@@ -130,6 +130,41 @@ export interface KnownProvider {
   requiresApiKey?: boolean;
 }
 
+export const DATABRICKS_ANTHROPIC_PRESET = 'databricks:anthropic';
+export const DATABRICKS_OPENAI_PRESET = 'databricks:openai';
+
+export function isDatabricksPreset(value: string | null | undefined): boolean {
+  return value === DATABRICKS_ANTHROPIC_PRESET || value === DATABRICKS_OPENAI_PRESET;
+}
+
+export function databricksGatewayBaseUrl(workspaceUrl: string, protocol: 'anthropic' | 'openai'): string | null {
+  try {
+    const url = new URL(workspaceUrl.trim());
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.pathname !== '/') return null;
+    return `${url.origin}${protocol === 'anthropic' ? '/ai-gateway/anthropic/v1' : '/ai-gateway/mlflow/v1'}`;
+  } catch {
+    return null;
+  }
+}
+
+export function databricksWorkspaceUrl(baseUrl: string, protocol: 'anthropic' | 'openai'): string {
+  try {
+    const url = new URL(baseUrl);
+    if (databricksGatewayBaseUrl(url.origin, protocol) === baseUrl) return url.origin;
+  } catch {
+    // Keep an incomplete workspace URL visible while it is being edited.
+  }
+  return baseUrl;
+}
+
+export function isDatabricksGatewayBaseUrl(baseUrl: string, protocol: 'anthropic' | 'openai'): boolean {
+  try {
+    return databricksGatewayBaseUrl(new URL(baseUrl).origin, protocol) === baseUrl;
+  } catch {
+    return false;
+  }
+}
+
 // Some providers appear more than once because they expose both
 // Anthropic-compatible (/v1/messages) and OpenAI-compatible
 // (/v1/chat/completions) gateways. Keep those entries separate so the Settings
@@ -145,6 +180,13 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     protocol: 'anthropic',
     baseUrl: 'https://api.anthropic.com',
     preferredModels: ['claude-sonnet-4-5', 'claude-opus-4-5', 'claude-haiku-4-5'],
+  },
+  {
+    label: 'Databricks — Anthropic',
+    protocol: 'anthropic',
+    baseUrl: DATABRICKS_ANTHROPIC_PRESET,
+    preferredModels: [],
+    apiKeyConsoleLink: { host: 'Databricks', url: 'https://docs.databricks.com/aws/en/dev-tools/auth/pat' },
   },
   {
     label: 'DeepSeek — Anthropic',
@@ -189,6 +231,13 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     protocol: 'openai',
     baseUrl: 'https://api.openai.com/v1',
     preferredModels: ['gpt-4o', 'gpt-4o-mini', 'o3', 'o4-mini'],
+  },
+  {
+    label: 'Databricks — OpenAI',
+    protocol: 'openai',
+    baseUrl: DATABRICKS_OPENAI_PRESET,
+    preferredModels: [],
+    apiKeyConsoleLink: { host: 'Databricks', url: 'https://docs.databricks.com/aws/en/dev-tools/auth/pat' },
   },
   {
     label: 'Atlas Cloud',
@@ -525,7 +574,9 @@ export interface ByokProviderPresetConfig {
 
 const BYOK_PROVIDER_PRESET_SPECS = [
   { id: 'anthropic', title: 'Anthropic', providerLabel: 'Anthropic (Claude)' },
+  { id: 'databricks-anthropic', title: 'Databricks — Anthropic', providerLabel: 'Databricks — Anthropic' },
   { id: 'openai', title: 'OpenAI', providerLabel: 'OpenAI' },
+  { id: 'databricks-openai', title: 'Databricks — OpenAI', providerLabel: 'Databricks — OpenAI' },
   { id: 'atlascloud', title: 'Atlas Cloud', providerLabel: 'Atlas Cloud' },
   { id: 'google-ai-studio', title: 'Google Gemini', providerLabel: 'Google Gemini' },
   { id: 'ollama', title: 'Ollama Cloud', providerLabel: 'Ollama Cloud (managed)' },

@@ -71,6 +71,33 @@ describe('API proxy routes', () => {
     );
   });
 
+  it('streams Databricks Anthropic messages with bearer authentication', async () => {
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      if (String(input).startsWith(baseUrl)) return realFetch(input, init);
+      return Promise.resolve(sseResponse('event: message_stop\ndata: {}\n\n'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const res = await realFetch(`${baseUrl}/api/proxy/anthropic/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://acme.cloud.databricks.com/ai-gateway/anthropic/v1',
+        apiKey: 'workspace-secret',
+        model: 'system.ai.claude-sonnet-4-5',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+    expect(res.status).toBe(200);
+    await res.text();
+    const upstream = fetchMock.mock.calls.find(([input]) =>
+      String(input).startsWith('https://acme.cloud.databricks.com'));
+    expect(upstream?.[0]).toBe('https://acme.cloud.databricks.com/ai-gateway/anthropic/v1/messages');
+    expect(upstream?.[1]?.headers).toMatchObject({ authorization: 'Bearer workspace-secret' });
+    expect(upstream?.[1]?.headers).not.toHaveProperty('x-api-key');
+    expect(new Headers(upstream?.[1]?.headers).has('Databricks-Model-Provider-Service')).toBe(false);
+    expect(JSON.parse(String(upstream?.[1]?.body))).toMatchObject({ model: 'system.ai.claude-sonnet-4-5' });
+  });
+
   it.each([
     {
       provider: 'anthropic',

@@ -629,6 +629,8 @@ export const pl: Dict = {
   'settings.fetchModelsFailed': 'Nie udało się pobrać modeli: {detail}',
   'settings.suggestedModelsHint': 'To sugerowane modele dla tego protokołu. Twój dostawca może obsługiwać inne modele.',
   'settings.baseUrl': 'Bazowy URL',
+  'settings.databricksWorkspaceUrl': 'Adres URL obszaru roboczego',
+  'settings.databricksModelServiceName': 'Nazwa usługi modelu',
   'settings.baseUrlInvalid': 'Użyj publicznego URL http:// lub https://.',
   'settings.baseUrlCustomize': 'Dostosuj URL',
   'settings.baseUrlDefaultHint': 'Zmień tylko wtedy, gdy używasz proxy lub zgodnej bramy.',

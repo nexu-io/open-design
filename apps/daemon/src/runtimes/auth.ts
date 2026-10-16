@@ -465,7 +465,16 @@ export function reportsToolPrincipalAuthFailure(text: string): boolean {
 export function classifyAgentServiceFailure(
   text: string,
 ): AgentServiceFailureCode | null {
-  const value = String(text || '');
+  const value = String(text || '').split(/\r?\n/).map((line) => {
+    try {
+      // Quota headers appear on successful and rejected requests too; they
+      // are metadata, not evidence of a rate-limit failure.
+      return JSON.stringify(JSON.parse(line), (key, field) =>
+        key === 'responseHeaders' ? undefined : field);
+    } catch {
+      return line;
+    }
+  }).join('\n');
   if (!value.trim()) return null;
   // Claimed before auth because the code says whose credentials failed and the
   // sentence beside it does not. vela's link gateway answers an upstream

@@ -1,5 +1,5 @@
 import type { TrackingByokPreflightBlockReason } from '@open-design/contracts/analytics';
-import { KNOWN_PROVIDERS } from '../../state/config';
+import { isDatabricksPreset, KNOWN_PROVIDERS } from '../../state/config';
 import type { AppConfig } from '../../types';
 import { byokProviderRequiresApiKey } from '../../utils/byokProvider';
 import { blockingByokDraftIssues, validateByokDraft } from './validation';
@@ -32,6 +32,7 @@ export function byokPreflightBlockReason(
         selectedProvider,
         config.baseUrl,
       ),
+      databricksGateway: isDatabricksPreset(config.apiProviderBaseUrl),
     },
   );
   const missingReasons = new Set<TrackingByokPreflightBlockReason>();

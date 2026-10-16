@@ -42,6 +42,7 @@ import {
 } from '../projects.js';
 import { exportProjectTranscript } from '../transcript-export.js';
 import { googleGenerateContentUrl } from '../integrations/google-models.js';
+import { anthropicGatewayAuthHeaders } from '../integrations/databricks-gateway.js';
 
 // Re-export the request/response types so existing daemon-internal
 // imports (and the route handler) keep their referenced names. The
@@ -545,7 +546,7 @@ function buildFinalizeProviderRequest(params: FinalizeProviderCallParams): Final
       url: appendVersionedApiPath(params.baseUrl, '/messages'),
       headers: {
         'content-type': 'application/json',
-        'x-api-key': params.apiKey,
+        ...anthropicGatewayAuthHeaders(params.baseUrl, params.apiKey),
         'anthropic-version': '2023-06-01',
       },
       body: {

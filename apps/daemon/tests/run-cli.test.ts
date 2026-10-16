@@ -166,16 +166,18 @@ async function startRunStubServer(resumable: boolean): Promise<StubServer> {
   };
 }
 
-async function runCli(args: string[]): Promise<{ stdout: string; stderr: string; code: number | null }> {
+async function runCli(args: string[], stdin?: string): Promise<{ stdout: string; stderr: string; code: number | null }> {
   const env: NodeJS.ProcessEnv = { ...process.env };
   delete env.NODE_OPTIONS;
   try {
-    const { stdout, stderr } = await execFileP(process.execPath, [TSX_CLI, CLI_SRC, ...args], {
+    const result = execFileP(process.execPath, [TSX_CLI, CLI_SRC, ...args], {
       cwd: DAEMON_ROOT,
       env,
       timeout: 15_000,
       maxBuffer: 4 * 1024 * 1024,
     });
+    if (stdin !== undefined) result.child.stdin?.end(stdin);
+    const { stdout, stderr } = await result;
     return { stdout, stderr, code: 0 };
   } catch (err) {
     const failed = err as { stdout?: string; stderr?: string; code?: number | null };
@@ -188,6 +190,86 @@ async function runCli(args: string[]): Promise<{ stdout: string; stderr: string;
 }
 
 describe('od run CLI', () => {
+  it.each([
+    ['anthropic', 'https://workspace.cloud.databricks.com/ai-gateway/anthropic/v1'],
+    ['openai', 'https://workspace.cloud.databricks.com/ai-gateway/mlflow/v1'],
+  ])('forwards a Databricks %s BYOK provider file with a prompt file', async (protocol, baseUrl) => {
+    stub = await startRunStubServer(true);
+    tempDir = await mkdtemp(join(tmpdir(), 'od-run-byok-'));
+    const providerFile = join(tempDir, 'provider.json');
+    const promptFile = join(tempDir, 'prompt.txt');
+    const provider = { protocol, baseUrl, apiKey: 'databricks-test-token' };
+    await writeFile(providerFile, JSON.stringify(provider), { mode: 0o600 });
+    await writeFile(promptFile, 'Create a report.\nUse a clear layout.');
+
+    const result = await runCli([
+      'run', 'start', '--project', 'project-1', '--agent', 'byok-opencode',
+      '--model', 'system.ai.claude-sonnet-4-5', '--byok-provider-file', providerFile,
+      '--prompt-file', promptFile, '--daemon-url', stub.baseUrl, '--json',
+    ]);
+
+    expect(result.code, result.stderr).toBe(0);
+    expect(JSON.parse(stub.requests[0]!.body)).toMatchObject({
+      agentId: 'byok-opencode',
+      model: 'system.ai.claude-sonnet-4-5',
+      message: 'Create a report.\nUse a clear layout.',
+      byokProvider: provider,
+    });
+    expect(JSON.parse(result.stdout)).toEqual({ runId: 'run-2' });
+    expect(result.stdout + result.stderr).not.toContain(provider.apiKey);
+  });
+
+  it('reads a BYOK provider from stdin', async () => {
+    stub = await startRunStubServer(true);
+    const provider = { protocol: 'openai', apiKey: 'stdin-test-token', baseUrl: 'https://example.com/v1' };
+    const result = await runCli([
+      'run', 'start', '--project', 'project-1', '--agent', 'byok-opencode',
+      '--model', 'custom-model', '--byok-provider-file', '-', '--message', 'Hello',
+      '--daemon-url', stub.baseUrl, '--json',
+    ], JSON.stringify(provider));
+
+    expect(result.code, result.stderr).toBe(0);
+    expect(JSON.parse(stub.requests[0]!.body).byokProvider).toEqual(provider);
+    expect(result.stdout + result.stderr).not.toContain(provider.apiKey);
+  });
+
+  it.each(['{"apiKey":"secret-but-broken"', '[]', 'null'])('rejects invalid BYOK provider input without echoing it', async (input) => {
+    stub = await startRunStubServer(true);
+    const result = await runCli([
+      'run', 'start', '--project', 'project-1', '--agent', 'byok-opencode',
+      '--byok-provider-file', '-', '--daemon-url', stub.baseUrl,
+    ], input);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain('--byok-provider-file must contain a JSON object');
+    expect(result.stdout + result.stderr).not.toContain('secret-but-broken');
+    expect(stub.requests).toHaveLength(0);
+  });
+
+  it('rejects using stdin for both the BYOK provider and the prompt', async () => {
+    stub = await startRunStubServer(true);
+    const result = await runCli([
+      'run', 'start', '--project', 'project-1', '--agent', 'byok-opencode',
+      '--byok-provider-file', '-', '--prompt-file', '-', '--daemon-url', stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain('cannot both read stdin');
+    expect(stub.requests).toHaveLength(0);
+  });
+
+  it('rejects a BYOK provider for a different agent', async () => {
+    stub = await startRunStubServer(true);
+    const result = await runCli([
+      'run', 'start', '--project', 'project-1', '--agent', 'claude',
+      '--byok-provider-file', '-', '--daemon-url', stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain('--byok-provider-file requires --agent byok-opencode');
+    expect(stub.requests).toHaveLength(0);
+  });
+
   it('keeps one --skill backward compatible and sends multiple ids canonically', async () => {
     stub = await startRunStubServer(true);
     const single = await runCli([

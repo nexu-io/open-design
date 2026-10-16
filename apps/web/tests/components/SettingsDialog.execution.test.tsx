@@ -709,6 +709,37 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     ).toBe('https://platform.openai.com/api-keys');
   });
 
+  it('keeps Databricks Anthropic and OpenAI workspace settings independent', () => {
+    renderSettingsDialog();
+    fireEvent.click(screen.getByRole('tab', { name: 'Databricks — Anthropic' }));
+    const workspace = screen.getByLabelText('Workspace URL') as HTMLInputElement;
+    expect(workspace.value).toBe('');
+    fireEvent.change(workspace, { target: { value: 'https://acme.cloud.databricks.com' } });
+    fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'anthropic-token' } });
+    fireEvent.change(screen.getByLabelText('Model service name'), {
+      target: { value: 'system.ai.claude-sonnet-4-5' },
+    });
+    expect(workspace.value).toBe('https://acme.cloud.databricks.com');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Databricks — OpenAI' }));
+    expect((screen.getByLabelText('Workspace URL') as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText('API key') as HTMLInputElement).value).toBe('');
+    fireEvent.change(screen.getByLabelText('Workspace URL'), {
+      target: { value: 'https://other.cloud.databricks.com' },
+    });
+    fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'openai-token' } });
+    fireEvent.change(screen.getByLabelText('Model service name'), {
+      target: { value: 'system.ai.other-model' },
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Databricks — Anthropic' }));
+    expect((screen.getByLabelText('Workspace URL') as HTMLInputElement).value)
+      .toBe('https://acme.cloud.databricks.com');
+    expect((screen.getByLabelText('API key') as HTMLInputElement).value).toBe('anthropic-token');
+    expect((screen.getByLabelText('Model service name') as HTMLInputElement).value)
+      .toBe('system.ai.claude-sonnet-4-5');
+  });
+
   it('isolates API key draft and visibility by BYOK provider preset', () => {
     renderSettingsDialog({
       apiProtocol: 'openai',

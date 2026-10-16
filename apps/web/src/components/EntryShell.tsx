@@ -212,7 +212,14 @@ import {
   API_PROTOCOL_TABS,
   SUGGESTED_MODELS_BY_PROTOCOL,
 } from '../state/apiProtocols';
-import { defaultKnownProviderModel, KNOWN_PROVIDERS } from '../state/config';
+import {
+  databricksGatewayBaseUrl,
+  databricksWorkspaceUrl,
+  defaultKnownProviderModel,
+  isDatabricksGatewayBaseUrl,
+  isDatabricksPreset,
+  KNOWN_PROVIDERS,
+} from '../state/config';
 import type { KnownProvider } from '../state/config';
 import { testAgent, testApiProvider } from '../providers/connection-test';
 import { fetchProviderModels } from '../providers/provider-models';
@@ -2405,8 +2412,12 @@ function OnboardingView({
   const canTestProvider =
     Boolean(config.apiKey.trim()) &&
     Boolean(config.baseUrl.trim()) &&
-    Boolean(config.model.trim());
+    Boolean(config.model.trim()) &&
+    (!isDatabricksPreset(config.apiProviderBaseUrl) ||
+      ((apiProtocol === 'anthropic' || apiProtocol === 'openai') &&
+        isDatabricksGatewayBaseUrl(config.baseUrl, apiProtocol)));
   const canFetchProviderModels =
+    !isDatabricksPreset(config.apiProviderBaseUrl) &&
     apiProtocol !== 'azure' &&
     apiProtocol !== 'ollama' &&
     Boolean(config.apiKey.trim()) &&
@@ -3922,7 +3933,7 @@ function OnboardingView({
                       (item) => item.protocol === apiProtocol && item.baseUrl === baseUrl,
                     );
                     updateApiConfig({
-                      baseUrl: provider?.baseUrl ?? '',
+                      baseUrl: provider && !isDatabricksPreset(provider.baseUrl) ? provider.baseUrl : '',
                       model: defaultKnownProviderModel(provider),
                       apiProviderBaseUrl: provider?.baseUrl ?? null,
                     });
@@ -3934,8 +3945,13 @@ function OnboardingView({
                   }}
                   onBaseUrlChange={(baseUrl) =>
                     updateApiConfig({
-                      baseUrl,
-                      apiProviderBaseUrl: apiProtocol === 'azure' ? '' : null,
+                      baseUrl: isDatabricksPreset(config.apiProviderBaseUrl) &&
+                        (apiProtocol === 'anthropic' || apiProtocol === 'openai')
+                          ? databricksGatewayBaseUrl(baseUrl, apiProtocol) ?? baseUrl
+                          : baseUrl,
+                      apiProviderBaseUrl: isDatabricksPreset(config.apiProviderBaseUrl)
+                        ? config.apiProviderBaseUrl
+                        : apiProtocol === 'azure' ? '' : null,
                     })
                   }
                   modelOptions={byokModelOptions}
@@ -4172,7 +4188,8 @@ function OnboardingByokSetupPanel({
   const t = useT();
   const running = testState.status === 'running';
   const fetchingModels = modelsState.status === 'running';
-  const useDeploymentInput = apiProtocol === 'azure';
+  const databricksPreset = isDatabricksPreset(selectedProvider?.baseUrl);
+  const useDeploymentInput = apiProtocol === 'azure' || databricksPreset;
   return (
     <div className="onboarding-view__setup-panel">
       <div className="onboarding-view__setup-head">
@@ -4245,12 +4262,14 @@ function OnboardingByokSetupPanel({
       </label>
       <div className="onboarding-view__compact-fields">
         <label className="onboarding-view__inline-field">
-          <span>{t('settings.baseUrl')}</span>
+          <span>{databricksPreset ? t('settings.databricksWorkspaceUrl') : t('settings.baseUrl')}</span>
           <input
             type="url"
             inputMode="url"
-            value={baseUrl}
-            placeholder={selectedProvider?.baseUrl ?? 'https://api.anthropic.com'}
+            value={databricksPreset && (apiProtocol === 'anthropic' || apiProtocol === 'openai')
+              ? databricksWorkspaceUrl(baseUrl, apiProtocol)
+              : baseUrl}
+            placeholder={databricksPreset ? 'https://your-workspace.cloud.databricks.com' : selectedProvider?.baseUrl ?? 'https://api.anthropic.com'}
             onChange={(event) => onBaseUrlChange(event.target.value)}
           />
         </label>
@@ -4268,7 +4287,7 @@ function OnboardingByokSetupPanel({
         ) : (
           <label className="onboarding-view__inline-field">
             <span>
-              {useDeploymentInput
+              {databricksPreset ? t('settings.databricksModelServiceName') : useDeploymentInput
                 ? t('settings.azureDeploymentModel')
                 : t('settings.model')}
             </span>
@@ -4276,7 +4295,9 @@ function OnboardingByokSetupPanel({
               type="text"
               value={model}
               placeholder={
-                useDeploymentInput
+                databricksPreset
+                  ? 'system.ai.claude-sonnet-4-5'
+                  : useDeploymentInput
                   ? t('settings.azureDeploymentModel')
                   : defaultKnownProviderModel(selectedProvider) || 'claude-sonnet-4-5'
               }

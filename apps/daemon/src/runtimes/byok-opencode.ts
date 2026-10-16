@@ -1,4 +1,5 @@
 import type { ByokChatProviderConfig } from '@open-design/contracts';
+import { isDatabricksAnthropicGateway, isDatabricksOpenAIGateway } from '../integrations/databricks-gateway.js';
 
 export const BYOK_OPENCODE_AGENT_ID = 'byok-opencode';
 export const BYOK_OPENCODE_PROVIDER_ID = 'open-design-byok';
@@ -185,13 +186,25 @@ function buildProviderEntry(
     : {};
   const usesAzureOpenAICompatiblePath =
     protocol === 'azure' && /\/openai\/v\d+(?:$|\/)/.test(safeUrlPathname(baseUrl));
+  const usesDatabricksAnthropicGateway =
+    protocol === 'anthropic' && isDatabricksAnthropicGateway(baseUrl);
   switch (protocol) {
     case 'anthropic':
       return {
         npm: '@ai-sdk/anthropic',
         options: {
-          ...apiKeyOption,
+          // The SDK requires an API key even when a gateway uses Bearer auth.
+          // Override its x-api-key header so the workspace token goes only in Authorization.
+          ...(usesDatabricksAnthropicGateway
+            ? { apiKey: 'unused' }
+            : apiKeyOption),
           ...(baseUrl ? { baseURL: baseUrl } : {}),
+          ...(usesDatabricksAnthropicGateway
+            ? { headers: {
+                authorization: `Bearer {env:${BYOK_OPENCODE_API_KEY_ENV}}`,
+                'x-api-key': '',
+              } }
+            : {}),
         },
       };
     case 'azure':
@@ -223,10 +236,9 @@ function buildProviderEntry(
         },
       };
     case 'openai':
-      // Real OpenAI speaks the Responses API via @ai-sdk/openai. Every other
-      // host under the "openai" protocol (DeepSeek, vLLM, etc.) only serves
-      // /chat/completions, so route it through @ai-sdk/openai-compatible.
-      if (isRealOpenAIHost(baseUrl)) {
+      // OpenAI and Databricks' unified gateway support Responses, including
+      // reasoning with tools. Other compatible hosts use Chat Completions.
+      if (isRealOpenAIHost(baseUrl) || isDatabricksOpenAIGateway(baseUrl)) {
         return {
           npm: '@ai-sdk/openai',
           options: {

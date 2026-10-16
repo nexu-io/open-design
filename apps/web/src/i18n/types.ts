@@ -543,6 +543,8 @@ export interface Dict {
   'settings.maxTokens': string;
   'settings.maxTokensHint': string;
   'settings.baseUrl': string;
+  'settings.databricksWorkspaceUrl': string;
+  'settings.databricksModelServiceName': string;
   'settings.baseUrlInvalid': string;
   'settings.baseUrlCustomize': string;
   'settings.baseUrlDefaultHint': string;

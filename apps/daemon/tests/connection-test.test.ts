@@ -687,6 +687,55 @@ describe('POST /api/provider/models', () => {
 });
 
 describe('POST /api/test/connection provider mode', () => {
+  it('keeps Anthropic API-key auth for a non-Databricks matching-path endpoint', async () => {
+    const endpoint = 'https://gateway.example/ai-gateway/anthropic/v1';
+    const fetchMock = passThroughOrUpstream(() =>
+      jsonResponse({ content: [{ type: 'text', text: 'ok' }] }));
+    vi.stubGlobal('fetch', fetchMock);
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'anthropic',
+        baseUrl: endpoint,
+        apiKey: 'custom-secret',
+        model: 'custom-model',
+      }),
+    });
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({ ok: true, kind: 'success' });
+    const upstream = fetchMock.mock.calls.find(([input]) => String(input) === `${endpoint}/messages`);
+    expect(upstream).toBeDefined();
+    const headers = new Headers(upstream?.[1]?.headers);
+    expect(headers.get('x-api-key')).toBe('custom-secret');
+    expect(headers.has('authorization')).toBe(false);
+  });
+
+  it('tests Databricks Anthropic with bearer authentication', async () => {
+    const fetchMock = passThroughOrUpstream((url, init) => {
+      expect(url).toBe('https://acme.cloud.databricks.com/ai-gateway/anthropic/v1/messages');
+      expect(init?.headers).toMatchObject({ authorization: 'Bearer workspace-secret' });
+      expect(init?.headers).not.toHaveProperty('x-api-key');
+      expect(new Headers(init?.headers).has('Databricks-Model-Provider-Service')).toBe(false);
+      expect(JSON.parse(String(init?.body))).toMatchObject({ model: 'system.ai.claude-sonnet-4-5' });
+      return jsonResponse({ content: [{ type: 'text', text: 'ok' }] });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'anthropic',
+        baseUrl: 'https://acme.cloud.databricks.com/ai-gateway/anthropic/v1',
+        apiKey: 'workspace-secret',
+        model: 'system.ai.claude-sonnet-4-5',
+      }),
+    });
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({ ok: true, kind: 'success' });
+  });
   it('reports success and returns the model sample for an Anthropic 200', async () => {
     vi.stubGlobal(
       'fetch',

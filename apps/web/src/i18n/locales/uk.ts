@@ -629,6 +629,8 @@ export const uk: Dict = {
   'settings.fetchModelsFailed': 'Не вдалося отримати моделі: {detail}',
   'settings.suggestedModelsHint': 'Це рекомендовані моделі для цього протоколу. Ваш провайдер може підтримувати інші моделі.',
   'settings.baseUrl': 'Базовий URL',
+  'settings.databricksWorkspaceUrl': 'URL робочого простору',
+  'settings.databricksModelServiceName': 'Назва сервісу моделі',
   'settings.baseUrlInvalid': 'Використовуйте публічний URL з http:// або https://.',
   'settings.baseUrlCustomize': 'Налаштувати URL',
   'settings.baseUrlDefaultHint': 'Змінюйте лише при використанні проксі або сумісного шлюзу.',

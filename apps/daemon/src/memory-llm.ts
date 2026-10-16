@@ -65,6 +65,7 @@ import {
 } from './memory-extractions.js';
 import { resolveProviderConfig } from './media/config.js';
 import { AIHUBMIX_APP_CODE } from './integrations/aihubmix.js';
+import { anthropicGatewayAuthHeaders } from './integrations/databricks-gateway.js';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 import { createHash } from 'node:crypto';
@@ -785,7 +786,7 @@ async function callAnthropic(provider, system, user) {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-api-key': provider.apiKey,
+        ...anthropicGatewayAuthHeaders(provider.baseUrl, provider.apiKey),
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({

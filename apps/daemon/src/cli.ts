@@ -19,7 +19,7 @@ import { resolveDaemonUrl } from './daemon-url.js';
 import { SidecarFactory } from '@open-design/sidecar';
 import { APP_KEYS, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
 import { EXPORT_FORMATS, EXPORT_IMAGE_FORMATS, mediaFailureNextStep } from '@open-design/contracts';
-import type { ArtifactLintFinding, LintArtifactCliResultEnvelope, LintArtifactResponse, LintFailOn } from '@open-design/contracts';
+import type { ArtifactLintFinding, ByokChatProviderConfig, LintArtifactCliResultEnvelope, LintArtifactResponse, LintFailOn } from '@open-design/contracts';
 import { buildExportCliRequestBody, buildExportCliResultEnvelope, resolveExportCliDeckMode } from './export-cli-request.js';
 import { exportRoutePath } from './export-cli-routing.js';
 import {
@@ -256,6 +256,7 @@ const PROJECT_RESOURCE_STRING_FLAGS = new Set([
   ...PROJECT_STRING_FLAGS,
   'workspace',
   'workspace-member',
+  'byok-provider-file',
 ]);
 const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow', 'thumbnail']);
 const WORKSPACE_STRING_FLAGS = new Set([
@@ -7852,7 +7853,8 @@ async function runRun(args) {
                [--prompt-file <path|->] [--task-execution <id>]
                [--client-request-id <id>]
                [--skill <id>[,<id>]] [--plugin <id>] [--inputs <json>] [--grant-caps a,b]
-               [--agent claude|codex|opencode] [--model <id>] [--service-tier <id>]
+               [--agent claude|codex|opencode|byok-opencode] [--model <id>] [--service-tier <id>]
+               [--byok-provider-file <path|->]
                [--workspace <id> --workspace-member <id>] [--follow] [--json]
   od run redesign [--path <folder>] [--message "<text>" | --prompt-file <path|->]
                [--agent claude] [--model <id>] [--service-tier <id>] [--follow] [--json]
@@ -7873,6 +7875,9 @@ async function runRun(args) {
 
 Common options:
   --daemon-url <url>         OpenDesign daemon HTTP base.
+  --byok-provider-file <path|->
+                             Read a BYOK provider JSON object from a file or stdin.
+                             Use with --agent byok-opencode and --model <id>.
   --workspace <id>           Explicit Workspace id for a bound project.
   --workspace-member <id>    Explicit Workspace member id for a bound project.
   --json                     Emit raw JSON.`);
@@ -8127,6 +8132,25 @@ Common options:
         process.exit(2);
       }
       const body = { projectId: flags.project };
+      if (flags['byok-provider-file']) {
+        if (flags.agent !== 'byok-opencode') {
+          console.error('--byok-provider-file requires --agent byok-opencode');
+          process.exit(2);
+        }
+        if (flags['byok-provider-file'] === '-' && flags['prompt-file'] === '-') {
+          console.error('--byok-provider-file and --prompt-file cannot both read stdin');
+          process.exit(2);
+        }
+        try {
+          const provider: ByokChatProviderConfig = JSON.parse(await readFileFlagOrStdin(flags['byok-provider-file']));
+          if (!provider || typeof provider !== 'object' || Array.isArray(provider)) throw new Error();
+          body.byokProvider = provider;
+        } catch {
+          // JSON parser errors can include the token from malformed input.
+          console.error('--byok-provider-file must contain a JSON object; check the file path and JSON syntax.');
+          process.exit(2);
+        }
+      }
       if (flags.conversation) body.conversationId = flags.conversation;
       const message = await readRunMessageFromFlags(flags);
       if (message) body.message = message;

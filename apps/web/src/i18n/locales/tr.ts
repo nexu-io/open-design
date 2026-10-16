@@ -629,6 +629,8 @@ export const tr: Dict = {
   'settings.fetchModelsFailed': 'Modeller getirilemedi: {detail}',
   'settings.suggestedModelsHint': 'Bunlar bu protokol için önerilen modellerdir. Sağlayıcınız farklı modelleri destekleyebilir.',
   'settings.baseUrl': 'Temel URL',
+  'settings.databricksWorkspaceUrl': 'Çalışma alanı URL’si',
+  'settings.databricksModelServiceName': 'Model hizmeti adı',
   'settings.baseUrlInvalid': 'Genel bir http:// veya https:// URL kullanın.',
   'settings.baseUrlCustomize': 'URL’yi özelleştir',
   'settings.baseUrlDefaultHint': 'Yalnızca proxy veya uyumlu bir ağ geçidi kullanıyorsanız değiştirin.',

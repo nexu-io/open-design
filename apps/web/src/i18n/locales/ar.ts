@@ -629,6 +629,8 @@ export const ar: Dict = {
   'settings.fetchModelsFailed': 'تعذّر جلب النماذج: {detail}',
   'settings.suggestedModelsHint': 'هذه نماذج مقترحة لهذا البروتوكول. قد يدعم مزوّدك نماذج مختلفة.',
   'settings.baseUrl': 'رابط القاعدة',
+  'settings.databricksWorkspaceUrl': 'عنوان URL لمساحة العمل',
+  'settings.databricksModelServiceName': 'اسم خدمة النموذج',
   'settings.baseUrlInvalid': 'استخدم رابط http:// أو https:// عامًا.',
   'settings.baseUrlCustomize': 'تخصيص URL',
   'settings.baseUrlDefaultHint': 'غيّر هذا فقط إذا كنت تستخدم وكيلاً أو بوابة متوافقة.',

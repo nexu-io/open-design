@@ -629,6 +629,8 @@ export const fa: Dict = {
   'settings.fetchModelsFailed': 'دریافت مدل‌ها ممکن نشد: {detail}',
   'settings.suggestedModelsHint': 'این‌ها مدل‌های پیشنهادی برای این پروتکل هستند. ارائه‌دهنده شما ممکن است مدل‌های دیگری را پشتیبانی کند.',
   'settings.baseUrl': 'آدرس پایه',
+  'settings.databricksWorkspaceUrl': 'نشانی فضای کاری',
+  'settings.databricksModelServiceName': 'نام سرویس مدل',
   'settings.baseUrlInvalid': 'از URL عمومی http:// یا https:// استفاده کنید.',
   'settings.baseUrlCustomize': 'سفارشی‌سازی URL',
   'settings.baseUrlDefaultHint': 'فقط در صورت استفاده از پراکسی یا درگاه سازگار، آن را تغییر دهید.',

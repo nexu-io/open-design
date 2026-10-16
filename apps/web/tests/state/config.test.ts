@@ -4,6 +4,9 @@ import {
   BYOK_PROVIDER_PRESETS,
   DEFAULT_CONFIG,
   defaultKnownProviderModel,
+  databricksGatewayBaseUrl,
+  databricksWorkspaceUrl,
+  isDatabricksGatewayBaseUrl,
   fetchMediaProvidersFromDaemon,
   isStoredMediaProviderEntryEmpty,
   isStoredMediaProviderEntryPresent,
@@ -23,6 +26,22 @@ const store = new Map<string, string>();
 const originalFetch = globalThis.fetch;
 
 describe('KNOWN_PROVIDERS', () => {
+  it('keeps Databricks presets separate and derives each gateway from a workspace origin', () => {
+    expect(BYOK_PROVIDER_PRESETS.filter((preset) => preset.id.startsWith('databricks-')))
+      .toEqual([
+        expect.objectContaining({ id: 'databricks-anthropic', protocol: 'anthropic' }),
+        expect.objectContaining({ id: 'databricks-openai', protocol: 'openai' }),
+      ]);
+    const workspace = 'https://acme.cloud.databricks.com/';
+    const anthropic = databricksGatewayBaseUrl(workspace, 'anthropic');
+    const openai = databricksGatewayBaseUrl(workspace, 'openai');
+    expect(anthropic).toBe('https://acme.cloud.databricks.com/ai-gateway/anthropic/v1');
+    expect(openai).toBe('https://acme.cloud.databricks.com/ai-gateway/mlflow/v1');
+    expect(databricksWorkspaceUrl(anthropic!, 'anthropic')).toBe('https://acme.cloud.databricks.com');
+    expect(isDatabricksGatewayBaseUrl(openai!, 'openai')).toBe(true);
+    expect(databricksGatewayBaseUrl('https://acme.cloud.databricks.com/extra', 'openai')).toBeNull();
+    expect(databricksGatewayBaseUrl('http://acme.cloud.databricks.com', 'openai')).toBeNull();
+  });
   it('includes separate SiliconFlow CN and Global presets', () => {
     expect(
       KNOWN_PROVIDERS.filter((provider) => provider.label.startsWith('SiliconFlow')),

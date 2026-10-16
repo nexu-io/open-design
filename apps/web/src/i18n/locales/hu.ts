@@ -629,6 +629,8 @@ export const hu: Dict = {
   'settings.fetchModelsFailed': 'Nem sikerült lekérni a modelleket: {detail}',
   'settings.suggestedModelsHint': 'Ezek a protokollhoz javasolt modellek. A szolgáltatód más modelleket is támogathat.',
   'settings.baseUrl': 'Base URL',
+  'settings.databricksWorkspaceUrl': 'Munkaterület URL-címe',
+  'settings.databricksModelServiceName': 'Modellszolgáltatás neve',
   'settings.baseUrlInvalid': 'Használj nyilvános http:// vagy https:// URL-t.',
   'settings.baseUrlCustomize': 'URL testreszabása',
   'settings.baseUrlDefaultHint': 'Csak proxy vagy kompatibilis átjáró használatakor módosítsd.',

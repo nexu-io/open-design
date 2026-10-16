@@ -10,6 +10,86 @@ import {
 import { byokOpenCodeAgentDef } from '../../src/runtimes/defs/byok-opencode.js';
 
 describe('byok-opencode runtime config', () => {
+  it.each([
+    'https://acme.cloud.databricks.com/ai-gateway/anthropic/v1',
+    'https://adb-1234567890123456.7.azuredatabricks.net/ai-gateway/anthropic/v1',
+    'https://1234567890123456.7.gcp.databricks.com/ai-gateway/anthropic/v1',
+  ])('uses the Databricks Anthropic gateway at %s with bearer auth without embedding the token', (baseUrl) => {
+    const anthropic = buildOpenCodeByokProviderConfig({
+      protocol: 'anthropic',
+      apiKey: 'workspace-secret',
+      baseUrl,
+    }, 'system.ai.claude-sonnet-4-5');
+    expect(anthropic?.env).toEqual({ [BYOK_OPENCODE_API_KEY_ENV]: 'workspace-secret' });
+    expect(JSON.stringify(anthropic?.config)).not.toContain('workspace-secret');
+    expect(anthropic?.config).toMatchObject({ provider: {
+      [BYOK_OPENCODE_PROVIDER_ID]: {
+        npm: '@ai-sdk/anthropic',
+        options: {
+          baseURL: baseUrl,
+          apiKey: 'unused',
+          headers: {
+            authorization: `Bearer {env:${BYOK_OPENCODE_API_KEY_ENV}}`,
+            'x-api-key': '',
+          },
+        },
+      },
+    } });
+  });
+
+  it.each([
+    'https://gateway.example/ai-gateway/anthropic/v1',
+    'https://acme.cloud.databricks.com.gateway.example/ai-gateway/anthropic/v1',
+  ])('keeps Anthropic API-key auth for a non-Databricks matching-path endpoint: %s', (baseUrl) => {
+    const out = buildOpenCodeByokProviderConfig({
+      protocol: 'anthropic',
+      apiKey: 'custom-secret',
+      baseUrl,
+    }, 'custom-model');
+    expect(out?.config).toMatchObject({ provider: {
+      [BYOK_OPENCODE_PROVIDER_ID]: {
+        npm: '@ai-sdk/anthropic',
+        options: { apiKey: `{env:${BYOK_OPENCODE_API_KEY_ENV}}` },
+      },
+    } });
+    expect(out?.config).not.toHaveProperty(`provider.${BYOK_OPENCODE_PROVIDER_ID}.options.headers`);
+  });
+
+  it.each([
+    'https://acme.cloud.databricks.com/ai-gateway/mlflow/v1',
+    'https://adb-1234567890123456.7.azuredatabricks.net/ai-gateway/mlflow/v1',
+    'https://1234567890123456.7.gcp.databricks.com/ai-gateway/mlflow/v1',
+  ])('uses the Responses transport for Databricks model services at %s', (baseUrl) => {
+    const openai = buildOpenCodeByokProviderConfig({
+      protocol: 'openai',
+      apiKey: 'other-secret',
+      baseUrl,
+    }, 'system.ai.gpt-6-luna');
+    expect(openai?.config).toMatchObject({ provider: {
+      [BYOK_OPENCODE_PROVIDER_ID]: {
+        npm: '@ai-sdk/openai',
+        options: { baseURL: baseUrl },
+      },
+    } });
+  });
+
+  it.each([
+    'https://gateway.example/ai-gateway/mlflow/v1',
+    'https://acme.cloud.databricks.com.gateway.example/ai-gateway/mlflow/v1',
+    'https://fakeazuredatabricks.net/ai-gateway/mlflow/v1',
+    'http://acme.cloud.databricks.com/ai-gateway/mlflow/v1',
+    'https://acme.cloud.databricks.com/v1',
+  ])('keeps Chat Completions for non-Databricks gateway URLs: %s', (baseUrl) => {
+    const out = buildOpenCodeByokProviderConfig({
+      protocol: 'openai',
+      apiKey: 'test-key',
+      baseUrl,
+    }, 'custom-model');
+    expect(out?.config).toMatchObject({ provider: {
+      [BYOK_OPENCODE_PROVIDER_ID]: { npm: '@ai-sdk/openai-compatible' },
+    } });
+  });
+
   it('gates non-interactive permission bypass on the installed OpenCode capability', () => {
     agentCapabilities.delete('byok-opencode');
     expect(byokOpenCodeAgentDef.helpArgs).toEqual(['run', '--help']);

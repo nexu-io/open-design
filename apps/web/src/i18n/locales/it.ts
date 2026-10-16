@@ -629,6 +629,8 @@ export const it: Dict = {
   'settings.fetchModelsFailed': 'Impossibile recuperare i modelli: {detail}',
   'settings.suggestedModelsHint': 'Questi sono modelli suggeriti per questo protocollo. Il tuo provider potrebbe supportare altri modelli.',
   'settings.baseUrl': 'URL di base',
+  'settings.databricksWorkspaceUrl': 'URL dell’area di lavoro',
+  'settings.databricksModelServiceName': 'Nome del servizio del modello',
   'settings.baseUrlInvalid': 'Usa un URL pubblico http:// o https://.',
   'settings.baseUrlCustomize': 'Personalizza URL',
   'settings.baseUrlDefaultHint': 'Modificalo solo se usi un proxy o un gateway compatibile.',

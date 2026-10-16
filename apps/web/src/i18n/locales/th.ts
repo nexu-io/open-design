@@ -629,6 +629,8 @@ export const th: Dict = {
   'settings.fetchModelsFailed': 'ไม่สามารถดึงโมเดลได้: {detail}',
   'settings.suggestedModelsHint': 'นี่คือโมเดลที่แนะนำสำหรับโปรโตคอลนี้ ผู้ให้บริการของคุณอาจรองรับโมเดลอื่นๆ',
   'settings.baseUrl': 'Base URL',
+  'settings.databricksWorkspaceUrl': 'URL ของเวิร์กสเปซ',
+  'settings.databricksModelServiceName': 'ชื่อบริการโมเดล',
   'settings.baseUrlInvalid': 'ใช้ URL สาธารณะ http:// หรือ https://',
   'settings.baseUrlCustomize': 'ปรับแต่ง URL',
   'settings.baseUrlDefaultHint': 'เปลี่ยนเฉพาะเมื่อใช้พร็อกซีหรือเกตเวย์ที่เข้ากันได้',

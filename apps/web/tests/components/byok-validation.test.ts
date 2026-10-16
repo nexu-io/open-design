@@ -8,6 +8,19 @@ import {
 } from '../../src/components/byok/validation';
 
 describe('BYOK draft validation', () => {
+  it('requires a derived gateway URL for a Databricks preset', () => {
+    const config = { apiKey: 'workspace-token', model: 'system.ai.claude-sonnet-4-5' };
+    expect(validateByokDraft('anthropic', {
+      ...config,
+      baseUrl: 'https://acme.cloud.databricks.com/ai-gateway/anthropic/v1',
+    }, { databricksGateway: true }).ok).toBe(true);
+    expect(validateByokDraft('anthropic', {
+      ...config,
+      baseUrl: 'https://acme.cloud.databricks.com/other',
+    }, { databricksGateway: true }).issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: 'base_url', code: 'base_url_invalid' }),
+    ]));
+  });
   it('cleans pasted API keys without changing the stored value itself', () => {
     expect(cleanByokApiKey(' \u200Bsk-ant-test\n\t')).toBe('sk-ant-test');
   });

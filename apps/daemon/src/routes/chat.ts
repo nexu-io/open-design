@@ -36,6 +36,7 @@ import { projectKindToTracking } from '@open-design/contracts/analytics';
 import { proxyDispatcherRequestInit, validateUserProviderBaseUrl } from '../connectionTest.js';
 import { isKnownReasoningEffort, resolveModelForServiceTier } from '../runtimes/models.js';
 import { googleStreamGenerateContentUrl } from '../integrations/google-models.js';
+import { anthropicGatewayAuthHeaders } from '../integrations/databricks-gateway.js';
 import { createRoleMarkerGuard } from '../role-marker-guard.js';
 import { authorizeReasoningEgress, sendReasoningEgressDenial } from '../reasoning-egress.js';
 import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
@@ -1023,7 +1024,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
 
     return runAnthropicChatStream(res, {
       url,
-      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      headers: { ...anthropicGatewayAuthHeaders(baseUrl, apiKey), 'anthropic-version': '2023-06-01' },
       payload: buildAnthropicChatPayload(model, systemPrompt, messages, maxTokens),
       logTag: 'proxy:anthropic',
     });

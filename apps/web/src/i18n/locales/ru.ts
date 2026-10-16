@@ -629,6 +629,8 @@ export const ru: Dict = {
   'settings.fetchModelsFailed': 'Не удалось загрузить модели: {detail}',
   'settings.suggestedModelsHint': 'Это рекомендуемые модели для этого протокола. Ваш провайдер может поддерживать другие модели.',
   'settings.baseUrl': 'Базовый URL',
+  'settings.databricksWorkspaceUrl': 'URL рабочего пространства',
+  'settings.databricksModelServiceName': 'Имя сервиса модели',
   'settings.baseUrlInvalid': 'Используйте публичный URL с http:// или https://.',
   'settings.baseUrlCustomize': 'Настроить URL',
   'settings.baseUrlDefaultHint': 'Изменяйте только при использовании прокси или совместимого шлюза.',

@@ -625,6 +625,8 @@ export const zhTW: Dict = {
   "settings.suggestedModelsHint":
     "這些是此協定的建議模型。你的提供方可能支援不同的模型。",
   "settings.baseUrl": "Base URL",
+  "settings.databricksWorkspaceUrl": "工作區 URL",
+  "settings.databricksModelServiceName": "模型服務名稱",
   "settings.baseUrlInvalid": "使用公網 http:// 或 https:// URL。",
   "settings.baseUrlCustomize": "自訂 URL",
   "settings.baseUrlDefaultHint": "僅在使用代理或相容閘道時修改。",

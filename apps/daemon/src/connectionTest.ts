@@ -61,6 +61,7 @@ import {
   isUnsupportedMaxTokensError,
 } from './integrations/openai-chat-token-params.js';
 import { aihubmixHeaders } from './integrations/aihubmix.js';
+import { anthropicGatewayAuthHeaders } from './integrations/databricks-gateway.js';
 import type { AgentCliEnvPrefs } from './app-config.js';
 import type { RuntimeAgentDef } from './runtimes/types.js';
 import { preparePromptFileForAgent, type PreparedPromptFile } from './runtimes/prompt-file.js';
@@ -1404,7 +1405,7 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
         url: appendVersionedApiPath(baseUrl, '/messages'),
         headers: {
           'content-type': 'application/json',
-          'x-api-key': apiKey,
+          ...anthropicGatewayAuthHeaders(baseUrl, apiKey),
           'anthropic-version': '2023-06-01',
         },
         body: {

@@ -1,5 +1,6 @@
 import { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 import type { ApiProtocol, ProviderModelOption } from '../../types';
+import { isDatabricksGatewayBaseUrl } from '../../state/config';
 
 export type ByokDraftField = 'api_key' | 'base_url' | 'model';
 
@@ -40,6 +41,7 @@ interface ValidateByokDraftOptions {
   credentialConfigured?: boolean;
   requireModel?: boolean;
   keyValidationBaseUrl?: string;
+  databricksGateway?: boolean;
 }
 
 interface ByokDraftConfig {
@@ -172,7 +174,10 @@ export function validateByokDraft(
     // gate on these issues, and the daemon owns the OD_ALLOWED_INTERNAL_HOSTS
     // decision. Only genuinely malformed / non-http URLs are a client blocker.
     const baseUrlCheck = validateBaseUrl(baseUrl);
-    if (baseUrlCheck.error && !baseUrlCheck.forbidden) {
+    if ((baseUrlCheck.error && !baseUrlCheck.forbidden) ||
+      (options.databricksGateway &&
+        (protocol !== 'anthropic' && protocol !== 'openai' ||
+          !isDatabricksGatewayBaseUrl(baseUrl, protocol)))) {
       issues.push({
         field: 'base_url',
         level: 'error',

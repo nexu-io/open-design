@@ -629,6 +629,8 @@ export const de: Dict = {
   'settings.fetchModelsFailed': 'Modelle konnten nicht abgerufen werden: {detail}',
   'settings.suggestedModelsHint': 'Dies sind vorgeschlagene Modelle für dieses Protokoll. Ihr Anbieter kann andere Modelle unterstützen.',
   'settings.baseUrl': 'Base URL',
+  'settings.databricksWorkspaceUrl': 'Workspace-URL',
+  'settings.databricksModelServiceName': 'Modelldienstname',
   'settings.baseUrlInvalid': 'Öffentliche http://- oder https://-URL verwenden.',
   'settings.baseUrlCustomize': 'URL anpassen',
   'settings.baseUrlDefaultHint': 'Ändern Sie dies nur, wenn Sie einen Proxy oder ein kompatibles Gateway verwenden.',

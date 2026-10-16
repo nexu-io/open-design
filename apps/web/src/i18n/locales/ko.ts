@@ -629,6 +629,8 @@ export const ko: Dict = {
   'settings.fetchModelsFailed': '모델을 가져올 수 없습니다: {detail}',
   'settings.suggestedModelsHint': '이 프로토콜에 대한 추천 모델입니다. 사용 중인 제공자는 다른 모델을 지원할 수 있습니다.',
   'settings.baseUrl': 'Base URL',
+  'settings.databricksWorkspaceUrl': '워크스페이스 URL',
+  'settings.databricksModelServiceName': '모델 서비스 이름',
   'settings.baseUrlInvalid': '공개 http:// 또는 https:// URL을 사용하세요.',
   'settings.baseUrlCustomize': 'URL 사용자 지정',
   'settings.baseUrlDefaultHint': '프록시 또는 호환 게이트웨이를 사용하는 경우에만 변경하세요.',

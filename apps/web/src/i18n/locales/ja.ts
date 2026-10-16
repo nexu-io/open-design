@@ -629,6 +629,8 @@ export const ja: Dict = {
   'settings.fetchModelsFailed': 'モデルを取得できませんでした: {detail}',
   'settings.suggestedModelsHint': 'これはこのプロトコル向けの推奨モデルです。プロバイダーによっては別のモデルをサポートしている場合があります。',
   'settings.baseUrl': 'ベース URL',
+  'settings.databricksWorkspaceUrl': 'ワークスペース URL',
+  'settings.databricksModelServiceName': 'モデルサービス名',
   'settings.baseUrlInvalid': '公開 http:// または https:// URL を使用してください。',
   'settings.baseUrlCustomize': 'URL をカスタマイズ',
   'settings.baseUrlDefaultHint': 'プロキシまたは互換ゲートウェイを使用する場合のみ変更してください。',

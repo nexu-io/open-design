@@ -629,6 +629,8 @@ export const id: Dict = {
   'settings.fetchModelsFailed': 'Tidak dapat mengambil model: {detail}',
   'settings.suggestedModelsHint': 'Ini model yang disarankan untuk protokol ini. Provider kamu mungkin mendukung model lain.',
   'settings.baseUrl': 'Base URL',
+  'settings.databricksWorkspaceUrl': 'URL ruang kerja',
+  'settings.databricksModelServiceName': 'Nama layanan model',
   'settings.baseUrlInvalid': 'Gunakan URL publik http:// atau https://.',
   'settings.baseUrlCustomize': 'Sesuaikan URL',
   'settings.baseUrlDefaultHint': 'Ubah hanya jika Anda menggunakan proxy atau gateway yang kompatibel.',

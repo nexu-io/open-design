@@ -406,6 +406,22 @@ describe('callAnthropicWithRetry', () => {
     return new Response(body, { status });
   }
 
+  it('uses bearer authentication for a Databricks Anthropic gateway', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(200, {
+      content: [{ type: 'text', text: 'DESIGN.md body' }],
+    }));
+    await callAnthropicWithRetry({
+      ...baseParams,
+      baseUrl: 'https://acme.cloud.databricks.com/ai-gateway/anthropic/v1',
+      fetchImpl,
+    });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://acme.cloud.databricks.com/ai-gateway/anthropic/v1/messages',
+      expect.objectContaining({ headers: expect.objectContaining({ authorization: 'Bearer sk-test-key' }) }),
+    );
+    expect(fetchImpl.mock.calls[0]?.[1]?.headers).not.toHaveProperty('x-api-key');
+  });
+
   it('throws FinalizeUpstreamError(401) on auth failure (no retry on 4xx non-429)', async () => {
     const fetchImpl = vi.fn(async () => textResponse(401, '{"error":{"type":"authentication_error","message":"invalid x-api-key"}}'));
     await expect(callAnthropicWithRetry({ ...baseParams, fetchImpl })).rejects.toMatchObject({

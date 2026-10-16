@@ -2,6 +2,27 @@ import { describe, expect, it } from 'vitest';
 import { classifyAgentServiceFailure } from '../../src/runtimes/auth.js';
 
 describe('classifyAgentServiceFailure', () => {
+  it('does not infer throttling from quota headers on an OpenCode HTTP 400 error', () => {
+    const message = "Bad Request: Function tools with reasoning_effort are not supported for gpt-6-luna in /v1/chat/completions.";
+    const raw = JSON.stringify({
+      type: 'error',
+      error: {
+        name: 'APIError',
+        data: {
+          message,
+          statusCode: 400,
+          isRetryable: false,
+          responseHeaders: {
+            'x-ratelimit-limit-requests': '100000',
+            'x-ratelimit-remaining-requests': '99993',
+            'x-ratelimit-reset-requests': '4ms',
+          },
+        },
+      },
+    });
+    expect(classifyAgentServiceFailure(`${message}\n${raw}`)).toBeNull();
+  });
+
   it('classifies the official DeepSeek Harness missing-credential failure', () => {
     expect(
       classifyAgentServiceFailure(

@@ -629,6 +629,8 @@ export const ptBR: Dict = {
   'settings.fetchModelsFailed': 'Não foi possível buscar os modelos: {detail}',
   'settings.suggestedModelsHint': 'Estes são modelos sugeridos para este protocolo. Seu provedor pode oferecer suporte a modelos diferentes.',
   'settings.baseUrl': 'URL base',
+  'settings.databricksWorkspaceUrl': 'URL do espaço de trabalho',
+  'settings.databricksModelServiceName': 'Nome do serviço de modelo',
   'settings.baseUrlInvalid': 'Use uma URL pública http:// ou https://.',
   'settings.baseUrlCustomize': 'Personalizar URL',
   'settings.baseUrlDefaultHint': 'Altere somente se você usar um proxy ou gateway compatível.',
