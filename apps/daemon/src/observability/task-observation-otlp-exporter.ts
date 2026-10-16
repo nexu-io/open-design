@@ -48,7 +48,7 @@ export interface TaskObservationExportOptions {
   config: TaskObservationExporterConfig | null;
   fetchImpl?: typeof fetch;
   deliveryIdempotencyKey?: string;
-  onDeliveryAttempt?: () => void;
+  onDeliveryAttempt?: (trace?: { traceId: string; protocol: 'legacy-v1' | 'otlp-v4' }) => void;
   context?: TaskObservationExportContextV1;
   /** Test-only retry delay override. Production callers should omit it. */
   retryDelayMs?: number;
@@ -966,7 +966,7 @@ async function postOtlpTaskPayload(
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
       attemptCount += 1;
-      opts.onDeliveryAttempt?.();
+      opts.onDeliveryAttempt?.({ traceId: payload.resourceSpans[0]!.scopeSpans[0]!.spans[0]!.traceId, protocol: 'otlp-v4' });
       const response = await fetchImpl(`${config.baseUrl}${LANGFUSE_OTLP_TRACES_PATH}`, {
         method: 'POST',
         headers: {
@@ -1097,7 +1097,8 @@ export async function exportTaskObservationAggregate(
       opts.fetchImpl ?? globalThis.fetch,
       () => {
         attemptCount += 1;
-        opts.onDeliveryAttempt?.();
+        const trace = (legacyBatch as Array<{ type: string; body: { id: string } }>).find(event => event.type === 'trace-create');
+        opts.onDeliveryAttempt?.({ traceId: String(trace!.body.id), protocol: 'legacy-v1' });
       },
     );
     return withDiagnostics({

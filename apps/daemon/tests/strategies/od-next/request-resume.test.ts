@@ -41,6 +41,20 @@ it('sends new query, key, attachments and runtime context without repeating stab
   expect(text).not.toContain(parseOdNextPromptBundleV2(previous.promptBundle.text).sessionSkills.generalOrchestrationSkill.body);
 });
 
+it('reminds a resumed discovery session to load a newly requested type without replaying its catalog', () => {
+  const discovery = (bundle: ReturnType<typeof parseOdNextPromptBundleV2>) => {
+    bundle.sessionSkills.taskTypeSkill.skillName = 'discovery';
+    bundle.sessionSkills.taskTypeSkill.body = 'Full catalog sentinel.';
+  };
+  const current = task('bbb', bundle => { discovery(bundle); bundle.userFirstPrompt = '现在做一份说明书'; });
+  const text = composeResumedRequest(current, task('aaa', discovery))!;
+  expect(text).toContain('new deliverable type');
+  expect(text).toContain('native file');
+  expect(text).toContain('already in context');
+  expect(text).not.toContain('Full catalog sentinel.');
+  expect(composeResumedRequest(task('bbb'), task('aaa'))).not.toContain('new deliverable type');
+});
+
 it.each(['core', 'skill', 'configuration', 'custom'] as const)('requires full input when %s instructions change', kind => {
   const previous = task('aaa');
   const current = task('bbb', bundle => {

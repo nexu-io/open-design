@@ -670,14 +670,7 @@ process.exit(127);
     }
   });
 
-  // ACCEPTANCE for the opt-out switch. Nothing configured takes the OD Next
-  // route — that is the default this build ships. The SAME running daemon
-  // takes the ordinary route on the next run once `odNextStrategyMode: 'off'`
-  // is saved through the public app-config API. No restart, no environment
-  // variable — that is what "configure it and it takes effect" has to mean for
-  // a packaged install, where the saved mode is the only control a user has:
-  // the packaged child environment allowlist carries no `OD_NEXT_*` key.
-  it('marker protocol automatically resumes Codex once and preserves files despite a missing canonical entry', async () => {
+  it('Discovery resumes Codex once and delivers multiple real files without the default canonical entry', async () => {
     const fixture = await createPublicRolloutFixture('marker-production', 'design');
     await verifyProductionHostProtocol(fixture, 'marker-production');
   });
@@ -713,7 +706,9 @@ process.exit(127);
     expect(task.planContract).toBeUndefined();
     const production = await waitForRunTerminal(started.url, task.latestRunId);
     expect(production.status).toBe('succeeded');
-    expect(production.strategyTask).toMatchObject({ outcome: 'completed', terminal: true, deliverableValid: false });
+    // Discovery validates the current run's independent output candidates;
+    // the homepage's default index.html is not required for this delivery.
+    expect(production.strategyTask).toMatchObject({ outcome: 'completed', terminal: true, deliverableValid: true });
     expect(repeatPreparation).toBeTypeOf('function');
     const repeated = repeatPreparation!();
     expect(repeated.start).toBe(false);
@@ -742,6 +737,7 @@ process.exit(127);
     expect(visibleText).not.toContain('<od-next');
     expect(await readFile(path.join(invocations[1]!.cwd, 'landing.html'), 'utf8')).toContain('Landing');
     expect(await readFile(path.join(invocations[1]!.cwd, 'deck.html'), 'utf8')).toContain('Deck');
+    await expect(readFile(path.join(invocations[1]!.cwd, 'index.html'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
     const response = await fetch(`${started.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`);
     const history = await response.json() as {
       messages: Array<{ content: string; strategyTaskDelivered?: boolean; events?: Array<{ kind: string; suggestions?: string[] }> }>;
@@ -751,7 +747,7 @@ process.exit(127);
     const persistedSuggestions = history.messages.flatMap(message => (message.events ?? [])
       .filter(event => event.kind === 'next_steps').map(event => event.suggestions));
     expect(persistedSuggestions).toEqual(suggestionsExpected ? [PRODUCTION_FOLLOW_UP_SUGGESTIONS] : []);
-    expect(history.messages.some(message => message.strategyTaskDelivered)).toBe(false);
+    expect(history.messages.some(message => message.strategyTaskDelivered)).toBe(true);
   }
 
   it.each(['missing-session', 'expired-session'] as const)('marker production cold-starts with its plan when %s', async mode => {
@@ -783,34 +779,6 @@ process.exit(127);
     expect(settled.runs[0]?.settlementReason).toBe('continued');
     expect(settled.runs).toHaveLength(2);
   });
-
-  it.each(['identical', 'conflicting', 'malformed'] as const)(
-    'produces once despite %s repeated retired runtime-state blocks', async mode => {
-      const fixture = await createPublicRolloutFixture(`marker-duplicate-state-${mode}`, 'design');
-      started = fixture.started; binDir = fixture.binDir;
-      process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
-      const created = await postRun(started.url, publicRunRequest(fixture,
-        'Create a landing page from the plan.', `duplicate-state-${mode}`));
-      const request = await waitForRunTerminal(started.url, created.runId as string);
-      expect(request.status, JSON.stringify(request)).toBe('succeeded');
-      const task = await waitForTask(created.strategyTask!.taskExecutionId, 'completed');
-      expect(task.runs.map(run => run.inputStage)).toEqual(['request', 'production']);
-      expect(task.planContract).toBeUndefined();
-      const production = await waitForRunTerminal(started.url, task.latestRunId);
-      expect(production.status, JSON.stringify(production)).toBe('succeeded');
-      const calls = await readProjectInvocations(fixture.logPath, fixture.projectId);
-      expect(calls).toHaveLength(2);
-      expect(calls[1]!.argv).toContain('resume');
-      expect(calls[1]!.stdin).toContain('This is the production turn');
-      expect(await readFile(path.join(calls[1]!.cwd, 'landing.html'), 'utf8')).toContain('Landing');
-      const response = await fetch(`${started.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`);
-      const history = await response.json() as { messages: Array<{ content: string }> };
-      expect(response.status).toBe(200);
-      expect(history.messages.some(message => message.content.includes('Plan: create a blue landing page.'))).toBe(true);
-      expect(JSON.stringify(history)).not.toContain('open-design-runtime-state');
-      expect(JSON.stringify(history)).not.toContain('od-production-ready');
-    }, 45_000,
-  );
 
   it('does not cold-replay production after a tool ran before resume failure', async () => {
     const fixture = await createPublicRolloutFixture('marker-expired-side-effect', 'design');
@@ -974,6 +942,11 @@ process.exit(127);
       'Hold the run open and drain slowly after a stop.', 'draining-first'));
     const firstRunId = first.runId as string;
     await vi.waitFor(async () => expect((await getRun(started!.url, firstRunId)).status).toBe('running'));
+    // A running registry entry precedes child initialization. Wait for the
+    // fixture's installed SIGTERM handler before testing its drain window.
+    await vi.waitFor(async () => {
+      expect(await readFile(fixture.logPath, 'utf8')).toContain('\"drainReady\":true');
+    });
     const stopping = fetch(`${started.url}/api/runs/${encodeURIComponent(firstRunId)}/cancel`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
     });
@@ -1122,55 +1095,6 @@ process.exit(127);
       expect((await readProjectInvocations(fixture.logPath, fixture.projectId))).toHaveLength(2);
     }, 45_000);
 
-  it('sends compact historical context to the agent while still accepting another clarification form', async () => {
-    const fixture = await createPublicRolloutFixture('marker-question', 'design');
-    started = fixture.started; binDir = fixture.binDir;
-    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
-    const original = 'Original handoff request: create a blue page with keyboard navigation.';
-    const first = await postRun(started.url, publicRunRequest(fixture, original, 'history-context-first'));
-    const previous = await waitForTask(first.strategyTask!.taskExecutionId, 'completed');
-    await waitForRunTerminal(started.url, previous.latestRunId);
-    const callsBefore = await readProjectInvocations(fixture.logPath, fixture.projectId);
-    const body = '<!doctype html><html><body>' + 'STORED_PAGE_BODY_SENTINEL'.repeat(1000) + '</body></html>';
-    await writeFile(path.join(callsBefore[0]!.cwd, 'history-page.html'), body);
-    const prior = listMessages(database(), fixture.conversationId)
-      .find(message => message.runId === previous.latestRunId)!;
-    expect(prior).toBeDefined();
-    upsertMessage(database(), fixture.conversationId, {
-      ...prior,
-      content: 'Plan: keep the blue palette and keyboard navigation.\n'
-        + '<question-form id="scope">{"questions":[{"id":"audience","label":"Who is this for?"}]}</question-form>\n'
-        + `<artifact identifier="history-page" type="text/html" title="Existing page">${body}</artifact>`,
-      producedFiles: [{ name: 'history-page.html', path: 'history-page.html', size: body.length,
-        mtime: Date.now(), kind: 'html', mime: 'text/html',
-        artifactManifest: { metadata: { identifier: 'history-page' } } }],
-    });
-    const followup = 'Continue the blue page. Ask for more detail if useful.';
-    const next = await postRun(started.url, {
-      ...publicRunRequest(fixture, followup, 'history-context-second'),
-      // Changed instructions require the full bundle rather than native incremental input.
-      systemPrompt: 'Current instruction: retain keyboard navigation.',
-    });
-    const current = await waitForTask(next.strategyTask!.taskExecutionId, 'completed');
-    expect((await waitForRunTerminal(started.url, current.latestRunId)).status).toBe('succeeded');
-    const calls = await readProjectInvocations(fixture.logPath, fixture.projectId);
-    expect(calls).toHaveLength(2);
-    const context = parseOdNextPromptBundleV2(calls[1]!.stdin).context.priorTranscript!;
-    for (const text of [original, 'blue palette', 'keyboard navigation', 'Who is this for?', 'history-page.html']) {
-      expect(context).toContain(text);
-    }
-    expect(context).not.toContain('STORED_PAGE_BODY_SENTINEL');
-    expect(context).not.toContain('<question-form');
-    expect(context).not.toContain('already answered');
-    expect(calls[1]!.stdin).toContain(followup);
-    // The fixture agent asks the same question again. It remains an ordinary
-    // succeeded reply: historical formatting must never become a repetition gate.
-    const reply = listMessages(database(), fixture.conversationId)
-      .find(message => message.runId === current.latestRunId)!;
-    expect(reply.content).toContain('<question-form id="scope">');
-    expect(reply.content).toContain('Who is this for?');
-  }, 45_000);
-
   it('rejects a handoff during an active run and continues under the current strategy after daemon restart', async () => {
     const fixture = await createPublicRolloutFixture('marker-handoff', 'design');
     started = fixture.started; binDir = fixture.binDir;
@@ -1194,7 +1118,31 @@ process.exit(127);
     expect(task.continuedFromTaskExecutionId).toBe(first.strategyTask!.taskExecutionId);
   }, 45_000);
 
-  it('runs OD Next by default and leaves it on the next run once the installation opts out', async () => {
+  it('keeps the automatic WebGL entry in Discovery when Query requests a presentation', async () => {
+    const fixture = await createPublicRolloutFixture('webgl-query-priority', 'design');
+    started = fixture.started;
+    binDir = fixture.binDir;
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    const project = await createProjectForScenario(started.url, 'manual-webgl', {
+      kind: 'prototype', intent: 'webgl-experience',
+    });
+    expect(project.metadata?.scenarioBinding).toMatchObject({
+      provenance: 'automatic_default', pluginId: 'example-webgl-experience',
+    });
+    const run = await postRun(started.url, publicRunRequest(
+      project, 'Make a three-slide community-service presentation, not a WebGL demo.',
+      'webgl-query-priority',
+    ));
+    expect(run.strategyTask).toMatchObject({ inputStage: 'request' });
+    expect(await readDurableRunState(run.runId as string)).toMatchObject({
+      strategyRolloutDecision: { decisionClass: 'active', taskType: 'discovery' },
+    });
+    await fetch(`${started.url}/api/runs/${encodeURIComponent(run.runId as string)}/cancel`, { method: 'POST' });
+    await waitForRunTerminal(started.url, run.runId as string);
+  });
+
+  it('keeps Discovery active for subsequent requests despite a historical off preference', async () => {
     const fixture = await createPublicRolloutFixture('app-config-opt-out', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
@@ -1208,7 +1156,7 @@ process.exit(127);
     ));
     expect(beforeOptOut.strategyTask).toMatchObject({ inputStage: 'request', terminal: false });
     expect(await readDurableRunState(beforeOptOut.runId as string)).toMatchObject({
-      strategyRolloutDecision: { decisionClass: 'active', taskType: 'prototype' },
+      strategyRolloutDecision: { decisionClass: 'active', taskType: 'discovery' },
     });
     await fetch(
       `${started.url}/api/runs/${encodeURIComponent(beforeOptOut.runId as string)}/cancel`,
@@ -1247,17 +1195,17 @@ process.exit(127);
     const invocationsBefore = (await readProjectInvocations(fixture.logPath, fixture.projectId)).length;
     const afterOptOut = await postRun(started.url, publicRunRequest(
       fixture,
-      'Run after this installation opted out.',
+      'Create a 2-page PPT after this installation opted out.',
       'app-config-opt-out-after',
     ));
-    expect(afterOptOut.strategyTask).toBeUndefined();
-    expect(afterOptOut.pluginId).toBe('example-web-prototype');
+    expect(afterOptOut.strategyTask).toMatchObject({ inputStage: 'request' });
     await waitForRunTerminal(started.url, afterOptOut.runId as string);
     const ordinaryInvocations = (await readProjectInvocations(fixture.logPath, fixture.projectId))
       .slice(invocationsBefore);
     expect(ordinaryInvocations).toHaveLength(1);
-    expect(ordinaryInvocations[0]?.stdin).not.toContain('OD Next Strategy V2');
+    expect(ordinaryInvocations[0]?.stdin).toContain('skill_name="discovery"');
     expect(ordinaryInvocations[0]?.stdin).not.toContain('open-design.strategy-state/v2');
+    expect(ordinaryInvocations[0]?.stdin).not.toContain('Deck framework — DO NOT EDIT');
 
     // The operator-facing surface names the authority that decided, so the
     // person who just configured the mode can confirm theirs is the one in
@@ -1266,9 +1214,9 @@ process.exit(127);
     const status = await fetch(`${started.url}/api/strategies/od-next/rollout`);
     expect(status.status).toBe(200);
     expect((await status.json() as { status: unknown }).status).toMatchObject({
-      requestedMode: 'off',
-      requestedModeSource: 'app_config',
-      effectiveMode: 'off',
+      requestedMode: 'active',
+      requestedModeSource: 'default',
+      effectiveMode: 'active',
     });
     // Two full runs against a real server, plus config writes and a status
     // read — the heaviest case in this file, and the only one that drives more
@@ -1363,7 +1311,7 @@ process.exit(127);
     }
   });
 
-  it('routes the four approved automatic profiles while ordinary Image remains media-only', async () => {
+  it('converges official automatic and explicit task-type entries into Discovery', async () => {
     const fixture = await createPublicRolloutFixture('approved-profiles', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
@@ -1499,7 +1447,7 @@ process.exit(127);
         strategyRolloutDecision: {
           schemaVersion: 1,
           decisionClass: 'active',
-          taskType: candidate.taskProfile,
+          taskType: 'discovery',
           primaryReasonCode: 'od_next_rollout_eligible',
         },
       });
@@ -1583,7 +1531,7 @@ process.exit(127);
         strategyRolloutDecision: {
           schemaVersion: 1,
           decisionClass: 'active',
-          taskType: 'prototype',
+          taskType: 'discovery',
           primaryReasonCode: 'od_next_rollout_eligible',
         },
       });
@@ -1638,13 +1586,12 @@ process.exit(127);
       'Create an ordinary image.',
       'ordinary-image-default',
     ));
-    expect(imageRun.strategyTask).toBeUndefined();
-    expect(imageRun.pluginId).toBe('od-media-generation');
+    expect(imageRun.strategyTask).toMatchObject({ inputStage: 'request' });
     expect(await readDurableRunState(imageRun.runId as string)).toMatchObject({
       strategyRolloutDecision: {
         schemaVersion: 1,
-        decisionClass: 'not_applicable',
-        taskType: null,
+        decisionClass: 'active',
+        taskType: 'discovery',
       },
     });
     const imageStatus = await fetch(
@@ -1654,8 +1601,8 @@ process.exit(127);
     expect(await imageStatus.json()).toMatchObject({
       strategyRolloutDecision: {
         schemaVersion: 1,
-        decisionClass: 'not_applicable',
-        taskType: null,
+        decisionClass: 'active',
+        taskType: 'discovery',
       },
     });
     await waitForRunTerminal(started.url, imageRun.runId as string);
@@ -1684,13 +1631,12 @@ process.exit(127);
       'Create an ordinary image.',
       'ordinary-image-explicit',
     ));
-    expect(explicitImageRun.strategyTask).toBeUndefined();
-    expect(explicitImageRun.pluginId).toBe('od-media-generation');
+    expect(explicitImageRun.strategyTask).toMatchObject({ inputStage: 'request' });
     expect(await readDurableRunState(explicitImageRun.runId as string)).toMatchObject({
       strategyRolloutDecision: {
         schemaVersion: 1,
-        decisionClass: 'explicit_user',
-        taskType: null,
+        decisionClass: 'active',
+        taskType: 'discovery',
       },
     });
     await waitForRunTerminal(started.url, explicitImageRun.runId as string);
@@ -1725,7 +1671,7 @@ process.exit(127);
     expect(await readDurableRunState(created.runId as string)).toMatchObject({
       strategyRolloutDecision: {
         decisionClass: 'active',
-        taskType: 'prototype',
+        taskType: 'discovery',
       },
     });
     await fetch(`${started.url}/api/runs/${encodeURIComponent(created.runId as string)}/cancel`, {
@@ -1825,9 +1771,9 @@ process.exit(127);
     ]);
     expect(savedResult.stderr).toBe('');
     expect((JSON.parse(savedResult.stdout) as { status: unknown }).status).toMatchObject({
-      requestedMode: 'off',
-      requestedModeSource: 'app_config',
-      effectiveMode: 'off',
+      requestedMode: 'active',
+      requestedModeSource: 'default',
+      effectiveMode: 'active',
     });
 
     // The reset endpoint and its CLI subcommand are both gone, and gone the
@@ -1858,7 +1804,9 @@ process.exit(127);
     // what replaced it — and gets a non-zero exit, because the recovery it
     // asked for neither happened nor can.
     expect(resetCli.stderr).toContain('od strategy rollout reset was removed');
-    expect(resetCli.stderr).toContain('od config set odNextStrategyMode off');
+    expect(resetCli.stderr).toContain('OD Next is active by default');
+    expect(resetCli.stderr).toContain('od strategy rollout status');
+    expect(resetCli.stderr).not.toContain('od config set odNextStrategyMode off');
   });
 
   it('keeps active retry/task recipe-only while rollback lazily resolves the ordinary default', async () => {
@@ -2239,7 +2187,7 @@ process.exit(127);
     expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(1);
   });
 
-  it('never overrides explicit plugin, snapshot, or existing project-pin authority', async () => {
+  it('converges verified bundled task pins while protecting custom plugin and invalid snapshot authority', async () => {
     const fixture = await createPublicRolloutFixture(
       'authority',
       'design',
@@ -2261,15 +2209,17 @@ process.exit(127);
       started.url,
       publicRunRequest(fixture, 'Use the pinned default.', 'pinned-authority'),
     );
-    expect(pinned.strategyTask).toBeUndefined();
-    expect(pinned.pluginId).toBe('example-web-prototype');
+    expect(pinned.strategyTask).toMatchObject({ inputStage: 'request' });
+    await fetch(`${started.url}/api/runs/${encodeURIComponent(pinned.runId as string)}/cancel`, { method: 'POST' });
+    await waitForRunTerminal(started.url, pinned.runId as string);
 
     const explicitDefault = await postRun(started.url, {
       ...publicRunRequest(fixture, 'Use the explicit default.', 'explicit-default'),
       pluginId: 'example-web-prototype',
     });
-    expect(explicitDefault.strategyTask).toBeUndefined();
-    expect(explicitDefault.pluginId).toBe('example-web-prototype');
+    expect(explicitDefault.strategyTask).toMatchObject({ inputStage: 'request' });
+    await fetch(`${started.url}/api/runs/${encodeURIComponent(explicitDefault.runId as string)}/cancel`, { method: 'POST' });
+    await waitForRunTerminal(started.url, explicitDefault.runId as string);
 
     const invalidSnapshot = await fetch(`${started.url}/api/runs`, {
       method: 'POST',
@@ -2302,11 +2252,12 @@ process.exit(127);
       source: 'community-collision-fixture',
       trust: 'restricted',
     });
+    const collisionProject = await createProjectForScenario(started.url, 'collision-isolated', { kind: 'prototype' });
     const collidingId = await fetch(`${started.url}/api/runs`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        ...publicRunRequest(fixture, 'Use an explicit colliding id.', 'colliding-id'),
+        ...publicRunRequest(collisionProject, 'Use an explicit colliding id.', 'colliding-id'),
         pluginId: 'od-next-strategy',
       }),
     });
@@ -2315,7 +2266,7 @@ process.exit(127);
       error: { code: 'capabilities-required' },
     });
     expect((database().prepare('SELECT COUNT(*) AS count FROM strategy_task_executions').get() as { count: number }).count)
-      .toBe(strategyTaskCountAtStart);
+      .toBe(strategyTaskCountAtStart + 2);
 
     const restoredResult = await runOdCli([
       'project', 'restore-automatic-scenario', fixture.projectId,
@@ -3009,6 +2960,7 @@ process.stdin.on('end', () => {
   if (stdin.includes('Hold the run open and drain slowly after a stop.') && !stdin.includes('Historical task context.')) {
     // Stopping answers only after the process exits; keep that window open.
     process.on('SIGTERM', () => setTimeout(() => process.exit(0), 2500));
+    fs.appendFileSync(logPath, JSON.stringify({ drainReady: true }) + '\\n');
     setInterval(() => {}, 1 << 30);
     return;
   }
@@ -3025,26 +2977,7 @@ process.stdin.on('end', () => {
     return;
   }
   let text = 'Ordinary public run completed.';
-  if (${JSON.stringify(label)}.startsWith('marker-duplicate-state-')) {
-    const mode = ${JSON.stringify(label)}.slice('marker-duplicate-state-'.length);
-    if (stdin.includes('This is the production turn')) {
-      fs.writeFileSync('landing.html', '<!doctype html><html><body>Landing</body></html>');
-      text = 'Wrote landing.html.';
-    } else {
-      const key = /<od-production-ready key="([a-f0-9]+)"/.exec(stdin)?.[1];
-      if (!key) throw new Error('Current host marker key was not injected');
-      const state = {
-        schema: 'open-design.strategy-state/v2', route: 'full_plan', inputStage: 'request',
-        outcome: 'plan_ready', executionMode: 'simple', executionIntent: 'produce', reasonCodes: [],
-      };
-      const bodies = mode === 'malformed' ? ['{broken}', '{also broken}']
-        : [JSON.stringify(state), JSON.stringify(mode === 'conflicting'
-          ? { ...state, executionMode: null, executionIntent: 'plan_only' } : state)];
-      text = 'Plan: create a blue landing page.\\n'
-        + bodies.map(body => '<open-design-runtime-state>\\n' + body + '\\n</open-design-runtime-state>').join('\\n')
-        + '\\n<od-production-ready key="' + key + '" />';
-    }
-  } else if (${JSON.stringify(label)} === 'marker-handoff') {
+  if (${JSON.stringify(label)} === 'marker-handoff') {
     if (stdin.includes('Historical task context.')) {
       fs.writeFileSync('index.html', '<!doctype html><html><body>Dog battle</body></html>');
       text = 'Delivered index.html.';

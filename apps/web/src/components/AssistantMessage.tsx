@@ -8,6 +8,7 @@ import { upstreamActivityAt } from "../runtime/chat/upstream-activity";
 import type { RecordFileScope } from "../runtime/chat/record-file-open";
 import { FileOpsSummary } from "./FileOpsSummary";
 import { messageArtifactRefs } from "../runtime/chat/artifact-refs";
+import { liveArtifactDeliveries } from "../runtime/live-artifact-delivery";
 import { assistantMessageNeverHadARun } from "../runtime/chat/host-authored-message";
 import {
   renderMarkdown,
@@ -731,6 +732,7 @@ function AssistantMessageImpl({
     [displayEvents, fileOpScope],
   );
   const rawProduced = message.producedFiles ?? [];
+  const liveDeliveries = useMemo(() => liveArtifactDeliveries(message.events), [message.events]);
   /**
    * 这一轮 agent 自己声明的「显示什么」—— `<od-focus …/>` 的 `show`。
    *
@@ -864,7 +866,7 @@ function AssistantMessageImpl({
    * 用意,原样保留)。第 1 条不受这道闸约束 —— 工具行本身带 `pending` 态,
    * 边跑边出卡是设计要的(D37)。
    */
-  const turnArtifactPanelEntries = useMemo(() => {
+  const rawTurnArtifactPanelEntries = useMemo(() => {
     /*
      * 两条支各自已经在消费点做过同一套边界处理
      * (`summaryArtifactOps` / `declaredArtifactFiles`):有 `show` 就按声明收窄,
@@ -875,6 +877,9 @@ function AssistantMessageImpl({
     if (streaming) return [];
     return orderArtifactCards(producedFilesAsFileOps(declaredArtifactFiles), artifactFocus);
   }, [artifactFocus, declaredArtifactFiles, streaming, summaryArtifactOps]);
+  const turnArtifactPanelEntries = liveDeliveries.length
+    ? rawTurnArtifactPanelEntries.filter(entry => entry.path !== 'template.html')
+    : rawTurnArtifactPanelEntries;
   // The single artifact the "next step" affordance anchors to: prefer the HTML
   // produced by THIS turn; if the final turn emitted none (a summary / continue
   // message) fall back to the most recently modified HTML in the project so
@@ -1355,6 +1360,11 @@ function AssistantMessageImpl({
         )}
         {/* 状态行 / 插件候选不属于执行记录,也没有流里的位置 —— 收在最后 */}
         {restBlocks.map((b, i) => renderOuterBlock(b, `rest-${i}`))}
+        {liveDeliveries.map(item => (
+          <Button key={item.id} onClick={() => onRequestOpenFile?.(item.tabId)}>
+            {item.title || t('tasks.liveArtifact')}
+          </Button>
+        ))}
         {/* #5517 shape: the collapsible tool-op summary lists only the ops the
             turn actually emitted, and the produced-files list stays its own
             flat block below it (name / size / Open / Download). Folding the

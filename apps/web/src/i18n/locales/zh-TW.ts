@@ -5872,7 +5872,7 @@ export const zhTW: Dict = {
   'labs.title': "Open Design 實驗室",
   'labs.itemAbout': "關於 {name}",
   'labs.navHint': "搶先體驗尚未正式發布的能力。",
-  'labs.pageDesc': "搶先體驗尚未正式發布的能力，通常已優於目前版本；隨時關閉即可恢復現狀。",
+  'labs.pageDesc': "搶先體驗仍在探索中的功能。功能及可用範圍可能隨版本調整。",
   'labs.harnessName': "Design Harness",
   'labs.harnessHint': "開啟後，下次生成將使用 OpenDesign 最新生成策略，生成效果更精緻（內測中）",
   'labs.harnessTooltip': "開啟後改用 Open Design 為設計場景打造的 agent harness，產物在版面、結構與完成度上會明顯更好。",

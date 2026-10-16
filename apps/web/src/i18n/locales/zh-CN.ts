@@ -5865,7 +5865,7 @@ export const zhCN: Dict = {
   'labs.title': "Open Design 实验室",
   'labs.itemAbout': "关于 {name}",
   'labs.navHint': "抢先体验尚未正式发布的能力。",
-  'labs.pageDesc': "抢先体验尚未正式发布的能力，通常已优于当前版本；随时关闭即可恢复现状。",
+  'labs.pageDesc': "抢先体验尚在探索中的功能。功能及可用范围可能随版本调整。",
   'labs.harnessName': "Design Harness",
   'labs.harnessHint': "开启后，下次生成将使用 OpenDesign 最新生成策略，生成效果更精美（内测中）",
   'labs.harnessTooltip': "开启后改用 Open Design 为设计场景专门打造的 agent harness，产物在版式、结构和完成度上会明显更好。",

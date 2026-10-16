@@ -1,4 +1,5 @@
 import { persistStrategyResumeText } from '../../src/strategies/task-store.js';
+import { observeDiscoveryEvent } from '../../src/strategies/od-next/discovery-observation.js';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -284,6 +285,21 @@ describe('task observation rollout', () => {
     `).run();
   }
 
+  it('exports live Skill IDs even when the bounded Run event ring no longer contains the Read', async () => {
+    const run = syntheticRun();
+    const skillRoot = '/bundled/scenarios/od-next-strategy/assets/task-profiles';
+    observeDiscoveryEvent(run, { event: 'diagnostic', data: { type: 'skill_discovery_policy', injected: true, skillRoot } });
+    observeDiscoveryEvent(run, { event: 'agent', data: { type: 'tool_use', id: 'read-doc', name: 'Read', input: { file_path: `${skillRoot}/document.md` } } });
+    observeDiscoveryEvent(run, { event: 'agent', data: { type: 'tool_result', toolUseId: 'read-doc', content: 'Private body sentinel.' } });
+    const fetchImpl = vi.fn<typeof fetch>(async () => acceptedResponse());
+    await expect(service({ mode: 'send', dataDir: tempDir, fetchImpl, getRun: () => run }).finalizeForRun('run-1')).resolves.toMatchObject({ action: 'sent' });
+    const batch = JSON.parse(String(fetchImpl.mock.calls[0]![1]!.body)).batch as Array<{ type: string; body: Record<string, unknown> }>;
+    expect(batch.find(event => event.type === 'trace-create')?.body).toMatchObject({ metadata: {
+      skill_discovery_enabled: true, skill_discovery_policy_injected: true, skill_ids_loaded: ['document'],
+    } });
+    expect(JSON.stringify(batch)).not.toContain('Private body sentinel.');
+  });
+
   it('keeps the mapped run version when restart finalization replaces single-run telemetry', async () => {
     const fetchImpl = vi.fn<typeof fetch>(async () => acceptedResponse());
     const startedVersion = {
@@ -502,6 +518,26 @@ describe('task observation rollout', () => {
       action: 'observed',
     });
     expect(deliveryRow().aggregateDigest).toMatch(/^[a-f0-9]{64}$/u);
+  });
+
+  it.each(['legacy', 'otlp'] as const)('exposes actual %s payload trace ID after export and across restart', async (mode) => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => acceptedResponse());
+    const rollout = service({ mode: 'send', env: { LANGFUSE_EXPORTER_MODE: mode }, dataDir: tempDir, fetchImpl });
+    expect(rollout.telemetryForRun('run-1')?.traceId).toBeNull();
+    await rollout.finalizeForRun('run-1');
+    const payload = JSON.parse(String(fetchImpl.mock.calls[0]![1]!.body));
+    const traceId = mode === 'otlp' ? payload.resourceSpans[0].scopeSpans[0].spans[0].traceId : payload.batch[0].body.id;
+    expect(rollout.telemetryForRun('run-1')).toMatchObject({ status: 'accepted', traceId,
+      protocol: mode === 'otlp' ? 'otlp-v4' : 'legacy-v1', remoteVerification: 'not_checked' });
+    // Changing current exporter config cannot rewrite historical trace identity.
+    const restarted = service({ mode: 'send', env: { LANGFUSE_EXPORTER_MODE: mode === 'otlp' ? 'legacy' : 'otlp' }, dataDir: tempDir });
+    expect(restarted.telemetryForRun('run-1')?.traceId).toBe(traceId);
+  });
+
+  it('does not fabricate trace identity for observe-only or missing exporter receipts', async () => {
+    const rollout = service({ mode: 'observe', dataDir: tempDir });
+    await rollout.finalizeForRun('run-1');
+    expect(rollout.telemetryForRun('run-1')).toMatchObject({ status: 'observed', traceId: null, attemptCount: 0 });
   });
 
   it('sends one task root with environment tags and never resends a finalized task', async () => {

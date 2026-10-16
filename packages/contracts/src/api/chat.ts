@@ -710,7 +710,23 @@ export interface ChatRunExecutionDiagnostics {
   };
 }
 
+/** Exporter evidence; accepted means ingest accepted, not remote query verification. */
+export interface TaskTelemetryStatus {
+  version: 1;
+  taskExecutionId: string;
+  status: 'unknown' | 'pending' | 'in_flight' | 'failed' | 'accepted' | 'not_expected' | 'observed' | 'compatibility';
+  traceId: string | null;
+  protocol: 'legacy-v1' | 'otlp-v4' | null;
+  transport: 'langfuse' | 'relay' | null;
+  attemptCount: number | null;
+  reason: string | null;
+  environment: string | null;
+  sampledAt: number;
+  remoteVerification: 'not_checked';
+}
+
 export interface ChatRunStatusResponse {
+  taskTelemetry?: TaskTelemetryStatus;
   id: string;
   projectId: string | null;
   conversationId: string | null;

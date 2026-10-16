@@ -1,3 +1,4 @@
+import { buildPreviewStorageBridge } from './preview-storage';
 import { injectMotionSourcePlayer, markMotionHostedPreview } from '@open-design/contracts/runtime/motion-source-player';
 /**
  * Wrap an artifact's HTML for a sandboxed iframe. Corresponds to
@@ -37,6 +38,7 @@ import {
   PREVIEW_RUNTIME_STATE_VERSION,
 } from '@open-design/contracts/runtime/preview-runtime-state';
 import {
+  buildPreviewSandboxShim,
   PREVIEW_REDIRECT_GUARD_MAX_HOPS,
   PREVIEW_REDIRECT_GUARD_SELF_REFRESH_MIN_DELAY_MS,
   PREVIEW_REDIRECT_GUARD_WINDOW_MS,
@@ -68,6 +70,8 @@ import {
 import { isApprovedFontStylesheetHref } from './deck-thumbnail-parser';
 
 export type SrcdocOptions = {
+  /** Host-scoped local progress, seeded before authored scripts by the lazy shell. */
+  previewStorage?: boolean;
   /** Live embedded motion preview only; do not enable for exports/captures. */
   motionPreview?: boolean;
   deck?: boolean;
@@ -369,7 +373,7 @@ export function buildSrcdoc(
   const withDeferredFonts = options.deferFontStylesheets
     ? deferTrustedFontStylesheets(withPreviewBaseBridge)
     : withPreviewBaseBridge;
-  const withShim = injectSandboxShim(withDeferredFonts);
+  const withShim = injectSandboxShim(withDeferredFonts, options.previewStorage);
   const blockLoadTimeScriptRedirect = htmlHasLoadTimeLocationNavigation(withPreviewBaseBridge);
   // Always on: a redirect loop can freeze ANY previewed artifact, and the guard
   // is inert on documents that never self-redirect. Injected right after the
@@ -500,6 +504,7 @@ export function buildLazySrcdocTransport(options: { quirksMode?: boolean } = {})
         } catch (_) { /* sandboxed parent — host falls back to onLoad */ }
       }
       function handleTransportMessage(ev){
+        if (ev.source !== window.parent) return;
         var data = ev && ev.data;
         if (data && data.type === 'od:srcdoc-transport-shell-probe') {
           announceReady();
@@ -511,6 +516,9 @@ export function buildLazySrcdocTransport(options: { quirksMode?: boolean } = {})
           window.removeEventListener('message', handleTransportMessage);
         }
         document.open();
+        window.__odPreviewStorageSeed = data.previewStorage
+          ? { generation: data.generation, values: data.previewStorage }
+          : null;
         document.write(data.html);
         document.close();
       }
@@ -1527,103 +1535,14 @@ function escapeAttr(value: string): string {
 // try/catch — when it throws, the whole script aborts and the deck
 // becomes a static, unnavigable preview. We install a same-origin
 // in-memory shim BEFORE any user script runs so those decks degrade
-// gracefully (position just doesn't persist across reloads).
+// gracefully. Live host previews may additionally seed isolated local progress;
+// exports and unhosted documents retain the in-memory fallback.
 // allow-popups and allow-popups-to-escape-sandbox are needed for 
 // links with target="_blank" to work in the sandboxed preview.
-// Empty hrefs and hash only hrefs will be intercepted and ignored.
-// hrefs leading to an id on the page will be scrolled into view.
-function injectSandboxShim(doc: string): string {
-  const shim = `<script data-od-sandbox-shim>(function(){
-  function makeStore(){
-    var data = {};
-    var api = {
-      getItem: function(k){ return Object.prototype.hasOwnProperty.call(data, k) ? data[k] : null; },
-      setItem: function(k, v){ data[k] = String(v); },
-      removeItem: function(k){ delete data[k]; },
-      clear: function(){ data = {}; },
-      key: function(i){ return Object.keys(data)[i] || null; }
-    };
-    Object.defineProperty(api, 'length', { get: function(){ return Object.keys(data).length; } });
-    return api;
-  }
-  function tryShim(name){
-    var works = false;
-    try { works = !!window[name] && typeof window[name].getItem === 'function'; void window[name].length; }
-    catch (_) { works = false; }
-    if (works) return;
-    try { Object.defineProperty(window, name, { configurable: true, value: makeStore() }); }
-    catch (_) { try { window[name] = makeStore(); } catch (__) {} }
-  }
-  tryShim('localStorage');
-  tryShim('sessionStorage');
-  // A <base href> pointing at the artifact's real /raw/ URL (injectBaseHref,
-  // below) is what lets relative asset paths resolve inside this opaque
-  // srcDoc document. That same base is what breaks history.pushState /
-  // replaceState: a bare-hash call like replaceState(null, '', '#/3') — the
-  // exact pattern generated decks use for their own slide routing — resolves
-  // against the <base> into a real http(s) URL, and the browser throws
-  // SecurityError because the DOCUMENT's own origin is the opaque "null" of
-  // about:srcdoc, which can never match a concrete origin. A deck whose own
-  // navigation function calls replaceState before it finishes updating the
-  // slide DOM (ordering varies by generated template) aborts mid-navigation
-  // on that throw, leaving the main canvas blank until a manual reload —
-  // the thumbnail rail is unaffected because it does not run the deck's
-  // script per-thumbnail. Wrap both methods so that failure degrades to a
-  // no-op instead of interrupting the caller: the iframe's address bar was
-  // never visible to the user anyway, so losing the hash update here is
-  // invisible.
-  function shimHistoryMethod(name){
-    try {
-      var h = window.history;
-      var original = h && h[name];
-      if (typeof original !== 'function') return;
-      h[name] = function(state, title, url){
-        try {
-          return original.call(h, state, title, url);
-        } catch (_) {
-          return undefined;
-        }
-      };
-    } catch (_) {}
-  }
-  shimHistoryMethod('pushState');
-  shimHistoryMethod('replaceState');
-  document.addEventListener('click', (e) => {
-    if (!e.target || !(e.target instanceof Element)) return;
-    var link = e.target.closest('a[href]');
-    if (!link) return;
-    var href = link.getAttribute('href');
-    if (href === null) return;
-    var isAnchor = href.startsWith('#') || href === '';
-    if (isAnchor) {
-      e.preventDefault();
-      if (href === '' || href === '#') {
-        window.scrollTo({ top: 0 });
-        history.replaceState(null, '', ' ');
-      } else {
-        var targetId = href.slice(1);
-        var target = targetId ? document.getElementById(targetId) : null;
-        if (target) {
-          target.scrollIntoView();
-          location.hash === href && history.replaceState(null, '', ' ');
-          location.hash = href;
-        }
-      }
-    } else if (link.getAttribute('target') === '_blank') {
-      e.preventDefault();
-      let safe = false;
-      try {
-        var url = new URL(href, location.href);
-        safe =
-          url.protocol === 'http:' ||
-          url.protocol === 'https:' ||
-          url.protocol === 'mailto:';
-      } catch (_) {}
-      safe && window.open(href, '_blank', 'noopener,noreferrer');
-    }
-  });
-})();</script>`;
-  return injectAtDocumentStart(doc, shim);
+// Empty hrefs return to the top; element anchors scroll into view.
+// Hash routers keep their same-document route and browser history.
+function injectSandboxShim(doc: string, persistStorage = false): string {
+  return injectAtDocumentStart(doc, buildPreviewSandboxShim() + (persistStorage ? buildPreviewStorageBridge() : ''));
 }
 
 function injectPreviewFocusGuard(doc: string): string {

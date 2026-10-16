@@ -5421,7 +5421,7 @@ export const ko: Dict = {
   'labs.title': "Open Design 랩",
   'labs.itemAbout': "{name} 정보",
   'labs.navHint': "아직 출시되지 않은 기능을 미리 사용해 보세요.",
-  'labs.pageDesc': "아직 정식 출시되지 않은 기능을 먼저 사용해 볼 수 있습니다. 대체로 현재 동작보다 낫고, 언제든 꺼서 원래대로 되돌릴 수 있습니다.",
+  'labs.pageDesc': "실험적인 기능을 체험하세요. 기능과 사용 가능 범위는 버전에 따라 달라질 수 있습니다.",
   'labs.harnessName': "Design Harness",
   'labs.harnessHint': "켜면 다음 생성부터 OpenDesign 최신 생성 전략을 사용해 결과물이 한층 정교해집니다 (베타)",
   'labs.harnessTooltip': "Open Design 이 디자인 작업을 위해 만든 agent harness 로 전환합니다. 레이아웃, 구조, 완성도가 눈에 띄게 좋아집니다.",

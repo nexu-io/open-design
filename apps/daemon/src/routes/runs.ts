@@ -113,7 +113,6 @@ import {
 } from '../strategies/od-next/task-input-snapshot.js';
 import {
   evaluateOdNextRollout,
-  odNextTaskTypeForProjectScenarioBinding,
   readOdNextRolloutPolicy,
   type OdNextRolloutDecision,
 } from '../strategies/od-next/rollout.js';
@@ -656,6 +655,7 @@ export interface RegisterRunRoutesDeps {
     ) => Promise<boolean>;
   };
   telemetry: {
+    taskTelemetryForRun?: (runId: string) => ChatRunStatusResponse['taskTelemetry'];
     reportRunCompletionTelemetryFallback: (input: RunCreatedFallbackInput) => void;
     resolveRunProjectKindForAnalytics: (input: RunProjectKindInput) => string | null;
     runArtifactBaselines: RunArtifactBaselines;
@@ -766,17 +766,21 @@ function toProjectFiles(value: unknown): ProjectFileEntry[] {
 // Intents the scenario-plugin fallback resolver is allowed to see. Mirrors the
 // `ProjectMetadata['intent']` contract union so an unknown/legacy string in a
 // stored project row never gets cast into the union.
-const SCENARIO_PROJECT_INTENTS: readonly NonNullable<ContractProjectMetadata['intent']>[] = [
-  'live-artifact',
-  'web-clone',
-  'document',
-  'marketing',
-  'hyperframes',
-  'motion-design',
-];
+const SCENARIO_PROJECT_INTENTS: Record<NonNullable<ContractProjectMetadata['intent']>, true> = {
+  'live-artifact': true,
+  'web-clone': true,
+  document: true,
+  'webgl-experience': true,
+  'worker-visualizer': true,
+  marketing: true,
+  hyperframes: true,
+  'motion-design': true,
+};
 
 function toScenarioProjectIntent(value: unknown): ContractProjectMetadata['intent'] | undefined {
-  return SCENARIO_PROJECT_INTENTS.find((intent) => intent === value);
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(SCENARIO_PROJECT_INTENTS, value)
+    ? value as NonNullable<ContractProjectMetadata['intent']>
+    : undefined;
 }
 
 function toScenarioProjectMetadata(
@@ -1045,6 +1049,8 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       }
     }
     const status = design.runs.statusBody(run);
+    const taskTelemetry = status.strategyTask ? ctx.telemetry.taskTelemetryForRun?.(run.id) : undefined;
+    if (taskTelemetry) status.taskTelemetry = taskTelemetry;
     // A read can derive display identity from the validated task, but must not
     // stamp the source Run and bypass clarification's linked-snapshot witness.
     return projectedSnapshotId
@@ -1629,7 +1635,16 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         Array.isArray((rolloutProject?.metadata as ContractProjectMetadata | undefined)?.contextPlugins)
         && (rolloutProject?.metadata as ContractProjectMetadata).contextPlugins!.length > 0
       );
-      const explicitExecutablePlugin = Boolean(
+      const officialTypeEntry = Boolean(defaultPluginId
+        && getInstalledPlugin(db, defaultPluginId)?.sourceKind === 'bundled'
+        && verifiedScenarioBinding?.pluginId === defaultPluginId
+        && (!suppliedPluginWasNamed || requestBody.pluginId === defaultPluginId)
+        && (!suppliedSnapshotWasNamed || requestBody.appliedPluginSnapshotId === rolloutProject?.appliedPluginSnapshotId));
+      const officialTemplateEntry = Boolean(selectedExamplePlugin?.sourceKind === 'bundled'
+        && verifiedExampleBinding
+        && (!suppliedPluginWasNamed || requestBody.pluginId === selectedExamplePlugin.id)
+        && (!suppliedSnapshotWasNamed || requestBody.appliedPluginSnapshotId === rolloutProject?.appliedPluginSnapshotId));
+      const explicitExecutablePlugin = !officialTypeEntry && !officialTemplateEntry && Boolean(
         suppliedSnapshotWasNamed
         || suppliedPluginWasNamed
         || (projectHasExplicitPin && !projectPinIsAutomaticDefault)
@@ -1647,21 +1662,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         explicitExecutablePlugin
         || suppliedContextPluginWasNamed
       );
-      // Read per request, not at boot: `odNextStrategyMode` is how a user opts
-      // this installation out of OD Next, and "configure it and it takes
-      // effect" has to mean the next run, not the next daemon restart.
-      //
-      // Deliberately uncaught. `readAppConfig` already answers `{}` for the
-      // states that mean "nothing configured" — no file, unparseable file — and
-      // only throws when the daemon genuinely cannot read its own config. That
-      // is not the same as an opt-out, and swallowing it would silently run the
-      // ordinary route (with no `agentCliEnv` either) while telling the
-      // operator the installation was never opted in.
+      // Subsequent requests use the current policy, including older conversations.
+      // In-flight physical runs and idempotent retries keep their frozen bundle.
       const rolloutAppConfig = await readAppConfig(RUNTIME_DATA_DIR);
       const rolloutPolicy = readOdNextRolloutPolicy(process.env, rolloutAppConfig);
-      const rolloutTaskType = previousStrategyTask
-        ? getSnapshot(db, previousStrategyTask.snapshotId)?.strategy?.selectedTaskProfile.taskType ?? null
-        : odNextTaskTypeForProjectScenarioBinding(verifiedStrategyBinding ?? verifiedScenarioBinding);
+      const rolloutTaskType = !explicitUserPlugin ? 'discovery' as const : null;
       const routeApplicability = explicitUserPlugin
         ? 'explicit_user' as const
         : rolloutTaskType && snapshotConversationId

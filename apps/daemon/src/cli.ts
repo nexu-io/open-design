@@ -438,13 +438,10 @@ function printStrategyHelp() {
 
 Report which OD Next mode this daemon is running and which authority chose it.
 
-OD Next runs by default; this installation opts out of it here:
-
-  od config set odNextStrategyMode off       Opt out; takes effect next run.
-  od config set odNextStrategyMode active    Opt back in.
-
-Status names the authority in effect (env / app_config / default), which the
-mode alone does not: leaving it unset and saving 'off' produce opposite routes.
+OD Next is active by default. Historical personal odNextStrategyMode values
+are ignored; saving 'off' does not opt out. Status reports the effective mode
+and its authority. Process-level OD_NEXT_STRATEGY_ROLLOUT controls engineering
+rollouts separately from personal settings.
 
 Options:
   --json                   Emit the daemon response as JSON.
@@ -484,8 +481,7 @@ async function runStrategy(args) {
     console.error(
       'od strategy rollout reset was removed: the daemon-instance stop latch it '
       + 'cleared no longer exists, so there is nothing to reset.\n'
-      + 'OD Next now runs unless this installation opts out. To opt out:\n'
-      + '  od config set odNextStrategyMode off\n'
+      + 'OD Next is active by default; historical personal off values are ignored.\n'
       + 'To check which authority decides the mode:\n'
       + '  od strategy rollout status',
     );
@@ -1769,7 +1765,7 @@ async function runMedia(args) {
     printMediaHelp();
     return;
   }
-  if (sub !== 'generate' && sub !== 'wait' && sub !== 'scaffold') {
+  if (sub !== 'generate' && sub !== 'wait' && sub !== 'scaffold' && sub !== 'models') {
     console.error(`unknown subcommand: od media ${sub}`);
     printMediaHelp();
     process.exit(1);
@@ -1777,6 +1773,15 @@ async function runMedia(args) {
 
   const idx = args.indexOf(sub);
   const subArgs = [...args.slice(0, idx), ...args.slice(idx + 1)];
+  if (sub === 'models') {
+    const flags = parseFlags(subArgs, { string: ['daemon-url'], boolean: ['json', 'help', 'h'] });
+    if (flags.help || flags.h) { printMediaHelp(); return; }
+    const daemonUrl = await cliDaemonUrl(flags);
+    const response = await fetch(`${daemonUrl.replace(/\/$/, '')}/api/media/models`);
+    if (!response.ok) throw new Error(`Media catalog request failed (${response.status})`);
+    console.log(JSON.stringify(await response.json()));
+    return;
+  }
   if (sub === 'wait') return runMediaWait(subArgs);
   if (sub === 'scaffold') return runMediaScaffold(subArgs);
   return runMediaGenerate(subArgs);
@@ -2275,7 +2280,8 @@ async function cliDaemonBaseUrl(flags) {
 }
 
 function printMediaHelp() {
-  console.log(`Usage: od media scaffold --composition-dir .hyperframes-cache/<id> [opts]
+  console.log(`Usage: od media models --json
+       od media scaffold --composition-dir .hyperframes-cache/<id> [opts]
        od media generate --surface <image|video|audio> --model <id> [opts]
        "$OD_NODE_BIN" "$OD_BIN" media generate --surface <image|video|audio> --model <id> [opts]
 

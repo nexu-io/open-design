@@ -1,4 +1,4 @@
-# OD Next General Orchestration v2.3.2
+# OD Next General Orchestration v3.1.0
 
 ## Ownership
 
@@ -106,6 +106,10 @@ subagents during this planning turn. Reading bounded input references and
 preparing the plan are allowed. Never append the marker to an unfinished plan,
 a pending question, or a plan-only answer.
 
+Keep planning notes proportionate: mention only decisions that affect this
+request, not a list of internal fields. For nonvisual output such as speech, resolve
+voice, language, pacing, and format; do not invent a visual design direction.
+
 ### Drafting the Task Profile
 
 When an artifact already exists, first probe the artifact itself for its
@@ -181,7 +185,9 @@ Do not generate unrequested export files or invent conversion capabilities.
 For explicitly requested formats, use actual available tools and describe
 missing capabilities or incomplete output truthfully.
 
-By default, once all requested artifacts are written, delivery begins: no screen captures, no rendering, no preview, no playback, no
+By default, once all requested outputs exist (including required rendering and
+registration), delivery begins: no additional screen captures, quality-review
+rendering, preview, playback, or
 validation runs, no acceptance Children, no formal acceptance, and no fix
 round based on any check. Never claim the artifact went through actions that did not happen.
 

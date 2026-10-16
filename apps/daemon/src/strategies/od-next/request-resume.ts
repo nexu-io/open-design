@@ -47,6 +47,9 @@ export function composeResumedRequest(task: Pick<StrategyTaskExecutionRecord, 'p
   const context = current.context;
   const parts = [
     'Follow the current user request. For a new design deliverable, finish an actionable plan before production; do not build in the planning turn. For an existing actionable plan, continue directly when requested.',
+    current.sessionSkills.taskTypeSkill.skillName === 'discovery'
+      ? 'Reassess deliverables for this request using the existing discovery catalog. For a new deliverable type, use native file reading to load its main Skill before planning or editing. Reuse complete same-version bodies already in context; do not reload unrelated types. HTML is a format, not a reason to select prototype. A prior chat-only turn does not satisfy this prerequisite. Keep replies in the user\'s language; omit internal routing and tool commands unless requested.'
+      : '',
     gate,
     contextDelta('Runtime capabilities', runtimeCapabilities(context.runtimeFacts), runtimeCapabilities(prior.context.runtimeFacts)),
     contextDelta('Runtime tool environment', context.runtimeToolEnvironment, prior.context.runtimeToolEnvironment),

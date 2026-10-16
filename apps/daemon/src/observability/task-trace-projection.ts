@@ -35,6 +35,12 @@ export function projectTaskTrace(runs: TaskRunTraceProjection[], durationMs: num
     metadata[key] = runs.flatMap(run => Array.isArray(run.metadata[key]) ? run.metadata[key] as unknown[] : []);
   }
   Object.assign(metadata, taskObjectMetadata(runs.map(run => run.metadata)));
+  metadata.skill_discovery_enabled = runs.some(run => run.metadata.skill_discovery_enabled === true);
+  metadata.skill_ids_loaded = [...new Set(runs.flatMap(run =>
+    Array.isArray(run.metadata.skill_ids_loaded) ? run.metadata.skill_ids_loaded as string[] : []))].sort();
+  metadata.skill_discovery_policy_injected = runs.some(run => run.metadata.skill_discovery_policy_injected === true);
+  metadata.skill_load_events = runs.flatMap(run => Array.isArray(run.metadata.skill_load_events) ? run.metadata.skill_load_events : []);
+  metadata.skill_observation_status = runs.some(run => run.metadata.skill_observation_status === 'partial') ? 'partial' : metadata.skill_discovery_enabled ? 'complete' : 'unavailable';
   // Physical Run facts remain in run_metadata; they are not Task totals.
   for (const key of ['langfuse_trace_id', 'cost_usd', 'cost_breakdown', 'performance_diagnostics']) delete metadata[key];
   return { input: first.input, output: last.output, metadata };

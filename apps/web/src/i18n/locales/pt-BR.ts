@@ -5421,7 +5421,7 @@ export const ptBR: Dict = {
   'labs.title': "Open Design Labs",
   'labs.itemAbout': "Sobre {name}",
   'labs.navHint': "Teste recursos antes do lançamento.",
-  'labs.pageDesc': "Tenha acesso antecipado a recursos que ainda não foram lançados. Costumam ser melhores que o comportamento atual, e desligar restaura o estado atual na hora.",
+  'labs.pageDesc': "Explore recursos experimentais. Os recursos e sua disponibilidade podem mudar entre versões.",
   'labs.harnessName': "Design Harness",
   'labs.harnessHint': "Ao ativar, a próxima geração usará a estratégia mais recente da OpenDesign, com resultados bem mais caprichados (beta)",
   'labs.harnessTooltip': "Passa a usar o harness de agente que a Open Design criou para trabalho de design. Layout, estrutura e nível de acabamento ficam visivelmente melhores.",

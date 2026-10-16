@@ -484,6 +484,7 @@ describe('OD Next planning coordinator', () => {
     expect(resolveStrategyHandoff(db, input, [])).toBeNull();
   });
 
+
   it.each([
     ['a bundle written by the pre-reshape v2 composer', (target: Database.Database) => {
       // Same schema id as today's composer over a layout its parser no longer reads.

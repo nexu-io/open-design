@@ -702,31 +702,9 @@ function applyConfigValue(
   }
 }
 
-/**
- * What this installation's OD Next preference reads as when the field is there
- * but cannot be understood.
- *
- * Scoped deliberately narrow: this covers `odNextStrategyMode` holding a value
- * that is not one of the modes — a hand edit, a typo, a mode some other version
- * writes. Something was configured and we cannot read it, and since flipping
- * the default made unconfigured mean `active`, dropping it would turn "we
- * cannot read your choice" into "you chose OD Next".
- *
- * It deliberately does NOT cover a config file that fails to parse at all, or
- * one whose body is not an object. Those reset every preference to its default
- * — agent, telemetry, everything — and singling this one out to resolve against
- * its default would be inconsistent with the rest of the file and would opt
- * installations out of a rollout they never declined. A broken file is not
- * evidence of an opt-out; it is evidence of a broken file, and the user has
- * lost the whole config either way.
- *
- * The narrow case still has the property worth having: a user who never opted
- * out is unaffected, because a readable config keeps its value and a fresh
- * install has no key at all.
- *
- * This is a claim about one field, not about the user, so it is deliberately
- * not reported as a distinct mode source: `readOdNextRolloutPolicy` sees a
- * saved `off` and says `app_config`, which is true — a config is what decided.
+/** Legacy field normalization retained for config compatibility.
+ * OD Next rollout ignores this retired Labs preference, including normalized off.
+ * Operator environment controls remain the supported rollout override.
  */
 const OD_NEXT_MODE_WHEN_CONFIG_UNREADABLE = 'off' as const;
 
@@ -904,21 +882,9 @@ export class InvalidAppConfigValueError extends Error {
   }
 }
 
-/**
- * Refuse a write that names a control key with a value that is not one of its
- * modes.
- *
- * Every other preference here is sanitized by dropping what it cannot store,
- * and that is the right trade for a preference: the cost of a bad value is one
- * setting falling back to its default. `odNextStrategyMode` is not a
- * preference — it decides whether OD Next runs at all, and its default is
- * `active`, so dropping it is not a neutral outcome. It revokes an opt-out,
- * which means `od config set odNextStrategyMode of` would put the installation
- * back on OD Next while printing success, and the person who typed it would go
- * on believing they had opted out.
- *
- * So a typo fails loudly instead. `null` stays a legitimate value: clearing the
- * key IS the deliberate way to return to the default.
+/** Keep the legacy stored-value contract for older callers. The current rollout
+ * ignores this user preference; only an engineering environment override can
+ * change the new active default. Invalid legacy writes still fail explicitly.
  */
 function assertWritableControlValues(partial: Record<string, unknown>): void {
   if (!Object.prototype.hasOwnProperty.call(partial, 'odNextStrategyMode')) return;

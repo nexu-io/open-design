@@ -87,7 +87,7 @@ describe('bundled OD Next strategy package identity', () => {
     ]);
     expect(prototype.selectedTaskProfile).toEqual(expect.objectContaining({
       taskType: 'prototype',
-      version: '2.3.2',
+      version: '3.1.9',
       path: './assets/task-profiles/prototype.md',
     }));
     expect(hyperframes.packageHash).not.toBe(prototype.packageHash);

@@ -27,6 +27,7 @@ export const StrategyTaskTypeV2Schema = z.enum([
   'ppt',
   'marketing',
   'hyperframes',
+  'discovery',
   'motion-design',
   'generic',
 ]);
@@ -153,7 +154,7 @@ export const BundledStrategyDeclarationV2Schema = z.object({
   assets: z.object({
     core: StrategyAssetDeclarationV2Schema,
     orchestration: StrategyAssetDeclarationV2Schema,
-    taskProfiles: z.array(StrategyTaskProfileAssetDeclarationV2Schema).min(4).max(5),
+    taskProfiles: z.array(StrategyTaskProfileAssetDeclarationV2Schema).min(4),
     taskProfileMapping: StrategyAssetDeclarationV2Schema,
   }).strict(),
 }).strict().superRefine((value, context) => {

@@ -377,6 +377,8 @@ export interface ReportContext {
   runtime?: RuntimeInfo;
   /** Redacted section-level prompt diagnostics captured before agent spawn. */
   promptTelemetry?: PromptStackTelemetry;
+  /** Bounded, content-free discovery evidence from actual runtime events. */
+  skillDiscovery?: Record<string, unknown>;
   strategyRolloutDecision?: {
     requestedMode: string;
     effectiveMode: string;
@@ -2031,6 +2033,7 @@ export function buildTracePayload(
   // here. Fields are flat (Langfuse stores it as JSON but indexes shallow
   // keys best). All entries are anonymous — no PII, no credentials.
   const traceMetadata: Record<string, unknown> = {
+    ...ctx.skillDiscovery,
     ...(ctx.evalContextV2 && wantsContent ? { eval_context_v2: wantsArtifacts ? ctx.evalContextV2 : {
       ...ctx.evalContextV2,
       attachments: { turnDelta: { semantics: 'current_user_turn', entries: [] }, effectiveContext: { semantics: 'conversation_context_before_run', entries: [] } },

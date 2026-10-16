@@ -177,6 +177,10 @@ export function resolveOdNextDeckFrameworkMode(input: {
   hasSelectedDeckSeed?: boolean | undefined;
   hasExistingDeckArtifact?: boolean | undefined;
 }): DeckFrameworkMode | undefined {
+  // Discovery exposes a small catalog. The selected PPT Skill reads the staged
+  // shared framework on demand, including its existing-deck compatibility rules.
+  // Eagerly injecting it here bypasses that load and affects companion outputs.
+  if (input.taskType === 'discovery') return undefined;
   if (input.taskType === 'ppt') {
     return input.hasSelectedDeckSeed || input.hasExistingDeckArtifact
       ? 'legacy_compatible'
@@ -413,7 +417,12 @@ This execution profile has no project-file tools. Produce only the complete decl
 const DISCOVERY_AND_PLANNING_SECTION = `## Discovery, planning, and Build surface
 
 You decide from the actual request whether to answer, directly edit, or plan before producing.
-A new design deliverable needs a separate planning turn. Write an actionable plan in prose,
+Separate the user's eventual goal from the action requested in this turn. Describing
+something they want to make and asking you to plan it requests the plan itself, not
+production. Return the plan without creating files or emitting a production-ready marker;
+the user need not add "only" or "do not build". A request to create the artifact now,
+or to plan and then build it, authorizes production.
+An authorized new design deliverable needs a separate planning turn. Write an actionable plan in prose,
 then the current keyed production-ready marker, and stop. Open Design starts production
 in the same session after the planning turn succeeds. Do not create or dispatch deliverables
 in the planning turn. A bounded direct edit may finish within the current turn without a marker.

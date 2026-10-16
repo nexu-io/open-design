@@ -3895,13 +3895,23 @@ describe('FileViewer SVG artifacts', () => {
     };
     const { rerender } = render(<FileViewer {...props} filesRefreshKey={1} />);
 
+    const initialFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const post = vi.spyOn(initialFrame.contentWindow!, 'postMessage');
+    fireEvent.load(initialFrame);
+    const activations = () => post.mock.calls
+      .map(([message]) => message)
+      .filter((message) => message.type === 'od:srcdoc-transport-activate');
+    expect(activations()).toHaveLength(1);
     fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
     const frame = await waitFor(() => {
       const active = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
       expect(active.getAttribute('data-od-render-mode')).toBe('srcdoc');
       return active;
     });
-    const editTransport = frame.srcdoc;
+    expect(frame).toBe(initialFrame);
+    const editActivationCount = activations().length;
+    const editActivation = activations().at(-1)!;
+    expect(editActivation.html).toContain('Editable');
 
     // One persisted save can emit multiple file-list / version watcher
     // refreshes. They update background metadata, but must not replace the
@@ -3910,14 +3920,17 @@ describe('FileViewer SVG artifacts', () => {
     rerender(<FileViewer {...props} filesRefreshKey={7} />);
     rerender(<FileViewer {...props} filesRefreshKey={9} />);
     expect(screen.getByTestId('artifact-preview-frame')).toBe(frame);
-    expect(frame.srcdoc).toBe(editTransport);
+    expect(activations()).toHaveLength(editActivationCount);
+    expect(activations().at(-1)!.html).toBe(editActivation.html);
 
     fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
     await waitFor(() => {
       expect(screen.getByTestId('manual-edit-mode-toggle').getAttribute('aria-pressed')).toBe('false');
     });
     expect(screen.getByTestId('artifact-preview-frame')).toBe(frame);
-    expect(frame.srcdoc).not.toBe(editTransport);
+    await waitFor(() => expect(activations()).toHaveLength(editActivationCount + 1));
+    expect(activations().at(-1)!.html).toContain('Editable');
+    expect(activations().at(-1)!.generation).not.toBe(editActivation.generation);
   });
 
   // #4291 review: if the exit-time text commit fails, the close path must NOT
@@ -10167,7 +10180,13 @@ describe('FileViewer tweaks toolbar', () => {
       const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
       expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
       const initialTransport = frame.srcdoc;
-      expect(initialTransport).toContain('src="assets/hero.png"');
+      const post = vi.spyOn(frame.contentWindow!, 'postMessage');
+      fireEvent.load(frame);
+      const activations = () => post.mock.calls
+        .map(([message]) => message)
+        .filter((message) => message.type === 'od:srcdoc-transport-activate');
+      expect(activations()).toHaveLength(1);
+      expect(activations()[0].html).toContain('src="assets/hero.png"');
 
       filesResponse.resolve(new Response(JSON.stringify({
         files: [
@@ -10189,6 +10208,7 @@ describe('FileViewer tweaks toolbar', () => {
         String(input).includes('/api/projects/project-1/preview-url')
       ))).toBe(false);
       expect(frame.srcdoc).toBe(initialTransport);
+      expect(activations()).toHaveLength(1);
     } finally {
       filesResponse.resolve(new Response(JSON.stringify({ files: [] }), { status: 200 }));
     }

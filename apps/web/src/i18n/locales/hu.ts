@@ -5421,7 +5421,7 @@ export const hu: Dict = {
   'labs.title': "Open Design Labs",
   'labs.itemAbout': "{name} névjegye",
   'labs.navHint': "Próbáld ki a funkciókat a megjelenés előtt.",
-  'labs.pageDesc': "Korai hozzáférés olyan képességekhez, amelyek még nem jelentek meg. Általában jobbak a jelenlegi működésnél, és kikapcsolva azonnal visszaáll a mostani állapot.",
+  'labs.pageDesc': "Fedezd fel a kísérleti funkciókat. A funkciók és elérhetőségük verziónként változhat.",
   'labs.harnessName': "Design Harness",
   'labs.harnessHint': "Bekapcsolva a következő generálás az OpenDesign legújabb stratégiáját használja, érezhetően igényesebb eredménnyel (béta)",
   'labs.harnessTooltip': "Átvált arra az agent harness re, amelyet az Open Design tervezői munkához épített. Az elrendezés, a szerkezet és a kidolgozottság érezhetően jobb lesz.",

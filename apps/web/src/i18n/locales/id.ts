@@ -5421,7 +5421,7 @@ export const id: Dict = {
   'labs.title': "Open Design Labs",
   'labs.itemAbout': "Tentang {name}",
   'labs.navHint': "Coba fitur sebelum dirilis.",
-  'labs.pageDesc': "Dapatkan akses awal ke kemampuan yang belum dirilis. Umumnya lebih baik dari perilaku saat ini, dan mematikannya langsung mengembalikan keadaan sekarang.",
+  'labs.pageDesc': "Jelajahi fitur eksperimental. Fitur dan ketersediaannya dapat berubah antarversi.",
   'labs.harnessName': "Design Harness",
   'labs.harnessHint': "Setelah diaktifkan, generasi berikutnya memakai strategi terbaru OpenDesign dengan hasil yang jauh lebih rapi (beta)",
   'labs.harnessTooltip': "Beralih ke agent harness yang dibangun Open Design untuk pekerjaan desain. Tata letak, struktur, dan kelengkapan hasil terasa jauh lebih baik.",

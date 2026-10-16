@@ -233,6 +233,10 @@ export class StrategyTaskTransitionConflictError extends Error {
 }
 
 export function migrateStrategyTaskStore(db: SqliteDb): void {
+  db.exec(`CREATE TABLE IF NOT EXISTS strategy_motion_deliveries (
+    task_execution_id TEXT PRIMARY KEY, declarations_json TEXT NOT NULL,
+    frozen INTEGER NOT NULL DEFAULT 0 CHECK (frozen IN (0,1))
+  )`);
   db.exec(`
     CREATE TABLE IF NOT EXISTS strategy_task_executions (
       task_execution_id TEXT PRIMARY KEY,

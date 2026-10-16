@@ -44,6 +44,7 @@ export async function finalizeSuccessfulRunDeliverable(input: {
   touchedPaths?: string[];
   baselineEntryFile?: string;
   allowIndependentOutput?: boolean;
+  allowMultipleOutputCandidates?: boolean;
   syntaxFinalizerEnabled?: boolean;
 }): Promise<SuccessfulRunDeliverableFinalizationResult> {
   const deliverable = await validateRunDeliverable({
@@ -57,6 +58,7 @@ export async function finalizeSuccessfulRunDeliverable(input: {
     ...(input.touchedPaths ? { touchedPaths: input.touchedPaths } : {}),
     ...(input.baselineEntryFile ? { baselineEntryFile: input.baselineEntryFile } : {}),
     ...(input.allowIndependentOutput ? { allowIndependentOutput: true } : {}),
+    ...(input.allowMultipleOutputCandidates ? { allowMultipleOutputCandidates: true } : {}),
   });
   if (
     !deliverable.valid
