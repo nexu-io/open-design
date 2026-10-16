@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "gate-1-roteiro-do-filme-de-lan-amento-tra-o-urbano-mrnw96zt",
+  "title": "Gate #1 — Roteiro do filme de lançamento · Traço Urbano",
+  "version": "0.1.0",
+  "description": "Projeto real: `C:\\Projects\\BragaMarketing\\videos\\traco-urbano-launch\\` 16:9 · pt-BR · ~75s totais · 7 capítulos · voz Matilda (settings do voice-winner, já aprovados). Grafia abaixo é a oficial (a fonética do TTS está no",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
