@@ -211,11 +211,13 @@ function emitSessionEvent(
   provider: string,
   model: string,
   event: SessionEvent,
+  streamedSteps: Set<number>,
 ): void {
   switch (event.type) {
     case 'assistant/chunk': {
       const chunk = event.data.chunk;
       if (chunk.type === 'text-delta' && chunk.text !== '') {
+        streamedSteps.add(event.data.step);
         writeFrame(output, { v: 1, type: 'text', request_id: request.request_id, content: chunk.text });
       } else if (chunk.type === 'reasoning-delta' && chunk.text !== '') {
         writeFrame(output, { v: 1, type: 'thinking', request_id: request.request_id, content: chunk.text });
@@ -243,9 +245,17 @@ function emitSessionEvent(
         is_error: event.data.message.content[0].isError === true,
       });
       return;
-    case 'assistant/message':
+    case 'assistant/message': {
+      // Non-streamed providers deliver the whole reply here instead of as
+      // text-delta chunks. Emit it once when no chunk already carried text.
+      const streamed = streamedSteps.has(event.data.step);
+      const messageText = contentText(event.data.message.content);
+      if (!streamed && messageText !== '') {
+        writeFrame(output, { v: 1, type: 'text', request_id: request.request_id, content: messageText });
+      }
       if (event.data.usage) writeFrame(output, usageFrame(request.request_id, provider, model, event.data.usage));
       return;
+    }
     default:
       return;
   }
@@ -270,6 +280,7 @@ async function execute(
   let firstSeq = Number.POSITIVE_INFINITY;
   let turnEnd: SessionEvent<'turn/end'> | undefined;
   let assistantOutput = '';
+  const streamedSteps = new Set<number>();
   const setup = (agentCtx: Context) => {
     const selected: ModelSelectionRef = { current: selection, assembled: undefined };
     installModelSelection(agentCtx, selected);
@@ -277,9 +288,12 @@ async function execute(
   let disposeEvent = () => {};
   const onSessionEvent = (session: { id: unknown }, event: SessionEvent) => {
     if (String(session.id) !== String(sessionId) || event.seq < firstSeq) return;
-    emitSessionEvent(output, request, selection.provider, selection.model, event);
+    emitSessionEvent(output, request, selection.provider, selection.model, event, streamedSteps);
     if (event.type === 'assistant/chunk' && event.data.chunk.type === 'text-delta') {
       assistantOutput += event.data.chunk.text;
+    }
+    if (event.type === 'assistant/message' && !streamedSteps.has(event.data.step)) {
+      assistantOutput += contentText(event.data.message.content);
     }
     if (event.type === 'turn/end') turnEnd = event;
   };
