@@ -48,7 +48,7 @@ describe('native session recovery metadata', () => {
     });
   });
 
-  it('describes Pi and ACP recovery modes without leaking handles', () => {
+  it('describes Pi, OMP, and ACP recovery modes without leaking handles', () => {
     const pi = initialNativeSessionRecoveryMetadata({
       agent: { id: 'pi' },
       supportsSessionResume: true,
@@ -56,6 +56,14 @@ describe('native session recovery metadata', () => {
       resumeSessionId: null,
       invalidationReason: null,
       updatedAt: 200,
+    });
+    const omp = initialNativeSessionRecoveryMetadata({
+      agent: { id: 'omp' },
+      supportsSessionResume: true,
+      isResuming: false,
+      resumeSessionId: null,
+      invalidationReason: null,
+      updatedAt: 250,
     });
     const acp = initialNativeSessionRecoveryMetadata({
       agent: { id: 'amr', resumesSessionViaAcpLoad: true },
@@ -68,6 +76,13 @@ describe('native session recovery metadata', () => {
 
     expect(pi).toMatchObject({
       agentId: 'pi',
+      state: 'no_recoverable_session',
+      acquisition: 'session-file-discovered',
+      continuation: 'session-file-resume',
+      handle: { present: false, kind: 'session-file-path' },
+    });
+    expect(omp).toMatchObject({
+      agentId: 'omp',
       state: 'no_recoverable_session',
       acquisition: 'session-file-discovered',
       continuation: 'session-file-resume',

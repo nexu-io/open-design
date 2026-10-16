@@ -231,6 +231,7 @@ const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   // dropped on every save and no way to keep it but a wrapper script that sets
   // the variable and is pointed at by PI_BIN (issue #8093).
   ['pi', new Set(['PI_BIN', 'PI_CODING_AGENT_DIR'])],
+  ['omp', new Set(['OMP_BIN'])],
   ['qoder', new Set(['QODER_BIN'])],
   ['qwen', new Set(['QWEN_BIN'])],
   ['trae-cli', new Set(['TRAE_CLI_BIN'])],
