@@ -1,4 +1,4 @@
-import { lstat, mkdir, readdir, realpath, rename, rm } from "node:fs/promises";
+import { lstat, mkdir, readdir, realpath, rename, rm, stat } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 
 import type {
@@ -12,6 +12,7 @@ import type {
 import type { DesktopUpdaterConfig } from "./config.js";
 import {
   BACK_DIR,
+  isVanishedPathError,
   LOCK_OWNER_FILE,
   type DesktopUpdaterStoreLayout,
 } from "./store.js";
@@ -407,6 +408,166 @@ export async function scanReleaseCleanupEntries(input: {
   return nextEntries;
 }
 
+type RetainedMetadataVerdict = "intact" | "invalid" | "missing";
+
+/**
+ * Decide whether a retained release's metadata record is still usable.
+ *
+ * `lstat` only proves a directory entry exists — it succeeds for a dangling
+ * symlink and for a file holding unparseable bytes. `scanReleaseCleanupEntries`
+ * already reads and validates the record, so the per-check pass has to reach
+ * the same verdict or the two paths disagree about whether a release is usable.
+ *
+ * Anything we cannot positively fault is reported `intact`: a metadata file
+ * that is merely unreadable at this moment must never cost a real release its
+ * record.
+ */
+async function inspectRetainedMetadata(
+  metadataPath: string,
+  channel: DesktopUpdaterConfig["channel"],
+): Promise<RetainedMetadataVerdict> {
+  const link = await lstat(metadataPath).then(
+    (stats) => stats,
+    (error: unknown) => (isVanishedPathError(error) ? null : "unreadable" as const),
+  );
+  if (link === "unreadable") return "intact";
+  if (link == null) return "missing";
+  if (link.isSymbolicLink()) {
+    // A dangling link is a missing record; a live one still is not the regular
+    // file this store is supposed to hold.
+    const target = await stat(metadataPath).then(
+      () => "present" as const,
+      (error: unknown) => (isVanishedPathError(error) ? null : "unreadable" as const),
+    );
+    if (target === "unreadable") return "intact";
+    return target == null ? "missing" : "invalid";
+  }
+  if (!link.isFile()) return "invalid";
+  let metadata: unknown;
+  try {
+    metadata = await readJsonStrict<unknown>(metadataPath);
+  } catch (error) {
+    if (isVanishedPathError(error)) return "missing";
+    // Unparseable bytes are a fault we can name; any other read failure is not.
+    return error instanceof SyntaxError ? "invalid" : "intact";
+  }
+  if (!isRecord(metadata)) return "invalid";
+  // scanReleaseCleanupEntries() only accepts a record once
+  // releaseVersionForChannel() resolves a version for the configured channel.
+  // Without the same check here an object such as `{}` stays `retained` on every
+  // per-check pass while a full rescan would fault it, so the stale entry could
+  // survive indefinitely between rescans.
+  return releaseVersionForChannel(metadata, channel) == null ? "invalid" : "intact";
+}
+
+/**
+ * Downgrade retained entries whose backing release directory is gone.
+ *
+ * Only `next-version-ready` and `manual` rescan the releases directory; every
+ * other trigger carries `cleanup.json` forward as written. A retained entry is
+ * therefore trusted indefinitely, so a release removed from outside the app —
+ * disk-space tooling, antivirus quarantine, a partial write after a crash, or
+ * manual pruning — keeps being counted as a local release that no longer
+ * exists. Such an entry is moved to the same terminal `cleanup-removed` state
+ * the app's own pruning produces.
+ *
+ * Only a release whose directory is gone is recorded as `cleanup-removed`:
+ * that state means the payload is off the disk, and this pass never calls
+ * `rm()` — removal belongs to `cleanupDeprecatedReleaseEntries`. A directory
+ * that survives while its `metadata.json` is missing, unreadable, or not a
+ * usable record is marked `unknown` instead, matching what a full rescan would
+ * say and leaving the orphan visible to the cleanup pass.
+ *
+ * An entry that merely cannot be read at this moment is left untouched, so a
+ * transient filesystem failure never erases the record of a real release.
+ */
+export async function revalidateRetainedReleaseEntries(input: {
+  channel: DesktopUpdaterConfig["channel"];
+  descriptor: ReleaseCleanupDescriptor;
+  layout: DesktopUpdaterStoreLayout;
+  logger: DesktopUpdaterLogger;
+  nowIso: string;
+}): Promise<ReleaseCleanupDescriptor> {
+  const { channel, descriptor, layout, logger, nowIso } = input;
+  const releases: ReleaseCleanupEntry[] = [];
+  for (const entry of descriptor.releases) {
+    if (entry.state !== "retained") {
+      releases.push(entry);
+      continue;
+    }
+    const releaseDir = resolve(layout.root, entry.path);
+    if (!containsPath(layout.releasesRoot, releaseDir)) {
+      releases.push(entry);
+      continue;
+    }
+    // Unreadable counts as intact: only state we positively know is gone may
+    // drop a retained release.
+    const releaseEntry = await lstat(releaseDir).then(
+      (stats) => stats,
+      (error: unknown) => (isVanishedPathError(error) ? null : "unreadable" as const),
+    );
+    if (releaseEntry === "unreadable") {
+      releases.push(entry);
+      continue;
+    }
+    if (releaseEntry != null && (!releaseEntry.isDirectory() || releaseEntry.isSymbolicLink())) {
+      releases.push({
+        ...entry,
+        error: releaseCleanupError("release-path-invalid", "release entry is not a plain directory", {
+          path: releaseDir,
+        }),
+        reason: "metadata-invalid",
+        state: "unknown",
+        updatedAt: nowIso,
+      });
+      continue;
+    }
+    if (releaseEntry != null) {
+      // Derived from the release directory, never from entry.metadataPath: the
+      // stored field is only shape-checked when cleanup.json is read, so a
+      // tampered entry could otherwise point at a sibling release's valid
+      // record and vouch for itself. scanReleaseCleanupEntries() derives it the
+      // same way.
+      const metadataPath = join(releaseDir, "metadata.json");
+      const verdict = await inspectRetainedMetadata(metadataPath, channel);
+      if (verdict === "intact") {
+        releases.push(entry);
+        continue;
+      }
+      // The directory is still on disk, so nothing was cleaned up here. Flag it
+      // the way a full rescan would and leave removal to the pass that actually
+      // calls rm().
+      releases.push({
+        ...entry,
+        error: releaseCleanupError(
+          verdict === "missing" ? "release-metadata-missing" : "release-metadata-invalid",
+          verdict === "missing"
+            ? "retained release metadata.json could not be read"
+            : "retained release metadata.json is not a usable record",
+          { path: metadataPath },
+        ),
+        reason: verdict === "missing" ? "metadata-missing" : "metadata-invalid",
+        state: "unknown",
+        updatedAt: nowIso,
+      });
+      continue;
+    }
+    logger.warn("[open-design updater] retained release is no longer on disk; marking it removed", {
+      key: entry.key,
+      path: releaseDir,
+    });
+    releases.push({
+      ...entry,
+      error: undefined,
+      reason: "metadata-missing",
+      removedAt: entry.removedAt ?? nowIso,
+      state: "cleanup-removed",
+      updatedAt: nowIso,
+    });
+  }
+  return { ...descriptor, releases, updatedAt: nowIso };
+}
+
 export async function cleanupDeprecatedReleaseEntries(input: {
   descriptor: ReleaseCleanupDescriptor;
   layout: DesktopUpdaterStoreLayout;
@@ -474,6 +635,43 @@ export async function cleanupDeprecatedReleaseEntries(input: {
   };
 }
 
+/**
+ * Cheap descriptor revalidation, safe to run on every version check.
+ *
+ * The full lifecycle only runs on cold start, when a new version becomes
+ * ready, and on manual clear. A long-running app that merely re-checks would
+ * otherwise keep trusting a descriptor written when it launched, so a release
+ * deleted while the app is open stays `retained` for the rest of the session.
+ * This takes the same lock and drops only entries whose directory has
+ * vanished; it never rescans, deprecates, or removes anything, and it leaves
+ * the recorded trigger alone so lifecycle telemetry still reports what last
+ * performed a real pass.
+ */
+export async function revalidateReleaseCleanupState(input: {
+  config: DesktopUpdaterConfig;
+  layout: DesktopUpdaterStoreLayout;
+  logger: DesktopUpdaterLogger;
+  now: () => Date;
+}): Promise<DesktopUpdateCacheLifecycleSummary | null> {
+  const { config, layout, logger, now } = input;
+  return await withUpdaterLifecycleLock(layout, logger, async () => {
+    const current = await readReleaseCleanupDescriptor(layout);
+    if (current == null) return null;
+    const revalidated = await revalidateRetainedReleaseEntries({
+      channel: config.channel,
+      descriptor: current,
+      layout,
+      logger,
+      nowIso: now().toISOString(),
+    });
+    const unchanged = revalidated.releases.length === current.releases.length
+      && revalidated.releases.every((entry, index) => entry === current.releases[index]);
+    if (unchanged) return summarizeReleaseCleanupDescriptor(current, config.platform);
+    await writeJson(layout.cleanupPath, revalidated);
+    return summarizeReleaseCleanupDescriptor(revalidated, config.platform);
+  });
+}
+
 export async function runUpdateReleaseLifecycle(input: {
   config: DesktopUpdaterConfig;
   layout: DesktopUpdaterStoreLayout;
@@ -517,7 +715,8 @@ export async function runUpdateReleaseLifecycle(input: {
       };
     }
 
-    const cleaned = await cleanupDeprecatedReleaseEntries({
+    const revalidated = await revalidateRetainedReleaseEntries({
+      channel: config.channel,
       descriptor: {
         ...next,
         currentVersion: config.currentVersion,
@@ -525,6 +724,12 @@ export async function runUpdateReleaseLifecycle(input: {
         trigger,
         updatedAt: startedAt,
       },
+      layout,
+      logger,
+      nowIso: now().toISOString(),
+    });
+    const cleaned = await cleanupDeprecatedReleaseEntries({
+      descriptor: revalidated,
       layout,
       logger,
       nowIso: now().toISOString(),
