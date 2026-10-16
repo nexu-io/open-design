@@ -3,6 +3,7 @@ import { existsSync, realpathSync } from 'node:fs';
 import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import JSZip from 'jszip';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type {
@@ -306,6 +307,36 @@ describe('screenshot export desktop renderer file handoff', () => {
       const body = (await res.json()) as { error?: { code?: string; message?: string } };
       expect(body.error?.code).toBe('BAD_REQUEST');
       expect(body.error?.message).toContain('not a slide deck');
+    } finally {
+      await new Promise<void>((resolve) => srv.server.close(() => resolve()));
+    }
+  });
+
+  // #7526: notes the renderer collected per slide must reach PowerPoint's notes pane.
+  it('carries renderer speaker notes into the screenshot PPTX', async () => {
+    const notesRenderer = async (input: DesktopRenderSlidesInput): Promise<DesktopRenderSlidesResult> => {
+      await mkdir(input.outputDir!, { recursive: true });
+      const files = [0, 1].map((i) => path.join(input.outputDir!, `slide-${i}.png`));
+      for (const file of files) await writeFile(file, PNG);
+      return { ok: true, slideFiles: files, notes: ['Hook them with the demo', ''], width: 1920, height: 1080, mode: 'deck' };
+    };
+    const srv = (await startServer({
+      port: 0,
+      returnServer: true,
+      desktopSlideRenderer: notesRenderer,
+    })) as { url: string; server: http.Server };
+    try {
+      const res = await fetch(`${srv.url}/api/projects/${projectId}/export/pptx`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName: 'index.html' }),
+      });
+      expect(res.status).toBe(200);
+      const zip = await JSZip.loadAsync(Buffer.from(await res.arrayBuffer()));
+      const first = await zip.file('ppt/notesSlides/notesSlide1.xml')!.async('string');
+      const second = (await zip.file('ppt/notesSlides/notesSlide2.xml')?.async('string')) ?? '';
+      expect(first).toContain('Hook them with the demo');
+      expect(second).not.toContain('Hook them with the demo');
     } finally {
       await new Promise<void>((resolve) => srv.server.close(() => resolve()));
     }
