@@ -37,6 +37,12 @@ describe('parseUntil', () => {
     expect(() => parseUntil('')).toThrow(UntilSyntaxError);
   });
 
+  it('rejects a numeric comparison with no right-hand value', () => {
+    expect(() => parseUntil('critique.score >=')).toThrow(UntilSyntaxError);
+    expect(() => parseUntil('critique.score>= || iterations>=3')).toThrow(UntilSyntaxError);
+    expect(isParseableUntil('iterations >=')).toBe(false);
+  });
+
   it('isParseableUntil returns false for syntactically broken input', () => {
     expect(isParseableUntil('critique.score nope 4')).toBe(false);
     expect(isParseableUntil('critique.score >= 4')).toBe(true);

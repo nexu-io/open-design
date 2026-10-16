@@ -129,13 +129,20 @@ function parseComparison(raw: string): UntilComparison {
     }
     value = rhs === 'true';
   } else {
-    const parsed = Number(rhs);
-    if (!Number.isFinite(parsed)) {
-      throw new UntilSyntaxError(`signal "${signal}" expects a number, got "${rhs}"`);
-    }
-    value = parsed;
+    value = parseNumberLiteral(signal, rhs);
   }
   return { signal, op, value };
+}
+
+// A numeric comparison must carry an explicit literal. `Number('')` is 0, so
+// without the length check a truncated `critique.score >=` would parse as the
+// always-true `critique.score >= 0` and end a devloop after one iteration.
+function parseNumberLiteral(signal: keyof UntilSignals, rhs: string): number {
+  const parsed = rhs.length > 0 ? Number(rhs) : Number.NaN;
+  if (!Number.isFinite(parsed)) {
+    throw new UntilSyntaxError(`signal "${signal}" expects a number, got "${rhs}"`);
+  }
+  return parsed;
 }
 
 function stripOuterParens(input: string): string {
