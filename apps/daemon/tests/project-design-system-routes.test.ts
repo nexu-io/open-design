@@ -8,6 +8,7 @@ import JSZip from 'jszip';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { startServer } from '../src/server.js';
+import { installImportTokenAutoMint, uninstallImportTokenAutoMint } from './import-token-shim.js';
 
 describe('project design system route gates', () => {
   let server: http.Server;
@@ -23,6 +24,7 @@ describe('project design system route gates', () => {
     };
     baseUrl = started.url;
     server = started.server;
+    installImportTokenAutoMint();
   });
 
   afterEach(() => {
@@ -32,6 +34,7 @@ describe('project design system route gates', () => {
   });
 
   afterAll(async () => {
+    uninstallImportTokenAutoMint();
     for (const id of projectsToClean.splice(0)) {
       await fetch(`${baseUrl}/api/projects/${encodeURIComponent(id)}`, {
         method: 'DELETE',

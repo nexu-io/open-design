@@ -26,6 +26,11 @@ describe('POST /api/import/folder', () => {
     };
     baseUrl = started.url;
     server = started.server;
+    // issue #5480: no fetch shim in this suite. In dormant pure-web mode
+    // the directory-binding gate falls back to the same-origin origin
+    // check, which same-process test fetches satisfy, and tests that
+    // exercise the desktop-gated HMAC path register a secret and sign
+    // tokens explicitly (see the sandbox provenance tests below).
   });
 
   afterEach(() => {
