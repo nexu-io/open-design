@@ -4,7 +4,9 @@
 //   - `github:owner/repo[@ref][/subpath]` — fetched from
 //     codeload.github.com as a tar.gz, extracted into a temp dir, then
 //     copied into the daemon data-root-derived plugin registry via the local
-//     backend.
+//     backend. A subpath is walked through the api.github.com contents API
+//     instead, because the repository can be far larger than the size cap
+//     (see `copyGithubContentsPath`).
 //   - `https://…tar.gz` / `…tgz`   — same extraction path, no path-rewrite.
 //
 // Hard install constraints (spec §7.2 / plan §3.A6):
@@ -110,7 +112,10 @@ export interface InstallOptions {
   allowReplacePlugin?: (pluginId: string) => boolean | string;
 }
 
-export type ArchiveFetcher = (url: string) => Promise<{
+export type ArchiveFetcher = (
+  url: string,
+  init?: Pick<RequestInit, 'headers'>,
+) => Promise<{
   ok: boolean;
   status: number;
   statusText: string;
@@ -118,6 +123,10 @@ export type ArchiveFetcher = (url: string) => Promise<{
 }>;
 
 const DEFAULT_MAX_BYTES = 50 * 1024 * 1024;
+
+/** GitHub contents API media type that returns a file's raw bytes instead of
+ *  the default base64 JSON envelope. */
+const GITHUB_RAW_MEDIA_TYPE = 'application/vnd.github.raw';
 
 const SAFE_BASENAME = /^[a-z0-9][a-z0-9._-]*$/;
 const GITHUB_SOURCE_RE = /^github:([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+)(.*)$/;
@@ -232,6 +241,7 @@ async function* installFromGithub(
   }
 
   let lastError: string | undefined;
+  let firstError: string | undefined;
   const triedUrls: string[] = [];
   for (const candidate of parsed.candidates) {
     if (candidate.subpath) {
@@ -242,6 +252,7 @@ async function* installFromGithub(
         buffered.push(ev);
         if (ev.kind === 'error') {
           lastError = ev.message;
+          firstError ??= ev.message;
           break;
         }
         if (ev.kind === 'success') {
@@ -262,6 +273,7 @@ async function* installFromGithub(
       buffered.push(ev);
       if (ev.kind === 'error') {
         lastError = ev.message;
+        firstError ??= ev.message;
         break;
       }
       if (ev.kind === 'success') {
@@ -272,10 +284,19 @@ async function* installFromGithub(
     if (!lastError || !shouldTryNextGithubRefCandidate(lastError)) break;
   }
 
+  // The first candidate's failure is the headline: when a later candidate
+  // fails for a knock-on reason (a rate limit, or a size cap hit while
+  // re-downloading), the first error is the one that names what actually went
+  // wrong with the source the caller asked for.
+  const detail =
+    firstError && lastError && lastError !== firstError
+      ? `${firstError} (fallback: ${lastError})`
+      : (firstError ?? lastError);
+
   yield {
     kind: 'error',
-    message: lastError
-      ? `GitHub install failed: ${lastError}. Tried GitHub fetch URL(s): ${triedUrls.join(', ')}`
+    message: detail
+      ? `GitHub install failed: ${detail}. Tried GitHub fetch URL(s): ${triedUrls.join(', ')}`
       : `GitHub source ${opts.source} did not produce an installable archive`,
     warnings: [],
   };
@@ -386,7 +407,7 @@ async function* installFromGithubContents(
     } catch (err) {
       yield {
         kind: 'error',
-        message: (err as Error).message,
+        message: describeFetchFailure(err),
         warnings: [],
       };
       return;
@@ -429,11 +450,18 @@ async function copyGithubContentsPath(
       continue;
     }
     if (entry.type === 'file') {
+      const filePath = entry.path ?? path.posix.join(githubPath, name);
       if (!entry.download_url) {
-        throw new Error(`GitHub file ${entry.path ?? name} does not expose a download URL`);
+        throw new Error(`GitHub file ${filePath} does not expose a download URL`);
       }
       await fsp.mkdir(path.dirname(childDest), { recursive: true });
-      await copyGithubFile(fetcher, entry.download_url, childDest, budget);
+      await copyGithubFile(
+        fetcher,
+        entry.download_url,
+        githubContentsUrl(owner, repo, filePath, ref),
+        childDest,
+        budget,
+      );
       continue;
     }
     throw new Error(`GitHub entry ${entry.path ?? name} has unsupported type ${entry.type ?? 'unknown'}`);
@@ -453,16 +481,84 @@ async function fetchGithubJson(fetcher: ArchiveFetcher, url: string): Promise<Gi
   }
 }
 
+/**
+ * Download one file of a GitHub contents tree.
+ *
+ * GitHub advertises each file at `download_url`, which points at
+ * raw.githubusercontent.com. That host is unreachable on some networks (its
+ * name resolves to 0.0.0.0, or the TLS handshake is reset) even though the
+ * api.github.com listing that produced this entry just succeeded. So when the
+ * advertised URL fails for any reason other than a 404, retry the same path on
+ * the host we already proved reachable, asking for the raw media type. A 404
+ * is not retried: the file genuinely is not there, and the caller's ref and
+ * subpath fallback owns that case.
+ *
+ * The retry only happens before any byte is written, so a size-cap breach or a
+ * mid-stream failure is never silently re-attempted.
+ */
 async function copyGithubFile(
   fetcher: ArchiveFetcher,
   url: string,
+  fallbackUrl: string,
   destPath: string,
   budget: GithubContentsBudget,
 ): Promise<void> {
-  const resp = await fetcher(url);
-  if (!resp.ok || !resp.body) {
-    throw new Error(`Fetch failed: ${resp.status} ${resp.statusText} for ${url}`);
+  let primary: Awaited<ReturnType<ArchiveFetcher>> | null = null;
+  let primaryError: unknown = undefined;
+  try {
+    primary = await fetcher(url);
+  } catch (err) {
+    primaryError = err;
   }
+  if (primary?.ok && primary.body) {
+    await streamGithubFileBody(primary.body, destPath, budget);
+    return;
+  }
+  if (primary && primary.status === 404) {
+    throw new Error(`Fetch failed: 404 ${primary.statusText} for ${url}`);
+  }
+
+  let fallback: Awaited<ReturnType<ArchiveFetcher>> | null = null;
+  let fallbackError: unknown = undefined;
+  try {
+    fallback = await fetcher(fallbackUrl, { headers: { accept: GITHUB_RAW_MEDIA_TYPE } });
+  } catch (err) {
+    fallbackError = err;
+  }
+  if (fallback?.ok && fallback.body) {
+    await streamGithubFileBody(fallback.body, destPath, budget);
+    return;
+  }
+
+  const primaryReason = primaryError
+    ? describeFetchFailure(primaryError)
+    : describeFailedResponse(primary, url);
+  const fallbackReason = fallbackError
+    ? describeFetchFailure(fallbackError)
+    : describeFailedResponse(fallback, fallbackUrl);
+  throw new Error(
+    `GitHub file download failed: ${primaryReason} (download_url ${url}). `
+      + `Fallback ${fallbackUrl} failed: ${fallbackReason}`,
+  );
+}
+
+/** Describe a non-ok archive response the way `fetchGithubJson` does. */
+function describeFailedResponse(
+  resp: Awaited<ReturnType<ArchiveFetcher>> | null,
+  url: string,
+): string {
+  return resp
+    ? `Fetch failed: ${resp.status} ${resp.statusText} for ${url}`
+    : `No response for ${url}`;
+}
+
+/** Stream a GitHub file response into `destPath`, enforcing the shared size
+ *  cap and folding the bytes into the install's content digest. */
+async function streamGithubFileBody(
+  body: Readable,
+  destPath: string,
+  budget: GithubContentsBudget,
+): Promise<void> {
   const digestStream = new Transform({
     transform(chunk: Buffer, _encoding, callback) {
       budget.bytes += chunk.length;
@@ -474,7 +570,40 @@ async function copyGithubFile(
       callback(null, chunk);
     },
   });
-  await pipeline(resp.body as NodeJS.ReadableStream, digestStream, fs.createWriteStream(destPath));
+  await pipeline(body as NodeJS.ReadableStream, digestStream, fs.createWriteStream(destPath));
+}
+
+/**
+ * Flatten an error chain into one diagnostic line.
+ *
+ * undici reports every connection-level failure as a bare `TypeError: fetch
+ * failed` and keeps the real reason on `error.cause` — `ENOTFOUND`, a TLS
+ * reset, or this daemon's own SSRF guard rejecting the resolved address.
+ * Reporting only `error.message` collapses all of those into the same useless
+ * string, so walk the chain and keep every distinct layer.
+ */
+function describeFetchFailure(error: unknown): string {
+  const parts: string[] = [];
+  const seen = new Set<unknown>();
+  let current: unknown = error;
+  while (current != null && !seen.has(current)) {
+    seen.add(current);
+    if (typeof current === 'string') {
+      parts.push(current);
+      break;
+    }
+    if (!(current instanceof Error)) break;
+    const message = current.message.trim();
+    // undici's wrapper carries no information of its own.
+    if (message && !/^fetch failed\.?$/i.test(message)) {
+      const code = (current as { code?: unknown }).code;
+      parts.push(
+        typeof code === 'string' && !message.includes(code) ? `${message} (${code})` : message,
+      );
+    }
+    current = (current as { cause?: unknown }).cause;
+  }
+  return parts.join(': ') || 'unknown fetch failure';
 }
 
 async function readStreamText(body: Readable, maxBytes: number): Promise<string> {
@@ -651,8 +780,11 @@ async function* installFromArchiveUrl(
   }
 }
 
-async function defaultFetcher(url: string): ReturnType<ArchiveFetcher> {
-  const response = await safeExternalFetch(url);
+async function defaultFetcher(
+  url: string,
+  init?: Pick<RequestInit, 'headers'>,
+): ReturnType<ArchiveFetcher> {
+  const response = await safeExternalFetch(url, init);
   return {
     ok: response.ok,
     status: response.status,
