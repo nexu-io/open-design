@@ -29,6 +29,8 @@
 // one source of truth. Cards are display-only and emitted whole, so the parser
 // is complete-only (no partial-JSON repair); a still-streaming, not-yet-closed
 // block is stripped by `stripTrailingOpenOdCard` so raw markup never flashes.
+// Every consumer that needs the outer card boundary uses `findOdCardClose`, so
+// a `</od-card>` quoted inside a JSON string stays payload data everywhere.
 
 /** The card kinds. Mirrors the `type` attribute and the payload `kind`. */
 export type OdCardKind =
@@ -151,6 +153,10 @@ export type OdCardSegment =
 // `od-card` is the canonical tag. The close tag must match, so we capture the
 // name and compute the matching close string. Case-insensitive at scan time.
 const OD_CARD_OPEN_RE = /<(od-card)\b([^>]*)>/i;
+const OD_CARD_CLOSE = '</od-card>';
+// Characters valid JSON can hold outside strings (structure, whitespace,
+// numbers, true/false/null), plus the backticks of a closing ``` fence.
+const JSON_OUTSIDE_STRING_CHAR_RE = /^[\s{}[\],:0-9+\-.eEtrufalsn`]$/;
 
 /**
  * Split a final assistant text payload into ordered prose + card segments so
@@ -167,10 +173,9 @@ export function splitOnOdCards(input: string): OdCardSegment[] {
       out.push({ kind: 'text', text: slice });
       break;
     }
-    const closeTag = '</od-card>';
     const openStart = cursor + m.index;
     const openEnd = openStart + m[0].length;
-    const closeIdx = findCloseTag(input, openEnd, closeTag);
+    const closeIdx = findOdCardClose(input, openEnd);
     if (closeIdx === -1) {
       // Unterminated — leave the rest as prose so we don't swallow it.
       out.push({ kind: 'text', text: slice });
@@ -182,7 +187,7 @@ export function splitOnOdCards(input: string): OdCardSegment[] {
     const body = input.slice(openEnd, closeIdx);
     const attrs = parseAttrs(m[2] ?? '');
     const card = tryParseOdCard(body, attrs);
-    const blockEnd = closeIdx + closeTag.length;
+    const blockEnd = closeIdx + OD_CARD_CLOSE.length;
     if (card) {
       out.push({ kind: 'card', card, raw: input.slice(openStart, blockEnd) });
     } else {
@@ -212,26 +217,120 @@ export function stripTrailingOpenOdCard(
     const slice = input.slice(cursor);
     const m = OD_CARD_OPEN_RE.exec(slice);
     if (!m) break;
-    const closeTag = '</od-card>';
     const openStart = cursor + m.index;
     const openEnd = openStart + m[0].length;
-    const closeIdx = findCloseTag(input, openEnd, closeTag);
+    const closeIdx = findOdCardClose(input, openEnd, { live: true });
     if (closeIdx === -1) {
       return { text: input.slice(0, openStart), hadOpenCard: true };
     }
-    cursor = closeIdx + closeTag.length;
+    cursor = closeIdx + OD_CARD_CLOSE.length;
   }
   return { text: input, hadOpenCard: false };
 }
 
-function findCloseTag(input: string, from: number, closeTag: string): number {
-  const closeLower = closeTag.toLowerCase();
-  const tagLen = closeTag.length;
-  const maxStart = input.length - tagLen;
-  for (let i = from; i <= maxStart; i++) {
-    if (input.slice(i, i + tagLen).toLowerCase() === closeLower) return i;
+function isOdCardCloseAt(input: string, index: number): boolean {
+  return input.charCodeAt(index) === 60 /* < */
+    && input.slice(index, index + OD_CARD_CLOSE.length).toLowerCase() === OD_CARD_CLOSE;
+}
+
+/** True when the input ends partway through a `</od-card>` starting at `index`. */
+function endsInsideOdCardClose(input: string, index: number): boolean {
+  if (index + OD_CARD_CLOSE.length <= input.length) return false;
+  return OD_CARD_CLOSE.startsWith(input.slice(index).toLowerCase());
+}
+
+/**
+ * Find the `</od-card>` that closes a card whose opening tag ends at `from`.
+ * Returns its index, or -1 when the card is not closed (yet).
+ *
+ * The payload is JSON, and `JSON.stringify` keeps a literal `</od-card>` inside
+ * string values, so the first literal marker is not always the outer close.
+ * One pass tracks JSON string state (`"` and backslash escapes):
+ *
+ * - The first marker outside a string is the close, as it always was.
+ * - The first marker inside a string (even right after a backslash, since
+ *   `\</od-card>` is still a literal marker) is remembered as the historical
+ *   fallback. The scan then looks for the next marker outside a string and
+ *   accepts it only when the body up to it parses as a JSON object; otherwise
+ *   the fallback wins, so malformed cards keep their first-marker boundary.
+ * - The body stops being plausible JSON at the first character JSON never has
+ *   outside a string (such as `<`, `>`, `\` or a letter outside
+ *   true/false/null), or at a raw control character inside a string, which
+ *   `JSON.stringify` never emits. Once a fallback exists and the body is not
+ *   plausible, the fallback is final. Two scans that are both still plausible
+ *   are in opposite string states, so one of them stops at the next opener's
+ *   `<`, which keeps the total work linear across adjacent cards.
+ * - Reaching the end of input with only an in-string marker means the payload
+ *   may still be streaming: `live` callers get -1 (keep the block hidden), final
+ *   callers get the fallback. A live frame that ends partway through the real
+ *   outer close also keeps waiting instead of releasing the raw payload.
+ *
+ * Escaped spellings (`<\/od-card>`, or the bracket as a JSON unicode escape)
+ * are not literal markers and never close.
+ */
+export function findOdCardClose(
+  input: string,
+  from: number,
+  options: { live?: boolean } = {},
+): number {
+  let inString = false;
+  let escaped = false;
+  let fallback = -1;
+  let plausible = true;
+  let i = from;
+  // A leading ```json fence is part of the card format, not of the JSON.
+  const fence = /^\s*```(?:json)?/i.exec(input.slice(from, from + 64));
+  if (fence) i += fence[0].length;
+  for (; i < input.length; i++) {
+    const code = input.charCodeAt(i);
+    if (inString) {
+      if (fallback === -1 && isOdCardCloseAt(input, i)) {
+        fallback = i;
+        if (!plausible) return fallback;
+      }
+      if (escaped) escaped = false;
+      else if (code === 92 /* \ */) escaped = true;
+      else if (code === 34 /* " */) inString = false;
+      else if (code < 0x20) {
+        plausible = false;
+        if (fallback !== -1) return fallback;
+      }
+      continue;
+    }
+    if (code === 34 /* " */) {
+      inString = true;
+    } else if (isOdCardCloseAt(input, i)) {
+      if (fallback === -1 || (plausible && isJsonObjectBody(input.slice(from, i)))) return i;
+      return fallback;
+    } else if (!JSON_OUTSIDE_STRING_CHAR_RE.test(input[i]!)) {
+      if (fallback !== -1) {
+        if (options.live && endsInsideOdCardClose(input, i)) return -1;
+        // Not JSON, so the in-string marker was the real (malformed) boundary.
+        return fallback;
+      }
+      plausible = false;
+    }
   }
-  return -1;
+  if (fallback === -1 || options.live) return -1;
+  return fallback;
+}
+
+/** The JSON text of a card body: trimmed, with an optional ```json fence removed. */
+function odCardJsonText(body: string): string {
+  return body
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/```\s*$/i, '')
+    .trim();
+}
+
+function isJsonObjectBody(body: string): boolean {
+  try {
+    const data: unknown = JSON.parse(odCardJsonText(body));
+    return typeof data === 'object' && data !== null && !Array.isArray(data);
+  } catch {
+    return false;
+  }
 }
 
 function parseAttrs(raw: string): Record<string, string> {
@@ -261,12 +360,8 @@ export function tryParseOdCard(
   body: string,
   attrs: Record<string, string>,
 ): OdCard | null {
-  const trimmed = body.trim();
-  if (!trimmed) return null;
-  const stripped = trimmed
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/```\s*$/i, '')
-    .trim();
+  if (!body.trim()) return null;
+  const stripped = odCardJsonText(body);
   let data: unknown;
   try {
     data = JSON.parse(stripped);
