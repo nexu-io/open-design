@@ -1014,6 +1014,7 @@ export const fr: Dict = {
   'homeHero.footer.ratio': 'Ratio',
   'homeHero.footer.duration': 'Durée',
   'homeHero.footer.resolution': 'Résolution',
+  'homeHero.footer.pageQuantity': 'Nombre de pages',
   'homeHero.footer.speakerNotes': 'Notes',
   'homeHero.footer.noSpeakerNotes': 'Sans notes',
   'homeHero.footer.availableCount': '{n} disponibles',
