@@ -1599,6 +1599,7 @@ function DesignSystemDetail({
     reloadKey,
     workspaceContext: resourceReadContext,
     workspaceReadGeneration: resourceReadIdentityKey,
+    detailPending: !detailResolved,
   });
 
   async function handleDownload() {
