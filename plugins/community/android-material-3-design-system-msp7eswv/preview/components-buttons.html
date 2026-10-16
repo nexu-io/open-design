@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Material 3 button families and states</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%236750a4'/%3E%3Ctext x='32' y='41' text-anchor='middle' font-family='sans-serif' font-size='25' fill='white'%3EM3%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="preview.css">
+  <style>
+    .groups { display: grid; gap: 20px; }
+    .group { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 20px; border-radius: 20px; background: var(--md-sys-color-surface-container-low); }
+    .group h2 { flex-basis: 100%; margin: 0; font: var(--md-sys-type-title-medium); }
+    .btn { min-height: 48px; border: 0; border-radius: 999px; padding: 0 24px; cursor: pointer; font: var(--md-sys-type-label-large); transition: filter var(--md-sys-motion-short); }
+    .btn:hover { filter: brightness(.96); }
+    .filled { color: var(--md-sys-color-on-primary); background: var(--md-sys-color-primary); }
+    .tonal { color: var(--md-sys-color-on-secondary-container); background: var(--md-sys-color-secondary-container); }
+    .outlined { color: var(--md-sys-color-primary); border: 1px solid var(--md-sys-color-outline); background: transparent; }
+    .text { color: var(--md-sys-color-primary); background: transparent; }
+    .selected { box-shadow: 0 0 0 3px var(--md-sys-color-primary-container); }
+    .btn:disabled { opacity: var(--md-sys-state-disabled-opacity); cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <main class="preview-shell">
+    <p class="eyebrow">Components / buttons</p>
+    <h1>Emphasis follows the task hierarchy</h1>
+    <p class="lede">A focused task area usually needs one filled action. Tonal, outlined, and text buttons support secondary or reversible actions. All visible controls retain a 48px target.</p>
+    <section class="groups" aria-label="Button examples">
+      <article class="group"><h2>Action hierarchy</h2><button class="btn filled">Send message</button><button class="btn tonal">Save draft</button><button class="btn outlined">Preview</button><button class="btn text">Cancel</button></article>
+      <article class="group"><h2>State communication</h2><button class="btn tonal selected" aria-pressed="true">Selected</button><button class="btn outlined">Keyboard focus next</button><button class="btn filled" disabled>Sending…</button></article>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Material 3 adaptive navigation</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%236750a4'/%3E%3Ctext x='32' y='41' text-anchor='middle' font-family='sans-serif' font-size='25' fill='white'%3EM3%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="preview.css">
+  <style>
+    .examples { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: stretch; }
+    .device { min-height: 360px; overflow: hidden; border: 1px solid var(--md-sys-color-outline-variant); border-radius: 20px; background: var(--md-sys-color-surface-container-low); }
+    .device header { padding: 16px; font: var(--md-sys-type-title-medium); background: var(--md-sys-color-surface-container); }
+    .canvas { height: 250px; display: grid; gap: 8px; padding: 12px; }
+    .compact .canvas { grid-template-rows: 1fr 56px; }
+    .medium .canvas { grid-template-columns: 64px 1fr; }
+    .expanded .canvas { grid-template-columns: 64px .8fr 1.2fr; }
+    .block { display: grid; place-items: center; border-radius: 12px; color: var(--md-sys-color-on-surface-variant); background: var(--md-sys-color-surface-container-high); font: var(--md-sys-type-label-medium); text-align: center; }
+    .nav { color: var(--md-sys-color-on-secondary-container); background: var(--md-sys-color-secondary-container); }
+    .device footer { padding: 12px 16px; color: var(--md-sys-color-on-surface-variant); font: var(--md-sys-type-body-small); }
+    @media (max-width: 820px) { .examples { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main class="preview-shell">
+    <p class="eyebrow">Components / adaptive navigation</p>
+    <h1>Change structure instead of shrinking columns</h1>
+    <p class="lede">Compact, medium, and expanded windows preserve the same destinations while changing navigation placement and whether list and detail can be shown together.</p>
+    <section class="examples" aria-label="Adaptive navigation structures">
+      <article class="device compact"><header>Compact · &lt;600</header><div class="canvas"><div class="block">single content pane</div><div class="block nav">bottom navigation</div></div><footer>List and detail replace each other.</footer></article>
+      <article class="device medium"><header>Medium · 600–839</header><div class="canvas"><div class="block nav">rail</div><div class="block">single content pane</div></div><footer>Rail preserves destination access.</footer></article>
+      <article class="device expanded"><header>Expanded · ≥840</header><div class="canvas"><div class="block nav">rail</div><div class="block">list</div><div class="block">detail</div></div><footer>List-detail appears simultaneously.</footer></article>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "android-material-3-design-system-msp7eswv",
+  "title": "Android Material 3 Design System",
+  "version": "0.1.0",
+  "description": "这是一套可被 Open Design 项目直接复用的 Material 3 设计系统包。它把官方 AndroidX baseline color roles、Material type scale、shape scale、自适应 window size classes、状态层和 motion guidance 汇总成清晰规则、CSS 令牌、聚焦预览与一个可运行的响应式 UI Kit。",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}

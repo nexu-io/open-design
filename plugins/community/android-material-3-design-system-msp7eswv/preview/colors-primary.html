@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Material 3 semantic color pairs</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%236750a4'/%3E%3Ctext x='32' y='41' text-anchor='middle' font-family='sans-serif' font-size='25' fill='white'%3EM3%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="preview.css">
+  <style>
+    .role { min-height: 144px; display: flex; flex-direction: column; justify-content: space-between; border-radius: 20px; padding: 20px; }
+    .primary { color: var(--md-sys-color-on-primary); background: var(--md-sys-color-primary); }
+    .primary-container { color: var(--md-sys-color-on-primary-container); background: var(--md-sys-color-primary-container); }
+    .secondary { color: var(--md-sys-color-on-secondary); background: var(--md-sys-color-secondary); }
+    .secondary-container { color: var(--md-sys-color-on-secondary-container); background: var(--md-sys-color-secondary-container); }
+    .tertiary { color: var(--md-sys-color-on-tertiary); background: var(--md-sys-color-tertiary); }
+    .error-container { color: var(--md-sys-color-on-error-container); background: var(--md-sys-color-error-container); }
+    .role strong { font: var(--md-sys-type-title-medium); }
+    .role span { opacity: .86; font: var(--md-sys-type-body-small); }
+  </style>
+</head>
+<body>
+  <main class="preview-shell">
+    <p class="eyebrow">Color / semantic pairing</p>
+    <h1>Roles travel in foreground–container pairs</h1>
+    <p class="lede">Review emphasis and legibility rather than isolated swatches. A component using a container role must use its matching <code>on-*</code> foreground role.</p>
+    <section class="grid" aria-label="Material color role examples">
+      <article class="role primary"><strong>Primary</strong><span>on-primary · highest task emphasis</span></article>
+      <article class="role primary-container"><strong>Primary container</strong><span>on-primary-container · selected surfaces</span></article>
+      <article class="role secondary"><strong>Secondary</strong><span>on-secondary · supporting actions</span></article>
+      <article class="role secondary-container"><strong>Secondary container</strong><span>on-secondary-container · tonal controls</span></article>
+      <article class="role tertiary"><strong>Tertiary</strong><span>on-tertiary · deliberate contrast</span></article>
+      <article class="role error-container"><strong>Error container</strong><span>on-error-container · pair color with recovery text</span></article>
+    </section>
+  </main>
+</body>
+</html>
