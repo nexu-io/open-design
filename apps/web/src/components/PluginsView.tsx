@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import {
   useCallback,
   useEffect,
@@ -1494,7 +1495,7 @@ export function ExtensionsMarketplace({
       metaSetter: Dispatch<SetStateAction<ReadonlyMap<string, SharedResourceCardMeta>>>,
     ): Promise<boolean> => {
       try {
-        const res = await fetch(`/api/workspace/${basePath}/team`, {
+        const res = await apiFetch(`/api/workspace/${basePath}/team`, {
           cache: 'no-store',
           headers: workspaceProjectHeaders(context),
         });
@@ -1643,7 +1644,7 @@ export function ExtensionsMarketplace({
     setMenuId(null);
     const basePath = kind === 'plugins' ? 'plugins' : 'skills';
     try {
-      const res = await fetch(`/api/workspace/${basePath}/${encodeURIComponent(id)}/share`, {
+      const res = await apiFetch(`/api/workspace/${basePath}/${encodeURIComponent(id)}/share`, {
         method: 'POST',
         headers: workspaceProjectHeaders(context),
       });
@@ -1705,7 +1706,7 @@ export function ExtensionsMarketplace({
     setMenuId(null);
     const basePath = kind === 'plugins' ? 'plugins' : 'skills';
     try {
-      const res = await fetch(`/api/workspace/${basePath}/${encodeURIComponent(id)}/share`, {
+      const res = await apiFetch(`/api/workspace/${basePath}/${encodeURIComponent(id)}/share`, {
         method: 'DELETE',
         headers: workspaceProjectHeaders(context),
       });
@@ -4289,7 +4290,7 @@ function TeamPanel({
     }
     const context = read.context;
     const loadShared = async (basePath: string): Promise<ReadonlySet<string>> => {
-      const res = await fetch(`/api/workspace/${basePath}/team`, {
+      const res = await apiFetch(`/api/workspace/${basePath}/team`, {
         cache: 'no-store',
         headers: workspaceProjectHeaders(context),
       });
@@ -4361,7 +4362,7 @@ function TeamPanel({
     setSharingId(id);
     setFailed(false);
     try {
-      const res = await fetch(`/api/workspace/${basePath}/${encodeURIComponent(id)}/share`, {
+      const res = await apiFetch(`/api/workspace/${basePath}/${encodeURIComponent(id)}/share`, {
         method: 'POST',
         headers: workspaceProjectHeaders(context),
       });

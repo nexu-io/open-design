@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 // Sandboxed HTML preview surface — used for `examples/*` plugins
 // and any scenario plugin that ships a runnable `od.preview.entry`.
 //
@@ -49,12 +50,12 @@ async function probe(url: string): Promise<'ok' | 'unreachable'> {
   if (existing) return existing;
   const run = (async () => {
     try {
-      const head = await fetch(url, { method: 'HEAD' });
+      const head = await apiFetch(url, { method: 'HEAD' });
       if (head.ok) return 'ok' as const;
       // Fall back to a normal GET — the daemon's asset routes only
       // handle GET, so HEAD may legitimately 404 even when the entry
       // exists. Use a Range request to keep the response tiny.
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method: 'GET',
         headers: { Range: 'bytes=0-0' },
       });

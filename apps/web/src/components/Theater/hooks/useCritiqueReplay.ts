@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import { useEffect, useReducer, useRef, useState } from 'react';
 import type { Dispatch } from 'react';
 
@@ -268,7 +269,7 @@ async function defaultFetch(
   url: string,
   init?: RequestInit,
 ): Promise<string | ArrayBuffer> {
-  const res = await fetch(url, init);
+  const res = await apiFetch(url, init);
   if (!res.ok) throw new Error(`transcript fetch failed: ${res.status}`);
   return url.endsWith('.gz') ? await res.arrayBuffer() : await res.text();
 }

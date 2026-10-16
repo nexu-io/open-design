@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 // Fetches `GET /api/projects/:id` once on mount and caches the response,
 // surfacing the `resolvedDir` field added in PR #451 prereq commit. The
 // daemon route returns `ProjectDetailResponse` (project + resolvedDir)
@@ -73,7 +74,7 @@ export function useProjectDetail(
         return;
       }
       try {
-        const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, {
+        const resp = await apiFetch(`/api/projects/${encodeURIComponent(projectId)}`, {
           ...(authorityKey !== 'none'
             ? {
                 headers: {

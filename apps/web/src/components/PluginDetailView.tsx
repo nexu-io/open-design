@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 // Plan G4 / spec §11.6 — installed extension detail.
 //
 // This route intentionally presents a curated, full-page summary for people
@@ -209,7 +210,7 @@ export function PluginDetailView(props: Props) {
   useEffect(() => {
     if (!pluginWorkspaceContextReady) return;
     let cancelled = false;
-    void fetch(`/api/plugins/${encodeURIComponent(props.pluginId)}`, {
+    void apiFetch(`/api/plugins/${encodeURIComponent(props.pluginId)}`, {
       ...(pluginWorkspaceContext
         ? { headers: workspaceProjectHeaders(pluginWorkspaceContext) }
         : {}),

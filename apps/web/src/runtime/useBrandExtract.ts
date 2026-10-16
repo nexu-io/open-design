@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 // `useBrandExtract` — kick off a programmatic-first brand extraction.
 //
 // Extraction is no longer an in-place SSE pipeline. `POST /api/brands { url }`
@@ -104,7 +105,7 @@ export function useBrandExtract(): UseBrandExtract {
 
     let resp: Response;
     try {
-      resp = await fetch('/api/brands', {
+      resp = await apiFetch('/api/brands', {
         method: 'POST',
         cache: 'no-store',
         headers: {

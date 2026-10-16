@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import {
 	TOUCHPOINT_COMPONENT_V2_RUNTIME_API_VERSION,
 	TOUCHPOINT_COMPONENT_V2_SDK_VERSION,
@@ -532,7 +533,7 @@ export async function recordTestAcceptance(
 	}>,
 	signal?: AbortSignal,
 ): Promise<unknown> {
-	const response = await fetch(
+	const response = await apiFetch(
 		`/api/touchpoints/test-runtime/test-deployments/${encodeURIComponent(input.deploymentId)}/acceptances`,
 		{
 			method: "POST",
@@ -1017,7 +1018,7 @@ export function TestCampaignModal({
 		}
 		/** Acquires a validated context only while this request owns the selection. */
 		const fetchContext = async (signal: AbortSignal, ownsRequest: () => boolean): Promise<TestContext | null> => {
-			const response = await fetch("/api/touchpoints/test-runtime/context", {
+			const response = await apiFetch("/api/touchpoints/test-runtime/context", {
 				method: "POST",
 				headers: { "content-type": "application/json" },
 				body: JSON.stringify({
@@ -1197,7 +1198,7 @@ export function TestCampaignModal({
 					if (testContextMode(selectedContext) === "immutable") query.set("contextToken", selectedContext.contextToken!);
 					// Server time precedes its awaited reads; request and body latency consume the grant.
 					const received = testClock();
-					const response = await fetch("/api/touchpoints/test-runtime?" + query, {
+					const response = await apiFetch("/api/touchpoints/test-runtime?" + query, {
 						cache: "no-store",
 						signal: requestSignal,
 					});

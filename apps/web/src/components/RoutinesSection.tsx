@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import type {
@@ -419,7 +420,7 @@ function RunHistory({
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch(`/api/routines/${routineId}/runs?limit=10`, {
+        const res = await apiFetch(`/api/routines/${routineId}/runs?limit=10`, {
           headers: routineWorkspaceHeaders(workspaceScope),
         });
         if (!res.ok) throw new Error(`runs: ${res.status}`);
@@ -542,7 +543,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
     const requestWorkspaceContext = routinesWorkspaceContext;
     try {
       const [rRes, projectList] = await Promise.all([
-        fetch('/api/routines', {
+        apiFetch('/api/routines', {
           headers: requestWorkspaceContext
             ? workspaceProjectHeaders(requestWorkspaceContext)
             : {},
@@ -628,7 +629,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
             context: body.context,
           }
         : body;
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method: isEdit ? 'PATCH' : 'POST',
         headers: {
           'content-type': 'application/json',
@@ -659,7 +660,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
     setBusyId(routine.id);
     setError(null);
     try {
-      const res = await fetch(`/api/routines/${routine.id}/run`, {
+      const res = await apiFetch(`/api/routines/${routine.id}/run`, {
         method: 'POST',
         headers: routineWorkspaceHeaders(routineWorkspaceScope(routine)),
       });
@@ -680,7 +681,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
   const toggleEnabled = async (routine: Routine) => {
     setBusyId(routine.id);
     try {
-      const res = await fetch(`/api/routines/${routine.id}`, {
+      const res = await apiFetch(`/api/routines/${routine.id}`, {
         method: 'PATCH',
         headers: {
           'content-type': 'application/json',
@@ -704,7 +705,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
     if (!window.confirm(t('routines.confirmDelete'))) return;
     setBusyId(routine.id);
     try {
-      const res = await fetch(`/api/routines/${routine.id}`, {
+      const res = await apiFetch(`/api/routines/${routine.id}`, {
         method: 'DELETE',
         headers: routineWorkspaceHeaders(routineWorkspaceScope(routine)),
       });

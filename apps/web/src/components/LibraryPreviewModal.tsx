@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 // OD Library — full-size, kind-aware asset preview.
 //
 // The grid only shows a thumbnail; this modal renders the asset for real:
@@ -66,7 +67,7 @@ function useRawText(rawUrl: string, enabled: boolean) {
     if (!enabled) return;
     let cancelled = false;
     setState({ text: null, loading: true, error: false });
-    fetch(rawUrl)
+    apiFetch(rawUrl)
       .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
       .then((text) => {
         if (!cancelled) setState({ text, loading: false, error: false });

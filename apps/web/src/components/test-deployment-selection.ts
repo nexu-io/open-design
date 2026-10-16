@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TestRuntimeDeploymentCatalogPage } from "@open-design/contracts/api/touchpointTestRuntime";
 import { emitWebTouchpointDiagnostic } from "./touchpoint-component";
@@ -188,7 +189,7 @@ export function useTestDeploymentSelection({
 				let catalogCompleteness: SelectionState["catalogCompleteness"] = "complete";
 				do {
 					const query = cursor === null ? "" : `?${new URLSearchParams({ cursor })}`;
-					const response = await fetch(`/api/touchpoints/test-runtime/deployments${query}`, {
+					const response = await apiFetch(`/api/touchpoints/test-runtime/deployments${query}`, {
 						cache: "no-store",
 						signal: controller.signal,
 					});

@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 // Thin POST-and-decode wrappers around the daemon's /api/test/connection route.
 // The daemon always answers with HTTP 200 and a `ConnectionTestResponse`
 // body even on upstream-caused failures, so the only paths that throw here
@@ -22,7 +23,7 @@ async function postTest(
 ): Promise<ConnectionTestResponse> {
   const start = Date.now();
   try {
-    const response = await fetch('/api/test/connection', {
+    const response = await apiFetch('/api/test/connection', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),

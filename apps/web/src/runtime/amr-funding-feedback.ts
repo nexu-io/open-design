@@ -1,4 +1,5 @@
 import type { AmrWalletSnapshot, WorkspaceBillingPreflightResponse } from '@open-design/contracts';
+import { apiFetch } from './web-path';
 import { currentWorkspaceAccountGeneration } from '../collab/workspace-identity';
 import type { AmrBalanceGateScope } from './amr-balance-gate';
 
@@ -62,7 +63,7 @@ export function checkAmrFundingFeedback(
     try {
       const query = new URLSearchParams({ workspaceId: scope.workspaceId });
       if (modelId) query.set('modelId', modelId);
-      const response = await fetch(`/api/workspace/billing/preflight?${query}`, {
+      const response = await apiFetch(`/api/workspace/billing/preflight?${query}`, {
         cache: 'no-store', signal: AbortSignal.timeout(5_000),
       });
       if (!response.ok) return 'unknown';

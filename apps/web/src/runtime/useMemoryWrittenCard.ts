@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 // `useMemoryWrittenCard` — surface the memory component (design draft
 // `body-components.html`, 组件 8 「记忆组件」) after a turn actually writes
 // long-term memory.
@@ -83,14 +84,14 @@ export function memoryWrittenCardContent(
 }
 
 async function fetchExtractionRecords(): Promise<MemoryExtractionRecord[]> {
-  const resp = await fetch('/api/memory/extractions');
+  const resp = await apiFetch('/api/memory/extractions');
   if (!resp.ok) return [];
   const json = (await resp.json()) as { extractions?: MemoryExtractionRecord[] };
   return Array.isArray(json?.extractions) ? json.extractions : [];
 }
 
 async function fetchEntrySummaries(): Promise<MemoryEntrySummary[]> {
-  const resp = await fetch('/api/memory');
+  const resp = await apiFetch('/api/memory');
   if (!resp.ok) return [];
   const json = (await resp.json()) as { entries?: MemoryEntrySummary[] };
   return Array.isArray(json?.entries) ? json.entries : [];

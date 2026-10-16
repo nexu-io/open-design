@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 // Reusable "invite teammates" dialog for the team workspace.
 //
 // Opened from the team dropdown in the left rail. Ported VERBATIM (markup +
@@ -259,7 +260,7 @@ export function InviteDialog({
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetch('/api/workspace/invite', {
+      const res = await apiFetch('/api/workspace/invite', {
         method: 'POST',
         headers: {
           'content-type': 'application/json',

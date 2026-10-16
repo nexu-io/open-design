@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 // PostHog browser client wrapper. Lazy-loads posthog-js only after the
 // daemon /api/analytics/config response confirms a key is present, so dev
 // builds and forks impose zero runtime cost. All entry points are
@@ -196,7 +197,7 @@ function fetchAnalyticsConfigShared(): Promise<AnalyticsConfigResponse | null> {
   return coalescedGet(
     'analytics-config',
     async () => {
-      const res = await fetch('/api/analytics/config');
+      const res = await apiFetch('/api/analytics/config');
       if (!res.ok) return null;
       return (await res.json()) as AnalyticsConfigResponse;
     },

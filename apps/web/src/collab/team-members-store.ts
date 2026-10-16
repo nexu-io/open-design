@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import type {
   CollabCloudMemberDirectoryEntry,
   CollabCloudMembersResponse,
@@ -162,7 +163,7 @@ export class TeamMembersIdentityStore {
 
   private async performLoad(requestEpoch: number): Promise<void> {
     try {
-      const res = await fetch('/api/workspace/members', {
+      const res = await apiFetch('/api/workspace/members', {
         headers: workspaceProjectHeaders(this.context),
       });
       if (!res.ok) throw new Error(`members ${res.status}`);

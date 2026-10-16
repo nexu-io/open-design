@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 // Plan §3.C3 / spec §10.3.4 — GenUI Inbox drawer.
 //
 // Lists every persisted surface for a project (project / conversation
@@ -123,7 +124,7 @@ async function defaultFetchSurfaces(
   projectId: string,
   workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<SurfaceRow[]> {
-  const resp = await fetch(
+  const resp = await apiFetch(
     `/api/projects/${encodeURIComponent(projectId)}/genui`,
     workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : undefined,
   );
@@ -137,7 +138,7 @@ async function defaultRevokeSurface(
   surfaceId: string,
   workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<void> {
-  const resp = await fetch(
+  const resp = await apiFetch(
     `/api/projects/${encodeURIComponent(projectId)}/genui/${encodeURIComponent(surfaceId)}/revoke`,
     {
       method: 'POST',

@@ -29,6 +29,7 @@ import {
   type WorkspaceResourceAccessInput,
 } from '../collab/workspace-resource-mutation.js';
 import type { Project, ProjectFile } from '@open-design/contracts';
+import { createPathConfig, rewriteKnownInternalBrowserPaths } from '@open-design/path-config';
 
 type DbHandle = ReturnType<typeof openDatabase>;
 
@@ -757,6 +758,7 @@ export function registerDesignSystemRoutes(
             req.params.id,
             path.posix.dirname(PACKAGED_SHOWCASE_PATH),
             workspaceQuery,
+            ctx.paths.WEB_BASE_PATH,
           ),
         );
       }
@@ -1054,15 +1056,18 @@ export function rewriteDesignSystemShowcaseAssetUrls(
   designSystemId: string,
   baseDir: string,
   workspaceQuery?: { workspaceId: string; workspaceMemberId: string } | null,
+  webBasePath = '',
 ): string {
   if (!html) return html;
-  return html
+  const publicPath = createPathConfig(webBasePath).withBasePath;
+  const rewritten = html
     .replace(/\b(src|href)=(["'])([^"']+)\2/gi, (match, attr: string, quote: string, raw: string) => {
       const rewritten = rewriteDesignSystemShowcaseAssetUrl(
         raw,
         designSystemId,
         baseDir,
         workspaceQuery,
+        publicPath,
       );
       return rewritten === raw ? match : `${attr}=${quote}${rewritten}${quote}`;
     })
@@ -1072,16 +1077,19 @@ export function rewriteDesignSystemShowcaseAssetUrls(
         designSystemId,
         baseDir,
         workspaceQuery,
+        publicPath,
       );
       return rewritten === raw ? match : `url(${quote}${rewritten}${quote})`;
     });
+  return rewriteKnownInternalBrowserPaths(rewritten, webBasePath);
 }
 
 function rewriteDesignSystemShowcaseAssetUrl(
   rawUrl: string,
   designSystemId: string,
   baseDir: string,
-  workspaceQuery?: { workspaceId: string; workspaceMemberId: string } | null,
+  workspaceQuery: { workspaceId: string; workspaceMemberId: string } | null | undefined,
+  publicPath: (path: string) => string,
 ): string {
   const value = rawUrl.trim();
   if (
@@ -1106,13 +1114,14 @@ function rewriteDesignSystemShowcaseAssetUrl(
     return rawUrl;
   }
 
-  const staticUrl =
+  const staticUrl = publicPath(
     `/api/design-systems/${encodeURIComponent(designSystemId)}/static`
     + `?path=${encodeURIComponent(relativePath)}`
     + (workspaceQuery
       ? `&workspaceId=${encodeURIComponent(workspaceQuery.workspaceId)}`
         + `&workspaceMemberId=${encodeURIComponent(workspaceQuery.workspaceMemberId)}`
-      : '');
+      : ''),
+  );
   if (suffix.startsWith('?')) return `${staticUrl}&${suffix.slice(1)}`;
   return `${staticUrl}${suffix}`;
 }

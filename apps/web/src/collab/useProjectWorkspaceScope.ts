@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { isSameWorkspacePrincipal } from '@open-design/contracts';
 import type {
@@ -320,7 +321,7 @@ async function fetchProjectWorkspaceScope(
   return get(
     `project-workspace-scope:${projectId}:${workspaceIdentityKey}`,
     async (sharedSignal): Promise<ProjectWorkspaceScope> => {
-      const response = await fetch(
+      const response = await apiFetch(
         `/api/projects/${encodeURIComponent(projectId)}/workspace-scope`,
         {
           cache: 'no-store',

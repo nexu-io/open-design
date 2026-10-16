@@ -1,3 +1,4 @@
+import { apiFetch, apiPath } from '@/runtime/web-path';
 // Shared GitHub star-count hook backing the topbar pill
 // (`GithubStarBadge`). The browser talks only to the local daemon,
 // which caches GitHub metadata and can return stale-on-error values
@@ -8,7 +9,7 @@
 import { useEffect, useState } from 'react';
 import type { OpenDesignGithubRepoResponse } from '@open-design/contracts';
 
-const API = '/api/github/open-design';
+const API = apiPath('/github/open-design');
 const REPO = 'https://github.com/nexu-io/open-design';
 const LS_KEY = 'open-design:gh-stars';
 const FAILURE_LS_KEY = 'open-design:gh-stars:last-failure';
@@ -121,7 +122,7 @@ export function useGithubStars(): number | null {
     const ctrl = new AbortController();
     (async () => {
       try {
-        const res = await fetch(API, {
+        const res = await apiFetch(API, {
           signal: ctrl.signal,
         });
         if (!res.ok) {

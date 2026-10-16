@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 // The ONE read of the team-shared project catalog
 // (`GET /api/workspace/projects/team`).
 //
@@ -244,7 +245,7 @@ export async function fetchTeamProjectsCatalog(
     + `:generation:${options.requestGeneration ?? 'verified'}`
     + `:target:${options.cacheDiscriminator ?? 'catalog'}`;
   const run = async (): Promise<TeamProject[]> => {
-    const response = await fetch('/api/workspace/projects/team', {
+    const response = await apiFetch('/api/workspace/projects/team', {
       headers: workspaceProjectHeaders(options.context),
     });
     if (!response.ok) throw new Error(`team-projects ${response.status}`);

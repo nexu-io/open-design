@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 // Structured editor for the singleton user profile (id `user_profile`, type
 // `profile`). The profile is the PRE-loop foundation: the daemon injects it
 // into every task brief, so a few labelled fields here become the default
@@ -77,7 +78,7 @@ export function MemoryProfilePanel({ enabled }: { enabled: boolean }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const resp = await fetch(`/api/memory/${encodeURIComponent(PROFILE_MEMORY_ID)}`);
+      const resp = await apiFetch(`/api/memory/${encodeURIComponent(PROFILE_MEMORY_ID)}`);
       if (resp.status === 404) {
         setValues({});
         return;
@@ -100,7 +101,7 @@ export function MemoryProfilePanel({ enabled }: { enabled: boolean }) {
     setBusy(true);
     setSaved(false);
     try {
-      const resp = await fetch(`/api/memory/${encodeURIComponent(PROFILE_MEMORY_ID)}`, {
+      const resp = await apiFetch(`/api/memory/${encodeURIComponent(PROFILE_MEMORY_ID)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

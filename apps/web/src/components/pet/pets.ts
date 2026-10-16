@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import type { AppConfig, CodexPetSummary, PetAtlasLayout, PetAtlasRowDef, PetCustom, PetConfig } from '../../types';
 import {
   codexPetSpritesheetUrl,
@@ -306,7 +307,7 @@ export async function migrateCustomPetAtlas(
   if (!match) return null;
 
   try {
-    const resp = await fetch(codexPetSpritesheetUrl(match));
+    const resp = await apiFetch(codexPetSpritesheetUrl(match));
     if (!resp.ok) return null;
     const blob = await resp.blob();
     const dataUrl = await blobToDataUrl(blob);
@@ -324,7 +325,7 @@ export async function migrateCustomPetAtlas(
 }
 
 export async function prepareCodexPetCustom(pet: CodexPetSummary): Promise<PetCustom> {
-  const resp = await fetch(codexPetSpritesheetUrl(pet));
+  const resp = await apiFetch(codexPetSpritesheetUrl(pet));
   if (!resp.ok) throw new Error('Could not download that pet.');
   const blob = await resp.blob();
   const dataUrl = await blobToDataUrl(blob);

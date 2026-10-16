@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 export type MessageCenterFilter = 'all' | 'unread' | 'read';
 
 export interface MessageCenterMessage {
@@ -110,7 +111,7 @@ export function clearAnonymousState(storage: Storage): void {
  * authoritative: there is no runtime, so there is no account.
  */
 export async function isAmrLoggedIn(): Promise<boolean> {
-  const response = await fetch('/api/integrations/vela/status', { cache: 'no-store' });
+  const response = await apiFetch('/api/integrations/vela/status', { cache: 'no-store' });
   if (response.status === 503) {
     const payload = (await response.clone().json().catch(() => null)) as { error?: string } | null;
     if (payload?.error === 'amr-runtime-unavailable') return false;
@@ -140,7 +141,7 @@ export async function pullMessageCenter(input: {
     });
     if (cursor) query.set('cursor', cursor);
     const proxy = input.loggedIn ? ACCOUNT_PROXY : ANONYMOUS_PROXY;
-    const response = await fetch(`${proxy}/messages?${query}`, { cache: 'no-store' });
+    const response = await apiFetch(`${proxy}/messages?${query}`, { cache: 'no-store' });
     if (!response.ok) throw new Error(`Message Center sync failed: ${response.status}`);
     const page = (await response.json()) as MessageCenterPage;
     if (!Array.isArray(page.messages)) {
@@ -156,7 +157,7 @@ export async function pullMessageCenter(input: {
 }
 
 export async function markAccountMessageRead(messageId: string): Promise<void> {
-  const response = await fetch(`${ACCOUNT_PROXY}/messages/${encodeURIComponent(messageId)}/read`, { method: 'POST' });
+  const response = await apiFetch(`${ACCOUNT_PROXY}/messages/${encodeURIComponent(messageId)}/read`, { method: 'POST' });
   if (!response.ok) throw new Error(`Mark message read failed: ${response.status}`);
 }
 

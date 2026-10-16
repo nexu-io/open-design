@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import { useEffect, useState } from 'react';
 import { Excalidraw } from '@excalidraw/excalidraw';
 import styles from './SketchEnginePrewarm.module.css';
@@ -8,7 +9,7 @@ import styles from './SketchEnginePrewarm.module.css';
  * "Loading scene…" message.
  *
  * The "Loading scene…" delay is owned by Excalidraw itself, not by our scene
- * data fetch (a freshly created sketch already mounts with `loaded: true` and a
+ * data apiFetch(a freshly created sketch already mounts with `loaded: true` and a
  * synchronous empty scene). On its first mount in a session Excalidraw performs
  * a one-time initialization — loading and registering its fonts on the document
  * and spinning up the canvas/renderer. Those costs are cached process-wide

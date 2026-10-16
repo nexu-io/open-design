@@ -2,6 +2,7 @@
   "schemaVersion": 2,
   "targets": [
     "packages/release",
+    "packages/path-config",
     "packages/contracts",
     "packages/standalone",
     "packages/components",

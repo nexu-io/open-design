@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type {
   OdNextRolloutControlResponse,
@@ -35,7 +36,7 @@ const LOADING: LabsHarnessState | null = null;
 
 /** `PUT /api/app-config` merges per key, so a single-field body is safe. */
 async function writeHarnessMode(mode: OdNextRolloutMode): Promise<void> {
-  const response = await fetch('/api/app-config', {
+  const response = await apiFetch('/api/app-config', {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ odNextStrategyMode: mode }),
@@ -298,7 +299,7 @@ export function LabsSection({ autosave }: LabsSectionProps) {
    */
   const readStatus = useCallback(async () => {
     try {
-      const response = await fetch('/api/strategies/od-next/rollout');
+      const response = await apiFetch('/api/strategies/od-next/rollout');
       if (!response.ok) throw new Error(`rollout status failed (${response.status})`);
       const body = (await response.json()) as OdNextRolloutControlResponse;
       if (!mountedRef.current) return;

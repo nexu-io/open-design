@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 // Shared rich brand preview.
 //
 // Thin adapter: builds a normalized DesignKit from a BrandSummary and renders
@@ -90,7 +91,7 @@ export function BrandPreviewCard({
       if (onApplyDesignSystem) {
         onApplyDesignSystem(designSystemId);
       } else {
-        await fetch('/api/app-config', {
+        await apiFetch('/api/app-config', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ designSystemId }),
@@ -145,7 +146,7 @@ export function BrandPreviewCard({
     }
     setBusy(true);
     try {
-      const response = await fetch(`/api/brands/${encodeURIComponent(meta.id)}`, {
+      const response = await apiFetch(`/api/brands/${encodeURIComponent(meta.id)}`, {
         method: 'DELETE',
         ...(mutationWorkspaceContext
           ? { headers: workspaceProjectHeaders(mutationWorkspaceContext) }

@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   TeamProject,
@@ -249,7 +250,7 @@ export function currentWorkspaceContextRequestToken(): string {
 }
 
 async function fetchWorkspaceDirectory(): Promise<WorkspaceDirectoryResponse> {
-  const response = await fetch('/api/workspace/directory', { cache: 'no-store' });
+  const response = await apiFetch('/api/workspace/directory', { cache: 'no-store' });
   if (!response.ok) {
     const error = new Error(`workspace-directory ${response.status}`) as Error & {
       status?: number;
@@ -776,7 +777,7 @@ export function useWorkspaceContext(): WorkspaceContextState {
         if (!selected) {
           return { context: null } satisfies WorkspaceContextResponse;
         }
-        const res = await fetch('/api/workspace/context', {
+        const res = await apiFetch('/api/workspace/context', {
           cache: 'no-store',
           headers: explicitWorkspaceHeaders(selected),
         });
@@ -1340,7 +1341,7 @@ export function useWorkspaceBillingResponse(
           billingInterestScope
             ? workspaceBillingInterestHeaders(billingInterestScope)
             : undefined;
-        const res = await fetch(billingUrl, {
+        const res = await apiFetch(billingUrl, {
           cache: 'no-store',
           ...(runtimeHeaders ? { headers: runtimeHeaders } : {}),
         });

@@ -10,6 +10,11 @@ import {
   writeArchivedIds,
 } from '../src/message-center-client';
 
+vi.mock('../src/runtime/web-path', () => ({
+  apiFetch: (input: RequestInfo | URL, init?: RequestInit) =>
+    fetch(`/open-design${String(input)}`, init),
+}));
+
 describe('message center client', () => {
   beforeEach(() => vi.restoreAllMocks());
 
@@ -101,7 +106,7 @@ describe('message center client', () => {
     expect(result.map((message) => message.id)).toEqual(['new', 'old']);
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
     const firstUrl = String(vi.mocked(fetch).mock.calls[0]?.[0]);
-    expect(firstUrl).toContain('/api/integrations/vela/message-center-public/messages?');
+    expect(firstUrl).toContain('/open-design/api/integrations/vela/message-center-public/messages?');
     expect(firstUrl).not.toContain('startedAt=');
   });
 
@@ -121,7 +126,7 @@ describe('message center client', () => {
     ));
     await pullMessageCenter({ locale: 'en', loggedIn: true });
     expect(String(vi.mocked(fetch).mock.calls[0]?.[0])).toContain(
-      '/api/integrations/vela/message-center/messages?',
+      '/open-design/api/integrations/vela/message-center/messages?',
     );
   });
 });

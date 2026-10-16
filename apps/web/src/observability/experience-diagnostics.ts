@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import {
   CLIENT_EXPERIENCE_DIAGNOSTIC_EVENT,
   parseClientExperienceDiagnostic,
@@ -33,7 +34,7 @@ async function deliver(payload: ClientExperienceDiagnostic, attempt: number): Pr
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5_000);
   try {
-    const response = await fetch('/api/observability/event', {
+    const response = await apiFetch('/api/observability/event', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ event: CLIENT_EXPERIENCE_DIAGNOSTIC_EVENT, properties: payload }),
       signal: controller.signal, keepalive: true,
