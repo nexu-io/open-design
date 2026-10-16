@@ -2406,22 +2406,6 @@ a.avatar-item:visited {
   flex: 1 1 auto;
   min-width: 0;
 }
-/* OPEND-2170 · creation hand-off (owner: ProjectView `creationHandoff`).
-   While a Home send's first transcript settles, the hand-off's chat card
-   (`[data-creation-handoff]`, a ProjectCreationPendingChat) is the column's
-   in-flow pane and the real ChatPane keeps its layout underneath, hidden:
-   it must stay mounted (stream subscription, auto-send) but must not paint
-   its own spinner / skeleton / empty log through the translucent material.
-   `top` matches `.split-chat-tabs-dock { height: 48px }` in routines.css. */
-.split-chat-slot--creation-handoff > .pane:not([data-creation-handoff]) {
-  position: absolute;
-  top: 48px;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  visibility: hidden;
-  pointer-events: none;
-}
 .split-edit-divider {
   grid-column: 2;
   width: 8px;

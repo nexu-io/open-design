@@ -39,6 +39,8 @@ export const uiP0Groups = {
       "ui/home-amr-pending.test.ts",
       "ui/home-send-single-loading.test.ts",
       "ui/home-send-split-width.test.ts",
+      // OPEND-3334: pixel parity + single status across the hand-off.
+      "ui/home-send-handoff-parity.test.ts",
       "ui/amr-onboarding.test.ts",
       "ui/api-empty-response.test.ts",
       "ui/settings-api-protocol.test.ts",
