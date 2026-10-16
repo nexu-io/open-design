@@ -214,6 +214,19 @@ describe('manual edit source patches', () => {
     expect(result.source).not.toContain('<body');
   });
 
+  it('persists consecutive soft line breaks as br elements and reads them back as newlines', () => {
+    const source = '<main><p data-od-id="body">Original body</p></main>';
+    const result = applyManualEditPatch(source, {
+      kind: 'set-text',
+      id: 'body',
+      value: 'First line\n\nThird line',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.source).toContain('First line<br><br>Third line');
+    expect(readManualEditFields(result.source, 'body').text).toBe('First line\n\nThird line');
+  });
+
   it('detects full documents after leading comments and keeps fragments distinct', () => {
     expect(isManualEditFullHtmlDocument('<!-- generated -->\n<!doctype html><html></html>')).toBe(true);
     expect(isManualEditFullHtmlDocument('<?xml version="1.0"?>\n<html></html>')).toBe(true);
