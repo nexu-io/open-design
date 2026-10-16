@@ -769,6 +769,7 @@ export const uk: Dict = {
   'settings.mcpMethodOneClick': 'Встановлення в один клік',
   'settings.mcpInstructionCursor': 'Натисніть «Install in Cursor», щоб встановити з діалогом підтвердження, або об’єднайте цей JSON у {path}.',
   'settings.mcpDeeplinkInstallCursor': 'Встановити в Cursor',
+  "settings.mcpInstructionOctop": "Задайте в OCTOP_USER ім’я користувача Octop і виконайте od mcp install octop або імпортуйте цей JSON в екземпляр OpenDesign у конекторах Octop. Не редагуйте базу даних вручну.",
   'settings.mcpMethodJson': 'Конфігурація JSON',
   'settings.mcpInstructionKiro': 'Відкрийте {path} і об’єднайте цей JSON. Для конфігурації на рівні workspace використовуйте .kiro/settings/mcp.json.',
   'settings.mcpInstructionCopilot': 'Відкрийте палітру команд ({shortcut}), виконайте «MCP: Open User Configuration» і об’єднайте цей JSON. Copilot Chat має бути в режимі Agent, щоб інструменти з’явилися.',

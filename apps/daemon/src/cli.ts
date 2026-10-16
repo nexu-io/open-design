@@ -2466,7 +2466,7 @@ To register this server into a coding agent's own config automatically:
 // Codex one-click install use), so every install path configures byte-for-
 // byte the same command. Falls back to a minimal `od mcp --daemon-url`
 // spec when the daemon is unreachable.
-async function resolveMcpLaunchSpec(flags) {
+async function resolveMcpLaunchSpec(flags, requireCanonical = false) {
   const base = await cliDaemonBaseUrl(flags);
   try {
     const resp = await fetch(`${base}/api/mcp/install-info`);
@@ -2482,6 +2482,9 @@ async function resolveMcpLaunchSpec(flags) {
     }
   } catch {
     // daemon not running / unreachable — fall through to the minimal spec
+  }
+  if (requireCanonical) {
+    throw new Error('Cannot resolve the OpenDesign launch configuration. Start OpenDesign and retry, or specify --daemon-url.');
   }
   return {
     command: 'od',
@@ -2541,7 +2544,15 @@ async function runMcpInstall(args) {
   const serverName = flags.name || 'open-design';
 
   const os = await import('node:os');
-  const spec = await resolveMcpLaunchSpec(flags);
+  let spec;
+  try {
+    spec = slug === 'octop' && uninstall
+      ? { command: '', args: [], env: {} }
+      : await resolveMcpLaunchSpec(flags, slug === 'octop');
+  } catch (err) {
+    emitInstallResult(useJson, { ok: false, agent: slug, message: err.message });
+    process.exit(1);
+  }
   const plan = planAgentInstall(slug, spec, {
     home: os.homedir(),
     platform: process.platform,
@@ -2584,20 +2595,42 @@ async function runMcpInstall(args) {
       return;
     }
     const { spawn } = await import('node:child_process');
+    let octopResult = null;
     const code = await new Promise((resolve) => {
-      const child = spawn(plan.bin, argv, { stdio: 'inherit' });
+      const isOctop = plan.slug === 'octop';
+      const child = spawn(plan.bin, argv, { stdio: isOctop ? ['pipe', 'pipe', 'pipe'] : 'inherit' });
+      let output = '';
+      let errors = '';
+      if (isOctop) {
+        child.stdout.on('data', (chunk) => { output += chunk; });
+        child.stderr.on('data', (chunk) => { errors += chunk; });
+        // A rejected command may close stdin early; its exit status remains authoritative.
+        child.stdin.on('error', () => {});
+        child.stdin.end(uninstall ? undefined : plan.stdin);
+      }
       child.on('error', (err) => {
         console.error(`✗ failed to run ${plan.bin}: ${err.message}`);
         resolve(127);
       });
-      child.on('exit', (c) => resolve(c ?? 0));
+      child.on(isOctop ? 'close' : 'exit', (c) => {
+        if (isOctop) {
+          try {
+            octopResult = JSON.parse(output);
+          } catch {
+            octopResult = { ok: false, message: errors.trim() || 'Octop returned an invalid installation result.' };
+          }
+          resolve(c === 0 && octopResult.ok === true ? 0 : (c || 1));
+        } else {
+          resolve(c ?? 0);
+        }
+      });
     });
     if (code !== 0) {
       emitInstallResult(useJson, {
         ok: false,
         agent: slug,
         kind: 'cli',
-        message: `${plan.bin} exited with code ${code}`,
+        message: octopResult?.message || `${plan.bin} exited with code ${code}`,
       });
       process.exit(code || 1);
     }
@@ -2605,9 +2638,10 @@ async function runMcpInstall(args) {
       ok: true,
       agent: slug,
       kind: 'cli',
-      message: uninstall
+      ...(octopResult ? { connector: octopResult } : {}),
+      message: octopResult?.message || (uninstall
         ? `removed ${serverName} from ${slug}`
-        : `installed ${serverName} into ${slug}`,
+        : `installed ${serverName} into ${slug}`),
     });
     return;
   }
@@ -2695,10 +2729,15 @@ Options:
   --name <name>           MCP server name in the agent config (default: open-design).
   --daemon-url <url>      Daemon URL used to resolve the launch command.
 
+Octop uses its CLI to create an encrypted, user-owned built-in connector.
+Select the user with OCTOP_USER or octop config set-user. Launch credentials
+are passed through stdin, not command-line arguments.
+
 The launch command is resolved from the running daemon's
 /api/mcp/install-info, so the installed entry matches the Settings → MCP
 panel snippet byte-for-byte. Start the daemon first for an exact match;
-otherwise a minimal \`od mcp --daemon-url <url>\` command is used.`);
+otherwise a minimal \`od mcp --daemon-url <url>\` command is used for other
+agents. Octop requires the canonical configuration from a reachable daemon.`);
 }
 
 // ---------------------------------------------------------------------------

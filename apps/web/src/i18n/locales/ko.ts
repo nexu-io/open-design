@@ -769,6 +769,7 @@ export const ko: Dict = {
   'settings.mcpMethodOneClick': '원클릭 설치',
   'settings.mcpInstructionCursor': '"Install in Cursor"를 클릭하여 승인 대화상자와 함께 설치하거나, 이 JSON을 {path}에 병합하세요.',
   'settings.mcpDeeplinkInstallCursor': 'Cursor에 설치',
+  "settings.mcpInstructionOctop": "OCTOP_USER를 Octop 사용자 이름으로 설정하고 od mcp install octop을 실행하거나, Octop 커넥터에서 OpenDesign 인스턴스에 이 JSON을 가져오세요. 데이터베이스를 직접 수정하지 마세요.",
   'settings.mcpMethodJson': 'JSON 설정',
   'settings.mcpInstructionKiro': '{path}을(를) 열고 이 JSON을 병합하세요. 워크스페이스 수준 설정은 .kiro/settings/mcp.json을 사용하세요.',
   'settings.mcpInstructionCopilot': 'Command Palette({shortcut})를 열고 "MCP: Open User Configuration"을 실행한 후 이 JSON을 병합하세요. 도구가 표시되려면 Copilot Chat이 Agent 모드여야 합니다.',

@@ -8226,6 +8226,7 @@ function MediaProvidersSection({
 // source where `od` is not installed globally. The installer panel
 // must NOT reference bare `od`.
 type McpClientId =
+  | 'octop'
   | 'claude'
   | 'codex'
   | 'cursor'
@@ -8492,6 +8493,14 @@ function IntegrationsSection() {
         return `cursor://anysphere.cursor-deeplink/mcp/install?name=open-design&config=${encoded}`;
       },
       deeplinkLabel: () => t('settings.mcpDeeplinkInstallCursor'),
+    },
+    {
+      id: 'octop',
+      label: 'Octop',
+      buildMethod: () => t('settings.mcpMethodJson'),
+      buildInstruction: () => t('settings.mcpInstructionOctop'),
+      buildSnippet: buildSharedMcpJson,
+      buildSnippetLang: () => 'json',
     },
     {
       id: 'kiro',

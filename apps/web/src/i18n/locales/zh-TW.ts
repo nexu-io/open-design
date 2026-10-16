@@ -765,6 +765,7 @@ export const zhTW: Dict = {
   "settings.mcpInstructionCursor":
     "點擊「在 Cursor 中安裝」以透過核准對話框安裝，或將此 JSON 合併至 {path}。",
   "settings.mcpDeeplinkInstallCursor": "在 Cursor 中安裝",
+  "settings.mcpInstructionOctop": "將 OCTOP_USER 設為 Octop 使用者名稱後執行 od mcp install octop，或在 Octop「連接器」建立 OpenDesign 實例並匯入此 JSON。請勿手動編輯資料庫。",
   "settings.mcpMethodJson": "JSON 設定檔",
   "settings.mcpInstructionKiro":
     "開啟 {path} 並合併此 JSON。若要使用 workspace 層級設定，請使用 .kiro/settings/mcp.json。",

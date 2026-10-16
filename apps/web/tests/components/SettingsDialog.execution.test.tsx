@@ -5105,6 +5105,22 @@ describe('SettingsDialog MCP server interactions', () => {
     expect(screen.getByText(/"mcpServers"/i)).toBeTruthy();
   });
 
+  it('offers Octop and copies its canonical import configuration', async () => {
+    const env = { TOKEN: 'test-secret' };
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ ...installInfo, env }) });
+    renderSettingsDialog({ mode: 'daemon', agentId: 'codex' }, { initialSection: 'integrations' });
+    await screen.findByText(/claude mcp add-json --scope user open-design/i);
+    fireEvent.click(screen.getByRole('button', { name: /Claude Code/i }));
+    fireEvent.click(screen.getByRole('option', { name: /Octop/i }));
+    expect(screen.getByText(/Run od mcp install octop with OCTOP_USER/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Copy setup command' }));
+    await waitFor(() => expect(writeTextMock).toHaveBeenCalled());
+    const config = JSON.parse(writeTextMock.mock.calls[0]![0]);
+    expect(config.mcpServers['open-design']).toEqual({
+      command: installInfo.command, args: installInfo.args, env,
+    });
+  });
+
   it('copies the currently selected MCP snippet to the clipboard', async () => {
     renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex' },
