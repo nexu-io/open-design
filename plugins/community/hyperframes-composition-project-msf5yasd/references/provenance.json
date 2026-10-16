@@ -1,0 +1,26 @@
+{
+  "candidateId": "1aa04e0c-75b4-4e61-9f66-70193dc51ced",
+  "projectId": "e516f7dd-0bfe-4151-a9b9-ea8770f1fbbf",
+  "runId": "9dd27179-0c23-404b-bc3a-e17194d711c7",
+  "conversationId": "dcf94c33-ae65-46c8-84e9-3f9d5b4f83e6",
+  "provenance": {
+    "summary": "Detected from videos/civico-due-work-explosion/CLAUDE.md, videos/civico-due-work-explosion/AGENTS.md after a successful run.",
+    "detectedAt": 1785878487279
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "videos/civico-due-work-explosion/CLAUDE.md",
+      "label": "videos/civico-due-work-explosion/CLAUDE.md",
+      "size": 7166,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "videos/civico-due-work-explosion/AGENTS.md",
+      "label": "videos/civico-due-work-explosion/AGENTS.md",
+      "size": 7166,
+      "copied": true
+    }
+  ]
+}
