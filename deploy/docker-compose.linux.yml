@@ -38,7 +38,10 @@ services:
       # API keys for agent CLIs. Leave blank to omit.
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      CODEX_API_KEY: ${CODEX_API_KEY:-}
     volumes:
       - ${HOME}/.local/bin:/mnt/host-local-bin:ro
       - ${HOME}/.opencode/bin:/mnt/host-opencode:ro
