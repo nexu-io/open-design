@@ -269,7 +269,10 @@ const clock = (): Clock => ({ monotonic: performance.now(), wall: Date.now() });
  * ones whose answer depends on the direction of the error say so at the call
  * site.
  */
-const elapsed = (start: Clock) => Math.max(0, performance.now() - start.monotonic, Date.now() - start.wall);
+// Monotonic expiry is irreversible. Wall-only expiry is a display fence,
+// not permission to destroy authority: a correction may make it usable again.
+const monotonicElapsed = (start: Clock) => Math.max(0, performance.now() - start.monotonic);
+const elapsed = (start: Clock) => Math.max(monotonicElapsed(start), Date.now() - start.wall);
 // Reserve time for the decision round and DOM cleanup inside the 30s online
 // withdrawal target. Offline replay retains its separate recovery policy.
 const POLL_MS = 10_000;
@@ -461,6 +464,7 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 	const clear = useCallback(() => clearRef.current(), []);
 	const isCurrent = useCallback((expected: number) => {
 		const current = lease.current;
+		// C1: forward jumps fence use; backward cannot extend it; correction re-allows use.
 		return Boolean(current && inputs.current.enabled && current.identity === inputs.current.identity && current.generation === expected && elapsed(current.start) < current.validForMs && !document.hidden);
 	}, []);
 	/**
@@ -484,6 +488,7 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 		let request: AbortController | null = null;
 		let timeout: ReturnType<typeof setTimeout> | undefined;
 		let expiryTimer: ReturnType<typeof setTimeout> | undefined;
+		let clockRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
 		let boundaryTimer: ReturnType<typeof setTimeout> | undefined;
 		let retryTimer: ReturnType<typeof setTimeout> | undefined;
 		let heartbeatTimer: ReturnType<typeof setTimeout> | undefined;
@@ -526,11 +531,42 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 			pendingPoll = false;
 			cancelRequest();
 			clearTimeout(expiryTimer);
+			clearTimeout(clockRecoveryTimer);
 			clearTimeout(boundaryTimer);
 			clearTimeout(retryTimer);
 			lease.current = null;
 			++generation.current;
 			publish();
+		};
+		/**
+		 * Keep a wall-only expiry off screen with its original clocks and window.
+		 * Observe correction without fetching or renewing. Monotonic expiry,
+		 * withdrawal, identity changes and cleanup retire it permanently. This
+		 * also recovers answers fenced before their first mount (OPEND-3378).
+		 */
+		const recoverClockLease = () => {
+			clearTimeout(clockRecoveryTimer);
+			const held = revalidationLease;
+			if (stopped || !held) return;
+			const remaining = held.validForMs - monotonicElapsed(held.start);
+			if (remaining <= 0) {
+				revalidationLease = null;
+				// Suspension must preserve the ordinary offline expiry cleanup.
+				if (offlineFallback && offline) revalidateOnce();
+				return;
+			}
+			if (elapsed(held.start) < held.validForMs && !document.hidden) {
+				lease.current = { ...held, generation: generation.current };
+				revalidationLease = null;
+				status = "active";
+				publish();
+				armExpiry();
+			} else clockRecoveryTimer = setTimeout(recoverClockLease, Math.min(1_000, remaining));
+		};
+		const suspendClockLease = (held: NonNullable<typeof lease.current>) => {
+			revalidationLease = held;
+			revoke();
+			recoverClockLease();
 		};
 		/**
 		 * One request every {@link SERVER_FAULT_HEARTBEAT_MS}, for as long as
@@ -619,10 +655,14 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 				// Only an explicit device-offline signal can announce recovery reliably.
 				applyOfflineRecovery(browserReportsOffline() ? "announced" : "unannounced");
 			}
-			if (touchpointWithdrawsDisplay(error) || !recoverable || elapsed(recoverable.start) >= recoverable.validForMs) {
+			// C2: discard at monotonic expiry or withdrawal. Forward-only wall
+			// expiry suspends; backward adds no time; correction recovers.
+			if (touchpointWithdrawsDisplay(error) || !recoverable || monotonicElapsed(recoverable.start) >= recoverable.validForMs) {
 				revalidationLease = null;
 				status = "error";
 				revoke();
+			} else if (elapsed(recoverable.start) >= recoverable.validForMs) {
+				suspendClockLease(recoverable);
 			}
 			// Scheduled after any revoke above, which clears the retry timer: an
 			// authoritative withdrawal must not be retried back onto the screen.
@@ -630,7 +670,8 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 			// Fast failures may retry before the next scheduled poll. A round
 			// spanning that boundary queues one follow-up instead of losing it.
 			const delay = RETRY_BACKOFF_MS[retryIndex] ?? 0;
-			const remainingInCycle = cycleStart === null ? 0 : pollMs - elapsed(cycleStart);
+			// C3: all wall jumps leave the monotonic retry budget unchanged.
+			const remainingInCycle = cycleStart === null ? 0 : pollMs - monotonicElapsed(cycleStart);
 			if (
 				// A backoff chain answers "the server is slow or flaky". It has no
 				// answer at all for "there is no network", where every attempt in
@@ -656,8 +697,15 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 			const tick = () => {
 				const current = lease.current;
 				if (stopped || !current) return;
+				// C4: forward expiry hides a monotonic-live grant; backward
+				// cannot extend; correction restores via the bounded watcher.
 				const remaining = current.validForMs - elapsed(current.start);
 				if (remaining <= 0) {
+					if (monotonicElapsed(current.start) < current.validForMs) {
+						suspendClockLease(current);
+						return;
+					}
+					revalidationLease = null;
 					revoke();
 					// The end of the window is the one moment in fallback that is worth
 					// a request: it is what tells the daemon to reclaim the package it
@@ -717,6 +765,13 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 				offline = recovery !== null;
 				applyOfflineRecovery(recovery);
 				if (result.kind === "retain") {
+					// C5: retain extends neither clock. Forward expiry keeps the
+					// original grant aside; correction can recover before monotonic expiry.
+					if (revalidationLease && elapsed(revalidationLease.start) >= revalidationLease.validForMs &&
+						monotonicElapsed(revalidationLease.start) < revalidationLease.validForMs) {
+						recoverClockLease();
+						return;
+					}
 					if (!lease.current && revalidationLease && elapsed(revalidationLease.start) < revalidationLease.validForMs) {
 						lease.current = { ...revalidationLease, generation: generation.current };
 						status = "active";
@@ -741,7 +796,9 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 					revoke();
 					const retry = () => {
 						if (stopped) return;
-						const remaining = result.retryAfterMs - elapsed(started);
+						// C6: all wall jumps leave this duration unchanged;
+						// only a subsequent server response can grant display.
+						const remaining = result.retryAfterMs - monotonicElapsed(started);
 						if (remaining > MAX_TIMER_MS) boundaryTimer = setTimeout(retry, MAX_TIMER_MS);
 						else boundaryTimer = setTimeout(() => void refresh(), Math.max(100, remaining));
 					};
@@ -750,7 +807,10 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 				}
 				status = "active";
 				clearTimeout(boundaryTimer);
-				if (!Number.isFinite(result.validForMs) || result.validForMs <= elapsed(started)) {
+				// C7: latency expires on the monotonic clock. Forward-wall
+				// answers suspend below, backward adds no time, correction recovers.
+				if (!Number.isFinite(result.validForMs) || result.validForMs <= monotonicElapsed(started)) {
+					revalidationLease = null;
 					revoke();
 					return;
 				}
@@ -772,6 +832,9 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 				// before it ever reached the screen (OPEND-3378, `fencedMount`):
 				// there is nothing mounted to preserve, and keeping the generation
 				// would leave that host blank for the rest of the lease.
+				// C8: mounted same-key renewal preserves generation for all jumps.
+				// A suspended lease resumes only inside both windows; correction can
+				// restore it, with a fresh generation if its mount was abandoned.
 				const same =
 					previous?.key === result.key &&
 					previous.identity === identity &&
@@ -781,6 +844,11 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 				fencedMount.current = null;
 				lease.current = { identity, key: result.key, value: same && !result.replaceValue ? previous.value : result.value, generation: generation.current, start: started, validForMs: result.validForMs, offlineValidForMs: result.offlineValidForMs, timeContexts: result.timeContexts };
 				revalidationLease = null;
+				if (elapsed(started) >= result.validForMs) {
+					suspendClockLease(lease.current);
+					return;
+				}
+				clearTimeout(clockRecoveryTimer);
 				publish();
 				armExpiry();
 			} catch (error) {
@@ -815,6 +883,8 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 			revalidationLease = lease.current ?? revalidationLease;
 			status = document.hidden ? status : "loading";
 			revoke();
+			if (revalidationLease && elapsed(revalidationLease.start) >= revalidationLease.validForMs)
+				recoverClockLease();
 			if (!document.hidden) void refresh();
 		};
 		/**
@@ -858,15 +928,17 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 				return;
 			}
 			const current = lease.current;
+			// C9: forward/sleep uncertainty hides first, backward cannot
+			// extend, correction recovers only the original monotonic-live grant.
 			const live = current !== null && elapsed(current.start) < current.validForMs;
 			// Known offline: a return to the page may still retire a lapsed lease,
 			// but it may not ask (OPEND-3436 AC3). `online` is what asks next.
 			if ((offlineFallback || stopOnFailure) && browserReportsOffline()) {
 				if (current && !live) {
-					// Set aside exactly as `wake` would, unless fallback already
-					// reclaimed it — see the `offline` branch below.
-					if (!offline) revalidationLease = current;
-					revoke();
+					// A wall-only expiry remains suspended; a proven monotonic
+					// expiry cannot be restored by any later clock correction.
+					if (monotonicElapsed(current.start) < current.validForMs) suspendClockLease(current);
+					else { revalidationLease = null; revoke(); }
 				}
 				return;
 			}
@@ -878,10 +950,13 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 				// awaited, or the activity is on screen again for as long as the
 				// recovery takes; with no network that is the full request budget.
 				//
-				// `revoke`, not `wake`: a lapsed offline lease is not something to
-				// set aside and restore, because the daemon has reclaimed its
-				// package on the same schedule. There is nothing to come back to.
-				if (current && !live) revoke();
+				// True elapsed expiry is final. A wall-only expiry stays hidden
+				// until correction proves the original window still usable; no
+				// correction can override a received withdrawal or renew its clocks.
+				if (current && !live) {
+					if (monotonicElapsed(current.start) < current.validForMs) suspendClockLease(current);
+					else { revalidationLease = null; revoke(); }
+				}
 				revalidateOnce();
 				return;
 			}
@@ -928,6 +1003,9 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 		reportFencedMount,
 		get deadline() {
 			const current = lease.current;
+			// C10: a wall-time projection, never authority. Forward may project
+			// zero remaining; backward rebases without extending monotonic life;
+			// correction restores the original projected deadline.
 			return current && inputs.current.enabled && current.identity === inputs.current.identity ? Date.now() + Math.max(0, current.validForMs - elapsed(current.start)) : 0;
 		},
 	};

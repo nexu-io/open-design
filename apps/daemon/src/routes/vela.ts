@@ -1160,8 +1160,15 @@ function proxyTouchpointRuntimeRequest(
           finishOperation();
           res.status(200);
           res.setHeader('content-type', upstreamRes.headers['content-type'] ?? 'application/json');
-          annotate(decoded, decision);
-          res.end(decoded);
+          // Cache admission needs decoded content, but the cold reply itself
+          // is unchanged. Keep its negotiated wire encoding: expanding an
+          // asset-heavy decision here makes the client's first download pay
+          // for the full base64 payload even when upstream compressed it.
+          const contentEncoding = upstreamRes.headers['content-encoding'];
+          if (typeof contentEncoding === 'string' && contentEncoding)
+            res.setHeader('content-encoding', contentEncoding);
+          annotate(raw, decision, decision, false, Boolean(contentEncoding));
+          res.end(raw);
           return;
         }
         // `held` is the pair this attempt offered upstream. Upstream only trims

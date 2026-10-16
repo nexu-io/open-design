@@ -123,7 +123,10 @@ it('measures buffered gzip public bytes, held assembly and offline null boundari
   const url = '/api/touchpoints/production-runtime?placementKey=opend.home.campaign-modal&locale=en-US';
   const cold = await request(app, 'GET', url);
   expect(cold.status).toBe(200);
-  expect(cold.metrics).toMatchObject({ public_response_bytes: zlib.gzipSync(Buffer.from(JSON.stringify(decision))).byteLength, local_response_bytes: Buffer.byteLength(JSON.stringify(decision)), decoded_resource_bytes: Buffer.byteLength(code), daemon_version: '0.23.1', server_version: null, resource_read_ms: null });
+  // Full responses now retain their wire compression, just like the existing
+  // compressed echo path. The browser measures its decoded response.text()
+  // bytes itself; the daemon must not label compressed bytes as that value.
+  expect(cold.metrics).toMatchObject({ public_response_bytes: zlib.gzipSync(Buffer.from(JSON.stringify(decision))).byteLength, local_response_bytes: null, decoded_resource_bytes: Buffer.byteLength(code), daemon_version: '0.23.1', server_version: null, resource_read_ms: null });
   expect(cold.metrics?.public_transfer_ms).toBeGreaterThanOrEqual(0);
   const { content: _content, ...trimmed } = decision; payload = { ...trimmed, contentOmitted: true }; gzip = false;
   const held = await request(app, 'GET', url);

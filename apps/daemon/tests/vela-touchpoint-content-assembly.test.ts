@@ -579,6 +579,31 @@ describe('daemon touchpoint content assembly', () => {
     for (const value of seen) expect(value ?? '').not.toMatch(/zstd/);
   });
 
+  it.each(['gzip', 'deflate', 'br'] as const)('preserves negotiated %s on a cold full decision while filling the cache', async encoding => {
+    const encode = (input: Buffer) => encoding === 'gzip' ? zlib.gzipSync(input)
+      : encoding === 'deflate' ? zlib.deflateSync(input) : zlib.brotliCompressSync(input);
+    const decode = (input: Buffer) => encoding === 'gzip' ? zlib.gunzipSync(input)
+      : encoding === 'deflate' ? zlib.inflateSync(input) : zlib.brotliDecompressSync(input);
+    const full = Buffer.from(JSON.stringify(FULL_RESPONSE));
+    const wire = encode(full);
+    upstreamHandler = (_req, res, held) => {
+      res.setHeader('content-type', 'application/json');
+      res.setHeader('content-encoding', encoding);
+      res.end(held.heldContentId ? encode(Buffer.from(JSON.stringify(TRIMMED_RESPONSE))) : wire);
+    };
+
+    const cold = await rawDecide({ 'accept-encoding': encoding });
+    expect(cold.headers['content-encoding']).toBe(encoding);
+    expect(cold.body).toEqual(wire);
+    expect(JSON.parse(decode(cold.body).toString())).toEqual(FULL_RESPONSE);
+    // Preserving the wire representation must still admit the decoded package.
+    expect(recordedContentId()).toBe(FULL_RESPONSE.content.id);
+    const warm = await rawDecide({ 'accept-encoding': encoding });
+    expect(calls[1]).toMatchObject({ heldContentId: FULL_RESPONSE.content.id, heldContentLocale: LOCALE });
+    const rebuilt = warm.headers['content-encoding'] === encoding ? decode(warm.body) : warm.body;
+    expect(JSON.parse(rebuilt.toString())).toEqual(FULL_RESPONSE);
+  });
+
   // Before this route began reading bodies it forwarded them as a stream, so
   // its memory was bounded by the socket. Buffering to assemble gave that up;
   // these two cases put a ceiling back on it. The daemon is a privileged local
