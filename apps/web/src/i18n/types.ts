@@ -1118,6 +1118,7 @@ export interface Dict {
   'updater.reinstallReadyGeneric': string;
   'updater.reinstallReadyVersion': string;
   'updater.restartAnyway': string;
+  'updater.tryAgain': string;
   'updater.upToDate': string;
   'updater.viewVersionFeatures': string;
 
