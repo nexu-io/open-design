@@ -1046,6 +1046,7 @@ export const TR_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'retro': 'Vintage esinli tipografi, yüksek kontrastlı retro paletler ve nostaljik görsel öğelerle geçmişe dönük tasarım.',
   'revolut': 'Dijital bankacılık. Şık koyu arayüz, gradyan kartlar, fintech hassasiyeti.',
   'runwayml': 'Yapay zeka video üretimi. Sinematik koyu arayüz, medya zengini düzen.',
+  'riso': 'Oyuncu risograf estetiği. Sıcak kağıt, derin gül vurgusu, federal mavi yapı.',
   'sanity': 'Headless CMS. Kırmızı vurgu, içerik öncelikli editöryal düzen.',
   'sentry': 'Hata izleme. Koyu gösterge paneli, veri yoğun, pembe-mor vurgu.',
   'shadcn': 'Minimal, temiz bileşenler, monokrom palet ve utility-first kalıplarla Shadcn/ui esinli tasarım.',

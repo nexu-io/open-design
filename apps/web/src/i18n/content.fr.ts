@@ -270,6 +270,7 @@ export const FR_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   resend: 'API email. Thème dark minimaliste, accents monospace.',
   revolut: 'Banque digitale. Interface dark fine, cartes gradient, précision fintech.',
   runwayml: 'Génération vidéo IA. UI dark cinématique, layout riche en médias.',
+  riso: 'Esthétique risographie ludique. Papier chaud, accent rose profond, structure bleu fédéral.',
   sanity: 'Headless CMS. Accent rouge, layout éditorial content-first.',
   sentry: 'Monitoring d’erreurs. Dashboard dark, riche en données, accent rose-violet.',
   shopify: 'Plateforme e-commerce. Dark-first et cinématique, accent vert néon, type ultralégère.',
