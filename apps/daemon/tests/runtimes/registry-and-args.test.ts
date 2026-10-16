@@ -1,4 +1,5 @@
 import { test } from 'vitest';
+import { resolveAgentResumeFailurePolicy } from '../../src/agent-session-resume.js';
 import {
   AGENT_DEFS, amp, assert, chmodSync, claude, codex, cursorAgent, detectAgents, grokBuild, join, mkdtempSync, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
@@ -70,6 +71,60 @@ test('local agent profiles inherit a base adapter and can pin the default model'
 
       const explicitArgs = profile.buildArgs('', [], [], { model: 'zyb-gpt' });
       assert.equal(explicitArgs[explicitArgs.indexOf('--model') + 1], 'zyb-gpt');
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('local profiles preserve base resume classification and customization', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-profile-resume-'));
+  try {
+    await withEnvSnapshot(['OD_AGENT_PROFILES_CONFIG'], async () => {
+      const config = join(dir, 'agents.local.json');
+      writeFileSync(config, JSON.stringify({ agents: ['kilo', 'amr', 'codex', 'opencode', 'claude'].map((baseAgent) => ({
+        id: `local-${baseAgent}`, baseAgent, bin: `custom-${baseAgent}`,
+        args: ['wrapper'], env: { PROFILE_ROUTE: 'local' }, defaultModel: 'custom-model',
+      })) }));
+      process.env.OD_AGENT_PROFILES_CONFIG = config;
+      const profiles = readLocalAgentProfileDefs();
+      const kiloError = JSON.stringify({ jsonrpc: '2.0', id: 2, error: {
+        code: -32602, message: 'session not found: stale', data: { sessionId: 'stale' },
+      } });
+      for (const profile of profiles) {
+        const baseId = profile.id.replace('local-', '');
+        assert.equal(profile.bin, `custom-${baseId}`);
+        assert.equal(profile.buildArgs('', [], [], {})[0], 'wrapper');
+        assert.deepEqual(profile.env, { PROFILE_ROUTE: 'local' });
+        const input = {
+          agentId: profile.resumeFailureAgentId ?? profile.id,
+          stderr: '', stdout: kiloError, isResuming: true, resumeSessionId: 'stale',
+        };
+        const policy = resolveAgentResumeFailurePolicy(input);
+        assert.equal(policy.clearStaleSession, baseId === 'kilo');
+        assert.equal(policy.autoReseedFullTranscript, baseId === 'kilo');
+        assert.equal(profile.resumeFailureAgentId, baseId);
+        if (baseId === 'kilo') {
+          assert.equal(profile.resumesSessionViaAcpLoad, true);
+          assert.equal(profile.acpSessionIdIsDurable, true);
+          for (const override of [
+            { isResuming: false }, { resumeSessionId: null },
+            { stdout: '', stderr: kiloError },
+            { stdout: JSON.stringify({ id: 2, error: { code: -32603, data: { service: 'model' } } }) },
+            { stdout: JSON.stringify({ id: 3, error: { code: -32603, data: { service: 'session' } } }) },
+            { stdout: JSON.stringify({ id: 2, error: { code: -32602, data: { service: 'session' } } }) },
+            { stdout: JSON.stringify({ id: 2, error: { code: -32603, data: { service: 'session' } } }) },
+            { stdout: 'Session not found' },
+          ]) assert.equal(resolveAgentResumeFailurePolicy({ ...input, ...override }).resumeFailed, false);
+        }
+        const ownFailure = baseId === 'codex' ? { stderr: 'no rollout found for thread id abc' }
+          : baseId === 'opencode' ? { stderr: 'Error: Session not found' }
+            : baseId === 'claude' ? { stderr: 'No conversation found with session ID: abc' }
+              : baseId === 'amr' ? { stdout: '{"error":{"data":{"kind":"resume_failed"}}}' }
+                : { stdout: kiloError };
+        assert.equal(resolveAgentResumeFailurePolicy({ ...input, stdout: '', ...ownFailure }).resumeFailed, true);
+      }
+      assert.equal(profiles.length, 5);
     });
   } finally {
     rmSync(dir, { recursive: true, force: true });
