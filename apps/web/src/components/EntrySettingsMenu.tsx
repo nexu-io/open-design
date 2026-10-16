@@ -46,9 +46,10 @@ export type EntrySettingsSection =
   | 'integrations'
   | 'mcpClient'
   | 'language'
-  // Legacy deep-link token: the theme setting is gone (the app ships
-  // light-only) and SettingsDialog folds this into General, but the token stays
-  // accepted so an old link does not become a type error at the call site.
+  // Legacy deep-link token: the theme lives inside General (the theme select
+  // sits under the language row), and SettingsDialog folds this token into
+  // General. It stays accepted so an old link does not become a type error
+  // at the call site.
   | 'appearance'
   | 'notifications'
   | 'pet'
