@@ -16,8 +16,12 @@ export const FALLBACK_MAX_TOKENS = 8192;
 // for both the UI input attributes and runtime validation in
 // `effectiveMaxTokens`, so a stale or hand-edited localStorage value
 // can't sneak past the UI's promise.
+//
+// MAX_MAX_TOKENS must be >= the highest shipped per-model default so that
+// a user who edits the override can restore the placeholder value through
+// the same control.
 export const MIN_MAX_TOKENS = 1024;
-export const MAX_MAX_TOKENS = 200000;
+export const MAX_MAX_TOKENS = 400000;
 
 const LITELLM_MODELS = litellmData.models as Record<string, number>;
 
