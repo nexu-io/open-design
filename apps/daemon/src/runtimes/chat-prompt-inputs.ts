@@ -68,14 +68,27 @@ type CommentAttachmentInput = {
   source?: InputValue;
 };
 
+/**
+ * Compose the live instruction block in cacheable-prefix order (#4679).
+ *
+ * The stable trio — `daemonSystemPrompt`, `runtimeToolPrompt`, and the big
+ * `clientStableSystemPrompt` (design system / skills / memory) — is emitted
+ * first and contiguously so a provider can reuse it as a cached prefix across
+ * turns. The per-turn `clientSystemPrompt` (run context, research contract,
+ * browser-use guard, title task) follows as a volatile tail, and any
+ * `finalPromptOverride` (the codex imagegen override) is appended last so it
+ * stays semantically volatile and never lands inside the cacheable prefix.
+ */
 export function composeLiveInstructionPrompt({
   daemonSystemPrompt,
   runtimeToolPrompt,
+  clientStableSystemPrompt,
   clientSystemPrompt,
   finalPromptOverride,
 }: {
   daemonSystemPrompt?: string | null;
   runtimeToolPrompt?: string | null;
+  clientStableSystemPrompt?: string | null;
   clientSystemPrompt?: string | null;
   finalPromptOverride?: string | null;
 }) {
@@ -83,7 +96,12 @@ export function composeLiveInstructionPrompt({
     typeof finalPromptOverride === 'string'
       ? finalPromptOverride.trim()
       : '';
-  const parts = [daemonSystemPrompt, runtimeToolPrompt, clientSystemPrompt]
+  const parts = [
+    daemonSystemPrompt,
+    runtimeToolPrompt,
+    clientStableSystemPrompt,
+    clientSystemPrompt,
+  ]
     .map((part) => (typeof part === 'string' ? part.trim() : ''))
     .map((part) =>
       override && part.includes(override)
@@ -268,13 +286,19 @@ export function composeChatAgentTextPayload({
 
   assertOdNextLegacyTextContributorCoverage(Object.keys(contributors), strategyInputStage);
 
-  const clientInstructionPrompt = [
+  const clientVolatileSystemPrompt = [
     researchCommandContract,
     runContextPrompt,
     connectedExternalMcpReference,
     browserUnavailableGuard,
     titleGenerationDirective,
+  ]
+    .map((part) => (typeof part === 'string' ? part.trim() : ''))
+    .filter(Boolean)
+    .join('\n\n---\n\n');
+  const clientInstructionPrompt = [
     clientSystemPrompt,
+    clientVolatileSystemPrompt,
   ]
     .map((part) => (typeof part === 'string' ? part.trim() : ''))
     .filter(Boolean)
@@ -282,7 +306,8 @@ export function composeChatAgentTextPayload({
   const instructionPrompt = composeLiveInstructionPrompt({
     daemonSystemPrompt,
     runtimeToolPrompt,
-    clientSystemPrompt: clientInstructionPrompt,
+    clientStableSystemPrompt: clientSystemPrompt,
+    clientSystemPrompt: clientVolatileSystemPrompt,
     finalPromptOverride: null,
   });
   const composedPrompt = [
