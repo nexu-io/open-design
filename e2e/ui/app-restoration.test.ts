@@ -316,6 +316,80 @@ test('[P0] switching between projects restores each project workspace to its las
   await expect(tabBySuffix(page, 'beta-secondary.png')).toHaveAttribute('aria-selected', 'false');
 });
 
+// OPEND-3303 / QA on #8384: the switcher lists every recent project, so it can
+// open one that has no tab yet. The suite fixture answers the Vela status read
+// with 503, which leaves the account/workspace identity unresolved — the state
+// QA reproduced in — and the picked project must still land its URL AND its
+// name in the trigger. Returning through the switcher to a project that does
+// have a tab keeps the file that tab last showed.
+test('[P0] the project switcher opens an unopened project and returns to the last file of an opened one', async ({ page }) => {
+  await routeMockAgents(page);
+
+  const pngBytes = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=',
+    'base64',
+  );
+  // Created through the daemon API and never opened: it has no tab.
+  const unopenedName = uniqueProjectName('Switcher Unopened');
+  const unopenedProjectId = `switcher-unopened-${Date.now().toString(36)}`;
+  const created = await page.request.post('/api/projects', {
+    data: {
+      id: unopenedProjectId,
+      name: unopenedName,
+      skillId: null,
+      designSystemId: null,
+      pendingPrompt: null,
+      metadata: { kind: 'prototype' },
+    },
+  });
+  expect(created.ok(), `create project: ${await created.text()}`).toBeTruthy();
+
+  await gotoEntryHome(page);
+  await createPrototypeProject(page, 'Switcher Opened');
+  await expectWorkspaceReady(page);
+  const { projectId: openedProjectId } = await getCurrentProjectContext(page);
+  const trigger = page.getByTestId('workspace-tabs-dropdown-trigger');
+  const openedName = (await trigger.textContent())?.trim() ?? '';
+  expect(openedName).toContain('Switcher Opened');
+
+  for (const name of ['opened-primary.png', 'opened-secondary.png']) {
+    const upload = page.waitForResponse(
+      (resp: Response) => resp.url().includes('/upload') && resp.request().method() === 'POST',
+      { timeout: 5000 },
+    );
+    await page.getByTestId('design-files-upload-input').setInputFiles({
+      name,
+      mimeType: 'image/png',
+      buffer: pngBytes,
+    });
+    await expect((await upload).ok()).toBeTruthy();
+  }
+  const primaryTab = await ensureFileTabOpen(page, 'opened-primary.png');
+  await ensureFileTabOpen(page, 'opened-secondary.png');
+  await primaryTab.click();
+  await expect(primaryTab).toHaveAttribute('aria-selected', 'true');
+
+  await trigger.click();
+  await page
+    .getByRole('listbox')
+    .getByRole('option', { name: new RegExp(escapeRegExp(unopenedName)) })
+    .click();
+  await expect(page).toHaveURL(new RegExp(`/projects/${escapeRegExp(unopenedProjectId)}(?:/|$)`));
+  await expectWorkspaceReady(page);
+  await expect(trigger).toContainText(unopenedName);
+
+  await trigger.click();
+  await page
+    .getByRole('listbox')
+    .getByRole('option', { name: new RegExp(escapeRegExp(openedName)) })
+    .click();
+  await expect(page).toHaveURL(new RegExp(`/projects/${escapeRegExp(openedProjectId)}(?:/|$)`));
+  await expectWorkspaceReady(page);
+  await expect(trigger).toContainText(openedName);
+  await expect(tabBySuffix(page, 'opened-primary.png')).toHaveAttribute('aria-selected', 'true');
+  await expect(tabBySuffix(page, 'opened-secondary.png')).toHaveAttribute('aria-selected', 'false');
+});
+
 test('[P0] @critical visiting an uploaded design file route restores its tab and file workspace surface', async ({ page }) => {
   await routeMockAgents(page);
 
