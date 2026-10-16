@@ -79,23 +79,21 @@ export async function ensureRailOpen(page: Page): Promise<void> {
 /**
  * Opens the New project modal.
  *
- * The rail is NOT the entry point any more. #5517 (b55f17169, f16075f7e)
- * rebuilt `EntryNavRail` and deleted both `entry-nav-new-project` and
- * `entry-nav-projects`; the rail's destinations are now Home / Community /
- * 草稿 / 全部项目 / 设计系统 / 插件. `onNewProject` is still destructured in
- * `EntryNavRail.tsx` but nothing calls it, so probing for a rail "+ New
- * project" button can only ever miss — this helper used to burn that probe
- * plus an `ensureRailOpen` round-trip before falling through to the path
- * below.
+ * The rail's `entry-nav-new-project` item is the entry point (#8097). #5517
+ * (b55f17169, f16075f7e) had deleted it — leaving `EntryShell`'s
+ * `onNewProject` handler as dead wiring and the dialog reachable only through
+ * the `/projects` deep link — so this helper drove `DesignsTab`'s CTA
+ * instead. The restored item heads the second destination group on both
+ * identity branches, so it opens the modal from any entry view without a
+ * route change first.
  *
- * The modal's only surviving trigger is `DesignsTab`'s own CTA
- * (`designs-new-project` once the workspace has projects,
- * `designs-empty-new-project` while it has none), which lives in the
- * `projects` entry view. That view has no UI entry either: `HomeView` passes
- * `heading` to `RecentProjectsStrip`, which selects the full-page-grid header
- * that omits `recent-projects-view-all`, so `HomeView.onViewAllProjects` is
- * wired but unreachable — the same gap `e2e/ui/entry-chrome-flows.test.ts`
- * documents. Drive the `/projects` route directly until an entry returns.
+ * `DesignsTab`'s own CTA (`designs-new-project` once the workspace has
+ * projects, `designs-empty-new-project` while it has none) stays as the
+ * fallback for callers that arrive outside the entry shell or before the rail
+ * has committed; the helper keeps its long-standing "never fail the flow"
+ * contract and lets the `/projects` route surface any real regression. The
+ * rail's docked state persists (`od.entry.railOpen`) and shows around the
+ * modal backdrop, so `visual-new-project-modal` expects it open either way.
  */
 /**
  * Opens 全部项目 from the rail and switches it to the 团队项目 tab (OPEND-3108).
@@ -109,15 +107,23 @@ export async function openTeamProjectsTab(page: Page): Promise<void> {
 
 export async function openNewProjectModal(page: Page): Promise<void> {
   if (await page.getByTestId('new-project-panel').isVisible().catch(() => false)) return;
-  // Chrome parity only, never a functional step: the rail carries no
-  // new-project affordance, but the rail's docked state persists
-  // (`od.entry.railOpen`) and shows around the modal backdrop, so the
-  // `visual-new-project-modal` baseline would churn if this flow stopped
-  // docking it. Skipped outside the entry shell — a project surface has no
-  // pinned-tab toggle at all (`WorkspaceTabsBar` renders it only for
-  // `isPinned && active`) — and never allowed to fail the flow.
+  // Canonical opener inside the entry shell (#8097). Outside it — a project
+  // surface has no rail at all (`WorkspaceTabsBar` renders the pinned-tab
+  // toggle only for `isPinned && active`) — or if the rail path cannot land,
+  // fall through to the Projects-view CTA below rather than fail the flow.
   if ((await page.locator('.entry').count()) > 0) {
-    await ensureRailOpen(page).catch(() => {});
+    try {
+      await ensureRailOpen(page);
+      const railButton = page.getByTestId('entry-nav-new-project');
+      await expect(railButton).toBeVisible({ timeout: T.short });
+      await railButton.click();
+      await expect(page.getByTestId('new-project-modal')).toBeVisible({ timeout: T.long });
+      await expect(page.getByTestId('new-project-panel')).toBeVisible();
+      return;
+    } catch {
+      // The rail did not open the modal; the Projects-view CTA below is the
+      // fallback, and `entry-chrome-flows`' P1 asserts the rail item itself.
+    }
   }
   await openProjectsEntryView(page);
   await dismissWhatsNewPopup(page);
