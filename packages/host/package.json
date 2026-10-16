@@ -33,9 +33,9 @@
   },
   "devDependencies": {
     "@types/node": "24.12.2",
-    "esbuild": "0.28.0",
+    "esbuild": "0.28.1",
     "typescript": "6.0.3",
-    "vitest": "4.1.6"
+    "vitest": "4.1.11"
   },
   "engines": {
     "node": "~24"
