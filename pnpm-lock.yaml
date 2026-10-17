@@ -19,7 +19,7 @@ overrides:
   image-size: 2.0.3
   ip-address: 10.7.1
   js-yaml: 4.3.2
-  lodash-es: 4.18.0
+  lodash-es: 4.18.1
   mermaid: 11.16.1
   nanoid@^3: 3.3.18
   nanoid@^4: 5.1.16
@@ -5263,9 +5263,8 @@ packages:
     resolution: {integrity: sha512-NXYBzinNrblfraPGyrbPoD19C1h9lfI/1mzgWYvXUTe414Gz/X1FD2XBZSZM7rRTrMA8JL3OtAaGifrIKhQ5yQ==}
     engines: {node: '>= 12.0.0'}
 
-  lodash-es@4.18.0:
-    resolution: {integrity: sha512-koAgswPPA+UTaPN64Etp+PGP+WT6oqOS2NMi5yDkMaiGw9qY4VxQbQF0mtKMyr4BlTznWyzePV5UpECTJQmSUA==}
-    deprecated: Bad release. Please use lodash-es@4.17.23 instead.
+  lodash-es@4.18.1:
+    resolution: {integrity: sha512-J8xewKD/Gk22OZbhpOVSwcs60zhd95ESDwezOFuA3/099925PdHJ7OFHNTGtajL3AlZkykD32HykiMo+BIBI8A==}
 
   lodash.debounce@4.0.8:
     resolution: {integrity: sha512-FT1yDzDYEoYWhnSGnpE/4Kj1fLZkDFyqRb7fNt6FdYOSxlUWAtp42Eh6Wb0rGIv/m9Bgo7x4GhQbm5Ys4SG5ow==}
@@ -7333,12 +7332,12 @@ snapshots:
     dependencies:
       '@chevrotain/gast': 11.0.3
       '@chevrotain/types': 11.0.3
-      lodash-es: 4.18.0
+      lodash-es: 4.18.1
 
   '@chevrotain/gast@11.0.3':
     dependencies:
       '@chevrotain/types': 11.0.3
-      lodash-es: 4.18.0
+      lodash-es: 4.18.1
 
   '@chevrotain/regexp-to-ast@11.0.3': {}
 
@@ -9931,7 +9930,7 @@ snapshots:
   chevrotain-allstar@0.3.1(chevrotain@11.0.3):
     dependencies:
       chevrotain: 11.0.3
-      lodash-es: 4.18.0
+      lodash-es: 4.18.1
 
   chevrotain@11.0.3:
     dependencies:
@@ -9940,7 +9939,7 @@ snapshots:
       '@chevrotain/regexp-to-ast': 11.0.3
       '@chevrotain/types': 11.0.3
       '@chevrotain/utils': 11.0.3
-      lodash-es: 4.18.0
+      lodash-es: 4.18.1
 
   chokidar@3.6.0:
     dependencies:
@@ -10279,7 +10278,7 @@ snapshots:
   dagre-d3-es@7.0.14:
     dependencies:
       d3: 7.9.0
-      lodash-es: 4.18.0
+      lodash-es: 4.18.1
 
   data-uri-to-buffer@4.0.1:
     optional: true
@@ -11450,7 +11449,7 @@ snapshots:
       lightningcss-win32-arm64-msvc: 1.32.0
       lightningcss-win32-x64-msvc: 1.32.0
 
-  lodash-es@4.18.0: {}
+  lodash-es@4.18.1: {}
 
   lodash.debounce@4.0.8: {}
 
