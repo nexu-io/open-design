@@ -72,6 +72,11 @@ describe("desktop BrowserWindow chrome options", () => {
     expect(mainAppWindowOptions()).toContain("backgroundThrottling: false");
   });
 
+  test("throttles the main window while it is hidden so the page stops animating", () => {
+    expect(runtimeSource).toContain("window.webContents.setBackgroundThrottling(true);\n          window.hide();");
+    expect(runtimeSource).toContain('window.on("show", () => window.webContents.setBackgroundThrottling(false));');
+  });
+
   test("keeps channel-specific window titles from being overwritten by the renderer page title", () => {
     expect(runtimeSource).toContain('window.on("page-title-updated", (event) => {');
     expect(runtimeSource).toContain("event.preventDefault();");

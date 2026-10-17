@@ -133,6 +133,9 @@ export async function runElectronBuilder(
       electronLanguages: MAC_ELECTRON_LANGUAGES,
       entitlements: config.signed ? macResources.entitlements : undefined,
       entitlementsInherit: config.signed ? macResources.entitlementsInherit : undefined,
+      // Every launch starts as a menu bar agent without a Dock icon; user
+      // launches restore it in apps/packaged, while MCP background launches stay menu bar only.
+      extendInfo: { LSUIElement: true },
       gatekeeperAssess: false,
       hardenedRuntime: config.signed,
       icon: macResources.icon,

@@ -845,6 +845,30 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     expect(navigate).toHaveBeenCalledWith(homeRoute);
   });
 
+  it('hides the desktop window when closing the active Home tab', async () => {
+    const hideWindow = vi.fn(async () => undefined);
+    window.openDesignDesktop = {
+      exportDiagnostics: vi.fn(async () => ({ ok: false, cancelled: true } as const)),
+      hideWindow,
+    };
+
+    try {
+      render(<WorkspaceTabsBar route={homeRoute} projects={[project]} />);
+
+      const allowedDefault = fireEvent.keyDown(document, {
+        key: 'w',
+        metaKey: true,
+      });
+
+      expect(allowedDefault).toBe(false);
+      expect(hideWindow).toHaveBeenCalledOnce();
+      expect(screen.getAllByRole('tab')).toHaveLength(1);
+      expect(navigate).not.toHaveBeenCalled();
+    } finally {
+      delete window.openDesignDesktop;
+    }
+  });
+
   it('switches tabs with browser-style next and previous tab shortcuts', async () => {
     window.localStorage.setItem(
       'open-design:workspace-tabs:v1',

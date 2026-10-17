@@ -174,6 +174,7 @@ function normalizeProjectImportResult(input: unknown): OpenDesignHostProjectImpo
 // duplicated from main/diagnostics.ts on purpose so the preload bundle does
 // not pull in node-only modules transitively.
 const DESKTOP_DIAGNOSTICS_IPC_CHANNEL = 'diagnostics:export-to-file';
+const DESKTOP_HIDE_WINDOW_IPC_CHANNEL = 'window:hide';
 
 type DesktopDiagnosticsExportResult =
   | { ok: true; path: string }
@@ -386,4 +387,5 @@ contextBridge.exposeInMainWorld(OPEN_DESIGN_HOST_GLOBAL, hostBridge);
 contextBridge.exposeInMainWorld('openDesignDesktop', {
   exportDiagnostics: (): Promise<DesktopDiagnosticsExportResult> =>
     ipcRenderer.invoke(DESKTOP_DIAGNOSTICS_IPC_CHANNEL) as Promise<DesktopDiagnosticsExportResult>,
+  hideWindow: (): Promise<void> => ipcRenderer.invoke(DESKTOP_HIDE_WINDOW_IPC_CHANNEL) as Promise<void>,
 });

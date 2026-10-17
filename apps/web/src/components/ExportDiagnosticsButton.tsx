@@ -12,6 +12,7 @@ type DesktopExportResult =
 
 interface OpenDesignDesktopApi {
   exportDiagnostics(): Promise<DesktopExportResult>;
+  hideWindow?(): Promise<void>;
 }
 
 declare global {

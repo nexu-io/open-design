@@ -379,6 +379,7 @@ export type DesktopClickResult = {
 
 export type DesktopStatusSnapshot = {
   pid?: number;
+  restorable?: boolean;
   state: "idle" | "running" | "unknown";
   title?: string | null;
   updatedAt?: string;
@@ -454,6 +455,13 @@ export type DesktopRuntimeOptions = {
    * otherwise only live in DevTools.
    */
   rendererLogPath?: string | null;
+  /**
+   * Packaged macOS app with a menu bar icon: closing the main window also
+   * hides the Dock icon, showing the window brings it back, and a window the
+   * user hid reports itself restorable so a new launcher shows it instead of
+   * restarting the app and its daemon. Omitted by tools-dev.
+   */
+  menubarResident?: boolean;
   requestQuit?: () => void;
   onMainWindowReady?: () => void;
   /**
@@ -1759,6 +1767,32 @@ export function ensureWindowVisible(window: BrowserWindow): void {
 }
 
 /**
+ * Shows a hidden window where the user called it from: the display under the
+ * cursor and the current Space, instead of macOS switching back to the Space
+ * the window was closed on. Joining every Space for the show pins the window
+ * to the active one; `skipTransformProcessType` keeps the toggle from flipping
+ * the process type, which can leave the app without a Dock icon (#2394).
+ */
+function showHiddenWindowWhereCalled(window: BrowserWindow): void {
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  const bounds = window.getBounds();
+  if (screen.getDisplayMatching(bounds).id !== display.id) {
+    const area = display.workArea;
+    const width = Math.min(bounds.width, area.width);
+    const height = Math.min(bounds.height, area.height);
+    window.setBounds({
+      x: area.x + Math.round((area.width - width) / 2),
+      y: area.y + Math.round((area.height - height) / 2),
+      width,
+      height,
+    });
+  }
+  window.setVisibleOnAllWorkspaces(true, { skipTransformProcessType: true });
+  ensureWindowVisible(window);
+  window.setVisibleOnAllWorkspaces(false, { skipTransformProcessType: true });
+}
+
+/**
  * Surface of {@link BrowserWindow} consumed by
  * {@link hideWindowExitingFullscreen} — declared structurally so the
  * helper can be exercised with a plain mock in unit tests without
@@ -2717,11 +2751,36 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     window.on("leave-full-screen", () => {
       enteringFullscreen = false;
     });
+    // Electron ignores dock.hide() within 1s of dock.show(), so a window closed
+    // right after it was shown would leave the Dock icon behind. Retry once.
+    const hideDock = (): void => {
+      if (options.menubarResident !== true || app.dock == null) return;
+      app.dock.hide();
+      if (!app.dock.isVisible()) return;
+      setTimeout(() => {
+        if (!window.isDestroyed() && !window.isVisible()) app.dock?.hide();
+      }, 1000);
+    };
+    // `backgroundThrottling: false` keeps a hidden window's page "visible", so the
+    // home screen's endless animations and timers kept the GPU busy after close.
+    // Throttling must be on before hide() for Chromium to mark the page hidden.
+    window.on("show", () => window.webContents.setBackgroundThrottling(false));
     window.on("close", (event) => {
       if (stopped) return;
       event.preventDefault();
       hideWindowExitingFullscreen({
-        hide: () => window.hide(),
+        hide: () => {
+          window.webContents.setBackgroundThrottling(true);
+          window.hide();
+          // Reopening the app activates it before `show()` runs, and macOS
+          // then switches to the Space the window was closed on. A hidden
+          // window on every Space gives it nowhere to switch to;
+          // showHiddenWindowWhereCalled pins it to the active Space again.
+          if (options.menubarResident === true) {
+            window.setVisibleOnAllWorkspaces(true, { skipTransformProcessType: true });
+          }
+          hideDock();
+        },
         isFullScreen: () => window.isFullScreen(),
         isSimpleFullScreen: () => window.isSimpleFullScreen(),
         isEnteringFullscreen: () => enteringFullscreen,
@@ -2799,10 +2858,21 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   let pendingUpdateDialogRequest: OpenDesignHostUpdaterOpenDialogRequest | null = null;
   let revealed = false;
   let revealing = false;
+  // Menu bar resident: the Dock icon follows the main window. `dock.show()`
+  // can take focus from the window, so focus it again once the Dock settles.
+  // It also activates the Dock when called on an active app to work around a
+  // macOS bug, so skip it when the icon is already visible.
+  const showDock = (): void => {
+    if (options.menubarResident !== true || app.dock == null || app.dock.isVisible()) return;
+    void app.dock.show().then(() => {
+      if (!window.isDestroyed() && window.isVisible()) window.focus();
+    });
+  };
 
   const revealMainWindow = (): void => {
     if (revealed || window.isDestroyed()) return;
     revealed = true;
+    showDock();
     showWindowButtons(window);
     window.show();
     window.focus();
@@ -3089,6 +3159,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     },
     show() {
       if (window.isDestroyed()) return;
+      showDock();
       // Before the splash reveal gate has fired (revealWhenReady), the main
       // window is still hidden and surfacing it here would show the half-loaded
       // web shell and bypass the gate — reintroducing the startup flash this is
@@ -3100,6 +3171,10 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
           splash.show();
           splash.focus();
         }
+        return;
+      }
+      if (options.menubarResident === true && !window.isVisible()) {
+        showHiddenWindowWhereCalled(window);
         return;
       }
       // A minimized window must be restored before focus — `focus()` alone
@@ -3115,6 +3190,9 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         updatedAt: new Date().toISOString(),
         url: resolveDesktopStatusUrl(currentUrl, pendingUrl),
         windowVisible: !window.isDestroyed() && window.isVisible(),
+        // Hidden to the menu bar after reveal: a new launcher shows it again
+        // instead of restarting the app and dropping connected MCP clients.
+        restorable: options.menubarResident === true && revealed && !window.isDestroyed() && !window.isVisible(),
       };
     },
   };

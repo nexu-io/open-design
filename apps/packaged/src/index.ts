@@ -25,8 +25,10 @@ import {
   recordIncomingUpdateLifecycle,
   applyLoopbackConnectionLimitSwitch,
   applyOsLocaleSwitch,
+  createMenubarTray,
   createSplashWindow,
   setSplashStage,
+  watchUserDesktopIntent,
   type DesktopMainHandle,
 } from "@open-design/desktop/main";
 import { releaseChannelFromNamespace, releaseChannelFromVersion } from "@open-design/release";
@@ -71,7 +73,6 @@ import {
   isPackagedPayloadDelegation,
   markPackagedManagedOuter,
   supportsDeferredHeadlessDesktop,
-  watchUserDesktopIntent,
 } from "./managed-headless.js";
 import { findPackagedDeeplinkArg, launchPackagedPayloadDesktop } from "./payload-desktop-launch.js";
 import { packagedEntryUrl, registerOdProtocol } from "./protocol.js";
@@ -82,6 +83,8 @@ import { syncWindowsUninstallDisplayVersion } from "./windows-lifecycle.js";
 
 let packagedLogger: PackagedDesktopLogger | null = null;
 const secondInstanceHandoff = createPackagedSecondInstanceHandoff();
+// Module scope keeps the Tray referenced; a collected Tray loses its icon.
+let menubarTray: ReturnType<typeof createMenubarTray> | null = null;
 
 // Telemetry context for the fatal-exit path. Populated once config + launcher
 // runtime are resolved so the `main().catch` below can report a startup failure
@@ -318,6 +321,11 @@ async function main(): Promise<void> {
   }
   await app.whenReady();
 
+  // Info.plist LSUIElement starts every launch without a Dock icon, so an MCP
+  // client's background launch stays menu bar only. A user launch gets the
+  // Dock icon back before the splash appears.
+  if (!deferredHeadless) void app.dock?.show();
+
   // Show the brand splash IMMEDIATELY, before we await the daemon/web sidecars
   // below. Cold boot otherwise leaves the user staring at no window at all for
   // the few seconds the sidecars take to come up; putting the animation on
@@ -440,6 +448,7 @@ async function main(): Promise<void> {
       }
     },
     windowTitle: resolvePackagedWindowTitle(activeConfig),
+    menubarResident: process.platform === "darwin",
     inviteProtocolClientPath:
       process.platform === "win32" ? launcherRuntime.installedLaunchPath : null,
     async onExternalShow() {
@@ -480,6 +489,7 @@ async function main(): Promise<void> {
         url: sidecars.currentWebUrl(),
       }),
       launch: async () => {
+        await app.dock?.show();
         splash = createSplashWindow();
         return await launchDesktop();
       },
@@ -489,12 +499,23 @@ async function main(): Promise<void> {
         splash = null;
         dialog.showErrorBox(
           "Open Design",
-          "Open Design could not open its window. Quit Open Design from the Dock and open it again.",
+          "Open Design could not open its window. Quit Open Design from its menu bar icon and open it again.",
         );
       },
       stopHeadless: async () => { await sidecars.close(); },
     })
     : null;
+  // Until the window is restored, desktop main's quit cleanup is not
+  // installed. Stop the sidecars here so a menu bar Quit or a logout does not
+  // leave the daemon running. After restore, desktop main's handler owns quit.
+  let headlessQuitting = false;
+  app.on("before-quit", (event) => {
+    if (deferredDesktop == null || deferredDesktop.current() != null) return;
+    event.preventDefault();
+    if (headlessQuitting) return;
+    headlessQuitting = true;
+    void deferredDesktop.stop().finally(() => app.exit(0));
+  });
   let client!: SidecarClient<DesktopMainHandle>;
   client = SidecarFactory.create<DesktopMainHandle>({
     handlers: Object.fromEntries([
@@ -530,6 +551,18 @@ async function main(): Promise<void> {
     });
     watchUserDesktopIntent(app, () => {
       void deferredDesktop.restore().catch(() => undefined);
+    });
+  }
+  if (process.platform === "darwin") {
+    menubarTray = createMenubarTray({
+      onOpen: () => {
+        void invokeDesktop(SIDECAR_MESSAGES.SHOW, {}).catch((error: unknown) => {
+          packagedLogger?.warn("menu bar open failed", { error });
+        });
+      },
+      // One quit path for every state: desktop main's before-quit handler
+      // after restore, the headless handler above before it.
+      onQuit: () => app.quit(),
     });
   }
 }

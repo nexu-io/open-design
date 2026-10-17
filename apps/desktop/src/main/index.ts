@@ -4,7 +4,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { BrowserWindow, Menu, app, dialog, globalShortcut, powerMonitor, shell, type MenuItemConstructorOptions } from "electron";
+import { BrowserWindow, Menu, app, dialog, globalShortcut, ipcMain, powerMonitor, shell, type MenuItemConstructorOptions } from "electron";
 
 import {
   APP_KEYS,
@@ -68,6 +68,7 @@ import {
   registerDesktopDiagnosticsIpc,
 } from "./diagnostics.js";
 import { notifyDesktopExternalShow } from "./external-show.js";
+import { watchUserDesktopIntent } from "./desktop-intent.js";
 
 // Re-export pure URL-policy helpers so the packaged workspace's
 // vitest can pin their behaviour without spinning up a full Electron
@@ -85,6 +86,8 @@ export {
   type SplashBootStage,
   type SplashStageSurface,
 } from "./runtime.js";
+export { createMenubarTray } from "./menubar.js";
+export { watchUserDesktopIntent } from "./desktop-intent.js";
 
 // Re-export the path-validation helpers for the same reason (#974).
 // shell.openPath is privileged main-process behaviour; pinning the
@@ -214,6 +217,8 @@ export type DesktopMainOptions = {
   inviteProtocolClientPath?: string | null;
   preloadPath?: string;
   windowTitle?: string;
+  /** Packaged macOS app with a menu bar icon; see DesktopRuntimeOptions.menubarResident. */
+  menubarResident?: boolean;
   onDesktopReady?: (controls: {
     dispatchInviteDeeplink(url: string | null): void;
     show(): void;
@@ -975,6 +980,7 @@ export async function runDesktopMain(
     desktopAuthSecret,
     discoverUrl: options.discoverWebUrl,
     discoverDaemonUrl: options.discoverDaemonUrl,
+    menubarResident: options.menubarResident,
     osLocale,
     preloadPath: options.preloadPath,
     // Round-5 (lefarcen P1, mrcfps): runtime hands this back to itself
@@ -1035,9 +1041,17 @@ export async function runDesktopMain(
     app,
     (event, properties) => reportDesktopObservabilityEvent(discoverDaemonBaseUrl, event, properties),
   );
-  removeDiagnosticsIpc = registerDesktopDiagnosticsIpc({
+  const removeRegisteredDiagnosticsIpc = registerDesktopDiagnosticsIpc({
     discoverDaemonBaseUrl: resolveDaemonBaseUrl(options),
   });
+  ipcMain.handle("window:hide", (event) => {
+    if (process.platform !== "darwin") return;
+    BrowserWindow.fromWebContents(event.sender)?.close();
+  });
+  removeDiagnosticsIpc = () => {
+    removeRegisteredDiagnosticsIpc();
+    ipcMain.removeHandler("window:hide");
+  };
   // Route opendesign:// team-invite deeplinks to the daemon (desktop wake-up).
   registerInviteDeeplink({
     resolveDaemonBaseUrl: resolveDaemonBaseUrl(options),
@@ -1055,6 +1069,9 @@ export async function runDesktopMain(
     intervalMs: updater.config.checkIntervalMs,
     startupSilentPayloadUpdate: {
       isEnabled: async () => {
+        // Hidden to the menu bar: quitting now would drop connected MCP
+        // clients, so the downloaded payload waits for the next launch.
+        if (desktop?.status().restorable === true) return false;
         const baseUrl = await discoverUpdaterAppConfigBaseUrl();
         const config = await readAppConfigFromDaemon(baseUrl);
         return config.allowSilentUpdates === true;
@@ -1074,8 +1091,10 @@ export async function runDesktopMain(
     shutdownAndExit();
   });
 
-  app.on("activate", () => {
-    desktop?.show();
+  // A background reopen (the MCP bootstrap's `open -g`) must not surface the
+  // window. `open-url` stays with the invite deeplink handler.
+  watchUserDesktopIntent(app, (source) => {
+    if (source === "activate") desktop?.show();
   });
 
   return {
