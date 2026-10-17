@@ -17,7 +17,7 @@
     "@open-design/standalone": "workspace:*",
     "@types/node": "24.12.2",
     "typescript": "6.0.3",
-    "vitest": "4.1.6"
+    "vitest": "4.1.11"
   },
   "engines": {"node": "~24"}
 }
