@@ -7,6 +7,7 @@ import {
   fetchVelaWorkspaceBillingProjection,
   fetchVelaWorkspaceBalance,
   isVelaWorkspaceAuthorizationError,
+  readVelaBillingCommandFailure,
   parseBillingCatalog,
   parseBillingSummary,
   parseWorkspaceBillingSnapshot,
@@ -379,5 +380,78 @@ describe('vela billing 收口', () => {
         'json',
       ],
     ]);
+  });
+
+  it('parses the vela CLI 503 database_busy line, including retryAfterMs', () => {
+    // Exact example from vela PR #393: 503 database_busy with Retry-After: 2.
+    const line = '{"error":"fetch billing summary: API request failed with status 503: database_busy (retry after 2s)","errorCode":"database_busy","code":"database_busy","status":503,"retryAfterMs":2000}';
+    expect(readVelaBillingCommandFailure(line)).toEqual({
+      status: 503,
+      code: 'database_busy',
+      retryAfterMs: 2000,
+    });
+    expect(readVelaBillingCommandFailure(`noise\n${line}\n`)).toEqual({
+      status: 503,
+      code: 'database_busy',
+      retryAfterMs: 2000,
+    });
+  });
+
+  it('parses a network-error line that only carries error', () => {
+    expect(readVelaBillingCommandFailure(
+      '{"error":"network error: connection timeout"}\n',
+    )).toEqual({});
+  });
+
+  it('ignores garbage stdout, missing fields, and retryAfterMs above 60s', () => {
+    expect(readVelaBillingCommandFailure('')).toBeNull();
+    expect(readVelaBillingCommandFailure('some random text\n{invalid json\nanother line\n')).toBeNull();
+    expect(readVelaBillingCommandFailure('{"error":"API request failed","code":"database_busy","status":503,"retryAfterMs":120000}')).toEqual({
+      status: 503,
+      code: 'database_busy',
+    });
+    expect(readVelaBillingCommandFailure('{"error":"API request failed","errorCode":"database_busy"}')).toEqual({
+      code: 'database_busy',
+    });
+  });
+
+  it('attaches status, code, and retryAfterMs when workspace-snapshot fails', async () => {
+    const line = '{"error":"fetch billing summary: API request failed with status 503: database_busy (retry after 2s)","errorCode":"database_busy","code":"database_busy","status":503,"retryAfterMs":2000}';
+    await expect(fetchVelaWorkspaceBillingProjection('ws_test', {
+      run: async () => {
+        throw Object.assign(new Error('Command failed'), { stdout: line });
+      },
+    })).rejects.toMatchObject({
+      status: 503,
+      code: 'database_busy',
+      retryAfterMs: 2000,
+    });
+  });
+
+  it('attaches the fallback workspace-balance failure when snapshot is unsupported', async () => {
+    const line = '{"error":"fetch workspace balance: API request failed with status 503: database_busy (retry after 3s)","code":"database_busy","status":503,"retryAfterMs":3000}';
+    await expect(fetchVelaWorkspaceBillingProjection('ws_test', {
+      run: async (args) => {
+        if (args[0] === 'workspace-snapshot') {
+          throw new VelaWorkspaceBillingSnapshotUnsupportedError();
+        }
+        throw Object.assign(new Error('Command failed'), { stdout: `${line}\n` });
+      },
+    })).rejects.toMatchObject({
+      status: 503,
+      code: 'database_busy',
+      retryAfterMs: 3000,
+    });
+  });
+
+  it('keeps degrading summary, balance, checkout, and catalog failures to null', async () => {
+    const line = '{"error":"network error: connection timeout"}';
+    const fail = async () => {
+      throw Object.assign(new Error('Command failed'), { stdout: line });
+    };
+    await expect(fetchVelaBillingSummary({ run: fail })).resolves.toBeNull();
+    await expect(fetchVelaWorkspaceBalance('ws_test', { run: fail })).resolves.toBeNull();
+    await expect(fetchBillingCheckoutUrl({ workspaceId: 'ws_test', run: fail })).resolves.toBeNull();
+    await expect(fetchVelaBillingCatalog('ws_test', { run: fail })).resolves.toBeNull();
   });
 });

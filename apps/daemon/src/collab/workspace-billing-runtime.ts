@@ -71,6 +71,7 @@ export interface WorkspaceBillingRuntimeScheduler {
   clearTimeout(timer: ReturnType<typeof setTimeout>): void;
   setInterval(callback: () => void, delayMs: number): ReturnType<typeof setInterval>;
   clearInterval(timer: ReturnType<typeof setInterval>): void;
+  random?(): number;
 }
 
 export interface WorkspaceBillingRuntimeCoordinatorOptions {
@@ -507,10 +508,13 @@ export class WorkspaceBillingRuntimeCoordinator {
       this.realtimeHealthyWorkspaces.add(requested);
       return;
     }
-    if (!this.realtimeHealthyWorkspaces.delete(requested)) return;
-    // A disconnect or source-health downgrade immediately restores the
-    // authoritative fallback and refreshes the last-good projection.
-    this.reconnect(requested);
+    // On disconnect (healthy=false), only update the health flag without
+    // triggering an immediate billing refresh. The refresh will happen after
+    // reconnect via the onReconnect handler's explicit reconnect() call, with
+    // jitter to avoid thundering herd. This prevents duplicate billing refreshes
+    // (one on disconnect, one after reconnect) when ~1000 workspaces drop
+    // simultaneously.
+    this.realtimeHealthyWorkspaces.delete(requested);
   }
 
   refreshAll(reason = 'catch-up'): void {
@@ -970,7 +974,9 @@ export class WorkspaceBillingRuntimeCoordinator {
         entry.errorCode = code;
         entry.reason = reason;
         entry.revision += 1n;
-        this.scheduleRetry(entry);
+        // Extract Retry-After from error (503 database_busy with retry hint)
+        const retryAfterMs = extractRetryAfter(error);
+        this.scheduleRetry(entry, retryAfterMs);
         this.publish(entry);
       })
       .finally(() => {
@@ -999,10 +1005,18 @@ export class WorkspaceBillingRuntimeCoordinator {
     );
   }
 
-  private scheduleRetry(entry: RuntimeEntry): void {
+  private scheduleRetry(entry: RuntimeEntry, retryAfterMs?: number): void {
     if (entry.retryTimer || this.retryDelaysMs.length === 0 || this.disposed) return;
     if (entry.retryAttempt >= this.retryDelaysMs.length) return;
-    const delay = this.retryDelaysMs[entry.retryAttempt]!;
+    const baseDelay = this.retryDelaysMs[entry.retryAttempt]!;
+    // Add jitter (±20%) to retry delays to avoid synchronized retry storms
+    const random = this.scheduler.random?.() ?? Math.random();
+    const jitter = 0.8 + random * 0.4;
+    let delay = Math.floor(baseDelay * jitter);
+    // Honor server-provided Retry-After if present (e.g. 503 database_busy)
+    if (retryAfterMs !== undefined && retryAfterMs > 0) {
+      delay = Math.max(delay, retryAfterMs);
+    }
     entry.retryAttempt += 1;
     entry.retryAt = this.scheduler.now() + delay;
     entry.retryTimer = this.scheduler.setTimeout(() => {
@@ -1527,4 +1541,42 @@ function strongerReason(current: string | null, next: string): string {
     return 1;
   };
   return rank(next) >= rank(current) ? next : current;
+}
+
+/**
+ * Extract Retry-After milliseconds from an error object. Supports:
+ * - error.retryAfterMs (number, milliseconds)
+ * - error.retryAfter (number in seconds, or HTTP-date string)
+ * Returns undefined if no valid retry hint is found.
+ */
+function extractRetryAfter(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const err = error as Record<string, unknown>;
+  
+  // Direct milliseconds field
+  if (typeof err.retryAfterMs === 'number' && err.retryAfterMs > 0) {
+    return Math.min(err.retryAfterMs, 60_000);
+  }
+  
+  // Retry-After in seconds or HTTP-date
+  if (err.retryAfter !== undefined) {
+    if (typeof err.retryAfter === 'number' && err.retryAfter > 0) {
+      return Math.min(err.retryAfter * 1000, 60_000);
+    }
+    if (typeof err.retryAfter === 'string') {
+      // Try parsing as seconds first
+      const seconds = Number(err.retryAfter);
+      if (Number.isFinite(seconds) && seconds > 0) {
+        return Math.min(seconds * 1000, 60_000);
+      }
+      // Try parsing as HTTP-date
+      const date = Date.parse(err.retryAfter);
+      if (Number.isFinite(date)) {
+        const delayMs = Math.max(0, date - Date.now());
+        return Math.min(delayMs, 60_000);
+      }
+    }
+  }
+  
+  return undefined;
 }
