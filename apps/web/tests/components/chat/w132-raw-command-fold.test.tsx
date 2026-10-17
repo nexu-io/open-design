@@ -249,23 +249,85 @@ describe('反向对照:用户自己动过的,生命周期不许拨回去', () =>
   });
 });
 
-describe('反向对照:失败那一档行为不变', () => {
-  /*
-   * 失败的 rawTitle 命令**不走这一支**(条件里写死 `!row.failed`),它落到兜底那一行:
-   * `<code>{row.title}</code>` + 「失败」按钮。这次改动一个字都不许碰它。
-   */
-  it('失败的命令行仍然是单行,不是折叠块', () => {
-    render(<ToolRow row={rawSettled({ failed: true, failReason: 'exit 1' })} />);
-    expect(document.querySelector('details'), '失败那档不该被顺手改成折叠块').toBeNull();
-    expect(screen.getByText('失败')).toBeTruthy();
-    expect(screen.getByText('npm install')).toBeTruthy();
-  });
-
-  it('失败的命令行不显示终端输出(和修之前一样)', () => {
+describe('失败的原始命令也能展开查看输出 (#8831)', () => {
+  it('首屏默认收起,保留箭头、命令和失败标记,手动展开才显示错误', () => {
     const { container } = render(
       <ToolRow row={rawSettled({ failed: true, terminal: 'ELIFECYCLE  Command failed.' })} />,
     );
-    expect(container.textContent).not.toContain('ELIFECYCLE');
+    expect(fold().open).toBe(false);
+    expect(screen.getByTestId('chat-foldable-toggle')).toBeTruthy();
+    expect(screen.getByText('失败')).toBeTruthy();
+    expect(fold().querySelector('summary')?.textContent).toContain('npm install');
+    expect(container.textContent).not.toContain('ELIFECYCLE  Command failed.');
+    clickSummary(fold());
+    expect(fold().open).toBe(true);
+    expect(container.textContent).toContain('ELIFECYCLE  Command failed.');
+  });
+
+  it('能手动收起并重新展开错误输出', () => {
+    const { container } = render(
+      <ToolRow row={rawSettled({ failed: true, terminal: 'ELIFECYCLE  Command failed.' })} />,
+    );
+    expect(fold().open).toBe(false);
+    clickSummary(fold());
+    expect(fold().open).toBe(true);
+    echoToggle(fold());
+    clickSummary(fold());
+    expect(fold().open).toBe(false);
+    clickSummary(fold());
+    expect(fold().open).toBe(true);
+    expect(container.textContent).toContain('ELIFECYCLE  Command failed.');
+  });
+
+  it('在途命令失败后保留同一个折叠块并自动收起,可以手动查看最终错误', () => {
+    const { container, rerender } = render(<ToolRow row={rawRunning()} running />);
+    const original = fold();
+    echoToggle(original);
+
+    rerender(<ToolRow row={rawSettled({ failed: true, terminal: 'ELIFECYCLE  Command failed.' })} />);
+    expect(fold()).toBe(original);
+    expect(fold().open).toBe(false);
+    expect(screen.getByText('失败')).toBeTruthy();
+    clickSummary(fold());
+    expect(fold().open).toBe(true);
+    expect(container.textContent).toContain('ELIFECYCLE  Command failed.');
+    expect(container.textContent).not.toContain('Resolving dependencies');
+  });
+
+  it('用户在执行中手动展开过的,失败后保留用户的展开状态', () => {
+    const { rerender } = render(<ToolRow row={rawRunning()} running />);
+    echoToggle(fold());
+    clickSummary(fold());
+    clickSummary(fold());
+    expect(fold().open).toBe(true);
+
+    rerender(<ToolRow row={rawSettled({ failed: true, terminal: 'ELIFECYCLE  Command failed.' })} />);
+    expect(fold().open).toBe(true);
+  });
+
+  it('用户在执行中收起过的,失败后仍保持收起,可以手动展开原因', () => {
+    const { container, rerender } = render(<ToolRow row={rawRunning()} running />);
+    echoToggle(fold());
+    clickSummary(fold());
+    expect(fold().open).toBe(false);
+
+    rerender(<ToolRow row={rawSettled({ failed: true, terminal: 'ELIFECYCLE  Command failed.' })} />);
+    expect(fold().open).toBe(false);
+    expect(screen.getByText('失败')).toBeTruthy();
+    clickSummary(fold());
+    expect(fold().open).toBe(true);
+    expect(container.textContent).toContain('ELIFECYCLE  Command failed.');
+  });
+
+  it('没有错误输出时仍能展开查看失败的命令', () => {
+    render(<ToolRow row={rawSettled({ failed: true, terminal: null })} />);
+    expect(fold().open).toBe(false);
+    expect(screen.getByTestId('chat-foldable-toggle')).toBeTruthy();
+    expect(screen.getByText('失败')).toBeTruthy();
+    expect(fold().querySelector('summary')?.textContent).toContain('npm install');
+    clickSummary(fold());
+    expect(fold().open).toBe(true);
+    expect(fold().querySelector('summary')?.nextElementSibling?.textContent).toContain('npm install');
   });
 });
 
@@ -283,10 +345,13 @@ describe('反向对照:有人话标题那一支一个字都没改坏', () => {
     expect(container.textContent).not.toContain('added 37 packages');
   });
 
-  it('失败的默认展开,报错原文在 DOM 里', () => {
+  it('带描述的失败命令也默认收起,手动展开后读取错误', () => {
     const { container } = render(
       <ToolRow row={titled({ failed: true, terminal: 'ELIFECYCLE  Command failed.', elapsedMs: 2100 })} />,
     );
+    expect(fold().open).toBe(false);
+    expect(container.textContent).not.toContain('ELIFECYCLE  Command failed.');
+    clickSummary(fold());
     expect(fold().open).toBe(true);
     expect(container.textContent).toContain('ELIFECYCLE  Command failed.');
   });
@@ -353,5 +418,29 @@ describe('在途输出整条链(不手搓 row.terminal,从事件流验起)', () 
     for (const line of LIVE_OUT.split('\n')) {
       expect(container.textContent, `在途输出缺了这一行:${line}`).toContain(line);
     }
+  });
+
+  it('失败 tool_result 的错误正文也能一路走到可展开的工具行', () => {
+    const error = 'ELIFECYCLE  Command failed.';
+    const events: PersistedAgentEvent[] = [
+      ...inFlightEvents(LIVE_OUT),
+      { kind: 'tool_result', toolUseId: 'acp-1', content: error, isError: true, completedAt: 2000 },
+    ];
+    const row = rowsOf(buildTurnBlocks({ events, runStatus: 'succeeded' }))
+      .find((item) => item.command === 'npm install');
+    if (!row) throw new Error('fixture 坏了:事件流没产出命令行');
+    expect(row.failed).toBe(true);
+    expect(row.rawTitle).toBe(true);
+    expect(row.file).toBeNull();
+    expect(row.failReason).toBe(error);
+
+    const { container } = render(<ToolRow row={row} />);
+    expect(fold().open).toBe(false);
+    expect(screen.getByTestId('chat-foldable-toggle')).toBeTruthy();
+    expect(screen.getByText('失败')).toBeTruthy();
+    expect(container.textContent).not.toContain(error);
+    clickSummary(fold());
+    expect(fold().open).toBe(true);
+    expect(container.textContent).toContain(error);
   });
 });
