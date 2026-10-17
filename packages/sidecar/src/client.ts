@@ -1,3 +1,4 @@
+import { Worker } from "node:worker_threads";
 import { createJsonIpcServer, requestJsonIpc } from "./json-ipc.js";
 import {
   isCurrentSidecarLauncher,
@@ -17,6 +18,7 @@ const BUSINESS_INVOKE = "sidecar:invoke";
 const INHERITED_ENDPOINT_ENV = "OD_SIDECAR_CLIENT_ENDPOINT";
 const SUPERVISOR_HANDOFF = "sidecar:supervisor-handoff";
 const SUPERVISOR_HANDOFF_ACCEPTED = "sidecar:supervisor-handoff-accepted";
+const DEFAULT_SUPERVISOR_LOSS_GRACE_MS = 30_000;
 export const SIDECAR_SUPERVISOR_TARGET_ENV = "OD_SIDECAR_SUPERVISOR_TARGET";
 
 export type SidecarResources = Readonly<{
@@ -215,6 +217,32 @@ function assertEnvelope(message: unknown): InvokeEnvelope | ControlEnvelope {
   return { action: request.action, app: request.app, input: request.input, type: BUSINESS_INVOKE };
 }
 
+// The main-thread supervisor interval cannot fire while the runtime thread is
+// blocked, so a worker thread enforces a deadline after the supervisor is gone.
+function startSupervisorLossWatchdog(supervisorPid: number): Worker {
+  const configuredGraceMs = Number(process.env.OD_SIDECAR_SUPERVISOR_LOSS_GRACE_MS);
+  const graceMs = Number.isSafeInteger(configuredGraceMs) && configuredGraceMs > 0
+    ? configuredGraceMs
+    : DEFAULT_SUPERVISOR_LOSS_GRACE_MS;
+  const watchdog = new Worker(`
+    const { workerData } = require("node:worker_threads");
+    const interval = setInterval(() => {
+      try {
+        process.kill(workerData.supervisorPid, 0);
+      } catch {
+        clearInterval(interval);
+        setTimeout(() => process.kill(process.pid, "SIGKILL"), workerData.graceMs);
+      }
+    }, 1_000);
+  `, {
+    eval: true,
+    workerData: { graceMs, supervisorPid },
+  });
+  watchdog.on("error", () => {});
+  watchdog.unref();
+  return watchdog;
+}
+
 export class SidecarClient<TRuntime> {
   readonly resources: SidecarResources;
   readonly stamp: SidecarStamp;
@@ -226,6 +254,7 @@ export class SidecarClient<TRuntime> {
   #startPromise: Promise<void> | null = null;
   #stopPromise: Promise<void> | null = null;
   #supervisorTimer: NodeJS.Timeout | null = null;
+  #watchdog: Worker | null = null;
   readonly #signalHandler = () => { this.#stopAndExit(); };
   #resolveStopped!: () => void;
   readonly #stopped = new Promise<void>((resolve) => { this.#resolveStopped = resolve; });
@@ -254,6 +283,8 @@ export class SidecarClient<TRuntime> {
     if (isCurrentSidecarLauncher()) {
       throw new Error("a sidecar launcher must bootstrap a generation before starting server lifecycle");
     }
+    // One per client: start() may be retried after a failed attempt.
+    this.#watchdog ??= startSupervisorLossWatchdog(this.resources.pid);
     let runtime!: TRuntime;
     let runtimeStarted = false;
     try {
@@ -346,6 +377,9 @@ export class SidecarClient<TRuntime> {
       this.#runtime = null;
     } finally {
       this.#clearEndpoint();
+      // Only a finished stop releases the watchdog; a hung stop stays covered.
+      void this.#watchdog?.terminate();
+      this.#watchdog = null;
       this.#resolveStopped();
     }
   }

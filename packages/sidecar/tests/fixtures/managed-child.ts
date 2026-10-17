@@ -36,4 +36,8 @@ const client = SidecarFactory.create<ManagedRuntime>({
 });
 
 await client.start();
+const freezeAfterStartMs = process.env.OD_TEST_FREEZE_AFTER_START_MS;
+if (freezeAfterStartMs != null) {
+  setTimeout(() => { for (;;) {} }, Number(freezeAfterStartMs));
+}
 await client.waitUntilStopped();

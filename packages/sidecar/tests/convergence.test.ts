@@ -1097,6 +1097,104 @@ describe("server-side atomic operations", () => {
     }
   }, process.platform === "win32" ? 30_000 : 15_000);
 
+  it("kills a runtime whose main thread is blocked after its supervisor disappears", async () => {
+    const fixture = fileURLToPath(new URL("./fixtures/managed-child.ts", import.meta.url));
+    const root = await mkdtemp(join(tmpdir(), "open-design-blocked-supervisor-death-"));
+    const supervisedStamp = { ...stamp, namespace: `blocked-supervisor-death-${process.pid}` };
+    const supervisorLossGraceMs = 1_500;
+    const spawned = await spawnSidecar({
+      args: ["--import", "tsx", fixture],
+      command: process.execPath,
+      env: {
+        ...process.env,
+        OD_SIDECAR_SUPERVISOR_LOSS_GRACE_MS: String(supervisorLossGraceMs),
+        OD_TEST_FREEZE_AFTER_START_MS: "200",
+      },
+      resources: {
+        dataRoot: join(root, "data"),
+        ownerPid: null,
+        port: 0,
+        runtimeRoot: join(root, "runtime"),
+      },
+      stamp: supervisedStamp,
+    });
+    let runtimePid: number | null = null;
+    try {
+      await vi.waitFor(async () => {
+        const status = await getSidecarStatus<{ pid: number; port: number }>(supervisedStamp);
+        expect(status.pid).toBe(spawned.process.pid);
+        expect(status.port).toBeGreaterThan(0);
+        runtimePid = (await captureProcessSnapshot())
+          .find(({ ppid }) => ppid === spawned.process.pid)?.pid ?? null;
+        expect(runtimePid).toBeGreaterThan(0);
+      }, { interval: 50, timeout: FIXTURE_READY_TIMEOUT_MS });
+      const blockedRuntimePid = runtimePid;
+      if (blockedRuntimePid == null) throw new Error("managed target was not discovered");
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      process.kill(spawned.process.pid, "SIGKILL");
+
+      await expect(waitForProcessExit(spawned.process.pid, 2_000)).resolves.toBe(true);
+      expect(
+        await waitForProcessExit(blockedRuntimePid, supervisorLossGraceMs + 3_000),
+        "runtime did not exit within 1500+3000 ms",
+      ).toBe(true);
+    } finally {
+      if (runtimePid != null) {
+        try { process.kill(runtimePid, "SIGKILL"); } catch {}
+      }
+      try { process.kill(spawned.process.pid, "SIGKILL"); } catch {}
+      await stopSidecar(supervisedStamp, { killGraceMs: 2_000, termGraceMs: 0 }).catch(() => undefined);
+      await rm(root, { force: true, recursive: true });
+    }
+  }, process.platform === "win32" ? 30_000 : 15_000);
+
+  it("keeps a runtime with a blocked main thread alive while its supervisor lives", async () => {
+    const fixture = fileURLToPath(new URL("./fixtures/managed-child.ts", import.meta.url));
+    const root = await mkdtemp(join(tmpdir(), "open-design-blocked-supervisor-alive-"));
+    const supervisedStamp = { ...stamp, namespace: `blocked-supervisor-alive-${process.pid}` };
+    const spawned = await spawnSidecar({
+      args: ["--import", "tsx", fixture],
+      command: process.execPath,
+      env: {
+        ...process.env,
+        OD_SIDECAR_SUPERVISOR_LOSS_GRACE_MS: "1500",
+        OD_TEST_FREEZE_AFTER_START_MS: "200",
+      },
+      resources: {
+        dataRoot: join(root, "data"),
+        ownerPid: null,
+        port: 0,
+        runtimeRoot: join(root, "runtime"),
+      },
+      stamp: supervisedStamp,
+    });
+    let runtimePid: number | null = null;
+    try {
+      await vi.waitFor(async () => {
+        const status = await getSidecarStatus<{ pid: number; port: number }>(supervisedStamp);
+        expect(status.pid).toBe(spawned.process.pid);
+        expect(status.port).toBeGreaterThan(0);
+        runtimePid = (await captureProcessSnapshot())
+          .find(({ ppid }) => ppid === spawned.process.pid)?.pid ?? null;
+        expect(runtimePid).toBeGreaterThan(0);
+      }, { interval: 50, timeout: FIXTURE_READY_TIMEOUT_MS });
+      const blockedRuntimePid = runtimePid;
+      if (blockedRuntimePid == null) throw new Error("managed target was not discovered");
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 3_000));
+      expect(() => process.kill(blockedRuntimePid, 0)).not.toThrow();
+    } finally {
+      if (runtimePid != null) {
+        try { process.kill(runtimePid, "SIGKILL"); } catch {}
+      }
+      try { process.kill(spawned.process.pid, "SIGKILL"); } catch {}
+      await stopSidecar(supervisedStamp, { killGraceMs: 2_000, termGraceMs: 0 }).catch(() => undefined);
+      await rm(root, { force: true, recursive: true });
+    }
+  }, process.platform === "win32" ? 30_000 : 15_000);
+
   it("retires fenced descendants when an ownerless target exits on SIGTERM", async () => {
     const fixture = fileURLToPath(new URL("./fixtures/orphaning-sidecar.ts", import.meta.url));
     const root = await mkdtemp(join(tmpdir(), "open-design-owner-orphan-"));
