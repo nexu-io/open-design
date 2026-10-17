@@ -11,7 +11,23 @@ import { getRecord } from './internal.js';
 export type PiRpcContext = {
   runStartedAt: number;
   sentFirstToken: { value: boolean };
+  /**
+   * Holds a failed turn's error until `agent_end` says whether pi will retry
+   * it. Optional: without it the error is forwarded immediately.
+   */
+  pendingError?: { value: { message: string; raw: JsonRecord } | null };
 };
+
+/**
+ * Forwards an error held back by a failed turn. Call it when pi's stdout ends
+ * with no `agent_end`, so the failure is still reported.
+ */
+export function flushPiRpcPendingError(send: SendAgentEvent, ctx: PiRpcContext): void {
+  const pending = ctx.pendingError?.value;
+  if (!pending || !ctx.pendingError) return;
+  ctx.pendingError.value = null;
+  send('agent', { type: 'error', message: pending.message, raw: pending.raw });
+}
 /**
  * Maps a single raw pi RPC JSON object to zero or more daemon SSE events,
  * dispatching each through `send`. Returns `'agent_end'` when pi signals the
@@ -33,6 +49,15 @@ export function mapPiRpcEvent(
   }
 
   if (raw.type === 'agent_end') {
+    // pi marks an `agent_end` that is followed by its own auto-retry with
+    // `willRetry: true`. The run is not over: drop the held error and keep
+    // reading, otherwise the caller closes stdin and kills pi mid-retry.
+    if (raw.willRetry === true) {
+      if (ctx.pendingError) ctx.pendingError.value = null;
+      send('agent', { type: 'status', label: 'retrying' });
+      return null;
+    }
+    flushPiRpcPendingError(send, ctx);
     return 'agent_end';
   }
 
@@ -68,7 +93,12 @@ export function mapPiRpcEvent(
         typeof message.errorMessage === 'string' && message.errorMessage.length > 0
           ? message.errorMessage
           : 'Pi agent error';
-      send('agent', { type: 'error', message: messageText, raw });
+      if (ctx.pendingError) {
+        // Hold it until `agent_end` reveals whether pi will retry.
+        ctx.pendingError.value = { message: messageText, raw };
+      } else {
+        send('agent', { type: 'error', message: messageText, raw });
+      }
     }
     return null;
   }

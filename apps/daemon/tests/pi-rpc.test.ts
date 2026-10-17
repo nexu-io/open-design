@@ -1269,3 +1269,68 @@ test('attachPiRpcSession getLastSessionPath returns null when multiple session f
     await fsp.rm(piDir, { recursive: true, force: true }).catch(() => {});
   }
 });
+
+// ─── pi auto-retry (agent_end with willRetry) ─────────────────────────────
+
+const failedTurn: JsonRecord = {
+  type: 'turn_end',
+  message: { role: 'assistant', stopReason: 'error', errorMessage: 'connection lost mid-reply' },
+};
+
+const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
+
+test('attachPiRpcSession keeps the run open when agent_end carries willRetry', async () => {
+  const { child, events } = createSession();
+
+  feedStdoutLines(child, [failedTurn, { type: 'agent_end', willRetry: true }]);
+  await settle();
+
+  assert.equal(child.stdin.writableEnded, false, 'stdin must stay open while pi retries');
+  assert.ok(
+    events.some((e) => e.channel === 'agent' && e.type === 'status' && e.label === 'retrying'),
+    'should report the retry',
+  );
+  assert.equal(
+    events.filter((e) => e.type === 'error').length,
+    0,
+    'the failed turn must not surface as a run failure while pi retries',
+  );
+
+  // The retry succeeds and the run ends normally.
+  feedStdoutLines(child, [
+    { type: 'turn_end', message: { role: 'assistant', stopReason: 'stop' } },
+    { type: 'agent_end', willRetry: false },
+  ]);
+  await settle();
+
+  assert.equal(child.stdin.writableEnded, true, 'stdin closes once the retried run ends');
+  assert.equal(events.filter((e) => e.type === 'error').length, 0);
+  closeStdout(child);
+});
+
+test('attachPiRpcSession reports the failed turn when agent_end has no retry left', async () => {
+  const { child, events } = createSession();
+
+  feedStdoutLines(child, [failedTurn, { type: 'agent_end', willRetry: false }]);
+  await settle();
+
+  const errors = events.filter((e) => e.type === 'error');
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0]?.message, 'connection lost mid-reply');
+  closeStdout(child);
+});
+
+test('attachPiRpcSession still reports a held error when pi exits without agent_end', async () => {
+  const { child, events } = createSession();
+
+  feedStdoutLines(child, [failedTurn]);
+  await settle();
+  assert.equal(events.filter((e) => e.type === 'error').length, 0, 'held back until agent_end');
+
+  closeStdout(child);
+  await settle();
+
+  const errors = events.filter((e) => e.type === 'error');
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0]?.message, 'connection lost mid-reply');
+});

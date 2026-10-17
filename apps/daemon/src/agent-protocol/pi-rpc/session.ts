@@ -9,7 +9,7 @@ import path from 'node:path';
 import type { ChildProcess } from 'node:child_process';
 import type { Writable } from 'node:stream';
 import { createJsonLineStream } from '../core/index.js';
-import { mapPiRpcEvent } from './events.js';
+import { flushPiRpcPendingError, mapPiRpcEvent, type PiRpcContext } from './events.js';
 import type { JsonRecord, SendAgentEvent } from './internal.js';
 import { isRecord, errorMessage, errorCode, getRecord } from './internal.js';
 
@@ -202,6 +202,11 @@ export function attachPiRpcSession({
   let finished = false;
   let fatal = false;
   const sentFirstToken = { value: false };
+  const piContext: PiRpcContext = {
+    runStartedAt,
+    sentFirstToken,
+    pendingError: { value: null },
+  };
   let capturedSessionPath: string | null = null;
 
   let nextRpcId = 1;
@@ -358,7 +363,7 @@ export function attachPiRpcSession({
     }
 
     // Agent events: delegate to the pure mapper.
-    const result = mapPiRpcEvent(raw, send, { runStartedAt, sentFirstToken });
+    const result = mapPiRpcEvent(raw, send, piContext);
 
     if (result === 'agent_end') {
       finished = true;
@@ -391,7 +396,11 @@ export function attachPiRpcSession({
       fail(`parser: ${errorMessage(err)}`);
     }
   });
-  stdout.on('close', () => parser.flush());
+  stdout.on('close', () => {
+    parser.flush();
+    // pi exited with a failed turn held back and no `agent_end`: report it.
+    if (!finished) flushPiRpcPendingError(send, piContext);
+  });
   child.on('error', (err: unknown) => fail(errorMessage(err)));
 
   return {
