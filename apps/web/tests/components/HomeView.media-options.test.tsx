@@ -486,6 +486,41 @@ describe('HomeView media composer options', () => {
     })));
   });
 
+  it('reseeds the image model when provider credentials hydrate after the chip opened', async () => {
+    // Issue #7088 review: media providers land asynchronously. The Image
+    // composer mounted with no credentials seeds the Cloud model; once the
+    // daemon response hydrates mediaProviders, the untouched default must
+    // switch to the configured provider before submit.
+    stubFetch();
+    const onSubmit = vi.fn();
+    const { rerender } = renderHome({ onSubmit, promptTemplates: [], mediaProviders: {} });
+
+    await clickHomeRailChip('image');
+    await setHomePrompt('Create a campaign image.');
+
+    rerender(<HomeView {...homeProps({
+      onSubmit,
+      promptTemplates: [],
+      mediaProviders: { openai: { apiKey: 'sk-test', baseUrl: '' } },
+    })} />);
+
+    await submitHome();
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      projectMetadata: expect.objectContaining({
+        kind: 'image',
+        imageModel: 'gpt-image-2',
+      }),
+    })));
+  });
+
+  // No "explicit pick survives hydration" spec here on purpose: the Home
+  // media composer exposes no model control (media chips deferred those
+  // settings to the run), so an explicit model choice cannot occur on this
+  // surface today. The touched-latch in updateActiveInputs still guards it
+  // for any future inline model edit; NewProjectPanel covers the pick case
+  // with a real picker.
+
   it('does not wait for rich Workspace context after a directory-scoped plugin was selected', async () => {
     const fetchMock = stubFetch({ teamMediaPlugin: true });
     const onSubmit = vi.fn();

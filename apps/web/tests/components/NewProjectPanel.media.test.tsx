@@ -290,4 +290,101 @@ describe('NewProjectPanel media provider badges', () => {
       }),
     );
   });
+
+  it('reseeds the untouched image default when provider credentials hydrate after mount', () => {
+    // Issue #7088 review: media providers arrive asynchronously from the
+    // daemon. A panel mounted before that response seeded the Cloud model;
+    // once credentials land, an untouched default must follow them instead
+    // of staying pinned to vela.
+    const onCreate = vi.fn();
+    const panel = (mediaProviders: Record<string, never> | {
+      volcengine: { apiKey: string; apiKeyConfigured: boolean; apiKeyTail: string; baseUrl: string };
+    }) => (
+      <NewProjectPanel
+        skills={[]}
+        designSystems={[]}
+        defaultDesignSystemId={null}
+        templates={[]}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={onCreate}
+        mediaProviders={mediaProviders}
+      />
+    );
+    const { rerender } = render(panel({}));
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Image' }));
+    expect(screen.getByTestId('model-picker-trigger').textContent).toContain('gpt-image-2 (Cloud)');
+
+    rerender(panel({
+      volcengine: {
+        apiKey: '',
+        apiKeyConfigured: true,
+        apiKeyTail: '5678',
+        baseUrl: '',
+      },
+    }));
+
+    fireEvent.change(screen.getByTestId('new-project-name'), {
+      target: { value: 'Hydrated provider image' },
+    });
+    fireEvent.click(screen.getByTestId('create-project'));
+
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          imageModel: 'doubao-seedream-3-0-t2i-250415',
+        }),
+      }),
+    );
+  });
+
+  it('keeps an explicitly chosen image model when provider credentials hydrate later', () => {
+    // The reseed must only replace defaults the user never touched: an
+    // explicit Cloud pick before hydration stays picked afterwards.
+    const onCreate = vi.fn();
+    const panel = (mediaProviders: Record<string, never> | {
+      volcengine: { apiKey: string; apiKeyConfigured: boolean; apiKeyTail: string; baseUrl: string };
+    }) => (
+      <NewProjectPanel
+        skills={[]}
+        designSystems={[]}
+        defaultDesignSystemId={null}
+        templates={[]}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={onCreate}
+        mediaProviders={mediaProviders}
+      />
+    );
+    const { rerender } = render(panel({}));
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Image' }));
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
+    fireEvent.click(screen.getByTestId('model-picker-option-vela/gpt-image-2'));
+
+    rerender(panel({
+      volcengine: {
+        apiKey: '',
+        apiKeyConfigured: true,
+        apiKeyTail: '5678',
+        baseUrl: '',
+      },
+    }));
+
+    fireEvent.change(screen.getByTestId('new-project-name'), {
+      target: { value: 'Explicit cloud pick' },
+    });
+    fireEvent.click(screen.getByTestId('create-project'));
+
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          imageModel: 'vela/gpt-image-2',
+        }),
+      }),
+    );
+  });
 });

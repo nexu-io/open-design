@@ -1099,12 +1099,25 @@ export function HomeView({
     elevenLabsVoices.length,
   ]);
 
+  // Per-surface latch for an explicit user model pick. The Home media
+  // composer exposes no model control today, but any future inline edit
+  // that changes `model` latches here so the provider-hydration reseed in
+  // the effect above can never overwrite a deliberate choice (issue #7088).
+  const mediaModelTouchedRef = useRef<Partial<Record<HomeComposerMediaSurface, boolean>>>({});
+
   useEffect(() => {
     if (!active?.mediaSurface) return;
+    // Providers hydrate asynchronously after mount. When the user never
+    // picked a model, drop the seeded `model` from the re-seed inputs so
+    // normalizeHomeMediaInputs re-resolves the default against the freshly
+    // stored credentials instead of keeping the pre-hydration Cloud route.
+    const seedInputs = mediaModelTouchedRef.current[active.mediaSurface]
+      ? active.inputs
+      : { ...active.inputs, model: undefined };
     const composer = buildHomeMediaComposer(
       active.mediaSurface,
       promptTemplates,
-      active.inputs,
+      seedInputs,
       elevenLabsVoices,
       {
         elevenLabsVoiceWarning,
@@ -2235,6 +2248,9 @@ export function HomeView({
 
   function updateActiveInputs(next: Record<string, unknown>) {
     if (!active) return;
+    if (active.mediaSurface && next.model !== active.inputs.model) {
+      mediaModelTouchedRef.current[active.mediaSurface] = true;
+    }
     const normalized = active.mediaSurface
       ? normalizeHomeMediaInputs(active.mediaSurface, next, promptTemplates, elevenLabsVoices, composerImageModels, mediaProviders)
       : next;
