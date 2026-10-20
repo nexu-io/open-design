@@ -2147,6 +2147,7 @@ export function EntryShell({
     skillsLoading,
     connectors,
     promptTemplates,
+    mediaProviders: config.mediaProviders,
     deepSeekV4FlashCampaignAudience,
     onDeepSeekV4FlashCampaignUseNow: applyDeepSeekCampaignModel,
     deepSeekV4FlashCampaignMetricsConsent: config.telemetry?.metrics === true,

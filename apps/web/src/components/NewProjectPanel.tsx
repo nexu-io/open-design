@@ -40,8 +40,6 @@ import {
   AUDIO_DURATIONS_SEC,
   AUDIO_MODELS_BY_KIND,
   DEFAULT_AUDIO_MODEL,
-  DEFAULT_IMAGE_MODEL,
-  DEFAULT_VIDEO_MODEL,
   findProvider,
   imageModelIdForPromptTemplate,
   IMAGE_MODELS,
@@ -50,6 +48,7 @@ import {
   VIDEO_LENGTHS_SEC,
   VIDEO_MODELS,
 } from '../media/models';
+import { resolveDefaultMediaModel } from '../media/default-model';
 import {
   mergeAihubmixModels,
   useAIHubMixImageModels,
@@ -361,9 +360,13 @@ export function NewProjectPanel({
   // Blank card: create routes through the tab's default skill. A template id
   // routes the project through that design template's SKILL.md instead.
   const [startTemplateId, setStartTemplateId] = useState<string | null>(null);
-  const [imageModel, setImageModel] = useState(DEFAULT_IMAGE_MODEL);
+  const [imageModel, setImageModel] = useState(() =>
+    resolveDefaultMediaModel('image', mediaProviders),
+  );
   const [imageAspect, setImageAspect] = useState<MediaAspect>('1:1');
-  const [videoModel, setVideoModel] = useState(DEFAULT_VIDEO_MODEL);
+  const [videoModel, setVideoModel] = useState(() =>
+    resolveDefaultMediaModel('video', mediaProviders),
+  );
   const [videoModelTouched, setVideoModelTouched] = useState(false);
   const [videoAspect, setVideoAspect] = useState<MediaAspect>('16:9');
   const [videoLength, setVideoLength] = useState(5);

@@ -461,6 +461,31 @@ describe('HomeView media composer options', () => {
     })));
   });
 
+  it('seeds the submitted image metadata from a configured media provider', async () => {
+    // Issue #7088: a user who connected an BYOK provider (here OpenAI) must not
+    // have every fresh Home image project pinned to the managed Cloud default.
+    // promptTemplates stays empty so no template `model` can mask the seeded
+    // composer default — the assertion proves the credential-driven seed itself.
+    stubFetch();
+    const onSubmit = vi.fn();
+    renderHome({
+      onSubmit,
+      promptTemplates: [],
+      mediaProviders: { openai: { apiKey: 'sk-test', baseUrl: '' } },
+    });
+
+    await clickHomeRailChip('image');
+    await setHomePrompt('Create a campaign image.');
+    await submitHome();
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      projectMetadata: expect.objectContaining({
+        kind: 'image',
+        imageModel: 'gpt-image-2',
+      }),
+    })));
+  });
+
   it('does not wait for rich Workspace context after a directory-scoped plugin was selected', async () => {
     const fetchMock = stubFetch({ teamMediaPlugin: true });
     const onSubmit = vi.fn();
