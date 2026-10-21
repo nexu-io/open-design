@@ -40,8 +40,17 @@ export function useProjectDeleteFlow(input: {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const accountGeneration = currentWorkspaceAccountGeneration();
   const { history, status } = useProjectShareHistoryState(target && workspaceContext ? target.id : undefined, workspaceContext, 'delete-confirmation');
-  const shareReadStatus = target && !workspaceContext ? 'error' : status;
-  const activeShareCount = history ? history.publications.filter(publication => publication.status === 'active').length : null;
+  // A session with no workspace identity has no share surface in scope:
+  // publishing requires the collab identity it lacks, and the daemon's delete
+  // path owns stop-before-delete authorization server-side. Resolve that
+  // session to a settled, share-free reading — a forced 'error' here made
+  // every signed-out confirm dead-end on the generic retry copy with a
+  // permanently disabled accept button, so local-first deletes never issued.
+  const localSession = target != null && workspaceContext == null;
+  const shareReadStatus = localSession ? 'ready' : status;
+  const activeShareCount = localSession
+    ? 0
+    : history ? history.publications.filter(publication => publication.status === 'active').length : null;
 
   const request = useCallback((project: Project) => {
     setFailed(false);

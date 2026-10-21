@@ -14,7 +14,8 @@ type BatchRead = { scope: string; count: number | null; failed: boolean };
  * A batch confirmation cannot claim zero shared links until every selected
  * project's authoritative history has been read for the same account. A failed
  * read keeps the destructive confirmation locked; closing/reopening retries.
- * Without a workspace identity no count is known (as for single-card delete);
+ * A session without a workspace identity has no share surface in scope (same
+ * invariant as the single-card flow), so it settles at zero without a read;
  * the daemon still owns the final stop-before-delete authorization.
  */
 export function useBatchProjectShareCount(
@@ -65,10 +66,11 @@ export function useBatchProjectShareCount(
   }, [scope, context, generation]);
   const needsRead = ids.length > 0;
   const current = result?.scope === scope ? result : null;
+  const localSession = needsRead && context == null;
   return {
-    count: current?.count ?? null,
+    count: localSession ? 0 : current?.count ?? null,
     pending: needsRead && !!context && !current,
-    failed: needsRead && (!context || current?.failed === true),
-    generation: current?.count !== null && current?.count !== undefined ? generation : null,
+    failed: needsRead && !!context && current?.failed === true,
+    generation: localSession || (current?.count !== null && current?.count !== undefined) ? generation : null,
   };
 }
