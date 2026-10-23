@@ -12,6 +12,7 @@ import {
 } from "../analytics/events";
 import { useT } from "../i18n";
 import { useWorkspaceContext } from "../collab/useWorkspaceContext";
+import { workspaceIdentitySettledSignedOut } from "../collab/workspace-identity-signed-out";
 import { currentWorkspaceAccountGeneration, workspaceIdentityCacheKey } from "../collab/workspace-identity";
 import {
 	getProjectCoverSnapshot,
@@ -143,8 +144,12 @@ export function DesignsTab({
 	const confirmTitleId = useId();
 	const t = useT();
 	const analytics = useAnalytics();
-	const { context: workspaceContext, loading: workspaceContextLoading } = useWorkspaceContext();
-	const deleteFlow = useProjectDeleteFlow({ onDelete, analyticsPage: "all_projects", workspaceContext });
+	const workspaceContextState = useWorkspaceContext();
+	const { context: workspaceContext, loading: workspaceContextLoading } = workspaceContextState;
+	// A bare null context also covers loading/unavailable reads; only the
+	// settled signed-out reading may drive the share-free delete path.
+	const workspaceSettledSignedOut = workspaceIdentitySettledSignedOut(workspaceContextState);
+	const deleteFlow = useProjectDeleteFlow({ onDelete, analyticsPage: "all_projects", workspaceContext, workspaceSignedOut: workspaceSettledSignedOut });
 	// P0 page_view page_name=projects — fire once when the tab mounts so
 	// `/projects` landings register even before the user clicks anything.
 	// ref-keyed to survive re-renders that flip parent state without
@@ -189,7 +194,7 @@ export function DesignsTab({
 	const [confirmPending, setConfirmPending] = useState(false);
 	const [confirmError, setConfirmError] = useState<string | null>(null);
 	const [batchDeleteIds, setBatchDeleteIds] = useState<string[]>([]);
-	const batchShares = useBatchProjectShareCount(confirmTarget ? batchDeleteIds : [], workspaceContext);
+	const batchShares = useBatchProjectShareCount(confirmTarget ? batchDeleteIds : [], workspaceContext, workspaceSettledSignedOut);
 	const [view, setView] = useState<ViewMode>(() => {
 		if (typeof window === "undefined") return "grid";
 		try {

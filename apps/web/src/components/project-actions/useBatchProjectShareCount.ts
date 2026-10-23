@@ -14,13 +14,17 @@ type BatchRead = { scope: string; count: number | null; failed: boolean };
  * A batch confirmation cannot claim zero shared links until every selected
  * project's authoritative history has been read for the same account. A failed
  * read keeps the destructive confirmation locked; closing/reopening retries.
- * A session without a workspace identity has no share surface in scope (same
- * invariant as the single-card flow), so it settles at zero without a read;
- * the daemon still owns the final stop-before-delete authorization.
+ * A session whose identity read has SETTLED with no workspace identity (the
+ * caller verifies this via `workspaceIdentitySettledSignedOut` — a bare null
+ * context also covers loading/unavailable reads, which must fail closed) has
+ * no share surface in scope (same invariant as the single-card flow), so it
+ * settles at zero without a read; the daemon still owns the final
+ * stop-before-delete authorization.
  */
 export function useBatchProjectShareCount(
   ids: readonly string[],
   context: WorkspaceCollabContext | null | undefined,
+  settledSignedOut = false,
 ) {
   const generation = currentWorkspaceAccountGeneration();
   const scope = JSON.stringify([ids, workspaceAccountScopedCacheKey(context)]);
@@ -66,11 +70,13 @@ export function useBatchProjectShareCount(
   }, [scope, context, generation]);
   const needsRead = ids.length > 0;
   const current = result?.scope === scope ? result : null;
-  const localSession = needsRead && context == null;
+  const shareFreeSession = needsRead && context == null && settledSignedOut;
   return {
-    count: localSession ? 0 : current?.count ?? null,
-    pending: needsRead && !!context && !current,
+    count: shareFreeSession ? 0 : current?.count ?? null,
+    // An unresolved identity (loading / unavailable) stays pending: the
+    // confirmation keeps waiting instead of claiming share-free.
+    pending: needsRead && !shareFreeSession && (!context || !current),
     failed: needsRead && !!context && current?.failed === true,
-    generation: localSession || (current?.count !== null && current?.count !== undefined) ? generation : null,
+    generation: shareFreeSession || (current?.count !== null && current?.count !== undefined) ? generation : null,
   };
 }

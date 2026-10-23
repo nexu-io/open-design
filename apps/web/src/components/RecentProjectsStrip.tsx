@@ -42,6 +42,7 @@ import {
   notifyTeamProjectsChanged,
   useWorkspaceContext,
 } from '../collab/useWorkspaceContext';
+import { workspaceIdentitySettledSignedOut } from '../collab/workspace-identity-signed-out';
 import { moveWorkspaceProject } from '../state/projects';
 import {
   workspaceContextHasWorkspaceIdentity,
@@ -381,10 +382,14 @@ export function RecentProjectsStrip({
   // member directory turns an ownerMemberId into a display name, while the
   // workspace context supplies the signed-in user's own name and profile image.
   const { resolve: resolveMember } = useTeamMembers();
+  const workspaceContextState = useWorkspaceContext();
   const {
     context: workspaceContext,
     loading: workspaceContextLoading,
-  } = useWorkspaceContext();
+  } = workspaceContextState;
+  // A bare null context also covers loading/unavailable reads; only the
+  // settled signed-out reading may drive the share-free delete path.
+  const workspaceSettledSignedOut = workspaceIdentitySettledSignedOut(workspaceContextState);
   // A cover request captures the complete identity at dispatch. A mutable ref
   // keeps the queue callbacks stable without letting an in-flight read drift
   // to whichever Workspace a different render happens to select later.
@@ -524,7 +529,7 @@ export function RecentProjectsStrip({
   // Delete confirm → request → settle, shared with the rail's 最近项目 rows
   // (OPEND-2797) so both entry points open the very same dialog. A failed
   // request keeps that dialog open with a visible reason (recvqbh189zBY6).
-  const deleteFlow = useProjectDeleteFlow({ onDelete, analyticsPage, workspaceContext });
+  const deleteFlow = useProjectDeleteFlow({ onDelete, analyticsPage, workspaceContext, workspaceSignedOut: workspaceSettledSignedOut });
   const duplicateFlow = useProjectDuplicateFlow({ onDuplicate, analyticsPage, workspaceContext });
   // Project → team-space sharing (the project card entry), through the flow
   // the rail rows share. The card menu is this surface's progress readout: it
@@ -662,6 +667,7 @@ export function RecentProjectsStrip({
   const batchShares = useBatchProjectShareCount(
     bulkDeleteOpen ? selectedProjects.map(({ project }) => project.id) : [],
     workspaceContext,
+    workspaceSettledSignedOut,
   );
   // Same gate as the per-card menu: only your own projects can be moved or
   // deleted, so a selection containing someone else's shared project disables

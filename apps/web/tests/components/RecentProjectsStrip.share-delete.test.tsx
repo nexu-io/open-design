@@ -12,9 +12,10 @@ const context: WorkspaceCollabContext = {
   permissions: buildWorkspacePermissions({ role: 'owner', lifecycleState: 'active' }),
 };
 let workspaceContext: WorkspaceCollabContext | null = context;
+let workspaceLoading = false;
 vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  useWorkspaceContext: () => ({ context: workspaceContext, loading: false }),
+  useWorkspaceContext: () => ({ context: workspaceContext, loading: workspaceLoading }),
 }));
 vi.mock('../../src/providers/registry', () => ({
   fetchProjectFileText: vi.fn(async () => null), fetchProjectFiles: vi.fn(async () => []),
@@ -28,6 +29,7 @@ const remove = vi.fn(async (_id: string) => true);
 const request = vi.fn<typeof fetch>();
 beforeEach(() => {
   workspaceContext = context;
+  workspaceLoading = false;
   remove.mockClear(); request.mockReset(); vi.stubGlobal('fetch', request);
   request.mockImplementation(async (url) => {
     const path = String(url);
@@ -76,6 +78,31 @@ it('Drafts batch deletes without a workspace identity and waits on no share-stat
   fireEvent.click(within(dialog).getByRole('button', { name: 'Delete selected' }));
   expect(remove).toHaveBeenCalledTimes(2);
   expect(remove.mock.calls.map(([id]) => id).sort()).toEqual(['project-1', 'project-2']);
+  expect(request.mock.calls.filter(([url]) => String(url).endsWith('/share-state'))).toHaveLength(0);
+});
+it('Drafts single-card delete fails closed while the workspace read is loading, then deletes once it settles signed out', async () => {
+  workspaceContext = null;
+  workspaceLoading = true;
+  const props = {
+    heading: 'Drafts', space: 'drafts' as const,
+    projects: [project('project-1', 'Landing refresh')],
+    limit: 1, onOpen: vi.fn(), onDelete: remove,
+  };
+  const view = render(<RecentProjectsStrip {...props} />);
+  fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
+  const dialog = screen.getByRole('alertdialog');
+  // A null context during loading is not proof of sign-out: keep waiting.
+  expect(within(dialog).getByTestId('project-delete-confirm-accept')).toBeDisabled();
+  expect(within(dialog).queryByRole('alert')).toBeNull();
+  fireEvent.click(within(dialog).getByTestId('project-delete-confirm-accept'));
+  expect(remove).not.toHaveBeenCalled();
+  // The read settles with no identity: the confirm unlocks without a read.
+  workspaceLoading = false;
+  view.rerender(<RecentProjectsStrip {...props} />);
+  expect(within(screen.getByRole('alertdialog')).getByTestId('project-delete-confirm-accept')).toBeEnabled();
+  fireEvent.click(within(screen.getByRole('alertdialog')).getByTestId('project-delete-confirm-accept'));
+  await waitFor(() => expect(remove).toHaveBeenCalledExactlyOnceWith('project-1'));
   expect(request.mock.calls.filter(([url]) => String(url).endsWith('/share-state'))).toHaveLength(0);
 });
 it('Drafts single-card delete keeps an exact refusal visible and retryable', async () => {
