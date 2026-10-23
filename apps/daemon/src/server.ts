@@ -506,6 +506,7 @@ import {
   getDetectedRuntimeVersions,
   ensureDetectedRuntimeCapabilities,
 } from './runtimes/detection.js';
+import { agentCapabilities } from './runtimes/capabilities.js';
 
 import {
   antigravityQuotaGuidance,

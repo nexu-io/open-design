@@ -1066,6 +1066,9 @@ test('detectAgents records Antigravity permission capability from stderr help ou
       assert.equal(detected?.available, true);
       assert.deepEqual(agentCapabilities.get('antigravity'), {
         skipPermissions: true,
+        modelFlag: false,
+        effortFlag: false,
+        disableSlashCommands: false,
       });
       assert.ok(
         antigravity.buildArgs('', [], [], {}).includes('--dangerously-skip-permissions'),
