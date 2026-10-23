@@ -4273,6 +4273,41 @@ setTimeout(() => process.exit(0), 10000);
     });
   });
 
+  it('does not early-exit on text delta and catches delayed terminal ERROR in antigravity', async () => {
+    agentCapabilities.delete('antigravity');
+    const script = `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.4.6');
+  process.exit(0);
+}
+if (args[0] === '--help') {
+  console.error('--dangerously-skip-permissions');
+  process.exit(0);
+}
+process.stdin.resume();
+process.stdin.on('data', () => {});
+process.stdin.on('end', () => {
+  process.stdout.write(JSON.stringify({
+    event: 'step_update',
+    step_update: { step_type: 'agent_response', text_delta: 'ok' },
+  }) + '\\n');
+  setTimeout(() => {
+    process.stdout.write(JSON.stringify({
+      event: 'result',
+      result: { status: 'ERROR', error: 'quota exceeded after turn' },
+    }) + '\\n');
+    process.exit(0);
+  }, 1200);
+});
+`;
+    await withFakeAntigravity(script, async () => {
+      const result = await testAgentConnection({ agentId: 'antigravity' });
+      expect(result.ok).toBe(false);
+      expect(result.detail).toContain('quota exceeded after turn');
+    });
+  });
+
 
   it('keeps OpenCode smoke tests green when git bootstrap is unavailable', async () => {
     const gitDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-opencode-git-missing-'));
