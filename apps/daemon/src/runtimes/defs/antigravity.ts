@@ -10,9 +10,12 @@ import { dirname, join } from 'node:path';
 
 import { DEFAULT_MODEL_OPTION } from './shared.js';
 import { agentCapabilities } from '../capabilities.js';
-import type { RuntimeAgentDef } from '../types.js';
+import type { RuntimeAgentDef, RuntimeModelOption } from '../types.js';
 
 const ANTIGRAVITY_SKIP_PERMISSIONS_FLAG = '--dangerously-skip-permissions';
+const ANTIGRAVITY_MODEL_FLAG = '--model';
+const ANTIGRAVITY_EFFORT_FLAG = '--effort';
+const ANTIGRAVITY_DISABLE_SLASH_COMMANDS_FLAG = '--disable-slash-commands';
 
 // Headless runs use agy's documented stdin channel (agy >= 1.1.15):
 //   agy --input-format stream-json --output-format stream-json
@@ -191,6 +194,28 @@ export async function waitForAgyToReadModel(
   return false;
 }
 
+export function parseAntigravityModels(
+  stdout: string,
+): RuntimeModelOption[] | null {
+  const lines = String(stdout || '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0 && !l.toLowerCase().startsWith('fetching'));
+  if (lines.length === 0) return null;
+  const seen = new Set<string>();
+  const out: RuntimeModelOption[] = [DEFAULT_MODEL_OPTION];
+  for (const line of lines) {
+    const parts = line.includes('\t') ? line.split('\t') : line.split(/\s{2,}/);
+    const first = parts[0]?.trim() ?? '';
+    const second = parts[1]?.trim() ?? '';
+    const label = (parts.length > 1 && second) ? second : first;
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    out.push({ id: label, label });
+  }
+  return out;
+}
+
 export const antigravityAgentDef = {
   id: 'antigravity',
   name: 'Antigravity',
@@ -199,9 +224,26 @@ export const antigravityAgentDef = {
   helpArgs: ['--help'],
   capabilityFlags: {
     [ANTIGRAVITY_SKIP_PERMISSIONS_FLAG]: 'skipPermissions',
+    [ANTIGRAVITY_MODEL_FLAG]: 'modelFlag',
+    [ANTIGRAVITY_EFFORT_FLAG]: 'effortFlag',
+    [ANTIGRAVITY_DISABLE_SLASH_COMMANDS_FLAG]: 'disableSlashCommands',
+  },
+  listModels: {
+    args: ['models'],
+    timeoutMs: 8_000,
+    parse: parseAntigravityModels,
   },
   fallbackModels: [
     DEFAULT_MODEL_OPTION,
+    { id: 'Gemini 3.8 Flash (High)', label: 'Gemini 3.8 Flash (High)' },
+    { id: 'Gemini 3.8 Flash (Medium)', label: 'Gemini 3.8 Flash (Medium)' },
+    { id: 'Gemini 3.8 Flash (Low)', label: 'Gemini 3.8 Flash (Low)' },
+    { id: 'Gemini 3.7 Flash (High)', label: 'Gemini 3.7 Flash (High)' },
+    { id: 'Gemini 3.7 Flash (Medium)', label: 'Gemini 3.7 Flash (Medium)' },
+    { id: 'Gemini 3.7 Flash (Low)', label: 'Gemini 3.7 Flash (Low)' },
+    { id: 'Gemini 3.6 Flash (High)', label: 'Gemini 3.6 Flash (High)' },
+    { id: 'Gemini 3.6 Flash (Medium)', label: 'Gemini 3.6 Flash (Medium)' },
+    { id: 'Gemini 3.6 Flash (Low)', label: 'Gemini 3.6 Flash (Low)' },
     { id: 'Gemini 3.1 Pro (High)', label: 'Gemini 3.1 Pro (High)' },
     { id: 'Gemini 3.1 Pro (Low)', label: 'Gemini 3.1 Pro (Low)' },
     { id: 'Gemini 3.5 Flash (High)', label: 'Gemini 3.5 Flash (High)' },
@@ -236,9 +278,18 @@ export const antigravityAgentDef = {
     options = {},
     runtimeContext = {},
   ) => {
-    if (options.model && options.model !== DEFAULT_MODEL_OPTION.id) {
+    const caps = agentCapabilities.get('antigravity');
+    const model =
+      options.model && options.model !== DEFAULT_MODEL_OPTION.id
+        ? options.model
+        : null;
+
+    // Modern agy (v1.2.6+) supports native --model via CLI args without mutating
+    // global settings.json on disk. Only fallback to mutating settings.json when
+    // running an older agy build that lacks the --model capability flag.
+    if (!caps?.modelFlag && model) {
       writeAntigravityModelSelection(
-        options.model,
+        model,
         runtimeContext.antigravitySettingsPath,
       );
     }
@@ -254,8 +305,17 @@ export const antigravityAgentDef = {
       args.push('--log-file', runtimeContext.agentLogFilePath);
     }
     // Daemon-managed headless runs have no interactive approval channel.
-    if (agentCapabilities.get('antigravity')?.skipPermissions) {
+    if (caps?.skipPermissions) {
       args.push(ANTIGRAVITY_SKIP_PERMISSIONS_FLAG);
+    }
+    if (caps?.modelFlag && model) {
+      args.push(ANTIGRAVITY_MODEL_FLAG, model);
+    }
+    if (caps?.effortFlag && options.reasoning) {
+      args.push(ANTIGRAVITY_EFFORT_FLAG, options.reasoning);
+    }
+    if (caps?.disableSlashCommands) {
+      args.push(ANTIGRAVITY_DISABLE_SLASH_COMMANDS_FLAG);
     }
     args.push(...ANTIGRAVITY_STREAM_JSON_ARGS);
     return args;

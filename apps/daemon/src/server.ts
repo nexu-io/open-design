@@ -14544,12 +14544,6 @@ export async function startServer({
       && agentOptions.model !== 'default'
         ? agentOptions.model
         : null;
-    if (antigravityConcreteModel) {
-      const { acquireAntigravityModelLock } = await import(
-        './runtimes/defs/antigravity.js'
-      );
-      antigravityModelLockRelease = await acquireAntigravityModelLock();
-    }
 
     let args;
     const observeClaudeNativeChildBehavior =
@@ -14559,6 +14553,14 @@ export async function startServer({
       // to be filled only by `GET /api/agents`. Probe it here so a daemon that
       // has never served that route still builds the same argv as one that has.
       await ensureDetectedRuntimeCapabilities(def.id, configuredAgentEnv);
+      if (antigravityConcreteModel) {
+        if (!agentCapabilities.get('antigravity')?.modelFlag) {
+          const { acquireAntigravityModelLock } = await import(
+            './runtimes/defs/antigravity.js'
+          );
+          antigravityModelLockRelease = await acquireAntigravityModelLock();
+        }
+      }
       args = def.buildArgs(
         composed,
         promptImagePaths,

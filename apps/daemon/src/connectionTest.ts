@@ -63,6 +63,8 @@ import {
 import { aihubmixHeaders } from './integrations/aihubmix.js';
 import type { AgentCliEnvPrefs } from './app-config.js';
 import type { RuntimeAgentDef } from './runtimes/types.js';
+import { agentCapabilities } from './runtimes/capabilities.js';
+import { ensureDetectedRuntimeCapabilities } from './runtimes/detection.js';
 import { preparePromptFileForAgent, type PreparedPromptFile } from './runtimes/prompt-file.js';
 import { configuredAllowedInternalHosts } from './origin-validation.js';
 import {
@@ -2374,6 +2376,7 @@ async function testAgentConnectionInternal(
   let child: AgentChild | null = null;
   let childExit: Promise<AgentChildExit> | null = null;
   let childClosed = false;
+  let earlyOkExit = false;
   let promptFile: PreparedPromptFile | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let abortHandler: (() => void) | null = null;
@@ -2581,6 +2584,9 @@ async function testAgentConnectionInternal(
     }
     let args: string[];
     try {
+      if (input.agentId === 'antigravity') {
+        await ensureDetectedRuntimeCapabilities('antigravity', configuredAgentEnv);
+      }
       promptFile = await preparePromptFileForAgent(def, SMOKE_PROMPT, 'connection-test');
       args = def.buildArgs(
         SMOKE_PROMPT,
@@ -2615,6 +2621,15 @@ async function testAgentConnectionInternal(
       }
       if ((input.agentId === 'opencode' || input.agentId === 'mimo') && !args.includes('--title')) {
         args.push('--title', 'Connection test');
+      }
+      if (input.agentId === 'antigravity') {
+        const caps = agentCapabilities.get('antigravity');
+        if (caps?.effortFlag && !args.includes('--effort')) {
+          args.push('--effort', 'low');
+        }
+        if (caps?.disableSlashCommands && !args.includes('--disable-slash-commands')) {
+          args.push('--disable-slash-commands');
+        }
       }
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
@@ -3061,6 +3076,15 @@ async function testAgentConnectionInternal(
     ]);
 
     if (winner.kind === 'text') {
+      if (def.id === 'antigravity' && isSmokeOkReply(winner.text)) {
+        earlyOkExit = true;
+        if (!childClosed && child) {
+          try {
+            child.kill();
+          } catch {}
+        }
+        return resultFromAgentText(winner.text, { code: 0, signal: null });
+      }
       const completion = await Promise.race([
         streamError,
         childExit,
