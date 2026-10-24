@@ -180,6 +180,20 @@ export const API_ERROR_CODES = [
   // so a client can attach to it instead of starting another. Not retryable
   // while that run is active; ordinary chat turns are never gated by this.
   'DESIGN_SYSTEM_ENRICHMENT_IN_PROGRESS',
+  // A run was requested for an EXTERNAL workspace (a folder-backed project's
+  // `metadata.baseDir`, including orchestrator scratch workspaces) that
+  // another live run is already writing. Two agents writing the same
+  // directory race on identical files (2026-10-22/23: two automation-driven
+  // runs on one folder-backed project admitted 34 ms apart). The daemon
+  // refuses the newcomer with HTTP 409 and names the run that owns the
+  // workspace in `details` (`WorkspaceRunActiveDetails`) so the caller can
+  // cancel that run, wait, or follow it instead of starting a second writer.
+  // A blocking run with an in-flight cancel request does NOT block:
+  // overlapping the run the composer is cancelling is the pre-existing
+  // "send now" interrupt behavior. Od-owned projects are not gated by this
+  // (OD-managed per-project storage; ordinary concurrent turns there are
+  // documented behavior) and neither are runs with no identifiable workspace.
+  'WORKSPACE_RUN_ACTIVE',
   // POST /api/projects bounds every read-only preparation step that runs
   // before the project/conversation transaction (design-system and skill
   // validation, plugin and location lookups, plugin registry loads, template

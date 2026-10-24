@@ -537,6 +537,24 @@ export interface DesignSystemEnrichmentInProgressDetails {
   conversationId: string;
 }
 
+/**
+ * `ApiError.details` for `WORKSPACE_RUN_ACTIVE` (HTTP 409 from `POST /api/runs`
+ * and `POST /api/chat`, and the terminal code of a run refused by the shared
+ * start path): the live run that already owns the external workspace the new
+ * run targeted, plus the normalized workspace identity that collided. Callers
+ * should cancel `runId`, wait for it to finish, or follow it — never start a
+ * second writer on the same directory.
+ */
+export interface WorkspaceRunActiveDetails {
+  kind: 'workspace_run_active';
+  /** The live run that occupies the workspace. */
+  runId: string;
+  /** Normalized workspace identity that collided (`folder:<baseDir>`). */
+  workspace: string;
+  projectId: string;
+  conversationId: string;
+}
+
 export type NativeSessionRecoveryState =
   | 'not_applicable'
   | 'no_recoverable_session'

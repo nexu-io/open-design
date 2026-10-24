@@ -517,6 +517,7 @@ import { importFigmaFromBytes } from './figma/figma-import.js';
 import { renderDesignSystemPreview } from './design-systems/preview.js';
 import { renderDesignSystemShowcase } from './design-systems/showcase.js';
 import { createChatRunService } from './runtimes/runs.js';
+import { activeRunBlockingWorkspaceForProject } from './runtimes/run-workspace-occupancy.js';
 import { reapLeftoverAgentProcesses, spawnAgentProcess } from './runtimes/agent-process.js';
 import {
   createAmrTerminalReportDeliveryService,
@@ -11403,6 +11404,34 @@ export async function startServer({
     run.nativeSessionContinuePending = null;
     /** @type {Partial<ChatRequest> & { imagePaths?: string[] }} */
     chatBody = chatBody || {};
+    // Workspace occupancy guard: every start path (HTTP runs, Orbit, routine
+    // automation, strategy continuations, retries) funnels through here, so
+    // this is the last line of defense behind the HTTP admission checks. A
+    // run whose project's workspace is already being written by another live
+    // run fails fast with `WORKSPACE_RUN_ACTIVE` naming the owner, instead of
+    // silently racing a second agent through the same directory. Runs whose
+    // workspace cannot be identified (no project) are not gated.
+    {
+      const guardProjectId =
+        (typeof run.projectId === 'string' && run.projectId)
+        || (typeof chatBody.projectId === 'string' && chatBody.projectId)
+        || null;
+      if (guardProjectId) {
+        const workspaceBlocking = activeRunBlockingWorkspaceForProject(design.runs, db, {
+          projectId: guardProjectId,
+          excludeRunId: run.id,
+          treatCancelRequestedAsSuperseding: true,
+        });
+        if (workspaceBlocking) {
+          return design.runs.fail(
+            run,
+            'WORKSPACE_RUN_ACTIVE',
+            `another live run (${workspaceBlocking.run.id}) is already writing this workspace; `
+              + 'this run refuses to start on top of it. Cancel that run or wait for it to finish.',
+          );
+        }
+      }
+    }
     let strategyTaskAtStart;
     try {
       strategyTaskAtStart = getStrategyTaskExecutionByRunId(db, run.id);
