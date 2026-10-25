@@ -137,6 +137,7 @@ import {
   isAmrSessionAuthenticated,
 } from './components/amrLoginPolling';
 import { CollabDemoView } from './collab/CollabDemoView';
+import { cloudGateDecision, isCloudAgentUsableForAutoPick } from './cloud-gate';
 import {
   WorkspaceMemberDirectoryPreloader,
 } from './collab/WorkspaceMemberDirectoryPreloader';
@@ -1032,6 +1033,10 @@ function AppInner() {
   const hostPlatform = useMemo(() => getOpenDesignHost()?.client.platform, []);
   useModalWindowDragGuard();
   const workspaceContextState = useWorkspaceContext();
+  // A completed user who cancels the passive Cloud gate must not be bounced
+  // straight back by the workspace-credential redirect. Session scoped; reset
+  // when the condition clears or Cloud is deliberately re-selected.
+  const [cloudGateDismissed, setCloudGateDismissed] = useState(false);
   const {
     context: workspaceContext,
     loading: workspaceContextLoading,
@@ -2431,15 +2436,13 @@ function AppInner() {
     const usesOpenDesignCloud =
       config.mode === 'daemon'
       && config.agentId === AMR_AGENT_ID;
-    const cloudIdentityRejected =
-      workspaceContextState.failure === 'reauth-required'
-      || (
-        usesOpenDesignCloud
-        && (
-          amrLoginStatus?.loggedIn === false
-          || amrLoginStatus?.sessionState === 'reauth_required'
-        )
-      );
+    const cloudIdentityRejected = cloudGateDecision({
+      usesOpenDesignCloud,
+      amrLoggedIn: amrLoginStatus?.loggedIn,
+      amrSessionState: amrLoginStatus?.sessionState,
+      workspaceFailure: workspaceContextState.failure,
+      dismissed: cloudGateDismissed,
+    });
     // Keep this exact file route only when its public URL was witnessed under
     // the authenticated workspace. Project reads still fail closed below;
     // the signed-out surface exposes that URL and no mutation authority.
@@ -2781,9 +2784,10 @@ function AppInner() {
     if (!daemonConfigLoaded || agentsLoading) return;
     if (config.onboardingCompleted !== true) return;
     if (config.agentId) return;
-    // A signed-out Cloud agent is not a usable auto-pick: selecting it would
-    // immediately bounce the user into the passive reauth gate (issue #8370).
-    const cloudUnavailable = amrLoginStatus?.loggedIn === false;
+    // A signed-out or expired Cloud agent is not a usable auto-pick: selecting
+    // it would immediately recreate the passive reauth gate (issue #8370).
+    // Expired sessions keep loggedIn=true, so sessionState matters too.
+    const cloudUnavailable = !isCloudAgentUsableForAutoPick(amrLoginStatus);
     const firstAvailable = agents.find(
       (a) => a.available && (!cloudUnavailable || a.id !== AMR_AGENT_ID),
     );
@@ -2800,6 +2804,7 @@ function AppInner() {
     agentsLoading,
     agents,
     amrLoginStatus?.loggedIn,
+    amrLoginStatus?.sessionState,
     config.agentId,
     config.onboardingCompleted,
   ]);
@@ -5597,7 +5602,18 @@ function AppInner() {
   // Escape hatch for the passive Cloud reauth gate. Persists the reverted
   // selection before leaving, so the gate does not re-derive and bounce the
   // user straight back to onboarding on the next render.
+  useEffect(() => {
+    if (workspaceContextState.failure !== 'reauth-required') setCloudGateDismissed(false);
+  }, [workspaceContextState.failure]);
+
+  useEffect(() => {
+    if (config.mode === 'daemon' && config.agentId === AMR_AGENT_ID) {
+      setCloudGateDismissed(false);
+    }
+  }, [config.mode, config.agentId]);
+
   const handleCancelCloudOnboarding = useCallback(() => {
+    setCloudGateDismissed(true);
     const next = revertCloudSelectionConfig(
       latestPersistedConfigRef.current,
       agents,
@@ -6290,6 +6306,7 @@ function AppInner() {
         onOpenSettings={openSettings}
         onCompleteOnboarding={handleCompleteOnboarding}
         onCancelCloudOnboarding={handleCancelCloudOnboarding}
+        cloudGateDismissed={cloudGateDismissed}
         onSignedOut={handleActiveCloudSignOut}
         onAmrLoginStatusChange={handleAmrLoginStatusChange}
       />
