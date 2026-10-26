@@ -1003,6 +1003,51 @@ test('[P1] visible workspace allowance refreshes in place without reloading the 
   )).toBe(documentMarker);
 });
 
+test.describe('UISTATE-E12-CLIENT cold-start loading', () => {
+  const cases = [
+    { tier: 'free', fixture: { ...PERSONAL, workspaceId: 'ui-e12-free', workspaceName: 'E12 Free' } },
+    { tier: 'go', fixture: { ...PERSONAL, workspaceId: 'ui-e12-go', workspaceName: 'E12 Go', billingState: 'active', planId: 'go' } },
+    { tier: 'plus', fixture: { ...PERSONAL, workspaceId: 'ui-e12-plus', workspaceName: 'E12 Plus', billingState: 'active', planId: 'plus' } },
+  ] as const;
+
+  for (const { tier, fixture } of cases) {
+    test(`[P0] ${tier} shows the unified loading block until workspace billing returns`, async ({ page }) => {
+      await wireWorkspaceMocks(page, fixture, [fixture]);
+
+      let markPending!: () => void;
+      let releaseBilling!: () => void;
+      const billingPending = new Promise<void>((resolve) => { markPending = resolve; });
+      const billingGate = new Promise<void>((resolve) => { releaseBilling = resolve; });
+      await page.route('**/api/workspace/billing**', async (route) => {
+        if (route.request().method() !== 'GET') return route.fallback();
+        markPending();
+        await billingGate;
+        await route.fallback();
+      });
+
+      await gotoHome(page);
+      const trigger = page.getByTestId('entry-top-right-credits');
+      await trigger.hover();
+      await billingPending;
+      const panel = page.getByTestId('entry-top-right-credits-panel');
+      await expect(panel).toBeVisible();
+      await expect(panel.getByRole('img', { name: tier, exact: true })).toBeVisible();
+      const loading = panel.getByTestId('workspace-quota-skeleton');
+      await expect(loading).toHaveAttribute('aria-busy', 'true');
+      await expect(loading.getByTestId('workspace-quota-window-skeleton')).toHaveCount(1);
+      await expect(loading.getByTestId('workspace-quota-wallet-skeleton')).toHaveCount(1);
+      await expect(panel.getByRole('alert')).toHaveCount(0);
+      await expect(panel.getByRole('progressbar')).toHaveCount(0);
+      await expect(panel.getByText(/加载|重试|刷新|错误|\$0/)).toHaveCount(0);
+
+      releaseBilling();
+      await expect(loading).toHaveCount(0);
+      await expect(panel).toBeVisible();
+      await expect(panel.getByTestId('entry-nav-credits-row')).toContainText('$0.00');
+    });
+  }
+});
+
 test('[P0] plugin owner shares, syncs, and removes a workspace resource from the real catalog controls', async ({
   page,
 }) => {
