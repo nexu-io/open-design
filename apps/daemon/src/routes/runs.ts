@@ -180,6 +180,7 @@ import {
   type RunSteeringRefusal,
 } from '../runtimes/run-steering.js';
 import { runMessageEventPersistenceAnalytics } from '../runtimes/chat-run-messages.js';
+import { activeRunBlockingWorkspaceForProject } from '../runtimes/run-workspace-occupancy.js';
 import {
   isLegacyHydratedRunWithoutAppliedSnapshot,
   TERMINAL_RUN_STATUSES,
@@ -2696,6 +2697,34 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
               kind: 'design_system_enrichment_in_progress',
               runId: blockingRun.id,
               conversationId: blockingRun.conversationId ?? '',
+            },
+          },
+        );
+      }
+      // Workspace occupancy: refuse a second live writer on one workspace
+      // (folder-backed baseDir or one od-owned project). A blocking run with
+      // an in-flight cancel request does not block — overlapping the run the
+      // composer is cancelling is the pre-existing "send now" behavior.
+      const workspaceBlocking = activeRunBlockingWorkspaceForProject(design.runs, db, {
+        projectId: meta.projectId,
+        excludeRunId: preparedRun.run.id,
+        treatCancelRequestedAsSuperseding: true,
+      });
+      if (workspaceBlocking) {
+        design.runs.drop(preparedRun.run);
+        return sendApiError(
+          res,
+          409,
+          'WORKSPACE_RUN_ACTIVE',
+          `another live run (${workspaceBlocking.run.id}) is already writing this workspace; `
+            + 'cancel that run or wait for it to finish before starting another one here',
+          {
+            details: {
+              kind: 'workspace_run_active',
+              runId: workspaceBlocking.run.id,
+              workspace: workspaceBlocking.workspace,
+              projectId: workspaceBlocking.run.projectId ?? '',
+              conversationId: workspaceBlocking.run.conversationId ?? '',
             },
           },
         );

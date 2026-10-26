@@ -64,7 +64,11 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
 });
 `, 'utf8');
     await chmod(bin, 0o755);
-    process.env.PI_GRACEFUL_SHUTDOWN_MS = '10';
+    // Wide grace window so the fixture's own exit(143) is always observed
+    // before the daemon's SIGTERM fallback: at 10ms a loaded CI runner can
+    // deliver the SIGTERM before the child's exit event drains the loop, and
+    // the close classifier then reads our shutdown instead of the nonzero exit.
+    process.env.PI_GRACEFUL_SHUTDOWN_MS = '500';
     started = await startServer({ port: 0, returnServer: true }) as StartedServer;
     const config = await fetch(`${started.url}/api/app-config`, {
       method: 'PUT', headers: { 'content-type': 'application/json' },

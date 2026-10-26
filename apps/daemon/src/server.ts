@@ -517,6 +517,7 @@ import { importFigmaFromBytes } from './figma/figma-import.js';
 import { renderDesignSystemPreview } from './design-systems/preview.js';
 import { renderDesignSystemShowcase } from './design-systems/showcase.js';
 import { createChatRunService } from './runtimes/runs.js';
+import { activeRunBlockingWorkspaceForProject } from './runtimes/run-workspace-occupancy.js';
 import { reapLeftoverAgentProcesses, spawnAgentProcess } from './runtimes/agent-process.js';
 import {
   createAmrTerminalReportDeliveryService,
@@ -11403,6 +11404,34 @@ export async function startServer({
     run.nativeSessionContinuePending = null;
     /** @type {Partial<ChatRequest> & { imagePaths?: string[] }} */
     chatBody = chatBody || {};
+    // Workspace occupancy guard: every start path (HTTP runs, Orbit, routine
+    // automation, strategy continuations, retries) funnels through here, so
+    // this is the last line of defense behind the HTTP admission checks. A
+    // run whose project's workspace is already being written by another live
+    // run fails fast with `WORKSPACE_RUN_ACTIVE` naming the owner, instead of
+    // silently racing a second agent through the same directory. Runs whose
+    // workspace cannot be identified (no project) are not gated.
+    {
+      const guardProjectId =
+        (typeof run.projectId === 'string' && run.projectId)
+        || (typeof chatBody.projectId === 'string' && chatBody.projectId)
+        || null;
+      if (guardProjectId) {
+        const workspaceBlocking = activeRunBlockingWorkspaceForProject(design.runs, db, {
+          projectId: guardProjectId,
+          excludeRunId: run.id,
+          treatCancelRequestedAsSuperseding: true,
+        });
+        if (workspaceBlocking) {
+          return design.runs.fail(
+            run,
+            'WORKSPACE_RUN_ACTIVE',
+            `another live run (${workspaceBlocking.run.id}) is already writing this workspace; `
+              + 'this run refuses to start on top of it. Cancel that run or wait for it to finish.',
+          );
+        }
+      }
+    }
     let strategyTaskAtStart;
     try {
       strategyTaskAtStart = getStrategyTaskExecutionByRunId(db, run.id);
@@ -11678,8 +11707,13 @@ export async function startServer({
     if (typeof projectId === 'string' && projectId) {
       let chatMeta = null;
       try {
-        const chatProject = getProject(db, projectId);
-        chatMeta = chatProject?.metadata ?? null;
+        // Launch cwd must come from the same admission snapshot the
+        // workspace-occupancy guard attributes to this run. The row can be
+        // rebound (working-dir) while this run waits out memory extraction;
+        // re-reading it here would launch the child into a directory the
+        // guard does not record, reopening the second-writer hole. The row
+        // read only covers runs without a captured snapshot (legacy rows).
+        chatMeta = launchProjectMetadataForRun(run, () => getProject(db, projectId));
         // ensureProject/resolveProjectDir now resolve external baseDir folders
         // internally (and assertSandboxProjectRootAvailable rejects imported
         // folders with no managed copy in sandbox mode), so we pass chatMeta
@@ -18561,3 +18595,21 @@ function sanitizeSlug(text) {
     .replace(/^-+|-+$/g, '')
     .slice(0, 64);
 }
+
+/**
+ * The project metadata a Run's launch resolves its working directory from:
+ * the snapshot captured at admission — the same snapshot the
+ * workspace-occupancy guard attributes to the run. Re-reading the project
+ * row here would let a working-dir rebind in the admission→launch gap move
+ * the child into a directory the guard does not record for this run,
+ * reopening the second-writer hole. The row is read only for runs without a
+ * captured snapshot (legacy/hydrated rows).
+ */
+export function launchProjectMetadataForRun(
+  run: { projectMetadata?: { baseDir?: unknown } | null },
+  readRowMetadata: () => { baseDir?: unknown } | null | undefined,
+): { baseDir?: unknown } | null {
+  return run.projectMetadata ?? readRowMetadata() ?? null;
+}
+
+export const __forTestLaunchProjectMetadata = launchProjectMetadataForRun;
