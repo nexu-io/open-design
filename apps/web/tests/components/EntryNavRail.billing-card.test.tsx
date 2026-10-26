@@ -102,23 +102,21 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('account menu billing card — plan label (#146)', () => {
-  it('does NOT label an unsubscribed team-typed workspace as 团队版', () => {
+describe('account menu billing card — scoped plan tier (#146)', () => {
+  it('shows Free for an unsubscribed team-typed workspace', () => {
     renderRail({ context: context(), billing: billing() });
 
     const card = billingCard();
-    expect(card.queryByText('团队版')).toBeNull();
-    // `entry.billingTierFree` reads 免费 in zh-CN.
-    expect(card.getByText('免费版')).toBeTruthy();
+    expect(card.getByRole('img', { name: 'free' })).toBeTruthy();
   });
 
-  it('labels a workspace that really holds a team subscription as 团队版', () => {
+  it('shows Plus for a team Plus subscription', () => {
     renderRail({
       context: context({ billingState: 'active', planId: 'team_plus' } as Partial<WorkspaceCollabContext>),
       billing: billing({ membershipTier: 'team_plus', subscriptionStatus: 'active' }),
     });
 
-    expect(billingCard().getByText('团队版')).toBeTruthy();
+    expect(billingCard().getByRole('img', { name: 'plus' })).toBeTruthy();
   });
 
   // The label is a plan question, so an unknown tier must not be answered from
@@ -342,7 +340,7 @@ describe('account menu billing card — scoped USD balance (recvqgaMLxEdZX)', ()
     expect(billingCard().getByText('$0.00')).toBeTruthy();
   });
 
-  it('preserves the team wallet battery icon and chevron', () => {
+  it('keeps the wallet chevron and scoped balance', () => {
     renderRail({
       context: context(),
       billing: billing({ totalAvailableCredits: 600_000 }),
@@ -350,8 +348,8 @@ describe('account menu billing card — scoped USD balance (recvqgaMLxEdZX)', ()
     });
 
     const row = billingCard().getByTestId('entry-nav-credits-row');
-    expect(row.querySelectorAll('svg')).toHaveLength(2);
-    expect(row.textContent?.trim()).toBe('按量额度$12.00');
+    expect(row.querySelectorAll('svg')).toHaveLength(1);
+    expect(row.textContent?.trim()).toBe('$12.00');
   });
 });
 

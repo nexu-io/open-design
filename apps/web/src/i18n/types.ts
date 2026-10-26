@@ -31,6 +31,15 @@ export const LOCALE_LABEL: Record<Locale, string> = {
 // offending string instead of a generic object mismatch.
 export interface Dict {
   'workspaceQuota.unavailable': string;
+  'workspaceQuota.designPlanAllowance': string;
+  'workspaceQuota.subscribeToUse': string;
+  'workspaceQuota.usageUnavailable': string;
+  'workspaceQuota.periodMinutes': string;
+  'workspaceQuota.resetIn': string;
+  'workspaceQuota.planHelp': string;
+  'workspaceQuota.meteredHelp': string;
+  'workspaceQuota.shared': string;
+  'workspaceQuota.contactOwnerForBilling': string;
   'workspaceQuota.unsubscribed': string;
   'workspaceQuota.contactOwner': string;
   'workspaceQuota.payAsYouGo': string;

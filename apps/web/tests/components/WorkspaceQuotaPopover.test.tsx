@@ -23,12 +23,12 @@ function panel(value: WorkspaceQuotaView, role: 'owner' | 'admin' | 'member' = '
   return <I18nProvider initial="zh-CN"><WorkspaceQuotaPopover context={{ ...context, role }} view={value} profile="local" /></I18nProvider>;
 }
 beforeEach(() => { vi.spyOn(window, 'open').mockReturnValue(null); });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe.each(['zh-CN', 'en'] as const)('K6 C-01 reset rows (U001/UI-002) — %s', locale => {
   function renderQuota(value: WorkspaceQuotaView) {
     render(<I18nProvider initial={locale}><WorkspaceQuotaPopover context={context} view={value} profile="local" /></I18nProvider>);
-    return within(screen.getByRole('region', { name: 'Design Plan' }));
+    return within(screen.getByRole('region', { name: locale === 'en' ? 'Design Plan allowance' : 'Design Plan 额度' }));
   }
   function expectQuotaWithoutReset(value: WorkspaceQuotaView, percent: number, count: number) {
     const plan = renderQuota(value);
@@ -54,12 +54,13 @@ describe.each(['zh-CN', 'en'] as const)('K6 C-01 reset rows (U001/UI-002) — %s
     for (const window of value.windows ?? []) Reflect.deleteProperty(window, 'resetsAt');
     expectQuotaWithoutReset(value, 75, 2);
   });
-  it('preserves valid reset rows and the existing locale date format', () => {
+  it('shows a relative reset countdown', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-22T00:00:00Z'));
     const plan = renderQuota(view('go'));
-    const time = new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-      .format(new Date('2026-10-22T06:00:00Z'));
-    expect(plan.getAllByText(locale === 'en' ? `Resets at ${time}` : `${time} 重置`)).toHaveLength(2);
+    expect(plan.getAllByText(locale === 'en' ? 'Resets in 6 hours' : '6 小时后重置')).toHaveLength(2);
     expect(plan.getAllByRole('progressbar')).toHaveLength(2);
+    vi.useRealTimers();
   });
 });
 
@@ -73,18 +74,22 @@ describe('C-01 state and role matrix (VIEW-001/002/021)', () => {
   for (const [id, tier, balance, percent] of cases) {
     it.each(['owner', 'admin', 'member'] as const)(`${id} ${tier}: %s sees the shared amount and its role action`, role => {
       render(panel(view(tier, balance, percent), role));
-      expect(screen.getByRole('region', { name: 'Design Plan' })).toBeTruthy();
+      expect(screen.getByRole('region', { name: 'Design Plan 额度' })).toBeTruthy();
       expect(screen.getByRole('region', { name: '按量额度' })).toBeTruthy();
       expect(screen.getByText(`$${Number(balance).toFixed(2)}`)).toBeTruthy();
       expect(screen.queryAllByRole('progressbar').length).toBe(tier === 'go' ? 2 : tier === 'free' ? 0 : 1);
-      if (tier === 'free') expect(screen.getByText('未订阅')).toBeTruthy();
+      if (tier === 'free') {
+        expect(screen.getByText('未订阅')).toBeTruthy();
+        expect(screen.getByText('订阅套餐后可用')).toBeTruthy();
+      }
       else for (const bar of screen.getAllByRole('progressbar')) expect(bar.getAttribute('aria-valuenow')).toBe(String(percent));
       const action = tier === 'max' ? '管理' : '升级';
       if (role === 'owner') {
+        expect(screen.getByText('额度全员共用')).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: action }));
         expect(window.open).toHaveBeenLastCalledWith(quotaPopoverConsoleUrl('local', 'workspace-a', tier === 'max' ? 'console' : 'plans'), '_blank', 'noopener,noreferrer');
       } else {
-        expect(screen.getByText('联系 Owner')).toBeTruthy();
+        expect(screen.getByText('升级或充值请联系 Owner')).toBeTruthy();
         expect(screen.queryByRole('button', { name: /升级|管理/ })).toBeNull();
       }
       // VIEW-003: every role's arrow is a view link, never a recharge intent.
@@ -113,7 +118,8 @@ it('E12 uses identical default loading markup for every tier and unknown tier (d
     expect(within(skeleton).queryAllByTestId('workspace-quota-wallet-skeleton')).toHaveLength(1);
     expect(screen.queryByRole('progressbar')).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();
-    expect(screen.queryByText(/加载|重试|刷新|错误|\$0/)).toBeNull();
+    expect(screen.queryByText(/加载|重试|刷新|错误|暂不可用|\$0/)).toBeNull();
+    expect(screen.queryByRole('img', { name: /暂不可用/ })).toBeNull();
     const html = skeleton.innerHTML;
     mounted.unmount();
     return html;
@@ -121,21 +127,29 @@ it('E12 uses identical default loading markup for every tier and unknown tier (d
   for (const html of skeletons) expect(html).toBe(skeletons[0]);
 });
 
+it('does not call an unknown plan unavailable when a scoped balance has loaded', () => {
+  render(panel({ ...view('free'), tier: null, balanceUsd: '24' }));
+  expect(screen.getByText('$24.00')).toBeTruthy();
+  expect(screen.queryByText('明细暂不可用')).toBeNull();
+  expect(screen.queryByRole('img')).toBeNull();
+});
+
 it('E03 missing breakdown/modelRestriction/windows stays unavailable, never fake $0 (VIEW-012)', () => {
   render(panel({ ...view('go'), windows: null, balanceUsd: null }));
-  expect(within(screen.getByRole('region', { name: '按量额度' })).getByText('明细暂不可用')).toBeTruthy();
-  expect(within(screen.getByRole('region', { name: 'Design Plan' })).getAllByText('明细暂不可用')).toHaveLength(2);
-  expect(screen.getAllByTitle('明细暂不可用')).toHaveLength(2);
-  expect(screen.getByText('5 小时')).toBeTruthy();
-  expect(screen.getByText('7 天')).toBeTruthy();
+  expect(within(screen.getByRole('region', { name: '按量额度' })).getByText('—')).toBeTruthy();
+  expect(screen.queryByText('明细暂不可用')).toBeNull();
+  expect(within(screen.getByRole('region', { name: 'Design Plan 额度' })).getAllByText('暂未获取用量')).toHaveLength(2);
+  expect(screen.getByRole('button', { name: /性价比模型/ })).toBeTruthy();
+  expect(screen.getByRole('button', { name: /顶级模型/ })).toBeTruthy();
+  expect(screen.queryByText('5 小时')).toBeNull();
+  expect(screen.queryByText('7 天')).toBeNull();
   expect(screen.queryByText('$0.00')).toBeNull();
   expect(screen.queryByRole('progressbar')).toBeNull();
 });
 it('E09 displays server merged total without adding gift/recharge or expiring them (VIEW-021)', () => {
   render(panel({ ...view('free', '40.30'), breakdown: 'gift + recharge', modelRestriction: 'supported models' }));
-  // MAIN-REVIEW F-1 / E states: model info is hover-only, with no breakdown or refresh row.
-  expect(screen.getByTitle('supported models').textContent).toBe('Design Plan');
-  expect(screen.queryByText(/supported models|gift \+ recharge|模型说明/)).toBeNull();
+  expect(screen.getByRole('button', { name: 'supported models' })).toBeTruthy();
+  expect(screen.queryByText(/gift \+ recharge|模型说明/)).toBeNull();
   expect(screen.queryByRole('button', { name: '刷新' })).toBeNull();
   expect(screen.getByText('$40.30')).toBeTruthy();
   expect(screen.queryByText('$0.50')).toBeNull();
@@ -154,7 +168,7 @@ it('E03 C-04 open, workspace/member change and reopen signal the existing reader
 });
 it('E09 no workspace id hides links/actions and never fabricates a destination', () => {
   render(<I18nProvider initial="zh-CN"><WorkspaceQuotaPopover context={null} view={view('free', '0')} /></I18nProvider>);
-  expect(screen.queryByRole('button')).toBeNull();
+  expect(screen.queryByRole('button', { name: /升级|管理|查看余额/ })).toBeNull();
   expect(quotaPopoverConsoleUrl('local', null)).toBeNull();
 });
 it.each(['expired', 'canceled'])('E04 C-05 preserves neutral presentation for server status %s, never infers from reset dates', status => {

@@ -1,7 +1,6 @@
-/* Designer v2, with the redundant tier label removed by product on Sep 23.
-   Scope every override to personal cards; team cards retain the existing UI. */
+/* Shared billing popover shell. */
 .panel:global(.entry-top-right-credits-panel) {
-  width: min(312px, calc(100vw - 32px));
+  width: min(280px, calc(100vw - 32px));
 }
 .card:global(.entry-nav-rail__menu-credits) {
   display: block;
@@ -11,7 +10,7 @@
   margin-bottom: 0;
   background: #202020;
   color: #fafafa;
-  box-shadow: 0 16px 30px #00000020;
+  box-shadow: 0 10px 22px #00000018;
   font-family:
     Inter,
     -apple-system,
@@ -31,19 +30,19 @@
   justify-content: space-between;
   gap: 8px;
   padding: 0;
-  margin-bottom: 20px;
-  min-height: 24px;
+  margin-bottom: 16px;
+  min-height: 22px;
 }
 .card :global(.entry-nav-rail__menu-credits-plan) {
   display: flex;
   align-items: center;
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 24px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 22px;
 }
 .card :global(.plan-wordmark) {
   display: block;
-  height: 20px;
+  height: 18px;
   width: auto;
   flex-shrink: 0;
 }
@@ -53,9 +52,9 @@
   justify-content: center;
   gap: normal;
   height: auto;
-  min-height: 24px;
+  min-height: 22px;
   box-sizing: border-box;
-  padding: 3px 10px;
+  padding: 2px 9px;
   border: 0;
   border-radius: 100px;
   background: #fafafa;
