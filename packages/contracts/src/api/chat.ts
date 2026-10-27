@@ -10,7 +10,7 @@ import type {
 } from './comments';
 import type { ResearchOptions } from './research';
 import type { RunContextSelection } from './context.js';
-import type { MediaExecutionPolicy } from './media.js';
+import type { MediaExecutionPolicy, RunMediaTaskFailure } from './media.js';
 import type { AppliedPluginSnapshot } from '../plugins/apply.js';
 import type { McpAuthMode, McpServerConfig, McpTransport } from './mcp';
 import type {
@@ -194,6 +194,8 @@ export interface ChatRequest {
   research?: ResearchOptions;
   context?: RunContextSelection;
   appliedPluginSnapshotId?: string | null;
+  pluginId?: string;
+  pluginInputs?: Record<string, unknown>;
   /**
    * Run-scoped media execution policy. Omitted means current OpenDesign
    * behavior: media generation is enabled and OD may execute its configured
@@ -709,7 +711,23 @@ export interface ChatRunExecutionDiagnostics {
   };
 }
 
+/** Exporter evidence; accepted means ingest accepted, not remote query verification. */
+export interface TaskTelemetryStatus {
+  version: 1;
+  taskExecutionId: string;
+  status: 'unknown' | 'pending' | 'in_flight' | 'failed' | 'accepted' | 'not_expected' | 'observed' | 'compatibility';
+  traceId: string | null;
+  protocol: 'legacy-v1' | 'otlp-v4' | null;
+  transport: 'langfuse' | 'relay' | 'vela' | null;
+  attemptCount: number | null;
+  reason: string | null;
+  environment: string | null;
+  sampledAt: number;
+  remoteVerification: 'not_checked';
+}
+
 export interface ChatRunStatusResponse {
+  taskTelemetry?: TaskTelemetryStatus;
   id: string;
   projectId: string | null;
   conversationId: string | null;
@@ -789,6 +807,12 @@ export interface ChatRunStatusResponse {
    *  Judged by the canonical `todoSnapshotHasUnfinishedWork` predicate so it can
    *  never diverge from the chat footer's `unfinishedTodosFromEvents`. */
   endedWithUnfinishedWork?: boolean;
+  /** Media generations this run dispatched that the DAEMON itself recorded as
+   *  failed. Empty/absent means the host watched none fail — never that the
+   *  agent said so. Present so a terminal turn can render the real failure card
+   *  (with the task's own retryability verdict) instead of leaving the user with
+   *  a green check and an apology in prose. */
+  mediaTaskFailures?: RunMediaTaskFailure[];
   /** Authoritative artifact files created or modified by this run. Mirrors
    *  ChatSseEndPayload.artifactCount and run_finished.artifact_count. */
   artifactCount?: number;
@@ -807,6 +831,23 @@ export interface ChatRunStatusResponse {
     | 'project_missing'
     | 'entry_missing'
     | 'entry_not_touched'
+    | 'entry_unreadable'
+    | 'type_mismatch';
+  /** Whether the project holds a usable canonical deliverable RIGHT NOW,
+   *  regardless of whether this run wrote it. `deliverableValid` answers "did
+   *  THIS run deliver" and is the right gate for accepting a completion claim;
+   *  this answers "does the user have it", which is what decides whether a
+   *  refused turn is worth showing as a failure. A turn that verifies finished
+   *  work and correctly changes nothing is `deliverableValid: false` and
+   *  `projectDeliverableValid: true`. Present for terminal runs whose strategy
+   *  task settled blocked; absent on daemons that predate the split. */
+  projectDeliverableValid?: boolean;
+  /** Why `projectDeliverableValid` came out the way it did. Run-scoped values
+   *  (`not_succeeded`, `no_artifact`, `entry_not_touched`) never appear here. */
+  projectDeliverableValidation?:
+    | 'valid'
+    | 'project_missing'
+    | 'entry_missing'
     | 'entry_unreadable'
     | 'type_mismatch';
   /** Canonical project-relative file selected by deliverable validation. */
@@ -846,6 +887,24 @@ export type ChatRunResultPackageResponse = RunResultPackageResponse;
 
 export interface ChatRunListResponse {
   runs: ChatRunStatusResponse[];
+  /**
+   * Projects holding an unanswered `<question-form>` / `<ask-question>`.
+   *
+   * `ChatRunStatus` cannot express "waiting on the user": that state outlives
+   * the run that asked, so the run itself reads `succeeded` while the project
+   * is still blocked — see `ProjectDisplayStatus.awaiting_input`, which the
+   * daemon composes from exactly this set. Callers that render a per-project
+   * status from the runs feed need it or they will show such a project as
+   * finished.
+   *
+   * Always a subset of the projects the accompanying `runs` already expose —
+   * never the raw query — so it cannot widen what a caller can see. A project
+   * that has no visible run therefore never appears here, which is harmless:
+   * awaiting_input only arises from a run that asked.
+   *
+   * Optional: older daemons omit it, and absent means "unknown", not "none".
+   */
+  awaitingInputProjectIds?: string[];
 }
 
 export interface ChatRunCancelResponse {
@@ -929,6 +988,25 @@ export interface ChatCommentAttachment {
   source?: 'saved-comment' | 'board-batch';
 }
 
+/**
+ * Present on a run event whose payload the daemon shortened so the event stays
+ * within its storage budget (a persisted run event never carries an unbounded
+ * payload — see `apps/daemon/src/runtimes/run-event-payload-budget.ts`).
+ *
+ * The shortened text itself also carries an inline `[open-design: …]` marker
+ * naming what was cut, so a client that rebuilds the event without this field
+ * still shows that the payload is incomplete. Absent on events that fit, and on
+ * every event written before the budget existed.
+ */
+export interface AgentEventPayloadTruncation {
+  /**
+   * UTF-8 byte length of the payload before it was shortened: `line` for
+   * `raw`, `content` for `tool_result`, the serialized `input` for
+   * `tool_use`, the whole serialized event for any other kind.
+   */
+  originalBytes: number;
+}
+
 export type PersistedAgentEvent =
   // `code` carries the structured API error code for `label: 'error'`
   // status events (e.g. AGENT_AUTH_REQUIRED, RATE_LIMITED). Clients use it to
@@ -999,7 +1077,39 @@ export type PersistedAgentEvent =
    * existed simply have none — clients MUST fall back to the legacy bare-marker
    * heuristic there rather than treating "no key" as "no boundary".
    */
-  | { kind: 'done_key'; key: string }
+  | {
+      kind: 'done_key';
+      key: string;
+      /**
+       * This physical Run's own wall-clock span.
+       *
+       * A logical OD Next task runs as several physical Runs, and the client
+       * folds them into one turn when history is reloaded
+       * (`foldStrategyTaskTurns`). That fold concatenates every Run's events
+       * into a single stream but can only keep ONE message row, so the first
+       * Run's `createdAt` and the last Run's `endedAt` survive and every
+       * boundary in between is lost. The renderer then has one clock for N
+       * Runs: a Run whose events carry no timestamps of their own (a
+       * clarification Run typically has none, and the plain-stream agent
+       * family never emits any) has no boundary left to fall back on and shows
+       * no duration at all, while a thinking gap — inferred from "last stamped
+       * event until the next one" — runs straight across the boundary and
+       * charges earlier Runs' wall-clock time to the current one.
+       *
+       * `done_key` is already emitted once per Run and is already what the
+       * renderer uses to detect a Run boundary, so the span belongs here: it
+       * travels with the boundary it describes and needs no parallel channel.
+       *
+       * Optional because turns recorded before this existed carry none, and
+       * because a Run that is still in flight has no end yet. An absent boundary
+       * is unknown. Clients may still use timestamps belonging to the same Run,
+       * but MUST NOT substitute a preceding Run's timestamps or the aggregate
+       * folded turn's span for a missing successor-Run boundary. If no own timing
+       * data is available, leave the duration unknown rather than inventing one.
+       */
+      runStartedAt?: number;
+      runEndedAt?: number;
+    }
   /**
    * This turn's follow-up suggestions — the three one-line actions the chat
    * offers under a delivered answer. Parsed by the daemon out of the agent's
@@ -1008,9 +1118,10 @@ export type PersistedAgentEvent =
    *
    * Persisted with the turn's other events so a reloaded conversation shows
    * the same three rows it showed live. Turns recorded before this event
-   * existed have none, and MUST render no next-step row at all — there is no
-   * legacy fallback, because the suggestions are about the specific thing that
-   * turn built and cannot be reconstructed after the fact.
+   * existed have none. Normally no next-step row is rendered; OPEND-2776
+   * permits the UI's three image actions when a successful turn has its own
+   * nonempty image deliverables. That fallback does not manufacture an event
+   * or infer generated images from user attachments or project history.
    */
   | { kind: 'next_steps'; suggestions: string[] }
   /**
@@ -1073,12 +1184,16 @@ export type PersistedAgentEvent =
       input: unknown;
       /** Optional wall-clock ms when the tool first started (e.g. ACP first frame). */
       startedAt?: number;
+      /** See {@link AgentEventPayloadTruncation}. */
+      truncated?: AgentEventPayloadTruncation;
     }
   | {
       kind: 'tool_result';
       toolUseId: string;
       content: string;
       isError: boolean;
+      /** See {@link AgentEventPayloadTruncation}. */
+      truncated?: AgentEventPayloadTruncation;
       /**
        * Wall-clock ms when the call finished. Pairs with `tool_use.startedAt` so the
        * UI can show a per-call duration. Optional on purpose: several adapters emit
@@ -1123,7 +1238,23 @@ export type PersistedAgentEvent =
        *  projection can read a truncation as incomplete after reload (#1247). */
       stopReason?: string;
     }
-  | { kind: 'raw'; line: string };
+  // Per-request token usage for one model request (assistant `message`),
+  // keyed by `requestId` (provider `msg_…` id). Persisted alongside the
+  // run-level `usage` record so request-level cost/percentile analysis has a
+  // durable source; the per-request token sum reconciles with `usage`.
+  | {
+      kind: 'request_usage';
+      requestId: string;
+      inputTokens?: number;
+      outputTokens?: number;
+      cacheCreationInputTokens?: number;
+      cacheReadInputTokens?: number;
+    }
+  /**
+   * A stdout line the agent's parser did not recognise. Nothing renders it; it
+   * is kept as a bounded breadcrumb (`truncated` says when it was shortened).
+   */
+  | { kind: 'raw'; line: string; truncated?: AgentEventPayloadTruncation };
 
 /**
  * What a chat card DRAWS.
@@ -1177,6 +1308,16 @@ export const CHAT_ARTIFACT_SNAPSHOT_STATES = [
 
 export type ChatArtifactSnapshotState = (typeof CHAT_ARTIFACT_SNAPSHOT_STATES)[number];
 
+/** Validated geometry and authored frame time shared by a Motion source/MP4 pair. */
+export interface MotionArtifactPreview {
+  width: number;
+  height: number;
+  duration: number;
+  posterTime: number;
+  sourcePath: string;
+  videoPath: string;
+}
+
 /**
  * One artifact as a chat turn refers to it.
  *
@@ -1198,6 +1339,8 @@ export interface ChatArtifactRef {
   snapshotId?: string;
   /** Static cover for a `latest_with_static_preview` card. */
   thumbnailUrl?: string;
+  /** Frozen composition geometry and authored cover time for video Motion. */
+  motionPreview?: MotionArtifactPreview;
   /** Static cover for an `immutable_snapshot` card. */
   snapshotUrl?: string;
   snapshotState: ChatArtifactSnapshotState;

@@ -682,7 +682,7 @@ export const SafeRunProcessOutcomeV1Schema = z.object({
 export type SafeRunProcessOutcomeV1 = z.infer<typeof SafeRunProcessOutcomeV1Schema>;
 
 export const SafeDeliverableSyntaxFinalizationV1Schema = z.object({
-  action: z.enum(['allow', 'fail']),
+  action: z.enum(['allow', 'warn', 'fail']),
   reason: z.enum(DELIVERABLE_SYNTAX_FINALIZATION_REASONS).optional(),
   refusal: z.enum(DELIVERABLE_SYNTAX_SAFE_FIX_REFUSALS).optional(),
   summaryVersion: z.literal(1).optional(),
@@ -730,6 +730,8 @@ export const SafeDeliverableSyntaxTelemetryV1Schema = z.object({
   ]),
   recoveredDeliveryCount: z.union([z.literal(0), z.literal(1)]),
   blockedBrokenDeliveryCount: z.union([z.literal(0), z.literal(1)]),
+  /** Absent without a complete Host summary and a known physical Run terminal. */
+  deliveredWithSyntaxWarningCount: z.union([z.literal(0), z.literal(1)]).optional(),
 }).strict();
 export type SafeDeliverableSyntaxTelemetryV1 = z.infer<
   typeof SafeDeliverableSyntaxTelemetryV1Schema

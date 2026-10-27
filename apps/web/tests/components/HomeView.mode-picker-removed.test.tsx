@@ -59,7 +59,6 @@ function renderHome(overrides: Partial<React.ComponentProps<typeof HomeView>> = 
         projects={[] as never}
         onSubmit={() => undefined}
         onOpenProject={() => undefined}
-        onViewAllProjects={() => undefined}
         {...overrides}
       />
     </I18nProvider>,

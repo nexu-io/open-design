@@ -9,16 +9,15 @@ import {
 } from '../analytics/events';
 import { useAnalytics } from '../analytics/provider';
 import { useI18n } from '../i18n';
+import { amrPlansUrlForProfile } from '../runtime/amr-guidance';
 import styles from './GoPlanSunsetDialog.module.css';
-
-const GO_PLAN_PRICING_URL =
-  'https://open-design.ai/amr/dashboard?source=open_design&billing=plan';
 
 type DismissElement = 'acknowledge' | 'close';
 
 interface Props {
   active: boolean;
   currentPlanId?: string;
+  profile?: string | null;
   metricsConsent?: boolean;
   onDismiss: (element: DismissElement) => Promise<void>;
 }
@@ -29,6 +28,7 @@ interface Props {
 export function GoPlanSunsetDialog({
   active,
   currentPlanId = 'unknown',
+  profile,
   metricsConsent = false,
   onDismiss,
 }: Props) {
@@ -154,7 +154,7 @@ export function GoPlanSunsetDialog({
       },
     );
     window.open(
-      attributedAmrUrl(GO_PLAN_PRICING_URL, attribution),
+      attributedAmrUrl(amrPlansUrlForProfile(profile), attribution),
       '_blank',
       'noopener,noreferrer',
     );

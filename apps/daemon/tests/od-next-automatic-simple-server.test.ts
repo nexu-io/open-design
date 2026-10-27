@@ -1,22 +1,25 @@
 import type { Server } from 'node:http';
 import { execFile } from 'node:child_process';
-import { chmod, cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { chmod, cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Agent, fetch as undiciFetch } from 'undici';
+import * as contracts from '@open-design/contracts';
 import type {
-  AppliedStrategyBindingV2,
-  OdNextRuntimeCapabilitySnapshotV1,
-  OpenDesignPlanContractV2,
   ProjectScenarioTaskProfile,
 } from '@open-design/contracts';
+
 import {
-  normalizeAgentObservationV1,
-  OD_NEXT_PROMPT_STAGE_CONTRACT_V2,
-  parseOdNextPromptBundleV2,
+  parseOdNextPromptBundleV2
 } from '@open-design/contracts';
+
+// Legacy-chain tests replay tasks carrying the previous frozen output contract.
+// Only the prompt slot differs; parsers, persistence, claims and real server stay real.
+const frozenProtocolFixture = vi.hoisted(() => ({ legacy: false }));
 
 const uuidControl = vi.hoisted(() => ({ forced: [] as string[] }));
 let pendingAutomaticFixtureIdentity: {
@@ -32,25 +35,21 @@ vi.mock('node:crypto', async (importOriginal) => {
   };
 });
 
-import { closeDatabase, openDatabase } from '../src/db.js';
-import { createSnapshot, linkSnapshotToProject } from '../src/plugins/snapshots.js';
+import { closeDatabase, listMessages, openDatabase, upsertMessage } from '../src/db.js';
+import { AGENT_DEFS } from '../src/runtimes/registry.js';
+import type { FrozenSkillPackageV1 } from '../src/strategies/od-next/frozen-skill-package.js';
+import { agentBinEnvKey } from '../src/runtimes/executables.js';
+import { execAgentFile } from '../src/runtimes/invocation.js';
 import {
   getInstalledPlugin,
   resolvePluginFolder,
   upsertInstalledPlugin,
 } from '../src/plugins/registry.js';
-import { createBundledStrategyBindingV2 } from '../src/plugins/strategy-package.js';
-import { startServer, type StartServerOptions } from '../src/server.js';
+import { startServer } from '../src/server.js';
+import * as automaticProduction from '../src/strategies/od-next/automatic-simple-production.js';
 import {
-  createStrategyTaskExecution,
-  getStrategyTaskExecution,
+  getStrategyTaskExecution
 } from '../src/strategies/task-store.js';
-import { strategyTaskCreateIdentityFixture } from './strategies/strategy-task-test-fixtures.js';
-import { prepareStrategyRequest } from '../src/strategies/od-next/coordinator.js';
-import {
-  hashOdNextRuntimeCapabilitySnapshotV1,
-  resolveBundledOdNextRuntimeCapability,
-} from '../src/runtimes/od-next-capability-gate.js';
 
 type StartedServer = {
   url: string;
@@ -58,19 +57,41 @@ type StartedServer = {
   shutdown?: () => Promise<void> | void;
 };
 
+// Each fixture owns its HTTP transport; daemon-internal fetch remains untouched.
+const fixtureHttpClients = new Map<string, { owner: StartedServer; dispatcher: Agent }>();
+const fixtureShutdowns = new WeakMap<StartedServer, Promise<void>>();
+const fixtureAgentBinEnvKeys = [...new Set([
+  ...AGENT_DEFS.map(def => agentBinEnvKey(def.id)).filter((key): key is string => key !== null),
+  'VELA_OPENCODE_BIN',
+])];
+let fixtureDetectionIsolation: Promise<{ root: string; home: string; bin: string }> | null = null;
+let previousDetectionEnv: Record<string, string | undefined> = {};
+
+function fetch(input: Parameters<typeof undiciFetch>[0], init?: Parameters<typeof undiciFetch>[1]) {
+  const origin = new URL(typeof input === 'string' ? input : 'url' in input ? input.url : input.href).origin;
+  const client = fixtureHttpClients.get(origin);
+  if (!client) throw new Error(`No fixture HTTP client owns ${origin}`);
+  return undiciFetch(input, { ...init, dispatcher: client.dispatcher });
+}
+
 type RunStatus = {
   id: string;
   status: string;
   updatedAt: number;
   eventsLogPath: string;
   endedWithUnfinishedWork?: boolean;
+  cancelRequested?: boolean;
   error?: string | null;
   errorCode?: string | null;
+  strategyRolloutDecision?: { effectiveMode: string; reasonCodes: string[] } | null;
   strategyTask?: {
     taskExecutionId: string;
+    runMappings?: Array<{ runId: string; taskRunIndex: number }>;
     inputStage: string;
     outcome: string;
     terminal: boolean;
+    activeRunId?: string;
+    nextRunId?: string;
   };
 };
 
@@ -84,6 +105,7 @@ type Invocation = {
 };
 
 const THREAD_ID = '019fffaa-0000-7000-8000-000000000010';
+const PRODUCTION_FOLLOW_UP_SUGGESTIONS = ['完善落地页的移动端布局', '为演示文稿添加目录页', '统一页面与演示文稿的配色'];
 const execFileP = promisify(execFile);
 const DAEMON_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO_ROOT = path.resolve(DAEMON_ROOT, '../..');
@@ -105,44 +127,6 @@ const EXECUTION_PREFLIGHT = {
   templates: [],
   outputKinds: [{ id: 'prototype', supported: true }],
 };
-const DIRECT_ELIGIBLE = {
-  editableBaselineExists: true,
-  localAndUnambiguous: true,
-  canonicalDeliverableStable: true,
-  deliverableSetStable: true,
-  dependenciesBounded: true,
-};
-const INTAKE_PASSED = {
-  inputRefs: [{ id: 'request', accessible: true }],
-  selectedAgentAvailable: true,
-  nativeContinuation: 'verified' as const,
-  taskProfileAvailable: true,
-  dependencies: [],
-};
-
-function complexCapabilitySnapshot(): OdNextRuntimeCapabilitySnapshotV1 {
-  const withoutHash: Omit<OdNextRuntimeCapabilitySnapshotV1, 'snapshotHash'> = {
-    schema: 'open-design.od-next-runtime-capability-snapshot/v1',
-    runtimePath: 'codex',
-    agentId: 'codex',
-    agentCliVersion: 'synthetic-cli-simulating-fixture/1',
-    runtimeAdapterVersion: 'synthetic-adapter/1',
-    fixtureVersion: 'synthetic-gate/v1',
-    fixtureHash: `sha256:${'d'.repeat(64)}`,
-    nativeSessionContinuation: {
-      support: 'verified', evidenceLevel: 'L0', source: 'sanitized_fixture_replay',
-    },
-    nativeSubagents: {
-      support: 'verified', evidenceLevel: 'L2', source: 'sanitized_fixture_replay',
-    },
-    capturedAt: 100,
-  };
-  return {
-    ...withoutHash,
-    snapshotHash: hashOdNextRuntimeCapabilitySnapshotV1(withoutHash),
-  };
-}
-
 describe('OD Next automatic production through the real server', () => {
   let started: StartedServer | null = null;
   let binDir: string | null = null;
@@ -150,22 +134,169 @@ describe('OD Next automatic production through the real server', () => {
   let previousCodexTransport: string | undefined;
 
   beforeEach(() => {
+    frozenProtocolFixture.legacy = false;
+    const composeHead = contracts.composeOdNextStrategyBundleHeadV2;
+    vi.spyOn(contracts, 'composeOdNextStrategyBundleHeadV2').mockImplementation(input => {
+      const head = composeHead(input);
+      if (frozenProtocolFixture.legacy) head.coreSystemPrompt.outputContract =
+        'Historical V2 output: emit open-design-plan-contract and open-design-runtime-state blocks. Emit exactly one Runtime State block on every response.';
+      return head;
+    });
+    previousDetectionEnv = Object.fromEntries(['PATH', 'OD_AGENT_HOME', ...fixtureAgentBinEnvKeys]
+      .map(key => [key, process.env[key]]));
     previousCodexTransport = process.env.OD_CODEX_TRANSPORT;
     process.env.OD_CODEX_TRANSPORT = 'exec-json';
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     if (previousCodexTransport == null) delete process.env.OD_CODEX_TRANSPORT;
     else process.env.OD_CODEX_TRANSPORT = previousCodexTransport;
     delete process.env.OD_NEXT_STRATEGY_ROLLOUT;
     delete process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY;
     uuidControl.forced.length = 0;
     pendingAutomaticFixtureIdentity = null;
-    await stopServer(started);
-    started = null;
-    closeDatabase();
-    if (binDir) await rm(binDir, { recursive: true, force: true });
-    binDir = null;
+    try {
+      await stopServer(started);
+      started = null;
+      closeDatabase();
+      if (binDir) await rm(binDir, { recursive: true, force: true });
+      binDir = null;
+    } finally {
+      try {
+        const isolation = await fixtureDetectionIsolation;
+        if (isolation) await rm(isolation.root, { recursive: true, force: true });
+      } finally {
+        fixtureDetectionIsolation = null;
+        for (const [key, value] of Object.entries(previousDetectionEnv)) {
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
+      }
+    }
+  });
+
+  it.each([
+    ['public', 'models'], ['public', 'auth'],
+    ['strategy', 'models'], ['strategy', 'auth'],
+  ] as const)('%s Codex fixture answers %s probes without stdin or a generation', async (kind, probe) => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-next-codex-probes-'));
+    const fixture = kind === 'public'
+      ? await writePublicRolloutCodex(binDir, 'probe-metadata')
+      : await writeStrategyCodex(binDir);
+    const def = AGENT_DEFS.find(agent => agent.id === 'codex')!;
+    const probeDefinition = probe === 'models' ? def.listModels! : def.authProbe!;
+    // Use the real probe launcher: stdin stays open, as it does during detection.
+    // The timeout is only a failure bound; successful probes exit on their own.
+    const { stdout } = await execAgentFile(fixture.bin, probeDefinition.args, {
+      cwd: binDir,
+      timeout: probeDefinition.timeoutMs,
+    });
+    if (probe === 'models') {
+      expect(def.listModels!.parse(String(stdout))).toContainEqual({ id: 'gpt-5.5', label: 'gpt-5.5' });
+    } else {
+      expect(stdout).toContain('Logged in using ChatGPT');
+    }
+    await expect(readFile(fixture.logPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('isolates host CLI probes while retaining real selected Codex detection and preflight', async () => {
+    const hostRoot = await mkdtemp(path.join(os.tmpdir(), 'od-next-controlled-host-'));
+    const hostBinDir = path.join(hostRoot, 'bin');
+    const hostHome = path.join(hostRoot, 'home');
+    const hostLog = path.join(hostRoot, 'host-probes.jsonl');
+    const selectedLog = path.join(hostRoot, 'selected-probes.jsonl');
+    const previous = { PATH: process.env.PATH, OD_AGENT_HOME: process.env.OD_AGENT_HOME,
+      AIDER_BIN: process.env.AIDER_BIN };
+    await mkdir(hostBinDir);
+    await mkdir(hostHome);
+    await writeFile(hostLog, '');
+    await writeFile(selectedLog, '');
+    await symlink(process.execPath, path.join(hostBinDir, 'node'));
+    const sentinel = path.join(hostBinDir, 'aider');
+    await writeFile(sentinel, `#!/usr/bin/env node
+const fs = require('node:fs');
+fs.appendFileSync(${JSON.stringify(hostLog)}, JSON.stringify(process.argv.slice(2)) + '\\n');
+console.log('aider 0.86.0');
+`, 'utf8');
+    await chmod(sentinel, 0o755);
+    // A controlled host candidate, not the developer's real CLI. Fixture
+    // isolation must fence both PATH discovery and inherited explicit overrides.
+    process.env.PATH = [hostBinDir, '/usr/bin', '/bin', '/usr/sbin', '/sbin'].join(path.delimiter);
+    process.env.OD_AGENT_HOME = hostHome;
+    process.env.AIDER_BIN = sentinel;
+    try {
+      const fixture = await createFixture('repair', { probeLogPath: selectedLog });
+      const selectedBin = path.join(path.dirname(fixture.logPath), 'codex-repair');
+      // Empty fixture-only API-key entries ensure the actual login-status
+      // probe is observed instead of relying on any inherited authenticated env.
+      const config = await fetch(`${started!.url}/api/app-config`, {
+        method: 'PUT', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ agentId: 'codex', agentCliEnv: { codex: {
+          CODEX_BIN: selectedBin, CODEX_HOME: path.dirname(selectedBin),
+          CODEX_API_KEY: '', OPENAI_API_KEY: '',
+        } } }),
+      });
+      expect(config.status).toBe(200);
+      const detected = await fetch(`${started!.url}/api/agents`);
+      expect(detected.status).toBe(200);
+      const available = await detected.json() as { agents: Array<{ id: string; available: boolean }> };
+      expect(available.agents.find(agent => agent.id === 'codex')?.available).toBe(true);
+      const probes = (await readFile(selectedLog, 'utf8')).trim().split('\n')
+        .filter(Boolean).map(line => JSON.parse(line) as string[]);
+      expect(probes).toContainEqual(['--version']);
+      // Codex declares listModels/authProbe but no helpArgs/capabilityFlags;
+      // probeCapabilities therefore returns without invoking --help.
+      expect(probes).toContainEqual(['debug', 'models']);
+      expect(probes).toContainEqual(['login', 'status']);
+
+      queueFixtureIds(fixture);
+      await postRun(started!.url, createRunRequest(fixture, 'Build the operator prototype.'));
+      const task = await waitForTask(fixture.taskExecutionId, 'completed');
+      await waitForRunTerminal(started!.url, task.latestRunId);
+
+      const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
+      expect(invocations.some(call => call.stdin.includes('This is the production turn'))).toBe(true);
+
+      // A real non-invocable selected executable must still become unavailable.
+      // Exit 127 is the supported stale-wrapper signal, unlike generic exit 1.
+      await writeFile(selectedBin, `#!/usr/bin/env node
+require('node:fs').appendFileSync(${JSON.stringify(selectedLog)}, JSON.stringify(process.argv.slice(2)) + '\\n');
+process.exit(127);
+`, 'utf8');
+      const probeCount = (await readFile(selectedLog, 'utf8')).trim().split('\n').length;
+      const brokenResponse = await fetch(`${started!.url}/api/agents`);
+      expect(brokenResponse.status).toBe(200);
+      const broken = await brokenResponse.json() as { agents: Array<{ id: string; available: boolean }> };
+      expect(broken.agents.find(agent => agent.id === 'codex')?.available).toBe(false);
+      const afterFailure = (await readFile(selectedLog, 'utf8')).trim().split('\n')
+        .filter(Boolean).map(line => JSON.parse(line) as string[]);
+      expect(afterFailure.length).toBeGreaterThan(probeCount);
+      expect(afterFailure.slice(probeCount)).toContainEqual(['--version']);
+      // This is the expected red anchor on the unisolated fixture. All selected
+      // runtime assertions above must pass before this boundary can be green.
+      const hostProbes = (await readFile(hostLog, 'utf8')).trim().split('\n').filter(Boolean);
+      expect(hostProbes).toEqual([]);
+    } finally {
+      await stopServer(started);
+      started = null;
+      // Keep the probe-only evidence in the Vitest log before removing owned
+      // fixture files, including when a prerequisite assertion fails.
+      const probeEvidence = await Promise.all([selectedLog, hostLog].map(async file => {
+        try {
+          return (await readFile(file, 'utf8')).trim().split('\n').filter(Boolean)
+            .map(line => JSON.parse(line) as string[]);
+        } catch { return null; }
+      }));
+      console.info('[2623-probe-evidence]', JSON.stringify({
+        selected: probeEvidence[0], controlledHost: probeEvidence[1],
+      }));
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      await rm(hostRoot, { recursive: true, force: true });
+    }
   });
 
   it('keeps off/observe public POST behavior ordinary and idempotent with zero strategy tasks', async () => {
@@ -197,7 +328,7 @@ describe('OD Next automatic production through the real server', () => {
     const replayed = await postRun(started!.url, body);
     expect(replayed).toMatchObject({ runId: created.runId, reused: true });
     expect(replayed.strategyTask).toBeUndefined();
-    expect((database().prepare('SELECT COUNT(*) AS count FROM strategy_task_executions').get() as { count: number }).count)
+    expect((database().prepare('SELECT COUNT(*) AS count FROM strategy_task_executions WHERE project_id = ?').get(fixture.projectId) as { count: number }).count)
       .toBe(0);
     const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
     expect(invocations).toHaveLength(1);
@@ -496,14 +627,584 @@ describe('OD Next automatic production through the real server', () => {
     }
   });
 
-  // ACCEPTANCE for the opt-out switch. Nothing configured takes the OD Next
-  // route — that is the default this build ships. The SAME running daemon
-  // takes the ordinary route on the next run once `odNextStrategyMode: 'off'`
-  // is saved through the public app-config API. No restart, no environment
-  // variable — that is what "configure it and it takes effect" has to mean for
-  // a packaged install, where the saved mode is the only control a user has:
-  // the packaged child environment allowlist carries no `OD_NEXT_*` key.
-  it('runs OD Next by default and leaves it on the next run once the installation opts out', async () => {
+  it('runs an unregistered non-resume Qoder through public cold production and follow-ups', async () => {
+    delete process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY;
+    const fixture = await createPublicRolloutFixture('qoder-cold', 'design');
+    started = fixture.started; binDir = fixture.binDir;
+    const qoder = await writePublicQoder(binDir);
+    const configured = await fetch(`${started.url}/api/app-config`, {
+      method: 'PUT', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ agentId: 'qoder', agentCliEnv: { qoder: { QODER_BIN: qoder.bin } }, odNextStrategyMode: 'active' }),
+    });
+    expect(configured.status).toBe(200);
+    expect(AGENT_DEFS.find(agent => agent.id === 'qoder')?.streamFormat).toBe('qoder-stream-json');
+    const uploaded = await fetch(`${started.url}/api/projects/${fixture.projectId}/files`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'brief.txt', content: 'QODER_ATTACHMENT_SENTINEL' }),
+    });
+    expect(uploaded.status).toBe(200);
+    const created = await postRun(started.url, {
+      ...publicRunRequest(fixture, 'Build the QODER_ORIGINAL_REQUEST page.', 'qoder-first'),
+      agentId: 'qoder', attachments: ['brief.txt'],
+    });
+    expect(created.strategyTask, JSON.stringify(created)).toBeDefined();
+    const task = await waitForTask(created.strategyTask!.taskExecutionId, 'completed');
+    expect(task.runs.map(run => run.inputStage)).toEqual(['request', 'production']);
+    const production = await waitForRunTerminal(started.url, task.latestRunId);
+    expect(production).toMatchObject({ status: 'succeeded', strategyRolloutDecision: { effectiveMode: 'active' } });
+    const invocations = await readProjectInvocations(qoder.logPath, fixture.projectId);
+    expect(invocations).toHaveLength(2);
+    expect(invocations[1]!.stdin).toContain('QODER_ORIGINAL_REQUEST');
+    expect(invocations[1]!.stdin).toContain('QODER_PLAN_SENTINEL');
+    expect(invocations[1]!.stdin).toContain('This is the production turn');
+    // Frozen attachments use task-input references rather than source names.
+    expect(invocations[1]!.stdin).toContain('task-input:attachments/attachment-001.txt');
+    expect(invocations[1]!.taskInputFiles).toEqual(expect.arrayContaining([
+      { name: 'attachment-001.txt', content: 'QODER_ATTACHMENT_SENTINEL' },
+    ]));
+    const events = await readFile(production.eventsLogPath, 'utf8');
+    expect(events).toContain('strategy_production_transport');
+    expect(events).toContain('cold_start');
+    const file = await fetch(`${started.url}/api/projects/${fixture.projectId}/files/index.html`);
+    expect(file.status).toBe(200);
+    expect(await file.text()).toContain('Qoder delivered');
+
+    const followup = await postRun(started.url, { ...publicRunRequest(fixture, 'Refine the page.', 'qoder-followup'), agentId: 'qoder' });
+    expect((await waitForRunTerminal(started.url, followup.runId as string)).status).toBe('succeeded');
+    const question = await postRun(started.url, { ...publicRunRequest(fixture, 'Ask for audience.', 'qoder-question'), agentId: 'qoder' });
+    const asked = await waitForTask(question.strategyTask!.taskExecutionId, 'completed');
+    expect(asked.runs[0]!.settlementReason).toBe('question');
+    const answer = await postRun(started.url, {
+      ...publicRunRequest(fixture, 'Audience: designers.', 'qoder-answer'),
+      agentId: 'qoder', taskExecutionId: asked.taskExecutionId,
+    });
+    expect((await waitForRunTerminal(started.url, answer.runId as string)).status).toBe('succeeded');
+    const all = await readProjectInvocations(qoder.logPath, fixture.projectId);
+    expect(all).toHaveLength(5);
+    expect(all.every(invocation => !invocation.argv.includes('resume'))).toBe(true);
+    expect(all.at(-1)!.stdin).toContain('Audience: designers.');
+  }, 30_000);
+
+  it.each(['JSON indentation', 'JSON key order', 'Base64 padding'] as const)(
+    'loads a mapped production Run after equivalent frozen Skill %s changes', async (representation) => {
+    delete process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY;
+    const caseId = representation.toLowerCase().replaceAll(' ', '-');
+    const fixture = await createPublicRolloutFixture('marker-frozen-representation', 'design');
+    started = fixture.started; binDir = fixture.binDir;
+    const skillDir = path.join(process.env.OD_DATA_DIR!, 'skills', 'representation-skill');
+    await mkdir(path.join(skillDir, 'references'), { recursive: true });
+    await writeFile(path.join(skillDir, 'references', 'guide.md'), 'frozen guide\n');
+    await writeFile(path.join(skillDir, 'SKILL.md'), '---\nname: representation-skill\ndescription: fixture\n---\n# FROZEN_BODY_SENTINEL\nRead references/guide.md before production.');
+    const created = await postRun(started.url, {
+      ...publicRunRequest(fixture, 'Build using the selected frozen Skill.', `frozen-${caseId}-first`),
+      skillIds: ['representation-skill'],
+    });
+    expect(created.strategyTask, JSON.stringify(created)).toBeDefined();
+    await waitForInvocationCount(fixture.logPath, fixture.projectId, 1);
+    const row = database().prepare(
+      'SELECT payload_json AS payload FROM strategy_task_frozen_skill_packages WHERE task_execution_id = ?',
+    ).get(created.strategyTask!.taskExecutionId) as { payload: string };
+    const frozen: FrozenSkillPackageV1 = JSON.parse(row.payload);
+    let payload = JSON.stringify(frozen, null, 2);
+    if (representation === 'JSON key order') {
+      payload = JSON.stringify({ selections: frozen.selections, schema: frozen.schema, identity: frozen.identity });
+    } else if (representation === 'Base64 padding') {
+      const file = frozen.selections[0]!.files[0]!;
+      const unpadded = file.bytesBase64.replace(/=+$/, '');
+      expect(unpadded).not.toBe(file.bytesBase64);
+      file.bytesBase64 = unpadded;
+      payload = JSON.stringify(frozen);
+    }
+    database().prepare(
+      'UPDATE strategy_task_frozen_skill_packages SET payload_json = ? WHERE task_execution_id = ?',
+    ).run(payload, created.strategyTask!.taskExecutionId);
+    await writeFile(`${fixture.logPath}.release`, 'continue');
+    const task = await waitForTask(created.strategyTask!.taskExecutionId, 'completed');
+    expect(task.runs.map(run => run.inputStage)).toEqual(['request', 'production']);
+    const production = await waitForRunTerminal(started.url, task.latestRunId);
+    expect(production).toMatchObject({ status: 'succeeded', errorCode: null });
+    expect(task.frozenSkillPackage?.selections[0]?.body).toContain('FROZEN_BODY_SENTINEL');
+    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(2);
+    const file = await fetch(`${started.url}/api/projects/${fixture.projectId}/files/index.html`);
+    expect(file.status).toBe(200);
+    expect(await file.text()).toContain('Frozen Skill delivered');
+    const next = await postRun(started.url, publicRunRequest(fixture, 'Continue refining.', `frozen-${caseId}-followup`));
+    expect((await waitForRunTerminal(started.url, next.runId as string)).status).toBe('succeeded');
+  }, 30_000);
+
+  it('Discovery resumes Codex once and delivers multiple real files without the default canonical entry', async () => {
+    const fixture = await createPublicRolloutFixture('marker-production', 'design');
+    await verifyProductionHostProtocol(fixture, 'marker-production');
+  });
+
+  it('marker protocol persists production follow-up suggestions with the current run key', async () => {
+    const fixture = await createPublicRolloutFixture('marker-production-suggestions', 'design');
+    await verifyProductionHostProtocol(fixture, 'marker-production-suggestions');
+  });
+
+  async function verifyProductionHostProtocol(
+    fixture: Awaited<ReturnType<typeof createPublicRolloutFixture>>,
+    label: string,
+  ) {
+    const prepareContinuation = automaticProduction.prepareAutomaticStrategyContinuation;
+    let repeatPreparation: (() => ReturnType<typeof prepareContinuation>) | undefined;
+    vi.spyOn(automaticProduction, 'prepareAutomaticStrategyContinuation').mockImplementation(input => {
+      const first = prepareContinuation(input);
+      if (first.start) {
+        // Replay the real server callback after delivery: invoking createMeta
+        // again before start would overwrite its pending chat body. A fresh
+        // host nonce must still reuse the original physical Run and prompt.
+        repeatPreparation = () => prepareContinuation(input);
+      }
+      return first;
+    });
+    started = fixture.started; binDir = fixture.binDir;
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    const created = await postRun(started.url, publicRunRequest(fixture, 'Create a landing page and a presentation.', label));
+    const request = await waitForRunTerminal(started.url, created.runId as string);
+    expect(request.status, JSON.stringify(request)).toBe('succeeded');
+    const task = await waitForTask(created.strategyTask!.taskExecutionId, 'completed');
+    expect(task.runs).toHaveLength(2);
+    expect(task.planContract).toBeUndefined();
+    const production = await waitForRunTerminal(started.url, task.latestRunId);
+    expect(production.status).toBe('succeeded');
+    // Discovery validates the current run's independent output candidates;
+    // the homepage's default index.html is not required for this delivery.
+    expect(production.strategyTask).toMatchObject({ outcome: 'completed', terminal: true, deliverableValid: true });
+    expect(repeatPreparation).toBeTypeOf('function');
+    const repeated = repeatPreparation!();
+    expect(repeated.start).toBe(false);
+    expect(repeated.prepared?.kind).toBe('reused');
+    expect(repeated.prepared?.run.id).toBe(task.latestRunId);
+    const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
+    expect(invocations).toHaveLength(2);
+    expect(invocations[1]!.argv).toContain('resume');
+    expect(invocations[1]!.stdin).toContain('This is the production turn');
+    expect(invocations[1]!.stdin).not.toContain('planContractHash=');
+    const events = (await readFile(production.eventsLogPath, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+    const doneKeys = events.filter(event => event.event === 'agent' && event.data?.type === 'done_key');
+    expect(doneKeys).toHaveLength(1);
+    const productionKey = doneKeys[0]!.data.key;
+    expect(productionKey).toMatch(/^[a-f0-9]{16}$/);
+    expect(invocations[1]!.stdin).toContain(`<od-done key="${productionKey}"/>`);
+    expect(invocations[1]!.stdin).toContain(`<od-next key="${productionKey}" value=`);
+    expect(invocations[1]!.stdin).toContain(`<od-focus key="${productionKey}"`);
+    const suggestionsExpected = label === 'marker-production-suggestions';
+    const suggestions = events.filter(event => event.event === 'agent' && event.data?.type === 'next_steps');
+    // Suggestions are optional display hints, not a completion requirement.
+    expect(suggestions.map(event => event.data.suggestions)).toEqual(suggestionsExpected ? [PRODUCTION_FOLLOW_UP_SUGGESTIONS] : []);
+    const visibleText = events
+      .filter(event => event.event === 'agent' && event.data?.type === 'text_delta')
+      .map(event => event.data.delta).join('');
+    expect(visibleText).not.toContain('<od-next');
+    expect(await readFile(path.join(invocations[1]!.cwd, 'landing.html'), 'utf8')).toContain('Landing');
+    expect(await readFile(path.join(invocations[1]!.cwd, 'deck.html'), 'utf8')).toContain('Deck');
+    await expect(readFile(path.join(invocations[1]!.cwd, 'index.html'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+    const response = await fetch(`${started.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`);
+    const history = await response.json() as {
+      messages: Array<{ content: string; strategyTaskDelivered?: boolean; events?: Array<{ kind: string; suggestions?: string[] }> }>;
+    };
+    expect(JSON.stringify(history)).not.toContain('od-production-ready');
+    expect(JSON.stringify(history)).not.toContain('<od-next');
+    const persistedSuggestions = history.messages.flatMap(message => (message.events ?? [])
+      .filter(event => event.kind === 'next_steps').map(event => event.suggestions));
+    expect(persistedSuggestions).toEqual(suggestionsExpected ? [PRODUCTION_FOLLOW_UP_SUGGESTIONS] : []);
+    expect(history.messages.some(message => message.strategyTaskDelivered)).toBe(true);
+  }
+
+  it.each(['missing-session', 'expired-session'] as const)('marker production cold-starts with its plan when %s', async mode => {
+    const fixture = await createPublicRolloutFixture(`marker-${mode}`, 'design');
+    started = fixture.started; binDir = fixture.binDir;
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    const created = await postRun(started.url, publicRunRequest(fixture, 'Create a landing page and a presentation.', `cold-${mode}`));
+    const request = await waitForRunTerminal(started.url, created.runId as string);
+    expect(request.status).toBe('succeeded');
+    const task = getStrategyTaskExecution(database(), created.strategyTask!.taskExecutionId)!;
+    expect(task.runs).toHaveLength(2);
+    const production = await waitForRunTerminal(started.url, task.latestRunId);
+    expect(production.status, JSON.stringify(production)).toBe('succeeded');
+    const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
+    expect(invocations).toHaveLength(mode === 'expired-session' ? 3 : 2);
+    const cold = invocations.at(-1)!;
+    expect(cold.argv).not.toContain('resume');
+    expect(cold.stdin).toContain('open_design_prompt_bundle');
+    expect(cold.stdin).toContain('Create a landing page and a presentation.');
+    expect(cold.stdin).toContain('Plan: create a landing page and a matching deck.');
+    expect(cold.stdin).toContain('This is the production turn');
+    expect(cold.stdin).not.toContain('Plan-to-production continuation:');
+    const events = (await readFile(production.eventsLogPath, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+    const transports = events.filter(event => event.data?.type === 'strategy_production_transport').map(event => event.data.transport);
+    expect(transports).toEqual(mode === 'expired-session' ? ['resume', 'cold_start'] : ['cold_start']);
+    expect(await readFile(path.join(cold.cwd, 'landing.html'), 'utf8')).toContain('Landing');
+    const settled = getStrategyTaskExecution(database(), task.taskExecutionId)!;
+    expect(settled.outcome).toBe('completed');
+    expect(settled.runs[0]?.settlementReason).toBe('continued');
+    expect(settled.runs).toHaveLength(2);
+  });
+
+  it('does not cold-replay production after a tool ran before resume failure', async () => {
+    const fixture = await createPublicRolloutFixture('marker-expired-side-effect', 'design');
+    started = fixture.started; binDir = fixture.binDir;
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    const created = await postRun(started.url, publicRunRequest(fixture, 'Create a landing page and a presentation.', 'unsafe-cold'));
+    await waitForRunTerminal(started.url, created.runId as string);
+    const task = getStrategyTaskExecution(database(), created.strategyTask!.taskExecutionId)!;
+    const production = await waitForRunTerminal(started.url, task.latestRunId);
+    expect(production.status).toBe('failed');
+    expect(production.strategyTask).toMatchObject({ outcome: 'completed', settlementReason: 'ended', settlementFacts: { physicalStatus: 'failed' } });
+    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(2);
+  });
+
+  it('marker protocol delivers an independent image while preserving an existing prototype page', async () => {
+    const fixture = await createPublicRolloutFixture('marker-image', 'design');
+    started = fixture.started; binDir = fixture.binDir;
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    const projectRoot = path.join(process.env.OD_DATA_DIR!, 'projects', fixture.projectId);
+    await mkdir(projectRoot, { recursive: true });
+    const existingPage = '<!doctype html><html><body>Existing page</body></html>';
+    await writeFile(path.join(projectRoot, 'index.html'), existingPage);
+    const created = await postRun(started.url, publicRunRequest(fixture, '帮我生成一个狗狗大作战的图片，只出图片。', 'marker-image'));
+    await waitForRunTerminal(started.url, created.runId as string);
+    const task = await waitForTask(created.strategyTask!.taskExecutionId, 'completed');
+    expect(task.runs).toHaveLength(2);
+    const production = await waitForRunTerminal(started.url, task.latestRunId);
+    expect(production.status).toBe('succeeded');
+    expect(production.strategyTask).toMatchObject({ outcome: 'completed', deliverableValid: true });
+    const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
+    expect(invocations).toHaveLength(2);
+    expect(invocations[0]!.stdin).not.toContain('allowedProductionRoutes');
+    expect(invocations[0]!.stdin).not.toContain('supportedOutputKinds');
+    expect(invocations[1]!.stdin).toContain('Drop any unrequested wrapper');
+    expect(invocations[1]!.argv).toContain('resume');
+    expect(await readFile(path.join(projectRoot, 'index.html'), 'utf8')).toBe(existingPage);
+    expect((await readFile(path.join(projectRoot, 'dog.png'))).length).toBeGreaterThan(0);
+    const response = await fetch(`${started.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`);
+    const history = await response.json() as { messages: Array<{ strategyTaskDelivered?: boolean }> };
+    expect(history.messages.some(message => message.strategyTaskDelivered)).toBe(true);
+  });
+
+  it('marker protocol accepts repeated form answers as new tasks without the one-question gate', async () => {
+    const fixture = await createPublicRolloutFixture('marker-question', 'design');
+    started = fixture.started; binDir = fixture.binDir;
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    const first = await postRun(started.url, publicRunRequest(fixture, 'Make a design.', 'marker-question-first'));
+    await waitForRunTerminal(started.url, first.runId as string);
+    const settled = await waitForTask(first.strategyTask!.taskExecutionId, 'completed');
+    const second = await postRun(started.url, {
+      ...publicRunRequest(fixture, 'Here is the requested context.', 'marker-question-second'),
+      taskExecutionId: settled.taskExecutionId,
+    });
+    expect(second.runId).toBeTruthy();
+    expect(second.strategyTask!.taskExecutionId).not.toBe(settled.taskExecutionId);
+    expect((await waitForRunTerminal(started.url, second.runId as string)).status).toBe('succeeded');
+    const next = await waitForTask(second.strategyTask!.taskExecutionId, 'completed');
+    expect(next.runs).toHaveLength(1);
+  });
+
+  it('carries a form answer through a new plan into automatic production', async () => {
+    const fixture = await createPublicRolloutFixture('marker-question-plan', 'design');
+    started = fixture.started; binDir = fixture.binDir;
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    const first = await postRun(started.url, publicRunRequest(fixture, 'Make a landing page for our product.', 'answer-first'));
+    await waitForRunTerminal(started.url, first.runId as string);
+    const asked = await waitForTask(first.strategyTask!.taskExecutionId, 'completed');
+    expect(asked.runs).toHaveLength(1);
+    expect(asked.runs[0]!.settlementReason).toBe('question');
+    const answer = await postRun(started.url, {
+      ...publicRunRequest(fixture, 'Audience: developers.', 'answer-second'),
+      taskExecutionId: asked.taskExecutionId,
+    });
+    expect(answer.strategyTask!.taskExecutionId).not.toBe(asked.taskExecutionId);
+    const task = await waitForTask(answer.strategyTask!.taskExecutionId, 'completed');
+    expect(task.continuedFromTaskExecutionId).toBe(asked.taskExecutionId);
+    expect(task.runs).toHaveLength(2);
+    expect(task.runs[0]!.settlementReason).toBe('continued');
+    expect(task.runs[1]!.inputStage).toBe('production');
+    expect((await waitForRunTerminal(started.url, task.latestRunId)).status).toBe('succeeded');
+    const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
+    expect(invocations).toHaveLength(3);
+    expect(invocations[1]!.stdin).toContain('Audience: developers.');
+    expect(invocations[2]!.stdin).toContain('This is the production turn');
+    expect(await readFile(path.join(invocations[2]!.cwd, 'index.html'), 'utf8')).toContain('Developer landing');
+  }, 45_000);
+
+  it('continues once when a tool call separates the plan from its production marker', async () => {
+    const fixture = await createPublicRolloutFixture('marker-tool-split', 'design');
+    started = fixture.started; binDir = fixture.binDir;
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    const created = await postRun(started.url, publicRunRequest(fixture, 'Create a landing page and a presentation.', 'tool-split'));
+    const request = await waitForRunTerminal(started.url, created.runId as string);
+    expect(request.status, JSON.stringify(request)).toBe('succeeded');
+    const task = await waitForTask(created.strategyTask!.taskExecutionId, 'completed');
+    expect(task.runs).toHaveLength(2);
+    expect(task.runs[0]!.settlementReason).toBe('continued');
+    expect((await waitForRunTerminal(started.url, task.latestRunId)).status).toBe('succeeded');
+    const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
+    expect(invocations).toHaveLength(2);
+    expect(await readFile(path.join(invocations[1]!.cwd, 'landing.html'), 'utf8')).toContain('Landing');
+    const response = await fetch(`${started.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`);
+    const history = await response.json() as { messages: Array<{ content?: string }> };
+    expect(JSON.stringify(history)).not.toContain('od-production-ready');
+    expect(history.messages.some(message => message.content?.includes('Plan: create a landing page and a matching deck.'))).toBe(true);
+  });
+
+  it('points the planning end at its production run so od run watch follows the task', async () => {
+    const fixture = await createPublicRolloutFixture('marker-production', 'design');
+    started = fixture.started; binDir = fixture.binDir;
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    const created = await postRun(started.url, publicRunRequest(fixture, 'Create a landing page and a presentation.', 'watch-follow'));
+    const task = await waitForTask(created.strategyTask!.taskExecutionId, 'completed');
+    const planningRunId = created.runId as string;
+    const productionRunId = task.latestRunId;
+    expect(productionRunId).not.toBe(planningRunId);
+    await waitForRunTerminal(started.url, productionRunId);
+    const { stdout } = await runOdCli(['run', 'watch', planningRunId, '--daemon-url', started.url]);
+    const frames = stdout.trim().split('\n').map(line => JSON.parse(line) as {
+      event: string;
+      data: { strategyTask?: NonNullable<RunStatus['strategyTask']> };
+    });
+    const ends = frames.filter(frame => frame.event === 'end');
+    expect(ends).toHaveLength(2);
+    expect(ends[0]!.data.strategyTask).toMatchObject({ terminal: false, nextRunId: productionRunId });
+    expect(ends[0]!.data.strategyTask?.runMappings).toContainEqual({ runId: productionRunId, taskRunIndex: 1 });
+    expect(ends[1]!.data.strategyTask).toMatchObject({ terminal: true, outcome: 'completed' });
+    expect(stdout).not.toContain('od-production-ready');
+  }, 45_000);
+
+  it.each(['active', 'off'] as const)(
+    'starts a new turn instead of failing every message when the previous task is unreadable (rollout %s)', async mode => {
+      const fixture = await createPublicRolloutFixture('marker-unreadable', 'design');
+      started = fixture.started; binDir = fixture.binDir;
+      process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+      const first = await postRun(started.url, publicRunRequest(fixture, 'Create a landing page.', `unreadable-first-${mode}`));
+      const old = await waitForTask(first.strategyTask!.taskExecutionId, 'completed');
+      await waitForRunTerminal(started.url, old.latestRunId);
+      writeStalePromptBundle(old.taskExecutionId, old.initialRunId);
+      expect(() => getStrategyTaskExecution(database(), old.taskExecutionId)).toThrow();
+      if (mode === 'off') process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
+      const warn = vi.spyOn(console, 'warn');
+      const next = await postRun(started.url, publicRunRequest(fixture, 'Now make a pricing page.', `unreadable-next-${mode}`));
+      expect((await waitForRunTerminal(started.url, next.runId as string)).status).toBe('succeeded');
+      expect(warn).toHaveBeenCalledWith('[od-next-task] previous task unreadable; follow-up starts a new task',
+        expect.objectContaining({ runId: expect.any(String) }));
+      if (mode === 'off') {
+        expect(next.strategyTask).toBeUndefined();
+        return;
+      }
+      const task = await waitForTask(next.strategyTask!.taskExecutionId, 'completed');
+      expect(task.taskExecutionId).not.toBe(old.taskExecutionId);
+      expect(task.continuedFromTaskExecutionId).toBeUndefined();
+    }, 45_000);
+
+  it('accepts a message sent while the stopped Run is still draining', async () => {
+    const fixture = await createPublicRolloutFixture('marker-handoff', 'design');
+    started = fixture.started; binDir = fixture.binDir;
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    const first = await postRun(started.url, publicRunRequest(fixture,
+      'Hold the run open and drain slowly after a stop.', 'draining-first'));
+    const firstRunId = first.runId as string;
+    await vi.waitFor(async () => expect((await getRun(started!.url, firstRunId)).status).toBe('running'));
+    // A running registry entry precedes child initialization. Wait for the
+    // fixture's installed SIGTERM handler before testing its drain window.
+    await vi.waitFor(async () => {
+      expect(await readFile(fixture.logPath, 'utf8')).toContain('\"drainReady\":true');
+    });
+    const stopping = fetch(`${started.url}/api/runs/${encodeURIComponent(firstRunId)}/cancel`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
+    });
+    await vi.waitFor(async () => expect(await getRun(started!.url, firstRunId))
+      .toMatchObject({ status: 'running', cancelRequested: true }));
+    const next = await postRun(started.url, publicRunRequest(fixture, 'Continue and create the dog battle page.', 'draining-next'));
+    expect(next.strategyTask!.taskExecutionId).not.toBe(first.strategyTask!.taskExecutionId);
+    expect((await stopping).status).toBe(200);
+    expect((await waitForRunTerminal(started.url, firstRunId)).status).toBe('canceled');
+    expect((await waitForRunTerminal(started.url, next.runId as string)).status).toBe('succeeded');
+    const task = await waitForTask(next.strategyTask!.taskExecutionId, 'completed');
+    expect(task.continuedFromTaskExecutionId).toBe(first.strategyTask!.taskExecutionId);
+  }, 45_000);
+
+  it('resumes current marker conversations with only the current request and host directives', async () => {
+    const fixture = await createPublicRolloutFixture('marker-question', 'design');
+    started = fixture.started; binDir = fixture.binDir;
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    const first = await postRun(started.url, publicRunRequest(fixture, 'Original request sentinel.', 'resume-first'));
+    await waitForRunTerminal(started.url, first.runId as string);
+    await waitForTask(first.strategyTask!.taskExecutionId, 'completed');
+    const second = await postRun(started.url, publicRunRequest(fixture, 'Current request sentinel.', 'resume-second'));
+    expect((await waitForRunTerminal(started.url, second.runId as string)).status).toBe('succeeded');
+    const calls = await readProjectInvocations(fixture.logPath, fixture.projectId);
+    expect(calls).toHaveLength(2);
+    expect(calls[1]!.argv).toContain('resume');
+    expect(calls[1]!.stdin).toContain('Current request sentinel.');
+    expect(calls[1]!.stdin).toContain('<od-production-ready key=');
+    expect(calls[1]!.stdin).not.toContain('Original request sentinel.');
+    expect(calls[1]!.stdin).not.toContain('<open_design_core_system_prompt>');
+    expect(calls[1]!.stdin).not.toContain('<session_skills>');
+    expect(calls[1]!.stdin).not.toContain('## Runtime tool environment');
+    expect(calls[1]!.stdin).not.toContain('capabilitySnapshotHash');
+    expect(calls[1]!.stdin).not.toContain('open_design_request_turn');
+    expect(calls[1]!.stdin.length).toBeLessThan(calls[0]!.stdin.length);
+    const firstKey = /<od-production-ready key="([a-f0-9]+)"/.exec(calls[0]!.stdin)?.[1];
+    expect(calls[1]!.stdin).not.toContain(firstKey!);
+  }, 45_000);
+
+  it('automatically produces again after a resumed request with its new marker key', async () => {
+    const fixture = await createPublicRolloutFixture('marker-production', 'design');
+    started = fixture.started; binDir = fixture.binDir;
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    const first = await postRun(started.url, publicRunRequest(fixture, 'Make a landing page.', 'repeat-first'));
+    await waitForTask(first.strategyTask!.taskExecutionId, 'completed');
+    const second = await postRun(started.url, publicRunRequest(fixture, 'Design another site from scratch.', 'repeat-second'));
+    const task = await waitForTask(second.strategyTask!.taskExecutionId, 'completed');
+    expect(task.runs).toHaveLength(2);
+    expect(task.runs[0]!.settlementReason).toBe('continued');
+    expect(task.runs[1]!.inputStage).toBe('production');
+    expect(task.runs[0]!.resumeFinalText).toBeDefined();
+    const calls = await readProjectInvocations(fixture.logPath, fixture.projectId);
+    expect(calls).toHaveLength(4);
+    expect(calls[2]!.argv).toContain('resume');
+    expect(calls[2]!.stdin).not.toContain('<session_skills>');
+    expect(calls[3]!.argv).toContain('resume');
+    expect(calls[3]!.stdin).toContain('This is the production turn');
+  }, 45_000);
+
+  it('re-sends changed stable instructions while retaining a current native session', async () => {
+    const fixture = await createPublicRolloutFixture('marker-question', 'design');
+    started = fixture.started; binDir = fixture.binDir;
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    const first = await postRun(started.url, publicRunRequest(fixture, 'Initial task.', 'change-first'));
+    await waitForTask(first.strategyTask!.taskExecutionId, 'completed');
+    const second = await postRun(started.url, {
+      ...publicRunRequest(fixture, 'Updated task.', 'change-second'),
+      systemPrompt: 'New stable rule: use yellow.',
+    });
+    await waitForTask(second.strategyTask!.taskExecutionId, 'completed');
+    const calls = await readProjectInvocations(fixture.logPath, fixture.projectId);
+    expect(calls[1]!.argv).toContain('resume');
+    expect(calls[1]!.stdin).toContain('New stable rule: use yellow.');
+    expect(calls[1]!.stdin).toContain('<open_design_core_system_prompt>');
+  }, 45_000);
+
+  it('restores the full frozen request when native request resume has expired', async () => {
+    const fixture = await createPublicRolloutFixture('marker-request-expired', 'design');
+    started = fixture.started; binDir = fixture.binDir;
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    const first = await postRun(started.url, publicRunRequest(fixture, 'Original context to recover.', 'expired-first'));
+    await waitForTask(first.strategyTask!.taskExecutionId, 'completed');
+    const second = await postRun(started.url, publicRunRequest(fixture, 'Current followup.', 'expired-second'));
+    const task = await waitForTask(second.strategyTask!.taskExecutionId, 'completed');
+    expect(task.runs).toHaveLength(1);
+    const calls = await readProjectInvocations(fixture.logPath, fixture.projectId);
+    expect(calls).toHaveLength(3);
+    expect(calls[1]!.argv).toContain('resume');
+    expect(calls[1]!.stdin).not.toContain('<session_skills>');
+    expect(calls[2]!.argv).not.toContain('resume');
+    expect(calls[2]!.stdin).toContain('Original context to recover.');
+    expect(calls[2]!.stdin).toContain('Current followup.');
+    expect(calls[2]!.stdin).toContain('<session_skills>');
+  }, 45_000);
+
+  it.each(['plan_ready', 'clarification_required', 'blocked'] as const)(
+    'hands off historical %s through the current strategy and preserves exact retries after restart', async outcome => {
+      const fixture = await createPublicRolloutFixture('marker-handoff', 'design');
+      started = fixture.started; binDir = fixture.binDir;
+      process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+      frozenProtocolFixture.legacy = true;
+      const first = await postRun(started.url, publicRunRequest(fixture,
+        'Create a dog battle page for children. Keep the blue background.', `history-${outcome}`));
+      await waitForRunTerminal(started.url, first.runId as string);
+      const old = await waitForTask(first.strategyTask!.taskExecutionId, 'completed');
+      // Persist the pre-upgrade state, including an invalid model contract. No retired engine is loaded.
+      database().prepare(`UPDATE strategy_task_executions SET outcome=?, route='full_plan',
+        execution_mode=?, plan_contract_json=?, plan_contract_hash=? WHERE task_execution_id=?`)
+        .run(outcome, outcome === 'clarification_required' ? null : 'simple', '{invalid legacy plan', 'old-hash', old.taskExecutionId);
+      const historical = database().prepare('SELECT * FROM strategy_task_executions WHERE task_execution_id=?').get(old.taskExecutionId);
+      frozenProtocolFixture.legacy = false;
+      await stopServer(started); started = await startDaemon();
+      const request = {
+        ...publicRunRequest(fixture, 'Continue production using that plan. Audience: children aged 6–8.', `continue-${outcome}`),
+        ...(outcome === 'plan_ready' ? {} : { taskExecutionId: old.taskExecutionId }),
+      };
+      let continued: Awaited<ReturnType<typeof postRun>>;
+      if (outcome === 'clarification_required') {
+        const response = await fetch(`${started.url}/api/chat`, { method: 'POST',
+          headers: { 'content-type': 'application/json' }, body: JSON.stringify(request) });
+        expect(response.status).toBe(200);
+        const events = await response.text();
+        expect(events).not.toContain('od_next_clarification_repeated');
+        continued = await postRun(started.url, request);
+      } else continued = await postRun(started.url, request);
+      expect(continued.strategyTask!.taskExecutionId).not.toBe(old.taskExecutionId);
+      expect((await waitForRunTerminal(started.url, continued.runId as string)).status).toBe('succeeded');
+      const next = await waitForTask(continued.strategyTask!.taskExecutionId, 'completed');
+      expect(next.continuedFromTaskExecutionId).toBe(old.taskExecutionId);
+      expect(next.runs).toHaveLength(1);
+      expect(next.planContract).toBeUndefined();
+      expect(parseOdNextPromptBundleV2(next.promptBundle.text).coreSystemPrompt.outputContract).toContain('od-production-ready');
+      const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
+      expect(invocations).toHaveLength(2);
+      expect(invocations[1]!.argv).not.toContain('resume');
+      expect(invocations[1]!.stdin).toContain('Keep the blue background.');
+      expect(invocations[1]!.stdin).toContain('Plan: one blue dog battle page.');
+      expect(invocations[1]!.stdin).toContain('Audience: children aged 6–8.');
+      expect(invocations[1]!.stdin).not.toContain('Historical V2 output:');
+      expect(invocations[1]!.stdin).not.toContain('{invalid legacy plan');
+      expect(await readFile(path.join(invocations[1]!.cwd, 'index.html'), 'utf8')).toContain('Dog battle');
+      expect(database().prepare('SELECT * FROM strategy_task_executions WHERE task_execution_id=?').get(old.taskExecutionId)).toEqual(historical);
+      await stopServer(started); started = await startDaemon();
+      const retry = await postRun(started.url, request);
+      expect(retry.runId).toBe(continued.runId);
+      expect((await readProjectInvocations(fixture.logPath, fixture.projectId))).toHaveLength(2);
+    }, 45_000);
+
+  it('rejects a handoff during an active run and continues under the current strategy after daemon restart', async () => {
+    const fixture = await createPublicRolloutFixture('marker-handoff', 'design');
+    started = fixture.started; binDir = fixture.binDir;
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    frozenProtocolFixture.legacy = true;
+    const first = await postRun(started.url, publicRunRequest(fixture,
+      'Hold the public rollout run open until canceled.', 'upgrade-running'));
+    await vi.waitFor(async () => expect((await getRun(started!.url, first.runId as string)).status).toBe('running'));
+    const request = { ...publicRunRequest(fixture, 'Continue and create the dog battle page.', 'upgrade-continued'),
+      taskExecutionId: first.strategyTask!.taskExecutionId };
+    const busy = await fetch(`${started.url}/api/runs`, { method: 'POST',
+      headers: { 'content-type': 'application/json' }, body: JSON.stringify(request) });
+    expect(busy.status).toBe(409);
+    expect(await busy.json()).toMatchObject({ error: { code: 'RUN_IN_PROGRESS' } });
+    await stopServer(started); frozenProtocolFixture.legacy = false; started = await startDaemon();
+    const next = await postRun(started.url, request);
+    expect(next.strategyTask!.taskExecutionId).not.toBe(first.strategyTask!.taskExecutionId);
+    expect((await waitForRunTerminal(started.url, next.runId as string)).status).toBe('succeeded');
+    const task = await waitForTask(next.strategyTask!.taskExecutionId, 'completed');
+    expect(task.runs).toHaveLength(1);
+    expect(task.continuedFromTaskExecutionId).toBe(first.strategyTask!.taskExecutionId);
+  }, 45_000);
+
+  it('keeps the automatic WebGL entry in Discovery when Query requests a presentation', async () => {
+    const fixture = await createPublicRolloutFixture('webgl-query-priority', 'design');
+    started = fixture.started;
+    binDir = fixture.binDir;
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    const project = await createProjectForScenario(started.url, 'manual-webgl', {
+      kind: 'prototype', intent: 'webgl-experience',
+    });
+    expect(project.metadata?.scenarioBinding).toMatchObject({
+      provenance: 'automatic_default', pluginId: 'example-webgl-experience',
+    });
+    const run = await postRun(started.url, publicRunRequest(
+      project, 'Make a three-slide community-service presentation, not a WebGL demo.',
+      'webgl-query-priority',
+    ));
+    expect(run.strategyTask).toMatchObject({ inputStage: 'request' });
+    expect(await readDurableRunState(run.runId as string)).toMatchObject({
+      strategyRolloutDecision: { decisionClass: 'active', taskType: 'discovery' },
+    });
+    await fetch(`${started.url}/api/runs/${encodeURIComponent(run.runId as string)}/cancel`, { method: 'POST' });
+    await waitForRunTerminal(started.url, run.runId as string);
+  });
+
+  it('keeps Discovery active for subsequent requests despite a historical off preference', async () => {
     const fixture = await createPublicRolloutFixture('app-config-opt-out', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
@@ -517,7 +1218,7 @@ describe('OD Next automatic production through the real server', () => {
     ));
     expect(beforeOptOut.strategyTask).toMatchObject({ inputStage: 'request', terminal: false });
     expect(await readDurableRunState(beforeOptOut.runId as string)).toMatchObject({
-      strategyRolloutDecision: { decisionClass: 'active', taskType: 'prototype' },
+      strategyRolloutDecision: { decisionClass: 'active', taskType: 'discovery' },
     });
     await fetch(
       `${started.url}/api/runs/${encodeURIComponent(beforeOptOut.runId as string)}/cancel`,
@@ -556,17 +1257,17 @@ describe('OD Next automatic production through the real server', () => {
     const invocationsBefore = (await readProjectInvocations(fixture.logPath, fixture.projectId)).length;
     const afterOptOut = await postRun(started.url, publicRunRequest(
       fixture,
-      'Run after this installation opted out.',
+      'Create a 2-page PPT after this installation opted out.',
       'app-config-opt-out-after',
     ));
-    expect(afterOptOut.strategyTask).toBeUndefined();
-    expect(afterOptOut.pluginId).toBe('example-web-prototype');
+    expect(afterOptOut.strategyTask).toMatchObject({ inputStage: 'request' });
     await waitForRunTerminal(started.url, afterOptOut.runId as string);
     const ordinaryInvocations = (await readProjectInvocations(fixture.logPath, fixture.projectId))
       .slice(invocationsBefore);
     expect(ordinaryInvocations).toHaveLength(1);
-    expect(ordinaryInvocations[0]?.stdin).not.toContain('OD Next Strategy V2');
+    expect(ordinaryInvocations[0]?.stdin).toContain('skill_name="discovery"');
     expect(ordinaryInvocations[0]?.stdin).not.toContain('open-design.strategy-state/v2');
+    expect(ordinaryInvocations[0]?.stdin).not.toContain('Deck framework — DO NOT EDIT');
 
     // The operator-facing surface names the authority that decided, so the
     // person who just configured the mode can confirm theirs is the one in
@@ -575,9 +1276,9 @@ describe('OD Next automatic production through the real server', () => {
     const status = await fetch(`${started.url}/api/strategies/od-next/rollout`);
     expect(status.status).toBe(200);
     expect((await status.json() as { status: unknown }).status).toMatchObject({
-      requestedMode: 'off',
-      requestedModeSource: 'app_config',
-      effectiveMode: 'off',
+      requestedMode: 'active',
+      requestedModeSource: 'default',
+      effectiveMode: 'active',
     });
     // Two full runs against a real server, plus config writes and a status
     // read — the heaviest case in this file, and the only one that drives more
@@ -672,7 +1373,7 @@ describe('OD Next automatic production through the real server', () => {
     }
   });
 
-  it('routes the four approved automatic profiles while ordinary Image remains media-only', async () => {
+  it('converges official automatic and explicit task-type entries into Discovery', async () => {
     const fixture = await createPublicRolloutFixture('approved-profiles', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
@@ -808,7 +1509,7 @@ describe('OD Next automatic production through the real server', () => {
         strategyRolloutDecision: {
           schemaVersion: 1,
           decisionClass: 'active',
-          taskType: candidate.taskProfile,
+          taskType: 'discovery',
           primaryReasonCode: 'od_next_rollout_eligible',
         },
       });
@@ -892,7 +1593,7 @@ describe('OD Next automatic production through the real server', () => {
         strategyRolloutDecision: {
           schemaVersion: 1,
           decisionClass: 'active',
-          taskType: 'prototype',
+          taskType: 'discovery',
           primaryReasonCode: 'od_next_rollout_eligible',
         },
       });
@@ -947,13 +1648,12 @@ describe('OD Next automatic production through the real server', () => {
       'Create an ordinary image.',
       'ordinary-image-default',
     ));
-    expect(imageRun.strategyTask).toBeUndefined();
-    expect(imageRun.pluginId).toBe('od-media-generation');
+    expect(imageRun.strategyTask).toMatchObject({ inputStage: 'request' });
     expect(await readDurableRunState(imageRun.runId as string)).toMatchObject({
       strategyRolloutDecision: {
         schemaVersion: 1,
-        decisionClass: 'not_applicable',
-        taskType: null,
+        decisionClass: 'active',
+        taskType: 'discovery',
       },
     });
     const imageStatus = await fetch(
@@ -963,8 +1663,8 @@ describe('OD Next automatic production through the real server', () => {
     expect(await imageStatus.json()).toMatchObject({
       strategyRolloutDecision: {
         schemaVersion: 1,
-        decisionClass: 'not_applicable',
-        taskType: null,
+        decisionClass: 'active',
+        taskType: 'discovery',
       },
     });
     await waitForRunTerminal(started.url, imageRun.runId as string);
@@ -993,13 +1693,12 @@ describe('OD Next automatic production through the real server', () => {
       'Create an ordinary image.',
       'ordinary-image-explicit',
     ));
-    expect(explicitImageRun.strategyTask).toBeUndefined();
-    expect(explicitImageRun.pluginId).toBe('od-media-generation');
+    expect(explicitImageRun.strategyTask).toMatchObject({ inputStage: 'request' });
     expect(await readDurableRunState(explicitImageRun.runId as string)).toMatchObject({
       strategyRolloutDecision: {
         schemaVersion: 1,
-        decisionClass: 'explicit_user',
-        taskType: null,
+        decisionClass: 'active',
+        taskType: 'discovery',
       },
     });
     await waitForRunTerminal(started.url, explicitImageRun.runId as string);
@@ -1034,7 +1733,7 @@ describe('OD Next automatic production through the real server', () => {
     expect(await readDurableRunState(created.runId as string)).toMatchObject({
       strategyRolloutDecision: {
         decisionClass: 'active',
-        taskType: 'prototype',
+        taskType: 'discovery',
       },
     });
     await fetch(`${started.url}/api/runs/${encodeURIComponent(created.runId as string)}/cancel`, {
@@ -1043,7 +1742,7 @@ describe('OD Next automatic production through the real server', () => {
     await waitForRunTerminal(started.url, created.runId as string);
   });
 
-  it('binds adapter-family capability facts for an unrecognized new CLI version', async () => {
+  it('admits an unrecognized CLI version without a registered capability fixture', async () => {
     const agentCliVersion = 'codex-cli 99.0.0-forward-compatible';
     const fixture = await createPublicRolloutFixture(
       'synthetic-planning-facts',
@@ -1055,20 +1754,6 @@ describe('OD Next automatic production through the real server', () => {
     binDir = fixture.binDir;
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
 
-    const resolvedCapability = resolveBundledOdNextRuntimeCapability({
-      agentId: 'codex',
-      agentCliVersion,
-    });
-    expect(resolvedCapability).toMatchObject({
-      reason: 'capability_resolved',
-      snapshot: {
-        agentCliVersion,
-        recordedAgentCliVersion: 'codex-cli 0.147.0',
-        nativeSessionContinuation: { support: 'verified' },
-        nativeSubagents: { support: 'verified' },
-      },
-    });
-
     const created = await postRun(
       started.url,
       publicRunRequest(
@@ -1079,9 +1764,8 @@ describe('OD Next automatic production through the real server', () => {
     );
     expect(created.strategyTask).toMatchObject({ inputStage: 'request', terminal: false });
     const task = getStrategyTaskExecution(database(), created.taskExecutionId as string);
-    expect(task?.promptBundle.text).toContain(
-      resolvedCapability.snapshot!.snapshotHash.slice('sha256:'.length),
-    );
+    expect((await getRun(started.url, created.runId as string)).strategyRolloutDecision?.effectiveMode).toBe('active');
+    expect(task?.promptBundle.text).not.toMatch(/capability_snapshot_hash|native_child_lifecycle_verified|native_session_continuation|fixture_version/);
 
     const canceled = await fetch(
       `${started.url}/api/runs/${encodeURIComponent(created.runId as string)}/cancel`,
@@ -1134,9 +1818,9 @@ describe('OD Next automatic production through the real server', () => {
     ]);
     expect(savedResult.stderr).toBe('');
     expect((JSON.parse(savedResult.stdout) as { status: unknown }).status).toMatchObject({
-      requestedMode: 'off',
-      requestedModeSource: 'app_config',
-      effectiveMode: 'off',
+      requestedMode: 'active',
+      requestedModeSource: 'default',
+      effectiveMode: 'active',
     });
 
     // The reset endpoint and its CLI subcommand are both gone, and gone the
@@ -1167,7 +1851,9 @@ describe('OD Next automatic production through the real server', () => {
     // what replaced it — and gets a non-zero exit, because the recovery it
     // asked for neither happened nor can.
     expect(resetCli.stderr).toContain('od strategy rollout reset was removed');
-    expect(resetCli.stderr).toContain('od config set odNextStrategyMode off');
+    expect(resetCli.stderr).toContain('OD Next is active by default');
+    expect(resetCli.stderr).toContain('od strategy rollout status');
+    expect(resetCli.stderr).not.toContain('od config set odNextStrategyMode off');
   });
 
   it('keeps active retry/task recipe-only while rollback lazily resolves the ordinary default', async () => {
@@ -1200,11 +1886,11 @@ describe('OD Next automatic production through the real server', () => {
       });
     expect(activeTask?.runs[0]?.finalText).toEqual(activeTask?.promptBundle);
     const promptBundleText = activeTask?.promptBundle.text ?? '';
-    const doneKey = /<od-done key="([a-f0-9]{16})"\/>/.exec(promptBundleText)?.[1];
+    const doneKey = /<od-production-ready key="([a-f0-9]{16})" \/>/.exec(promptBundleText)?.[1];
     expect(doneKey).toMatch(/^[a-f0-9]{16}$/);
-    expect(promptBundleText).toContain('route=direct_edit');
-    expect(promptBundleText).toContain(`<od-next key="${doneKey}" value="Add an orders list page"/>`);
-    expect(promptBundleText).toContain(`<od-focus key="${doneKey}"`);
+    expect(promptBundleText).toContain('production automatically');
+    expect(promptBundleText).not.toContain('<od-done key=');
+    expect(promptBundleText).not.toContain('<od-focus key=');
     expect(promptBundleText.slice(
       promptBundleText.indexOf('<open_design_core_system_prompt>'),
       promptBundleText.indexOf('</open_design_core_system_prompt>'),
@@ -1228,14 +1914,7 @@ describe('OD Next automatic production through the real server', () => {
       reused: true,
     });
 
-    const ordinary = await postRun(
-      started!.url,
-      publicRunRequest(fixture, 'Run after rollback.', 'ordinary-after-rollback'),
-    );
-    expect(ordinary.strategyTask).toBeUndefined();
-    expect(ordinary.pluginId).toBe('example-web-prototype');
-    await waitForRunTerminal(started!.url, ordinary.runId as string);
-
+    await waitForInvocationCount(fixture.logPath, fixture.projectId, 1);
     const canceledResponse = await fetch(
       `${started!.url}/api/runs/${encodeURIComponent(active.runId as string)}/cancel`,
       { method: 'POST' },
@@ -1249,6 +1928,14 @@ describe('OD Next automatic production through the real server', () => {
         terminal: true,
       },
     });
+    const ordinary = await postRun(
+      started!.url,
+      publicRunRequest(fixture, 'Run after rollback.', 'ordinary-after-rollback'),
+    );
+    expect(ordinary.strategyTask).toBeUndefined();
+    expect(ordinary.pluginId).toBe('example-web-prototype');
+    await waitForRunTerminal(started!.url, ordinary.runId as string);
+
     const activeInvocation = (await readProjectInvocations(fixture.logPath, fixture.projectId))
       .find((invocation) => invocation.stdin.includes('Hold the public rollout run open'));
     expect(activeInvocation?.stdin).toBe(activeTask?.promptBundle.text);
@@ -1480,6 +2167,7 @@ describe('OD Next automatic production through the real server', () => {
       'null-identity-request',
     );
     const deleted = await postRun(started.url, deletedBody);
+    await waitForRunTerminal(started.url, deleted.runId as string);
     const nulled = await postRun(started.url, nullBody);
     await waitForInvocationCount(fixture.logPath, fixture.projectId, 2);
     await Promise.all([
@@ -1488,9 +2176,12 @@ describe('OD Next automatic production through the real server', () => {
     ]);
     const invocationCount = (await readProjectInvocations(fixture.logPath, fixture.projectId)).length;
 
-    database().prepare(
-      'DELETE FROM strategy_task_runs WHERE task_execution_id = ?',
-    ).run(deleted.taskExecutionId);
+    // Deliberately corrupt this task's mapping after removing its new evidence
+    // children. The test still exercises the real missing-mapping rejection.
+    database().transaction(() => {
+      database().prepare('DELETE FROM strategy_task_run_write_evidence WHERE task_execution_id = ?').run(deleted.taskExecutionId);
+      database().prepare('DELETE FROM strategy_task_runs WHERE task_execution_id = ?').run(deleted.taskExecutionId);
+    }).immediate();
     database().prepare(
       `UPDATE strategy_task_runs
           SET final_text = NULL, final_text_utf8_bytes = NULL, final_text_sha256 = NULL
@@ -1543,7 +2234,7 @@ describe('OD Next automatic production through the real server', () => {
     expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(1);
   });
 
-  it('never overrides explicit plugin, snapshot, or existing project-pin authority', async () => {
+  it('converges verified bundled task pins while protecting custom plugin and invalid snapshot authority', async () => {
     const fixture = await createPublicRolloutFixture(
       'authority',
       'design',
@@ -1565,15 +2256,17 @@ describe('OD Next automatic production through the real server', () => {
       started.url,
       publicRunRequest(fixture, 'Use the pinned default.', 'pinned-authority'),
     );
-    expect(pinned.strategyTask).toBeUndefined();
-    expect(pinned.pluginId).toBe('example-web-prototype');
+    expect(pinned.strategyTask).toMatchObject({ inputStage: 'request' });
+    await fetch(`${started.url}/api/runs/${encodeURIComponent(pinned.runId as string)}/cancel`, { method: 'POST' });
+    await waitForRunTerminal(started.url, pinned.runId as string);
 
     const explicitDefault = await postRun(started.url, {
       ...publicRunRequest(fixture, 'Use the explicit default.', 'explicit-default'),
       pluginId: 'example-web-prototype',
     });
-    expect(explicitDefault.strategyTask).toBeUndefined();
-    expect(explicitDefault.pluginId).toBe('example-web-prototype');
+    expect(explicitDefault.strategyTask).toMatchObject({ inputStage: 'request' });
+    await fetch(`${started.url}/api/runs/${encodeURIComponent(explicitDefault.runId as string)}/cancel`, { method: 'POST' });
+    await waitForRunTerminal(started.url, explicitDefault.runId as string);
 
     const invalidSnapshot = await fetch(`${started.url}/api/runs`, {
       method: 'POST',
@@ -1606,11 +2299,12 @@ describe('OD Next automatic production through the real server', () => {
       source: 'community-collision-fixture',
       trust: 'restricted',
     });
+    const collisionProject = await createProjectForScenario(started.url, 'collision-isolated', { kind: 'prototype' });
     const collidingId = await fetch(`${started.url}/api/runs`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        ...publicRunRequest(fixture, 'Use an explicit colliding id.', 'colliding-id'),
+        ...publicRunRequest(collisionProject, 'Use an explicit colliding id.', 'colliding-id'),
         pluginId: 'od-next-strategy',
       }),
     });
@@ -1619,7 +2313,7 @@ describe('OD Next automatic production through the real server', () => {
       error: { code: 'capabilities-required' },
     });
     expect((database().prepare('SELECT COUNT(*) AS count FROM strategy_task_executions').get() as { count: number }).count)
-      .toBe(strategyTaskCountAtStart);
+      .toBe(strategyTaskCountAtStart + 2);
 
     const restoredResult = await runOdCli([
       'project', 'restore-automatic-scenario', fixture.projectId,
@@ -1699,7 +2393,6 @@ describe('OD Next automatic production through the real server', () => {
     const terminal = await waitForTask(fixture.taskExecutionId, 'completed');
     expect(terminal.runs.map((run) => run.inputStage)).toEqual([
       'request',
-      'contract_repair',
       'production',
     ]);
 
@@ -1715,7 +2408,7 @@ describe('OD Next automatic production through the real server', () => {
     // One stable identity per physical Run — a shared insert id would collapse
     // three Runs into one row on ingest.
     const insertIds = recoveries.map((recovery) => recovery?.insertId);
-    expect(new Set(insertIds).size).toBe(3);
+    expect(new Set(insertIds).size).toBe(2);
     // The continuation inherits the requesting client's identity rather than
     // inventing one, so the chain stays attributable to the same person.
     for (const recovery of recoveries) {
@@ -1732,332 +2425,16 @@ describe('OD Next automatic production through the real server', () => {
     expect(new Set(lineage.map((props) => props.initial_run_id))).toEqual(
       new Set([fixture.initialRunId]),
     );
-    expect(lineage.map((props) => props.task_run_index)).toEqual([0, 1, 2]);
+    expect(lineage.map((props) => props.task_run_index)).toEqual([0, 1]);
     // The rollout decision is daemon-owned truth; every Run of an admitted
     // task reports the harness it actually ran under.
     expect(lineage.map((props) => props.harness)).toEqual([
-      'od_next',
       'od_next',
       'od_next',
     ]);
     // The lifecycle re-reads host facts (app config, agent detection) before
     // it captures, so three physical Runs settle well past the shared default.
   }, 90_000);
-
-  it('runs parsed plan -> serialization repair -> production after each source end and remains exactly-once across restart', async () => {
-    const fixture = await createFixture('repair');
-    const sourcePdfAttachment = path.join(
-      process.env.OD_DATA_DIR!,
-      'projects',
-      fixture.projectId,
-      'brief.pdf',
-    );
-    const sourceTextAttachment = path.join(
-      path.dirname(sourcePdfAttachment),
-      'notes.txt',
-    );
-    await mkdir(path.dirname(sourcePdfAttachment), { recursive: true });
-    await writeFile(sourcePdfAttachment, '%PDF-1.7\nimmutable brief');
-    await writeFile(sourceTextAttachment, 'immutable notes');
-    const body = {
-      ...createRunRequest(fixture, 'Build the operator prototype.'),
-      attachments: ['brief.pdf', 'notes.txt'],
-    };
-
-    queueFixtureIds(fixture);
-    const created = await postRun(started!.url, body);
-    expect(created).toMatchObject({
-      runId: fixture.initialRunId,
-      taskExecutionId: fixture.taskExecutionId,
-      strategyTask: {
-        taskExecutionId: fixture.taskExecutionId,
-        inputStage: 'request',
-        outcome: 'running',
-        terminal: false,
-      },
-    });
-    expect(uuidControl.forced).toEqual([]);
-    const liveMutation = [
-      'LIVE_CONTEXT_MUTATION_MUST_NOT_EXPORT',
-      '/Users/alice/live-only.txt',
-      'sk-test-1234567890123456789012',
-    ].join(' ');
-    await writeFile(sourcePdfAttachment, liveMutation);
-    await writeFile(sourceTextAttachment, liveMutation);
-
-    const initialTerminal = await waitForRunTerminal(started!.url, fixture.initialRunId);
-    expect(initialTerminal.status, JSON.stringify(initialTerminal)).toBe('succeeded');
-    const terminal = await waitForTask(fixture.taskExecutionId, 'completed');
-    expect(terminal.runs.map((run) => run.inputStage)).toEqual([
-      'request',
-      'contract_repair',
-      'production',
-    ]);
-    expect(terminal.runs.map((run) => run.sourceRunId ?? null)).toEqual([
-      null,
-      fixture.initialRunId,
-      terminal.runs[1]?.runId,
-    ]);
-    expect(terminal.planContractRepairAttempts).toBe(1);
-    expect(terminal.terminalRunId).toBe(terminal.runs[2]?.runId);
-
-    const statuses = await Promise.all(
-      terminal.runs.map((mapping) => getRun(started!.url, mapping.runId)),
-    );
-    expect(statuses.map((run) => run.status)).toEqual([
-      'succeeded',
-      'succeeded',
-      'succeeded',
-    ]);
-    expect(statuses.at(-1)?.strategyTask).toMatchObject({
-      taskExecutionId: fixture.taskExecutionId,
-      inputStage: 'production',
-      outcome: 'completed',
-      terminal: true,
-    });
-    const resultPackageResponse = await fetch(
-      `${started!.url}/api/runs/${fixture.initialRunId}/result-package`,
-    );
-    expect(resultPackageResponse.status).toBe(200);
-    const resultPackage = await resultPackageResponse.json() as {
-      run: { id: string };
-      strategyTask?: RunStatus['strategyTask'];
-    };
-    expect(resultPackage.run.id).toBe(terminal.terminalRunId);
-    expect(resultPackage.strategyTask).toMatchObject({
-      taskExecutionId: fixture.taskExecutionId,
-      inputStage: 'production',
-      outcome: 'completed',
-      terminal: true,
-    });
-    const watched = await runOdCli([
-      'run',
-      'watch',
-      fixture.initialRunId,
-      '--daemon-url',
-      started!.url,
-    ]);
-    const watchedEnds = watched.stdout
-      .trim()
-      .split('\n')
-      .map((line) => JSON.parse(line) as { event: string; data: RunStatus })
-      .filter((event) => event.event === 'end');
-    expect(watched.stdout).toContain('Prepared a simple plan.');
-    expect(watched.stdout).not.toContain('<open-design-plan-contract>');
-    expect(watched.stdout).not.toContain('<open-design-runtime-state>');
-    expect(watchedEnds.map((event) => event.data.strategyTask?.inputStage)).toEqual([
-      'contract_repair',
-      'production',
-      'production',
-    ]);
-    expect(watchedEnds.at(-1)?.data.strategyTask).toMatchObject({
-      outcome: 'completed',
-      terminal: true,
-    });
-
-    const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
-    expect(invocations).toHaveLength(3);
-    expect(invocations.map((invocation) => invocation.stdin)).toEqual(
-      terminal.runs.map((mapping) => mapping.finalText.text),
-    );
-    expect(invocations[0]?.argv).not.toContain('resume');
-    expect(invocations[0]?.stdin).toMatch(/^<open_design_prompt_bundle/);
-    expect(invocations[0]?.stdin).toContain('<open_design_core_system_prompt>');
-    expect(invocations[0]?.stdin).toContain('<user_first_prompt>');
-    expect(invocations[0]?.stdin).toContain('<task_metadata>');
-    expect(invocations[0]?.stdin).toContain('<context>');
-    // The rejected wrapper and the pre-PRD tag names must not come back.
-    expect(invocations[0]?.stdin).not.toContain('<system_prompt>');
-    expect(invocations[0]?.stdin).not.toContain('<task_config>');
-    expect(invocations[0]?.stdin).not.toContain('<user_prompt>');
-    // The Bundle is a tree: each spec slot is its own element, not a '---'
-    // section inside one blob, and the user's words come last. Markdown inside
-    // a CDATA prompt is allowed to contain a thematic break, so inspect only
-    // the XML envelope when guarding against the rejected flat serialization.
-    for (const nested of [
-      '<execution_boundary>',
-      '<core_strategy>',
-      '<output_contract>',
-      '<echo_guard>',
-      '<session_skills>',
-      '<task_type_skill skill_name="prototype">',
-      '<active_stages>',
-      '<stage name="discovery">',
-      '<atom name="discovery-question-form">',
-      '<task_type>',
-      '<attachments>',
-      '<recipe_identity ',
-      '<runtime_tool_environment>',
-    ]) {
-      expect(invocations[0]!.stdin).toContain(nested);
-    }
-    const structuralEnvelope = invocations[0]!.stdin.replace(
-      /<!\[CDATA\[[\s\S]*?\]\]>/gu,
-      '<![CDATA[…]]>',
-    );
-    expect(structuralEnvelope).not.toContain('\n\n---\n\n');
-    expect(invocations[0]!.stdin).not.toContain('## Active stage:');
-    expect(invocations[0]!.stdin.lastIndexOf('<user_first_prompt>'))
-      .toBeGreaterThan(invocations[0]!.stdin.lastIndexOf('</context>'));
-    // Drift 2, proved on the real payload: the head through active_stages is
-    // the shared cache prefix, so no per-task or per-run value may appear in it.
-    const firstStdin = invocations[0]!.stdin;
-    const systemPromptSlice = firstStdin.slice(
-      firstStdin.indexOf('  <open_design_core_system_prompt>'),
-      firstStdin.indexOf('  </active_stages>'),
-    );
-    expect(systemPromptSlice.length).toBeGreaterThan(0);
-    for (const perTaskValue of [
-      'open-design.od-next-task-configuration/v1',
-      'open-design.od-next-request-input-facts/v1',
-      'task-input:attachments/attachment-001.pdf',
-      'workspace:project',
-      // The runtime tool contract embeds the daemon URL, which is per-run.
-      'Daemon URL',
-      'OD_TASK_INPUT_DIR',
-    ]) {
-      expect(systemPromptSlice).not.toContain(perTaskValue);
-      expect(firstStdin).toContain(perTaskValue);
-    }
-    expect(invocations[0]?.stdin).toContain('open-design.od-next-task-configuration/v1');
-    expect(invocations[0]?.stdin).toContain('open-design.od-next-request-input-facts/v1');
-    expect(invocations[0]?.stdin).toContain('"taskType":"prototype"');
-    expect(invocations[0]?.stdin).toContain('task-input:attachments/attachment-001.pdf');
-    expect(invocations[0]?.stdin).toContain('task-input:attachments/attachment-002.txt');
-    expect(invocations[0]?.stdin).toContain('OD_TASK_INPUT_DIR');
-    expect(invocations[0]?.stdin).toContain('"reference":"workspace:project"');
-    expect(invocations[0]?.stdin).not.toContain(process.env.OD_DATA_DIR ?? '__missing_data_root__');
-    expect(invocations[0]?.stdin).not.toContain('# User request');
-    expect(invocations[1]?.argv.slice(0, 2)).toEqual(['exec', 'resume']);
-    expect(invocations[2]?.argv.slice(0, 2)).toEqual(['exec', 'resume']);
-    expect(invocations.slice(1).map((invocation) => invocation.argv.includes(THREAD_ID)))
-      .toEqual([true, true]);
-    expect(invocations[1]?.stdin).toContain('native continuation — contract_repair');
-    expect(invocations[2]?.stdin).toContain('native continuation — production');
-    expect(invocations[1]?.stdin).toMatch(/^<open_design_request_turn/);
-    expect(invocations[2]?.stdin).toMatch(/^<open_design_request_turn/);
-    expect(invocations[1]?.stdin).toContain('stage="contract_repair" task_run_index="1"');
-    expect(invocations[2]?.stdin).toContain('stage="production" task_run_index="2"');
-    expect(invocations[1]?.stdin).not.toContain('# User request');
-    expect(invocations[2]?.stdin).not.toContain('# User request');
-    expect(invocations[1]?.stdin).not.toContain('open-design.strategy-state/v2');
-    expect(invocations[2]?.stdin).toContain('## Closing Runtime State');
-    expect(invocations[2]?.stdin).toContain('schema open-design.strategy-state/v2');
-    expect(invocations[2]?.stdin).toContain('inputStage production');
-    expect(invocations[2]?.stdin).toContain('no Plan Contract block');
-    expect(statuses[0]!.updatedAt).toBeLessThanOrEqual(invocations[1]!.startedAt);
-    expect(statuses[1]!.updatedAt).toBeLessThanOrEqual(invocations[2]!.startedAt);
-    for (const invocation of invocations) {
-      expect(invocation.taskInputDir).toContain('od-next-run-inputs');
-      expect(invocation.taskInputDir).not.toContain('od-next-task-inputs');
-      expect(invocation.taskInputFiles).toEqual([
-        { name: 'attachment-001.pdf', content: '%PDF-1.7\nimmutable brief' },
-        { name: 'attachment-002.txt', content: 'immutable notes' },
-      ]);
-    }
-
-    const durableInputSnapshots = await Promise.all(terminal.runs.map(async (mapping) => {
-      const state = JSON.parse(await readFile(path.join(
-        process.env.OD_DATA_DIR!,
-        'runs',
-        mapping.runId,
-        'state.json',
-      ), 'utf8')) as {
-        odNextTaskInputSnapshot?: {
-          taskExecutionId: string;
-          snapshotDir: string;
-          manifestSha256: string;
-        };
-      };
-      return state.odNextTaskInputSnapshot;
-    }));
-    expect(durableInputSnapshots).toEqual([
-      expect.objectContaining({ taskExecutionId: fixture.taskExecutionId }),
-      expect.objectContaining({ taskExecutionId: fixture.taskExecutionId }),
-      expect.objectContaining({ taskExecutionId: fixture.taskExecutionId }),
-    ]);
-    expect(new Set(durableInputSnapshots.map((snapshot) => snapshot?.manifestSha256)).size).toBe(1);
-    expect(await readFile(path.join(
-      durableInputSnapshots[0]!.snapshotDir,
-      'attachments',
-      'attachment-001.pdf',
-    ), 'utf8')).toBe('%PDF-1.7\nimmutable brief');
-
-    const durablePromptEvidence = await Promise.all(terminal.runs.map(async (mapping) => {
-      const state = JSON.parse(await readFile(path.join(
-        process.env.OD_DATA_DIR!,
-        'runs',
-        mapping.runId,
-        'state.json',
-      ), 'utf8')) as {
-        promptTelemetry?: {
-          promptFingerprint: string;
-          rawBytes: number;
-          odNextExactSend?: {
-            schema: string;
-            boundary: string;
-            kind: string;
-            promptSchema: string;
-            stage: string;
-            sha256: string;
-            utf8Bytes: number;
-          };
-          sections: Array<{
-            kind: string;
-            redactedContent?: string;
-          }>;
-        };
-      };
-      return state.promptTelemetry;
-    }));
-    expect(durablePromptEvidence.map((telemetry) => telemetry?.odNextExactSend)).toEqual(
-      terminal.runs.map((mapping) => ({
-        boundary: 'hostComposed',
-        kind: mapping.finalText.kind,
-        promptSchema: mapping.finalText.schema,
-        schema: 'open-design.od-next-exact-send-prompt/v1',
-        stage: mapping.inputStage,
-        sha256: mapping.finalText.sha256,
-        utf8Bytes: mapping.finalText.utf8Bytes,
-      })),
-    );
-    for (const [index, telemetry] of durablePromptEvidence.entries()) {
-      expect(telemetry?.rawBytes).toBe(terminal.runs[index]!.finalText.utf8Bytes);
-      expect(telemetry?.promptFingerprint).toMatch(/^sha256:/u);
-      expect(telemetry?.sections.map((section) => section.kind)).toEqual([
-        'odNextExactFinalText',
-      ]);
-      expect(telemetry?.sections[0]?.redactedContent).toBeTruthy();
-      expect(Buffer.byteLength(
-        telemetry?.sections[0]?.redactedContent ?? '',
-        'utf8',
-      )).toBeLessThanOrEqual(64 * 1024);
-      expect(JSON.stringify(telemetry)).not.toContain(sourcePdfAttachment);
-      expect(JSON.stringify(telemetry)).not.toContain(sourceTextAttachment);
-      expect(JSON.stringify(telemetry)).not.toContain(process.env.OD_DATA_DIR!);
-      expect(JSON.stringify(telemetry)).not.toContain('LIVE_CONTEXT_MUTATION_MUST_NOT_EXPORT');
-      expect(JSON.stringify(telemetry)).not.toContain('/Users/alice/live-only.txt');
-      expect(JSON.stringify(telemetry)).not.toContain('sk-test-');
-    }
-
-    for (const mapping of terminal.runs) {
-      await getRun(started!.url, mapping.runId);
-      await getRun(started!.url, mapping.runId);
-    }
-    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(3);
-    expect(getStrategyTaskExecution(database(), fixture.taskExecutionId)?.runs).toHaveLength(3);
-
-    await stopServer(started);
-    started = await startDaemon();
-    for (const mapping of terminal.runs) {
-      expect((await getRun(started.url, mapping.runId)).status).toBe('succeeded');
-    }
-    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(3);
-    expect(getStrategyTaskExecution(database(), fixture.taskExecutionId)).toMatchObject({
-      outcome: 'completed',
-      terminalRunId: terminal.runs[2]?.runId,
-    });
-  });
 
   it('keeps a completed task exactly-once across an exact retry and daemon restart', async () => {
     const fixture = await createFixture('repair');
@@ -2072,12 +2449,11 @@ describe('OD Next automatic production through the real server', () => {
     const terminal = await waitForTask(fixture.taskExecutionId, 'completed');
     expect(terminal.runs.map((run) => run.inputStage)).toEqual([
       'request',
-      'contract_repair',
       'production',
     ]);
     expect(terminal.route).toBe('full_plan');
-    expect(terminal.terminalRunId).toBe(terminal.runs[2]?.runId);
-    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(3);
+    expect(terminal.terminalRunId).toBe(terminal.runs[1]?.runId);
+    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(2);
 
     const retried = await postRun(started!.url, body);
     expect(retried).toMatchObject({
@@ -2091,16 +2467,16 @@ describe('OD Next automatic production through the real server', () => {
         terminal: true,
       },
     });
-    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(3);
-    expect(getStrategyTaskExecution(database(), fixture.taskExecutionId)?.runs).toHaveLength(3);
+    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(2);
+    expect(getStrategyTaskExecution(database(), fixture.taskExecutionId)?.runs).toHaveLength(2);
 
     await stopServer(started);
     started = await startDaemon();
     expect((await getRun(started.url, fixture.initialRunId)).status).toBe('succeeded');
-    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(3);
+    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(2);
     expect(getStrategyTaskExecution(database(), fixture.taskExecutionId)).toMatchObject({
       outcome: 'completed',
-      terminalRunId: terminal.runs[2]?.runId,
+      terminalRunId: terminal.runs[1]?.runId,
     });
   });
 
@@ -2127,7 +2503,7 @@ describe('OD Next automatic production through the real server', () => {
     await waitForTask(fixture.taskExecutionId, 'completed');
 
     const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
-    expect(invocations).toHaveLength(3);
+    expect(invocations).toHaveLength(2);
     const bundle = parseOdNextPromptBundleV2(invocations[0]!.stdin);
     expect(bundle.userFirstPrompt).toBe(repeatedQuery);
     expect(bundle.context.priorTranscript).toContain(priorTranscript);
@@ -2140,7 +2516,119 @@ describe('OD Next automatic production through the real server', () => {
     expect(researchContract).not.toContain('## assistant');
   });
 
-  it('blocks the durable task when the selected agent exits before publishing a session', async () => {
+  it('keeps a successful no-artifact production reply completed without claiming delivery', async () => {
+    const fixture = await createFixture('repair');
+    await writeFile(`${fixture.logPath}.blocked-production`, '1');
+    queueFixtureIds(fixture);
+    await postRun(started!.url, createRunRequest(fixture, 'Build the lesson deck.'), {
+      'x-od-analytics-device-id': 'device-no-artifact-production',
+      'x-od-analytics-session-id': 'session-no-artifact-production',
+      'x-od-analytics-client-type': 'desktop',
+    });
+    const task = await waitForTask(fixture.taskExecutionId, 'completed');
+    expect(task.runs.map((run) => run.inputStage)).toEqual(['request', 'production']);
+    const terminal = await waitForRunTerminal(started!.url, task.latestRunId);
+    // A clean production exit completes the turn without claiming delivery.
+    // Missing artifacts must not restore contract blocking or a repair turn.
+    expect(terminal).toMatchObject({
+      status: 'succeeded',
+      exitCode: 0,
+      strategyTask: {
+        outcome: 'completed', terminal: true, inputStage: 'production',
+        deliverableValid: false, settlementReason: 'ended', settlementFacts: { todoUnfinished: true, deliverableValid: false },
+      },
+    });
+    expect(terminal.endedWithUnfinishedWork).toBe(true);
+    expect(terminal.errorCode ?? null).toBeNull();
+    expect(terminal.error ?? null).toBeNull();
+    const records = (await readFile(terminal.eventsLogPath, 'utf8')).trim().split('\n')
+      .map((line) => JSON.parse(line));
+    expect(records.filter((event) => event.event === 'error')).toHaveLength(0);
+    expect(records.filter((event) => event.event === 'end')).toHaveLength(1);
+    const end = records.find((event) => event.event === 'end')?.data;
+    expect(end).toMatchObject({
+      status: 'succeeded',
+      code: 0,
+      artifactCount: 0,
+      strategyTask: {
+        outcome: 'completed', inputStage: 'production',
+        deliverableValid: false, settlementReason: 'ended', settlementFacts: { todoUnfinished: true, deliverableValid: false },
+      },
+    });
+    expect(end.strategyTask.blockedContext ?? null).toBeNull();
+    expect(records.find((event) => event.data?.type === 'runtime_close')?.data)
+      .toMatchObject({ rpc_close_reason: 'exit_0', status: 'succeeded', exit_code: 0 });
+    const response = await fetch(
+      `${started!.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`,
+    );
+    const { messages } = await response.json() as {
+      messages: Array<{ runId?: string; runStatus?: string }>;
+    };
+    expect(messages.find((message) => message.runId === task.latestRunId)?.runStatus).toBe('succeeded');
+    const [recovery] = await waitForRunAnalyticsRecoveries([task.latestRunId]);
+    expect(recovery?.properties).toMatchObject({
+      result: 'success',
+      od_next_settlement_reason: 'ended', od_next_settlement_facts: { todoUnfinished: true, deliverableValid: false },
+      rpc_close_reason: 'exit_0',
+    });
+    expect(recovery?.properties?.error_code).toBeUndefined();
+    expect(recovery?.properties?.od_next_blocked_reason_code).toBeUndefined();
+    for (const mapping of task.runs.slice(0, -1)) {
+      expect((await getRun(started!.url, mapping.runId)).status).toBe('succeeded');
+    }
+    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(2);
+  }, 90_000);
+
+  it("ends a refused planning turn as the agent's reply instead of a failed Run", async () => {
+    const fixture = await createFixture('repair');
+    await writeFile(`${fixture.logPath}.refused-request`, '1');
+    queueFixtureIds(fixture);
+    await postRun(started!.url, createRunRequest(fixture, 'hello'), {
+      'x-od-analytics-device-id': 'device-refused-request',
+      'x-od-analytics-session-id': 'session-refused-request',
+      'x-od-analytics-client-type': 'desktop',
+    });
+    const task = await waitForTask(fixture.taskExecutionId, 'completed');
+    expect(task.runs.map((run) => run.inputStage)).toEqual(['request']);
+    const terminal = await waitForRunTerminal(started!.url, task.latestRunId);
+    // The task records the refusal; the physical Run keeps its own clean exit.
+    expect(terminal).toMatchObject({
+      status: 'succeeded',
+      exitCode: 0,
+      strategyTask: { outcome: 'completed', terminal: true, inputStage: 'request' },
+    });
+    expect(terminal.endedWithUnfinishedWork).toBe(false);
+    expect(terminal.errorCode ?? null).toBeNull();
+    expect(terminal.error ?? null).toBeNull();
+    const records = (await readFile(terminal.eventsLogPath, 'utf8')).trim().split('\n')
+      .map((line) => JSON.parse(line));
+    expect(records.filter((event) => event.event === 'error')).toHaveLength(0);
+    expect(records.filter((event) => event.event === 'end')).toHaveLength(1);
+    expect(records.find((event) => event.event === 'end')?.data).toMatchObject({
+      status: 'succeeded', code: 0, strategyTask: { outcome: 'completed', inputStage: 'request' },
+    });
+    expect(records.find((event) => event.data?.type === 'runtime_close')?.data)
+      .toMatchObject({ rpc_close_reason: 'exit_0', status: 'succeeded', exit_code: 0 });
+    const response = await fetch(
+      `${started!.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`,
+    );
+    const { messages } = await response.json() as {
+      messages: Array<{ runId?: string; runStatus?: string; content?: string }>;
+    };
+    expect(messages.find((message) => message.runId === task.latestRunId)).toMatchObject({
+      runStatus: 'succeeded',
+      content: expect.stringContaining('Tell me what you would like to design'),
+    });
+    const [recovery] = await waitForRunAnalyticsRecoveries([task.latestRunId]);
+    expect(recovery?.properties).toMatchObject({
+      result: 'success',
+      rpc_close_reason: 'exit_0',
+    });
+    expect(recovery?.properties?.error_code).toBeUndefined();
+    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(1);
+  }, 90_000);
+
+  it('preserves physical Run failure without a duplicate task block when the selected agent exits before publishing a session', async () => {
     const fixture = await createFixture('repair');
     await writeFile(`${fixture.logPath}.fail-start`, '1');
 
@@ -2156,12 +2644,12 @@ describe('OD Next automatic production through the real server', () => {
       errorCode: 'AGENT_EXECUTION_FAILED',
       strategyTask: {
         taskExecutionId: fixture.taskExecutionId,
-        outcome: 'blocked',
+        outcome: 'completed',
         terminal: true,
       },
     });
     expect(getStrategyTaskExecution(database(), fixture.taskExecutionId)).toMatchObject({
-      outcome: 'blocked',
+      outcome: 'completed',
       latestRunId: fixture.initialRunId,
     });
   });
@@ -2213,12 +2701,71 @@ describe('OD Next automatic production through the real server', () => {
     expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(invocationCount);
   });
 
-  it('does not report unfinished work when the task delivered under a stale plan', async () => {
-    // QA on project 3ffc55f1: the turn wrote its deliverable and OD Next
-    // settled the task `completed`, but the agent's last plan snapshot still
-    // showed pending items. The Run was stamped endedWithUnfinishedWork, so the
-    // chat offered to "continue remaining tasks" on finished work — and taking
-    // that offer opened a second task that could only block on `no_artifact`.
+  it.each([
+    { declaredEntry: true, childFile: 'plant-taxonomy-guide.html' },
+    { declaredEntry: false, childFile: 'plant-taxonomy-guide.html' },
+    { declaredEntry: false, childFile: 'index.html' },
+  ])('completes a linked $childFile write without Runtime State (declared entry: $declaredEntry, OPEND-2887)', async ({ declaredEntry, childFile }) => {
+    const fixture = await createFixture('repair');
+    const entryFile = 'plant-science-landing.html';
+    const upload = await fetch(`${started!.url}/api/projects/${fixture.projectId}/files`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: entryFile, content: `<!doctype html><a href="${childFile}">分类导览</a>` }),
+    });
+    expect(upload.ok).toBe(true);
+    if (declaredEntry) {
+      const update = await fetch(`${started!.url}/api/projects/${fixture.projectId}`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ metadata: { kind: 'prototype', entryFile } }),
+      });
+      expect(update.ok).toBe(true);
+    }
+    await writeFile(`${fixture.logPath}.linked-page`, childFile);
+    queueFixtureIds(fixture);
+    const created = await postRun(started!.url, createRunRequest(fixture, 'Build the taxonomy page linked from the existing landing page.'));
+    const terminal = await waitForRunTerminal(started!.url, created.runId as string);
+    expect(terminal).toMatchObject({
+      status: 'succeeded', deliverableValid: true, deliverableEntryFile: entryFile,
+      strategyTask: { outcome: 'completed', terminal: true },
+    });
+    const task = getStrategyTaskExecution(database(), terminal.strategyTask!.taskExecutionId)!;
+    expect(task.runs).toHaveLength(1);
+    const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
+    expect(invocations).toHaveLength(1);
+    expect(parseOdNextPromptBundleV2(invocations[0]!.stdin).coreSystemPrompt.outputContract)
+      .toContain('od-production-ready');
+    const reloaded = await fetch(`${started!.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`);
+    const { messages } = await reloaded.json() as { messages: Array<{ runId?: string; strategyTaskDelivered?: boolean }> };
+    expect(messages.find((message) => message.runId === task.latestRunId)?.strategyTaskDelivered).toBe(true);
+    const cli = await runOdCli(['run', 'info', task.latestRunId!, '--daemon-url', started!.url, '--json']);
+    expect(JSON.parse(cli.stdout)).toMatchObject({ strategyTask: { outcome: 'completed' } });
+    if (!declaredEntry) {
+      const project = await fetch(`${started!.url}/api/projects/${fixture.projectId}`);
+      expect(await project.json()).toMatchObject({ project: { metadata: { entryFile } } });
+      await writeFile(`${fixture.logPath}.linked-page-edit`, '1');
+    }
+    const followup = await postRun(started!.url, {
+      ...createRunRequest(fixture, declaredEntry ? 'Confirm the delivered page.' : 'Update the taxonomy page.'),
+      userMessageId: `followup-user-${fixture.projectId}`,
+      assistantMessageId: `followup-assistant-${fixture.projectId}`,
+      clientRequestId: `followup-request-${fixture.projectId}`,
+    });
+    const followupTerminal = await waitForRunTerminal(started!.url, followup.runId as string);
+    expect(followupTerminal).toMatchObject(declaredEntry ? {
+      deliverableValid: false, deliverableValidation: 'no_artifact',
+      strategyTask: { outcome: 'completed', terminal: true },
+    } : {
+      deliverableValid: true, deliverableEntryFile: entryFile,
+      strategyTask: { outcome: 'completed', terminal: true },
+    });
+    expect(followupTerminal.strategyTask!.taskExecutionId).not.toBe(task.taskExecutionId);
+    const resumed = await readProjectInvocations(fixture.logPath, fixture.projectId);
+    expect(resumed).toHaveLength(2);
+    expect(resumed[1]!.argv).toContain('resume');
+  });
+
+  it('preserves unfinished todos alongside file evidence without an extra automatic turn', async () => {
+    // A valid file proves an output exists, not that the remaining work is done.
     const fixture = await createFixture('repair');
     queueFixtureIds(fixture);
     await postRun(started!.url, createRunRequest(fixture, 'Build the coach prototype.'));
@@ -2232,354 +2779,56 @@ describe('OD Next automatic production through the real server', () => {
     // The stale snapshot really did reach the Run — otherwise this asserts nothing.
     const events = await readFile(terminal.eventsLogPath, 'utf8');
     expect(events).toContain('Deliver the runnable entry');
-    expect(terminal.endedWithUnfinishedWork).toBe(false);
+    expect(terminal.endedWithUnfinishedWork).toBe(true);
+    expect(task.runs.map((run) => run.inputStage)).toEqual(['request', 'production']);
+    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(2);
 
-    // …and it must survive a reload. The delivered verdict lives only in the
-    // task store — the messages table has no strategy column — so the
-    // conversation read path has to project it, or reopening the project
-    // brings the bogus "continue remaining tasks" offer straight back.
+    // Reload retains both facts: a file was delivered and todos remain unfinished.
     const reloaded = await fetch(
       `${started!.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`,
     );
     expect(reloaded.status).toBe(200);
     const { messages } = await reloaded.json() as {
-      messages: Array<{ role: string; runId?: string; strategyTaskDelivered?: boolean }>;
+      messages: Array<{ role: string; runId?: string; strategyTaskDelivered?: boolean; events?: unknown }>;
     };
     const deliveredTurn = messages.find((message) => message.runId === task.latestRunId);
     expect(deliveredTurn).toBeDefined();
     expect(deliveredTurn!.strategyTaskDelivered).toBe(true);
+    expect(contracts.eventsEndedWithUnfinishedWork(deliveredTurn!.events)).toBe(true);
   });
 
-  it('fails closed when daemon-owned execution preflight rejects', async () => {
-    const fixture = await createFixture('repair');
-    await stopServer(started);
-    started = await startDaemon(async () => {
-      throw new Error('fixture preflight unavailable');
-    });
-
-    queueFixtureIds(fixture);
-    await postRun(started.url, createRunRequest(fixture, 'Build the operator prototype.'));
-    const task = await waitForTask(fixture.taskExecutionId, 'blocked');
-    const terminal = await waitForRunTerminal(started.url, task.latestRunId);
-
-    expect(task.runs.map((run) => run.inputStage)).toEqual(['request']);
-    expect(terminal).toMatchObject({
-      status: 'failed',
-      errorCode: 'OD_NEXT_EXECUTION_PREFLIGHT_FAILED',
-      strategyTask: {
-        taskExecutionId: fixture.taskExecutionId,
-        outcome: 'blocked',
-        terminal: true,
-      },
-    });
-  });
-
-  it('does not allocate a stale continuation when cancel wins during execution preflight', async () => {
-    const fixture = await createFixture('repair');
-    await stopServer(started);
-    let enterResolver!: () => void;
-    let releaseResolver!: () => void;
-    const resolverEntered = new Promise<void>((resolve) => { enterResolver = resolve; });
-    const resolverGate = new Promise<void>((resolve) => { releaseResolver = resolve; });
-    started = await startDaemon(async () => {
-      enterResolver();
-      await resolverGate;
-      return EXECUTION_PREFLIGHT;
-    });
-
-    queueFixtureIds(fixture);
-    await postRun(started.url, createRunRequest(fixture, 'Build the operator prototype.'));
-    await resolverEntered;
-    const awaiting = getStrategyTaskExecution(database(), fixture.taskExecutionId);
-    expect(awaiting?.runs.map((run) => run.inputStage)).toEqual(['request']);
-    const activeRunId = awaiting?.activeRunId;
-    expect(activeRunId).toBeTruthy();
-
-    const cancelResponse = await fetch(
-      `${started.url}/api/runs/${encodeURIComponent(activeRunId!)}/cancel`,
-      { method: 'POST' },
-    );
-    expect(cancelResponse.status).toBe(200);
-    releaseResolver();
-
-    const task = await waitForTask(fixture.taskExecutionId, 'canceled');
-    const terminal = await waitForRunTerminal(started.url, activeRunId!);
-    expect(task.runs.map((run) => run.inputStage)).toEqual(['request']);
-    expect(terminal).toMatchObject({
-      status: 'canceled',
-      strategyTask: { outcome: 'canceled', terminal: true },
-    });
-    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(1);
-  });
-
-  it('runs a verified complex package chain and requires normalized Child evidence', async () => {
-    const capabilityResult = resolveBundledOdNextRuntimeCapability({
-      agentId: 'codex',
-      agentCliVersion: 'codex-cli 0.147.0',
-      capturedAt: 100,
-    });
-    expect(capabilityResult.reason).toBe('capability_resolved');
-    if (!capabilityResult.snapshot) throw new Error('expected verified Codex capability');
-    const capability = capabilityResult.snapshot;
-    const fixture = await createFixture('complex', { capability });
-    await stopServer(started);
-    started = await startDaemon(
-      () => EXECUTION_PREFLIGHT,
-      ({ phase, taskExecutionId, runId }) => {
-        if (phase === 'eligibility') return { capabilitySnapshot: capability };
-        const rootId = `task-run:${runId}`;
-        const fact = (
-          id: string,
-          kind: 'task_run' | 'child_agent',
-          status: 'running' | 'completed',
-          packageId?: string,
-        ) => normalizeAgentObservationV1({
-          identity: {
-            observationId: id,
-            taskExecutionId,
-            runId,
-            taskRunIndex: 1,
-            ...(kind === 'child_agent' ? { parentObservationId: rootId } : {}),
-          },
-          kind,
-          stage: 'production',
-          status,
-          ...(packageId ? { attributes: { buildPackageId: packageId } } : {}),
-        });
-        return {
-          capabilitySnapshot: capability,
-          taskRunObservationId: rootId,
-          observations: [
-            fact(rootId, 'task_run', 'running'),
-            fact('child-shell', 'child_agent', 'running', 'shell'),
-            fact('child-shell', 'child_agent', 'completed', 'shell'),
-            fact('child-flow', 'child_agent', 'running', 'flow'),
-            fact('child-flow', 'child_agent', 'completed', 'flow'),
-            fact(rootId, 'task_run', 'completed'),
-          ],
-        };
-      },
-    );
-
-    queueFixtureIds(fixture);
-    await postRun(started.url, createRunRequest(fixture, 'Build the complex prototype.'));
-    const terminal = await waitForTask(fixture.taskExecutionId, 'completed');
-    expect(terminal).toMatchObject({
-      executionMode: 'complex',
-      terminalRunId: terminal.runs[1]?.runId,
-    });
-    expect(terminal.runs.map((run) => run.inputStage)).toEqual(['request', 'production']);
-    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(2);
-  });
-
-  it('binds native Claude Agents to complex Build Packages and completes from durable facts', async () => {
-    const capabilityResult = resolveBundledOdNextRuntimeCapability({
-      agentId: 'claude',
-      agentCliVersion: '2.1.233 (Claude Code)',
-    });
-    expect(capabilityResult.reason).toBe('capability_resolved');
-    if (!capabilityResult.snapshot) throw new Error('expected verified Claude capability');
-    const fixture = await createFixture('complex', {
-      selectedAgentId: 'claude',
-      capability: capabilityResult.snapshot,
-    });
-    if (!started) throw new Error('expected running daemon fixture');
-
-    queueFixtureIds(fixture);
-    await postRun(started.url, createRunRequest(fixture, 'Build the complex prototype.'));
-    const terminal = await waitForTask(fixture.taskExecutionId, 'completed');
-    expect(terminal).toMatchObject({ executionMode: 'complex' });
-    expect(terminal.runs.map((run) => run.inputStage)).toEqual(['request', 'production']);
-
-    const invocations = await readClaudeInvocations(fixture.logPath, fixture.projectId);
-    expect(invocations).toHaveLength(2);
-    const production = invocations[1]!;
-    const agentsFlag = production.argv.indexOf('--agents');
-    expect(agentsFlag).toBeGreaterThan(-1);
-    const nativeAgents = JSON.parse(production.argv[agentsFlag + 1]!) as Record<string, unknown>;
-    const handles = Object.keys(nativeAgents);
-    expect(handles).toHaveLength(2);
-    expect(handles.every((handle) => /^od-build-\d+-[a-f0-9]{16}$/.test(handle))).toBe(true);
-    expect(JSON.stringify(nativeAgents)).not.toContain('shell');
-    expect(JSON.stringify(nativeAgents)).not.toContain('flow');
-    const productionPrompt = (JSON.parse(production.stdin) as any).message.content[0].text;
-    expect(productionPrompt).toContain('"buildPackageId":"shell"');
-    expect(productionPrompt).toContain('"buildPackageId":"flow"');
-    expect(production.argv).toContain('--forward-subagent-text');
-
-    const productionRun = await getRun(started.url, terminal.runs[1]!.runId);
-    const childFacts = await readClaudeChildRuntimeFacts(productionRun.eventsLogPath);
-    expect(childFacts.filter((fact) => fact.state === 'completed').map((fact) => (
-      fact.buildPackageId
-    ))).toEqual(['shell', 'flow']);
-    const childToolFacts = await readClaudeChildToolRuntimeFacts(productionRun.eventsLogPath);
-    expect(childToolFacts.filter((fact) => fact.state === 'completed').map((fact) => (
-      [fact.buildPackageId, fact.toolName]
-    ))).toEqual([['shell', 'Bash'], ['flow', 'Bash']]);
-    const persistedEvents = await readFile(productionRun.eventsLogPath, 'utf8');
-    expect(persistedEvents).not.toContain('INTERNAL_CHILD_TEXT_SHOULD_NOT_PERSIST');
-    expect(persistedEvents).not.toContain('INTERNAL_CHILD_TOOL_INPUT');
-    expect(persistedEvents).not.toContain('INTERNAL_CHILD_TOOL_OUTPUT');
-  });
-
-  async function createFixture(
-    mode: 'repair' | 'direct' | 'complex',
-    {
-      selectedAgentId = 'codex',
-      capability,
-    }: {
-      selectedAgentId?: string;
-      capability?: OdNextRuntimeCapabilitySnapshotV1;
-    } = {},
-  ) {
-    const suffix = `${mode}-${Date.now()}-${++sequence}`;
-    if (mode !== 'direct') {
-      const publicFixture = await createPublicRolloutFixture(`chain-${suffix}`, 'design');
-      started = publicFixture.started;
-      binDir = publicFixture.binDir;
-      process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
-      process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
-      const template = await createStrategyTemplate();
-      const initialRunId = `019fffab-0000-7000-8000-${sequence
-        .toString(16)
-        .padStart(12, '0')}`;
-      const taskOwnerUuid = `019fffaa-0000-7000-8000-${sequence
-        .toString(16)
-        .padStart(12, '0')}`;
-      const taskExecutionId = `odnext_${taskOwnerUuid.replaceAll('-', '')}`;
-      const plan = planContract(template.snapshotId, template.strategy, mode, capability);
-      const { bin, logPath } = selectedAgentId === 'claude'
-        ? await writeStrategyClaude(binDir, plan)
-        : await writeStrategyCodex(binDir, mode, plan);
-      const configResponse = await fetch(`${started.url}/api/app-config`, {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          agentId: selectedAgentId,
-          agentCliEnv: selectedAgentId === 'claude'
-            ? { claude: { CLAUDE_BIN: bin } }
-            : { codex: { CODEX_BIN: bin, CODEX_HOME: binDir } },
-          telemetry: { metrics: false, content: false, artifactManifest: false },
-          privacyDecisionAt: Date.now(),
-        }),
-      });
-      expect(configResponse.status).toBe(200);
-      expect((await fetch(`${started.url}/api/agents`)).status).toBe(200);
-      return {
-        projectId: publicFixture.projectId,
-        conversationId: publicFixture.conversationId,
-        snapshotId: template.snapshotId,
-        useAutomaticSnapshot: true,
-        initialRunId,
-        taskOwnerUuid,
-        taskExecutionId,
-        logPath,
-        agentId: selectedAgentId,
-      };
-    }
-    binDir = await mkdtemp(path.join(os.tmpdir(), `od-next-server-${mode}-`));
-    started = await startDaemon();
-    const projectId = `od-next-server-${suffix}`;
-    const projectResponse = await fetch(`${started.url}/api/projects`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        id: projectId,
-        name: `OD Next ${mode} server test`,
-        metadata: { kind: 'prototype' },
-        conversationMode: mode === 'direct' ? 'chat' : 'design',
-        skipDiscoveryBrief: true,
-      }),
-    });
-    expect(projectResponse.status).toBe(200);
-    const projectBody = await projectResponse.json() as {
-      conversationId: string;
-      appliedPluginSnapshotId?: string;
-      project?: {
-        metadata?: { scenarioBinding?: { snapshotId: string } };
-      };
-    };
-    const project = { id: projectId, conversationId: projectBody.conversationId };
-    if (mode !== 'direct') {
-      expect(projectBody.project?.metadata?.scenarioBinding).toMatchObject({
-        provenance: 'automatic_default',
-        taskProfile: 'prototype',
-      });
-    }
-
-    const snapshot = mode === 'direct'
-      ? await createStrategySnapshot(project.id, project.conversationId)
-      : await createStrategyTemplate();
-    if (!snapshot?.strategy) throw new Error('OD Next strategy snapshot fixture is missing');
-    const initialRunId = `019fffab-0000-7000-8000-${sequence
-      .toString(16)
-      .padStart(12, '0')}`;
-    const taskOwnerUuid = mode === 'direct'
-      ? null
-      : `019fffaa-0000-7000-8000-${sequence.toString(16).padStart(12, '0')}`;
-    const taskExecutionId = taskOwnerUuid
-      ? `odnext_${taskOwnerUuid.replaceAll('-', '')}`
-      : `task-${suffix}`;
-    if (mode === 'direct') {
-      createStrategyTaskExecution(database(), {
-        taskExecutionId,
-        projectId: project.id,
-        conversationId: project.conversationId,
-        snapshotId: snapshot.snapshotId,
-        selectedAgentId,
-        initialRunId,
-        ...strategyTaskCreateIdentityFixture(),
-      });
-      prepareStrategyRequest(database(), {
-        taskExecutionId,
-        preference: 'auto',
-        directEdit: DIRECT_ELIGIBLE,
-        intake: INTAKE_PASSED,
-        execution: EXECUTION_PREFLIGHT,
-      });
-    } else {
-      process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
-      process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
-    }
-
-    const plan = planContract(snapshot.snapshotId, snapshot.strategy!, mode, capability);
-    const { bin, logPath } = selectedAgentId === 'claude'
-      ? await writeStrategyClaude(binDir, plan)
-      : await writeStrategyCodex(binDir, mode, plan);
+  async function createFixture(_mode: 'repair', { probeLogPath }: { probeLogPath?: string } = {}) {
+    const suffix = `marker-${Date.now()}-${++sequence}`;
+    const publicFixture = await createPublicRolloutFixture(`chain-${suffix}`, 'design');
+    started = publicFixture.started; binDir = publicFixture.binDir;
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    const initialRunId = `019fffab-0000-7000-8000-${sequence.toString(16).padStart(12, '0')}`;
+    const taskOwnerUuid = `019fffaa-0000-7000-8000-${sequence.toString(16).padStart(12, '0')}`;
+    const taskExecutionId = `odnext_${taskOwnerUuid.replaceAll('-', '')}`;
+    const { bin, logPath } = await writeStrategyCodex(binDir, probeLogPath);
     const configResponse = await fetch(`${started.url}/api/app-config`, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        agentId: selectedAgentId,
-        agentCliEnv: selectedAgentId === 'claude'
-          ? { claude: { CLAUDE_BIN: bin } }
-          : { codex: { CODEX_BIN: bin, CODEX_HOME: binDir } },
-        telemetry: { metrics: false, content: false, artifactManifest: false },
-        privacyDecisionAt: Date.now(),
-      }),
+      method: 'PUT', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ agentId: 'codex', agentCliEnv: { codex: { CODEX_BIN: bin, CODEX_HOME: binDir } },
+        telemetry: { metrics: false, content: false, artifactManifest: false }, privacyDecisionAt: Date.now() }),
     });
     expect(configResponse.status).toBe(200);
-    const agentsResponse = await fetch(`${started.url}/api/agents`);
-    expect(agentsResponse.status).toBe(200);
-    return {
-      projectId: project.id,
-      conversationId: project.conversationId,
-      snapshotId: snapshot.snapshotId,
-      useAutomaticSnapshot: mode !== 'direct',
-      initialRunId,
-      taskOwnerUuid,
-      taskExecutionId,
-      logPath,
-      agentId: selectedAgentId,
-    };
+    expect((await fetch(`${started.url}/api/agents`)).status).toBe(200);
+    return { projectId: publicFixture.projectId, conversationId: publicFixture.conversationId,
+      snapshotId: 'automatic-fixture-snapshot', useAutomaticSnapshot: true, initialRunId, taskOwnerUuid,
+      taskExecutionId, logPath, agentId: 'codex' };
   }
+
 });
+
+type CodexArchiveFrame = { pid: number; method: string; threadId?: string };
 
 async function createPublicRolloutFixture(
   label: string,
   conversationMode: 'design' | 'chat' | 'plan' = 'chat',
   pluginId?: string,
   agentCliVersion = 'codex-cli 0.147.0',
+  preflightResolver?: () => typeof EXECUTION_PREFLIGHT,
 ) {
   const suffix = `${label}-${Date.now()}`;
   const binDir = await mkdtemp(path.join(os.tmpdir(), `od-next-public-${label}-`));
@@ -2588,7 +2837,7 @@ async function createPublicRolloutFixture(
     label,
     agentCliVersion,
   );
-  const started = await startDaemon();
+  const started = await startDaemon(preflightResolver);
   const projectId = `od-next-public-${suffix}`;
   const projectResponse = await fetch(`${started.url}/api/projects`, {
     method: 'POST',
@@ -2730,23 +2979,170 @@ const argv = process.argv.slice(2);
 const logPath = ${JSON.stringify(logPath)};
 if (argv.includes('--version')) { console.log(${JSON.stringify(agentCliVersion)}); process.exit(0); }
 if (argv.includes('--help')) { console.log('Usage: codex exec'); process.exit(0); }
+// Metadata probes never consume a generation prompt on stdin.
+if (argv[0] === 'debug' && argv[1] === 'models') { console.log(JSON.stringify({ models: [{ id: 'gpt-5.5' }] })); process.exit(0); }
+if (argv[0] === 'login' && argv[1] === 'status') { console.log('Logged in using ChatGPT'); process.exit(0); }
 let stdin = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => { stdin += chunk; });
 process.stdin.on('end', () => {
   fs.appendFileSync(logPath, JSON.stringify({ argv, stdin, cwd: process.cwd(), startedAt: Date.now() }) + '\\n');
-  console.log(JSON.stringify({ type: 'thread.started', thread_id: 'public-rollout-session' }));
+  if (['marker-expired-session', 'marker-expired-side-effect', 'marker-request-expired'].includes(${JSON.stringify(label)}) && argv.includes('resume')) {
+    if (${JSON.stringify(label)} === 'marker-expired-side-effect') {
+      console.log(JSON.stringify({ type: 'item.completed', item: {
+        id: 'side-effect', type: 'command_execution', command: 'echo executed', aggregated_output: 'executed', exit_code: 0, status: 'completed',
+      } }));
+    }
+    process.stderr.write('no rollout found for thread id invalid-session\\n');
+    process.exit(1);
+  }
+  if (${JSON.stringify(label)} !== 'marker-missing-session') {
+  console.log(JSON.stringify({ type: 'thread.started', thread_id: ${JSON.stringify(label.startsWith('marker-') ? THREAD_ID : 'public-rollout-session')} }));
+  }
   console.log(JSON.stringify({ type: 'turn.started' }));
-  if (stdin.includes('Hold the public rollout run open until canceled.')) {
+  if (${JSON.stringify(label)} === 'marker-frozen-representation') {
+    const emit = (text) => {
+      console.log(JSON.stringify({ type: 'item.completed', item: { id: 'answer', type: 'agent_message', text } }));
+      console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1 } }));
+      setTimeout(() => process.exit(0), 5);
+    };
+    if (stdin.includes('This is the production turn')) {
+      fs.writeFileSync('index.html', '<!doctype html><html><body>Frozen Skill delivered</body></html>');
+      emit('Delivered index.html.');
+    } else if (stdin.includes('Continue refining.')) {
+      emit('Refinement complete.');
+    } else {
+      const key = /<od-production-ready key="([a-f0-9]+)"/.exec(stdin)?.[1];
+      if (!key) throw new Error('Current host marker key was not injected');
+      const waiting = setInterval(() => {
+        if (!fs.existsSync(logPath + '.release')) return;
+        clearInterval(waiting);
+        emit('Plan: build with the selected Skill.\\n<od-production-ready key="' + key + '" />');
+      }, 10);
+    }
+    return;
+  }
+  if (stdin.includes('Hold the public rollout run open until canceled.') && !stdin.includes('Historical task context.')) {
     setInterval(() => {}, 1 << 30);
     return;
   }
+  if (stdin.includes('Hold the run open and drain slowly after a stop.') && !stdin.includes('Historical task context.')) {
+    // Stopping answers only after the process exits; keep that window open.
+    process.on('SIGTERM', () => setTimeout(() => process.exit(0), 2500));
+    fs.appendFileSync(logPath, JSON.stringify({ drainReady: true }) + '\\n');
+    setInterval(() => {}, 1 << 30);
+    return;
+  }
+  if (${JSON.stringify(label)} === 'marker-tool-split' && !stdin.includes('This is the production turn')) {
+    const key = /<od-production-ready key="([a-f0-9]+)"/.exec(stdin)?.[1];
+    if (!key) throw new Error('Current host marker key was not injected');
+    for (const item of [
+      { id: 'plan', type: 'agent_message', text: 'Plan: create a landing page and a matching deck.' },
+      { id: 'todo', type: 'command_execution', command: 'echo planned', aggregated_output: 'planned', exit_code: 0, status: 'completed' },
+      { id: 'answer', type: 'agent_message', text: '<od-production-ready key="' + key + '" />' },
+    ]) console.log(JSON.stringify({ type: 'item.completed', item }));
+    console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1 } }));
+    setTimeout(() => process.exit(0), 5);
+    return;
+  }
+  let text = 'Ordinary public run completed.';
+  if (${JSON.stringify(label)} === 'marker-handoff') {
+    if (stdin.includes('Historical task context.')) {
+      fs.writeFileSync('index.html', '<!doctype html><html><body>Dog battle</body></html>');
+      text = 'Delivered index.html.';
+    } else text = 'Plan: one blue dog battle page.\\n<open-design-plan-contract>bad old contract</open-design-plan-contract>';
+  } else if (${JSON.stringify(label)} === 'marker-image') {
+    if (stdin.includes('This is the production turn')) {
+      fs.writeFileSync('dog.png', Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5X8AAAAASUVORK5CYII=', 'base64'));
+      text = 'Delivered dog.png.';
+    } else {
+      const key = /<od-production-ready key="([a-f0-9]+)"/.exec(stdin)?.[1];
+      if (!key) throw new Error('Current host marker key was not injected');
+      text = 'Plan: deliver a standalone dog image only.\\n<od-production-ready key="' + key + '" />';
+    }
+  } else if (['marker-production', 'marker-production-suggestions', 'marker-missing-session', 'marker-expired-session', 'marker-expired-side-effect', 'marker-tool-split'].includes(${JSON.stringify(label)})) {
+    if (stdin.includes('This is the production turn')) {
+      fs.writeFileSync('landing.html', '<!doctype html><html><body>Landing</body></html>');
+      fs.writeFileSync('deck.html', '<!doctype html><html><body>Deck</body></html>');
+      text = 'Wrote landing.html and deck.html.\\n<open-design-runtime-state>\\n{broken}\\n</open-design-runtime-state>';
+      if (${JSON.stringify(label)} === 'marker-production-suggestions') {
+        const key = /<od-next key="([a-f0-9]+)"/.exec(stdin)?.[1];
+        if (!key) throw new Error('Current next-step marker key was not injected');
+        text += '\\n' + ${JSON.stringify(PRODUCTION_FOLLOW_UP_SUGGESTIONS)}
+          .map(value => '<od-next key="' + key + '" value="' + value + '"/>').join('\\n');
+      }
+    } else {
+      const key = /<od-production-ready key="([a-f0-9]+)"/.exec(stdin)?.[1];
+      if (!key) throw new Error('Current host marker key was not injected');
+      text = 'Plan: create a landing page and a matching deck.\\n<od-production-ready key="' + key + '" />';
+    }
+  } else if (['marker-question', 'marker-request-expired'].includes(${JSON.stringify(label)})) {
+    text = '<question-form id="scope">{"questions":[{"id":"audience","label":"Who is this for?"}]}</question-form>';
+  } else if (${JSON.stringify(label)} === 'marker-question-plan') {
+    if (stdin.includes('This is the production turn')) {
+      fs.writeFileSync('index.html', '<!doctype html><html><body>Developer landing</body></html>');
+      text = 'Wrote index.html.';
+    } else if (stdin.includes('Audience: developers.')) {
+      const key = /<od-production-ready key="([a-f0-9]+)"/.exec(stdin)?.[1];
+      if (!key) throw new Error('Current host marker key was not injected');
+      text = 'Plan: a landing page for developers.\\n<od-production-ready key="' + key + '" />';
+    } else {
+      text = '<question-form id="scope">{"questions":[{"id":"audience","label":"Who is this for?"}]}</question-form>';
+    }
+  } else if (${JSON.stringify(label)} === 'marker-unreadable') {
+    const key = /<od-production-ready key="([a-f0-9]+)"/.exec(stdin)?.[1];
+    if (stdin.includes('This is the production turn')) {
+      fs.writeFileSync('index.html', '<!doctype html><html><body>Page</body></html>');
+      text = 'Wrote index.html.';
+    } else if (key) {
+      text = 'Plan: one page.\\n<od-production-ready key="' + key + '" />';
+    }
+  }
   console.log(JSON.stringify({
-    type: 'item.completed',
-    item: { id: 'answer', type: 'agent_message', text: 'Ordinary public run completed.' },
+    type: 'item.completed', item: { id: 'answer', type: 'agent_message', text },
   }));
   console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1 } }));
   setTimeout(() => process.exit(0), 5);
+});
+`, 'utf8');
+  await chmod(bin, 0o755);
+  return { bin, logPath };
+}
+
+async function writePublicQoder(dir: string): Promise<{ bin: string; logPath: string }> {
+  const bin = path.join(dir, 'qoder-public');
+  const logPath = path.join(dir, 'qoder-public.jsonl');
+  await writeFile(bin, `#!/usr/bin/env node
+const fs = require('node:fs');
+const path = require('node:path');
+const argv = process.argv.slice(2);
+if (argv.includes('--version')) { console.log('qodercli 0.3.0'); process.exit(0); }
+if (argv.includes('--help')) { console.log('Usage: qodercli -p --output-format stream-json --yolo'); process.exit(0); }
+let stdin = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', chunk => { stdin += chunk; });
+process.stdin.on('end', () => {
+  const inputDir = process.env.OD_TASK_INPUT_DIR;
+  const attachments = inputDir && path.join(inputDir, 'attachments');
+  const taskInputFiles = attachments && fs.existsSync(attachments)
+    ? fs.readdirSync(attachments).map(name => ({ name, content: fs.readFileSync(path.join(attachments, name), 'utf8') })) : [];
+  fs.appendFileSync(${JSON.stringify(logPath)}, JSON.stringify({ argv, stdin, cwd: process.cwd(), startedAt: Date.now(), taskInputFiles }) + '\\n');
+  const current = /<user_first_prompt>\\s*<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>\\s*<\\/user_first_prompt>/.exec(stdin)?.[1] || stdin;
+  let text = 'Follow-up complete.';
+  if (current.includes('This is the production turn')) {
+    fs.writeFileSync('index.html', '<!doctype html><html><body>Qoder delivered</body></html>');
+    text = 'Delivered index.html.';
+  } else if (current.includes('QODER_ORIGINAL_REQUEST')) {
+    const key = /<od-production-ready key="([a-f0-9]+)"/.exec(stdin)?.[1];
+    if (!key) throw new Error('Current host marker key was not injected');
+    text = 'QODER_PLAN_SENTINEL: one page.\\n<od-production-ready key="' + key + '" />';
+  } else if (current.includes('Ask for audience.')) {
+    text = '<question-form id="scope">{"questions":[{"id":"audience","label":"Who is this for?"}]}</question-form>';
+  }
+  const W = obj => fs.writeSync(1, JSON.stringify(obj) + '\\n');
+  W({ type: 'system', subtype: 'init', model: 'qoder-fixture', qodercli_version: '0.3.0' });
+  W({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
+  W({ type: 'result', is_error: false, stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 } });
 });
 `, 'utf8');
   await chmod(bin, 0o755);
@@ -2770,6 +3166,22 @@ function database() {
   return openDatabase(process.cwd(), { dataDir });
 }
 
+/** Rewrite a task's frozen bundle in the layout the v2 composer used before its reshape. */
+function writeStalePromptBundle(taskExecutionId: string, initialRunId: string): void {
+  const text = contracts.serializeCanonicalXml({
+    kind: 'element',
+    tag: 'open_design_prompt_bundle',
+    attributes: [['schema', contracts.OD_NEXT_PROMPT_BUNDLE_SCHEMA_V2]],
+    children: [{ kind: 'element', tag: 'system_prompt', children: [{ kind: 'text', tag: 'core_system_prompt', text: 'stale' }] }],
+  });
+  const utf8Bytes = Buffer.byteLength(text, 'utf8');
+  const sha256 = createHash('sha256').update(text, 'utf8').digest('hex');
+  database().prepare(`UPDATE strategy_task_executions SET prompt_bundle_text=?, prompt_bundle_utf8_bytes=?, prompt_bundle_sha256=?
+    WHERE task_execution_id=?`).run(text, utf8Bytes, sha256, taskExecutionId);
+  database().prepare(`UPDATE strategy_task_runs SET final_text=?, final_text_utf8_bytes=?, final_text_sha256=?
+    WHERE run_id=?`).run(text, utf8Bytes, sha256, initialRunId);
+}
+
 async function readDurableRunState(runId: string): Promise<Record<string, unknown>> {
   const dataDir = process.env.OD_DATA_DIR;
   if (!dataDir) throw new Error('OD_DATA_DIR is required');
@@ -2779,239 +3191,87 @@ async function readDurableRunState(runId: string): Promise<Record<string, unknow
   )) as Record<string, unknown>;
 }
 
-async function startDaemon(
-  resolver: NonNullable<StartServerOptions['odNextExecutionPreflightResolver']> =
-    () => EXECUTION_PREFLIGHT,
-  complexResolver: StartServerOptions['odNextComplexProductionResolver'] = null,
-): Promise<StartedServer> {
-  return await startServer({
-    port: 0,
-    returnServer: true,
-    odNextExecutionPreflightResolver: resolver,
-    odNextComplexProductionResolver: complexResolver,
-  }) as StartedServer;
+/**
+ * Reuse the ACP server fixtures' OD_AGENT_HOME + minimal PATH boundary.
+ * Detection and the selected CLI still run normally; only unrelated host
+ * executables are outside this test's discovery scope. Explicit *_BIN paths
+ * can bypass PATH, so the fixture also removes inherited executable overrides.
+ */
+async function isolateAgentDetection(): Promise<void> {
+  fixtureDetectionIsolation ??= (async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'od-next-agent-detection-'));
+    try {
+      const home = path.join(root, 'home');
+      const bin = path.join(root, 'bin');
+      await mkdir(home);
+      await mkdir(bin);
+      // Keep Node shebangs usable without exposing every CLI installed beside
+      // the host Node binary. Selected agent bins stay explicit in app config.
+      await symlink(process.execPath, path.join(bin, 'node'));
+      return { root, home, bin };
+    } catch (error) {
+      await rm(root, { recursive: true, force: true });
+      throw error;
+    }
+  })();
+  const isolation = await fixtureDetectionIsolation;
+  process.env.OD_AGENT_HOME = isolation.home;
+  process.env.PATH = [isolation.bin, '/usr/bin', '/bin', '/usr/sbin', '/sbin'].join(path.delimiter);
+  for (const key of fixtureAgentBinEnvKeys) delete process.env[key];
 }
 
-async function stopServer(server: StartedServer | null): Promise<void> {
-  if (!server) return;
+async function startDaemon(
+  resolver: () => typeof EXECUTION_PREFLIGHT =
+    () => EXECUTION_PREFLIGHT,
+  complexResolver: unknown = null,
+): Promise<StartedServer> {
+  await isolateAgentDetection();
+  const started = await startServer({
+    port: 0,
+    returnServer: true,
+  }) as StartedServer;
+  fixtureHttpClients.set(new URL(started.url).origin, { owner: started, dispatcher: new Agent() });
+  return started;
+}
+
+function stopServer(server: StartedServer | null): Promise<void> {
+  if (!server) return Promise.resolve();
+  const existing = fixtureShutdowns.get(server);
+  if (existing) return existing;
+  const pending = stopOwnedServer(server);
+  fixtureShutdowns.set(server, pending);
+  return pending;
+}
+
+async function stopOwnedServer(server: StartedServer): Promise<void> {
   await Promise.resolve(server.shutdown?.());
+  const origin = new URL(server.url).origin;
+  const client = fixtureHttpClients.get(origin);
+  if (client?.owner === server) {
+    fixtureHttpClients.delete(origin);
+    // Runs have settled first. Release only this fixture's keep-alive clients,
+    // including a connection whose idle transition races server.close().
+    await client.dispatcher.destroy();
+  }
   if (server.server.listening) {
     await new Promise<void>((resolve) => server.server.close(() => resolve()));
   }
 }
 
-async function createStrategySnapshot(
-  projectId: string,
-  conversationId: string,
-  linkToProject = true,
-) {
-  const source = path.resolve(
-    import.meta.dirname,
-    '../../../plugins/_official/scenarios/od-next-strategy',
-  );
-  const resolved = await resolvePluginFolder({
-    folder: source,
-    folderId: 'od-next-strategy',
-    sourceKind: 'bundled',
-    source,
-    trust: 'bundled',
-  });
-  if (!resolved.ok) throw new Error(resolved.errors.join('; '));
-  const plugin = resolved.record;
-  upsertInstalledPlugin(database(), plugin);
-  const strategy = createBundledStrategyBindingV2({ plugin, taskType: 'prototype' });
-  const snapshot = createSnapshot(database(), {
-    projectId,
-    conversationId,
-    runId: null,
-    pluginId: 'od-next-strategy',
-    pluginVersion: '2.0.0',
-    manifestSourceDigest: 'od-next-server-test-manifest',
-    strategy,
-    taskKind: 'new-generation',
-    inputs: {},
-    resolvedContext: { items: [] },
-    pipeline: {
-      stages: OD_NEXT_PROMPT_STAGE_CONTRACT_V2.map((stage) => ({
-        id: stage.id,
-        atoms: [...stage.atoms],
-      })),
-    },
-    capabilitiesGranted: ['prompt:inject'],
-    capabilitiesRequired: ['prompt:inject'],
-    assetsStaged: [],
-    connectorsRequired: [],
-    connectorsResolved: [],
-    mcpServers: [],
-  });
-  if (linkToProject) linkSnapshotToProject(database(), snapshot.snapshotId, projectId);
-  return snapshot;
-}
-
-async function createStrategyTemplate() {
-  const source = path.resolve(
-    import.meta.dirname,
-    '../../../plugins/_official/scenarios/od-next-strategy',
-  );
-  const resolved = await resolvePluginFolder({
-    folder: source,
-    folderId: 'od-next-strategy',
-    sourceKind: 'bundled',
-    source,
-    trust: 'bundled',
-  });
-  if (!resolved.ok) throw new Error(resolved.errors.join('; '));
-  return {
-    snapshotId: '00000000-0000-4000-8000-000000000000',
-    strategy: createBundledStrategyBindingV2({ plugin: resolved.record, taskType: 'prototype' }),
-  };
-}
-
-function planContract(
-  snapshotId: string,
-  strategy: AppliedStrategyBindingV2,
-  mode: 'repair' | 'direct' | 'complex' = 'repair',
-  capability = complexCapabilitySnapshot(),
-): OpenDesignPlanContractV2 {
-  return {
-    schema: 'open-design.plan-contract/v2',
-    strategy: {
-      id: 'od-next-strategy',
-      version: strategy.version,
-      packageHash: strategy.packageHash,
-      snapshotId,
-    },
-    taskProfile: {
-      schemaVersion: '2',
-      taskType: 'prototype',
-      taskProfileVersion: strategy.selectedTaskProfile.version,
-      goal: 'Build an operator prototype',
-      contextAndAudience: 'Product operators',
-      inputsAndReferences: ['request'],
-      constraints: [],
-      canonicalDeliverable: { id: 'prototype', kind: 'prototype', format: 'html' },
-      requiredDeliverables: [{ id: 'prototype', kind: 'prototype' }],
-      designSpec: {
-        source: 'resolved-baseline',
-        version: '1',
-        decisions: { palette: 'neutral' },
-      },
-      buildRequirements: [{ id: 'build', text: 'Build the prototype.' }],
-      assumptions: [],
-      risks: [],
-      taskSpecific: {},
-    },
-    fullPlan: {
-      executionMode: mode === 'complex' ? 'complex' : 'simple',
-      steps: mode === 'complex'
-        ? [
-            { id: 'shell', objective: 'Build shell', outputs: ['shell'] },
-            { id: 'flow', objective: 'Build flow', outputs: ['flow'], dependsOn: ['shell'] },
-          ]
-        : [{ id: 'build', objective: 'Build', outputs: ['prototype'] }],
-      readinessArtifacts: [],
-      buildPackages: mode === 'complex'
-        ? [
-            {
-              id: 'shell', objective: 'Build shell', inputs: ['design-spec'], outputs: ['shell'],
-              sharedConstraints: ['Use the frozen design spec.'], dependsOn: [],
-              allowedResources: ['project-source'],
-            },
-            {
-              id: 'flow', objective: 'Build flow', inputs: ['shell'], outputs: ['flow'],
-              sharedConstraints: ['Use the frozen design spec.'], dependsOn: ['shell'],
-              allowedResources: ['project-source'],
-            },
-          ]
-        : [],
-    },
-    runManifest: {
-      selectedAgentId: mode === 'complex' ? capability.agentId : 'codex',
-      capabilitySnapshotHash: mode === 'complex'
-        ? capability.snapshotHash.slice('sha256:'.length)
-        : 'c'.repeat(64),
-      inputRefs: ['request'],
-      productionRoutes: ['html'],
-      preflight: { intake: 'passed', execution: 'passed' },
-    },
-    decisionSummary: {
-      goal: 'Build an operator prototype',
-      deliverables: ['prototype'],
-      keyConstraints: [],
-      assumptions: [],
-      risks: [],
-      openDecisions: [],
-    },
-  };
-}
-
-function runtimeState(input: {
-  route?: 'direct_edit' | 'full_plan';
-  inputStage?: 'request' | 'contract_repair' | 'production';
-  outcome: 'plan_ready' | 'completed';
-  executionMode?: 'simple' | 'complex';
-}) {
-  return {
-    schema: 'open-design.strategy-state/v2',
-    route: input.route ?? 'full_plan',
-    inputStage: input.inputStage ?? 'request',
-    outcome: input.outcome,
-    executionMode: input.executionMode ?? 'simple',
-    reasonCodes: [],
-  };
-}
-
-function machineBlock(tag: string, value: unknown, fenced = false): string {
-  const json = JSON.stringify(value);
-  return `<${tag}>\n${fenced ? `\`\`\`json\n${json}\n\`\`\`` : json}\n</${tag}>`;
-}
-
-async function writeStrategyCodex(
-  dir: string,
-  mode: 'repair' | 'direct' | 'complex',
-  plan: OpenDesignPlanContractV2,
-): Promise<{ bin: string; logPath: string }> {
-  const bin = path.join(dir, `codex-${mode}`);
-  const logPath = path.join(dir, `codex-${mode}.jsonl`);
-  const initialRepair = [
-    'Prepared a simple plan.',
-    machineBlock('open-design-plan-contract', plan, true),
-    machineBlock('open-design-runtime-state', runtimeState({ outcome: 'plan_ready' })),
-  ].join('\n');
-  const repaired = [
-    machineBlock('open-design-plan-contract', plan),
-    machineBlock('open-design-runtime-state', runtimeState({
-      inputStage: 'contract_repair',
-      outcome: 'plan_ready',
-    })),
-  ].join('\n');
-  const production = machineBlock('open-design-runtime-state', runtimeState({
-    inputStage: 'production',
-    outcome: 'completed',
-  }));
-  const direct = machineBlock('open-design-runtime-state', runtimeState({
-    route: 'direct_edit',
-    outcome: 'completed',
-  }));
-  const complexPlan = [
-    'Prepared a complex plan.',
-    machineBlock('open-design-plan-contract', plan),
-    machineBlock('open-design-runtime-state', runtimeState({
-      outcome: 'plan_ready', executionMode: 'complex',
-    })),
-  ].join('\n');
-  const complexProduction = machineBlock('open-design-runtime-state', runtimeState({
-    inputStage: 'production', outcome: 'completed', executionMode: 'complex',
-  }));
-
+async function writeStrategyCodex(dir: string, probeLogPath?: string): Promise<{ bin: string; logPath: string }> {
+  const bin = path.join(dir, 'codex-repair');
+  const logPath = path.join(dir, 'codex-marker.jsonl');
   await writeFile(bin, `#!/usr/bin/env node
 const fs = require('node:fs');
 const path = require('node:path');
 const argv = process.argv.slice(2);
 const logPath = ${JSON.stringify(logPath)};
-const mode = ${JSON.stringify(mode)};
+${probeLogPath ? `if (argv.includes('--version') || argv.includes('--help') || argv[0] === 'debug' && argv[1] === 'models' || argv[0] === 'login' && argv[1] === 'status') fs.appendFileSync(${JSON.stringify(probeLogPath)}, JSON.stringify(argv) + '\\n');` : ''}
 if (argv.includes('--version')) { console.log('codex-cli 0.147.0'); process.exit(0); }
 if (argv.includes('--help')) { console.log('Usage: codex exec [--sandbox MODE]'); process.exit(0); }
+// Answer probes before failure/generation handling, without waiting for stdin.
+if (argv[0] === 'debug' && argv[1] === 'models') { console.log(JSON.stringify({ models: [{ id: 'gpt-5.5' }] })); process.exit(0); }
+if (argv[0] === 'login' && argv[1] === 'status') { console.log('Logged in using ChatGPT'); process.exit(0); }
 if (fs.existsSync(logPath + '.fail-start')) {
   process.stderr.write('fixture: process exited before session start\\n');
   process.exit(1);
@@ -3036,39 +3296,40 @@ function finish() {
     process.exit(2);
   }
   let text;
-  if (mode === 'direct') {
-    fs.writeFileSync(path.join(process.cwd(), 'index.html'), '<!doctype html><title>Direct</title>');
-    text = ${JSON.stringify(direct)};
-  } else if (mode === 'complex' && stdin.includes('native continuation — production')) {
-    fs.writeFileSync(path.join(process.cwd(), 'index.html'), '<!doctype html><title>Complex</title>');
-    text = ${JSON.stringify(complexProduction)};
-  } else if (mode === 'complex') {
-    text = ${JSON.stringify(complexPlan)};
-  } else if (stdin.includes('native continuation — contract_repair')) {
-    text = ${JSON.stringify(repaired)};
-  } else if (stdin.includes('native continuation — production')) {
+  if (fs.existsSync(logPath + '.linked-page')) {
+    const childFile = fs.readFileSync(logPath + '.linked-page', 'utf8');
+    const edited = fs.existsSync(logPath + '.linked-page-edit');
+    if (edited || !fs.existsSync(path.join(process.cwd(), childFile))) {
+      fs.writeFileSync(path.join(process.cwd(), childFile), '<!doctype html><title>Taxonomy</title><a href="plant-science-landing.html">Home</a>' + (edited ? '<p>Updated taxonomy</p>' : ''));
+    }
+    text = '已交付 ' + childFile + '。';
+  } else if (stdin.includes('This is the production turn') && fs.existsSync(logPath + '.blocked-production')) {
+    staleTodoList = true;
+    text = 'Working on the lesson.';
+  } else if (stdin.includes('This is the production turn')) {
     fs.writeFileSync(path.join(process.cwd(), 'index.html'), '<!doctype html><title>Production</title>');
     staleTodoList = true;
-    text = ${JSON.stringify(production)};
+    text = 'Delivered index.html.';
+  } else if (!argv.includes('resume') && fs.existsSync(logPath + '.refused-request')) {
+    // A planning turn that declines the request: the agent answers in prose,
+    // writes nothing, emits no machine block, and exits cleanly.
+    text = 'Hello! Tell me what you would like to design and I will plan it.';
   } else {
-    text = ${JSON.stringify(initialRepair)};
-  }
-  const snapshotPath = logPath + '.snapshot';
-  // The Bundle publishes the applied snapshot as a <recipe_identity> attribute
-  // and inside <runtime_facts>; the older Markdown line and inline example value
-  // are kept as fallbacks so this fixture can read either shape.
-  const detectedSnapshot = /applied_snapshot=[^a-f0-9]*([a-f0-9-]{36})/.exec(stdin)?.[1]
-    || /appliedSnapshot[^a-f0-9]*([a-f0-9-]{36})/.exec(stdin)?.[1]
-    || /applied snapshot:[^a-f0-9]*([a-f0-9-]{36})/.exec(stdin)?.[1]
-    || /"snapshotId"\\s*:\\s*"([a-f0-9-]{36})"/.exec(stdin)?.[1];
-  if (detectedSnapshot) fs.writeFileSync(snapshotPath, detectedSnapshot);
-  const appliedSnapshot = detectedSnapshot
-    || (fs.existsSync(snapshotPath) ? fs.readFileSync(snapshotPath, 'utf8') : null);
-  if (appliedSnapshot) {
-    text = text.replaceAll(${JSON.stringify(plan.strategy.snapshotId)}, appliedSnapshot);
+    const markerKey = /<od-production-ready key="([a-f0-9]+)"/.exec(stdin)?.[1];
+    if (!markerKey) throw new Error('Missing current marker key');
+    text = 'Prepared a simple plan.\\n<od-production-ready key="' + markerKey + '" />';
   }
   console.log(JSON.stringify({ type: 'thread.started', thread_id: ${JSON.stringify(THREAD_ID)} }));
   console.log(JSON.stringify({ type: 'turn.started' }));
+  if (stdin.includes('This is the production turn') && fs.existsSync(logPath + '.blocked-production')) {
+    // Replay the host-observed failure boundary: completed tools and progress text,
+    // no deliverable or Runtime State, then a clean process exit.
+    for (let i = 0; i < 2; i++) console.log(JSON.stringify({ type: 'item.completed', item: {
+      id: 'tool-' + i, type: 'mcp_tool_call', server: 'tasks', tool: 'TodoWrite',
+      arguments: { todos: [{ content: 'Build the lesson', status: 'in_progress' }] },
+      result: { content: [{ type: 'text', text: 'Updated task list' }] }, status: 'completed',
+    } }));
+  }
   if (staleTodoList) {
     // Observed on real turns: the deliverable is written, but the LAST plan
     // snapshot the agent emits still carries unchecked items.
@@ -3089,142 +3350,6 @@ setTimeout(finish, 1500);
 `, 'utf8');
   await chmod(bin, 0o755);
   return { bin, logPath };
-}
-
-async function writeStrategyClaude(
-  dir: string,
-  plan: OpenDesignPlanContractV2,
-): Promise<{ bin: string; logPath: string }> {
-  const bin = path.join(dir, 'claude-complex');
-  const logPath = path.join(dir, 'claude-complex.jsonl');
-  const complexPlan = [
-    'Prepared a complex plan.',
-    machineBlock('open-design-plan-contract', plan),
-    machineBlock('open-design-runtime-state', runtimeState({
-      outcome: 'plan_ready',
-      executionMode: 'complex',
-    })),
-  ].join('\n');
-  const complexProduction = machineBlock('open-design-runtime-state', runtimeState({
-    inputStage: 'production',
-    outcome: 'completed',
-    executionMode: 'complex',
-  }));
-  await writeFile(bin, `#!/usr/bin/env node
-const fs = require('node:fs');
-const path = require('node:path');
-const argv = process.argv.slice(2);
-const logPath = ${JSON.stringify(logPath)};
-if (argv.includes('--version')) { fs.writeSync(1, '2.1.233 (Claude Code)\\n'); process.exit(0); }
-if (argv.includes('--help')) {
-  fs.writeSync(1, 'Usage: claude -p [--include-partial-messages] [--forward-subagent-text] [--agents JSON] [--resume ID]\\n');
-  process.exit(0);
-}
-let stdin = '';
-let finished = false;
-function w(value) { fs.writeSync(1, JSON.stringify(value) + '\\n'); }
-function finish() {
-  if (finished || stdin.length === 0) return;
-  finished = true;
-  fs.appendFileSync(logPath, JSON.stringify({ argv, stdin, cwd: process.cwd(), startedAt: Date.now() }) + '\\n');
-  const production = stdin.includes('native continuation — production');
-  const snapshotPath = logPath + '.snapshot';
-  // The Bundle publishes the applied snapshot as a <recipe_identity> attribute
-  // and inside <runtime_facts>; the older Markdown line and inline example value
-  // are kept as fallbacks so this fixture can read either shape.
-  const detectedSnapshot = /applied_snapshot=[^a-f0-9]*([a-f0-9-]{36})/.exec(stdin)?.[1]
-    || /appliedSnapshot[^a-f0-9]*([a-f0-9-]{36})/.exec(stdin)?.[1]
-    || /applied snapshot:[^a-f0-9]*([a-f0-9-]{36})/.exec(stdin)?.[1]
-    || /"snapshotId"\\s*:\\s*"([a-f0-9-]{36})"/.exec(stdin)?.[1];
-  if (detectedSnapshot) fs.writeFileSync(snapshotPath, detectedSnapshot);
-  const appliedSnapshot = detectedSnapshot
-    || (fs.existsSync(snapshotPath) ? fs.readFileSync(snapshotPath, 'utf8') : null);
-  let text = production ? ${JSON.stringify(complexProduction)} : ${JSON.stringify(complexPlan)};
-  if (appliedSnapshot) text = text.replaceAll(${JSON.stringify(plan.strategy.snapshotId)}, appliedSnapshot);
-  w({ type: 'system', subtype: 'init', model: 'claude-haiku-4-5', session_id: 'claude-complex-session', claude_code_version: '2.1.233' });
-  if (production) {
-    const agentsIndex = argv.indexOf('--agents');
-    const agents = agentsIndex >= 0 ? JSON.parse(argv[agentsIndex + 1]) : {};
-    const handles = Object.keys(agents);
-    for (let index = 0; index < handles.length; index += 1) {
-      const handle = handles[index];
-      const toolId = 'native-agent-' + index;
-      w({
-        type: 'assistant', parent_tool_use_id: null,
-        message: { id: 'delegate-' + index, stop_reason: 'tool_use', content: [{
-          type: 'tool_use', id: toolId, name: 'Agent',
-          input: { prompt: 'Execute the daemon-bound package only.', subagent_type: handle, model: 'haiku', isolation: 'worktree' },
-        }] },
-      });
-      w({
-        type: 'assistant', parent_tool_use_id: toolId,
-        message: { id: 'child-work-' + index, stop_reason: 'tool_use', content: [
-          { type: 'text', text: 'INTERNAL_CHILD_TEXT_SHOULD_NOT_PERSIST' },
-          { type: 'tool_use', id: 'child-tool-' + index, name: 'Bash', input: { command: 'INTERNAL_CHILD_TOOL_INPUT' } },
-        ] },
-      });
-      w({
-        type: 'user', parent_tool_use_id: toolId,
-        message: { content: [{ type: 'tool_result', tool_use_id: 'child-tool-' + index, content: 'INTERNAL_CHILD_TOOL_OUTPUT' }] },
-      });
-      w({
-        type: 'user',
-        message: { content: [{ type: 'tool_result', tool_use_id: toolId, content: 'completed' }] },
-        tool_use_result: {
-          status: 'completed', agentId: 'child-' + index, agentType: handle,
-          resolvedModel: 'claude-haiku-4-5', totalDurationMs: 10 + index,
-          totalTokens: 3, usage: { input_tokens: 2, output_tokens: 1 },
-        },
-      });
-    }
-    fs.writeFileSync(path.join(process.cwd(), 'index.html'), '<!doctype html><title>Claude Complex</title>');
-  }
-  w({ type: 'assistant', parent_tool_use_id: null, message: { id: 'final', content: [{ type: 'text', text }], stop_reason: 'end_turn' } });
-  w({ type: 'result', subtype: 'success', is_error: false, session_id: 'claude-complex-session', stop_reason: 'end_turn', usage: { input_tokens: 10, output_tokens: 5 }, duration_ms: 30 });
-  setTimeout(() => process.exit(0), 10);
-}
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', (chunk) => { stdin += chunk; setTimeout(finish, 0); });
-process.stdin.on('end', finish);
-process.stdin.on('error', finish);
-setTimeout(finish, 1500);
-`, 'utf8');
-  await chmod(bin, 0o755);
-  return { bin, logPath };
-}
-
-async function readClaudeChildRuntimeFacts(
-  eventsLogPath: string,
-): Promise<Array<Record<string, any>>> {
-  const raw = await readFile(eventsLogPath, 'utf8');
-  return raw.trim().split('\n').flatMap((line) => {
-    try {
-      const record = JSON.parse(line) as { event?: string; data?: Record<string, any> };
-      return record.event === 'agent'
-        && record.data?.name === 'claude_child_runtime_fact'
-        ? [record.data]
-        : [];
-    } catch {
-      return [];
-    }
-  });
-}
-
-async function readClaudeChildToolRuntimeFacts(
-  eventsLogPath: string,
-): Promise<Array<Record<string, any>>> {
-  const raw = await readFile(eventsLogPath, 'utf8');
-  return raw.trim().split('\n').flatMap((line) => {
-    try {
-      const record = JSON.parse(line) as { event?: string; data?: Record<string, any> };
-      return record.event === 'agent'
-        && record.data?.name === 'claude_child_tool_runtime_fact'
-        ? [record.data]
-        : [];
-    } catch {
-      return [];
-    }
-  });
 }
 
 function createRunRequest(
@@ -3378,24 +3503,9 @@ async function readProjectInvocations(logPath: string, projectId: string): Promi
     .filter(Boolean)
     .map((line) => JSON.parse(line) as Invocation)
     .filter((invocation) =>
-      invocation.argv[0] === 'exec'
+      (invocation.argv[0] === 'exec' || invocation.argv[0] === '-p')
       && invocation.cwd.includes(projectId),
     );
-}
-
-async function readClaudeInvocations(logPath: string, projectId: string): Promise<Invocation[]> {
-  let raw = '';
-  try {
-    raw = await readFile(logPath, 'utf8');
-  } catch {
-    return [];
-  }
-  return raw
-    .trim()
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => JSON.parse(line) as Invocation)
-    .filter((invocation) => invocation.cwd.includes(projectId));
 }
 
 async function waitForInvocationCount(

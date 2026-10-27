@@ -64,11 +64,13 @@ down is an explicit act rather than something a typo can do for you.
   "body": "Import, edit and sync design systems with cleaner release highlights on Home.",
   "imageUrl": "https://whatsnew.open-design.ai/0.13.0.png",
   "linkUrl": "https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0",
+  "ctaLabel": "View release notes",
   "locales": {
     "zh-CN": {
       "title": "设计系统同步",
       "body": "在首页导入、编辑并同步设计系统，发布亮点更清晰。",
-      "linkUrl": "https://open-design.ai/zh/blog/0-13-0/"
+      "linkUrl": "https://open-design.ai/zh/blog/0-13-0/",
+      "ctaLabel": "查看更新说明"
     }
   }
 }
@@ -83,8 +85,11 @@ parser rather than trusting review:
 - `imageUrl` — optional, must be `https:`. Omitted → text-only card.
 - `linkUrl` — optional, must be `https:`. Omitted → the CTA falls back to the
   GitHub releases index.
+- `ctaLabel` — optional, non-empty plain-text button label. Omitted → the
+  client's localized release-notes label. Clients predating this field ignore
+  it and keep their built-in label; they need a client update to support it.
 - `locales` — optional per-locale overrides keyed by app locale id (`en`,
-  `zh-CN`, …); each may override `title`/`body`/`linkUrl`. An exact locale wins,
+  `zh-CN`, …); each may override `title`/`body`/`linkUrl`/`ctaLabel`. An exact locale wins,
   then the bare language (`zh` for `zh-TW`), then the base fields.
 
 ## Updating the card

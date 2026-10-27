@@ -26,6 +26,11 @@
 // a form the user can still fill in, and their answer comes back as 409
 // STRATEGY_TASK_STATE_MISMATCH (OPEND-2364). Agreement is the contract.
 
+import {
+  chatProtocolSkipRanges,
+  type ChatProtocolRange,
+} from '../artifacts/chat-protocol-context.js';
+
 // Canonical open tag plus the `<ask-question>` alias. Matching only the open
 // tag is intentionally NOT enough on its own (see `emittedRenderableQuestionForm`).
 export const QUESTION_FORM_OPEN_RE = /<(question-form|ask-question)\b[^>]*>/i;
@@ -157,6 +162,17 @@ function findNestedQuestionFormOpen(text: string, from: number, until: number): 
   return nested ? from + nested.index : -1;
 }
 
+/** Match a complete existing form without invoking the context scanner again. */
+function readQuestionFormPayloadAt(text: string, openStart: number): ChatProtocolRange | null {
+  const match = QUESTION_FORM_OPEN_RE.exec(text.slice(openStart));
+  if (!match || match.index !== 0) return null;
+  const openEnd = openStart + match[0].length;
+  const closeTag = `</${(match[1] ?? 'question-form').toLowerCase()}>`;
+  const closeStart = findQuestionFormCloseTag(text, openEnd, closeTag);
+  if (closeStart < 0 || !questionFormBodyIsRenderable(text.slice(openEnd, closeStart))) return null;
+  return [openEnd, closeStart + closeTag.length];
+}
+
 // Whether the agent's visible text contains a *renderable* clarifying form — a
 // closed `<question-form>`/`<ask-question>` block whose body satisfies the
 // parser contract above. Matching only the open tag would let a malformed,
@@ -209,13 +225,26 @@ export interface QuestionFormScan {
 export function scanQuestionForms(text: unknown): QuestionFormScan {
   const scan: QuestionFormScan = { renderable: 0, unrenderable: 0, unterminated: false };
   if (typeof text !== 'string' || !text) return scan;
+  const protectedRanges = chatProtocolSkipRanges(text, readQuestionFormPayloadAt);
+  let protectedIndex = 0;
   let cursor = 0;
   while (cursor < text.length) {
     const m = QUESTION_FORM_OPEN_RE.exec(text.slice(cursor));
     if (!m) return scan;
     const tagName = (m[1] ?? 'question-form').toLowerCase();
     const closeTag = `</${tagName}>`;
-    const openEnd = cursor + m.index + m[0].length;
+    const openStart = cursor + m.index;
+    const openEnd = openStart + m[0].length;
+    // Code and outer protocol payloads cannot ask independent questions.
+    // Scan coordinates stay in the original text, and both cursors advance.
+    while (protectedRanges[protectedIndex] && protectedRanges[protectedIndex]![1] <= openStart) {
+      protectedIndex++;
+    }
+    const protectedRange = protectedRanges[protectedIndex];
+    if (protectedRange && openStart >= protectedRange[0] && openStart < protectedRange[1]) {
+      cursor = openEnd;
+      continue;
+    }
     const closeIdx = findQuestionFormCloseTag(text, openEnd, closeTag);
     if (closeIdx === -1) {
       const resumeAt = findNestedQuestionFormOpen(text, openEnd, text.length);

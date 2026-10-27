@@ -23,6 +23,13 @@ function stageSections(content: string): { build: string; runtime: string } {
 }
 
 describe("deploy/Dockerfile content directories", () => {
+  it("copies the self-contained postinstall consumer", async () => {
+    const content = await readFile(dockerfile, "utf8");
+    const { build } = stageSections(content);
+
+    expect(build).toMatch(/^COPY scripts\/postinstall\.mjs \.\/scripts\/$/m);
+  });
+
   it("copies every runtime-resolved content directory into both stages", async () => {
     const content = await readFile(dockerfile, "utf8");
     const { build, runtime } = stageSections(content);
@@ -37,6 +44,15 @@ describe("deploy/Dockerfile content directories", () => {
         new RegExp(`^COPY --from=build [^\\n]*/app/${dir} \\./${dir}$`, "m"),
       );
     }
+  });
+
+  it("makes bundled plugin manifests available before the web type check", async () => {
+    const { build } = stageSections(await readFile(dockerfile, "utf8"));
+    const webBuild = build.indexOf("pnpm --filter @open-design/web build");
+    expect(webBuild).toBeGreaterThan(0);
+    const pluginCopy = build.indexOf("COPY plugins/_official ./plugins/_official");
+    expect(pluginCopy).toBeGreaterThanOrEqual(0);
+    expect(pluginCopy).toBeLessThan(webBuild);
   });
 
   it("ships the checked-in plugin preview manifest", async () => {

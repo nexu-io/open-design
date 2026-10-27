@@ -55,6 +55,7 @@ const OUTPUT_FILES = [
   "packages/platform/dist/index.mjs",
   "packages/platform/dist/index.d.ts",
   "packages/sidecar/dist/index.mjs",
+  "packages/sidecar/dist/supervisor.mjs",
   "packages/sidecar/dist/index.d.ts",
   "packages/download/dist/index.mjs",
   "packages/download/dist/index.d.ts",
@@ -293,7 +294,7 @@ describe("ensureWorkspaceBuildArtifacts", () => {
     }
   });
 
-  it("materializes cached outputs when an expected workspace output is missing", async () => {
+  it.each(["apps/web/dist/sidecar/index.js", "packages/sidecar/dist/supervisor.mjs"])("restores missing runtime entry %s from cache", async (missingEntry) => {
     const root = await mkdtemp(join(tmpdir(), "open-design-workspace-build-stale-"));
     const cache = new ToolPackCache(join(root, ".cache"));
     const config = createConfig(root, cache.root);
@@ -305,7 +306,7 @@ describe("ensureWorkspaceBuildArtifacts", () => {
         builds += 1;
         await writeOutputs(root, `build-${builds}`);
       }));
-      await rm(join(root, "apps/web/dist/sidecar/index.js"), { force: true });
+      await rm(join(root, missingEntry), { force: true });
       await ensureWorkspaceBuildArtifacts(config, cache, buildRunner(async () => {
         builds += 1;
         await writeOutputs(root, `build-${builds}`);
@@ -313,7 +314,22 @@ describe("ensureWorkspaceBuildArtifacts", () => {
 
       expect(builds).toBe(1);
       expect(cache.report().entries.map((entry) => entry.status)).toEqual(["miss", "hit"]);
-      expect(await readFile(join(root, "apps/web/dist/sidecar/index.js"), "utf8")).toBe("build-1\n");
+      expect(await readFile(join(root, missingEntry), "utf8")).toBe("build-1\n");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it.each(["mac", "win"] as const)("rejects a %s build missing the supervisor runtime entry", async (platform) => {
+    const root = await mkdtemp(join(tmpdir(), "od-missing-supervisor-"));
+    const cache = new ToolPackCache(join(root, ".cache"));
+    const config = { ...createConfig(root, cache.root), platform };
+    try {
+      await writeWorkspace(root);
+      await expect(ensureWorkspaceBuildArtifacts(config, cache, buildRunner(async () => {
+        await writeOutputs(root, "incomplete");
+        await rm(join(root, "packages/sidecar/dist/supervisor.mjs"));
+      }))).rejects.toThrow("packages/sidecar/dist/supervisor.mjs");
     } finally {
       await rm(root, { force: true, recursive: true });
     }
@@ -433,9 +449,32 @@ describe("runWorkspaceBuild", () => {
       });
 
       expect(calls.map((call) => call.args)).toEqual(WORKSPACE_BUILD_COMMANDS.map((command) => [...command.args]));
-      expect(calls[1]?.env).toMatchObject({ OD_WEB_OUTPUT_MODE: "standalone" });
+      expect(calls[1]?.env).toMatchObject({ OD_WEB_OUTPUT_MODE: "standalone", OD_WEB_TYPECHECK: "external" });
+      expect(calls[1]?.env?.NODE_OPTIONS).toContain("--max-old-space-size=4096");
       expect(await readFile(join(root, "apps/web/next-env.d.ts"), "utf8")).toBe("original\n");
     } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("raises the V8 heap ceiling for the closure build without dropping caller NODE_OPTIONS", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-workspace-runner-heap-"));
+    const config = createConfig(root, join(root, ".cache"));
+    const calls: Array<{ args: string[]; env?: NodeJS.ProcessEnv }> = [];
+    const previousNodeOptions = process.env.NODE_OPTIONS;
+    process.env.NODE_OPTIONS = "--enable-source-maps";
+
+    try {
+      await mkdir(join(root, "apps/web"), { recursive: true });
+      await runWorkspaceBuild(config, async (args, env) => {
+        calls.push({ args, env });
+      });
+
+      // Ours first, so a caller's own --max-old-space-size still wins (Node keeps the last one).
+      expect(calls[1]?.env?.NODE_OPTIONS).toBe("--max-old-space-size=4096 --enable-source-maps");
+    } finally {
+      if (previousNodeOptions == null) delete process.env.NODE_OPTIONS;
+      else process.env.NODE_OPTIONS = previousNodeOptions;
       await rm(root, { force: true, recursive: true });
     }
   });

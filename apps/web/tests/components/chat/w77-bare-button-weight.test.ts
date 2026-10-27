@@ -67,6 +67,12 @@ const read = (p: string): string => readFileSync(resolve(WEB, p), 'utf-8');
 const SPEC_BARE_BUTTON_WEIGHT = '400';
 /** 面板排版基线(`ChatRoot.module.css:144`)—— 裸按钮**不**应该等于它。 */
 const PANEL_BASELINE_WEIGHT = '500';
+/**
+ * 全站按钮阶梯(OPEND-2553 C2):`primitives.css` 的全局 `button` 和共享 `Button`
+ * 的 `.button` 都钉在 600(`tests/styles/font-weight-normalization.test.ts`)。
+ * 面板外的裸按钮和面板内带类名的按钮读回的都是这一档。
+ */
+const GLOBAL_BUTTON_WEIGHT = '600';
 
 /**
  * CSS Module 在产线上是哈希类名,全局表里的同名类**匹配不到**它。
@@ -140,8 +146,8 @@ describe('W77 面板里的裸 button 按稿子的真实渲染值', () => {
   });
 
   /* ── 反向对照:自带字重的按钮不许跟着变 ───────────────────────────── */
-  it('共享 `Button` 的 `.button` 仍是自己的 500,没被压平', () => {
-    expect(weightOf(fx.sharedInPanel)).toBe(PANEL_BASELINE_WEIGHT);
+  it('共享 `Button` 的 `.button` 仍是自己的 600,没被压平', () => {
+    expect(weightOf(fx.sharedInPanel)).toBe(GLOBAL_BUTTON_WEIGHT);
   });
 
   it('`.button` 的字重由 button.module.css 判,不由 chat.css 那条判', () => {
@@ -150,8 +156,8 @@ describe('W77 面板里的裸 button 按稿子的真实渲染值', () => {
   });
 
   /* ── 面板外不许被带走 ─────────────────────────────────────────────── */
-  it('面板**外面**的裸 button 仍是全局 primitives 的 500', () => {
-    expect(weightOf(fx.bareOutsidePanel)).toBe(PANEL_BASELINE_WEIGHT);
+  it('面板**外面**的裸 button 仍是全局 primitives 的 600', () => {
+    expect(weightOf(fx.bareOutsidePanel)).toBe(GLOBAL_BUTTON_WEIGHT);
   });
 
   it('`[data-chat-root]` 这层围栏确实关得住 —— 面板外那颗根本匹配不到这条规则', () => {
@@ -168,8 +174,8 @@ describe('W77 面板里的裸 button 按稿子的真实渲染值', () => {
     ];
     expect(seen).toEqual([
       SPEC_BARE_BUTTON_WEIGHT,
-      PANEL_BASELINE_WEIGHT,
-      PANEL_BASELINE_WEIGHT,
+      GLOBAL_BUTTON_WEIGHT,
+      GLOBAL_BUTTON_WEIGHT,
     ]);
     expect(new Set(seen).size).toBe(2);
   });

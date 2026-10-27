@@ -1,6 +1,6 @@
 {
   "name": "open-design",
-  "version": "0.22.1",
+  "version": "0.25.1",
   "private": true,
   "packageManager": "pnpm@10.33.2",
   "type": "module",
@@ -28,6 +28,7 @@
     "typecheck": "pnpm -r --workspace-concurrency=4 --if-present run typecheck && tsc -p scripts/tsconfig.json --noEmit"
   },
   "devDependencies": {
+    "@typescript/native": "npm:typescript@7.0.2",
     "@open-design/components": "workspace:*",
     "@open-design/daemon": "workspace:*",
     "@open-design/tools-dev": "workspace:*",
@@ -36,7 +37,6 @@
     "@open-design/tools-serve": "workspace:*",
     "@types/node": "20.19.39",
     "tsx": "4.22.3",
-    "typescript": "5.9.3",
     "yaml": "2.9.0"
   },
   "engines": {

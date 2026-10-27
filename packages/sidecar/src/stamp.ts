@@ -147,6 +147,16 @@ export function sidecarStampKey(stamp: SidecarStamp): string {
   return SIDECAR_STAMP_FIELDS.map((field) => `${field}=${value[field]}`).join("\n");
 }
 
+/**
+ * The client endpoint for `stamp`, resolved with this process's environment.
+ * The value is opaque; hand it to another process verbatim (for example in an
+ * MCP registration) instead of a stamp, because the receiver may resolve a
+ * different temporary directory.
+ */
+export function resolveSidecarClientEndpoint(stamp: SidecarStamp): string {
+  return resolvePrivateIpcPath(stamp);
+}
+
 export function resolvePrivateIpcPath(stamp: SidecarStamp, platform: NodeJS.Platform = process.platform): string {
   const principal = platform === "win32"
     ? (() => {
@@ -154,7 +164,10 @@ export function resolvePrivateIpcPath(stamp: SidecarStamp, platform: NodeJS.Plat
       })()
     : String(process.getuid?.() ?? process.env.USER ?? "unknown");
   const digest = createHash("sha256").update(`${principal}\n${sidecarStampKey(stamp)}`).digest("hex").slice(0, 32);
-  return platform === "win32"
-    ? `\\\\.\\pipe\\open-design-sidecar-${digest}`
-    : join(tmpdir(), `od-sidecar-${principal}`, `${digest}.sock`);
+  if (platform === "win32") return `\\\\.\\pipe\\open-design-sidecar-${digest}`;
+  const endpoint = join(tmpdir(), `od-sidecar-${principal}`, `${digest}.sock`);
+  // macOS sun_path allows 103 path bytes plus a null terminator.
+  return platform === 'darwin' && Buffer.byteLength(endpoint) > 103
+    ? join('/tmp', `od-sidecar-${principal}`, `${digest}.sock`)
+    : endpoint;
 }

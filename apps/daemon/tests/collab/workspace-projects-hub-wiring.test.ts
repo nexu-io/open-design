@@ -224,10 +224,18 @@ describe('server.ts wiring (source boundary)', () => {
     );
     const body = source.slice(start, end);
     const resetStart = body.indexOf('resetWorkspaceIdentityCaches();');
+    const environmentResetStart = body.indexOf(
+      'workspaceHubSubscriptions?.resetForEnvironmentChange();',
+    );
+    const billingResetStart = body.indexOf(
+      'workspaceBillingRuntime.resetIdentity();',
+    );
     const endpointRefreshStart = body.indexOf(
       'workspaceHubSubscriptions?.refreshEndpoints();',
     );
     expect(resetStart).toBeGreaterThan(-1);
+    expect(environmentResetStart).toBeGreaterThan(resetStart);
+    expect(billingResetStart).toBeGreaterThan(environmentResetStart);
     expect(endpointRefreshStart).toBeGreaterThan(resetStart);
   });
 
@@ -707,8 +715,11 @@ describe('server.ts wiring (source boundary)', () => {
     const helperBody = source.slice(helperStart, configStart);
     expect(helperBody).toContain('getTeamProjectMaterialization(');
     expect(helperBody).toContain('target.workspaceId');
+    expect(helperBody).toContain('getWorkspaceProjectByProjectId(db, target.projectId)');
+    expect(helperBody).toContain('binding?.workspaceId === target.workspaceId');
+    expect(helperBody).toContain('{ ...target, resourceId: binding.resourceHubResourceId }');
     expect(helperBody).toContain(
-      'teamProjectContentResourceId(target.projectId, target)',
+      'teamProjectContentResourceId(target.projectId, boundTarget)',
     );
     expect(helperBody).toContain(
       'latestTeamProjectMaterializationVersion(',

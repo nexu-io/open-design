@@ -16,6 +16,7 @@ import JSZip from 'jszip';
 import type Database from 'better-sqlite3';
 
 import {
+  type Brand,
   type ComponentsManifest,
   extractComponentsManifest,
   summarizeComponentsManifestForPrompt,
@@ -1039,7 +1040,7 @@ async function isAllowedDesignSystemStaticFile(
   relativePath: string,
 ): Promise<boolean> {
   if (!isSafeManifestPath(relativePath)) return false;
-  if (DESIGN_SYSTEM_STATIC_SYSTEM_FILES.has(relativePath)) return true;
+  if (relativePath === 'brand.json' || DESIGN_SYSTEM_STATIC_SYSTEM_FILES.has(relativePath)) return true;
 
   const allowed = new Set<string>();
   const add = (filePath: string | undefined): void => {
@@ -1061,7 +1062,22 @@ async function isAllowedDesignSystemStaticFile(
     await addFilesUnderDeclaredDir(brandRoot, 'assets', allowed);
   }
 
-  return allowed.has(relativePath);
+  if (allowed.has(relativePath)) return true;
+  if (!relativePath.startsWith('assets/')) return false;
+  // User systems may have a brand manifest without a project manifest. Expose
+  // its declared logo/imagery files, not every file copied under assets/.
+  try {
+    const brand = JSON.parse(await readFile(path.join(brandRoot, 'brand.json'), 'utf8')) as Partial<Brand> | null;
+    const referenced: unknown[] = [
+      brand?.logo?.primary,
+      ...(Array.isArray(brand?.logo?.alternates) ? brand.logo.alternates : []),
+      ...(Array.isArray(brand?.imagery?.samples) ? brand.imagery.samples.map(sample => sample?.file) : []),
+    ];
+    return referenced.some(filePath => typeof filePath === 'string'
+      && isSafeManifestPath(filePath) && sanitizeRelativeFilePath(filePath) === relativePath);
+  } catch {
+    return false;
+  }
 }
 
 function designSystemStaticContentType(relativePath: string): string {
@@ -2423,8 +2439,8 @@ export type DesignSystemAssetSyncResult = {
  *     (the "fingerprint protection was spinning with nothing to protect"
  *     root cause the investigation identified).
  *
- * Only paths under `assets/` are accepted; anything else is silently
- * skipped — this function syncs real assets, not arbitrary canonical files.
+ * Only the public brand manifest and paths under `assets/` are accepted.
+ * Project metadata and other arbitrary canonical files are never copied.
  */
 export async function syncUserDesignSystemAssetsFromFiles(
   root: string,
@@ -2446,7 +2462,7 @@ export async function syncUserDesignSystemAssetsFromFiles(
   const synced: string[] = [];
   for (const file of files) {
     const sanitized = sanitizeRelativeFilePath(file.path);
-    if (!sanitized || !(sanitized === 'assets' || sanitized.startsWith('assets/'))) continue;
+    if (!sanitized || !(sanitized === 'brand.json' || sanitized === 'assets' || sanitized.startsWith('assets/'))) continue;
     const targetPath = path.join(dir, ...sanitized.split('/'));
     await mkdir(path.dirname(targetPath), { recursive: true });
     await writeFile(targetPath, file.content);

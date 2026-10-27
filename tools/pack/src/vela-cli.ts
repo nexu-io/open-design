@@ -33,6 +33,20 @@ const WORKSPACE_BILLING_SNAPSHOT_HELP_MARKERS = [
   "--workspace-id",
   "--format",
 ] as const;
+const CODING_PLAN_PREFLIGHT_HELP_ARGS = ["billing", "preflight", "--help"] as const;
+// The client's Coding Plan progress bar is driven by
+// `billing preflight --workspace-id <id> [--model <id>] --format json`
+// (`fetchVelaBillingPreflight`). A CLI without the subcommand does not fail
+// here on its own: cobra answers an unknown subcommand by printing the parent
+// `billing` help and exiting 0, so packaging would happily bundle a binary
+// that silently drops the progress bar. Matching the subcommand name plus the
+// three flags the daemon passes is what makes this gate fail-closed.
+const CODING_PLAN_PREFLIGHT_HELP_MARKERS = [
+  "preflight",
+  "--workspace-id",
+  "--model",
+  "--format",
+] as const;
 
 type VelaCliPlatform = "linux" | "mac" | "win";
 type VelaCliCommandResult = {
@@ -165,6 +179,48 @@ async function validateBundledVelaCliBinary(
     throw strictResolutionError(
       `bundled Vela CLI lacks the workspace billing snapshot capability markers: ${missingBillingSnapshotMarkers.join(", ")}`,
     );
+  }
+
+  let codingPlanPreflightHelpResult: VelaCliCommandResult;
+  try {
+    codingPlanPreflightHelpResult = await runCommand(
+      source,
+      CODING_PLAN_PREFLIGHT_HELP_ARGS,
+    );
+  } catch (error) {
+    throw strictResolutionError(
+      "bundled Vela CLI lacks the coding plan preflight capability",
+      error,
+    );
+  }
+  const codingPlanPreflightHelp =
+    `${codingPlanPreflightHelpResult.stdout}\n${codingPlanPreflightHelpResult.stderr}`;
+  const missingCodingPlanPreflightMarkers =
+    CODING_PLAN_PREFLIGHT_HELP_MARKERS.filter(
+      (marker) => !codingPlanPreflightHelp.includes(marker),
+    );
+  if (missingCodingPlanPreflightMarkers.length > 0) {
+    throw strictResolutionError(
+      `bundled Vela CLI lacks the coding plan preflight capability markers: ${missingCodingPlanPreflightMarkers.join(", ")}`,
+    );
+  }
+
+  // Selected-file publication and explicit visibility moves must not silently
+  // fall back to parent help on a CLI that predates the project policy API.
+  for (const [command, positional] of [
+    ["ensure-private", "<projectId>"],
+    ["visibility", "<projectId> <private|team>"],
+    ["register-resource", "<projectId> <resourceId>"],
+  ] as const) {
+    let policyHelp: VelaCliCommandResult;
+    try {
+      policyHelp = await runCommand(source, ["team-projects", command, "--help"]);
+    } catch (error) {
+      throw strictResolutionError(`bundled Vela CLI lacks the project policy capability: ${command}`, error);
+    }
+    if (!`${policyHelp.stdout}\n${policyHelp.stderr}`.includes(`vela team-projects ${command} ${positional}`)) {
+      throw strictResolutionError(`bundled Vela CLI lacks the project policy capability: ${command}`);
+    }
   }
 }
 

@@ -30,6 +30,16 @@ function ruleBody(selector: string): string {
   return hit?.[1] ?? '';
 }
 
+/** 取某个选择器**最后一条**规则体 —— 稿子那一块(`.queue .q`)排在文件尾部,
+ *  内距 / 间距由它说了算。 */
+function lastRuleBody(selector: string): string {
+  const re = new RegExp(`(?:^|\\n)\\${selector}\\s*\\{([^}]*)\\}`, 'g');
+  let last: string | undefined;
+  for (const hit of CSS.matchAll(re)) last = hit[1];
+  expect(last, `找不到 ${selector} 的规则`).toBeDefined();
+  return last ?? '';
+}
+
 describe('队列行的排版', () => {
   it('按稿子走 flex,而且不换行', () => {
     const body = ruleBody('.chat-queued-send-row');
@@ -39,10 +49,18 @@ describe('队列行的排版', () => {
     );
   });
 
-  it('只有正文那一段伸缩,手柄 / 序号 / 动作都定宽', () => {
+  it('只有正文那一段伸缩,手柄 / 动作都定宽', () => {
     expect(ruleBody('.chat-queued-send-main'), '正文要吃掉剩余宽度').toMatch(/flex:\s*1/);
-    expect(ruleBody('.chat-queued-send-index'), '序号定宽').toMatch(/flex:\s*none/);
     expect(ruleBody('.chat-queued-send-drag-handle'), '手柄定宽').toMatch(/flex:\s*0 0 auto/);
     expect(ruleBody('.chat-queued-send-actions'), '动作定宽').toMatch(/flex:\s*0 0 auto/);
+  });
+
+  /* K1(参照 #8165 提交 1):队列行紧凑成 `gap: 4px; padding: 6px 4px`,
+     序号那一格连同 `.chat-queued-send-index` 规则一起去掉。 */
+  it('行是紧凑内距,没有序号那一格', () => {
+    const body = lastRuleBody('.chat-queued-send-row');
+    expect(body).toMatch(/gap:\s*4px/);
+    expect(body).toMatch(/padding:\s*6px 4px/);
+    expect(CSS).not.toMatch(/\.chat-queued-send-index/);
   });
 });

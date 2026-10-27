@@ -22,7 +22,7 @@ import { byokApiKeyIsEditableInSettings } from '../utils/byokProvider';
 // (vela #1055), so sending a user to /wallet would drop them on a surface the
 // product no longer navigates to.
 export const AMR_CONSOLE_URL =
-  'https://open-design.ai/amr/dashboard?source=open_design';
+  'https://open-design.ai/cloud/dashboard?source=open_design';
 export const DEFAULT_AMR_RECHARGE_URL = AMR_CONSOLE_URL;
 export const AMR_RECHARGE_URL = DEFAULT_AMR_RECHARGE_URL;
 
@@ -78,6 +78,19 @@ export const AMR_CONSOLE_UPGRADE_INTENT = 'plan';
  * and is no longer.
  */
 export const AMR_CONSOLE_AUTO_RECHARGE_INTENT = 'auto-recharge';
+
+/**
+ * The console's `billing=<intent>` value that means "open the manual top-up
+ * (充值) dialog on arrival". Product ruling 2026-09-23: the billing card's
+ * wallet row lands on the recharge dialog, not on the auto-recharge policy.
+ *
+ * ⚠️ NOT YET HONORED ON B: vela's console has the dialog
+ * (`components/commerce/recharge/personal-recharge-modal.tsx`, opened from the
+ * wallet route) but its deep-link effect only knows `plan`, `checkout`,
+ * `auto-recharge` and `portal_return`. Until B adds this intent the link
+ * degrades to the dashboard, the same place the row went before.
+ */
+export const AMR_CONSOLE_RECHARGE_INTENT = 'recharge';
 
 // The test entry moved off `vela.powerformer.net` onto
 // `open-design.powerformer.net/cloud` when vela cut the test Cloud domain over
@@ -314,13 +327,22 @@ export type RunFailureMessageKey =
   | 'chat.runError.sessionExpiredMessage'
   | 'chat.runError.gitBashMissingMessage'
   | 'chat.runError.cpuUnsupportedMessage'
+  | 'chat.runError.osUnsupportedMessage'
   | 'chat.runError.agentCrashedMessage'
   | 'chat.runError.accountSuspendedMessage'
+  | 'chat.runError.certificateFailureMessage'
+  | 'chat.runError.proxyConfigurationMessage'
+  | 'chat.runError.networkConfigurationMessage'
+  | 'chat.runError.hostPolicyBlockMessage'
+  | 'chat.runError.localStorageFailureMessage'
+  | 'chat.runError.tierUpgradeRequiredMessage'
   | 'chat.runError.fallbackMessage'
   | 'chat.runError.cliSessionRefusedMessage'
   | 'chat.runError.strategyTaskStateMismatchMessage'
   | 'chat.runError.agentReplyIncompleteMessage'
+  | 'chat.runError.noDeliverableMessage'
   | 'chat.runError.clarificationRepeatedMessage'
+  | 'chat.runError.regionNotSupportedMessage'
   | 'chat.runError.clientEnvironmentMessage'
   | null;
 
@@ -483,13 +505,22 @@ export type RunFailureTitleKey =
   | 'chat.runError.title.gitBashMissing'
   | 'chat.runError.title.artifactMissing'
   | 'chat.runError.title.cpuUnsupported'
+  | 'chat.runError.title.osUnsupported'
   | 'chat.runError.title.agentCrashed'
   | 'chat.runError.title.accountSuspended'
   | 'chat.runError.title.cliSessionRefused'
   | 'chat.runError.title.strategyTaskHalted'
   | 'chat.runError.title.agentReplyIncomplete'
+  | 'chat.runError.title.noDeliverable'
   | 'chat.runError.title.clarificationRepeated'
+  | 'chat.runError.title.regionNotSupported'
   | 'chat.runError.title.clientEnvironment'
+  | 'chat.runError.title.certificateFailure'
+  | 'chat.runError.title.proxyConfiguration'
+  | 'chat.runError.title.networkConfiguration'
+  | 'chat.runError.title.hostPolicyBlock'
+  | 'chat.runError.title.localStorageFailure'
+  | 'chat.runError.title.tierUpgradeRequired'
   | 'chat.runError.title.generic';
 
 export interface RunFailureUi {
@@ -524,18 +555,19 @@ export interface RunFailureUi {
    */
   cloudSwitchCta: boolean;
   /**
-   * Draw no error card at all — some other surface already owns this story.
+   * Draw no error card. Existing run status and diagnostics remain intact.
    *
-   * Two failures set it. The browser↔daemon stream drop hands its card to the
+   * The browser↔daemon stream drop hands its card to the
    * reconnect line at the tail of the conversation (grid 82–84, S29), which is
    * already saying the same thing with the right button; the insufficient
    * balance hands its card to the upgrade card (component 18). Two blocks of
    * UI for one event, in two different wordings, is exactly what the design
    * forbids.
    *
-   * This is a HAND-OFF, not a delete: it is only true while the surface named
-   * above is actually on screen. The reconnect line always is. The upgrade card
-   * is conditional — see `failureCardHandedToAmrBalanceCard`.
+   * Those hand-offs apply only while their receiving surface is on screen.
+   * The upgrade card is conditional — see `failureCardHandedToAmrBalanceCard`.
+   * Missing Git Bash also sets this flag by product decision: the existing
+   * failed-run status remains, with no replacement card or installation UI.
    */
   suppressCard?: boolean;
 }
@@ -884,55 +916,19 @@ function switchModelWithGuidance(
 }
 
 /**
- * S30 · the failure is in the user's own machine or network path.
- *
- * The daemon already names these five causes (`clientEnvironmentFailureDetail`
- * in `apps/daemon/src/run-failure-classification.ts`) and already rules them
- * `retryable: false` / `user_action: 'none'`. Web had no row for any of them,
- * so all five landed on the unclassified fallback and were handed a 〔重试〕 —
- * and a retry here is a whole new run against the same rewritten TLS chain or
- * the same blocked route, i.e. the same answer.
- *
- * ⚠️ 待产品补格 —— 这张卡**没有**用产品文档 S30 的润色列,是故意的。
- *
- * S30 的场景名是「公司网络 / 代理 / 证书」,`原文时机` 列出三个成因(地区不支持 /
- * 证书校验失败 / 代理不可达),但 `润色标题` + `润色正文` 那张表**只写了一行**,
- * 而且那一行的「场景内的情况」写死是**「地区不支持」**:「当前地区暂不支持此服务」/
- * 「暂不支持当前网络所在地区,请尝试切换网络后再试。」证书和代理那两个成因,
- * 文档至今没有润色格。
- *
- * 而这张卡服务的五个 detail 里**没有一个是地区拦截**(判据见
- * `clientEnvironmentFailureDetail`,`apps/daemon/src/run-failure-classification.ts`):
- * `host_policy_block` 是 Windows AppLocker 拦住了二进制启动、`local_storage_failure`
- * 是本机 SQLite/WAL 读写失败、`certificate_failure` 是 TLS 信任链被拒、
- * `proxy_configuration` 是代理设置本身不对、`network_configuration` 是连接压根没建起来
- * (ENOTFOUND / ECONNREFUSED / EHOSTUNREACH —— 该文件自己的注释就写着「a machine that
- * just went offline fails at DNS」「nothing is wrong at the provider」)。
- *
- * 决定性的一条:daemon **有**地区拦截的判据,但它不在这五格里 —— 上游那句
- * `Country, region, or territory not supported` 命中的是 `isUpstreamClientErrorText`,
- * 落到 `failure_detail: 'upstream_client_error'`(同文件,并由
- * `apps/daemon/tests/run-failure-classification.test.ts` 钉住)。
- *
- * 所以把 S30 的润色句接到这里,等于对着一次本机磁盘失败说「你所在的地区不支持,
- * 换个网络」—— 既是错误诊断,给的处置也完全没用。文案宁可留旧的,也不自拟:
- * 这五格保持原文案,等产品为「本机存储 / 系统策略 / 证书 / 代理」补格,
- * 或等 `upstream_client_error` 拆出真正的地区拦截 detail 再接 S30。
- *
- * 旧文案同样没有承诺「装个证书就好了」—— 上游实测过装了也不行的构建。
- * `messageCauseKey` 这条通路继续为正文的 `{cause}` 供值,五个成因各写各的。
- *
- * 〔重试〕 stays as the SECONDARY on purpose. The upstream sentence these
- * classify on ("unknown certificate verification error") covers two different
- * events: a corporate middlebox (deterministic) and a handshake cut mid-flight
- * on a lossy link (a flake). Keeping a retry within reach costs nothing and
- * covers the second; making it the primary is what the design forbids.
+ * Named environment failures use the approved supplementary copy
+ * (L7ukd6xcqoWpo2xJzKdcDPctnvh, revision 96), not the region-only S30 text.
+ * Keep each existing recovery action and cause identity when changing copy.
  */
-function clientEnvironmentCard(causeKey: RunFailureCauseKey): RunFailureUi {
+function clientEnvironmentCard(
+  titleKey: RunFailureTitleKey,
+  messageKey: RunFailureMessageKey,
+  causeKey: RunFailureCauseKey,
+): RunFailureUi {
   return failureCard(
     { directFix: 'open-settings' },
-    'chat.runError.title.clientEnvironment',
-    'chat.runError.clientEnvironmentMessage',
+    titleKey,
+    messageKey,
     { secondaryRetry: true, messageCauseKey: causeKey },
   );
 }
@@ -988,9 +984,18 @@ function runsOnALocalAgent(agentId: string | null | undefined): boolean {
  * 而**不出**的约三十类里包括进程崩了(S19,每月 20,868 次,第二大桶)和没装
  * CLI(S01)。
  *
- * 这里只动**主按钮位**。每一类失败自己的标题 / 正文一个字都没改,阶梯算出来的
- * 那颗动作(换个模型 / 去设置 / 在终端登录 / 重试 …)也一颗都没删 —— 它们让出
- * 主位,退到次级(见 `ChatPane` 的 `errorActionVariant`)。
+ * 这个字段今天只回答一件事:**这一轮该不该拿到那颗 CTA**。卡上画几颗、画哪几颗,
+ * 自 OPEND-2807 起由 `ChatPane` 自己的两个开关决定 —— Cloud 的失败走
+ * `showCloudRetry`,第三颗是〔重试〕;BYOK / 本地 CLI 走 `showCloudSwitchCta`,
+ * 第三颗是这颗 CTA,且要求宿主真的接了 `onSwitchToAmrAndRetry` 或
+ * `onOpenAmrSettings`(接不住就只剩两颗,不画点了没反应的按钮)。
+ * 两颗常驻次级〔联系我们〕〔导出日志〕无条件在场,所以一张卡恒是三颗。
+ *
+ * ⚠️ 阶梯算出来的那组动作(换个模型 / 去设置 / 在终端登录 / 授权并重试 / 续跑)
+ * **已经整组离开卡面**,不是「退到次级」—— 后者是 OPEND-2772 当时的形态,已被推翻。
+ * `primaryActionForFailure` 仍然在算,但结果只喂标题 / 正文 / 交接判据,
+ * 不再决定任何一颗按钮。终局、三个例外与四条代价记在
+ * `specs/current/chat-panel-decisions-sheet.md` 的「OPEND-2807 报错卡终局」。
  */
 function withCloudSwitchCta(ui: RunFailureUi): RunFailureUi {
   return ui.cloudSwitchCta ? ui : { ...ui, cloudSwitchCta: true };
@@ -1112,6 +1117,29 @@ const AGENT_AGNOSTIC_FAILURE_UI: Record<string, RunFailureUi> = {
   // share the row: to the user they are one story — the reply came back without
   // the marker — and splitting them would only ask product for four wordings of
   // the same sentence.
+  // The turn ran to the end and produced no openable file.
+  //
+  // Ladder rung 2. Distinct from the four Runtime State codes on purpose: to
+  // the user those say "your reply went missing", and this one says "nothing
+  // came out this round" — a different sentence, a different expectation, and
+  // the only one of the two that is true when the project is empty. Since the
+  // undeclared shape of this failure is now attributed here too
+  // (`reattributeUndeclaredTurn`), it is the code a real empty-handed turn
+  // lands on whether or not the agent wrote its machine block.
+  //
+  // Retry earns its place: the deliverable is missing because THIS turn wrote
+  // nothing, and a re-run is exactly the thing that can write it. A turn whose
+  // deliverable does exist never reaches a card at all — `providers/daemon.ts`
+  // keeps it `succeeded` on `projectDeliverableValid`.
+  //
+  // ⚠️ Copy is engineering's, like the rows below it:
+  // `docs/design/run-errors/error-ux-design.md` has no cell for it. S23 ("跑完
+  // 没生成文件") is the nearest and is listed there as invisible in telemetry;
+  // product should rewrite the wording, not the routing.
+  od_next_canonical_deliverable_invalid: retryWithGuidance(
+    'chat.runError.title.noDeliverable',
+    'chat.runError.noDeliverableMessage',
+  ),
   od_next_protocol_runtime_state_missing: agentReplyIncomplete(),
   od_next_protocol_runtime_state_duplicate: agentReplyIncomplete(),
   od_next_protocol_runtime_state_invalid_json: agentReplyIncomplete(),
@@ -1288,13 +1316,16 @@ const AGENT_AGNOSTIC_DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
     'chat.runError.title.sessionExpired',
     'chat.runError.sessionExpiredMessage',
   ),
-  // Windows: the agent needs Git Bash to spawn and it isn't installed
-  // (daemon user_action: install_cli). Point at installing Git for Windows,
-  // then retry — same "install the dependency, then re-run" shape as cli_missing.
-  git_bash_missing: retryWithGuidance(
-    'chat.runError.title.gitBashMissing',
-    'chat.runError.gitBashMissingMessage',
-  ),
+  // Product decision (2026-09-14): no error card for missing Git Bash.
+  // Keep the daemon's failed-run diagnosis and the existing run-status shell;
+  // suppressing this surface does not turn the failed run into a success.
+  git_bash_missing: {
+    ...retryWithGuidance(
+      'chat.runError.title.gitBashMissing',
+      'chat.runError.gitBashMissingMessage',
+    ),
+    suppressCard: true,
+  },
   // The bundled agent binary needs a CPU instruction set (AVX2) this device
   // doesn't have, so it crashes on launch — retrying reproduces the crash and
   // switching hosted models doesn't help (the runtime binary is the problem).
@@ -1307,6 +1338,13 @@ const AGENT_AGNOSTIC_DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
   cpu_unsupported: contactSupportOnly(
     'chat.runError.title.cpuUnsupported',
     'chat.runError.cpuUnsupportedMessage',
+  ),
+  // The bundled runtime cannot load on this Windows build (older than 10 1809 /
+  // build 17763, Bun's floor). Deterministic like cpu_unsupported, so no Retry;
+  // the copy names the OS version so the user updates Windows instead.
+  os_unsupported: contactSupportOnly(
+    'chat.runError.title.osUnsupported',
+    'chat.runError.osUnsupportedMessage',
   ),
   // S19 · the agent exited and did not say why. 20,868 runs/month, 16.3% of all
   // failures, 3,869 devices — the second-largest bucket, and until now it had no
@@ -1519,49 +1557,30 @@ const AGENT_AGNOSTIC_DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
   // store, the route and the host policy belong to the user's machine, so the
   // card is the same one whichever agent happened to be running.
   //
-  // ⚠️ 待拍板 — 这五格用的是**旧文案**,不是 S30 的润色列。S30 唯一那行润色格
-  // 的适用情况是「地区不支持」,而这五格一个都不是地区拦截(真正的地区信号落在
-  // `upstream_client_error`)。完整判据写在 `clientEnvironmentCard` 的文档注释里。
-  //
-  // ⚠️ 待拍板 — `certificate_failure` 是 TLS 信任链被拒(多半是公司中间盒),
-  // 不构成地区拦截。S30 的 `原文时机` 点了「证书校验失败」这个成因,但润色表里
-  // 没有给它写行,所以这一格没有可照抄的终稿。
+  // Product-approved descriptions distinguish local/network causes from region restrictions.
   certificate_failure: clientEnvironmentCard(
+    'chat.runError.title.certificateFailure',
+    'chat.runError.certificateFailureMessage',
     'chat.runError.clientEnvironmentCause.certificate',
   ),
-  // ⚠️ 待拍板 — 代理**设置本身**不对(`unsupported proxy protocol` /
-  // `proxy configuration`)。处置是去改代理,不是换地区。S30 的 `原文时机` 点了
-  // 「代理不可达」,润色表同样没给它写行。
   proxy_configuration: clientEnvironmentCard(
+    'chat.runError.title.proxyConfiguration',
+    'chat.runError.proxyConfigurationMessage',
     'chat.runError.clientEnvironmentCause.proxy',
   ),
-  // ⚠️ 待拍板 — 连接压根没建起来(ENOTFOUND / ECONNREFUSED / EHOSTUNREACH /
-  // getaddrinfo)。这是**掉线**的第一形态,不是地区拦截 —— 对着一台刚断网的机器
-  // 说「你所在地区不支持」是错误诊断。文档里最接近的是 S11「当前网络中断」/
-  // S29「网络连接未能恢复」,但那两格的时机都是「跑到一半连接断了 / 重连失败」,
-  // 和「一次都没连上」不是同一件事,归属要产品拍板,不自行改路由。
   network_configuration: clientEnvironmentCard(
+    'chat.runError.title.networkConfiguration',
+    'chat.runError.networkConfigurationMessage',
     'chat.runError.clientEnvironmentCause.network',
   ),
-  // ⚠️ 待拍板 — Windows Application Control / AppLocker 拦住了二进制启动。
-  // 纯本机 OS 策略,整条链路上没有网络,更没有地区。文档 S01–S32 没有任何一格
-  // 讲系统策略拦截。
   host_policy_block: clientEnvironmentCard(
+    'chat.runError.title.hostPolicyBlock',
+    'chat.runError.hostPolicyBlockMessage',
     'chat.runError.clientEnvironmentCause.hostPolicy',
   ),
-  // ⚠️ 待拍板 — this one is a local SQLite/WAL I/O failure, not a network path.
-  // The design gives the environment family exactly one card (S30) and W28's
-  // brief lists all five under it, so it renders here.
-  //
-  // 文档里**没有**这一格:S19「进程崩了」的 `原文时机` 明写「能识别的原因
-  // (Windows 找不到 node、配置文件坏了、**磁盘读写出错**…)研发逐个识别后走对应
-  // 场景」—— 也就是说产品知道磁盘读写出错该有自己的场景,但 S01–S32 里始终没写。
-  // (S27 提到磁盘空间不足,时机是「客户端起不来」;S32 的「凭据保存失败」限定在
-  // 登录流程 —— 两格都不是运行中的本机存储失败。)
-  //
-  // 所以这一格没有可照抄的终稿,更不能套 S30 的「地区不支持 / 切换网络」:
-  // 那对一次磁盘 I/O 失败既诊断错了,给的处置也一点用没有。等产品补格。
   local_storage_failure: clientEnvironmentCard(
+    'chat.runError.title.localStorageFailure',
+    'chat.runError.localStorageFailureMessage',
     'chat.runError.clientEnvironmentCause.localStorage',
   ),
 };
@@ -1571,7 +1590,8 @@ const AGENT_AGNOSTIC_DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
 //   - agent-agnostic root cause (cli missing, prompt too large, model
 //     unavailable, tool loop, bad output, bad runtime def) → named type + fix
 //   - agent-agnostic failure_detail (timeout, empty output, stale resumed
-//     session, missing Git Bash) → named type + retry, for every agent
+//     session) → named type + retry, for every agent
+//   - missing Git Bash → retain failed-run status without an error card
 //   - AMR agent, auth required      → authorize-and-retry button, clearer copy
 //   - AMR agent, insufficient funds → recharge button + manual retry, clearer copy
 //   - AMR agent, tier entitlement   → upgrade button + manual retry
@@ -1603,9 +1623,18 @@ export function resolveRunFailureUi(
     rawMessage,
     verdict,
   );
+  // S30 changes copy only. Keep the existing code/agent/verdict action
+  // selection, and never infer a region restriction from the raw message.
+  const localizedUi: RunFailureUi = detail === 'region_not_supported'
+    ? {
+      ...ui,
+      titleKey: 'chat.runError.title.regionNotSupported',
+      messageKey: 'chat.runError.regionNotSupportedMessage',
+    }
+    : ui;
   return runsOnALocalAgent(agentId)
-    ? withCloudSwitchCta(ui)
-    : withoutCloudSelfPromotion(ui);
+    ? withCloudSwitchCta(localizedUi)
+    : withoutCloudSelfPromotion(localizedUi);
 }
 
 function resolveRunFailureUiIgnoringSelfPromotion(
@@ -1739,8 +1768,8 @@ function resolveRunFailureUiIgnoringSelfPromotion(
     if (code === 'AMR_TIER_UPGRADE_REQUIRED') {
       return failureCard(
         { directFix: 'upgrade' },
-        'chat.amrBalanceGate.title',
-        null,
+        'chat.runError.title.tierUpgradeRequired',
+        'chat.runError.tierUpgradeRequiredMessage',
         { secondaryRetry: true },
       );
     }
@@ -1778,7 +1807,7 @@ function resolveRunFailureUiIgnoringSelfPromotion(
       return failureCard(
         { directFix: 'launch-terminal-auth' },
         'chat.runError.title.signInRequired.other',
-        null,
+        'chat.runError.signInMessage.other',
         { secondaryRetry: true },
       );
     }

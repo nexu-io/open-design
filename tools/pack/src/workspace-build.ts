@@ -41,13 +41,36 @@ export const WORKSPACE_BUILD_COMMANDS = [
       "--filter", "@open-design/packaged^...",
       "--workspace-concurrency=1", "--if-present", "run", "build",
     ],
-    env: ["OD_WEB_OUTPUT_MODE"],
+    env: ["OD_WEB_OUTPUT_MODE", "OD_WEB_TYPECHECK=external"],
   },
   { args: ["--filter", "@open-design/web", "run", "build:sidecar"] },
   { args: ["--filter", "@open-design/packaged", "run", "build"] },
 ] as const;
 
-export const WORKSPACE_BUILD_CACHE_SCHEMA_VERSION = 10;
+export const WORKSPACE_BUILD_CACHE_SCHEMA_VERSION = 12;
+
+/**
+ * V8 old-space ceiling (MB) for the packaged closure build, the stage that runs
+ * `next build` for apps/web. This ceiling was introduced for Next's historical
+ * in-process TypeScript checker, which exceeded Node's 2 GB default on macOS CI.
+ * Type checking now runs in the native TS 7 process after Next's build; keep the
+ * existing Node ceiling for the remaining Next/bundler work. It does not control
+ * native compiler memory. 4 GB fits the 7 GB runners. The ceiling changes
+ * resource limits, not emitted output, so it is not a cache-key determinant or a
+ * schema-version change.
+ */
+export const WORKSPACE_BUILD_MAX_OLD_SPACE_MB = 4096;
+
+/**
+ * NODE_OPTIONS handed to the closure build: our heap ceiling first, then whatever
+ * the caller already had, so a caller's own `--max-old-space-size` still wins
+ * (Node honours the last occurrence).
+ */
+export function workspaceBuildNodeOptions(inherited: string | undefined): string {
+  return [`--max-old-space-size=${WORKSPACE_BUILD_MAX_OLD_SPACE_MB}`, inherited?.trim()]
+    .filter((part) => part)
+    .join(" ");
+}
 
 export type WorkspaceBuildCacheKeyInputs = {
   buildCommands: unknown;
@@ -148,7 +171,11 @@ export async function runWorkspaceBuild(
     await runPnpm([...WORKSPACE_BUILD_COMMANDS[0].args]);
     await runPnpm(
       [...WORKSPACE_BUILD_COMMANDS[1].args],
-      { OD_WEB_OUTPUT_MODE: config.webOutputMode },
+      {
+        NODE_OPTIONS: workspaceBuildNodeOptions(process.env.NODE_OPTIONS),
+        OD_WEB_OUTPUT_MODE: config.webOutputMode,
+        OD_WEB_TYPECHECK: "external",
+      },
     );
     await runPnpm([...WORKSPACE_BUILD_COMMANDS[2].args]);
     await runPnpm([...WORKSPACE_BUILD_COMMANDS[3].args]);
@@ -179,6 +206,7 @@ function workspaceBuildOutputFiles(config: ToolPackConfig): string[] {
     "packages/platform/dist/index.mjs",
     "packages/platform/dist/index.d.ts",
     "packages/sidecar/dist/index.mjs",
+    "packages/sidecar/dist/supervisor.mjs",
     "packages/sidecar/dist/index.d.ts",
     "packages/download/dist/index.mjs",
     "packages/download/dist/index.d.ts",

@@ -4,7 +4,7 @@ import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { startServer } from '../src/server.js';
 
@@ -53,6 +53,11 @@ describe('same-run retry runtime', () => {
   const originalEnv = snapshotEnv();
   let started: StartedServer | null = null;
   let binDir: string | null = null;
+
+  beforeEach(() => {
+    // These plain-reply fixtures exercise transport retries without an OD Next task.
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
+  });
 
   afterEach(async () => {
     await Promise.resolve(started?.shutdown?.());
@@ -291,6 +296,67 @@ describe('same-run retry runtime', () => {
     const events = await readRunEvents(run.eventsLogPath);
     expect(events.filter((event) => event.event === 'start')).toHaveLength(1);
     expect(events.filter((event) => event.event === 'run_retry_attempted')).toHaveLength(0);
+  });
+
+  it('keeps a cleanly completed AMR turn succeeded when the daemon has to force vela to exit', async () => {
+    // Windows reports a child the daemon kills by pid as code 1 with no signal.
+    // Vela that is still finishing its own shutdown after end_turn gets killed
+    // once the 500ms grace ends; that exit must not turn a delivered answer into
+    // a failed run.
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-run-amr-forced-close-bin-'));
+    const fakeVela = path.join(binDir, 'vela-slow-exit');
+    await writeFile(fakeVela, `#!/bin/sh
+export FAKE_VELA_EXIT_DELAY_AFTER_EOF_MS=10000
+export FAKE_VELA_EXIT_CODE_ON_SIGTERM=1
+exec ${JSON.stringify(process.execPath)} ${JSON.stringify(FAKE_VELA)} "$@"
+`, 'utf8');
+    await chmod(fakeVela, 0o755);
+    configureAmrFirstOutputEnv();
+    process.env.OD_CHAT_RUN_INACTIVITY_KILL_GRACE_MS = '200';
+
+    started = await startServer({ port: 0, returnServer: true }) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'amr',
+      agentCliEnv: { amr: { VELA_BIN: fakeVela } },
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const run = await createAndWaitForRun(started.url, 'amr', 'say hello');
+    expect(run.exitCode).toBe(1);
+    expect(run.signal).toBeNull();
+    expect(run.status).toBe('succeeded');
+    const events = await readRunEvents(run.eventsLogPath);
+    expect(events.filter((event) => event.event === 'error')).toHaveLength(0);
+  });
+
+  it('keeps a cleanly completed AMR turn failed when vela exits non-zero on its own during the grace wait', async () => {
+    // The daemon waits 500ms after end_turn before it signals vela. A vela
+    // that exits 1 inside that window failed by itself; only an exit the
+    // daemon caused may be read as the completed turn.
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-run-amr-self-exit-bin-'));
+    const fakeVela = path.join(binDir, 'vela-self-exit');
+    await writeFile(fakeVela, `#!/bin/sh
+export FAKE_VELA_EXIT_DELAY_AFTER_EOF_MS=50
+export FAKE_VELA_EXIT_CODE_AFTER_EOF=1
+exec ${JSON.stringify(process.execPath)} ${JSON.stringify(FAKE_VELA)} "$@"
+`, 'utf8');
+    await chmod(fakeVela, 0o755);
+    configureAmrFirstOutputEnv();
+    process.env.OD_CHAT_RUN_INACTIVITY_KILL_GRACE_MS = '200';
+
+    started = await startServer({ port: 0, returnServer: true }) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'amr',
+      agentCliEnv: { amr: { VELA_BIN: fakeVela } },
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const run = await createAndWaitForRun(started.url, 'amr', 'say hello');
+    expect(run.exitCode).toBe(1);
+    expect(run.signal).toBeNull();
+    expect(run.status).toBe('failed');
   });
 
   it('fails AMR after both first-output attempts remain heartbeat-only', async () => {
@@ -656,6 +722,7 @@ function snapshotEnv(): Record<string, string | undefined> {
     OPEN_DESIGN_TELEMETRY_RELAY_URL: process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL,
     POSTHOG_KEY: process.env.POSTHOG_KEY,
     POSTHOG_HOST: process.env.POSTHOG_HOST,
+    OD_NEXT_STRATEGY_ROLLOUT: process.env.OD_NEXT_STRATEGY_ROLLOUT,
     OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS: process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS,
     OD_CHAT_RUN_FIRST_OUTPUT_TIMEOUT_MS: process.env.OD_CHAT_RUN_FIRST_OUTPUT_TIMEOUT_MS,
     OD_CHAT_RUN_INACTIVITY_KILL_GRACE_MS: process.env.OD_CHAT_RUN_INACTIVITY_KILL_GRACE_MS,

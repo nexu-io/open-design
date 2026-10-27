@@ -15,7 +15,10 @@ import { forwardRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatPane } from '../../src/components/ChatPane';
-import type { ChatReconnectView } from '../../src/runtime/chat/reconnect-state';
+import {
+  nextChatReconnectView,
+  type ChatReconnectView,
+} from '../../src/runtime/chat/reconnect-state';
 import type { AppConfig, ChatMessage } from '../../src/types';
 
 const translate = (key: string, vars?: Record<string, string | number>) => {
@@ -155,6 +158,49 @@ describe('S29 · 重连行挂在流水尾部', () => {
     const cta = screen.getByRole('button', { name: 'chat.edge.reconnectCta' });
     fireEvent.click(cta);
     expect(onManualReconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits for a transport reading before describing a manual press as a numbered attempt', () => {
+    const owner = { runId: 'run-1', conversationId: CONV };
+    let reconnect = nextChatReconnectView(null, {
+      kind: 'transport', ...owner, attempt: 5, max: 5, phase: 'exhausted',
+    });
+    // ProjectView sends this signal before its asynchronous reattach scan.
+    // Exercise the real ChatPane -> Reconnect boundary: passing manualRetry
+    // only to an isolated Reconnect would miss a dropped prop at this seam.
+    const onManualReconnect = vi.fn(() => {
+      reconnect = nextChatReconnectView(reconnect, { kind: 'manual-retry', runId: owner.runId });
+      show({ reconnect, onManualReconnect });
+    });
+    const { show } = renderChat({ reconnect, onManualReconnect });
+
+    fireEvent.click(screen.getByRole('button', { name: 'chat.edge.reconnectCta' }));
+
+    expect(onManualReconnect).toHaveBeenCalledTimes(1);
+    expect(reconnect).toMatchObject({ manualRetry: true, attempt: 1, max: 5 });
+    // Keep the existing immediate feedback and suppress a second press.
+    expect(screen.getByTestId('chat-reconnect').textContent).toContain('chat.edge.reconnecting');
+    expect(screen.queryByRole('button', { name: 'chat.edge.reconnectCta' })).toBeNull();
+    expect.soft(screen.getByTestId('chat-reconnect').textContent).not.toContain(
+      'chat.edge.reconnectingDescription',
+    );
+
+    // The numeric values are identical; only the real transport signal makes
+    // this a measured attempt rather than the optimistic press feedback.
+    reconnect = nextChatReconnectView(reconnect, {
+      kind: 'transport', ...owner, attempt: 1, max: 5, phase: 'reconnecting',
+    });
+    show({ reconnect, onManualReconnect });
+    expect(reconnect?.manualRetry).toBe(false);
+    expect(screen.getByTestId('chat-reconnect').textContent).toContain(
+      'chat.edge.reconnectingDescription 1 5',
+    );
+
+    reconnect = nextChatReconnectView(reconnect, {
+      kind: 'transport', ...owner, attempt: 0, max: 5, phase: 'cleared',
+    });
+    show({ reconnect, onManualReconnect });
+    expect(screen.queryByTestId('chat-reconnect')).toBeNull();
   });
 
   it('leaves nothing behind once the connection is back', () => {

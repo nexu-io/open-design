@@ -1,0 +1,30 @@
+{
+  "runId": "fixture-clarification-run",
+  "formId": "fixture-clarification",
+  "events": [
+    {
+      "kind": "done_key",
+      "key": "0123456789abcdef"
+    },
+    {
+      "kind": "text",
+      "text": "**Reading of the brief**\n\n"
+    },
+    {
+      "kind": "text",
+      "text": "This fictional example needs one preference before the next step.\n\n"
+    },
+    {
+      "kind": "text",
+      "text": "<question-"
+    },
+    {
+      "kind": "text",
+      "text": "form>\n{\"id\":\"fixture-clarification\",\"title\":\"Choose an output format\",\"questions\":[{\"id\":\"format\",\"type\":\"radio\",\"label\":\"Which format should the example use?\",\"required\":true,\"options\":[{\"value\":\"short\",\"label\":\"Short\"},{\"value\":\"detailed\",\"label\":\"Detailed\"}]}]}\n</question-"
+    },
+    {
+      "kind": "text",
+      "text": "form>"
+    }
+  ]
+}

@@ -30,6 +30,7 @@ import {
   createToolInputPathScanner,
   type ToolInputPathScanner,
 } from './tool-input-path-scanner.js';
+import { boundedRawAgentEvent } from './run-event-payload-budget.js';
 
 type StreamEvent = Record<string, unknown>;
 type EventSink = (event: StreamEvent) => void;
@@ -69,12 +70,44 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+/** Token fields carried on a single assistant `message.usage`. Mirrors the
+ *  raw claude stream-json shape so the per-request sum reconciles with the
+ *  run-level `result.usage` aggregate. */
+export interface ClaudePerRequestUsage {
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
+}
+
+/** Extract the per-request token fields from an assistant `message.usage`,
+ *  keeping only finite numbers. Returns null when `usage` is absent or carries
+ *  no token field, so the parser does not emit empty per-request records. */
+function perRequestUsageFrom(usage: unknown): ClaudePerRequestUsage | null {
+  if (!isRecord(usage)) return null;
+  const out: ClaudePerRequestUsage = {};
+  const keys = [
+    'input_tokens',
+    'output_tokens',
+    'cache_creation_input_tokens',
+    'cache_read_input_tokens',
+  ] as const;
+  let seen = false;
+  for (const key of keys) {
+    const value = usage[key];
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      out[key] = value;
+      seen = true;
+    }
+  }
+  return seen ? out : null;
+}
+
 export interface ClaudeStreamHandlerOptions {
   suppressHtmlArtifactsAfterFileWrite?: boolean;
   onChildRuntimeFact?: (fact: ClaudeChildRuntimeFact) => void;
   onChildToolRuntimeFact?: (fact: ClaudeChildToolRuntimeFact) => void;
   childEvidenceNow?: () => number;
-  nativeBuildPackageBindings?: Readonly<Record<string, string>>;
   /** Consume forwarded Child frames only as native evidence, never as parent UI output. */
   suppressForwardedSubagentEvents?: boolean;
   /** 墙上时间。只用来给在途那一行盖一个不动的计时起点;测试注入。 */
@@ -94,9 +127,6 @@ export function createClaudeStreamHandler(
           ? { onToolFact: options.onChildToolRuntimeFact }
           : {}),
         ...(options.childEvidenceNow ? { now: options.childEvidenceNow } : {}),
-        ...(options.nativeBuildPackageBindings
-          ? { nativeBuildPackageBindings: options.nativeBuildPackageBindings }
-          : {}),
       })
     : null;
 
@@ -662,7 +692,9 @@ export function createClaudeStreamHandler(
       try {
         obj = JSON.parse(line);
       } catch {
-        onEvent({ type: 'raw', line });
+        // Bounded at the source: the live stream and the run buffer carry the
+        // same line the transcript stores (see run-event-payload-budget.ts).
+        onEvent(boundedRawAgentEvent(line, null));
         continue;
       }
       handleObject(obj);
@@ -676,7 +708,7 @@ export function createClaudeStreamHandler(
       try {
         handleObject(JSON.parse(rem));
       } catch {
-        onEvent({ type: 'raw', line: rem });
+        onEvent(boundedRawAgentEvent(rem));
       }
     }
     flushPendingArtifactText();
@@ -757,6 +789,21 @@ export function createClaudeStreamHandler(
       const textMsgId = explicitMsgId ?? (currentMessageStreamedText ? currentMessageId : null);
       const thinkingMsgId = explicitMsgId ?? (currentMessageStreamedThinking ? currentMessageId : null);
       if (explicitMsgId) currentMessageId = explicitMsgId;
+      // Per-request usage: every assistant message carries its own
+      // `message.usage` (per-turn input/output/cache tokens). The run-level
+      // `result.usage` collapses these into one aggregate, which is why
+      // request-level cost/percentile analysis can't graduate from run-level
+      // (#3408 / #3547 follow-up B). Surface the per-request record here,
+      // keyed by `message.id` (the provider `msg_…` request id), so the per-
+      // request token sum reconciles against `result.usage`. Emitted before
+      // the content-block loop so the record exists even if the message has
+      // only tool_use blocks.
+      if (explicitMsgId) {
+        const perRequest = perRequestUsageFrom(obj.message.usage);
+        if (perRequest) {
+          onEvent({ type: 'request_usage', requestId: explicitMsgId, usage: perRequest });
+        }
+      }
       const textAlreadyStreamed = textMsgId ? textStreamed.has(textMsgId) : false;
       const thinkingAlreadyStreamed = thinkingMsgId ? thinkingStreamed.has(thinkingMsgId) : false;
       // LEGACY turn-boundary source. Claude Code 2.1.259 sets this field to

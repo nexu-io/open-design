@@ -13,6 +13,7 @@ import {
   type Ref,
   type SyntheticEvent,
 } from 'react';
+import { bindMotionPreviewActivity, unbindMotionPreviewActivity } from '../runtime/motion-preview-activity';
 
 export const OD_PREVIEW_KEEP_ALIVE =
   typeof process === 'undefined' || process.env.OD_PREVIEW_KEEP_ALIVE !== '0';
@@ -61,6 +62,7 @@ function parkIframeElement(frame: HTMLIFrameElement) {
   frame.onload = null;
   frame.removeAttribute('data-testid');
   frame.setAttribute('data-od-active', 'false');
+  frame.setAttribute('data-od-motion-active', 'false');
   frame.setAttribute('aria-hidden', 'true');
   frame.setAttribute('tabindex', '-1');
 }
@@ -98,6 +100,7 @@ export function IframeKeepAliveProvider({
     const entry = entriesRef.current.get(key);
     if (!entry) return false;
     const wasActive = activeKeysRef.current.has(key);
+    unbindMotionPreviewActivity(entry.element);
     entry.element.remove();
     entriesRef.current.delete(key);
     activeKeysRef.current.delete(key);
@@ -218,6 +221,7 @@ export function useIframeKeepAlivePool(): IframeKeepAlivePoolValue {
     const removeFallbackEntry = (key: string) => {
       const entry = fallbackEntriesRef.current.get(key);
       if (!entry) return;
+      unbindMotionPreviewActivity(entry.element);
       entry.element.remove();
       fallbackEntriesRef.current.delete(key);
       fallbackActiveKeysRef.current.delete(key);
@@ -271,6 +275,7 @@ export function useIframeKeepAlivePool(): IframeKeepAlivePoolValue {
   useEffect(() => () => {
     for (const key of Array.from(fallbackEntriesRef.current.keys())) {
       const entry = fallbackEntriesRef.current.get(key);
+      if (entry) unbindMotionPreviewActivity(entry.element);
       entry?.element.remove();
       fallbackEntriesRef.current.delete(key);
       fallbackActiveKeysRef.current.delete(key);
@@ -423,7 +428,11 @@ const ClientPooledIframe = forwardRef<HTMLIFrameElement, PooledIframeProps>(func
   useLayoutEffect(() => {
     const host = hostRef.current;
     if (!host) return undefined;
-    const frame = pool.attach(cacheKey, host, () => document.createElement('iframe'));
+    const frame = pool.attach(cacheKey, host, () => {
+      const next = document.createElement('iframe');
+      bindMotionPreviewActivity(next);
+      return next;
+    });
     iframeRef.current = frame;
     return () => {
       setForwardedRef(forwardedRef, null);

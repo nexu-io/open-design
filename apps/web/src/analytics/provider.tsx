@@ -28,7 +28,8 @@ import {
   setConfigureGlobals,
 } from './client';
 import { APP_VERSION_PLACEHOLDER } from './app-version';
-import { patchExceptionTrackingAppVersion } from './error-tracking';
+import { patchExceptionTrackingAppVersion, patchExceptionTrackingDistinctId } from './error-tracking';
+import { setChatCorrelation } from '../observability/chat-context';
 import type { AnalyticsConfigureGlobals } from '@open-design/contracts/analytics';
 import {
   detectClientType,
@@ -106,7 +107,17 @@ async function loadRuntimeAppVersion(): Promise<string | null> {
       try {
         const res = await fetch('/api/version');
         if (!res.ok) return null;
-        const body = (await res.json()) as { version?: { version?: string } };
+        const body = (await res.json()) as {
+          version?: { version?: string; channel?: string };
+        };
+        // The daemon has always answered with `channel` alongside `version`
+        // (see `resolveAppVersionInfo`); we simply dropped it on the floor.
+        // It is the one dimension that separates "the packaged stable build
+        // is janky" from "a dev daemon is janky", so a chat-health dashboard
+        // without it cannot tell a real regression from local noise. Stamped
+        // before the early return below so a daemon that reports a channel but
+        // no version still contributes it.
+        setChatCorrelation({ release_channel: body?.version?.channel });
         const next = body?.version?.version;
         if (!next) return null;
         runtimeAppVersion = next;
@@ -330,7 +341,9 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
           insertId,
           requestId,
         });
-      })();
+      })().catch(() => {
+        // An asynchronous measurement failure cannot escape into the product.
+      });
     },
     [identity, locale, appVersion],
   );
@@ -367,6 +380,10 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
         }
       },
       setIdentity: (installationId: string | null) => {
+        // The safety channel bootstraps before a fresh install mints its id;
+        // move it onto the installation identity too so renderer stability
+        // events match native ones within the same session (OPEND-4220).
+        patchExceptionTrackingDistinctId(installationId);
         applyIdentity(installationId);
         // Keep the fetch wrapper's header in sync so daemon-side captures
         // start using the new id immediately, not after the next reload.

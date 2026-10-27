@@ -205,6 +205,27 @@ describe('降级卡面 · 加载中不是空白', () => {
 });
 
 /* ------------------------------------------------------------------ *
+ * ③ 已有静态封面但资源本身加载失败 —— 不得把破图留成完成态空壳
+ * ------------------------------------------------------------------ */
+describe('静态封面失败 · 不保留破图空壳', () => {
+  it('coverUrl 的图片触发 error 后,卡面不应继续保留失败的 <img>', () => {
+    renderCards([{ name: 'capstone-defense-deck.html', kind: 'html', coverUrl: COVER }]);
+
+    const card = cardOf('capstone-defense-deck.html');
+    const img = card.querySelector<HTMLImageElement>('img.artifact-card-media');
+    expect(img, 'fixture must exercise the static-cover path').not.toBeNull();
+
+    // 真实现场是同一形状:卡的背景仍在,但缩略图请求失败后没有任何状态变化。
+    // 这条规格只钉可观察结果,不自拟失败文案或重试控件的具体样式。
+    fireEvent.error(img!);
+    expect(
+      card.querySelector('img.artifact-card-media'),
+      'failed cover must not remain as a blank broken-image shell',
+    ).toBeNull();
+  });
+});
+
+/* ------------------------------------------------------------------ *
  * 反向对照 —— 这两条防的是「修快了,把产品行为一起改掉」
  * ------------------------------------------------------------------ */
 describe('反向对照 · 产品行为原样', () => {

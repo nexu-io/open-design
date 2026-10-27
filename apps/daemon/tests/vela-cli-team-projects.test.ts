@@ -730,7 +730,7 @@ describe('Vela CLI team-project catalog adapter', () => {
       role: 'member' as const,
       lifecycleState: 'active' as const,
     };
-    await catalog.upsert({ projectId: 'p-fallback' }, principal);
+    await expect(catalog.upsert({ projectId: 'p-fallback' }, principal)).rejects.toThrow('TEAM_PROJECT_CATALOG_UNAVAILABLE');
     await catalog.remove('p-fallback', principal);
     expect(teamCalls).toEqual([['--help']]);
     expect(resourceCalls).toEqual([['shared', '--json']]);

@@ -16,6 +16,7 @@ import {
 } from '@/vitest/packaged-failure-evidence';
 import {
   assertPackagedHomeFirstRunResult,
+  codexAppServerInvocationsCompleted,
   describePackagedHomeFirstRunStall,
   PACKAGED_HOME_FIRST_RUN_OUTPUT,
   PACKAGED_HOME_FIRST_RUN_PROMPT,
@@ -491,10 +492,7 @@ macDescribe('packaged mac runtime smoke', () => {
       expect(invocation).toBeDefined();
       const receipts = (await readFile(invocation!.path, 'utf8')).trim().split('\n')
         .map((line) => JSON.parse(line));
-      expect(receipts.length).toBeGreaterThan(0);
-      expect(receipts.every((entry) => entry.nonce === invocation!.nonce && entry.mode === 'app-server')).toBe(true);
-      expect(receipts.map((entry) => entry.method)).toEqual(expect.arrayContaining(['initialize', 'thread/start', 'turn/start']));
-      expect(receipts.some((entry) => entry.event === 'completed' && entry.failed === false)).toBe(true);
+      expect(codexAppServerInvocationsCompleted(receipts, invocation!.nonce)).toBe(true);
       expect(firstRun.submitClicked).toBe(true);
       expect(firstRun.projectId).toEqual(expect.any(String));
       expect(firstRun.hrefBefore).toMatch(/^(od:\/\/app\/|http:\/\/127\.0\.0\.1:\d+\/$)/);
@@ -1141,7 +1139,10 @@ macDescribe('packaged mac runtime smoke', () => {
       // Self-heal: real recovery releases ship as version+1 (versioned
       // artifacts are immutable), so the next update arrives under a bumped
       // version with a healthy payload and converges.
-      const healedVersion = bumpCountedVersion(targetVersion);
+      const healedVersion = resolvePackagedUpdateScenario({
+        releaseChannel: updateScenario.channel,
+        releaseVersion: targetVersion,
+      }).fixtureVersion;
       const healedPayloadPath = await buildVersionBumpedMacPayloadFixture(
         localPayload.payloadPath,
         corruptWorkDir,
@@ -2650,13 +2651,6 @@ async function buildVersionBumpedMacPayloadFixture(
   });
 }
 
-function bumpCountedVersion(version: string): string {
-  const match = /^(.*[.-](?:beta|betas|prerelease|preview))\.(\d+)$/.exec(version);
-  if (match?.[1] == null || match[2] == null) {
-    throw new Error(`rollback acceptance requires a counted version to bump: ${version}`);
-  }
-  return `${match[1]}.${Number(match[2]) + 1}`;
-}
 
 /**
  * Reset the namespace to a pristine pre-install state. `uninstall` removes the

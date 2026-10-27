@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
+import { homeTemplateTrigger } from '../helpers/home-template-picker';
 //
 // Scenario-card rail coverage.
 //   - The default create rail renders illustrated scenario cards carrying a
 //     title AND a one-line description.
-//   - The rail leads with Website clone, then the slide deck ("Slides"), per the
+//   - The rail leads with Prototype, then Motion design, per the
 //     curated create order.
 //   - The finer-grained scenarios (wireframe / mobile / document) exist and
 //     route to a working scenario plugin.
@@ -41,7 +42,7 @@ vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
 }));
 
 import { HomeHero } from '../../src/components/HomeHero';
-import { findChip, orderedCreateChips } from '../../src/components/home-hero/chips';
+import { findChip, ONBOARDING_ARTIFACT_CHIP_IDS, orderedCreateChips } from '../../src/components/home-hero/chips';
 import {
   prototypeSceneProjectMetadata,
   prototypeSubChipForSlug,
@@ -76,47 +77,59 @@ function renderHero(overrides: Partial<React.ComponentProps<typeof HomeHero>> = 
 
 // #5517 removed the illustrated scenario-card rail from Home; scenarios are
 // picked from the composer footer's radial template picker instead.
-function openTemplatePicker() {
-  fireEvent.click(screen.getByTestId('home-hero-template-trigger'));
+// Types are a horizontal pill row under the working-directory row (product,
+// 2026-08-21); anything that does not fit folds into its 全部 popover.
+function typePill(chipId: string): HTMLElement | null {
+  const inline = screen.queryByTestId(`home-hero-type-pill-${chipId}`);
+  if (inline) return inline;
+  if (!screen.queryByTestId('home-hero-type-pills-popover')) fireEvent.click(homeTemplateTrigger());
+  return screen.getByTestId('home-hero-type-pills-popover').querySelector(`[data-chip="${chipId}"]`);
 }
 
 describe('HomeHero scenario cards', () => {
   it('labels each create scenario in the composer template picker', () => {
     renderHero();
-    openTemplatePicker();
-    expect(
-      screen.getByTestId('home-hero-template-wedge-prototype').getAttribute('aria-label'),
-    ).toContain('Prototype');
-    expect(
-      screen.getByTestId('home-hero-template-wedge-deck').getAttribute('aria-label'),
-    ).toContain('Slide deck');
+    expect(typePill('prototype')?.textContent).toContain('Prototype');
+    expect(typePill('deck')?.textContent).toContain('Slide deck');
   });
 
-  it('uses the fixed ten-item Home creation hierarchy in product order', () => {
+  it('uses the fixed eleven-item Home creation hierarchy in product order', () => {
     const ordered = orderedCreateChips();
     const ids = ordered.map((chip) => chip.id);
     expect(ids).toEqual([
       'prototype',
+      'motion-design',
       'deck',
-      'image',
       'document',
-      'hyperframes',
+      'image',
       'web-clone',
+      'hyperframes',
+      'webgl',
+      'live-artifact',
       'video',
       'audio',
-      'live-artifact',
-      'webgl',
     ]);
     expect(ids).not.toContain('wireframe');
     expect(ids).not.toContain('mobile');
   });
 
+  it('keeps the design-system onboarding teaser within its existing curated scope', () => {
+    expect(ONBOARDING_ARTIFACT_CHIP_IDS).toEqual([
+      'prototype',
+      'deck',
+      'document',
+      'image',
+      'hyperframes',
+      'webgl',
+      'live-artifact',
+    ]);
+  });
+
   it('keeps nested prototype scenarios executable without giving them a chip of their own', () => {
     renderHero();
-    openTemplatePicker();
-    expect(screen.queryByTestId('home-hero-template-wedge-wireframe')).toBeNull();
-    expect(screen.queryByTestId('home-hero-template-wedge-mobile')).toBeNull();
-    expect(screen.getByTestId('home-hero-template-wedge-document')).toBeTruthy();
+    expect(typePill('wireframe')).toBeNull();
+    expect(typePill('mobile')).toBeNull();
+    expect(typePill('document')).toBeTruthy();
     // They are scenes, so they have no catalog entry at all — what makes them
     // executable is the Prototype chip's action plus their own refinement.
     expect(findChip('wireframe')).toBeUndefined();

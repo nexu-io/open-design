@@ -1,13 +1,15 @@
 {
-  "id": "0.21.0",
-  "title": "Reliable, Start to Finish",
-  "body": "HTML previews stay visible as you switch projects, files, or between Code and Preview.\nAgent connections are more reliable, with improved support for current DeepSeek Harness and Kimi releases.\nRelaunching Open Design now recovers more reliably after an unexpected shutdown.",
+  "id": "0.26.1",
+  "title": "OpenDesign Intelligent Router is here",
+  "body": "Understand your intent in one sentence and route the best skills straight to the work you want to create.\nShare work with a link so people can view it and comment exactly where changes are needed.\nMotion videos track smoothly, with audio dropouts and glitches fixed for steadier sync.",
   "imageUrl": "https://whatsnew.open-design.ai/0.18.0.webp",
-  "linkUrl": "https://github.com/nexu-io/open-design/releases/tag/open-design-v0.21.0",
+  "linkUrl": "https://github.com/nexu-io/open-design/releases/tag/open-design-v0.26.1",
+  "ctaLabel": "View release notes",
   "locales": {
     "zh-CN": {
-      "title": "从启动到预览，始终可靠",
-      "body": "切换项目、文件，或在「代码」与「预览」之间切换时，HTML 预览保持正常显示。\n提升 Agent 连接稳定性，并完善对新版 DeepSeek Harness 与 Kimi 的兼容。\n意外退出后重新启动时，Open Design 能够更可靠地恢复运行。"
+      "title": "OpenDesign Intelligent Router 正式上线",
+      "body": "一句话就懂你：自动路由优质 skill，直奔你想要的作品\n支持链接分享作品：对方点开就能看，想改哪里就评哪里\n动效视频丝滑跟拍：修复音频断续、跳音问题，音画同步更稳",
+      "ctaLabel": "查看更新说明"
     }
   }
 }

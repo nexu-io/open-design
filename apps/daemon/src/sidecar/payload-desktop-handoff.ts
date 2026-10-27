@@ -42,6 +42,11 @@ const SIDECAR_ONLY_ENV_KEYS = [
   "OD_SIDECAR_IPC_PATH",
   "OD_SIDECAR_NAMESPACE",
   "OD_SIDECAR_SOURCE",
+  // Share Viewer debug override the packaged launcher forwarded to this
+  // daemon. The replacement desktop forwards its own launch override, if any;
+  // carrying this one over would make a one-off override sticky.
+  "OD_SHARE_VIEWER_URL",
+  "OD_SHARE_VIEWER_URLS",
   SIDECAR_ENV.TOOLS_DEV_PARENT_PID,
 ] as const;
 
@@ -297,8 +302,7 @@ export async function prepareLegacyPayloadDesktopHandoff(options: {
   ]);
   if (runtime == null) return { kind: "none", reason: "invalid-runtime" };
   if (outer == null) return { kind: "none", reason: "invalid-install-anchor" };
-  if (payloadExecutablePath == null) return { kind: "none", reason: "invalid-payload" };
-  if (desktopStatus != null && desktopStatus.pid === outer.pid &&
+  if (payloadExecutablePath != null && desktopStatus != null && desktopStatus.pid === outer.pid &&
       typeof desktopStatus.executablePath === "string" &&
       await samePath(desktopStatus.executablePath, payloadExecutablePath, platform)) {
     return { kind: "none", reason: "payload-desktop-active" };
@@ -346,6 +350,7 @@ export async function prepareLegacyPayloadDesktopHandoff(options: {
   if (!canCaptureInitialState && !canCaptureConfirmedBinding && !canResumePreparedState) {
     return { kind: "none", reason: "launcher-state-not-eligible" };
   }
+  if (payloadExecutablePath == null) return { kind: "none", reason: "invalid-payload" };
 
   const now = (options.now ?? (() => new Date()))().toISOString();
   const descriptor: LauncherDesktopHandoffDescriptor = canResumePreparedState && existing != null

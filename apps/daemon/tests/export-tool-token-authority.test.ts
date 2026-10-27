@@ -490,6 +490,73 @@ describe('od export run-scoped project authority', () => {
     });
   });
 
+  it('treats a forwarded foreign Basic credential as a proxy-authenticated browser request', async () => {
+    // Given: a reverse proxy (Coolify/Traefik basic auth) authenticates the
+    // browser itself and forwards its own credential to the daemon.
+    const proxyCredential = `Basic ${Buffer.from('proxy-user:proxy-pass').toString('base64')}`;
+
+    // When: the browser export and archive surfaces are reached through it.
+    const exportResponse = await fetch(`${daemonUrl}/api/projects/${unboundProjectId}/export/image`, {
+      method: 'POST',
+      headers: { authorization: proxyCredential, 'content-type': 'application/json' },
+      body: JSON.stringify({ fileName: 'index.html' }),
+    });
+    const exportBody = Buffer.from(await exportResponse.arrayBuffer());
+    const archiveResponse = await fetch(`${daemonUrl}/api/projects/${unboundProjectId}/archive`, {
+      headers: { authorization: proxyCredential },
+    });
+    await archiveResponse.arrayBuffer();
+
+    // Then: the header never claims the run-scoped tool lane, so both stay on
+    // project authorization exactly like a header-free browser request.
+    expect(exportResponse.status, exportBody.toString()).toBe(200);
+    expect(exportBody).toEqual(png);
+    expect(archiveResponse.status).toBe(200);
+  });
+
+  it.each([
+    ['a malformed Bearer credential with no token', 'Bearer '],
+    ['a bare Bearer scheme', 'Bearer'],
+  ] as const)('fails closed on %s', async (_label, authorization) => {
+    // Given: a Bearer scheme carrying no token. Trimming reduces `Bearer ` to
+    // `Bearer`, so scheme detection must not depend on a token following it.
+    const request = {
+      method: 'POST',
+      headers: { authorization, 'content-type': 'application/json' },
+      body: JSON.stringify({ fileName: 'index.html' }),
+    } as const;
+
+    // When: it reaches an export surface that succeeds headerless.
+    const response = await fetch(`${daemonUrl}/api/projects/${unboundProjectId}/export/image`, request);
+    const body = await response.text();
+
+    // Then: it stays on the tool-token lane and fails closed, rather than
+    // downgrading to the browser project-authority lane.
+    expect(response.status, body).toBe(401);
+    expect(JSON.parse(body)).toMatchObject({ error: { code: 'TOOL_TOKEN_MISSING' } });
+  });
+
+  it('still routes foreign Bearer credentials to the run-scoped tool-token lane', async () => {
+    // Given: a Bearer credential that is neither the daemon API token nor a minted grant.
+    const request = {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer forged-tool-token',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ fileName: 'index.html' }),
+    } as const;
+
+    // When: it is presented to the same otherwise-headerless export surface.
+    const response = await fetch(`${daemonUrl}/api/projects/${unboundProjectId}/export/image`, request);
+
+    // Then: the tool lane still fails closed instead of downgrading to project auth.
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'TOOL_TOKEN_INVALID' },
+    });
+  });
+
   async function runExportCli(
     requestedProjectId: string,
     outputPath: string,

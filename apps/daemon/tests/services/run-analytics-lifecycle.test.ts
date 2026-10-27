@@ -6,6 +6,7 @@
 // land as `cancelled`, not as a missing row, or the cancellation rate is
 // computed against a smaller denominator than the truth.
 
+import Database from 'better-sqlite3';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -29,7 +30,7 @@ function harness(finishCaptureResult: unknown = {
   status: 'queued',
   acknowledgement: 'local_buffer',
   errorType: null,
-}) {
+}, db: unknown = {}) {
   const captured: Captured[] = [];
   const recoveries: Array<{ runId: string; properties: Record<string, unknown>; insertId: string }> = [];
   const completed: string[] = [];
@@ -41,7 +42,7 @@ function harness(finishCaptureResult: unknown = {
   });
 
   const lifecycle = createRunAnalyticsLifecycle({
-    db: {} as never,
+    db: db as never,
     design: {
       runs: {
         wait: () => terminal as never,
@@ -122,6 +123,96 @@ async function settled(h: ReturnType<typeof harness>, eventName: string) {
 }
 
 describe('run analytics lifecycle', () => {
+  it('freezes persisted Motion intent for creation, terminal and recovery independently of discovery routing', async () => {
+    const project = { id: 'motion-project', name: 'Motion', metadataJson: JSON.stringify({ kind: 'video', videoModel: 'hyperframes-html', intent: 'motion-design' }) };
+    const db = { prepare: () => ({ get: () => project }) };
+    const h = harness(undefined, db);
+    h.lifecycle.install({
+      run: fakeRun({ projectId: project.id }),
+      body: { projectId: project.id, analyticsHints: { projectKind: 'hyperframes' } },
+      requestAnalyticsContext: CONTEXT as never,
+    });
+    expect((await settled(h, 'run_created')).properties.project_intent).toBe('motion-design');
+    project.metadataJson = JSON.stringify({ intent: 'hyperframes' });
+    h.settle({ status: 'succeeded' });
+    expect((await settled(h, 'run_finished')).properties.project_intent).toBe('motion-design');
+    expect(h.recoveries).toHaveLength(2);
+    expect(h.recoveries.every((row) => row.properties.project_intent === 'motion-design')).toBe(true);
+  });
+
+  it.each([
+    { attachments: undefined, expected: undefined },
+    { attachments: [], expected: [] },
+    { attachments: [{ id: 'board', source: 'board-batch' }, { id: 'legacy' }], expected: [] },
+    { attachments: [{ id: 'saved-1', source: 'saved-comment' }, { id: 'saved-1', source: 'saved-comment' }, { id: 'board', source: 'board-batch' }, { id: 'legacy' }], expected: ['saved-1'] },
+  ])('freezes this Run saved comments across creation, completion and recovery: $expected', async ({ attachments, expected }) => {
+    const h = harness();
+    const body = { agentId: 'codex', commentAttachments: attachments, analyticsHints: { sourceRunId: 'unrelated-run' } };
+    h.lifecycle.install({ run: fakeRun(), body, requestAnalyticsContext: CONTEXT as never });
+    const created = await settled(h, 'run_created');
+    expect(created.properties.comment_ids).toEqual(expected);
+    expect(Object.hasOwn(created.properties, 'comment_ids')).toBe(expected !== undefined);
+    body.commentAttachments = [{ id: 'later', source: 'saved-comment' }];
+    h.settle({ status: 'succeeded' });
+    const finished = await settled(h, 'run_finished');
+    expect(finished.properties.comment_ids).toEqual(expected);
+    expect(h.recoveries.every((recovery) => JSON.stringify(recovery.properties.comment_ids) === JSON.stringify(expected))).toBe(true);
+    expect(h.completed).toEqual(['run-under-test']);
+    expect(h.recoveries).toHaveLength(2);
+  });
+
+  it.each([{ ids: [] }, { ids: ['original'] }])('preserves same-Run recovered comment IDs $ids over new request attachments', async ({ ids }) => {
+    const h = harness();
+    h.lifecycle.install({
+      run: fakeRun({ analyticsRecovery: { context: CONTEXT, properties: { comment_ids: ids } } }),
+      body: { commentAttachments: [{ id: 'new', source: 'saved-comment' }] },
+      requestAnalyticsContext: CONTEXT as never,
+    });
+    expect((await settled(h, 'run_created')).properties.comment_ids).toEqual(ids);
+    h.settle({ status: 'succeeded' });
+    expect((await settled(h, 'run_finished')).properties.comment_ids).toEqual(ids);
+    expect(h.recoveries.at(-1)?.properties.comment_ids).toEqual(ids);
+  });
+  it('uses current Run attachments when the existing recovery predates comment observation', async () => {
+    const h = harness();
+    h.lifecycle.install({
+      run: fakeRun({ analyticsRecovery: { context: CONTEXT, properties: { source_run_id: 'other-run' } } }),
+      body: { commentAttachments: [{ id: 'current', source: 'saved-comment' }], analyticsHints: { sourceRunId: 'other-run' } },
+      requestAnalyticsContext: CONTEXT as never,
+    });
+    expect((await settled(h, 'run_created')).properties.comment_ids).toEqual(['current']);
+    h.settle({ status: 'canceled' });
+    const finished = await settled(h, 'run_finished');
+    expect(finished.properties).toMatchObject({ comment_ids: ['current'], result: 'cancelled' });
+    expect(h.recoveries).toHaveLength(2);
+  });
+
+  it('records text-only settlement as a normal successful reply', async () => {
+    const h = harness();
+    h.lifecycle.install({
+      run: fakeRun({ strategyTask: { terminal: true, outcome: 'completed', settlementReason: 'ended', deliverableValid: false, settlementFacts: { physicalStatus: 'succeeded', deliverableValid: false } } }),
+      body: { agentId: 'codex' }, requestAnalyticsContext: CONTEXT as never,
+    });
+    await settled(h, 'run_created');
+    h.settle({ status: 'succeeded' });
+    const finished = await settled(h, 'run_finished');
+    expect(finished.properties).toMatchObject({ result: 'success', od_next_settlement_reason: 'ended', od_next_settlement_facts: { physicalStatus: 'succeeded', deliverableValid: false } });
+    expect(finished.properties.od_next_blocked_reason_code).toBeUndefined();
+  });
+
+  it('reports a physical failure even when orchestration has ended normally', async () => {
+    const h = harness();
+    h.lifecycle.install({
+      run: fakeRun({ strategyTask: { terminal: true, outcome: 'completed', settlementReason: 'ended', settlementFacts: { physicalStatus: 'failed' } } }),
+      body: { agentId: 'codex' }, requestAnalyticsContext: CONTEXT as never,
+    });
+    await settled(h, 'run_created');
+    h.settle({ status: 'failed' });
+    const finished = await settled(h, 'run_finished');
+    expect(finished.properties).toMatchObject({ result: 'failed', od_next_settlement_reason: 'ended', od_next_settlement_facts: { physicalStatus: 'failed' } });
+    expect(finished.properties.od_next_blocked_reason_code).toBeUndefined();
+  });
+
   it('reports a created run and pairs its finish under the same insert id', async () => {
     const h = harness();
     h.lifecycle.install({
@@ -216,7 +307,7 @@ describe('run analytics lifecycle', () => {
     });
   });
 
-  it('settles matching and conflicting terminal claims before capturing run_finished', async () => {
+  it.each(['noop', 'recording', 'throwing', 'pending'] as const)('keeps real Run terminal state intact with %s measurement', async (measurement) => {
     const captured: Captured[] = [];
     const runs = createChatRunService({
       createSseResponse: () => ({
@@ -246,6 +337,9 @@ describe('run analytics lifecycle', () => {
         analytics: {
           capture: (args) => {
             captured.push(args as Captured);
+            if (measurement === 'noop') return undefined;
+            if (args.eventName === 'run_finished' && measurement === 'throwing') throw new Error('measurement only');
+            if (args.eventName === 'run_finished' && measurement === 'pending') return new Promise(() => {});
             return {
               status: 'queued',
               acknowledgement: 'local_buffer',
@@ -274,7 +368,7 @@ describe('run analytics lifecycle', () => {
     });
     lifecycle.install({
       run: run as never,
-      body: { agentId: 'amr' },
+      body: { agentId: 'amr', commentAttachments: [{ id: 'real-run-comment', source: 'saved-comment' }] },
       requestAnalyticsContext: CONTEXT as never,
     });
     await vi.waitFor(() => {
@@ -287,7 +381,9 @@ describe('run analytics lifecycle', () => {
       expect(captured.some((event) => event.eventName === 'run_finished')).toBe(true);
     });
     const finished = captured.find((event) => event.eventName === 'run_finished');
+    expect(await runs.wait(run)).toMatchObject({ status: 'failed' });
     expect(finished?.properties).toMatchObject({
+      comment_ids: ['real-run-comment'],
       terminal_integrity: 'late',
       duplicate_terminal_count: 1,
       late_terminal_count: 1,
@@ -458,11 +554,100 @@ describe('run analytics lifecycle', () => {
     // A scheduled Automation has no caller to attribute the Run to. Silence is
     // the correct outcome — inventing an identity would be worse than a gap.
     const h = harness();
-    h.lifecycle.install({ run: fakeRun(), body: {}, requestAnalyticsContext: null });
+    h.lifecycle.install({ run: fakeRun(), body: { commentAttachments: [{ id: 'saved', source: 'saved-comment' }] }, requestAnalyticsContext: null });
     h.settle({ status: 'succeeded' });
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(h.captured).toEqual([]);
     expect(h.recoveries).toEqual([]);
+  });
+
+  it('publishes per-request usage count, sums, and reconciliation invariant to run_finished', async () => {
+    const h = harness();
+    const run = fakeRun({
+      agentId: 'claude',
+      events: [
+        {
+          event: 'agent',
+          data: {
+            type: 'request_usage',
+            requestId: 'msg_1',
+            usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 2 },
+          },
+        },
+        {
+          event: 'agent',
+          data: {
+            type: 'request_usage',
+            requestId: 'msg_2',
+            usage: { input_tokens: 20, output_tokens: 15, cache_read_input_tokens: 3 },
+          },
+        },
+        {
+          event: 'agent',
+          data: {
+            type: 'usage',
+            usage: { input_tokens: 30, output_tokens: 20, cache_read_input_tokens: 5 },
+          },
+        },
+      ],
+    });
+    h.lifecycle.install({
+      run,
+      body: { agentId: 'claude' },
+      requestAnalyticsContext: CONTEXT as never,
+    });
+    await settled(h, 'run_created');
+    h.settle({ status: 'succeeded' });
+
+    const finished = await settled(h, 'run_finished');
+    expect(finished.properties.request_usage_count).toBe(2);
+    expect(finished.properties.request_usage_input_tokens_sum).toBe(30);
+    expect(finished.properties.request_usage_output_tokens_sum).toBe(20);
+    expect(finished.properties.request_usage_reconciles_aggregate).toBe(true);
+  });
+});
+
+describe('run_finished storage observability', () => {
+  it('adds storage fields to the emitted run_finished only, never to the recovery snapshot', async () => {
+    const db = new Database(':memory:');
+    db.exec(`CREATE TABLE messages (id TEXT PRIMARY KEY, content TEXT NOT NULL DEFAULT '', events_json TEXT);`);
+    db.prepare(`INSERT INTO messages (id, content, events_json) VALUES ('assistant-1', 'done', '[]')`).run();
+    try {
+      const h = harness(undefined, db);
+      h.lifecycle.install({
+        run: fakeRun({ assistantMessageId: 'assistant-1' }),
+        body: { agentId: 'codex' },
+        requestAnalyticsContext: CONTEXT as never,
+      });
+      await settled(h, 'run_created');
+      h.settle({ status: 'succeeded' });
+      const finished = await settled(h, 'run_finished');
+      expect(finished.properties).toMatchObject({
+        storage_schema_version: 1,
+        storage_events_json_bytes: 2,
+        storage_content_bytes: 4,
+      });
+      const recovery = h.recoveries.at(-1)!.properties;
+      expect(Object.keys(recovery).filter((key) => key.startsWith('storage_'))).toEqual([]);
+      // Every recovery property reaches PostHog unchanged.
+      for (const [key, value] of Object.entries(recovery)) expect(finished.properties[key]).toEqual(value);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('emits exactly the pre-existing properties when storage cannot be measured', async () => {
+    const h = harness();
+    h.lifecycle.install({
+      run: fakeRun({ assistantMessageId: 'assistant-1' }),
+      body: { agentId: 'codex' },
+      requestAnalyticsContext: CONTEXT as never,
+    });
+    await settled(h, 'run_created');
+    h.settle({ status: 'succeeded' });
+    const finished = await settled(h, 'run_finished');
+    expect(Object.keys(finished.properties).filter((key) => key.startsWith('storage_'))).toEqual([]);
+    expect(finished.properties).toEqual(h.recoveries.at(-1)!.properties);
   });
 });
 

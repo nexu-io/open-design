@@ -209,7 +209,7 @@
   gap: 5px;
   padding: 4px 12px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--accent-strong);
   background: var(--accent-tint);
   border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));

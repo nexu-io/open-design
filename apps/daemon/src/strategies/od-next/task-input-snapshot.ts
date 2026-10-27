@@ -43,6 +43,7 @@ type SnapshotSource = {
 };
 
 export type SnapshotFile = {
+  sourcePathHash?: string;
   id: string;
   relativePath: string;
   kind: 'file' | 'image';
@@ -573,6 +574,8 @@ export function createOdNextTaskInputSnapshot(input: {
   taskConfiguration: OdNextTaskConfigurationV1;
   projectRoot: string;
   projectAttachments?: readonly string[];
+  /** Host-owned prior task inputs; validated against the same managed root. */
+  inheritedSnapshot?: OdNextTaskInputSnapshotDescriptor;
   uploadRoot: string;
   imagePaths?: readonly string[];
   commentCount?: number;
@@ -585,7 +588,10 @@ export function createOdNextTaskInputSnapshot(input: {
   afterReadSource?: (sourcePath: string) => void;
 }): OdNextTaskInputSnapshotDescriptor {
   const taskExecutionId = safeTaskId(input.taskExecutionId);
-  const sources: SnapshotSource[] = [
+  const inherited = input.inheritedSnapshot
+    ? loadOdNextTaskInputSnapshot(input.inheritedSnapshot, input.snapshotsRoot)
+    : null;
+  const sources: Array<SnapshotSource | (SnapshotFile & { content: Buffer })> = [
     ...(input.projectAttachments ?? []).map((sourcePath) => ({
       kind: 'file' as const,
       sourcePath,
@@ -596,9 +602,10 @@ export function createOdNextTaskInputSnapshot(input: {
       sourcePath,
       allowedRoot: input.uploadRoot,
     })),
+    ...(inherited?.files ?? []),
   ];
   const countCap = input.countCap ?? DEFAULT_OD_NEXT_ATTACHMENT_COUNT_CAP;
-  if (sources.length > countCap) {
+  if (sources.length - (inherited?.files.length ?? 0) > countCap) {
     throw new OdNextTaskInputSnapshotError('OD Next attachment count exceeds the task cap.', 'OD_NEXT_INPUT_SNAPSHOT_OVERSIZE');
   }
   const snapshotsRoot = path.resolve(input.snapshotsRoot);
@@ -648,10 +655,10 @@ export function createOdNextTaskInputSnapshot(input: {
       snapshotCleanupAllowed = true;
     }
     fs.mkdirSync(attachmentsDir, { recursive: false, mode: 0o700 });
-    sources.forEach((source, index) => {
+    sources.forEach((source) => {
       let bytes: Buffer;
       try {
-        bytes = readSourceWithoutFollowingSymlinks(
+        bytes = 'content' in source ? source.content : readSourceWithoutFollowingSymlinks(
           source,
           fileCap,
           input.beforeOpenSource,
@@ -663,15 +670,20 @@ export function createOdNextTaskInputSnapshot(input: {
           'OD Next attachment could not be read and frozen safely.',
         );
       }
+      const identity = sha256(bytes);
+      if ('content' in source && files.some(file => file.kind === source.kind && file.sha256 === identity)) return;
+      if (files.length >= countCap || bytes.length > fileCap) {
+        throw new OdNextTaskInputSnapshotError('OD Next inherited attachments exceed the task cap.', 'OD_NEXT_INPUT_SNAPSHOT_OVERSIZE');
+      }
       total += bytes.length;
       if (total > totalCap) {
         throw new OdNextTaskInputSnapshotError('OD Next attachments exceed the task byte cap.', 'OD_NEXT_INPUT_SNAPSHOT_OVERSIZE');
       }
-      const identity = sha256(bytes);
       const type = mediaTypeFromBytes(bytes);
       if (source.kind === 'image' && !type.mediaType.startsWith('image/')) {
         throw new OdNextTaskInputSnapshotError('OD Next image attachment bytes are not a supported image type.', 'OD_NEXT_INPUT_SNAPSHOT_TYPE_MISMATCH');
       }
+      const index = files.length;
       const id = `attachment-${String(index + 1).padStart(3, '0')}`;
       const relativePath = `attachments/${id}${type.extension}`;
       const destination = path.join(snapshotDir, relativePath);
@@ -687,6 +699,7 @@ export function createOdNextTaskInputSnapshot(input: {
         throw new OdNextTaskInputSnapshotError('OD Next frozen attachment failed digest verification.');
       }
       files.push({
+        ...('content' in source ? { sourcePathHash: source.sourcePathHash } : source.kind === 'file' ? { sourcePathHash: sha256(Buffer.from(path.relative(input.projectRoot, path.resolve(input.projectRoot, source.sourcePath)).replaceAll('\\', '/'))) } : {}),
         id,
         relativePath,
         kind: source.kind,
@@ -1040,7 +1053,17 @@ export function createOdNextRunInputProjection(input: {
     }
     fs.chmodSync(attachmentsDir, 0o555);
     fs.chmodSync(projectionDir, 0o555);
-    fs.chmodSync(taskProjectionRoot, 0o555);
+    // The access root is handed to adapters as a writable root, and codex's
+    // Linux sandbox materialises synthetic bubblewrap mount targets (`.codex`,
+    // `.agents`, `.git`) directly inside every writable root. Creating them
+    // succeeds because bwrap runs in a user namespace, but the teardown that
+    // unlinks them runs as the real user and needs write permission on the
+    // PARENT. Freezing the root to 0o555 therefore made codex abort with
+    // `failed to remove synthetic bubblewrap mount target ... Permission
+    // denied`, and made our own cleanup below leave the root behind forever.
+    // Immutability lives on the projection directory and its 0o444 files, one
+    // level down; the root only needs to be traversable and owner-writable.
+    fs.chmodSync(taskProjectionRoot, 0o700);
     const projectedPaths = loaded.files.map((file) => (
       path.join(projectionDir, file.relativePath)
     ));
@@ -1060,7 +1083,7 @@ export function createOdNextRunInputProjection(input: {
     if (projectionPathVerified) {
       removeRunProjectionTree(projectionDir);
       if (fs.existsSync(taskProjectionRoot)) {
-        try { fs.chmodSync(taskProjectionRoot, 0o555); } catch { /* best effort */ }
+        try { fs.chmodSync(taskProjectionRoot, 0o700); } catch { /* best effort */ }
       }
     }
     throw error;
@@ -1096,10 +1119,26 @@ export function removeOdNextRunInputProjection(
   }
   fs.chmodSync(projectionAccessRoot, 0o700);
   removeRunProjectionTree(projectionDir);
+  // Sandboxes that treat the access root as a writable root leave their own
+  // synthetic mount targets behind: empty directories such as `.codex`,
+  // `.agents` and `.git`. They are not ours to interpret, but an EMPTY
+  // directory carries no caller data, so removing it is safe and keeps the
+  // per-Run root from accumulating forever. Anything else — a file, a symlink,
+  // a directory with content — is left untouched and reported by the root
+  // surviving this call.
+  for (const entry of fs.readdirSync(projectionAccessRoot)) {
+    const candidate = path.join(projectionAccessRoot, entry);
+    try {
+      const stat = fs.lstatSync(candidate);
+      if (stat.isSymbolicLink() || !stat.isDirectory()) continue;
+      if (fs.readdirSync(candidate).length !== 0) continue;
+      fs.rmdirSync(candidate);
+    } catch { /* best effort: leave the entry and the root behind */ }
+  }
   if (fs.readdirSync(projectionAccessRoot).length === 0) {
     fs.rmdirSync(projectionAccessRoot);
   } else {
-    fs.chmodSync(projectionAccessRoot, 0o555);
+    fs.chmodSync(projectionAccessRoot, 0o700);
   }
 }
 

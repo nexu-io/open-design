@@ -2,6 +2,8 @@ import {
   createOpenCodeRootTaskEvidenceCollector,
   type OpenCodeTaskTerminalCandidate,
 } from './opencode-child-evidence.js';
+import { OpenCodeToolEvents } from './opencode-tool-events.js';
+import { boundedRawAgentEvent } from './run-event-payload-budget.js';
 
 type JsonObject = Record<string, unknown>;
 type StreamEvent = Record<string, unknown>;
@@ -9,6 +11,7 @@ type StreamEventHandler = (event: StreamEvent) => void;
 type ParserKind = string;
 
 type ParserState = {
+  openCodeToolEvents: OpenCodeToolEvents;
   cursorTextSoFar: string;
   cursorTurnStart: number;
   openCodeToolUses: Set<string>;
@@ -27,6 +30,11 @@ type ParserState = {
   suppressDuplicateArtifactText: boolean;
   artifactOpenCandidate: string;
   pendingArtifactText: string;
+  // Antigravity: tool steps already announced as tool_use, keyed by
+  // `<conversation_id>:<step_index>`, and whether any agent_response text
+  // streamed (the terminal result repeats the full response).
+  antigravityToolUses: Set<string>;
+  antigravityTextEmitted: boolean;
 };
 
 type Usage = {
@@ -212,6 +220,7 @@ function openCodeToolResult(
 
 function handleOpenCodeEvent(obj: unknown, onEvent: StreamEventHandler, state: ParserState): boolean {
   if (!isRecord(obj)) return false;
+  if (state.openCodeToolEvents.handle(obj, onEvent)) return true;
   const part = isRecord(obj.part) ? obj.part : {};
 
   if (obj.type === 'step_start') {
@@ -224,6 +233,7 @@ function handleOpenCodeEvent(obj: unknown, onEvent: StreamEventHandler, state: P
       typeof obj.sessionID === 'string' && obj.sessionID.length > 0
         ? obj.sessionID
         : null;
+    state.openCodeToolEvents.startSession(sessionId, onEvent);
     onEvent({ type: 'status', label: 'running', sessionId });
     return true;
   }
@@ -234,6 +244,7 @@ function handleOpenCodeEvent(obj: unknown, onEvent: StreamEventHandler, state: P
   }
 
   if (obj.type === 'tool_use' && typeof part.tool === 'string' && typeof part.callID === 'string') {
+    state.openCodeToolEvents.complete(part.callID);
     const statePart = isRecord(part.state) ? part.state : null;
     const key = `${obj.sessionID || 'session'}:${part.callID}`;
     if (!state.openCodeToolUses.has(key)) {
@@ -406,6 +417,107 @@ function handleGeminiEvent(obj: unknown, onEvent: StreamEventHandler, state: Par
       type: 'usage',
       usage,
       durationMs: typeof obj.stats.duration_ms === 'number' ? obj.stats.duration_ms : undefined,
+    });
+    return true;
+  }
+
+  return false;
+}
+
+// Antigravity `agy --output-format stream-json` (agy >= 1.1.8). Every frame
+// carries an `event` discriminator: `init` once, `step_update` per
+// conversation step (closed-vocabulary `step_type`: user_input,
+// agent_response, tool, checkpoint, subagent — plus `error_message`, seen in
+// recorded streams), then one terminal `result`. Shapes follow agy's headless
+// docs and recorded agy 1.3.1 output (tests/fixtures/antigravity-stream-json).
+// Frames without `event` fall back to the Gemini-CLI JSONL branch, which some
+// agy-compatible builds print.
+function handleAntigravityEvent(obj: unknown, onEvent: StreamEventHandler, state: ParserState): boolean {
+  if (!isRecord(obj)) return false;
+  if (typeof obj.event !== 'string') return handleGeminiEvent(obj, onEvent, state);
+
+  if (obj.event === 'init') {
+    onEvent({
+      type: 'status',
+      label: 'initializing',
+      sessionId: typeof obj.conversation_id === 'string' ? obj.conversation_id : null,
+    });
+    return true;
+  }
+
+  if (obj.event === 'step_update') {
+    const step = isRecord(obj.step_update) ? obj.step_update : null;
+    if (!step) return false;
+    if (step.step_type === 'agent_response') {
+      if (typeof step.text_delta === 'string' && step.text_delta.length > 0) {
+        state.antigravityTextEmitted = true;
+        onEvent({ type: 'text_delta', delta: step.text_delta });
+      }
+      return true;
+    }
+    if (step.step_type === 'tool') {
+      const toolInfo = isRecord(step.tool_info) ? step.tool_info : {};
+      const name = typeof toolInfo.name === 'string'
+        ? toolInfo.name
+        : typeof step.tool_name === 'string'
+          ? step.tool_name
+          : 'tool';
+      const id = `${String(step.conversation_id ?? obj.conversation_id ?? '')}:${String(step.step_index ?? '')}`;
+      if (!state.antigravityToolUses.has(id)) {
+        state.antigravityToolUses.add(id);
+        onEvent({ type: 'tool_use', id, name, input: toolInfo.parameters ?? null });
+      }
+      if (step.state === 'DONE' || step.state === 'ERROR') {
+        onEvent({
+          type: 'tool_result',
+          toolUseId: id,
+          content: typeof toolInfo.output === 'string'
+            ? toolInfo.output
+            : stringifyContent(toolInfo.output ?? ''),
+          isError: step.state === 'ERROR',
+        });
+      }
+      return true;
+    }
+    // user_input echoes the prompt; checkpoint / subagent / error_message
+    // carry no user-visible payload (an error's message arrives on the
+    // terminal result).
+    return true;
+  }
+
+  if (obj.event === 'result') {
+    const result = isRecord(obj.result) ? obj.result : null;
+    if (!result) return false;
+    if (result.status !== 'SUCCESS') {
+      onEvent({
+        type: 'error',
+        message: typeof result.error === 'string' && result.error
+          ? result.error
+          : `Antigravity run ended with status ${String(result.status ?? 'unknown')}`,
+        raw: stringifyContent(obj),
+      });
+      return true;
+    }
+    if (
+      !state.antigravityTextEmitted &&
+      typeof result.response === 'string' &&
+      result.response.length > 0
+    ) {
+      state.antigravityTextEmitted = true;
+      onEvent({ type: 'text_delta', delta: result.response });
+    }
+    const rawUsage = isRecord(result.usage) ? result.usage : {};
+    const usage: Usage = {};
+    if (typeof rawUsage.input_tokens === 'number') usage.input_tokens = rawUsage.input_tokens;
+    if (typeof rawUsage.output_tokens === 'number') usage.output_tokens = rawUsage.output_tokens;
+    if (typeof rawUsage.thinking_tokens === 'number') usage.thought_tokens = rawUsage.thinking_tokens;
+    if (typeof rawUsage.cache_read_tokens === 'number') usage.cached_read_tokens = rawUsage.cache_read_tokens;
+    onEvent({
+      type: 'usage',
+      usage,
+      durationMs: typeof result.duration_seconds === 'number'
+        ? Math.round(result.duration_seconds * 1000)
+        : undefined,
     });
     return true;
   }
@@ -1330,6 +1442,7 @@ function handleCodexEvent(obj: unknown, onEvent: StreamEventHandler, state: Pars
 
 function createParserState(): ParserState {
   return {
+    openCodeToolEvents: new OpenCodeToolEvents(),
     cursorTextSoFar: '',
     cursorTurnStart: 0,
     openCodeToolUses: new Set<string>(),
@@ -1344,6 +1457,8 @@ function createParserState(): ParserState {
     suppressDuplicateArtifactText: false,
     artifactOpenCandidate: '',
     pendingArtifactText: '',
+    antigravityToolUses: new Set<string>(),
+    antigravityTextEmitted: false,
   };
 }
 
@@ -1388,12 +1503,17 @@ export function createJsonEventStreamHandler(
     ? createOpenCodeRootTaskEvidenceCollector(options.openCodeChildEvidence)
     : null;
 
+  // Unrecognised lines are streamed to the browser and persisted as `raw`
+  // events that nothing renders. They are bounded here, at the source, so the
+  // live SSE fan-out, the daemon's run event buffer and the stored transcript
+  // all carry the same bounded line — a cursor-agent `editToolCall` completion
+  // alone repeats the edited file twice (see run-event-payload-budget.ts).
   function handleLine(line: string): void {
     let obj: unknown;
     try {
       obj = JSON.parse(line);
     } catch {
-      onEvent({ type: 'raw', line });
+      onEvent(boundedRawAgentEvent(line, null));
       return;
     }
 
@@ -1401,11 +1521,12 @@ export function createJsonEventStreamHandler(
 
     if (kind === 'opencode' && handleOpenCodeEvent(obj, onEvent, state)) return;
     if (kind === 'gemini' && handleGeminiEvent(obj, onEvent, state)) return;
+    if (kind === 'antigravity' && handleAntigravityEvent(obj, onEvent, state)) return;
     if (kind === 'kimi' && handleKimiEvent(obj, onEvent)) return;
     if (kind === 'cursor-agent' && handleCursorEvent(obj, onEvent, state)) return;
     if (kind === 'codex' && handleCodexEvent(obj, onEvent, state)) return;
 
-    onEvent({ type: 'raw', line });
+    onEvent(boundedRawAgentEvent(line, obj));
   }
 
   function feed(chunk: string): void {
@@ -1423,6 +1544,7 @@ export function createJsonEventStreamHandler(
     const rem = buffer.trim();
     buffer = '';
     if (rem) handleLine(rem);
+    if (kind === 'opencode') state.openCodeToolEvents.flush(onEvent);
     flushPendingArtifactText(state, onEvent);
   }
 

@@ -9,6 +9,10 @@ export interface MessageCenterMessage {
   typeName: string;
   title: string;
   body: string;
+  /** Optional cover the card reveals on expand. Only what the payload
+   *  actually carries: the media slot stays empty until a message ships its
+   *  own image. */
+  imageUrl?: string | null;
   ctaLabel: string | null;
   ctaUrl: string | null;
   publishedAt: string;
@@ -40,6 +44,14 @@ const ANONYMOUS_PROXY = '/api/integrations/vela/message-center-public';
 const LEGACY_WINDOW_KEY = 'open-design.message-center.anonymous-started-at.v1';
 const MESSAGES_KEY = 'open-design.message-center.anonymous-messages.v1';
 const READ_KEY = 'open-design.message-center.anonymous-read-ids.v1';
+/* Archived ids are LOCAL for signed-in users too: the vela message model
+   carries a single state field (`readAt`) and there is no archive endpoint, so
+   this store is the whole truth. Deliberately outside the anonymous mirror
+   above — `clearAnonymousState` wipes that mirror the moment an account takes
+   over, and an archive the user made must survive the hand-off (it would also
+   have to survive it once a server field exists). Not synced across devices;
+   that needs the backend field. */
+const ARCHIVED_KEY = 'open-design.message-center.archived-ids.v1';
 const MAX_MESSAGE_CENTER_PAGES = 20;
 
 export function readAnonymousMessages(storage: Storage): MessageCenterMessage[] {
@@ -57,6 +69,14 @@ export function writeAnonymousState(
 ): void {
   storage.setItem(MESSAGES_KEY, JSON.stringify(messages));
   storage.setItem(READ_KEY, JSON.stringify([...readIds]));
+}
+
+export function readArchivedIds(storage: Storage): Set<string> {
+  return new Set(parseArray<string>(storage.getItem(ARCHIVED_KEY)));
+}
+
+export function writeArchivedIds(storage: Storage, ids: Set<string>): void {
+  storage.setItem(ARCHIVED_KEY, JSON.stringify([...ids]));
 }
 
 export function clearAnonymousState(storage: Storage): void {

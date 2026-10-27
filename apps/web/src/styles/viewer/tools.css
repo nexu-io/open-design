@@ -87,8 +87,10 @@
 .artifact-card-thumb {
   position: relative;
   display: block;
+  width: 100%;
   aspect-ratio: 16 / 10;
   height: auto;
+  max-height: var(--chat-artifact-max-height, 240px);
   background: var(--bg-subtle);
   border-radius: calc(var(--radius) - 1px);
   overflow: hidden;
@@ -98,7 +100,7 @@
      measured 2026-08-28 in a 1600px window, dropping this line takes the
      frame's scale from 0.140 to 1.111 and the 1440px page renders 1600px
      wide inside a 202px card. */
-  container-type: inline-size;
+  container-type: size;
 }
 /* The grey placeholder: the only placeholder tone in the whole sheet. */
 .artifact-card-mini {
@@ -136,20 +138,22 @@
    desktop three-column layout). Scaling was never the missing part; the base
    was.
 
-   1440x900 because: it is 16/10 like the thumb above, so scaling by width
-   fits both axes exactly with no crop or letterbox; and it clears every
+   1440x900 because: it is 16/10 like the thumb above, and it clears every
    common desktop breakpoint (768 / 1024 / 1280) while staying near the real
    preview pane's width, so both land in the same responsive bucket. Going all
    the way to 1920 would show a wider layout than the pane on the right
-   actually renders, and would shrink type past legibility at card size. */
+   actually renders, and would shrink type past legibility at card size.
+   Motion overrides the viewport height to its native canvas ratio. Fit the
+   viewport by BOTH axes and centre it: the outer card has a height cap, so
+   width-only scaling can clip a portrait canvas or a wide single card. */
 .artifact-card-frame {
   position: absolute;
-  top: 0;
-  left: 0;
+  top: 50%;
+  left: 50%;
   width: 1440px;
   height: 900px;
-  transform: scale(calc(100cqw / 1440px));
-  transform-origin: top left;
+  transform: translate(-50%, -50%) scale(min(calc(100cqw / 1440px), calc(100cqh / var(--artifact-frame-height, 900px))));
+  transform-origin: center;
   border: 0;
   background: var(--bg-panel);
   pointer-events: none;
@@ -162,14 +166,8 @@
 .artifact-card--video .artifact-card-thumb {
   display: grid;
   place-items: center;
-  background: var(--bg-panel);
 }
 .artifact-card--video .artifact-card-media {
-  position: relative;
-  inset: auto;
-  width: auto;
-  max-width: 100%;
-  height: 100%;
   object-fit: contain;
 }
 .artifact-card--video .artifact-card-mini {
@@ -215,6 +213,8 @@
   z-index: 2;
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
+  max-width: calc(100% - 16px);
   gap: 4px;
 }
 /* The export pill wraps in a relative anchor when it opens a format popover
@@ -230,6 +230,9 @@
    stay on the design baseline. */
 .artifact-card .artifact-card-act {
   flex: none;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -251,6 +254,13 @@
   text-decoration: none;
   cursor: pointer;
   transition: background-color var(--duration-faster) var(--ease-out);
+}
+/* Wrap the pair when translations do not fit side by side. A single long
+   label may truncate, while its icon and the other action remain reachable. */
+.artifact-card-act-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* Hover deepens the same glass fill without changing geometry. */
 .artifact-card .artifact-card-act:hover {
@@ -301,7 +311,7 @@
   letter-spacing: 0.06em;
   color: var(--text-soft);
   margin-bottom: 6px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .produced-files-list {
   display: flex;
@@ -360,169 +370,6 @@
 .produced-file-actions .ghost-link:hover {
   background: var(--bg-fill-tertiary);
   color: var(--text);
-}
-
-.plugin-action-panel {
-  margin-top: 4px;
-  padding: 12px 14px;
-  border: 1px solid var(--accent-soft);
-  border-radius: var(--radius);
-  background: color-mix(in srgb, var(--accent) 5%, var(--bg-panel));
-  box-shadow: var(--shadow-xs);
-}
-.plugin-action-panel__head {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  margin-bottom: 10px;
-}
-.plugin-action-panel__icon {
-  width: 25px;
-  height: 25px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius);
-  background: var(--accent-soft);
-  color: var(--accent);
-  flex-shrink: 0;
-}
-.plugin-action-panel__title {
-  font-weight: 600;
-  font-size: 13px;
-  color: var(--text);
-}
-.plugin-action-panel__subtitle {
-  margin-top: 2px;
-  font-size: 12px;
-  line-height: 1.35;
-  color: var(--text-muted);
-}
-.plugin-action-panel__list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.plugin-action-card {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-  padding-top: 8px;
-  border-top: 1px solid var(--border-soft);
-}
-.plugin-action-panel__list .plugin-action-card:first-child {
-  padding-top: 0;
-  border-top: none;
-}
-.plugin-action-panel > .plugin-action-card:only-child {
-  padding-top: 0;
-  border-top: none;
-}
-.plugin-action-card__main {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-.plugin-action-card__folder-icon {
-  width: 23px;
-  height: 23px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  background: var(--bg-subtle);
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-.plugin-action-card__copy {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 5px 8px;
-  min-width: 0;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-.plugin-action-card__path {
-  max-width: 220px;
-  padding: 1px 6px;
-  border-radius: var(--radius-xs);
-  background: var(--bg-panel);
-  border: 1px solid var(--border-soft);
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.plugin-action-card__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.plugin-action-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  min-height: 28px;
-  max-width: 100%;
-  padding: 5px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-panel);
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-}
-.plugin-action-button:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-.plugin-action-button:disabled {
-  opacity: 0.58;
-  cursor: default;
-}
-.plugin-action-button--primary {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: #fff;
-}
-.plugin-action-button--primary:hover:not(:disabled) {
-  color: #fff;
-  filter: brightness(0.85);
-}
-.plugin-action-card__notice {
-  margin-top: 8px;
-  padding: 6px 8px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-panel);
-  border: 1px solid var(--border-soft);
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.35;
-}
-.plugin-action-card__notice a {
-  color: var(--accent);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  word-break: break-all;
-}
-
-.plugin-action-candidate__details {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 9px;
-}
-
-.plugin-action-candidate__details p {
-  flex: 1 1 240px;
-  margin: 0;
 }
 
 /* "Files this turn" summary — derived from file operation tool_use events.
@@ -920,7 +767,7 @@
 .present-menu-copy small {
   color: var(--text-muted);
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.2;
 }
 
@@ -1575,5 +1422,5 @@
   color: var(--text-muted);
   background: var(--bg-subtle);
   border-color: var(--border);
-  font-weight: 500;
+  font-weight: 600;
 }

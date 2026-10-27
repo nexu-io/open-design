@@ -37,17 +37,22 @@
  *    这一点如实写在这里,不冒充成计算值。
  *
  * 判据两端都钉**具体字面值**,不写「两个元素相等」——都算成 `none` 时那种断言永远绿。
+ *
+ * 整份层叠在模块顶层注入一次、全文件只读共用,按文件切成多张 `<style>`(顺序不变):
+ * 以前每条用例各自解析一遍 1.7 MB 的表,解析本身就吃掉了 5 秒超时。
+ * 原委和守卫见 `helpers/style-sheet-fixture.ts` 与 `readExpandedIndexCssSegments`。
  */
 import { cleanup, render } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ComponentProps } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AudioArtifact } from '../../../src/components/chat/AudioArtifact';
 import audioStyles from '../../../src/components/chat/AudioArtifact.module.css';
-import { readExpandedIndexCss } from '../../helpers/read-expanded-css';
+import { readExpandedIndexCssSegments } from '../../helpers/read-expanded-css';
+import { injectStyleSheets } from '../../helpers/style-sheet-fixture';
 
 const SRC = resolve(dirname(fileURLToPath(import.meta.url)), '../../../src');
 const MODULE_PATH = resolve(SRC, 'components/chat/AudioArtifact.module.css');
@@ -87,18 +92,6 @@ function scopedModuleCss(): string {
     const scoped = local(name);
     return scoped === name ? whole : `.${scoped}`;
   });
-}
-
-function injectStyles(): void {
-  for (const [mark, text] of [
-    ['index', readExpandedIndexCss()],
-    ['module', scopedModuleCss()],
-  ] as const) {
-    const style = document.createElement('style');
-    style.textContent = text;
-    style.dataset.odTestSheet = mark;
-    document.head.appendChild(style);
-  }
 }
 
 function mount(props: Partial<ComponentProps<typeof AudioArtifact>> = {}): HTMLElement {
@@ -142,16 +135,25 @@ function reducedMotionRules(): CSSStyleRule[] {
   return out;
 }
 
+/** 全局层叠在前、这一支 Module 在后。模块顶层注入 = 收集阶段,不计入任何超时。 */
+const sheets = injectStyleSheets([...readExpandedIndexCssSegments(), scopedModuleCss()]);
+
+beforeEach(() => {
+  sheets.assertIntact();
+});
+
 afterEach(() => {
   cleanup();
-  document.querySelectorAll('style[data-od-test-sheet]').forEach((n) => n.remove());
   document.querySelectorAll('.app').forEach((n) => n.remove());
+});
+
+afterAll(() => {
+  sheets.remove();
 });
 
 describe('这把尺子看得见缺陷', () => {
   it('哈希改写是真的在做事 —— 局部名和实际类名不是同一个字符串', () => {
     expect(local('aud')).not.toBe('aud');
-    injectStyles();
     const root = mount();
     expect(root.className).toBe(local('aud'));
     expect(getComputedStyle(root).padding).toBe('3px');
@@ -169,7 +171,6 @@ describe('波形在播的时候起伏', () => {
   });
 
   it('播着的时候柱子挂上 wave-pulse,0.55s 无限循环', () => {
-    injectStyles();
     const root = mount({ previewPlaying: true, previewCurrentSec: 12 });
     expect(root.hasAttribute('data-playing')).toBe(true);
     expect(getComputedStyle(barsOf(root)[0]!).animation).toBe(
@@ -178,13 +179,11 @@ describe('波形在播的时候起伏', () => {
   });
 
   it('逐根错开 18ms —— 全条一起动的是「还在响」,不是音量', () => {
-    injectStyles();
     const root = mount({ previewPlaying: true, previewCurrentSec: 12 });
     expect(getComputedStyle(barsOf(root)[0]!).animationDelay).toBe(DESIGN_STAGGER);
   });
 
   it('关键帧就是稿子那三档 scaleY', () => {
-    injectStyles();
     const rule = keyframesRule(local('wave-pulse'));
     expect(rule, '注入的表里找不到 wave-pulse').not.toBeNull();
     const stops = [...rule!.cssRules].map((one) => [
@@ -195,7 +194,6 @@ describe('波形在播的时候起伏', () => {
   });
 
   it('停着的时候不动', () => {
-    injectStyles();
     const root = mount();
     expect(root.hasAttribute('data-playing')).toBe(false);
     const animation = getComputedStyle(barsOf(root)[0]!).animation;
@@ -203,14 +201,12 @@ describe('波形在播的时候起伏', () => {
   });
 
   it('降级动画时整条停下 —— 规则在,且就是 animation: none', () => {
-    injectStyles();
     const barSelector = `.${local('aud')}[data-playing] .${local('wave')} > i`;
     const hit = reducedMotionRules().filter((rule) => rule.selectorText === barSelector);
     expect(hit.map((rule) => rule.style.animation)).toEqual(['none']);
   });
 
   it('已播那截仍然变实 —— 这条本来就对,别在改动画时弄丢', () => {
-    injectStyles();
     const root = mount({ previewPlaying: true, previewCurrentSec: 24 });
     const on = barsOf(root).filter((bar) => bar.className === local('on'));
     expect(on.length).toBe(Math.round((24 / 48) * DESIGN_BARS));
@@ -240,7 +236,6 @@ describe('白行的构成', () => {
 
 describe('多条音频之间有间距', () => {
   it('第二条往下让 8px —— 和产物卡那一档同值', () => {
-    injectStyles();
     // 产线的形状:`FileOpsSummary.tsx:179` 把每段音频平铺进 `.file-ops-audio`
     const { container } = render(
       <div className="file-ops-audio">

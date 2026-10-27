@@ -54,7 +54,8 @@ export type ProjectScenarioTaskProfile =
   | 'prototype'
   | 'ppt'
   | 'marketing'
-  | 'hyperframes';
+  | 'hyperframes'
+  | 'motion-design';
 
 /**
  * Daemon-owned identity for the scenario currently pinned to a project.
@@ -192,6 +193,8 @@ export interface DesignSystemReviewEntry {
 }
 
 export interface ProjectMetadata {
+  /** Reserved admitted facts; installed only with the matching local content receipt. */
+  _commentFiles?: import('./comments.js').CommentFileState;
   kind: ProjectKind;
   // `live-artifact`: the data-backed live dashboard flow (drives the
   // live-artifact skill/system-prompt path). `web-clone`: website reproduction
@@ -211,7 +214,8 @@ export interface ProjectMetadata {
     | 'webgl-experience'
     | 'worker-visualizer'
     | 'marketing'
-    | 'hyperframes';
+    | 'hyperframes'
+    | 'motion-design';
   fidelity?: 'wireframe' | 'high-fidelity';
   speakerNotes?: boolean;
   slideCount?: string;
@@ -463,6 +467,12 @@ export interface CreateProjectRequest {
   exampleReference?: CreateProjectExampleReference;
   /** Session mode for the default conversation seeded with the project. */
   conversationMode?: ChatSessionMode;
+  /**
+   * Caller-minted id for the default conversation seeded with the project.
+   * Lets an optimistic client route to the conversation before the create
+   * answers; omitted, the daemon mints one.
+   */
+  conversationId?: string;
   customInstructions?: string;
   /** Persisted to metadata.skipDiscoveryBrief for automated project runs. */
   skipDiscoveryBrief?: boolean;
@@ -982,7 +992,9 @@ export type DeployPreflightWarningCode =
   | 'external-script'
   | 'external-stylesheet'
   | 'no-doctype'
-  | 'no-viewport';
+  | 'no-viewport'
+  /** The entry would collide with the project's root index.html; deploy is refused with ENTRY_INDEX_CONFLICT. */
+  | 'entry-index-conflict';
 
 export interface DeployPreflightWarning {
   code: DeployPreflightWarningCode;

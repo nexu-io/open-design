@@ -201,6 +201,18 @@ function configuredExecutableOverride(
   return executableFilePath(configuredEnv?.[envKey] ?? process.env[envKey]);
 }
 
+function orderPathCandidatesForAgent(agentId: string, candidates: string[]): string[] {
+  if (agentId !== 'copilot') return candidates;
+  const isVsCodeBootstrap = (candidate: string) =>
+    candidate.replace(/\\/g, '/').toLowerCase().includes(
+      '/code/user/globalstorage/github.copilot-chat/copilotcli/',
+    );
+  return [
+    ...candidates.filter((candidate) => !isVsCodeBootstrap(candidate)),
+    ...candidates.filter(isVsCodeBootstrap),
+  ];
+}
+
 export function resolveAmrOpenCodeExecutable(
   env: Record<string, string | undefined> = process.env,
 ): string | null {
@@ -421,10 +433,11 @@ export function inspectAgentExecutableResolution(
       pathCandidates.push(resolved);
     }
   }
+  const orderedPathCandidates = orderPathCandidatesForAgent(def.id, pathCandidates);
   // First hit among what is left. Plain order is not enough on its own — the
   // first file that merely *exists* can be a shim detection already proved
   // dead, which is why those are filtered out above rather than ranked below.
-  const pathResolvedPath: string | null = pathCandidates[0] ?? null;
+  const pathResolvedPath: string | null = orderedPathCandidates[0] ?? null;
   const builtInPath = packagedBuiltInExecutable(def, configuredEnv);
   const appBundlePath = codexAppBundleExecutable(def);
   return {

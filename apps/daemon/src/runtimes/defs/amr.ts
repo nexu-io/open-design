@@ -9,7 +9,11 @@ const AMR_MODELS_TIMEOUT_MS = 10_000;
 const AMR_MODELS_RETRY_DELAYS_MS = [250, 750] as const;
 export type VelaModelJsonSource = 'preset' | 'remote';
 
+// deepseek-v4.1-flash leads because it is the one chat model every plan
+// (including free) is entitled to; a list without per-caller `enabled` flags
+// (the preset seed) otherwise resolves `default` to a model the caller cannot use.
 const PREFERRED_AMR_CHAT_MODEL_ORDER = [
+  'deepseek-v4.1-flash',
   'deepseek-v4-flash',
   'deepseek-v4-pro',
 ] as const;
@@ -98,11 +102,11 @@ function normalizeKnownVelaVersionId(rawId: string): string | null {
   return null;
 }
 
-function isVelaChatModelId(modelId: string): boolean {
+export function isVelaChatCapableModelId(modelId: string): boolean {
   // Temporary chat-surface guard: Vela already lists media-generation models,
   // but OpenDesign's AMR runtime currently drives only chat completions.
   // Remove this filter when AMR grows first-class image/video execution.
-  const id = modelId.toLowerCase();
+  const id = (normalizeVelaModelId(modelId) ?? modelId.trim()).toLowerCase();
   if (id.startsWith('gpt-image-')) return false;
   if (id.startsWith('nano-banana-')) return false;
   if (id.startsWith('seedream-')) return false;
@@ -122,7 +126,7 @@ export function parseVelaModels(stdout: string): RuntimeModelOption[] {
     const [rawId] = trimmed.split(/\s+/);
     if (!rawId) continue;
     const id = normalizeVelaModelId(rawId);
-    if (!id || seen.has(id) || !isVelaChatModelId(id)) continue;
+    if (!id || seen.has(id) || !isVelaChatCapableModelId(id)) continue;
     seen.add(id);
     models.push({ id, label: id });
   }
@@ -157,7 +161,7 @@ export function parseVelaModelJson(
       ? (item as { id?: unknown }).id
       : null;
     const id = typeof rawId === 'string' ? (normalizeVelaModelId(rawId) ?? '') : '';
-    if (!id || seen.has(id) || !isVelaChatModelId(id)) continue;
+    if (!id || seen.has(id) || !isVelaChatCapableModelId(id)) continue;
     seen.add(id);
     models.push(withVelaModelPriceFields({ id, label: id }, item));
   }

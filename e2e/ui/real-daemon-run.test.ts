@@ -297,7 +297,7 @@ for (const strategyMode of ['active', 'off'] as const) {
   });
 }
 
-test('[P0] local OD Next clarification canary preserves one taskExecutionId through the public form', async ({ page }) => {
+test('[P0] local OD Next form answers start a new task after the question run ends', async ({ page }) => {
   test.skip(
     process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'active'
       || process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY !== '1',
@@ -314,22 +314,23 @@ test('[P0] local OD Next clarification canary preserves one taskExecutionId thro
   await expect.poll(async () => {
     const response = await page.request.get(`/api/runs/${created.runId}`);
     return (await response.json() as { strategyTask?: { outcome: string } }).strategyTask?.outcome;
-  }, { timeout: 20_000 }).toBe('clarification_required');
+  }, { timeout: 20_000 }).toBe('completed');
 
   const form = page.locator('.question-form').first();
   await expect(form).toBeVisible();
   await form.getByText('Desktop web', { exact: true }).click();
   const clarificationResponsePromise = page.waitForResponse(isCreateRunResponse);
-  await form.getByRole('button', { name: 'Send answers' }).click();
+  await form.getByRole('button', { name: 'Next', exact: true }).click();
   const clarificationResponse = await clarificationResponsePromise;
   const clarificationText = await clarificationResponse.text();
   expect(clarificationResponse.ok(), clarificationText).toBeTruthy();
   const clarification = JSON.parse(clarificationText) as {
+    runId: string;
     taskExecutionId: string;
     strategyTask?: { inputStage: string };
   };
-  expect(clarification.taskExecutionId).toBe(created.taskExecutionId);
-  expect(clarification.strategyTask?.inputStage).toBe('clarification');
+  expect(clarification.taskExecutionId).not.toBe(created.taskExecutionId);
+  expect(clarification.strategyTask?.inputStage).toBe('request');
 
   const { projectId } = await currentProjectContext(page);
   await expectProjectFilesToContain(page, projectId, [OD_NEXT_CANARY_FILE]);
@@ -337,18 +338,18 @@ test('[P0] local OD Next clarification canary preserves one taskExecutionId thro
     'Created od-next-active-canary.html through the continued native session.',
   ).last()).toBeVisible();
   await expect.poll(async () => {
-    const response = await page.request.get(`/api/runs/${created.runId}`);
+    const response = await page.request.get(`/api/runs/${clarification.runId}`);
     return (await response.json() as {
       strategyTask?: { taskExecutionId: string; outcome: string; terminal: boolean };
     }).strategyTask;
   }, { timeout: 20_000 }).toMatchObject({
-    taskExecutionId: created.taskExecutionId,
+    taskExecutionId: clarification.taskExecutionId,
     outcome: 'completed',
     terminal: true,
   });
 });
 
-test('[P0] local OD Next public canaries project blocked and canceled terminal mappings', async ({ page }) => {
+test('[P0] local OD Next public canaries preserve normal no-artifact endings and cancellation', async ({ page }) => {
   test.skip(
     process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'active'
       || process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY !== '1',
@@ -368,7 +369,7 @@ test('[P0] local OD Next public canaries project blocked and canceled terminal m
     }).strategyTask;
   }, { timeout: 20_000 }).toMatchObject({
     taskExecutionId: blocked.taskExecutionId,
-    outcome: 'blocked',
+    outcome: 'completed',
     terminal: true,
   });
 
@@ -393,7 +394,7 @@ test('[P0] local OD Next public canaries project blocked and canceled terminal m
   });
 });
 
-test('[P0] OD Next app-config switch takes effect immediately and rejects invalid modes atomically', async ({ page }) => {
+test('[P0] OD Next retired app-config preference preserves the active default and rejects invalid modes atomically', async ({ page }) => {
   const readRollout = async () => {
     const response = await page.request.get('/api/strategies/od-next/rollout');
     expect(response.ok(), await response.text()).toBeTruthy();
@@ -412,7 +413,7 @@ test('[P0] OD Next app-config switch takes effect immediately and rejects invali
   expect(activeWrite.ok(), await activeWrite.text()).toBeTruthy();
   await expect.poll(readRollout).toMatchObject({
     requestedMode: 'active',
-    requestedModeSource: 'app_config',
+    requestedModeSource: 'default',
     effectiveMode: 'active',
   });
 
@@ -432,7 +433,7 @@ test('[P0] OD Next app-config switch takes effect immediately and rejects invali
   });
   await expect.poll(readRollout).toMatchObject({
     requestedMode: 'active',
-    requestedModeSource: 'app_config',
+    requestedModeSource: 'default',
     effectiveMode: 'active',
   });
   const afterInvalid = await page.request.get('/api/app-config');
@@ -444,9 +445,9 @@ test('[P0] OD Next app-config switch takes effect immediately and rejects invali
   });
   expect(offWrite.ok(), await offWrite.text()).toBeTruthy();
   await expect.poll(readRollout).toMatchObject({
-    requestedMode: 'off',
-    requestedModeSource: 'app_config',
-    effectiveMode: 'off',
+    requestedMode: 'active',
+    requestedModeSource: 'default',
+    effectiveMode: 'active',
   });
 });
 
@@ -562,8 +563,10 @@ test('[P0] real daemon run surfaces process/parser errors in chat', async ({ pag
 
   const rawError = 'intentional fake codex failure';
   const card = runErrorCard(page);
-  await expect(card).toContainText('Task failed', { timeout: 15_000 });
-  await expect(card).toContainText("This one didn't get through");
+  await expect(card).toContainText('The task could not be completed', { timeout: 15_000 });
+  await expect(card.getByTestId('chat-run-error-description')).toHaveText(
+    'This task failed to run. Please retry. If it fails again, please contact support.',
+  );
   await expect(card).not.toContainText(rawError);
 
   const { projectId, conversationId } = await currentProjectContext(page);
@@ -594,9 +597,15 @@ test('[P0] ACP handshake refusal is actionable, persists, and does not auto-retr
   const rawError = 'json-rpc id 2: Internal error';
   const card = runErrorCard(page);
   await expect(card).toContainText('Agent version incompatible', { timeout: 15_000 });
-  await expect(card).toContainText('Kimi CLI refused to start a session');
+  await expect(card.getByTestId('chat-run-error-description')).toHaveText(
+    'Open Design does not currently support this agent version. Please switch to a supported version and try again.',
+  );
   await expect(card).not.toContainText(rawError);
-  await expect(card.getByRole('button', { name: /^Retry$/ })).toBeVisible();
+  // OPEND-2807 / G16: a failed local CLI run has exactly these three actions.
+  await expect(card.getByRole('button')).toHaveText([
+    'Contact us', 'Export logs', 'Switch to OpenDesign Cloud',
+  ]);
+  await expect(card.getByRole('button', { name: /^Retry$/ })).toHaveCount(0);
   await expect.poll(() => countAcpRunSessionStarts(fakeAcpHandshakeRuntime.invocationLog)).toBe(1);
 
   const { projectId, conversationId } = await currentProjectContext(page);
@@ -605,7 +614,9 @@ test('[P0] ACP handshake refusal is actionable, persists, and does not auto-retr
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
   await expect(runErrorCard(page)).toContainText('Agent version incompatible', { timeout: 15_000 });
-  await expect(runErrorCard(page)).toContainText('Kimi CLI refused to start a session');
+  await expect(runErrorCard(page).getByTestId('chat-run-error-description')).toHaveText(
+    'Open Design does not currently support this agent version. Please switch to a supported version and try again.',
+  );
   await expect.poll(() => countAcpRunSessionStarts(fakeAcpHandshakeRuntime.invocationLog)).toBe(1);
 });
 
@@ -617,17 +628,23 @@ test('[P1] real daemon classifies a Claude prompt-too-long result and preserves 
 
   const card = runErrorCard(page);
   await expect(card).toContainText('Conversation too long', { timeout: 15_000 });
-  await expect(card).toContainText('exceed what the AI can process');
-  await expect(card.getByRole('button', { name: /^Retry$/ })).toBeVisible();
-  // OPEND-2772 / 规格 T68:切换卡整块删掉,那颗〔切换到 Cloud〕
-  // 收进报错卡,并铺到**所有** BYOK / 本地 CLI 的失败 —— 这一轮跑的是本地 claude,
-  // 所以它在场,而〔重试〕退到次级(判据 `runsOnALocalAgent`)。
-  await expect(page.getByRole('button', { name: /Switch to Cloud/i })).toHaveCount(1);
+  await expect(card.getByTestId('chat-run-error-description')).toHaveText(
+    'The current context exceeds the length the model can handle. Please start a new conversation and try again.',
+  );
+  // OPEND-2807 / G16: a failed local CLI run has exactly these three actions.
+  await expect(card.getByRole('button')).toHaveText([
+    'Contact us', 'Export logs', 'Switch to OpenDesign Cloud',
+  ]);
+  await expect(card.getByRole('button', { name: /^Retry$/ })).toHaveCount(0);
+  // The Cloud action remains in this one error card, with no separate suggestion card.
+  await expect(page.getByRole('button', { name: 'Switch to OpenDesign Cloud', exact: true })).toHaveCount(1);
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
   await expect(runErrorCard(page)).toContainText('Conversation too long', { timeout: 15_000 });
-  await expect(runErrorCard(page)).toContainText('exceed what the AI can process');
+  await expect(runErrorCard(page).getByTestId('chat-run-error-description')).toHaveText(
+    'The current context exceeds the length the model can handle. Please start a new conversation and try again.',
+  );
 });
 
 test('[P0] real daemon run supports a follow-up turn in the same project', async ({ page }) => {
@@ -722,7 +739,8 @@ test('[P1] plan-document daemon run creates, opens, and restores an editable mar
   // The composer has no session-mode picker any more (#7635); the plan
   // document flow is driven by the prompt (the fake runtime keys on it), and
   // the run carries the conversation's stored design mode.
-  await expect(page.getByTestId('chat-composer').getByTestId('composer-mode-trigger')).toHaveCount(0);  const runRequestPromise = page.waitForRequest(isCreateRunRequest);
+  await expect(page.getByTestId('chat-composer').getByTestId('composer-mode-trigger')).toHaveCount(0);
+  const runRequestPromise = page.waitForRequest(isCreateRunRequest);
   await sendPrompt(page, 'Create a deterministic plan document');
   const runRequest = await runRequestPromise;
   expect((runRequest.postDataJSON() as { sessionMode?: string }).sessionMode).toBe('design');
@@ -779,7 +797,8 @@ test('[P1] media-only turn auto-opens the generated image file', async ({ page }
 // generated HTML instead of staying on the markdown plan.
 test('[P1] plan-document generation turn auto-opens the generated HTML file', async ({ page }) => {
   test.setTimeout(120_000);
-  await createProject(page, 'Plan document html auto-open smoke', 'claude');  await expectWorkspaceReady(page);
+  await createProject(page, 'Plan document html auto-open smoke', 'claude');
+  await expectWorkspaceReady(page);
 
   await sendPrompt(page, 'Create a deterministic plan document');
   const { projectId } = await currentProjectContext(page);
@@ -813,7 +832,8 @@ test('[P1] plan-document generation turn auto-opens the generated HTML file', as
 // auto-open path cannot mask the turn-end selection.
 test('[P1] plan-document regeneration re-opens the existing generated HTML file', async ({ page }) => {
   test.setTimeout(120_000);
-  await createProject(page, 'Plan document html regen smoke');  await expectWorkspaceReady(page);
+  await createProject(page, 'Plan document html regen smoke');
+  await expectWorkspaceReady(page);
 
   await sendPrompt(page, 'Create a deterministic plan document');
   const { projectId, conversationId } = await currentProjectContext(page);
@@ -869,6 +889,7 @@ test('[P0] real daemon run restores a delayed artifact turn after reload', async
 
   await expectRestoredDelayedAssistantMessage(page, projectId, conversationId, {
     expectedUserMessages: 1,
+    expectedAssistantMessages: 2,
     expectedThinking: false,
   });
 });
@@ -997,6 +1018,7 @@ test('[P1] real daemon run survives reload before the create response reaches th
 
   await expectRestoredDelayedAssistantMessage(page, projectId, conversationId, {
     requireRunId: true,
+    expectedAssistantMessages: 2,
     expectedThinking: false,
   });
 });
@@ -1009,8 +1031,8 @@ test('[P0] empty daemon output fails cleanly, persists after reload, and does no
 
   const rawError = 'Agent completed without producing any output.';
   const card = runErrorCard(page);
-  await expect(card).toContainText('No output produced', { timeout: 15_000 });
-  await expect(card).toContainText('The agent finished without producing any output');
+  await expect(card).toContainText('Unable to generate content', { timeout: 15_000 });
+  await expect(card).toContainText('The AI could not generate content. Please start the task again, or switch models and try again.');
   await expect(card).not.toContainText(rawError);
 
   const { projectId, conversationId } = await currentProjectContext(page);
@@ -1023,8 +1045,8 @@ test('[P0] empty daemon output fails cleanly, persists after reload, and does no
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
-  await expect(runErrorCard(page)).toContainText('No output produced');
-  await expect(runErrorCard(page)).toContainText('The agent finished without producing any output');
+  await expect(runErrorCard(page)).toContainText('Unable to generate content');
+  await expect(runErrorCard(page)).toContainText('The AI could not generate content. Please start the task again, or switch models and try again.');
   await expect(runErrorCard(page)).not.toContainText(rawError);
   expect(await listProjectFiles(page, projectId)).toEqual([]);
 });
@@ -1531,8 +1553,8 @@ async function leaveProjectForEntry(page: Page) {
 
 async function gotoEntryHome(page: Page) {
   // Hold until the async projects list settles: its late resolution re-renders
-  // the home hero (recent-projects strip mounting), which keeps controls like
-  // the shortcuts trigger unstable under CI timing. Arm before navigating.
+  // the home hero (the rail's 最近项目 rows mounting), which keeps controls
+  // like the shortcuts trigger unstable under CI timing. Arm before navigating.
   const projectsSettled = page
     .waitForResponse(
       (response) =>
@@ -2002,6 +2024,7 @@ async function expectRestoredDelayedAssistantMessage(
   conversationId: string,
   options: {
     expectedUserMessages?: number;
+    expectedAssistantMessages?: number;
     requireRunId?: boolean;
     expectedThinking?: boolean;
     producedFiles?: string[];
@@ -2010,7 +2033,7 @@ async function expectRestoredDelayedAssistantMessage(
   await expect
     .poll(async () => {
       const messages = await listConversationMessages(page, projectId, conversationId);
-      const assistant = messages.find((message) => message.role === 'assistant');
+      const assistant = messages.filter((message) => message.role === 'assistant').at(-1);
       return {
         userMessages: messages.filter((message) => message.role === 'user').length,
         assistantMessages: messages.filter((message) => message.role === 'assistant').length,
@@ -2022,7 +2045,7 @@ async function expectRestoredDelayedAssistantMessage(
     }, { timeout: 15_000 })
     .toEqual({
       userMessages: options.expectedUserMessages ?? expect.any(Number),
-      assistantMessages: 1,
+      assistantMessages: options.expectedAssistantMessages ?? 1,
       hasRunId: options.requireRunId ? true : expect.any(Boolean),
       runStatus: 'succeeded',
       producedFiles: options.producedFiles ?? [DELAYED_FILE],
@@ -2038,7 +2061,7 @@ async function expectPersistedAssistantContent(
 ) {
   await expect.poll(async () => {
     const messages = await listConversationMessages(page, projectId, conversationId);
-    return messages.find((message) => message.role === 'assistant')?.content ?? '';
+    return messages.filter((message) => message.role === 'assistant').at(-1)?.content ?? '';
   }, { timeout: 15_000 }).toContain(expectedContent);
 }
 

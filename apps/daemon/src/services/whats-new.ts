@@ -82,9 +82,11 @@ function parseLocaleOverrides(value: unknown): Record<string, WhatsNewLocaleCont
     const title = readNonEmptyString(entry.title);
     const body = readNonEmptyString(entry.body);
     const linkUrl = readHttpsUrl(entry.linkUrl);
+    const ctaLabel = readNonEmptyString(entry.ctaLabel);
     if (title != null) override.title = title;
     if (body != null) override.body = body;
     if (linkUrl != null) override.linkUrl = linkUrl;
+    if (ctaLabel != null) override.ctaLabel = ctaLabel;
     if (Object.keys(override).length > 0) locales[locale] = override;
   }
   return Object.keys(locales).length > 0 ? locales : undefined;
@@ -105,6 +107,7 @@ export function parseWhatsNewDocument(payload: unknown): { id: string | null; co
 
   const imageUrl = readHttpsUrl(payload.imageUrl);
   const linkUrl = readHttpsUrl(payload.linkUrl);
+  const ctaLabel = readNonEmptyString(payload.ctaLabel);
   const locales = parseLocaleOverrides(payload.locales);
   return {
     id,
@@ -113,6 +116,7 @@ export function parseWhatsNewDocument(payload: unknown): { id: string | null; co
       body,
       ...(imageUrl != null ? { imageUrl } : {}),
       ...(linkUrl != null ? { linkUrl } : {}),
+      ...(ctaLabel != null ? { ctaLabel } : {}),
       ...(locales != null ? { locales } : {}),
     },
   };

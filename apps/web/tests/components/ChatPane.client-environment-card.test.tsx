@@ -1,21 +1,9 @@
 // @vitest-environment jsdom
-/**
- * S30 · 环境类报错卡**渲染出来**长什么样。
- *
- * 上一层(`tests/runtime/run-failure-action-certificate.test.ts`)钉的是映射:
- * 五个 detail 都解析成 `open-settings` + `secondaryRetry`。这一层钉的是卡面 ——
- * 主按钮真的画了〔去设置〕、点下去落到设置 → 本地 CLI(`execution` 那一节,
- * 「高级:代理与自定义路径」就折叠在里面),重试还在但不是主按钮,
- * 而且正文点名了这一格自己的成因。
- *
- * ⚠️ 这张卡用的**不是**产品文档 S30 的润色列 —— 那一行只适用于「地区不支持」,
- * 而这五个 detail 一个都不是地区拦截。判据在 `amr-guidance.ts` 的
- * `clientEnvironmentCard` 文档注释里。
- *
- * 用真的 zh-CN 词典而不是「返回 key」的假 `t`:S30 要验的正是那句话本身,
- * 返回 key 的话插值有没有发生根本看不出来。
+/** Environment error copy remains classified separately from regional S30.
+ * G16 fixes error-card actions by the failed run's Cloud/local identity;
+ * certificate diagnostics no longer add Settings or local Retry controls.
  */
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatPane } from '../../src/components/ChatPane';
@@ -40,7 +28,7 @@ vi.mock('../../src/i18n', () => ({
 afterEach(() => cleanup());
 
 /** 同事真机上撞到的那一格:opencode 的证书报错原样传到 daemon 并被命名。 */
-function certificateFailureTurn(): ChatMessage[] {
+function certificateFailureTurn(agentId = 'amr'): ChatMessage[] {
   return [
     { id: 'user-1', role: 'user', content: 'Build it', createdAt: 0 },
     {
@@ -51,7 +39,7 @@ function certificateFailureTurn(): ChatMessage[] {
       endedAt: 2,
       runId: 'run-1',
       runStatus: 'failed',
-      agentId: 'amr',
+      agentId,
       events: [
         {
           kind: 'status',
@@ -87,45 +75,34 @@ function renderPane(extra: Record<string, unknown>) {
   );
 }
 
-describe('S30 · 环境类报错卡的按钮', () => {
-  it('主按钮是〔去设置〕,落到设置 → 本地 CLI 那一节', () => {
+describe('G16 · 环境类报错卡的固定按钮', () => {
+  it('Cloud 证书失败只通过固定重试处理原失败轮', () => {
     const onOpenSettings = vi.fn();
-    const { container } = renderPane({ onOpenSettings, onRetry: vi.fn() });
-
-    const button = container.querySelector<HTMLButtonElement>(
-      '[data-testid="chat-error-open-settings"]',
-    );
-    expect(button, 'S30 要一颗〔去设置〕').toBeTruthy();
-    expect(button!.textContent).toContain('去设置');
-    // 「高级:代理与自定义路径」那个折叠块渲染在 activeSection === 'execution' 里,
-    // 它填的 configuredEnv 在 runtimes/env.ts 优先级最高 —— 这就是唯一的落点。
-    fireEvent.click(button!);
-    expect(onOpenSettings).toHaveBeenCalledWith('execution');
+    const onRetry = vi.fn();
+    renderPane({ onOpenSettings, onRetry });
+    const card = screen.getByTestId('chat-run-error-card');
+    expect(within(card).getAllByRole('button').map((button) => button.textContent?.trim()))
+      .toEqual(['联系我们', '导出日志', '重试']);
+    fireEvent.click(within(card).getByRole('button', { name: '重试' }));
+    expect(onRetry).toHaveBeenCalledWith(expect.objectContaining({ id: 'assistant-1' }), 'manual_retry');
+    expect(onOpenSettings).not.toHaveBeenCalled();
   });
 
-  /**
-   * 重试**留着**,但它不是这张卡的主动作 —— 主动作是〔去设置〕。
-   *
-   * ⚠️ 已知差一步:`secondaryRetry` 这一家(S30 之外还有 S15 充值、S04 授权、
-   * S17)今天都把重试画成 `variant="primary"`,所以卡上会出现两颗 primary、
-   * 而且重试在最右。这是这四档共用的那一行的既有行为,不是 S30 引进的;
-   * 要真正「降为次按钮」得动那一行,超出这次的范围,单列待拍板。
-   * 这里只钉当下为真的部分:两颗都在,〔去设置〕在左。
-   */
-  it('重试还在,但主动作是〔去设置〕—— 上游那句话里混着一类真·网络抖动', () => {
-    const { container } = renderPane({ onOpenSettings: vi.fn(), onRetry: vi.fn() });
-
-    const group = container.querySelector('[data-testid="chat-error-open-settings"]')
-      ?.parentElement;
-    expect(group, '两颗动作应该在同一组里').toBeTruthy();
-    const ids = Array.from(group!.querySelectorAll('button')).map((b) =>
-      b.getAttribute('data-testid'),
-    );
-    expect(ids, '设计是故意保留重试的').toContain('chat-error-retry');
-    expect(ids[0]).toBe('chat-error-open-settings');
+  it('本地 CLI 证书失败只交给 Cloud，不调用本地重试或设置', () => {
+    const onRetry = vi.fn();
+    const onOpenSettings = vi.fn();
+    const onSwitchToAmrAndRetry = vi.fn();
+    renderPane({ messages: certificateFailureTurn('opencode'), onRetry, onOpenSettings, onSwitchToAmrAndRetry });
+    const card = screen.getByTestId('chat-run-error-card');
+    expect(within(card).getAllByRole('button').map((button) => button.textContent?.trim()))
+      .toEqual(['联系我们', '导出日志', '切换到 OpenDesign Cloud']);
+    fireEvent.click(within(card).getByRole('button', { name: '切换到 OpenDesign Cloud' }));
+    expect(onSwitchToAmrAndRetry).toHaveBeenCalledWith(expect.objectContaining({ id: 'assistant-1', agentId: 'opencode' }));
+    expect(onRetry).not.toHaveBeenCalled();
+    expect(onOpenSettings).not.toHaveBeenCalled();
   });
 
-  it('不推「切到 Open Design 智能体」—— 公司网络在那条路上一样在', () => {
+  it('固定动作不额外生成另一张 Cloud 指导卡', () => {
     const { container } = renderPane({ onOpenSettings: vi.fn(), onRetry: vi.fn() });
     expect(container.querySelector('.amr-guidance')).toBeNull();
   });
@@ -137,21 +114,20 @@ describe('S30 · 环境类报错卡的文案', () => {
    * 「场景内的情况」写死是「地区不支持」;而这张卡服务的五个 detail 里没有一个
    * 是地区拦截(真正的地区信号 `Country, region, or territory not supported`
    * 落在 `upstream_client_error`)。判据全文在 `amr-guidance.ts` 的
-   * `clientEnvironmentCard` 文档注释里。所以这里钉的仍是旧文案。
+   * `clientEnvironmentCard` 文档注释里。此处改用补充文档 revision 96 为证书专门批准的文案。
    */
-  it('卡面就是 S30 那一句,{供应商} 和成因都填好了', () => {
+  it('卡面逐字使用产品补充文档的证书标题和正文', () => {
     renderPane({ onOpenSettings: vi.fn(), onRetry: vi.fn() });
 
-    expect(screen.getByText('网络环境不对')).toBeTruthy();
+    expect(screen.getByText('无法安全连接服务')).toBeTruthy();
     // 括号里是这一格自己的成因,不是五格一个说法。
     const body = screen.getByTestId('chat-run-error-description').textContent ?? '';
-    expect(body).toMatch(/^看起来走了代理或公司网络，.+拒绝了请求（证书校验失败）。/);
-    expect(body).toMatch(/换一个网络出口，或在设置里调整代理。$/);
+    expect(body).toBe('连接服务时未通过安全验证，请尝试更换网络。');
   });
 
-  it('卡上不再出现「任务执行失败」这句什么都没说的兜底', () => {
+  it('卡上不再出现「任务未能完成」这句什么都没说的兜底', () => {
     renderPane({ onOpenSettings: vi.fn(), onRetry: vi.fn() });
-    expect(screen.queryByText('任务执行失败')).toBeNull();
+    expect(screen.queryByText('任务未能完成')).toBeNull();
   });
 
   it('也不再把上游那串英文原文摊在卡面上', () => {

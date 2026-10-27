@@ -16,22 +16,25 @@ import type {
   InstalledPluginRecord,
   WorkspaceCollabContext,
 } from '@open-design/contracts';
+import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useT } from '../i18n';
 import type { Dict, Locale } from '../i18n/types';
 import { Icon } from './Icon';
+import { CREATION_TYPE_ORDER, type CreationTypeId } from './creation-type-order';
 import {
   buildCategoryCatalog,
   buildSubcategoryCatalog,
   extractCategories,
   extractSubcategories,
 } from './plugins-home/facets';
+import { curatedPluginPriority } from './plugins-home/curatedPriority';
 import { localizePluginTitle } from './plugins-home/localization';
 import { examplePresetSeedPrompt } from './plugins-home/presetSeedPrompt';
 import { inferPluginPreview, type MediaPreviewSpec } from './plugins-home/preview';
 import { pluginSubfacetLabel } from './plugins-home/subfacetLabel';
 
-export type TemplateType = 'Prototype' | 'Live Artifact' | 'Slides' | 'Image' | 'Video' | 'HyperFrames' | 'Audio';
+export type TemplateType = 'Prototype' | 'Live Artifact' | 'Slides' | 'Document' | 'Image' | 'Motion design' | 'Video' | 'HyperFrames' | 'Audio' | 'WebGL';
 
 export type TemplateDemo = {
   id: string;
@@ -39,6 +42,9 @@ export type TemplateDemo = {
   tags: string[];
   accent: string;
   meta: string;
+  /** Who published the template, for the card byline under the caption. Real
+   *  catalogue data only — see `templateAuthor`. */
+  author: string;
   type: TemplateType;
   subtype: string;
   /** The WHOLE media spec the gallery tile renders — poster plus, for plugins
@@ -59,7 +65,38 @@ export type TemplateDemo = {
   prompt: string;
 };
 
-export const TEMPLATE_TYPE_ORDER: TemplateType[] = ['Prototype', 'Slides', 'Live Artifact', 'Image', 'Video', 'HyperFrames', 'Audio'];
+// Community owns its supported type set. Website clone remains Home-only.
+const COMMUNITY_TYPES: Partial<Record<CreationTypeId, TemplateType>> = {
+  prototype: 'Prototype',
+  'motion-design': 'Motion design',
+  deck: 'Slides',
+  document: 'Document',
+  image: 'Image',
+  hyperframes: 'HyperFrames',
+  webgl: 'WebGL',
+  'live-artifact': 'Live Artifact',
+  video: 'Video',
+  audio: 'Audio',
+};
+
+// Grouping is Community-specific; priority comes only from the shared order.
+// Empty categories keep their entry rather than depending on the catalogue.
+const COMMUNITY_INLINE_TYPES: ReadonlySet<TemplateType> = new Set([
+  'Prototype', 'Motion design', 'Slides', 'Document', 'Image',
+]);
+
+export const TEMPLATE_TYPE_ORDER: TemplateType[] = CREATION_TYPE_ORDER.flatMap((id) => {
+  const type = COMMUNITY_TYPES[id];
+  return type ? [type] : [];
+});
+
+export const COMMUNITY_TAB_TYPES: readonly TemplateType[] = TEMPLATE_TYPE_ORDER.filter(
+  (type) => COMMUNITY_INLINE_TYPES.has(type),
+);
+
+export const COMMUNITY_MORE_TYPES: readonly TemplateType[] = TEMPLATE_TYPE_ORDER.filter(
+  (type) => !COMMUNITY_INLINE_TYPES.has(type),
+);
 
 /** The Community grid is the plugin catalogue seen through the artifact a user
  *  wants to make. Membership comes from the shared facet derivation in
@@ -69,11 +106,14 @@ export const TEMPLATE_TYPE_ORDER: TemplateType[] = ['Prototype', 'Slides', 'Live
 const FACET_CATEGORY_TYPE: Record<string, TemplateType> = {
   'deck': 'Slides',
   'prototype': 'Prototype',
+  'document': 'Document',
   'live-artifact': 'Live Artifact',
   'image': 'Image',
+  'motion-design': 'Motion design',
   'video': 'Video',
   'hyperframes': 'HyperFrames',
   'audio': 'Audio',
+  'webgl': 'WebGL',
 };
 
 // The type tabs are rendered from the catalogue's `type` field, which is
@@ -83,10 +123,13 @@ export const TEMPLATE_TYPE_LABEL_KEY: Record<TemplateType, keyof Dict> = {
   'Prototype': 'community.typePrototype',
   'Live Artifact': 'community.typeLiveArtifact',
   'Slides': 'community.typeSlides',
+  'Document': 'community.typeDocument',
   'Image': 'community.typeImage',
+  'Motion design': 'homeHero.chip.motionDesign',
   'Video': 'community.typeVideo',
   'HyperFrames': 'community.typeHyperFrames',
   'Audio': 'community.typeAudio',
+  'WebGL': 'community.typeWebGL',
 };
 
 // Card accents tint the thumbnail plate and the fallback preview page. The
@@ -105,6 +148,26 @@ function hashString(value: string): number {
     h = Math.imul(h, 16777619);
   }
   return Math.abs(h);
+}
+
+/** The byline's identity, from the catalogue and nothing else.
+ *
+ *  A manifest that names its author wins outright. Failing that the SOURCE
+ *  answers it — what the daemon ships and what the marketplace serves are both
+ *  published by Open Design, and a plugin authored on this machine is the
+ *  signed-in person's own (the same official / 你 split `PluginsView` hands
+ *  `SkillDetailView`). Nothing here invents a handle: the removed version of
+ *  this byline paired a made-up name with made-up view/remix counts, and the
+ *  counts have no source to come back from. */
+function templateAuthor(
+  record: InstalledPluginRecord,
+  t: ReturnType<typeof useT>,
+): string {
+  const named = record.manifest?.author?.name?.trim();
+  if (named) return named;
+  return record.sourceKind === 'bundled' || record.sourceKind === 'marketplace'
+    ? 'Open Design'
+    : t('chat.you');
 }
 
 function templateAccent(id: string): string {
@@ -142,8 +205,9 @@ export function buildCommunityTemplates(
   });
 
   // Group the grid the way the pills read: category order, then the sub-facet
-  // display order, then catalogue order. The subtype pill row is derived from
-  // this array, so sorting here is what puts the pills in taxonomy order.
+  // display order, then the curated Home picks in their Home order, then
+  // catalogue order. The subtype pill row is derived from this array, so
+  // sorting here is what puts the pills in taxonomy order.
   entries.sort((a, b) => {
     const byCategory = categoryOrder.indexOf(a.categorySlug) - categoryOrder.indexOf(b.categorySlug);
     if (byCategory !== 0) return byCategory;
@@ -154,6 +218,9 @@ export function buildCommunityTemplates(
     );
     const bySub = rank(a.categorySlug, a.subSlug) - rank(b.categorySlug, b.subSlug);
     if (bySub !== 0) return bySub;
+    const curated = (record: InstalledPluginRecord) => curatedPluginPriority(record) ?? Number.MAX_SAFE_INTEGER;
+    const byCurated = curated(a.record) - curated(b.record);
+    if (byCurated !== 0) return byCurated;
     return a.index - b.index;
   });
 
@@ -177,6 +244,7 @@ export function buildCommunityTemplates(
       tags: record.manifest?.tags ?? [],
       accent: templateAccent(record.id),
       meta: subtype ? `${typeLabel} · ${subtype}` : typeLabel,
+      author: templateAuthor(record, t),
       type,
       subtype,
       cardMedia,
@@ -191,15 +259,53 @@ export function buildCommunityTemplates(
 export function TemplatePreviewModal({
   template,
   onClose,
-  onUse,
-  busy,
 }: {
   template: TemplateDemo;
   onClose: () => void;
-  onUse: () => void;
+  /* The footer bar that carried the Remix / 使用 action is gone (per product:
+     去掉下边的 remix 那一条; OPEND-2692), so nothing consumes these any more.
+     Kept — and made optional — so the call sites that still pass them
+     type-check unchanged; drop them there whenever those files are touched
+     next. */
+  onUse?: () => void;
   busy?: boolean;
 }) {
   const t = useT();
+  const panelRef = useRef<HTMLElement>(null);
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  useEffect(() => {
+    panelRef.current?.focus();
+  }, []);
+  // Keyboard events do not bubble out of an iframe. Listen in both documents
+  // and rebind when a same-origin preview finishes loading or navigates.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent): void {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      onClose();
+    }
+    const frame = frameRef.current;
+    let frameDocument: Document | null = null;
+    function bindFrame(): void {
+      frameDocument?.removeEventListener('keydown', onKeyDown, true);
+      frameDocument = null;
+      try {
+        frameDocument = frame?.contentDocument ?? null;
+        frameDocument?.addEventListener('keydown', onKeyDown, true);
+      } catch {
+        // Cross-origin previews cannot be observed by the host document.
+      }
+    }
+    document.addEventListener('keydown', onKeyDown, true);
+    frame?.addEventListener('load', bindFrame);
+    bindFrame();
+    return () => {
+      document.removeEventListener('keydown', onKeyDown, true);
+      frame?.removeEventListener('load', bindFrame);
+      frameDocument?.removeEventListener('keydown', onKeyDown, true);
+    };
+  }, [onClose]);
   // The overlay is `position: fixed; inset: 0`, so it must render as a direct
   // child of <body> (the PluginDetailsModal convention). Left inline, any host
   // ancestor that forms a stacking context — e.g. `.home-view`'s
@@ -209,6 +315,8 @@ export function TemplatePreviewModal({
   const overlay = (
     <div className="community-template-preview" role="presentation" onMouseDown={onClose}>
       <section
+        ref={panelRef}
+        tabIndex={-1}
         className="community-template-preview__panel"
         role="dialog"
         aria-modal="true"
@@ -225,6 +333,7 @@ export function TemplatePreviewModal({
           </button>
         </header>
         <iframe
+          ref={frameRef}
           title={`${template.title} preview`}
           className="community-template-preview__frame"
           // Html-preview plugins load their real daemon-served page; media
@@ -234,12 +343,6 @@ export function TemplatePreviewModal({
             ? { src: template.previewSrc }
             : { srcDoc: templatePreviewHtml(template) })}
         />
-        <footer className="community-template-preview__foot">
-          <span>{template.meta}</span>
-          <button type="button" disabled={busy} onClick={onUse}>
-            {busy ? t('common.loading') : templateActionLabel(template)}
-          </button>
-        </footer>
       </section>
     </div>
   );

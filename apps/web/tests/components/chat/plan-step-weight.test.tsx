@@ -31,12 +31,16 @@
  * 层叠按 `index.css` 的真实导入顺序整条注入,再叠上相关的三支 CSS Module
  * (类名按 vitest 实际发下来的哈希改写,和打包器做的是同一件事)。
  * 两端都钉字面值 `400` / `600`,不写「两者不等」。
+ *
+ * 整份层叠在模块顶层注入一次、全文件只读共用,按文件切成多张 `<style>`(顺序不变):
+ * 以前每条用例各自解析一遍 1.7 MB 的表,解析本身就吃掉了 5 秒超时。
+ * 原委和守卫见 `helpers/style-sheet-fixture.ts` 与 `readExpandedIndexCssSegments`。
  */
 import { cleanup, render } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { I18nProvider } from '../../../src/i18n';
 import { PlanPill } from '../../../src/components/chat/PlanPill';
@@ -44,7 +48,8 @@ import { chatSeam } from '../../../src/components/chat/ChatRoot';
 import chatRootStyles from '../../../src/components/chat/ChatRoot.module.css';
 import planStyles from '../../../src/components/chat/PlanPill.module.css';
 import recordStyles from '../../../src/components/chat/primitives/record.module.css';
-import { readExpandedIndexCss } from '../../helpers/read-expanded-css';
+import { readExpandedIndexCssSegments } from '../../helpers/read-expanded-css';
+import { injectStyleSheets } from '../../helpers/style-sheet-fixture';
 
 const SRC = resolve(dirname(fileURLToPath(import.meta.url)), '../../../src');
 
@@ -79,15 +84,6 @@ function scoped({ path, styles }: Sheet): string {
     const hit = styles[name];
     return typeof hit === 'string' && hit.length > 0 && hit !== name ? `.${hit}` : whole;
   });
-}
-
-function injectStyles(): void {
-  for (const text of [readExpandedIndexCss(), ...SHEETS.map(scoped)]) {
-    const style = document.createElement('style');
-    style.textContent = text;
-    style.dataset.odTestSheet = '';
-    document.head.appendChild(style);
-  }
 }
 
 const TODOS = [
@@ -125,10 +121,20 @@ const weightOf = (el: Element): string => {
 const stepOf = (root: HTMLElement, text: string): HTMLElement =>
   [...root.querySelectorAll<HTMLElement>('li')].find((li) => li.textContent?.includes(text))!;
 
+/** 全局层叠在前、三支 Module 在后。模块顶层注入 = 收集阶段,不计入任何超时。 */
+const sheets = injectStyleSheets([...readExpandedIndexCssSegments(), ...SHEETS.map(scoped)]);
+
+beforeEach(() => {
+  sheets.assertIntact();
+});
+
 afterEach(() => {
   cleanup();
-  document.querySelectorAll('style[data-od-test-sheet]').forEach((n) => n.remove());
   document.querySelectorAll('.app').forEach((n) => n.remove());
+});
+
+afterAll(() => {
+  sheets.remove();
 });
 
 describe('这把尺子看得见缺陷', () => {
@@ -138,33 +144,31 @@ describe('这把尺子看得见缺陷', () => {
   });
 
   it('接缝真的把 500 传下来了 —— 不挂接缝就量不到,那种夹具会假绿', () => {
-    injectStyles();
     const inSeam = mount();
     const seamRoot = inSeam.querySelector<HTMLElement>('[data-chat-root]')!;
     expect(weightOf(seamRoot)).toBe(SEAM_BASELINE_WEIGHT);
     cleanup();
     const bare = mount({ seam: false });
     expect(bare.querySelector('[data-chat-root]')).toBeNull();
-    // 裸渲染继承全站 body 的 400 —— 正好等于稿子要的值,所以坏的实现也会「对」
-    expect(weightOf(document.body)).toBe(DESIGN_STEP_WEIGHT);
+    // 裸渲染继承全站 body 的 600(全站阶梯默认档,OPEND-2553 C2)—— 既不是接缝的
+    // 500 也不是稿子的 400,所以不挂接缝的夹具量到的根本不是这条链。
+    expect(weightOf(document.body)).toBe('600');
+    expect(weightOf(document.body)).not.toBe(DESIGN_STEP_WEIGHT);
   });
 });
 
 describe('计划卡:非当前的几步比基线轻一档', () => {
   it('未开始那一步是 400', () => {
-    injectStyles();
     const root = mount();
     expect(weightOf(stepOf(root, '第三步'))).toBe(DESIGN_STEP_WEIGHT);
   });
 
   it('做完那一步也是 400 —— 划线不兼职表达轻重', () => {
-    injectStyles();
     const root = mount();
     expect(weightOf(stepOf(root, '第一步'))).toBe(DESIGN_STEP_WEIGHT);
   });
 
   it('反向对照:当前那一步仍然是 600,唯一被强调的一行', () => {
-    injectStyles();
     const root = mount();
     expect(weightOf(stepOf(root, '第二步'))).toBe(DESIGN_CURRENT_WEIGHT);
   });

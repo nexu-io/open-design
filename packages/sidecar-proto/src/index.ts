@@ -37,6 +37,23 @@ export const SIDECAR_ENV = Object.freeze({
   WEB_TSCONFIG_PATH: "OD_WEB_TSCONFIG_PATH",
 } as const);
 
+/**
+ * Shape of an MCP registration written by a daemon whose packaged outer manages
+ * the headless bootstrap. Only a managed outer appends `MANAGED_ARG` to the
+ * bootstrap argv, so registrations produced under an older outer keep today's
+ * shape and today's behavior.
+ */
+export const MCP_BOOTSTRAP_CONTRACT = Object.freeze({
+  /** Appended to OD_MCP_BOOTSTRAP_ARGS by a managed outer. */
+  MANAGED_ARG: "--od-mcp-managed",
+  /**
+   * JSON `{ daemon: string[]; desktop: string[] }` of absolute sidecar client
+   * endpoints for every mode of the registering namespace. They are resolved by
+   * the daemon because the MCP process may not share its TMPDIR.
+   */
+  DISCOVERY_ENV: "OD_MCP_DISCOVERY",
+} as const);
+
 export const SIDECAR_RUNTIME_ENV = Object.freeze({
   base: SIDECAR_ENV.BASE,
   ipcBase: SIDECAR_ENV.IPC_BASE,
@@ -192,6 +209,12 @@ export type DesktopStatusSnapshot = {
     frameRenderer?: boolean;
   };
   pid?: number | null;
+  /**
+   * True when this owner is a windowless headless runtime that restores its
+   * desktop window in place when it receives SHOW. A launcher that sees it
+   * sends SHOW instead of restarting the owner.
+   */
+  restorable?: boolean;
   state: DesktopRuntimeState;
   title?: string | null;
   update?: DesktopUpdateStatusSnapshot;

@@ -76,6 +76,9 @@ function toRef(
   };
   if (row.workspaceArtifactId) ref.workspaceArtifactId = row.workspaceArtifactId;
   if (!snapshot || snapshot.captureState !== 'ready') return ref;
+  if (snapshot.motionPreviewJson) {
+    try { ref.motionPreview = JSON.parse(snapshot.motionPreviewJson); } catch { /* older/unreadable metadata uses the ordinary preview */ }
+  }
   ref.snapshotId = snapshot.id;
   if (snapshot.contentDigest) {
     ref.snapshotUrl = chatArtifactSnapshotContentUrl(projectId, snapshot.id);

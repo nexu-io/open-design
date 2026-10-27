@@ -11,6 +11,7 @@ import {
 } from '../run-deliverable-validation.js';
 import {
   finalizeDeliverableSyntax,
+  DeliverableSyntaxInternalError,
   type DeliverableSyntaxFinalizationOutcome,
 } from './deliverable-syntax-finalization.js';
 
@@ -28,8 +29,8 @@ export function deliverableSyntaxFinalizerEnabled(
 
 /**
  * Resolve the canonical output and run the syntax finalizer for every
- * successful physical Run. Strategy protocol state is intentionally absent
- * from this boundary: a complete HTML artifact is sufficient evidence.
+ * successful physical Run. Media export validity is owned by the exporter,
+ * independent of task orchestration and model-authored plans.
  */
 export async function finalizeSuccessfulRunDeliverable(input: {
   artifactCount: number;
@@ -41,6 +42,9 @@ export async function finalizeSuccessfulRunDeliverable(input: {
   relatedPaths?: readonly string[];
   repairState?: DeliverableSyntaxRepairState;
   touchedPaths?: string[];
+  baselineEntryFile?: string;
+  allowIndependentOutput?: boolean;
+  allowMultipleOutputCandidates?: boolean;
   syntaxFinalizerEnabled?: boolean;
 }): Promise<SuccessfulRunDeliverableFinalizationResult> {
   const deliverable = await validateRunDeliverable({
@@ -52,6 +56,9 @@ export async function finalizeSuccessfulRunDeliverable(input: {
     runStatus: 'succeeded',
     artifactCount: input.artifactCount,
     ...(input.touchedPaths ? { touchedPaths: input.touchedPaths } : {}),
+    ...(input.baselineEntryFile ? { baselineEntryFile: input.baselineEntryFile } : {}),
+    ...(input.allowIndependentOutput ? { allowIndependentOutput: true } : {}),
+    ...(input.allowMultipleOutputCandidates ? { allowMultipleOutputCandidates: true } : {}),
   });
   if (
     !deliverable.valid
@@ -61,18 +68,28 @@ export async function finalizeSuccessfulRunDeliverable(input: {
     return { deliverable, syntax: { action: 'skip' } };
   }
 
-  const syntax = await finalizeDeliverableSyntax({
+  const syntaxInput = {
     artifactKind: deliverable.artifactKind,
     projectRoot: resolveProjectDir(
       input.projectsRoot,
       input.projectId,
       input.projectMetadata,
     ),
-    entryFile: deliverable.entryFile,
+    entryFile: deliverable.linkedPage ?? deliverable.entryFile,
     relatedPaths: input.relatedPaths ?? [],
     processTreeQuiescent: input.processTreeQuiescent,
     ...(input.repairState ? { repairState: input.repairState } : {}),
     ...(input.previousMetrics ? { previousMetrics: input.previousMetrics } : {}),
-  });
+  };
+  let syntax: DeliverableSyntaxFinalizationOutcome;
+  try {
+    syntax = await finalizeDeliverableSyntax(syntaxInput);
+  } catch (error) {
+    if (!(error instanceof DeliverableSyntaxInternalError)) throw error;
+    // The product's non-blocking delivery policy must not hide an engine defect.
+    // Never log the cause: it may contain generated source or local paths.
+    console.error('[deliverable-syntax] internal_error');
+    syntax = error.outcome;
+  }
   return { deliverable, syntax };
 }

@@ -749,7 +749,7 @@
 }
 
 .fontWeights {
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-muted);
 }
 
@@ -1055,7 +1055,7 @@
 .shotCap {
   display: block;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.25;
   color: var(--text-strong);
 }
@@ -1257,6 +1257,9 @@
 }
 
 /* Image lightbox overlay. */
+/* DELIBERATE exception to the app's one scrim (--scrim-tint / --scrim-backdrop,
+   styles/material.css): this is a LIGHTBOX. A near-opaque dark ground is what
+   lifts the image off the page; the shared light scrim would wash it out. */
 .lightbox {
   position: fixed;
   inset: 0;
@@ -1782,7 +1785,7 @@
   background: var(--bg-panel);
   color: var(--text);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   font-family: inherit;
   cursor: pointer;
   transition: border-color var(--dur-quick) var(--ease-out),

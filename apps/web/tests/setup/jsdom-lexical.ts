@@ -66,3 +66,14 @@ if (typeof window !== 'undefined') {
     Element.prototype.scrollIntoView = () => {};
   }
 }
+
+// jsdom has no 2D canvas backend, so every `getContext('2d')` call emits a
+// "Not implemented" jsdomError on the virtual console. Components that draw
+// (SpaceBackground, the kinetic grid, thumbnail rasterization) already treat a
+// null context as "no canvas, skip drawing", so return null quietly instead of
+// burying real diagnostics under one warning per render. Suites that need a
+// drawable canvas still `vi.spyOn(HTMLCanvasElement.prototype, 'getContext')`.
+if (typeof window !== 'undefined' && typeof HTMLCanvasElement !== 'undefined') {
+  HTMLCanvasElement.prototype.getContext =
+    (() => null) as unknown as HTMLCanvasElement['getContext'];
+}

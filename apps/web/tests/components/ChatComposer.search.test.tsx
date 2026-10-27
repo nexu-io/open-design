@@ -3,7 +3,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ChatComposer } from '../../src/components/ChatComposer';
+import { ChatComposer, STAGE_ATTACHMENT_EVENT } from '../../src/components/ChatComposer';
 import { I18nProvider } from '../../src/i18n';
 import { ANNOTATION_EVENT } from '../../src/components/PreviewDrawOverlay';
 import { uploadProjectFiles } from '../../src/providers/registry';
@@ -567,6 +567,38 @@ describe('ChatComposer /search command', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Fermer' }));
     expect(screen.queryByRole('dialog', { name: longName })).toBeNull();
+  });
+
+  it.each([
+    { name: 'Company logo', path: 'uploads/chat-image.png', kind: 'image', element: 'img' },
+    { name: 'Pasted screenshot', path: 'uploads/capture', kind: 'image', element: 'img' },
+  ] as const)('previews $name using attachment metadata in both chip and card', ({ element, ...attachment }) => {
+    render(
+      <ChatComposer
+        projectId="project-1"
+        projectFiles={[]}
+        streaming={false}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent(STAGE_ATTACHMENT_EVENT, {
+        detail: { attachments: [attachment] },
+      }));
+    });
+
+    const trigger = screen.getByRole('button', { name: `Preview ${attachment.name}` });
+    const url = `/api/projects/project-1/raw/${attachment.path}`;
+    expect(trigger.querySelector(element)?.getAttribute('src')).toContain(url);
+    fireEvent.click(trigger);
+    const dialog = screen.getByRole('dialog', { name: attachment.name });
+    const media = dialog.querySelector(`.staged-preview-card > ${element}`);
+    expect(media?.getAttribute('src')).toContain(url);
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog', { name: attachment.name })).toBeNull();
   });
 
   it('keeps staged image preview modal styling available', () => {

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -81,6 +82,8 @@ beforeEach(() => {
     apiKey: 'phc_test',
     host: 'https://us.i.posthog.com',
     distinctId: 'chat-protocol-test',
+    clientType: 'web',
+    osName: 'Mac OS X',
   });
   (globalThis as unknown as { PerformanceObserver: unknown }).PerformanceObserver =
     FakePerformanceObserver;

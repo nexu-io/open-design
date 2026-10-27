@@ -2,7 +2,14 @@
 name: gsap-plugins
 description: |
   Official GSAP skill for GSAP plugins — registration, ScrollToPlugin, ScrollSmoother, Flip, Draggable, Inertia, Observer, SplitText, ScrambleText, SVG and physics plugins, CustomEase, EasePack, CustomWiggle, CustomBounce, GSDevTools. Use when the user asks about a GSAP plugin, scroll-to, flip animations, draggable, SVG drawing, or plugin registration.
+zh_name: "GSAP · 动效插件"
+zh_description: "GSAP 插件动效：Flip、Draggable、文字、路径等专项动画。"
 triggers:
+  - "动效"
+  - "动画"
+  - "motion"
+  - "动效插件"
+  - "拖拽"
   - "gsap plugins"
   - "gsap plugin registration"
   - "flip animation"
@@ -11,8 +18,9 @@ triggers:
   - "splittext"
 license: MIT
 od:
-  mode: prototype
+  mode: utility
   category: animation-motion
+  source-commit: aed9cfd3277740755f6bfc1155c7aa645403b760
   upstream: "https://github.com/greensock/gsap-skills"
 ---
 

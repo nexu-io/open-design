@@ -443,6 +443,44 @@ describe('ProjectView tab URL hydration', () => {
     expect(mockedCacheTabsLocally).toHaveBeenCalledTimes(2);
   });
 
+  it.each([
+    { tabs: ['restore-me.png'], active: '__design_files__' },
+    { tabs: [], active: null },
+  ])('keeps a locally restored selection over the default primary file: $active', async (selection) => {
+    const actual = await vi.importActual<typeof import('../../src/state/projects')>(
+      '../../src/state/projects',
+    );
+    const cachedProjectId = `local-restoration-${selection.active ?? 'empty'}`;
+    const cacheKey = `open-design:project-tabs:v1:${cachedProjectId}`;
+    window.localStorage.setItem(cacheKey, JSON.stringify({ ...selection, updatedAt: 2 }));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(Response.json({
+      tabs: [], active: null, hasSavedState: false,
+    }));
+    let restored;
+    try {
+      restored = await actual.loadTabs(cachedProjectId, null, {
+        reconcileNewerCacheToDaemon: false,
+      });
+    } finally {
+      fetchSpy.mockRestore();
+      window.localStorage.removeItem(cacheKey);
+    }
+    mockedLoadTabs.mockResolvedValue(restored);
+    mockedFetchProjectFiles.mockResolvedValue([{
+      name: 'restore-me.png', path: 'restore-me.png', type: 'file',
+      size: 1, mtime: 1, mime: 'image/png', kind: 'image',
+    }]);
+
+    renderProjectView({ project: { ...project, id: cachedProjectId } });
+
+    await waitFor(() => expect(mockedFetchProjectFiles).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByTestId('workspace-active-tab').textContent)
+      .toBe(selection.active ?? ''));
+    expect(mockedCacheTabsLocally).not.toHaveBeenCalledWith(
+      cachedProjectId, expect.objectContaining({ active: 'restore-me.png' }), null,
+    );
+  });
+
   it('does not auto-open the primary file when saved tabs were explicitly empty', async () => {
     mockedLoadTabs.mockResolvedValue({ tabs: [], active: null, hasSavedState: true });
     mockedFetchProjectFiles.mockResolvedValue([

@@ -13,7 +13,7 @@
  * 原因(已反证:改成 `auto` 后日志照样不动 —— scroll chaining 只往祖先传),
  * 所以这份规格一个字都不去测它。
  *
- * 伤害面:出现条件只是「≥2 条用户消息」,几乎每段对话都有;导轨平时
+ * 伤害面:出现条件只是「有用户消息」,几乎每段对话都有;导轨平时
  * `opacity: 0` 但照样吃输入,而 `.chat-log` 又**故意没有滚动条**(导轨就是它的
  * 替代品),于是用户按肌肉记忆把指针停在右边缘,正好落进死区。
  *
@@ -25,7 +25,6 @@
  *    —— 这是 `preventDefault()` 能生效的唯一前提;
  *  · 一个真的 `WheelEvent` 打在导轨上时,位移按判据分账写进
  *    `track.scrollTop` / `log.scrollTop`,并且默认行为被取消;
- *  · 退避态(`is-retracted`)的解除条件;
  *  · 导轨既有行为(悬停短横出预览卡、点击跳转、轨道自身可滚)没被弄坏。
  *
  * **不能证明**(jsdom 既没有布局也没有命中测试):
@@ -175,7 +174,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-/** 三条用户消息 + 一条助手消息 —— 导轨要 ≥2 条用户消息才渲染。 */
+/** 三条用户消息 + 一条助手消息 —— 多条短横,轨道才有东西可滚。 */
 function buildMessages(): ChatMessage[] {
   const out: ChatMessage[] = [
     { id: 'u1', role: 'user', content: 'first question', createdAt: 1 } as ChatMessage,
@@ -376,65 +375,6 @@ describe('★ 接管的前提:非 passive 的原生监听', () => {
     const result = wheelOnRail(surfaces, { deltaY: 120, ctrlKey: true });
     expect(result.defaultPrevented, '吞掉 ctrl+滚轮等于把浏览器缩放从用户手里拿走').toBe(false);
     expect(result.logMoved).toBe(0);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// ★ 退避态不该继续吃输入
-// ---------------------------------------------------------------------------
-
-describe('★ 退避态(点完跳转)', () => {
-  const clickFirstMarker = (nav: HTMLElement) => {
-    const marker = nav.querySelector('.chat-message-rail__marker') as HTMLElement;
-    fireEvent.click(marker);
-    return marker;
-  };
-
-  it('点完短横之后导轨进入退避态', async () => {
-    const surfaces = await mount({ trackTravel: 0 });
-    clickFirstMarker(surfaces.nav);
-    await tick();
-    expect(surfaces.nav.classList.contains('is-retracted')).toBe(true);
-  });
-
-  it('退避态下 `pointer-events` 关掉 —— 隐形的东西不吃输入', async () => {
-    const surfaces = await mount({ trackTravel: 0 });
-    clickFirstMarker(surfaces.nav);
-    await tick();
-    // 层叠由同目录的 `chat-rail-retracted-pointer-events.test.ts` 单独算;
-    // 这里只钉住「类名确实挂上了」,两份合起来才是完整判据。
-    expect(surfaces.nav.className).toContain('is-retracted');
-  });
-
-  it('指针离开导轨的矩形就解除退避 —— 不能靠 mouseleave,那时它已经不被命中了', async () => {
-    const surfaces = await mount({ trackTravel: 0 });
-    clickFirstMarker(surfaces.nav);
-    await tick();
-    expect(surfaces.nav.classList.contains('is-retracted')).toBe(true);
-
-    // 导轨矩形是 left 780 / right 800;400 在它左边,也就是正文里。
-    await act(async () => {
-      document.dispatchEvent(
-        new MouseEvent('pointermove', { clientX: 400, clientY: 300, bubbles: true }),
-      );
-    });
-    expect(
-      surfaces.nav.classList.contains('is-retracted'),
-      '指针已经离开导轨,退避却没解除 —— 导轨从此再也不亮,比原缺陷更糟',
-    ).toBe(false);
-  });
-
-  it('指针还停在导轨上时保持退避 —— 别在跳转落地的同时又把导轨亮回来', async () => {
-    const surfaces = await mount({ trackTravel: 0 });
-    clickFirstMarker(surfaces.nav);
-    await tick();
-
-    await act(async () => {
-      document.dispatchEvent(
-        new MouseEvent('pointermove', { clientX: 790, clientY: 300, bubbles: true }),
-      );
-    });
-    expect(surfaces.nav.classList.contains('is-retracted')).toBe(true);
   });
 });
 

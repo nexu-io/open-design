@@ -1,3 +1,4 @@
+import { renderPackagedMainEntry } from "../launcher/packaged-entry.js";
 import { readFile } from "node:fs/promises";
 
 import type { ToolPackConfig } from "../config/index.js";
@@ -27,6 +28,7 @@ export const WIN_PREBUNDLE_RUNTIME_DEPENDENCIES = {
   "better-sqlite3": "12.10.0",
   "blake3-wasm": "2.1.5",
   "hyperframes": "0.8.1",
+  "gsap": "3.14.2",
   "node-pty": "1.1.0",
   "sharp": "0.35.3",
 } as const;
@@ -54,7 +56,7 @@ export const WIN_PREBUNDLE_POLICIES = {
     label: "packaged main",
   },
   daemonCli: {
-    externals: ["@ffmpeg-installer/ffmpeg", "@open-design/sidecar", "better-sqlite3", "blake3-wasm", "hyperframes", "node-pty"],
+    externals: ["@ffmpeg-installer/ffmpeg", "@open-design/sidecar", "better-sqlite3", "blake3-wasm", "hyperframes", "gsap", "node-pty"],
     forbiddenInputs: [
       "/node_modules/@open-design/daemon/",
       "/node_modules/@ffmpeg-installer/ffmpeg/",
@@ -62,6 +64,7 @@ export const WIN_PREBUNDLE_POLICIES = {
       "/node_modules/blake3-wasm/",
       "/node_modules/electron/",
       "/node_modules/hyperframes/",
+      "/node_modules/gsap/",
       "/node_modules/next/",
       "/node_modules/node-pty/",
       "/node_modules/openai/",
@@ -71,7 +74,7 @@ export const WIN_PREBUNDLE_POLICIES = {
     label: "daemon cli",
   },
   daemonSidecar: {
-    externals: ["@ffmpeg-installer/ffmpeg", "@open-design/sidecar", "better-sqlite3", "blake3-wasm", "hyperframes", "node-pty"],
+    externals: ["@ffmpeg-installer/ffmpeg", "@open-design/sidecar", "better-sqlite3", "blake3-wasm", "hyperframes", "gsap", "node-pty"],
     forbiddenInputs: [
       "/node_modules/@open-design/daemon/",
       "/node_modules/@ffmpeg-installer/ffmpeg/",
@@ -79,6 +82,7 @@ export const WIN_PREBUNDLE_POLICIES = {
       "/node_modules/blake3-wasm/",
       "/node_modules/electron/",
       "/node_modules/hyperframes/",
+      "/node_modules/gsap/",
       "/node_modules/next/",
       "/node_modules/node-pty/",
       "/node_modules/openai/",
@@ -144,7 +148,5 @@ export async function assertWinPrebundleMetafile(options: {
 }
 
 export function renderWinPackagedMainEntry(usePrebundle: boolean): string {
-  return usePrebundle
-    ? 'import("./prebundled/packaged-main.mjs").catch((error) => {\n  console.error("packaged entry failed", error);\n  process.exit(1);\n});\n'
-    : 'import("@open-design/packaged").catch((error) => {\n  console.error("packaged entry failed", error);\n  process.exit(1);\n});\n';
+  return renderPackagedMainEntry(usePrebundle);
 }

@@ -73,6 +73,20 @@ export function isAcpTerminalFailureStatus(update: JsonObject): boolean {
   const status = acpUpdateStatus(update);
   return status === 'failed' || status === 'failure' || status === 'error' || status === 'cancelled' || status === 'canceled';
 }
+
+/**
+ * Returns whether an ACP tool update explicitly reports a failed operation.
+ * ACP adapters use both camelCase and snake_case for process exit codes, and
+ * some expose the canonical `isError` flag directly. A terminal `completed`
+ * status therefore cannot be treated as success when one of these fields
+ * reports failure.
+ */
+export function isAcpToolUpdateError(update: JsonObject): boolean {
+  if (isAcpTerminalFailureStatus(update)) return true;
+  if (update.isError === true) return true;
+  const exitCode = update.exitCode ?? update.exit_code;
+  return typeof exitCode === 'number' && Number.isInteger(exitCode) && exitCode !== 0;
+}
 /**
  * Returns `true` when the update's status is a terminal tool outcome
  * (completed or failed). Used to decide when to emit `tool_result`.
@@ -374,7 +388,11 @@ export function acpArtifactWritePathRanked(
   }
   // 3. A path-like filename token in the human title (reject `Image.open`).
   const title = typeof update.title === 'string' ? update.title : '';
-  const match = title.match(/[\w./\\-]+\.[A-Za-z0-9]+/);
+  // A URL's host/path is not a local artifact. Remove whole URI tokens before
+  // matching filenames so http://127.0.0.1 cannot yield //127.0.0.1. Keep UNC
+  // paths and any separate local filename elsewhere in the title eligible.
+  const localTitle = title.replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s"'`<>]+/gi, ' ');
+  const match = localTitle.match(/[\w./\\-]+\.[A-Za-z0-9]+/);
   if (match?.[0] && isAcpPathLikeToken(match[0])) {
     return { path: match[0], rank: ACP_PATH_RANK_TITLE };
   }

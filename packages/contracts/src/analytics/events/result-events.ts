@@ -2,6 +2,8 @@
  * @module analytics/events/result-events
  * *_result event prop types (run, feedback, settings, packaged).
  */
+import type { ApiFailureReason, ApiFailureStage } from '../../api/failure-detail.js';
+import type { TrackingProjectIntent } from './shared-enums.js';
 import type {
   AnalyticsAttributionQuality,
   AnalyticsDistributionMechanism,
@@ -10,6 +12,7 @@ import type {
   AnalyticsPublisherClass,
   TrackingRuntimeType,
 } from '../public-params.js';
+import type { StrategySettlementFactsV2 } from '../../plugins/strategy-v2.js';
 import type { ReleaseChannel } from '@open-design/release';
 import type { ArtifactOriginEntrySurface, ArtifactOriginStatus } from '../../api/files.js';
 import type { AgentDiagnosticReason, AgentDiagnosticSeverity } from '../../api/registry.js';
@@ -80,6 +83,8 @@ export interface ProjectCreateResultProps {
   project_source: TrackingProjectSource;
   project_id: string | null;
   project_kind: TrackingProjectKind | null;
+  /** Saved product scene; optional for producers predating this dimension. */
+  project_intent?: TrackingProjectIntent;
   design_system?: string;
   target_platforms?: string;
   companion_surfaces?: string;
@@ -356,6 +361,8 @@ export interface RunCreatedProps extends RunTaskLineageProps {
   // `TrackingDesignSystemRunEntryFrom` set; both unions stay
   // distinct so the dashboard can split funnels cleanly.
   entry_from?: TrackingRunEntrySource;
+  /** Explicit saved-comment attachments of this Run; not proof of a public-share comment. */
+  comment_ids?: string[];
   /** v4 name; entry_from remains during the compatibility window. */
   entry_source?: TrackingRunEntrySource;
   // Session-dimension run context (0-based `turn_index` within the browser
@@ -384,6 +391,8 @@ export interface RunCreatedProps extends RunTaskLineageProps {
   conversation_id: string | null;
   run_id: string;
   project_kind: TrackingProjectKind | null;
+  /** Frozen from project metadata at physical Run creation, independent of strategy. */
+  project_intent?: TrackingProjectIntent;
   design_system_id?: string;
   design_system_source: TrackingDesignSystemSource;
   // Official preset vs user-built; `design_system_slug` carries the concrete
@@ -496,6 +505,25 @@ export interface RunCreatedProps extends RunTaskLineageProps {
    * and when the user never opted in (there is nothing to explain).
    */
   harness_fallback_reason?: string;
+  /**
+   * The gate that refused an OD Next turn, when its logical task settled
+   * `blocked`.
+   *
+   * `result` is derived from the PHYSICAL run status, and a refused turn
+   * usually exits 0 with a complete reply on screen — so this whole class of
+   * failure reported `result: 'success'` and left no trace anywhere queryable.
+   * The user saw a red card; the data said the run was fine. Carrying the
+   * primary reason code (the same `reasonCodes[0]` the failure card keys on)
+   * makes the class countable without changing what `result` means.
+   *
+   * Omitted for every run whose strategy task did not block, which is the
+   * common case.
+   */
+  od_next_blocked_reason_code?: string;
+  /** Orchestration action: question, continued, or ended. */
+  od_next_settlement_reason?: string;
+  /** Independent physical-run and reply facts, not a success verdict. */
+  od_next_settlement_facts?: StrategySettlementFactsV2;
 }
 
 export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
@@ -670,6 +698,17 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   // where session reuse applies.
   is_followup_turn?: boolean;
   cache_token_source?: 'anthropic' | 'openai' | 'unavailable';
+  // Per-request token coverage (#4610). `request_usage_count` is how many model
+  // requests in the run carry a per-request usage record (request_id + tokens);
+  // 0 means only the run-level aggregate was available. The `_sum` fields are
+  // the per-request token totals, and `request_usage_reconciles_aggregate` is
+  // whether that sum matches the run-level `result.usage` (the #4610 invariant).
+  // Together these let request-level cost/percentile analysis graduate off the
+  // run-level floor for claude_code.
+  request_usage_count?: number;
+  request_usage_input_tokens_sum?: number;
+  request_usage_output_tokens_sum?: number;
+  request_usage_reconciles_aggregate?: boolean;
   queue_duration_ms?: number;
   pre_spawn_duration_ms?: number;
   prompt_build_duration_ms?: number;
@@ -785,6 +824,26 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   /** Compacted event count in the terminal message snapshot. */
   message_event_final_event_count?: number;
   message_event_persistence_error_count?: number;
+  /**
+   * Content-free storage summary of what this run left in SQLite, measured
+   * after the run's events were finalized. Byte fields are SQLite
+   * `octet_length` of the stored text (logical content, not file growth).
+   * A field that could not be measured is omitted, never reported as 0.
+   */
+  storage_schema_version?: 1;
+  storage_events_json_bytes?: number;
+  storage_content_bytes?: number;
+  /** Append-only event batches still unfolded for this message. */
+  storage_pending_batch_count?: number;
+  storage_pending_batch_bytes?: number;
+  /** OD Next prompt bundle; only on the task's initial run, never per resume. */
+  storage_prompt_bundle_bytes?: number;
+  /** Largest single persisted event (UTF-16 chars) and its event kind. */
+  storage_largest_event_chars?: number;
+  storage_largest_event_kind?: string;
+  /** Events the payload budget truncated, and their original UTF-8 size. */
+  storage_truncated_event_count?: number;
+  storage_truncated_original_bytes?: number;
   retry_original_failure_category?: TrackingRunFailureCategory;
   retry_original_failure_detail?: TrackingRunFailureDetail;
   retry_original_failure_stage?: TrackingRunFailureStage;
@@ -996,12 +1055,25 @@ export interface SketchExportResultProps {
 
 export type TrackingDeployProvider = 'vercel' | 'cloudflare_pages';
 
+// Optional failure detail copied from the daemon's closed-token `failure`
+// field (see packages/contracts/src/api/failure-detail.ts). Present only on
+// failed attempts whose daemon response carried it; `error_code` keeps its
+// original meaning and values, so these fields only add resolution.
+export interface TrackingFailureDetailProps {
+  failed_stage?: ApiFailureStage;
+  failure_reason?: ApiFailureReason;
+  // HTTP status / error code returned by the upstream service (Vela API or
+  // deploy provider), when the daemon could read one.
+  upstream_status?: number;
+  upstream_error_code?: string;
+}
+
 // Fired from the deploy modal when a real publish attempt resolves — NOT when
 // the modal merely opens (that path is `artifact_export_result` with
 // export_format vercel/cloudflare_pages and only means "popover opened").
 // `result` is 'success' once the provider accepts the deploy (the link may
 // still be delayed/protected), 'failed' on a hard error or missing config.
-export interface ArtifactDeployResultProps {
+export interface ArtifactDeployResultProps extends TrackingFailureDetailProps {
   page_name: 'artifact';
   area: 'deploy_modal';
   artifact_id: string;
@@ -1026,7 +1098,19 @@ export interface ArtifactDeployResultProps {
 // for publish, or removal is confirmed for unpublish), regardless of whether a
 // newer request superseded this one in the UI. Clicking the publish button
 // reports separately as ui_click element 'publish_file'.
-export interface ArtifactPublishResultProps {
+/** Queue acceptance is separate from a click or a successful physical Run. */
+export interface ProjectCommentSendResultProps {
+  page_name: 'artifact';
+  area: 'comment_popover';
+  project_id: string;
+  project_kind: TrackingProjectKind | null;
+  result: 'accepted' | 'queued' | 'rejected';
+  submitted_comment_ids: string[];
+  /** Returned subset of explicitly saved comments; excludes temporary board notes. */
+  comment_ids: string[];
+}
+
+export interface ArtifactPublishResultProps extends TrackingFailureDetailProps {
   page_name: 'artifact';
   area: 'share_option_popover';
   artifact_id: string;
@@ -1037,8 +1121,17 @@ export interface ArtifactPublishResultProps {
   // confirmed (the one actionable failure), 'publish_failed' otherwise.
   error_code?: TrackingPublishErrorCode;
   publish_duration_ms: number;
+  /** Stable alias already known to this attempt, never a full public URL. */
+  publish_id?: string;
+  /** Only the committed receipt supplies version and time. */
+  share_version?: number;
+  published_at?: number;
   project_id: string;
   project_kind: TrackingProjectKind | null;
+  // The daemon's own error code (e.g. PUBLIC_FILE_PUBLISH_UNAVAILABLE,
+  // WORKSPACE_PROJECT_PUBLISH_DENIED) that `error_code` folds into
+  // 'publish_failed'. Token-shaped; absent when the daemon sent none.
+  daemon_error_code?: string;
 }
 
 // Outcome of an HTML file version restore from the version history modal.

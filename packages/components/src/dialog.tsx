@@ -5,6 +5,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from 'react';
+import { createPortal } from 'react-dom';
 
 import { joinClassNames } from './class-names';
 import styles from './dialog.module.css';
@@ -86,7 +87,7 @@ export function Dialog({
     ...dataAttributes,
   };
 
-  return (
+  const overlay = (
     <div
       className={joinClassNames(
         includeChromeClassName ? styles.backdrop : undefined,
@@ -105,6 +106,15 @@ export function Dialog({
       )}
     </div>
   );
+
+  // Mounted on <body>, not where the dialog is used: the scrim's z-index only
+  // outranks app chrome (tabs row 120, the floating account cluster 150) if it
+  // competes in the ROOT stacking context. Rendered in place, any ancestor that
+  // opens a stacking context traps it — the scrim then stopped at the content
+  // area and that chrome floated over the dialog. React events still bubble
+  // through the React tree, so callers see no difference.
+  if (typeof document === 'undefined') return overlay;
+  return createPortal(overlay, document.body);
 }
 
 export function DialogHeader({ className, ...props }: DialogSectionProps) {

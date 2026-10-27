@@ -86,7 +86,11 @@ function composerText(): string {
 }
 
 function rowTexts(): string[] {
-  return screen.queryAllByTestId('chat-queued-send-row').map((el) => el.textContent ?? '');
+  // A dequeued card stays mounted for its exit transition; it is already out
+  // of the queue, so only rows whose card is not leaving count.
+  return screen.queryAllByTestId('chat-queued-send-row')
+    .filter((el) => el.closest('[data-testid="queued-send-banner"]')?.getAttribute('data-phase') !== 'exit')
+    .map((el) => el.textContent ?? '');
 }
 
 function clickEditOnFirstRow() {

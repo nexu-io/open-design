@@ -43,7 +43,7 @@
  *    **在这里量不到**,本文件一个字都没有断言它。那一条只能真机验。
  */
 
-import { act, cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ProjectView } from '../../src/components/ProjectView';
@@ -132,7 +132,10 @@ vi.mock('../../src/components/AvatarMenu', () => ({ AvatarMenu: () => null }));
 vi.mock('../../src/components/Loading', () => ({ CenteredLoader: () => null }));
 vi.mock('../../src/components/FileWorkspace', () => ({
   DESIGN_SYSTEM_TAB: '__design_system__',
-  FileWorkspace: () => null,
+  FileWorkspace: ({ shareRequest }: { shareRequest?: { name: string; nonce: number; anchorId?: string } | null }) => (
+    <output data-testid="project-view-share-request" data-file={shareRequest?.name ?? ''}
+      data-nonce={shareRequest?.nonce ?? ''} data-anchor={shareRequest?.anchorId ?? ''} />
+  ),
 }));
 
 /*
@@ -142,7 +145,7 @@ vi.mock('../../src/components/FileWorkspace', () => ({
 vi.mock('../../src/components/ChatPane', async () => {
   const { AssistantMessage } = await import('../../src/components/AssistantMessage');
   return {
-    ChatPane: ({ messages }: { messages: ChatMessage[] }) => (
+    ChatPane: ({ messages, onArtifactShare }: { messages: ChatMessage[]; onArtifactShare?: (fileName: string, anchorId?: string) => void }) => (
       <>
         {messages
           .filter((message) => message.role === 'assistant')
@@ -152,6 +155,7 @@ vi.mock('../../src/components/ChatPane', async () => {
               message={message}
               streaming={false}
               projectId={PROJECT_ID}
+              onArtifactShare={onArtifactShare}
             />
           ))}
       </>
@@ -280,6 +284,7 @@ const card = () =>
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.clearAllMocks();
   vi.restoreAllMocks();
   window.sessionStorage.clear();
@@ -291,6 +296,84 @@ beforeEach(() => {
 });
 
 describe('封面在终止帧之后才落地时,卡面必须自己换成快照', () => {
+  it('F13 real ProjectView card passes a monotonic same-ms named request into FileWorkspace', async () => {
+    renderProjectView();
+    const share = await screen.findByTestId(`artifact-card-publish-${ARTIFACT}`);
+    expect(share).toBeEnabled();
+    const bridge = screen.getByTestId('project-view-share-request');
+    vi.spyOn(Date, 'now').mockReturnValue(1710000000000);
+    for (const nonce of [1710000000000, 1710000000001, 1710000000002]) {
+      fireEvent.click(share);
+      await waitFor(() => expect(bridge).toHaveAttribute('data-nonce', String(nonce)));
+      expect(bridge).toHaveAttribute('data-file', ARTIFACT);
+      expect(bridge.getAttribute('data-anchor')).toBeTruthy();
+    }
+  });
+  it('refreshes an already-ready latest cover through three revisions without changing an earlier turn', async () => {
+    const latest = finishedTurn(readyRef)[0]!;
+    const historical: ChatMessage = {
+      ...latest,
+      id: 'msg-historical',
+      runId: 'run-historical',
+      createdAt: latest.createdAt! - 1000,
+    };
+    listMessages.mockResolvedValue([historical, latest]);
+    const view = renderProjectView();
+    const coverFor = (messageId: string) => document
+      .getElementById(`assistant-message-${messageId}`)
+      ?.querySelector('img')
+      ?.getAttribute('src');
+    await waitFor(() => {
+      expect(coverFor(MESSAGE_ID)).toBe(COVER_URL);
+      expect(coverFor(historical.id)).toBe(COVER_URL);
+    });
+
+    // OPEND-2769: the displayed message already has a ready cover. The server
+    // changes its snapshot identity while message/file identities stay stable.
+    // Exercise the real event -> listMessages -> memoized card pipeline, not
+    // just a prop-injected ready image or the pending-to-ready fallback.
+    vi.useFakeTimers();
+    let previousCover = COVER_URL;
+    for (const revision of [2, 3, 4]) {
+      const snapshotId = `snap-${revision}`;
+      const thumbnailUrl = `/api/projects/${PROJECT_ID}/chat-artifact-snapshots/${snapshotId}/thumbnail`;
+      listMessages.mockResolvedValue([
+        historical,
+        {
+          ...latest,
+          artifactRefs: [{ ...readyRef, snapshotId, thumbnailUrl }],
+        },
+      ]);
+      const readsBeforeEvent = listMessages.mock.calls.length;
+      act(() => {
+        projectEventHandler()({
+          type: 'chat-artifact-refs-changed',
+          projectId: PROJECT_ID,
+          conversationId: CONVERSATION_ID,
+          messageId: MESSAGE_ID,
+        } as ProjectEvent);
+      });
+      await act(async () => { await vi.advanceTimersByTimeAsync(149); });
+      expect(listMessages).toHaveBeenCalledTimes(readsBeforeEvent);
+      expect(coverFor(MESSAGE_ID)).toBe(previousCover);
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      expect(coverFor(MESSAGE_ID)).toBe(thumbnailUrl);
+      expect(listMessages).toHaveBeenCalledTimes(readsBeforeEvent + 1);
+      expect(coverFor(historical.id)).toBe(COVER_URL);
+      previousCover = thumbnailUrl;
+    }
+
+    // A fresh mount must show exactly what the event-updated card already did.
+    vi.useRealTimers();
+    view.unmount();
+    renderProjectView();
+    await waitFor(() => {
+      expect(coverFor(MESSAGE_ID)).toBe(previousCover);
+      expect(coverFor(historical.id)).toBe(COVER_URL);
+    });
+  });
+
   it('先降级成 live iframe,收到 chat-artifact-refs-changed 后换成 <img> 快照', async () => {
     renderProjectView();
     await waitFor(() => expect(listMessages).toHaveBeenCalled());

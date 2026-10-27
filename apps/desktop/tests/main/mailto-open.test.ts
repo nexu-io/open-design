@@ -2,7 +2,10 @@ import { describe, expect, test } from "vitest";
 
 import {
   extractDefaultMailtoHandlerBundleId,
+  hasProtocolHandler,
   isBrowserBundleId,
+  mailtoAddress,
+  noMailClientNotice,
   openFirstPartyMailto,
   readDefaultMailtoHandlerBundleId,
   resolveMailtoLaunch,
@@ -251,15 +254,140 @@ describe("openFirstPartyMailto", () => {
     expect(calls).toEqual([`external:${MAILTO}`]);
   });
 
-  test("reports failure when even openExternal throws", async () => {
+  // OPEND-2799: on Windows the button did nothing when no mail client is
+  // registered — `shell.openExternal(mailto:)` resolves without opening
+  // anything. The main process now pre-checks the mailto handler and, when
+  // there is none (or the launch is refused), copies the address and tells the
+  // user, so the click always has a visible outcome.
+  test("win32: copies the address and notifies when no mailto handler is registered", async () => {
+    const calls: string[] = [];
+    const notified: string[] = [];
+    const opened = await openFirstPartyMailto(MAILTO, {
+      platform: "win32",
+      readHandlerBundleId: async () => null,
+      readProtocolHandlerName: () => "",
+      openWithAppleMail: async (url) => void calls.push(`mail:${url}`),
+      openExternal: async (url) => void calls.push(`external:${url}`),
+      notifyNoMailClient: async (address) => void notified.push(address),
+    });
+    expect(opened).toBe(false);
+    expect(calls).toEqual([]);
+    expect(notified).toEqual(["support@open-design.ai"]);
+  });
+
+  test("win32: copies the address and notifies when the registered handler refuses the launch", async () => {
+    const notified: string[] = [];
+    const opened = await openFirstPartyMailto(MAILTO, {
+      platform: "win32",
+      readHandlerBundleId: async () => null,
+      readProtocolHandlerName: () => "Outlook",
+      openWithAppleMail: async () => {},
+      openExternal: async () => {
+        throw new Error("Application not found");
+      },
+      notifyNoMailClient: async (address) => void notified.push(address),
+    });
+    expect(opened).toBe(false);
+    expect(notified).toEqual(["support@open-design.ai"]);
+  });
+
+  test("win32: a registered handler that accepts the launch shows no notice", async () => {
+    const calls: string[] = [];
+    const notified: string[] = [];
+    const opened = await openFirstPartyMailto(MAILTO, {
+      platform: "win32",
+      readHandlerBundleId: async () => null,
+      readProtocolHandlerName: () => "Outlook",
+      openWithAppleMail: async () => {},
+      openExternal: async (url) => void calls.push(`external:${url}`),
+      notifyNoMailClient: async (address) => void notified.push(address),
+    });
+    expect(opened).toBe(true);
+    expect(calls).toEqual([`external:${MAILTO}`]);
+    expect(notified).toEqual([]);
+  });
+
+  test("darwin: the LaunchServices path is untouched — no protocol pre-check, no notice", async () => {
+    const calls: string[] = [];
+    const notified: string[] = [];
+    let protocolChecked = false;
+    const opened = await openFirstPartyMailto(MAILTO, {
+      platform: "darwin",
+      readHandlerBundleId: async () => "com.google.chrome",
+      readProtocolHandlerName: () => {
+        protocolChecked = true;
+        return "";
+      },
+      openWithAppleMail: async (url) => void calls.push(`mail:${url}`),
+      openExternal: async (url) => void calls.push(`external:${url}`),
+      notifyNoMailClient: async (address) => void notified.push(address),
+    });
+    expect(opened).toBe(true);
+    expect(protocolChecked).toBe(false);
+    expect(calls).toEqual([`mail:${MAILTO}`]);
+    expect(notified).toEqual([]);
+  });
+
+  test("reports failure when even openExternal throws, after telling the user", async () => {
+    const notified: string[] = [];
     const opened = await openFirstPartyMailto(MAILTO, {
       platform: "linux",
       readHandlerBundleId: async () => null,
+      readProtocolHandlerName: () => "Thunderbird",
       openWithAppleMail: async () => {},
       openExternal: async () => {
         throw new Error("no handler");
       },
+      notifyNoMailClient: async (address) => void notified.push(address),
     });
     expect(opened).toBe(false);
+    expect(notified).toEqual(["support@open-design.ai"]);
+  });
+
+  test("a failing notice never escapes to the caller", async () => {
+    const opened = await openFirstPartyMailto(MAILTO, {
+      platform: "win32",
+      readHandlerBundleId: async () => null,
+      readProtocolHandlerName: () => "",
+      openWithAppleMail: async () => {},
+      openExternal: async () => {},
+      notifyNoMailClient: async () => {
+        throw new Error("dialog unavailable");
+      },
+    });
+    expect(opened).toBe(false);
+  });
+});
+
+describe("mailto fallback helpers (OPEND-2799)", () => {
+  test("mailtoAddress reads the recipient and ignores query parameters", () => {
+    expect(mailtoAddress("mailto:support@open-design.ai")).toBe("support@open-design.ai");
+    expect(mailtoAddress("mailto:support@open-design.ai?subject=%E5%8F%8D%E9%A6%88")).toBe(
+      "support@open-design.ai",
+    );
+    expect(mailtoAddress("https://open-design.ai")).toBeNull();
+    expect(mailtoAddress("mailto:")).toBeNull();
+    expect(mailtoAddress("not a url")).toBeNull();
+  });
+
+  test("hasProtocolHandler treats an empty handler name as missing and a throwing lookup as unknown", () => {
+    expect(hasProtocolHandler("mailto:", () => "Outlook")).toBe(true);
+    expect(hasProtocolHandler("mailto:", () => "")).toBe(false);
+    expect(hasProtocolHandler("mailto:", () => "   ")).toBe(false);
+    expect(
+      hasProtocolHandler("mailto:", () => {
+        throw new Error("not ready");
+      }),
+    ).toBe(true);
+  });
+
+  test("noMailClientNotice names the copied address in the OS language", () => {
+    const zh = noMailClientNotice("support@open-design.ai", "zh-CN");
+    expect(zh.detail).toContain("已复制 support@open-design.ai 到剪贴板");
+    expect(zh.button).toBe("好");
+    const en = noMailClientNotice("support@open-design.ai", "en-US");
+    expect(en.detail).toContain("support@open-design.ai has been copied to your clipboard");
+    expect(en.button).toBe("OK");
+    expect(noMailClientNotice("a@b.c", "fr-FR").button).toBe("OK");
   });
 });

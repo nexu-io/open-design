@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -177,6 +178,8 @@ beforeEach(() => {
     apiKey: 'phc_test',
     host: 'https://us.i.posthog.com',
     distinctId: 'chat-scroll-freeze-handle-test',
+    clientType: 'web',
+    osName: 'Mac OS X',
   });
   rafSpy = vi.fn((cb: FrameRequestCallback) => {
     cb(clock);

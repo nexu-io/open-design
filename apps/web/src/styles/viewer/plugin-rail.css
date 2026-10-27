@@ -45,7 +45,7 @@
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   border-radius: var(--radius-pill);
   padding: 5px 11px;
   cursor: pointer;
@@ -198,7 +198,7 @@
 .inline-plugins-rail--strip .inline-plugins-rail__title {
   overflow: hidden;
   text-overflow: ellipsis;
-  font-weight: 500;
+  font-weight: 600;
 }
 /* Description + trust are hidden inside the strip rail — they live
    in the marketplace detail page. Keeping the strip compact is the
@@ -317,7 +317,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text);
-  font-weight: 500;
+  font-weight: 600;
 }
 .context-chip-strip__remove {
   appearance: none;
@@ -428,7 +428,7 @@ select.plugin-inputs-form__input {
   text-transform: none;
   letter-spacing: 0;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
 }
 .plugin-inputs-form__file-shell {
@@ -500,14 +500,15 @@ select.plugin-inputs-form__input {
   min-height: 24px;
   max-width: 100%;
   gap: 0;
-  padding: 0 3px 0 0;
+  /* Same 4px inset as every other composer tag (OPEND-3085). */
+  padding: 4px;
   background: color-mix(in srgb, var(--bg-panel) 88%, var(--c-tint));
   border-color: color-mix(in srgb, var(--c-hue) 16%, var(--border-soft));
 }
 .composer-shell .context-chip-strip__body {
   gap: 6px;
   min-width: 0;
-  padding: 2px 6px 2px 8px;
+  padding: 0;
 }
 /* Drop the badge box — let a small, hue-tinted type icon lead, exactly
    like a file context chip. */
@@ -530,7 +531,7 @@ select.plugin-inputs-form__input {
 .composer-shell .context-chip-strip__label {
   max-width: 168px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .composer-shell .context-chip-strip__remove {
   width: 18px;

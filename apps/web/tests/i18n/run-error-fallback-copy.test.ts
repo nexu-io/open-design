@@ -47,29 +47,29 @@ const DETAILS_POINTER: Record<Locale, string[]> = {
 };
 
 /**
- * 正向对照:文案还得**留着**「把日志发给我们」那半句 —— 〔导出日志〕按钮还在,
+ * 正向对照:文案还得**留着**「联系支持」那半句 —— 产品补充文档 revision 96 明确要求再次失败时联系支持,
  * 这句话现在指的是一个真实存在的按钮。少了这条,把整句删空也会绿。
  */
-const LOGS_WORD: Record<Locale, string> = {
-  ar: 'السجلات',
-  de: 'Logs',
-  en: 'logs',
-  'es-ES': 'registros',
-  fa: 'گزارش‌ها',
-  fr: 'journaux',
-  hu: 'naplókat',
-  id: 'log',
-  it: 'log',
-  ja: 'ログ',
-  ko: '로그',
-  pl: 'logi',
-  'pt-BR': 'logs',
-  ru: 'логи',
-  th: 'บันทึก',
-  tr: 'günlükleri',
-  uk: 'журнали',
-  'zh-CN': '日志',
-  'zh-TW': '日誌',
+const SUPPORT_WORD: Record<Locale, string> = {
+  'ar': 'الدعم',
+  'de': 'Support',
+  'en': 'support',
+  'es-ES': 'soporte',
+  'fa': 'پشتیبانی',
+  'fr': 'assistance',
+  'hu': 'ügyfélszolgálat',
+  'id': 'dukungan',
+  'it': 'assistenza',
+  'ja': 'サポート',
+  'ko': '지원팀',
+  'pl': 'pomocą techniczną',
+  'pt-BR': 'suporte',
+  'ru': 'поддержку',
+  'th': 'ฝ่ายสนับสนุน',
+  'tr': 'destek',
+  'uk': 'підтримки',
+  'zh-CN': '支持',
+  'zh-TW': '支援',
 };
 
 /**
@@ -83,12 +83,12 @@ describe('chat.runError.fallbackMessage 不再指向已下线的「查看详情�
     expect(LOCALES).toHaveLength(19);
     for (const locale of LOCALES) {
       expect(DETAILS_POINTER[locale], `missing pointer list for ${locale}`).toBeTruthy();
-      expect(LOGS_WORD[locale], `missing logs word for ${locale}`).toBeTruthy();
+      expect(SUPPORT_WORD[locale], `missing support word for ${locale}`).toBeTruthy();
     }
   });
 
   for (const locale of LOCALES) {
-    it(`${locale}:不提「查看详情」,但仍然说得清「把日志发给我们」`, async () => {
+    it(`${locale}:不提「查看详情」,但仍然说得清「联系支持」`, async () => {
       const dict = await loadDict(locale);
       const message = dict['chat.runError.fallbackMessage'];
 
@@ -103,7 +103,7 @@ describe('chat.runError.fallbackMessage 不再指向已下线的「查看详情�
       }
 
       // 正向对照。
-      expect(message, `${locale} lost the "send us the logs" half`).toContain(LOGS_WORD[locale]);
+      expect(message, `${locale} lost the "contact support" half`).toContain(SUPPORT_WORD[locale]);
     });
   }
 });

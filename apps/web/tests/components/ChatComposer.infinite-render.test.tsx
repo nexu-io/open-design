@@ -111,7 +111,7 @@ describe('ChatComposer infinite re-render regression (#2097)', () => {
     await waitFor(() => expect(window.localStorage.getItem(key)).toBeNull());
   });
 
-  it('keeps the original draft while Send is paused and when the decision is canceled', async () => {
+  it('clears on submit and restores the original draft when the decision is canceled', async () => {
     let resolveDecision!: (outcome: 'restore-draft') => void;
     const onSend = vi.fn(() => new Promise<'restore-draft'>((resolve) => {
       resolveDecision = resolve;
@@ -124,10 +124,12 @@ describe('ChatComposer infinite re-render regression (#2097)', () => {
     fireEvent.click(screen.getByTestId('chat-send'));
 
     expect(onSend).toHaveBeenCalledTimes(1);
-    expect(composerText()).toBe('keep this exact prompt');
+    // OPEND-3392: the sent prompt leaves the composer immediately …
+    await waitFor(() => expect(composerText().trim()).toBe(''));
 
+    // … and only comes back when the host hands the send back.
     await act(async () => resolveDecision('restore-draft'));
-    expect(composerText()).toBe('keep this exact prompt');
+    await waitFor(() => expect(composerText()).toBe('keep this exact prompt'));
   });
 
   it('accepts only one submit while the current send decision is pending', async () => {
@@ -170,7 +172,7 @@ describe('ChatComposer infinite re-render regression (#2097)', () => {
     expect(screen.queryByTestId('chat-send')).toBeNull();
     expect(screen.getByTestId('chat-send-pending')).toHaveAttribute('aria-busy', 'true');
     expect(screen.getByRole('button', { name: 'Preparing...' })).toBeDisabled();
-    expect(composerText()).toBe('wait for AMR admission');
+    await waitFor(() => expect(composerText().trim()).toBe(''));
 
     await act(async () => resolveSend());
     await waitFor(() => expect(screen.queryByTestId('chat-send-pending')).toBeNull());

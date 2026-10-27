@@ -168,6 +168,17 @@ const CODEX_SHELL_ENVIRONMENT_INCLUDE_KEYS = [
   'OD_WORKSPACE_ID',
   'OD_WORKSPACE_MEMBER_ID',
   'OD_TASK_INPUT_DIR',
+  'OD_STOCK_RUN_ID',
+  'OD_STOCK_SESSION_ID',
+  'OD_STOCK_ANALYTICS_DEVICE_ID',
+  'OD_STOCK_ANALYTICS_SESSION_ID',
+  'OD_STOCK_ANALYTICS_CLIENT_TYPE',
+  'OD_STOCK_ANALYTICS_LOCALE',
+  'OD_STOCK_SOURCE_COMMIT',
+  'OD_STOCK_EXECUTION_SOURCE',
+  'OD_STOCK_NODE_ID',
+  'OD_STOCK_EVALUATION_RUN_ID',
+  'OD_STOCK_CASE_ID',
 ] as const;
 
 export function codexOpenDesignShellEnvironmentArgs(): string[] {
@@ -471,7 +482,8 @@ export const CODEX_APP_SERVER_STREAM_FORMAT = 'codex-app-server';
  *
  * Two notifications land later than this floor and degrade quietly when
  * absent: `warning` (rust-v0.122.0) simply produces no warning pill, and
- * `item/fileChange/patchUpdated` (rust-v0.123.0) is not consumed at all.
+ * `item/fileChange/patchUpdated` (rust-v0.123.0) is enabled per thread only
+ * when the running server's initialize response reports a supported version.
  */
 export const CODEX_APP_SERVER_MIN_VERSION = '0.95.0';
 

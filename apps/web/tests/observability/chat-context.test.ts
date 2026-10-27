@@ -14,6 +14,7 @@ import {
 } from '../../src/observability/chat-context';
 import {
   __resetChatHealthForTest,
+  markChatOpenIntent,
   openChatSurface,
 } from '../../src/observability/chat-health';
 
@@ -83,6 +84,8 @@ beforeEach(() => {
     apiKey: 'phc_test',
     host: 'https://us.i.posthog.com',
     distinctId: 'chat-context-test',
+    clientType: 'web',
+    osName: 'Mac OS X',
   });
   vi.useFakeTimers({ shouldAdvanceTime: false });
   vi.spyOn(performance, 'now').mockImplementation(() => clock);
@@ -237,6 +240,7 @@ describe('observability/chat-context — measurement trust', () => {
 
   it('marks a first paint trusted on a clean, visible, fully-styled open', () => {
     const log = buildChatLog(2);
+    markChatOpenIntent('conversation_switch');
     const handle = openChatSurface({ element: log, messageCount: 2, virtualized: false });
     clock += 300;
     handle.markFirstPaint({ renderedRowCount: 2 });

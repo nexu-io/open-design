@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { forwardRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -220,11 +220,11 @@ describe('ChatPane session switcher', () => {
     expect(trackRunFailedToastSurfaceView).not.toHaveBeenCalled();
   });
 
-  // 同上:这颗〔去充值〕原来钉在 `AMR_INSUFFICIENT_BALANCE` 上,现在那一档整张卡
-  // 都不画了。深链本身(profile 作用域的控制台地址)仍然是产品行为,由另一条同样
-  // 走「充值」主动作的失败来守 —— 工作区额度用尽。
-  it('opens the profile-scoped console from the AMR recharge action', () => {
+  // G16 removes the recharge action from error cards. Preserve the Cloud
+  // failure and verify that its only recovery action retries that same turn.
+  it('keeps fixed Cloud actions when workspace credits are exhausted', () => {
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const onRetry = vi.fn();
     render(
       <ChatPane
         messages={[
@@ -242,7 +242,7 @@ describe('ChatPane session switcher', () => {
         onEnsureProject={async () => 'project-1'}
         onSend={vi.fn()}
         onStop={vi.fn()}
-        onRetry={vi.fn()}
+        onRetry={onRetry}
         conversations={[conversation({ id: 'conv-1', title: 'Current' })]}
         activeConversationId="conv-1"
         onSelectConversation={vi.fn()}
@@ -251,41 +251,22 @@ describe('ChatPane session switcher', () => {
       />,
     );
 
-    const rechargeAction = screen.getByText('chat.amrError.rechargeCta');
-    const retryAction = screen.getByText('promptTemplates.retry');
-    expect(rechargeAction.parentElement).toBe(retryAction.parentElement);
-    expect(
-      rechargeAction.parentElement?.closest('[data-user-action-footer="true"]'),
-    ).toBeTruthy();
-
-    fireEvent.click(rechargeAction);
-
-    const [consoleUrl, target, features] = openSpy.mock.calls[0] ?? [];
-    expect(target).toBe('_blank');
-    expect(features).toBe('noopener,noreferrer');
-    const parsedConsoleUrl = new URL(String(consoleUrl));
-    // Top-up reports on the console dashboard now, not a wallet page.
-    expect(`${parsedConsoleUrl.origin}${parsedConsoleUrl.pathname}`).toBe(
-      'https://open-design.powerformer.net/cloud/dashboard',
-    );
-    // The plain top-up entry must NOT carry the upgrade intent — it opens the
-    // console to add credit, not the plan catalog.
-    expect(parsedConsoleUrl.searchParams.get('billing')).toBeNull();
-    expect(parsedConsoleUrl.searchParams.get('od_entry_source')).toBe('chat_error_recharge');
+    const card = screen.getByTestId('chat-run-error-card');
+    expect(within(card).getAllByRole('button').map((button) => button.textContent?.trim())).toEqual([
+      'chat.runError.contactSupportCta', 'chat.runError.exportLogsCta', 'promptTemplates.retry',
+    ]);
+    fireEvent.click(within(card).getByRole('button', { name: 'promptTemplates.retry' }));
+    expect(onRetry).toHaveBeenCalledWith(expect.objectContaining({ id: 'msg-amr-credits' }), 'manual_retry');
+    expect(openSpy).not.toHaveBeenCalled();
+    openSpy.mockRestore();
   });
 
-  it('opens the profile console plan surface from the AMR tier upgrade action', () => {
+  it('keeps the profile-scoped plan URL on the separate zero-balance UpgradeCard', () => {
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
     render(
       <ChatPane
-        messages={[
-          failedAssistantMessage({
-            id: 'msg-amr-upgrade',
-            runId: 'run-amr-upgrade',
-            code: 'AMR_TIER_UPGRADE_REQUIRED',
-            agentId: 'amr',
-          }),
-        ]}
+        messages={[]}
+        amrBalanceCardUsd={0}
         streaming={false}
         error={null}
         projectId="project-1"
@@ -302,7 +283,8 @@ describe('ChatPane session switcher', () => {
       />,
     );
 
-    fireEvent.click(screen.getByText('chat.amrBalanceGate.plansCta'));
+    expect(screen.queryByTestId('chat-run-error-card')).toBeNull();
+    fireEvent.click(within(screen.getByTestId('chat-upgrade-card')).getByRole('button', { name: 'settings.amrUpgrade' }));
 
     const [plansUrl, target, features] = openSpy.mock.calls[0] ?? [];
     expect(target).toBe('_blank');
@@ -315,7 +297,8 @@ describe('ChatPane session switcher', () => {
       'https://open-design.powerformer.net/cloud/dashboard',
     );
     expect(parsedPlansUrl.searchParams.get('billing')).toBe('plan');
-    expect(parsedPlansUrl.searchParams.get('od_entry_source')).toBe('chat_error_upgrade');
+    expect(parsedPlansUrl.searchParams.get('od_entry_source')).toBe('chat_upgrade_card');
+    openSpy.mockRestore();
   });
 });
 

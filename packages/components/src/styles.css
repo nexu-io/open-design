@@ -8,7 +8,7 @@ button {
   height: 36px;
   padding: 0 var(--spacing-16, 16px);
   font-size: var(--font-size-14, 14px);
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1;
   white-space: nowrap;
   color: var(--text);

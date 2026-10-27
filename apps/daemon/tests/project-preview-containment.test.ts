@@ -586,6 +586,71 @@ describe('project preview containment routes', () => {
     }
   });
 
+  // The build-focus bridge is what lets the Design Files pane park a cursor on
+  // the part of a page the agent is writing right now. It rides the same
+  // `odPreviewBridge` query as the other bridges and must stay opt-in: a
+  // preview that did not ask for it gets a clean document.
+  it('injects the build-focus bridge only when asked, and only once', async () => {
+    const projectId = await createProject();
+    await writeProjectFile(
+      projectId,
+      'index.html',
+      '<!doctype html><html><body><h1>Studio Nine</h1></body></html>',
+    );
+
+    const plain = await fetch(`${baseUrl}/api/projects/${projectId}/raw/index.html`);
+    expect(await plain.text()).not.toContain('data-od-preview-build-focus');
+
+    const bridged = await fetch(
+      `${baseUrl}/api/projects/${projectId}/raw/index.html?odPreviewBridge=buildfocus`,
+    );
+    expect(bridged.status).toBe(200);
+    const html = await bridged.text();
+    expect(html.split('data-od-preview-build-focus').length - 1).toBe(1);
+    expect(html).toContain('od:preview-build-focus');
+    // Asking for one bridge must not hand out the others — the observability
+    // bridge in particular reports page errors into a host-wide buffer.
+    expect(html).not.toContain('data-od-preview-observability');
+    expect(html).not.toContain('data-od-url-scroll-bridge');
+
+    // A non-HTML file has nothing to inject into.
+    await writeProjectFile(projectId, 'notes.txt', 'plain text');
+    const text = await fetch(
+      `${baseUrl}/api/projects/${projectId}/raw/notes.txt?odPreviewBridge=buildfocus`,
+    );
+    expect(await text.text()).not.toContain('data-od-preview-build-focus');
+  });
+
+  it('hosts only video motion in building previews without changing raw sources or legacy playback', async () => {
+    const projectId = await createProject();
+    for (const mode of ['video', 'interactive', 'legacy', 'prototype', 'ppt', 'marketing']) {
+      const source = `<!doctype html><html><head>${mode === 'video' || mode === 'interactive' ? `<meta name="od-motion-output" content="${mode}">` : ''}</head><body><main data-composition-id="main"></main></body></html>`;
+      await writeProjectFile(projectId, `${mode}.html`, source);
+      const response = await fetch(`${baseUrl}/api/projects/${projectId}/raw/${mode}.html?odPreviewBridge=buildfocus`);
+      const html = await response.text();
+      expect(html.includes('window.__odMotionPreview=true')).toBe(mode === 'video');
+      expect(html.includes('data-od-motion-source-player')).toBe(mode === 'video');
+      if (mode === 'video') expect(html.indexOf('window.__odMotionPreview=true')).toBeLessThan(html.indexOf('data-od-motion-source-player'));
+      expect(await (await fetch(`${baseUrl}/api/projects/${projectId}/raw/${mode}.html`)).text()).toBe(source);
+    }
+  });
+
+  it('upgrades a persisted Motion player for thumbnail previews while raw source bytes remain unchanged', async () => {
+    const projectId = await createProject({ kind: 'video', intent: 'motion-design' });
+    const source = '<!doctype html><html><head><meta name="od-motion-output" content="video"></head><body><main data-composition-id="main"></main><script data-od-motion-source-player="5">oldPlayer();</script></body></html>';
+    await writeProjectFile(projectId, 'index.html', source);
+    const plain = await fetch(`${baseUrl}/api/projects/${projectId}/raw/index.html`);
+    expect(await plain.text()).toBe(source);
+    const thumbnail = await fetch(`${baseUrl}/api/projects/${projectId}/raw/index.html?odMotionPreview=1&odMotionThumbnail=1`);
+    expect(thumbnail.status).toBe(200);
+    const html = await thumbnail.text();
+    expect(html).not.toContain('oldPlayer();');
+    expect(html).toContain('data-od-motion-source-player="8"');
+    expect(html).toContain("searchParams.get('odMotionThumbnail')");
+    expect(html.match(/<script data-od-motion-source-player/g)).toHaveLength(1);
+    expect(html).not.toContain('data-od-url-scroll-bridge');
+  });
+
   it('rejects invalid preview scopes and escaping preview-url paths', async () => {
     const projectId = await createProject();
     await writeProjectFile(projectId, 'index.html', '<!doctype html>');

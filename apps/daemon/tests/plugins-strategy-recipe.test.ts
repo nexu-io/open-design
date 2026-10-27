@@ -1,4 +1,4 @@
-import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
@@ -100,6 +100,107 @@ afterAll(() => {
 });
 
 describe('OD Next V2 request recipe wiring', () => {
+  it.each(['prototype', 'ppt', 'marketing', 'hyperframes'] as const)(
+    'treats %s as guidance rather than overriding the current requested output', async (taskType) => {
+      const binding = createBundledStrategyBindingV2({ plugin, taskType });
+      const applied = applyPlugin({ plugin, inputs: {}, registry: EMPTY_REGISTRY, internalStrategyBinding: binding }).result.appliedPlugin;
+      const recipe = await resolveRecipe({ activeSnapshot: { ...applied, snapshotId: `intent-${taskType}` } });
+      if (!recipe) throw new Error('expected real OD Next recipe');
+      const prompt = composeSystemPrompt({ odNextStrategyRecipe: recipe });
+      expect(prompt).toBe(composeContractsSystemPrompt({ odNextStrategyRecipe: recipe }));
+      expect(prompt).toContain('Only when editing HTML that already contains data-od-comment-id');
+      expect(prompt).toContain('mint a fresh UUID for every copied or new node');
+      expect(prompt).toContain('never recycle a deleted identity');
+      expect(prompt).toContain("The user's latest explicit request determines this turn's deliverables");
+      expect(prompt).toContain('Do not add an HTML wrapper, presentation page, or extra export');
+      expect(prompt).not.toContain('propose a task-type\n   switch and wait for confirmation');
+      expect(prompt).not.toContain('is rejected as an invalid\ncanonical deliverable');
+      expect(prompt).toContain('Apply this profile only to the parts of the current request');
+    },
+  );
+
+  // Read and register the real bundled resource; no hand-authored atom fixture.
+  // This witnesses the prompt contract that reaches a strategy recipe, not an
+  // assertion that a nondeterministic model will obey that contract.
+  async function loadedDiscoveryExamples() {
+    const recipe = await resolveRecipe();
+    if (!recipe) throw new Error('expected real OD Next recipe');
+    const atoms = await loadBundledAtomBodiesStrict(db, ['discovery-question-form']);
+    const atom = atoms.find((entry) => entry.atomId === 'discovery-question-form');
+    if (!atom) throw new Error('expected registered bundled discovery atom');
+    const prompt = composeSystemPrompt({
+      agentId: 'codex',
+      sessionMode: 'design',
+      odNextStrategyRecipe: recipe,
+    });
+    expect(prompt).toContain(atom.body);
+    const questions: Array<Record<string, unknown>> = [];
+    for (const fence of atom.body.matchAll(/```(?:html|json)\s*\n([\s\S]*?)```/g)) {
+      for (const form of (fence[1] ?? '').matchAll(/<question-form\b[^>]*>([\s\S]*?)<\/question-form>/g)) {
+        const parsed: unknown = JSON.parse(form[1] ?? '');
+        if (!parsed || typeof parsed !== 'object' || !('questions' in parsed)
+          || !Array.isArray(parsed.questions)) throw new Error('expected wrapped question-form example');
+        for (const question of parsed.questions) {
+          if (!question || typeof question !== 'object' || Array.isArray(question)) {
+            throw new Error('expected question object in real atom example');
+          }
+          questions.push(question as Record<string, unknown>);
+        }
+      }
+    }
+    expect(questions.length).toBeGreaterThan(0);
+    return { body: atom.body, questions };
+  }
+
+  it.each(['radio', 'checkbox', 'select'] as const)(
+    'delivers a consumable %s recommended default in the real strategy atom example',
+    async (type) => {
+      const { questions } = await loadedDiscoveryExamples();
+      const examples = questions.filter((question) => question.type === type);
+      expect(examples.length, `real atom must teach ${type} default shape`).toBeGreaterThan(0);
+      for (const question of examples) {
+        const options = question.options;
+        if (!Array.isArray(options)) throw new Error(`${type} example requires options`);
+        const values = options.map((option: unknown) => {
+          if (typeof option === 'string') return option;
+          if (option && typeof option === 'object' && 'value' in option) return option.value;
+          throw new Error('option requires a stable value');
+        });
+        const declared = question.defaultValue ?? question.default;
+        if (type === 'checkbox') {
+          expect(Array.isArray(declared), 'checkbox default must be value[]').toBe(true);
+          if (!Array.isArray(declared)) throw new Error('missing checkbox default array');
+          expect(declared.length).toBeGreaterThan(0);
+          expect(new Set(declared).size).toBe(declared.length);
+          for (const value of declared) expect(values).toContain(value);
+          if (typeof question.maxSelections === 'number') {
+            expect(declared.length).toBeLessThanOrEqual(question.maxSelections);
+          }
+        } else {
+          expect(typeof declared, `${type} default must be an option value`).toBe('string');
+          expect(values).toContain(declared);
+        }
+      }
+    },
+  );
+
+  it('preserves an unanswered file example rather than inventing a default', async () => {
+    const { questions } = await loadedDiscoveryExamples();
+    const uploads = questions.filter((question) => question.type === 'file');
+    expect(uploads.length, 'real atom must show when preselection is inappropriate').toBeGreaterThan(0);
+    for (const question of uploads) {
+      expect(Object.hasOwn(question, 'default')).toBe(false);
+      expect(Object.hasOwn(question, 'defaultValue')).toBe(false);
+    }
+  });
+
+  it('explicitly permits omission when the brief provides no reasonable recommendation', async () => {
+    const { body } = await loadedDiscoveryExamples();
+    // This narrow assertion is deliberately a prose-contract guard. It cannot
+    // prove the model's reasoning or substitute for observing actual output.
+    expect(body).toMatch(/omit[^.\n]*`default(?:Value)?`[^.\n]*(?:no|not)[^.\n]*(?:reasonable|sensible|supported|basis)/i);
+  });
+
   it('injects the canonical Deck Protocol v1 framework for the real PPT profile', async () => {
     const binding = createBundledStrategyBindingV2({ plugin, taskType: 'ppt' });
     const pptSnapshot = {
@@ -206,11 +307,12 @@ describe('OD Next V2 request recipe wiring', () => {
     expect(prompt).toContain('compact operator interfaces');
     expect(prompt).toContain('Use concise product language.');
     expect(prompt).toContain('Prioritize incident triage.');
-    expect(prompt).toContain('open-design.plan-contract/v2');
-    expect(prompt).toContain('open-design.strategy-state/v2');
-    expect(prompt).toContain('capabilitySnapshotHash');
-    expect(prompt).toContain('productionRoutes');
-    expect(prompt).toContain('decisionSummary');
+    expect(prompt).toContain('OD Next production-marker/v1');
+    expect(prompt).toContain('od-production-ready');
+    expect(prompt).not.toContain('open-design.plan-contract/v2');
+    expect(prompt).not.toContain('open-design.strategy-state/v2');
+    expect(prompt).not.toContain('capabilitySnapshotHash');
+    expect(prompt).toContain('concise, actionable plan');
     expect(prompt.split('\n').filter((line) => (
       line.startsWith('## Active stage:') || line.startsWith('### ')
     ))).toEqual(expect.arrayContaining([

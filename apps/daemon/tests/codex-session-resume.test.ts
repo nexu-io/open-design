@@ -53,6 +53,8 @@ describe('codex native session resume', () => {
   let binDir: string | null = null;
 
   beforeEach(() => {
+    // These plain-reply fixtures exercise native sessions without an OD Next task.
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
     // These fixtures implement the legacy `codex exec --json` wire format and
     // assert its argv-level resume contract. Keep this suite on that transport
     // now that production defaults to the app-server JSON-RPC transport.
@@ -470,6 +472,7 @@ function snapshotEnv(): Record<string, string | undefined> {
     OPEN_DESIGN_TELEMETRY_RELAY_URL: process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL,
     POSTHOG_KEY: process.env.POSTHOG_KEY,
     POSTHOG_HOST: process.env.POSTHOG_HOST,
+    OD_NEXT_STRATEGY_ROLLOUT: process.env.OD_NEXT_STRATEGY_ROLLOUT,
   };
 }
 

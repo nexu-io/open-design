@@ -1,7 +1,8 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import ts from "typescript";
+import * as ts from "@typescript/native/unstable/ast";
+import { parseSource, withNativeSourceParser, forEachNativeSource } from "./lib/typescript/source.ts";
 
 import { checkCrossAppImports } from "./check-cross-app-imports.ts";
 import { checkTsNocheckImports } from "./check-ts-nocheck-imports.ts";
@@ -35,6 +36,8 @@ const allowedE2eScripts = new Set([
   // Explicit opt-in local daemon acceptance; not part of hermetic CI test discovery.
   "e2e/scripts/syntax-acceptance.ts",
   "e2e/scripts/visual-report.ts",
+  // Cross-version real Vela / synthetic OpenCode protocol acceptance.
+  "e2e/scripts/vela-contract.ts",
 ]);
 
 function toRepositoryPath(filePath: string): string {
@@ -932,13 +935,7 @@ function pushStringSpecifier(
 }
 
 function collectImportSpecifiersFromSource(repositoryPath: string, source: string): SourceImportSpecifier[] {
-  const sourceFile = ts.createSourceFile(
-    repositoryPath,
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    repositoryPath.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-  );
+  const sourceFile = parseSource(repositoryPath, source);
   const imports: SourceImportSpecifier[] = [];
 
   const visit = (node: ts.Node): void => {
@@ -954,7 +951,7 @@ function collectImportSpecifiersFromSource(repositoryPath: string, source: strin
       pushStringSpecifier(imports, sourceFile, node.arguments[0]);
     }
 
-    ts.forEachChild(node, visit);
+    node.forEachChild(visit);
   };
 
   visit(sourceFile);
@@ -1020,6 +1017,7 @@ export function collectWebImportIsolationViolationsFromSource(
 
 async function checkWebImportIsolation(): Promise<boolean> {
   const violations: WebImportIsolationViolation[] = [];
+  const sources = new Map<string, string>();
 
   for (const repositoryPrefix of webImportIsolationSourcePrefixes) {
     const repositoryDirectory = repositoryPrefix.replace(/\/$/, "");
@@ -1031,9 +1029,13 @@ async function checkWebImportIsolation(): Promise<boolean> {
     )) {
       if (!isWebImportIsolationSourcePath(repositoryPath)) continue;
       const source = await readFile(path.join(repoRoot, repositoryPath), "utf8");
-      violations.push(...collectWebImportIsolationViolationsFromSource(repositoryPath, source));
+      sources.set(repositoryPath, source);
     }
   }
+
+  await forEachNativeSource(sources, (repositoryPath, source) => {
+    violations.push(...collectWebImportIsolationViolationsFromSource(repositoryPath, source));
+  });
 
   if (violations.length > 0) {
     console.error("Web import isolation violations found:");
@@ -1551,7 +1553,7 @@ if (isMain) {
   // `--list-checks` is the machine-readable registry of repository guard checks.
   if (process.argv[2] === "--list-checks") {
     for (const check of checks) console.log(check.name);
-  } else if (!(await runGuardChecks(checks, { repoRoot }))) {
+  } else if (!(await withNativeSourceParser(() => runGuardChecks(checks, { repoRoot })))) {
     process.exitCode = 1;
   }
 }

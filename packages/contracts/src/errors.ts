@@ -1,3 +1,4 @@
+import type { ApiFailureDetail } from './api/failure-detail.js';
 import type { JsonValue } from './common.js';
 
 export const API_ERROR_CODES = [
@@ -179,6 +180,15 @@ export const API_ERROR_CODES = [
   // so a client can attach to it instead of starting another. Not retryable
   // while that run is active; ordinary chat turns are never gated by this.
   'DESIGN_SYSTEM_ENRICHMENT_IN_PROGRESS',
+  // POST /api/projects bounds every read-only preparation step that runs
+  // before the project/conversation transaction (design-system and skill
+  // validation, plugin and location lookups, plugin registry loads, template
+  // seeding) with one request-wide deadline. When the deadline passes the
+  // daemon answers HTTP 504 with this code and commits nothing, so a client
+  // that already entered an optimistic project surface can roll back to its
+  // composer instead of waiting on a stalled create. Retryable: the same
+  // client-minted project id may be resubmitted.
+  'PROJECT_CREATE_PREPARATION_TIMEOUT',
   'INTERNAL_ERROR',
 ] as const;
 
@@ -191,6 +201,8 @@ export interface ApiError {
   retryable?: boolean;
   requestId?: string;
   taskId?: string;
+  /** Optional closed-token classification; see `api/failure-detail.ts`. */
+  failure?: ApiFailureDetail;
 }
 
 export interface ApiErrorResponse {

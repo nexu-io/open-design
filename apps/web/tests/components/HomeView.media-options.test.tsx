@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { pickHomeTemplate, homeTemplateTrigger } from '../helpers/home-template-picker';
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -26,6 +27,7 @@ vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => {
 });
 
 import { HomeView } from '../../src/components/HomeView';
+import { HOME_APPLY_TEMPLATE_EVENT } from '../../src/components/home-hero/chips';
 import type { DesignSystemSummary, PromptTemplateSummary } from '../../src/types';
 // HomeHero's prompt input migrated from a <textarea> + highlight overlay to the
 // same Lexical contenteditable the project composer uses. It still has
@@ -90,15 +92,12 @@ describe('HomeView media composer options', () => {
     stubFetch({ mediaApplyResponse });
     renderHome();
 
-    const imageTab = await screen.findByTestId('home-hero-type-pill-image');
-    const prototypeTab = await screen.findByTestId('home-hero-type-pill-prototype');
-    await waitFor(() => expect((imageTab as HTMLButtonElement).disabled).toBe(false));
+    await pickHomeTemplate('image');
 
-    fireEvent.click(imageTab);
-
-    await waitFor(() => expect(imageTab.getAttribute('aria-selected')).toBe('true'));
-    expect((imageTab as HTMLButtonElement).disabled).toBe(false);
-    expect((prototypeTab as HTMLButtonElement).disabled).toBe(false);
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Image');
+    });
+    expect(homeTemplateTrigger()).toBeTruthy();
   });
 
   it('defaults to Design mode with no mode picker in the composer', async () => {
@@ -568,7 +567,9 @@ describe('HomeView media composer options', () => {
     renderHome();
 
     await screen.findByTestId('home-hero-input');
-    expect((screen.getByTestId('home-hero-template-trigger') as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      (homeTemplateTrigger() as HTMLButtonElement).disabled,
+    ).toBe(true);
     expect(fetchMock.mock.calls.some(([url]) => (
       typeof url === 'string' && url.includes('/api/plugins/od-media-generation/apply')
     ))).toBe(false);
@@ -637,7 +638,6 @@ function homeProps(overrides: Partial<React.ComponentProps<typeof HomeView>> = {
     projects: [],
     onSubmit: () => undefined,
     onOpenProject: () => undefined,
-    onViewAllProjects: () => undefined,
     promptTemplates: PROMPT_TEMPLATES,
     ...overrides,
   };
@@ -726,20 +726,7 @@ async function openOption(name: string) {
   await waitFor(() => expect(screen.getByTestId(`home-hero-footer-option-${name}-menu`)).toBeTruthy());
 }
 
-async function clickHomeRailChip(id: string) {
-  // #5517 removed the inline template rail from Home: every scenario template
-  // is picked from the composer footer's radial Template picker. Wait until the
-  // trigger and the wedge are enabled first — plugins load asynchronously, so
-  // both are briefly disabled after mount.
-  const trigger = await screen.findByTestId('home-hero-template-trigger');
-  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false));
-  fireEvent.click(trigger);
-  const wedgeId = `home-hero-template-wedge-${id}`;
-  await waitFor(() =>
-    expect(screen.getByTestId(wedgeId).getAttribute('aria-disabled')).not.toBe('true'),
-  );
-  fireEvent.click(screen.getByTestId(wedgeId));
-}
+const clickHomeRailChip = pickHomeTemplate;
 
 // Drive the Lexical editor and let the OnChange -> onPromptChange -> setPrompt
 // state flush settle (the submit path reads HomeView's React `prompt` state, not

@@ -1,13 +1,9 @@
-<h1 align="center">OpenDesign: オープンソースの Claude Design 代替ツール</h1>
+<h1 align="center">OpenDesign：初の共同作業型AIデザインエージェントワークスペース</h1>
 
-> ⚡ **[OpenDesign Cloud——公式モデルサービス。](https://open-design.ai/zh/pricing/)** 一度のチャージで、OpenDesign 内のエージェントモデルと画像モデルを利用できます。エージェントには GPT、Claude、DeepSeek、画像には GPT Image 2.0、Seedream 5.0 Pro、Nano Banana 2.0 を提供します。
->
-> 🚀 **[DeepSeek V4 Flash と V4 Pro が利用可能になりました。](https://open-design.ai/zh/pricing/)** プロトタイプ、スライド、デザインシステム、日常的なエージェントタスクに最先端の知能を活用できます。OpenDesign メンバーは、アプリ内で両モデルを 2 週間無制限に利用できます。
->
-> 🧩 **[DeepSeek Harness に対応しました。](https://open-design.ai/zh/agents/deepseek-harness-design/)** DeepSeek 公式の `dsh` Agent Harness を OpenDesign のネイティブランタイムとして接続できます。構造化思考、ツール呼び出し、モデル検出、キャンセル、セッション再開に対応し、生成ファイルはライブプレビューと納品のため OpenDesign のワークフロー内に保持されます。
+> ✨ **[GitHub 100K スター記念 — OpenDesign Go のクレジットが2倍に](https://open-design.ai/pricing/)**。**初月わずか8米ドルで、対象の Design Plan モデルで毎月最大120米ドル分のクレジット**をご利用いただけます。GPT-6 Luna、DeepSeek V4.1 Flash、GLM-5.3 Flash-X、MiMo V2.6 Flash など10種類以上のモデルに対応しています。 すべての個人プランには、Codex、Claude Code、DSH、OpenCode などで利用できる API アクセスが含まれます。
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="OpenDesign hero banner" width="100%" />
+  <img src="../../docs/assets/readme-hero-design-agent.webp" alt="OpenDesign：初の共同作業型AIデザインエージェントワークスペース" width="100%" />
 </p>
 
 <p align="center">
@@ -31,79 +27,65 @@
 
 ## OpenDesign とは
 
-🎨 **ローカルファーストでオープンソースの Claude Design 代替ツール。** &nbsp;🖥️ **macOS と Windows 向けのネイティブデスクトップアプリ。** &nbsp;⚡ **100 種類以上の機能スキル + 独立したレンダリングテンプレートカタログ** · ✨ **151 のデザインシステムパッケージ** · 📦 **277 のすぐ使えるプラグイン。** &nbsp;🖼️ **ウェブ · デスクトップ · モバイルのプロトタイプ**、**ライブダッシュボード／アーティファクト**、**スライド**、**画像**、**動画**、さらに **HyperFrames** のモーショングラフィックスを生成。🔒 サンドボックス化された iframe プレビュー · HTML / PDF / PPTX / MP4 エクスポート。&nbsp;🤖 **25 種類のローカル CLI 実行ファイル上で動作**、もしくは BYOK 経由で任意の OpenAI 互換エンドポイント上でも動作します。
+OpenDesign は**初の共同作業型AIデザインエージェントワークスペース**です。要件を入力し、普段使っているコーディングエージェントまたは OpenDesign Cloud で、デザインシステムに沿ったプロトタイプを作成します。チームと共有してフィードバックを集め、同じプロジェクト内でエージェントに改善を続けてもらえます。
 
-OpenDesign は、そのループをエージェントが読み書きできる **機能スキル・レンダリングデザインテンプレート・デザインシステム・プラグインのファイルシステム** にします。
-
-これはまた、**エージェント時代の Figma 代替ツール**でもあります——キャンバス上でピクセルを動かす代わりに、本物の CSS、本物のフォント、本物のコンポーネントによる単一ページのアーティファクトを納品し、HTML / PDF / PPTX / MP4 へ直接エクスポートします。すでにあなたのデザインシステムによって形づくられ、すでに日常的に使うエージェントの中で実行可能です。
+このワークフローはオープンで拡張可能です。OpenDesign は Apache 2.0 ライセンスで公開され、スキル、デザインテンプレート、デザインシステム、プラグインをチームが調べて独自の工程に合わせて調整できます。
 
 
 ---
 
 ## プロダクトツアー
 
-OpenDesign の中核ワークフローを手早く紹介します。**Home** でブリーフを入力し、**Plugins** で再利用可能なスキルを探し、ブランドの参考資料を **Design System** に変換します。その後、プロジェクトの **Studio** でプロトタイプ、スライド、モバイルアプリ、画像、ドキュメント、HyperFrame を一か所で作成・改善できます。
-
 ### コアページ
 
 <table>
 <tr>
-<td valign="top">
-<img src="../../docs/screenshots/product-tour/home.png" alt="Home" /><br/>
-<sub><b>Home</b> — アーティファクトの種類を選び、ブリーフを入力し、開始前にデザインシステム、作業ディレクトリ、モデルを設定します。</sub>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png"><img src="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png" alt="Home — 要件またはサンプルから始めます。" width="500" /></a><br/>
+<sub><b>Home</b> — 要件またはサンプルから始めます。</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp"><img src="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp" alt="All projects — デザインシステム、メディア、プロトタイプをもう一度開きます。" width="500" /></a><br/>
+<sub><b>All projects</b> — デザインシステム、メディア、プロトタイプをもう一度開きます。</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png"><img src="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png" alt="Design Systems — ブランド素材を確認し、エージェントと一緒に改善します。" width="500" /></a><br/>
+<sub><b>Design Systems</b> — ブランド素材を確認し、エージェントと一緒に改善します。</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png"><img src="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png" alt="Plugins — スキルを探して Try it から起動します。" width="500" /></a><br/>
+<sub><b>Plugins</b> — スキルを探して Try it から起動します。</sub>
 </td>
 </tr>
 </table>
+
+### Studio — 1 つのプロジェクトで制作と改善
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/plugins.png" alt="Plugins" /><br/>
-<sub><b>Plugins</b> — 公式スキルをカテゴリ別に閲覧し、カタログを検索して <code>Try it</code> からワークフローを開始します。</sub>
+<img src="../../docs/screenshots/product-tour/studio-prototype-2026.webp" alt="Prototype — エージェントと対話しながら Web 体験を制作・改善し、ライブプレビューで確認します。" /><br/>
+<sub><b>Prototype</b> — エージェントと対話しながら Web 体験を制作・改善し、ライブプレビューで確認します。</sub>
 </td>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/design-system.png" alt="Design System" /><br/>
-<sub><b>Design System</b> — ブランドのビジュアル言語を抽出・調整し、結果をプレビューして、同じワークスペースでそのまま制作を続けます。</sub>
+<img src="../../docs/screenshots/product-tour/studio-slides-2026.png" alt="Slides — スライドと発表者ノートを確認しながら資料を作り、完成したら書き出します。" /><br/>
+<sub><b>Slides</b> — スライドと発表者ノートを確認しながら資料を作り、完成したら書き出します。</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-image-2026.webp" alt="Image — 会話からビジュアル素材を生成し、結果を確認してダウンロードまたは開きます。" /><br/>
+<sub><b>Image</b> — 会話からビジュアル素材を生成し、結果を確認してダウンロードまたは開きます。</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4"><img src="../../docs/screenshots/product-tour/studio-hyperframes-poster-2026.png" alt="HyperFrames — エージェントとモーショングラフィックスを作り、MP4 に書き出します。" /></a><br/>
+<sub><b>HyperFrames</b> — エージェントとモーショングラフィックスを作り、MP4 に書き出します。 <a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4">動画を見る</a>.</sub>
 </td>
 </tr>
 </table>
 
-### Studio — 1 つのプロジェクトで多様なアーティファクトを
-
-プロジェクトの Studio では、会話、生成ファイル、ライブプレビューが 6 種類のアーティファクトを通じて一か所にまとまります。
-
-<table>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-prototype.png" alt="プロトタイプ" /><br/>
-<sub><b>プロトタイプ</b> — Web 体験を生成または再構築し、レンダリングされたページを確認しながら、その場でエージェントと反復します。</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-deck.png" alt="スライド" /><br/>
-<sub><b>スライド</b> — 複数スライドのプレゼンテーションを作成し、サムネイルとスピーカーノートを確認して、完成したらエクスポートします。</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-mobile-app.png" alt="モバイルアプリ" /><br/>
-<sub><b>モバイルアプリ</b> — デバイスプレビューでモバイル UI を生成・調整し、会話、出力ファイル、次の操作を横に表示したまま進めます。</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-image.png" alt="画像" /><br/>
-<sub><b>画像</b> — プロジェクトの会話からビジュアル素材を生成し、結果をフルサイズで確認してからダウンロードまたは開きます。</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-document.png" alt="ドキュメント" /><br/>
-<sub><b>ドキュメント</b> — 洗練された複数ページのガイドや編集ドキュメントを作成し、レイアウトを確認して、完成したらエクスポートまたは共有します。</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-hyperframe.png" alt="HyperFrame" /><br/>
-<sub><b>HyperFrame</b> — コード駆動のモーショングラフィックスを作成し、Studio 内でアニメーションをプレビューして、完成した動画をエクスポートします。</sub>
-</td>
-</tr>
-</table>
 ---
 
 ## プラットフォーム互換性
@@ -248,29 +230,12 @@ Runtime 定義は [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runti
 
 ## なぜ OpenDesign なのか
 
-> **2026 年 4 月、Anthropic は Claude Design をリリースしました——LLM が散文を書くのをやめ、デザインアーティファクトを直接納品し始めた初めての出来事でした。** これは一気に広まりました。しかし、それはクローズドソースのまま、有料のみ、クラウドのみで、Anthropic のモデル、Anthropic のスキル、Anthropic のサーフェスに縛られていました。チェックアウトもなく、セルフホストもなく、Vercel デプロイもなく、自前のエージェントへの差し替えもできません。
-
-OpenDesign (OD) はそのオープンソースの代替ツールです。同じループ、同じアーティファクトファーストのメンタルモデル、ロックインは一切なし:
-
 - 🤖 **エージェントネイティブ、モデル非依存。** 私たちはエージェントを同梱しません。すでにあなたの `PATH` にある `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` がデザインエンジンです。ワンクリックで差し替えられます。
 - 🧠 **デフォルトでブランドグレード。** すべてのレンダリングは、アクティブなパッケージの `DESIGN.md` を中核のブランド契約として読み取ります。151 のデザインシステムパッケージが同梱され、従来のパッケージは `DESIGN.md` だけでも、新しいパッケージは `manifest.json`、`tokens.css`、コンポーネント、アセット、出典情報を追加できます。フォルダをドロップすればピッカーが見つけます。
-- 🖥️ **ローカルファースト、あらゆるレイヤーで BYOK。** ネイティブデスクトップアプリはクラウドへの往復なしにローカルファーストのままです。デーモンデータパスを説明する前に、ルートの `AGENTS.md` にある **Daemon data directory contract** を必ず読んでください。
+- 🖥️ **ローカルファースト、あらゆるレイヤーで BYOK。** ネイティブデスクトップアプリはローカルファーストです。製品分析とセッションリプレイには同意が必要です。データを処理・除去した安全性と信頼性のテレメトリは常時有効です。デーモンデータパスを説明する前に、ルートの `AGENTS.md` にある **Daemon data directory contract** を必ず読んでください。
 - 🌍 **4 つの平面で組み合わせ可能。** **プラグイン**はワークフロー、**機能スキル**はエージェント動作、**デザインテンプレート**はレンダリング設計図、**デザインシステム**はブランドを担います。
-- 🔁 **既存のコードベースをリフレッシュ。** `git` リポジトリ + `DESIGN.md` をエージェントに渡せば、あなたの実際のコンポーネントをブランド仕様にリファクタリングします。専用のプラグインが Figma / Pencil のワークフローを React / Next.js / Vue のコードへと移行します。
-- 🔒 **信念としてのプライバシー。** すべてがあなたのデータのある場所——あなたのラップトップ、チームのサーバー、Vercel プロジェクト——で動作します。ネットワークが必要なときも、BYOK プロキシは SSRF からガードされています。
-
-### 比較
-
-| | Claude Design | Figma | Lovable / v0 / Bolt | **OpenDesign** |
-|---|---|---|---|---|
-| オープンソース | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
-| セルフホスト／デスクトップ | ❌ | ❌ | ❌ | **✅ macOS + Windows + Docker** |
-| エージェントネイティブ（あなたの CLI で動作） | Anthropic のみ | ❌ | クラウドエージェントのみ | **✅ 25 CLI + BYOK** |
-| ブランドグレードの `DESIGN.md` | プロプライエタリ | テーマ JSON | 限定的なトークン | **✅ 151 システム同梱** |
-| スキル／プラグイン／テンプレート | クローズド | プラグインストア | クローズド | **✅ 100 種類以上の機能スキル · 独立したレンダリングテンプレートカタログ · 277 プラグイン** |
-| HyperFrames（HTML→MP4） | ❌ | ❌ | ❌ | **✅ 第一級対応** |
-| 既存リポジトリをブランドにリフレッシュ | ❌ | ❌ | ❌ | **✅ エージェント + `DESIGN.md` 経由** |
-| 最低限の課金 | Pro / Max / Team | Pro / Org | Pro / Team | **BYOK · 任意の互換エンドポイント** |
+- 🔁 **既存のコードベースをリフレッシュ。** `git` リポジトリ + `DESIGN.md` をエージェントに渡せば、あなたの実際のコンポーネントをブランド仕様にリファクタリングします。
+- 🔒 **信念としてのプライバシー。** プロジェクトはローカルまたは自分で管理する環境で実行できます。クラウドモデルや OpenDesign Cloud へのリクエストは、それぞれのサービスに送信されます。BYOK プロキシには SSRF 対策が含まれます。
 
 ---
 
@@ -340,7 +305,7 @@ Node `~24`、pnpm `10.33.x`。Windows ユーザーは [`docs/windows-troubleshoo
 `brief → plugin → direction → design system → artifact → handoff → memory`
 
 1. **PM がブリーフを提出します。** プラグインピッカーが、ランディングページ · ピッチデック · ダッシュボード · ソーシャル投稿 · PM スペック · OKR スコアカード… を提案します。
-2. **デザイナー（またはエージェント）が方向性を確定します。** ブランドがない？ 5 つの厳選された方向性から選びます。ブランドがある？ スクリーンショット／URL をドロップ → エージェントが GitHub に接続し、Figma をインポートし、再利用可能な `DESIGN.md` に体系化します。
+2. **デザイナー（またはエージェント）が方向性を確定します。** ブランドがない？ 5 つの厳選された方向性から選びます。ブランドがある？ スクリーンショット／URL をドロップ → エージェントが GitHub に接続し、再利用可能な `DESIGN.md` に体系化します。
 3. **エージェントが最初の成果物を作ります。** ファイルシステム対応 CLI は正規ファイルを書き、ファイルツールのない BYOK/API は完全な `<artifact>` ブロックを返します。
 4. **エンジニアリングへ引き渡します。** アーティファクトは本物の HTML/CSS です——Cursor、Codex、または Claude Code にドロップして、コードとして開発を続けられます。あるいは PPTX / PDF / MP4 をマーケティングへ直接エクスポートできます。
 5. **OpenDesign は使うほど賢くなります。** あなたのスクリーンショット、フォント、パレット、確定したアーティファクトは、次回のセッションのデフォルトとして蓄積されます。やり直しは減り、ブレも減ります。
@@ -413,9 +378,9 @@ od skills list --json
 
 **AI & LLM** — `claude` · `cohere` · `mistral-ai` · `minimax` · `together-ai` · `replicate` · `runwayml` · `elevenlabs` · `ollama` · `x-ai`
 
-**開発者ツール** — `cursor` · `vercel` · `linear-app` · `framer` · `expo` · `clickhouse` · `mongodb` · `supabase` · `hashicorp` · `posthog` · `sentry` · `warp` · `webflow` · `sanity` · `mintlify` · `lovable` · `composio` · `opencode-ai` · `voltagent`
+**開発者ツール** — `cursor` · `vercel` · `linear-app` · `expo` · `clickhouse` · `mongodb` · `supabase` · `hashicorp` · `posthog` · `sentry` · `warp` · `sanity` · `mintlify` · `composio` · `opencode-ai` · `voltagent`
 
-**生産性** — `notion` · `figma` · `miro` · `airtable` · `superhuman` · `intercom` · `zapier` · `cal` · `clay` · `raycast`
+**生産性** — `notion` · `miro` · `airtable` · `superhuman` · `intercom` · `zapier` · `cal` · `clay` · `raycast`
 
 **フィンテック** — `stripe` · `coinbase` · `binance` · `kraken` · `mastercard` · `revolut` · `wise`
 
@@ -471,7 +436,7 @@ od skills list --json
 od plugin list                       # list installed plugins (--task-kind / --mode / --tag filters)
 od plugin search "landing page"      # search by keyword
 od plugin info od-default            # inspect a plugin's metadata, inputs, capabilities
-od plugin install od-figma-migration # install from a registry; also accepts ./local-folder or an https://… link
+od plugin install od-default        # install from a registry; also accepts ./local-folder or an https://… link
 od plugin apply od-default --input brief="a one-page pitch for our seed round"
 od plugin upgrade od-default         # upgrade
 od plugin uninstall od-default       # uninstall
@@ -492,7 +457,7 @@ my-plugin/
 └── examples/           ← optional: concrete use cases
 ```
 
-主要フィールドは `specVersion`、`name`、`version`、Agent Skill を公開する場合だけ任意の `compat.agentSkills[].path`、そして `od.kind`、`od.taskKind`、`od.mode`、`od.capabilities[]`、`od.inputs[]` です。
+主要フィールドは `specVersion`、`name`、`version`、Agent Skill を公開する場合だけ任意の `compat.agentSkills[].path`、そして `od.kind`、`od.taskKind` (`new-generation` / `figma-migration` / `code-migration` / `tune-collab`)、`od.mode`、`od.capabilities[]`、`od.inputs[]` です。
 
 ローカルでスキャフォールド + 検証:
 
@@ -707,11 +672,10 @@ gh pr create --fill
 
 | プロジェクト | 役割 |
 |---|---|
-| Claude Design | このリポジトリがオープンソースの代替ツールとなっている、クローズドソースのプロダクト。 |
 | [`alchaincyf/huashu-design`](https://github.com/alchaincyf/huashu-design) | デザイン哲学の羅針盤——ジュニアデザイナーのワークフロー、ブランドアセットのプロトコル、アンチ AI スロップのチェックリスト、5 次元の批評。 |
 | [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) | 雑誌風のウェブ PPT スキルで、[`design-templates/guizang-ppt/`](../../design-templates/guizang-ppt/) の下にそのままバンドルされています。deck モードのデフォルト。 |
 | [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill) | HTML PPT Studio ファミリー——15 のスライドテンプレート、36 のテーマ、31 のページレイアウト、アニメーションランタイム、マグネティックカードのプレゼンターモード。 |
-| [`OpenCoworkAI/open-codesign`](https://github.com/OpenCoworkAI/open-codesign) | 最初のオープンソース Claude Design 代替ツール。私たちが借用している UX パターン（ストリーミングアーティファクトのループ、サンドボックス化された iframe、ライブエージェントパネル）。 |
+| [`OpenCoworkAI/open-codesign`](https://github.com/OpenCoworkAI/open-codesign) | 私たちが借用している UX パターン（ストリーミングアーティファクトのループ、サンドボックス化された iframe、ライブエージェントパネル）。 |
 | [`multica-ai/multica`](https://github.com/multica-ai/multica) | デーモン + アダプターのアーキテクチャ——PATH スキャンによるエージェント検出、唯一の特権プロセスとしてのローカルデーモン。 |
 | [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md) | 当初の 9 セクション `DESIGN.md` スキーマと upstream 由来 70 システムの歴史的な出典。現在のパッケージはこの基盤を拡張できます。 |
 | [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills) | `design-systems/` の下に追加された 57 のデザインスキルの出典。 |

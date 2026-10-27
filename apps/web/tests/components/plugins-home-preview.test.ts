@@ -116,10 +116,22 @@ describe('inferPluginPreview', () => {
     expect(out.label).toBe('example.html');
   });
 
+  it('uses a bundled HTML poster on cards before CDN previews exist, keeping details live', () => {
+    const record = make({
+      id: 'new-motion',
+      preview: { type: 'html', entry: './example.html', poster: './assets/cover.jpg' },
+    });
+    expect(inferPluginPreview(record).kind).toBe('html');
+    expect(inferPluginPreview(record, { preferBaked: true })).toMatchObject({
+      kind: 'media', mediaType: 'image', imageOnly: true,
+      poster: '/api/plugins/new-motion/asset/assets/cover.jpg', videoUrl: null,
+    });
+  });
+
   it('uses baked previews only when the gallery explicitly opts in', () => {
     const record = make({
       id: 'baked-html',
-      preview: { type: 'html', entry: './index.html' },
+      preview: { type: 'html', entry: './index.html', poster: './assets/cover.jpg' },
       bakedPreview: {
         poster: '/api/plugin-previews/baked-html/hash/poster.jpg',
         video: '/api/plugin-previews/baked-html/hash/preview.mp4',

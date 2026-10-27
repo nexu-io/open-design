@@ -1,3 +1,4 @@
+import * as diagnosticEvidence from '../src/services/diagnostics-evidence.js';
 import fs, { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -1438,5 +1439,18 @@ describe('createVelaWorkspaceContextProvider — stale pin recovery', () => {
     expect(pin.replaceCalls.length).toBe(0);
     expect(pin.setCalls.length).toBe(0);
     expect(pin.getActiveWorkspaceId()).toBe('ws-team-1');
+  });
+});
+
+
+describe('workspace authority failure evidence', () => {
+  it('records the cloud failure without changing its public result or retaining the credential', async () => {
+    const record = vi.spyOn(diagnosticEvidence, 'recordDiagnosticFailure').mockImplementation(() => undefined);
+    try {
+      const result = await fetchVelaWorkspaceDirectory({ readSession: () => SESSION, fetch: async () => jsonResponse(503, {}) });
+      expect(result).toEqual({ ok: false, items: [], reason: 'upstream', status: 503 });
+      expect(record).toHaveBeenCalledWith(expect.objectContaining({ source: 'workspace-directory', status: 503 }));
+      expect(record.mock.calls[0]![0]).not.toHaveProperty('controlKey');
+    } finally { record.mockRestore(); }
   });
 });

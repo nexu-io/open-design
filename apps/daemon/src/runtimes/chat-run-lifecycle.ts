@@ -69,6 +69,8 @@ export function classifyChatRunCloseStatus(params: {
   code: number | null;
   signal: NodeJS.Signals | string | null;
   acpCleanCompletion: boolean;
+  /** The daemon began terminating this ACP attempt after its prompt completed. */
+  acpCompletionShutdownRequested?: boolean;
   artifactQuietShutdownRequested: boolean;
   turnCompletedCleanly: boolean;
   artifactProducedThisRun: boolean;
@@ -82,6 +84,10 @@ export function classifyChatRunCloseStatus(params: {
       (params.code === 130 && params.signal === null)
     );
   if (acpForcedShutdown) return 'succeeded';
+  // Once the daemon itself is shutting down a completed attempt, the exit
+  // status reflects that shutdown, not the turn: Windows reports a child
+  // killed by pid as code 1 with no signal.
+  if (params.acpCleanCompletion && params.acpCompletionShutdownRequested) return 'succeeded';
   const artifactQuietShutdown =
     params.artifactQuietShutdownRequested &&
     params.code === null &&
@@ -206,131 +212,63 @@ export function resolveAcpStageTimeoutMs(agentDefault?: number): number | undefi
   return undefined;
 }
 
-type GeminiJsonEventStreamEvent = Record<string, unknown>;
-type BufferedStdoutChunk = { text: string; receivedAt: number };
-
-function parseGeminiJsonEventStreamEvents(text: string): GeminiJsonEventStreamEvent[] | null {
-  const lines = text
-    .split(/\r?\n/u)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  if (lines.length === 0) return null;
-  const events: GeminiJsonEventStreamEvent[] = [];
-  for (const line of lines) {
-    try {
-      const obj = JSON.parse(line);
-      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
-      events.push(obj as GeminiJsonEventStreamEvent);
-    } catch {
-      return null;
-    }
-  }
-  return events;
-}
-
-function isGeminiJsonEventStream(events: GeminiJsonEventStreamEvent[] | null): boolean {
-  if (!events || events.length === 0) return false;
-  const [firstEvent] = events;
-  if (
-    !firstEvent ||
-    firstEvent.type !== 'init' ||
-    typeof firstEvent.session_id !== 'string' ||
-    firstEvent.session_id.length === 0 ||
-    typeof firstEvent.model !== 'string' ||
-    firstEvent.model.length === 0
-  ) {
-    return false;
-  }
-  return events.every((event) => {
-    const type = event?.type;
-    return (
-      type === 'init' ||
-      type === 'message' ||
-      type === 'tool_use' ||
-      type === 'tool_result' ||
-      type === 'error' ||
-      type === 'result'
-    );
-  });
-}
-
-function geminiJsonEventStreamHasVisibleAssistantText(
-  events: GeminiJsonEventStreamEvent[] | null,
-): boolean {
-  if (!events) return false;
-  return events.some((event) => (
-    event.type === 'message' &&
-    event.role === 'assistant' &&
-    typeof event.content === 'string' &&
-    event.content.length > 0
-  ));
-}
-
-export function looksLikeGeminiJsonEventStream(text: string): boolean {
-  return isGeminiJsonEventStream(parseGeminiJsonEventStreamEvents(text));
-}
-
-export function bufferedAntigravityGeminiFirstTokenAt(
-  chunks: readonly BufferedStdoutChunk[],
-): number | null {
-  if (chunks.length === 0) return null;
-  const text = chunks.map((chunk) => chunk.text).join('');
-  const events = parseGeminiJsonEventStreamEvents(text);
-  if (!isGeminiJsonEventStream(events)) return null;
-  if (!geminiJsonEventStreamHasVisibleAssistantText(events)) return null;
-
-  let offset = 0;
-  for (const line of text.split(/(\r?\n)/u)) {
-    const nextOffset = offset + line.length;
-    if (line.length > 0 && line.trim().length > 0) {
-      try {
-        const event = JSON.parse(line) as GeminiJsonEventStreamEvent;
-        if (
-          event?.type === 'message' &&
-          event.role === 'assistant' &&
-          typeof event.content === 'string' &&
-          event.content.length > 0
-        ) {
-          let consumed = 0;
-          for (const chunk of chunks) {
-            consumed += chunk.text.length;
-            if (consumed >= nextOffset) return chunk.receivedAt;
-          }
-          return chunks.at(-1)?.receivedAt ?? null;
-        }
-      } catch {
-        return null;
-      }
-    }
-    offset = nextOffset;
-  }
-  return null;
+/**
+ * Whether a runtime reads its whole prompt from stdin (and then waits for
+ * EOF). Those runtimes get the prompt — as plain text, or in the shape their
+ * `encodeStdinPrompt` produces — as a complete file-backed stdin at spawn; see
+ * `openCompletePromptAsStdin` in `agent-process.ts` and
+ * `agentStdinPromptPayload` below.
+ *
+ * Excluded are the runtimes whose stdin carries a framed protocol instead:
+ * Claude's `stream-json` input (stdin stays open for mid-turn messages),
+ * pi-rpc, dsh-profile JSONL, ACP / Codex app-server JSON-RPC (those set
+ * `promptViaStdin: false`). A frame cut short by a dying daemon does not parse,
+ * so they cannot act on a partial prompt the way a plain-text reader does.
+ */
+export function runtimeReadsPlainTextPromptFromStdin(def: {
+  promptViaStdin?: boolean;
+  promptInputFormat?: string;
+  streamFormat?: string;
+}): boolean {
+  return (
+    def.promptViaStdin === true
+    && def.streamFormat !== 'pi-rpc'
+    && def.streamFormat !== 'dsh-profile-jsonl'
+    && (def.promptInputFormat ?? 'text') !== 'stream-json'
+  );
 }
 
 /**
- * Writes the composed prompt as the final chunk on the child's stdin, closes
- * it, and reports whether that write was backpressured.
- *
- * `end(chunk)` cannot report this: it returns the stream rather than a boolean,
- * and `writableNeedDrain` is already back to false by the time it returns — even
- * for a chunk that `write(chunk)` would have rejected. Every runtime except
- * Claude (which streams JSON and keeps stdin open) takes this path, so reading
- * backpressure off `end()` left `stdin_backpressure` permanently false on
- * exactly the runs whose `stdin_write` stalls it exists to attribute. Issuing
- * the write and the close separately is what makes the signal real.
- *
- * Returns true when the chunk had to be buffered because the OS pipe was full,
- * i.e. the child was not draining stdin.
+ * The bytes a whole-prompt stdin runtime receives for the composed prompt:
+ * the raw text unless the runtime declares its own stdin framing (e.g.
+ * Antigravity's one-message stream-json NDJSON). Shared by the chat-run spawn
+ * and the connection test so the two can never hand a CLI different shapes.
  */
-export function writePromptAndEndStdin(
-  stdin: {
-    write: (chunk: string, encoding: BufferEncoding, cb: (err?: Error | null) => void) => boolean;
-    end: () => void;
-  },
-  composed: string,
-  onFlush: (err?: Error | null) => void,
-): boolean {
-  const accepted = stdin.write(composed, 'utf8', onFlush);
-  stdin.end();
-  return accepted === false;
+export function agentStdinPromptPayload(
+  def: { encodeStdinPrompt?: (prompt: string) => string },
+  prompt: string,
+): string {
+  return def.encodeStdinPrompt ? def.encodeStdinPrompt(prompt) : prompt;
+}
+
+/**
+ * Stdin telemetry for a prompt handed over as the child's file-backed stdin
+ * at spawn.
+ *
+ * The prompt was complete on disk before the child existed, so the daemon's
+ * side of the write is finished the moment the child is spawned: it cannot be
+ * backpressured (`stdin_backpressure` is false by construction — a child that
+ * never reads its stdin now stalls in its own first-token wait, not in a daemon
+ * write), and `stdin_write_start`/`stdin_write_end` land together, in their
+ * historical position after spawn, so phase math and the Langfuse
+ * `stdin-write` span keep their shape.
+ */
+export function recordPromptDeliveredAtSpawn(
+  run: { stdinBackpressure?: boolean },
+  lifecycle: { mark: (mark: 'model_call_start' | 'stdin_write_start' | 'stdin_write_end') => void },
+): void {
+  lifecycle.mark('model_call_start');
+  lifecycle.mark('stdin_write_start');
+  lifecycle.mark('stdin_write_end');
+  run.stdinBackpressure = false;
 }

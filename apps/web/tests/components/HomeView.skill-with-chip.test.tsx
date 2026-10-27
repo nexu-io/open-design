@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
+import { pickHomeTemplate } from '../helpers/home-template-picker';
 
 import { act } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SkillSummary } from '@open-design/contracts';
+import newGenerationManifest from '../../../../plugins/_official/scenarios/od-new-generation/open-design.json';
 
 vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
   PlaceholderCarousel: () => null,
@@ -22,6 +24,8 @@ vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => {
 });
 
 import { HomeView } from '../../src/components/HomeView';
+import { HOME_APPLY_TEMPLATE_EVENT } from '../../src/components/home-hero/chips';
+import { requestHomeChip } from '../../src/runtime/home-intent';
 import type { PluginLoopSubmit } from '../../src/components/PluginLoopHome';
 import { homeHeroPromptText, setHomeHeroPrompt } from '../helpers/home-hero-lexical';
 
@@ -65,7 +69,7 @@ function pluginRecord(id: string, title: string, tags: string[], od: Record<stri
 const CATALOG = [
   pluginRecord('example-web-prototype', 'Web Prototype', ['prototype'], { mode: 'prototype' }),
   pluginRecord('example-simple-deck', 'Simple Deck', ['deck'], { mode: 'deck' }),
-  pluginRecord('od-new-generation', 'New generation', [], {}),
+  pluginRecord('od-new-generation', 'New generation', [], newGenerationManifest.od),
   pluginRecord('od-media-generation', 'Media generation', [], {}),
 ];
 
@@ -165,15 +169,21 @@ async function settle() {
   });
 }
 
-async function pickHomeTemplate(id: string) {
-  const trigger = await screen.findByTestId('home-hero-template-trigger');
-  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false));
-  fireEvent.click(trigger);
-  const wedge = await screen.findByTestId(`home-hero-template-wedge-${id}`);
-  await waitFor(() =>
-    expect(screen.getByTestId(`home-hero-template-wedge-${id}`).getAttribute('aria-disabled'))
-      .not.toBe('true'));
-  fireEvent.click(wedge);
+
+
+
+// The hero no longer renders a second-level scene row; a Prototype scene is
+// reached the way other surfaces hand one off — a queued chip intent naming the
+// retired top-level id, which HomeView folds onto 原型 + that scene.
+async function pickPrototypeScene(scene: string) {
+  await act(async () => {
+    requestHomeChip(scene);
+  });
+  await waitFor(() => {
+    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
+    expect(JSON.parse(window.localStorage.getItem('open-design:home-composer:chip') ?? '{}'))
+      .toMatchObject({ chipId: 'prototype', prototypeSubtypeId: scene });
+  });
 }
 
 // The @-mention popover's own pick path: type an `@query` into the live Lexical
@@ -195,7 +205,6 @@ function renderHome(onSubmit: SubmitSpy) {
       skills={[PROTOTYPE_SKILL, DECK_SKILL]}
       onSubmit={onSubmit}
       onOpenProject={() => undefined}
-      onViewAllProjects={() => undefined}
     />,
   );
 }
@@ -212,6 +221,20 @@ async function submitAndRead(onSubmit: SubmitSpy) {
 }
 
 describe('HomeView — @-mentioning a Skill on top of a picked task type', () => {
+  it('sends a free-form motion-design brief with the real bundled required-input manifest', async () => {
+    stubFetch();
+    stubAnimationFrame();
+    const onSubmit = submitSpy();
+    renderHome(onSubmit);
+    await act(async () => { requestHomeChip('motion-design'); });
+    await waitFor(() => expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Motion design'));
+    const prompt = '帮我做一段 15 秒的专注计时器产品介绍，产品名叫「一刻」，横版，不需要配音。';
+    setHomeHeroPrompt(prompt);
+    await settle();
+    expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(false);
+    const payload = await submitAndRead(onSubmit);
+    expect(payload).toMatchObject({ prompt, automaticStrategyTaskProfile: 'motion-design', pluginId: null });
+  });
   afterEach(() => {
     vi.unstubAllGlobals();
     cleanup();
@@ -253,9 +276,7 @@ describe('HomeView — @-mentioning a Skill on top of a picked task type', () =>
 
     // 1. Task type, then its second-level scene.
     await pickHomeTemplate('prototype');
-    const scene = await screen.findByTestId('home-hero-subtype-mobile');
-    fireEvent.click(scene);
-    await waitFor(() => expect(scene.getAttribute('aria-selected')).toBe('true'));
+    await pickPrototypeScene('mobile');
 
     // 2. A Skill whose `od.mode` is `deck` — again, not a task-type pick.
     await mentionSkill('@deck', /deck lab/i);

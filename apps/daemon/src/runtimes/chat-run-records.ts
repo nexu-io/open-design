@@ -33,6 +33,7 @@ import type { RunTerminalLifecycleV1 } from '../observability/run-terminal-lifec
 
 import { getProject } from '../db.js';
 import {
+  validateProjectDeliverable,
   validateRunDeliverable,
   type RunDeliverableValidationResult,
 } from '../run-deliverable-validation.js';
@@ -93,6 +94,29 @@ export async function validateChatRunDeliverable(input: {
   });
 }
 
+/**
+ * Does the project this run belongs to hold a usable canonical deliverable?
+ *
+ * The presentation-side question, resolved through the same project record
+ * lookup as `validateChatRunDeliverable` so both answers describe one project.
+ * Never feed it to a completion gate — see `DeliverableValidationScope`.
+ */
+export async function validateChatProjectDeliverable(input: {
+  db: Parameters<typeof getProject>[0];
+  projectsRoot: string;
+  run: RunForDeliverableValidation;
+}): Promise<RunDeliverableValidationResult> {
+  const project = input.run.projectId
+    ? toProjectRecord(getProject(input.db, input.run.projectId))
+    : null;
+  return validateProjectDeliverable({
+    projectsRoot: input.projectsRoot,
+    projectId: input.run.projectId,
+    projectMetadata:
+      project?.metadata ?? input.run.projectMetadata ?? null,
+  });
+}
+
 /** The run facts `runTouchedArtifactPaths` reads. */
 export interface RunForTouchedArtifactPaths {
   artifactOutcome?: { diff?: { touchedPaths?: unknown } } | undefined;
@@ -131,6 +155,7 @@ export interface SseClient {
 
 export interface ChatRun {
   id: string;
+  diagnosticIncidentIds?: string[];
   projectId: string | null;
   conversationId: string | null;
   assistantMessageId: string | null;
@@ -223,6 +248,8 @@ export interface ChatRun {
     designSystemCreated: boolean;
     previewModuleCount: number;
     filesWritten?: number;
+    filesWrittenUnknown?: boolean;
+    filesWrittenSource?: 'filesystem' | 'tool_stream' | 'unknown';
     diff?: RunArtifactDiff;
   };
   artifactPaths?: string[];

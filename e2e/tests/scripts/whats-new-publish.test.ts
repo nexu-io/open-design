@@ -68,6 +68,20 @@ describe("what's new document guard", () => {
     await expect(check(validDocument)).resolves.toBe(true);
   });
 
+  test("accepts configurable base and localized CTA labels", async () => {
+    await expect(check({
+      ...validDocument, ctaLabel: "View Arena",
+      locales: { "zh-CN": { ctaLabel: "查看评测站" } },
+    })).resolves.toBe(true);
+  });
+
+  test.each(["", "   ", 42, null])("rejects invalid CTA labels (%j) before publishing", async (ctaLabel) => {
+    await expect(check({ ...validDocument, ctaLabel })).resolves.toBe(false);
+    await expect(check({
+      ...validDocument, locales: { "zh-CN": { title: "标题", ctaLabel } },
+    })).resolves.toBe(false);
+  });
+
   test("the empty retirement document passes", async () => {
     await expect(check({})).resolves.toBe(true);
   });

@@ -1,3 +1,4 @@
+import { recordDiagnosticFailure } from '../services/diagnostics-evidence.js';
 const MAX_RECENT_API_FAILURES = 100;
 
 export interface RecentApiFailure {
@@ -18,6 +19,11 @@ export interface ApiFailureToRecord extends Omit<RecentApiFailure, 'method' | 'p
 }
 
 const failures: RecentApiFailure[] = [];
+const listeners = new Set<(failure: RecentApiFailure) => void>();
+export function observeApiFailures(listener: (failure: RecentApiFailure) => void): () => void {
+  listeners.add(listener);
+  return () => { listeners.delete(listener); };
+}
 
 function diagnosticRouteTemplate(request: ApiFailureToRecord['request']): string {
   const routePath = request?.route?.path;
@@ -37,11 +43,14 @@ function diagnosticRouteTemplate(request: ApiFailureToRecord['request']): string
 
 export function recordApiFailure(failure: ApiFailureToRecord): void {
   const { request, ...metadata } = failure;
-  failures.push({
+  recordDiagnosticFailure({ source: 'local-api', operation: diagnosticRouteTemplate(request), status: failure.status, requestId: failure.requestId });
+  const entry: RecentApiFailure = {
     ...metadata,
     method: request?.method?.toUpperCase() ?? 'UNKNOWN',
     path: diagnosticRouteTemplate(request),
-  });
+  };
+  failures.push(entry);
+  for (const listener of listeners) { try { listener({ ...entry }); } catch { /* diagnostics cannot break API errors */ } }
   if (failures.length > MAX_RECENT_API_FAILURES) {
     failures.splice(0, failures.length - MAX_RECENT_API_FAILURES);
   }

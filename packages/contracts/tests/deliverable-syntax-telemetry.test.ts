@@ -19,10 +19,36 @@ const finalization = {
 };
 
 describe('content-free syntax terminal summary', () => {
+  it('preserves the distinct internal engine error reason', () => {
+    expect(SafeDeliverableSyntaxTelemetryV1Schema.parse({
+      ...legacy, status: 'incomplete', finalization: { ...finalization, action: 'warn', reason: 'internal_error' },
+    })).toMatchObject({ finalization: { reason: 'internal_error' } });
+  });
   it('accepts legacy evidence without inventing missing summary fields', () => {
     const parsed = SafeDeliverableSyntaxTelemetryV1Schema.parse(legacy);
     expect(parsed).not.toHaveProperty('finalization');
     expect(parsed).not.toHaveProperty('terminalRunStatus');
+    expect(parsed).not.toHaveProperty('deliveredWithSyntaxWarningCount');
+  });
+
+  it.each([0, 1])('accepts a bounded warning delivery count of %i', (count) => {
+    expect(SafeDeliverableSyntaxTelemetryV1Schema.parse({
+      ...legacy,
+      finalization: { ...finalization, action: 'warn', reason: 'no_safe_fix' },
+      deliveredWithSyntaxWarningCount: count,
+    })).toMatchObject({ finalization: { action: 'warn' }, deliveredWithSyntaxWarningCount: count });
+  });
+
+  it('retains the historical fail action', () => {
+    expect(SafeDeliverableSyntaxTelemetryV1Schema.parse({
+      ...legacy, finalization: { ...finalization, action: 'fail' },
+    })).toMatchObject({ finalization: { action: 'fail' } });
+  });
+
+  it.each([-1, 2, 0.5, '1', null])('rejects invalid warning counts: %j', (count) => {
+    expect(SafeDeliverableSyntaxTelemetryV1Schema.safeParse({
+      ...legacy, deliveredWithSyntaxWarningCount: count,
+    }).success).toBe(false);
   });
 
   it('accepts the additive commit summary, proposal timing and terminal alias', () => {

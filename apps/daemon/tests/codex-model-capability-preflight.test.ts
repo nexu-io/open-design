@@ -3,9 +3,30 @@ import { randomUUID } from 'node:crypto';
 import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { startServer } from '../src/server.js';
+
+// These fixtures own the CLI/config layers, including absence of host MDM.
+vi.mock('../src/runtimes/invocation.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/runtimes/invocation.js')>();
+  return { ...actual, execAgentFile: (...args: Parameters<typeof actual.execAgentFile>) => {
+    if (args[0] === '/usr/bin/defaults') {
+      return Promise.reject(new Error('Domain/default pair (com.openai.codex, config_toml_base64) does not exist'));
+    }
+    return actual.execAgentFile(...args);
+  } };
+});
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...actual, stat: (filePath: Parameters<typeof actual.stat>[0]) => {
+    if (/^\/(?:Library\/Managed Preferences|etc\/codex)(?:\/|$)/.test(String(filePath))) {
+      return Promise.reject(Object.assign(new Error('fixture: no host policy'), { code: 'ENOENT' }));
+    }
+    return actual.stat(filePath);
+  } };
+});
 
 type StartedServer = {
   url: string;
@@ -122,6 +143,8 @@ describe('Codex configured-model capability preflight', () => {
     // success-path case on the transport whose protocol it implements;
     // app-server protocol coverage belongs to the dedicated transport suites.
     process.env.OD_CODEX_TRANSPORT = 'exec-json';
+    // The preflight fixture emits a plain reply without the OD Next task protocol.
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
     started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
     await putConfig(started.url, {
       agentId: 'codex',

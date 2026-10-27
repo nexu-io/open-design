@@ -19,7 +19,7 @@
 // 裁决(用户 2026-09-08):这种时候也要画一张**能说话、能操作**的卡。
 //
 // 这个文件的两半互为对照,缺一半都会让另一半变成空洞断言:
-//   · 前半(会红):终态失败 + 三条来源全空 → 卡在场、说得出话、点得动重试;
+//   · 前半(会红):终态失败 + 三条来源全空 → 卡在场、说得出话、点得动对应运行来源的恢复动作;
 //   · 后半(修前修后都必须绿)= 反向锚点,钉住「别修过头」:
 //     空回复那一档、交接给别的 UI 那一档、成功的一轮,都仍然不出卡。
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -86,8 +86,10 @@ function renderChat(
   } = {},
 ) {
   const onRetry = overrides.onRetry === null ? undefined : (overrides.onRetry ?? vi.fn());
+  const onSwitchToAmrAndRetry = vi.fn();
   return {
     onRetry,
+    onSwitchToAmrAndRetry,
     ...render(
       <ChatPane
         messages={[message]}
@@ -98,6 +100,7 @@ function renderChat(
         onEnsureProject={async () => 'project-1'}
         onSend={vi.fn()}
         onStop={vi.fn()}
+        onSwitchToAmrAndRetry={onSwitchToAmrAndRetry}
         {...(onRetry ? { onRetry: onRetry as never } : {})}
         {...(overrides.reconnect ? { reconnect: overrides.reconnect } : {})}
         conversations={[
@@ -159,16 +162,14 @@ describe('终态失败 + 说不出原因:兜底报错卡', () => {
     );
   });
 
-  it('那张卡上的〔重试〕真的能把这一轮推下去', () => {
-    const { onRetry } = renderChat(failedRunWithNothingToSay());
+  it('CLI 失败卡上的 Cloud 动作传回原消息，不重试本地运行', () => {
+    const message = failedRunWithNothingToSay();
+    const { onRetry, onSwitchToAmrAndRetry } = renderChat(message);
 
-    const retry = screen.getByTestId('chat-error-retry');
-    fireEvent.click(retry);
-    expect(onRetry).toHaveBeenCalledTimes(1);
-    expect(onRetry).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'msg-failed' }),
-      'manual_retry',
-    );
+    fireEvent.click(screen.getByTestId('chat-error-switch-to-cloud'));
+    expect(onSwitchToAmrAndRetry).toHaveBeenCalledExactlyOnceWith(message);
+    expect(screen.queryByTestId('chat-error-retry')).toBeNull();
+    expect(onRetry).not.toHaveBeenCalled();
   });
 
   it('〔联系支持〕〔导出日志〕这两条不挑失败类型的出路也在', () => {
@@ -179,18 +180,18 @@ describe('终态失败 + 说不出原因:兜底报错卡', () => {
   });
 
   it.each(['no_result', 'delivery_failed'] as const)(
-    '交付失败(resultDeliveryState=%s)同样出卡、同样带得动重试',
+    'CLI 交付失败(resultDeliveryState=%s)同样出卡并将原消息交给 Cloud 恢复',
     (state) => {
-      const { onRetry } = renderChat(deliveryFailedRun(state));
+      const message = deliveryFailedRun(state);
+      const { onRetry, onSwitchToAmrAndRetry } = renderChat(message);
 
       expect(screen.getByTestId('chat-run-error-description').textContent).toBe(
         'chat.runError.fallbackMessage',
       );
-      fireEvent.click(screen.getByTestId('chat-error-retry'));
-      expect(onRetry).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 'msg-delivery' }),
-        'manual_retry',
-      );
+      fireEvent.click(screen.getByTestId('chat-error-switch-to-cloud'));
+      expect(onSwitchToAmrAndRetry).toHaveBeenCalledExactlyOnceWith(message);
+      expect(screen.queryByTestId('chat-error-retry')).toBeNull();
+      expect(onRetry).not.toHaveBeenCalled();
     },
   );
 

@@ -1,24 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { VisuallyHidden } from '@open-design/components';
 import { Icon } from './Icon';
 import { useI18n } from '../i18n';
-import {
-  cancelVelaLogin,
-  fetchVelaLoginStatus,
-  startVelaLogin,
-  type VelaLoginStatus,
-} from '../providers/daemon';
-import {
-  AMR_LOGIN_POLL_INTERVAL_MS,
-  amrLoginPollOutcome,
-  isAmrSessionAuthenticated,
-  notifyAmrLoginStatusChanged,
-} from './amrLoginPolling';
-import {
-  notifyTeamProjectsChanged,
-  notifyWorkspaceBillingRefresh,
-  notifyWorkspaceContextRefresh,
-} from '../collab/useWorkspaceContext';
+import { useCloudSignIn } from './use-cloud-sign-in';
+import { AmrActivationHintText } from './AmrActivationHintText';
 
 const DISMISSED_KEY = 'od.entry.cloudSignInTip.dismissed';
 
@@ -43,7 +28,6 @@ export function resetCloudSignInTipDismissal(): void {
   }
 }
 
-type TipState = 'idle' | 'signing' | 'error';
 
 /**
  * recvqgpXSYFNTq: the rail's bottom-left callout slot goes visibly blank
@@ -103,6 +87,9 @@ export function RailAccountRecoveryTip() {
   );
 }
 
+// How long a sign-in waits for the browser before offering to reopen it.
+const ACTIVATION_HINT_DELAY_MS = 5000;
+
 /**
  * The signed-out rail's bottom callout (#5517 "OpenDesign Cloud 版" card).
  * The demo's card jumps to a mock sign-in; the product card IS the sign-in:
@@ -111,89 +98,40 @@ export function RailAccountRecoveryTip() {
  * link fallback — and on success every workspace surface is nudged to
  * re-read, which swaps the rail to the signed-in form (unmounting the card).
  */
-export function CloudSignInTip() {
+export function CloudSignInTip({ sharePrompt = false, className, onLoginSuccess, actionLabel }: { sharePrompt?: boolean; className?: string; onLoginSuccess?: () => void; actionLabel?: string } = {}) {
   const { t } = useI18n();
-  const [state, setState] = useState<TipState>('idle');
-  const [status, setStatus] = useState<VelaLoginStatus | null>(null);
-  const cancelledRef = useRef(false);
-  const mountedRef = useRef(true);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-      cancelledRef.current = true;
-    };
-  }, []);
-
-  async function begin() {
-    if (state === 'signing') return;
-    cancelledRef.current = false;
-    setState('signing');
-    setStatus(null);
-    const current = await fetchVelaLoginStatus();
-    if (cancelledRef.current || !mountedRef.current) return;
-    if (isAmrSessionAuthenticated(current)) {
-      finishSignedIn();
-      return;
-    }
-    const result = await startVelaLogin();
-    if (cancelledRef.current || !mountedRef.current) return;
-    if (!result.ok && !result.alreadyRunning) {
-      console.error('[amr-login] startVelaLogin failed', result);
-      setState('error');
-      return;
-    }
-    const startedAt = Date.now();
-    while (!cancelledRef.current && mountedRef.current) {
-      await new Promise((resolve) => window.setTimeout(resolve, AMR_LOGIN_POLL_INTERVAL_MS));
-      if (cancelledRef.current || !mountedRef.current) return;
-      const next = await fetchVelaLoginStatus();
-      if (cancelledRef.current || !mountedRef.current) return;
-      if (next) setStatus(next);
-      const outcome = amrLoginPollOutcome(next, startedAt);
-      if (outcome === 'signed-in') {
-        finishSignedIn();
-        return;
-      }
-      if (outcome === 'stopped' || outcome === 'timed-out') {
-        // A timed-out attempt's `vela login` child is often still alive (the
-        // daemon never self-reported loginInFlight: false) — release it, or
-        // the daemon still sees a login in flight and a retry click 409s as
-        // alreadyRunning instead of spawning a fresh one, so no new browser
-        // tab ever opens. Mirrors AmrLoginPill / InlineModelSwitcher / EntryShell.
-        if (outcome === 'timed-out') void cancelVelaLogin();
-        console.error('[amr-login] poll did not reach a signed-in status', { outcome, next });
-        setState('error');
-        return;
-      }
-    }
-  }
-
-  function finishSignedIn() {
-    notifyAmrLoginStatusChanged();
-    notifyWorkspaceContextRefresh();
-    notifyWorkspaceBillingRefresh();
-    notifyTeamProjectsChanged();
-    if (mountedRef.current) setState('idle');
-  }
-
-  async function cancel() {
-    cancelledRef.current = true;
-    setState('idle');
-    setStatus(null);
-    await cancelVelaLogin();
-    notifyAmrLoginStatusChanged('login-canceled');
-  }
-
+  // Login flow extracted to `useCloudSignIn` (2026 refactor: item 1/OD-2) so
+  // `ShareSignInButton` can drive the same flow through a real button; this
+  // component's own rendering/behavior below is unchanged.
+  const { state, status, begin, cancel } = useCloudSignIn({ onLoginSuccess });
   const signing = state === 'signing';
 
-  const headBadge = (
-    <div className="entry-local-mode-tip__head">
-      <span className="entry-local-mode-tip__login-badge">
-        <Icon name="log-in" size={14} />
-        {t('settings.amrLogin')}
-      </span>
+  // The "sign-in page didn't open?" line is a fallback: it waits a few
+  // seconds into the attempt (the browser usually opens on its own), unless
+  // the daemon already reports the browser failed to open. Same rule as the
+  // onboarding welcome screen.
+  const [activationHintDue, setActivationHintDue] = useState(false);
+  useEffect(() => {
+    if (!signing) {
+      setActivationHintDue(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setActivationHintDue(true), ACTIVATION_HINT_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [signing]);
+
+  // The pitch and the call-to-action slot stay put across states, so the
+  // card neither jumps in height nor shows a second "Sign in" while one is
+  // already running: the button itself turns into the pending indicator.
+  const pitch = (
+    <div className="entry-local-mode-tip__pitch">
+      <strong className="entry-local-mode-tip__title">
+        <span className="entry-local-mode-tip__title-icon" aria-hidden>
+          <Icon name="sparkles" size={12} />
+        </span>
+        {t('entry.cloudCreditsTitle')}
+      </strong>
+      <p>{t('entry.cloudCreditsBody')}</p>
     </div>
   );
 
@@ -201,7 +139,7 @@ export function CloudSignInTip() {
     <section
       role="button"
       tabIndex={signing ? -1 : 0}
-      className={`entry-local-mode-tip${signing ? ' is-signing' : ''}`}
+      className={`${sharePrompt ? className ?? '' : 'entry-local-mode-tip'}${signing ? ' is-signing' : ''}`}
       onClick={() => {
         if (!signing) void begin();
       }}
@@ -211,32 +149,46 @@ export function CloudSignInTip() {
         event.preventDefault();
         void begin();
       }}
-      aria-label={t('entry.cloudCalloutTitle')}
-      data-testid="entry-cloud-signin-tip"
+      aria-label={actionLabel ?? t(sharePrompt ? 'settings.amrLogin' : 'entry.cloudCalloutTitle')}
+      data-testid={sharePrompt ? 'share-cloud-signin' : 'entry-cloud-signin-tip'}
     >
+      {sharePrompt ? null : pitch}
+      {state === 'error' ? (
+        <p className="entry-local-mode-tip__error" role="alert">
+          {t('settings.amrLoginErrorCompact')}
+        </p>
+      ) : null}
+      <div className="entry-local-mode-tip__head">
+        <span
+          className={`entry-local-mode-tip__login-badge${signing ? ' is-pending' : ''}`}
+          role={signing ? 'status' : undefined}
+        >
+          <Icon name={signing ? 'spinner' : 'log-in'} size={14} />
+          <span>{signing ? t('settings.amrSigningIn') : actionLabel ?? t(sharePrompt ? 'settings.amrLogin' : 'entry.cloudCreditsCta')}</span>
+        </span>
+      </div>
       {signing ? (
         <>
-          {headBadge}
-          <p>{t('settings.amrSigningIn')}</p>
-          {status?.activationUrl ? (
-            <div className="amr-login-activation" role="group">
-              <span className="amr-login-activation__hint">
+          {status?.activationUrl && (activationHintDue || status.browserOpenFailed) ? (
+            <p className="entry-local-mode-tip__activation">
+              <span>
                 {status.browserOpenFailed
-                  ? t('settings.amrActivationBrowserFailed')
-                  : t('settings.amrActivationHint')}
+                  ? <AmrActivationHintText browserOpenFailed />
+                  : t('settings.onboardingActivationPrompt')}
               </span>
-              <div className="amr-login-activation__actions">
-                <a
-                  className="amr-login-activation__open"
-                  href={status.activationUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  {t('settings.amrActivationOpen')}
-                </a>
-              </div>
-            </div>
+              <a
+                className="entry-local-mode-tip__activation-link"
+                href={status.activationUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(event) => event.stopPropagation()}
+              >
+                {status.browserOpenFailed
+                  ? t('settings.amrActivationOpen')
+                  : t('settings.onboardingActivationReopen')}
+                <Icon name="external-link" size={11} />
+              </a>
+            </p>
           ) : null}
           <button
             type="button"
@@ -249,17 +201,7 @@ export function CloudSignInTip() {
             {t('settings.amrCancelSignIn')}
           </button>
         </>
-      ) : state === 'error' ? (
-        <>
-          {headBadge}
-          <p role="alert">{t('settings.amrLoginErrorCompact')}</p>
-        </>
-      ) : (
-        <>
-          <p>{t('entry.cloudCalloutBody')}</p>
-          {headBadge}
-        </>
-      )}
+      ) : null}
     </section>
   );
 }

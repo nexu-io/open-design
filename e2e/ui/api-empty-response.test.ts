@@ -25,7 +25,7 @@ test.beforeEach(async ({ page }) => {
    * `ensureRailOpen` 的那次点击上(`timeout: 0`,一直等到整条用例超时)。
    *
    * 处置和其余 17 个走 `applyStandardMocks` 的 UI 文件一致:把这条**与本用例无关**
-   * 的发版公告挡在外面。本用例考的是「空流应当显示 No output 而不是 Done」。
+   * 的发版公告挡在外面。本用例考的是「空流应当显示批准的失败标题而不是 Done」。
    */
   await suppressWhatsNew(page);
   await page.route('**/api/integrations/vela/status*', async (route) => {
@@ -92,7 +92,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('[P0] @critical API empty stream shows No output instead of Done', async ({ page }) => {
+test('[P0] @critical API empty stream shows approved failure status instead of Done', async ({ page }) => {
   const runRequests = await routeSuccessfulRuns(page, { runIdPrefix: 'api-empty-response-run' });
 
   await gotoEntryHome(page);
@@ -101,8 +101,8 @@ test('[P0] @critical API empty stream shows No output instead of Done', async ({
   await sendPrompt(page, 'Create a login page');
 
   await runRequests.expectCount(1);
-  await expect(page.locator('.assistant-label', { hasText: 'No output' })).toBeVisible();
-  await expect(page.getByText(/provider ended the request/i).first()).toBeVisible();
+  await expect(page.locator('.assistant-label', { hasText: 'The task could not be completed' })).toBeVisible();
+  await expect(page.getByText('This task failed to run. Please retry. If it fails again, please contact support.', { exact: true }).first()).toBeVisible();
   await expect(page.locator('.assistant-label', { hasText: 'Done' })).toHaveCount(0);
 });
 

@@ -58,13 +58,20 @@ jobs:
       suite: p0
   e2e_vitest:
     name: E2E Vitest
-    runs-on: ubuntu-latest
+    # Playwright 1.60.0 does not support Ubuntu 26.04, which ubuntu-latest
+    # began resolving to during prerelease validation. Pin the supported image
+    # so browser installation and E2E runtime startup stay reproducible.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
           ref: ${{ inputs.commit }}
+      # Match PR CI's CPU-derived worker budget. The Vitest default of four
+      # workers can starve concurrently starting web sidecars on hosted runners.
+      - name: Configure CI parallelism
+        uses: ./.github/actions/configure-ci-parallelism
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
         with:
@@ -98,7 +105,9 @@ jobs:
   daemon_unit_tests:
     name: Daemon tests (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Includes checkout/install: prerelease.8 needed 13m27s for tests alone
+    # and exceeded 15m overall. Keep headroom for setup and runner variance.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:

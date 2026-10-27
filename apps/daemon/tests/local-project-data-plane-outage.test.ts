@@ -113,6 +113,12 @@ describe('local project data plane during Workspace authority outage', () => {
       name: 'Read-only mirror outage fixture',
       createdAt: now,
       updatedAt: now,
+      // Landed mirror bytes already carry an exact catalog fact; an outage
+      // must not require inventing an owner identity or admitting a receipt.
+      metadata: { _commentFiles: { schemaVersion: 1, revision: 1, files: [{
+        sourceFileId: randomUUID(), sourceFilePath: 'index.html', entryPath: 'index.html',
+        resourceId: `hub-${mirrorProjectId}`, versionId: 'mirror-v1', retired: false,
+      }] } },
     });
     insertConversation(db, {
       id: mirrorConversationId,
@@ -240,7 +246,7 @@ describe('local project data plane during Workspace authority outage', () => {
         }),
       },
     );
-    expect(mirrorComment.status).toBe(200);
+    expect(mirrorComment.status, await mirrorComment.clone().text()).toBe(200);
     expect(workspaceDirectoryRequests, 'read-only mirror access')
       .toBe(directoryRequestsAfterStartup);
 
@@ -307,6 +313,6 @@ describe('local project data plane during Workspace authority outage', () => {
         }),
       },
     );
-    expect(comment.status).toBe(200);
+    expect(comment.status, await comment.clone().text()).toBe(200);
   });
 });

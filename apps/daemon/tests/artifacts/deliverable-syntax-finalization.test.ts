@@ -7,6 +7,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { finalizeDeliverableSyntax } from '../../src/artifacts/deliverable-syntax-finalization.js';
 import { checkDeliverableSyntax } from '../../src/artifacts/deliverable-syntax.js';
 import * as safeFix from '../../src/artifacts/deliverable-syntax-safe-fix.js';
+import * as syntaxChecker from '../../src/artifacts/deliverable-syntax.js';
+import * as repairDecision from '../../src/artifacts/deliverable-syntax-repair.js';
 
 const roots: string[] = [];
 
@@ -25,6 +27,45 @@ async function htmlFixture(source: string): Promise<string> {
 }
 
 describe('deliverable syntax finalization', () => {
+  it('rejects an invalid repair decision instead of disguising an invariant failure as checker_error', async () => {
+    const projectRoot = await htmlFixture('<script>const items = [1;</script>');
+    vi.spyOn(repairDecision, 'decideDeliverableSyntaxRepair').mockReturnValue({ action: 'accept', next: undefined });
+    await expect(finalizeDeliverableSyntax({
+      artifactKind: 'html', projectRoot, entryFile: 'index.html', processTreeQuiescent: true,
+    })).rejects.toMatchObject({ name: 'DeliverableSyntaxInternalError' });
+  });
+
+  it('rejects unexpected programming errors without exporting their message', async () => {
+    const projectRoot = await htmlFixture('<script>const items = [1;</script>');
+    vi.spyOn(syntaxChecker, 'checkDeliverableSyntax').mockRejectedValueOnce(new TypeError('private source'));
+    await expect(finalizeDeliverableSyntax({
+      artifactKind: 'html', projectRoot, entryFile: 'index.html', processTreeQuiescent: true,
+    })).rejects.toMatchObject({ name: 'DeliverableSyntaxInternalError', message: 'Syntax finalizer internal error' });
+  });
+
+  it.each(['checker', 'proposal'] as const)('warns without leaking an unexpected %s exception', async (stage) => {
+    const source = '<script>const items = [1;</script>';
+    const projectRoot = await htmlFixture(source);
+    const error = Object.assign(new Error('private path and source must not be exported'), { code: 'EIO' });
+    if (stage === 'checker') vi.spyOn(syntaxChecker, 'checkDeliverableSyntax').mockRejectedValueOnce(error);
+    else vi.spyOn(safeFix, 'proposeDeliverableSyntaxSafeFix').mockRejectedValueOnce(error);
+    const result = await finalizeDeliverableSyntax({
+      artifactKind: 'html', projectRoot, entryFile: 'index.html', processTreeQuiescent: true,
+    });
+    expect(result).toMatchObject({
+      action: 'warn', reason: 'check_incomplete',
+      validation: {
+        status: 'incomplete', reason: 'checker_error',
+        finalization: {
+          action: 'warn', initialStatus: stage === 'checker' ? 'incomplete' : 'repairable',
+          stagedPatchCount: 0, committedPatchCount: 0,
+        },
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain(error.message);
+    await expect(fs.readFile(path.join(projectRoot, 'index.html'), 'utf8')).resolves.toBe(source);
+  });
+
   it('accepts a parse-valid final Web deliverable', async () => {
     const projectRoot = await htmlFixture(
       '<!doctype html><script>const ready = true;</script>',
@@ -74,7 +115,7 @@ describe('deliverable syntax finalization', () => {
     });
   });
 
-  it('blocks terminal success when the final Web candidate is still broken', async () => {
+  it('warns without blocking delivery when the final Web candidate is still broken', async () => {
     const projectRoot = await htmlFixture(
       '<!doctype html><script>const broken = ;</script>',
     );
@@ -85,12 +126,12 @@ describe('deliverable syntax finalization', () => {
       entryFile: 'index.html',
       processTreeQuiescent: true,
     })).resolves.toMatchObject({
-      action: 'fail',
+      action: 'warn',
       reason: 'no_safe_fix',
       location: expect.stringMatching(/^index\.html:1:/u),
       validation: {
         status: 'repairable', source: 'run_finalizer',
-        finalization: { action: 'fail', reason: 'no_safe_fix', refusal: 'unsupported_syntax_error' },
+        finalization: { action: 'warn', reason: 'no_safe_fix', refusal: 'unsupported_syntax_error' },
         metrics: { safeFixProposalCount: 1, safeFixProposalDurationMs: expect.any(Number) },
       },
     });
@@ -148,14 +189,14 @@ describe('deliverable syntax finalization', () => {
       entryFile: 'index.html',
       processTreeQuiescent: true,
     })).resolves.toMatchObject({
-      action: 'fail',
+      action: 'warn',
       reason: 'attempt_limit_reached',
       validation: {
         status: 'repairable',
         repairState: { attempt: 8, maxAttempts: 8, mode: 'host_safe_fixer' },
         metrics: { checkCount: 9, repairableCheckCount: 9 },
         finalization: {
-          action: 'fail', initialStatus: 'repairable', stagedPatchCount: 8,
+          action: 'warn', initialStatus: 'repairable', stagedPatchCount: 8,
           committedPatchCount: 0, committedRepairRules: [],
         },
       },
@@ -172,7 +213,7 @@ describe('deliverable syntax finalization', () => {
       artifactKind: 'html', projectRoot, entryFile: 'index.html', processTreeQuiescent: true,
       monotonicNow: () => times.shift() ?? 1002,
     })).resolves.toMatchObject({
-      action: 'fail', reason: 'repair_budget_exceeded',
+      action: 'warn', reason: 'repair_budget_exceeded',
       validation: { repairState: { attempt: 1, maxAttempts: 8 } },
     });
     await expect(fs.readFile(path.join(projectRoot, 'index.html'), 'utf8')).resolves.toBe(source);
@@ -196,7 +237,7 @@ describe('deliverable syntax finalization', () => {
     await expect(finalizeDeliverableSyntax({
       artifactKind: 'html', projectRoot, entryFile: 'index.html', processTreeQuiescent: true,
     })).resolves.toMatchObject({
-      action: 'fail', reason: 'repair_budget_exceeded',
+      action: 'warn', reason: 'repair_budget_exceeded',
       validation: { repairState: { attempt: 2, maxAttempts: 8 } },
     });
     await expect(fs.readFile(path.join(projectRoot, 'index.html'), 'utf8')).resolves.toBe(source);
@@ -236,9 +277,9 @@ describe('deliverable syntax finalization', () => {
       await expect(finalizeDeliverableSyntax({
         artifactKind: 'html', projectRoot, entryFile: 'index.html', processTreeQuiescent: true,
       })).resolves.toMatchObject({
-        action: 'fail', validation: {
+        action: 'warn', validation: {
           status: 'pass', finalization: {
-            action: 'fail', initialStatus: 'repairable', stagedPatchCount: 1,
+            action: 'warn', initialStatus: 'repairable', stagedPatchCount: 1,
             committedPatchCount: 0, committedRepairRules: [],
           },
         },
@@ -255,7 +296,7 @@ describe('deliverable syntax finalization', () => {
       artifactKind: 'html', projectRoot, entryFile: 'index.html', processTreeQuiescent: true,
       monotonicNow: () => times.shift() ?? 1002,
     })).resolves.toMatchObject({
-      action: 'fail', reason: 'repair_budget_exceeded', validation: {
+      action: 'warn', reason: 'repair_budget_exceeded', validation: {
         status: 'pass', finalization: {
           initialStatus: 'repairable', stagedPatchCount: 1, committedPatchCount: 0,
           committedRepairRules: [],
@@ -265,7 +306,7 @@ describe('deliverable syntax finalization', () => {
     await expect(fs.readFile(path.join(projectRoot, 'index.html'), 'utf8')).resolves.toBe(source);
   });
 
-  it('blocks an inconclusive check while the process tree is not quiet', async () => {
+  it('warns on an inconclusive check while the process tree is not quiet', async () => {
     await expect(finalizeDeliverableSyntax({
       artifactKind: 'html',
       projectRoot: '/path/that/does/not/exist',
@@ -273,7 +314,7 @@ describe('deliverable syntax finalization', () => {
       processTreeQuiescent: false,
       checkedAt: 456,
     })).resolves.toMatchObject({
-      action: 'fail',
+      action: 'warn',
       reason: 'check_incomplete',
       validation: {
         status: 'incomplete',
@@ -284,14 +325,14 @@ describe('deliverable syntax finalization', () => {
     });
   });
 
-  it.each(['missing', 'oversize'])('blocks %s input without presenting it as checked', async (kind) => {
+  it.each(['missing', 'oversize'])('warns on %s input without presenting it as checked', async (kind) => {
     const source = kind === 'oversize' ? `<script>${' '.repeat(2 * 1024 * 1024)}</script>` : '';
     const projectRoot = await htmlFixture(source);
     if (kind === 'missing') await fs.unlink(path.join(projectRoot, 'index.html'));
     await expect(finalizeDeliverableSyntax({
       artifactKind: 'html', projectRoot, entryFile: 'index.html', processTreeQuiescent: true,
     })).resolves.toMatchObject({
-      action: 'fail', reason: 'check_incomplete', validation: { status: 'incomplete' },
+      action: 'warn', reason: 'check_incomplete', validation: { status: 'incomplete' },
     });
   });
 

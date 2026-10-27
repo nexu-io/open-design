@@ -14,7 +14,7 @@
 // `ChatPane` 在这一层是 mock 的(它自带半个应用),所以这里断言的是
 // **ProjectView 把哪份数据交给了 ChatPane**;两段靠同一个 prop 名接在一起。
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import {
   buildWorkspacePermissions,
   buildWorkspaceSeatSummary,
@@ -28,8 +28,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProjectView } from '../../src/components/ProjectView';
 import type { ProjectWorkspaceScopeState } from '../../src/collab/useProjectWorkspaceScope';
 import { resetWorkspaceContextCache } from '../../src/collab/useWorkspaceContext';
-import { fetchAmrWalletSnapshot, streamViaDaemon } from '../../src/providers/daemon';
+import { advanceWorkspaceAccountGeneration, resetWorkspaceAccountGeneration } from '../../src/collab/workspace-identity';
+import { fetchAmrWalletSnapshot, fetchChatRunStatus, reattachDaemonRun, streamViaDaemon } from '../../src/providers/daemon';
 import { checkAmrBalanceGate } from '../../src/runtime/amr-balance-gate';
+import { checkAmrFundingFeedback } from '../../src/runtime/amr-funding-feedback';
 import {
   createConversation,
   listConversations,
@@ -168,6 +170,10 @@ vi.mock('../../src/runtime/amr-balance-gate', async () => {
 
 vi.mock('../../src/providers/project-events', () => ({
   useProjectFileEvents: vi.fn(),
+}));
+
+vi.mock('../../src/runtime/amr-funding-feedback', () => ({
+  checkAmrFundingFeedback: vi.fn().mockResolvedValue('unknown'),
 }));
 
 // 呈现层曾经用 `isPaidAmrPlan(await resolveAmrPlan(...))` 把免费档的告警滤掉。
@@ -546,6 +552,7 @@ describe('跑到一半余额不足:谁点亮升级卡', () => {
     // 发送前那道闸门放行 —— 这一页要的正是「闸门看不出问题,run 起来了,
     // 跑到一半才死在钱上」那一格。
     mockedCheckAmrBalanceGate.mockResolvedValue({ kind: 'allow' });
+    vi.mocked(checkAmrFundingFeedback).mockResolvedValue('unknown');
     workspaceScopeMocks.projectScope = { loading: true, scope: null };
     workspaceScopeMocks.ambientContext = CALLER_CONTEXT;
     projectCollabMocks.writerAuthority = 'allowed';
@@ -555,6 +562,7 @@ describe('跑到一半余额不足:谁点亮升级卡', () => {
 
   afterEach(() => {
     cleanup();
+    resetWorkspaceAccountGeneration();
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
@@ -571,6 +579,112 @@ describe('跑到一半余额不足:谁点亮升级卡', () => {
     await waitFor(() =>
       expect(screen.getByTestId('amr-balance-card-prop').textContent).toBe('0'),
     );
+  });
+
+  it('opens the funding dialog before the post-failure wallet read resolves', async () => {
+    mockedFetchAmrWalletSnapshot.mockImplementation(() => new Promise(() => undefined));
+    workspaceBillingResponse = provenWorkspaceBilling('0');
+    failMidRunWith('AMR_INSUFFICIENT_BALANCE');
+    await sendOnce();
+    await waitFor(() => expect(screen.queryByTestId('amr-balance-dialog')).not.toBeNull());
+  });
+
+  it('shows independent funding feedback while agent startup is still pending, without cancellation', async () => {
+    vi.mocked(checkAmrFundingFeedback).mockResolvedValue('insufficient');
+    mockedStreamViaDaemon.mockImplementation(() => new Promise(() => {}));
+    await sendOnce();
+    await screen.findByTestId('amr-balance-dialog');
+    const options = mockedStreamViaDaemon.mock.calls[0]![0];
+    expect(options.signal?.aborted).toBe(false);
+    expect(options.cancelSignal?.aborted).toBe(false);
+    expect(screen.getByTestId('failed-assistant-id').textContent).toBe('');
+  });
+
+  it('starts the run while preflight is pending and ignores its negative result after output', async () => {
+    let finish!: (result: 'insufficient') => void;
+    vi.mocked(checkAmrFundingFeedback).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    mockedStreamViaDaemon.mockImplementation(() => new Promise(() => {}));
+    await sendOnce();
+    const options = mockedStreamViaDaemon.mock.calls[0]![0];
+    await act(async () => {
+      options.handlers.onDelta('The task is already generating.');
+      finish('insufficient');
+    });
+    expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
+    expect(options.cancelSignal?.aborted).toBe(false);
+  });
+
+  it('does not check funding for a local agent', async () => {
+    mockedStreamViaDaemon.mockImplementation(() => new Promise(() => {}));
+    renderProjectView({
+      project: { ...project(), pendingPrompt: null } as never,
+      config: { ...config, agentId: 'codex' },
+      agents: [{ id: 'codex', name: 'Codex', available: true }] as unknown as AgentInfo[],
+    });
+    const send = await screen.findByTestId('normal-send');
+    await waitFor(() => expect((send as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(send);
+    await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalled());
+    expect(checkAmrFundingFeedback).not.toHaveBeenCalled();
+  });
+
+  it('does not reopen a dismissed dialog when the same run reports its failure again', async () => {
+    mockedFetchAmrWalletSnapshot.mockResolvedValue(snapshot('0'));
+    workspaceBillingResponse = provenWorkspaceBilling('0');
+    failMidRunWith('AMR_INSUFFICIENT_BALANCE');
+    await sendOnce();
+    const dialog = await screen.findByTestId('amr-balance-dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'chat.amrBalanceGate.laterCta' }));
+    expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
+    const options = mockedStreamViaDaemon.mock.calls[0]![0];
+    await act(async () => {
+      await options.handlers.onError(Object.assign(new Error('insufficient balance'), {
+        code: 'AMR_INSUFFICIENT_BALANCE',
+      }));
+    });
+    expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
+  });
+
+  it('ignores a late funding rejection after the account changes', async () => {
+    mockedFetchAmrWalletSnapshot.mockResolvedValue(snapshot('0'));
+    workspaceBillingResponse = provenWorkspaceBilling('0');
+    mockedStreamViaDaemon.mockImplementation(async (options) => {
+      options.onRunCreated?.('run-before-account-change');
+    });
+    await sendOnce();
+    advanceWorkspaceAccountGeneration('new-account');
+    const options = mockedStreamViaDaemon.mock.calls[0]![0];
+    await act(async () => {
+      await options.handlers.onError(Object.assign(new Error('insufficient balance'), {
+        code: 'AMR_INSUFFICIENT_BALANCE',
+      }));
+    });
+    expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
+  });
+
+  it.each(['running', 'failed'] as const)('reattaches a %s run without treating historical failure as live', async (status) => {
+    mockedFetchAmrWalletSnapshot.mockResolvedValue(snapshot('0'));
+    workspaceBillingResponse = provenWorkspaceBilling('0');
+    mockedListMessages.mockResolvedValue([{
+      id: 'assistant-reattach', role: 'assistant', content: 'Working', createdAt: 1,
+      agentId: 'amr', runId: 'run-reattach', runStatus: 'running',
+    }]);
+    vi.mocked(fetchChatRunStatus).mockResolvedValue({
+      id: 'run-reattach', projectId: PROJECT_ID,
+      conversationId: conversation(PROJECT_ID).id,
+      assistantMessageId: 'assistant-reattach', agentId: 'amr', status,
+      createdAt: 1, updatedAt: 2, exitCode: null, signal: null,
+    });
+    vi.mocked(reattachDaemonRun).mockImplementation(async () => {});
+    renderProjectView({ project: { ...project(), pendingPrompt: null } as never });
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalled());
+    const options = vi.mocked(reattachDaemonRun).mock.calls[0]![0];
+    await act(async () => {
+      await options.handlers.onError(Object.assign(new Error('insufficient balance'), {
+        code: 'AMR_INSUFFICIENT_BALANCE',
+      }));
+    });
+    expect(screen.queryByTestId('amr-balance-dialog') !== null).toBe(status === 'running');
   });
 
   /*
@@ -803,6 +917,7 @@ describe('T61 ④ 存档:那一轮的余额不随后来的钱包改写', () => {
       expect(screen.getByTestId('amr-balance-anchor-prop').textContent).toBe(FAILED_TURN_ID),
     );
     expect(screen.getByTestId('amr-balance-card-prop').textContent).toBe('0.35');
+    expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
   });
 
   /**

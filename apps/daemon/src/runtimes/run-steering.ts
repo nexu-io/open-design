@@ -10,8 +10,9 @@
  * fails silently if we guess:
  *
  *  1. The runtime delivers its prompt as `stream-json`. That is the only writer
- *     that leaves stdin open past the opening prompt — every other runtime goes
- *     through `writePromptAndEndStdin`, so a later write lands on a closed pipe.
+ *     that leaves stdin open past the opening prompt — every other plain-text
+ *     runtime gets its whole prompt as a file-backed stdin at spawn
+ *     (`spawnAgentProcess`), so there is no pipe left to write to.
  *     This is a permanent property of the agent, so callers should stop
  *     advertising the affordance rather than retry.
  *  2. The run is still live.

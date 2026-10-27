@@ -8,7 +8,7 @@ button {
   height: 36px;
   padding: 0 var(--spacing-16, 16px);
   font-size: var(--font-size-14, 14px);
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1;
   white-space: nowrap;
   color: var(--text);
@@ -410,4 +410,62 @@ code {
   background-color: var(--text-strong);
   -webkit-mask: url(/brand-icon.svg) center / contain no-repeat;
   mask: url(/brand-icon.svg) center / contain no-repeat;
+}
+
+/* -------- Hover marquee ---------------------------------------------- */
+/* Pairs with <MarqueeLabel> (components/MarqueeLabel.tsx). The slot is a
+   fixed clipping window; the text inside it is what travels, so the ellipsis
+   lives on the inner span rather than on the box the layout positions.
+   Consumers keep their own class on the slot for sizing/typography — this adds
+   only the clipping and the motion. */
+.od-marquee {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.od-marquee__text {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Written as `*:hover` rather than a bare `:hover`: same match, same specificity,
+   but a selector that still parses once a test harness strips the state
+   pseudo-class off it (tests/components/chat/queue-draft-alignment.test.tsx).
+   Plays while the slot's PARENT is hovered or keyboard-focused — the row or
+   button the label sits in, so crossing the leading icon starts it too. The
+   240ms delay keeps a sweep down a list from firing every row the pointer has
+   already left. One pass, then it holds at the tail (`forwards`); leaving
+   drops the animation and the ellipsis returns.
+   `data-marquee` is set by MarqueeLabel only when the name actually overflows,
+   so labels that already fit never move. */
+*:hover > .od-marquee[data-marquee='on'] > .od-marquee__text,
+*:focus-visible > .od-marquee[data-marquee='on'] > .od-marquee__text {
+  flex: 0 0 auto;
+  max-width: none;
+  text-overflow: clip;
+  animation: od-marquee-slide var(--marquee-duration, 1200ms) ease-in-out 240ms 1
+    forwards;
+}
+@keyframes od-marquee-slide {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(var(--marquee-shift, 0px));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* No crawl for readers who asked for none — the name stays truncated, which
+     is the state the ellipsis already advertises. */
+  *:hover > .od-marquee[data-marquee='on'] > .od-marquee__text,
+  *:focus-visible > .od-marquee[data-marquee='on'] > .od-marquee__text {
+    flex: 0 1 auto;
+    max-width: 100%;
+    text-overflow: ellipsis;
+    animation: none;
+  }
 }

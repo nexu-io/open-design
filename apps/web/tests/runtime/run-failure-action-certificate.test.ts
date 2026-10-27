@@ -59,6 +59,14 @@ const CAUSE_KEY_BY_DETAIL: Record<
   local_storage_failure: 'chat.runError.clientEnvironmentCause.localStorage',
 };
 
+const COPY_NAME_BY_DETAIL = {
+  certificate_failure: 'certificateFailure',
+  proxy_configuration: 'proxyConfiguration',
+  network_configuration: 'networkConfiguration',
+  host_policy_block: 'hostPolicyBlock',
+  local_storage_failure: 'localStorageFailure',
+} as const;
+
 describe('S30 · daemon 判定不可重试的环境失败,卡片不能给〔重试〕主按钮', () => {
   it('certificate_failure(同事撞上的那一格)不该给〔重试〕', () => {
     const ui = resolveRunFailureUi('AGENT_EXECUTION_FAILED', 'certificate_failure', 'amr');
@@ -98,8 +106,8 @@ describe('S30 · daemon 判定不可重试的环境失败,卡片不能给〔重�
   it.each(CLIENT_ENVIRONMENT_DETAILS)('%s 用 S30 的标题与正文', (detail) => {
     const ui = resolveRunFailureUi('AGENT_EXECUTION_FAILED', detail, 'amr');
 
-    expect(ui.titleKey).toBe('chat.runError.title.clientEnvironment');
-    expect(ui.messageKey).toBe('chat.runError.clientEnvironmentMessage');
+    expect(ui.titleKey).toBe(`chat.runError.title.${COPY_NAME_BY_DETAIL[detail]}`);
+    expect(ui.messageKey).toBe(`chat.runError.${COPY_NAME_BY_DETAIL[detail]}Message`);
     expect(ui.messageCauseKey).toBe(CAUSE_KEY_BY_DETAIL[detail]);
   });
 
@@ -117,27 +125,29 @@ describe('S30 · daemon 判定不可重试的环境失败,卡片不能给〔重�
   /**
    * ⚠️ 这一格**没有**换成产品文档 S30 的润色列,判据写在
    * `amr-guidance.ts` 的 `clientEnvironmentCard` 文档注释里:S30 唯一那行润色格
-   * 只适用于「地区不支持」,而这五格一个都不是地区拦截。所以正文继续钉旧文案 ——
-   * 「宁可留旧的,也不许自拟」。
+   * 只适用于「地区不支持」,而这五格一个都不是地区拦截。所以正文现在采用补充文档 revision 96 的证书文案。
    */
   it('S30 的中文正文逐字照设计稿,并且不承诺「配好证书就能用」', () => {
-    expect(zhCN['chat.runError.title.clientEnvironment']).toBe('网络环境不对');
-    expect(zhCN['chat.runError.clientEnvironmentMessage']).toBe(
-      '看起来走了代理或公司网络，{agent} 拒绝了请求（{cause}）。换一个网络出口，或在设置里调整代理。',
+    expect(zhCN['chat.runError.title.certificateFailure']).toBe('无法安全连接服务');
+    expect(zhCN['chat.runError.certificateFailureMessage']).toBe(
+      '连接服务时未通过安全验证，请尝试更换网络。',
     );
     expect(zhCN['chat.runError.clientEnvironmentCause.certificate']).toBe('证书校验失败');
     expect(zhCN['chat.runError.openSettingsCta']).toBe('去设置');
     // 上游实测某些版本配了证书也没用,所以文案里不能出现这种承诺。
     for (const dict of [en, zhCN]) {
-      const body = dict['chat.runError.clientEnvironmentMessage'];
+      const body = dict['chat.runError.certificateFailureMessage'];
       expect(body).not.toMatch(/安装证书|导入证书|install (?:the )?certificate/i);
     }
   });
 
-  it('五格的 {cause} 各不相同,卡上不会五格一个说法', () => {
+  it('五格的最终正文各不相同,卡上不会五格一个说法', () => {
     const rendered = new Set(
       CLIENT_ENVIRONMENT_DETAILS.map(
-        (detail) => zhCN[CAUSE_KEY_BY_DETAIL[detail] as keyof typeof zhCN],
+        (detail) => {
+          const ui = resolveRunFailureUi('AGENT_EXECUTION_FAILED', detail, 'amr');
+          return ui.messageKey ? zhCN[ui.messageKey] : null;
+        },
       ),
     );
     expect(rendered.size).toBe(CLIENT_ENVIRONMENT_DETAILS.length);

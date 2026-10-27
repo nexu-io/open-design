@@ -183,10 +183,11 @@ afterEach(() => {
 
 describe('先证明这把尺子看得见缺陷', () => {
   /**
-   * 把接缝上那三条排版声明整体抽掉,读数必须掉回全站 `body` 的 400 / 14px / 125%。
+   * 把接缝上那三条排版声明整体抽掉,读数必须掉回全站 `body` 的 600 / 14px / 125%
+   * (全站字重阶梯的默认档,见 `tests/styles/font-weight-normalization.test.ts`)。
    * 抽掉之后仍然是 500 / 13px,说明量到的不是这三条,那这份测试就是假绿。
    */
-  it('抽掉接缝上的排版声明,读数掉回全站 body 的 14px / 400 / 125%', () => {
+  it('抽掉接缝上的排版声明,读数掉回全站 body 的 14px / 600 / 125%', () => {
     const withoutBaseline = CHAT_ROOT_CSS.split('\n')
       .filter((line) => !/^\s*(font-weight|font-size|line-height)\s*:/.test(line))
       .join('\n');
@@ -197,7 +198,7 @@ describe('先证明这把尺子看得见缺陷', () => {
     mount(withoutBaseline);
     const seam = read('seam');
     expect(seam.fontSize).toBe('14px');
-    expect(seam.fontWeight).toBe('normal');
+    expect(seam.fontWeight).toBe('600');
     expect(seam.lineHeight).toBe('125%');
   });
 
@@ -278,22 +279,22 @@ describe('反向守卫:全站 body 没被顺手推过去', () => {
     expect(bodyRule()).toMatch(/font-size:\s*var\(--font-size-14,\s*14px\)/);
   });
 
-  it('全站 body 仍然不声明 font-weight(继承 400)', () => {
-    expect(
-      /font-weight\s*:/.test(bodyRule()),
-      '全站 body 出现了 font-weight —— 基线被推到聊天面板之外了',
-    ).toBe(false);
+  it('全站 body 走的是全站阶梯的 600,不是面板的 500', () => {
+    // 全站默认字重由 OPEND-2553 C2 钉在 600(`font-weight-normalization.test.ts`);
+    // 面板的 500 只归接缝层,不许反过来推进 `base.css` 的 body。
+    expect(bodyRule()).toMatch(/font-weight:\s*600/);
+    expect(bodyRule()).not.toMatch(/font-weight:\s*500/);
   });
 
   it('全站 body 仍然是 125% 行高', () => {
     expect(bodyRule()).toMatch(/line-height:\s*125%/);
   });
 
-  it('jsdom 里量出来的 body 也还是 14px / 400 / 125%', () => {
+  it('jsdom 里量出来的 body 也还是 14px / 600 / 125%', () => {
     mount(CHAT_ROOT_CSS);
     const cs = getComputedStyle(document.body);
     expect(cs.fontSize).toBe('14px');
-    expect(cs.fontWeight).toBe('normal');
+    expect(cs.fontWeight).toBe('600');
     expect(cs.lineHeight).toBe('125%');
   });
 });

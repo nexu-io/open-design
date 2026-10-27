@@ -1,0 +1,131 @@
+.stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #fff;
+}
+
+/* A display, not an editor. `pointer-events: none` is load-bearing twice over:
+   an iframe otherwise swallows dragenter/dragover and the pane's drag-to-upload
+   target would stop firing, and a half-built page must not take clicks meant
+   for the panel around it. */
+.frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
+  pointer-events: none;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Positioned by transform from the frame's own coordinates, so it glides
+   between targets instead of jumping. */
+.cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  width: 22px;
+  height: 22px;
+  transition: transform 260ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.cursorGlyph {
+  position: absolute;
+  inset: 0;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.28));
+}
+
+.cursorRing {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  opacity: 0;
+  animation: df-build-focus-ring 1.6s cubic-bezier(0.23, 1, 0.32, 1) infinite;
+}
+
+/* The description the cursor carries: what is being made, right here. */
+.cursorCaption {
+  position: absolute;
+  top: 22px;
+  left: 14px;
+  max-width: 320px;
+  padding: 4px 9px;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--bg-panel);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
+}
+
+/* Bottom-left status: the file being built, and the step log under it. Sits on
+   a soft scrim so it stays legible over any page. */
+.dock {
+  position: absolute;
+  left: 16px;
+  bottom: 14px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: min(60%, 420px);
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--bg-panel) 88%, transparent);
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+}
+
+.dockCaption {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dockFeed {
+  max-height: 74px;
+  text-align: left;
+}
+
+@keyframes df-build-focus-ring {
+  0% {
+    opacity: 0.55;
+    transform: scale(0.9);
+  }
+  70% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cursor {
+    transition: none;
+  }
+  .cursorRing {
+    animation: none;
+  }
+}

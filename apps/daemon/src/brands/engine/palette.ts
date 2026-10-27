@@ -1,8 +1,7 @@
 // @ts-nocheck
 /**
- * Palette engine — a faithful, dependency-free port of @ant-design/colors'
- * `generate()` HSV algorithm (the L1 "color algorithm" of the brand framework,
- * see docs/brand-framework.md §1/§5).
+ * Palette engine — a faithful, dependency-free port of the @ant-design/colors
+ * `generate()` HSV algorithm.
  *
  * One seed color → a deterministic 10-step ladder `[5 lighter, base, 4 darker]`
  * where index 5 ≈ the seed. The same algorithm, run on a dark background with
@@ -236,8 +235,7 @@ export function generate(
 
 // ─────────────────────────── 13 preset palettes (12 + grey) ─────────────────
 //
-// Base colors are the real Ant Design seeds (docs/brand-framework.md §1, "12+1
-// 预设色板"). Each ladder is computed by generate() so it stays in lockstep
+// Base colors are the real Ant Design seeds (the "12+1 预设色板"). Each ladder is computed by generate() so it stays in lockstep
 // with the algorithm above rather than being hand-typed.
 
 const presetSeeds: Record<string, string> = {

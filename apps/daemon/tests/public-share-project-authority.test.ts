@@ -1,0 +1,100 @@
+import Database from 'better-sqlite3';
+import express from 'express';
+import { createServer } from 'node:http';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { expect, it, vi } from 'vitest';
+import { buildWorkspacePermissions, buildWorkspaceSeatSummary, type WorkspaceCollabContext, type TeamProject } from '@open-design/contracts';
+import { createCollabRuntime } from '../src/collab/runtime.js';
+import { registerCollabSyncRoutes } from '../src/routes/collab-sync.js';
+import { migratePublicFilePublications, createSqlitePublicFilePublicationStore } from '../src/collab/public-file-publication-store.js';
+import { migrateCommentRelayOutbox } from '../src/collab/comment-relay-outbox.js';
+import { createPublicSharePublishingFixture } from './public-share-publishing-fixture.js';
+import { ensurePublicShareProject } from '../src/collab/public-share-project-bootstrap.js';
+
+it.each([null, 'another-member', 'owner', 'catalog-owner', 'placeholder', 'catalog-other-owner', 'catalog-placeholder', 'bootstrap-failed', 'bootstrap-root-failed'])('catalog absent, durable local author=%s: reject unknown author or bootstrap before file publication', async localOwner => {
+  const root = await mkdtemp(join(tmpdir(), 'od-catalog-authority-'));
+  const db = new Database(':memory:');
+  migratePublicFilePublications(db); migrateCommentRelayOutbox(db);
+  const store = createSqlitePublicFilePublicationStore(db);
+  const context: WorkspaceCollabContext = {
+    workspaceId: 'w', workspaceMemberId: 'owner', workspaceType: 'personal', role: 'owner',
+    memberStatus: 'active', lifecycleState: 'active', billingState: 'active', planId: null, providerMode: 'platform_credits',
+    seatSummary: buildWorkspaceSeatSummary({ seatLimit: 1, usedSeats: 1 }),
+    permissions: buildWorkspacePermissions({ role: 'owner', lifecycleState: 'active' }),
+  };
+  const runtime = createCollabRuntime({ workspaceContext: { current: async () => context } });
+  const events: string[] = [];
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  let catalog: TeamProject | null = localOwner?.startsWith('catalog-')
+    ? { projectId: 'p', ownerMemberId: localOwner === 'catalog-other-owner' ? 'other' : 'owner', sharedAt: new Date(1).toISOString() } : null;
+  const fixture = createPublicSharePublishingFixture(db, store, async () => {
+    events.push('file-upload'); return JSON.stringify({ id: 'file-version', version: 1 });
+  });
+  if (!fixture.sharePublishing) throw new Error('fixture missing publisher');
+  const sourceFileId = vi.fn<NonNullable<typeof fixture.sharePublishing.sourceFileId>>((scope, project) => {
+    expect(project).toBe(catalog);
+    return fixture.sharePublishing!.sourceFileId!(scope);
+  });
+  const admitFileReceipt = vi.fn<NonNullable<typeof fixture.sharePublishing.admitFileReceipt>>(async (scope) => {
+    expect(scope.sourceFileId).toBe(sourceFileId.mock.results[0]!.value);
+  });
+  const publisher = { ...fixture.sharePublishing, sourceFileId, admitFileReceipt, ensureProject: async () => {
+    events.push('root-and-catalog');
+    if (localOwner === 'bootstrap-failed') throw new Error('private credential https://private.invalid/private-path');
+    if (localOwner === 'bootstrap-root-failed') return ensurePublicShareProject({
+      projectId: 'p', principal: { teamId: 'w', memberId: 'owner', role: 'owner', lifecycleState: 'active', workspaceType: 'personal' },
+      describeProject: () => ({ metadata: {} }),
+      run: async () => { throw Object.assign(new Error('private credential'), { stderr: 'private response' }); },
+    });
+    catalog = { projectId: 'p', ownerMemberId: 'owner', sharedAt: new Date(1).toISOString() };
+    return catalog;
+  } };
+  const app = express(); app.use(express.json());
+  const deps = { collab: runtime, ...fixture, sharePublishing: publisher,
+    verifyWorkspaceRequest: async () => context, resolveSharedProject: async () => catalog,
+    resolveLocalPublicShareOwner: () => localOwner === 'placeholder' || localOwner?.startsWith('bootstrap-') ? 'owner' : localOwner, resolveProjectDir: () => root,
+    projectStore: { has: () => true, register: () => {}, get: () => ({ metadata: localOwner === 'placeholder' || localOwner === 'catalog-placeholder' ? { sharedProjectPlaceholderAt: 1 } : {} }) },
+    publicFilePublicationStore: store,
+  };
+  registerCollabSyncRoutes(app, deps);
+  const server = createServer(app);
+  try {
+    await writeFile(join(root, 'index.html'), '<h1>Own file</h1>');
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address(); if (!address || typeof address === 'string') throw new Error('no listener');
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/projects/p/files/index.html/publish-public`, { method: 'POST' });
+    const body = await response.json();
+    if (localOwner?.startsWith('bootstrap-')) {
+      expect(response.status).toBe(503);
+      expect(body).toEqual({ error: 'WORKSPACE_PROJECT_OWNERSHIP_UNAVAILABLE' });
+      expect(events).toEqual(['root-and-catalog']);
+      expect(warn).toHaveBeenCalledExactlyOnceWith('[od] public share diagnostic', expect.any(String));
+      expect(JSON.parse(warn.mock.calls[0]![1] as string)).toEqual({
+        operation: 'bootstrap', stage: localOwner === 'bootstrap-failed' ? 'bootstrap' : 'bootstrap_catalog_upsert', status: 503,
+        errorCode: 'WORKSPACE_PROJECT_OWNERSHIP_UNAVAILABLE', reason: 'unknown', durationMs: expect.any(Number),
+      });
+    } else if (localOwner !== 'owner' && localOwner !== 'catalog-owner') {
+      expect(response.status).toBe(403);
+      expect(body).toEqual({ error: 'WORKSPACE_PROJECT_PUBLISH_DENIED' });
+      expect(events).toEqual([]);
+    } else {
+      expect(response.status).toBe(200);
+      expect(events).toEqual(localOwner === 'catalog-owner' ? ['file-upload'] : ['root-and-catalog', 'file-upload']);
+      expect(sourceFileId).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ projectId: 'p', filePath: 'index.html' }), localOwner === 'catalog-owner' ? catalog : null);
+      expect(admitFileReceipt).toHaveBeenCalledOnce();
+      expect(catalog).toMatchObject({ projectId: 'p', ownerMemberId: 'owner' });
+      expect(body).toMatchObject({ status: 'published', receipt: { version: 1 } });
+      if (localOwner === 'catalog-owner') {
+        const state = await fetch(`http://127.0.0.1:${address.port}/api/projects/p/files/index.html/publish-public`);
+        expect(state.status).toBe(200);
+        expect(sourceFileId).toHaveBeenLastCalledWith(expect.objectContaining({ projectId: 'p', filePath: 'index.html' }), catalog);
+      }
+    }
+  } finally {
+    server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve()));
+    warn.mockRestore();
+    runtime.dispose(); db.close(); await rm(root, { recursive: true, force: true });
+  }
+});

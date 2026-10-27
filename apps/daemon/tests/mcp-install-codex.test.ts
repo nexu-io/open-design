@@ -8,6 +8,7 @@ import {
   createCodexCliInvocation,
   installCodexMcp,
   probeCodexInstall,
+  refreshOwnedCodexMcp,
   setCodexRunner,
   uninstallCodexMcp,
   type CodexRunner,
@@ -193,5 +194,62 @@ describe('codex-cli uninstall', () => {
     const runner = makeStubRunner(async () => ({ exitCode: 1, stdout: '', stderr: 'Error: not found\n' }));
     setCodexRunner(runner);
     await expect(uninstallCodexMcp('open-design')).rejects.toThrow(/not found/);
+  });
+});
+
+describe('refreshOwnedCodexMcp', () => {
+  const spec = {
+    name: 'open-design',
+    command: '/Applications/Open Design Prerelease.app/Contents/Frameworks/Helper',
+    args: ['/Applications/Open Design Prerelease.app/cli.js', 'mcp'],
+    env: { OD_MCP_BOOTSTRAP_ARGS: '["--headless","--od-mcp-managed"]' },
+  };
+  const existingJson = JSON.stringify({
+    name: 'open-design',
+    enabled: true,
+    transport: { type: 'stdio', command: '/old/Helper', args: ['/old/cli.js', 'mcp'], env: { OD_DATA_DIR: '/data/prerelease' } },
+  });
+
+  it('rewrites a registration that belongs to this install', async () => {
+    const runner = makeStubRunner(async () => ({ exitCode: 0, stdout: existingJson, stderr: '' }));
+    setCodexRunner(runner);
+    const isOwned = vi.fn(() => true);
+    await expect(refreshOwnedCodexMcp(spec, isOwned)).resolves.toBe('refreshed');
+    expect(isOwned).toHaveBeenCalledWith({ command: '/old/Helper', args: ['/old/cli.js', 'mcp'], env: { OD_DATA_DIR: '/data/prerelease' } });
+    expect(runner.calls.map((call) => call.args.slice(0, 3))).toEqual([
+      ['mcp', 'get', 'open-design'],
+      ['mcp', 'add', 'open-design'],
+    ]);
+  });
+
+  it("leaves another install's registration untouched", async () => {
+    const runner = makeStubRunner(async () => ({ exitCode: 0, stdout: existingJson, stderr: '' }));
+    setCodexRunner(runner);
+    await expect(refreshOwnedCodexMcp(spec, () => false)).resolves.toBe('foreign');
+    // Only the read ran: nothing was written.
+    expect(runner.calls.map((call) => call.args)).toEqual([['mcp', 'get', 'open-design', '--json']]);
+  });
+
+  it('leaves a registration it cannot read untouched', async () => {
+    const runner = makeStubRunner(async () => ({ exitCode: 0, stdout: 'not json', stderr: '' }));
+    setCodexRunner(runner);
+    await expect(refreshOwnedCodexMcp(spec, () => true)).resolves.toBe('unreadable');
+    expect(runner.calls).toHaveLength(1);
+  });
+
+  it('never creates a registration the user has not installed', async () => {
+    const runner = makeStubRunner(async () => ({ exitCode: 1, stdout: '', stderr: 'not found' }));
+    setCodexRunner(runner);
+    await expect(refreshOwnedCodexMcp(spec, () => true)).resolves.toBe('absent');
+    expect(runner.calls).toHaveLength(1);
+  });
+
+  it('does nothing without a Codex CLI', async () => {
+    setCodexRunner({
+      async run() {
+        throw Object.assign(new Error('spawn codex ENOENT'), { code: 'ENOENT' });
+      },
+    });
+    await expect(refreshOwnedCodexMcp(spec, () => true)).resolves.toBe('unavailable');
   });
 });

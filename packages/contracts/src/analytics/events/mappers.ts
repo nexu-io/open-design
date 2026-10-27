@@ -4,7 +4,7 @@
  */
 import { HYPERFRAMES_VIDEO_MODEL } from '../../api/projects.js';
 import type { AnalyticsConfigureGlobals, TrackingConfigureAvailability, TrackingConfigureType, TrackingRuntimeType } from '../public-params.js';
-import type { TrackingArtifactKind, TrackingByokProviderId, TrackingCliProviderId, TrackingExecutionMode, TrackingFeedbackProviderId, TrackingFidelity, TrackingFileSizeBucket, TrackingFileType, TrackingHarness, TrackingNewProjectTab, TrackingProjectKind } from './shared-enums.js';
+import type { TrackingArtifactKind, TrackingByokProviderId, TrackingCliProviderId, TrackingExecutionMode, TrackingFeedbackProviderId, TrackingFidelity, TrackingFileSizeBucket, TrackingFileType, TrackingHarness, TrackingNewProjectTab, TrackingProjectKind, TrackingProjectIntent } from './shared-enums.js';
 import type { TrackingSessionMode, TrackingSettingsArea } from './ui-click.js';
 // ---- Enum mapping helpers (code ↔ CSV wire format) -----------------------
 
@@ -38,6 +38,25 @@ export interface ProjectKindTrackingHints {
   intent?: string | null | undefined;
   platform?: string | null | undefined;
   platformTargets?: readonly string[] | null | undefined;
+}
+
+/** Preserve the saved scene across routing changes, revisits and continuations. */
+export function projectIntentFromMetadataToTracking(
+  metadata: { intent?: string | null } | null | undefined,
+): TrackingProjectIntent {
+  switch (metadata?.intent) {
+    case 'live-artifact':
+    case 'web-clone':
+    case 'document':
+    case 'webgl-experience':
+    case 'worker-visualizer':
+    case 'marketing':
+    case 'hyperframes':
+    case 'motion-design':
+      return metadata.intent;
+    default:
+      return 'unknown';
+  }
 }
 
 function isMobileSurface(hints: ProjectKindTrackingHints | undefined): boolean {
@@ -548,6 +567,41 @@ export function normalizeCustomReason(
  * ordinary route" are different facts and the dashboard should be able to tell
  * them apart.
  */
+/**
+ * The OD Next gate that refused a turn, for `run_finished`.
+ *
+ * `run_finished.result` is derived from the PHYSICAL run status, and a refused
+ * OD Next turn normally exits 0 with a complete reply on screen — so this whole
+ * class of failure reported `result: 'success'` while the user was looking at a
+ * red card, and nothing queryable disagreed.
+ *
+ * Only a TERMINAL `blocked` projection counts. A task still running may block
+ * later or may not, and a `completed` / `canceled` one refused nothing; either
+ * would make the field mean "an OD Next task passed through here", which is
+ * what `harness` already says.
+ *
+ * `reasonCodes[0]` deliberately, not the whole list: it is the same value the
+ * failure card keys on and the same one the daemon logs, so the metric and the
+ * thing the user saw cannot drift apart.
+ */
+export function odNextBlockedAnalyticsFromStrategyTask(
+  strategyTask: {
+    terminal?: boolean;
+    outcome?: string;
+    // `| undefined` explicitly: the daemon compiles with
+    // `exactOptionalPropertyTypes`, where an optional property and one that may
+    // hold `undefined` are different types, and its projection is the latter.
+    blockedContext?: { reasonCodes?: readonly string[] | undefined } | null | undefined;
+  } | null | undefined,
+): { od_next_blocked_reason_code?: string } {
+  if (strategyTask?.terminal !== true) return {};
+  if (strategyTask.outcome !== 'blocked') return {};
+  const primary = strategyTask.blockedContext?.reasonCodes?.[0];
+  return typeof primary === 'string' && primary
+    ? { od_next_blocked_reason_code: primary }
+    : {};
+}
+
 export function harnessAnalyticsFromRolloutDecision(
   decision: { effectiveMode?: string; primaryReasonCode?: string } | null | undefined,
 ): { harness?: TrackingHarness; harness_fallback_reason?: string } {

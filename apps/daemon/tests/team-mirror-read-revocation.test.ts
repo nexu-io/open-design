@@ -106,8 +106,8 @@ describe('team mirror read revocation', () => {
     }
     // Hot-path quarantine checks must use the startup-hydrated in-memory
     // index. Detail/files already need one project row for their response;
-    // revocation must not add a second lookup. Comments need no project row
-    // at all. Check both normal and revoked projects so the optimization
+    // revocation must not add a second lookup. Current comments read one row
+    // for immutable file-lifetime filtering, not quarantine. Check both projects so the optimization
     // cannot accidentally become a revoked-only shortcut.
     const dataDir = process.env.OD_DATA_DIR;
     if (!dataDir) throw new Error('OD_DATA_DIR is required for this test');
@@ -137,7 +137,7 @@ describe('team mirror read revocation', () => {
       await expectProjectReads(
         `/api/projects/${normalId}/conversations/${normalProject.conversationId}/comments`,
         200,
-        0,
+        1,
       );
       await expectProjectReads(
         `/api/projects/${revokedId}/conversations/${conversationId}/comments`,

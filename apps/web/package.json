@@ -1,6 +1,6 @@
 {
   "name": "@open-design/web",
-  "version": "0.22.1",
+  "version": "0.25.1",
   "private": true,
   "type": "module",
   "exports": {
@@ -22,9 +22,9 @@
   ],
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build",
+    "build": "next build && tsc -b --noEmit",
     "build:sidecar": "tsc -p tsconfig.sidecar.json",
-    "typecheck": "tsc -b --noEmit",
+    "typecheck": "next typegen && tsc -b --noEmit",
     "test": "vitest run -c vitest.config.ts --maxWorkers=2"
   },
   "dependencies": {
@@ -42,6 +42,7 @@
     "@xterm/addon-fit": "0.10.0",
     "@xterm/xterm": "5.5.0",
     "dompurify": "3.4.2",
+    "htmlparser2": "10.1.0",
     "jspdf": "4.2.1",
     "lexical": "0.36.2",
     "lucide-react": "1.16.0",
@@ -50,6 +51,7 @@
     "motion": "12.40.0",
     "next": "16.2.6",
     "openai": "6.38.0",
+    "parse5": "8.0.1",
     "posthog-js": "1.374.2",
     "react": "18.3.1",
     "react-dom": "18.3.1",
@@ -58,6 +60,7 @@
     "three": "0.185.1"
   },
   "devDependencies": {
+    "@typescript/native": "npm:typescript@7.0.2",
     "@tailwindcss/postcss": "4.3.0",
     "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "16.3.2",
@@ -69,7 +72,7 @@
     "jsdom": "29.1.1",
     "postcss": "8.5.15",
     "tailwindcss": "4.3.0",
-    "typescript": "5.9.3",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
     "vitest": "4.1.6"
   },
   "engines": {

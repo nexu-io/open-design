@@ -13,6 +13,12 @@ export const MEDIA_SURFACES = [
 
 export type MediaSurface = (typeof MEDIA_SURFACES)[number];
 
+/** Available supported Cloud video models for the authenticated project workspace. */
+export interface CloudVideoModelsResponse {
+  source: 'account_workspace_catalogue';
+  video: Array<{ id: string; label: string; hint: string; provider: string; caps: string[]; default?: boolean }>;
+}
+
 export const MEDIA_TASK_STATUSES = [
   'queued',
   'running',
@@ -94,6 +100,36 @@ export interface ProjectMediaTaskError {
   nextStep?: MediaFailureNextStep;
 }
 
+/**
+ * A media generation the HOST itself watched fail, attributed to the run that
+ * asked for it.
+ *
+ * The daemon has always known this: `routes/media.ts` writes a `[media]`
+ * `event: "failed"` diagnostic carrying the very `run_id` that dispatched the
+ * task. It just never handed the fact back to the run, so the run's terminal
+ * frame was decided by the agent's exit code alone — the agent exits 0 after
+ * apologising in prose, and the turn published `status: "succeeded"`,
+ * `endedWithUnfinishedWork: false`, a green check, and an empty artifact rail.
+ *
+ * This is host-observed evidence, never a reading of the model's own words.
+ * The apology sentence the media contract asks the model to copy verbatim
+ * (`prompts/media-contract.ts`, design S22) is COPY: it can be rewritten in any
+ * release, and no completeness verdict may depend on what it says.
+ */
+export interface RunMediaTaskFailure {
+  /** The media task's id, so a consumer can fetch its full record. */
+  taskId: string;
+  /** `image` | `video` | `audio`, as requested. Absent if the request never named one. */
+  surface?: string;
+  /** The requested media model id. */
+  model?: string;
+  /** When the host recorded the failure. */
+  failedAt: number;
+  /** The task's own classified error, verbatim — same shape the media task
+   *  endpoints publish, so an error card needs no second vocabulary. */
+  error: ProjectMediaTaskError;
+}
+
 /** Everything a media failure can be classified from. All fields optional. */
 export interface MediaFailureSignal {
   /**
@@ -120,6 +156,7 @@ const MEDIA_FAILURE_NEXT_STEP_BY_CODE: Readonly<Record<string, MediaFailureNextS
   MEDIA_SURFACE_DENIED: 'unsupported',
   // The run allows media but not THIS model — another allowed one exists.
   MEDIA_MODEL_DENIED: 'switch-model',
+  MEDIA_MODEL_UNAVAILABLE: 'switch-model',
   // No renderer is wired for the selected model: a Settings problem, whether
   // the fix is a key or a different provider entry.
   STUB_PROVIDER_DISABLED: 'open-settings',
@@ -328,12 +365,12 @@ export function mediaExecutionPolicyDenial(
 
 /** Request for Open Design's deterministic local HyperFrames scaffold. */
 export interface HyperFramesScaffoldRequest {
-  /** Project-relative path in the form `.hyperframes-cache/<id>`. */
+  /** Project-relative path in the form `.hyperframes-cache/<id>` or visible `motion-source/<id>`. */
   compositionDir: string;
 }
 
 /** Files created before the agent authors the composition HTML. */
 export interface HyperFramesScaffoldResponse {
   compositionDir: string;
-  files: ['hyperframes.json', 'meta.json', 'index.html'];
+  files: ['hyperframes.json', 'meta.json', 'index.html', ...string[]];
 }

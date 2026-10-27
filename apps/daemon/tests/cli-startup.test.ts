@@ -20,7 +20,21 @@ describe('CLI startup boundaries', () => {
     ['config', ['config', 'get', 'apiProtocol', '--daemon-url', 'http://127.0.0.1:9']],
     ['diagnostics', ['diagnostics', 'export', '--daemon-url', 'http://127.0.0.1:9']],
     ['amr', ['amr', 'status', '--daemon-url', 'http://127.0.0.1:9']],
-  ])('initializes flag constants before dispatching od %s', async (_name, args) => {
+    ['automation create', [
+      'automation', 'create',
+      '--name', 'nightly',
+      '--prompt', 'refresh the board',
+      '--schedule', 'daily:03:00',
+      '--skill', 'alpha,beta',
+      '--daemon-url', 'http://127.0.0.1:9',
+    ]],
+    ['automation update', [
+      'automation', 'update', 'routine-1',
+      '--name', 'nightly',
+      '--skill', 'alpha,beta',
+      '--daemon-url', 'http://127.0.0.1:9',
+    ]],
+  ])('initializes module-level bindings before dispatching od %s', async (_name, args) => {
     let output = '';
     try {
       const result = await execFileAsync(
@@ -42,6 +56,7 @@ describe('CLI startup boundaries', () => {
     expect(output).not.toContain('CONFIG_STRING_FLAGS');
     expect(output).not.toContain('DIAGNOSTICS_STRING_FLAGS');
     expect(output).not.toContain('AMR_STRING_FLAGS');
+    expect(output).not.toContain('splitAutomationIds');
   });
 
   it('keeps od daemon start alive until SIGTERM and reports the actual listening port', async () => {

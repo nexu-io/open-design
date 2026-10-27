@@ -24,11 +24,11 @@
  * 非中文语种**不生造新词**,沿用各自既有的「新建对话」措辞(`chat.newConversation`
  * 那一支的名词),只把 fork 词根换掉。
  *
- * ## ③ 入口(产品裁决:**只留面板头图标键**)
+ * ## ③ 入口(产品裁决:**只留一个**)
  *
- * 稿子的面板头有那枚十字键;历史下拉里那颗「新建」是产品自带的第二个入口,
- * 同一个动作两个口子 —— 删下拉那颗。两颗本来就共用同一个 `onNewConversation`
- * 与同一个 `newConversationDisabled` 门槛,所以删掉不改可达性。
+ * 2026-09-03 先收敛成面板头那枚十字键;OPEND-3087(Demo #8113)再把这唯一
+ * 一枚挪进历史下拉,与搜索框并排 —— 面板头不再有新建按钮。入口仍然只有一个,
+ * 仍走同一个 `onNewConversation` 与同一个 `newConversationDisabled` 门槛。
  *
  * ## 判据取法
  *
@@ -37,7 +37,7 @@
  * 也让 `toBeNull()` 真空通过。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render as rtlRender, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render as rtlRender, screen, within } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -132,37 +132,43 @@ function attr(el: Element, name: string): string {
   return value;
 }
 
-describe('③ 新建入口只剩面板头那一枚', () => {
-  it('历史下拉里那颗「新建」没了(下拉本身照常展开)', () => {
+describe('③ 新建入口只剩历史下拉里那一枚', () => {
+  it('面板头没有新建按钮;打开历史下拉后有且只有一枚', () => {
     renderChat();
+    expect(
+      screen.queryByTestId('chat-new-conversation'),
+      '面板头还留着新建按钮 —— OPEND-3087 把唯一入口挪进了历史下拉',
+    ).toBeNull();
+
     fireEvent.click(screen.getByTestId('conversation-history-trigger'));
 
-    /* 真空探针:先证下拉确实开着,下面的 toBeNull 才有意义 */
-    expect(screen.getByTestId('conversation-history-menu')).toBeTruthy();
+    /* 真空探针:先证下拉确实开着,下面的计数才有意义 */
+    const menu = screen.getByTestId('conversation-history-menu');
     expect(screen.getByTestId('conversation-history-search')).toBeTruthy();
-
-    expect(
-      screen.queryByTestId('conversation-history-new'),
-      '历史下拉里还留着第二个「新建」入口 —— 同一个动作两个口子',
-    ).toBeNull();
+    expect(within(menu).getByTestId('chat-new-conversation')).toBeTruthy();
+    expect(screen.queryAllByTestId('chat-new-conversation').length).toBe(1);
+    expect(screen.queryByTestId('conversation-history-new')).toBeNull();
   });
 
-  it('面板头那一枚还在,点得到,走的还是同一条 onNewConversation', () => {
+  it('下拉里那一枚点得到,走的还是同一条 onNewConversation,点完下拉收起', () => {
     const onNewConversation = vi.fn();
     renderChat({ onNewConversation });
 
-    const button = screen.getByTestId('chat-new-conversation');
+    fireEvent.click(screen.getByTestId('conversation-history-trigger'));
+    const button = within(screen.getByTestId('conversation-history-menu')).getByTestId('chat-new-conversation');
     expect(attr(button, 'aria-label')).toBe('新会话');
     fireEvent.click(button);
     expect(onNewConversation).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('conversation-history-menu')).toBeNull();
   });
 
-  it('两个入口本来就同一个门槛:没有 onNewConversation 时两处一起消失', () => {
+  it('同一个门槛:没有 onNewConversation 时下拉里也没有那一枚', () => {
     renderChat({ onNewConversation: null });
     expect(screen.queryByTestId('chat-new-conversation')).toBeNull();
 
     fireEvent.click(screen.getByTestId('conversation-history-trigger'));
     expect(screen.getByTestId('conversation-history-menu')).toBeTruthy();
+    expect(screen.queryByTestId('chat-new-conversation')).toBeNull();
     expect(screen.queryByTestId('conversation-history-new')).toBeNull();
   });
 });

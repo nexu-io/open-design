@@ -50,6 +50,9 @@ function abortableSseResponse(
 
 const READY = 'event: ready\ndata: {"workspaceId":"w1"}\n\n';
 const HEARTBEAT = 'event: heartbeat\ndata: {}\n\n';
+const QUOTA_EVENT = {
+  type: 'coding-plan-usage-changed', workspaceId: 'w1', workspaceMemberId: 'm1', eventId: '42',
+};
 const COMMENT_EVENT =
   'event: workspace-event\ndata: {"type":"comment-changed","workspaceId":"w1","projectId":"p1","seq":7}\n\n';
 const BILLING_KEY = { workspaceId: 'w1', workspaceMemberId: 'm1' };
@@ -88,6 +91,14 @@ afterEach(() => {
 });
 
 describe('parseHubWorkspaceEvent', () => {
+  it('requires exact quota scope and a decimal cursor without borrowing billing clocks', () => {
+    expect(parseHubWorkspaceEvent(JSON.stringify({
+      ...QUOTA_EVENT, revision: 'wallet-9', revisionClock: { epoch: 'wallet', counter: '9' },
+    }))).toEqual(QUOTA_EVENT);
+    for (const invalid of [
+      { workspaceId: '' }, { workspaceMemberId: '' }, { eventId: '-1' }, { eventId: 42 },
+    ]) expect(parseHubWorkspaceEvent(JSON.stringify({ ...QUOTA_EVENT, ...invalid }))).toBeNull();
+  });
   it('parses a valid thin event and drops unknown types', () => {
     expect(parseHubWorkspaceEvent('{"type":"comment-changed","projectId":"p","seq":3}')).toEqual({
       type: 'comment-changed',
@@ -215,6 +226,37 @@ describe('parseHubWorkspaceEvent', () => {
 });
 
 describe('startHubEventsSubscriber', () => {
+  it.each([true, false])('negotiates quota events and deduplicates member cursors only when capable (%s)', async (capable) => {
+    const events: unknown[] = [];
+    let complete!: () => void;
+    const finished = new Promise<void>((resolve) => { complete = resolve; });
+    let requestedUrl = '';
+    subscriber = startHubEventsSubscriber({
+      resolveEndpoint: async () => ({ url: 'https://hub/events?existing=1', headers: {}, workspaceId: 'w1', identityKey: 'account-a' }),
+      onEvent: (event) => {
+        if (event.type === 'comment-changed') complete();
+        else events.push(event);
+      },
+      fetchImpl: async (url) => {
+        requestedUrl = String(url);
+        return sseResponse([
+          `event: ready\ndata: ${JSON.stringify({ workspaceId: 'w1', capabilities: capable ? ['coding-plan-usage-events-v1'] : [] })}\n\n`,
+          ...[
+            QUOTA_EVENT, QUOTA_EVENT,
+            { ...QUOTA_EVENT, eventId: '41' },
+            { ...QUOTA_EVENT, workspaceId: 'other', eventId: '99' },
+            { ...QUOTA_EVENT, workspaceMemberId: 'm2' },
+            { ...QUOTA_EVENT, eventId: '43' },
+          ].map((event) => `event: workspace-event\ndata: ${JSON.stringify(event)}\n\n`),
+          COMMENT_EVENT,
+        ], { holdOpen: true });
+      },
+    });
+    await finished;
+    expect(new URL(requestedUrl).searchParams.get('codingPlanUsageEvents')).toBe('1');
+    expect(new URL(requestedUrl).searchParams.get('existing')).toBe('1');
+    expect(events).toEqual(capable ? [QUOTA_EVENT, { ...QUOTA_EVENT, workspaceMemberId: 'm2' }, { ...QUOTA_EVENT, eventId: '43' }] : []);
+  });
   it('jitters transport reconnects so simultaneous daemons do not retry in lockstep', async () => {
     vi.useFakeTimers();
     const fetchImpl = vi

@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -11,6 +12,8 @@ export const DEFAULT_DAEMON_URL = "http://127.0.0.1:7456";
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
 export interface ResolveDaemonUrlOptions {
+  /** MCP must discover an endpoint; a guessed default could belong to another runtime. */
+  allowLegacyDefault?: boolean;
   connectInherited?: typeof SidecarFactory.connectInherited;
   /** Value passed via `--daemon-url`. Empty string is treated as unset. */
   flagUrl?: string | null;
@@ -25,7 +28,8 @@ export interface ResolveDaemonUrlOptions {
  *
  * Spawn order: explicit `--daemon-url` flag, `OD_DAEMON_URL` env, then
  * inherited sidecar client status, then the default
- * `tools-dev status --json` runtime. Falls back to the legacy default
+ * `tools-dev status --json` runtime in a verified source checkout only.
+ * Discovery never invokes a package manager. Falls back to the legacy default
  * for direct `od` launches that do not run as a sidecar.
  */
 export async function resolveDaemonUrl(
@@ -44,6 +48,9 @@ export async function resolveDaemonUrl(
   if (discovered != null) return discovered;
   const toolsDevUrl = await discoverDaemonUrlFromToolsDev(env, options.timeoutMs ?? 800);
   if (toolsDevUrl != null) return toolsDevUrl;
+  if (options.allowLegacyDefault === false) {
+    throw new Error("Open Design daemon could not be discovered. Open the app and refresh the MCP registration, or supply --daemon-url explicitly.");
+  }
   return DEFAULT_DAEMON_URL;
 }
 
@@ -66,10 +73,12 @@ async function discoverDaemonUrlFromToolsDev(
   env: NodeJS.ProcessEnv,
   timeoutMs: number,
 ): Promise<string | null> {
+  const entry = await sourceToolsDevEntry();
+  if (entry == null) return null;
   return await new Promise<string | null>((resolve) => {
     let child;
     try {
-      child = spawn("pnpm", ["--silent", "exec", "tools-dev", "status", "--json"], {
+      child = spawn(process.execPath, [entry, "status", "--json"], {
         cwd: REPO_ROOT,
         env,
         stdio: ["ignore", "pipe", "ignore"],
@@ -102,6 +111,38 @@ async function discoverDaemonUrlFromToolsDev(
   });
 }
 
+/**
+ * A dev probe may execute only the owned Node entry in a source checkout.
+ * Missing MCP environment is normal for old registrations, so env flags cannot
+ * establish this boundary. Anchor it to the module's physical location and
+ * repository identities; installed bundles and launcher payloads fail closed.
+ */
+async function sourceToolsDevEntry(): Promise<string | null> {
+  try {
+    const root = await realpath(REPO_ROOT);
+    const moduleDir = path.dirname(await realpath(fileURLToPath(import.meta.url)));
+    if (root.split(path.sep).some((segment) => segment.toLowerCase().endsWith(".app"))) return null;
+    if (!["src", "dist"].some((dir) => moduleDir === path.join(root, "apps/daemon", dir))) return null;
+    const entry = path.join(root, "tools/dev/bin/tools-dev.mjs");
+    const [git, workspace, entryStat, entryPath, rootJson, daemonJson, toolsJson] = await Promise.all([
+      stat(path.join(root, ".git")),
+      stat(path.join(root, "pnpm-workspace.yaml")),
+      stat(entry),
+      realpath(entry),
+      readFile(path.join(root, "package.json"), "utf8"),
+      readFile(path.join(root, "apps/daemon/package.json"), "utf8"),
+      readFile(path.join(root, "tools/dev/package.json"), "utf8"),
+    ]);
+    if ((!git.isDirectory() && !git.isFile()) || !workspace.isFile() || !entryStat.isFile() || entryPath !== entry) return null;
+    if (JSON.parse(rootJson)?.name !== "open-design" || JSON.parse(daemonJson)?.name !== "@open-design/daemon") return null;
+    const tools = JSON.parse(toolsJson);
+    if (tools?.name !== "@open-design/tools-dev" || tools?.bin?.["tools-dev"] !== "./bin/tools-dev.mjs") return null;
+    return entry;
+  } catch {
+    return null;
+  }
+}
+
 function extractDaemonUrlFromToolsDevStatus(stdout: string): string | null {
   for (let i = stdout.indexOf("{"); i !== -1; i = stdout.indexOf("{", i + 1)) {
     try {
@@ -112,7 +153,7 @@ function extractDaemonUrlFromToolsDevStatus(stdout: string): string | null {
       const url = parsed?.apps?.daemon?.url ?? parsed?.url ?? null;
       if (typeof url === "string" && url.length > 0) return url;
     } catch {
-      // pnpm wrappers can print warnings before JSON; continue scanning.
+      // The Node runtime can print notices before JSON; continue scanning.
     }
   }
   return null;

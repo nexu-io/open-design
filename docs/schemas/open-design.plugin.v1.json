@@ -54,6 +54,15 @@
             "type":   { "type": "string" },
             "entry":  { "type": "string" },
             "poster": { "type": "string" },
+            "galleryPosterOnly": {
+              "type": "boolean",
+              "description": "For an HTML preview, show its bundled poster in gallery cards even when a baked clip exists. The detail preview stays live."
+            },
+            "bakeStillAtSec": {
+              "type": "number",
+              "minimum": 0,
+              "description": "For a GSAP-backed HTML preview, pause its timeline at this second and bake that still as the gallery poster and clip."
+            },
             "video":  { "type": "string" },
             "gif":    { "type": "string" },
             "motion": {

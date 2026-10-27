@@ -14,6 +14,7 @@ import {
   API_ERROR_CODES,
   isSameWorkspacePrincipal,
   type ApiErrorCode,
+  type ProjectDeleteShareResidual,
 } from '@open-design/contracts';
 import type {
   AppliedPluginSnapshot,
@@ -749,6 +750,8 @@ export async function createProject(
     pendingPrompt?: string;
     metadata?: ProjectMetadata;
     conversationMode?: ChatSessionMode;
+    /** Optional caller-minted id for the seeded conversation (same handoff). */
+    conversationId?: string;
     // Plan §3.A1 / spec §11.5 — POST /api/projects accepts a pluginId
     // (or pre-applied snapshot id) to resolve and pin a plugin to the new
     // project. Used by the PluginLoopHome flow on Home.
@@ -1141,6 +1144,7 @@ export async function patchProject(
 export async function deleteProject(
   id: string,
   workspaceContext?: WorkspaceCollabContext | null,
+  onShareResiduals?: (rows: ReadonlyArray<ProjectDeleteShareResidual>) => void,
 ): Promise<true> {
   try {
     const resp = await fetch(`/api/projects/${encodeURIComponent(id)}`, {
@@ -1182,6 +1186,15 @@ export async function deleteProject(
         return true;
       }
       throw new ProjectDeleteError(message, resp.status, code);
+    }
+    // This response is the only delivery of orphaned share information. Hand it
+    // to the app-level queue before cache cleanup/navigation can remove its origin.
+    const payload: unknown = await resp.json().catch(() => null);
+    if (payload && typeof payload === 'object' && 'shareResiduals' in payload && Array.isArray(payload.shareResiduals)) {
+      const rows = payload.shareResiduals.filter((row): row is ProjectDeleteShareResidual =>
+        row && typeof row === 'object' && typeof row.filePath === 'string'
+        && typeof row.slug === 'string' && typeof row.retrying === 'boolean');
+      if (rows.length) onShareResiduals?.(rows.map(row => Object.freeze({ ...row })));
     }
     // Drop per-project browser caches once the project is gone server-side so
     // they do not accumulate in localStorage for the lifetime of the profile.
@@ -1417,15 +1430,21 @@ async function readProjectMessageListError(resp: Response): Promise<{
 }> {
   let message = `Could not load messages for this conversation (${resp.status}).`;
   let code: string | null = null;
-  let retryable = false;
+  // Legacy errors and proxy failures may omit a retryability hint. This is a
+  // read, so transient HTTP statuses can use the caller's bounded retry policy.
+  let retryable = resp.status === 408
+    || resp.status === 429
+    || (resp.status >= 500 && resp.status <= 599);
   try {
     const payload = await resp.json() as {
+      retryable?: unknown;
       error?: string | {
         code?: unknown;
         message?: unknown;
         retryable?: unknown;
       };
     };
+    if (typeof payload.retryable === 'boolean') retryable = payload.retryable;
     if (payload.error && typeof payload.error === 'object') {
       const rawCode = payload.error.code;
       code = typeof rawCode === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/u.test(rawCode)
@@ -1434,7 +1453,9 @@ async function readProjectMessageListError(resp: Response): Promise<{
       if (typeof payload.error.message === 'string' && payload.error.message.trim()) {
         message = payload.error.message;
       }
-      retryable = payload.error.retryable === true;
+      if (typeof payload.error.retryable === 'boolean') {
+        retryable = payload.error.retryable;
+      }
     } else if (typeof payload.error === 'string' && payload.error.trim()) {
       message = payload.error;
     }
@@ -1448,12 +1469,16 @@ export async function listMessages(
   projectId: string,
   conversationId: string,
   workspaceContext?: WorkspaceCollabContext | null,
+  signal?: AbortSignal,
 ): Promise<ChatMessage[]> {
   try {
     const resp = await fetch(
       `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`,
-      workspaceContext
-        ? { headers: workspaceProjectHeaders(workspaceContext) }
+      workspaceContext || signal
+        ? {
+            ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
+            ...(signal ? { signal } : {}),
+          }
         : undefined,
     );
     if (!resp.ok) {
@@ -1695,9 +1720,13 @@ function readCachedTabs(
 ): OpenTabsState | null {
   if (typeof window === 'undefined') return null;
   try {
-    return normalizeTabsState(JSON.parse(
+    const cached = normalizeTabsState(JSON.parse(
       window.localStorage.getItem(tabsCacheKey(projectId, workspaceContext)) ?? 'null',
     ));
+    // An existing cache is a saved user choice, even for older entries without
+    // this marker or an intentionally empty selection. Defaults must not win
+    // while the debounced daemon save is still pending.
+    return cached ? { ...cached, hasSavedState: true } : null;
   } catch {
     return null;
   }
@@ -1722,6 +1751,7 @@ function writeCachedTabs(
 ): OpenTabsState {
   const next: OpenTabsState = {
     ...state,
+    hasSavedState: true,
     updatedAt: Date.now(),
   };
   if (typeof window !== 'undefined') {

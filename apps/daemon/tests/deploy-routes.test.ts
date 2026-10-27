@@ -1326,6 +1326,79 @@ describe('deploy provider routes', () => {
     }
   });
 
+  // Additive failure detail: status and envelope code stay exactly as above,
+  // and `error.failure` adds what that generic code cannot say.
+  it('adds a closed-token failure detail without changing status or envelope code', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-failure-detail-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    try {
+      const projectId = await setupProjectAndVercelConfig('failure-detail', 'Failure detail test');
+      const realFetch = globalThis.fetch;
+      let providerResponse: () => Promise<Response> = async () => { throw new Error('unset'); };
+      vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url =
+          typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        if (url.includes('/v13/deployments')) return providerResponse();
+        throw new Error(`Unexpected fetch: ${url}`);
+      }));
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const deploy = async () => {
+        const resp = await realFetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-od-request-id': 'req-deploy-0001' },
+          body: JSON.stringify({ fileName: 'index.html', providerId: VERCEL_PROVIDER_ID }),
+        });
+        return { status: resp.status, body: await resp.json() as { error?: Record<string, unknown> } };
+      };
+      try {
+        providerResponse = async () => new Response(
+          JSON.stringify({ error: { code: 'too_many_requests', message: 'Too many requests.' } }),
+          { status: 429, headers: { 'content-type': 'application/json' } },
+        );
+        const rejected = await deploy();
+        expect(rejected.status).toBe(429);
+        expect(rejected.body.error?.code).toBe('BAD_REQUEST');
+        expect(rejected.body.error?.failure).toEqual({
+          stage: 'provider', reason: 'provider_rejected', upstreamStatus: 429, upstreamCode: 'too_many_requests',
+        });
+
+        providerResponse = async () => { throw new TypeError('fetch failed'); };
+        const unreachable = await deploy();
+        expect(unreachable.status).toBe(400);
+        expect(unreachable.body.error?.code).toBe('BAD_REQUEST');
+        expect(unreachable.body.error?.failure).toEqual({ stage: 'provider', reason: 'provider_unreachable' });
+
+        providerResponse = async () => new Response(
+          JSON.stringify({ error: { code: 'forbidden', message: 'Not authorized', invalidToken: true } }),
+          { status: 403, headers: { 'content-type': 'application/json' } },
+        );
+        const tokenRejected = await deploy();
+        expect(tokenRejected.status).toBe(403);
+        expect(tokenRejected.body.error?.code).toBe('PROVIDER_FORBIDDEN');
+        expect(tokenRejected.body.error?.failure).toEqual({
+          stage: 'provider', reason: 'provider_token_invalid', upstreamStatus: 403, upstreamCode: 'forbidden',
+        });
+
+        const lines = warn.mock.calls
+          .filter(([label]) => label === '[od] deploy failure')
+          .map(([, json]) => JSON.parse(String(json)) as Record<string, unknown>);
+        expect(lines.map((line) => line.reason)).toEqual([
+          'provider_rejected', 'provider_unreachable', 'provider_token_invalid',
+        ]);
+        expect(lines.every((line) => line.requestId === 'req-deploy-0001' && line.providerId === VERCEL_PROVIDER_ID)).toBe(true);
+      } finally {
+        warn.mockRestore();
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
   // A provider failure whose CAUSE is known — not merely its status — still
   // earns a specific code.
   it('reports PROVIDER_FORBIDDEN when the provider names a permission failure', async () => {

@@ -3,6 +3,7 @@
 // builds and forks impose zero runtime cost. All entry points are
 // fire-and-forget: capture failures must never propagate to product code.
 
+import { getOpenDesignHost } from '@open-design/host';
 import type { PostHog } from 'posthog-js';
 import {
   EVENT_SCHEMA_VERSION,
@@ -13,9 +14,11 @@ import {
 import { scrubBeforeSend } from './scrub';
 import {
   clearExceptionTrackingContext,
+  detectBrowserOsName,
   setExceptionTrackingContext,
 } from './error-tracking';
 import { pinFirstSessionForCapture } from './identity';
+import { registerChatReplaySessionSource } from '../observability/chat-context';
 import { coalescedGet } from '../lib/coalesced-get';
 
 interface AnalyticsContext {
@@ -217,15 +220,21 @@ export function bootstrapExceptionTracking(context: AnalyticsContext): Promise<v
         return;
       }
       const telemetryEnv = cfg.env || 'unknown';
-      const distinctId =
-        (typeof cfg.installationId === 'string' && cfg.installationId) ||
-        context.anonymousId;
+      const installationId = typeof cfg.installationId === 'string' && cfg.installationId ? cfg.installationId : null;
+      const distinctId = installationId || context.anonymousId;
+      const hostStartupContext = await getOpenDesignHost()?.startup?.context().catch(() => null);
       setExceptionTrackingContext({
+        // Fresh install that has not opted out: the renderer mints the
+        // installation id shortly after; hold stability metrics until then.
+        identityPending: installationId == null && cfg.enabled === true,
         apiKey: cfg.key,
         host: cfg.host,
         distinctId,
+        clientType: context.clientType,
+        osName: detectBrowserOsName(),
         appVersion: context.appVersion,
         sessionId: context.sessionId,
+        ...(hostStartupContext ? { appSessionId: hostStartupContext.app_session_id } : {}),
         telemetryEnv,
       });
     } catch {
@@ -353,6 +362,15 @@ export async function getAnalyticsClient(
         },
 
         loaded: (instance) => {
+          // Hand the chat-observability correlation block its replay-session
+          // reader. This is the ONLY place it can come from: we load
+          // posthog-js through `await import('posthog-js')`, and the ESM
+          // build — unlike the landing page's `array.js` snippet — never
+          // publishes itself as `window.posthog`. Without this line every
+          // `replay_session_id` on a `client_chat_*` event is silently
+          // undefined while the wiring looks complete. See the trap
+          // documented on `registerChatReplaySessionSource`.
+          registerChatReplaySessionSource(() => instance.get_session_id());
           lastRegisterPayload = {
             event_schema_version: EVENT_SCHEMA_VERSION,
             env: telemetryEnv,
@@ -384,6 +402,10 @@ export async function getAnalyticsClient(
             apiKey: cfgKey,
             host: cfgHost,
             distinctId,
+            // Re-bridging must not end the first-session hold (OPEND-4220).
+            identityPending: !(typeof cfg.installationId === 'string' && cfg.installationId) && cfg.enabled === true,
+            clientType: context.clientType,
+            osName: detectBrowserOsName(),
             appVersion: context.appVersion,
             sessionId: context.sessionId,
             telemetryEnv,

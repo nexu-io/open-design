@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { forwardRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -92,7 +92,7 @@ function refusedMessage(overrides: Partial<ChatMessage> = {}): ChatMessage {
   } as ChatMessage;
 }
 
-function renderChat(message: ChatMessage) {
+function renderChat(message: ChatMessage, onSwitchToAmrAndRetry = vi.fn()) {
   return render(
     <ChatPane
       messages={[message]}
@@ -104,6 +104,7 @@ function renderChat(message: ChatMessage) {
       onSend={vi.fn()}
       onStop={vi.fn()}
       onRetry={vi.fn()}
+      onSwitchToAmrAndRetry={onSwitchToAmrAndRetry}
       conversations={[
         { projectId: 'project-1', id: 'conv-1', title: 'Current', createdAt: 1, updatedAt: 1 },
       ]}
@@ -166,9 +167,14 @@ describe('ChatPane — ACP CLI session refusal card', () => {
     expect(container.querySelector('.run-error__diagnostic')).toBeNull();
   });
 
-  it('offers Retry — the CLI build is the user\'s to change, then re-run', () => {
-    renderChat(refusedMessage());
-    expect(screen.getByRole('button', { name: 'promptTemplates.retry' })).toBeTruthy();
+  it('offers Cloud switching for the refused CLI run, without a second Retry action', () => {
+    const message = refusedMessage();
+    const onSwitchToAmrAndRetry = vi.fn();
+    renderChat(message, onSwitchToAmrAndRetry);
+
+    fireEvent.click(screen.getByRole('button', { name: 'chat.amrCard.switchCta' }));
+    expect(onSwitchToAmrAndRetry).toHaveBeenCalledExactlyOnceWith(message);
+    expect(screen.queryByRole('button', { name: 'promptTemplates.retry' })).toBeNull();
   });
 
   // The daemon may ship extra structured facts on the same event (it already

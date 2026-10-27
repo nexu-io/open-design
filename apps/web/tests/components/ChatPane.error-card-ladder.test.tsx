@@ -1,14 +1,8 @@
 // @vitest-environment jsdom
 //
-// 红测(E2 / E6):报错卡上不许出现上游原始错误串,第 4 档的〔联系支持〕要提为主。
-//
-// 权威:`specs/current/run-error-catalog.md` §6.Z;
-//       `docs/design/run-errors/error-ux-design.md` 原则五「文案说人话」。
-//
-// 在改之前:
-//   - `ChatPane.tsx` 的 `displayError = runFailureUi?.messageKey ? t(...) : rawError`
-//     会把一段英文 stderr 直接摊在卡面上 → 第一个用例红;
-//   - 〔联系支持〕永远是 `variant="secondary"`,没有「提为主」这条路 → 第二个用例红。
+// 报错卡不泄漏原始错误；专属文案和真实重连行的交接保持不变。
+// OPEND-2807 / G16 覆盖旧恢复阶梯：联系我们、导出日志常驻次级，
+// Cloud 的主动作固定重试，CLI/BYOK 的主动作固定切换到 OpenDesign Cloud。
 import { cleanup, render, screen } from '@testing-library/react';
 import { forwardRef } from 'react';
 import type { ComponentProps } from 'react';
@@ -103,13 +97,7 @@ function renderChat(
       onSend={vi.fn()}
       onStop={vi.fn()}
       onRetry={vi.fn()}
-      /*
-       * 这份文件里凡是提到〔切换到 Cloud〕的判据,说的都是 `ProjectView` 那个宿主 ——
-       * 也只有它接了这颗 CTA 的动作。夹具原来一个都没接,于是它模拟的其实是
-       * `workspace/SideChatTab`(两个 AMR 口子都不接),而那儿这颗按钮点了没反应,
-       * 现在也不再画。补上这一条,夹具才和它想照的那个宿主对得上;
-       * 全文件 11 条断言的期望值一条都没动。
-       */
+      // 对应已接真实 Cloud 恢复回调的宿主；侧聊全链由独立宿主测试覆盖。
       onSwitchToAmrAndRetry={vi.fn()}
       conversations={[
         { projectId: 'project-1', id: 'conv-1', title: 'Current', createdAt: 1, updatedAt: 1 },
@@ -156,18 +144,7 @@ describe('报错卡兜底文案(E2)', () => {
   });
 });
 
-describe('第 4 档:联系支持提为主(E6)', () => {
-  /*
-   * ⚠️ OPEND-2772(T68)缩小了这一档的适用面,没有删掉它。
-   *
-   * 第 4 档的意思一直是「这张卡不能是死路」——上面三档都没答案时,把常驻次级的
-   * 〔联系支持〕提上来。产品 2026-09-07 推翻 §6.Z 的阶梯之后,**非 Cloud 的卡主位
-   * 归那颗〔切换到 Cloud〕**,那本身就是一条活路,所以这一档不再
-   * 需要在 BYOK 上提〔联系支持〕。
-   *
-   * 提为主的场景**仍然存在**,而且正是最该有的那个:已经跑在 Cloud 上的 run
-   * (它拿不到 Cloud CTA)。所以这一节改成两侧都钉,而不是把它删掉。
-   */
+describe('G16:主动作按失败运行来源固定，联系支持保持次级', () => {
   it('BYOK 封号:主位归 Cloud CTA,〔联系支持〕退回常驻次级', () => {
     renderChat(failedMessage({}, { failureDetail: 'account_suspended' }));
     const support = screen.getByTestId('chat-error-contact-support');
@@ -177,13 +154,15 @@ describe('第 4 档:联系支持提为主(E6)', () => {
     ).toBe('primary');
   });
 
-  it('已经在 Cloud 上的封号:没有 Cloud CTA,〔联系支持〕仍然提为主', () => {
+  it('已经在 Cloud 上的封号:主动作重试，联系支持保持次级', () => {
     renderChat(
       failedMessage({ agentId: 'amr' }, { failureDetail: 'account_suspended' }),
     );
     expect(screen.queryByTestId('chat-error-switch-to-cloud')).toBeNull();
     const support = screen.getByTestId('chat-error-contact-support');
-    expect(support.dataset.primary).toBe('true');
+    expect(support.dataset.primary).toBeUndefined();
+    expect(support.dataset.runErrorAction).toBe('secondary');
+    expect(screen.getByTestId('chat-error-retry').dataset.runErrorAction).toBe('primary');
   });
 
   it('普通可重试的卡上,〔联系支持〕仍是常驻次级', () => {
@@ -268,7 +247,8 @@ describe('R9 断线:报错卡让位给流水最后一行的重连行', () => {
     expect(description).toContain('chat.connectionDropped');
     expect(description).not.toContain('chat.runError.fallbackMessage');
     // 而且带得出恢复动作 —— 屏幕上什么都不剩才是这条 bug 的形状。
-    expect(screen.getByTestId('chat-error-retry')).toBeTruthy();
+    expect(screen.getByTestId('chat-error-switch-to-cloud').dataset.runErrorAction).toBe('primary');
+    expect(screen.queryByTestId('chat-error-retry')).toBeNull();
   });
 
   it('重连行不在场时,老行(只有 detail、没有 code)同样由报错卡接住', () => {
@@ -278,7 +258,8 @@ describe('R9 断线:报错卡让位给流水最后一行的重连行', () => {
     );
     expect(screen.queryByTestId('chat-reconnect')).toBeNull();
     expect(container.querySelector('[data-user-action-card="run-recovery"]')).toBeTruthy();
-    expect(screen.getByTestId('chat-error-retry')).toBeTruthy();
+    expect(screen.getByTestId('chat-error-switch-to-cloud').dataset.runErrorAction).toBe('primary');
+    expect(screen.queryByTestId('chat-error-retry')).toBeNull();
   });
 
   it('重连行在场时,屏幕上只有它一块 UI', () => {

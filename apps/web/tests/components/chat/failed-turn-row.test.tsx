@@ -145,10 +145,10 @@ describe('整轮失败 · 静态对照(证明没一刀切)', () => {
     expect(label?.textContent).toBe(en['assistant.canceledLabel']);
   });
 
-  it('API 空回复虽然也是 failed,状态词照旧是「没有输出」', () => {
+  it('API 空回复保留 failed,状态词使用批准的「任务未能完成」', () => {
     // 出处:`ProjectView.tsx` 的 `emptyApiResponse` 分支把空流写成
     // `runStatus:'failed'` + `status(label:'empty_response')`;
-    // `e2e/ui/api-empty-response.test.ts` 那条 P0 明令这格显示「No output」、
+    // `e2e/ui/api-empty-response.test.ts` 那条 P0 使用补充文档批准的失败标题、
     // 且 `Done` 计数为 0。这里把那条判据下沉到便宜层。
     const { container } = renderAfterFollowUp(
       failedTurn({
@@ -160,7 +160,7 @@ describe('整轮失败 · 静态对照(证明没一刀切)', () => {
       }),
     );
     const label = container.querySelector('[data-testid="assistant-label"]');
-    expect(label?.textContent).toBe(en['assistant.emptyResponseLabel']);
+    expect(label?.textContent).toBe('The task could not be completed');
   });
 
   it('报错卡还归这一轮时,让位的理由仍是 B36 那条,不是新加的这条', () => {

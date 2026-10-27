@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { BundledStrategyDeclarationV2Schema } from '@open-design/contracts';
+import { assertOdNextPlanningBuildOnlyV2, BundledStrategyDeclarationV2Schema } from '@open-design/contracts';
 import { parseManifest } from '../src/index.js';
 
 const pluginRoot = fileURLToPath(
@@ -26,7 +26,6 @@ const forbiddenContent = [
   /completion[ -]gate/i,
   /final[ -]evidence[ -]bundle/i,
   /repair[ -]required/i,
-  /\brepeat\b/i,
   /\bcritique\b/i,
   /revalidation/i,
   /critique(?:-theater)?/i,
@@ -35,10 +34,10 @@ const forbiddenContent = [
 ];
 
 describe('bundled OD Next Strategy V2 package', () => {
-  it('declares the inactive versioned asset set and exact planning recipe identity', () => {
+  it('declares the active versioned asset set and exact planning recipe identity', () => {
     expect(manifest).toMatchObject({
       name: 'od-next-strategy',
-      version: '2.0.4',
+      version: '3.3.8',
       od: {
         kind: 'scenario',
         hidden: true,
@@ -58,6 +57,8 @@ describe('bundled OD Next Strategy V2 package', () => {
       ['ppt', 'active', ['deck']],
       ['marketing', 'active', ['image']],
       ['hyperframes', 'active', ['video']],
+      ['discovery', 'active', ['generic']],
+      ['motion-design', 'active', ['video']],
     ]);
   });
 
@@ -78,14 +79,28 @@ describe('bundled OD Next Strategy V2 package', () => {
       ...declaration.assets.taskProfiles.flatMap((profile) => (profile.resources ?? []).map((resource) => resource.path)),
       declaration.assets.taskProfileMapping.path,
     ];
-    expect(new Set(assetPaths).size).toBe(assetPaths.length);
+    // Discovery stages existing specialist resources; uniqueness is per
+    // selected profile, not across independent profile declarations.
+    for (const profile of declaration.assets.taskProfiles) {
+      const resources = (profile.resources ?? []).map((resource) => resource.path);
+      expect(new Set(resources).size, profile.taskType).toBe(resources.length);
+    }
 
-    for (const assetPath of assetPaths) {
+    for (const assetPath of new Set(assetPaths)) {
       const content = readFileSync(`${pluginRoot}/${assetPath.slice(2)}`, 'utf8');
       expect(content.length, assetPath).toBeGreaterThan(100);
       // Resources (shells, stylesheets) are quoted as facts, never as
       // instructions, so the pre-Build vocabulary rule applies to prose only.
       if (!assetPath.endsWith('.md')) continue;
+      // Motion is the synced public Skill and explicitly permits one bounded
+      // video check. Animation "repeat" is not a repeating pipeline stage.
+      if (assetPath === './assets/task-profiles/motion-design.md') {
+        expect(content).toBe(readFileSync(`${pluginRoot}/../../../../skills/motion-design/SKILL.md`, 'utf8'));
+        expect(content).toContain('make at most one');
+        expect(content).toContain('Do not spawn acceptance agents, score aesthetics, add a separate pipeline');
+        expect(() => assertOdNextPlanningBuildOnlyV2(content, assetPath)).not.toThrow();
+        continue;
+      }
       for (const forbidden of forbiddenContent) {
         expect(content, `${assetPath} must not match ${forbidden}`).not.toMatch(forbidden);
       }
@@ -123,6 +138,36 @@ describe('bundled OD Next Strategy V2 package', () => {
     expect(ruleCard).toContain('### Variable-length text and stacked information');
     expect(ruleCard).toContain('.od-frames/layout.css');
     expect(ruleCard).toContain('OD-LAYOUT-PRIMITIVES v1');
+  });
+
+  it('bounds functional SVG icons without sizing content SVGs', () => {
+    const prototype = declaration.assets.taskProfiles.find((profile) => profile.taskType === 'prototype');
+    const ruleCard = readFileSync(`${pluginRoot}/assets/task-profiles/prototype.md`, 'utf8');
+    const primitives = readFileSync(`${pluginRoot}/assets/task-profiles/prototype/layout.css`, 'utf8');
+
+    expect(prototype?.version).toBe('3.1.9');
+    expect(prototype?.resources?.find((resource) => resource.path.endsWith('/layout.css'))?.version)
+      .toBe('1.1.2');
+    expect(ruleCard).toContain('### Bound functional icon geometry');
+    expect(ruleCard).toContain('`.od-icon`');
+    expect(ruleCard).toContain('`--od-icon-size`');
+    expect(ruleCard).toMatch(/`viewBox`[^.\n]*(?:does not|is not)[^.\n]*(?:size|geometry)/i);
+    expect(ruleCard).toMatch(/parent selectors?/i);
+    expect(ruleCard).toMatch(/content SVG/i);
+
+    const iconRule = primitives.match(/\.od-icon\s*\{([^}]*)\}/s)?.[1];
+    expect(iconRule).toBeDefined();
+    expect(iconRule).toMatch(/display:\s*inline-block/);
+    expect(iconRule).toMatch(/inline-size:\s*var\(--od-icon-size,\s*1em\)/);
+    expect(iconRule).toMatch(/block-size:\s*var\(--od-icon-size,\s*1em\)/);
+    expect(iconRule).toMatch(/flex:\s*none/);
+
+    // Sizing by parent context recreated the original blind spot: each new
+    // context can miss a selector. The staged primitive stays opt-in so charts,
+    // plans, diagrams, logos, and illustrations keep their own geometry.
+    const uncommented = primitives.replace(/\/\*[\s\S]*?\*\//g, '');
+    const selectors = Array.from(uncommented.matchAll(/([^{}]+)\{/g), (match) => match[1] ?? '');
+    expect(selectors.some((selector) => /(^|[^.#[:\w-])svg(?=$|[^\w-])/i.test(selector))).toBe(false);
   });
 
   it('maps unknown project kinds to generic or blocked instead of guessing', () => {

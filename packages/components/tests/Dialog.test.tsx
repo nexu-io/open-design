@@ -27,15 +27,28 @@ describe('Dialog', () => {
     expect(screen.getByRole('dialog', { name: 'Rename design' })).toBeTruthy();
   });
 
+  // The overlay is portaled onto <body> (so its scrim out-ranks app chrome in
+  // the root stacking context), which is why every query below goes through
+  // `baseElement` rather than the render container.
+  it('mounts the backdrop on <body>, outside the render container', () => {
+    const { container, baseElement } = render(
+      <Dialog>
+        <h2>Portaled</h2>
+      </Dialog>,
+    );
+    expect(container.querySelector('.modal-backdrop')).toBeNull();
+    expect(baseElement.querySelector('.modal-backdrop')?.parentElement).toBe(document.body);
+  });
+
   it('closes on backdrop click when enabled', () => {
     const onClose = vi.fn();
-    const { container } = render(
+    const { baseElement } = render(
       <Dialog onClose={onClose}>
         <h2>Backdrop close</h2>
       </Dialog>,
     );
 
-    fireEvent.click(container.querySelector('.modal-backdrop') as HTMLElement);
+    fireEvent.click(baseElement.querySelector('.modal-backdrop') as HTMLElement);
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -54,13 +67,13 @@ describe('Dialog', () => {
   });
 
   it('lets custom panels opt out of the shared modal chrome class', () => {
-    const { container } = render(
+    const { baseElement } = render(
       <Dialog className="plugin-details-modal" includeChromeClassName={false}>
         <h2>Plugin details</h2>
       </Dialog>,
     );
 
-    const panel = container.querySelector('.plugin-details-modal');
+    const panel = baseElement.querySelector('.plugin-details-modal');
 
     expect(panel).toBeTruthy();
     expect(panel?.className).toBe('plugin-details-modal');
@@ -73,13 +86,13 @@ describe('Dialog', () => {
     document.head.insertBefore(variantStyles, document.head.firstChild);
 
     try {
-      const { container } = render(
+      const { baseElement } = render(
         <Dialog className="modal-rename">
           <h2>Rename design</h2>
         </Dialog>,
       );
 
-      const panel = container.querySelector('.modal-rename') as HTMLElement;
+      const panel = baseElement.querySelector('.modal-rename') as HTMLElement;
       const panelStyles = getComputedStyle(panel);
 
       expect(panelStyles.width).toBe('420px');
@@ -90,7 +103,7 @@ describe('Dialog', () => {
   });
 
   it('supports sectioned layouts with shared header/body/footer primitives', () => {
-    const { container } = render(
+    const { baseElement } = render(
       <Dialog layout="sectioned" ariaLabelledBy="dialog-title">
         <DialogHeader>
           <DialogTitle id="dialog-title">Sketch text</DialogTitle>
@@ -110,9 +123,9 @@ describe('Dialog', () => {
     );
 
     expect(screen.getByRole('dialog', { name: 'Sketch text' })).toBeTruthy();
-    expect(container.querySelector('[class*="dialogSectioned"]')).toBeTruthy();
-    expect(container.querySelector('[class*="header"]')).toBeTruthy();
-    expect(container.querySelector('[class*="body"]')).toBeTruthy();
-    expect(container.querySelector('[class*="footer"]')).toBeTruthy();
+    expect(baseElement.querySelector('[class*="dialogSectioned"]')).toBeTruthy();
+    expect(baseElement.querySelector('[class*="header"]')).toBeTruthy();
+    expect(baseElement.querySelector('[class*="body"]')).toBeTruthy();
+    expect(baseElement.querySelector('[class*="footer"]')).toBeTruthy();
   });
 });

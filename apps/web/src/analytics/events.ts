@@ -1,3 +1,6 @@
+import { reportExperienceEvent } from '../observability/experience-diagnostics';
+import { observeAnalytics } from './observe';
+import type { ProjectCommentSendResultProps, ShareGuideClickProps, ShareGuideSurfaceViewProps } from '@open-design/contracts/analytics';
 // Typed track* helpers for the v2 analytics schema. Each helper accepts a
 // strongly typed props payload (from @open-design/contracts/analytics) and
 // forwards it through the loosely typed `track()` from AnalyticsProvider.
@@ -210,7 +213,23 @@ function send<T extends object>(
   props: T,
   options?: TrackOptions,
 ): void {
+  // SAFETY: typed event props are plain payload objects; both sinks read them as string-keyed properties.
+  reportExperienceEvent(event, props as unknown as Record<string, unknown>);
+  // SAFETY: the same plain typed payload is forwarded without mutation.
   track(event, props as unknown as Record<string, unknown>, options);
+}
+
+/** New passive observations never pass requestId options: those can wrap business fetches. */
+export function trackProjectCommentSendResult(track: Track, props: ProjectCommentSendResultProps): void {
+  observeAnalytics(() => send(track, 'project_comment_send_result', props));
+}
+
+export function trackShareGuideSurfaceView(track: Track, props: ShareGuideSurfaceViewProps): void {
+  observeAnalytics(() => send(track, 'surface_view', props));
+}
+
+export function trackShareGuideClick(track: Track, props: ShareGuideClickProps): void {
+  observeAnalytics(() => send(track, 'ui_click', props));
 }
 
 // ---- page_view -----------------------------------------------------------
@@ -1217,8 +1236,9 @@ export function trackArtifactDeployResult(
 export function trackArtifactPublishResult(
   track: Track,
   props: ArtifactPublishResultProps,
+  options?: { requestId?: string },
 ): void {
-  send(track, 'artifact_publish_result', props);
+  send(track, 'artifact_publish_result', props, options);
 }
 
 export function trackFileVersionRestoreResult(
@@ -1307,6 +1327,7 @@ export function trackAssistantFeedbackClick(
 ) {
   track(
     'assistant_feedback_click',
+    // SAFETY: the typed feedback payload is a plain string-keyed object, passed unchanged to track.
     props as unknown as Record<string, unknown>,
   );
 }
@@ -1317,6 +1338,7 @@ export function trackAssistantFeedbackReasonView(
 ) {
   track(
     'assistant_feedback_reason_view',
+    // SAFETY: the typed feedback payload is a plain string-keyed object, passed unchanged to track.
     props as unknown as Record<string, unknown>,
   );
 }
@@ -1328,6 +1350,7 @@ export function trackAssistantFeedbackReasonClick(
 ) {
   track(
     'assistant_feedback_reason_click',
+    // SAFETY: the typed feedback payload is a plain string-keyed object, passed unchanged to track.
     props as unknown as Record<string, unknown>,
     options,
   );
@@ -1340,6 +1363,7 @@ export function trackAssistantFeedbackReasonSubmit(
 ) {
   track(
     'assistant_feedback_reason_submit',
+    // SAFETY: the typed feedback payload is a plain string-keyed object, passed unchanged to track.
     props as unknown as Record<string, unknown>,
     options,
   );

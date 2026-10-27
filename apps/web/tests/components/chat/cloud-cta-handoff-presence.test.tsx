@@ -1,30 +1,9 @@
 // @vitest-environment jsdom
 /**
- * 报错卡上那颗〔切换到 Cloud〕**只在接手方在场时**才画。
- *
- * 这颗 CTA 自己不做事,它把这一轮交给宿主:`onSwitchToAmrAndRetry`,接不住时
- * 回落 `onOpenAmrSettings`。两个都没接的宿主,onClick 走完两个分支什么都不会
- * 发生 —— 而 `ChatPane` 里凡是读 `showCloudSwitchCta` 的地方都当它已经把主位
- * 接走了:`errorActionVariant` 把真能用的〔重试〕挤到次级,
- * `contactSupportIsPrimary` 也不再升格。
- *
- * 三个宿主正好有这一种:
- *   · `ProjectView`              —— `onSwitchToAmrAndRetry` + `onOpenAmrSettings` 都接
- *   · `workspace/SideChatTab`    —— 只接 `onRetry`,两个 AMR 口子一个都没接
- *   · `DesignSystemFlow`         —— 三个都没接
- *
- * 所以侧边聊天里,一轮失败之后屏幕上唯一显眼的那颗按钮是**假的**,同时真能用的
- * 那颗被降级;第 4 档(没有任何恢复动作)的卡更是连一颗主按钮都不剩。
- *
- * 不变量和 `balanceCardCannotTakeTheHandoff` / `reconnectRowCannotTakeTheHandoff`
- * 是同一条:**让位只在接手方真的在场时成立**。
- *
- * ⚠️ 这里**不**碰「卡上该有几颗按钮」。铺不铺这颗 CTA 由
- * `runFailureUi.cloudSwitchCta`(OPEND-2772「铺到所有报错」)说了算;这份文件只问
- * 「这个宿主接不接得住」。反向锚点那一条钉的就是:接得住的宿主,一格都不许变。
- *
- * 判据一律走渲染文本 / `data-testid` / 点击行为,不碰 CSS 类名
- * (`apps/web/src/components/chat/AGENTS.md` §5)。
+ * CTA 只在真实回调存在时渲染；G16 不允许缺 Cloud 接线的裸组件退回旧 CLI 重试。
+ * 未接回调的夹具只是组件边界，不代表真实 SideChat。真实侧聊→FileWorkspace→
+ * ProjectView→认证回程的来源与执行归属由独立宿主测试覆盖。
+ * 已接回调的 CLI/BYOK 卡固定三颗，Cloud 设置是既有兼容回调，不造空按钮。
  */
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -152,8 +131,8 @@ function primaryActions(container: HTMLElement): HTMLElement[] {
   );
 }
 
-/** `workspace/SideChatTab` 的接线:能重试,但两个 AMR 口子都没接 */
-const SIDE_CHAT_TAB: HostWiring = {};
+/** 故意缺少 Cloud 回调的裸 ChatPane，不能冒充当前真实侧聊。 */
+const UNWIRED_COMPONENT: HostWiring = {};
 
 /** `ProjectView` 的接线:两个都接 */
 function projectViewWiring(): Required<HostWiring> & { onSwitchToAmrAndRetry: ReturnType<typeof vi.fn> } {
@@ -163,68 +142,47 @@ function projectViewWiring(): Required<HostWiring> & { onSwitchToAmrAndRetry: Re
   } as never;
 }
 
-describe('接手方不在场时,报错卡不许让位', () => {
-  /*
-   * S19 进程崩了(每月 20,868 次,第二大桶):阶梯第 2 档,答案是〔重试〕。
-   * 侧边聊天接了 `onRetry`,所以这颗按钮是**真的能用**的。
-   */
-  it('侧边聊天:不画那颗点了没反应的 Cloud 按钮', () => {
+describe('裸组件缺 Cloud 接线时不伪造恢复入口', () => {
+  it('不画点了没反应的 Cloud 按钮', () => {
     const { container } = renderFailure({
-      code: 'AGENT_EXECUTION_FAILED',
-      detail: 'process_crashed',
-      host: SIDE_CHAT_TAB,
+      code: 'AGENT_EXECUTION_FAILED', detail: 'process_crashed', host: UNWIRED_COMPONENT,
     });
 
     expect(screen.queryByTestId('chat-error-switch-to-cloud')).toBeNull();
-    expect(
-      Array.from(container.querySelectorAll('button')).filter((b) =>
-        (b.textContent ?? '').includes('切换到 Cloud'),
-      ),
-    ).toHaveLength(0);
+    expect(Array.from(container.querySelectorAll('button')).filter((button) =>
+      (button.textContent ?? '').includes('切换到 OpenDesign Cloud'),
+    )).toHaveLength(0);
   });
 
-  it('侧边聊天:〔重试〕还在,而且拿回主位', () => {
+  it('不回退旧 CLI 重试，常驻动作保持次级', () => {
     const { container } = renderFailure({
-      code: 'AGENT_EXECUTION_FAILED',
-      detail: 'process_crashed',
-      host: SIDE_CHAT_TAB,
+      code: 'AGENT_EXECUTION_FAILED', detail: 'process_crashed', host: UNWIRED_COMPONENT,
     });
 
-    const retry = screen.getByTestId('chat-error-retry');
-    expect(retry.getAttribute('data-run-error-action')).toBe('primary');
-    const primaries = primaryActions(container);
-    expect(primaries).toHaveLength(1);
-    expect(primaries[0]).toBe(retry);
+    expect(screen.queryByTestId('chat-error-retry')).toBeNull();
+    expect(primaryActions(container)).toHaveLength(0);
+    expect(screen.getByTestId('chat-error-contact-support').dataset.runErrorAction).toBe('secondary');
+    expect(screen.getByTestId('chat-error-export-logs').dataset.runErrorAction).toBe('secondary');
   });
 
-  it('侧边聊天:那颗〔重试〕点下去真的走宿主的重试', () => {
+  it('缺 Cloud 回调不会借常驻按钮调用本地重试', () => {
     const { onRetry } = renderFailure({
-      code: 'AGENT_EXECUTION_FAILED',
-      detail: 'process_crashed',
-      host: SIDE_CHAT_TAB,
+      code: 'AGENT_EXECUTION_FAILED', detail: 'process_crashed', host: UNWIRED_COMPONENT,
     });
 
-    fireEvent.click(screen.getByTestId('chat-error-retry'));
-
-    expect(onRetry).toHaveBeenCalledTimes(1);
-    expect(onRetry.mock.calls[0]![0]).toMatchObject({ id: 'msg-failed' });
+    fireEvent.click(screen.getByTestId('chat-error-contact-support'));
+    expect(screen.getByTestId('chat-support-dialog')).toBeTruthy();
+    expect(onRetry).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('chat-error-retry')).toBeNull();
   });
 
-  /*
-   * 阶梯第 4 档(`AGENT_RUNTIME_DEF_INVALID`):卡上本来就没有恢复动作,唯一的
-   * 主按钮来自「常驻次级〔联系支持〕升格」。那颗假 CTA 一出场,升格被压掉 ——
-   * 于是整张卡真的一颗主按钮都不剩,正是第 4 档存在的理由要防的那件事。
-   */
-  it('侧边聊天 · 第 4 档:卡不许变成「零个主按钮 + 一颗假按钮」', () => {
-    const { container } = renderFailure({
-      code: 'AGENT_RUNTIME_DEF_INVALID',
-      host: SIDE_CHAT_TAB,
-    });
+  it('旧第 4 档也不造 Cloud 按钮或将联系支持升格', () => {
+    const { container } = renderFailure({ code: 'AGENT_RUNTIME_DEF_INVALID', host: UNWIRED_COMPONENT });
 
+    expect(screen.getByTestId('chat-run-error-card')).toBeTruthy();
     expect(screen.queryByTestId('chat-error-switch-to-cloud')).toBeNull();
-    const primaries = primaryActions(container);
-    expect(primaries).toHaveLength(1);
-    expect(primaries[0]!.getAttribute('data-testid')).toBe('chat-error-contact-support');
+    expect(primaryActions(container)).toHaveLength(0);
+    expect(screen.getByTestId('chat-error-contact-support').dataset.runErrorAction).toBe('secondary');
   });
 
   it('两个口子只要接了一个(回落到打开 Cloud 设置),CTA 照旧在', () => {
@@ -241,10 +199,7 @@ describe('接手方不在场时,报错卡不许让位', () => {
   });
 });
 
-/*
- * 反向锚点。`ProjectView` 那种两个 handler 都接的宿主,这次改动**一格都不许变** ——
- * OPEND-2772 的主位归属、〔重试〕让位到次级,全部照旧。
- */
+// 接线完整时固定三颗，真实回调优先于设置兼容回调。
 describe('反向锚点 · 接手方在场的宿主行为不变', () => {
   it('ProjectView:主位仍是那颗〔切换到 Cloud〕', () => {
     const { container } = renderFailure({
@@ -259,16 +214,18 @@ describe('反向锚点 · 接手方在场的宿主行为不变', () => {
     expect(primaries[0]).toBe(cta);
   });
 
-  it('ProjectView:〔重试〕仍在,仍是次级', () => {
+  it('ProjectView:CLI 只保留固定三颗，不再另加本地重试', () => {
     renderFailure({
       code: 'AGENT_EXECUTION_FAILED',
       detail: 'process_crashed',
       host: projectViewWiring(),
     });
 
-    expect(screen.getByTestId('chat-error-retry').getAttribute('data-run-error-action')).toBe(
-      'secondary',
-    );
+    expect(screen.queryByTestId('chat-error-retry')).toBeNull();
+    expect(Array.from(screen.getByTestId('chat-run-error-card').querySelectorAll('button'),
+      (button) => button.dataset.testid)).toEqual([
+      'chat-error-contact-support', 'chat-error-export-logs', 'chat-error-switch-to-cloud',
+    ]);
   });
 
   it('ProjectView:点它走的仍是 onSwitchToAmrAndRetry', () => {
@@ -281,7 +238,9 @@ describe('反向锚点 · 接手方在场的宿主行为不变', () => {
 
     fireEvent.click(screen.getByTestId('chat-error-switch-to-cloud'));
 
-    expect(host.onSwitchToAmrAndRetry).toHaveBeenCalledTimes(1);
+    expect(host.onSwitchToAmrAndRetry).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ id: 'msg-failed', agentId: 'claude' }),
+    );
     expect(host.onOpenAmrSettings).not.toHaveBeenCalled();
   });
 

@@ -1,5 +1,5 @@
 import { expect, test } from '@/playwright/suite';
-import { configureVisualPage, gotoVisualHome } from '@/playwright/visual';
+import { configureVisualPage, gotoVisualHome, gotoVisualProjectsPage } from '@/playwright/visual';
 import { T } from '@/timeouts';
 
 const PROJECT_ID = 'visual-comment-slide-deck';
@@ -79,6 +79,8 @@ test('[P1] ignores slide tag examples in comments when rendering a recent cover'
   });
 
   await gotoVisualHome(page);
+  // The cards live on the 项目 page; Home only lists the rail rows (OPEND-3140).
+  await gotoVisualProjectsPage(page);
   const card = page.locator(`.recent-projects__card[data-project-id="${PROJECT_ID}"]`);
   await expect(card.getByText(PROJECT_NAME, { exact: true })).toBeVisible({ timeout: T.medium });
   const frame = card.locator('.recent-projects__deck-iframe').contentFrame();

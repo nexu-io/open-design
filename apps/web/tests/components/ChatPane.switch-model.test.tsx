@@ -1,18 +1,8 @@
 // @vitest-environment jsdom
-/**
- * 红测(E3):〔更换模型〕要**直接打开模型选择器**,不是把人送进设置面板。
- *
- * 权威是交付稿自己的话(`docs/design/run-errors/error-ux-design.md:130`,S08):
- * 「更换模型直接打开模型选择器,**选完自动重跑**;切到 Open Design 智能体后自动重跑。」
- *
- * 之前记在 `chat-panel-feedback.md` 里的理由是**错的** —— 那条写着「项目页里没有
- * 模型选择器,所以只能落设置」,可 `ProjectView` 一直挂着 `AvatarMenu`,composer
- * 那颗触发器点开就是内联的模型列表(2026-08-27 在真机上点开确认过)。
- *
- * 这一层只钉「按下去发生了什么」:开选择器、而且**不**打开设置。
- * 「选完自动重跑」那一半在 ProjectView 那层,由 `ProjectView.switch-model-rerun` 钉。
+/** G16 replaces the error-card model-picker/settings actions with the fixed
+ * Cloud handoff for a failed local run. Model-unavailable copy remains covered.
  */
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatPane } from '../../src/components/ChatPane';
@@ -26,7 +16,7 @@ vi.mock('../../src/i18n', () => ({
 
 afterEach(() => cleanup());
 
-/** 模型下线 —— 这一档的主动作就是〔更换模型〕(`amr-guidance` 的 switch-model) */
+/** 本地运行报模型下线，保留分类，但卡上仅允许固定 Cloud 入口。 */
 function modelGoneTurn(): ChatMessage[] {
   return [
     { id: 'user-1', role: 'user', content: 'Build it', createdAt: 0 },
@@ -73,36 +63,30 @@ function renderPane(extra: Record<string, unknown>) {
   );
 }
 
-describe('E3 · 〔更换模型〕的落点', () => {
-  it('opens the model picker instead of sending the user to Settings', () => {
+describe('G16 · 模型下线卡的固定 Cloud 入口', () => {
+  it.each([true, false])('不调用旧模型选择器或设置，无论 picker 是否接线 (%s)', (withPicker) => {
     const onSwitchModel = vi.fn();
     const onOpenSettings = vi.fn();
-    const { container } = renderPane({ onSwitchModel, onOpenSettings, onRetry: vi.fn() });
-
-    const button = container.querySelector<HTMLButtonElement>('[data-testid="chat-error-switch-model"]');
-    expect(button, '这一档应该给一颗〔更换模型〕').toBeTruthy();
-    fireEvent.click(button!);
-
-    expect(onSwitchModel, '稿子要的是「直接打开模型选择器」').toHaveBeenCalledTimes(1);
-    // 带上是哪一轮 —— 选完模型要重跑的就是它(和 onRetry 同一副形状)
-    expect(onSwitchModel.mock.calls[0]?.[0]).toMatchObject({ id: 'assistant-1' });
-    expect(onOpenSettings, '不该再把人丢进设置面板').not.toHaveBeenCalled();
-  });
-
-  it('still falls back to Settings when no picker is wired', () => {
-    // 首页之类没有内联选择器的宿主:退回设置,总好过按了没反应。
-    const onOpenSettings = vi.fn();
-    const { container } = renderPane({ onOpenSettings, onRetry: vi.fn() });
-    fireEvent.click(container.querySelector<HTMLButtonElement>('[data-testid="chat-error-switch-model"]')!);
-    expect(onOpenSettings).toHaveBeenCalledWith('execution');
+    const onRetry = vi.fn();
+    const onSwitchToAmrAndRetry = vi.fn();
+    const { container } = renderPane({
+      ...(withPicker ? { onSwitchModel } : {}), onOpenSettings, onRetry, onSwitchToAmrAndRetry,
+    });
+    const card = screen.getByTestId('chat-run-error-card');
+    expect(within(card).getAllByRole('button').map((button) => button.textContent?.trim())).toEqual([
+      'chat.runError.contactSupportCta', 'chat.runError.exportLogsCta', 'chat.amrCard.switchCta',
+    ]);
+    expect(container.querySelector('[data-testid="chat-error-switch-model"]')).toBeNull();
+    fireEvent.click(within(card).getByRole('button', { name: 'chat.amrCard.switchCta' }));
+    expect(onSwitchToAmrAndRetry).toHaveBeenCalledWith(expect.objectContaining({ id: 'assistant-1', agentId: 'claude' }));
+    expect(onSwitchModel).not.toHaveBeenCalled();
+    expect(onOpenSettings).not.toHaveBeenCalled();
+    expect(onRetry).not.toHaveBeenCalled();
   });
 });
 
 describe('E3 · 卡上的话不许和按钮的落点打架', () => {
-  /**
-   * 按钮改成就地开选择器之后,原来那句「请**在设置中**切换到其他可用模型后重试」
-   * 就成了假话 —— 它指的路和按下去发生的事不是一回事。真机上先照出来的正是这个。
-   */
+  // The approved model-unavailable text must not resurrect a removed Settings instruction.
   it('no longer sends the reader to Settings in words', async () => {
     const { readFileSync } = await import('node:fs');
     const { fileURLToPath } = await import('node:url');

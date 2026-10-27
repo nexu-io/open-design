@@ -303,7 +303,6 @@ function renderHome(handoffId: number, pluginId: string) {
         projects={[]}
         onSubmit={() => undefined}
         onOpenProject={() => undefined}
-        onViewAllProjects={() => undefined}
         promptHandoff={createPluginUseHandoff(handoffId, pluginId, { action: 'use-with-query' })}
       />
     </I18nProvider>,
@@ -345,11 +344,15 @@ describe('community template Use lands a sendable composer', () => {
 
     // The brief really is in the composer, so the send has content.
     expect(screen.getByTestId('home-hero-active-plugin').textContent).toContain(
-      'Write a Demo Day Pitch',
+      // The lead chip cuts the title to eight code points, then an ellipsis.
+      'Write a…',
     );
     expect(submit.disabled).toBe(false);
-    expect(submit.getAttribute('data-tooltip')).not.toBe('Type something to run');
-    expect(submit.getAttribute('data-tooltip')).toBe('Run');
+    // The composer dropped its send tooltip (the 运行 bubble landed on the
+    // prompt text right above the arrow), so `aria-label` is the button's only
+    // readout now — "Run" rather than the sending state.
+    expect(submit.getAttribute('data-tooltip')).toBeNull();
+    expect(submit.getAttribute('aria-label')).toBe('Run');
   });
 
   it('stays sendable across two Use clicks with different templates', async () => {
@@ -365,7 +368,6 @@ describe('community template Use lands a sendable composer', () => {
           projects={[]}
           onSubmit={() => undefined}
           onOpenProject={() => undefined}
-          onViewAllProjects={() => undefined}
           promptHandoff={createPluginUseHandoff(2, DESIGN_BRIEF.id, { action: 'use-with-query' })}
         />
       </I18nProvider>,
@@ -373,7 +375,7 @@ describe('community template Use lands a sendable composer', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('home-hero-active-plugin').textContent).toContain(
-        'Write a Design Brief',
+        'Write a…',
       );
     });
     await settle();
@@ -492,7 +494,6 @@ describe('community template Use lands a sendable composer', () => {
             submittedPluginInputs.push(payload.pluginInputs ?? {});
           }}
           onOpenProject={() => undefined}
-          onViewAllProjects={() => undefined}
           promptHandoff={createPluginUseHandoff(1, LIVE_DASHBOARD.id, { action: 'use-with-query' })}
         />
       </I18nProvider>

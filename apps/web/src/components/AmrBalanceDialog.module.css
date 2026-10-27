@@ -202,7 +202,7 @@
   border: none;
   background: var(--accent);
   color: #fff;
-  font-weight: 500;
+  font-weight: 600;
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent),
     0 8px 20px color-mix(in srgb, var(--accent) 20%, transparent);

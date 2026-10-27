@@ -659,6 +659,125 @@ describe('chat run service shutdown', () => {
     });
   });
 
+  it('reports a daemon signal to a completed child that outlives the grace wait', async () => {
+    const childPid = 40_600;
+    const child = new FakeChildProcess({ closeOn: 'SIGTERM', pid: childPid });
+    platformMocks.listProcessSnapshots.mockResolvedValue([{ pid: childPid, ppid: 1, command: 'vela' }]);
+    platformMocks.stopProcesses.mockImplementation(async (_pids, options) => {
+      options?.onSignal?.(childPid, 'SIGTERM');
+      child.exitCode = 1;
+      child.emit('exit', 1, null);
+      child.emit('close', 1, null);
+      return { alreadyStopped: false, forcedPids: [], matchedPids: [childPid], remainingPids: [], stoppedPids: [childPid] };
+    });
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
+    run.status = 'running';
+    const onChildSignal = vi.fn();
+
+    await runs.terminateProcessTree(run, child, null, { gracefulWaitMs: 20, onChildSignal });
+
+    expect(onChildSignal).toHaveBeenCalledTimes(1);
+    expect(platformMocks.stopProcesses).toHaveBeenCalledWith([childPid], expect.anything());
+  });
+
+  it('does not report a daemon signal when the child exits on its own during the grace wait', async () => {
+    const childPid = 40_700;
+    const child = new FakeChildProcess({ closeOn: 'SIGTERM', pid: childPid });
+    platformMocks.listProcessSnapshots.mockResolvedValue([{ pid: childPid, ppid: 1, command: 'vela' }]);
+    platformMocks.stopProcesses.mockResolvedValue({
+      alreadyStopped: true, forcedPids: [], matchedPids: [], remainingPids: [], stoppedPids: [],
+    });
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
+    run.status = 'running';
+    const onChildSignal = vi.fn();
+    setTimeout(() => {
+      child.exitCode = 1;
+      child.emit('exit', 1, null);
+      child.emit('close', 1, null);
+    }, 5);
+
+    await runs.terminateProcessTree(run, child, null, { gracefulWaitMs: 200, onChildSignal });
+
+    expect(onChildSignal).not.toHaveBeenCalled();
+  });
+
+  it('reports a daemon signal on the pid-less path only while the child is alive', async () => {
+    const runs = createRuns();
+    const alive = new FakeChildProcess({ closeOn: 'SIGTERM' });
+    const aliveRun = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
+    const signalled = vi.fn();
+    await runs.terminateProcessTree(aliveRun, alive, null, { gracefulWaitMs: 10, onChildSignal: signalled });
+    expect(signalled).toHaveBeenCalledTimes(1);
+    expect(alive.signals).toEqual(['SIGTERM']);
+
+    const exiting = new FakeChildProcess({ closeOn: 'SIGTERM' });
+    const exitingRun = runs.create({ projectId: 'project-1', conversationId: 'conv-2' });
+    const notSignalled = vi.fn();
+    setTimeout(() => {
+      exiting.exitCode = 1;
+      exiting.emit('exit', 1, null);
+      exiting.emit('close', 1, null);
+    }, 5);
+    await runs.terminateProcessTree(exitingRun, exiting, null, { gracefulWaitMs: 200, onChildSignal: notSignalled });
+    expect(notSignalled).not.toHaveBeenCalled();
+    expect(exiting.signals).toEqual([]);
+  });
+
+  // A signal the daemon only attempted is not a daemon-caused exit: the child
+  // may still die of its own failure afterwards, which must stay a failure.
+  it('does not report a daemon signal when the Windows stop path fails to dispatch it', async () => {
+    const childPid = 40_800;
+    const child = new FakeChildProcess({ closeOn: 'SIGTERM', pid: childPid });
+    platformMocks.listProcessSnapshots.mockResolvedValue([{ pid: childPid, ppid: 1, command: 'vela' }]);
+    platformMocks.stopProcesses.mockRejectedValue(Object.assign(new Error('operation not permitted'), { code: 'EPERM' }));
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
+    run.status = 'running';
+    const onChildSignal = vi.fn();
+
+    await runs.terminateProcessTree(run, child, null, { gracefulWaitMs: 10, onChildSignal });
+
+    expect(onChildSignal).not.toHaveBeenCalled();
+  });
+
+  it('does not report a daemon signal when the child is gone before the Windows stop path signals it', async () => {
+    const childPid = 40_900;
+    const child = new FakeChildProcess({ closeOn: 'SIGTERM', pid: childPid });
+    platformMocks.listProcessSnapshots.mockResolvedValue([{ pid: childPid, ppid: 1, command: 'vela' }]);
+    // process.kill hit ESRCH: nothing was delivered, so no dispatch is reported.
+    platformMocks.stopProcesses.mockResolvedValue({
+      alreadyStopped: false, forcedPids: [], matchedPids: [childPid], remainingPids: [], stoppedPids: [childPid],
+    });
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
+    run.status = 'running';
+    const onChildSignal = vi.fn();
+
+    await runs.terminateProcessTree(run, child, null, { gracefulWaitMs: 10, onChildSignal });
+
+    expect(onChildSignal).not.toHaveBeenCalled();
+  });
+
+  it('does not report a daemon signal when the pid-less kill is not delivered', async () => {
+    const child = new FakeChildProcess({ closeOn: 'SIGKILL' });
+    child.kill = (signal: string) => { child.signals.push(signal); return false; };
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
+    const onChildSignal = vi.fn();
+    setTimeout(() => {
+      child.exitCode = 1;
+      child.emit('exit', 1, null);
+      child.emit('close', 1, null);
+    }, 40);
+
+    await runs.terminateProcessTree(run, child, null, { gracefulWaitMs: 10, termGraceMs: 200, onChildSignal });
+
+    expect(child.signals[0]).toBe('SIGTERM');
+    expect(onChildSignal).not.toHaveBeenCalled();
+  });
+
   it('filters active runs by conversation within the same project', () => {
     const runs = createRuns();
     const runA = runs.create({ projectId: 'project-1', conversationId: 'conv-a' });
@@ -826,7 +945,7 @@ describe('chat run service shutdown', () => {
 
       expect(platformMocks.stopProcesses).toHaveBeenCalledWith(
         [descendantPid, childPid],
-        { termGraceMs: 30, killGraceMs: 500 },
+        { termGraceMs: 30, killGraceMs: 500, onSignal: expect.any(Function) },
       );
       expect(run.events).not.toContainEqual(expect.objectContaining({
         event: 'diagnostic',
@@ -1827,6 +1946,122 @@ describe('run event log persistence', () => {
     });
   });
 
+  // OPEND-2629: `GET /api/runs?projectId` is what the Home entry rail folds
+  // into one status per project. After a restart nothing is in memory, so the
+  // project-scoped list has to be rebuilt from durable history — every
+  // persisted run of the queried project, and only that project's runs.
+  describe('project-scoped list after restart', () => {
+    it('lists every persisted run of the project without loading other projects', () => {
+      const before = createRunsWithLog(tmpDir);
+      const failed = before.create({ projectId: 'p1', conversationId: 'c1' });
+      before.finish(failed, 'failed', 1, null);
+      const succeeded = before.create({ projectId: 'p1', conversationId: 'c1' });
+      before.finish(succeeded, 'succeeded', 0, null);
+      const other = before.create({ projectId: 'p2', conversationId: 'c2' });
+      before.finish(other, 'succeeded', 0, null);
+
+      const restarted = createRunsWithLog(tmpDir);
+      const listed = restarted.list({ projectId: 'p1' });
+      expect(listed.map((run) => run.id).sort()).toEqual([failed.id, succeeded.id].sort());
+      expect(listed.map((run) => run.status).sort()).toEqual(['failed', 'succeeded']);
+      expect(listed.every((run) => run.projectId === 'p1')).toBe(true);
+
+      // Hydration is scoped to the queried project: p2 stays on disk until
+      // something asks for it, so a project-scoped list never loads the
+      // whole run history.
+      expect(restarted.list().map((run) => run.id)).not.toContain(other.id);
+      expect(restarted.get(other.id)).toMatchObject({ id: other.id, projectId: 'p2' });
+    });
+
+    it('applies conversation and status filters on top of the hydrated project history', () => {
+      const before = createRunsWithLog(tmpDir);
+      const failed = before.create({ projectId: 'p1', conversationId: 'c1' });
+      before.finish(failed, 'failed', 1, null);
+      const succeeded = before.create({ projectId: 'p1', conversationId: 'c2' });
+      before.finish(succeeded, 'succeeded', 0, null);
+
+      const restarted = createRunsWithLog(tmpDir);
+      expect(
+        restarted.list({ projectId: 'p1', status: 'succeeded' }).map((run) => run.id),
+      ).toEqual([succeeded.id]);
+      expect(
+        restarted.list({ projectId: 'p1', conversationId: 'c1' }).map((run) => run.id),
+      ).toEqual([failed.id]);
+      expect(restarted.list({ projectId: 'p1', status: 'active' })).toEqual([]);
+    });
+
+    it('keeps the persisted workspace scope and runtime on hydrated project runs', () => {
+      const workspaceScope = {
+        schemaVersion: 1,
+        projectId: 'p-team',
+        workspaceId: 'workspace-a',
+        source: 'persisted_project_binding',
+      };
+      const before = createRunsWithLog(tmpDir);
+      const teamRun = before.create({
+        projectId: 'p-team',
+        conversationId: 'c-team',
+        agentId: 'amr',
+        workspaceScope,
+      });
+      before.finish(teamRun, 'succeeded', 0, null);
+      const localRun = before.create({
+        projectId: 'p-team',
+        conversationId: 'c-team',
+        agentId: 'claude',
+        workspaceScope: null,
+      });
+      before.finish(localRun, 'succeeded', 0, null);
+
+      const restarted = createRunsWithLog(tmpDir);
+      const listed = restarted.list({ projectId: 'p-team' });
+      expect(listed).toHaveLength(2);
+      // The route's visibility filters key off these two fields, so they must
+      // come back exactly as persisted for the same authorization decision.
+      expect(listed.find((run) => run.id === teamRun.id)).toMatchObject({
+        agentId: 'amr',
+        workspaceScope,
+      });
+      expect(listed.find((run) => run.id === localRun.id)).toMatchObject({
+        agentId: 'claude',
+        workspaceScope: null,
+      });
+      expect(restarted.list({ projectId: 'p-other' })).toEqual([]);
+    });
+
+    it('lists runs created after the restart alongside hydrated history and forgets dropped runs', () => {
+      const before = createRunsWithLog(tmpDir);
+      const persisted = before.create({ projectId: 'p1', conversationId: 'c1' });
+      before.finish(persisted, 'succeeded', 0, null);
+
+      const restarted = createRunsWithLog(tmpDir);
+      const fresh = restarted.create({ projectId: 'p1', conversationId: 'c1' });
+      restarted.finish(fresh, 'succeeded', 0, null);
+      const dropped = restarted.create({ projectId: 'p1', conversationId: 'c1' });
+      restarted.drop(dropped);
+
+      expect(restarted.list({ projectId: 'p1' }).map((run) => run.id).sort()).toEqual(
+        [persisted.id, fresh.id].sort(),
+      );
+    });
+
+    it('re-lists a terminal run the in-memory TTL already evicted', () => {
+      vi.useFakeTimers();
+      try {
+        const runs = createRunsWithLog(tmpDir);
+        const run = runs.create({ projectId: 'p1', conversationId: 'c1' });
+        runs.finish(run, 'succeeded', 0, null);
+        vi.advanceTimersByTime(60_001);
+        // The unscoped list is a view of what is in memory and still forgets
+        // the run after the TTL; the project-scoped list is the durable one.
+        expect(runs.list().map((entry) => entry.id)).not.toContain(run.id);
+        expect(runs.list({ projectId: 'p1' }).map((entry) => entry.id)).toEqual([run.id]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   it('retains the cancellation cause when hydrating durable status after restart', async () => {
     const beforeRestart = createRunsWithLog(tmpDir);
     const canceled = beforeRestart.create({ projectId: 'p1' });
@@ -2060,9 +2295,7 @@ describe('work completeness vs a settled OD Next verdict', () => {
     });
   }
 
-  /** A settled OD Next task projection. `completed` is only reachable once the
-   *  coordinator saw BOTH a succeeded process AND a resolvable canonical
-   *  deliverable, so it is the strongest completion evidence the daemon holds. */
+  /** The task ended; physical status and remaining work are independent facts. */
   function completedStrategyTask() {
     return {
       taskExecutionId: 'odnext_8979d0a7452e4e65a51c666ad89f864d',
@@ -2081,22 +2314,30 @@ describe('work completeness vs a settled OD Next verdict', () => {
     };
   }
 
-  it('does not report unfinished work when OD Next settled the task as completed', () => {
+  it.each([true, false, undefined])('preserves unfinished work after task completion with file evidence %s', (deliverableValid) => {
     const runs = createRuns();
     const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
-    // The agent delivered index.html plus six images and declared the task
-    // complete, but its LAST TodoWrite snapshot still carried two pending
-    // items — the exact shape QA captured on project 3ffc55f1.
     run.lastTodoSnapshot = [
-      { content: '生成品牌视觉资产', status: 'completed' },
-      { content: '写入响应式交互原型', status: 'pending' },
-      { content: '交付根目录运行入口', status: 'pending' },
+      { content: 'Write the page', status: 'completed' },
+      { content: 'Add animation', status: 'pending' },
+      { content: 'Adapt for mobile', status: 'pending' },
     ];
-    run.strategyTask = completedStrategyTask();
-    run.deliverableValid = true;
+    run.strategyTask = { ...completedStrategyTask(), deliverableValid };
+    run.deliverableValid = deliverableValid;
 
     runs.finish(run, 'succeeded', 0, null);
 
+    expect(run.status).toBe('succeeded');
+    expect(run.strategyTask.outcome).toBe('completed');
+    expect(run.endedWithUnfinishedWork).toBe(true);
+  });
+
+  it('allows an ordinary answer to finish without files or todo', () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+    run.strategyTask = { ...completedStrategyTask(), deliverableValid: false };
+    runs.finish(run, 'succeeded', 0, null);
+    expect(run.status).toBe('succeeded');
     expect(run.endedWithUnfinishedWork).toBe(false);
   });
 

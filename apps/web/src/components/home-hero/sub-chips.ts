@@ -5,7 +5,7 @@
 // "landing page / dashboard / portfolio" under its "Website" choice, and
 // matching the exact sub-category taxonomy the Community plugin grid uses.
 //
-// Prototype owns a fixed Home information architecture. Its eight scenes stay
+// Prototype owns a fixed Home information architecture. Its seven scenes stay
 // visible even when the installed plugin catalog has no matching example.
 // Deck continues to use the dynamic Community facet taxonomy.
 
@@ -54,7 +54,6 @@ const SUBCATEGORY_ICONS: Record<string, IconName> = {
   'app-prototypes': 'blocks',
   'landing-marketing': 'globe',
   'developer-tools': 'terminal',
-  'docs-reports': 'file',
   'brand-design': 'palette',
   // deck — the 15 commercial "品类" scenes (slug === commercial category id)
   'fundraising-pitch': 'present',
@@ -98,7 +97,8 @@ const PROTOTYPE_SUB_CHIPS: readonly HomeHeroSubChip[] = [
   { slug: 'app-prototypes', label: 'Apps', icon: 'blocks' },
   { slug: 'developer-tools', label: 'Developer tools', icon: 'terminal' },
   { slug: 'brand-design', label: 'Brand / design', icon: 'palette' },
-  { slug: 'docs-reports', label: 'Docs / reports', icon: 'file' },
+  // Docs / reports left this rail: those plugins are the `document` kind now
+  // (OPEND-3118), reached from the 文档 chip rather than a Prototype scene.
 ];
 
 export function prototypeSubChipForSlug(slug: string | null): HomeHeroSubChip | null {

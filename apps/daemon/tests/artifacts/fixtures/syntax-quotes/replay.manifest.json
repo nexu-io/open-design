@@ -20,9 +20,9 @@
       "appliedRepairRules": []
     },
     {
-      "id": "ambiguous-expression-blocked",
+      "id": "ambiguous-expression-delivered-with-warning",
       "before": "ambiguous-expression.html",
-      "action": "fail",
+      "action": "warn",
       "attempts": 0,
       "appliedRepairRules": [],
       "finalizationReason": "no_safe_fix",

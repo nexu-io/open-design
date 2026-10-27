@@ -227,7 +227,7 @@
 .viewer-module-pointer__cta {
   margin: 4px 0 0;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
 }
 .viewer-module-pointer__entries {
@@ -321,13 +321,29 @@
   height: 30px;
   padding: 0;
 }
-.viewer-comment-count-trigger {
+.viewer-action.viewer-comment-count-trigger {
   position: relative;
+  box-sizing: border-box;
   justify-content: center;
   min-width: 42px;
   height: 30px;
   padding: 0 8px;
   gap: 5px;
+  border: 0;
+  border-radius: 6px;
+  background: #F3F3F4;
+  color: #333333;
+  font-size: 12px;
+  font-weight: 700;
+}
+.viewer-action.viewer-comment-count-trigger:hover:not(:disabled) {
+  background: #F3F3F4;
+  color: #333333;
+}
+.viewer-action.viewer-comment-count-trigger.active,
+.viewer-action.viewer-comment-count-trigger.active:hover:not(:disabled) {
+  background: #E4E4E6;
+  color: #333333;
 }
 .viewer-comment-count {
   min-width: 12px;
@@ -571,7 +587,7 @@
   background: var(--bg-panel);
   border-color: var(--border);
   color: var(--text-strong);
-  font-weight: 500;
+  font-weight: 600;
 }
 .viewer-meta { font-size: 12px; color: var(--text-muted); }
 .ghost-link {
@@ -956,7 +972,7 @@
 }
 .live-artifact-refresh-value.muted {
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: 600;
 }
 .live-artifact-refresh-sub {
   font-size: 12px;
@@ -1154,7 +1170,7 @@
 }
 .live-artifact-refresh-tile-title {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1383,7 +1399,7 @@
   background-color: transparent;
   color: var(--text);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.2;
   box-shadow: none;
 }
@@ -1444,7 +1460,7 @@
   background: transparent;
   color: var(--text-muted);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1;
   text-align: left;
 }
@@ -1656,25 +1672,26 @@
   z-index: 2;
   left: 0;
   top: 0;
-  width: 42px;
-  height: 42px;
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
   padding: 0;
-  border: 3px solid #fff;
-  border-radius: 50% 50% 50% 10px;
-  background: #d96a46;
-  color: white;
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 36px;
-  text-align: center;
-  box-shadow: 0 10px 22px rgba(33, 24, 18, 0.22);
+  border: 0;
+  border-radius: 50% 50% 50% 4px;
+  background: #282828;
+  color: #FFFFFF;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   pointer-events: auto;
   transform: translate(-50%, -50%);
 }
 .comment-saved-pin:hover,
 .comment-active-pin:hover {
-  background: #c95e3e;
-  transform: translate(-50%, calc(-50% - 1px));
+  transform: translate(-50%, -50%);
 }
 .comment-active-pin {
   pointer-events: none;
@@ -1708,6 +1725,15 @@
   flex-direction: column;
   overflow: hidden;
 }
+/* OP2: reason line under a read-only share-page comment's textarea. No
+   board color/size was given for this specific line; matches the app's
+   existing muted-caption convention (comment-side-time / commentSync). */
+.comment-popover-readonly-note {
+  margin: 6px 0 0;
+  color: #888888;
+  font-size: 11px;
+  line-height: 16px;
+}
 .comment-popover-body {
   flex: 1 1 auto;
   /* Without this a flex item refuses to shrink below its content height, which
@@ -1731,7 +1757,7 @@
   overflow: hidden;
   color: var(--text);
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1810,7 +1836,7 @@
 }
 .annotation-style-row span {
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: 600;
 }
 .annotation-style-row strong {
   display: inline-flex;
@@ -2100,10 +2126,13 @@
   width: 320px;
   height: 100%;
   max-width: 100%;
-  background: var(--bg-panel, #fff);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  box-sizing: border-box;
+  background: #FAFAFA;
+  border: 1px solid #E6E6E6;
+  border-radius: 10px;
+  box-shadow: none;
+  font-size: 13px;
+  color: #333333;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -2116,18 +2145,20 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-panel, #fff);
+  height: 56px;
+  min-height: 56px;
+  padding: 0 16px;
+  border-bottom: 1px solid #EDEDED;
+  background: #FAFAFA;
 }
 .comment-side-title {
   display: inline-flex;
   align-items: center;
   min-width: 0;
   gap: 7px;
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 700;
+  color: #202020;
+  font-size: 13px;
+  font-weight: 600;
 }
 .comment-side-title span {
   overflow: hidden;
@@ -2146,17 +2177,20 @@
   display: flex;
   align-items: center;
   flex: 0 0 auto;
-  /* No bottom inset: the 16px gap down to the first comment is owned by the
-     list's own top padding, so the two never stack into a 22px+ gutter. */
-  padding: 6px 8px 0;
+  /* The compact toolbar and list each own their reference-layout inset. */
+  min-height: 36px;
+  padding: 6px 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #8A8A8A;
 }
 .comment-side-select-all {
   border: 0;
   border-radius: var(--radius-sm);
   padding: 4px 6px;
   background: transparent;
-  color: var(--text-muted);
-  font-size: 12px;
+  color: #8A8A8A;
+  font-size: 11.5px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -2232,10 +2266,10 @@
 .comment-side-list {
   flex: 1;
   overflow-y: auto;
-  padding: 12px;
+  padding: 8px 12px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 .comment-side-empty {
   padding: 24px 8px;
@@ -2245,23 +2279,23 @@
 }
 .comment-side-item {
   position: relative;
-  border: 1px solid transparent;
-  border-radius: var(--radius);
-  padding: 10px 12px 10px 8px;
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 10px 6px 8px;
   background: transparent;
-  color: var(--text);
+  color: #333333;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 .comment-side-item.selected {
-  background: var(--comment-accent-surface);
-  border-color: var(--comment-accent-border);
+  background: #EDEDED;
+  border-color: transparent;
 }
 .comment-side-item.active {
-  background: var(--comment-accent-surface-strong);
-  border-color: var(--comment-accent-border);
-  box-shadow: inset 3px 0 0 var(--comment-accent);
+  background: #EDEDED;
+  border-color: transparent;
+  box-shadow: none;
 }
 .comment-side-item.dragging {
   opacity: 0.45;
@@ -2286,7 +2320,7 @@
 .comment-side-item-head {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 .comment-side-drag-handle {
   width: 22px;
@@ -2318,19 +2352,21 @@
 .comment-side-author {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex: 1;
   min-width: 0;
 }
 .comment-side-author-copy {
   display: inline-flex;
+  flex: 1;
   min-width: 0;
   flex-direction: column;
   gap: 1px;
 }
 .comment-side-author strong {
   font-size: 13px;
-  color: var(--text);
+  font-weight: 600;
+  color: #202020;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2341,33 +2377,33 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12px;
-  color: var(--text-muted);
-  line-height: 1.2;
+  color: #888888;
+  line-height: normal;
 }
 .comment-side-avatar {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #0a0a0a;
-  color: #fff;
   font-size: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-weight: 600;
+  font-weight: 500;
   flex-shrink: 0;
 }
 .comment-side-time {
-  font-size: 12px;
-  color: var(--text-muted);
+  flex: none;
+  font-size: 10.5px;
+  line-height: 16px;
+  color: #A0A0A0;
   white-space: nowrap;
 }
 .comment-side-check {
   width: 16px;
   height: 16px;
-  border-radius: var(--radius-xs);
-  border: 1.5px solid var(--border);
-  background: var(--bg-panel);
+  border-radius: 4px;
+  border: 1px solid #CFCFCF;
+  background: #FFFFFF;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -2377,15 +2413,31 @@
   flex-shrink: 0;
 }
 .comment-side-check.checked {
-  background: var(--comment-accent);
-  border-color: var(--comment-accent);
+  background: #202020;
+  border-color: #202020;
 }
 .comment-side-body {
+  padding-left: 28px;
   font-size: 13px;
-  color: var(--text);
-  line-height: 1.45;
+  color: #494949;
+  line-height: 20px;
   word-break: break-word;
   white-space: pre-wrap;
+}
+.comment-side-body.is-clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+.comment-side-expand {
+  align-self: flex-start;
+  padding: 2px 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--comment-accent);
+  font: inherit;
+  cursor: pointer;
 }
 .comment-side-attachments {
   display: flex;
@@ -2412,22 +2464,28 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
-  border-top: 1px solid var(--border);
-  background: var(--comment-accent-surface);
+  height: 40px;
+  min-height: 40px;
+  box-sizing: border-box;
+  padding: 4px 14px 8px;
+  border-top: 1px solid #EDEDED;
+  background: #FAFAFA;
 }
 .comment-side-selectcount {
   flex: 1;
   font-size: 12px;
-  color: var(--comment-accent-strong);
+  font-weight: 500;
+  color: #8A8A8A;
 }
 .comment-side-selectbar .ghost {
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
   background: transparent;
-  border: none;
   font-size: 12px;
-  color: var(--text);
+  color: #202020;
   cursor: pointer;
-  padding: 4px 6px;
 }
 .comment-side-selectbar .ghost:hover {
   color: var(--text);
@@ -2437,12 +2495,14 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  background: var(--comment-accent);
-  color: #fff;
-  border: 1px solid var(--comment-accent);
-  border-radius: var(--radius-sm);
-  padding: 5px 10px;
+  height: 28px;
+  padding: 0 9px;
+  background: #202020;
+  color: #FFFFFF;
+  border: 0;
+  border-radius: 6px;
   font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
 }
 .comment-side-selectbar .primary:disabled {
@@ -2452,8 +2512,8 @@
   cursor: not-allowed;
 }
 .comment-side-selectbar .primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--comment-accent) 88%, #000);
-  border-color: color-mix(in srgb, var(--comment-accent) 88%, #000);
+  background: #202020;
+  border-color: #202020;
 }
 .comment-side-new-comment {
   flex: 0 0 auto;
@@ -3017,7 +3077,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   background: var(--bg-subtle);
   color: var(--text-muted);
   font-size: 11px;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: 0;
   overflow: hidden;
   white-space: nowrap;

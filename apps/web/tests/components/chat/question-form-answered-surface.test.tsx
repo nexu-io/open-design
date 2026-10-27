@@ -73,10 +73,28 @@ function answered(
 }
 
 describe('「已确认」陈述块的底', () => {
-  it('有浅灰底、有 16px 圆角', () => {
+  /*
+   * OPEND-3177(P3,纠正 K1 #8185):chat 面板自 OPEND-3090 起不再铺底,设计定稿
+   * (OPEND-3178 录屏 2026-09-16 + 评论「去掉底部的白色底」)把这一块**直接透明落在
+   * 面板上** —— 不再是稿子那枚浅灰底,也不是 K1 的白色浮动卡。圆角 / 内距两枚
+   * 自定义属性保留(视觉方向答案那一档仍靠 `--answered-radius` 区分)。
+   */
+  it('不铺底:透明落在面板上,圆角仍走自定义属性', () => {
     const cs = getComputedStyle(answered());
-    expect(cs.background || cs.backgroundColor, '那块还是纯白无底').toBe('var(--bg-panel)');
+    // jsdom 把 `transparent` 规范化成 `rgba(0, 0, 0, 0)`,两种写法都算「不铺底」;
+    // 读 `background` 简写优先 —— jsdom 不解析 `var()`,铺了 token 底时只有它带值
+    expect(['transparent', 'rgba(0, 0, 0, 0)'], '那块又铺回了一层底').toContain(cs.background || cs.backgroundColor);
     expect(cs.borderRadius).toBe('var(--answered-radius)');
+  });
+
+  it('不读浮动卡 token,也不带边和阴影', () => {
+    const rule = CSS.replace(/\/\*[\s\S]*?\*\//g, '')
+      .split('}')
+      .find((chunk) => chunk.includes('.answered {'));
+    expect(rule, '找不到 `.answered` 那条规则').toBeTruthy();
+    expect(rule!).not.toMatch(/--chat-floating-card-|--bg-panel|--material-/);
+    expect(rule!).not.toMatch(/(?:^|;)\s*border\s*:/);
+    expect(rule!).not.toMatch(/box-shadow\s*:\s*(?!none)/);
   });
 
   /*

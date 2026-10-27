@@ -114,7 +114,6 @@ describe('HomeView plugin i18n', () => {
             projects={[]}
             onSubmit={() => undefined}
             onOpenProject={() => undefined}
-            onViewAllProjects={() => undefined}
             promptHandoff={createPluginUseHandoff(1, 'localized-plugin', { action: 'use' })}
           />
         </div>

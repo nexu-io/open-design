@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { useLayoutEffect } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { TemplatePicker } from '../../../src/components/home-hero/TemplatePicker';
@@ -26,104 +27,162 @@ function labelFor(chipId: string): string {
   return chipById(chipId).label;
 }
 
-function renderPicker(activeChipId: string | null) {
-  const onPick = vi.fn();
-  return {
-    onPick,
-    ...render(
-      <TemplatePicker
-        templates={templates}
-        activeChipId={activeChipId}
-        labelFor={labelFor}
-        onPick={onPick}
-      />,
-    ),
-  };
-}
-
-function mockPickerRect(top: number, bottom: number) {
-  const picker = screen.getByTestId('home-hero-template-picker');
-  vi.spyOn(picker, 'getBoundingClientRect').mockReturnValue({
-    x: 100,
-    y: top,
-    left: 100,
-    right: 240,
-    top,
-    bottom,
-    width: 140,
-    height: bottom - top,
-    toJSON: () => ({}),
-  });
-}
-
 describe('TemplatePicker', () => {
-  it('keeps the menu open for its own scroll but dismisses when a trigger ancestor scrolls', () => {
-    renderPicker('deck');
-    fireEvent.click(screen.getByTestId('home-hero-template-trigger'));
-
-    const menu = screen.getByTestId('home-hero-template-menu');
-    fireEvent.scroll(menu);
-    expect(screen.queryByTestId('home-hero-template-menu')).not.toBeNull();
-
-    const triggerAncestor = screen.getByTestId('home-hero-template-picker').parentElement;
-    expect(triggerAncestor).not.toBeNull();
-    fireEvent.scroll(triggerAncestor!);
-    expect(screen.queryByTestId('home-hero-template-menu')).toBeNull();
-  });
-
-  it('shows the selected template on the trigger and offers no clear affordance', () => {
-    const view = renderPicker('document');
+  it('shows the committed type without offering direct switching', () => {
+    const onPick = vi.fn();
+    const onClear = vi.fn();
+    render(<TemplatePicker templates={templates} onPick={onPick} onClear={onClear}
+      activeChipId="deck" labelFor={labelFor} />);
 
     expect(screen.getByTestId('home-hero-template-picker').className).toContain('has-selection');
-    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Document');
-    // Clearing the creation type was removed (per product): neither the pill's
-    // inline × nor the menu's leading Clear row exists any more.
-    expect(screen.queryByTestId('home-hero-template-reset')).toBeNull();
+    fireEvent.click(screen.getByText(labelFor('deck')));
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(document.querySelector('[aria-haspopup="listbox"]')).toBeNull();
+    expect(onPick).not.toHaveBeenCalled();
+    expect(onClear).not.toHaveBeenCalled();
+  });
 
-    fireEvent.click(screen.getByTestId('home-hero-template-trigger'));
-    expect(screen.getByTestId('home-hero-template-menu')).not.toBeNull();
-    expect(screen.queryByTestId('home-hero-template-radial-clear')).toBeNull();
+  it('offers the dropdown before a type is selected', () => {
+    const onPick = vi.fn();
+    render(
+      <TemplatePicker templates={templates} activeChipId={null} onPick={onPick} labelFor={labelFor} />,
+    );
 
-    view.rerender(
+    fireEvent.click(screen.getByTestId('home-hero-template-trigger').querySelector('button')!);
+    expect(screen.getAllByRole('option')).toHaveLength(templates.length);
+    expect(screen.getAllByRole('option').every((option) => option.getAttribute('aria-selected') === 'false')).toBe(true);
+    fireEvent.click(screen.getByRole('option', { name: labelFor('prototype') }));
+    expect(onPick).toHaveBeenCalledWith(chipById('prototype'));
+    expect(screen.queryByRole('listbox')).toBeNull();
+  });
+
+  it('clears the selected type without opening its switch menu', () => {
+    const onClear = vi.fn();
+    render(
       <TemplatePicker
         templates={templates}
-        activeChipId={null}
+        activeChipId="deck"
+        onClear={onClear}
         labelFor={labelFor}
-        onPick={vi.fn()}
       />,
     );
 
-    expect(screen.getByTestId('home-hero-template-picker').className).not.toContain('has-selection');
-    // #5517 dropped the explicit "None" placeholder at rest — the gray
-    // "Creation type" kicker alone reads as the empty state, and the label slot
-    // only appears once a template is selected.
-    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Creation type');
+    fireEvent.mouseOver(screen.getByTestId('home-hero-template-picker'));
+    fireEvent.click(screen.getByTestId('home-hero-template-clear'));
+    expect(onClear).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('listbox')).toBeNull();
   });
 
-  it('caps a tall viewport at six visible rows', () => {
-    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(900);
-    renderPicker('deck');
-    mockPickerRect(160, 200);
-
-    fireEvent.click(screen.getByTestId('home-hero-template-trigger'));
-
-    const menu = screen.getByTestId('home-hero-template-menu');
-    expect(menu.style.top).toBe('208px');
-    expect(menu.style.bottom).toBe('');
-    expect(menu.style.maxHeight).toBe('286px');
+  it('does not clear a type while selection is disabled', () => {
+    const onClear = vi.fn();
+    render(<TemplatePicker templates={templates} activeChipId="prototype" onClear={onClear}
+      labelFor={labelFor} disabled />);
+    fireEvent.click(screen.getByTestId('home-hero-template-clear'));
+    expect(onClear).not.toHaveBeenCalled();
   });
 
-  it('flips above the trigger when the space below cannot fit one row', () => {
-    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(300);
-    renderPicker('deck');
-    mockPickerRect(220, 260);
+  it('dismisses on outside pointer down and restores focus on Escape', () => {
+    render(<TemplatePicker templates={templates} activeChipId={null} labelFor={labelFor} />);
+    const trigger = screen.getByTestId('home-hero-template-trigger').querySelector('button')!;
+    fireEvent.click(trigger);
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole('listbox')).toBeNull();
+    fireEvent.click(trigger);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
 
-    fireEvent.click(screen.getByTestId('home-hero-template-trigger'));
+  it('keeps a click made as the picker becomes enabled before passive effects flush', () => {
+    function ReadyPicker({ disabled }: { disabled: boolean }) {
+      useLayoutEffect(() => {
+        if (!disabled) screen.getByTestId('home-hero-template-trigger').querySelector('button')!.click();
+      }, [disabled]);
+      return <TemplatePicker templates={templates} activeChipId={null} labelFor={labelFor} disabled={disabled} />;
+    }
+    const { rerender } = render(<ReadyPicker disabled />);
+    rerender(<ReadyPicker disabled={false} />);
+    expect(screen.getByRole('listbox')).toBeTruthy();
+  });
 
-    const menu = screen.getByTestId('home-hero-template-menu');
-    expect(menu.style.top).toBe('');
-    expect(menu.style.bottom).toBe('88px');
-    expect(menu.style.maxHeight).toBe('196px');
-    expect(menu.style.transformOrigin).toBe('bottom left');
+  it('closes an open menu when loading disables the picker', () => {
+    const props = { templates, activeChipId: null, labelFor };
+    const { rerender } = render(<TemplatePicker {...props} />);
+    fireEvent.click(screen.getByTestId('home-hero-template-trigger').querySelector('button')!);
+    expect(screen.getByRole('listbox')).toBeTruthy();
+    rerender(<TemplatePicker {...props} disabled />);
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(screen.getByTestId('home-hero-template-trigger').querySelector('button')!.disabled).toBe(true);
+  });
+
+  it('closes the picker when a type is committed and restores it after clearing', () => {
+    const { rerender } = render(<TemplatePicker templates={templates} activeChipId={null} labelFor={labelFor} />);
+    fireEvent.click(screen.getByTestId('home-hero-template-trigger').querySelector('button')!);
+    expect(screen.getByRole('listbox')).toBeTruthy();
+
+    rerender(<TemplatePicker templates={templates} activeChipId="prototype" labelFor={labelFor} />);
+    fireEvent.click(screen.getByText(labelFor('prototype')));
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(document.querySelector('[aria-haspopup="listbox"]')).toBeNull();
+
+    rerender(<TemplatePicker templates={templates} activeChipId={null} labelFor={labelFor} />);
+    fireEvent.click(screen.getByTestId('home-hero-template-trigger').querySelector('button')!);
+    expect(screen.getByRole('listbox')).toBeTruthy();
+  });
+
+  it('offers no clear when the host supplies no handler', () => {
+    render(
+      <TemplatePicker templates={templates} activeChipId="deck" labelFor={labelFor} />,
+    );
+
+    expect(screen.queryByTestId('home-hero-template-clear')).toBeNull();
+    expect(screen.queryByTestId('home-hero-template-reset')).toBeNull();
+  });
+});
+
+describe('TemplatePicker — the sub-type row cannot move the pill', () => {
+  // The pill used to retitle itself to the picked sub-category, so browsing the
+  // sub-type row relabelled and resized the composer's own row under the
+  // cursor (per product: 切换二级目录时输入框的绿色按钮不要动). The category is
+  // not part of this component's inputs at all any more — the only thing that
+  // can change the pill is changing the TYPE.
+  it('names the type, never a sub-category', () => {
+    const { rerender } = render(
+      <TemplatePicker
+        templates={templates}
+        activeChipId="prototype"
+        labelFor={labelFor}
+      />,
+    );
+    const pillText = screen.getByTestId('home-hero-template-trigger').textContent;
+    expect(pillText).toContain(labelFor('prototype'));
+
+    // Everything a sub-category pick changes in the host (its own selection
+    // state) leaves this component's props untouched, so the pill re-renders
+    // identically.
+    rerender(
+      <TemplatePicker
+        templates={templates}
+        activeChipId="prototype"
+        labelFor={labelFor}
+      />,
+    );
+    expect(screen.getByTestId('home-hero-template-trigger').textContent).toBe(pillText);
+  });
+
+  it('offers neither a type clear nor a sub-type clear', () => {
+    render(
+      <TemplatePicker
+        templates={templates}
+        activeChipId="prototype"
+        labelFor={labelFor}
+      />,
+    );
+
+    // The progressive "first × drops the category, second drops the type" pair
+    // went away with the retitling that made it legible.
+    expect(screen.queryByTestId('home-hero-template-clear-subtype')).toBeNull();
+    fireEvent.mouseOver(screen.getByTestId('home-hero-template-picker'));
+    expect(screen.queryByTestId('home-hero-template-clear')).toBeNull();
   });
 });

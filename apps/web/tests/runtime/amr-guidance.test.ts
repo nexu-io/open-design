@@ -29,7 +29,7 @@ describe('amrRechargeUrlForProfile', () => {
   // entry this module builds therefore targets `/dashboard`, not `/wallet`.
   it('targets the console dashboard on every AMR profile', () => {
     expect(DEFAULT_AMR_RECHARGE_URL).toBe(
-      'https://open-design.ai/amr/dashboard?source=open_design',
+      'https://open-design.ai/cloud/dashboard?source=open_design',
     );
     expect(amrRechargeUrlForProfile('prod')).toBe(DEFAULT_AMR_RECHARGE_URL);
     expect(amrRechargeUrlForProfile('test')).toBe(
@@ -272,7 +272,7 @@ describe('resolveRunFailureUi', () => {
   });
 
   // #895 long tail: lower-frequency failure_detail values the daemon already
-  // classifies (timeout, empty output, stale resumed session, missing Git Bash)
+  // classifies (timeout, empty output, stale resumed session)
   // now map to a named type + actionable copy with a plain Retry, for any agent —
   // the AGENT_EXECUTION_FAILED code alone would only show the raw stderr.
   it('maps long-tail failure_detail values to a named type + retry guidance for any agent', () => {
@@ -281,7 +281,6 @@ describe('resolveRunFailureUi', () => {
       ['inactivity_timeout', 'chat.runError.title.timedOut', 'chat.runError.inactivityTimeoutMessage'],
       ['empty_output', 'chat.runError.title.emptyOutput', 'chat.runError.emptyOutputMessage'],
       ['session_resume_expired', 'chat.runError.title.sessionExpired', 'chat.runError.sessionExpiredMessage'],
-      ['git_bash_missing', 'chat.runError.title.gitBashMissing', 'chat.runError.gitBashMissingMessage'],
     ];
     for (const [detail, titleKey, messageKey] of cases) {
       for (const agent of ['claude', 'codex', 'amr', null]) {
@@ -293,6 +292,21 @@ describe('resolveRunFailureUi', () => {
           cloudSwitchCta: agent !== 'amr',
         });
       }
+    }
+  });
+
+  it('suppresses only the Git Bash card while retaining its failure mapping for every agent', () => {
+    for (const agent of ['claude', 'codex', 'amr', null]) {
+      expect(resolveRunFailureUi('AGENT_EXECUTION_FAILED', 'git_bash_missing', agent)).toMatchObject({
+        suppressCard: true,
+        primaryAction: 'retry',
+        secondaryRetry: false,
+        cloudSwitchCta: agent !== 'amr',
+        titleKey: 'chat.runError.title.gitBashMissing',
+        messageKey: 'chat.runError.gitBashMissingMessage',
+      });
+      expect(resolveRunFailureUi('AGENT_EXECUTION_FAILED', 'cli_not_installed', agent).suppressCard)
+        .not.toBe(true);
     }
   });
 
@@ -310,6 +324,20 @@ describe('resolveRunFailureUi', () => {
         messageKey: 'chat.runError.cpuUnsupportedMessage',
         secondaryRetry: false,
         cloudSwitchCta: agent !== 'amr',
+      });
+    }
+  });
+
+  // os_unsupported: the bundled runtime cannot load on a Windows build older
+  // than 10 1809. Same deterministic shape as cpu_unsupported — no Retry; the
+  // card names the OS version so the user stops retrying and updates Windows.
+  it('maps os_unsupported to Windows-version guidance without retry', () => {
+    for (const agent of ['claude', 'codex', 'amr', null]) {
+      expect(resolveRunFailureUi('AGENT_EXECUTION_FAILED', 'os_unsupported', agent)).toMatchObject({
+        primaryAction: 'contact-support',
+        titleKey: 'chat.runError.title.osUnsupported',
+        messageKey: 'chat.runError.osUnsupportedMessage',
+        secondaryRetry: false,
       });
     }
   });
@@ -532,8 +560,8 @@ describe('resolveRunFailureUi', () => {
     const ui = resolveRunFailureUi('AMR_TIER_UPGRADE_REQUIRED', null, 'amr');
     expect(ui).toMatchObject({
       primaryAction: 'upgrade',
-      titleKey: 'chat.amrBalanceGate.title',
-      messageKey: null,
+      titleKey: 'chat.runError.title.tierUpgradeRequired',
+      messageKey: 'chat.runError.tierUpgradeRequiredMessage',
       secondaryRetry: true,
       cloudSwitchCta: false,
     });
@@ -636,7 +664,7 @@ describe('resolveRunFailureUi', () => {
     const ui = resolveRunFailureUi('AGENT_AUTH_REQUIRED', null, 'antigravity');
     expect(ui).toMatchObject({
       primaryAction: 'launch-terminal-auth',
-      messageKey: null,
+      messageKey: 'chat.runError.signInMessage.other',
       secondaryRetry: true,
       cloudSwitchCta: true,
     });

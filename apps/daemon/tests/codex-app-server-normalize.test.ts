@@ -538,6 +538,16 @@ describe('codex app-server -> OpenDesign event normalization', () => {
   });
 
   describe('usage', () => {
+    it('records current Turn usage without experimental telemetry flags', () => {
+      const { events } = drive([
+        { method: 'turn/started', params: { ...THREAD, turn: { id: 'turn1' } } },
+        { method: 'thread/tokenUsage/updated', params: { ...THREAD, tokenUsage: {
+          total: { inputTokens: 1000, outputTokens: 200, totalTokens: 1200 },
+          last: { inputTokens: 10, outputTokens: 2, totalTokens: 12 },
+        } } },
+      ]);
+      expect(events.find(event => event.type === 'usage')).toMatchObject({ evaluationTurnUsage: { input: 10, output: 2, total: 12, modelCalls: 1 } });
+    });
     it('carries every token counter through as a usage event', () => {
       const { events } = drive([
         {
@@ -569,6 +579,7 @@ describe('codex app-server -> OpenDesign event normalization', () => {
       expect(events).toEqual([
         {
           type: 'usage',
+          usageScope: 'sessionCumulative', evaluationTurnUsage: null,
           usage: {
             input_tokens: 16412,
             output_tokens: 188,

@@ -496,6 +496,58 @@ describe('durable run terminal reconciliation', () => {
       .toEqual({ status: 'failed' });
   });
 
+  it('re-measures storage for a replayed run_finished without touching the durable state', async () => {
+    const runId = 'run-died-with-daemon';
+    const runDir = path.join(tmpDir, runId);
+    fs.mkdirSync(runDir, { recursive: true });
+    const statePath = path.join(runDir, 'state.json');
+    fs.writeFileSync(statePath, JSON.stringify({
+      schemaVersion: 1,
+      id: runId,
+      projectId: 'p1',
+      conversationId: 'c1',
+      assistantMessageId: 'm-storage',
+      agentId: 'claude',
+      status: 'failed',
+      createdAt: 1_000,
+      updatedAt: 2_000,
+      exitCode: 1,
+      error: 'daemon restarted',
+      analyticsRecovery: {
+        context: { deviceId: 'device-1', sessionId: 'session-1', clientType: 'desktop', locale: 'en' },
+        properties: { page_name: 'chat_panel', area: 'chat_panel', project_id: 'p1', conversation_id: 'c1', run_id: runId },
+        insertId: 'run-created-storage',
+      },
+      langfuseCompletedAt: 2_000,
+    }));
+    const storageDb = new Database(':memory:');
+    storageDb.exec(`CREATE TABLE messages (
+      id TEXT PRIMARY KEY, run_id TEXT, run_status TEXT, ended_at INTEGER, content TEXT NOT NULL DEFAULT '', events_json TEXT)`);
+    storageDb.prepare(
+      `INSERT INTO messages (id, run_id, run_status, content, events_json) VALUES ('m-storage', ?, 'failed', 'partial', '[]')`,
+    ).run(runId);
+    const capture = vi.fn(async (_args: { eventName: string; properties: Record<string, unknown> }) => undefined);
+    try {
+      await reconcileDurableRunTerminals({
+        analytics: { capture },
+        appVersion: '0.15.1',
+        db: storageDb,
+        reportLangfuse: vi.fn(),
+        runsLogDir: tmpDir,
+      });
+      const finished = capture.mock.calls.map(([args]) => args).find((args) => args.eventName === 'run_finished');
+      expect(finished?.properties).toMatchObject({
+        storage_schema_version: 1,
+        storage_content_bytes: 7,
+        storage_events_json_bytes: expect.any(Number),
+      });
+      const persisted = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+      expect(Object.keys(persisted.analyticsRecovery.properties).filter((key: string) => key.startsWith('storage_'))).toEqual([]);
+    } finally {
+      storageDb.close();
+    }
+  });
+
   it('preserves the real failure taxonomy when replaying incomplete analytics', async () => {
     const runId = 'run-analytics-incomplete';
     const runDir = path.join(tmpDir, runId);

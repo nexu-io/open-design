@@ -154,8 +154,8 @@ describe('Write 只落一行(N4 / D3)', () => {
      * 整条删掉了,所以前两条用例已经没有办法把源码喂进来。
      * 谁要把它接回来,得先在这里给出理由 —— 而不是悄悄多出一张卡。
      *
-     * `StreamingCodeCard` 本体留着:还没闭合的 `<artifact type="text/html">`
-     * 仍然要走它,否则半截 HTML 会当 markdown 正文漏出来(见 ProseBlock)。
+     * artifact 中间源码面板也已按用户裁决隐藏;实际分片隔离与最终产物
+     * 由 AssistantMessage.hidden-extra-ui.test.tsx 的真实组件规格覆盖。
      */
     const assistant = readSrc('components/AssistantMessage.tsx');
     expect(assistant).not.toContain('live-tool');
@@ -163,8 +163,6 @@ describe('Write 只落一行(N4 / D3)', () => {
     expect(assistant).not.toContain('liveToolInput');
     expect(readSrc('components/ChatPane.tsx')).not.toContain('liveToolInput');
     expect(readSrc('components/ProjectView.tsx')).not.toContain('liveToolInput');
-    /* <artifact> 那条流式通道**不动** */
-    expect(assistant).toContain('StreamingCodeCard');
   });
 
   it('反面守卫:跑命令的终端输出照旧带正文块', () => {

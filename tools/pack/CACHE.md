@@ -60,6 +60,12 @@ The build-graph cache is almost entirely Windows-specific.
 
 `mac` and `linux` have `<platform>.workspace-build` only.
 
+The workspace build delegates Web type validation to independent same-commit
+CI/release checks (`next typegen` plus the full Web tsconfig, including tests).
+The build recipe explicitly sets `OD_WEB_TYPECHECK=external`; this recipe is
+part of the workspace node key. Local ordinary `next build` still checks its
+production-only tsconfig. Declaration outputs remain part of the cache contract.
+
 ## Determinant rules
 
 **R1 — A node key must cover every input that determines the node's output.**

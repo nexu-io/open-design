@@ -1,201 +1,149 @@
-// Chat input-latency observer (INP for the chat panel).
-//
-// Long tasks tell us the main thread was blocked. They do not tell us
-// whether a user was waiting on it. `client_chat_interaction_latency`
-// closes that gap: it measures the delay between a real interaction —
-// a keystroke in the composer, a click on a tool row — and the frame that
-// answered it, using the browser's Event Timing API (the primitive behind
-// Core Web Vitals' INP).
-//
-// This is the metric that matches the complaint. "Typing lags while it's
-// generating" is not a long-task count; it is an interaction that took
-// 700ms to paint. The `streaming` breakdown is the whole point of the
-// event: the same UI can be fine at rest and unusable mid-run, and only a
-// paired comparison shows it.
-//
-// Volume control, in three layers, because an un-throttled interaction
-// metric is the classic case of telemetry becoming the problem:
-//
-//   1. `durationThreshold` filters IN THE BROWSER. Interactions faster
-//      than 200 ms never reach our JavaScript at all — zero cost for the
-//      overwhelming majority of interactions, which are fine.
-//   2. We keep only the WORST interaction per 30 s window. A user
-//      hammering keys through a janky minute yields two events, not two
-//      hundred, and the worst case is the one worth knowing.
-//   3. A hard per-session cap. Past it we stop reporting, because the
-//      hundredth slow interaction in one session adds nothing the first
-//      twenty did not already establish.
-//
-// Scope: only interactions inside the chat panel are reported. An event
-// named `client_chat_*` that also counts clicks in the file viewer would
-// make "chat input latency" untrue, and the file viewer has its own
-// observability surface.
-
 import type { ChatInteractionLatencyProps } from '@open-design/contracts/analytics';
-
-import { reportSafetyEvent } from '../analytics/error-tracking';
 import { chatCorrelation } from './chat-context';
+import {
+  createExposureClock, reportResponsiveness,
+  responsivenessVisible,
+} from './responsiveness';
 
-/**
- * 200 ms. The RAIL "user notices" boundary is 100 ms, but the browser
- * already exposes a 104 ms floor of its own and the 100–200 ms band is
- * dominated by ordinary React work we would not act on. 200 ms is the
- * point where an interaction reads as "the app hesitated".
- */
-const REPORT_THRESHOLD_MS = 200;
 const WINDOW_MS = 30_000;
-const MAX_REPORTS_PER_SESSION = 20;
-
+const MAX_LEGACY_REPORTS = 20;
 type ChatArea = ChatInteractionLatencyProps['area'];
-
-interface WindowState {
-  worstMs: number;
-  count: number;
-  eventName: string;
-  area: ChatArea;
-  streaming: boolean;
+type InputArea = 'composer' | 'search' | 'settings' | 'other_input';
+interface InputWindow {
+  attempts: number;
+  samples: number;
+  slow: number;
+  max: number | null;
+  queue: number | null;
 }
+let teardown: (() => void) | null = null;
+let reported = 0;
 
-let observer: PerformanceObserver | null = null;
-let flushTimer: ReturnType<typeof setInterval> | null = null;
-let current: WindowState | null = null;
-let reportedThisSession = 0;
-let installed = false;
+function chatArea(el: Element): ChatArea {
+  const explicit = el.closest('[data-od-chat-area]')?.getAttribute('data-od-chat-area');
+  if (explicit === 'composer' || explicit === 'chat_log') return explicit;
+  if (el.closest('[data-testid="chat-composer"]')) return 'composer';
+  if (el.closest('[data-testid="chat-log"]')) return 'chat_log';
+  return 'other';
+}
+function inputArea(el: Element): InputArea | null {
+  if (!el.matches('input:not([type="password"]):not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]), textarea, [contenteditable="true"], [role="textbox"], [role="searchbox"]')) return null;
+  if (chatArea(el) === 'composer') return 'composer';
+  if (el.matches('[type="search"], [role="searchbox"], [data-testid="project-search-input"]') || el.closest('[role="search"]')) return 'search';
+  if (el.closest('[data-od-input-area="settings"], .modal-settings')) return 'settings';
+  return 'other_input';
+}
 
 export function installChatInteractionObserver(): () => void {
-  if (installed) return () => undefined;
-  if (typeof PerformanceObserver === 'undefined') return () => undefined;
-  // Event Timing is Chromium-only today. Safari and Firefox report the
-  // entry type as unsupported; observe() would throw or silently no-op.
-  if (PerformanceObserver.supportedEntryTypes?.includes?.('event') !== true) {
-    return () => undefined;
-  }
-  installed = true;
-
-  observer = new PerformanceObserver((list) => {
-    if (reportedThisSession >= MAX_REPORTS_PER_SESSION) return;
-    for (const entry of list.getEntries()) {
-      const timing = entry as PerformanceEventTiming;
-      const duration = timing.duration;
-      if (typeof duration !== 'number' || duration < REPORT_THRESHOLD_MS) continue;
-      const area = resolveArea(timing.target ?? null);
-      // Not chat, not our story.
-      if (area === 'other') continue;
-      if (current == null || duration > current.worstMs) {
-        current = {
-          worstMs: duration,
-          count: (current?.count ?? 0) + 1,
-          // `entry.name` on an Event Timing entry is the DOM event type
-          // ("keydown", "pointerup"). It is a fixed vocabulary, never a
-          // selector and never user text.
-          eventName: typeof timing.name === 'string' ? timing.name : 'unknown',
-          area,
-          streaming: isStreaming(),
-        };
-      } else {
-        current.count += 1;
+  if (teardown || typeof document === 'undefined') return () => undefined;
+  let observer: PerformanceObserver | null = null;
+  let supported = false;
+  let since = performance.now();
+  let lastEntry = -1;
+  let inputs = new Map<InputArea, InputWindow>();
+  let current: { worst: number; count: number; name: string; area: ChatArea; streaming: boolean } | null = null;
+  const clock = createExposureClock();
+  const state = (area: InputArea): InputWindow => {
+    let value = inputs.get(area);
+    if (!value) {
+      value = { attempts: 0, samples: 0, slow: 0, max: null, queue: null };
+      inputs.set(area, value);
+    }
+    return value;
+  };
+  const reset = () => { inputs = new Map(); current = null; since = performance.now(); lastEntry = -1; clock.reset(); };
+  const stop = () => { observer?.disconnect(); observer = null; supported = false; reset(); };
+  const start = () => {
+    reset();
+    if (typeof PerformanceObserver === 'undefined'
+      || !PerformanceObserver.supportedEntryTypes?.includes('event')) return;
+    try {
+      observer = new PerformanceObserver((list) => {
+        if (!responsivenessVisible()) return;
+        for (const entry of list.getEntries()) {
+          const timing = entry as PerformanceEventTiming;
+          if (!Number.isFinite(timing.duration) || timing.duration < 16) continue;
+          // Ignore entries that began before observation or while the page was hidden.
+          if (Number.isFinite(timing.startTime) && timing.startTime < since) continue;
+          const el = timing.target instanceof Element ? timing.target : null;
+          if (!el) continue;
+          const area = chatArea(el);
+          if (reported < MAX_LEGACY_REPORTS && area !== 'other' && timing.duration >= 200) {
+            const count = (current?.count ?? 0) + 1;
+            if (!current || timing.duration > current.worst) {
+              current = { worst: timing.duration, count, name: safeEventName(timing.name),
+                area, streaming: chatCorrelation().run_id != null };
+            } else current.count = count;
+          }
+          // One DOM event family, not keydown + keyup + beforeinput for the
+          // same keystroke. The 16ms API floor makes these qualified samples,
+          // NOT a census of all keystrokes (attempts are counted separately).
+          const input = timing.name === 'keydown' ? inputArea(el) : null;
+          if (!input) continue;
+          if (Number.isFinite(timing.startTime)) {
+            if (timing.startTime <= lastEntry) continue;
+            lastEntry = timing.startTime;
+          }
+          const bucket = state(input);
+          bucket.samples += 1;
+          if (timing.duration > 500) bucket.slow += 1;
+          bucket.max = Math.max(bucket.max ?? 0, timing.duration);
+          if (Number.isFinite(timing.processingStart) && Number.isFinite(timing.startTime)
+            && timing.processingStart >= timing.startTime) {
+            bucket.queue = Math.max(bucket.queue ?? 0, timing.processingStart - timing.startTime);
+          }
+        }
+      });
+      observer.observe({ type: 'event', durationThreshold: 16 } as PerformanceObserverInit);
+      supported = true;
+    } catch { stop(); }
+  };
+  start();
+  const keydown = (event: KeyboardEvent) => {
+    if (!event.isTrusted || !supported || !responsivenessVisible() || !(event.target instanceof Element)) return;
+    const area = inputArea(event.target);
+    if (area) state(area).attempts += 1;
+  };
+  const visibility = () => { inputs.clear(); current = null; since = performance.now(); };
+  document.addEventListener('keydown', keydown, { capture: true, passive: true });
+  document.addEventListener('visibilitychange', visibility);
+  const timer = setInterval(() => {
+    const exposure = clock.tick();
+    const measurable = supported && exposure.qualified;
+    reportResponsiveness('client_responsiveness_window', {
+      telemetry_capability: supported ? 'supported' : 'unsupported', measurement: 'event_timing',
+      measurable, unavailable_reason: !supported ? 'unsupported' : measurable ? null : 'background_or_sleep',
+      window_ms: exposure.elapsed,
+    });
+    if (measurable) {
+      for (const [area, value] of inputs) reportResponsiveness('client_input_responsiveness', {
+        telemetry_capability: 'supported', area, window_ms: exposure.elapsed,
+        input_attempt_count: value.attempts, qualified_sample_count: value.samples,
+        over_500ms_count: value.slow, max_input_to_presentation_ms: value.max,
+        max_queue_delay_ms: value.queue, sample_floor_ms: 16,
+      });
+      // Historical ≥200ms, chat-only, 30s maximum and 20-report cap retain
+      // their meaning. They are never used as an input-rate denominator.
+      if (current && reported < MAX_LEGACY_REPORTS) {
+        reported += 1;
+        reportResponsiveness('client_chat_interaction_latency', {
+          ...chatCorrelation(), inp_ms: Math.round(current.worst), interaction_count: current.count,
+          event_name: current.name, area: current.area, streaming: current.streaming,
+        });
       }
     }
-  });
-
-  try {
-    observer.observe({
-      type: 'event',
-      buffered: true,
-      // Filtering here rather than in JS is the difference between
-      // observing every interaction and observing only slow ones.
-      durationThreshold: REPORT_THRESHOLD_MS,
-    } as PerformanceObserverInit);
-  } catch {
-    observer = null;
-    installed = false;
-    return () => undefined;
-  }
-
-  flushTimer = setInterval(flush, WINDOW_MS);
-
-  return () => {
-    try {
-      observer?.disconnect();
-    } catch {
-      // best-effort teardown
-    }
-    if (flushTimer != null) clearInterval(flushTimer);
-    observer = null;
-    flushTimer = null;
-    current = null;
-    installed = false;
+    inputs.clear(); current = null;
+  }, WINDOW_MS);
+  const cleanup = () => {
+    stop(); clock.stop(); clearInterval(timer);
+    document.removeEventListener('keydown', keydown, { capture: true });
+    document.removeEventListener('visibilitychange', visibility);
+    teardown = null;
   };
+  teardown = cleanup;
+  return cleanup;
 }
-
-function flush(): void {
-  const state = current;
-  current = null;
-  if (state == null) return;
-  // The cap is enforced in ONE place — the observer callback, which stops
-  // accumulating (and stops doing DOM work) once we are done reporting.
-  // A second check here would be dead code: by the time the cap is hit the
-  // observer has stopped filling `current`, so this function has nothing
-  // left to suppress. Two mechanisms for one rule also make the rule
-  // untestable — remove either and the spec stays green.
-  reportedThisSession += 1;
-
-  const correlation = chatCorrelation();
-  const props: ChatInteractionLatencyProps = {
-    ...correlation,
-    inp_ms: Math.round(state.worstMs),
-    interaction_count: state.count,
-    event_name: state.eventName,
-    area: state.area,
-    streaming: state.streaming,
-  };
-  reportSafetyEvent('client_chat_interaction_latency', { ...props });
+function safeEventName(name: string): string {
+  return ['keydown', 'keyup', 'pointerdown', 'pointerup', 'click', 'input', 'beforeinput'].includes(name) ? name : 'unknown';
 }
-
-/**
- * A run is in flight exactly when the correlation context is carrying a
- * `run_id`; the wiring clears it at every terminal state. Deriving the
- * flag instead of maintaining a second one means the two can never
- * disagree about whether the app was streaming.
- */
-function isStreaming(): boolean {
-  return chatCorrelation().run_id != null;
-}
-
-/**
- * Attribute an interaction to a chat region.
- *
- * Prefers an explicit `data-od-chat-area` marker. Until that is wired it
- * falls back to the two container test ids that already ship in
- * production markup, so the metric is useful on day one rather than
- * blocked on a component change we do not own.
- */
-function resolveArea(target: Node | null): ChatArea {
-  const el = target instanceof Element ? target : null;
-  if (el == null) return 'other';
-  try {
-    const marked = el.closest('[data-od-chat-area]');
-    const explicit = marked?.getAttribute('data-od-chat-area');
-    if (explicit === 'composer' || explicit === 'chat_log') return explicit;
-    if (el.closest('[data-testid="chat-composer"]') != null) return 'composer';
-    if (el.closest('[data-testid="chat-log"]') != null) return 'chat_log';
-    return 'other';
-  } catch {
-    return 'other';
-  }
-}
-
-/** Test-only — flush module state between cases. */
-export function __resetChatInteractionForTest(): void {
-  current = null;
-  reportedThisSession = 0;
-  if (flushTimer != null) clearInterval(flushTimer);
-  flushTimer = null;
-  try {
-    observer?.disconnect();
-  } catch {
-    // best-effort
-  }
-  observer = null;
-  installed = false;
-}
+export function __resetChatInteractionForTest(): void { teardown?.(); reported = 0; }

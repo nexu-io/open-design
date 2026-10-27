@@ -67,6 +67,18 @@ describe('localizedWhatsNewContent', () => {
     expect(zh.linkUrl).toBe('https://example.com/blog');
   });
 
+  it('resolves CTA labels through the existing locale and base fallback', () => {
+    const content = {
+      ...CONTENT,
+      ctaLabel: 'View Arena',
+      locales: { zh: { ctaLabel: '查看评测站' }, 'zh-CN': { ctaLabel: '查看评测站（中文）' } },
+    };
+    expect(localizedWhatsNewContent(content, 'zh-CN')).toHaveProperty('ctaLabel', '查看评测站（中文）');
+    expect(localizedWhatsNewContent(content, 'zh-TW')).toHaveProperty('ctaLabel', '查看评测站');
+    expect(localizedWhatsNewContent(content, 'fr')).toHaveProperty('ctaLabel', 'View Arena');
+    expect(localizedWhatsNewContent(CONTENT, 'en')).toHaveProperty('ctaLabel', null);
+  });
+
   it('falls back to the base copy for unknown locales', () => {
     const fr = localizedWhatsNewContent(CONTENT, 'fr');
     expect(fr.title).toBe(CONTENT.title);

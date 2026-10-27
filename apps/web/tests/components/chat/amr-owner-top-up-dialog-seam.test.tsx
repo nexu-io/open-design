@@ -111,7 +111,7 @@ afterEach(() => {
 /**
  * 产品里的形态:页面上有那唯一一层接缝,弹窗从接缝**之内**渲染 ——
  * 但它 portal 到 `<body>`,于是 DOM 树上仍然在接缝之外。
- * 两个调用点(`ProjectView` / `EntryShell`)都是这个形态。
+ * 两个调用点(`ProjectView` / `HomeAmrBalanceGateDialogs`)都是这个形态。
  */
 function renderPortalled() {
   render(
@@ -205,7 +205,9 @@ describe('浮层形态:弹窗自己那两个元素上,--chat-* 都解析得出�
 });
 
 /**
- * 两个调用点(`ProjectView` 聊天页 / `EntryShell` 首页)都必须落在**浮层形态**上。
+ * 两个调用点(`ProjectView` 聊天页 / `HomeAmrBalanceGateDialogs` 首页闸门宿主,
+ * OPEND-2614 之后由 App 挂载 —— 首页的判定在乐观 pending 页背后落定,那时
+ * `EntryShell` 已经卸载)都必须落在**浮层形态**上。
  *
  * 接缝挂在「不是 `inline`」那一支 —— 哪天有人在调用点补一个 `inline`
  * 想「就地渲染」,弹窗会退回没有接缝的那条路,而上面那些断言查的是组件本身,
@@ -214,7 +216,7 @@ describe('浮层形态:弹窗自己那两个元素上,--chat-* 都解析得出�
 describe('两个调用点都走浮层形态', () => {
   const callSites = [
     { file: 'components/ProjectView.tsx', label: '聊天页' },
-    { file: 'components/EntryShell.tsx', label: '首页' },
+    { file: 'components/HomeAmrBalanceGateDialogs.tsx', label: '首页' },
   ];
 
   for (const { file, label } of callSites) {

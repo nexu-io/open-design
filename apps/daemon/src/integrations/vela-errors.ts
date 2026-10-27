@@ -1,3 +1,10 @@
+import {
+  DEFAULT_VELA_CONSOLE_ORIGIN,
+  resolveEffectiveVelaConsoleOrigin,
+} from './vela-console-origin.js';
+
+type EnvMap = NodeJS.ProcessEnv | Record<string, string | undefined>;
+
 export type AmrAccountErrorCode =
   | 'AMR_AUTH_REQUIRED'
   | 'AMR_INSUFFICIENT_BALANCE'
@@ -26,13 +33,16 @@ export interface AmrAccountFailureSignal {
 // rehomed onto it (vela #1055) and the wallet route left the product's
 // information architecture, so this link must not send a user there.
 export const DEFAULT_AMR_RECHARGE_URL =
-  'https://open-design.ai/amr/dashboard?source=open_design';
+  `${DEFAULT_VELA_CONSOLE_ORIGIN}/dashboard?source=open_design`;
+
+export function amrRechargeUrl(configuredEnv: EnvMap = {}): string {
+  const origin = resolveEffectiveVelaConsoleOrigin(process.env, configuredEnv)
+    ?? DEFAULT_VELA_CONSOLE_ORIGIN;
+  return `${origin}/dashboard?source=open_design`;
+}
 
 const AMR_AUTH_REQUIRED_MESSAGE =
   'AMR sign-in is required. Sign in to AMR Cloud again, then retry this run.';
-
-const AMR_INSUFFICIENT_BALANCE_MESSAGE =
-  `AMR Cloud reported insufficient balance for this model. Top up your AMR balance at ${DEFAULT_AMR_RECHARGE_URL}, then retry this run.`;
 
 const AMR_TIER_UPGRADE_REQUIRED_MESSAGE =
   'Your current AMR plan does not include this model or request type. Upgrade your AMR plan, or switch to an available model and retry.';
@@ -178,19 +188,28 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-export function classifyAmrAccountFailureDetails(details: unknown): AmrAccountFailure | null {
+function insufficientBalanceFailure(configuredEnv: EnvMap): AmrAccountFailure {
+  const actionUrl = amrRechargeUrl(configuredEnv);
+  return {
+    code: 'AMR_INSUFFICIENT_BALANCE',
+    message:
+      `AMR Cloud reported insufficient balance for this model. Top up your AMR balance at ${actionUrl}, then retry this run.`,
+    action: 'recharge',
+    actionUrl,
+  };
+}
+
+export function classifyAmrAccountFailureDetails(
+  details: unknown,
+  configuredEnv: EnvMap = {},
+): AmrAccountFailure | null {
   if (!isRecord(details)) return null;
   const code = typeof details.code === 'string' ? details.code.toLowerCase() : '';
   const accountAction =
     typeof details.accountAction === 'string' ? details.accountAction.toLowerCase() : '';
 
   if (code === 'insufficient_balance' || accountAction === 'recharge') {
-    return {
-      code: 'AMR_INSUFFICIENT_BALANCE',
-      message: AMR_INSUFFICIENT_BALANCE_MESSAGE,
-      action: 'recharge',
-      actionUrl: DEFAULT_AMR_RECHARGE_URL,
-    };
+    return insufficientBalanceFailure(configuredEnv);
   }
 
   if (code === 'tier_model_not_entitled') {
@@ -226,8 +245,9 @@ function stringPart(value: unknown): string {
 
 export function classifyAmrAccountFailureSignal(
   signal: AmrAccountFailureSignal,
+  configuredEnv: EnvMap = {},
 ): AmrAccountFailure | null {
-  const structured = classifyAmrAccountFailureDetails(signal.details);
+  const structured = classifyAmrAccountFailureDetails(signal.details, configuredEnv);
   if (structured) return structured;
 
   const primaryText = [
@@ -236,25 +256,23 @@ export function classifyAmrAccountFailureSignal(
     stringPart(signal.errorCode),
     stringPart(signal.stdoutTail),
   ].join('\n');
-  const primary = classifyAmrAccountFailure(primaryText);
+  const primary = classifyAmrAccountFailure(primaryText, configuredEnv);
   if (primary) return primary;
 
   // Stderr is intentionally last. Prefer ACP structured details and protocol
   // messages so AMR account errors are managed through one stable channel.
-  return classifyAmrAccountFailure(stringPart(signal.stderrTail));
+  return classifyAmrAccountFailure(stringPart(signal.stderrTail), configuredEnv);
 }
 
-export function classifyAmrAccountFailure(text: string): AmrAccountFailure | null {
+export function classifyAmrAccountFailure(
+  text: string,
+  configuredEnv: EnvMap = {},
+): AmrAccountFailure | null {
   const value = normalizeFailureText(text);
   if (!value.trim()) return null;
 
   if (containsInsufficientBalanceSignal(value)) {
-    return {
-      code: 'AMR_INSUFFICIENT_BALANCE',
-      message: AMR_INSUFFICIENT_BALANCE_MESSAGE,
-      action: 'recharge',
-      actionUrl: DEFAULT_AMR_RECHARGE_URL,
-    };
+    return insufficientBalanceFailure(configuredEnv);
   }
 
   if (value.includes('tier_model_not_entitled')) {

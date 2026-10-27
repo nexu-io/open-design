@@ -233,7 +233,8 @@ vi.mock('../../src/components/Loading', () => ({
  * ChatPane 自带半个应用,这一层把它换成一块**只报事实**的板子:
  * 流水里有哪些消息、这一轮是不是进行中。屏幕上「消息上屏了没有」就是这两格。
  */
-vi.mock('../../src/components/ChatPane', () => ({
+vi.mock('../../src/components/ChatPane', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/components/ChatPane')>()),
   ChatPane: (props: {
     messages?: ChatMessage[];
     streaming?: boolean;
@@ -462,11 +463,17 @@ describe('OPEND-2614 发送后先上屏,再等预检', () => {
   /**
    * 反向对照:先画不等于「拦不住了」。
    *
-   * 预检判定拦截时,这一轮仍然不许留在流水里假装在跑 —— 它回到发送队列,
+   * 预检判定拦截时,这一轮仍然不许留在流水里假装在跑 —— 它被原样收回,
    * 由余额卡/弹窗解释原因(那四种分支由 `ProjectView.amr-balance-branches`
    * 钉死,这里只钉「画出来的那一轮被收回去了」)。
+   *
+   * ⚠️ **收回之后它不再落进发送队列**(OPEND-2719)。队列的语义是「等一等就能
+   * 跑」,而余额耗尽等不出来:消息会一直躺在那儿,用户看到的就是单里说的
+   * 「没有触发额度不足提示,而是把消息加入待发送队列」。正文改由输入框接回
+   * (`handleComposerSend` 的 `restore-draft`),那一半钉在
+   * `ProjectView.retry-gating.test.tsx`。这里只把「不再入队」钉住。
    */
-  it('预检回来说拦截:画出去的那一轮要收回,并落进发送队列', async () => {
+  it('预检回来说拦截:画出去的那一轮要收回,而且不落进发送队列', async () => {
     let settle: (value: unknown) => void = () => {};
     mockedCheckAmrBalanceGate.mockReturnValue(
       new Promise((resolve) => {
@@ -493,8 +500,8 @@ describe('OPEND-2614 发送后先上屏,再等预检', () => {
       },
     });
 
-    await waitFor(() => expect(screen.getByTestId('queued').textContent).toContain(PROMPT));
-    expect(transcript()).not.toContain(`user:${PROMPT}`);
+    await waitFor(() => expect(transcript()).not.toContain(`user:${PROMPT}`));
+    expect(screen.getByTestId('queued').textContent).not.toContain(PROMPT);
     expect(screen.getByTestId('streaming').textContent).toBe('no');
     expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
   });

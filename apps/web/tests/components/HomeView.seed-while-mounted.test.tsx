@@ -40,7 +40,6 @@ describe('HomeView seedHomeComposerPrompt while already mounted', () => {
         projects={[]}
         onSubmit={() => undefined}
         onOpenProject={() => undefined}
-        onViewAllProjects={() => undefined}
       />,
     );
 

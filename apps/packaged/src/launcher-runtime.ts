@@ -333,6 +333,7 @@ async function resolvePayloadConfig(
     config: {
       ...config,
       appVersion: raw.appVersion?.trim() || manifest.version,
+      daemonCliEntry: await resolveOptionalPayloadEntry(resourcesPath, raw.daemonCliEntryRelative),
       daemonSidecarEntry: await resolveOptionalPayloadEntry(resourcesPath, raw.daemonSidecarEntryRelative),
       nodeCommand,
       resourceRoot,

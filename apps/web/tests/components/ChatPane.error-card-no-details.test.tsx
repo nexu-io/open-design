@@ -10,8 +10,7 @@
 //   1. 折叠没了 —— 改之前红;
 //   2. **同一张卡**照旧有标题、那句人话、〔联系支持〕、〔导出日志〕——
 //      少了这条,整张卡没渲染时第 1 条照样绿;
-//   3. `brand.viewDetails` 这个 key 在**插件建议卡**那一路仍然出现 ——
-//      少了这条,把 key 连根删掉也照样绿。
+//   3. 插件建议卡已由后续用户裁决隐藏,不再充当共享 key 的显示对照。
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { forwardRef } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -161,17 +160,17 @@ describe('报错卡:「错误详情」折叠已下线', () => {
   });
 });
 
-// 第二条正向对照:`brand.viewDetails` 是**共享 key**,报错卡只是它的消费者之一。
-// 插件建议卡(`AssistantMessage` 里的 `SkillPluginCandidateCard`)照旧要有它。
-describe('brand.viewDetails 的其他消费者没有被连带删掉', () => {
-  it('插件建议卡上仍然有〔查看详情〕折叠', () => {
+// 后续裁决同时隐藏插件建议卡;报错卡的三条原规格保持不变。
+describe('插件建议卡的独立隐藏裁决', () => {
+  it('插件建议卡和详情入口隐藏,正常正文保留', () => {
     const message = {
       id: 'msg-plugin',
       role: 'assistant',
-      content: '',
+      content: 'The repository review is complete.',
       createdAt: 1,
       runStatus: 'succeeded',
       events: [
+        { kind: 'text', text: 'The repository review is complete.' },
         {
           kind: 'plugin_candidate',
           candidateId: 'candidate-1',
@@ -189,7 +188,7 @@ describe('brand.viewDetails 的其他消费者没有被连带删掉', () => {
     const card = container.querySelector<HTMLElement>(
       '[data-user-action-card="plugin-suggestion"]',
     );
-    expect(card).toBeTruthy();
-    expect(within(card!).getByRole('button', { name: 'brand.viewDetails' })).toBeTruthy();
+    expect(card).toBeNull();
+    expect(container.textContent).toContain('The repository review is complete.');
   });
 });

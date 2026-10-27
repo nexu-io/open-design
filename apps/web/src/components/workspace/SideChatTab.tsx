@@ -1,3 +1,4 @@
+import type { RecoveryActionBlockReason } from '../../runtime/chat/recovery-gating';
 import { useT } from '../../i18n';
 import { Icon } from '../Icon';
 import { ChatPane } from '../ChatPane';
@@ -37,6 +38,9 @@ export interface ActiveConversationChatState {
     meta?: ChatSendMeta,
   ) => void;
   onRetry?: (assistantMessage: ChatMessage) => void;
+  recoveryActionsBlockedReason?: RecoveryActionBlockReason | null;
+  retryPendingAssistantId?: string | null;
+  supersededErrorAssistantIds?: readonly string[];
   onStop: () => void;
   onRemoveQueuedSend?: (id: string) => void;
   // Editing a queued send replaces its full payload (prompt + attachments +
@@ -93,6 +97,8 @@ interface Props {
   onNewConversation?: () => void;
   /** Live ProjectView state for the primary conversation when this tab mirrors it. */
   activeConversationChat?: ActiveConversationChatState;
+  onSwitchConversationToCloud?: (conversationId: string, message: ChatMessage) => void;
+  recoveryActionsBlockedReason?: RecoveryActionBlockReason | null;
   /** Forward produced-file / tool-card open requests to the workspace. */
   onRequestOpenFile?: (name: string) => void;
 }
@@ -118,6 +124,8 @@ export function SideChatTab({
   onSessionModeChange,
   onNewConversation,
   activeConversationChat,
+  onSwitchConversationToCloud,
+  recoveryActionsBlockedReason = null,
   onRequestOpenFile,
 }: Props) {
   const t = useT();
@@ -135,6 +143,12 @@ export function SideChatTab({
     activeConversationChat?.conversationId === conversationId
       ? activeConversationChat
       : null;
+  const recoveryBlock = controlledChat?.recoveryActionsBlockedReason
+    ?? recoveryActionsBlockedReason
+    ?? ((controlledChat?.loading ?? chat.loading)
+      || (controlledChat?.sendDisabled ?? chat.sendDisabled)
+      || (controlledChat?.streaming ?? chat.streaming)
+      ? 'conversation-busy' : null);
 
   return (
     <div className={styles.sideChat} data-testid="side-chat-tab">
@@ -167,6 +181,15 @@ export function SideChatTab({
           onEnsureProject={async () => projectId}
           onSend={controlledChat?.onSend ?? chat.onSend}
           onRetry={controlledChat?.onRetry ?? chat.onRetry}
+          recoveryActionsBlockedReason={recoveryBlock}
+          retryPendingAssistantId={controlledChat?.retryPendingAssistantId}
+          supersededErrorAssistantIds={controlledChat?.supersededErrorAssistantIds}
+          onSwitchToAmrAndRetry={onSwitchConversationToCloud
+            ? (failedAssistant) => {
+                if (recoveryBlock !== null) return;
+                onSwitchConversationToCloud(conversationId, failedAssistant);
+              }
+            : undefined}
           onStop={controlledChat?.onStop ?? chat.onStop}
           onAssistantFeedback={controlledChat?.onAssistantFeedback}
           onRequestOpenFile={onRequestOpenFile}

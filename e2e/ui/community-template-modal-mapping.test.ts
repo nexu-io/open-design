@@ -4,8 +4,8 @@
 //   • the Community gallery card opens the FULL plugin details modal
 //     (Use split action + Share menu + close);
 //   • the creation page's active template chip opens the LIGHTWEIGHT
-//     community preview (header title/category + close, footer category +
-//     Remix).
+//     community preview (header title/category + close; no footer — the Remix
+//     bar is gone per product, OPEND-2692).
 // Before the swap the two entries were reversed. These specs pin the
 // corrected mapping end-to-end through the real entry shell.
 
@@ -129,7 +129,7 @@ async function gotoCommunity(page: Page) {
 async function openDeckCommunityCard(page: Page) {
   await page.getByRole('button', { name: 'Slides', exact: true }).click();
   const card = page.locator('article.community-template-card').first();
-  await expect(card.locator('.community-template-card__foot')).toContainText('Slides');
+  await expect(card).toHaveAttribute('data-template-type', 'Slides');
   await card.click();
 }
 
@@ -170,12 +170,13 @@ test('[P0] signed-out Local setup can use a Community template on Home', async (
   await page.getByTestId(`plugin-details-use-${DECK_PLUGIN.id}`).click();
   await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
 
-  // The chip's detail entry opens the LIGHTWEIGHT preview: footer category +
-  // Remix, no Use split action, no Share menu.
+  // The chip's detail entry opens the LIGHTWEIGHT preview: header category
+  // + close only — no Remix footer, no Use split action, no Share menu.
   await page.getByTestId('home-hero-active-plugin').locator('.home-hero__active-chip-body').click();
   await expect(page.locator('.community-template-preview')).toBeVisible();
-  const foot = page.locator('.community-template-preview__foot');
-  await expect(foot).toContainText('Remix');
+  await expect(page.locator('.community-template-preview__head')).toContainText('Slides');
+  await expect(page.locator('.community-template-preview__foot')).toHaveCount(0);
+  await expect(page.locator('.community-template-preview')).not.toContainText('Remix');
   await expect(page.getByTestId(`plugin-details-use-${DECK_PLUGIN.id}`)).toHaveCount(0);
   await expect(page.locator('.template-share-trigger')).toHaveCount(0);
 
@@ -188,12 +189,21 @@ test('[P0] signed-out Local setup can use a Community template on Home', async (
 test('[P1] community category tabs filter the current template catalog', async ({ page }) => {
   await gotoCommunity(page);
 
+  // The caption under a card is the template's own title now, so the type it
+  // was gridded under is read off the card element itself.
   const cards = page.locator('article.community-template-card');
   await expect(cards).toHaveCount(1);
-  await expect(cards.locator('.community-template-card__foot')).toContainText('Prototype');
+  await expect(cards).toHaveAttribute('data-template-type', 'Prototype');
 
   await page.getByRole('button', { name: 'Slides', exact: true }).click();
 
   await expect(cards).toHaveCount(1);
-  await expect(cards.locator('.community-template-card__foot')).toContainText('Slides');
+  await expect(cards).toHaveAttribute('data-template-type', 'Slides');
+
+  // The row is fixed to the Home taxonomy: Document is a tab even while no
+  // document template ships, and picking it shows the empty state rather than
+  // borrowing another kind's cards.
+  await page.getByRole('button', { name: 'Document', exact: true }).click();
+  await expect(cards).toHaveCount(0);
+  await expect(page.getByTestId('community-empty-state')).toBeVisible();
 });

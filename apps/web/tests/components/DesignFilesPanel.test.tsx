@@ -571,6 +571,16 @@ describe("DesignFilesPanel selection", () => {
 });
 
 describe("DesignFilesPanel page thumbnails", () => {
+  it.each(['fresh', 'cached'])("keeps %s motion video thumbnails under inactive host playback", async (sourceMode) => {
+    const source = '<!doctype html><html><head><meta name="od-motion-output" content="video"></head><body><main data-composition-id="main" data-duration="15" data-width="1920" data-height="1080"><audio src="sound.wav" data-duration="15"></audio></main></body></html>';
+    const motionFile = file({ name: `motion-${sourceMode}.html`, kind: 'html', mime: 'text/html', size: 16000, mtime: 1700000000000 });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(source, { status: 200 })));
+    if (sourceMode === 'cached') setHtmlSourceSnapshot({ authorizationScopeKey: 'local', projectId: 'test-project', fileName: motionFile.name, refreshKey: `${motionFile.mtime}:${motionFile.size}:0`, source });
+    const { container } = renderPanel([motionFile]);
+    await waitFor(() => {
+      expect(container.querySelector<HTMLIFrameElement>('.df-card-thumb iframe')?.srcdoc).toContain('window.__odMotionPreview=true');
+    });
+  });
   afterEach(() => cleanup());
 
   it("does not fetch or iframe large HTML files for the Design Files thumbnail", () => {
@@ -1119,5 +1129,110 @@ describe("DesignFilesPanel pending sync (downloadPending)", () => {
     expect(screen.queryByText("version-one.txt")).toBeNull();
     expect(screen.getByText("version-two.txt")).toBeTruthy();
     expect(document.querySelector(".skeleton-block")).toBeNull();
+  });
+});
+
+// The middle state: a page exists, the run is still writing it. Before this,
+// the pane jumped from the starter CTAs straight to a grid of file cards, so
+// the artifact was never shown taking shape.
+describe("building preview", () => {
+  // The suite's other cleanup hook is scoped to its own describe block.
+  afterEach(() => {
+    cleanup();
+  });
+
+  const page = () => file({ name: "index.html", kind: "html" });
+
+  it("watches the page while the run is still writing it", () => {
+    renderPanel([page()], { running: true, runStartedAt: Date.now() - 1000 });
+
+    expect(screen.getByTestId("design-files-building")).toBeTruthy();
+    // The grid is what it replaces, not something it sits on top of.
+    expect(screen.queryByTestId("design-file-row-index.html")).toBeNull();
+  });
+
+  it('selects only HTML written since the active turn started', () => {
+    const runStartedAt = 1_800_000_000_000;
+    renderPanel([
+      file({ name: 'index.html', mtime: runStartedAt - 1 }),
+      file({ name: 'about.html', mtime: runStartedAt + 1 }),
+    ], { running: true, runStartedAt });
+
+    const preview = screen.getByTestId('design-files-building');
+    expect(preview.querySelector('iframe')?.getAttribute('src')).toContain('/about.html');
+  });
+
+  it("hands the pane back to the file grid when the run ends", () => {
+    const { rerender } = renderPanel([page()], { running: true, runStartedAt: Date.now() - 1000 });
+    expect(screen.getByTestId("design-files-building")).toBeTruthy();
+
+    rerender(
+      <DesignFilesPanel
+        projectId="test-project"
+        projectKind="prototype"
+        files={[page()]}
+        liveArtifacts={[]}
+        running={false}
+        onRefreshFiles={vi.fn()}
+        onOpenFile={vi.fn()}
+        onOpenLiveArtifact={vi.fn()}
+        onRenameFile={vi.fn()}
+        onDeleteFile={vi.fn()}
+        onDeleteFiles={vi.fn()}
+        onUpload={vi.fn()}
+        onUploadFiles={vi.fn()}
+        onPaste={vi.fn()}
+        onNewSketch={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByTestId("design-files-building")).toBeNull();
+    expect(screen.getByTestId("design-file-row-index.html")).toBeTruthy();
+  });
+
+  it("stays out of the way for a run that has produced no page", () => {
+    renderPanel([file({ name: "notes.md", kind: "text", mime: "text/markdown" })], {
+      running: true,
+    });
+
+    expect(screen.queryByTestId("design-files-building")).toBeNull();
+    expect(screen.getByTestId("design-file-row-notes.md")).toBeTruthy();
+  });
+
+  // The starter CTAs stay where they are: a run that has not written a page
+  // yet has nothing to preview, and an empty project still offers its
+  // creation actions while the agent works.
+  it("keeps the empty state's starter actions while a run has produced nothing", () => {
+    renderPanel([], { running: true });
+
+    expect(screen.queryByTestId("design-files-building")).toBeNull();
+    expect(screen.getByTestId("design-files-empty-new-sketch")).toBeTruthy();
+    expect(screen.queryByTestId("design-files-preview-toggle")).toBeNull();
+  });
+
+  // One switch, both directions. A one-way "show files" button would leave the
+  // run no route back to the preview once dismissed.
+  it("lets the user leave the preview for the files, and come back", () => {
+    renderPanel([page()], { running: true, runStartedAt: Date.now() - 1000 });
+
+    const toggle = screen.getByTestId("design-files-preview-toggle");
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    expect(screen.queryByTestId("design-files-building")).toBeNull();
+    expect(screen.getByTestId("design-file-row-index.html")).toBeTruthy();
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByTestId("design-files-building")).toBeTruthy();
+  });
+
+  // A switch with nothing on its other side would be a control that does
+  // nothing: outside a run that has written a page, the pane has one view.
+  it("shows no preview switch when no run is writing a page", () => {
+    renderPanel([page()], { running: false });
+
+    expect(screen.queryByTestId("design-files-preview-toggle")).toBeNull();
   });
 });

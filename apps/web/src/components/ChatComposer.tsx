@@ -287,6 +287,35 @@ type DesignToolboxResource =
 
 export type ChatSendOutcome = void | 'restore-draft';
 
+/** Committed composer content other than the editor text, mirrored for stale send closures. */
+interface ComposerContent {
+  staged: ChatAttachment[];
+  stagedVisualComments: ChatCommentAttachment[];
+  stagedSkills: SkillSummary[];
+  stagedMcpServers: McpServerConfig[];
+  stagedConnectors: ConnectorDetail[];
+  stagedWorkspaceContexts: WorkspaceContextItem[];
+  activeAppliedPlugin: AppliedPluginSnapshot | null;
+  quotes: ChatQuote[];
+}
+
+/** Everything `reset()` clears, captured at submit so a handed-back send can be restored. */
+interface ComposerSendSnapshot {
+  draft: string;
+  staged: ChatAttachment[];
+  nextAttachmentOrder: number;
+  stagedVisualComments: ChatCommentAttachment[];
+  stagedSkills: SkillSummary[];
+  stagedMcpServers: McpServerConfig[];
+  stagedConnectors: ConnectorDetail[];
+  stagedWorkspaceContexts: WorkspaceContextItem[];
+  workspaceLinkedDirAdds: Record<string, TrackedWorkspaceLinkedDir>;
+  promotedWorkspaceContextDir: string | null;
+  activeAppliedPlugin: AppliedPluginSnapshot | null;
+  inlineBackedPlugin: { id: string; label: string } | null;
+  quotes: ChatQuote[];
+}
+
 interface Props {
   /**
    * 正文取词(设计稿组件 23)攒下的引用。输入框上方那枚「N 条注释」芯片就是它,
@@ -490,10 +519,14 @@ export interface ChatComposerHandle {
   scheduleComposerPanelClose: () => void;
   /**
    * Open the composer "+" menu from outside, optionally landing on a specific
-   * flyout.
+   * flyout. `toolbox` is a legacy target from the removed toolbox row; it
+   * opens the bare menu.
    */
-  openPlusMenu: (submenu?: PlusMenuSubmenu) => void;
+  openPlusMenu: (submenu?: PlusMenuOpenTarget) => void;
 }
+
+/** Flyouts an external open request may land on; see `openPlusMenu`. */
+export type PlusMenuOpenTarget = PlusMenuSubmenu | 'toolbox';
 
 export interface ChatSendMeta {
   /** Stable identity for one confirmed user submission. Queueing and the
@@ -639,9 +672,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // by handleEditorChange (the editor is the single source for typing) and by
     // the programmatic-set paths below.
     const draftRef = useRef(draft);
-    // Submission admission can cross asynchronous gates before the composer
-    // is cleared. Keep a synchronous latch so a second Enter/click in that
-    // window cannot enqueue the same still-visible payload again.
+    // Submission admission can cross asynchronous gates after the composer
+    // has already cleared (OPEND-3392). Keep a synchronous latch so a second
+    // Enter/click in that window cannot start another send before the host
+    // decides whether the first one is kept or handed back.
     const composedSendPendingRef = useRef(false);
     // The latch above prevents duplicates, but a ref alone leaves the UI
     // completely unchanged while an async admission gate (notably AMR's
@@ -763,7 +797,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // External "+"-menu open request — nonce-keyed so every request re-opens
     // even after the menu was dismissed.
     const [plusMenuOpenRequest, setPlusMenuOpenRequest] = useState<
-      { nonce: number; submenu?: PlusMenuSubmenu } | null
+      { nonce: number; submenu?: PlusMenuOpenTarget } | null
     >(null);
     const [stagedMcpServers, setStagedMcpServers] = useState<McpServerConfig[]>([]);
     const [stagedConnectors, setStagedConnectors] = useState<ConnectorDetail[]>([]);
@@ -1510,7 +1544,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         scheduleComposerPanelClose: () => {
           scheduleComposerPanelClose();
         },
-        openPlusMenu: (submenu?: PlusMenuSubmenu) => {
+        openPlusMenu: (submenu?: PlusMenuOpenTarget) => {
           setComposerEngaged(true);
           setPlusMenuOpenRequest((prev) => ({
             nonce: (prev?.nonce ?? 0) + 1,
@@ -1521,7 +1555,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       [connectors, mcpServers, pluginsForComposer, skills]
     );
 
-    function reset() {
+    /** Clears everything sendable; returns the linked workspace contexts it deliberately keeps. */
+    function reset(): WorkspaceContextItem[] {
       pendingEntryFromRef.current = null;
       pendingSessionModeRef.current = null;
       const linkedWorkspaceContexts = stagedWorkspaceContexts.filter((item) => (
@@ -1554,6 +1589,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       setMentionTab('all');
       setSlash(null);
       editorRef.current?.clear();
+      return linkedWorkspaceContexts;
     }
 
     function currentCommentAttachments(extra: ChatCommentAttachment[] = []): ChatCommentAttachment[] {
@@ -1599,31 +1635,125 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       return Object.keys(meta).length > 0 ? meta : undefined;
     }
 
+    // Committed composer content, readable from the send promise's stale
+    // closure: a handed-back send must see what the user staged after reset().
+    const latestComposerContentRef = useRef<ComposerContent | null>(null);
+    useLayoutEffect(() => {
+      latestComposerContentRef.current = {
+        staged,
+        stagedVisualComments,
+        stagedSkills,
+        stagedMcpServers,
+        stagedConnectors,
+        stagedWorkspaceContexts,
+        activeAppliedPlugin,
+        quotes: quotes ?? [],
+      };
+    });
+
+    /**
+     * 清空之后输入框里有没有**任何**新东西 —— 不只是字。
+     *
+     * 等待期间输入框照常可用:用户可能没打字,只是加了附件、技能、插件、引用,
+     * 或者换了工作区上下文。这些同样是下一条的草稿,还原旧快照会把它们盖掉。
+     * 基线就是 `reset()` 之后的样子:全部为空,只留下它有意保留的已关联目录。
+     */
+    function composerChangedSinceReset(
+      snapshot: ComposerSendSnapshot,
+      keptWorkspaceContextIds: ReadonlySet<string>,
+    ): boolean {
+      const text = editorRef.current?.getText() ?? draftRef.current;
+      if (text.trim()) return true;
+      const current = latestComposerContentRef.current;
+      if (!current) return false;
+      return (
+        current.staged.length > 0
+        || current.stagedVisualComments.length > 0
+        || current.stagedSkills.length > 0
+        || current.stagedMcpServers.length > 0
+        || current.stagedConnectors.length > 0
+        || current.activeAppliedPlugin !== null
+        // Quotes live on the host, which may not have committed the clear yet:
+        // only a quote that was not part of the sent turn counts as new.
+        || current.quotes.some((quote) => !snapshot.quotes.some((sent) => sent.id === quote.id))
+        || current.stagedWorkspaceContexts.length !== keptWorkspaceContextIds.size
+        || current.stagedWorkspaceContexts.some((item) => !keptWorkspaceContextIds.has(item.id))
+      );
+    }
+
+    /**
+     * 输入框在「点发送」那一刻的全部可发内容 —— `reset()` 清掉的每一样都在这里。
+     *
+     * 宿主的 `onSend` 可能要等一道异步闸门(OpenDesign Cloud 的余额预检是两次
+     * HTTP 往返)才落定,而那一轮在闸门之前就已经上屏、会话已经是 Working。
+     * 输入框要是等到落定才清,用户就会看着已经发出去的正文在输入框里再躺
+     * 一两秒,以为没发出去(OPEND-3392)。所以提交即清空,只有宿主把这一发
+     * 退回来(`'restore-draft'` 或抛错)时,才凭这份快照原样还回去。
+     */
+    function captureSendSnapshot(): ComposerSendSnapshot {
+      return {
+        draft: draftRef.current,
+        staged,
+        nextAttachmentOrder: nextAttachmentOrderRef.current,
+        stagedVisualComments,
+        stagedSkills,
+        stagedMcpServers,
+        stagedConnectors,
+        stagedWorkspaceContexts,
+        workspaceLinkedDirAdds,
+        promotedWorkspaceContextDir,
+        activeAppliedPlugin,
+        inlineBackedPlugin: inlineBackedPluginRef.current,
+        quotes: quotes ?? [],
+      };
+    }
+
+    /**
+     * 把退回来的那一发还给输入框。
+     *
+     * 等待期间用户已经开始准备下一条的话**不还原**(见 `composerChangedSinceReset`):
+     * 此刻输入框里的是新内容,拿旧快照盖上去等于吞掉用户刚做的事。
+     */
+    function restoreSendSnapshot(
+      snapshot: ComposerSendSnapshot,
+      keptWorkspaceContextIds: ReadonlySet<string>,
+    ) {
+      if (composerChangedSinceReset(snapshot, keptWorkspaceContextIds)) return;
+      replaceEditorDraft(snapshot.draft);
+      setStaged(snapshot.staged);
+      nextAttachmentOrderRef.current = snapshot.nextAttachmentOrder;
+      setStagedVisualComments(snapshot.stagedVisualComments);
+      setStagedSkills(snapshot.stagedSkills);
+      setStagedMcpServers(snapshot.stagedMcpServers);
+      setStagedConnectors(snapshot.stagedConnectors);
+      setStagedWorkspaceContexts(snapshot.stagedWorkspaceContexts);
+      setWorkspaceLinkedDirAdds(snapshot.workspaceLinkedDirAdds);
+      setPromotedWorkspaceContextDir(snapshot.promotedWorkspaceContextDir);
+      setActiveAppliedPlugin(snapshot.activeAppliedPlugin);
+      inlineBackedPluginRef.current = snapshot.inlineBackedPlugin;
+      if (snapshot.quotes.length > 0) onRestoreQuotes?.(snapshot.quotes);
+    }
+
     function finishComposedSend(
       outcome: ChatSendOutcome | Promise<ChatSendOutcome>,
+      snapshot: ComposerSendSnapshot,
+      keptWorkspaceContextIds: ReadonlySet<string>,
       pendingMetadata?: { entryFrom: ChatSendMeta['entryFrom'] | null; sessionMode: ChatSessionMode | null },
     ) {
+      const handBack = () => {
+        restoreSendSnapshot(snapshot, keptWorkspaceContextIds);
+        if (pendingMetadata?.entryFrom && !pendingEntryFromRef.current) {
+          pendingEntryFromRef.current = pendingMetadata.entryFrom;
+        }
+        if (pendingMetadata?.sessionMode && !pendingSessionModeRef.current) {
+          pendingSessionModeRef.current = pendingMetadata.sessionMode;
+        }
+      };
       void Promise.resolve(outcome).then(
         (result) => {
-          if (result === 'restore-draft') {
-            if (pendingMetadata?.entryFrom && !pendingEntryFromRef.current) {
-              pendingEntryFromRef.current = pendingMetadata.entryFrom;
-            }
-            if (pendingMetadata?.sessionMode && !pendingSessionModeRef.current) {
-              pendingSessionModeRef.current = pendingMetadata.sessionMode;
-            }
-            return;
-          }
-          reset();
+          if (result === 'restore-draft') handBack();
         },
-        () => {
-          if (pendingMetadata?.entryFrom && !pendingEntryFromRef.current) {
-            pendingEntryFromRef.current = pendingMetadata.entryFrom;
-          }
-          if (pendingMetadata?.sessionMode && !pendingSessionModeRef.current) {
-            pendingSessionModeRef.current = pendingMetadata.sessionMode;
-          }
-        },
+        handBack,
       ).finally(() => {
         composedSendPendingRef.current = false;
         setComposedSendPending(false);
@@ -1637,14 +1767,18 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       if (composedSendPendingRef.current) return false;
       composedSendPendingRef.current = true;
       setComposedSendPending(true);
+      const snapshot = captureSendSnapshot();
+      let outcome: ChatSendOutcome | Promise<ChatSendOutcome>;
       try {
-        finishComposedSend(send(), pendingMetadata);
-        return true;
+        outcome = send();
       } catch (error) {
         composedSendPendingRef.current = false;
         setComposedSendPending(false);
         throw error;
       }
+      const keptWorkspaceContextIds = new Set(reset().map((item) => item.id));
+      finishComposedSend(outcome, snapshot, keptWorkspaceContextIds, pendingMetadata);
+      return true;
     }
 
     /**
@@ -2756,61 +2890,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       ]));
     }
 
-    // The WorkingDirPicker treats the project's working directory as a single
-    // primary folder, so selecting one replaces the primary `linkedDirs` entry
-    // while preserving staged workspace-context dirs. The folder is read-only
-    // awareness for the agent (→ `--add-dir`), not a Design Files import, and
-    // `baseDir` is never touched.
-    async function setWorkingDirFolder(dir: string) {
-      if (!projectId) return;
-      const base = projectMetadata ?? { kind: 'prototype' as const };
-      const metadata: ProjectMetadata = {
-        ...base,
-        linkedDirs: linkedDirsWithWorkspaceContext(dir),
-      };
-      const result = await patchProject(projectId, { metadata }, workspaceContext);
-      // The daemon rejects stale/inaccessible/system dirs with
-      // INVALID_LINKED_DIR (patchProject → null). Only commit the selection
-      // and promote it in recents when the project accepted it; otherwise
-      // surface the failure and leave recents untouched so a rejected path
-      // isn't re-promoted to the top of the menu.
-      if (!result?.metadata) {
-        onShowToast?.(t('homeWorkingDir.applyFailed'));
-        return;
-      }
-      onProjectMetadataChange?.(result);
-      const promotedDir = dir.trim();
-      setPromotedWorkspaceContextDir(
-        selectedWorkspaceContextDirs.includes(promotedDir) ? promotedDir : null,
-      );
-      setWorkspaceLinkedDirAdds((current) => {
-        const nextEntries = Object.entries(current).filter(([, tracked]) => (
-          tracked.dir !== promotedDir
-        ));
-        return nextEntries.length === Object.keys(current).length
-          ? current
-          : Object.fromEntries(nextEntries);
-      });
-      void rememberRecentDir(dir);
-    }
-    async function handlePickWorkingDir() {
-      const selected = await openFolderDialog();
-      if (selected) await setWorkingDirFolder(selected);
-    }
-    async function clearWorkingDir() {
-      if (!projectId) return;
-      const base = projectMetadata ?? { kind: 'prototype' as const };
-      const metadata: ProjectMetadata = {
-        ...base,
-        linkedDirs: linkedDirsWithWorkspaceContext(null),
-      };
-      const result = await patchProject(projectId, { metadata }, workspaceContext);
-      if (result?.metadata) {
-        setPromotedWorkspaceContextDir(null);
-        onProjectMetadataChange?.(result);
-      }
-    }
-
     // Lexical drives every text change through this callback. `present` is the
     // entity list the editor's text currently references (MentionNodes plus
     // plain `@token`s matched against composerMentionEntities, deduped by
@@ -3271,8 +3350,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       activeAppliedPlugin && activeAppliedPlugin.pluginId !== DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID
         ? activeAppliedPlugin
         : null;
-    const showAdmissionPendingButton = composedSendPending && !streaming;
-    const showStopButton = streaming && !hasComposerPayload;
+    // The transcript can enter streaming before the send's admission completes.
+    const showAdmissionPendingButton = composedSendPending;
+    const showStopButton = streaming && !hasComposerPayload && !showAdmissionPendingButton;
     const showSendButton = (!streaming || hasComposerPayload) && !showAdmissionPendingButton;
     /* 托盘里要摆的那一排卡:已传好的 `staged` 与还在传 / 传失败的 `pendingUploads`
        合成一排,顺序按用户当初挑文件的顺序(合并规则是纯函数,单测在
@@ -3656,19 +3736,22 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             <ComposerPlusMenu
               workspaceContext={workspaceContext}
               triggerTestId="chat-plus-trigger"
-              // 聊天面板走稿子那枚描边加号;home hero 不传这个,保持共享 Icon
-              // 的实心 remix 字形(产品裁决 2026-09-03:不动全站)。
-              strokeGlyph
               placementPreference="up"
-              openRequest={plusMenuOpenRequest}
+              // The menu no longer carries a toolbox row (OPEND-3085, per the
+              // Demo): a legacy `toolbox` target opens the bare menu.
+              openRequest={plusMenuOpenRequest ? {
+                nonce: plusMenuOpenRequest.nonce,
+                submenu: plusMenuOpenRequest.submenu === 'toolbox'
+                  ? undefined
+                  : plusMenuOpenRequest.submenu,
+              } : null}
               onOpen={() => {
                 trackComposerBar({ element: 'plus_menu_open' });
                 setComposerEngaged(true);
               }}
               onSubmenuOpen={(submenu) => {
-                // The toolbox flyout tracks its own open (design_toolbox_open);
-                // the working-dir flyout carries actions, not a resource list.
-                if (submenu === 'toolbox' || submenu === 'workingDir') return;
+                // The working-dir flyout carries actions, not a resource list.
+                if (submenu === 'workingDir') return;
                 trackComposerBar({
                   element: 'plus_submenu_open',
                   resource_kind: PLUS_SUBMENU_RESOURCE_KIND[submenu],
@@ -3689,10 +3772,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 });
                 insertConnectorMention(connector);
               }}
-              onAddConnector={() => {
+              onAddConnector={onOpenConnectors ? () => {
                 trackComposerBar({ element: 'plus_add', resource_kind: 'connector' });
-                onOpenConnectors?.();
-              }}
+                onOpenConnectors();
+              } : undefined}
               plugins={pluginsForComposer}
               onPickPlugin={(record) => {
                 trackComposerBar({
@@ -3702,10 +3785,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 });
                 void insertPluginMention(record);
               }}
-              onAddPlugin={() => {
+              onAddPlugin={onBrowsePlugins ? () => {
                 trackComposerBar({ element: 'plus_add', resource_kind: 'plugin' });
-                onBrowsePlugins?.();
-              }}
+                onBrowsePlugins();
+              } : undefined}
               skills={skills}
               onPickSkill={(skill) => {
                 trackComposerBar({
@@ -3724,10 +3807,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 });
                 insertMcpMention(server);
               }}
-              onAddMcp={() => {
+              onAddMcp={onOpenMcpSettings ? () => {
                 trackComposerBar({ element: 'plus_add', resource_kind: 'mcp' });
-                onOpenMcpSettings?.();
-              }}
+                onOpenMcpSettings();
+              } : undefined}
               onAttachFiles={() => {
                 trackChatPanelClick(analytics.track, {
                   page_name: 'chat_panel',
@@ -3748,20 +3831,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               onLinkLocalCode={() => {
                 trackComposerBar({ element: 'plus_pick', resource_kind: 'workspace', resource_id: 'local-code' });
                 void handleLinkLocalCodeContext();
-              }}
-              workingDir={workingDir}
-              recentWorkingDirs={recentDirs}
-              onPickWorkingDir={() => {
-                trackComposerBar({ element: 'plus_pick', resource_kind: 'workspace', resource_id: 'working-dir' });
-                void handlePickWorkingDir();
-              }}
-              onSelectRecentWorkingDir={(dir) => {
-                trackComposerBar({ element: 'plus_pick', resource_kind: 'workspace', resource_id: 'working-dir-recent' });
-                void setWorkingDirFolder(dir);
-              }}
-              onClearWorkingDir={() => {
-                trackComposerBar({ element: 'plus_pick', resource_kind: 'workspace', resource_id: 'working-dir-clear' });
-                void clearWorkingDir();
               }}
               attachLoading={uploading}
               onSelectFromLibrary={() => {
@@ -3797,53 +3866,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 trackComposerBar({ element: 'design_system_open' });
                 openDesignSystemPicker();
               } : undefined}
-              // 插件 and 设计百宝箱 live inside the "+" menu (right below
-              // 工作目录) as hover-expand submenus. The toolbox flyout reuses
-              // the same DesignToolboxPanel the standalone popover renders.
-              toolboxLabel={t('chat.designToolbox.title')}
-              renderToolbox={(close) => (
-                <DesignToolboxPanel
-                  workspaceContext={workspaceContext}
-                  actions={DESIGN_TOOLBOX_ACTIONS}
-                  skills={skills}
-                  plugins={pluginsForComposer}
-                  mcpServers={enabledMcpServers}
-                  mcpTemplates={mcpTemplates}
-                  connectors={connectors}
-                  projectFiles={projectFiles}
-                  activeSkillIds={stagedSkills.map((skill) => skill.id)}
-                  activePluginId={activeAppliedPlugin?.pluginId ?? pinnedPluginId ?? null}
-                  activeMcpServerIds={stagedMcpServers.map((server) => server.id)}
-                  activeConnectorIds={stagedConnectors.map((connector) => connector.id)}
-                  activeFilePaths={staged.map((item) => item.path)}
-                  onOpened={() => trackDesignToolbox({ element: 'design_toolbox_open' })}
-                  onPickAction={(action) => {
-                    trackDesignToolbox({
-                      element: 'design_toolbox_action',
-                      toolbox_action_id: action.id,
-                    });
-                    applyDesignToolboxAction(action);
-                    close();
-                  }}
-                  onPickSkill={(skill) => {
-                    trackDesignToolbox({
-                      element: 'design_toolbox_resource',
-                      resource_kind: 'skill',
-                      resource_id: skill.id,
-                    });
-                    applyDesignToolboxSkill(skill);
-                    close();
-                  }}
-                  onPickResource={(resource) => {
-                    trackDesignToolbox({
-                      element: 'design_toolbox_resource',
-                      ...designToolboxResourceTracking(resource),
-                    });
-                    applyDesignToolboxResource(resource);
-                    close();
-                  }}
-                />
-              )}
             />
             {/* #5517: the design-system picker sits inline in the composer's
                 icon row (palette icon) instead of the staged-context bar. */}

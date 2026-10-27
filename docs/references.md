@@ -8,23 +8,18 @@ Every external project this spec leans on. Three questions per entry: what is it
 
 ## Primary references
 
-### [Anthropic Claude Design][cd]
-- **URL:** [claude.ai/design][cd] · [release announcement](https://www.infoq.cn/article/TH0QVHpvVGZ7VP3hAEmm) · [ifanr review](https://www.ifanr.com/1662860)
+### [Claude Design](https://claude.ai/design) (Anthropic)
 
-[cd]: https://x.com/claudeai/status/2045156267690213649
-- **What it is:** Anthropic's closed-source AI design product. Released 2026-04-17. Powered by Opus 4.7. Web-only (claude.ai). Generates prototypes, wireframes, decks, marketing pages, complex prototypes with voice/video/3D/shaders.
-- **Why it matters to us:** Defines the category. Its viral moment (~60M X impressions week 1) proves the market.
-- **What we borrow:** The high-level value prop — "natural language → editable visual design." Feature inspiration for modes (prototype, deck, marketing). UI ideas around inline editing and custom sliders.
-- **What we don't:** Closed source. Anthropic-only models. No self-hosting. Paid tiers (Pro/Max/Team/Enterprise) only. We are not trying to be a drop-in clone; we are an **open substrate** for the same category.
+- **Role:** Historical UX reference for natural-language editing of visual artifacts, inline editing, and adjustment controls.
 
 ### [Open CoDesign][ocod] (OpenCoworkAI)
 - **Repo:** [github.com/OpenCoworkAI/open-codesign][ocod]
 - **Site:** [opencoworkai.github.io/open-codesign](https://opencoworkai.github.io/open-codesign/)
-- **What it is:** The main open-source Claude Design alternative. MIT-licensed. Electron desktop app. React 19 + Vite + Tailwind v4. [`@mariozechner/pi-ai`][piai] for multi-provider. SQLite for version history. 12 built-in design skill modules. HTML/JSX sandboxed iframe preview. Exports HTML/PDF/PPTX/ZIP/MD. 15 templates. Comment mode + slider controls + multi-frame preview.
+- **What it is:** An open-source design workspace. MIT-licensed. Electron desktop app. React 19 + Vite + Tailwind v4. [`@mariozechner/pi-ai`][piai] for multi-provider. SQLite for version history. 12 built-in design skill modules. HTML/JSX sandboxed iframe preview. Exports HTML/PDF/PPTX/ZIP/MD. 15 templates. Comment mode + slider controls + multi-frame preview.
 
 [ocod]: https://github.com/OpenCoworkAI/open-codesign
 [piai]: https://github.com/badlogic/pi-mono/tree/main/packages/ai
-- **Why it matters:** Direct competitor; most overlap with what we're building.
+- **Why it matters:** Reference for interactive artifact review and export workflows.
 - **What we borrow:**
   - UI concepts: **comment mode** (click-to-pin element edits), **tweak sliders** (agent-emitted parameters), **multi-frame preview** (desktop/tablet/phone).
   - Sandboxed iframe preview (`<iframe sandbox="allow-scripts">` with vendored React 18 + Babel standalone for JSX).
@@ -159,26 +154,6 @@ Every external project this spec leans on. Three questions per entry: what is it
 | [Puppeteer](https://pptr.dev/) | Reference for template/skill-owned browser rendering; core desktop PDF export uses Electron `printToPDF` or the screenshot/PDF pipeline |
 | [pptxgenjs](https://gitbrent.github.io/PptxGenJS/) | PPTX export engine |
 | [chokidar](https://github.com/paulmillr/chokidar) | Ref-counted project-file watching; skill/template registries rescan on listing requests instead |
-
----
-
-## Compatibility & differentiation matrix
-
-| Dimension | [Claude Design][cd] | [Open CoDesign][ocod] | [multica][multica] | [cc-switch][ccsw] | **OD** |
-|---|---|---|---|---|---|
-| Open source | ❌ | ✅ | ✅ | ✅ | ✅ |
-| Primary form factor | Web (hosted) | Electron | Web + Go daemon | Tauri | **Next.js web + Node daemon** |
-| Vercel-deployable | ❌ | ❌ | ❌ | ❌ | **✅** |
-| Runs local-only | ❌ | ✅ | ✅ | ✅ | **✅** |
-| Generates design artifacts | ✅ | ✅ | ❌ (general coding) | ❌ | **✅** |
-| Uses existing code agent | — (owns it) | ❌ | ✅ | ✅ | **✅** |
-| Supports Claude Code skills (`SKILL.md`) | — | ❌ | ✅ | ✅ | **✅** |
-| `DESIGN.md` as first-class | ❌ | ❌ | — | — | **✅** |
-| Deck mode / PPTX export | ✅ | ✅ | ❌ | ❌ | **✅ (via skill)** |
-| Template gallery | ✅ | ✅ (15) | ❌ | ❌ | **✅** |
-| Design-system authoring mode | ❌ | ❌ | ❌ | ❌ | **✅** |
-
-The two empty-column crossings where OD lights up and others don't: **Vercel-deployable + design-system authoring**, and **uses existing code agent + first-class DESIGN.md**. That's the niche.
 
 ---
 

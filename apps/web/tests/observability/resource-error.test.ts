@@ -2,6 +2,11 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+// Keep the safety-transport assertions separate from the independently tested diagnostic bridge.
+// Shared setup imports analytics transitively; reload it after registering this mock.
+vi.hoisted(() => vi.resetModules());
+vi.mock('../../src/observability/experience-diagnostics', () => ({ reportExperienceEvent: vi.fn() }));
+
 import {
   clearExceptionTrackingContext,
   setExceptionTrackingContext,
@@ -23,6 +28,8 @@ beforeEach(() => {
     apiKey: 'phc_test',
     host: 'https://us.i.posthog.com',
     distinctId: 'device-1',
+    clientType: 'web',
+    osName: 'Mac OS X',
     sessionId: 'session-1',
   });
   window.history.replaceState(
@@ -123,6 +130,7 @@ describe('resource error privacy and volume boundary', () => {
     for (const [index, item] of cases.entries()) {
       expect(fetchedProperties(index)).toMatchObject({
         ...item.expected,
+        monitoring_kind: `${item.expected.category}|first`,
         tag: item.tag,
         event_kind: 'first',
         repeat_count: 0,
@@ -213,6 +221,7 @@ describe('resource error privacy and volume boundary', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchedProperties(1)).toMatchObject({
       category: 'user_artifact',
+      monitoring_kind: 'user_artifact|repeat_summary',
       event_kind: 'repeat_summary',
       repeat_count: 4,
     });

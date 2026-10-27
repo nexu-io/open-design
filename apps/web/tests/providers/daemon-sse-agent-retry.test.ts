@@ -129,6 +129,20 @@ describe('传输层把 run_retry_attempted 转成 UI 读数', () => {
     expect(seen.map((s) => s.phase)).toEqual(['retrying']);
   });
 
+  // OPEND-2849 S09a:重试帧自己带着失败分类。限流(`rate_limit`)那一档要让
+  // 流水尾部那一行换成「模型服务请求繁忙」,别的原因保持「正在重试」(不带 cause)。
+  it('因限流触发的重试带上 cause=rate_limit', async () => {
+    const seen = await runStream([
+      sseEvent(1, 'run_retry_attempted', {
+        ...REAL_RETRY_FRAME,
+        failure_category: 'rate_limit',
+        failure_detail: 'rate_limit_429',
+      }),
+      sseEvent(2, 'end', { status: 'failed', code: 1 }),
+    ]);
+    expect(seen[0]).toEqual({ attempt: 1, max: 1, phase: 'retrying', cause: 'rate_limit' });
+  });
+
   it('一条重试帧都没有的普通流不发任何读数', async () => {
     const seen = await runStream([
       sseEvent(1, 'start', { bin: 'amr' }),

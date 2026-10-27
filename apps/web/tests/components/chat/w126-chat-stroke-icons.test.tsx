@@ -227,28 +227,22 @@ describe('聊天面板内的调用点换过去了 —— 面板外一个都不�
     expect(chatComposer).not.toMatch(/<Icon name="arrow-up" size=\{18\}/);
   });
 
-  it('加号键用 ChatPlusIcon,且只有聊天面板那一侧走它', () => {
-    expect(plusMenu).toContain('<ChatPlusIcon size={16} className="od-icon" />');
+  it('加号键两边都走共享 Icon 的 add-line(OPEND-3085 按 Demo 统一)', () => {
     /*
-     * 聊天面板那一侧仍然点名要描边加号(上面那条);else 分支是**首页**,字形跟着
-     * main 走,本分支不在这里替它做决定:
-     *   · 2026-09-05 合并 main 时它跟着 `2e4c1a753b`(#7635)变成了**回形针**
-     *     (`attach`),本分支 09-03「首页保持共享 Icon 实心加号」那条裁决当时被取代;
-     *   · 2026-09-07 合并 main 时 #7843 把 #7635 整期 revert 掉了(等
-     *     `feat/home-entry-refresh` 回来),首页这一格随之退回**实心加号**。
-     * 这条断言钉的是首页行为,不是聊天面板行为 —— 它这次变红的原因就是首页那半
-     * 跟着 main 回退了,所以改的是它,而不是去把 main 的首页改回来。真正要守的
-     * 不变量没动:**两条分支都还在,聊天面板那半永远是描边加号**。
+     * ⚠️ 这一条也**翻过面**。原来钉的是「聊天面板那一侧走 `ChatPlusIcon` 描边加号,
+     * 由 `strokeGlyph` 开关点名」。产品 2026-09-14 拍板项目页聊天模块一律按 Demo
+     * `877980fb17`(#8113)还原:触发键在首页和项目页是**同一枚** 36px 圆盘 +
+     * 共享 `Icon` 的 `plus`,`strokeGlyph` 开关随之删除;`ChatPlusIcon` 这枚
+     * 描边原语本身还在(上面那条单独钉它的路径),只是没有调用方了。
      */
     expect(plusMenu).toContain('<Icon name="plus" size={16} className="od-icon" />');
-    expect(src('components/ChatComposer.tsx')).toContain('strokeGlyph');
+    expect(plusMenu).not.toContain('ChatPlusIcon');
+    expect(plusMenu).not.toContain('strokeGlyph');
+    expect(src('components/ChatComposer.tsx')).not.toContain('strokeGlyph');
     expect(src('components/HomeHero.tsx')).not.toContain('strokeGlyph');
-    /* 菜单**条目**上的加号稿子里没有对应物,保持共享 Icon 不动。
-       合并 main 之后它从单行字面量变成了多行 + 加载态
-       (`name={attachLoading ? 'spinner' : 'plus'}`),所以不再按整段字面量匹配 ——
-       那样只是在钉排版。这里钉真正要守的两件事:条目图标仍是共享 Icon 的 plus、
+    /* 菜单**条目**「附加文件」按 Demo 用回形针(`attach`),上传中换 spinner;
        仍是 15、仍挂 `plus-menu__item-icon`。 */
-    expect(plusMenu).toMatch(/name=\{attachLoading \? 'spinner' : 'plus'\}/);
+    expect(plusMenu).toMatch(/name=\{attachLoading \? 'spinner' : 'attach'\}/);
     expect(plusMenu).toMatch(/size=\{15\}\s+className="plus-menu__item-icon"/);
   });
 

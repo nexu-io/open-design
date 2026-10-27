@@ -13,12 +13,14 @@
  *  2. 后端命名 + 可重试   → `retryable: true` 同样落盘
  *  3. run 上没有裁决(老 daemon / 早期分类器)→ 事件上一个字段都不长出来
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
 import { closeDatabase, openDatabase } from '../src/db.js';
+import { classifyRunFailure } from '../src/run-failure-classification.js';
+import { createChatRunService } from '../src/runtimes/runs.js';
 import { persistRunFailureClassification } from '../src/runtimes/chat-run-messages.js';
 
 type StoredEvent = Record<string, unknown>;
@@ -138,4 +140,63 @@ describe('persistRunFailureClassification carries the daemon verdict', () => {
       failureDetail: 'spawn_enoexec',
     });
   });
+
+  it.each([
+    ['region rejection', '403 Forbidden: Country, region, or territory not supported', 'region_not_supported'],
+    ['ordinary forbidden', '403 Forbidden', 'upstream_client_error'],
+  ])('retains the classified %s in SQLite and the run terminal SSE payload', (_label, message, expectedDetail) => {
+    const messageId = seedFailedMessage('msg-upstream', message);
+    const failure = classifyRunFailure({
+      result: 'failed',
+      status: { status: 'failed', error: message, errorCode: 'AGENT_EXECUTION_FAILED', exitCode: 1, signal: null },
+      errorCode: 'AGENT_EXECUTION_FAILED',
+      agentId: 'claude',
+      events: [{ event: 'error', data: { error: { code: 'AGENT_EXECUTION_FAILED', message } } }],
+    });
+    if (!failure) throw new Error('The actual failed provider response must receive a verdict');
+
+    const sent: Array<{ event: string; data: unknown }> = [];
+    const runs = createChatRunService({
+      createSseResponse: () => ({
+        send: vi.fn((event: string, data: unknown) => { sent.push({ event, data }); return true; }),
+        end: vi.fn(),
+        cleanup: vi.fn(),
+      }),
+      createSseErrorPayload: (code: string, text: string) => ({ error: { code, message: text } }),
+      shutdownGraceMs: 10,
+      ttlMs: 60_000,
+    });
+    const run = runs.create({ projectId: 'proj-verdict', conversationId: 'conv-verdict', assistantMessageId: messageId, agentId: 'claude' });
+    // Same projection as server finishRun: classified values, not a fabricated
+    // desired detail, feed both production persistence and terminal emission.
+    Object.assign(run, {
+      error: message,
+      errorCode: 'AGENT_EXECUTION_FAILED',
+      failureCategory: failure.failure_category,
+      failureDetail: failure.failure_detail,
+      failureAction: failure.user_action,
+      retryable: failure.retryable,
+    });
+    persistRunFailureClassification(db, run);
+    runs.finish(run, 'failed', 1, null);
+    runs.stream(run, { get: () => null, query: {} }, { on: () => {} });
+
+    const verdict = {
+      failureCategory: 'upstream_unavailable',
+      failureDetail: expectedDetail,
+      failureAction: 'none',
+      retryable: false,
+    };
+    expect.soft(runs.statusBody(run)).toMatchObject({ status: 'failed', ...verdict });
+    expect.soft(sent.filter((frame) => frame.event === 'end')).toEqual([
+      { event: 'end', data: expect.objectContaining({ status: 'failed', ...verdict }) },
+    ]);
+    closeDatabase();
+    db = openDatabase(dataDir, { dataDir });
+    expect(storedErrorEvent(messageId)).toEqual({
+      kind: 'status', label: 'error', detail: message,
+      code: 'AGENT_EXECUTION_FAILED', ...verdict,
+    });
+  });
+
 });

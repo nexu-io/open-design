@@ -1,3 +1,6 @@
+import os from 'node:os';
+
+import { asObject } from './agent-protocol/acp/json.js';
 import type {
   TrackingRunCancelOrigin,
   TrackingRunFailureCategory,
@@ -14,6 +17,7 @@ import type {
   TrackingRunTerminalTrigger,
 } from '@open-design/contracts/analytics';
 import {
+  AMR_CONTINUATION_ERROR_CODE,
   isMembershipConcurrencyLimitFailure,
   isModelWindowLimitFailure,
 } from '@open-design/contracts';
@@ -48,6 +52,17 @@ export interface RunFailureClassificationInput {
   terminalTrigger?: TrackingRunTerminalTrigger | null;
   events?: RunEventForFailureClassification[];
   admissionEvidence?: RunAdmissionEvidence | undefined;
+  /**
+   * The OS the agent ran on. Defaults to this daemon's host, which is where
+   * every agent child is spawned; tests pass it explicitly.
+   */
+  hostOs?: RunFailureHostOs;
+}
+
+export interface RunFailureHostOs {
+  platform: string;
+  /** `os.release()`, e.g. `10.0.16299` on Windows 10 1709. */
+  release: string;
 }
 
 export interface RunFailureClassification {
@@ -352,6 +367,20 @@ function isSessionResumeExpiredText(text: string): boolean {
     /\bsession [\w-]+ not found\b/i.test(text);
 }
 
+// A lost race for the local credential-refresh lock, not a bad credential.
+//
+// Anchored on the contention itself — another holder, or a holder that died
+// mid-refresh — because that is what separates this from a genuinely unusable
+// token. An expired or replayed refresh token reads as "refresh token expired
+// / already used" and belongs to `authDetail`; those phrases are deliberately
+// not matched here. The trailing "or sign in again" in the agent's own message
+// is advice for the persistent case and is likewise not treated as evidence,
+// so a first occurrence cannot be laundered into a sign-in prompt.
+function isTransientCredentialRefreshText(text: string): boolean {
+  return /\banother [\w ]*process is refreshing it\b/i.test(text) ||
+    /\bexited mid-refresh\b/i.test(text);
+}
+
 function promptTooLargeDetail(text: string): TrackingRunFailureDetail | null {
   if (
     /\b(?:Payload Too Large|Request Entity Too Large|request entity too large|request body exceeds configured limit)\b/i.test(text) ||
@@ -488,6 +517,14 @@ function authDetail(text: string): TrackingRunFailureDetail {
   return 'auth_required';
 }
 
+function upstreamClientErrorDetail(text: string): TrackingRunFailureDetail {
+  // Only the provider's explicit region denial gets S30. A bare 403, proxy
+  // rejection, or request-shape error keeps the existing client-error detail.
+  return /\bCountry, region, or territory not supported\b/i.test(text)
+    ? 'region_not_supported'
+    : 'upstream_client_error';
+}
+
 function upstreamDetail(text: string): TrackingRunFailureDetail {
   if (/\b(AMR model catalog is (?:temporarily )?unavailable|no endpoints found that support tool use|provider routing)\b/i.test(text)) {
     return 'provider_routing_error';
@@ -497,7 +534,7 @@ function upstreamDetail(text: string): TrackingRunFailureDetail {
     .test(text)) {
     return 'stream_disconnected';
   }
-  if (isUpstreamClientErrorText(text)) return 'upstream_client_error';
+  if (isUpstreamClientErrorText(text)) return upstreamClientErrorDetail(text);
   if (/\b(?:http|status|error|response)(?:[ _-]?code)?[\s:=#-]*5\d\d\b|\b5\d\d\s+(?:bad gateway|service unavailable|internal server error|gateway timeout)|\b(5xx|bad gateway|gateway timeout|internal server error|service unavailable|upstream[ _-](?:error|unavailable)|provider (?:error|unavailable)|overloaded|Unexpected server error|Failed to process error response)\b/i
     .test(text)) {
     return 'upstream_5xx';
@@ -691,6 +728,41 @@ function isAccountSuspendedText(text: string): boolean {
   return /\btemporarily suspended account access\b/i.test(text);
 }
 
+// Oldest Windows build the bundled OpenCode (a Bun-compiled binary) can run on:
+// Bun requires Windows 10 1809 / build 17763 (https://bun.com/docs/installation).
+const MIN_BUN_WINDOWS_BUILD = 17763;
+
+function hostOsOf(input: RunFailureClassificationInput): RunFailureHostOs {
+  return input.hostOs ?? { platform: process.platform, release: os.release() };
+}
+
+function windowsBuildNumber(hostOs: RunFailureHostOs): number | null {
+  if (hostOs.platform !== 'win32') return null;
+  const match = /^\d+\.\d+\.(\d+)/.exec(hostOs.release);
+  return match ? Number(match[1]) : null;
+}
+
+/**
+ * The bundled OpenCode died at load time because this Windows build is older
+ * than Bun supports. On such builds the loader cannot resolve a Windows API
+ * the binary imports and the process exits with STATUS_ENTRYPOINT_NOT_FOUND
+ * (hex 0xC0000139, or Go/Node's decimal rendering 3221225785) before
+ * readiness. Two gates keep this from mislabeling other failures:
+ * - the status must sit inside vela's bundled-opencode startup wrapper
+ *   (`isManagedRuntimeStartupFailureText`), since any binary can die with a
+ *   missing entry point for unrelated reasons (a broken DLL on PATH);
+ * - the host must be Windows with a build below Bun's floor. On a supported
+ *   build the same status is not explained by the OS version and keeps its
+ *   existing path.
+ * The same binary on the same OS fails deterministically, so this is never
+ * retried.
+ */
+function isWindowsTooOldForBundledRuntime(text: string, hostOs: RunFailureHostOs): boolean {
+  const build = windowsBuildNumber(hostOs);
+  if (build === null || build >= MIN_BUN_WINDOWS_BUILD) return false;
+  return /0xc0000139|\b3221225785\b/i.test(text) && isManagedRuntimeStartupFailureText(text);
+}
+
 function isCpuUnsupportedCrashText(text: string): boolean {
   if (/\bno_avx2\b/i.test(text)) return true;
   return (
@@ -861,7 +933,7 @@ function classification(
   const environment = [
     'auth_required', 'stale_profile', 'refresh_token_reused', 'missing_api_key',
     'invalid_api_key', 'cli_not_installed', 'git_bash_missing',
-    'agent_config_invalid', 'cpu_unsupported', 'host_policy_block',
+    'agent_config_invalid', 'cpu_unsupported', 'os_unsupported', 'host_policy_block',
     'local_storage_failure', 'certificate_failure', 'proxy_configuration',
     'network_configuration',
   ].includes(failure_detail) || localModel;
@@ -974,6 +1046,19 @@ function classifyRunFailureBase(
   }
 
   const errorCode = normalizeCode(input.errorCode ?? input.status.errorCode);
+  if (errorCode === 'OD_NEXT_TASK_BLOCKED') {
+    // The host rejected completion, but this does not establish why the model
+    // failed to satisfy the task contract. Do not infer a provider fault or a
+    // child crash from the blocked reason text (the process may exit zero).
+    return {
+      ...classification('process_exit', 'execution_failed', 'finalize', false, 'none', {
+        evidenceLevel: 'structured_code',
+      }),
+      failure_mechanism: 'unknown',
+      failure_domain: 'unknown',
+      repair_owner: 'unknown',
+    };
+  }
   const text = collectFailureText({ ...input, events });
   const retryableHint = latestRetryable(events);
   // Compute once; used both for the early empty_output guard below and for the
@@ -984,6 +1069,15 @@ function classifyRunFailureBase(
   // signal guard below (a watchdog kill IS a signal, and the reason it was
   // killed outranks the bare signal) and the timeout branch itself.
   const daemonTimeoutVerdict = hasDaemonTimeoutVerdict(events);
+  if (input.agentId === 'amr' && events.some((event) => {
+    if (event.event !== 'error') return false;
+    const data = asObject(event.data);
+    const details = asObject(asObject(data?.error)?.details);
+    return details?.code === AMR_CONTINUATION_ERROR_CODE;
+  })) {
+    return classification('process_exit', 'continuation_incomplete',
+      inferFailureStageFromEvents(events, 'post_tool_resume'), false, 'none');
+  }
   const amrFailure = classifyAmrAccountFailure(text);
   const byokOpenCodeProviderNotFound = isByokOpenCodeProviderNotFoundText(
     input.agentId,
@@ -1174,6 +1268,31 @@ function classifyRunFailureBase(
     return classification(
       'process_exit',
       'session_resume_expired',
+      'session_init',
+      true,
+      'retry',
+    );
+  }
+
+  // Concurrent refreshes of one stored OAuth credential: a second agent process
+  // (or a `claude login` run by hand) held the refresh lock, so this run's
+  // refresh aborted before a request was ever sent.
+  //
+  // Claimed ahead of every auth branch below on purpose. The agent's message
+  // ends "…or sign in again", and `auth` is fixed at `retryable: false` /
+  // `user_action: 'login'` — so reaching that verdict would tell the user to
+  // re-authenticate a credential that is perfectly valid, and strand the run.
+  // Claimed ahead of the `process_exit` fallbacks for the opposite reason:
+  // there it lands on `exit_nonzero`, which `transientSuppressedReason` refuses
+  // as a non-retryable category, which is how this surfaces today — a dead-end
+  // failure card for a condition the agent itself describes as transient.
+  //
+  // Nothing streamed and no tool ran at `session_init`, so the replay is safe
+  // and the side-effect gates in the retry policy stay satisfied.
+  if (isTransientCredentialRefreshText(text)) {
+    return classification(
+      'process_exit',
+      'credential_refresh_contention',
       'session_init',
       true,
       'retry',
@@ -1386,7 +1505,7 @@ function classifyRunFailureBase(
     const retryable = upstreamClientError ? false : retryableHint ?? true;
     return classification(
       'upstream_unavailable',
-      upstreamClientError ? 'upstream_client_error' : upstreamDetail(text),
+      upstreamClientError ? upstreamClientErrorDetail(text) : upstreamDetail(text),
       inferFailureStageFromEvents(events, 'first_token_wait'),
       retryable,
       retryable ? 'retry' : 'none',
@@ -1497,6 +1616,18 @@ function classifyRunFailureBase(
     return classification(
       'process_exit',
       'cpu_unsupported',
+      inferFailureStageFromEvents(events, 'session_init'),
+      false,
+      'none',
+    );
+  }
+
+  // Same reasoning as cpu_unsupported: the bundled runtime cannot load on this
+  // Windows build, and the fatal_rpc_error promotion below would retry it.
+  if (isWindowsTooOldForBundledRuntime(text, hostOsOf(input))) {
+    return classification(
+      'process_exit',
+      'os_unsupported',
       inferFailureStageFromEvents(events, 'session_init'),
       false,
       'none',

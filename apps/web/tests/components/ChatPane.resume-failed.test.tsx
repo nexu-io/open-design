@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { forwardRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -11,12 +11,8 @@ import {
 } from '../../src/analytics/events';
 import type { AppConfig, ChatMessage } from '../../src/types';
 
-// Red spec for the resume-on-failure affordance: a failed assistant message
-// flagged `resumable` (a transient upstream drop / inactivity timeout the
-// daemon can recover by resuming the agent's CLI session) must offer a
-// "Continue the run" action that calls `onResumeRun` with that message —
-// distinct from the from-scratch Retry. On origin/main there is no `resumable`
-// field, no `onResumeRun` prop, and no such button, so this goes red there.
+// G16 removes Continue from error cards, even when the stored CLI session is
+// resumable. Keep source identity, history, and recovery analytics assertions.
 
 const translate = (key: string, vars?: Record<string, string | number>) => {
   if (vars && Object.keys(vars).length > 0) {
@@ -56,7 +52,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function resumableFailedMessage(): ChatMessage {
+function resumableFailedMessage(agentId = 'claude'): ChatMessage {
   return {
     id: 'msg-upstream',
     role: 'assistant',
@@ -65,7 +61,7 @@ function resumableFailedMessage(): ChatMessage {
     runId: 'run-upstream',
     runStatus: 'failed',
     resumable: true,
-    agentId: 'claude',
+    agentId,
     events: [
       {
         kind: 'status',
@@ -82,10 +78,12 @@ function renderChat(opts: {
   onRetry: (m: ChatMessage) => void;
   onSend?: (...args: unknown[]) => void;
   activeAgentId?: string;
+  failedAgentId?: string;
+  onSwitchToAmrAndRetry?: (m: ChatMessage) => void;
 }) {
   return render(
     <ChatPane
-      messages={[resumableFailedMessage()]}
+      messages={[resumableFailedMessage(opts.failedAgentId)]}
       streaming={false}
       error={null}
       projectId="project-1"
@@ -95,6 +93,7 @@ function renderChat(opts: {
       onStop={vi.fn()}
       onRetry={opts.onRetry}
       onResumeRun={opts.onResumeRun}
+      onSwitchToAmrAndRetry={opts.onSwitchToAmrAndRetry}
       conversations={[
         { projectId: 'project-1', id: 'conv-1', title: 'Current', createdAt: 1, updatedAt: 1 },
       ]}
@@ -106,79 +105,68 @@ function renderChat(opts: {
   );
 }
 
-describe('ChatPane resume-on-failure', () => {
-  it('offers Continue (not from-scratch Retry) on a resumable failed run', () => {
+describe('ChatPane fixed actions for resumable failures', () => {
+  it('uses Cloud handoff and its telemetry instead of Continue for a resumable CLI run', () => {
     const onResumeRun = vi.fn();
     const onRetry = vi.fn();
-    const { container } = renderChat({ onResumeRun, onRetry, activeAgentId: 'claude' });
-
-    expect(container.querySelector('[data-user-action-card="run-recovery"]')).toBeTruthy();
-    const continueBtn = screen.getByRole('button', { name: 'chat.resumeRunCta' });
-    expect(continueBtn).toBeTruthy();
-    expect(continueBtn.textContent).toBe('chat.resumeRunCta');
-    // The from-scratch Retry must not be the offered action for a resumable run.
+    const onSwitchToAmrAndRetry = vi.fn();
+    const { container } = renderChat({ onResumeRun, onRetry, onSwitchToAmrAndRetry, activeAgentId: 'claude' });
+    const card = screen.getByTestId('chat-run-error-card');
+    expect(within(card).getAllByRole('button').map((button) => button.textContent?.trim())).toEqual([
+      'chat.runError.contactSupportCta', 'chat.runError.exportLogsCta', 'chat.amrCard.switchCta',
+    ]);
+    const cloud = within(card).getByRole('button', { name: 'chat.amrCard.switchCta' });
+    expect(screen.queryByRole('button', { name: 'chat.resumeRunCta' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'promptTemplates.retry' })).toBeNull();
-
-    const footer = container.querySelector(
-      '[data-user-action-card="run-recovery"] [data-user-action-footer="true"]',
-    );
-    expect(footer?.contains(continueBtn)).toBe(true);
+    expect(container.querySelector('[data-user-action-footer="true"]')?.contains(cloud)).toBe(true);
     expect(trackRunRecoveryActionSurfaceView).toHaveBeenCalledTimes(1);
     expect(vi.mocked(trackRunRecoveryActionSurfaceView).mock.calls[0]![1]).toMatchObject({
-      element: 'run_recovery_action',
-      task_execution_id: 'msg-upstream',
-      recovery_action_instance_id: 'recovery:msg-upstream:resume_run',
-      recovery_action_type: 'resume_run',
-      source_run_id: 'run-upstream',
+      element: 'run_recovery_action', task_execution_id: 'msg-upstream',
+      recovery_action_instance_id: 'recovery:msg-upstream:switch_runtime_retry',
+      recovery_action_type: 'switch_runtime_retry', source_run_id: 'run-upstream',
       source_agent_provider_id: 'claude_code',
     });
-
-    fireEvent.click(continueBtn);
+    fireEvent.click(cloud);
     expect(trackRunRecoveryActionClick).toHaveBeenCalledTimes(1);
     expect(vi.mocked(trackRunRecoveryActionClick).mock.calls[0]![1]).toMatchObject({
       task_execution_id: 'msg-upstream',
-      recovery_action_instance_id: 'recovery:msg-upstream:resume_run',
-      recovery_action_type: 'resume_run',
+      recovery_action_instance_id: 'recovery:msg-upstream:switch_runtime_retry',
+      recovery_action_type: 'switch_runtime_retry',
     });
-    expect(onResumeRun).toHaveBeenCalledTimes(1);
-    expect(onResumeRun.mock.calls[0]![0]).toMatchObject({ id: 'msg-upstream' });
+    expect(onSwitchToAmrAndRetry).toHaveBeenCalledWith(expect.objectContaining({ id: 'msg-upstream', resumable: true }));
+    expect(onResumeRun).not.toHaveBeenCalled();
     expect(onRetry).not.toHaveBeenCalled();
   });
 
-  it('offers Continue via plain send on surfaces without a resume handler (not Retry)', () => {
-    // SideChatTab / design-system chat mount ChatPane without onResumeRun. The
-    // daemon has persisted the resumable session, so the re-sending Retry path
-    // would silently resume + repeat the work. Continue must still show and
-    // resume via a plain send of the continue prompt (no original re-send).
+  it('does not silently send a Continue prompt when the host lacks a resume handler', () => {
     const onRetry = vi.fn();
     const onSend = vi.fn();
-    renderChat({ onRetry, onSend, activeAgentId: 'claude' });
-
-    const continueBtn = screen.getByRole('button', { name: 'chat.resumeRunCta' });
-    expect(continueBtn).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'promptTemplates.retry' })).toBeNull();
-
-    fireEvent.click(continueBtn);
-    expect(onSend).toHaveBeenCalledTimes(1);
-    expect(String(onSend.mock.calls[0]![0])).toContain('interrupted by a transient failure');
+    const onSwitchToAmrAndRetry = vi.fn();
+    renderChat({ onRetry, onSend, onSwitchToAmrAndRetry, activeAgentId: 'claude' });
+    fireEvent.click(screen.getByRole('button', { name: 'chat.amrCard.switchCta' }));
+    expect(onSwitchToAmrAndRetry).toHaveBeenCalledWith(expect.objectContaining({ id: 'msg-upstream' }));
+    expect(screen.queryByRole('button', { name: 'chat.resumeRunCta' })).toBeNull();
+    expect(onSend).not.toHaveBeenCalled();
     expect(onRetry).not.toHaveBeenCalled();
   });
 
-  it('falls back to Retry when the active agent no longer matches the failed run', () => {
-    // The failed message is from claude, but the user has since switched the
-    // active agent to opencode — the resumable session is keyed to claude, so
-    // Continue must NOT show (it would silently start fresh on the wrong agent).
+  it.each([
+    ['claude', 'opencode', 'chat.amrCard.switchCta'],
+    ['amr', 'claude', 'promptTemplates.retry'],
+  ])('retains the failed %s identity after the current agent changes to %s', (failedAgentId, activeAgentId, label) => {
     const onResumeRun = vi.fn();
     const onRetry = vi.fn();
-    renderChat({ onResumeRun, onRetry, activeAgentId: 'opencode' });
-
+    const onSwitchToAmrAndRetry = vi.fn();
+    renderChat({ onResumeRun, onRetry, onSwitchToAmrAndRetry, activeAgentId, failedAgentId });
     expect(screen.queryByRole('button', { name: 'chat.resumeRunCta' })).toBeNull();
-    const retryButton = screen.getByRole('button', { name: 'promptTemplates.retry' });
-    expect(retryButton).toBeTruthy();
-    /* 原来断言的是 `chat-error-action` —— 那是它当裸 `<button>` 时的手写类名。
-       2026-08-27 这颗改成走共享 `Button`(用户:「这个按钮圆角明显跟别的不一样」;
-       量到它 4px 圆角、旁边两颗 999px)。这里改成认 testid:要钉的是「回落到重试」
-       这条行为,不是它当年用哪个类名。 */
-    expect(retryButton.getAttribute('data-testid')).toBe('chat-error-retry');
+    fireEvent.click(screen.getByRole('button', { name: label }));
+    if (failedAgentId === 'amr') {
+      expect(onRetry).toHaveBeenCalledWith(expect.objectContaining({ id: 'msg-upstream', agentId: failedAgentId }), 'manual_retry');
+      expect(onSwitchToAmrAndRetry).not.toHaveBeenCalled();
+    } else {
+      expect(onSwitchToAmrAndRetry).toHaveBeenCalledWith(expect.objectContaining({ id: 'msg-upstream', agentId: failedAgentId }));
+      expect(onRetry).not.toHaveBeenCalled();
+    }
+    expect(onResumeRun).not.toHaveBeenCalled();
   });
 });

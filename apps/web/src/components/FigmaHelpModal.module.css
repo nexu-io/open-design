@@ -5,7 +5,9 @@
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(15, 15, 15, 0.38);
+  background: var(--scrim-tint);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
 }
 
 .modal {
@@ -31,7 +33,7 @@
   margin: 0 0 14px;
   color: var(--text-strong);
   font-size: 16px;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .close {
