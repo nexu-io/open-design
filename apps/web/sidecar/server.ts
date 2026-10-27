@@ -3,6 +3,7 @@ import {
   Agent as HttpAgent,
   createServer as createHttpServer,
   request as createHttpRequest,
+  type ClientRequest,
   type IncomingMessage,
   type Server as HttpServer,
   type ServerResponse,
@@ -486,8 +487,8 @@ function captureProxyRequestBody(request: IncomingMessage): Promise<ProxyRequest
       }
     };
     const onEnd = () => settle({ replayable: true, body: Buffer.concat(chunks) });
-    // A client that aborts mid-body gets the same truncated-stream behavior
-    // as the previous pipe-through implementation (and is never replayed).
+    // Release body capture on abort so the proxy can observe the closed
+    // browser and skip forwarding a truncated request.
     const onError = () => settle({ replayable: false, prefix: [...chunks], stream: request });
     request.on("data", onData);
     request.on("end", onEnd);
@@ -549,7 +550,24 @@ async function proxyHttpRequest(
   const body = await captureProxyRequestBody(request);
 
   await new Promise<void>((resolveProxy) => {
+    let upstream: ClientRequest | null = null;
+    let browserGone = false;
+    // An unfinished browser response owns the upstream request's lifetime.
+    // Normal response closure must leave completed keep-alive sockets pooled.
+    const onBrowserClose = (): void => {
+      if (browserGone) return;
+      browserGone = true;
+      if (!response.writableFinished) upstream?.destroy();
+      resolveProxy();
+    };
+    if (response.destroyed) {
+      onBrowserClose();
+      return;
+    }
+    response.once('close', onBrowserClose);
+
     const sendAttempt = (attempt: number): void => {
+      if (browserGone) return;
       const proxyRequest = proxyRequestFactory(
         target,
         {
@@ -560,13 +578,23 @@ async function proxyHttpRequest(
           agent: attempt === 0 ? (secure ? proxyHttpsAgent : proxyHttpAgent) : false,
         },
         (proxyResponse) => {
+          if (browserGone || response.destroyed) {
+            onBrowserClose();
+            proxyResponse.destroy();
+            return;
+          }
           response.writeHead(proxyResponse.statusCode ?? 502, proxyResponse.headers);
           proxyResponse.pipe(response);
           proxyResponse.on("end", resolveProxy);
         },
       );
+      upstream = proxyRequest;
 
       proxyRequest.on("error", (error) => {
+        if (browserGone || response.destroyed) {
+          onBrowserClose();
+          return;
+        }
         if (
           shouldReplayProxyRequest({
             attempt,
@@ -590,6 +618,14 @@ async function proxyHttpRequest(
       if (body.replayable) {
         proxyRequest.end(body.body);
       } else {
+        const onUploadClose = (): void => {
+          if (!body.stream.complete) onBrowserClose();
+        };
+        body.stream.once('close', onUploadClose);
+        if (body.stream.destroyed && !body.stream.complete) {
+          onBrowserClose();
+          return;
+        }
         for (const chunk of body.prefix) proxyRequest.write(chunk);
         body.stream.pipe(proxyRequest);
       }
