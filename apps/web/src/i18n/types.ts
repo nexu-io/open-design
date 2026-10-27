@@ -1290,6 +1290,7 @@ export interface Dict {
   /** Toast after POST /api/projects answered PROJECT_CREATE_PREPARATION_TIMEOUT. */
   'home.createTimedOut': string;
   'home.amrGateUnavailable': string;
+  'home.hyperframesRetired': string;
   'home.bundledScenarioMissing': string;
   'entry.cloudCalloutBody': string;
   'entry.cloudCreditsTitle': string;

@@ -1,5 +1,6 @@
 import path from 'node:path';
 
+import { MOTION_CREATION_POLICY_PROMPT } from '../../prompts/motion-creation-policy.js';
 import {
   OD_NEXT_BUNDLE_ECHO_GUARD_V2,
   detectOdNextDevicePlatformFromText,
@@ -272,10 +273,13 @@ export function createOdNextInitialPromptBundleService(
       path.join(deps.runtimeDataDir, 'od-next-task-inputs'),
     );
     const runContextPrompt = renderRunContextPrompt(context, project?.metadata);
-    const runtimeToolPrompt = deps.createAgentRuntimeToolPrompt(
-      deps.daemonUrl,
-      projectRoot && projectId ? { token: 'available' } : null,
-    );
+    const runtimeToolPrompt = [
+      deps.createAgentRuntimeToolPrompt(
+        deps.daemonUrl,
+        projectRoot && projectId ? { token: 'available' } : null,
+      ),
+      MOTION_CREATION_POLICY_PROMPT,
+    ].join('\n\n');
     const researchCommandContract = resolveResearchCommandContract(research, userPrompt);
     const formAnswerMatch = FORM_ANSWERS_HEADER_RE.exec(
       typeof currentPrompt === 'string' ? currentPrompt : '',

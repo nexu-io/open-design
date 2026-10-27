@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import { expectStableCount } from '@/playwright/assertions';
 import { expect, test } from '@/playwright/suite';
 import {
   ACTIVE_ARTIFACT_PREVIEW_SELECTOR,
@@ -120,44 +122,18 @@ for (const entry of automatedUiScenarios().filter(
       });
     }
 
-    if (entry.flow === 'hyperframes-project-routing') {
-      await page.route('**/api/skills', async (route) => {
-        await route.fulfill({
-          json: {
-            skills: [
-              {
-                id: 'video-shortform',
-                name: 'Video shortform',
-                description: 'Shortform video skill',
-                mode: 'video',
-                surface: 'video',
-                previewType: 'video',
-                designSystemRequired: false,
-                defaultFor: [],
-                triggers: [],
-                upstream: null,
-                hasBody: true,
-                examplePrompt: '',
-                aggregatesExamples: false,
-              },
-              {
-                id: 'hyperframes',
-                name: 'HyperFrames',
-                description: 'HTML-in-canvas video',
-                mode: 'video',
-                surface: 'video',
-                previewType: 'video',
-                designSystemRequired: false,
-                defaultFor: [],
-                triggers: [],
-                upstream: null,
-                hasBody: true,
-                examplePrompt: '',
-                aggregatesExamples: false,
-              },
-            ],
-          },
-        });
+    if (entry.flow === 'video-project-routing') {
+      // The providerless baseline used the local HyperFrames renderer as its
+      // only available video model. New video creation now needs its own
+      // configured provider; this public config fixture never invokes one.
+      await page.route('**/api/media/config', async (route) => {
+        if (route.request().method() !== 'GET') {
+          await route.fallback();
+          return;
+        }
+        await route.fulfill({ json: { providers: {
+          volcengine: { configured: true, apiKeyTail: 'e2e-video', baseUrl: '' },
+        } } });
       });
     }
 
@@ -197,8 +173,8 @@ for (const entry of automatedUiScenarios().filter(
       await runExampleUsePromptFlow(page, entry);
       return;
     }
-    if (entry.flow === 'hyperframes-project-routing') {
-      await runHyperframesProjectRoutingFlow(page, entry);
+    if (entry.flow === 'hyperframes-retirement') {
+      await runHyperframesRetirementFlow(page, entry);
       return;
     }
     if (entry.flow === 'image-project-routing') {
@@ -706,6 +682,58 @@ test('[P0] sending preview comments opens the refreshed follow-up artifact', asy
   await expectProjectFileToContain(page, projectId, revisedFileName, 'Preview copy refreshed after comment send.');
 });
 
+test('[P0] @critical historical HyperFrames metadata and skill fixture opens the original project preview without new creation', async ({ page }) => {
+  const projectId = `legacy-hyperframes-ui-${randomUUID()}`;
+  const fileName = 'legacy-hyperframes.html';
+  const created = await page.request.post('/api/projects', { data: {
+    id: projectId,
+    name: 'Historical HyperFrames UI fixture',
+    skillId: null,
+    designSystemId: null,
+    metadata: { kind: 'video' },
+  } });
+  expect(created.ok(), await created.text()).toBe(true);
+  await seedHtmlArtifact(page, projectId, fileName,
+    '<!doctype html><html><body><main data-duration="5" data-width="1920" data-height="1080"><h1>Original HyperFrames source</h1><p>Historical project preview remains available.</p></main></body></html>');
+
+  // Only the GET detail is a historical UI input fixture. The new-project API
+  // never receives retired bindings; real persisted/frozen recovery belongs to
+  // the daemon retirement tests. Files and the project URL use the real daemon.
+  await page.route(new RegExp(`/api/projects/${projectId}(?:\\?.*)?$`), async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    const response = await route.fetch();
+    expect(response.ok()).toBe(true);
+    const detail = await response.json() as { project: Record<string, unknown>; resolvedDir?: string };
+    await route.fulfill({ response, json: {
+      ...detail,
+      project: { ...detail.project, skillId: 'hyperframes', metadata: {
+        kind: 'video', intent: 'hyperframes', videoModel: 'hyperframes-html',
+      } },
+    } });
+  });
+  const creationRequests: string[] = [];
+  page.on('request', (request) => {
+    if (isCreateProjectRequest(request) || isCreateRunRequest(request)) creationRequests.push(request.url());
+  });
+  const historicalDetail = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === `/api/projects/${projectId}` && response.request().method() === 'GET');
+  await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
+  const detail = await (await historicalDetail).json() as { project: { id: string; skillId: string; metadata: Record<string, unknown> } };
+  expect(detail.project).toMatchObject({ id: projectId, skillId: 'hyperframes', metadata: {
+    kind: 'video', intent: 'hyperframes', videoModel: 'hyperframes-html',
+  } });
+  await expectWorkspaceReady(page);
+  expect((await getCurrentProjectContext(page)).projectId).toBe(projectId);
+  await openDesignFile(page, fileName);
+  const preview = await settledActiveArtifactPreview(page, T.medium);
+  await expect(preview.frame.getByRole('heading', { name: 'Original HyperFrames source' })).toBeVisible();
+  await expectProjectFileToContain(page, projectId, fileName, 'Historical project preview remains available.');
+  await expectStableCount(() => creationRequests.length, 0, { message: 'opening a historical project fixture must not create or run a new project' });
+});
+
 async function routeMockAgents(page: Page) {
   await routeAgents(page, [
     {
@@ -722,7 +750,7 @@ async function routeMockAgents(page: Page) {
 function scenarioPriority(entry: UiScenario): 'P0' | 'P1' | 'P2' {
   switch (entry.flow) {
     case 'example-use-prompt':
-    case 'hyperframes-project-routing':
+    case 'hyperframes-retirement':
     case 'image-project-routing':
     case 'video-project-routing':
     case 'audio-project-routing':
@@ -976,37 +1004,21 @@ async function runExampleUsePromptFlow(
   await expect(page.getByTestId('workspace-tabs-dropdown-trigger')).toContainText('Warm Utility Example');
 }
 
-async function runHyperframesProjectRoutingFlow(
+async function runHyperframesRetirementFlow(
   page: Page,
   entry: UiScenario,
 ) {
+  const creationRequests: string[] = [];
+  page.on('request', (request) => {
+    if (isCreateProjectRequest(request) || isCreateRunRequest(request)) creationRequests.push(request.url());
+  });
   await createProjectNameOnly(page, entry);
-
-  const createProjectRequest = page.waitForRequest(isCreateProjectRequest);
-  const createProjectResponse = page.waitForResponse(isCreateProjectResponse);
-  await page.getByTestId('create-project').click();
-
-  const request = await createProjectRequest;
-  const body = request.postDataJSON() as {
-    skillId?: string;
-    metadata?: {
-      kind?: string;
-      videoModel?: string;
-    };
-  };
-  expect(body.skillId).toBe('hyperframes');
-  expect(body.metadata?.kind).toBe('video');
-  expect(body.metadata?.videoModel).toBe('hyperframes-html');
-
-  const response = await createProjectResponse;
-  expect(response.ok(), `${response.status()} ${await response.text()}`).toBeTruthy();
-
-  await expectWorkspaceReady(page);
-  await sendPrompt(page, entry.prompt);
-  const { projectId } = await getCurrentProjectContext(page);
-  await expect(tabBySuffix(page, entry.mockArtifact!.fileName)).toBeVisible();
-  await expectProjectFileToContain(page, projectId, entry.mockArtifact!.fileName, entry.mockArtifact!.heading);
-  await expectScenarioProjectState(page, entry, projectId);
+  await page.getByTestId('model-picker-trigger').click();
+  await expect(page.locator('.model-picker [role="listbox"]')).toBeVisible();
+  await expect(page.getByTestId('model-picker-option-hyperframes-html')).toHaveCount(0);
+  await page.getByTestId('model-picker-trigger').click();
+  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+  await expectStableCount(() => creationRequests.length, 0, { message: 'retired renderer discovery must not create a project or start a run' });
 }
 
 async function runImageProjectRoutingFlow(
@@ -1055,7 +1067,7 @@ async function runVideoProjectRoutingFlow(
     };
   };
   expect(body.metadata?.kind).toBe('video');
-  expect(body.metadata?.videoModel).toBeTruthy();
+  expect(body.metadata?.videoModel).toBe(entry.create.videoModel);
   expect(body.metadata?.videoAspect).toBe('16:9');
   expect(body.metadata?.videoLength).toBe(5);
 

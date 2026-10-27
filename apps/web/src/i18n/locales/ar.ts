@@ -939,6 +939,7 @@ export const ar: Dict = {
   'home.daemonRecovering': 'انقطع الاتصال المحلي\nيتعذّر الاتصال حاليًا بخدمة Open Design على هذا الكمبيوتر. يرجى إعادة تشغيل التطبيق.',
   'home.createTimedOut': 'انتهت مهلة تجهيز المشروع قبل أن يبدأ. حاول الإرسال مرة أخرى.',
   'home.amrGateUnavailable': 'تعذّر تأكيد رصيد OpenDesign Cloud. حاول الإرسال مرة أخرى.',
+  'home.hyperframesRetired': "تم إيقاف هذا المحتوى الرسمي من HyperFrames. استخدم Motion للأعمال الجديدة. تظل المشاريع الحالية متاحة.",
   'home.bundledScenarioMissing': 'Bundled scenario "{scenarioId}" is not installed. Reinstall the daemon to restore the default plugin set.',
   "entry.cloudCalloutBody": "سجّل الدخول لاستخدام OpenDesign Cloud والتعاون عبر السحابة",
   "entry.cloudCreditsTitle": "احصل على أرصدة مجانية",

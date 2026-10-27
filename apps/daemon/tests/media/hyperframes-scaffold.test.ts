@@ -1,8 +1,10 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { scaffoldHyperFramesComposition } from '../../src/media/hyperframes-scaffold.js';
+import { readMotionExportSpec } from '../../src/artifacts/motion-delivery.js';
+
 
 describe('HyperFrames composition scaffold', () => {
   const roots: string[] = [];
@@ -57,5 +59,18 @@ describe('HyperFrames composition scaffold', () => {
       projectDir,
       compositionDir: '.hyperframes-cache/existing',
     })).rejects.toThrow(/already exists/);
+  });
+
+  it('supports an editable source-only work without imposing an MP4 delivery', async () => {
+    const projectDir = await mkdtemp(path.join(tmpdir(), 'od-motion-source-only-'));
+    roots.push(projectDir);
+    await scaffoldHyperFramesComposition({ projectDir, compositionDir: 'motion-source/animation' });
+    const sourcePath = 'motion-source/animation/index.html';
+    const source = (await readFile(path.join(projectDir, sourcePath), 'utf8'))
+      .replace('<meta name="od-motion-output" content="video">', '');
+    await writeFile(path.join(projectDir, sourcePath), source);
+    expect(source).toContain('data-od-motion-source-player');
+    expect(source).toContain('src="./gsap.min.js"');
+    expect(await readMotionExportSpec({ projectRoot: projectDir, sourcePath, outputPath: 'unused.mp4' })).toBeUndefined();
   });
 });

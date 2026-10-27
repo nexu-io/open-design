@@ -4,13 +4,13 @@
 // to make first:
 //
 //   Slides · Document · WebGL · Prototype · Live Artifact · Image · Video ·
-//   HyperFrames · Audio
+//   Motion design · Audio
 //
 // Prototype, Slides, Image, and Video have enough bundled templates to
 // deserve a second row. Those child buckets follow the Feishu prompt
 // taxonomy from the user-query analysis doc: business dashboards, app
 // prototypes, landing pages, pitch decks, training decks, brand visuals,
-// video/motion generation, and adjacent scene clusters. HyperFrames and
+// video/motion generation, and adjacent scene clusters. Motion design and
 // Audio stay flat because their catalog slices are intentionally small.
 //
 // Counts in each category reflect the catalog *as a whole*, not the
@@ -19,7 +19,7 @@
 // clicks make the row visually noisy and obscure how the overall
 // catalog is shaped.
 
-import { resolveLocalizedText, type InstalledPluginRecord } from '@open-design/contracts';
+import { isRetiredHyperFramesPlugin, resolveLocalizedText, type InstalledPluginRecord } from '@open-design/contracts';
 import { CURATED_LIVE_ARTIFACT_PLUGIN_IDS } from './curatedPriority';
 import { localizedText } from './localization';
 import { resolveCommercialCategoryId, type CommercialCategoryId } from './categoryLabel';
@@ -117,19 +117,6 @@ function matchesAny(record: InstalledPluginRecord, tests: Array<(record: Install
   return tests.some((test) => test(record));
 }
 
-const HYPERFRAMES_TESTS = [
-  byAnySlug(
-    'hyperframes',
-    'html-video',
-    'video-composition',
-    'interactive-video',
-  ),
-];
-
-function isHyperFramesPlugin(record: InstalledPluginRecord): boolean {
-  return matchesAny(record, HYPERFRAMES_TESTS);
-}
-
 // Motion design: templates for the Home `motion-design` task type. They are
 // video-mode plugins, but their Use path must open the OD Next motion-design
 // route, not the generative Video chip.
@@ -138,7 +125,7 @@ function isMotionDesignPlugin(record: InstalledPluginRecord): boolean {
 }
 
 function isVideoPlugin(record: InstalledPluginRecord): boolean {
-  return byMode('video')(record) && !isHyperFramesPlugin(record) && !isMotionDesignPlugin(record);
+  return byMode('video')(record) && !isMotionDesignPlugin(record);
 }
 
 function isLiveArtifactPlugin(record: InstalledPluginRecord): boolean {
@@ -243,12 +230,6 @@ const PRIMARY_CATEGORIES: readonly CategoryDef[] = [
     test: isVideoPlugin,
   },
   {
-    slug: 'hyperframes',
-    label: 'HyperFrames',
-    starterPrompt: 'Create an OpenDesign plugin that generates a HyperFrames-ready motion composition.',
-    test: isHyperFramesPlugin,
-  },
-  {
     slug: 'audio',
     label: 'Audio',
     starterPrompt: 'Create an OpenDesign plugin that generates audio, voice, or sound-design assets from a brief.',
@@ -351,7 +332,7 @@ function orderSubcategoriesForDisplay(parent: string, options: FacetOption[]): F
 }
 
 // Scene child buckets based on the Feishu prompt taxonomy. Document, WebGL,
-// HyperFrames and Audio intentionally have no children, so selecting them
+// Motion design and Audio intentionally have no children, so selecting them
 // keeps the section flat.
 //
 // NOTE: array order here is matching precedence (see SUBCATEGORY_DISPLAY_ORDER
@@ -441,7 +422,7 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
     ),
   },
   // (The former `docs-reports` prototype scene is the `document` primary
-  // category now — see DOCUMENT_TAG_SLUGS. Document, like HyperFrames and
+  // category now — see DOCUMENT_TAG_SLUGS. Document, like Motion design and
   // Audio, stays flat.)
   {
     parent: 'prototype',
@@ -580,6 +561,7 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
 ];
 
 function extractPrimaryCategory(record: InstalledPluginRecord): string | null {
+  if (isRetiredHyperFramesPlugin(record)) return null;
   return PRIMARY_CATEGORIES.find((c) => c.test(record))?.slug ?? null;
 }
 
@@ -648,7 +630,7 @@ export function applyFacetSelection(
   plugins: InstalledPluginRecord[],
   selection: FacetSelection,
 ): InstalledPluginRecord[] {
-  if (!selection.category) return plugins;
+  if (!selection.category) return plugins.filter((plugin) => !isRetiredHyperFramesPlugin(plugin));
   const want = selection.category;
   const inCategory = plugins.filter((p) => extractCategories(p).includes(want));
   if (!selection.subcategory) return inCategory;

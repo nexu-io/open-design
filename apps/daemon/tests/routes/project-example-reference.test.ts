@@ -257,6 +257,16 @@ describe('POST /api/projects exampleReference', () => {
     expect(insertProject).not.toHaveBeenCalled();
   });
 
+  it('still rejects a retired official example selected without a conflicting claim', async () => {
+    const insertProject = vi.fn();
+    const source = path.join(REPO_ROOT, 'plugins/_official/examples/hyperframes');
+    const baseUrl = await start(buildDeps({ insertProject, getLocalPluginBySource: localExampleResolver({ sourceKind: 'bundled', fsPath: source }) }));
+    const response = await post(baseUrl, createBody({ exampleReference: { pluginId: 'example-hyperframes', source } }));
+    expect(response.status).toBe(410);
+    expect(await response.json()).toMatchObject({ error: { code: 'CONTENT_RETIRED' } });
+    expect(insertProject).not.toHaveBeenCalled();
+  });
+
   it('rejects a reference whose record does not resolve to the claimed identity', async () => {
     const insertProject = vi.fn();
     const baseUrl = await start(buildDeps({

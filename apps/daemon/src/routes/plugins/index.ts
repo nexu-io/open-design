@@ -7,7 +7,8 @@ import type {
   ProjectMetadata,
   WorkspaceCollabContext,
 } from '@open-design/contracts';
-import { TeamResourceCopyForbiddenError } from '@open-design/contracts';
+import { TeamResourceCopyForbiddenError, RETIRED_HYPERFRAMES_MESSAGE, isRetiredHyperFramesPlugin } from '@open-design/contracts';
+import { projectAlreadyUsesRetiredPlugin } from '../../registry/hyperframes-retirement.js';
 import {
   duplicatePluginExampleIntoProject,
   PluginDuplicateProjectError,
@@ -79,6 +80,10 @@ interface SqliteDbLike {
 
 interface InstalledPluginLike {
   id?: string;
+  sourceKind?: string;
+  source?: string;
+  sourceMarketplaceId?: string;
+  resolvedSource?: string;
   title?: string;
   manifest?: Record<string, unknown>;
   fsPath?: string;
@@ -432,6 +437,9 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
     const body = req.body && typeof req.body === 'object'
       ? req.body as Record<string, unknown>
       : {};
+    if (isRetiredHyperFramesPlugin(plugin) && !projectAlreadyUsesRetiredPlugin(db, body.projectId, plugin)) {
+      return helpers.sendApiError(res, 410, 'CONTENT_RETIRED', RETIRED_HYPERFRAMES_MESSAGE);
+    }
     const inputs = body.inputs && typeof body.inputs === 'object' ? body.inputs : {};
     const grantCaps = Array.isArray(body.grantCaps)
       ? body.grantCaps.filter((capability: unknown): capability is string => typeof capability === 'string')
@@ -499,7 +507,7 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
     return binding.visibility === 'team'
       || binding.createdByWorkspaceMemberId === authority.workspaceMemberId;
   };
-  app.get('/api/plugins', async (req, res) => { try { const authority = await resolveWorkspaceAuthority(req, res, deps.verifyWorkspaceReadAuthority ?? deps.verifyWorkspaceRequestAuthority); if (authority === undefined) return; const visible = await plugins.listInstalledPlugins(db, authority?.workspaceId ?? null, authority?.workspaceMemberId ?? null); res.json({ plugins: helpers.applyBakedPreviews(visible, helpers.PLUGIN_PREVIEWS_DIR) }); } catch (err) { res.status(500).json({ error: String(err) }); } });
+  app.get('/api/plugins', async (req, res) => { try { const authority = await resolveWorkspaceAuthority(req, res, deps.verifyWorkspaceReadAuthority ?? deps.verifyWorkspaceRequestAuthority); if (authority === undefined) return; const visible = await plugins.listInstalledPlugins(db, authority?.workspaceId ?? null, authority?.workspaceMemberId ?? null); res.json({ plugins: helpers.applyBakedPreviews(visible.filter((plugin) => !isRetiredHyperFramesPlugin(plugin)), helpers.PLUGIN_PREVIEWS_DIR) }); } catch (err) { res.status(500).json({ error: String(err) }); } });
   // Keep this static route before /api/plugins/:id; Express matches in
   // registration order and would otherwise interpret "stats" as a plugin id.
   app.get('/api/plugins/stats', async (req, res) => {
@@ -518,7 +526,7 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
       snapshotVisibleToAuthority(row, authority));
     return helpers.handlePluginStats(res, installed, visibleSnapshots);
   });
-  app.get('/api/plugins/:id', async (req, res) => { try { const authority = await resolveWorkspaceAuthority(req, res); if (authority === undefined) return; const plugin = await resolveRequestPlugin(req.params.id, authority); if (!plugin) return res.status(404).json({ error: 'plugin not found' }); res.json(plugin); } catch (err) { res.status(500).json({ error: String(err) }); } });
+  app.get('/api/plugins/:id', async (req, res) => { try { const authority = await resolveWorkspaceAuthority(req, res); if (authority === undefined) return; const plugin = await resolveRequestPlugin(req.params.id, authority); if (!plugin) return res.status(404).json({ error: 'plugin not found' }); if (isRetiredHyperFramesPlugin(plugin)) return helpers.sendApiError(res, 410, 'CONTENT_RETIRED', RETIRED_HYPERFRAMES_MESSAGE); res.json(plugin); } catch (err) { res.status(500).json({ error: String(err) }); } });
   app.post('/api/plugins/upload-zip', (req, res) => {
     helpers.pluginUpload.single('file')(req, res, async (err: unknown) => {
       if (err) return helpers.sendMulterError(res, err);
@@ -708,6 +716,7 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
       if (authority === undefined) return;
       const plugin = await resolveRequestPlugin(pluginId, authority);
       if (!plugin) return res.status(404).json({ error: { code: 'plugin-not-found', message: 'plugin not found' } });
+      if (isRetiredHyperFramesPlugin(plugin)) return helpers.sendApiError(res, 410, 'CONTENT_RETIRED', RETIRED_HYPERFRAMES_MESSAGE);
       if (typeof plugin.id !== 'string' || typeof plugin.fsPath !== 'string') {
         return res.status(422).json({ error: { code: 'plugin-not-duplicable', message: 'plugin record is missing a filesystem source' } });
       }

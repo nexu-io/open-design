@@ -50,12 +50,6 @@ const CREATE_RAIL_SURFACES: RailSurface[] = [
     scenarioPluginId: 'example-simple-deck',
     automaticStrategyTaskProfile: 'ppt',
   },
-  {
-    chipId: 'hyperframes',
-    metadata: { kind: 'video', intent: 'hyperframes', videoModel: 'hyperframes-html' },
-    scenarioPluginId: 'example-hyperframes',
-    automaticStrategyTaskProfile: 'hyperframes',
-  },
   // The media composer also stamps the picked model / prompt template on the
   // metadata; neither participates in scenario routing, so they are left out.
   {

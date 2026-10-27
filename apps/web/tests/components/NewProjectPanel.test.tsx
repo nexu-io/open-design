@@ -621,14 +621,7 @@ describe('NewProjectPanel design system defaults', () => {
     expect(onCreate.mock.calls[0]?.[0].metadata).not.toHaveProperty('voice');
   });
 
-  it('pins skillId to hyperframes when the video model is hyperframes-html, regardless of skill discovery order', () => {
-    // Reproduces PR #866 mrcfps's reported regression: when daemon `readdir()`
-    // returns video skills in an order that puts `video-shortform` ahead of
-    // `hyperframes`, the previous `list[0]?.id` fallback would route the
-    // HyperFrames-HTML model through `video-shortform`, dropping the
-    // hyperframes SKILL body and the html-in-canvas preflight. The fix forces
-    // the create-time skillId to `hyperframes` whenever `hyperframes-html` is
-    // the chosen model.
+  it('hides the local HyperFrames renderer while preserving the ordinary video model and skill', () => {
     const onCreate = vi.fn();
     const videoSkills: SkillSummary[] = [
       {
@@ -648,6 +641,7 @@ describe('NewProjectPanel design system defaults', () => {
       },
       {
         id: 'hyperframes',
+        source: 'built-in',
         name: 'HyperFrames',
         description: 'HTML-in-canvas video',
         mode: 'video',
@@ -678,7 +672,8 @@ describe('NewProjectPanel design system defaults', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
     fireEvent.click(screen.getByTestId('new-project-media-surface-video'));
     fireEvent.click(screen.getByTestId('model-picker-trigger'));
-    fireEvent.click(screen.getByTestId('model-picker-option-hyperframes-html'));
+    expect(screen.queryByTestId('model-picker-option-hyperframes-html')).toBeNull();
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
     fireEvent.change(screen.getByTestId('new-project-name'), {
       target: { value: 'HyperFrames routing' },
     });
@@ -687,10 +682,10 @@ describe('NewProjectPanel design system defaults', () => {
     expect(onCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'HyperFrames routing',
-        skillId: 'hyperframes',
+        skillId: 'video-shortform',
         metadata: expect.objectContaining({
           kind: 'video',
-          videoModel: 'hyperframes-html',
+          videoModel: expect.not.stringMatching(/^hyperframes-html$/),
         }),
       }),
     );

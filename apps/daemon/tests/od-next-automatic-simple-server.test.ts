@@ -35,7 +35,7 @@ vi.mock('node:crypto', async (importOriginal) => {
   };
 });
 
-import { closeDatabase, listMessages, openDatabase, upsertMessage } from '../src/db.js';
+import { closeDatabase, getProject, listMessages, openDatabase, updateProject, upsertMessage } from '../src/db.js';
 import { AGENT_DEFS } from '../src/runtimes/registry.js';
 import type { FrozenSkillPackageV1 } from '../src/strategies/od-next/frozen-skill-package.js';
 import { agentBinEnvKey } from '../src/runtimes/executables.js';
@@ -1407,15 +1407,6 @@ process.exit(127);
         taskProfile: 'marketing',
         pluginId: 'example-web-prototype',
       },
-      {
-        ...(await createProjectForScenario(started.url, 'approved-hyperframes', {
-          kind: 'video',
-          intent: 'hyperframes',
-          videoModel: 'hyperframes-html',
-        }, undefined, 'hyperframes')),
-        taskProfile: 'hyperframes',
-        pluginId: 'example-hyperframes',
-      },
     ];
     for (const candidate of approved) {
       expect(candidate.metadata?.strategyBinding).toMatchObject({
@@ -1740,6 +1731,36 @@ process.exit(127);
       method: 'POST',
     });
     await waitForRunTerminal(started.url, created.runId as string);
+  });
+
+  it('restores a persisted HyperFrames project binding while its new creation entry remains retired', async () => {
+    const fixture = await createPublicRolloutFixture('legacy-hyperframes-binding', 'design');
+    started = fixture.started;
+    binDir = fixture.binDir;
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    // Seed the stored pre-upgrade state directly. The retired public create
+    // endpoint must never be used to manufacture a historical project.
+    const metadata = {
+      kind: 'video', intent: 'hyperframes', videoModel: 'hyperframes-html',
+      strategyBinding: { schemaVersion: 1, provenance: 'automatic_default', taskProfile: 'hyperframes', boundAt: 1 },
+    };
+    updateProject(database(), fixture.projectId, { metadata });
+    await stopServer(started);
+    started = await startDaemon();
+    expect(getProject(database(), fixture.projectId)?.metadata).toEqual(metadata);
+
+    const retired = await fetch(`${started.url}/api/projects`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: `${fixture.projectId}-new`, name: 'New old entry', metadata, automaticStrategyTaskProfile: 'hyperframes' }),
+    });
+    expect(retired.status).toBe(410);
+    const continued = await postRun(started.url, publicRunRequest(fixture,
+      'Hold the public rollout run open until canceled.', 'legacy-hyperframes-request'));
+    expect(continued.strategyTask).toMatchObject({ inputStage: 'request', terminal: false });
+    await fetch(`${started.url}/api/runs/${encodeURIComponent(continued.runId as string)}/cancel`, { method: 'POST' });
+    await waitForRunTerminal(started.url, continued.runId as string);
+    expect(getProject(database(), fixture.projectId)?.metadata?.strategyBinding).toEqual(metadata.strategyBinding);
   });
 
   it('admits an unrecognized CLI version without a registered capability fixture', async () => {
@@ -2479,6 +2500,29 @@ process.exit(127);
       terminalRunId: terminal.runs[1]?.runId,
     });
   });
+
+  it('reuses a verified frozen ad-hoc legacy Skill on an exact retry without admitting another retired Skill', async () => {
+    const fixture = await createFixture('repair');
+    const skillDir = path.join(process.env.OD_DATA_DIR!, 'skills', 'hyperframes');
+    await mkdir(skillDir, { recursive: true });
+    // A locally selectable source establishes the pre-retirement task. Removing
+    // it makes this canonical ID resolve to the retired official catalogue on
+    // retry, while the verified task retains its exact frozen source bytes.
+    await writeFile(path.join(skillDir, 'SKILL.md'), '---\nname: hyperframes\ndescription: Frozen legacy retry fixture\n---\nUse the existing editable animation source.\n');
+    const body = { ...createRunRequest(fixture, 'Update the existing operator header.'), skillIds: ['hyperframes'] };
+    try {
+      queueFixtureIds(fixture);
+      const created = await postRun(started!.url, body);
+      await waitForTask(fixture.taskExecutionId, 'completed');
+      expect(getStrategyTaskExecution(database(), fixture.taskExecutionId)?.frozenSkillPackage.selections.map((selection) => selection.canonicalId)).toEqual(['hyperframes']);
+      await rm(skillDir, { recursive: true, force: true });
+      const retried = await postRun(started!.url, body);
+      expect(retried).toMatchObject({ runId: created.runId, reused: true });
+      const changed = await fetch(`${started!.url}/api/runs`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...body, skillIds: ['hyperframes', 'video-hyperframes'] }) });
+      expect(changed.status).toBe(410);
+      expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(2);
+    } finally { await rm(skillDir, { recursive: true, force: true }); }
+  }, 60_000);
 
   it('uses the canonical Web current turn as the implicit research query', async () => {
     const fixture = await createFixture('repair');

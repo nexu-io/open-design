@@ -928,6 +928,7 @@ export const th: Dict = {
   'home.daemonRecovering': 'การเชื่อมต่อภายในเครื่องขาดหาย\nขณะนี้ไม่สามารถเชื่อมต่อกับบริการ Open Design บนคอมพิวเตอร์เครื่องนี้ได้ โปรดรีสตาร์ตแอป',
   'home.createTimedOut': 'การเตรียมโปรเจกต์หมดเวลาก่อนจะเริ่มได้ โปรดส่งอีกครั้ง',
   'home.amrGateUnavailable': 'ไม่สามารถยืนยันยอดคงเหลือ OpenDesign Cloud ได้ โปรดส่งอีกครั้ง',
+  'home.hyperframesRetired': "เนื้อหา HyperFrames อย่างเป็นทางการนี้ยุติให้บริการแล้ว โปรดใช้ Motion สำหรับผลงานใหม่ โปรเจกต์เดิมยังใช้งานได้",
   'home.bundledScenarioMissing': 'Bundled scenario "{scenarioId}" is not installed. Reinstall the daemon to restore the default plugin set.',
   "entry.cloudCalloutBody": "ลงชื่อเข้าใช้เพื่อใช้ OpenDesign Cloud และทำงานร่วมกันบนคลาวด์",
   "entry.cloudCreditsTitle": "รับเครดิตฟรี",

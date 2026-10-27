@@ -928,6 +928,7 @@ export const tr: Dict = {
   'home.daemonRecovering': 'Yerel bağlantı kesildi\nBu bilgisayardaki Open Design hizmetine şu anda bağlanılamıyor. Lütfen uygulamayı yeniden başlatın.',
   'home.createTimedOut': 'Proje hazırlığı zaman aşımına uğradı ve başlatılamadı. Lütfen yeniden gönderin.',
   'home.amrGateUnavailable': 'OpenDesign Cloud bakiyeniz doğrulanamadı. Tekrar göndermeyi deneyin.',
+  'home.hyperframesRetired': "Bu resmî HyperFrames içeriği kullanımdan kaldırıldı. Yeni çalışmalar için Motion kullanın. Mevcut projeler kullanılabilir olmaya devam eder.",
   'home.bundledScenarioMissing': 'Bundled scenario "{scenarioId}" is not installed. Reinstall the daemon to restore the default plugin set.',
   "entry.cloudCalloutBody": "OpenDesign Cloud'u kullanmak ve bulutta iş birliği yapmak için oturum açın",
   "entry.cloudCreditsTitle": "Ücretsiz kredi kazanın",

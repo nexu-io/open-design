@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { RETIRED_HYPERFRAMES_MESSAGE } from '@open-design/contracts';
+import { isRetiredOfficialSkill } from '../registry/hyperframes-retirement.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import type Database from 'better-sqlite3';
@@ -587,7 +589,7 @@ export function createDesignSystemServerServices({
 
   async function validateProjectSkillId(
     id: unknown,
-    options: { workspaceId?: string | null } = {},
+    options: { workspaceId?: string | null; allowRetiredId?: string | null } = {},
   ) {
     // Same invariant as Design Systems and exact-source plugins: project
     // creation follows locally reconciled content. Team membership is checked
@@ -612,6 +614,11 @@ export function createDesignSystemServerServices({
         code: 'SKILL_NOT_FOUND',
         message: 'skill not found',
       };
+    }
+    if (id !== options.allowRetiredId && isRetiredOfficialSkill(resolved, [
+      roots.SKILL_ROOTS[1], roots.DESIGN_TEMPLATE_ROOTS[1],
+    ])) {
+      return { ok: false, code: 'CONTENT_RETIRED', message: RETIRED_HYPERFRAMES_MESSAGE };
     }
     return { ok: true, id: resolved.id };
   }

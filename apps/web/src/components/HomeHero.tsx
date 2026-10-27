@@ -7,6 +7,7 @@
 // composed with the recent-projects strip and plugins section
 // without owning their data lifecycles.
 
+import { isRetiredHyperFramesPlugin } from '@open-design/contracts';
 import {
   forwardRef,
   useEffect,
@@ -840,7 +841,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     function onApplyTemplate(event: Event) {
       const chipId = (event as CustomEvent<{ chipId?: string }>).detail?.chipId;
       if (!chipId) return;
-      const chip = templateChips.find((item) => item.id === chipId);
+      const normalizedChipId = chipId === 'hyperframes' ? 'motion-design' : chipId;
+      const chip = templateChips.find((item) => item.id === normalizedChipId);
       if (chip) handlePickTaskChip(chip);
     }
     window.addEventListener(HOME_APPLY_TEMPLATE_EVENT, onApplyTemplate);
@@ -4271,6 +4273,7 @@ function movePluginPresetToEnd(
 }
 
 export function pluginMatchesExampleChip(record: InstalledPluginRecord, chipId: string): boolean {
+  if (isRetiredHyperFramesPlugin(record)) return false;
   const slugs = pluginRecordSlugs(record);
   const has = (...values: string[]) => values.some((value) => slugs.has(value));
   const hasPart = (...values: string[]) => {

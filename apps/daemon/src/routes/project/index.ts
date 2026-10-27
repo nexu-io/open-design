@@ -1,4 +1,6 @@
 import { withCommentFileDeletion, type CommentFileDeletion } from '../../collab/comment-file-deletion.js';
+import { RETIRED_HYPERFRAMES_MESSAGE, isRetiredHyperFramesPlugin } from '@open-design/contracts';
+import { addsRetiredProjectMetadata, isRetiredOfficialSnapshot, retiredSkillCandidateIds } from '../../registry/hyperframes-retirement.js';
 import { injectMotionSourcePlayer, isMotionVideoComposition, markMotionHostedPreview, MOTION_PREVIEW_OUTPUT_HEADER } from '@open-design/contracts/runtime/motion-source-player';
 import { createHash, randomUUID } from 'node:crypto';
 import { trackedCommentFilePaths } from '../../collab/local-comment-files.js';
@@ -97,6 +99,7 @@ import {
   FIRST_PARTY_ATOMS,
   buildConnectorProbe,
   getInstalledPlugin,
+  getSnapshot,
   listInstalledPlugins,
   automaticScenarioTaskProfile,
   createAutomaticProjectStrategyBinding,
@@ -3962,6 +3965,16 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       learnAssertedWorkspaceType(createWorkspace.context);
       const { id, name, projectLocationId, skillId, designSystemId, pendingPrompt, metadata, customInstructions, skipDiscoveryBrief } =
         req.body || {};
+      if (req.body?.automaticStrategyTaskProfile === 'hyperframes' || addsRetiredProjectMetadata(metadata)) {
+        return sendApiError(res, 410, 'CONTENT_RETIRED', RETIRED_HYPERFRAMES_MESSAGE);
+      }
+      // A reference combined with a snapshot is structurally invalid. Preserve
+      // that existing validation error instead of reading an unusable snapshot.
+      const requestedSnapshot = req.body?.exampleReference === undefined && typeof req.body?.appliedPluginSnapshotId === 'string'
+        ? getSnapshot(db, req.body.appliedPluginSnapshotId) : null;
+      if (requestedSnapshot && isRetiredOfficialSnapshot(requestedSnapshot, path.join(path.dirname(SKILLS_DIR), 'plugins', '_official'))) {
+        return sendApiError(res, 410, 'CONTENT_RETIRED', RETIRED_HYPERFRAMES_MESSAGE);
+      }
       if (typeof id !== 'string' || !isSafeId(id)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
       }
@@ -4079,7 +4092,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         'validating the selected skill',
       );
       if (!skillValidation.ok) {
-        return sendApiError(res, 400, skillValidation.code, skillValidation.message);
+        return sendApiError(res, skillValidation.code === 'CONTENT_RETIRED' ? 410 : 400, skillValidation.code, skillValidation.message);
       }
       const normalizedSkillId = skillValidation.id;
       const requestedPluginId =
@@ -4119,6 +4132,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             : getInstalledPlugin(db, requestedPluginId);
         if (!visiblePlugin) {
           return sendApiError(res, 404, 'PLUGIN_NOT_FOUND', 'plugin not found');
+        }
+        if (isRetiredHyperFramesPlugin(visiblePlugin as { id?: string; sourceKind?: string })) {
+          return sendApiError(res, 410, 'CONTENT_RETIRED', RETIRED_HYPERFRAMES_MESSAGE);
         }
       }
       const selectedLocationId = await awaitProjectCreatePreparation(
@@ -4303,6 +4319,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         );
         const resolvedExampleRecord = resolvedExample as
           { id?: unknown; source?: unknown; fsPath?: unknown } | null;
+        if (resolvedExample && isRetiredHyperFramesPlugin(resolvedExample as { id?: string; sourceKind?: string })) {
+          return sendApiError(res, 410, 'CONTENT_RETIRED', RETIRED_HYPERFRAMES_MESSAGE);
+        }
         if (
           !resolvedExampleRecord
           || resolvedExampleRecord.id !== examplePluginId
@@ -4522,6 +4541,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
               db,
               body: resolveBody,
               projectId: id,
+              bundledPluginsDir: path.join(path.dirname(SKILLS_DIR), 'plugins', '_official'),
               conversationId: cid,
               registry,
               activeProjectDesignSystem:
@@ -4760,6 +4780,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       | { ok: false; failure: ResolveSnapshotError | null } => {
       const resolved = resolvePluginSnapshot({
         db,
+        requireSnapshotProjectMatch: true,
         body: { pluginId: defaultPluginId },
         projectId: project.id,
         conversationId,
@@ -5235,6 +5256,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       if (!patchProject) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
       }
+      if (addsRetiredProjectMetadata(patch.metadata, patchProject.metadata)) {
+        return sendApiError(res, 410, 'CONTENT_RETIRED', RETIRED_HYPERFRAMES_MESSAGE);
+      }
       if (!await enforceWorkspaceProjectMutation(
         req,
         res,
@@ -5487,12 +5511,15 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         const skillValidation = await validateProjectSkillId(
           patch.skillId,
           {
+            ...(typeof patch.skillId === 'string' && retiredSkillCandidateIds([patch.skillId]).length > 0
+              ? { allowRetiredId: patchProject.skillId }
+              : {}),
             workspaceId: projectBinding?.workspaceId ?? null,
             workspaceMemberId: projectBinding?.createdByWorkspaceMemberId ?? null,
           },
         );
         if (!skillValidation.ok) {
-          return sendApiError(res, 400, skillValidation.code, skillValidation.message);
+          return sendApiError(res, skillValidation.code === 'CONTENT_RETIRED' ? 410 : 400, skillValidation.code, skillValidation.message);
         }
         patch.skillId = skillValidation.id;
       }

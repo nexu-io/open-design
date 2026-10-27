@@ -25,8 +25,11 @@ import type {
 } from '@open-design/contracts';
 import {
   automaticStrategyTaskProfileForRouteId,
+  isRetiredHyperFramesPlugin,
+  isRetiredHyperFramesSkillId,
   DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
 } from '@open-design/contracts';
+import { isRetiredSkillUse } from '../providers/registry';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackCommunityGalleryClick,
@@ -573,6 +576,7 @@ export function HomeView({
   const initialPluginsRef = useRef<InstalledPluginRecord[] | null>(
     desiredPluginCatalogKey ? readCachedVisiblePlugins(pluginCatalogOptions) : null,
   );
+  const composerSelectionEpochRef = useRef(0);
   const [pluginCatalogKey, setPluginCatalogKey] = useState<string | null>(
     desiredPluginCatalogKey,
   );
@@ -587,6 +591,7 @@ export function HomeView({
   // the exact new cache partition synchronously, or mask the old rows while a
   // deliberate identity change is unresolved.
   if (pluginCatalogKey !== desiredPluginCatalogKey) {
+    composerSelectionEpochRef.current += 1;
     const cached = desiredPluginCatalogKey
       ? readCachedVisiblePlugins(pluginCatalogOptions)
       : null;
@@ -601,6 +606,8 @@ export function HomeView({
   const [pendingAuthoringInputs, setPendingAuthoringInputs] = useState<Record<string, unknown>>(
     () => buildPluginAuthoringInputs(undefined),
   );
+  const [pendingSkillUseHandoff, setPendingSkillUseHandoff] =
+    useState<{ id: number; skill: SkillSummary } | null>(null);
   const [pendingPluginUseHandoff, setPendingPluginUseHandoff] =
     useState<PendingPluginUseHandoff | null>(null);
   // The persisted chip/plugin identity, read exactly once on mount (lazy
@@ -811,6 +818,7 @@ export function HomeView({
     examplePromptInfoRef.current = info;
   }, []);
   const [error, setError] = useState<string | null>(null);
+  const [retirementNotice, setRetirementNotice] = useState<string | null>(null);
   const [daemonRecoveryActive, setDaemonRecoveryActive] = useState(false);
   useEffect(() => {
     if (!daemonRecoveryActive) return;
@@ -1158,7 +1166,11 @@ export function HomeView({
     if (promptHandoff.source === 'skill-use') {
       // Same destination as picking the skill from the composer's own picker:
       // the skill becomes the run's active skill and seeds its example prompt.
-      useSkill(promptHandoff.skill, null);
+      if (isRetiredHyperFramesSkillId(promptHandoff.skill.id)) {
+        setPendingSkillUseHandoff({ id: promptHandoff.id, skill: promptHandoff.skill });
+      } else {
+        useSkill(promptHandoff.skill, null);
+      }
       scrollHomeToTop();
       return;
     }
@@ -1489,6 +1501,12 @@ export function HomeView({
     // (inputs valid, apply not failed/superseded) — callers use this to
     // decide whether the Send cue should fire.
   ): Promise<boolean> {
+    composerSelectionEpochRef.current += 1;
+    if (isRetiredHyperFramesPlugin(record)) {
+      redirectRetiredCreationToMotion();
+      return false;
+    }
+    setRetirementNotice(null);
     const applyRequestId = activePluginApplyRequestRef.current + 1;
     activePluginApplyRequestRef.current = applyRequestId;
     const shouldResolveImmediately = options?.deferApply !== true;
@@ -1752,6 +1770,10 @@ export function HomeView({
     inputs?: Record<string, unknown>,
     homeType?: { chipId?: string; projectKind?: ProjectKind; asExample?: boolean; useTracked?: boolean },
   ) {
+    if (isRetiredHyperFramesPlugin(record)) {
+      redirectRetiredCreationToMotion();
+      return;
+    }
     // A hand-off whose surface already recorded the use click (Community)
     // must not count again as a Home gallery click.
     if (!homeType?.useTracked) {
@@ -1888,10 +1910,59 @@ export function HomeView({
     return renderPluginBriefTemplate(query, hydratePluginInputs(fields, options?.inputs));
   }
 
+  function redirectRetiredCreationToMotion(showNotice = true) {
+    const motion = findChip('motion-design');
+    const motionAction = motion?.action;
+    const record = motionAction?.kind === 'apply-scenario'
+      ? plugins.find((plugin) => plugin.id === motionAction.pluginId)
+      : null;
+    setActiveSkill(null);
+    setActiveSkillCatalogScope(null);
+    if (motion?.action.kind === 'apply-scenario' && record) {
+      void usePlugin(record, undefined, {
+        chipId: motion.id,
+        projectKind: motion.action.projectKind,
+        projectMetadata: motion.action.projectMetadata,
+        suppressPromptUpdate: true,
+        deferApply: true,
+      });
+    } else {
+      setActive(null);
+      setFallbackProjectKind('video');
+      setFallbackProjectMetadata({ kind: 'video', intent: 'motion-design', videoModel: 'hyperframes-html' });
+    }
+    if (showNotice) setRetirementNotice(t('home.hyperframesRetired'));
+  }
+
+  function retiredPluginSelection(pluginId: string, record?: InstalledPluginRecord) {
+    // An existing user/third-party record always wins over a retired bundled id.
+    // Missing legacy ids can only produce a notice, never an apply of old content.
+    return isRetiredHyperFramesPlugin(record ?? { id: pluginId, sourceKind: 'bundled' });
+  }
+
+  useEffect(() => {
+    if (!pendingSkillUseHandoff || pluginsLoading) return;
+    const handoff = pendingSkillUseHandoff;
+    const selectionEpoch = composerSelectionEpochRef.current;
+    setPendingSkillUseHandoff(null);
+    void isRetiredSkillUse(handoff.skill.id, workspaceContext).then((retired) => {
+      if (consumedHandoffIdRef.current !== handoff.id
+        || composerSelectionEpochRef.current !== selectionEpoch) return;
+      if (retired) redirectRetiredCreationToMotion();
+      else useSkill(handoff.skill, null);
+    });
+    // A later handoff, manual selection or catalog identity invalidates this read.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingSkillUseHandoff, pluginsLoading]);
+
   useEffect(() => {
     if (!pendingPluginUseHandoff || pluginsLoading) return;
     const record = plugins.find((plugin) => plugin.id === pendingPluginUseHandoff.pluginId);
     setPendingPluginUseHandoff(null);
+    if (retiredPluginSelection(pendingPluginUseHandoff.pluginId, record)) {
+      redirectRetiredCreationToMotion();
+      return;
+    }
     if (!record) {
       setError(
         `Plugin "${pendingPluginUseHandoff.pluginId}" is not installed. Refresh Plugins and try again.`,
@@ -1936,6 +2007,14 @@ export function HomeView({
     setPendingChipRestore(null);
     if (active || pendingPluginUseHandoff) return;
     const record = plugins.find((plugin) => plugin.id === restore.pluginId);
+    if (retiredPluginSelection(restore.pluginId, record)) {
+      redirectRetiredCreationToMotion();
+      return;
+    }
+    if (restore.chipId === 'hyperframes' && !restore.explicitPick && !restore.examplePick) {
+      redirectRetiredCreationToMotion(false);
+      return;
+    }
     if (!record) {
       // The persisted plugin was uninstalled/removed since the last visit —
       // drop the stale pointer rather than surfacing an error for a background
@@ -1952,7 +2031,7 @@ export function HomeView({
       : null;
     const restoredAction = restoredChip?.action;
     requestActivePlugin(record, undefined, {
-      chipId: restore.chipId ?? undefined,
+      chipId: restoredChip?.id ?? restore.chipId ?? undefined,
       prototypeSubtypeId: restoredSubtype?.slug ?? null,
       projectKind: restore.projectKind ?? undefined,
       inputs:
@@ -2298,6 +2377,7 @@ export function HomeView({
    * composer — including the plugin-seeded prompt that came with it.
    */
   function clearActivePlugin() {
+    composerSelectionEpochRef.current += 1;
     if (active?.chipId) {
       // Dropping the pick falls back to the task type the user chose, with its
       // scene still selected — the scene refines that chip's action, it never
@@ -2370,6 +2450,7 @@ export function HomeView({
   }
 
   function clearActiveChipSelection() {
+    composerSelectionEpochRef.current += 1;
     activePluginApplyRequestRef.current += 1;
     setActive(null);
     setFallbackProjectKind(null);
@@ -2393,6 +2474,8 @@ export function HomeView({
   // order already ranks a user-selected Skill above its own), so nothing has
   // to be discarded to keep the rule defined.
   function useSkill(skill: SkillSummary, nextPrompt: string | null) {
+    composerSelectionEpochRef.current += 1;
+    setRetirementNotice(null);
     setActiveSkill(skill);
     setActiveSkillCatalogScope(localCatalogScopeFromWorkspaceContext(workspaceContext));
     setError(null);
@@ -2531,7 +2614,9 @@ export function HomeView({
       projectMetadata?: ProjectMetadata | null;
     },
   ) {
+    composerSelectionEpochRef.current += 1;
     setError(null);
+    setRetirementNotice(null);
     releaseWebCloneScaffold(chip.id);
     const activeChipId = chip.id;
     const prototypeSubtypeId = selection?.prototypeSubtypeId ?? null;
@@ -3141,6 +3226,7 @@ export function HomeView({
         onClearActivePlugin={clearActivePlugin}
         onClearActiveChip={clearActiveChipSelection}
         onClearActiveSkill={() => {
+          composerSelectionEpochRef.current += 1;
           setActiveSkill(null);
           setActiveSkillCatalogScope(null);
         }}
@@ -3213,7 +3299,7 @@ export function HomeView({
         onPickConnector={useConnector}
         onPickChip={pickChip}
         contextItemCount={contextItemCount}
-        error={error}
+        error={error ?? retirementNotice}
         workingDir={workingDir}
         recentDirs={recentDirs}
         onPickWorkingDir={handlePickWorkingDir}

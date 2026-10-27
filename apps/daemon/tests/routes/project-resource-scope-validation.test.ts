@@ -36,6 +36,7 @@ function buildDeps(input: {
   insertConversation?: ReturnType<typeof vi.fn>;
   fetchProjectCreationWorkspaceDirectory?: ReturnType<typeof vi.fn>;
   authorizeProjectRequest?: ReturnType<typeof vi.fn>;
+  projectSkillId?: string;
 } = {}) {
   const binding = {
     projectId: PROJECT_ID,
@@ -74,7 +75,7 @@ function buildDeps(input: {
       getProject: () => ({
         id: PROJECT_ID,
         name: 'Scope target',
-        skillId: null,
+        skillId: input.projectSkillId ?? null,
         designSystemId: null,
         metadata: null,
         createdAt: 1,
@@ -353,6 +354,18 @@ describe('project resource selection uses the persisted exact member', () => {
     expect(validateSkill).toHaveBeenCalledWith('private-skill', {
       workspaceId: WORKSPACE_ID,
       workspaceMemberId: MEMBER_ID,
+    });
+  });
+
+  it('adds the persisted legacy Skill only for a retired candidate patch', async () => {
+    const validateSkill = vi.fn(async () => ({ ok: false, code: 'SKILL_NOT_FOUND', message: 'fixture boundary' }));
+    const baseUrl = await start(buildDeps({ validateSkill, projectSkillId: 'hyperframes' }));
+    const response = await fetch(`${baseUrl}/api/projects/${PROJECT_ID}`, {
+      method: 'PATCH', headers: headers(), body: JSON.stringify({ skillId: 'hyperframes' }),
+    });
+    expect(response.status).toBe(400);
+    expect(validateSkill).toHaveBeenCalledWith('hyperframes', {
+      workspaceId: WORKSPACE_ID, workspaceMemberId: MEMBER_ID, allowRetiredId: 'hyperframes',
     });
   });
 

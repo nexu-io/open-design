@@ -13,6 +13,7 @@
 // The function is intentionally synchronous; future async resolution
 // (e.g. live MCP capability probing) belongs in a wrapper that calls this.
 
+import path from 'node:path';
 import {
   manifestSourceDigest,
   resolveAppliedPipeline,
@@ -21,6 +22,7 @@ import {
 } from '@open-design/plugin-runtime';
 import {
   renderPluginBlock,
+  isRetiredHyperFramesPlugin,
   resolveLocalizedText,
   type AppliedPluginSnapshot,
   type AppliedStrategyBindingV2,
@@ -221,7 +223,12 @@ export function applyPlugin(input: ApplyInput): ApplyComputed {
     sourceMarketplaceEntryName: input.plugin.sourceMarketplaceEntryName,
     sourceMarketplaceEntryVersion: input.plugin.sourceMarketplaceEntryVersion,
     marketplaceTrust:     input.plugin.marketplaceTrust,
-    resolvedSource:       input.plugin.resolvedSource,
+    // Preserve the real install source for candidate IDs without changing the
+    // snapshot shape of unrelated plugins or rewriting legacy snapshots.
+    resolvedSource:       input.plugin.resolvedSource
+      ?? (isRetiredHyperFramesPlugin({ id: input.plugin.id, sourceKind: 'bundled' })
+        ? input.plugin.sourceKind === 'local' ? path.resolve(input.plugin.source) : input.plugin.source
+        : undefined),
     resolvedRef:          input.plugin.resolvedRef,
     archiveIntegrity:     input.plugin.archiveIntegrity,
     pinnedRef:            input.plugin.pinnedRef,

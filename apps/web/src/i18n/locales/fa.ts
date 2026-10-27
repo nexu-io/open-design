@@ -939,6 +939,7 @@ export const fa: Dict = {
   'home.daemonRecovering': 'اتصال محلی قطع شد\nدر حال حاضر امکان اتصال به سرویس Open Design روی این رایانه وجود ندارد. لطفاً برنامه را دوباره راه‌اندازی کنید.',
   'home.createTimedOut': 'آماده‌سازی پروژه پیش از شروع به پایان مهلت رسید. دوباره ارسال کنید.',
   'home.amrGateUnavailable': 'تأیید موجودی OpenDesign Cloud ممکن نشد. دوباره ارسال کنید.',
+  'home.hyperframesRetired': "این محتوای رسمی HyperFrames بازنشسته شده است. برای آثار جدید از Motion استفاده کنید. پروژه‌های موجود همچنان در دسترس هستند.",
   'home.bundledScenarioMissing': 'Bundled scenario "{scenarioId}" is not installed. Reinstall the daemon to restore the default plugin set.',
   "entry.cloudCalloutBody": "برای استفاده از OpenDesign Cloud و همکاری در فضای ابری وارد شوید",
   "entry.cloudCreditsTitle": "اعتبار رایگان بگیرید",

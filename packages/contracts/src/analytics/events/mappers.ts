@@ -92,6 +92,7 @@ export function projectKindToTracking(
     case 'image':
       return 'image';
     case 'video':
+      if (hints?.intent === 'motion-design') return 'motion_design';
       // HyperFrames rides on the `video` kind; the local-render engine is the
       // only thing that distinguishes it, so route on videoModel here.
       return videoModel === HYPERFRAMES_VIDEO_MODEL ? 'hyperframes' : 'video';

@@ -59,6 +59,11 @@ const REGISTRY = {
 };
 
 describe('applyPlugin', () => {
+  it('keeps absent resolved provenance unchanged for unrelated plugins', () => {
+    const applied = applyPlugin({ plugin: pluginFixture(), inputs: { topic: 'design' }, registry: REGISTRY });
+    expect(applied.result.appliedPlugin.resolvedSource).toBeUndefined();
+  });
+
   it('produces a deterministic snapshot for the same inputs', () => {
     const a = applyPlugin({ plugin: pluginFixture(), inputs: { topic: 'design' }, registry: REGISTRY });
     const b = applyPlugin({ plugin: pluginFixture(), inputs: { topic: 'design' }, registry: REGISTRY });

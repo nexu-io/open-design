@@ -94,6 +94,9 @@ import {
   prepareStrategyIntake,
 } from '../strategies/od-next/coordinator.js';
 import type { FrozenSkillPackageV1 } from '../strategies/od-next/frozen-skill-package.js';
+import { RETIRED_HYPERFRAMES_MESSAGE } from '@open-design/contracts';
+import { findSkillById, resolveSkillId } from '../skills.js';
+import { isRetiredOfficialSkill, officialSkillRootsForBundledPlugins, retiredSkillCandidateIds } from '../registry/hyperframes-retirement.js';
 import { InvalidFrozenSkillPackageError } from '../strategies/od-next/frozen-skill-package.js';
 import type { ResolvedExamplePluginRecord } from '../strategies/od-next/example-skill-source.js';
 import { captureOdNextSessionSkillPackage } from '../strategies/od-next/session-skill-package.js';
@@ -1546,6 +1549,28 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         );
       }
       throw error;
+    }
+    const explicitSkillIds = retiredSkillCandidateIds([requestBody.skillId, ...(Array.isArray(requestBody.skillIds) ? requestBody.skillIds : [])]
+      .filter((id): id is string => typeof id === 'string' && Boolean(id.trim())));
+    if (explicitSkillIds.length > 0) {
+      const selectedProject = typeof requestBody.projectId === 'string' ? getProject(db, requestBody.projectId) : null;
+      const catalog = await ctx.resources.listAllSkillLikeEntries(resolveSkillCatalogScope({
+        metadata: selectedProject?.metadata as ContractProjectMetadata | undefined,
+        workspaceBinding: typeof requestBody.projectId === 'string'
+          ? ctx.projectStore?.getWorkspaceProjectByProjectId(db, requestBody.projectId) : null,
+      }) ?? undefined);
+      const inheritedIds = new Set([
+        selectedProject?.skillId,
+        ...(previousStrategyTask?.frozenSkillPackage.selections.map((selection) => selection.canonicalId) ?? []),
+        ...(idempotentStrategyRetry ? strategyTaskForRun(idempotentStrategyRetry)?.frozenSkillPackage.selections.map((selection) => selection.canonicalId) ?? [] : []),
+      ].filter((id): id is string => typeof id === 'string').map((id) => resolveSkillId(id)));
+      for (const id of explicitSkillIds) {
+        const selected = findSkillById(catalog, id);
+        if (selected && isRetiredOfficialSkill(selected, officialSkillRootsForBundledPlugins(ctx.paths.BUNDLED_PLUGINS_DIR))
+          && !inheritedIds.has(resolveSkillId(id))) {
+          return sendApiError(res, 410, 'CONTENT_RETIRED', RETIRED_HYPERFRAMES_MESSAGE);
+        }
+      }
     }
     if (idempotentStrategyRetry?.appliedPluginSnapshotId) {
       const retrySnapshot = getSnapshot(db, idempotentStrategyRetry.appliedPluginSnapshotId);

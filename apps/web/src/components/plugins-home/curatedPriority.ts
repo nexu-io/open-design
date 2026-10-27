@@ -117,14 +117,6 @@ const CURATED_VIDEO_PLUGIN_IDS = [
   'video-template-forbidden-city-cat-satire',
 ] as const;
 
-const CURATED_HYPERFRAMES_PLUGIN_IDS = [
-  'video-template-hyperframes-app-showcase-three-phones',
-  'video-template-hyperframes-brand-sizzle-reel',
-  'video-template-hyperframes-social-overlay-stack',
-  'video-template-hyperframes-website-to-video-promo',
-  'video-template-hyperframes-flight-map-route',
-] as const;
-
 // Motion design: the featured paper story leads the five templates in Home
 // and Community; the other four retain their editorial order.
 export const CURATED_MOTION_DESIGN_PLUGIN_IDS = [
@@ -144,7 +136,6 @@ export const CURATED_PLUGIN_IDS_BY_CHIP = {
   deck: CURATED_DECK_PLUGIN_IDS,
   image: CURATED_IMAGE_PLUGIN_IDS,
   video: CURATED_VIDEO_PLUGIN_IDS,
-  hyperframes: CURATED_HYPERFRAMES_PLUGIN_IDS,
   'motion-design': CURATED_MOTION_DESIGN_PLUGIN_IDS,
 };
 
@@ -157,7 +148,6 @@ const CURATED_GLOBAL_IDS = [
   ...CURATED_DECK_PLUGIN_IDS,
   ...CURATED_IMAGE_PLUGIN_IDS,
   ...CURATED_VIDEO_PLUGIN_IDS,
-  ...CURATED_HYPERFRAMES_PLUGIN_IDS,
   ...CURATED_MOTION_DESIGN_PLUGIN_IDS,
 ];
 

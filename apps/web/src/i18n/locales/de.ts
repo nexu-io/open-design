@@ -939,6 +939,7 @@ export const de: Dict = {
   'home.daemonRecovering': 'Lokale Verbindung getrennt\nDer Open Design-Dienst auf diesem Computer ist gerade nicht erreichbar. Bitte starte die App neu.',
   'home.createTimedOut': 'Die Projektvorbereitung hat zu lange gedauert und wurde nicht gestartet. Bitte erneut senden.',
   'home.amrGateUnavailable': 'Das OpenDesign-Cloud-Guthaben konnte nicht bestätigt werden. Bitte erneut senden.',
+  'home.hyperframesRetired': "Dieser offizielle HyperFrames-Inhalt wurde eingestellt. Verwende Motion für neue Werke. Bestehende Projekte bleiben verfügbar.",
   'home.bundledScenarioMissing': 'Bundled scenario "{scenarioId}" is not installed. Reinstall the daemon to restore the default plugin set.',
   "entry.cloudCalloutBody": "Melden Sie sich an, um OpenDesign Cloud zu nutzen und in der Cloud zusammenzuarbeiten",
   "entry.cloudCreditsTitle": "Kostenlose Credits sichern",

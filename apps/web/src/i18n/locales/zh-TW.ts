@@ -933,6 +933,7 @@ export const zhTW: Dict = {
   'home.daemonRecovering': '本機連線已中斷\n暫時無法連線到這台電腦上的 Open Design 服務，請重新啟動用戶端。',
   'home.createTimedOut': '專案準備逾時，任務尚未開始。請重新傳送。',
   'home.amrGateUnavailable': '暫時無法確認 OpenDesign Cloud 額度，請重新傳送。',
+  'home.hyperframesRetired': "此官方 HyperFrames 內容已下線。請使用 Motion 創作新作品，歷史專案仍可繼續使用。",
   'home.bundledScenarioMissing': '內建場景「{scenarioId}」未安裝。請重新安裝 OpenDesign，以還原預設外掛。',
   "entry.cloudCalloutBody": "登入即可享受雲端協作",
   "entry.cloudCreditsTitle": "註冊即領免費額度",

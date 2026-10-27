@@ -10,7 +10,6 @@ export const HOME_TYPE_PRIMARY_CHIP_IDS = ['prototype', 'motion-design', 'deck']
 export const HOME_TYPE_OTHER_CHIP_IDS = [
   'image',
   'document',
-  'hyperframes',
   'web-clone',
   'video',
   'audio',

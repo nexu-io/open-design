@@ -928,6 +928,7 @@ export const ko: Dict = {
   'home.daemonRecovering': '로컬 연결이 끊어졌습니다\n이 컴퓨터의 Open Design 서비스에 일시적으로 연결할 수 없습니다. 클라이언트를 다시 시작해 주세요.',
   'home.createTimedOut': '프로젝트 준비 시간이 초과되어 시작하지 못했습니다. 다시 보내 주세요.',
   'home.amrGateUnavailable': 'OpenDesign Cloud 잔액을 확인하지 못했습니다. 다시 보내 주세요.',
+  'home.hyperframesRetired': "이 공식 HyperFrames 콘텐츠는 더 이상 제공되지 않습니다. 새 작품은 Motion으로 만들어 주세요. 기존 프로젝트는 계속 사용할 수 있습니다.",
   'home.bundledScenarioMissing': 'Bundled scenario "{scenarioId}" is not installed. Reinstall the daemon to restore the default plugin set.',
   "entry.cloudCalloutBody": "로그인하여 OpenDesign Cloud를 사용하고 클라우드에서 협업하세요",
   "entry.cloudCreditsTitle": "가입하고 무료 크레딧 받기",

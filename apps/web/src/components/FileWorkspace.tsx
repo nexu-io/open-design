@@ -1106,7 +1106,7 @@ const COMMUNITY_PAGE_PRESETS: ProjectPagePreset[] = [
 const PROJECT_PAGE_PRESETS: ProjectPagePreset[] = [
   ...BLANK_PAGE_PRESETS,
   ...COMMUNITY_PAGE_PRESETS,
-];
+].filter((preset) => preset.category !== 'hyperframes');
 const PROJECT_PAGE_CATEGORY_ORDER: ProjectPageCategoryId[] = [
   'prototype',
   'liveArtifact',
@@ -1116,7 +1116,6 @@ const PROJECT_PAGE_CATEGORY_ORDER: ProjectPageCategoryId[] = [
   'document',
   'image',
   'video',
-  'hyperframes',
   'audio',
 ];
 const COMMUNITY_PLUGIN_CHIP_TO_PAGE_KIND: Record<string, ProjectPageKind> = {
@@ -1142,7 +1141,6 @@ const PROJECT_PAGE_CATEGORIES: Array<{
   { id: 'document', icon: 'file-text', labelKey: 'homeHero.chip.document' },
   { id: 'image', icon: 'image', labelKey: 'homeHero.chip.image' },
   { id: 'video', icon: 'play', labelKey: 'homeHero.chip.video' },
-  { id: 'hyperframes', icon: 'sparkles', labelKey: 'homeHero.chip.hyperframes' },
   { id: 'audio', icon: 'volume', labelKey: 'homeHero.chip.audio' },
   { id: 'liveArtifact', icon: 'kanban', labelKey: 'homeHero.chip.liveArtifact' },
 ];
@@ -1724,7 +1722,7 @@ export function FileWorkspace({
     () => [
       ...BLANK_PAGE_PRESETS,
       ...(communityPluginPresets.length > 0 ? communityPluginPresets : COMMUNITY_PAGE_PRESETS),
-    ],
+    ].filter((preset) => preset.category !== 'hyperframes'),
     [communityPluginPresets],
   );
   const sketchFiles = useMemo(

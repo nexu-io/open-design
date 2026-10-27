@@ -35,7 +35,8 @@ export const DELIVERABLE_SKILLS: readonly DeliverableSkillDefinition[] = [
 ];
 
 export function renderDeliverableSkillCatalog(skillRoot: string): string {
-  return DELIVERABLE_SKILLS.map((skill) =>
-    `- ${skill.id} (${skill.title}, v${skill.version}): ${skill.description} Read ${skillRoot}/${skill.id}.md; production routes: ${skill.routes.map((route) => `${route.id} / kind=${route.kind} / ${route.extensions.join(',')}`).join('; ')}`,
+  // Keep legacy definitions for persisted identities; advertise current creation choices only.
+  return DELIVERABLE_SKILLS.filter(skill => skill.id !== 'hyperframes').map((skill) =>
+    `- ${skill.id} (${skill.title}, v${skill.version}): ${skill.description}${skill.id === 'motion-design' ? ' Explicit requests for animation source only use Motion without requiring MP4 export.' : ''} Read ${skillRoot}/${skill.id}.md; production routes: ${skill.routes.map((route) => `${route.id} / kind=${route.kind} / ${route.extensions.join(',')}`).join('; ')}`,
   ).join('\n');
 }

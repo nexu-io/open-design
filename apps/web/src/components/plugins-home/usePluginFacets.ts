@@ -1,9 +1,9 @@
 // Faceted categorisation hook for the Plugins home section.
 //
 // Two-level starter model: the top row is the artifact kind
-// (Prototype / Slides / Image / Video / HyperFrames / Audio). Prototype,
+// (Prototype / Slides / Image / Video / Motion design / Audio). Prototype,
 // Slides, Image, and Video expose scene buckets from the prompt-taxonomy
-// analysis; HyperFrames and Audio stay flat.
+// analysis; Motion design and Audio stay flat.
 //
 // A small "Saved" toggle sits orthogonally to the category row —
 // when active it overrides the category selection and just shows

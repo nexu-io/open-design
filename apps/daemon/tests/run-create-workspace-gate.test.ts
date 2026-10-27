@@ -242,6 +242,7 @@ async function startServer(opts?: {
   seedImplicitScenarioPlugin?: boolean;
   teamProjectResourceState?: 'active' | 'deleted';
   loadPluginRegistryView?: () => Promise<any>;
+  listAllSkillLikeEntries?: () => Promise<never[]>;
 }) {
   createdRunCount = 0;
   lastCreatedRun = null;
@@ -329,6 +330,7 @@ async function startServer(opts?: {
   runsServiceStub = createRunsServiceStub();
   registerRunRoutes(app, {
     db,
+    resources: { listAllSkillLikeEntries: opts?.listAllSkillLikeEntries ?? (async () => []) },
     design: {
       runs: runsServiceStub,
       analytics: { capture: () => {} },
@@ -444,6 +446,19 @@ async function startServer(opts?: {
 }
 
 describe('POST /api/runs — workspace mutation gate', () => {
+  it('does not scan the retirement catalogue for ordinary Skills or no Skill', async () => {
+    const listAllSkillLikeEntries = vi.fn(async () => [] as never[]);
+    const baseUrl = await startServer({ listAllSkillLikeEntries });
+    for (const selection of [{}, { skillId: 'ordinary-helper', skillIds: ['another-helper'] }]) {
+      const response = await fetch(`${baseUrl}/api/runs`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ projectId: UNBOUND_PROJECT, agentId: 'claude', message: 'ordinary request', ...selection }),
+      });
+      expect(response.status).toBe(202);
+    }
+    expect(listAllSkillLikeEntries).not.toHaveBeenCalled();
+  });
+
   it.each(['/api/runs', '/api/chat'])(
     'keeps project and local plugin gates off the remote Workspace directory through %s',
     async (route) => {

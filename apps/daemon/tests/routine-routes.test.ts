@@ -1,6 +1,6 @@
 import express from 'express';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -15,6 +15,8 @@ import {
   openDatabase,
 } from '../src/db.js';
 import { registerRoutineRoutes } from '../src/routes/routine.js';
+import { listSkills, type SkillInfo } from '../src/skills.js';
+import { resolvePluginFolder, upsertInstalledPlugin } from '../src/plugins/registry.js';
 
 describe('routine routes', () => {
   let tempDir: string;
@@ -47,6 +49,7 @@ describe('routine routes', () => {
 
   function buildApp(options: {
     fetchWorkspaceDirectory?: () => Promise<any>;
+    listAllSkillLikeEntries?: () => Promise<SkillInfo[]>;
   } = {}) {
     const db = openDatabase(tempDir, { dataDir: tempDir });
     const nextRunAt = vi.fn(() => new Date('2026-05-13T01:00:00.000Z'));
@@ -75,7 +78,8 @@ describe('routine routes', () => {
     app.use(express.json());
     registerRoutineRoutes(app, {
       db,
-      paths: { RUNTIME_DATA_DIR: tempDir },
+      paths: { RUNTIME_DATA_DIR: tempDir, SKILLS_DIR: path.join(tempDir, 'skills'), DESIGN_TEMPLATES_DIR: path.join(tempDir, 'design-templates') },
+      resources: { listAllSkillLikeEntries: options.listAllSkillLikeEntries ?? (async () => []) },
       routines: {
         routineService: {
           nextRunAt,
@@ -141,6 +145,59 @@ describe('routine routes', () => {
       lifecycleState: 'active' as const,
     }];
   }
+
+  it('does not scan the retirement catalogue for ordinary routine selections', async () => {
+    const listAllSkillLikeEntries = vi.fn(async () => [] as never[]);
+    const { app } = buildApp({ listAllSkillLikeEntries });
+    const { server, port } = await listen(app);
+    try {
+      for (const selection of [{}, { skillId: 'ordinary-helper', context: { skillIds: ['another-helper'] } }]) {
+        const response = await fetch(`http://127.0.0.1:${port}/api/routines`, {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ name: 'ordinary', prompt: 'ordinary task', enabled: false, schedule: { kind: 'daily', time: '09:00', timezone: 'UTC' }, target: { mode: 'create_each_run' }, ...selection }),
+        });
+        expect(response.status).toBe(201);
+      }
+      expect(listAllSkillLikeEntries).not.toHaveBeenCalled();
+    } finally { await new Promise<void>((resolve) => server.close(() => resolve())); }
+  });
+
+  it('preserves project and same-target routine legacy bindings without transferring them to an unrelated target', async () => {
+    const skillRoot = path.join(tempDir, 'skills');
+    mkdirSync(path.join(skillRoot, 'hyperframes'), { recursive: true });
+    writeFileSync(path.join(skillRoot, 'hyperframes/SKILL.md'), '---\nname: hyperframes\ndescription: Official legacy animation\n---\nLegacy source.\n');
+    const catalog = await listSkills([path.join(tempDir, 'missing-user'), skillRoot]);
+    const { app, db } = buildApp({ listAllSkillLikeEntries: async () => catalog });
+    const now = Date.now();
+    for (const [id, skillId] of [['original', null], ['unrelated', null], ['bound-skill', 'hyperframes'], ['bound-plugin', null]] as const) insertProject(db, { id, name: id, skillId, createdAt: now, updatedAt: now });
+    const folder = path.join(tempDir, 'legacy-plugin');
+    mkdirSync(folder);
+    writeFileSync(path.join(folder, 'open-design.json'), JSON.stringify({ name: 'example-hyperframes', title: 'Legacy', version: '1.0.0', od: { kind: 'skill' } }));
+    const parsed = await resolvePluginFolder({ folder, folderId: 'example-hyperframes', sourceKind: 'bundled', source: folder, trust: 'bundled' });
+    if (!parsed.ok) throw new Error(parsed.errors.join('\n'));
+    upsertInstalledPlugin(db, parsed.record);
+    // Seed a historical pin through the snapshot writer; route assertions below
+    // concern already-persisted project identity, not a new plugin activation.
+    const { createSnapshot, linkSnapshotToProject } = await import('../src/plugins/snapshots.js');
+    const pin = createSnapshot(db, { projectId: 'bound-plugin', pluginId: parsed.record.id, pluginVersion: '1.0.0', manifestSourceDigest: 'historical', taskKind: 'new-generation', inputs: {}, resolvedContext: { items: [] }, capabilitiesGranted: [], capabilitiesRequired: [], assetsStaged: [], connectorsRequired: [], connectorsResolved: [], mcpServers: [] });
+    linkSnapshotToProject(db, pin.snapshotId, 'bound-plugin');
+    const seed = (id: string, skillId: string | null, context: Record<string, unknown>) => insertRoutine(db, { id, name: id, prompt: 'Edit source', scheduleKind: 'daily', scheduleValue: '09:00', scheduleJson: '{}', projectMode: 'reuse', projectId: 'original', skillId, agentId: null, contextJson: JSON.stringify(context), enabled: false, createdAt: now, updatedAt: now });
+    seed('legacy-skill', 'hyperframes', {});
+    seed('legacy-plugin', null, { pluginIds: ['example-hyperframes'] });
+    const { server, port } = await listen(app);
+    const request = (route: string, method: string, body: unknown) => fetch(`http://127.0.0.1:${port}${route}`, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    try {
+      for (const id of ['legacy-skill', 'legacy-plugin']) {
+        expect((await request(`/api/routines/${id}`, 'PATCH', { name: 'same target' })).status).toBe(200);
+        expect((await request(`/api/routines/${id}`, 'PATCH', { target: { mode: 'reuse', projectId: 'unrelated' } })).status).toBe(410);
+      }
+      const base = { name: 'new reuse', prompt: 'Edit existing source', enabled: false, schedule: { kind: 'daily', time: '09:00', timezone: 'UTC' } };
+      expect((await request('/api/routines', 'POST', { ...base, target: { mode: 'reuse', projectId: 'bound-skill' }, skillId: 'hyperframes' })).status).toBe(201);
+      expect((await request('/api/routines', 'POST', { ...base, target: { mode: 'reuse', projectId: 'bound-plugin' }, context: { pluginIds: ['example-hyperframes'] } })).status).toBe(201);
+      expect((await request('/api/routines', 'POST', { ...base, target: { mode: 'reuse', projectId: 'unrelated' }, skillId: 'hyperframes' })).status).toBe(410);
+      expect((await request('/api/routines/legacy-skill', 'PATCH', { target: { mode: 'reuse', projectId: 'unrelated' }, skillId: null })).status).toBe(200);
+    } finally { await new Promise<void>((resolve) => server.close(() => resolve())); }
+  });
 
   it('lists and fetches built-in automation templates', async () => {
     const { app } = buildApp();

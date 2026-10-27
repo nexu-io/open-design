@@ -271,7 +271,7 @@ describe('PluginsHomeSection (category bar)', () => {
     expect(screen.getByTestId('plugins-home-pill-category-deck')).toBeTruthy();
     expect(screen.getByTestId('plugins-home-pill-category-image')).toBeTruthy();
     expect(screen.getByTestId('plugins-home-pill-category-video')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-category-hyperframes')).toBeTruthy();
+    expect(screen.queryByTestId('plugins-home-pill-category-hyperframes')).toBeNull();
     expect(screen.getByTestId('plugins-home-pill-category-audio')).toBeTruthy();
     expect(screen.queryByTestId('plugins-home-pill-category-import')).toBeNull();
     expect(screen.queryByTestId('plugins-home-pill-category-create')).toBeNull();
@@ -281,18 +281,12 @@ describe('PluginsHomeSection (category bar)', () => {
     expect(screen.getByTestId('plugins-home-pill-subcategory-deck-fundraising-pitch')).toBeTruthy();
   });
 
-  it('filters Video separately from HyperFrames', () => {
+  it('keeps third-party HyperFrames-tagged content under Video without an independent entry', () => {
     renderSection();
-
     fireEvent.click(screen.getByTestId('plugins-home-pill-category-video'));
-    expect(pluginIds().sort()).toEqual(['video-cinematic', 'video-short']);
-    expect(screen.getByTestId('plugins-home-row-subcategory-video')).toBeTruthy();
-
-    fireEvent.click(screen.getByTestId('plugins-home-pill-category-hyperframes'));
-    expect(pluginIds()).toEqual(['hyperframes-composition']);
-    expect(screen.queryByTestId('plugins-home-row-subcategory-hyperframes')).toBeNull();
+    expect(pluginIds().sort()).toEqual(['hyperframes-composition', 'video-cinematic', 'video-short']);
+    expect(screen.queryByTestId('plugins-home-pill-category-hyperframes')).toBeNull();
   });
-
   it('groups Live Artifact as its own flat Community category', () => {
     renderSection();
 
@@ -370,12 +364,8 @@ describe('PluginsHomeSection (category bar)', () => {
     expect(screen.queryByTestId('plugins-home-contribution-card')).toBeNull();
   });
 
-  it('keeps HyperFrames and Audio flat', () => {
+  it('keeps Audio flat', () => {
     renderSection();
-
-    fireEvent.click(screen.getByTestId('plugins-home-pill-category-hyperframes'));
-    expect(pluginIds()).toEqual(['hyperframes-composition']);
-    expect(screen.queryByTestId('plugins-home-row-subcategory-hyperframes')).toBeNull();
 
     fireEvent.click(screen.getByTestId('plugins-home-pill-category-audio'));
     expect(pluginIds()).toEqual(['audio-voice']);

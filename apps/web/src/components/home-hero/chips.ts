@@ -27,17 +27,14 @@ import { CREATION_TYPE_ORDER as CREATE_RAIL_ORDER } from '../creation-type-order
 // Plugin ids the chip rail can dispatch to. Most chips route to a
 // `DefaultScenarioPluginId` so the same fallback table the daemon
 // uses for naked Home queries stays the source of truth. Specialised
-// chips (HyperFrames lives under `plugins/_official/examples/hyperframes/`
-// and surfaces as the `example-hyperframes` bundled plugin id) bypass
-// the default table by carrying their own plugin id directly. The
+// chips can bypass the default table by carrying their own plugin id directly. The
 // curated union keeps typo safety while letting the rail evolve
 // independently of the default-binding mapping.
 export type ChipScenarioPluginId =
   | DefaultScenarioPluginId
-  | 'example-hyperframes'
   // Powered-preview scenarios: real-time GPU / off-main-thread artifacts that
   // render in the cross-origin-isolated "powered preview" iframe. Kept as
-  // explicit members — like example-hyperframes — so the rail can name a
+  // explicit members so the rail can name a
   // scenario the default table has not mapped yet; both are mapped today.
   | 'example-webgl-experience';
 
@@ -243,29 +240,6 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     },
   },
   {
-    id: 'hyperframes',
-    label: 'HyperFrames',
-    icon: 'orbit',
-    group: 'create',
-    description: 'Motion graphics & loops',
-    hint: 'Author HTML-based motion: captions, audio-reactive visuals, scene transitions.',
-    // HyperFrames is its own bundled scenario (motion-graphics
-    // specialisation of Video). It surfaces in PluginsHomeSection's
-    // primary category list, so the rail picks it up too rather than
-    // hiding the specialised bucket behind the generic Video chip.
-    action: {
-      kind: 'apply-scenario',
-      pluginId: 'example-hyperframes',
-      projectKind: 'video',
-      automaticDefault: true,
-      projectMetadata: {
-        kind: 'video',
-        intent: 'hyperframes',
-        videoModel: 'hyperframes-html',
-      },
-    },
-  },
-  {
     id: 'webgl',
     label: 'WebGL experience',
     icon: 'sparkles',
@@ -414,7 +388,6 @@ export const HOME_TYPE_ROW_IDS: readonly string[] = ['prototype', 'motion-design
 export const HOME_TYPE_ROW_MORE_IDS: readonly string[] = [
   'image',
   'document',
-  'hyperframes',
   'web-clone',
   'video',
   'audio',
@@ -456,5 +429,5 @@ export const HOME_APPLY_TEMPLATE_EVENT = 'open-design:home-apply-template';
 // Helper used by tests + the rail component to pull the chip metadata
 // off a click target without round-tripping through React state.
 export function findChip(id: string): HomeHeroChip | undefined {
-  return HOME_HERO_CHIPS.find((c) => c.id === id);
+  return HOME_HERO_CHIPS.find((c) => c.id === (id === 'hyperframes' ? 'motion-design' : id));
 }

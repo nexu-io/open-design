@@ -42,6 +42,7 @@ export type TrackingProjectKind =
   | 'document'
   | 'image'
   | 'video'
+  | 'motion_design'
   // `hyperframes` is a `video` project rendered by the local HyperFrames
   // HTML→MP4 engine (`videoModel === 'hyperframes-html'`). The product
   // routes it as its own task type (a peer of Video, with its own Home

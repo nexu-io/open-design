@@ -7,6 +7,7 @@ import {
 } from '@open-design/contracts';
 import { composeResumedRequest, usesProductionMarker } from '../../../src/strategies/od-next/request-resume.js';
 import { TEST_PROMPT_BUNDLE } from '../strategy-task-test-fixtures.js';
+import { MOTION_CREATION_POLICY_PROMPT } from '../../../src/prompts/motion-creation-policy.js';
 
 function task(key: string, change?: (bundle: ReturnType<typeof parseOdNextPromptBundleV2>) => void) {
   const bundle = parseOdNextPromptBundleV2(TEST_PROMPT_BUNDLE);
@@ -19,6 +20,20 @@ function task(key: string, change?: (bundle: ReturnType<typeof parseOdNextPrompt
     utf8Bytes: Buffer.byteLength(text), sha256: createHash('sha256').update(text).digest('hex'),
   } };
 }
+
+it('carries current Motion policy in the frozen request context without changing legacy task content', () => {
+  const legacy = task('aaa');
+  const original = legacy.promptBundle.text;
+  const current = task('bbb', bundle => {
+    bundle.context.runtimeToolEnvironment = MOTION_CREATION_POLICY_PROMPT;
+  });
+  const resumed = composeResumedRequest(current, legacy)!;
+  expect(resumed).toContain(MOTION_CREATION_POLICY_PROMPT);
+  expect(resumed).toContain('source only');
+  expect(resumed).toContain('original persisted bindings');
+  expect(legacy.promptBundle.text).toBe(original);
+  expect(composeResumedRequest(legacy, legacy)).not.toContain('Current motion creation policy');
+});
 
 it('sends new query, key, attachments and runtime context without repeating stable skills or history', () => {
   const previous = task('aaa');

@@ -49,7 +49,6 @@ const TEMPLATE_HOME_TARGET: Record<TemplateType, Pick<CommunityTemplateUseTarget
   'Image': { chipId: 'image', projectKind: 'image' },
   'Motion design': { chipId: 'motion-design', projectKind: 'video' },
   'Video': { chipId: 'video', projectKind: 'video' },
-  'HyperFrames': { chipId: 'hyperframes', projectKind: 'video' },
   'Audio': { chipId: 'audio', projectKind: 'audio' },
   // GPU scenes create as prototypes — the same pair the Home `webgl` chip
   // dispatches (see home-hero/chips.ts).
@@ -77,7 +76,6 @@ const TEMPLATE_TYPE_ICON: Record<TemplateType, IconName> = {
   'Image': 'image',
   'Motion design': 'video-ai',
   'Video': 'video-ai',
-  'HyperFrames': 'orbit',
   'Audio': 'mic',
   'WebGL': 'sparkles',
 };

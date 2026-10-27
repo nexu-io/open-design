@@ -928,6 +928,7 @@ export const hu: Dict = {
   'home.daemonRecovering': 'Megszakadt a helyi kapcsolat\nJelenleg nem lehet csatlakozni a számítógépen futó Open Design szolgáltatáshoz. Indítsd újra az alkalmazást.',
   'home.createTimedOut': 'A projekt előkészítése túllépte az időkorlátot, és nem indult el. Küldd el újra.',
   'home.amrGateUnavailable': 'Nem sikerült megerősíteni az OpenDesign Cloud egyenleget. Próbáld újra elküldeni.',
+  'home.hyperframesRetired': "Ez a hivatalos HyperFrames-tartalom megszűnt. Új alkotásokhoz használd a Motiont. A meglévő projektek továbbra is elérhetők.",
   'home.bundledScenarioMissing': 'Bundled scenario "{scenarioId}" is not installed. Reinstall the daemon to restore the default plugin set.',
   "entry.cloudCalloutBody": "Jelentkezzen be az OpenDesign Cloud használatához és a felhőalapú együttműködéshez",
   "entry.cloudCreditsTitle": "Szerezzen ingyenes krediteket",

@@ -928,6 +928,7 @@ export const ru: Dict = {
   'home.daemonRecovering': 'Локальное подключение потеряно\nСейчас не удаётся подключиться к сервису Open Design на этом компьютере. Перезапустите приложение.',
   'home.createTimedOut': 'Подготовка проекта не уложилась в отведённое время и не была запущена. Отправьте ещё раз.',
   'home.amrGateUnavailable': 'Не удалось подтвердить баланс OpenDesign Cloud. Отправьте ещё раз.',
+  'home.hyperframesRetired': "Этот официальный контент HyperFrames больше недоступен. Используйте Motion для новых работ. Существующие проекты остаются доступными.",
   'home.bundledScenarioMissing': 'Bundled scenario "{scenarioId}" is not installed. Reinstall the daemon to restore the default plugin set.',
   "entry.cloudCalloutBody": "Войдите, чтобы использовать OpenDesign Cloud и работать совместно в облаке",
   "entry.cloudCreditsTitle": "Получите бесплатные кредиты",

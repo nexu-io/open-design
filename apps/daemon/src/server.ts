@@ -1145,6 +1145,8 @@ import {
 } from './routes/static-resource.js';
 export { rewriteSkillAssetUrls } from './routes/static-resource.js';
 import { registerRoutineRoutes, routineDbRowToContract } from './routes/routine.js';
+import { hasRetiredRoutineSkillSelection, isRetiredOfficialInstallSource, persistedRoutinePluginIdsForTarget, projectAlreadyUsesRetiredPlugin } from './registry/hyperframes-retirement.js';
+import { RETIRED_HYPERFRAMES_MESSAGE, isRetiredHyperFramesPlugin } from '@open-design/contracts';
 import {
   bindProjectToPersistedAutomationWorkspace,
   normalizePersistedAutomationWorkspaceScope,
@@ -9895,6 +9897,12 @@ export async function startServer({
           source = resolved.source;
         }
       }
+      if (isRetiredOfficialInstallSource(source, BUNDLED_PLUGINS_DIR) || (marketplaceResolution
+        && isRetiredHyperFramesPlugin({
+          id: marketplaceResolution.pluginName.split('/').at(-1),
+          sourceMarketplaceId: marketplaceResolution.marketplaceId,
+          resolvedSource: marketplaceResolution.source,
+        }))) return sendApiError(res, 410, 'CONTENT_RETIRED', RETIRED_HYPERFRAMES_MESSAGE);
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
@@ -17891,6 +17899,29 @@ export async function startServer({
       normalizePersistedAutomationWorkspaceScope(routine.context.workspaceScope);
     const routineContext = normalizeRunContextSelection(routine.context);
     const routineSkillId = routine.skillId ?? routineContext.skillIds?.[0] ?? null;
+    if (await hasRetiredRoutineSkillSelection({
+      ids: [routineSkillId, ...(routineContext.skillIds ?? [])].filter((id): id is string => typeof id === 'string'),
+      target: routine.target, execution: true, officialRoots: [SKILLS_DIR, DESIGN_TEMPLATES_DIR],
+      resolve: async () => {
+        const project = routine.target.mode === 'reuse' ? getProject(db, routine.target.projectId) : null;
+        const binding = project ? getWorkspaceProjectByProjectId(db, project.id) : null;
+        const scope = project
+          ? resolveSkillCatalogScope({ metadata: project.metadata, workspaceBinding: binding })
+          : storedRoutineWorkspaceScope;
+        return {
+          catalog: await listAllSkillLikeEntries(scope ?? { workspaceId: null, workspaceMemberId: null }),
+          projectSkillId: project?.skillId,
+          persistedRoutine: getRoutine(db, routine.id),
+        };
+      },
+    })) throw new Error(RETIRED_HYPERFRAMES_MESSAGE);
+    if ((routineContext.pluginIds ?? []).some((id) => {
+      if (!isRetiredHyperFramesPlugin({ id, sourceKind: 'bundled' })) return false;
+      const plugin = getInstalledPlugin(db, id);
+      return plugin && isRetiredHyperFramesPlugin(plugin)
+        && !projectAlreadyUsesRetiredPlugin(db, routine.target.mode === 'reuse' ? routine.target.projectId : null, plugin)
+        && !persistedRoutinePluginIdsForTarget(routine.target, getRoutine(db, routine.id)).includes(id);
+    })) throw new Error(RETIRED_HYPERFRAMES_MESSAGE);
     const contextMetadata = {
       ...(routineContext.pluginIds?.length
         ? {
@@ -18051,6 +18082,8 @@ export async function startServer({
           projectId,
           conversationId,
           registry,
+          requireSnapshotProjectMatch: routine.target.mode === 'reuse',
+          historicalRoutineId: routine.target.mode === 'reuse' ? routine.id : undefined,
           activeProjectDesignSystem:
             typeof persistedDesignSystemId === 'string' && persistedDesignSystemId.length > 0
               ? { id: persistedDesignSystemId }
@@ -18339,7 +18372,8 @@ export async function startServer({
 
   registerRoutineRoutes(app, {
     db,
-    paths: { RUNTIME_DATA_DIR },
+    paths: { RUNTIME_DATA_DIR, SKILLS_DIR, DESIGN_TEMPLATES_DIR },
+    resources: { listAllSkillLikeEntries },
     routines: { routineService },
   });
 

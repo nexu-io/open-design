@@ -928,6 +928,7 @@ export const id: Dict = {
   'home.daemonRecovering': 'Koneksi lokal terputus\nSaat ini tidak dapat terhubung ke layanan Open Design di komputer ini. Silakan mulai ulang aplikasi.',
   'home.createTimedOut': 'Persiapan proyek melebihi batas waktu sebelum dimulai. Coba kirim lagi.',
   'home.amrGateUnavailable': 'Saldo OpenDesign Cloud tidak dapat dikonfirmasi. Coba kirim lagi.',
+  'home.hyperframesRetired': "Konten resmi HyperFrames ini telah dihentikan. Gunakan Motion untuk karya baru. Proyek yang ada tetap tersedia.",
   'home.bundledScenarioMissing': 'Bundled scenario "{scenarioId}" is not installed. Reinstall the daemon to restore the default plugin set.',
   "entry.cloudCalloutBody": "Masuk untuk menggunakan OpenDesign Cloud dan berkolaborasi di cloud",
   "entry.cloudCreditsTitle": "Dapatkan kredit gratis",

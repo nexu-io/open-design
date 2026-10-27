@@ -27,7 +27,7 @@ vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => {
 });
 
 import { HomeView } from '../../src/components/HomeView';
-import { HOME_APPLY_TEMPLATE_EVENT } from '../../src/components/home-hero/chips';
+import { HOME_APPLY_TEMPLATE_EVENT, HOME_HERO_CHIPS } from '../../src/components/home-hero/chips';
 import type { DesignSystemSummary, PromptTemplateSummary } from '../../src/types';
 // HomeHero's prompt input migrated from a <textarea> + highlight overlay to the
 // same Lexical contenteditable the project composer uses. It still has
@@ -87,6 +87,101 @@ afterEach(() => {
 });
 
 describe('HomeView media composer options', () => {
+  it('retires the HyperFrames chip while retaining its old-entry alias to Motion', async () => {
+    stubFetch();
+    const onSubmit = vi.fn();
+    renderHome({ onSubmit });
+    await setHomePrompt('Keep my original animation brief.');
+    act(() => window.dispatchEvent(new CustomEvent(HOME_APPLY_TEMPLATE_EVENT, { detail: { chipId: 'hyperframes' } })));
+    await waitFor(() => expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Motion design'));
+    expect(homeHeroPromptText()).toBe('Keep my original animation brief.');
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(HOME_HERO_CHIPS.some((chip) => chip.id === 'hyperframes')).toBe(false);
+  });
+
+  it('restores a legacy official template draft as Motion without replacing the prompt or submitting', async () => {
+    stubFetch();
+    const onSubmit = vi.fn();
+    window.localStorage.setItem('open-design:home-composer:prompt', 'My saved motion brief.');
+    window.localStorage.setItem('open-design:home-composer:chip', JSON.stringify({
+      chipId: 'hyperframes', pluginId: 'example-hyperframes', projectKind: 'video', examplePick: true,
+    }));
+    renderHome({ onSubmit });
+    await waitFor(() => expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Motion design'));
+    expect(homeHeroPromptText()).toBe('My saved motion brief.');
+    expect(screen.getByText(/official HyperFrames content has been retired/)).toBeTruthy();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('rejects an old official template handoff and keeps the current prompt ready for Motion', async () => {
+    const fetchMock = stubFetch();
+    window.localStorage.setItem('open-design:home-composer:prompt', 'Keep this user brief.');
+    const onSubmit = vi.fn();
+    renderHome({ onSubmit, promptHandoff: {
+      id: 1, source: 'plugin-use', pluginId: 'example-hyperframes', chipId: 'hyperframes',
+      projectKind: 'video', action: 'use-with-query', focus: true,
+    } });
+    await waitFor(() => expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Motion design'));
+    expect(homeHeroPromptText()).toBe('Keep this user brief.');
+    expect(screen.getByText(/official HyperFrames content has been retired/)).toBeTruthy();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/example-hyperframes/apply'))).toBe(false);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('preserves a live user plugin whose id matches a retired official plugin', async () => {
+    stubFetch({ userHyperframesPlugin: true });
+    window.localStorage.setItem('open-design:home-composer:prompt', 'Keep my personal brief.');
+    renderHome({ promptHandoff: {
+      id: 10, source: 'plugin-use', pluginId: 'example-hyperframes', action: 'use', focus: true,
+    } });
+    await waitFor(() => expect(screen.getByTitle('Plugin: My animation plugin')).toBeTruthy());
+    expect(homeHeroPromptText()).toBe('Keep my personal brief.');
+    expect(screen.queryByText(/official HyperFrames content has been retired/)).toBeNull();
+  });
+
+  it('uses the daemon retirement verdict before applying a stale skill handoff', async () => {
+    stubFetch({ skillStatus: 410 });
+    window.localStorage.setItem('open-design:home-composer:prompt', 'Preserve the saved user brief.');
+    const onSubmit = vi.fn();
+    renderHome({ onSubmit, promptHandoff: {
+      id: 11, source: 'skill-use', focus: true, skill: hyperframesSkill(),
+    } });
+    await waitFor(() => expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Motion design'));
+    expect(homeHeroPromptText()).toBe('Preserve the saved user brief.');
+    expect(screen.getByText(/official HyperFrames content has been retired/)).toBeTruthy();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it.each([200, 410])('does not let a late skill verdict (%s) override a later Motion selection', async (status) => {
+    let resolveDetail!: (response: Response) => void;
+    const skillDetailResponse = new Promise<Response>((resolve) => { resolveDetail = resolve; });
+    const fetchMock = stubFetch({ skillDetailResponse });
+    window.localStorage.setItem('open-design:home-composer:prompt', 'My current Motion brief.');
+    renderHome({ promptHandoff: {
+      id: 13, source: 'skill-use', focus: true, skill: hyperframesSkill(),
+    } });
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url === '/api/skills/hyperframes')).toBe(true));
+    act(() => window.dispatchEvent(new CustomEvent(HOME_APPLY_TEMPLATE_EVENT, { detail: { chipId: 'motion-design' } })));
+    await act(async () => {
+      resolveDetail(json(status === 410 ? { error: { code: 'CONTENT_RETIRED' } } : {}, status));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Motion design');
+    expect(homeHeroPromptText()).toBe('My current Motion brief.');
+    expect(screen.queryByTestId('home-hero-active-skill')).toBeNull();
+    expect(screen.queryByText(/official HyperFrames content has been retired/)).toBeNull();
+  });
+
+  it.each([200, 404])('does not retire a same-id skill when its public detail returns %s', async (skillStatus) => {
+    const fetchMock = stubFetch({ skillStatus });
+    renderHome({ promptHandoff: {
+      id: 12, source: 'skill-use', focus: true, skill: hyperframesSkill(),
+    } });
+    await waitFor(() => expect(homeHeroPromptText()).toBe('A user-authored animation brief.'));
+    expect(fetchMock.mock.calls.some(([url]) => url === '/api/skills/hyperframes')).toBe(true);
+    expect(screen.queryByText(/official HyperFrames content has been retired/)).toBeNull();
+  });
+
   it('keeps the type tabs interactive while switching to Image', async () => {
     const mediaApplyResponse = new Promise<Response>(() => undefined);
     stubFetch({ mediaApplyResponse });
@@ -167,7 +262,7 @@ describe('HomeView media composer options', () => {
     expect(screen.queryByTestId('home-hero-footer-option-resolution')).toBeNull();
 
     // HyperFrames / Audio keep no pre-flight pills at all.
-    await clickHomeRailChip('hyperframes');
+    await clickHomeRailChip('motion-design');
     await waitFor(() => expect(screen.getByTestId('home-hero-template-trigger').textContent).not.toContain('None'));
     expect(promptIsEmpty()).toBe(true);
     expect(screen.queryByTestId('home-hero-footer-option-ratio')).toBeNull();
@@ -287,7 +382,7 @@ describe('HomeView media composer options', () => {
     expect(promptIsEmpty()).toBe(true);
   });
 
-  it('splits Video and HyperFrames templates into separate submitted metadata', async () => {
+  it('keeps Video prompt templates separate from the Motion route', async () => {
     stubFetch();
     const onSubmit = vi.fn();
     renderHome({ onSubmit });
@@ -304,13 +399,13 @@ describe('HomeView media composer options', () => {
     });
 
     onSubmit.mockClear();
-    await clickHomeRailChip('hyperframes');
+    await clickHomeRailChip('motion-design');
     await setHomePrompt('Make a HyperFrames motion video.');
     await submitHome();
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
         projectMetadata: expect.objectContaining({
-          promptTemplate: expect.objectContaining({ id: 'hyperframes-caption' }),
+          intent: 'motion-design',
         }),
       }));
     });
@@ -441,12 +536,12 @@ describe('HomeView media composer options', () => {
     expect(snapshotInputs).toHaveProperty('subject');
   });
 
-  it('submits HyperFrames as a video project with the hyperframes-html model', async () => {
+  it('submits Motion as a video project with the retained hyperframes-html renderer', async () => {
     stubFetch();
     const onSubmit = vi.fn();
     renderHome({ onSubmit });
 
-    await clickHomeRailChip('hyperframes');
+    await clickHomeRailChip('motion-design');
     await setHomePrompt('Create a HyperFrames launch bumper.');
     // submit() re-applies the plugin from the deferral-stripped inputs before
     // forwarding, so onSubmit fires after the apply round-trip resolves.
@@ -650,6 +745,9 @@ function stubFetch(options: {
   mediaApplyResponse?: Promise<Response>;
   teamMediaPlugin?: boolean;
   workspaceDirectoryStatus?: number;
+  skillStatus?: number;
+  skillDetailResponse?: Promise<Response>;
+  userHyperframesPlugin?: boolean;
 } = {}) {
   vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
     cb(0);
@@ -660,7 +758,13 @@ function stubFetch(options: {
     : MEDIA_PLUGIN;
   const fetchMock = vi.fn<typeof fetch>(async (url, init) => {
     if (typeof url === 'string' && url === '/api/plugins') {
-      return json({ plugins: [mediaPlugin, PROTOTYPE_PLUGIN, HYPERFRAMES_PLUGIN] });
+      return json({ plugins: [mediaPlugin, PROTOTYPE_PLUGIN, options.userHyperframesPlugin
+        ? { ...HYPERFRAMES_PLUGIN, sourceKind: 'user', title: 'My animation plugin' }
+        : HYPERFRAMES_PLUGIN, pluginRecord('od-new-generation', 'New generation')] });
+    }
+    if (url === '/api/skills/hyperframes') {
+      if (options.skillDetailResponse) return options.skillDetailResponse;
+      return json(options.skillStatus === 410 ? { error: { code: 'CONTENT_RETIRED' } } : {}, options.skillStatus ?? 200);
     }
     if (typeof url === 'string' && url === '/api/mcp/servers') {
       return json({ servers: [], templates: [] });
@@ -858,4 +962,13 @@ function json(body: unknown, status = 200) {
     status,
     headers: { 'content-type': 'application/json' },
   });
+}
+
+function hyperframesSkill(): import('../../src/types').SkillSummary {
+  return {
+    id: 'hyperframes', name: 'User animation skill', description: '', source: 'built-in',
+    mode: 'video', surface: 'video', previewType: 'video', designSystemRequired: false,
+    defaultFor: [], triggers: [], upstream: null, hasBody: true,
+    examplePrompt: 'A user-authored animation brief.', aggregatesExamples: false,
+  };
 }

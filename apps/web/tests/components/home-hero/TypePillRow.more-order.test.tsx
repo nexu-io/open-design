@@ -25,7 +25,6 @@ afterEach(() => {
 const EXPECTED_MORE_ORDER = [
   'image',
   'document',
-  'hyperframes',
   'web-clone',
   'video',
   'audio',
@@ -147,20 +146,20 @@ describe('TypePillRow — 更多 (OPEND-3146)', () => {
         new DOMRect(100, 100 + index * 46 - list.scrollTop, 200, 42));
       return vi.spyOn(item, 'focus');
     });
-    for (const [index, scrollTop] of [0, 0, 0, 21, 67, 113, 159].entries()) {
+    for (const [index, scrollTop] of [0, 0, 0, 21, 67, 113].entries()) {
       fireEvent.keyDown(items[index]!, { key: 'ArrowDown' });
       expect(document.activeElement).toBe(items[index + 1]);
       expect(focusSpies[index + 1]).toHaveBeenLastCalledWith({ preventScroll: true });
       expect(list.scrollTop).toBe(scrollTop);
     }
-    for (const [index, scrollTop] of [159, 159, 159, 138, 92, 46, 0].entries()) {
-      fireEvent.keyDown(items[7 - index]!, { key: 'ArrowUp' });
-      expect(document.activeElement).toBe(items[6 - index]);
+    for (const [index, scrollTop] of [113, 113, 113, 92, 46, 0].entries()) {
+      fireEvent.keyDown(items[6 - index]!, { key: 'ArrowUp' });
+      expect(document.activeElement).toBe(items[5 - index]);
       expect(list.scrollTop).toBe(scrollTop);
     }
     fireEvent.keyDown(items[0]!, { key: 'End' });
-    expect(list.scrollTop).toBe(159);
-    fireEvent.keyDown(items[7]!, { key: 'Home' });
+    expect(list.scrollTop).toBe(113);
+    fireEvent.keyDown(items[6]!, { key: 'Home' });
     expect(list.scrollTop).toBe(0);
   });
 
@@ -187,15 +186,15 @@ describe('TypePillRow — 更多 (OPEND-3146)', () => {
     const items = screen.getAllByRole('option');
     items.forEach((item, index) => vi.spyOn(item, 'getBoundingClientRect').mockImplementation(() =>
       new DOMRect(100, 100 + index * 46 - list.scrollTop, 200, 42)));
-    for (let index = 0; index < 8; index++) fireEvent.keyDown(document.activeElement!, { key: 'ArrowDown' });
-    expect(document.activeElement).toBe(items[7]);
+    for (let index = 0; index < 7; index++) fireEvent.keyDown(document.activeElement!, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(items[6]);
     expect(frames.size).toBe(1);
     pump(0);
     pump(30);
     expect(list.scrollTop).toBeGreaterThan(0);
     expect(list.scrollTop).toBeLessThan(159);
     // Reverse before the first animation finishes; old targets must not win.
-    for (let index = 0; index < 7; index++) fireEvent.keyDown(document.activeElement!, { key: 'ArrowUp' });
+    for (let index = 0; index < 6; index++) fireEvent.keyDown(document.activeElement!, { key: 'ArrowUp' });
     expect(document.activeElement).toBe(items[0]);
     expect(frames.size).toBe(1);
     pump(40);

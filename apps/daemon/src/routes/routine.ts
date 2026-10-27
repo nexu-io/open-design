@@ -1,4 +1,8 @@
 import type { Express } from 'express';
+import { RETIRED_HYPERFRAMES_MESSAGE, isRetiredHyperFramesPlugin } from '@open-design/contracts';
+import { hasRetiredRoutineSkillSelection, projectAlreadyUsesRetiredPlugin } from '../registry/hyperframes-retirement.js';
+import { getInstalledPlugin } from '../plugins/registry.js';
+import { resolveSkillCatalogScope } from '../skill-catalog-scope.js';
 import { randomUUID } from 'node:crypto';
 import {
   getAnyAutomationTemplate,
@@ -29,7 +33,8 @@ import {
 import type { PathDeps, RouteDeps } from '../server-context.js';
 
 export interface RegisterRoutineRoutesDeps extends RouteDeps<'db' | 'routines'> {
-  paths: Pick<PathDeps, 'RUNTIME_DATA_DIR'>;
+  paths: Pick<PathDeps, 'RUNTIME_DATA_DIR'> & Partial<Pick<PathDeps, 'SKILLS_DIR' | 'DESIGN_TEMPLATES_DIR'>>;
+  resources?: Pick<RouteDeps<'resources'>['resources'], 'listAllSkillLikeEntries'>;
 }
 
 export type RoutineRoutesService = Pick<
@@ -146,6 +151,37 @@ export function routineDbRowToContract(row: any, latestRun: any) {
 export function registerRoutineRoutes(app: Express, ctx: RegisterRoutineRoutesDeps) {
   const { db } = ctx;
   const { routineService } = ctx.routines;
+
+  async function addsRetiredSelection(body: any, existing?: any): Promise<boolean> {
+    const context = body.context !== undefined ? normalizeRoutineContext(body.context) : parseStoredRoutineContext(existing ?? {});
+    const previous = existing ? parseStoredRoutineContext(existing) : {};
+    const target = body.target ?? (existing ? { mode: existing.projectMode, projectId: existing.projectId } : {});
+    const ids = [Object.hasOwn(body, 'skillId') ? body.skillId : existing?.skillId, ...(Array.isArray(context.skillIds) ? context.skillIds : [])]
+      .filter((id): id is string => typeof id === 'string' && Boolean(id));
+    if (await hasRetiredRoutineSkillSelection({
+      ids, target, officialRoots: [ctx.paths.SKILLS_DIR, ctx.paths.DESIGN_TEMPLATES_DIR],
+      resolve: async () => {
+        const project = target.mode === 'reuse' ? getProject(db, target.projectId) : null;
+        const binding = project ? getWorkspaceProjectByProjectId(db, project.id) : null;
+        const scope = project
+          ? resolveSkillCatalogScope({ metadata: project.metadata, workspaceBinding: binding })
+          : normalizePersistedAutomationWorkspaceScope(context.workspaceScope);
+        return {
+          catalog: await ctx.resources?.listAllSkillLikeEntries(scope ?? { workspaceId: null, workspaceMemberId: null }) ?? [],
+          projectSkillId: project?.skillId,
+          persistedRoutine: existing,
+        };
+      },
+    })) return true;
+    const sameTarget = existing?.projectMode === target.mode && (target.mode !== 'reuse' || existing.projectId === target.projectId);
+    const oldPlugins = sameTarget && Array.isArray(previous.pluginIds) ? previous.pluginIds : [];
+    return (Array.isArray(context.pluginIds) ? context.pluginIds : []).some((id) => {
+      if (typeof id !== 'string' || !isRetiredHyperFramesPlugin({ id, sourceKind: 'bundled' })) return false;
+      const plugin = typeof id === 'string' ? getInstalledPlugin(db, id) : null;
+      return plugin && isRetiredHyperFramesPlugin(plugin) && !oldPlugins.includes(id)
+        && !(target.mode === 'reuse' && projectAlreadyUsesRetiredPlugin(db, target.projectId, plugin));
+    });
+  }
 
   function authorizeRoutineWorkspaceContext(
     req: any,
@@ -367,6 +403,7 @@ export function registerRoutineRoutes(app: Express, ctx: RegisterRoutineRoutesDe
     try {
       const body = req.body || {};
       validateRoutineInput(body, false);
+      if (await addsRetiredSelection(body)) return res.status(410).json({ code: 'CONTENT_RETIRED', error: RETIRED_HYPERFRAMES_MESSAGE });
       const id = `routine-${randomUUID()}`;
       const now = Date.now();
       const scheduleCols = scheduleToDbCols(body.schedule);
@@ -435,6 +472,7 @@ export function registerRoutineRoutes(app: Express, ctx: RegisterRoutineRoutesDe
       let resultingScope = existingScope;
       const body = req.body || {};
       validateRoutineInput(body, true);
+      if (await addsRetiredSelection(body, existing)) return res.status(410).json({ code: 'CONTENT_RETIRED', error: RETIRED_HYPERFRAMES_MESSAGE });
       const patch: any = {};
       if (body.name !== undefined) patch.name = body.name.trim();
       if (body.prompt !== undefined) patch.prompt = body.prompt;

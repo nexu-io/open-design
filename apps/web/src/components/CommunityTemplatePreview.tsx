@@ -34,7 +34,7 @@ import { examplePresetSeedPrompt } from './plugins-home/presetSeedPrompt';
 import { inferPluginPreview, type MediaPreviewSpec } from './plugins-home/preview';
 import { pluginSubfacetLabel } from './plugins-home/subfacetLabel';
 
-export type TemplateType = 'Prototype' | 'Live Artifact' | 'Slides' | 'Document' | 'Image' | 'Motion design' | 'Video' | 'HyperFrames' | 'Audio' | 'WebGL';
+export type TemplateType = 'Prototype' | 'Live Artifact' | 'Slides' | 'Document' | 'Image' | 'Motion design' | 'Video' | 'Audio' | 'WebGL';
 
 export type TemplateDemo = {
   id: string;
@@ -72,7 +72,6 @@ const COMMUNITY_TYPES: Partial<Record<CreationTypeId, TemplateType>> = {
   deck: 'Slides',
   document: 'Document',
   image: 'Image',
-  hyperframes: 'HyperFrames',
   webgl: 'WebGL',
   'live-artifact': 'Live Artifact',
   video: 'Video',
@@ -111,7 +110,6 @@ const FACET_CATEGORY_TYPE: Record<string, TemplateType> = {
   'image': 'Image',
   'motion-design': 'Motion design',
   'video': 'Video',
-  'hyperframes': 'HyperFrames',
   'audio': 'Audio',
   'webgl': 'WebGL',
 };
@@ -127,7 +125,6 @@ export const TEMPLATE_TYPE_LABEL_KEY: Record<TemplateType, keyof Dict> = {
   'Image': 'community.typeImage',
   'Motion design': 'homeHero.chip.motionDesign',
   'Video': 'community.typeVideo',
-  'HyperFrames': 'community.typeHyperFrames',
   'Audio': 'community.typeAudio',
   'WebGL': 'community.typeWebGL',
 };

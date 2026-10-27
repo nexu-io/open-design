@@ -10,6 +10,7 @@ import {
 } from '../src/prompts/od-next-strategy.js';
 
 import { composeSystemPrompt } from '../src/prompts/system.js';
+import { MOTION_CREATION_POLICY_PROMPT } from '../src/prompts/motion-creation-policy.js';
 import { composeOdNextMarkerProductionTurn, renderOdNextProductionReadyInstructions } from '../src/prompts/od-next-production-marker.js';
 import { renderChatTurnHostProtocolInstructions } from '../src/prompts/chat-turn-host-protocol.js';
 
@@ -48,6 +49,11 @@ describe('comment identity host contract', () => {
 });
 
 describe('OD Next V2 prompt recipe', () => {
+  it('keeps the current Motion creation choice in the API/BYOK recipe composer', () => {
+    const prompt = composeSystemPrompt({ odNextStrategyRecipe: recipe });
+    expect(prompt).toContain('Select motion-design for new motion films and editable timeline-animation source');
+    expect(prompt).toContain('does NOT require MP4 production');
+  });
   it('keeps runtime qualification out of the planning and delivery instructions', () => {
     const prompt = composeOdNextStrategyRequestPromptV2(recipe);
     expect(prompt).not.toContain('capabilitySnapshotHash');
@@ -273,7 +279,7 @@ describe('OD Next V2 prompt recipe', () => {
     const direct = composeOdNextStrategyRequestPromptV2(recipe, context);
     const mirrored = composeSystemPrompt({ odNextStrategyRecipe: recipe, ...context });
 
-    expect(mirrored).toBe(direct);
+    expect(mirrored).toBe(`${direct}\n\n${MOTION_CREATION_POLICY_PROMPT}`);
     expect(direct).toContain('"selectedAgentId": "codex"');
     expect(direct).toContain('"locale": "zh-CN"');
     expect(direct).toContain('"fidelity": "high-fidelity"');
@@ -460,7 +466,7 @@ describe('OD Next V2 prompt recipe', () => {
       odNextStrategyRecipe: recipe,
       skillBody: '# Untrusted extra skill',
       activeStageBlocks: ['## Active stage: critique\n\n# Critique Theater'],
-    })).toBe(direct);
+    })).toBe(`${direct}\n\n${MOTION_CREATION_POLICY_PROMPT}`);
   });
 
   it('keeps the legacy recipe API compatible while exposing core and stable context separately', () => {

@@ -1,3 +1,4 @@
+import { MOTION_CREATION_POLICY_PROMPT } from './motion-creation-policy.js';
 import { COMMENT_IDENTITY_EDIT_DIRECTIVE } from './comment-identity.js';
 /**
  * Prompt composer. The base is the OD-adapted "expert designer" system
@@ -322,7 +323,7 @@ export function composeSystemPrompt({
   // Read `docs/prompt-composition.md` before changing prompt text on either
   // side of this fork.
   if (odNextStrategyRecipe) {
-    return composeOdNextStrategyRequestPromptV2(odNextStrategyRecipe, {
+    const prompt = composeOdNextStrategyRequestPromptV2(odNextStrategyRecipe, {
       agentId,
       // The plan-tool fact has to cross the fork with everything else. Without
       // it an OD Next run keeps the pre-fix behaviour the legacy stack no
@@ -349,6 +350,9 @@ export function composeSystemPrompt({
       userInstructions,
       projectInstructions,
     });
+    return sessionMode === 'chat'
+      ? prompt
+      : `${prompt}\n\n${MOTION_CREATION_POLICY_PROMPT}`;
   }
   // Discovery + philosophy goes FIRST so its hard rules ("emit a form on
   // requirements decision, brand resolution, and TodoWrite workflow, run
@@ -588,6 +592,7 @@ export function composeSystemPrompt({
   }
 
   parts.push(`\n\n---\n\n${COMMENT_IDENTITY_EDIT_DIRECTIVE}`);
+  if (!isAskMode) parts.push(`\n\n---\n\n${MOTION_CREATION_POLICY_PROMPT}`);
   return parts.join('');
 }
 

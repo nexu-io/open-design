@@ -46,7 +46,7 @@ export interface UiScenario {
     | 'deck-pagination-per-file-isolated'
     | 'uploaded-image-renders-in-preview'
     | 'python-source-preview'
-    | 'hyperframes-project-routing'
+    | 'hyperframes-retirement'
     | 'image-project-routing'
     | 'video-project-routing'
     | 'audio-project-routing'

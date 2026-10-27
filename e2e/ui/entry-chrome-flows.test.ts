@@ -118,9 +118,25 @@ test('[P0] @critical entry chrome exposes the primary home creation surface and 
   for (const id of HOME_TYPE_OTHER_CHIP_IDS) {
     await expect(menu.locator(`[data-chip="${id}"]`)).toBeVisible();
   }
+  await expect(menu.locator('[data-chip="hyperframes"]')).toHaveCount(0);
   await testInfo.attach('home-type-dropdown', { body: await page.screenshot(), contentType: 'image/png' });
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
+
+  const creationRequests: string[] = [];
+  page.on('request', request => {
+    if (request.method() === 'POST' && /\/api\/(projects|runs)(?:\?|$)/.test(request.url())) {
+      creationRequests.push(request.url());
+    }
+  });
+  await page.getByTestId('home-hero-input').fill('Keep my existing motion brief');
+  await page.evaluate(() => {
+    window.dispatchEvent(new CustomEvent('open-design:home-apply-template', { detail: { chipId: 'hyperframes' } }));
+  });
+  await expect(page.getByTestId('home-hero-template-picker')).toHaveAttribute('data-type', 'motion-design');
+  await expect(page.getByTestId('home-hero-input')).toHaveText('Keep my existing motion brief');
+  await expectStableCount(() => creationRequests.length, 0, { message: 'legacy entry selection must not create a project or start a run' });
+  await testInfo.attach('legacy-hyperframes-entry-to-motion', { body: await page.screenshot(), contentType: 'image/png' });
 
   // The pet picker rail was removed; pet adoption now lives in
   // Settings → Pet exclusively. Make sure no rail leaks back into the

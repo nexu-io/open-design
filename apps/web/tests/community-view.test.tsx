@@ -338,7 +338,7 @@ describe('CommunityView catalogue source', () => {
     fireEvent.click(screen.getByTestId('community-type-tabs-more'));
     const popover = screen.getByTestId('community-type-tabs-popover');
     expect(Array.from(popover.querySelectorAll('button')).map((button) => button.textContent?.trim()))
-      .toEqual(['HyperFrames', 'WebGL', 'Live Artifact', 'Video', 'Audio']);
+      .toEqual(['WebGL', 'Live Artifact', 'Video', 'Audio']);
 
     fireEvent.click(screen.getByTestId('community-type-tab-video-more'));
 

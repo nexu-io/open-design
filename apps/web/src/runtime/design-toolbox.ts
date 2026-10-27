@@ -88,7 +88,7 @@ export const DESIGN_TOOLBOX_ACTIONS: DesignToolboxAction[] = [
   {
     id: 'transition-motion',
     icon: 'reload',
-    preferredSkillIds: ['emilkowalski-motion', 'gsap-timeline', 'gsap-core', 'remotion', 'video-hyperframes'],
+    preferredSkillIds: ['emilkowalski-motion', 'gsap-timeline', 'gsap-core', 'remotion'],
     categoryHints: ['animation-motion', 'video-generation'],
     searchTerms: ['transition', 'page transition', 'scene transition', 'loading transition', 'route transition', 'interstitial', '过场动画', '转场', '页面切换', '场景切换'],
   },
@@ -144,7 +144,7 @@ export const DESIGN_TOOLBOX_ACTIONS: DesignToolboxAction[] = [
   {
     id: 'video-gen',
     icon: 'play',
-    preferredSkillIds: ['video-hyperframes', 'sora', 'fal-video-edit', 'venice-video', 'replicate'],
+    preferredSkillIds: ['sora', 'fal-video-edit', 'venice-video', 'replicate'],
     categoryHints: ['video-generation'],
     searchTerms: ['video', 'sora', 'remotion', 'hyperframes', 'storyboard', '生视频', '视频', '分镜'],
   },

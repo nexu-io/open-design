@@ -11,6 +11,7 @@ import {
   trackNewProjectModalSurfaceView,
   trackNewProjectModalTabClick,
 } from '../analytics/events';
+import { isRetiredHyperFramesPromptTemplate } from '@open-design/contracts';
 import type { ConnectorDetail } from '@open-design/contracts';
 import type {
   TrackingDesignSystemApplyTargetKind,
@@ -364,7 +365,6 @@ export function NewProjectPanel({
   const [imageModel, setImageModel] = useState(DEFAULT_IMAGE_MODEL);
   const [imageAspect, setImageAspect] = useState<MediaAspect>('1:1');
   const [videoModel, setVideoModel] = useState(DEFAULT_VIDEO_MODEL);
-  const [videoModelTouched, setVideoModelTouched] = useState(false);
   const [videoAspect, setVideoAspect] = useState<MediaAspect>('16:9');
   const [videoLength, setVideoLength] = useState(5);
   const [audioKind, setAudioKind] = useState<AudioKind>('speech');
@@ -523,15 +523,8 @@ export function NewProjectPanel({
     }
     if (tab === 'media') {
       const list = skills.filter(
-        (s) => s.mode === mediaSurface || s.surface === mediaSurface,
+        (s) => (s.mode === mediaSurface || s.surface === mediaSurface),
       );
-      // The HyperFrames-HTML render path lives in the `hyperframes` skill.
-      // When the user has chosen `hyperframes-html` (via dropdown or template),
-      // pin the project to that skill explicitly.
-      if (mediaSurface === 'video' && videoModel === 'hyperframes-html') {
-        const hyper = list.find((s) => s.id === 'hyperframes');
-        if (hyper) return hyper.id;
-      }
       return list.find((s) => s.defaultFor.includes(mediaSurface))?.id
         ?? list[0]?.id
         ?? null;
@@ -561,10 +554,8 @@ export function NewProjectPanel({
   }, [tab]);
 
   // When the user picks a curated prompt template, propagate the template's
-  // declared `model` and `aspect` onto the actual project state. Without
-  // this the user picks (e.g.) a HyperFrames template but `videoModel`
-  // stays on the default seedance — the agent then dispatches the wrong
-  // model and the render path mismatches the prompt.
+  // declared `model` and `aspect` onto the actual project state so the
+  // selected generation model matches the user's template.
   function handleImagePromptTemplate(pick: PromptTemplatePick | null) {
     const rawModel = pick?.summary.model;
     const normalizedModel = rawModel
@@ -587,9 +578,8 @@ export function NewProjectPanel({
   function handleVideoPromptTemplate(pick: PromptTemplatePick | null) {
     setVideoPromptTemplate(pick);
     const m = pick?.summary.model;
-    if (m && VIDEO_MODELS.some((x) => x.id === m)) {
+    if (m && m !== 'hyperframes-html' && VIDEO_MODELS.some((x) => x.id === m)) {
       setVideoModel(m);
-      setVideoModelTouched(true);
     }
     const a = pick?.summary.aspect;
     if (a && (MEDIA_ASPECTS as readonly string[]).includes(a)) {
@@ -598,31 +588,8 @@ export function NewProjectPanel({
   }
   function handleVideoModel(id: string) {
     setVideoModel(id);
-    setVideoModelTouched(true);
   }
 
-  // The HyperFrames skill renders HTML compositions through a local
-  // `npx hyperframes render` path, which dispatches under the
-  // `hyperframes-html` model — not seedance/veo/sora. When the resolved
-  // skill for the video tab is hyperframes, default `videoModel` so the
-  // model dropdown matches the actual render path. Once the user has
-  // explicitly chosen a model (via the dropdown or by picking a template
-  // that declares a model), `videoModelTouched` latches and this effect
-  // becomes a no-op for the rest of the panel session — re-entering the
-  // Media tab's Video surface no longer silently rewrites their override back to
-  // hyperframes-html.
-  useEffect(() => {
-    if (tab !== 'media' || mediaSurface !== 'video') return;
-    if (skillIdForTab !== 'hyperframes') return;
-    if (videoModelTouched) return;
-    if (videoPromptTemplate) return;
-    if (!VIDEO_MODELS.some((m) => m.id === 'hyperframes-html')) return;
-    setVideoModel('hyperframes-html');
-    // Intentionally leaving videoPromptTemplate / videoModel out of deps
-    // so this only fires when the user toggles the tab or the skill
-    // resolution shifts — not whenever the user changes the dropdown.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, mediaSurface, skillIdForTab, videoModelTouched]);
 
   const canCreate =
     !loading && (tab !== 'template' || templateId != null);
@@ -1826,7 +1793,7 @@ function PromptTemplatePicker({
   const searchRef = useRef<HTMLInputElement | null>(null);
 
   const surfaceScoped = useMemo(
-    () => templates.filter((tpl) => tpl.surface === surface),
+    () => templates.filter((tpl) => tpl.surface === surface && !isRetiredHyperFramesPromptTemplate(tpl.surface, tpl.id)),
     [templates, surface],
   );
 
@@ -1870,6 +1837,10 @@ function PromptTemplatePicker({
   }, [open]);
 
   async function pickTemplate(summary: PromptTemplateSummary) {
+    if (isRetiredHyperFramesPromptTemplate(summary.surface, summary.id)) {
+      setError(t('home.hyperframesRetired'));
+      return;
+    }
     setLoadingId(summary.id);
     setError(null);
     try {
@@ -2698,7 +2669,7 @@ function MediaProjectOptions(props:
       <div className="newproj-media-options">
         <MediaModelCards
           label={t('newproj.modelLabel')}
-          models={supportedModels('video', mergeAihubmixModels(VIDEO_MODELS, aihubmixVideoModels))}
+          models={supportedModels('video', mergeAihubmixModels(VIDEO_MODELS.filter((model) => model.id !== 'hyperframes-html'), aihubmixVideoModels))}
           mediaProviders={props.mediaProviders}
           value={props.videoModel}
           onChange={props.onVideoModel}

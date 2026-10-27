@@ -1,3 +1,4 @@
+import { MOTION_CREATION_POLICY_PROMPT } from './motion-creation-policy.js';
 import { COMMENT_IDENTITY_EDIT_DIRECTIVE } from '@open-design/contracts/prompts/comment-identity';
 /**
  * Prompt composer. The base is the OD-adapted "expert designer" system
@@ -950,7 +951,7 @@ export function composeSystemPrompt({
   // (`../strategies/od-next/rollout.ts`). Read `docs/prompt-composition.md`
   // before changing prompt text on either side.
   if (odNextStrategyRecipe) {
-    return composeOdNextStrategyRequestPromptV2(odNextStrategyRecipe, {
+    const prompt = composeOdNextStrategyRequestPromptV2(odNextStrategyRecipe, {
       agentId,
       // The plan-tool fact has to cross the fork with everything else. Without
       // it an OD Next run keeps the pre-fix behaviour the slim charter no
@@ -979,6 +980,9 @@ export function composeSystemPrompt({
       userInstructions,
       projectInstructions,
     });
+    return sessionMode === 'chat'
+      ? prompt
+      : `${prompt}\n\n${MOTION_CREATION_POLICY_PROMPT}`;
   }
   // Slim core collapses the discovery layer + designer charter + their tail
   // overrides into one charter document; the classic stack keeps the legacy
@@ -1526,6 +1530,8 @@ export function composeSystemPrompt({
   );
 
   parts.push(`\n\n---\n\n${COMMENT_IDENTITY_EDIT_DIRECTIVE}`);
+
+  if (!isAskMode) parts.push(`\n\n---\n\n${MOTION_CREATION_POLICY_PROMPT}`);
 
   // Pinned LAST so recency bias reinforces the role-marker prohibition.
   // Slim uses the SP v2.0 translation; classic retains its existing wording.

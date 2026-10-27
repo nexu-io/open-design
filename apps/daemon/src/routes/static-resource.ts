@@ -7,6 +7,8 @@ import type {
   WorkspaceCollabContext,
 } from '@open-design/contracts';
 import { TeamResourceCopyForbiddenError } from '@open-design/contracts';
+import { RETIRED_HYPERFRAMES_MESSAGE, isRetiredHyperFramesPromptTemplate } from '@open-design/contracts';
+import { isRetiredOfficialSkill } from '../registry/hyperframes-retirement.js';
 import {
   enforceTeamResourceCopyAllowed,
   type TeamResourceStateProvider,
@@ -138,6 +140,9 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     mimeFor,
   } = ctx.resources;
   const { isLocalSameOrigin, resolvedPortRef, sendApiError } = ctx.http;
+  const retiredSkill = (skill: { id: string; dir?: string }) =>
+    isRetiredOfficialSkill(skill, [SKILLS_DIR, DESIGN_TEMPLATES_DIR]);
+  const sendRetired = (res: Response) => sendApiError(res, 410, 'CONTENT_RETIRED', RETIRED_HYPERFRAMES_MESSAGE);
   const teamResources = ctx.teamResources;
   const requireLocalOrigin = (req: any, res: any) => {
     if (isLocalSameOrigin(req, resolvedPortRef.current)) return true;
@@ -513,7 +518,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       // Strip full body + on-disk dir from the listing — frontend fetches the
       // body via /api/skills/:id when needed (keeps the listing payload small).
       res.json({
-        skills: skills.map(({ body, dir: _dir, ...rest }) => ({
+        skills: skills.filter((skill) => !retiredSkill(skill)).map(({ body, dir: _dir, ...rest }) => ({
           ...rest,
           hasBody: typeof body === 'string' && body.length > 0,
         })),
@@ -534,6 +539,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       });
       const skill = findSkillById(skills, req.params.id);
       if (!skill) return res.status(404).json({ error: 'skill not found' });
+      if (retiredSkill(skill)) return sendRetired(res);
       const { dir: _dir, ...serializable } = skill;
       res.json(serializable);
     } catch (err: any) {
@@ -549,7 +555,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     try {
       const templates = await listAllDesignTemplates();
       res.json({
-        designTemplates: templates.map(({ body, dir: _dir, ...rest }) => ({
+        designTemplates: templates.filter((template) => !retiredSkill(template)).map(({ body, dir: _dir, ...rest }) => ({
           ...rest,
           hasBody: typeof body === 'string' && body.length > 0,
         })),
@@ -564,6 +570,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       const templates = await listAllDesignTemplates();
       const template = findSkillById(templates, req.params.id);
       if (!template) return res.status(404).json({ error: 'design template not found' });
+      if (retiredSkill(template)) return sendRetired(res);
       const { dir: _dir, ...serializable } = template;
       res.json(serializable);
     } catch (err: any) {
@@ -870,7 +877,8 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     try {
       const templates = await listPromptTemplates(PROMPT_TEMPLATES_DIR);
       res.json({
-        promptTemplates: templates.map(({ prompt: _prompt, ...rest }) => rest),
+        promptTemplates: templates.filter((template) => !isRetiredHyperFramesPromptTemplate(template.surface, template.id))
+          .map(({ prompt: _prompt, ...rest }) => rest),
       });
     } catch (err: any) {
       res.status(500).json({ error: String(err) });
@@ -879,6 +887,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
 
   app.get('/api/prompt-templates/:surface/:id', async (req, res) => {
     try {
+      if (isRetiredHyperFramesPromptTemplate(req.params.surface, req.params.id)) return sendRetired(res);
       const tpl = await readPromptTemplate(
         PROMPT_TEMPLATES_DIR,
         req.params.surface,
@@ -934,6 +943,9 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
         workspaceId,
         workspaceMemberId: authority?.workspaceMemberId ?? null,
       });
+      const requestedSkill = findSkillById(skills, req.params.id)
+        ?? findSkillById(skills, splitDerivedSkillId(req.params.id)?.parentId);
+      if (requestedSkill && retiredSkill(requestedSkill)) return sendRetired(res);
       const workspaceQuery = authority
         ? `?workspaceId=${encodeURIComponent(authority.workspaceId)}&workspaceMemberId=${encodeURIComponent(authority.workspaceMemberId)}`
         : '';

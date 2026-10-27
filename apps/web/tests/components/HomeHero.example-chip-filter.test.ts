@@ -102,8 +102,8 @@ describe('pluginMatchesExampleChip — audio chip', () => {
     expect(pluginMatchesExampleChip(brandSizzleReel, 'audio')).toBe(false);
   });
 
-  it('still places that HyperFrames template under the hyperframes chip', () => {
-    expect(pluginMatchesExampleChip(brandSizzleReel, 'hyperframes')).toBe(true);
+  it('hides a retired official template even from an old chip request', () => {
+    expect(pluginMatchesExampleChip(brandSizzleReel, 'hyperframes')).toBe(false);
   });
 });
 
@@ -150,5 +150,22 @@ describe('homeHeroExamplePluginsForChip — motion-design chip', () => {
       'en',
     ).map((p) => p.id);
     expect(ids).toEqual(['example-motion-showreel']);
+  });
+});
+
+
+describe('retired official identity boundaries', () => {
+  it('keeps Motion templates that use HyperFrames tags', () => {
+    const tagged = { ...motionShowreel, manifest: { ...motionShowreel.manifest,
+      tags: ['motion-design', 'hyperframes', 'video'],
+    } };
+    expect(homeHeroExamplePluginsForChip('motion-design', [tagged], 'en').map((record) => record.id))
+      .toEqual(['example-motion-showreel']);
+  });
+
+  it('keeps a user plugin with the same id as a retired official template', () => {
+    const user = { ...brandSizzleReel, sourceKind: 'local' as const,
+      manifest: { ...brandSizzleReel.manifest, tags: ['motion-design', 'video'] } };
+    expect(homeHeroExamplePluginsForChip('motion-design', [user], 'en')).toEqual([user]);
   });
 });

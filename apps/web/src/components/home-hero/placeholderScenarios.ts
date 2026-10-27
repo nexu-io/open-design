@@ -62,7 +62,7 @@ export const PLACEHOLDER_SCENARIO_DEFS: ReadonlyArray<PlaceholderScenarioDef> = 
   { id: 'notes-to-deck', textKey: 'homeHero.carousel.notesToDeck', chipId: 'deck' },
   { id: 'signup-flow', textKey: 'homeHero.carousel.signupFlow', chipId: 'prototype' },
   { id: 'improve-brief', textKey: 'homeHero.carousel.improveBrief', chipId: 'document' },
-  { id: 'loading-animation', textKey: 'homeHero.carousel.loadingAnimation', chipId: 'hyperframes' },
+  { id: 'loading-animation', textKey: 'homeHero.carousel.loadingAnimation', chipId: 'motion-design' },
   { id: 'team-update-slides', textKey: 'homeHero.carousel.teamUpdateSlides', chipId: 'deck' },
   { id: 'orders-dashboard', textKey: 'homeHero.carousel.ordersDashboard', chipId: 'prototype' },
   {

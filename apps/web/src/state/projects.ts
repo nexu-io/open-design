@@ -12,6 +12,7 @@ import { BackoffController, type BackoffOptions } from '../lib/backoff';
 import { markProjectCreatedByViewer } from '../collab/useProjectCollab';
 import {
   API_ERROR_CODES,
+  isRetiredHyperFramesPlugin,
   isSameWorkspacePrincipal,
   type ApiErrorCode,
   type ProjectDeleteShareResidual,
@@ -1979,7 +1980,7 @@ export async function listPlugins(
     );
     if (!resp.ok) return [];
     const json = (await resp.json()) as { plugins?: InstalledPluginRecord[] };
-    const plugins = json.plugins ?? [];
+    const plugins = (json.plugins ?? []).filter((plugin) => !isRetiredHyperFramesPlugin(plugin));
     const visible = plugins.filter(isVisiblePlugin);
     if (pluginCatalogCacheGenerations.get(cacheKey) === requestGeneration) {
       cacheVisiblePlugins(cacheKey, visible);
@@ -1999,7 +2000,7 @@ export async function listPluginsFresh(
 ): Promise<InstalledPluginRecord[]> {
   const cached = cachedVisiblePlugins.get(pluginCatalogCacheKey(options));
   if (cached && Date.now() - cached.cachedAt < PLUGINS_CACHE_TTL_MS) {
-    return cached.plugins;
+    return cached.plugins.filter((plugin) => !isRetiredHyperFramesPlugin(plugin));
   }
   return listPlugins(options);
 }
@@ -2015,7 +2016,7 @@ export async function listPluginsFresh(
 export function readCachedVisiblePlugins(
   options: Pick<ListPluginsOptions, 'workspaceContext' | 'accountGeneration'> = {},
 ): InstalledPluginRecord[] | null {
-  return cachedVisiblePlugins.get(pluginCatalogCacheKey(options))?.plugins ?? null;
+  return cachedVisiblePlugins.get(pluginCatalogCacheKey(options))?.plugins.filter((plugin) => !isRetiredHyperFramesPlugin(plugin)) ?? null;
 }
 
 /**

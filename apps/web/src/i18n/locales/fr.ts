@@ -928,6 +928,7 @@ export const fr: Dict = {
   'entry.authExpiredBody': 'Open Design n’est pas connecté\nConnectez-vous pour voir vos projets et poursuivre la conversation.',
   'home.createFailed': 'Impossible de démarrer la tâche. Réessayez.',
   'home.daemonRecovering': 'Connexion locale interrompue\nImpossible de joindre le service Open Design sur cet ordinateur pour le moment. Redémarrez l’application.',
+  'home.hyperframesRetired': "Ce contenu officiel HyperFrames a été retiré. Utilisez Motion pour vos nouvelles créations. Les projets existants restent disponibles.",
   'home.bundledScenarioMissing': 'Le scénario intégré « {scenarioId} » n’est pas installé. Réinstallez le daemon pour restaurer les plugins par défaut.',
   "entry.cloudCalloutBody": "Connectez-vous pour utiliser OpenDesign Cloud et collaborer dans le cloud",
   "entry.cloudCreditsTitle": "Obtenez des crédits gratuits",

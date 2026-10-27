@@ -88,13 +88,13 @@ describe('extractCategories', () => {
     ).toEqual(['prototype']);
   });
 
-  it('splits HyperFrames from the broader video mode', () => {
+  it('keeps non-retired HyperFrames-tagged user content in video without a separate category', () => {
     expect(
       extractCategories(fixture({ id: 'hf', tags: ['hyperframes'], od: { mode: 'video' } })),
-    ).toEqual(['hyperframes']);
+    ).toEqual(['video']);
     expect(
       extractCategories(fixture({ id: 'composition', tags: ['video-composition'], od: { mode: 'video' } })),
-    ).toEqual(['hyperframes']);
+    ).toEqual(['video']);
   });
 
   // OPEND-3118: the bundled document examples are prototype-mode plugins whose
@@ -264,8 +264,7 @@ describe('buildFacetCatalog', () => {
       ['live-artifact', 1],
       ['image', 1],
       ['motion-design', 1],
-      ['video', 1],
-      ['hyperframes', 1],
+      ['video', 2],
       ['audio', 1],
     ]);
     // Display order (SUBCATEGORY_DISPLAY_ORDER) — distinct from the matching
@@ -355,10 +354,10 @@ describe('applyFacetSelection', () => {
     ).toEqual(['example-live-artifact']);
     expect(
       applyFacetSelection(plugins, { category: 'hyperframes', subcategory: null }).map((p) => p.id),
-    ).toEqual(['hf']);
+    ).toEqual([]);
     expect(
       applyFacetSelection(plugins, { category: 'video', subcategory: null }).map((p) => p.id),
-    ).toEqual(['video']);
+    ).toEqual(['video', 'hf']);
   });
 
   it('filters by the selected scene bucket inside the selected artifact kind', () => {

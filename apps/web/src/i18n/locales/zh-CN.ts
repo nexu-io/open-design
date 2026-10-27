@@ -931,6 +931,7 @@ export const zhCN: Dict = {
   'home.daemonRecovering': '本地连接已断开\n暂时无法连接这台电脑上的 Open Design 服务，请重启客户端。',
   'home.createTimedOut': '项目准备超时，任务尚未开始。请重新发送。',
   'home.amrGateUnavailable': '暂时无法确认 OpenDesign Cloud 额度，请重新发送。',
+  'home.hyperframesRetired': "此官方 HyperFrames 内容已下线。请使用 Motion 创作新作品，历史项目仍可继续使用。",
   'home.bundledScenarioMissing': '内置场景“{scenarioId}”未安装。请重新安装 OpenDesign，以恢复默认插件。',
   "entry.cloudCalloutBody": "登录即可享受云端协作",
   "entry.cloudCreditsTitle": "注册即领免费额度",

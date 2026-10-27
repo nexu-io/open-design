@@ -7,7 +7,6 @@ export const CREATION_TYPE_ORDER = [
   'document',
   'image',
   'web-clone',
-  'hyperframes',
   'webgl',
   'live-artifact',
   'video',

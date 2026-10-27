@@ -644,6 +644,24 @@ export async function deleteSkill(
   }
 }
 
+/** Only the daemon can resolve a skill's official resource root. */
+export async function isRetiredSkillUse(
+  id: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<boolean> {
+  try {
+    const resp = await fetch(
+      `/api/skills/${encodeURIComponent(id)}`,
+      workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : undefined,
+    );
+    if (resp.status !== 410) return false;
+    const body = await resp.json() as { error?: { code?: string } };
+    return body.error?.code === 'CONTENT_RETIRED';
+  } catch {
+    return false;
+  }
+}
+
 export async function fetchSkill(
   id: string,
   workspaceContext?: WorkspaceCollabContext | null,

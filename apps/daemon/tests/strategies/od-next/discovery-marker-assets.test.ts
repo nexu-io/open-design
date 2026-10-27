@@ -15,7 +15,7 @@ it('loads the deck framework lazily for Discovery while preserving the existing 
   expect(resolveOdNextDeckFrameworkMode({ taskType: 'ppt', hasExistingDeckArtifact: true })).toBe('legacy_compatible');
 });
 
-it('ships ten loadable main Skills without restoring the retired machine protocol', async () => {
+it('advertises current creation Skills while retaining legacy resources for saved bindings', async () => {
   const resolved = await resolvePluginFolder({ folder, folderId: 'od-next-strategy', sourceKind: 'bundled', source: folder, trust: 'bundled' });
   if (!resolved.ok) throw Error(resolved.errors.join(';'));
   const binding = createBundledStrategyBindingV2({ plugin: resolved.record, taskType: 'discovery' });
@@ -33,8 +33,11 @@ it('ships ten loadable main Skills without restoring the retired machine protoco
   expect(assets.taskSkill).toContain('production-ready');
   expect(assets.taskSkill).not.toMatch(/requiredDeliverables|runtime-state|planContractHash/);
   expect(DELIVERABLE_SKILLS).toHaveLength(11);
+  expect(assets.taskSkill).not.toContain('- hyperframes (');
   for (const skill of DELIVERABLE_SKILLS) {
-    expect(assets.taskSkill).toContain(`${folder}/assets/task-profiles/${skill.id}.md`);
+    if (skill.id !== 'hyperframes') {
+      expect(assets.taskSkill).toContain(`${folder}/assets/task-profiles/${skill.id}.md`);
+    }
     const body = await readFile(path.join(folder, `assets/task-profiles/${skill.id}.md`), 'utf8');
     expect(body).not.toMatch(/requiredDeliverables|resultRef=|outcome=completed/);
     expect(assets.taskResources.some(r => r.path.endsWith(`/${skill.id}.md`))).toBe(true);
@@ -80,7 +83,7 @@ it('keeps output selection independent of shared HTML implementation and exposes
   expect(taskSkill).toContain('A separately requested website still needs prototype');
   const video = await readFile(path.join(folder, 'assets/task-profiles/video.md'), 'utf8');
   expect(video).toContain('An internal HTML composition for this renderer is part of the video task, not an independently requested HyperFrames deliverable');
-  expect(taskSkill).toContain('not an internal renderer composition for MP4');
+  expect(taskSkill).toContain('Explicit requests for animation source only use Motion without requiring MP4 export.');
   expect(video).toContain('A failed render leaves the video undelivered');
   expect(video).toContain('Do not substitute an ad-hoc shell or ffmpeg animation');
   expect(video).toContain('A decodable container or successful encoder exit does not establish that the requested subject or motion is present');

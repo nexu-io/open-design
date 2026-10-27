@@ -109,10 +109,10 @@ describe('CommunityView — 更多 is a fixed list (OPEND-3098)', () => {
     const popover = openMore();
     expect(
       Array.from(popover.querySelectorAll('button')).map((button) => button.getAttribute('data-chip')),
-    ).toEqual(['hyperframes', 'webgl', 'live-artifact', 'video', 'audio']);
+    ).toEqual(['webgl', 'live-artifact', 'video', 'audio']);
     expect(
       Array.from(popover.querySelectorAll('button')).map((button) => button.textContent?.trim()),
-    ).toEqual(['HyperFrames', 'WebGL', 'Live Artifact', 'Video', 'Audio']);
+    ).toEqual(['WebGL', 'Live Artifact', 'Video', 'Audio']);
     expect([
       ...inlineTabs(),
       ...Array.from(popover.querySelectorAll('button')),
@@ -154,7 +154,7 @@ describe('CommunityView — 更多 is a fixed list (OPEND-3098)', () => {
     const popover = openMore();
     expect(
       Array.from(popover.querySelectorAll('button')).map((button) => button.getAttribute('data-chip')),
-    ).toEqual(['hyperframes', 'webgl', 'live-artifact', 'video']);
+    ).toEqual(['webgl', 'live-artifact', 'video']);
   });
 
   it('wears the Home webgl chip (sparkles glyph) and hands WebGL templates to the Home webgl chip as a prototype', async () => {

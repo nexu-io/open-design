@@ -22,6 +22,7 @@ import {
   installPluginSource,
   listPlugins,
   listPluginsFresh,
+  readCachedVisiblePlugins,
   listMessages,
   invalidatePluginCatalogCache,
   listProjects,
@@ -1380,6 +1381,21 @@ describe('listPlugins', () => {
     const rows = await listPlugins();
 
     expect(rows.map((row) => row.id)).toEqual(['od-new-generation']);
+  });
+
+  it('filters retired bundled entries from old API responses and cache while preserving same-id user content', async () => {
+    const retired = { id: 'example-hyperframes', sourceKind: 'bundled', manifest: { od: { mode: 'video' } } };
+    const user = { ...retired, sourceKind: 'user' };
+    const motion = { id: 'example-motion-showreel', sourceKind: 'bundled', manifest: { tags: ['motion-design', 'hyperframes'] } };
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(
+      JSON.stringify({ plugins: [retired, user, motion] }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    )));
+    const expected = [user, motion];
+    expect(await listPlugins()).toEqual(expected);
+    expect(readCachedVisiblePlugins()).toEqual(expected);
+    expect(await listPluginsFresh()).toEqual(expected);
+    expect(await listPlugins({ includeHidden: true })).toEqual(expected);
   });
 
   it('can include hidden plugins for installed-entry matching', async () => {

@@ -93,7 +93,7 @@ describe('HomeHero scenario cards', () => {
     expect(typePill('deck')?.textContent).toContain('Slide deck');
   });
 
-  it('uses the fixed eleven-item Home creation hierarchy in product order', () => {
+  it('uses the current Home creation hierarchy in product order', () => {
     const ordered = orderedCreateChips();
     const ids = ordered.map((chip) => chip.id);
     expect(ids).toEqual([
@@ -103,7 +103,6 @@ describe('HomeHero scenario cards', () => {
       'document',
       'image',
       'web-clone',
-      'hyperframes',
       'webgl',
       'live-artifact',
       'video',
@@ -119,7 +118,6 @@ describe('HomeHero scenario cards', () => {
       'deck',
       'document',
       'image',
-      'hyperframes',
       'webgl',
       'live-artifact',
     ]);

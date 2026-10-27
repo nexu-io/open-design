@@ -42,7 +42,7 @@ describe('PLACEHOLDER_SCENARIO_DEFS bindings', () => {
   it('only binds create templates that actually render a carousel', () => {
     // These are the templates with hand-curated carousel lines. Other templates
     // can still render a carousel through prompt-example or label fallbacks.
-    const SUPPORTED = new Set(['document', 'deck', 'prototype', 'hyperframes']);
+    const SUPPORTED = new Set(['document', 'deck', 'prototype', 'motion-design']);
     const used = new Set(PLACEHOLDER_SCENARIO_DEFS.map((d) => d.chipId));
     for (const chipId of used) {
       expect(SUPPORTED.has(chipId), `chipId "${chipId}" is not a carousel template`).toBe(true);

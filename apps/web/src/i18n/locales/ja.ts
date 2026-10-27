@@ -928,6 +928,7 @@ export const ja: Dict = {
   'home.daemonRecovering': 'ローカル接続が切断されました\nこのコンピューター上の Open Design サービスに一時的に接続できません。クライアントを再起動してください。',
   'home.createTimedOut': 'プロジェクトの準備がタイムアウトし、開始できませんでした。もう一度送信してください。',
   'home.amrGateUnavailable': 'OpenDesign Cloud の残高を確認できませんでした。もう一度送信してください。',
+  'home.hyperframesRetired': "この公式 HyperFrames コンテンツは提供を終了しました。新しい作品には Motion をご利用ください。既存のプロジェクトは引き続き利用できます。",
   'home.bundledScenarioMissing': 'Bundled scenario "{scenarioId}" is not installed. Reinstall the daemon to restore the default plugin set.',
   "entry.cloudCalloutBody": "サインインして OpenDesign Cloud を利用し、クラウドでコラボレーションしましょう",
   "entry.cloudCreditsTitle": "登録で無料クレジット",

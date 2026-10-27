@@ -573,15 +573,13 @@ describe('HomeHero intent rail', () => {
   });
 
   it('specialised category chips route to their bundled scenario plugin', () => {
-    // HyperFrames is the motion-graphics specialisation of Video,
-    // surfaced as a separate chip so users can target it directly
-    // instead of routing through the generic Video chip.
+    // Old entry ids resolve to Motion, while new creation lists omit them.
     expect(findChip('hyperframes')?.action).toMatchObject({
       kind: 'apply-scenario',
-      pluginId: 'example-hyperframes',
+      pluginId: 'od-new-generation',
       projectKind: 'video',
       automaticDefault: true,
-      projectMetadata: expect.objectContaining({ intent: 'hyperframes' }),
+      projectMetadata: expect.objectContaining({ intent: 'motion-design' }),
     });
     expect(findChip('live-artifact')?.action).toMatchObject({
       kind: 'apply-scenario',

@@ -21,6 +21,9 @@
 // deterministic across CLI / desktop / web.
 
 import type Database from 'better-sqlite3';
+import { RETIRED_HYPERFRAMES_MESSAGE, isRetiredHyperFramesPlugin } from '@open-design/contracts';
+import { isRetiredOfficialSnapshot, persistedRoutinePluginIdsForTarget, projectAlreadyUsesRetiredPlugin } from '../registry/hyperframes-retirement.js';
+import { getRoutine } from '../db.js';
 import type {
   AppliedPluginSnapshot,
   AppliedStrategyBindingV2,
@@ -68,6 +71,10 @@ export interface ResolveSnapshotInput {
   // always know it (the run carries `projectId`). For project-create we
   // pass the freshly-inserted project id.
   projectId: string;
+  /** Actual bundled resource root, used only to classify persisted local snapshot provenance. */
+  bundledPluginsDir?: string;
+  /** Daemon-only routine identity; its persisted target and original plugin selection are rechecked here. */
+  historicalRoutineId?: string | undefined;
   conversationId?: string | null | undefined;
   runId?: string | null | undefined;
   // Pluggable for tests; in production these are the daemon's live
@@ -145,6 +152,11 @@ export interface ResolveSnapshotError {
 }
 
 export type ResolveSnapshotResult = ResolveSnapshotOk | ResolveSnapshotError | null;
+
+function retiredContentError(): ResolveSnapshotError {
+  return { ok: false, status: 410, exitCode: 65,
+    body: { error: { code: 'CONTENT_RETIRED', message: RETIRED_HYPERFRAMES_MESSAGE } } };
+}
 
 // Read the snapshot id that's currently pinned on a project row (if any).
 // Returns null when the project is missing or has no snapshot pinned.
@@ -232,6 +244,7 @@ export function resolvePluginSnapshot(input: ResolveSnapshotInput): ResolveSnaps
         },
       };
     }
+    if (isRetiredOfficialSnapshot(snapshot, input.bundledPluginsDir) && !input.requireSnapshotProjectMatch) return retiredContentError();
     if (input.requireSnapshotProjectMatch) {
       const row = input.db
         .prepare('SELECT project_id AS projectId FROM applied_plugin_snapshots WHERE id = ?')
@@ -297,6 +310,13 @@ export function resolvePluginSnapshot(input: ResolveSnapshotInput): ResolveSnaps
         },
       },
     };
+  }
+  if (isRetiredHyperFramesPlugin(plugin)
+    && (!input.requireSnapshotProjectMatch || (!projectAlreadyUsesRetiredPlugin(input.db, input.projectId, plugin)
+      && !(input.historicalRoutineId && persistedRoutinePluginIdsForTarget(
+        { mode: 'reuse', projectId: input.projectId }, getRoutine(input.db, input.historicalRoutineId),
+      ).includes(plugin.id))))) {
+    return retiredContentError();
   }
 
   let applyComputed;
