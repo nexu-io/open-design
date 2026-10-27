@@ -143,7 +143,7 @@
     {
       "name": "community/vizney-blocks",
       "title": "Vizney Blocks",
-      "version": "0.27.0",
+      "version": "0.29.0",
       "source": "github:yehwanhwang/vizney-blocks@main/skills/vizney-blocks",
       "publisher": {
         "id": "vizney",
