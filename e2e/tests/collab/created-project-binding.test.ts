@@ -162,18 +162,37 @@ describe('a created project is bound only to an explicit Workspace', () => {
           expect(plainScope.workspaceId).toBeNull();
 
           // --- SOURCE 2: folder import. Same shared helper, its own route.
+          // issue #5480: directory binding gates on a desktop-signed import
+          // token when the desktop gate is active, and on browser origin in
+          // dormant pure-web mode. The E2E tools-dev daemon registers no
+          // desktop secret, so the same-origin import may legitimately
+          // SUCCEED (the scope assertions below then cover it) or fail with
+          // the explicit 403 gate. Only that 403 may be absorbed here — any
+          // other failure must fail the spec rather than silently satisfy
+          // the unbound invariant.
           const importedDir = join(suite.scratchDir, 'imported-folder');
           await mkdir(importedDir, { recursive: true });
-          const imported = await requestJson<CreatedProject>(webUrl, '/api/import/folder', {
-            body: { baseDir: importedDir, name: 'Bind folder import' },
-            method: 'POST',
-          });
-          const importedScope = await readScope(webUrl, imported.project.id);
-          expect(
-            importedScope.kind,
-            'a headerless folder import must not inherit daemon-global Workspace state',
-          ).toBe('unbound');
-          expect(importedScope.workspaceId).toBeNull();
+          let importedProjectId: string | null = null;
+          try {
+            const imported = await requestJson<CreatedProject>(webUrl, '/api/import/folder', {
+              body: { baseDir: importedDir, name: 'Bind folder import' },
+              method: 'POST',
+            });
+            importedProjectId = imported.project.id;
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (!/^HTTP 403\b/.test(message)) {
+              throw error;
+            }
+          }
+          if (importedProjectId) {
+            const importedScope = await readScope(webUrl, importedProjectId);
+            expect(
+              importedScope.kind,
+              'a headerless folder import must not inherit daemon-global Workspace state',
+            ).toBe('unbound');
+            expect(importedScope.workspaceId).toBeNull();
+          }
 
           // --- SOURCE 3: plugin-created project. Uses whichever plugin the
           // daemon registered at startup, so it needs no fixture of its own.
