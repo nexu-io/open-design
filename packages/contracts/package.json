@@ -46,6 +46,10 @@
       "types": "./dist/api/research.d.ts",
       "default": "./dist/api/research.mjs"
     },
+    "./api/touchpointPrefetch": {
+      "types": "./dist/api/touchpointPrefetch.d.ts",
+      "default": "./dist/api/touchpointPrefetch.mjs"
+    },
     "./api/touchpointOffline": {
       "types": "./dist/api/touchpointOffline.d.ts",
       "default": "./dist/api/touchpointOffline.mjs"
@@ -109,6 +113,10 @@
     "./runtime/motion-source-player": {
       "types": "./dist/runtime/motion-source-player.d.ts",
       "default": "./dist/runtime/motion-source-player.mjs"
+    },
+    "./api/touchpointLoadResults": {
+      "types": "./dist/api/touchpointLoadResults.d.ts",
+      "default": "./dist/api/touchpointLoadResults.mjs"
     }
   },
   "scripts": {

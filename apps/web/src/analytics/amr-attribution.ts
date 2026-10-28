@@ -4,12 +4,14 @@ import type {
   TrackingCampaignConversionSource,
   TrackingCampaignId,
   TrackingPageName,
+  CmsTouchpointContext,
 } from '@open-design/contracts/analytics';
 import {
   readOnboardingProfile,
   type OnboardingProfile,
 } from '../state/onboarding-profile';
 import { trackAmrEntryClick } from './events';
+import { captureCmsPrimary, type CmsPrimaryCapture } from './cms-touchpoints';
 
 type Track = (
   event: string,
@@ -19,6 +21,8 @@ type Track = (
 
 interface RecordAmrEntryOptions {
   metricsConsent?: boolean;
+  /** CMS replaces the historical entry click with its canonical primary CTA. */
+  cmsCapture?: CmsPrimaryCapture | null;
   reuseExistingFrom?: readonly TrackingAmrEntrySource[];
   campaignId?: TrackingCampaignId;
   conversionSource?: TrackingCampaignConversionSource;
@@ -30,6 +34,7 @@ interface SyncAmrProfileOptions {
   now?: Date;
 }
 
+const cmsAttributions = new WeakMap<CmsTouchpointContext, Map<string, AmrEntryAttribution>>();
 const AMR_ATTRIBUTION_STORAGE_KEY = 'open-design:amr-entry-attribution:v1';
 const AMR_ATTRIBUTION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -72,6 +77,7 @@ const ENTRY_PAGE_BY_SOURCE: Record<TrackingAmrEntrySource, TrackingPageName> = {
   chat_upgrade_card: 'chat_panel',
   chat_upgrade_card_auto_recharge: 'chat_panel',
   home_balance_gate_upgrade: 'home',
+  cms_campaign_primary_cta: 'home',
   chat_low_balance_warn_recharge: 'chat_panel',
   home_low_balance_warn_recharge: 'home',
   chat_balance_gate_sign_in: 'chat_panel',
@@ -113,6 +119,12 @@ export function recordAmrEntry(
   now: Date = new Date(),
   options: RecordAmrEntryOptions = {},
 ): AmrEntryAttribution {
+  const cmsCapture = sourceDetail === 'cms_campaign_primary_cta' ? options.cmsCapture : null;
+  // CMS link clicks must never mint a Pricing entry, even through an explicit caller.
+  if (cmsCapture?.action && cmsCapture.action.target_kind !== 'console_pricing')
+    throw new TypeError('cms_pricing_target_required');
+  const reusedCms = cmsCapture && cmsAttributions.get(cmsCapture.context)?.get(cmsCapture.eventId);
+  if (reusedCms) return reusedCms;
   const existing = readReusableAmrAttribution(now, options.reuseExistingFrom);
   if (existing) return existing;
 
@@ -134,7 +146,14 @@ export function recordAmrEntry(
     ...(profile?.source ? { odSource: profile.source } : {}),
   };
   writeAmrAttribution(attribution);
-  trackAmrEntryClick(track, {
+  if (cmsCapture) {
+    let entries = cmsAttributions.get(cmsCapture.context);
+    if (!entries) { entries = new Map(); cmsAttributions.set(cmsCapture.context, entries); }
+    entries.set(cmsCapture.eventId, attribution);
+  }
+  if (sourceDetail === "cms_campaign_primary_cta") {
+    if (options.cmsCapture) captureCmsPrimary(track, options.cmsCapture, attribution);
+  } else trackAmrEntryClick(track, {
     page_name: ENTRY_PAGE_BY_SOURCE[sourceDetail],
     area: 'amr_entry',
     element: sourceDetail,
@@ -149,7 +168,7 @@ export function recordAmrEntry(
       : {}),
   });
   if (options.metricsConsent === true) {
-    void mirrorAmrEntryToAmrAnalytics(attribution);
+    void mirrorAmrEntryToAmrAnalytics(attribution, sourceDetail === "cms_campaign_primary_cta" ? options.cmsCapture?.eventId : undefined);
   }
   return attribution;
 }
@@ -308,6 +327,7 @@ function readReusableAmrAttribution(
 
 async function mirrorAmrEntryToAmrAnalytics(
   attribution: AmrEntryAttribution,
+  cmsEventId?: string,
 ): Promise<void> {
   if (typeof fetch !== 'function') return;
   const sourcePageName = ENTRY_PAGE_BY_SOURCE[attribution.sourceDetail];
@@ -318,6 +338,7 @@ async function mirrorAmrEntryToAmrAnalytics(
       body: JSON.stringify({
         payload: {
           pageName: 'open_design',
+          ...(cmsEventId ? { cmsEventId } : {}),
           sourcePageName,
           area: 'amr_entry',
           element: attribution.sourceDetail,

@@ -501,8 +501,10 @@ export function applyConsent(consentGranted: boolean): void {
       // 2026-05-20 04:35.
       restoreSuperProperties();
     } else {
-      client.opt_out_capturing();
+      // reset() also clears the SDK's persisted consent. Clear identity first
+      // so the final opt-out survives and gates explicit and automatic capture.
       client.reset();
+      client.opt_out_capturing();
       resolvedDeviceId = null;
     }
   } catch {

@@ -1,8 +1,17 @@
 // @vitest-environment jsdom
 // Deliberate red specs are ordinary tests: failures document unmet ticket expectations on main.
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { TouchpointSdk } from "@open-design/contracts";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider, useI18n } from "../../src/i18n";
+// These cases render in the default zh-TW locale, so the dialog's accessible name is localized.
+import { zhTW } from "../../src/i18n/locales/zh-TW";
 import { ProductionCampaignHover } from "../../src/components/ProductionCampaignHover";
 import { ProductionCampaignModal } from "../../src/components/ProductionCampaignModal";
 import {
@@ -11,11 +20,19 @@ import {
 } from "../../src/components/TestCampaignModal";
 import * as component from "../../src/components/touchpoint-component";
 import * as navigation from "../../src/components/touchpoint-navigation";
-import { TOUCHPOINT_POLL_MS } from "../../src/components/touchpoint-lifecycle";
+
+const cmsTrack = vi.hoisted(() => vi.fn());
+vi.mock("../../src/analytics/provider", () => ({
+  useAnalytics: () => ({ track: cmsTrack }),
+  useAppVersion: () => "0.0.0",
+}));
 
 vi.mock("@open-design/host", () => ({
   OPEN_DESIGN_HOST_VERSION: 2,
-  getOpenDesignHost: () => ({ version: 2, client: { type: "desktop", osLocale: "en-US" } }),
+  getOpenDesignHost: () => ({
+    version: 2,
+    client: { type: "desktop", osLocale: "en-US" },
+  }),
 }));
 
 const modal = "opend.home.campaign-modal";
@@ -113,6 +130,7 @@ async function directHover() {
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(epoch);
+  cmsTrack.mockReset();
   localStorage.clear();
   latest = null;
   hasBox = true;
@@ -121,36 +139,69 @@ beforeEach(() => {
   window.history.replaceState({}, "", "/");
   vi.spyOn(document, "hidden", "get").mockReturnValue(false);
   vi.spyOn(document.documentElement, "lang", "get").mockReturnValue("en");
-  vi.spyOn(HTMLElement.prototype, "getClientRects").mockImplementation(function (this: HTMLElement) {
-    return { length: hasBox && !this.hidden ? 1 : 0, item: () => null } as unknown as DOMRectList;
-  });
-  vi.stubGlobal("ResizeObserver", class {
-    private check: () => void;
-    constructor(callback: ResizeObserverCallback) { this.check = () => callback([], this as unknown as ResizeObserver); }
-    observe() { resizeChecks.add(this.check); }
-    disconnect() { resizeChecks.delete(this.check); }
-  });
+  vi.spyOn(HTMLElement.prototype, "getClientRects").mockImplementation(
+    function (this: HTMLElement) {
+      return {
+        length: hasBox && !this.hidden ? 1 : 0,
+        item: () => null,
+      } as unknown as DOMRectList;
+    },
+  );
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      private check: () => void;
+      constructor(callback: ResizeObserverCallback) {
+        this.check = () => callback([], this as unknown as ResizeObserver);
+      }
+      observe() {
+        resizeChecks.add(this.check);
+      }
+      disconnect() {
+        resizeChecks.delete(this.check);
+      }
+    },
+  );
   // jsdom cannot load verified blob ES modules. Only verification/material rendering is replaced;
   // request scheduling, locale resolution, mounts, visibility and acceptance POSTs remain real.
-  vi.spyOn(component, "verifyWebTouchpoint").mockResolvedValue({ entryUrl: "blob:cms-repro", resourceUrls: new Map(), dispose: vi.fn() } as never);
-  vi.spyOn(component.OpenDesignTouchpointElement.prototype, "mount").mockImplementation(async function (this: InstanceType<typeof component.OpenDesignTouchpointElement>, _url, _digest, host) {
-    this.shadowRoot?.replaceChildren(document.createTextNode(`${host.placementKey}:${host.locale}`));
+  vi.spyOn(component, "verifyWebTouchpoint").mockResolvedValue({
+    entryUrl: "blob:cms-repro",
+    resourceUrls: new Map(),
+    dispose: vi.fn(),
+  } as never);
+  vi.spyOn(
+    component.OpenDesignTouchpointElement.prototype,
+    "mount",
+  ).mockImplementation(async function (
+    this: InstanceType<typeof component.OpenDesignTouchpointElement>,
+    _url,
+    _digest,
+    host,
+  ) {
+    this.shadowRoot?.replaceChildren(
+      document.createTextNode(`${host.placementKey}:${host.locale}`),
+    );
   });
   document.addEventListener("touchpointdiagnostic", diagnosticListener);
   catalogReply = () => Response.json({ deployments: [deployment()] });
-  contextReply = id => Response.json(context(oldGeneration, id));
-  decisionReply = (key, locale, id) => Response.json(decision(key, locale, oldGeneration, id));
+  contextReply = (id) => Response.json(context(oldGeneration, id));
+  decisionReply = (key, locale, id) =>
+    Response.json(decision(key, locale, oldGeneration, id));
   productionReply = () => new Response(null, { status: 404 });
   acceptanceReply = () => Response.json({ id: "accepted" }, { status: 201 });
   fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
     const url = new URL(input, "http://localhost");
-    if (url.pathname.endsWith("/acceptances")) return acceptanceReply(JSON.parse(String(init?.body)));
+    if (url.pathname.endsWith("/acceptances"))
+      return acceptanceReply(JSON.parse(String(init?.body)));
     if (url.pathname.endsWith("/deployments")) return catalogReply();
-    if (url.pathname.endsWith("/context")) return contextReply(JSON.parse(String(init?.body)).deploymentId);
+    if (url.pathname.endsWith("/context"))
+      return contextReply(JSON.parse(String(init?.body)).deploymentId);
     const key = url.searchParams.get("placementKey") as Placement;
     const locale = url.searchParams.get("locale")!;
-    if (url.pathname === "/api/touchpoints/test-runtime") return decisionReply(key, locale, url.searchParams.get("deploymentId")!);
-    if (url.pathname === "/api/touchpoints/production-runtime") return productionReply(key, locale);
+    if (url.pathname === "/api/touchpoints/test-runtime")
+      return decisionReply(key, locale, url.searchParams.get("deploymentId")!);
+    if (url.pathname === "/api/touchpoints/production-runtime")
+      return productionReply(key, locale);
     throw new Error(`Unexpected local fixture request: ${url.pathname}`);
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -385,7 +436,7 @@ describe("OPEND-3298 context recovery and remaining P1", () => {
     if (failedPlacement === modal) expect(visibleEntry()).toBe(true);
     else {
       expect(visibleEntry()).toBe(false);
-      expect(screen.queryByRole("dialog", { name: "Test campaign" })).not.toBeNull();
+      expect(screen.queryByRole("dialog", { name: zhTW["campaign.testDialogLabel"] })).not.toBeNull();
     }
   });
 
@@ -408,7 +459,7 @@ describe("OPEND-3298 context recovery and remaining P1", () => {
     expect(latest?.decisions.has(entry)).toBe(true);
     expect(latest?.decisions.has(layer)).toBe(true);
     expect(latest?.decisions.has(modal)).toBe(false);
-    expect(screen.queryByRole("dialog", { name: "Test campaign" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: zhTW["campaign.testDialogLabel"] })).toBeNull();
     const mount = vi.mocked(component.OpenDesignTouchpointElement.prototype.mount);
     const hoverMounts = () => mount.mock.calls.filter(([, , host]) => host.placementKey !== modal).length;
     const initialMounts = hoverMounts();
@@ -425,25 +476,25 @@ describe("OPEND-3298 context recovery and remaining P1", () => {
   it("keeps an on-screen presentation when its renewal hangs", async () => {
     await start();
     expect(visibleEntry()).toBe(true);
-    expect(screen.queryByRole("dialog", { name: "Test campaign" })).not.toBeNull();
+    expect(screen.queryByRole("dialog", { name: zhTW["campaign.testDialogLabel"] })).not.toBeNull();
     decisionReply = (key, locale, id) => key === modal
       ? new Promise<Response>(() => {}) : Response.json(decision(key, locale, oldGeneration, id));
     act(() => window.dispatchEvent(new Event("focus")));
     await settle(12_000);
     expect(visibleEntry()).toBe(true);
-    expect(screen.queryByRole("dialog", { name: "Test campaign" })).not.toBeNull();
+    expect(screen.queryByRole("dialog", { name: zhTW["campaign.testDialogLabel"] })).not.toBeNull();
   });
 
   it("renews healthy presentations past the original lease while one renewal keeps hanging", async () => {
     await start();
     expect(visibleEntry()).toBe(true);
-    expect(screen.queryByRole("dialog", { name: "Test campaign" })).not.toBeNull();
+    expect(screen.queryByRole("dialog", { name: zhTW["campaign.testDialogLabel"] })).not.toBeNull();
     decisionReply = (key, locale, id) => key === modal
       ? new Promise<Response>(() => {}) : Response.json(decision(key, locale, oldGeneration, id));
     act(() => window.dispatchEvent(new Event("focus")));
     await settle(12_000);
     // The hung modal stays on screen within the authority it already had.
-    expect(screen.queryByRole("dialog", { name: "Test campaign" })).not.toBeNull();
+    expect(screen.queryByRole("dialog", { name: zhTW["campaign.testDialogLabel"] })).not.toBeNull();
     // Well past the first 60s lease: the hover kept renewing on its own answers
     // and never blinked out, while the modal lapsed with the authority its last
     // answer granted.
@@ -453,7 +504,7 @@ describe("OPEND-3298 context recovery and remaining P1", () => {
       if (!visibleEntry()) hidden.push(second);
     }
     expect(hidden).toEqual([]);
-    expect(screen.queryByRole("dialog", { name: "Test campaign" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: zhTW["campaign.testDialogLabel"] })).toBeNull();
   });
 
   it("holds a poll-driven timeout only to its own deadline without remounting healthy hover siblings", async () => {
@@ -468,26 +519,22 @@ describe("OPEND-3298 context recovery and remaining P1", () => {
     let hanging = true;
     decisionReply = (key, locale, id) => key === modal && hanging
       ? new Promise<Response>(() => {}) : Response.json(decision(key, locale, oldGeneration, id));
-    // No focus refresh: the first timeout is discovered by the ordinary poll at t=40s.
+    // No focus refresh: failed presentations retry on cadence while siblings
+    // renew without remounting. Recovery must need no focus/online event.
     for (let second = 1; second <= 150; second += 1) {
       await settle(1_000);
       expect(visibleEntry(), `hover at t=${second}s`).toBe(true);
       expect(hoverMounts(), `hover mounts at t=${second}s`).toBe(initialMounts);
       expect(latest?.decisions.get(entry)).toBe(originalEntry);
-      if (Date.now() < modalDeadline) expect(screen.queryByRole("dialog", { name: "Test campaign" })).not.toBeNull();
-      else {
-        expect(screen.queryByRole("dialog", { name: "Test campaign" })).toBeNull();
+      if (Date.now() < modalDeadline || second >= 110) expect(screen.queryByRole("dialog", { name: zhTW["campaign.testDialogLabel"] })).not.toBeNull();
+      else if (second <= 90) {
+        expect(screen.queryByRole("dialog", { name: zhTW["campaign.testDialogLabel"] })).toBeNull();
         expect(latest?.decisions.has(modal)).toBe(false);
       }
-      // Failed presentations stop automatic requests; only the healthy pair
-      // keeps polling. Merely changing the mock response cannot wake recovery.
-      if (Date.now() - epoch >= TOUCHPOINT_POLL_MS + TEST_PLACEMENT_REQUEST_TIMEOUT_MS)
-        expect(modalRequests(), `modal requests at t=${second}s`).toBe(2);
+      if (second >= 40)
+        expect(modalRequests(), `modal requests at t=${second}s`).toBeGreaterThan(2);
       if (second === 90) hanging = false;
     }
-    act(() => window.dispatchEvent(new Event("focus")));
-    await settle(32);
-    expect(modalRequests()).toBe(3);
     expect(latest?.decisions.has(modal)).toBe(true);
     expect(visibleEntry()).toBe(true);
     expect(hoverMounts()).toBe(initialMounts);
@@ -499,10 +546,10 @@ describe("OPEND-3298 context recovery and remaining P1", () => {
     decisionReply = (key, locale, id) => key === modal || (key === entry && hangEntry)
       ? new Promise<Response>(() => {}) : Response.json(decision(key, locale, oldGeneration, id));
     await start();
-    await settle(10_000);
+    await settle(9_000);
     expect(visibleEntry()).toBe(true);
     hangEntry = true;
-    await settle(49_000);
+    await settle(50_000);
     expect(latest?.decisions.has(entry)).toBe(true);
     await settle(1_000);
     expect(latest?.decisions.has(entry)).toBe(false);
@@ -558,16 +605,21 @@ describe("OPEND-3311 return-home timing", () => {
     expect(visibleEntry()).toBe(true);
   });
 
-  it("stops catalog retries and polling after a failed remount discovery", async () => {
+  it("keeps catalog polling after a failed remount discovery and recovers on cadence", async () => {
     const view = await start();
     view.rerender(<Home home={false} />);
     await settle(100);
     let catalogs = 0;
     catalogReply = () => { catalogs += 1; return new Response(null, { status: 500 }); };
+    decisionReply = () => new Response(null, { status: 503 });
     view.rerender(<Home />);
     await settle(120_000);
-    expect(catalogs).toBe(1);
+    expect(catalogs).toBe(5);
     expect(visibleEntry()).toBe(false);
+    catalogReply = () => Response.json({ deployments: [deployment()] });
+    decisionReply = (key, locale, id) => Response.json(decision(key, locale, oldGeneration, id));
+    await settle(30_000);
+    expect(visibleEntry()).toBe(true);
   });
 
   it("focus wakes failed catalog discovery immediately instead of waiting for its poll", async () => {
@@ -596,70 +648,119 @@ describe("OPEND-3311 return-home timing", () => {
 
 
 describe("adversarial Test placement authority", () => {
-  it.each([9_000, 100])("charges %sms of body download against a five-second grant", async delay => {
-    const grantedAt = Date.now();
-    const mount = vi.mocked(component.OpenDesignTouchpointElement.prototype.mount);
-    decisionReply = (key, locale, id) => {
-      const answer = { ...decision(key, locale, oldGeneration, id),
-        serverTime: new Date(grantedAt).toISOString(),
-        authorizationExpiresAt: new Date(grantedAt + 5_000).toISOString(),
+  it.each([9_000, 100])(
+    "charges %sms of body download against a five-second grant",
+    async (delay) => {
+      const grantedAt = Date.now();
+      const mount = vi.mocked(
+        component.OpenDesignTouchpointElement.prototype.mount,
+      );
+      decisionReply = (key, locale, id) => {
+        const answer = {
+          ...decision(key, locale, oldGeneration, id),
+          serverTime: new Date(grantedAt).toISOString(),
+          authorizationExpiresAt: new Date(grantedAt + 5_000).toISOString(),
+        };
+        const response = Response.json(answer);
+        vi.spyOn(response, "text").mockImplementation(
+          () =>
+            new Promise((resolve) => {
+              setTimeout(() => resolve(JSON.stringify(answer)), delay);
+            }),
+        );
+        return response;
       };
-      const response = Response.json(answer);
-      vi.spyOn(response, "json").mockImplementation(() => new Promise(resolve => {
-        setTimeout(() => resolve(answer), delay);
-      }));
-      return response;
-    };
-    await start();
-    expect(mount).not.toHaveBeenCalled();
-    await settle(delay);
-    if (delay > 5_000) {
-      expect(latest?.decisions.size ?? 0).toBe(0);
+      await start();
       expect(mount).not.toHaveBeenCalled();
-      expect(visibleEntry()).toBe(false);
-      expect(screen.queryByRole("dialog", { name: "Test campaign" })).toBeNull();
-    } else {
-      expect(latest?.decisions.size).toBe(3);
-      expect(visibleEntry()).toBe(true);
-      expect(screen.queryByRole("dialog", { name: "Test campaign" })).not.toBeNull();
-      // Do not run the expiry/pruning timers: authorization must read the clock itself.
-      vi.setSystemTime(grantedAt + 4_999);
-      expect(latest?.isAuthorized(modal)).toBe(true);
-      vi.setSystemTime(grantedAt + 5_000);
-      expect(latest?.isAuthorized(modal)).toBe(false);
-    }
-  });
+      await settle(delay);
+      if (delay > 5_000) {
+        expect(latest?.decisions.size ?? 0).toBe(0);
+        expect(mount).not.toHaveBeenCalled();
+        expect(visibleEntry()).toBe(false);
+        expect(
+          screen.queryByRole("dialog", { name: zhTW["campaign.testDialogLabel"] }),
+        ).toBeNull();
+      } else {
+        expect(latest?.decisions.size).toBe(3);
+        expect(visibleEntry()).toBe(true);
+        expect(
+          screen.queryByRole("dialog", { name: zhTW["campaign.testDialogLabel"] }),
+        ).not.toBeNull();
+        // Do not run the expiry/pruning timers: authorization must read the clock itself.
+        vi.setSystemTime(grantedAt + 4_999);
+        expect(latest?.isAuthorized(modal)).toBe(true);
+        vi.setSystemTime(grantedAt + 5_000);
+        expect(latest?.isAuthorized(modal)).toBe(false);
+      }
+    },
+  );
 
   it("denies a still-mounted expired layer CTA while its sibling grant is live", async () => {
     const target = { kind: "https" as const, url: "https://example.com" };
     const actions = [{ id: "plan", target }];
     let dispatchAction!: (id: string) => Promise<void>;
-    vi.mocked(component.OpenDesignTouchpointElement.prototype.mount).mockImplementation(async function (this: component.OpenDesignTouchpointElement, _url, _digest, host, _resources, _actions, options) {
-      this.shadowRoot?.replaceChildren(document.createTextNode(host.placementKey));
+    vi.mocked(
+      component.OpenDesignTouchpointElement.prototype.mount,
+    ).mockImplementation(async function (
+      this: component.OpenDesignTouchpointElement,
+      _url,
+      _digest,
+      host,
+      _resources,
+      _actions,
+      options,
+    ) {
+      this.shadowRoot?.replaceChildren(
+        document.createTextNode(host.placementKey),
+      );
       if (host.placementKey === layer) {
         dispatchAction = options!.dispatchAction!;
         const cta = document.createElement("button");
-        cta.onclick = () => { void dispatchAction("plan").catch(() => {}); };
+        cta.onclick = () => {
+          void dispatchAction("plan").catch(() => {});
+        };
         this.shadowRoot?.append(cta);
       }
     });
-    const navigate = vi.spyOn(navigation, "navigateCampaignTarget").mockResolvedValue(true);
-    vi.stubGlobal("navigator", new Proxy(navigator, { get: (value, property) => property === "userActivation" ? { isActive: true, hasBeenActive: true } : Reflect.get(value, property, value) }));
+    const navigate = vi
+      .spyOn(navigation, "navigateCampaignTarget")
+      .mockResolvedValue(true);
+    vi.stubGlobal(
+      "navigator",
+      new Proxy(navigator, {
+        get: (value, property) =>
+          property === "userActivation"
+            ? { isActive: true, hasBeenActive: true }
+            : Reflect.get(value, property, value),
+      }),
+    );
     const grantedAt = Date.now();
     decisionReply = (key, locale, id) => {
       const answer = decision(key, locale, oldGeneration, id);
-      return Response.json({ ...answer,
-        authorizationExpiresAt: new Date(grantedAt + (key === layer ? 5_000 : 60_000)).toISOString(),
+      return Response.json({
+        ...answer,
+        authorizationExpiresAt: new Date(
+          grantedAt + (key === layer ? 5_000 : 60_000),
+        ).toISOString(),
         staticActions: actions,
-        content: { ...answer.content, manifest: { ...manifest,
-          placements: manifest.placements.map(value => ({ ...value, staticActions: actions })),
-        } },
+        content: {
+          ...answer.content,
+          manifest: {
+            ...manifest,
+            placements: manifest.placements.map((value) => ({
+              ...value,
+              staticActions: actions,
+            })),
+          },
+        },
       });
     };
     await start();
     fireEvent.pointerEnter(hoverEntry()!);
     await settle(32);
-    const layerHost = Array.from(document.querySelectorAll("opend-touchpoint")).find(host => host.shadowRoot?.querySelector("button"));
+    const layerHost = Array.from(
+      document.querySelectorAll("opend-touchpoint"),
+    ).find((host) => host.shadowRoot?.querySelector("button"));
     expect(layerHost).toBeDefined();
     const session = latest!;
     const layerDecision = session.decisions.get(layer)!;
@@ -669,7 +770,9 @@ describe("adversarial Test placement authority", () => {
     expect(layerHost!.isConnected).toBe(true);
     expect(session.isAuthorized()).toBe(true);
     expect(session.isAuthorized(layer)).toBe(false);
-    await act(async () => { fireEvent.click(layerHost!.shadowRoot!.querySelector("button")!); });
+    await act(async () => {
+      fireEvent.click(layerHost!.shadowRoot!.querySelector("button")!);
+    });
     expect(navigate).not.toHaveBeenCalled();
     // A fresh visibility notification also cannot accept an expired placement.
     const acceptances = requests("/acceptances").length;
@@ -678,4 +781,87 @@ describe("adversarial Test placement authority", () => {
     recordVisibleTestTouchpoint(session, layerDecision, layer);
     expect(requests("/acceptances")).toHaveLength(acceptances);
   });
+});
+
+it("B2 Test genuine mounted visible hover X uses analytics only, never frozen raw hover C", async () => {
+  const sdks = new Map<string, TouchpointSdk>();
+  vi.mocked(
+    component.OpenDesignTouchpointElement.prototype.mount,
+  ).mockRestore();
+  vi.spyOn(component.webTouchpointModuleCache, "import").mockResolvedValue({
+    mount(root, host, sdk) {
+      sdks.set(host.placementKey, sdk);
+      const button = document.createElement("button");
+      button.textContent = "explicit X";
+      button.onclick = () => sdk.requestClose("close");
+      root.append(button);
+      return root;
+    },
+  });
+  const identity = {
+    testerMemberId: "account-a",
+    contextId: `ctx-v1:${"a".repeat(64)}`,
+    generation: "1",
+    contextToken: `ctx-token-v1:${"b".repeat(64)}`,
+  };
+  contextReply = (id) =>
+    Response.json({ ...context(oldGeneration, id), ...identity });
+  decisionReply = (key, locale, id) => {
+    const value = decision(key, locale, oldGeneration, id);
+    return Response.json({
+      ...value,
+      testContext: { ...value.testContext, ...identity },
+    });
+  };
+  const original = fetchMock.getMockImplementation()! as (
+    input: string,
+    init?: RequestInit,
+  ) => Promise<Response>;
+  fetchMock.mockImplementation(async (input: string, init?: RequestInit) =>
+    new URL(input, "http://localhost").pathname.endsWith("/events")
+      ? Response.json({ accepted: true })
+      : original(input, init),
+  );
+  await start();
+  const entry = hoverEntry()!;
+  await act(async () => {
+    fireEvent.pointerEnter(entry);
+  });
+  await settle(32);
+  const layerNode =
+    document.querySelector<HTMLElement>(
+      'opend-touchpoint[data-placement-key="opend.home.hover-layer"]',
+    ) ??
+    document.querySelectorAll<HTMLElement>(
+      '[data-testid="cms-hover-overlay-root"] opend-touchpoint',
+    )[1]!;
+  const button = layerNode.shadowRoot!.querySelector("button")!;
+  act(() => {
+    fireEvent.click(button);
+    sdks.get(layer)!.requestClose("close");
+  });
+  const x = cmsTrack.mock.calls.filter(
+    ([event, props]) =>
+      event === "ui_click" &&
+      props.area === "cms_hover_layer" &&
+      props.element === "close",
+  );
+  expect(x).toHaveLength(1);
+  expect(x[0]![1]).toMatchObject({
+    mode: "test",
+    placement_key: layer,
+    decision_id: null,
+    page_name: "home",
+  });
+  for (const key of ["action_id", "target_kind", "button_role"])
+    expect(x[0]![1]).not.toHaveProperty(key);
+  const raw = requests("/events").map(([, init]) =>
+    JSON.parse(String(init?.body)),
+  );
+  expect(
+    raw.some((body) => body.placementKey === layer && body.kind === "exposure"),
+  ).toBe(true);
+  expect(
+    raw.some((body) => body.placementKey === layer && body.kind === "click"),
+  ).toBe(false);
 });

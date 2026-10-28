@@ -19,6 +19,8 @@ export const zhCN: Dict = {
   'billing.codingPlanPeriodDays': '{count} 天',
   'billing.codingPlanRemainingPercent': '剩余 {percent}%',
   "campaign.testReplay": "重新查看测试活动",
+  "campaign.dialogLabel": "活动",
+  "campaign.testDialogLabel": "测试活动",
   'invite.header.eyebrow': "团队邀请",
   'invite.loading': "正在加载邀请…",
   'invite.landing.title': "加入团队",

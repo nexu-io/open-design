@@ -1,3 +1,6 @@
+import { TOUCHPOINT_PREFETCH_LOCALE_HEADER } from '@open-design/contracts/api/touchpointPrefetch';
+import { getOpenDesignHost } from '@open-design/host';
+import { detectInitialLocale } from '../i18n';
 /**
  * Daemon provider — fetch-based SSE client for /api/runs. The daemon can
  * emit three event streams depending on the agent's streamFormat:
@@ -1381,10 +1384,11 @@ export function readVelaLoginStatus(
   const query = options.refresh ? '?refresh=1' : '';
   const url = `/api/integrations/vela/status${query}`;
   const accountGeneration = currentWorkspaceAccountGeneration();
+  const touchpointLocale = getOpenDesignHost()?.client.type === 'desktop' ? detectInitialLocale() : null;
   return coalescedGet(
-    `vela-login-status:${accountGeneration}:${url}`,
+    `vela-login-status:${accountGeneration}:${url}:${touchpointLocale ?? ''}`,
     async (): Promise<VelaLoginStatusRead> => {
-      const resp = await fetch(url, { cache: 'no-store' });
+      const resp = await fetch(url, { cache: 'no-store', ...(touchpointLocale ? { headers: { [TOUCHPOINT_PREFETCH_LOCALE_HEADER]: touchpointLocale } } : {}) });
       const body = await resp.json().catch(() => null);
       return { ok: resp.ok, httpStatus: resp.status, body };
     },

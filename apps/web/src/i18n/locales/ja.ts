@@ -23,6 +23,8 @@ export const ja: Dict = {
   'billing.codingPlanPeriodDays': '{count} 日間',
   'billing.codingPlanRemainingPercent': '残り {percent}%',
   "campaign.testReplay": "テストアクティビティを再表示",
+  "campaign.dialogLabel": "アクティビティ",
+  "campaign.testDialogLabel": "テストアクティビティ",
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

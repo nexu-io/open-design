@@ -85,6 +85,8 @@ export * from './runtime/model-window-limit.js';
 export * from './runtime/membership-concurrency-limit.js';
 export * from './observability/runtime-evidence-graph-v1.js';
 export * from './touchpoint-component-v2.js';
+export * from './material-locale.js';
+export * from './material-provenance.js';
 export * from './design-systems/components-manifest.js';
 export * from './design-systems/derived-token-outputs.js';
 export * from './design-systems/token-schema.js';
@@ -116,6 +118,10 @@ export * from './analytics/observability.js';
 export * from './observability/index.js';
 
 export * from './api/amr-continuation.js';
+
+export * from "./api/touchpointLoadResults.js";
+
+export * from './material-action-roles.js';
 export * from './runtime/comment-identity.js';
 export * from './runtime/comment-identity-helpers.js';
 export * from './runtime/comment-identity-selector.js';

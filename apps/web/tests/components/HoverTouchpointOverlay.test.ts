@@ -10,9 +10,11 @@ import {
 	it,
 	vi,
 } from "vitest";
+import { TouchpointLoadOwner } from "../../src/components/touchpoint-load-observability";
+import type { TouchpointLoadRecord } from "@open-design/contracts/api/touchpointLoadResults";
 import type { WebTouchpointContent } from "../../src/components/touchpoint-component";
 
-const mounts = vi.fn(async () => undefined);
+const mounts = vi.fn(async (..._args: unknown[]) => undefined);
 const disposes = vi.fn(async () => undefined);
 const verify = vi.fn();
 vi.mock("../../src/components/touchpoint-component", async () => ({
@@ -150,8 +152,8 @@ describe("HoverTouchpointOverlay measured clipping", () => {
 	it("leaves fitting material shadows unclipped", async () => {
 		const { layer } = await setup();
 		expect(layer.style.overflow).toBe("visible");
-		expect(layer.style.maxWidth).toBe("384px");
-		expect(layer.style.maxHeight).toBe("240px");
+		expect(layer.style.maxWidth).toBe("368px");
+		expect(layer.style.maxHeight).toBe("232px");
 	});
 
 	it.each([[600, 60], [120, 600]])("scrolls content constrained in either axis (%i × %i) and recovers after content shrink", async (width, height) => {
@@ -179,8 +181,8 @@ describe("HoverTouchpointOverlay measured clipping", () => {
 		fireEvent.resize(window);
 		flushLayout();
 		expect(layer.style.overflow).toBe("visible");
-		expect(layer.style.maxWidth).toBe("984px");
-		expect(layer.style.maxHeight).toBe("940px");
+		expect(layer.style.maxWidth).toBe("968px");
+		expect(layer.style.maxHeight).toBe("932px");
 	});
 
 	it("checks overflow after width constraints reflow the material, then recovers when the viewport grows", async () => {
@@ -190,7 +192,7 @@ describe("HoverTouchpointOverlay measured clipping", () => {
 		});
 		act(() => resize());
 		flushLayout();
-		expect(layer.clientHeight).toBe(284);
+		expect(layer.clientHeight).toBe(268);
 		expect(layer.style.overflow).toBe("auto");
 		vi.spyOn(window, "innerWidth", "get").mockReturnValue(1000);
 		fireEvent.resize(window);
@@ -211,8 +213,8 @@ describe("HoverTouchpointOverlay measured clipping", () => {
 		});
 		act(() => resize());
 		flushLayout();
-		expect(layer.style.top).toBe("8px");
-		expect(layer.style.maxHeight).toBe("234px");
+		expect(layer.style.top).toBe("16px");
+		expect(layer.style.maxHeight).toBe("226px");
 		expect(layer.style.overflow).toBe("auto");
 	});
 });
@@ -330,13 +332,52 @@ describe("HoverTouchpointOverlay interaction boundary", () => {
 		expect(layer.parentElement).toHaveAttribute("hidden");
 	});
 
+	it("respects the size manuscript 16px boundary and 8px entry gap for compact cards", () => {
+		const viewport={left:0,top:0,right:800,bottom:600,width:800,height:600};
+		const card={width:280,height:400};
+		const below=placeHoverOverlay({left:730,top:16,right:754,bottom:40,width:24,height:24},card,viewport);
+		expect(below.left).toBe(504); expect(below.top).toBe(48);
+		expect(below.left+280).toBe(784); expect(below.maxWidth).toBe(768);
+		const above=placeHoverOverlay({left:730,top:550,right:754,bottom:574,width:24,height:24},card,viewport);
+		expect(above.placement).toBe("above"); expect(above.top+400).toBe(542);
+		const narrow=placeHoverOverlay({left:40,top:20,right:64,bottom:44,width:24,height:24},card,{left:0,top:0,right:200,bottom:180,width:200,height:180});
+		expect(narrow.left).toBe(16);expect(narrow.maxWidth).toBe(168);
+	});
+
+	it.each([0, 296])("keeps 16px safe edges when shifted near x=%i at either vertical edge", (left) => {
+		const viewport = { left: 0, top: 0, right: 320, bottom: 240, width: 320, height: 240 };
+		for (const top of [0, 216]) {
+			const anchor = { left, top, right: left + 24, bottom: top + 24, width: 24, height: 24 };
+			for (const height of [100, 300]) {
+				const result = placeHoverOverlay(anchor, { width: 180, height }, viewport);
+				expect(result.placement).toBe(top === 0 ? "below" : "above");
+				expect(result.left).toBe(left === 0 ? 16 : 124);
+				expect(result.top).toBeGreaterThanOrEqual(16);
+				expect(result.top + Math.min(height, result.maxHeight)).toBeLessThanOrEqual(224);
+				expect(result.maxWidth).toBe(288);
+				expect(result.maxHeight).toBe(top === 0 && height === 300 ? 208 : 192);
+				if (height === 100) {
+					expect(top === 0 ? result.top - anchor.bottom : anchor.top - result.top - height).toBe(8);
+				}
+			}
+		}
+	});
+
+	it("keeps the layer inside content when the entry is in an excluded native titlebar", () => {
+		const viewport={left:0,top:44,right:1226,bottom:671,width:1226,height:627};
+		const result=placeHoverOverlay({left:1004,top:10,right:1028,bottom:34,width:24,height:24},{width:280,height:275},viewport,16);
+		expect(result.top).toBe(60);
+		expect(result.left).toBe(930);
+		expect(result.top+275).toBeLessThanOrEqual(viewport.bottom-16);
+	});
+
 	it("flips above and clamps to a narrow viewport without changing keyboard dismissal", async () => {
 		const position = placeHoverOverlay(
 			{ left: 70, top: 80, right: 94, bottom: 104, width: 24, height: 24 },
 			{ width: 120, height: 60 },
 			{ left: 0, top: 0, right: 100, bottom: 110, width: 100, height: 110 },
 		);
-		expect(position).toMatchObject({ placement: "above", left: 8, maxWidth: 84 });
+		expect(position).toMatchObject({ placement: "above", left: 16, maxWidth: 68 });
 		const { container } = render(createElement(HoverTouchpointOverlay, {
 			entry: content("opend.home.hover-entry"),
 			layer: content("opend.home.hover-layer"),
@@ -345,6 +386,9 @@ describe("HoverTouchpointOverlay interaction boundary", () => {
 		const [entry, layer] = Array.from(container.querySelectorAll("opend-touchpoint")) as [HTMLElement, HTMLElement];
 		await waitFor(() => expect(entry).not.toHaveAttribute("hidden"));
 		act(() => entry.focus());
+		// ENT-4: Tab focus alone must not expand; Enter does.
+		expect(layer.parentElement).toHaveAttribute("hidden");
+		fireEvent.keyDown(entry, { key: "Enter" });
 		expect(layer.parentElement).not.toHaveAttribute("hidden");
 		fireEvent.keyDown(window, { key: "Escape" });
 		expect(layer.parentElement).toHaveAttribute("hidden");
@@ -449,5 +493,183 @@ describe("HoverTouchpointOverlay interaction boundary", () => {
 		await waitFor(() => expect(disposes).toHaveBeenCalledTimes(2));
 		expect(entryDispose).toHaveBeenCalledOnce();
 		expect(layerDispose).toHaveBeenCalledOnce();
+	});
+});
+
+describe("explicit SDK X callback fencing", () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+		vi.useRealTimers();
+	});
+	it("rejects callbacks from a replaced pair even when its successor is visible and authorized", async () => {
+		vi.useFakeTimers();
+		vi.spyOn(document, "hidden", "get").mockReturnValue(false);
+		vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue({
+			length: 1,
+		} as DOMRectList);
+		vi.stubGlobal(
+			"ResizeObserver",
+			class {
+				observe() {}
+				disconnect() {}
+			},
+		);
+		const onLayerClose = vi.fn();
+		const authorized = () => true;
+		const props = {
+			entry: content("opend.home.hover-entry"),
+			layer: content("opend.home.hover-layer"),
+			isAuthorized: authorized,
+			onLayerClose,
+		};
+		const view = render(createElement(HoverTouchpointOverlay, props));
+		await act(async () => {});
+		const old = mounts.mock.calls[1]![5] as {
+			requestClose: (reason?: string) => void;
+		};
+		await act(async () => {
+			fireEvent.pointerEnter(view.container.querySelector("opend-touchpoint")!);
+		});
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(32);
+		});
+		view.rerender(
+			createElement(HoverTouchpointOverlay, {
+				...props,
+				layer: { ...props.layer, id: "foreign-content" },
+			}),
+		);
+		await act(async () => {});
+		const fresh = mounts.mock.calls[3]![5] as {
+			requestClose: (reason?: string) => void;
+		};
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(32);
+		});
+		act(() => old.requestClose("close"));
+		expect(onLayerClose).not.toHaveBeenCalled();
+		act(() => fresh.requestClose("close"));
+		expect(onLayerClose).toHaveBeenCalledTimes(1);
+		view.unmount();
+		act(() => fresh.requestClose("close"));
+		expect(onLayerClose).toHaveBeenCalledTimes(1);
+	});
+});
+
+
+describe("CMS-HST-003 explicit keyboard close records", () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+		vi.spyOn(document, "hidden", "get").mockReturnValue(false);
+		vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue({ length: 1 } as DOMRectList);
+		vi.stubGlobal("ResizeObserver", class {
+			observe() {}
+			disconnect() {}
+		});
+	});
+	afterEach(() => {
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+		vi.useRealTimers();
+	});
+
+	it.each(["Escape", "SDK X"])("records %s once without dispatching content actions and restores focus", async (trigger) => {
+		const onLayerClose = vi.fn();
+		const onLayerVisible = vi.fn();
+		const dispatchEntryAction = vi.fn();
+		const dispatchLayerAction = vi.fn();
+		const view = render(createElement(HoverTouchpointOverlay, {
+			entry: content("opend.home.hover-entry"),
+			layer: content("opend.home.hover-layer"),
+			isAuthorized: () => true,
+			onLayerClose, onLayerVisible, dispatchEntryAction, dispatchLayerAction,
+		}));
+		await act(async () => {});
+		const [entry, layer] = Array.from(view.container.querySelectorAll("opend-touchpoint")) as [HTMLElement, HTMLElement];
+		act(() => { entry.focus(); fireEvent.click(entry); });
+		await act(async () => { await vi.advanceTimersByTimeAsync(32); });
+		expect(onLayerVisible).toHaveBeenCalledOnce();
+		const button = document.createElement("button");
+		layer.appendChild(button);
+		act(() => button.focus());
+		const close = () => {
+			if (trigger === "Escape") fireEvent.keyDown(window, { key: "Escape" });
+			else (mounts.mock.calls[1]![5] as { requestClose: (reason: string) => void }).requestClose("close");
+		};
+		act(close);
+		expect(layer.parentElement).toHaveAttribute("hidden");
+		expect(document.activeElement).toBe(entry);
+		expect(onLayerClose).toHaveBeenCalledOnce();
+		act(close);
+		expect(onLayerClose).toHaveBeenCalledOnce();
+		expect(dispatchEntryAction).not.toHaveBeenCalled();
+		expect(dispatchLayerAction).not.toHaveBeenCalled();
+	});
+
+	it.each(["revoked", "hidden", "unseen", "replaced"])("does not record Escape for %s content", async (state) => {
+		let authorized = true;
+		const onLayerClose = vi.fn();
+		const onLayerVisible = vi.fn();
+		const props = {
+			entry: content("opend.home.hover-entry"),
+			layer: content("opend.home.hover-layer"),
+			isAuthorized: () => authorized,
+			onLayerClose, onLayerVisible,
+		};
+		const view = render(createElement(HoverTouchpointOverlay, props));
+		await act(async () => {});
+		const [entry, layer] = Array.from(view.container.querySelectorAll("opend-touchpoint")) as [HTMLElement, HTMLElement];
+		act(() => { entry.focus(); fireEvent.click(entry); });
+		if (state !== "unseen") {
+			await act(async () => { await vi.advanceTimersByTimeAsync(32); });
+			expect(onLayerVisible).toHaveBeenCalledOnce();
+		}
+		if (state === "revoked") authorized = false;
+		if (state === "hidden") layer.hidden = true;
+		if (state === "replaced") {
+			verify.mockImplementation(() => new Promise(() => {}));
+			view.rerender(createElement(HoverTouchpointOverlay, { ...props, layer: { ...props.layer, id: "replacement" } }));
+		}
+		fireEvent.keyDown(window, { key: "Escape" });
+		expect(layer.parentElement).toHaveAttribute("hidden");
+		expect(document.activeElement).toBe(entry);
+		expect(onLayerClose).not.toHaveBeenCalled();
+	});
+});
+
+describe("OBS-004 hover visibility failures", () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+		vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+		vi.spyOn(document, "hidden", "get").mockReturnValue(false);
+		vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue({ length: 1 } as DOMRectList);
+	});
+	afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
+	it.each(["entry", "layer"] as const)("disposes the pair after a controlled %s visibility failure", async (half) => {
+		const records: TouchpointLoadRecord[] = [];
+		const owner = new TouchpointLoadOwner("production", "en-US", record => records.push(record));
+		const entry = content("opend.home.hover-entry"), layer = content("opend.home.hover-layer");
+		const attempt = (value: WebTouchpointContent) => owner.decision(value.placementKey, owner.begin(value.placementKey), {
+			activityId: "activity", deploymentId: "deployment", touchpointDecisionId: value.placementKey, content: value,
+		});
+		const onDiagnostic = vi.fn(), onEntryVisible = vi.fn(), onLayerVisible = vi.fn();
+		const view = render(createElement(HoverTouchpointOverlay, { entry, layer, entryAttempt: attempt(entry), layerAttempt: attempt(layer), isAuthorized: () => true, onDiagnostic, onEntryVisible, onLayerVisible }));
+		await act(async () => {});
+		const [entryElement, layerElement] = Array.from(view.container.querySelectorAll<HTMLElement>("opend-touchpoint"));
+		Object.defineProperty(half === "entry" ? entryElement! : layerElement!, "getClientRects", { configurable: true, value: vi.fn(() => { throw new Error("platform detail"); }) });
+		if (half === "layer") fireEvent.pointerEnter(entryElement!);
+		await act(async () => { await vi.advanceTimersByTimeAsync(16); });
+		const failed = records.filter(record => record.result === "failed");
+		expect(failed).toEqual([expect.objectContaining({ placement_key: `opend.home.hover-${half}`, failure_stage: "visibility", error_code: "visibility_error" })]);
+		expect(onDiagnostic).toHaveBeenCalledWith("touchpoint_visibility_failed");
+		expect(disposes).toHaveBeenCalledTimes(2);
+		expect(entryElement).toHaveAttribute("hidden");
+		expect(layerElement).toHaveAttribute("hidden");
+		const terminalCount = records.filter(record => record.kind === "terminal").length;
+		document.dispatchEvent(new Event("visibilitychange"));
+		await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+		expect(records.filter(record => record.kind === "terminal")).toHaveLength(terminalCount);
+		expect(onLayerVisible).not.toHaveBeenCalled();
 	});
 });

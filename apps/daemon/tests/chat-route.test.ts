@@ -3590,38 +3590,45 @@ const timer = setInterval(() => {
   });
 
   it('surfaces Claude auth diagnostics through the SSE error channel', async () => {
-    await withFakeAgent(
-      'claude',
-      `
+    const configuredEndpoint = process.env.ANTHROPIC_BASE_URL;
+    delete process.env.ANTHROPIC_BASE_URL;
+    try {
+      await withFakeAgent(
+        'claude',
+        `
 console.error(JSON.stringify({ apiKeySource: 'none', error_status: 401 }));
 process.exit(1);
 `,
-      async () => {
-        const createResponse = await fetch(`${baseUrl}/api/runs`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            agentId: 'claude',
-            message: 'hello',
-          }),
-        });
-        expect(createResponse.status).toBe(202);
-        const { runId } = await createResponse.json() as { runId: string };
+        async () => {
+          const createResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'claude',
+              message: 'hello',
+            }),
+          });
+          expect(createResponse.status).toBe(202);
+          const { runId } = await createResponse.json() as { runId: string };
 
-        const eventsController = new AbortController();
-        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
-          signal: eventsController.signal,
-        });
-        const eventsBody = await readSseUntil(eventsResponse, 'event: error');
-        eventsController.abort();
-        const statusBody = await waitForRunStatus(baseUrl, runId);
+          const eventsController = new AbortController();
+          const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+            signal: eventsController.signal,
+          });
+          const eventsBody = await readSseUntil(eventsResponse, 'event: error');
+          eventsController.abort();
+          const statusBody = await waitForRunStatus(baseUrl, runId);
 
-        expect(eventsBody).toContain('event: error');
-        expect(eventsBody).toContain('/login');
-        expect(eventsBody).toContain('CLAUDE_CONFIG_DIR');
-        expect(statusBody.status).toBe('failed');
-      },
-    );
+          expect(eventsBody).toContain('event: error');
+          expect(eventsBody).toContain('/login');
+          expect(eventsBody).toContain('CLAUDE_CONFIG_DIR');
+          expect(statusBody.status).toBe('failed');
+        },
+      );
+    } finally {
+      if (configuredEndpoint === undefined) delete process.env.ANTHROPIC_BASE_URL;
+      else process.env.ANTHROPIC_BASE_URL = configuredEndpoint;
+    }
   });
 
   it('prefers a terminal Claude prompt-length error over auth-shaped stderr (#6979)', async () => {

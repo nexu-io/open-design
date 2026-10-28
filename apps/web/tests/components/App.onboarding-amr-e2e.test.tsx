@@ -315,8 +315,9 @@ describe('CMS campaigns outside the home view', () => {
     restoreHost = undefined;
   });
   // Every campaign placement this app authorizes is a HOME placement
-  // (`opend.home.*`). The hosts follow: the modal and the top-right entries
-  // belong to the home view, not to a project workbench or another entry tab.
+  // (`opend.home.*`). The modal and the account badge belong to the home view,
+  // not to a project workbench or another entry tab. OPEND-3040 is the one
+  // exception: the marketing hover also mounts in the project workspace.
   const witnesses = () => ({
     modals: [
       screen.queryByRole('dialog', { name: 'Production campaign witness' }),
@@ -414,8 +415,14 @@ describe('CMS campaigns outside the home view', () => {
       }),
     );
     const inProject = witnesses();
-    expect(inProject.modals).toEqual([null, null]);
-    expect(inProject.topRight).toEqual([null, null]);
+    // OPEND-3040: the marketing hover lives in the project workspace now, and
+    // the Test host is its runtime owner, so it stays mounted here — the mock's
+    // dialog is only a presence witness, not a real modal. The production modal
+    // and the account badge stay home-only.
+    expect(inProject.modals[0]).toBeNull();
+    expect(inProject.modals[1]).not.toBeNull();
+    expect(inProject.topRight[0]).toBeNull();
+    expect(inProject.topRight[1]).not.toBeNull();
   });
 });
 

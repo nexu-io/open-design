@@ -23,6 +23,8 @@ export const ar: Dict = {
   'billing.codingPlanPeriodDays': '{count} أيام',
   'billing.codingPlanRemainingPercent': 'متبقّي {percent}%',
   "campaign.testReplay": "إعادة فتح النشاط التجريبي",
+  "campaign.dialogLabel": "النشاط",
+  "campaign.testDialogLabel": "النشاط التجريبي",
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

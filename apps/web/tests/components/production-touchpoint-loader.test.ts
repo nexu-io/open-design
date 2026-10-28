@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { touchpointRevocationReceiptOf } from "@open-design/contracts/api/touchpointOffline";
+import { TouchpointLoadOwner } from "../../src/components/touchpoint-load-observability";
+import type { TouchpointLoadRecord } from "@open-design/contracts/api/touchpointLoadResults";
 import { ProductionTouchpointLoadError, loadProductionTouchpointDecision } from "../../src/components/production-touchpoint-loader";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -84,3 +86,50 @@ describe("production touchpoint decision loader", () => {
 		await expect(loadProductionTouchpointDecision("opend.home.account-badge", "en-US", new AbortController().signal)).rejects.toBe(abort);
 	});
 });
+
+it("requests quiet 200 absence and retains the old 404 classification without softening authorization errors", async () => {
+  const signal = new AbortController().signal;
+  const fetchMock = vi.fn(async () => new Response(JSON.stringify({ decision: null }), { status: 200 }));
+  vi.stubGlobal('fetch', fetchMock);
+  expect(await loadProductionTouchpointDecision('opend.home.hover-entry', 'en-US', signal)).toEqual({ kind: 'no-decision' });
+  expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('emptyResponse=200'), expect.objectContaining({ signal }));
+  for (const status of [401, 403]) {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ decision: null }), { status }));
+    await expect(loadProductionTouchpointDecision('opend.home.hover-entry', 'en-US', signal)).rejects.toMatchObject({ detail: `http_${status}`, touchpointWithdrawal: true, touchpointOfflineFallback: false });
+  }
+  const abort = new DOMException('aborted', 'AbortError');
+  fetchMock.mockRejectedValueOnce(abort);
+  await expect(loadProductionTouchpointDecision('opend.home.hover-entry', 'en-US', signal)).rejects.toBe(abort);
+});
+
+it('consumes controlled server resource failures while rejecting arbitrary exception fields', async () => {
+  const records: TouchpointLoadRecord[] = [];
+  const owner = new TouchpointLoadOwner('production', 'en-US', record => records.push(record));
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ error: 'resource_unavailable', failure_stage: 'resource_read', error_code: 'network_error', detail: 'secret URL' }, { status: 503 })));
+  await expect(loadProductionTouchpointDecision('opend.home.hover-entry', 'en-US', new AbortController().signal, undefined, owner)).rejects.toMatchObject({ detail: 'http_503' });
+  expect(records.at(-1)).toMatchObject({ failure_stage: 'resource_read', error_code: 'network_error', http_status: 503 });
+  expect(JSON.stringify(records)).not.toContain('secret URL');
+});
+
+ it("OBS-004 proposal records body transport failure after headers without losing Error identity", async () => {
+   const records: TouchpointLoadRecord[] = [];
+   const owner = new TouchpointLoadOwner("production", "en-US", record => records.push(record));
+   const error = new TypeError("private stream URL");
+   const response = Response.json({ decision: null });
+   Object.defineProperty(response, "text", { value: async () => { throw error; } });
+   vi.stubGlobal("fetch", vi.fn(async () => response));
+   await expect(loadProductionTouchpointDecision("opend.home.campaign-modal", "en-US", new AbortController().signal, undefined, owner)).rejects.toBe(error);
+   expect(records.filter(r => r.kind === "terminal")).toEqual([expect.objectContaining({ result: "failed", failure_stage: "transfer", error_code: "network_error", http_status: 200 })]);
+   expect(JSON.stringify(records)).not.toContain("private stream URL");
+ });
+ it.each([false, true])("OBS-004 preserves a body AbortError when signal aborted=%s", async (aborted) => {
+   const records: TouchpointLoadRecord[] = [];
+   const owner = new TouchpointLoadOwner("production", "en-US", record => records.push(record));
+   const controller = new AbortController();
+   const error = new DOMException("aborted", "AbortError");
+   const response = Response.json({ decision: null });
+   Object.defineProperty(response, "text", { value: async () => { if (aborted) controller.abort(); throw error; } });
+   vi.stubGlobal("fetch", vi.fn(async () => response));
+   await expect(loadProductionTouchpointDecision("opend.home.campaign-modal", "en-US", controller.signal, undefined, owner)).rejects.toBe(error);
+   expect(records.some(r => r.result === "failed")).toBe(false);
+ });

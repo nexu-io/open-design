@@ -123,7 +123,6 @@ export function useTestDeploymentSelection({
 	manual,
 	initialSelection = null,
 	onSelection,
-	pauseAutomaticRequests,
 	onRequestResult,
 }: {
 	enabled: boolean;
@@ -132,7 +131,6 @@ export function useTestDeploymentSelection({
 	/** An already-authorized in-process selection, never an offline directory grant. */
 	initialSelection?: TestDeployment | null;
 	onSelection?: (selected: TestDeployment | null) => void;
-	pauseAutomaticRequests?: () => boolean;
 	/** Only a completed directory read clears its own failure state. */
 	onRequestResult?: (failed: boolean) => void;
 }) {
@@ -154,14 +152,12 @@ export function useTestDeploymentSelection({
 		let disposed = false;
 		let request: AbortController | null = null;
 		let timeout: ReturnType<typeof setTimeout> | undefined;
-		let failed = false;
 		const cancel = () => {
 			request?.abort();
 			request = null;
 			clearTimeout(timeout);
 		};
 		const pause = () => {
-			failed = true;
 			onRequestResult?.(true);
 		};
 		const refresh = async () => {
@@ -223,7 +219,6 @@ export function useTestDeploymentSelection({
 					}
 				} while (cursor !== null);
 				if (!current()) return;
-				failed = false;
 				onRequestResult?.(false);
 				{
 					const previous = stateRef.current;
@@ -276,11 +271,10 @@ export function useTestDeploymentSelection({
 			else wake();
 		};
 		void refresh();
-		// OPEND-3436: a failed catalog or runtime round waits for one recovery
-		// event. A successful empty directory still uses normal discovery polling.
-		const interval = setInterval(() => {
-			if (!failed && !pauseAutomaticRequests?.()) void refresh();
-		}, POLL_MS);
+		// D-POLL: discovery keeps its cadence after its own failure and after a
+		// runtime failure, so a cleared fault is picked up without a reload or a
+		// recovery event. `refresh` still refuses while the browser reports offline.
+		const interval = setInterval(() => void refresh(), POLL_MS);
 		window.addEventListener("focus", wake);
 		window.addEventListener("online", wake);
 		window.addEventListener("pageshow", wake);
@@ -296,7 +290,7 @@ export function useTestDeploymentSelection({
 			window.removeEventListener("offline", cancel);
 			document.removeEventListener("visibilitychange", visibility);
 		};
-	}, [enabled, owner, manual, onSelection, pauseAutomaticRequests, onRequestResult]);
+	}, [enabled, owner, manual, onSelection, onRequestResult]);
 
 	const select = useCallback(
 		(id: string) => {

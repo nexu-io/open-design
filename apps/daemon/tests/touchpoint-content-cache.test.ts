@@ -180,8 +180,7 @@ describe('touchpoint content cache', () => {
   it('still rebuilds when the server answered in a fallback locale', () => {
     const cache = createTouchpointContentCache(dataDir);
     const requested = { scope: SCOPE, placementKey: MODAL.placementKey, locale: 'zh-CN' } as const;
-    // Vela resolves a placement locale through [requested, base language,
-    // en-US], so a zh-CN request is legitimately answered with en-US content.
+    // A legacy placement legitimately falls back from zh-CN to en-US.
     const full = fullResponse(MODAL.placementKey, 'modal.js', MODAL_ENTRY);
     cache.remember(requested, full);
     const held = cache.held(requested);
@@ -190,6 +189,35 @@ describe('touchpoint content cache', () => {
     // strand every placement the server answers through a fallback.
     expect(held).toEqual({ heldContentId: 'version-1', heldContentLocale: 'en-US' });
     expect(cache.reassemble(requested, held!, trimmedResponse(full))).toEqual(full);
+  });
+
+  it.each([SCOPE, `test:${SCOPE}:deployment-1`])('holds actual canonical en for a French request across restart in %s', scope => {
+    const requested = { scope, placementKey: MODAL.placementKey, locale: 'fr' };
+    const material = {
+      version: 1, materialVersionId: '10000000-0000-4000-8000-000000000001',
+      sourceHash: 'a'.repeat(64), templateId: 'locale-test', templateVersion: 1,
+      rendererDigest: `sha256:${'b'.repeat(64)}`, compilerIdentity: 'test-compiler', sourceDslVersion: 3,
+    };
+    const original = fullResponse(MODAL.placementKey, 'modal.js', MODAL_ENTRY);
+    const selectedManifest = {
+      ...original.content.manifest, material,
+      placements: original.content.manifest.placements.map(p => ({ ...p, locales: ['en'] })),
+    };
+    const full = { ...original, content: { ...original.content, locale: 'en', manifest: selectedManifest, manifestHash: digest(JSON.stringify(selectedManifest)) } };
+    const cache = createTouchpointContentCache(dataDir);
+    cache.remember(requested, full);
+    cache.close();
+    const restarted = createTouchpointContentCache(dataDir);
+    const held = restarted.held(requested);
+    expect(held).toEqual({ heldContentId: 'version-1', heldContentLocale: 'en' });
+    const rebuilt = restarted.reassemble(requested, held!, trimmedResponse(full));
+    expect(rebuilt).toEqual(full);
+    expect(JSON.stringify(rebuilt)).toBe(JSON.stringify(full));
+    // A normalized English alias cannot stand in for the exact offered pair.
+    expect(restarted.reassemble(requested, { ...held!, heldContentLocale: 'en-US' }, trimmedResponse(full))).toBeNull();
+    expect(restarted.reassemble(requested, { ...held!, heldContentLocale: 'EN' }, trimmedResponse(full))).toBeNull();
+    expect(restarted.held({ ...requested, locale: 'en' })).toBeNull();
+    restarted.close();
   });
 
   it('refuses to rebuild from a blob whose bytes no longer match its digest', () => {

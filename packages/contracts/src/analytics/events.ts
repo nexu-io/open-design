@@ -23,3 +23,5 @@ export * from './events/result-events.js';
 export * from './events/event-payload.js';
 export * from './events/mappers.js';
 export * from './events/design-system-helpers.js';
+
+export * from './events/cms-touchpoints.js';

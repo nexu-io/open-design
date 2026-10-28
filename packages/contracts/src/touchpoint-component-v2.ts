@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { materialActionRolesSchema } from "./material-action-roles.js";
+import { materialProvenanceSchema } from "./material-provenance.js";
 
 /**
  * Controlled mirror of @vela/shared's CMS v2 fixture. It is intentionally
@@ -22,11 +24,14 @@ export const TOUCHPOINT_COMPONENT_V2_UPSTREAM_PROVENANCE = Object.freeze({
 });
 
 export const TOUCHPOINT_COMPONENT_V2_RUNTIME_KIND = "web-component" as const;
-export const TOUCHPOINT_COMPONENT_V2_RUNTIME_API_VERSION = 1 as const;
+export const TOUCHPOINT_COMPONENT_V2_RUNTIME_API_VERSION = 2 as const;
 export const TOUCHPOINT_COMPONENT_V2_WRAPPER_VERSION =
 	"vela-touchpoint-wrapper-v1" as const;
 export const TOUCHPOINT_COMPONENT_V2_SDK_VERSION =
 	"vela-touchpoint-sdk-v1" as const;
+
+export type TouchpointRuntimeApiVersion = 1 | 2;
+export const TOUCHPOINT_PHASE2_CAPABILITIES = ["countdown-v1", "action-console-pricing-v1"] as const;
 
 const INTERNAL_ACTION_SENTINEL_ORIGIN = "https://vela.invalid";
 
@@ -46,7 +51,7 @@ function hasSentinelInternalOrigin(path: string): boolean {
 	}
 }
 
-const placementKeySchema = z.enum([
+export const placementKeySchema = z.enum([
 	"opend.home.campaign-modal",
 	"opend.home.account-badge",
 	"opend.home.hover-layer",
@@ -58,60 +63,70 @@ const packagePathSchema = z
 	.min(1)
 	.max(512)
 	.regex(/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[A-Za-z0-9][A-Za-z0-9._/-]*$/u);
-const staticActionSchema = z.object({
-	id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u),
-	target: z.discriminatedUnion("kind", [
-		z.object({
-			kind: z.literal("https"),
-			url: z
-				.string()
-				.max(2048)
-				.superRefine((value, context) => {
-					try {
-						const parsed = new URL(value);
-						if (
-							parsed.protocol !== "https:" ||
-							parsed.username ||
-							parsed.password
+const staticActionSchema = z
+	.object({
+		id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u),
+		target: z.discriminatedUnion("kind", [
+			z.object({ kind: z.literal("console-pricing") }).strict(),
+			z
+				.object({
+					kind: z.literal("https"),
+					url: z
+						.string()
+						.max(2048)
+						.superRefine((value, context) => {
+							try {
+								const parsed = new URL(value);
+								if (
+									parsed.protocol !== "https:" ||
+									parsed.username ||
+									parsed.password
+								)
+									context.addIssue({
+										code: z.ZodIssueCode.custom,
+										message:
+											"action URL must be static HTTPS without credentials",
+									});
+							} catch {
+								context.addIssue({
+									code: z.ZodIssueCode.custom,
+									message: "action URL must be valid HTTPS",
+								});
+							}
+						}),
+				})
+				.strict(),
+			z
+				.object({
+					/** Parsed across hosts; only the Vela host may execute this action. */
+					kind: z.literal("vela-personal-subscription"),
+					resourceId: z.literal("vela.dashboard.personal-subscription"),
+				})
+				.strict(),
+			z
+				.object({
+					kind: z.literal("internal"),
+					path: z
+						.string()
+						.max(1024)
+						.regex(/^\/(?!\/).*$/u)
+						.refine(
+							(value) => !value.includes("\\"),
+							"internal action path must not contain backslashes",
 						)
-							context.addIssue({
-								code: z.ZodIssueCode.custom,
-								message: "action URL must be static HTTPS without credentials",
-							});
-					} catch {
-						context.addIssue({
-							code: z.ZodIssueCode.custom,
-							message: "action URL must be valid HTTPS",
-						});
-					}
-				}),
-		}),
-		z.object({
-			/** Parsed across hosts; only the Vela host may execute this action. */
-			kind: z.literal("vela-personal-subscription"),
-			resourceId: z.literal("vela.dashboard.personal-subscription"),
-		}),
-		z.object({
-			kind: z.literal("internal"),
-			path: z
-				.string()
-				.max(1024)
-				.regex(/^\/(?!\/).*$/u)
-				.refine(
-					(value) => !value.includes("\\"),
-					"internal action path must not contain backslashes",
-				)
-				.refine(
-					(value) => !value.split("/").includes(".."),
-					"internal action path must not traverse",
-				)
-				.refine(
-					hasSentinelInternalOrigin,
-					"internal action path must resolve on the sentinel origin",
-				),
-		}),
-	]),
-});
+						.refine(
+							(value) => !value.split("/").includes(".."),
+							"internal action path must not traverse",
+						)
+						.refine(
+							hasSentinelInternalOrigin,
+							"internal action path must resolve on the sentinel origin",
+						),
+				})
+				.strict(),
+		]),
+	})
+	.strict();
 const imageOptimizationSchema = z.object({
 	source: packagePathSchema,
 	output: packagePathSchema,
@@ -123,9 +138,11 @@ const imageOptimizationSchema = z.object({
 /** Controlled mirror of Vela's frozen v2 manifest contract, including defaults and cross-field checks. */
 export const TouchpointComponentV2ManifestSchema = z
 	.object({
+		material: materialProvenanceSchema.optional(),
+		roleBindings: materialActionRolesSchema.optional(),
 		formatVersion: z.literal(2),
 		runtimeKind: z.literal(TOUCHPOINT_COMPONENT_V2_RUNTIME_KIND),
-		runtimeApiVersion: z.literal(TOUCHPOINT_COMPONENT_V2_RUNTIME_API_VERSION),
+		runtimeApiVersion: z.union([z.literal(1), z.literal(2)]),
 		platformWrapperVersion: z.literal(TOUCHPOINT_COMPONENT_V2_WRAPPER_VERSION),
 		sdkVersion: z.literal(TOUCHPOINT_COMPONENT_V2_SDK_VERSION),
 		contentLine: z.string().min(1).max(128),
@@ -149,6 +166,15 @@ export const TouchpointComponentV2ManifestSchema = z
 		images: z.array(imageOptimizationSchema).max(2048).default([]),
 	})
 	.superRefine((manifest, context) => {
+		if (manifest.roleBindings) {
+            if (manifest.material?.sourceDslVersion !== 3)
+                context.addIssue({ code: "custom", path: ["roleBindings"], message: "role bindings require material source DSL 3" });
+            for (const [index, binding] of manifest.roleBindings.bindings.entries()) {
+                const placement = manifest.placements.find(p => p.key === binding.placementKey);
+                if (!placement || !placement.staticActions.some(a => a.id === binding.buttonId))
+                    context.addIssue({ code: "custom", path: ["roleBindings", "bindings", index], message: "role binding requires a declared placement and static action ID" });
+            }
+        }
 		const declared = new Set(manifest.resources);
 		const claimed = new Set<string>();
 		const entries = new Set<string>();
@@ -203,6 +229,10 @@ export const TouchpointComponentV2ManifestSchema = z
 					message: "each placement must have its own entry",
 				});
 			entries.add(placement.entry);
+			if (manifest.runtimeApiVersion === 1 && placement.requiredCapabilities.some((capability) => (TOUCHPOINT_PHASE2_CAPABILITIES as readonly string[]).includes(capability)))
+				context.addIssue({ code: z.ZodIssueCode.custom, path: ["placements", index, "requiredCapabilities"], message: "phase 2 capabilities require runtime API 2" });
+			if (placement.staticActions.some((action) => action.target.kind === "console-pricing") && !placement.requiredCapabilities.includes("action-console-pricing-v1"))
+				context.addIssue({ code: z.ZodIssueCode.custom, path: ["placements", index, "requiredCapabilities"], message: "console-pricing requires action-console-pricing-v1" });
 			const locales = new Set<string>();
 			const actionIds = new Set<string>();
 			for (const [localeIndex, locale] of placement.locales.entries()) {
@@ -493,23 +523,25 @@ export function parseTouchpointComponentV2Fixture(
 
 /** Runtime primitives for the sole v2 Web Component contract. */
 export type TouchpointDiagnostic = Readonly<{ code: string; detail?: string }>;
+export type TouchpointCloseReason = "secondary_close" | "close";
 export type TouchpointSdk = Readonly<{
-	runtimeApiVersion: typeof TOUCHPOINT_COMPONENT_V2_RUNTIME_API_VERSION;
+	runtimeApiVersion: TouchpointRuntimeApiVersion;
 	signal: AbortSignal;
 	now: () => number;
 	dispatchAction: (actionId: string) => Promise<void>;
 	getResourceUrl: (resourceId: string) => string | undefined;
-	requestClose: () => void;
+	requestClose: (reason?: TouchpointCloseReason) => void;
 	diagnose: (diagnostic: TouchpointDiagnostic) => void;
 	onCleanup: (cleanup: () => void) => () => void;
 }>;
 export type TouchpointSdkHost = Readonly<{
+	runtimeApiVersion?: TouchpointRuntimeApiVersion;
 	signal: AbortSignal;
 	actionIds: ReadonlySet<string>;
 	resources: ReadonlyMap<string, string>;
 	now: () => number;
 	dispatchAction?: (actionId: string) => Promise<void>;
-	requestClose?: () => void;
+	requestClose?: (reason?: TouchpointCloseReason) => void;
 	diagnose?: (diagnostic: TouchpointDiagnostic) => void;
 }>;
 export type RevocableTouchpointSdk = Readonly<{
@@ -526,7 +558,8 @@ export function createTouchpointSdk(
 		host.diagnose?.(diagnostic);
 	const live = () => !revoked && !host.signal.aborted;
 	const sdk: TouchpointSdk = Object.freeze({
-		runtimeApiVersion: TOUCHPOINT_COMPONENT_V2_RUNTIME_API_VERSION,
+		// Callers that omit negotiation retain the historical API-1 SDK.
+		runtimeApiVersion: host.runtimeApiVersion ?? 1,
 		signal: host.signal,
 		now: host.now,
 		dispatchAction: async (actionId) => {
@@ -542,12 +575,13 @@ export function createTouchpointSdk(
 		},
 		getResourceUrl: (resourceId) =>
 			live() ? host.resources.get(resourceId) : undefined,
-		requestClose: () => {
+		requestClose: (reason) => {
 			if (!live()) {
 				diagnose({ code: "sdk_revoked_close" });
 				return;
 			}
-			host.requestClose?.();
+			// Old renderers omit the reason; malformed values cannot forge a category.
+			host.requestClose?.(reason === "secondary_close" || reason === "close" ? reason : undefined);
 		},
 		diagnose,
 		onCleanup: (cleanup) => {
@@ -630,8 +664,21 @@ export class TouchpointModuleCache<T = unknown> {
 	}
 }
 
-/** Latest-wins update queue for the sole v2 component runtime. */
+/** Trusted time supplied by the authorized runtime response, never by creative data. */
+export type TouchpointTimeContext = Readonly<{
+	schedule: Readonly<{ endsAt: string }>;
+	serverOffsetMs: number;
+}>;
+
+/** Remaining countdown duration; renderers may format it but must never display negatives. */
+export function touchpointCountdownMs(context: TouchpointTimeContext, deviceNow: number): number {
+	return Math.max(0, Date.parse(context.schedule.endsAt) - (deviceNow + context.serverOffsetMs));
+}
+
+/** Latest-wins update queue for the v1/v2 component runtime. */
 export type TouchpointComponentContext = Readonly<{
+	schedule?: TouchpointTimeContext["schedule"];
+	serverOffsetMs?: number;
 	instanceId: string;
 	contentVersionId: string;
 	placementKey: string;

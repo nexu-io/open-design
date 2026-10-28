@@ -23,6 +23,8 @@ export const esES: Dict = {
   'billing.codingPlanPeriodDays': '{count} días',
   'billing.codingPlanRemainingPercent': 'Queda {percent} %',
   "campaign.testReplay": "Volver a abrir la actividad de prueba",
+  "campaign.dialogLabel": "Actividad",
+  "campaign.testDialogLabel": "Actividad de prueba",
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

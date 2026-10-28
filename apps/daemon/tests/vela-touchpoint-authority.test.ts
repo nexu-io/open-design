@@ -265,6 +265,10 @@ describe('pending 410 authority', () => {
 });
 
 describe('revocation history eviction through the real proxy sequence', () => {
+  // These 257-request cases cross the real durable cache capacity boundary.
+  // Keep all fsyncs and assertions; allow the same macOS I/O headroom as the
+  // durable scope-eviction tests instead of relaxing the whole suite timeout.
+  const durableRequestSequenceTimeoutMs = 60_000;
   it('serves a late online response but never persists withdrawn authority after 257 subsequent receipts', async () => {
     await answer(200, { ...decision(), deploymentId: 'other-delivery' }); attempts.at(-1)!.request.emit('close');
     // start executes the real route held -> ticket path before the upstream is answered.
@@ -279,15 +283,15 @@ describe('revocation history eviction through the real proxy sequence', () => {
     expect((await answer(503, {}, { locale: 'zh-TW' })).status).toBe(503); attempts.at(-1)!.request.emit('close');
     await answer(200, decision(), { locale: 'zh-TW' }); attempts.at(-1)!.request.emit('close');
     expect((await answer(503, {}, { locale: 'zh-TW' })).offline).toBe('1');
-  });
-  it('releases request capacity on close so sequential attempts keep caching', async () => {
+  }, durableRequestSequenceTimeoutMs);
+  it('releases request capacity after response classification so sequential attempts keep caching', async () => {
     for (let i = 0; i < 257; i++) {
       await answer(200, decision()); attempts.at(-1)!.request.emit('close');
     }
     await answer(404, {}); attempts.at(-1)!.request.emit('close');
     await answer(200, decision()); attempts.at(-1)!.request.emit('close');
     expect((await answer(503, {})).offline).toBe('1');
-  });
+  }, durableRequestSequenceTimeoutMs);
 });
 
 

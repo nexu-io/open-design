@@ -74,9 +74,13 @@ describe('DeepSeek V4 Flash workbench campaign entry', () => {
     expect(entryShellSource).not.toMatch(
       /topRightSlot=\{\s*homeCampaignHostsVisible\s*&&/,
     );
+    // OPEND-3040: the project slot also opens for a signed-in account so the
+    // CMS hover can sit beside (not replace) the single built-in pill.
     expect(entryNavRailSource).toMatch(
-      /export function WorkspaceTopRightAccountCluster[\s\S]*?leadingSlot=\{\s*campaignAudience\s*\?\s*\(/,
+      /export function WorkspaceTopRightAccountCluster[\s\S]*?leadingSlot=\{\s*campaignAudience\s*\|\|\s*amrLoggedIn === true\s*\?\s*\(/,
     );
+    // Exactly one built-in pill in the project cluster; the hover never duplicates it.
+    expect(entryNavRailSource.match(/<WorkbenchCampaignBadge/g)).toHaveLength(1);
     expect(entryNavRailSource).toMatch(
       /export function WorkspaceTopRightAccountCluster[\s\S]*?leadingSlot=\{[\s\S]*?<WorkbenchCampaignBadge[\s\S]*?audience=\{campaignAudience\}[\s\S]*?page="project"/,
     );
@@ -85,10 +89,10 @@ describe('DeepSeek V4 Flash workbench campaign entry', () => {
     );
   });
 
-  it('keeps every CMS touchpoint host on the home view', () => {
-    // `opend.home.*` is the only placement family this app authorizes, so the
-    // account badge, the hover entry and the modals are home hosts. The
-    // workbench corner carries none of them.
+  it('keeps the modal and badge on home and adds only the hover host to the project workspace', () => {
+    // OPEND-3040 (product-confirmed): the marketing hover entry is also shown
+    // in the project workspace. The modal and the account badge stay
+    // home-only.
     expect(entryShellSource).toContain("const homeCampaignHostsVisible = view === 'home';");
     expect(entryShellSource).toMatch(
       /homeCampaignHostsVisible\s*&&\s*canRenderProductionCampaignBadge\(amrLoggedIn === true, amrAccountId\)\s*\?\s*<ProductionCampaignBadge authenticated sessionSubject=\{amrAccountId\}/,
@@ -97,8 +101,15 @@ describe('DeepSeek V4 Flash workbench campaign entry', () => {
       /homeCampaignHostsVisible\s*\?\s*\(\s*<ProductionCampaignHover\s+authenticated=\{amrLoggedIn === true\}\s+sessionSubject=\{amrAccountId\}/,
     );
     expect(entryNavRailSource).not.toContain('ProductionCampaignBadge');
+    expect(entryNavRailSource).toMatch(
+      /export function WorkspaceTopRightAccountCluster[\s\S]*?amrLoggedIn === true \? \(\s*<ProductionCampaignHover authenticated sessionSubject=\{amrAccountId\} \/>/,
+    );
+    // The Test runtime owner renders no modal UI; it feeds the project hover.
     expect(appSource).toMatch(
-      /\{route\.kind === 'home' && route\.view === 'home' && \([\s\S]*?<TestCampaignModal[\s\S]*?<ProductionCampaignModal/,
+      /\{\(\(route\.kind === 'home' && route\.view === 'home'\) \|\| route\.kind === 'project'\) \? \(\s*<TestCampaignModal/,
+    );
+    expect(appSource).toMatch(
+      /\{route\.kind === 'home' && route\.view === 'home' \? \(\s*<ProductionCampaignModal/,
     );
   });
 

@@ -1,4 +1,13 @@
+import { TOUCHPOINT_PREFETCH_LOCALE_HEADER } from '@open-design/contracts/api/touchpointPrefetch';
+import fs from 'node:fs';
+import path from 'node:path';
+import { isDesktopAuthRegistered, observeDesktopAuth } from '../desktop-auth.js';
+import { createTouchpointPrefetch, type TouchpointProxyRequest, type TouchpointProxyResponse } from './touchpoint-prefetch.js';
+import { normalizeTelemetryAppVersion, readCurrentAppVersionInfo } from '../app-version.js';
+import { touchpointLoadBatchSchema, TOUCHPOINT_LOAD_BODY_BYTES, parseTouchpointLoadMetrics } from '@open-design/contracts/api/touchpointLoadResults';
+import { touchpointMetricsHeader, touchpointResourceSizes, TOUCHPOINT_LOAD_METRICS_HEADER } from '../services/touchpoint-load-metrics.js';
 import type { Express, Request, Response } from 'express';
+import { touchpointTestBehaviorEventSchema, TOUCHPOINT_TEST_BEHAVIOR_BODY_LIMIT, touchpointTestAutomatedReportSchema, TOUCHPOINT_TEST_AUTOMATED_REPORT_BODY_LIMIT } from '@open-design/contracts/api/touchpointTestRuntime';
 import type {
   TestRuntimeAcceptanceRequest,
   TestRuntimeContextRequest,
@@ -16,7 +25,7 @@ import {
   spawnEnvForAgent,
 } from '../agents.js';
 import { readAnalyticsContext } from '../analytics.js';
-import { agentCliEnvForAgent, type AppConfigPrefs, writeAppConfig } from '../app-config.js';
+import { agentCliEnvForAgent, type AppConfigPrefs, writeAppConfig, observeAppConfig } from '../app-config.js';
 import {
   validateExternalPluginContext,
   validatePluginWorkflowId,
@@ -247,7 +256,7 @@ function pluginLoginCorrelationEnv(input: {
   }
 }
 
-function velaProxyRequestBody(req: Request): Buffer | null {
+function velaProxyRequestBody(req: Pick<Request, 'method' | 'body'>): Buffer | null {
   if (req.method === 'GET' || req.method === 'HEAD') return null;
   if (Buffer.isBuffer(req.body)) return req.body;
   if (typeof req.body === 'string') return Buffer.from(req.body);
@@ -585,10 +594,89 @@ function touchpointCacheScope(context: {
 export interface VelaRoutesLifecycle { close(): Promise<void>; }
 type TouchpointRequests = { closing: boolean; active: Map<() => void, Promise<void>> };
 
+/** Single authenticated write seam. No caller headers, queries, redirects or cache. */
+function proxyTestBehavior(req: TouchpointProxyRequest, res: TouchpointProxyResponse, context: { apiUrl: string; controlKey: string }, requests?: TouchpointRequests): void {
+  const body = velaProxyRequestBody(req);
+  const declared = req.headers['content-length'];
+  // The global JSON parser already consumed the stream. Requiring the wire
+  // length prevents chunked/whitespace bodies evading this narrower budget.
+  if (declared === undefined) { res.status(411).json({ error: 'touchpoint_test_behavior_length_required' }); return; }
+  if (req.headers['content-encoding'] && req.headers['content-encoding'] !== 'identity') {
+    res.status(415).json({ error: 'touchpoint_test_behavior_encoding_unsupported' }); return;
+  }
+  if ((declared !== undefined && (!/^\d+$/.test(String(declared)) || Number(declared) > TOUCHPOINT_TEST_BEHAVIOR_BODY_LIMIT)) || (body && body.byteLength > TOUCHPOINT_TEST_BEHAVIOR_BODY_LIMIT)) {
+    res.status(413).json({ error: 'touchpoint_test_behavior_body_too_large' }); return;
+  }
+  if (Object.keys(req.query).length || !touchpointTestBehaviorEventSchema.safeParse(req.body).success) {
+    res.status(400).json({ error: 'invalid_touchpoint_test_behavior' }); return;
+  }
+  const target = new URL('/api/v1/touchpoints/runtime/test-events', context.apiUrl);
+  if (!['http:', 'https:'].includes(target.protocol) || target.username || target.password) {
+    res.status(500).json({ error: 'invalid_vela_api_url' }); return;
+  }
+  if (requests?.closing) { res.status(503).json({ error: 'touchpoint_runtime_closing' }); return; }
+  let settled = false;
+  let incoming: http.IncomingMessage | undefined;
+  let upstream: http.ClientRequest | undefined;
+  let deadline: ReturnType<typeof setTimeout> | undefined;
+  let resolveDone: () => void = () => undefined;
+  const done = new Promise<void>(resolve => { resolveDone = resolve; });
+  const finish = () => {
+    if (settled) return false;
+    settled = true;
+    clearTimeout(deadline);
+    requests?.active.delete(cancel);
+    resolveDone();
+    return true;
+  };
+  const fail = (status: number, error: string) => {
+    if (!finish()) return;
+    incoming?.destroy();
+    upstream?.destroy();
+    if (!res.writableEnded && !res.destroyed) res.status(status).json({ error });
+  };
+  const cancel = () => {
+    if (!finish()) return;
+    incoming?.destroy(); upstream?.destroy();
+    if (!res.destroyed && !res.writableEnded) res.status(503).json({ error: 'touchpoint_runtime_closing' });
+  };
+  upstream = (target.protocol === 'https:' ? https : http).request(target, {
+    method: 'POST', headers: { accept: 'application/json', 'content-type': 'application/json',
+      'content-length': String(body?.byteLength ?? 0), authorization: `Bearer ${context.controlKey}` },
+  }, response => {
+    incoming = response;
+    if (settled) { response.destroy(); return; }
+    const status = response.statusCode ?? 502;
+    if (status >= 300 && status < 400) { fail(502, 'touchpoint_test_behavior_redirect'); return; }
+    const chunks: Buffer[] = [];
+    let bytes = 0;
+    response.on('data', (chunk: Buffer) => {
+      if (settled) return;
+      bytes += chunk.length;
+      if (bytes > TOUCHPOINT_TEST_BEHAVIOR_BODY_LIMIT) { fail(502, 'touchpoint_test_behavior_response_too_large'); return; }
+      chunks.push(chunk);
+    });
+    response.on('error', () => fail(502, 'touchpoint_runtime_unavailable'));
+    response.on('aborted', () => fail(502, 'touchpoint_runtime_unavailable'));
+    response.on('end', () => {
+      if (!finish()) return;
+      res.setHeader('content-type', 'application/json');
+      res.status(status).end(Buffer.concat(chunks, bytes));
+    });
+  });
+  deadline = setTimeout(() => fail(504, 'touchpoint_test_behavior_timeout'), 5_000);
+  deadline.unref?.();
+  requests?.active.set(cancel, done);
+  upstream.on('error', () => fail(502, 'touchpoint_runtime_unavailable'));
+  req.once('aborted', cancel);
+  res.once('close', cancel);
+  upstream.end(body);
+}
+
 function proxyTouchpointRuntimeRequest(
-  req: Request,
-  res: Response,
-  context: { profile?: string; apiUrl: string; controlKey?: string },
+  req: TouchpointProxyRequest,
+  res: TouchpointProxyResponse,
+  context: { profile?: string; apiUrl: string; controlKey?: string; daemonVersion?: string | null },
   runtime: 'test' | 'production',
   contentCache?: TouchpointContentCache,
   requests?: TouchpointRequests,
@@ -601,12 +689,13 @@ function proxyTouchpointRuntimeRequest(
   // keeps its separately enumerated context/deployment routes; neither proxy
   // forwards a browser-supplied Vela credential or arbitrary path.
   let suffix: string | null = null;
-  if (runtime === 'production') {
+  if (req.method === 'POST' && runtimePath === '/load-results') suffix = '/load-results';
+  else if (runtime === 'production') {
     if (req.method === 'GET' && runtimePath === '/') suffix = '/production';
     else if (req.method === 'POST' && runtimePath === '/events') suffix = '/events';
   } else if (
     req.method === 'POST' &&
-    /^\/test-deployments\/[A-Za-z0-9_-]{1,128}\/acceptances$/u.test(runtimePath)
+    /^\/test-deployments\/[A-Za-z0-9_-]{1,128}\/(?:acceptances|automated-reports)$/u.test(runtimePath)
   ) {
     suffix = runtimePath;
   } else if (req.method === 'GET' && runtimePath === '/deployments') {
@@ -615,11 +704,17 @@ function proxyTouchpointRuntimeRequest(
     suffix = '/test';
   } else if (req.method === 'POST' && runtimePath === '/context') {
     suffix = '/test-context';
+  } else if (req.method === 'POST' && runtimePath === '/events') {
+    suffix = '/test-events';
   }
   if (!suffix || !context.controlKey) {
     res.status(context.controlKey ? 404 : 401).json({
       error: context.controlKey ? 'unknown_touchpoint_runtime_path' : 'vela_control_key_required',
     });
+    return;
+  }
+  if (suffix === '/test-events') {
+    proxyTestBehavior(req, res, { apiUrl: context.apiUrl, controlKey: context.controlKey }, requests);
     return;
   }
   const query = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
@@ -632,6 +727,26 @@ function proxyTouchpointRuntimeRequest(
     return;
   }
   const body = req.method === 'POST' ? velaProxyRequestBody(req) : null;
+  if (suffix.endsWith('/automated-reports')) {
+    const declared = req.headers['content-length'];
+    if ((declared !== undefined && (!/^\d+$/.test(String(declared)) || Number(declared) > TOUCHPOINT_TEST_AUTOMATED_REPORT_BODY_LIMIT)) || (body && body.byteLength > TOUCHPOINT_TEST_AUTOMATED_REPORT_BODY_LIMIT)) {
+      res.status(413).json({ error: 'automated_report_body_too_large' }); return;
+    }
+    if (!touchpointTestAutomatedReportSchema.safeParse(req.body).success) {
+      res.status(400).json({ error: 'invalid_automated_report' }); return;
+    }
+  }
+  if (suffix === '/load-results') {
+    const declared = req.headers['content-length'];
+    if ((declared !== undefined && (!/^\d+$/.test(String(declared)) || Number(declared) > TOUCHPOINT_LOAD_BODY_BYTES)) || (body && body.byteLength > TOUCHPOINT_LOAD_BODY_BYTES)) {
+      res.status(413).json({ error: 'touchpoint_load_body_too_large' }); return;
+    }
+    let payload: unknown;
+    try { payload = body ? JSON.parse(body.toString('utf8')) : null; } catch { payload = null; }
+    if (!touchpointLoadBatchSchema.safeParse(payload).success) {
+      res.status(400).json({ error: 'invalid_touchpoint_load_batch' }); return;
+    }
+  }
   // Content assembly applies to exactly one route: the read-only production
   // decision. Everything else keeps the verbatim streaming path.
   const authorityScope = runtime === 'production'
@@ -724,7 +839,10 @@ function proxyTouchpointRuntimeRequest(
     res.status(200);
     res.setHeader('content-type', 'application/json');
     res.setHeader(TOUCHPOINT_OFFLINE_REPLAY_HEADER, '1');
-    res.end(Buffer.from(JSON.stringify(replayed), 'utf8'));
+    const localBody = Buffer.from(JSON.stringify(replayed), 'utf8');
+    const resources = touchpointResourceSizes(replayed);
+    res.setHeader(TOUCHPOINT_LOAD_METRICS_HEADER, touchpointMetricsHeader({ daemon_version: context.daemonVersion ?? null, cache_hit: true, cache_source: 'offline_fallback', local_response_bytes: localBody.byteLength, local_base64_bytes: resources.base64, decoded_resource_bytes: resources.decoded }));
+    res.end(localBody);
     return true;
   };
   /**
@@ -841,11 +959,13 @@ function proxyTouchpointRuntimeRequest(
       // oversized, or unreadable. Keep bytes for a later authenticated renewal.
       if (upstreamStatus !== null) refuseCachedAuthority(upstreamStatus);
       if (callerGone) { settleCutShort(); upstreamRes.destroy(); return; }
+      const upstreamMetrics = parseTouchpointLoadMetrics(typeof upstreamRes.headers[TOUCHPOINT_LOAD_METRICS_HEADER] === 'string' ? upstreamRes.headers[TOUCHPOINT_LOAD_METRICS_HEADER] : null);
       const passThrough = () => {
         upstreamRes.once('end', () => { bodyEnded = true; finishOperation(); });
         upstreamRes.once('error', settleCutShort);
         upstreamRes.once('close', () => { if (!bodyEnded) settleCutShort(); });
         res.status(upstreamRes.statusCode ?? 502);
+        res.setHeader(TOUCHPOINT_LOAD_METRICS_HEADER, touchpointMetricsHeader({ daemon_version: context.daemonVersion ?? null, server_version: upstreamMetrics?.server_version ?? null, resource_read_ms: upstreamMetrics?.resource_read_ms ?? null }));
         res.setHeader('content-type', upstreamRes.headers['content-type'] ?? 'application/json');
         // Without this the client would decode gzip bytes as JSON. It is set only
         // when upstream actually encoded, so an unencoded reply is unaffected.
@@ -866,6 +986,7 @@ function proxyTouchpointRuntimeRequest(
       let failed = false;
       let streaming = false;
       let answered = false;
+      let firstBodyByte: number | null = null;
       const forward = (chunk: Buffer): void => {
         if (!chunk.byteLength) return;
         if (!res.write(chunk)) {
@@ -885,6 +1006,7 @@ function proxyTouchpointRuntimeRequest(
        */
       const degradeToStreaming = (): void => {
         streaming = true;
+        res.setHeader(TOUCHPOINT_LOAD_METRICS_HEADER, touchpointMetricsHeader({ daemon_version: context.daemonVersion ?? null }));
         res.status(upstreamRes.statusCode ?? 502);
         res.setHeader('content-type', upstreamRes.headers['content-type'] ?? 'application/json');
         const contentEncoding = upstreamRes.headers['content-encoding'];
@@ -931,6 +1053,7 @@ function proxyTouchpointRuntimeRequest(
         settleCutShort();
       });
       upstreamRes.on('data', (chunk: Buffer) => {
+        if (firstBodyByte === null && chunk.byteLength) firstBodyByte = performance.now();
         if (answered) return;
         if (streaming) {
           forward(chunk);
@@ -961,7 +1084,23 @@ function proxyTouchpointRuntimeRequest(
         }
         if (failed || res.headersSent) return;
         const raw = Buffer.concat(chunks, size);
+        const publicTransferMs = firstBodyByte === null ? null : Math.max(0, performance.now() - firstBodyByte);
         chunks.length = 0;
+        const annotate = (localBody: Buffer, publicBody: unknown = null, localContent: unknown = publicBody, assembled = false, compressedEcho = false) => {
+          const publicSizes = touchpointResourceSizes(publicBody), localSizes = touchpointResourceSizes(localContent);
+          res.setHeader(TOUCHPOINT_LOAD_METRICS_HEADER, touchpointMetricsHeader({
+            daemon_version: context.daemonVersion ?? null,
+            public_transfer_ms: publicTransferMs, public_response_bytes: raw.byteLength,
+            local_response_bytes: compressedEcho ? null : localBody.byteLength,
+            public_base64_bytes: publicSizes.base64, local_base64_bytes: localSizes.base64,
+            decoded_resource_bytes: localSizes.decoded,
+            resource_read_ms: assembled ? null : upstreamMetrics?.resource_read_ms ?? null,
+            server_version: upstreamMetrics?.server_version ?? null,
+            cache_hit: assembled ? true : null, cache_source: assembled ? 'daemon' : null,
+            held_content_id: held?.heldContentId ?? null, held_content_locale: held?.heldContentLocale ?? null,
+            content_omitted: publicBody && typeof publicBody === 'object' && 'contentOmitted' in publicBody ? (publicBody as { contentOmitted?: boolean }).contentOmitted ?? null : null,
+          }));
+        };
         const echo = () => {
           finishOperation();
           res.status(upstreamRes.statusCode ?? 502);
@@ -969,6 +1108,9 @@ function proxyTouchpointRuntimeRequest(
           const contentEncoding = upstreamRes.headers['content-encoding'];
           if (typeof contentEncoding === 'string' && contentEncoding)
             res.setHeader('content-encoding', contentEncoding);
+          let parsedEcho: unknown = null;
+          try { const text = decodeProxyBody(raw, upstreamRes.headers['content-encoding'] as string | undefined, MAX_BUFFERED_DECISION_BYTES); if (text) parsedEcho = JSON.parse(text.toString('utf8')); } catch { /* Unknown body remains unknown. */ }
+          annotate(raw, parsedEcho, parsedEcho, false, Boolean(upstreamRes.headers['content-encoding']));
           res.end(raw);
         };
         const decoded = decodeProxyBody(
@@ -1022,6 +1164,7 @@ function proxyTouchpointRuntimeRequest(
           finishOperation();
           res.status(200);
           res.setHeader('content-type', upstreamRes.headers['content-type'] ?? 'application/json');
+          annotate(decoded, decision);
           res.end(decoded);
           return;
         }
@@ -1035,7 +1178,9 @@ function proxyTouchpointRuntimeRequest(
           finishOperation();
           res.status(200);
           res.setHeader('content-type', 'application/json');
-          res.end(Buffer.from(JSON.stringify(full), 'utf8'));
+          const localBody = Buffer.from(JSON.stringify(full), 'utf8');
+          annotate(localBody, decision, full, true);
+          res.end(localBody);
           return;
         }
         // The one thing that must never happen is a campaign that does not show
@@ -1069,6 +1214,7 @@ function proxyTouchpointRuntimeRequest(
 
 export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): VelaRoutesLifecycle {
   const env = deps.env ?? process.env;
+  const daemonVersion = readCurrentAppVersionInfo({ env }).then(info => normalizeTelemetryAppVersion(info.version)).catch(() => null);
   const onCredentialStateObserved =
     deps.onCredentialStateObserved ?? (() => undefined);
   const { RUNTIME_DATA_DIR } = deps.paths;
@@ -1082,6 +1228,9 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
     close() {
       if (closePromise) return closePromise;
       requests.closing = true;
+      stopDesktopObserver();
+      stopConfigObserver();
+      prefetch.close();
       closePromise = (async () => {
         const pending = [...requests.active.entries()];
         for (const [abort] of pending) abort();
@@ -1095,6 +1244,78 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
     },
   };
   const { readAppConfig } = deps.appConfig;
+  // Locale is renderer-owned. Persist only its validated, non-secret hint so a
+  // desktop relaunch can warm before the renderer mounts; first launch learns
+  // it from the early login-status read. Never guess a locale or warm all 19.
+  const localeFile = path.join(RUNTIME_DATA_DIR, 'touchpoint-prefetch-locale.json');
+  let warmLocale: string | null = null;
+  try {
+    const saved: unknown = JSON.parse(fs.readFileSync(localeFile, 'utf8'));
+    if (typeof saved === 'string' && /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8}){0,2}$/u.test(saved)) warmLocale = saved;
+  } catch { /* first launch */ }
+  let warmScope: string | null = null;
+  let warmIdentity: string | null = null;
+  let warmContext: { profile?: string; apiUrl: string; controlKey: string; daemonVersion?: string | null } | null = null;
+  const prefetch = createTouchpointPrefetch((req, res) => {
+    if (warmContext) proxyTouchpointRuntimeRequest(req, res, warmContext, 'production', touchpointContentCache, requests);
+    else res.status(401).json({ error: 'vela_control_key_required' });
+  });
+  let observation = 0;
+  async function reconcilePrefetch(req?: Request): Promise<void> {
+    const generation = ++observation;
+    try {
+      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+      if (generation !== observation || requests.closing) return;
+      if (!isDesktopAuthRegistered()) {
+        prefetch.reset(null);
+        if (warmScope) touchpointContentCache.refuseScope(warmScope);
+        warmScope = null; warmIdentity = null;
+        return;
+      }
+      const configured = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
+      const status = readVelaLoginStatus(env, configured);
+      const context = readVelaControlApiContext(env, configured);
+      const analytics = req && readAnalyticsContext(req);
+      const localeHint = req?.get(TOUCHPOINT_PREFETCH_LOCALE_HEADER) ?? (analytics?.clientType === 'desktop' ? analytics.locale : null);
+      if (localeHint && /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8}){0,2}$/u.test(localeHint)) {
+        if (warmLocale !== localeHint) {
+          warmLocale = localeHint;
+          try { fs.mkdirSync(RUNTIME_DATA_DIR, { recursive: true }); fs.writeFileSync(localeFile, JSON.stringify(warmLocale), { mode: 0o600 }); } catch { /* optimization only */ }
+        }
+      }
+      const enabled = isDesktopAuthRegistered() && status.loggedIn && status.sessionState === 'authenticated' &&
+        appConfig.telemetry?.metrics === true && context !== null;
+      const apiUrl = context ? productionApiUrl(context) : null;
+      const scope = enabled ? touchpointCacheScope({ ...context!, apiUrl: apiUrl! }) : null;
+      const identity = scope ? JSON.stringify([scope, status.user?.id ?? null, status.credentialRevision ?? null]) : null;
+      if (identity !== warmIdentity) {
+        prefetch.reset(null);
+        if (warmScope) touchpointContentCache.refuseScope(warmScope);
+        warmScope = scope;
+        warmIdentity = identity;
+      }
+      if (!enabled || !scope || !warmLocale) { prefetch.reset(null); return; }
+      warmContext = { ...context!, apiUrl: apiUrl!, daemonVersion: await daemonVersion };
+      if (generation !== observation || requests.closing) return;
+      prefetch.warm(touchpointCacheScope(warmContext), warmLocale);
+    } catch { prefetch.reset(null); }
+  }
+  // This override is the existing loopback-only local harness seam, shared by
+  // normal requests and warm requests; credentials cannot escape to a new host.
+  function productionApiUrl(context: { profile?: string; apiUrl: string }): string {
+    const override = env.OPEN_DESIGN_CMS_PRODUCTION_API_URL?.trim();
+    if (!override) return context.apiUrl;
+    const target = new URL(override), login = new URL(context.apiUrl);
+    const loopback = new Set(['127.0.0.1', '[::1]']);
+    if (context.profile !== 'local' || target.protocol !== 'http:' || login.protocol !== 'http:' ||
+      !loopback.has(target.hostname) || !loopback.has(login.hostname) || target.username || target.password ||
+      target.pathname !== '/' || target.search || target.hash) throw new Error('invalid_local_cms_production_origin');
+    return target.origin;
+  }
+  const stopDesktopObserver = observeDesktopAuth(() => { void reconcilePrefetch(); });
+  const stopConfigObserver = observeAppConfig(RUNTIME_DATA_DIR, () => { void reconcilePrefetch(); });
+  void reconcilePrefetch();
+
   const getPublicBaseUrl = deps.http.getPublicBaseUrl ?? ((req: Request) => {
     const proto = req.protocol || 'http';
     const host = req.get('host');
@@ -1203,6 +1424,7 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
 
   app.get('/api/integrations/vela/status', async (_req, res) => {
     try {
+      await reconcilePrefetch(_req);
       const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
       const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
       onCredentialStateObserved();
@@ -1318,6 +1540,7 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
     ['/api/touchpoints/production-runtime', '/api/touchpoints/production-runtime/*splat'],
     async (req, res) => {
       try {
+        await reconcilePrefetch();
         const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
         const context = readVelaControlApiContext(
           env,
@@ -1327,40 +1550,80 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
           res.status(401).json({ error: 'vela_control_key_required' });
           return;
         }
-        // Local end-to-end runs may keep their login/Test origin while
-        // exercising a separately owned publish-side API. Never forward a
-        // stored credential to an arbitrary remote origin through this knob.
-        const localPublishOrigin = env.OPEN_DESIGN_CMS_PRODUCTION_API_URL?.trim();
-        if (localPublishOrigin) {
-          const target = new URL(localPublishOrigin);
-          const login = new URL(context.apiUrl);
-          const loopback = new Set(['127.0.0.1', '[::1]']);
-          if (
-            context.profile !== 'local' ||
-            target.protocol !== 'http:' ||
-            login.protocol !== 'http:' ||
-            !loopback.has(target.hostname) ||
-            !loopback.has(login.hostname) ||
-            target.username ||
-            target.password ||
-            target.pathname !== '/' ||
-            target.search ||
-            target.hash
-          ) {
-            res.status(400).json({ error: 'invalid_local_cms_production_origin' });
+        let apiUrl: string;
+        try { apiUrl = productionApiUrl(context); }
+        catch { res.status(400).json({ error: 'invalid_local_cms_production_origin' }); return; }
+        const runtimeContext = { ...context, apiUrl, daemonVersion: await daemonVersion };
+        const joined = await prefetch.join(touchpointCacheScope(runtimeContext), req);
+        if (res.destroyed || res.writableEnded) return;
+        const latestConfig = await readAppConfig(RUNTIME_DATA_DIR);
+        const latestContext = readVelaControlApiContext(env, agentCliEnvForAgent(latestConfig.agentCliEnv, 'amr'));
+        if (!latestContext || touchpointCacheScope({ ...latestContext, apiUrl: productionApiUrl(latestContext) }) !== touchpointCacheScope(runtimeContext)) {
+          res.status(401).json({ error: 'touchpoint_identity_changed' }); return;
+        }
+        if (!joined && prefetch.backingOff(touchpointCacheScope(runtimeContext), req)) {
+          const key = touchpointContentKeyForRequest(new URL(req.url, 'http://daemon'), touchpointCacheScope(runtimeContext));
+          const local = key && touchpointContentCache.replayOffline(key, 'upstream_unavailable');
+          if (!local) { res.status(503).json({ error: 'touchpoint_runtime_unavailable' }); return; }
+          const bytes = Buffer.from(JSON.stringify(local));
+          const sizes = touchpointResourceSizes(local);
+          res.status(200).setHeader('content-type', 'application/json');
+          res.setHeader(TOUCHPOINT_OFFLINE_REPLAY_HEADER, '1');
+          res.setHeader(TOUCHPOINT_LOAD_METRICS_HEADER, touchpointMetricsHeader({ daemon_version: runtimeContext.daemonVersion, cache_hit: true, cache_source: 'offline_fallback', local_response_bytes: bytes.length, local_base64_bytes: sizes.base64, decoded_resource_bytes: sizes.decoded }));
+          res.end(bytes); return;
+        }
+        const ready = joined ?? prefetch.consumeReady(touchpointCacheScope(runtimeContext), req);
+        if (ready?.status === 200) {
+          const offline = ready.headers.has(TOUCHPOINT_OFFLINE_REPLAY_HEADER);
+          let expected: unknown = null;
+          try {
+            const raw = decodeProxyBody(ready.body, ready.headers.get('content-encoding') as string | undefined, MAX_BUFFERED_DECISION_BYTES);
+            if (raw) expected = JSON.parse(raw.toString('utf8'));
+          } catch { /* Unreadable warm answers cannot select an older cached grant. */ }
+          if (expected && typeof expected === 'object' && 'decision' in expected && expected.decision === null) {
+            res.status(200).json(expected); return;
+          }
+          const key = touchpointContentKeyForRequest(new URL(req.url, 'http://daemon'), touchpointCacheScope(runtimeContext));
+          const replay = expected && typeof expected === 'object' && 'offlineReplay' in expected
+            ? expected.offlineReplay as { reason?: unknown } | null : null;
+          const local = key && (offline
+            ? touchpointContentCache.replayOffline(key, replay?.reason === 'upstream_unreachable' ? 'upstream_unreachable' : 'upstream_unavailable', expected)
+            : touchpointContentCache.replayPrefetched(key, expected));
+          if (local) {
+            const bytes = Buffer.from(JSON.stringify(local));
+            const sizes = touchpointResourceSizes(local);
+            res.status(200).setHeader('content-type', 'application/json');
+            res.setHeader(TOUCHPOINT_LOAD_METRICS_HEADER, touchpointMetricsHeader({ daemon_version: runtimeContext.daemonVersion, cache_hit: true, cache_source: offline ? 'offline_fallback' : 'daemon', local_response_bytes: bytes.length, local_base64_bytes: sizes.base64, decoded_resource_bytes: sizes.decoded }));
+            if (offline) res.setHeader(TOUCHPOINT_OFFLINE_REPLAY_HEADER, '1');
+            if (String(req.headers['accept-encoding']).split(',').some(part => part.trim() === 'gzip')) {
+              res.setHeader('content-encoding', 'gzip'); res.end(zlib.gzipSync(bytes));
+            } else res.end(bytes);
             return;
           }
-          proxyTouchpointRuntimeRequest(
-            req,
-            res,
-            { ...context, apiUrl: target.origin },
-            'production',
-            touchpointContentCache,
-            requests,
-          );
+          // A captured online 200 is only a candidate. Refusal, replacement,
+          // failed admission or an exhausted original lease forbids handoff;
+          // another normal request here could revive the refused warm grant.
+          res.status(404).json({ error: 'touchpoint_prefetch_no_longer_authorized' });
           return;
         }
-        proxyTouchpointRuntimeRequest(req, res, context, 'production', touchpointContentCache, requests);
+        if (joined) {
+          res.status(joined.status);
+          let body = joined.body;
+          for (const [name, value] of joined.headers) {
+            if (name !== 'content-encoding') res.setHeader(name, value);
+          }
+          const encoding = joined.headers.get('content-encoding');
+          if (typeof encoding === 'string') {
+            // Joining is independent of the UI/CLI's encoding negotiation.
+            const decoded = decodeProxyBody(body, encoding, MAX_BUFFERED_DECISION_BYTES);
+            if (!decoded) { res.status(502).json({ error: 'touchpoint_runtime_unavailable' }); return; }
+            if (String(req.headers['accept-encoding']).split(',').some(part => part.trim() === encoding)) res.setHeader('content-encoding', encoding);
+            else body = decoded;
+          }
+          res.end(body);
+          return;
+        }
+        proxyTouchpointRuntimeRequest(req, res, runtimeContext, 'production', touchpointContentCache, requests);
       } catch {
         res.status(502).json({ error: 'touchpoint_runtime_unavailable' });
       }
@@ -1384,7 +1647,7 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
           res.status(401).json({ error: 'vela_control_key_required' });
           return;
         }
-        proxyTouchpointRuntimeRequest(req, res, context, 'test');
+        proxyTouchpointRuntimeRequest(req, res, { ...context, daemonVersion: await daemonVersion }, 'test', undefined, requests);
       } catch {
         res.status(502).json({ error: 'touchpoint_runtime_unavailable' });
       }
@@ -1433,6 +1696,7 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
       return;
     }
     try {
+      await reconcilePrefetch(req);
       const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
       const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
       const analyticsContext = readAnalyticsContext(req);
@@ -1465,6 +1729,7 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
       // returns) — never merely because it is slow, already activated, or a
       // login is already in flight.
       const spawned = await spawnVelaLoginWithFallback({
+        onCompleted: () => { void reconcilePrefetch(); },
         authAttemptId: requestAuthAttemptId,
         authRequestId: requestAuthRequestId,
         configuredEnv,
@@ -1585,6 +1850,11 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
   });
 
   app.post('/api/integrations/vela/logout', async (_req, res) => {
+    ++observation;
+    prefetch.reset(null);
+    if (warmScope) touchpointContentCache.refuseScope(warmScope);
+    warmScope = null;
+    warmIdentity = null;
     try {
       const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
       const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');

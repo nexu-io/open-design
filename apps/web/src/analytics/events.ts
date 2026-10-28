@@ -10,6 +10,8 @@ import type { ProjectCommentSendResultProps, ShareGuideClickProps, ShareGuideSur
 import type {
   // page_view / surface_view
   PageViewProps,
+  CmsTouchpointSurfaceViewProps,
+  CmsTouchpointClickProps,
   HelpPopoverSurfaceViewProps,
   SettingsPopoverSurfaceViewProps,
   NewProjectModalSurfaceViewProps,
@@ -1584,4 +1586,12 @@ export function trackExperienceSurveySent(
     $survey_questions: answered,
     ...responses,
   });
+}
+
+// CMS supplies the UUID already used by its load/runtime owner.
+export function trackCmsTouchpointSurfaceView(track: Track, props: CmsTouchpointSurfaceViewProps, options: { insertId: string }): void {
+  send(track, 'surface_view', props, options);
+}
+export function trackCmsTouchpointClick(track: Track, props: CmsTouchpointClickProps, options: { insertId: string }): void {
+  send(track, 'ui_click', props, options);
 }

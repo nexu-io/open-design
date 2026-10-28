@@ -23,6 +23,8 @@ export const zhTW: Dict = {
   'billing.codingPlanPeriodDays': '{count} 天',
   'billing.codingPlanRemainingPercent': '剩餘 {percent}%',
   "campaign.testReplay": "重新查看測試活動",
+  "campaign.dialogLabel": "活動",
+  "campaign.testDialogLabel": "測試活動",
   'invite.header.eyebrow': "團隊邀請",
   'invite.loading': "正在載入邀請…",
   'invite.landing.title': "加入團隊",

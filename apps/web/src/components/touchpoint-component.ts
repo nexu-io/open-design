@@ -1,6 +1,13 @@
+import type { TouchpointLoadAttempt } from "./touchpoint-load-observability";
 import {
+	type TouchpointRuntimeApiVersion,
+	type TouchpointCloseReason,
+	type TouchpointTimeContext,
 	type TouchpointComponentV2Manifest as ContentPackageManifest,
 	TouchpointComponentV2ManifestSchema as contentPackageManifestSchema,
+	materialProvenanceSchema,
+	selectDeclaredContentLocale,
+	type ContentLocaleMode,
 	createTouchpointSdk,
 	type TouchpointComponentContext,
 	type TouchpointComponentModule,
@@ -22,7 +29,7 @@ export type WebTouchpointContent = {
 	resources: Array<{ path: string; digest: string; bytes: string }>;
 	runtime: {
 		kind: "web-component";
-		apiVersion: 1;
+		apiVersion: TouchpointRuntimeApiVersion;
 		wrapperVersion: "vela-touchpoint-wrapper-v1";
 		sdkVersion: "vela-touchpoint-sdk-v1";
 	};
@@ -33,9 +40,11 @@ const MAX_TOUCHPOINT_BYTES = 2 * 1024 * 1024;
 export const TOUCHPOINT_TIMEOUT_MS = 5_000;
 
 export type TouchpointLifecycleOptions = Readonly<{
+	attempt?: TouchpointLoadAttempt;
 	timeoutMs?: number;
+	runtimeApiVersion?: TouchpointRuntimeApiVersion;
 	dispatchAction?: (actionId: string) => Promise<void>;
-	requestClose?: () => void;
+	requestClose?: (reason?: TouchpointCloseReason) => void;
 	onDiagnostic?: (diagnostic: TouchpointDiagnostic) => void;
 }>;
 
@@ -168,7 +177,7 @@ export async function verifyWebTouchpoint(touchpoint: WebTouchpointContent) {
 	const manifest = parsedManifest.data;
 	if (
 		touchpoint.runtime.kind !== "web-component" ||
-		touchpoint.runtime.apiVersion !== 1 ||
+		(touchpoint.runtime.apiVersion !== 1 && touchpoint.runtime.apiVersion !== 2) ||
 		touchpoint.runtime.wrapperVersion !== "vela-touchpoint-wrapper-v1" ||
 		touchpoint.runtime.sdkVersion !== "vela-touchpoint-sdk-v1" ||
 		manifest.runtimeKind !== touchpoint.runtime.kind ||
@@ -187,7 +196,7 @@ export async function verifyWebTouchpoint(touchpoint: WebTouchpointContent) {
 	if (
 		placement.staticActions.some(
 			(action) =>
-				action.target.kind !== "https" && action.target.kind !== "internal",
+				action.target.kind !== "https" && action.target.kind !== "internal" && action.target.kind !== "console-pricing",
 		)
 	)
 		throw new Error("touchpoint_action_unsupported");
@@ -269,6 +278,11 @@ const TouchpointElementBase: typeof HTMLElement =
 		? (class {} as typeof HTMLElement)
 		: HTMLElement;
 
+const HOVER_PLACEMENTS: ReadonlySet<string> = new Set(["opend.home.hover-entry", "opend.home.hover-layer"]);
+/** Hover-only intrinsic sizing defaults (OPEND-3323); exported for the layout witness. */
+export const HOVER_HOST_LAYOUT_CSS =
+	" :host > :where(:not(style)) { max-width: 100%; } :where(img, svg, video, canvas) { max-width: 100%; height: auto; } :where(img) { object-fit: contain; }";
+
 export class OpenDesignTouchpointElement extends TouchpointElementBase {
 	private generation = 0;
 	private disposed = true;
@@ -281,6 +295,8 @@ export class OpenDesignTouchpointElement extends TouchpointElementBase {
 	private onDiagnostic?: (diagnostic: TouchpointDiagnostic) => void;
 	private readonly lifecycleTimers = new Set<ReturnType<typeof setTimeout>>();
 	private contextGeneration = 0;
+	private latestContext?: WebTouchpointContext;
+	private rendererTime?: TouchpointTimeContext;
 	private updateQueue?: TouchpointUpdateQueue<WebTouchpointContext>;
 
 	/** Applies host styling only to the open ShadowRoot; it never writes global styles. */
@@ -301,6 +317,11 @@ export class OpenDesignTouchpointElement extends TouchpointElementBase {
 			style.dataset.velaTouchpointHost = "";
 			style.textContent =
 				":host { color-scheme: var(--vela-touchpoint-theme); font-family: var(--vela-touchpoint-font-family); color: var(--foreground); background: var(--background); } *, *::before, *::after { box-sizing: border-box; }";
+			if (HOVER_PLACEMENTS.has(context.placementKey))
+				// OPEND-3323: keep authored aspect ratio and fit inside the capped
+				// layer. Zero-specificity, so authored sizes and crops still win;
+				// no card width or font size is imposed here.
+				style.textContent += HOVER_HOST_LAYOUT_CSS;
 			this.shadowRoot.prepend(style);
 		}
 	}
@@ -349,6 +370,7 @@ export class OpenDesignTouchpointElement extends TouchpointElementBase {
 		this.controller = controller;
 		const lifecycle = createTouchpointSdk({
 			signal: controller.signal,
+			runtimeApiVersion: options.runtimeApiVersion ?? 1,
 			actionIds,
 			resources: resourceUrls,
 			now: () => Date.now(),
@@ -359,8 +381,8 @@ export class OpenDesignTouchpointElement extends TouchpointElementBase {
 					detail: actionId,
 				});
 			},
-			requestClose: () => {
-				if (options.requestClose) return options.requestClose();
+			requestClose: (reason) => {
+				if (options.requestClose) return options.requestClose(reason);
 				this.recordDiagnostic({
 					code: "touchpoint_close_denied",
 					detail: context.placementKey,
@@ -377,6 +399,7 @@ export class OpenDesignTouchpointElement extends TouchpointElementBase {
 					!this.sdkLifecycle
 				)
 					return;
+				this.latestContext = nextContext;
 				this.applyHostContext(nextContext);
 				await this.module.update(
 					this.instance,
@@ -385,9 +408,13 @@ export class OpenDesignTouchpointElement extends TouchpointElementBase {
 				);
 				if (!this.isCurrent(generation))
 					this.recordDiagnostic({ code: "component_update_expired" });
+				// Material renderers may replace every ShadowRoot child.
+				else this.applyHostContext(nextContext);
 			},
 			(code) => this.recordDiagnostic({ code }),
 		);
+		this.latestContext = context;
+		this.rendererTime = context.schedule && context.serverOffsetMs !== undefined ? { schedule: context.schedule, serverOffsetMs: context.serverOffsetMs } : undefined;
 		this.applyHostContext(context);
 		const timeoutMs = options.timeoutMs ?? TOUCHPOINT_TIMEOUT_MS;
 		if (!Number.isFinite(timeoutMs) || timeoutMs < 1)
@@ -396,6 +423,8 @@ export class OpenDesignTouchpointElement extends TouchpointElementBase {
 		let lateMount: Promise<unknown> | undefined;
 		let adoptedLateMount = false;
 		try {
+			const importStarted = performance.now();
+			const importCount = webTouchpointModuleCache.metrics().nativeEsmCount;
 			component = await this.withTimeout(
 				webTouchpointModuleCache.import(
 					entryDigest,
@@ -408,11 +437,13 @@ export class OpenDesignTouchpointElement extends TouchpointElementBase {
 				"import",
 				timeoutMs,
 			);
+			options.attempt?.enrich({ import_ms: Math.max(0, performance.now() - importStarted), ...(webTouchpointModuleCache.metrics().nativeEsmCount === importCount && !options.attempt?.offline ? { cache_hit: true, cache_source: "module" as const } : {}) });
 			if (!this.isCurrent(generation)) return;
 			const mount = component.mount;
 			const shadowRoot = this.shadowRoot;
 			if (typeof mount !== "function" || !shadowRoot)
 				throw new Error("component_mount_missing");
+			const mountStarted = performance.now();
 			lateMount = Promise.resolve().then(() =>
 				mount(shadowRoot, context, lifecycle.sdk),
 			);
@@ -422,13 +453,18 @@ export class OpenDesignTouchpointElement extends TouchpointElementBase {
 				"mount",
 				timeoutMs,
 			);
+			options.attempt?.enrich({ mount_ms: Math.max(0, performance.now() - mountStarted) });
 			if (!this.isCurrent(generation)) {
 				await this.disposeInstance(component, instance, lifecycle.sdk);
 				return;
 			}
 			adoptedLateMount = true;
+			// mount() owns the root and may clear the initial host style with
+			// innerHTML/replaceChildren; restore defaults before authored CSS.
+			this.applyHostContext(context);
 			this.module = component;
 			this.instance = instance;
+			if (this.rendererTime && (this.rendererTime.schedule !== context.schedule || this.rendererTime.serverOffsetMs !== context.serverOffsetMs)) await this.updateTime(this.rendererTime);
 		} catch (error) {
 			if (lateMount && !adoptedLateMount) {
 				void lateMount.then(
@@ -444,6 +480,13 @@ export class OpenDesignTouchpointElement extends TouchpointElementBase {
 			await this.dispose();
 			throw error;
 		}
+	}
+
+	/** Renew time without changing immutable content, SDK identity, or the mounted instance. */
+	async updateTime(time: TouchpointTimeContext) {
+		if (this.disposed) return;
+		this.rendererTime = time;
+		if (this.module && this.latestContext) await this.update({ ...this.latestContext, ...time }, new Map());
 	}
 
 	private async withTimeout<T>(
@@ -563,11 +606,9 @@ export function ensureWebTouchpointElement(): typeof OpenDesignTouchpointElement
 export function resolveWebTouchpointLocale(
 	requestedLocale: string,
 	placementLocales: readonly string[],
+	mode: ContentLocaleMode = "legacy-manifest",
 ): string | undefined {
-	const normalized = requestedLocale.replace(/_/g, "-");
-	const baseLanguage = normalized.split("-")[0] ?? normalized;
-	const candidates = [normalized, baseLanguage, "en-US"];
-	return candidates.find((candidate) => placementLocales.includes(candidate));
+	return selectDeclaredContentLocale(placementLocales, requestedLocale, mode);
 }
 
 /** Reads the current Web theme/font tokens for one isolated component instance. */
@@ -609,6 +650,9 @@ export function supportsWebTouchpointCapabilities(
 		new Set(requiredCapabilities).size !== requiredCapabilities.length
 	)
 		return false;
+	if (placement.staticActions.some((action) => action.target.kind === "console-pricing") && !placement.requiredCapabilities.includes("action-console-pricing-v1")) return false;
+	if (placement.requiredCapabilities.some((capability) => capability === "countdown-v1" || capability === "action-console-pricing-v1") && (touchpoint.runtime.apiVersion !== 2 || touchpoint.manifest.runtimeApiVersion !== 2)) return false;
+	if (touchpoint.manifest.runtimeApiVersion !== undefined && touchpoint.manifest.runtimeApiVersion !== touchpoint.runtime.apiVersion) return false;
 	const required = new Set(requiredCapabilities);
 	return (
 		required.size === placement.requiredCapabilities.length &&
@@ -739,15 +783,24 @@ export function webTouchpointContext(
 		touchpoint.locale,
 		document.documentElement.classList.contains("dark") ? "dark" : "light",
 	),
+	time?: TouchpointTimeContext,
 ): WebTouchpointContext | undefined {
+	// Upstream intake establishes provenance. This marker only selects language;
+	// manifest/hash, decision and proof validation still govern authorization.
+	const material = touchpoint.manifest.material;
+	const parsedMaterial = material === undefined ? undefined : materialProvenanceSchema.safeParse(material);
+	if (parsedMaterial && !parsedMaterial.success) return undefined;
+	const mode: ContentLocaleMode = parsedMaterial?.data.sourceDslVersion === 3
+		? "canonical-material-v3" : "legacy-manifest";
 	const placement = touchpoint.manifest.placements.find(
 		(candidate) => candidate.key === touchpoint.placementKey,
 	);
 	const locale = placement
-		? resolveWebTouchpointLocale(host.locale, placement.locales)
+		? resolveWebTouchpointLocale(host.locale, placement.locales, mode)
 		: undefined;
-	if (!locale) return undefined;
+	if (!locale || (placement?.requiredCapabilities.includes("countdown-v1") && (!time || !Number.isFinite(time.serverOffsetMs) || !Number.isFinite(Date.parse(time.schedule.endsAt))))) return undefined;
 	return Object.freeze({
+		...(touchpoint.runtime.apiVersion === 2 ? time : undefined),
 		instanceId: crypto.randomUUID(),
 		contentVersionId: touchpoint.id,
 		placementKey: touchpoint.placementKey,

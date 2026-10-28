@@ -5684,6 +5684,8 @@ export interface Dict {
   'skillDetail.previewAria': string;
   'common.dismiss': string;
   'campaign.testReplay': string;
+  'campaign.dialogLabel': string;
+  'campaign.testDialogLabel': string;
   'campaign.deepseekV4Flash.headline': string;
   'campaign.deepseekV4Flash.description': string;
   'campaign.deepseekV4Flash.benefit': string;

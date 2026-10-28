@@ -1,3 +1,5 @@
+import { TOUCHPOINT_POLL_MS } from "../../src/components/touchpoint-lifecycle";
+import { touchpointLoadQueue, resetTouchpointLoadObservability } from "../../src/components/touchpoint-load-observability";
 // @vitest-environment jsdom
 import { createHash } from "node:crypto";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
@@ -8,6 +10,8 @@ import { ProductionCampaignBadge } from "../../src/components/ProductionCampaign
 import { I18nProvider, useI18n } from "../../src/i18n";
 import * as touchpointComponent from "../../src/components/touchpoint-component";
 import { OpenDesignTouchpointElement } from "../../src/components/touchpoint-component";
+const cmsTrack = vi.hoisted(() => vi.fn());
+vi.mock("../../src/analytics/provider", () => ({ useAnalytics: () => ({ track: cmsTrack }), useAppVersion: () => "test" }));
 const digest = (value: string) => `sha256:${createHash("sha256").update(value).digest("hex")}`;
 const openExternalUrlMock = vi.hoisted(() => vi.fn(async () => true));
 vi.mock("../../src/providers/registry", () => ({ openExternalUrl: openExternalUrlMock }));
@@ -19,8 +23,12 @@ function LocaleSwitch() {
   const { setLocale } = useI18n();
   return <button onClick={() => setLocale("zh-CN")}>Switch locale</button>;
 }
-beforeEach(() => { vi.spyOn(OpenDesignTouchpointElement.prototype, "mount").mockImplementation(async function (this: OpenDesignTouchpointElement) { this.shadowRoot?.replaceChildren(document.createTextNode("Badge")); }); });
-afterEach(() => { cleanup(); getOpenDesignHostMock.mockReset(); openExternalUrlMock.mockClear(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+beforeEach(() => {
+	vi.spyOn(touchpointLoadQueue("production"), "enqueue").mockImplementation(() => {});
+	vi.spyOn(touchpointLoadQueue("test"), "enqueue").mockImplementation(() => {}); vi.spyOn(OpenDesignTouchpointElement.prototype, "mount").mockImplementation(async function (this: OpenDesignTouchpointElement) { this.shadowRoot?.replaceChildren(document.createTextNode("Badge")); }); });
+afterEach(() => {
+	cmsTrack.mockClear();
+	resetTouchpointLoadObservability(); cleanup(); getOpenDesignHostMock.mockReset(); openExternalUrlMock.mockClear(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 describe("ProductionCampaignBadge", () => {
   it("mounts the immutable account-badge through the shared custom-element adapter with locale fallback and no close control", async () => {
     getOpenDesignHostMock.mockReturnValue({ client: { type: "desktop", osLocale: "en-GB" } });
@@ -135,7 +143,7 @@ describe("ProductionCampaignBadge", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(screen.getByTestId("production-campaign-badge").querySelector("opend-touchpoint")).toBe(host);
     expect(OpenDesignTouchpointElement.prototype.mount).toHaveBeenCalledTimes(1);
-    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS); });
     expect(fetchMock).toHaveBeenCalledTimes(3);
     await dispatchAction?.("learn");
     expect(fetchMock).toHaveBeenCalledWith("/api/touchpoints/production-runtime/events", expect.objectContaining({ method: "POST" }));
@@ -178,7 +186,7 @@ describe("ProductionCampaignBadge", () => {
     // restore fires is now what drives recovery. What this case is about — the
     // host is not remounted across the outage — is unchanged.
     act(() => { window.dispatchEvent(new Event("online")); });
-    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS); });
     expect(requests[0]).toContain("activeDecisionId=decision-1");
     expect(screen.getByTestId("production-campaign-badge").querySelector("opend-touchpoint")).toBe(host);
     expect(OpenDesignTouchpointElement.prototype.mount).toHaveBeenCalledTimes(1);
@@ -199,7 +207,7 @@ describe("ProductionCampaignBadge", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(100); });
     const host = screen.getByTestId("production-campaign-badge").querySelector("opend-touchpoint");
     nextContent = { ...content, id: "version-badge-2" };
-    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS); });
     await act(async () => { await vi.advanceTimersByTimeAsync(16); });
     expect(screen.getByTestId("production-campaign-badge").querySelector("opend-touchpoint")).not.toBe(host);
     expect(OpenDesignTouchpointElement.prototype.mount).toHaveBeenCalledTimes(2);
@@ -263,5 +271,109 @@ describe("ProductionCampaignBadge", () => {
     resolveLateEn?.(new Response(JSON.stringify(localized("en-US")), { status: 200 }));
     await Promise.resolve();
     expect(screen.getByTestId("production-campaign-badge").querySelector("opend-touchpoint")?.shadowRoot?.textContent).toContain("中文内容");
+  });
+});
+
+it('accepts phase 2 time and pricing capabilities through the real badge host', async () => {
+  getOpenDesignHostMock.mockReturnValue({ client: { type: 'desktop', osLocale: 'en-US' } });
+  const requiredCapabilities = ['static-action', 'countdown-v1', 'action-console-pricing-v1'];
+  const staticActions = [{ id: 'upgrade', target: { kind: 'console-pricing' } }];
+  const phaseManifest = { ...manifest, runtimeApiVersion: 2, placements: manifest.placements.map(p => ({ ...p, requiredCapabilities, staticActions })) };
+  const phaseContent = { ...content, manifest: phaseManifest, manifestHash: digest(JSON.stringify(phaseManifest)), runtime: { ...content.runtime, apiVersion: 2 } };
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(decision({ requiredCapabilities, staticActions, content: phaseContent })), { status: 200 })));
+  render(<ProductionCampaignBadge authenticated sessionSubject="phase2-badge" />);
+  const badge = await screen.findByTestId('production-campaign-badge');
+  await waitFor(() => expect(badge.querySelector('opend-touchpoint')?.shadowRoot?.textContent).toContain('Badge'));
+  const call = vi.mocked(OpenDesignTouchpointElement.prototype.mount).mock.calls.at(-1)!;
+  expect(call[2]).toMatchObject({ schedule: { endsAt: expect.any(String) }, serverOffsetMs: expect.any(Number) });
+  expect(call[5]?.runtimeApiVersion).toBe(2);
+  expect(call[5]?.requestClose).toBeUndefined();
+});
+
+
+it('recovers a real same-content badge after failed mount with a new pre-fetch start, B and one exposure', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  getOpenDesignHostMock.mockReturnValue({ client: { type: 'desktop', osLocale: 'en-US' } });
+  vi.spyOn(HTMLElement.prototype, 'getClientRects').mockReturnValue({ length: 1 } as DOMRectList);
+  vi.mocked(OpenDesignTouchpointElement.prototype.mount).mockRejectedValueOnce(new Error('mount failed'));
+  const facts = () => vi.mocked(touchpointLoadQueue('production').enqueue).mock.calls.map(([record]) => record);
+  let requests = 0;
+  const transport = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/events')) return new Response('{}');
+    requests++;
+    expect(facts().filter(record => record.kind === 'start')).toHaveLength(Math.min(requests, 2));
+    return new Response(JSON.stringify(decision({ touchpointDecisionId: 'badge-recovered' })));
+  });
+  vi.stubGlobal('fetch', transport);
+  render(<ProductionCampaignBadge authenticated sessionSubject="recover-badge" />);
+  await waitFor(() => expect(facts().some(record => record.result === 'failed')).toBe(true));
+  await act(async () => { await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS); });
+  await waitFor(() => expect(facts().some(record => record.result === 'visible')).toBe(true));
+  const terminals = facts().filter(record => record.kind === 'terminal');
+  expect(terminals).toHaveLength(2);
+  expect(new Set(terminals.map(record => record.load_attempt_id)).size).toBe(2);
+  const exposures = () => transport.mock.calls.filter(([url]) => url.endsWith('/events'));
+  expect(exposures()).toHaveLength(1);
+  const visible = terminals.find(record => record.result === 'visible')!;
+  expect(cmsTrack).toHaveBeenCalledWith('surface_view', expect.objectContaining({ page_name: 'home', area: 'cms_account_badge', element: 'badge', mode: 'production', load_attempt_id: visible.load_attempt_id }), { insertId: visible.event_id });
+  expect(JSON.parse(String(exposures()[0]![1]?.body))).toMatchObject({ eventId: terminals.find(record => record.result === 'visible')!.event_id, touchpointDecisionId: 'badge-recovered' });
+  await act(async () => { await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS); });
+  expect(facts().filter(record => record.kind === 'start')).toHaveLength(2);
+  expect(facts().filter(record => record.kind === 'terminal')).toHaveLength(2);
+  expect(exposures()).toHaveLength(1);
+});
+
+// OBS-003: with no campaign, every 10s poll used to open a fresh load attempt
+// (start + cancelled/no_activity). The empty first attempt must instead be
+// renewed, exactly like campaign-modal and the hover pair.
+describe('OBS-003 account-badge no-activity polls', () => {
+  const POLLS = 4;
+  const facts = () => vi.mocked(touchpointLoadQueue('production').enqueue).mock.calls.map(([record]) => record);
+
+  it('emits exactly one start and then only renewals on the same attempt', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    getOpenDesignHostMock.mockReturnValue({ client: { type: 'desktop', osLocale: 'en-US' } });
+    const fetchMock = vi.fn(async () => Response.json({ decision: null }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ProductionCampaignBadge authenticated sessionSubject="empty-badge" />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    for (let poll = 0; poll < POLLS; poll++) await act(async () => { await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS); });
+    expect(fetchMock).toHaveBeenCalledTimes(POLLS + 1);
+    expect(facts().filter(record => record.kind === 'start')).toHaveLength(1);
+    const terminals = facts().filter(record => record.kind === 'terminal');
+    expect(terminals).toHaveLength(1);
+    expect(terminals[0]).toMatchObject({ result: 'cancelled', cancel_reason: 'no_activity' });
+    const renewals = facts().filter(record => record.kind === 'renewal');
+    expect(renewals).toHaveLength(POLLS);
+    expect(renewals.every(record => record.decision_outcome === 'no_activity')).toBe(true);
+    expect(new Set(facts().map(record => record.load_attempt_id)).size).toBe(1);
+    expect(screen.queryByTestId('production-campaign-badge')).toBeNull();
+  });
+
+  it('keeps activity behavior: an active badge renews one attempt, and a newly published campaign after empty polls starts a new one', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    getOpenDesignHostMock.mockReturnValue({ client: { type: 'desktop', osLocale: 'en-US' } });
+    let absent = true;
+    const fetchMock = vi.fn(async () => absent ? Response.json({ decision: null }) : new Response(JSON.stringify(decision())));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ProductionCampaignBadge authenticated sessionSubject="publish-badge" />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await act(async () => { await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS); });
+    const emptyAttempt = facts()[0]!.load_attempt_id;
+    absent = false;
+    await act(async () => { await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS); });
+    await screen.findByTestId('production-campaign-badge');
+    const starts = facts().filter(record => record.kind === 'start');
+    expect(starts).toHaveLength(2);
+    expect(starts[1]!.load_attempt_id).not.toBe(emptyAttempt);
+    expect(facts().some(record => record.load_attempt_id === emptyAttempt && record.cancel_reason === 'decision_changed')).toBe(false);
+    const renewalsBefore = facts().filter(record => record.kind === 'renewal').length;
+    for (let poll = 0; poll < POLLS; poll++) await act(async () => { await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS); });
+    expect(facts().filter(record => record.kind === 'start')).toHaveLength(2);
+    const activeRenewals = facts().filter(record => record.kind === 'renewal').slice(renewalsBefore);
+    expect(activeRenewals).toHaveLength(POLLS);
+    expect(activeRenewals.every(record => record.load_attempt_id === starts[1]!.load_attempt_id && record.decision_outcome === 'eligible')).toBe(true);
+    expect(screen.getByTestId('production-campaign-badge')).toBeTruthy();
   });
 });

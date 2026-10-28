@@ -23,6 +23,8 @@ export const th: Dict = {
   'billing.codingPlanPeriodDays': '{count} วัน',
   'billing.codingPlanRemainingPercent': 'เหลือ {percent}%',
   "campaign.testReplay": "เปิดกิจกรรมทดสอบอีกครั้ง",
+  "campaign.dialogLabel": "กิจกรรม",
+  "campaign.testDialogLabel": "กิจกรรมทดสอบ",
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

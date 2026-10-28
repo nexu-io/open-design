@@ -1,5 +1,11 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
+const desktopAuthObservers = new Set<() => void>();
+export function observeDesktopAuth(observer: () => void): () => void {
+  desktopAuthObservers.add(observer);
+  return () => { desktopAuthObservers.delete(observer); };
+}
+
 let desktopAuthSecret: Buffer | null = null;
 let desktopAuthEverRegistered = process.env.OD_REQUIRE_DESKTOP_AUTH === '1';
 export const consumedImportNonces = new Map<string, number>();
@@ -12,6 +18,7 @@ export function setDesktopAuthSecret(secret: Buffer | null): void {
     desktopAuthEverRegistered = true;
   }
   consumedImportNonces.clear();
+  for (const observer of desktopAuthObservers) observer();
 }
 
 export function getDesktopAuthSecret(): Buffer | null {

@@ -1,3 +1,4 @@
+import { touchpointLoadQueue, resetTouchpointLoadObservability } from "../../src/components/touchpoint-load-observability";
 // @vitest-environment jsdom
 import { createHash } from "node:crypto";
 import { StrictMode } from "react";
@@ -20,6 +21,8 @@ vi.mock("@open-design/host", () => ({
 		(globalThis as CampaignHostGlobal).__openDesignCampaignTestHost,
 }));
 
+import { I18nProvider } from "../../src/i18n";
+import { ProductionCampaignHover } from "../../src/components/ProductionCampaignHover";
 import { ProductionCampaignModal } from "../../src/components/ProductionCampaignModal";
 import {
 	clearTestRuntimeSession,
@@ -31,9 +34,13 @@ import {
 	TestTouchpointMount,
 	useTestRuntime,
 } from "../../src/components/TestCampaignModal";
+import * as providerRegistry from "../../src/providers/registry";
 import * as campaignNavigation from "../../src/components/touchpoint-navigation";
 import * as touchpointComponent from "../../src/components/touchpoint-component";
 import { OpenDesignTouchpointElement } from "../../src/components/touchpoint-component";
+
+const cmsTrack = vi.hoisted(() => vi.fn());
+vi.mock('../../src/analytics/provider', () => ({ useAnalytics: () => ({ track: cmsTrack }), useAppVersion: () => '0.0.0' }));
 
 const digest = (value: string) =>
 	`sha256:${createHash("sha256").update(value).digest("hex")}`;
@@ -210,6 +217,9 @@ function TestCampaignHarness({
 	);
 }
 beforeEach(() => {
+  cmsTrack.mockClear();
+	vi.spyOn(touchpointLoadQueue("production"), "enqueue").mockImplementation(() => {});
+	vi.spyOn(touchpointLoadQueue("test"), "enqueue").mockImplementation(() => {});
 	// jsdom cannot import the verified Blob entry. The modal is presented only
 	// once content has mounted, so stand in for a successful mount as the
 	// Production suite does; cases that exercise mount failures override it.
@@ -227,11 +237,13 @@ beforeEach(() => {
 	};
 });
 afterEach(() => {
+	resetTouchpointLoadObservability();
 	window.history.replaceState(null, "", "/");
 	delete (globalThis as CampaignHostGlobal).__openDesignCampaignTestHost;
 	cleanup();
 	vi.useRealTimers();
 	vi.unstubAllGlobals();
+	vi.unstubAllEnvs();
 	vi.restoreAllMocks();
 	clearTestRuntimeSession();
 });
@@ -341,7 +353,7 @@ describe("CMS modal host cleanup", () => {
 });
 
 describe("TestCampaignModal host guards", () => {
-	it("reopens only after an explicit Test replay and never clears impression history", async () => {
+	it("keeps a recorded Test activity closed without a replay button or clearing impression history", async () => {
 		const subject = "explicit-test-replay";
 		const key = `touchpoint-displayed:v1:${subject}:activity-1`;
 		localStorage.setItem(key, "1");
@@ -350,17 +362,9 @@ describe("TestCampaignModal host guards", () => {
 		const decision = runtime() as TestDecision;
 		authorizeMount(decision);
 		render(<ProductionCampaignModal authenticated sessionSubject={subject} />);
-		expect(screen.queryByRole("dialog")).toBeNull();
-		fireEvent.click(screen.getByRole("button", { name: "Reopen test activity" }));
-		await screen.findByRole("dialog");
-		fireEvent.keyDown(document, { key: "Escape" });
-		await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-		expect(localStorage.getItem(key)).toBe("1");
-		fireEvent.click(screen.getByRole("button", { name: "Reopen test activity" }));
-		await screen.findByRole("dialog");
-		act(() => clearTestRuntimeSession());
 		expect(screen.queryByRole("button", { name: "Reopen test activity" })).toBeNull();
 		expect(screen.queryByRole("dialog")).toBeNull();
+		expect(localStorage.getItem(key)).toBe("1");
 		localStorage.removeItem(key);
 	});
 
@@ -700,6 +704,27 @@ describe("Test campaign decision and lifecycle guards", () => {
 		);
 		expect(screen.getByRole("dialog")).toBeInTheDocument();
 	});
+	it("diagnoses immutable byte integrity failure and revokes every created Blob URL", async () => {
+		const { verifyWebTouchpoint } = await import(
+			"../../src/components/touchpoint-component"
+		);
+		const revoked: string[] = [];
+		const create = vi
+			.spyOn(URL, "createObjectURL")
+			.mockReturnValue("blob:verified");
+		const revoke = vi
+			.spyOn(URL, "revokeObjectURL")
+			.mockImplementation((url) => {
+				revoked.push(url);
+			});
+		await expect(
+			verifyWebTouchpoint({ ...content, entryModule: "tampered" } as any),
+		).rejects.toThrow("touchpoint_integrity_failed");
+		expect(create).toHaveBeenCalledOnce();
+		expect(revoke).toHaveBeenCalledWith("blob:verified");
+		create.mockRestore();
+		revoke.mockRestore();
+	});
 	it("gives initial focus to the first control a user can reach, past hidden and unfocusable ones", async () => {
 		const { focusWebTouchpointModal } = await import(
 			"../../src/components/touchpoint-component"
@@ -990,6 +1015,12 @@ describe("Test campaign four-placement contract", () => {
 				([url, init]) => init?.method === "POST" && url.includes("acceptances"),
 			);
 		await waitFor(() => expect(acceptanceCalls()).toHaveLength(1));
+		const facts = vi.mocked(touchpointLoadQueue("test").enqueue).mock.calls.map(([record]) => record);
+		expect(facts.filter(record => record.kind === "start")).toHaveLength(4);
+		expect(facts.filter(record => record.kind === "start").every(record => record.decision_id === null && record.decision_outcome === null)).toBe(true);
+		expect(facts.filter(record => record.result === "visible")).toHaveLength(1);
+		expect(facts.find(record => record.result === "visible")).toMatchObject({ decision_id: null, decision_outcome: "eligible" });
+		expect(JSON.parse(String(acceptanceCalls()[0]?.[1]?.body))).not.toHaveProperty("eventId");
 		expect(
 			acceptanceCalls().map(
 				([, init]) => JSON.parse(String(init?.body)).placementKey,
@@ -1331,6 +1362,21 @@ describe("negotiated immutable Test context", () => {
 		await waitFor(() => expect(screen.getByTestId("touchpoint-test-clock")).toHaveTextContent("error"));
 		expect(screen.queryByRole("dialog")).toBeNull();
 	}
+
+	it("binds a distinct workspace member to the authenticated app user without weakening context matching", async () => {
+		const bound = { ...context(), testerMemberId: "workspace-member", testerAppUserId: "account-a" };
+		const next = { ...decision(), testContext: bound };
+		vi.stubGlobal("fetch", server({ context: () => json(bound), decision: () => json(next) }));
+		await start(); await screen.findByRole("dialog");
+		expect(isSelectedTestCampaignDecision({ ...next, testContext: { ...bound, testerAppUserId: "account-b" } }, bound)).toBe(false);
+		expect(isSelectedTestCampaignDecision({ ...next, testContext: { ...bound, testerMemberId: "foreign-member" } }, bound)).toBe(false);
+	});
+
+	it.each(["account-b", "", null])("refuses a foreign or malformed authenticated tester app user %s", async testerAppUserId => {
+		const bound = { ...context(), testerMemberId: "workspace-member", testerAppUserId };
+		const mock = server({ context: () => json(bound) }); vi.stubGlobal("fetch", mock);
+		await start(); await failed(); expect(runtimeCalls(mock)).toHaveLength(0);
+	});
 
 	it("sends the acquired token on cold start and compares every immutable field", async () => {
 		const mock = server(); vi.stubGlobal("fetch", mock);
@@ -1742,3 +1788,494 @@ describe("negotiated immutable Test context", () => {
 		view.unmount();
 	});
 });
+
+
+it("recovers a real same-content Test modal mount with a fresh null-decision attempt and original acceptance schema", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
+  vi.spyOn(HTMLElement.prototype, 'getClientRects').mockReturnValue({ length: 1 } as DOMRectList);
+  const mount = vi.mocked(OpenDesignTouchpointElement.prototype.mount).mockRejectedValueOnce(new Error('mount failed'));
+  const facts = () => vi.mocked(touchpointLoadQueue('test').enqueue).mock.calls.map(([record]) => record);
+  const base = fetches(); let requests = 0;
+  const transport = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.includes('/test-runtime?')) {
+      requests++;
+      expect(facts().filter(record => record.kind === 'start')).toHaveLength(Math.min(requests, 2));
+    }
+    if (url.endsWith('/acceptances')) return new Response('{}');
+    return base(url);
+  });
+  vi.stubGlobal('fetch', transport);
+  render(<TestCampaignHarness authenticated />);
+  await screen.findByTestId('touchpoint-test-selector');
+  fireEvent.change(screen.getByLabelText('Test activity'), { target: { value: 'deployment-1' } });
+  await waitFor(() => expect(facts().some(record => record.result === 'failed')).toBe(true));
+  fireEvent(window, new Event('online'));
+  await waitFor(() => expect(mount.mock.calls.length).toBeGreaterThanOrEqual(2));
+  await waitFor(() => expect(facts().some(record => record.result === 'visible')).toBe(true));
+  const starts = facts().filter(record => record.kind === 'start');
+  const terminals = facts().filter(record => record.kind === 'terminal');
+  expect(starts).toHaveLength(2); expect(terminals).toHaveLength(2);
+  expect(new Set(terminals.map(record => record.load_attempt_id)).size).toBe(2);
+  expect(terminals.every(record => record.decision_id === null)).toBe(true);
+  const acceptance = transport.mock.calls.filter(([url]) => url.endsWith('/acceptances'));
+  expect(acceptance).toHaveLength(1);
+  expect(JSON.parse(String(acceptance[0]![1]?.body))).not.toHaveProperty('eventId');
+  expect(transport.mock.calls.some(([url]) => url.endsWith('/production-runtime/events'))).toBe(false);
+  await act(async () => { await vi.advanceTimersByTimeAsync(30000); });
+  expect(facts().filter(record => record.kind === 'start')).toHaveLength(2);
+  expect(facts().filter(record => record.kind === 'terminal')).toHaveLength(2);
+  expect(transport.mock.calls.filter(([url]) => url.endsWith('/acceptances'))).toHaveLength(1);
+});
+
+it('OBS-004 records a body transfer failure with received status and one terminal', async () => {
+  const base = fetches();
+  const error = new TypeError('body stream interrupted at private URL');
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (!url.includes('/test-runtime?')) return base(url);
+    const response = Response.json(runtime());
+    vi.spyOn(response, 'text').mockRejectedValue(error);
+    return response;
+  }));
+  render(<TestCampaignHarness authenticated />);
+  await screen.findByTestId('touchpoint-test-selector');
+  fireEvent.change(screen.getByLabelText('Test activity'), { target: { value: 'deployment-1' } });
+  const facts = () => vi.mocked(touchpointLoadQueue('test').enqueue).mock.calls.map(([record]) => record);
+  await waitFor(() => expect(facts().some(record => record.result === 'failed')).toBe(true));
+  const terminals = facts().filter(record => record.kind === 'terminal');
+  expect(terminals).toHaveLength(1);
+  expect(terminals[0]).toMatchObject({ result: 'failed', failure_stage: 'transfer', error_code: 'network_error', http_status: 200 });
+  expect(error).toBeInstanceOf(TypeError);
+  expect(JSON.stringify(facts())).not.toContain('private URL');
+  expect(screen.queryByRole('dialog')).toBeNull();
+});
+
+it('OBS-004 preserves an active body AbortError without adding transfer metadata', async () => {
+  const base = fetches();
+  const error = new DOMException('aborted', 'AbortError');
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (!url.includes('/test-runtime?')) return base(url);
+    const response = Response.json(runtime());
+    vi.spyOn(response, 'text').mockRejectedValue(error);
+    return response;
+  }));
+  render(<TestCampaignHarness authenticated />);
+  await screen.findByTestId('touchpoint-test-selector');
+  fireEvent.change(screen.getByLabelText('Test activity'), { target: { value: 'deployment-1' } });
+  const facts = () => vi.mocked(touchpointLoadQueue('test').enqueue).mock.calls.map(([record]) => record);
+  await waitFor(() => expect(facts().filter(record => record.kind === 'terminal')).toHaveLength(1));
+  expect(error.name).toBe('AbortError');
+  expect(error).not.toHaveProperty('failure_stage');
+  expect(error).not.toHaveProperty('error_code');
+  expect(facts().some(record => record.failure_stage === 'transfer')).toBe(false);
+});
+
+it('OBS-004 preserves a late body AbortError after unmount without classifying cancellation as transfer failure', async () => {
+  const base = fetches();
+  const error = new DOMException('aborted', 'AbortError');
+  let rejectBody!: (error: unknown) => void;
+  const text = vi.fn(() => new Promise<string>((_resolve, reject) => { rejectBody = reject; }));
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (!url.includes('/test-runtime?')) return base(url);
+    const response = Response.json(runtime());
+    vi.spyOn(response, 'text').mockImplementation(text);
+    return response;
+  }));
+  const view = render(<TestCampaignHarness authenticated />);
+  await screen.findByTestId('touchpoint-test-selector');
+  fireEvent.change(screen.getByLabelText('Test activity'), { target: { value: 'deployment-1' } });
+  await waitFor(() => expect(text).toHaveBeenCalledOnce());
+  view.unmount();
+  await act(async () => { rejectBody(error); });
+  expect(error.name).toBe('AbortError');
+  expect(error).not.toHaveProperty('failure_stage');
+  const facts = vi.mocked(touchpointLoadQueue('test').enqueue).mock.calls.map(([record]) => record);
+  expect(facts.filter(record => record.kind === 'terminal')).toHaveLength(1);
+  expect(facts.some(record => record.result === 'failed')).toBe(false);
+});
+
+it.each(['http', 'json'] as const)('records the actual Test runtime %s failure at its source stage', async kind => {
+  const base = fetches();
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => url.includes('/test-runtime?') ? kind === 'http'
+    ? Response.json({ error: 'resource_unavailable', failure_stage: 'resource_read', error_code: 'http_error', detail: 'private upstream URL' }, { status: 503 })
+    : new Response('{', { status: 200 }) : base(url)));
+  render(<TestCampaignHarness authenticated />);
+  await screen.findByTestId('touchpoint-test-selector');
+  fireEvent.change(screen.getByLabelText('Test activity'), { target: { value: 'deployment-1' } });
+  const facts = () => vi.mocked(touchpointLoadQueue('test').enqueue).mock.calls.map(([record]) => record);
+  await waitFor(() => expect(facts().some(record => record.result === 'failed')).toBe(true));
+  expect(facts().find(record => record.result === 'failed')).toMatchObject(kind === 'http'
+    ? { failure_stage: 'resource_read', error_code: 'http_error', http_status: 503 }
+    : { failure_stage: 'decode_validate', error_code: 'decode_error', http_status: null });
+  expect(JSON.stringify(facts())).not.toContain('private upstream URL');
+});
+
+
+async function startAutomaticFixture(input: { locale: "en" | "ja" | "en-US"; seed: string; fixed?: boolean; receipt?: unknown; report?: (init?: RequestInit) => Promise<Response> }) {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
+  vi.stubEnv('NEXT_PUBLIC_CMS_HOST_RELEASE', digest('real-release-fixture'));
+  vi.spyOn(HTMLElement.prototype, 'getClientRects').mockReturnValue({ length: 1 } as DOMRectList);
+  const locale = input.locale;
+  const material = { version: 1 as const, materialVersionId: '12345678-1234-4234-8234-123456789012', sourceHash: 'a'.repeat(64), templateId: 'fixed', templateVersion: 1, rendererDigest: digest('renderer'), compilerIdentity: 'fixture', sourceDslVersion: 3 as const };
+  const fixedManifest = { ...manifest, ...(input.fixed === false ? {} : { material }), placements: [{ ...manifest.placements[0]!, locales: [locale] }] };
+  const fixedContent = { ...content, locale, manifest: fixedManifest, manifestHash: digest(JSON.stringify(fixedManifest)) };
+  const snapshotHash = digest(`fixed-snapshot-${input.seed}`);
+  const context = { ...runtime().testContext, deploymentId: `deployment-${input.seed}`, contextId: `ctx-v1:${'a'.repeat(64)}`, generation: '1', contextToken: `ctx-token-v1:${'b'.repeat(64)}`, testerMemberId: 'account-a' };
+  const fixedDecision = { ...runtime(fixedContent), deploymentId: context.deploymentId, activityId: `activity-${input.seed}`, snapshotHash, manifestHash: fixedContent.manifestHash, testContext: context };
+  const deployment = { id: context.deploymentId, activityId: fixedDecision.activityId, snapshotHash, snapshot: { contentVersionId: content.id, manifestHash: fixedContent.manifestHash, artifactHash: fixedDecision.artifactHash, placementKeys: ['opend.home.campaign-modal'] } };
+  const requests: { url: string; body: Record<string, unknown>; signal?: AbortSignal | null }[] = [];
+  const diagnostics: unknown[] = [];
+  const listener = (event: Event) => diagnostics.push((event as CustomEvent).detail);
+  document.addEventListener('touchpointdiagnostic', listener);
+  const transport = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/acceptances') || url.endsWith('/automated-reports')) requests.push({ url, body: JSON.parse(String(init?.body)), signal: init?.signal });
+    if (url.endsWith('/acceptances')) return Response.json(input.receipt ?? { id: 'display-receipt' }, { status: 201 });
+    if (url.endsWith('/automated-reports')) return input.report ? input.report(init) : Response.json({ status: 'unverified' }, { status: 201 });
+    if (url.endsWith('/context')) return Response.json(context);
+    if (url.endsWith('/deployments')) return Response.json({ deployments: [deployment] });
+    return Response.json(fixedDecision);
+  });
+  vi.stubGlobal('fetch', transport);
+
+  const view = render(<I18nProvider initial={locale === 'ja' ? 'ja' : 'en'}><TestCampaignHarness authenticated /></I18nProvider>);
+  await screen.findByTestId('touchpoint-test-selector');
+  fireEvent.change(screen.getByLabelText('Test activity'), { target: { value: deployment.id } });
+  try { await waitFor(() => expect(requests.some(request => request.url.endsWith('/acceptances')), JSON.stringify(diagnostics)).toBe(true)); }
+  finally { document.removeEventListener('touchpointdiagnostic', listener); }
+  expect(screen.getByRole('dialog')).toBeVisible();
+  return { view, requests, context, snapshotHash, locale };
+}
+it.each(['en', 'ja'] as const)("submits server automatic checks after a real fixed-template %s display receipt and reuses its UUID on retry", async locale => {
+  let sent = 0;
+  const f = await startAutomaticFixture({ locale, seed: locale, report: async () => Response.json({ status: 'unverified' }, { status: ++sent === 1 ? 503 : 201 }) });
+  await waitFor(() => expect(f.requests.some(request => request.url.endsWith('/automated-reports'))).toBe(true));
+  await act(async () => { await vi.advanceTimersByTimeAsync(1100); });
+  const automatic = f.requests.filter(request => request.url.endsWith('/automated-reports'));
+  expect(automatic).toHaveLength(2);
+  expect(automatic[0]!.body).toEqual(automatic[1]!.body);
+  expect(automatic[0]!.body).toMatchObject({ version: 1, acceptanceId: 'display-receipt', contextToken: f.context.contextToken, snapshotHash: f.snapshotHash, placementKey: 'opend.home.campaign-modal', locale, hostRelease: digest('real-release-fixture'), observations: [] });
+  expect(automatic[0]!.body.reportId).toMatch(/^[a-f0-9-]{36}$/);
+  expect(automatic[0]!.body).not.toHaveProperty('passed');
+});
+it.each(['legacy ZIP', 'missing display id'] as const)('does not create an automatic gate for %s after a real Test mount', async kind => {
+  const f = await startAutomaticFixture({ locale: kind === 'legacy ZIP' ? 'en-US' : 'en', seed: kind === 'legacy ZIP' ? 'legacy' : 'missing-id', fixed: kind !== 'legacy ZIP', receipt: {} });
+  await act(async () => { await vi.advanceTimersByTimeAsync(1100); });
+  expect(f.requests.filter(request => request.url.endsWith('/automated-reports'))).toHaveLength(0);
+});
+it('aborts an automatic Test report when identity changes and rejects its late completion', async () => {
+  let release!: (value: Response) => void;
+  const pending = new Promise<Response>(resolve => { release = resolve; });
+  const f = await startAutomaticFixture({ locale: 'en', seed: 'identity', report: () => pending });
+  await waitFor(() => expect(f.requests.some(request => request.url.endsWith('/automated-reports'))).toBe(true));
+  const oldReport = f.requests.find(request => request.url.endsWith('/automated-reports'))!;
+  await act(async () => { f.view.rerender(<I18nProvider initial="en"><TestCampaignHarness authenticated sessionSubject="account-b" /></I18nProvider>); });
+  expect(oldReport.signal?.aborted).toBe(true);
+  await act(async () => { release(Response.json({ status: 'unverified' }, { status: 201 })); await pending; await vi.advanceTimersByTimeAsync(1500); });
+  expect(f.requests.filter(request => request.url.endsWith('/automated-reports'))).toHaveLength(1);
+});
+
+it.each(['retry', 'pending'] as const)('defensively cancels the old automatic report %s if an immutable context changes under the same selection', async kind => {
+  // Current server immutable deployments do not produce this drift. Exercise
+  // the client boundary with a malformed/future producer, through the real 409 recovery.
+  let published: ReturnType<typeof useTestRuntime> = null;
+  function Probe() { published = useTestRuntime(); return null; }
+  render(<Probe />);
+  let reports = 0;
+  let release!: (value: Response) => void;
+  const pending = new Promise<Response>(resolve => { release = resolve; });
+  const f = await startAutomaticFixture({ locale: 'en', seed: `context-drift-defense-${kind}`, report: () => kind === 'pending' ? pending : Promise.resolve(Response.json({ status: 'unverified' }, { status: ++reports === 1 ? 503 : 201 })) });
+  await waitFor(() => expect(f.requests.filter(r => r.url.endsWith('/automated-reports'))).toHaveLength(1));
+  const first = f.requests.find(r => r.url.endsWith('/automated-reports'))!;
+  const nextContext = { ...f.context, generation: '2', contextToken: 'ctx-token-v1:' + 'c'.repeat(64), updatedAt: '2030-01-01T00:00:00.001Z' };
+  const original = vi.mocked(fetch).getMockImplementation()!;
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/context')) return Response.json(nextContext);
+    const result = await original(url, init);
+    if (url.includes('/test-runtime?')) {
+      if (new URL(url, 'http://local').searchParams.get('contextToken') !== nextContext.contextToken) return Response.json({ error: 'test_context_mismatch', reason: 'context_token_mismatch', testContext: nextContext }, { status: 409 });
+      return Response.json({ ...await result.json(), testContext: { ...nextContext, scheduleState: 'active' } });
+    }
+    return result;
+  }));
+  await act(async () => { window.dispatchEvent(new Event('focus')); });
+  await waitFor(() => expect(published?.context.contextToken).toBe(nextContext.contextToken));
+  await act(async () => { await vi.advanceTimersByTimeAsync(1100); });
+  if (kind === 'pending') {
+    expect(first.signal?.aborted).toBe(true);
+    await act(async () => { release(Response.json({ status: 'unverified' }, { status: 201 })); await pending; });
+  }
+  expect(f.requests.filter(r => r.url.endsWith('/automated-reports') && r.body.contextToken === f.context.contextToken)).toHaveLength(1);
+  f.view.unmount();
+});
+
+
+it.each([['opend.home.campaign-modal', 'https', false], ['opend.home.campaign-modal', 'internal', false], ['opend.home.hover-layer', 'https', false], ['opend.home.hover-layer', 'internal', false], ['opend.home.campaign-modal', 'console_pricing', false], ['opend.home.hover-layer', 'console_pricing', false], ['opend.home.campaign-modal', 'https', true], ['opend.home.hover-layer', 'internal', true]] as const)('dispatches Test %s %s SDK link A/B (role bindings: %s) with actual targets and unchanged retry C', async (placementKey, target_kind, bound) => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
+  sessionStorage.clear(); localStorage.clear();
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  vi.spyOn(HTMLElement.prototype, 'getClientRects').mockImplementation(function (this: HTMLElement) { return { length: this.hidden || this.closest('[hidden]') ? 0 : 1 } as DOMRectList; });
+  Object.defineProperty(navigator, 'userActivation', { configurable: true, value: { isActive: true } });
+  const staticActions = [
+    { id: 'Link-A', target: target_kind === 'console_pricing' ? { kind: 'console-pricing' } : target_kind === 'https' ? { kind: 'https', url: 'https://example.com/a' } : { kind: 'internal', path: '/projects?a=1' } },
+    { id: 'Link_B', target: target_kind === 'console_pricing' ? { kind: 'console-pricing' } : target_kind === 'https' ? { kind: 'https', url: 'https://example.com/b' } : { kind: 'internal', path: '/projects?b=1' } },
+  ];
+  const requiredCapabilities = target_kind === 'console_pricing' ? ['static-action', 'action-console-pricing-v1'] : ['static-action'];
+  const apiVersion = target_kind === 'console_pricing' ? 2 : 1;
+  const placementKeys = placementKey === 'opend.home.hover-layer' ? ['opend.home.hover-entry', placementKey] : [placementKey];
+  const material = {
+    version: 1 as const,
+    materialVersionId: '12345678-1234-4234-8234-123456789012',
+    sourceHash: 'a'.repeat(64),
+    templateId: 'test-v3',
+    templateVersion: 9,
+    rendererDigest: digest('renderer'),
+    compilerIdentity: 'fixture',
+    sourceDslVersion: 3 as const,
+  };
+  const dimensions = {
+    template_id: material.templateId,
+    template_version: material.templateVersion,
+    material_version_id: material.materialVersionId,
+  };
+  // OBS-011: A is the registered primary, B the registered secondary button.
+  const roleBindings = { version: 1 as const, bindings: placementKeys.flatMap((key) => [
+    { placementKey: key, fieldKey: 'primaryCta', buttonId: 'Link-A', role: 'primary' as const },
+    { placementKey: key, fieldKey: 'secondaryCta', buttonId: 'Link_B', role: 'secondary' as const },
+  ]) };
+  const linkManifest = {
+    ...manifest,
+    material,
+    ...(bound ? { roleBindings } : {}),
+    resources: placementKeys.map((key) => `${key}.js`),
+    runtimeApiVersion: apiVersion,
+    placements: placementKeys.map((key) => ({
+      ...manifest.placements[0]!,
+      key,
+      entry: `${key}.js`,
+      locales: ['en'],
+      requiredCapabilities,
+      staticActions,
+    })),
+  };
+  const linkContent = {
+    ...content,
+    locale: 'en',
+    entryPath: `${placementKey}.js`,
+    resources: [{ ...content.resources[0]!, path: `${placementKey}.js` }],
+    runtime: { ...content.runtime, apiVersion },
+    placementKey,
+    manifest: linkManifest,
+    manifestHash: digest(JSON.stringify(linkManifest)),
+  };
+  const context = { ...runtime().testContext, contextId: `ctx-v1:${'a'.repeat(64)}`, generation: '1', contextToken: `ctx-token-v1:${'b'.repeat(64)}`, testerMemberId: 'account-a' };
+  const linkDecision = { ...runtime(linkContent), placementKey, requiredCapabilities, staticActions, manifestHash: linkContent.manifestHash, testContext: context };
+  const deployment = { id: context.deploymentId, activityId: linkDecision.activityId, snapshotHash: linkDecision.snapshotHash, snapshot: { contentVersionId: content.id, manifestHash: linkContent.manifestHash, artifactHash: linkDecision.artifactHash, placementKeys } };
+  let failedClick = false;
+  const transport = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/events')) {
+      const body = JSON.parse(String(init?.body));
+      if (body.kind === 'click' && !failedClick) { failedClick = true; return Response.json({}, { status: 503 }); }
+      return Response.json({ accepted: true }, { status: 202 });
+    }
+    if (url.endsWith('/context')) return Response.json(context);
+    if (url.endsWith('/deployments')) return Response.json({ deployments: [deployment] });
+    if (url.endsWith('/acceptances')) return Response.json({ id: 'display' }, { status: 201 });
+    const requestedPlacement = new URL(url, window.location.href).searchParams.get('placementKey') ?? placementKey;
+    return Response.json({
+      ...linkDecision,
+      placementKey: requestedPlacement,
+      content: {
+        ...linkContent,
+        placementKey: requestedPlacement,
+        entryPath: `${requestedPlacement}.js`,
+        resources: [
+          { ...content.resources[0]!, path: `${requestedPlacement}.js` },
+        ],
+      },
+    });
+  });
+  vi.stubGlobal('fetch', transport);
+
+  const navigation = vi.spyOn(campaignNavigation, 'navigateCampaignTarget');
+  const external = vi.spyOn(providerRegistry, 'openExternalUrl').mockResolvedValue(false);
+  if (target_kind !== 'console_pricing') navigation.mockResolvedValue(false);
+  render(<><TestCampaignHarness authenticated />{placementKey === 'opend.home.hover-layer' && <ProductionCampaignHover authenticated sessionSubject="account-a" />}</>);
+  await screen.findByTestId('touchpoint-test-selector');
+  fireEvent.change(screen.getByLabelText('Test activity'), { target: { value: deployment.id } });
+  if (placementKey === 'opend.home.hover-layer') {
+    const overlay = await screen.findByTestId('cms-hover-overlay-root');
+    const entry = overlay.querySelector('opend-touchpoint')!;
+    await waitFor(() => expect(entry).not.toHaveAttribute('hidden'));
+    fireEvent.pointerEnter(entry);
+  }
+  await waitFor(() => expect(cmsTrack.mock.calls.some(([event, props]) => event === 'surface_view' && props.placement_key === placementKey)).toBe(true));
+  for (const [event, props] of cmsTrack.mock.calls)
+    if (event === 'surface_view') expect(props).toMatchObject(dimensions);
+  const dispatch = vi.mocked(OpenDesignTouchpointElement.prototype.mount).mock.calls.slice().reverse().find(call => call[2].placementKey === placementKey && call[2].mode === 'test')![5]!.dispatchAction!;
+  await act(async () => { await expect(dispatch('not-registered')).rejects.toThrow('touchpoint_action_denied'); });
+  Object.defineProperty(navigator, 'userActivation', { configurable: true, value: { isActive: false } });
+  await act(async () => { await expect(dispatch(staticActions[0]!.id)).rejects.toThrow('touchpoint_action_denied'); });
+  expect(cmsTrack.mock.calls.filter(([event]) => event === 'ui_click')).toHaveLength(0);
+  Object.defineProperty(navigator, 'userActivation', { configurable: true, value: { isActive: true } });
+  for (const action of staticActions) await act(async () => { await expect(dispatch(action.id)).rejects.toThrow('touchpoint_action_denied'); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+  const clicks = transport.mock.calls.filter(([url]) => url.endsWith('/events')).map(([, init]) => JSON.parse(String(init?.body))).filter(body => body.kind === 'click');
+  expect(clicks).toHaveLength(3);
+  expect(clicks[2]).toEqual(clicks[0]);
+  expect(clicks[1].eventId).not.toBe(clicks[0].eventId);
+  // Each click names the button actually pressed; the element follows its verified role only.
+  const roleOf = (id: string) => (bound ? (id === 'Link-A' ? 'primary' : 'secondary') : null);
+  expect(clicks.map(body => body.button.id)).toEqual(['Link-A', 'Link_B', 'Link-A']);
+  for (const body of clicks) {
+    const action = staticActions.find(a => a.id === body.button.id)!;
+    expect(body).toMatchObject({
+      contractVersion: 2,
+      element: bound ? (roleOf(action.id) === 'primary' ? 'primary_cta' : 'secondary_cta') : 'unclassified_cta',
+      button: {
+        id: action.id, role: roleOf(action.id), targetKind: target_kind,
+        targetUrl: action.target.kind === 'https' ? action.target.url : action.target.kind === 'internal' ? action.target.path : null,
+        templateId: material.templateId, templateVersion: material.templateVersion, materialVersionId: material.materialVersionId,
+      },
+    });
+  }
+  expect(cmsTrack.mock.calls.filter(([event]) => event === 'ui_click')).toEqual(staticActions.map((action, i) => ['ui_click', expect.objectContaining({ mode: 'test', decision_id: null, page_name: 'home', area: placementKey.endsWith('hover-layer') ? 'cms_hover_layer' : 'cms_campaign_modal', element: target_kind === 'console_pricing' ? 'primary_cta' : 'link_cta', ...(target_kind !== 'console_pricing' ? { action_id: action.id, target_kind } : {}), ...(bound ? { button_role: roleOf(action.id) } : {}) }), { insertId: clicks[i].eventId }]));
+  for (const [, props] of cmsTrack.mock.calls)
+    expect(props).toMatchObject(dimensions);
+  if (target_kind === 'console_pricing') {
+    const analyticsClicks = cmsTrack.mock.calls.filter(([event]) => event === 'ui_click');
+    expect(external).toHaveBeenCalledTimes(2);
+    for (const [i, [url]] of external.mock.calls.entries()) {
+      const destination = new URL(url);
+      expect(destination.searchParams.get('billing')).toBe('plan');
+      expect(analyticsClicks[i]![1].entry_id).toBe(destination.searchParams.get('od_entry_id'));
+      expect(analyticsClicks[i]![1].source_detail).toBe('cms_campaign_primary_cta');
+      expect(analyticsClicks[i]![1]).not.toHaveProperty('action_id');
+      expect(analyticsClicks[i]![1]).not.toHaveProperty('target_kind');
+    }
+  } else expect(localStorage.getItem('open-design:amr-entry-attribution:v1')).toBeNull();
+  if (placementKey === 'opend.home.hover-layer') {
+    const close = vi.mocked(OpenDesignTouchpointElement.prototype.mount).mock.calls.slice().reverse().find(call => call[2].placementKey === placementKey && call[2].mode === 'test')![5]!.requestClose!;
+    await act(async()=>{close('close');});
+    const raw = transport.mock.calls.filter(([url])=>url.endsWith('/events')).map(([,init])=>JSON.parse(String(init?.body))).filter(body=>body.element==='close');
+    const captures = cmsTrack.mock.calls.filter(([event,props])=>event==='ui_click' && props.element==='close');
+    expect(raw).toHaveLength(1); expect(captures).toHaveLength(1);
+    expect(raw[0]).toMatchObject({eventId:captures[0]![2].insertId,kind:'click',surface:'layer',placementKey,contextId:context.contextId,loadAttemptId:captures[0]![1].load_attempt_id});
+    await act(async()=>{close('close');});
+    expect(transport.mock.calls.filter(([url,init])=>url.endsWith('/events') && JSON.parse(String(init?.body)).element==='close')).toHaveLength(1);
+  }
+  // The retired mount's callback becomes inert; it must not navigate or capture again.
+  act(() => clearTestRuntimeSession());
+  await act(async () => {
+    if (placementKey === 'opend.home.hover-layer') await expect(dispatch(staticActions[0]!.id)).rejects.toThrow('touchpoint_action_denied');
+    else await dispatch(staticActions[0]!.id);
+  });
+  expect(campaignNavigation.navigateCampaignTarget).toHaveBeenCalledTimes(2);
+  expect(cmsTrack.mock.calls.filter(([event]) => event === 'ui_click')).toHaveLength(placementKey === 'opend.home.hover-layer' ? 3 : 2);
+});
+
+it.each(['close', 'secondary_close'] as const)(
+  'keeps verified Test B identity on independent SDK %s X and raw C',
+  async (reason) => {
+    const f = await startAutomaticFixture({
+      locale: 'en',
+      seed: `obs-x-${reason}`,
+    });
+    const view = cmsTrack.mock.calls.find(
+      ([event]) => event === 'surface_view',
+    )!;
+    expect(view[1]).toMatchObject({
+      template_id: 'fixed',
+      template_version: 1,
+      material_version_id: '12345678-1234-4234-8234-123456789012',
+    });
+    const mount = vi
+      .mocked(OpenDesignTouchpointElement.prototype.mount)
+      .mock.calls.at(-1)!;
+    await act(async () => {
+      mount[5]!.requestClose!(reason);
+    });
+    const click = cmsTrack.mock.calls.find(([event]) => event === 'ui_click')!;
+    expect(click[1]).toMatchObject({
+      template_id: view[1].template_id,
+      template_version: view[1].template_version,
+      material_version_id: view[1].material_version_id,
+      element: reason,
+      load_attempt_id: view[1].load_attempt_id,
+    });
+    const bodies = vi
+      .mocked(fetch)
+      .mock.calls.filter(([url]) => String(url).endsWith('/events'))
+      .map(([, init]) => JSON.parse(String(init?.body)));
+    expect(bodies).toContainEqual(
+      expect.objectContaining({
+        kind: 'click',
+        element: reason,
+        eventId: click[2].insertId,
+      }),
+    );
+    for (const body of bodies) expect(body).not.toHaveProperty('template_id');
+    f.view.unmount();
+  },
+);
+
+it.each(['missing', 'different'] as const)(
+  'retains Test rendered identity across same-content %s renewal metadata',
+  async (kind) => {
+    const f = await startAutomaticFixture({
+      locale: 'en',
+      seed: `obs-renew-${kind}`,
+    });
+    const host = document.querySelector('opend-touchpoint');
+    const originalViews = cmsTrack.mock.calls.filter(
+      ([event]) => event === 'surface_view',
+    );
+    const transport = vi.mocked(fetch).getMockImplementation()!;
+    let resolveRenewal!: () => void;
+    const completed = new Promise<void>((resolve) => {
+      resolveRenewal = resolve;
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const response = await transport(input, init);
+        if (String(input).includes('/test-runtime?')) {
+          const next = await response.json();
+          if (kind === 'missing') delete next.content.manifest.material;
+          else next.content.manifest.material.templateVersion = 99;
+          resolveRenewal();
+          return Response.json(next);
+        }
+        return response;
+      }),
+    );
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+      await completed;
+    });
+    expect(document.querySelector('opend-touchpoint')).toBe(host);
+    expect(
+      cmsTrack.mock.calls.filter(([event]) => event === 'surface_view'),
+    ).toEqual(originalViews);
+    const mount = vi
+      .mocked(OpenDesignTouchpointElement.prototype.mount)
+      .mock.calls.at(-1)!;
+    await act(async () => {
+      mount[5]!.requestClose!('secondary_close');
+    });
+    const view = originalViews[0]![1];
+    expect(cmsTrack).toHaveBeenLastCalledWith(
+      'ui_click',
+      expect.objectContaining({
+        template_id: view.template_id,
+        template_version: 1,
+        material_version_id: view.material_version_id,
+        load_attempt_id: view.load_attempt_id,
+        element: 'secondary_close',
+      }),
+      expect.anything(),
+    );
+    f.view.unmount();
+  },
+);

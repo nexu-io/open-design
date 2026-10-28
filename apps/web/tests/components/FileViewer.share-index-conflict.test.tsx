@@ -2,7 +2,7 @@
 
 // entry-index-conflict: the share panel explains the refusal and copies the
 // daemon's agent prompt. Real fetch/provider parsing; only HTTP is stubbed.
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import {
@@ -191,7 +191,7 @@ it('shows the prompt for manual copy when the clipboard is unavailable', async (
   await act(async () => { fireEvent.click(generate); });
   await screen.findByText(conflictMessage);
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: /copy fix for agent/i })); });
-  expect(screen.getByText(/couldn't copy/i)).toBeTruthy();
+  await waitFor(() => { expect(screen.getByText(/couldn't copy/i)).toBeTruthy(); });
   expect(document.querySelector('pre')?.textContent).toBe(conflict.agentPrompt);
 });
 

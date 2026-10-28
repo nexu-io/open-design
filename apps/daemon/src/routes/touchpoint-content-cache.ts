@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -127,9 +128,12 @@ export interface TouchpointContentCache {
    * that, by definition, is not coming. The others are the expiry timer armed
    * at a record's known `endsAt` and the sweep run when the store is created.
    */
+  /** A just-prefetched online grant, with elapsed time deducted and its original lease cap. */
+  replayPrefetched(key: TouchpointContentKey, expected?: unknown): Record<string, unknown> | null;
   replayOffline(
     key: TouchpointContentKey,
     reason: TouchpointOfflineReplayReason,
+    expected?: unknown,
   ): Record<string, unknown> | null;
   /**
    * Act on a 410 the runtime returned for this placement, and report whether
@@ -223,7 +227,7 @@ type AssemblyRecord = Readonly<{
  * and no other.
  *
  * The locale compared is the one the daemon OFFERED, not the one it asked for.
- * Vela resolves a placement locale through [requested, base language, en-US],
+ * Vela selects one declared locale under the frozen source's language policy,
  * so a zh-CN request can legitimately be answered -- and cached -- as en-US,
  * and `held` reports that faithfully. Comparing the requested locale here
  * would strand every placement the server answers through a fallback.
@@ -915,6 +919,73 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
     if (!tokens.size) completed.delete(scope);
   };
 
+  /** Share durable refusal/clock/integrity checks; only outages may extend a lease to endsAt. */
+  function replayAuthorized(key: TouchpointContentKey, reason: TouchpointOfflineReplayReason | null, expected?: unknown): Record<string, unknown> | null {
+    if (!owns(key.scope)) return null;
+    settleCompleted(key.scope);
+    const eligible = readAssembly(key);
+    if (!eligible || eligible.version !== ASSEMBLY_VERSION || eligible.generation !== authority(key.scope)?.generation) return null;
+    retryRefusals(key.scope);
+    if (replayPauses.has(placementFenceName(key))) return null;
+    const file = assemblyFile(key);
+    const scopeRefusal = refusedScopes.get(key.scope);
+    const stored = pendingWithdrawals.size ? readAssembly(key) : null;
+    const pendingWithdrawal = stored && [...pendingWithdrawals.values()].some(withdrawal =>
+      withdrawal.scope === key.scope && withdrawal.placementKey === key.placementKey &&
+      !withdrawal.renewed.has(file) && touchpointWithdrawalReclaims(withdrawal.body, stored.identity),
+    );
+    if (refusedFiles.has(file) || (scopeRefusal && !scopeRefusal.has(file)) || pendingWithdrawal) {
+      // If storage has recovered, persist the remembered refusal before a
+      // later restart. Recovery itself never grants display authority.
+      const refused = stored ?? readAssembly(key);
+      if (refused) retireReplay(file, refused);
+      return null;
+    }
+    const live = liveRecord(key, true);
+    if (!live) return null;
+    const { record, schedule, now } = live;
+    if (expected !== undefined) {
+      // A captured warm response never overrides the current authority journal.
+      if (!isRecord(expected) || !isRecord(expected.content)) return null;
+      const expectedEnvelope = envelopeOf(expected);
+      const admittedEnvelope = { ...record.envelope };
+      if (reason !== null) {
+        const replay = expected[TOUCHPOINT_OFFLINE_REPLAY_FIELD];
+        if (!isRecord(replay) || replay.cachedServerTime !== schedule.serverTime) return null;
+        // Offline replay rewrites these fields only; compare every other
+        // audience, deployment, decision, schedule and immutable package binding.
+        for (const field of ['serverTime', 'authorizationExpiresAt', TOUCHPOINT_OFFLINE_REPLAY_FIELD]) {
+          delete expectedEnvelope[field];
+          delete admittedEnvelope[field];
+        }
+      }
+      if (!isDeepStrictEqual(expectedEnvelope, admittedEnvelope) ||
+        expected.content.id !== record.contentId || expected.content.locale !== record.locale ||
+        expected.content.manifestHash !== record.manifestHash || expected.content.entryDigest !== record.entryDigest) return null;
+    }
+    if (record.replayRefused || !record.identity || !touchpointScheduleAllowsDisplay(schedule, now)) return null;
+    const full = rebuild(key, record, record.envelope);
+    if (!full) return null;
+    const effectiveServerTime = new Date(now).toISOString();
+    // The two rewritten timing fields, and only those two. See the contract
+    // in `@open-design/contracts/api/touchpointOffline` for why each one is
+    // rewritten rather than echoed.
+    full.serverTime = effectiveServerTime;
+    if (reason === null) {
+      const deadline = Math.min(Date.parse(String(record.envelope.authorizationExpiresAt)), Date.parse(schedule.endsAt), Date.parse(schedule.serverTime) + 300_000);
+      if (!Number.isFinite(deadline) || deadline <= now) return null;
+      full.authorizationExpiresAt = new Date(deadline).toISOString();
+      return full;
+    }
+    full.authorizationExpiresAt = schedule.endsAt;
+    full[TOUCHPOINT_OFFLINE_REPLAY_FIELD] = {
+      reason,
+      cachedServerTime: schedule.serverTime,
+      effectiveServerTime,
+    };
+    return full;
+  }
+
   return {
     beginAuthority(scope) {
       if (closed) return null;
@@ -998,46 +1069,8 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
     },
     finishTicket(ticket) { activeTickets.delete(ticket); },
 
-    replayOffline(key, reason) {
-      if (!owns(key.scope)) return null;
-      settleCompleted(key.scope);
-      const eligible = readAssembly(key);
-      if (!eligible || eligible.version !== ASSEMBLY_VERSION || eligible.generation !== authority(key.scope)?.generation) return null;
-      retryRefusals(key.scope);
-      if (replayPauses.has(placementFenceName(key))) return null;
-      const file = assemblyFile(key);
-      const scopeRefusal = refusedScopes.get(key.scope);
-      const stored = pendingWithdrawals.size ? readAssembly(key) : null;
-      const pendingWithdrawal = stored && [...pendingWithdrawals.values()].some(withdrawal =>
-        withdrawal.scope === key.scope && withdrawal.placementKey === key.placementKey &&
-        !withdrawal.renewed.has(file) && touchpointWithdrawalReclaims(withdrawal.body, stored.identity),
-      );
-      if (refusedFiles.has(file) || (scopeRefusal && !scopeRefusal.has(file)) || pendingWithdrawal) {
-        // If storage has recovered, persist the remembered refusal before a
-        // later restart. Recovery itself never grants display authority.
-        const refused = stored ?? readAssembly(key);
-        if (refused) retireReplay(file, refused);
-        return null;
-      }
-      const live = liveRecord(key, true);
-      if (!live) return null;
-      const { record, schedule, now } = live;
-      if (record.replayRefused || !record.identity || !touchpointScheduleAllowsDisplay(schedule, now)) return null;
-      const full = rebuild(key, record, record.envelope);
-      if (!full) return null;
-      const effectiveServerTime = new Date(now).toISOString();
-      // The two rewritten timing fields, and only those two. See the contract
-      // in `@open-design/contracts/api/touchpointOffline` for why each one is
-      // rewritten rather than echoed.
-      full.serverTime = effectiveServerTime;
-      full.authorizationExpiresAt = schedule.endsAt;
-      full[TOUCHPOINT_OFFLINE_REPLAY_FIELD] = {
-        reason,
-        cachedServerTime: schedule.serverTime,
-        effectiveServerTime,
-      };
-      return full;
-    },
+    replayOffline(key, reason, expected) { return replayAuthorized(key, reason, expected); },
+    replayPrefetched(key, expected) { return replayAuthorized(key, null, expected); },
 
     forgetWithdrawn(key, body) {
       if (!owns(key.scope)) return false;
@@ -1115,6 +1148,7 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
         const clock = responseClock(requestElapsedMs);
         if (requestCannotPersist(key, response, ticket) || overtakenByWithdrawal(key, ticket)) return;
         if (!isRecord(response)) return;
+        if (response.decision === null) { refuseAuthority(key.scope, key); return; }
         if (overtakenByPendingWithdrawal(key, response, ticket) || overtakenByReceipt(key, response, ticket)) return;
         const content = response.content;
         if (!isRecord(content)) return;

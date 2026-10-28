@@ -16,6 +16,9 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  parseVelaLoginAttribution,
+  parseAmrEntryAnalyticsPayload,
+  mirrorAmrEntryAnalytics,
   applyVelaLiveAccount,
   clearAllVelaLiveAccounts,
   forgetVelaLogin,
@@ -720,5 +723,31 @@ describe('velaLiveAccountCacheKey + clearAllVelaLiveAccounts', () => {
     // Logout wipes everything.
     clearAllVelaLiveAccounts();
     expect(peekVelaLiveAccount(oldKey)).toBeNull();
+  });
+});
+
+
+describe('CMS AMR source and relationship mirror', () => {
+  const base = { pageName: 'open_design', sourcePageName: 'home', area: 'amr_entry', element: 'cms_campaign_primary_cta', action: 'click_amr_entry', entryId: 'od-amr-cms', sourceProduct: 'open_design', sourceDetail: 'cms_campaign_primary_cta', entryOccurredAt: '2026-10-09T00:00:00.000Z' };
+  const cmsEventId = '00000000-0000-4000-8000-000000000123';
+  it('accepts CMS login and strict mirror UUID but refuses forged historical metadata and wrong page', () => {
+    expect(parseVelaLoginAttribution({ attribution: { entryId: base.entryId, sourceProduct: base.sourceProduct, sourceDetail: base.sourceDetail, occurredAt: base.entryOccurredAt, odDeviceId: 'consented-device' } })).toMatchObject({ sourceDetail: 'cms_campaign_primary_cta', odDeviceId: 'consented-device' });
+    expect(parseAmrEntryAnalyticsPayload({ ...base, cmsEventId })).toMatchObject({ cmsEventId });
+    expect(parseAmrEntryAnalyticsPayload({ ...base, sourcePageName: 'chat_panel' })).toBeNull();
+    for (const invalid of ['bad', 12, null, '00000000-0000-0000-0000-000000000123']) expect(parseAmrEntryAnalyticsPayload({ ...base, cmsEventId: invalid })).toBeNull();
+    expect(parseAmrEntryAnalyticsPayload({ ...base, element: 'home_balance_gate_upgrade', sourceDetail: 'home_balance_gate_upgrade', cmsEventId })).toBeNull();
+    expect(parseAmrEntryAnalyticsPayload({ ...base, element: 'home_balance_gate_upgrade', sourceDetail: 'home_balance_gate_upgrade' })).not.toBeNull();
+  });
+  it('uses C only in common.eventId, preserving the existing relation registry, headers and old entry ID rule', async () => {
+    const transport = vi.fn(async (_url: string, _init: { body?: string }) => ({ ok: true, status: 202 }));
+    const payload = parseAmrEntryAnalyticsPayload({ ...base, cmsEventId })!;
+    const result = await mirrorAmrEntryAnalytics(payload, { fetchImpl: transport, analyticsContext: { deviceId: 'header-device', sessionId: 'header-session', locale: 'en' }, env: { OPEN_DESIGN_AMR_ANALYTICS_ENV: 'test' } });
+    expect(result).toEqual({ mirrored: true, status: 202 });
+    const event = JSON.parse(transport.mock.calls[0]![1].body!).events[0];
+    expect(event.common).toMatchObject({ eventId: cmsEventId, eventName: 'amr_entry', registryKey: 'open_design_amr_entry', anonymousId: 'header-device', sessionId: 'header-session' });
+    expect(event.payload).toEqual(base);
+    expect(event.payload).not.toHaveProperty('cmsEventId');
+    await mirrorAmrEntryAnalytics(parseAmrEntryAnalyticsPayload({ ...base, element: 'home_balance_gate_upgrade', sourceDetail: 'home_balance_gate_upgrade' })!, { fetchImpl: transport });
+    expect(JSON.parse(transport.mock.calls[1]![1].body!).events[0].common.eventId).toBe('od-amr-entry-od-amr-cms');
   });
 });

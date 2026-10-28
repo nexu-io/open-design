@@ -132,6 +132,7 @@ import {
   workspaceAnalyticsDimensions,
 } from '../analytics/workspace';
 import { WorkbenchCampaignBadge } from './WorkbenchCampaignBadge';
+import { ProductionCampaignHover } from './ProductionCampaignHover';
 import { workspaceChromeAccountActionsHost } from './workspaceChromeActions';
 
 /** Gap the account menu keeps from the rail card's top edge — the same inset
@@ -1957,17 +1958,25 @@ export function WorkspaceTopRightAccountCluster({
       billing={billing}
       billingResponse={billingResponse}
       balanceUsd={balanceUsd}
-      // No CMS touchpoint here: every placement the app authorizes is a home
-      // placement (`opend.home.*`), and a project workbench is not home. The
-      // built-in campaign pill is product chrome, not a CMS host, and stays.
-      leadingSlot={campaignAudience ? (
-        <WorkbenchCampaignBadge
-          audience={campaignAudience}
-          page="project"
-          metricsConsent={metricsConsent}
-          installationId={installationId}
-          loggedIn={amrLoggedIn}
-        />
+      // OPEND-3040: the marketing hover (entry + layer, atomic) is also shown
+      // in the project workspace. The modal and the account badge stay
+      // home-only. The built-in campaign pill is product chrome, rendered
+      // once, and is not duplicated by the CMS host.
+      leadingSlot={campaignAudience || amrLoggedIn === true ? (
+        <>
+          {campaignAudience ? (
+            <WorkbenchCampaignBadge
+              audience={campaignAudience}
+              page="project"
+              metricsConsent={metricsConsent}
+              installationId={installationId}
+              loggedIn={amrLoggedIn}
+            />
+          ) : null}
+          {amrLoggedIn === true ? (
+            <ProductionCampaignHover authenticated sessionSubject={amrAccountId} />
+          ) : null}
+        </>
       ) : null}
       updaterSlot={updaterSlot}
       onOpenSettings={onOpenSettings}

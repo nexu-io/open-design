@@ -2238,7 +2238,7 @@ function AppInner() {
       window.removeEventListener('focus', onReturnToApp);
       document.removeEventListener('visibilitychange', onReturnToApp);
     };
-  }, [applyAmrLoginStatus, clearAmrAuthRetryContinuation, daemonLive]);
+  }, [applyAmrLoginStatus, clearAmrAuthRetryContinuation, daemonLive, locale]);
 
   useEffect(() => {
     analytics.setUserId(
@@ -6101,7 +6101,7 @@ function AppInner() {
           && projectRouteWorkspaceContext.failure === 'unavailable' ? (
           <ProjectWorkspaceRecoveryTip />
         ) : null}
-        <div className="workspace-shell__body">
+        <div className="workspace-shell__body" data-cms-content-viewport="true">
           {appMain}
         </div>
       </div>
@@ -6113,22 +6113,25 @@ function AppInner() {
           dockLine
         />
       )}
-      {/* Every placement these hosts may render is a home placement
-          (`opend.home.*`), so the home view is where they belong: not over a
-          project workbench, not over another entry tab, and — since account
-          restoration can finish while login is still up — not over onboarding. */}
-      {route.kind === 'home' && route.view === 'home' && (
-        <>
-          <TestCampaignModal
-            authenticated={isAmrSessionAuthenticated(amrLoginStatus)}
-            sessionSubject={amrLoginStatus?.user?.id ?? null}
-          />
-          <ProductionCampaignModal
-            authenticated={isAmrSessionAuthenticated(amrLoginStatus)}
-            sessionSubject={amrLoginStatus?.user?.id ?? null}
-          />
-        </>
-      )}
+      {/* The campaign modal belongs to the home view only: not over a project
+          workbench, not over another entry tab, and — since account
+          restoration can finish while login is still up — not over onboarding.
+          The Test runtime owner (`TestCampaignModal`, which renders no modal)
+          also serves the hover host that the project workspace shows
+          (OPEND-3040), so it stays mounted at the same position across
+          home <-> project; the modal host itself stays home-only. */}
+      {((route.kind === 'home' && route.view === 'home') || route.kind === 'project') ? (
+        <TestCampaignModal
+          authenticated={isAmrSessionAuthenticated(amrLoginStatus)}
+          sessionSubject={amrLoginStatus?.user?.id ?? null}
+        />
+      ) : null}
+      {route.kind === 'home' && route.view === 'home' ? (
+        <ProductionCampaignModal
+          authenticated={isAmrSessionAuthenticated(amrLoginStatus)}
+          sessionSubject={amrLoginStatus?.user?.id ?? null}
+        />
+      ) : null}
       <TooltipLayer />
       <UpdateDialog />
       {/* Mounted at shell level, outside the route views, so a survey armed by

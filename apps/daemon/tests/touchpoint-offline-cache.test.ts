@@ -669,3 +669,72 @@ describe('generation provenance and durable renewal failures', () => {
     expect(reader.replayOffline(MODAL, 'upstream_unreachable')).toBeNull();
   });
 });
+
+describe('startup prefetch online handoff', () => {
+  it('deducts elapsed time without extending the original online lease or marking the response offline', () => {
+    const cache = createTouchpointContentCache(dataDir);
+    cache.remember(MODAL, fullResponse(MODAL.placementKey, 'modal.js', MODAL_ENTRY));
+    vi.advanceTimersByTime(20_000);
+    const result = cache.replayPrefetched(MODAL)!;
+    expect(Date.parse(String(result.serverTime))).toBeGreaterThanOrEqual(T0 + 20_000);
+    expect(result.authorizationExpiresAt).toBe(iso(T0 + 60_000));
+    expect(result.offlineReplay).toBeUndefined();
+    vi.advanceTimersByTime(40_000);
+    expect(cache.replayPrefetched(MODAL)).toBeNull();
+    expect(cache.replayOffline(MODAL, 'upstream_unreachable')).not.toBeNull();
+  });
+  it.each([401, 403, 404, 410])('refuses a completed prefetch after authoritative %s', status => {
+    const cache = createTouchpointContentCache(dataDir);
+    cache.remember(MODAL, fullResponse(MODAL.placementKey, 'modal.js', MODAL_ENTRY));
+    if (status === 410) cache.forgetWithdrawn(MODAL, revoked());
+    else cache.refuseReplay(MODAL, status as 401 | 403 | 404);
+    expect(cache.replayPrefetched(MODAL)).toBeNull();
+  });
+  it('keeps the five minute client lease cap when the upstream grant is longer', () => {
+    const cache = createTouchpointContentCache(dataDir);
+    cache.remember(MODAL, fullResponse(MODAL.placementKey, 'modal.js', MODAL_ENTRY, { authorizationExpiresAt: iso(T0 + HOUR) }));
+    expect(cache.replayPrefetched(MODAL)?.authorizationExpiresAt).toBe(iso(T0 + 300_000));
+    vi.advanceTimersByTime(300_000);
+    expect(cache.replayPrefetched(MODAL)).toBeNull();
+  });
+});
+
+describe('prefetch handoff matches the actual warm answer', () => {
+  it('rechecks a captured offline grant without shrinking its schedule lease to the expired online lease', () => {
+    const cache = createTouchpointContentCache(dataDir);
+    cache.remember(MODAL, fullResponse(MODAL.placementKey, 'modal.js', MODAL_ENTRY));
+    const captured = cache.replayOffline(MODAL, 'upstream_unavailable')!;
+    vi.advanceTimersByTime(70_000);
+    expect(cache.replayPrefetched(MODAL)).toBeNull();
+    const handedOff = cache.replayOffline(MODAL, 'upstream_unavailable', captured)!;
+    expect(handedOff.authorizationExpiresAt).toBe(captured.endsAt);
+    expect(Date.parse(String(handedOff.serverTime))).toBeGreaterThanOrEqual(T0 + 70_000);
+    cache.refuseReplay(MODAL, 403);
+    expect(cache.replayOffline(MODAL, 'upstream_unavailable', captured)).toBeNull();
+  });
+  it('requires the exact captured offline package and schedule', () => {
+    const cache = createTouchpointContentCache(dataDir);
+    cache.remember(MODAL, fullResponse(MODAL.placementKey, 'modal.js', MODAL_ENTRY));
+    const captured = cache.replayOffline(MODAL, 'upstream_unavailable')!;
+    expect(cache.replayOffline(MODAL, 'upstream_unavailable', { ...captured, endsAt: iso(T0 + 30_000) })).toBeNull();
+    const content = captured.content as Record<string, unknown>;
+    expect(cache.replayOffline(MODAL, 'upstream_unavailable', { ...captured, content: { ...content, id: 'other-package' } })).toBeNull();
+    expect(cache.replayOffline(MODAL, 'upstream_unavailable', captured)).not.toBeNull();
+  });
+  it('cannot substitute an old grant for a newly empty or malformed 200 response', () => {
+    const cache = createTouchpointContentCache(dataDir);
+    cache.remember(MODAL, fullResponse(MODAL.placementKey, 'modal.js', MODAL_ENTRY));
+    expect(cache.replayPrefetched(MODAL, { decision: null })).toBeNull();
+    expect(cache.replayPrefetched(MODAL, {})).toBeNull();
+    cache.remember(MODAL, { decision: null });
+    expect(cache.replayOffline(MODAL, 'upstream_unreachable')).toBeNull();
+  });
+  it('cannot substitute an older schedule or different material when a new answer failed admission', () => {
+    const cache = createTouchpointContentCache(dataDir);
+    const decision = fullResponse(MODAL.placementKey, 'modal.js', MODAL_ENTRY);
+    cache.remember(MODAL, decision);
+    expect(cache.replayPrefetched(MODAL, { ...decision, endsAt: iso(T0 + 30_000) })).toBeNull();
+    expect(cache.replayPrefetched(MODAL, { ...decision, content: { ...decision.content, manifestHash: digest('other') } })).toBeNull();
+    expect(cache.replayPrefetched(MODAL, decision)).not.toBeNull();
+  });
+});
