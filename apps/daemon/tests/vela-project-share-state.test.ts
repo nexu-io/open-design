@@ -12,6 +12,11 @@ it('accepts only an explicit successful empty history', () => {
 it.each([{ error: 'NOT_FOUND' }, { projectId: 'other', bindingExists: false, publications: [] }, { projectId: 'p', bindingExists: true, publications: [] }, { projectId: 'p', bindingExists: false, publications: [{ sourceFilePath: 'index.html', slug, status: 'active' }] }])('refuses malformed/error history %j', value => {
   expect(() => parseProjectShareState(JSON.stringify(value), 'p')).toThrow();
 });
+it('maps the structured cloud share_not_found reply to the authoritative empty history', () => {
+  expect(parseProjectShareState(JSON.stringify({ error: 'get project share status: API request failed with status 404: share_not_found', errorCode: 'share_not_found', status: 404 }), 'p'))
+    .toEqual({ projectId: 'p', bindingExists: false, hasEverShared: false, publications: [] });
+});
+
 describe.each(['personal', 'team'] as const)('%s local creator', workspaceType => {
   it.each(['none', 'active', 'stopped'] as const)('reads %s history through content-free registration without replacing an existing root', async status => {
     const session = { profile: 'test' as const, apiUrl: 'https://example.test', controlKey: 'synthetic', user: null, configMtimeMs: null };
@@ -71,6 +76,23 @@ it('runs the real command shape under a captured session', async () => {
   expect((await read({ projectId: 'p', resourceTeamId: 'w', ownerMemberId: 'o' })).bindingExists).toBe(false);
   expect(runCommand).toHaveBeenCalledWith(expect.objectContaining({ workspaceId: 'w', session: expect.objectContaining({ controlKey: 'synthetic' }), args: ['share', 'project-status', 'p', '--json'] }));
   runCommand.mockRejectedValue(new Error('404'));
+  await expect(read({ projectId: 'p', resourceTeamId: 'w', ownerMemberId: 'o' })).rejects.toThrow();
+});
+
+it('treats a CLI share_not_found failure (non-zero exit, structured stdout) as never-shared', async () => {
+  const session = { profile: 'test' as const, apiUrl: 'https://example.test', controlKey: 'synthetic', user: null, configMtimeMs: null };
+  const shareNotFound = Object.assign(new Error('Command failed with exit code 1'), { stdout: '{"error":"get project share status: API request failed with status 404: share_not_found","errorCode":"share_not_found","status":404}' });
+  const runCommand = vi.fn(async () => { throw shareNotFound; });
+  const read = createVelaProjectShareState({ dataRoot: tmpdir(), readSession: () => session,
+    fetchDirectory: async () => ({ ok: true, items: [{ workspaceId: 'w', workspaceName: 'W', workspaceType: 'personal', workspaceMemberId: 'o', role: 'owner', memberStatus: 'active', lifecycleState: 'active' }] }), runCommand });
+  await expect(read({ projectId: 'p', resourceTeamId: 'w', ownerMemberId: 'o' })).resolves.toEqual({ projectId: 'p', bindingExists: false, hasEverShared: false, publications: [] });
+});
+
+it('still surfaces unrelated CLI failures as unavailable instead of an empty history', async () => {
+  const session = { profile: 'test' as const, apiUrl: 'https://example.test', controlKey: 'synthetic', user: null, configMtimeMs: null };
+  const runCommand = vi.fn(async () => { throw Object.assign(new Error('Command failed with exit code 1'), { stdout: '{"error":"network timeout"}' }); });
+  const read = createVelaProjectShareState({ dataRoot: tmpdir(), readSession: () => session,
+    fetchDirectory: async () => ({ ok: true, items: [{ workspaceId: 'w', workspaceName: 'W', workspaceType: 'personal', workspaceMemberId: 'o', role: 'owner', memberStatus: 'active', lifecycleState: 'active' }] }), runCommand });
   await expect(read({ projectId: 'p', resourceTeamId: 'w', ownerMemberId: 'o' })).rejects.toThrow();
 });
 
