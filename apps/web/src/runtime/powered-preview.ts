@@ -7,11 +7,11 @@
  * viewers, ffmpeg.wasm, threaded physics/renderers) need. See issue #724.
  *
  * Isolation model: the daemon reports its own directly-reachable http origin
- * (`/api/preview/isolation`). We load the powered iframe from the host-swapped
- * loopback variant of that origin (127.0.0.1 <-> localhost). That reserved
- * origin is cross-origin to the app shell and the daemon treats browser
- * requests from it as preview-only, so granting `allow-same-origin` gives the
- * artifact Workers/storage without exposing the normal daemon API.
+ * (`/api/preview/isolation`). Each project loads from its own stable
+ * `od-<project hash>.localhost` hostname on that daemon port. The hash only
+ * gives the project a DNS-safe name; the daemon separately restricts that
+ * origin to the same project's powered files. Real browser origins keep
+ * Workers/storage separate from both the app shell and other projects.
  *
  * The daemon `/powered/*` route (apps/daemon/src/routes/project/index.ts)
  * stamps the isolation headers; this module is the browser half that decides
@@ -44,23 +44,6 @@ export function __resetPreviewIsolationCache(): void {
   isolationProbe = null;
 }
 
-/**
- * Swap 127.0.0.1 <-> localhost so the returned origin resolves to the same
- * loopback server but uses the daemon's preview-only browser host. Any
- * non-loopback host is returned unchanged; callers must reject unchanged
- * values because no preview-only host exists for them.
- */
-export function swapLoopbackHost(origin: string): string {
-  try {
-    const u = new URL(origin);
-    if (u.hostname === '127.0.0.1') u.hostname = 'localhost';
-    else if (u.hostname === 'localhost') u.hostname = '127.0.0.1';
-    return u.origin;
-  } catch {
-    return origin;
-  }
-}
-
 function isRemoteHttpOrigin(origin: string): boolean {
   try {
     const url = new URL(origin);
@@ -76,26 +59,32 @@ function isRemoteHttpOrigin(origin: string): boolean {
 
 /**
  * Resolve the origin to load the powered iframe from, given the daemon's
- * reported base. The result must be the loopback host-swapped variant, because
- * the daemon reserves that browser origin for powered file bytes only. Returns
- * null when no safe host swap exists or when the swapped origin still collides
- * with the app shell.
+ * reported base. A project gets a stable loopback hostname so native browser
+ * storage and Workers cannot share an origin with another project. Returns
+ * null when the local daemon or Web Crypto is unavailable.
  */
-export function resolvePoweredBaseOrigin(baseOrigin: string): string | null {
+export async function resolvePoweredBaseOrigin(
+  baseOrigin: string,
+  projectId: string,
+): Promise<string | null> {
   const appOrigin = typeof window !== 'undefined' ? window.location.origin : '';
   // A loopback URL reported through a reverse proxy points at the browser's
   // machine, not the remote daemon. Fall back to the same-origin raw preview
   // instead of leaking an unreachable localhost iframe URL.
   if (isRemoteHttpOrigin(appOrigin)) return null;
-  let normalized: string;
+  if (!projectId) return null;
   try {
-    normalized = new URL(baseOrigin).origin;
+    const url = new URL(baseOrigin);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    if (url.hostname !== '127.0.0.1' && url.hostname !== 'localhost') return null;
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(projectId));
+    const name = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0'))
+      .join('').slice(0, 32);
+    url.hostname = `od-${name}.localhost`;
+    return url.origin === appOrigin ? null : url.origin;
   } catch {
     return null;
   }
-  const swapped = swapLoopbackHost(normalized);
-  if (swapped === normalized || swapped === appOrigin) return null;
-  return swapped;
 }
 
 /**
@@ -108,8 +97,8 @@ export async function resolvePoweredPreviewUrl(
   filePath: string,
 ): Promise<string | null> {
   const info = await fetchPreviewIsolation();
-  if (!info || !info.supported || !info.baseOrigin) return null;
-  const base = resolvePoweredBaseOrigin(info.baseOrigin);
+  if (!info || !info.supported || info.projectOrigins !== true || !info.baseOrigin) return null;
+  const base = await resolvePoweredBaseOrigin(info.baseOrigin, projectId);
   if (!base) return null;
   return buildProjectPoweredFileUrl(base, projectId, filePath);
 }

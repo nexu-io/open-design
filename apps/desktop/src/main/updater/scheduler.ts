@@ -102,7 +102,7 @@ export function createDesktopUpdaterScheduler(
       const startupReady = startupTick && options.startupSilentPayloadUpdate != null
         ? await updater.status()
         : null;
-      status = await updater.checkForUpdates();
+      status = await updater.checkForUpdates({ trigger: "silent" });
       if (
         startupTick
         && options.startupSilentPayloadUpdate != null
@@ -120,7 +120,7 @@ export function createDesktopUpdaterScheduler(
         try {
           const enabled = await options.startupSilentPayloadUpdate.isEnabled();
           if (enabled) {
-            status = await updater.installUpdate();
+            status = await updater.installUpdate({ trigger: "silent" });
             if (status.installResult != null) {
               stop("silent-payload-installed");
               options.startupSilentPayloadUpdate.requestQuit();

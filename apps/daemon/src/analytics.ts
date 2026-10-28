@@ -36,9 +36,15 @@ import {
   type AnalyticsHostProduct,
   type AnalyticsPublisherClass,
   EVENT_SCHEMA_VERSION,
+  buildClientTelemetryParams,
+  isClientMetricEventName,
+  parseClientMetricEvent,
+  isProcessExitEventName,
+  processExitMetricFields,
 } from '@open-design/contracts/analytics';
 import { readAppConfig } from './app-config.js';
 import { readTelemetryEnvironment } from './telemetry-environment.js';
+import { inferReleaseChannelFromVersion, normalizeTelemetryAppVersion, readCurrentAppVersionInfo, resolveAppVersionInfo } from './app-version.js';
 import type { MediaStockTelemetryEvent } from '@open-design/contracts/analytics';
 
 const DEFAULT_HOST = 'https://us.i.posthog.com';
@@ -180,11 +186,12 @@ export interface PosthogConfig {
 
 export function readPosthogConfig(
   env: NodeJS.ProcessEnv = process.env,
+  packagedRuntime?: boolean,
 ): PosthogConfig | null {
   const key = env.POSTHOG_KEY?.trim();
   if (!key) return null;
   const host = (env.POSTHOG_HOST?.trim() || DEFAULT_HOST).replace(/\/+$/, '');
-  return { key, host, env: readTelemetryEnvironment(env) };
+  return { key, host, env: readTelemetryEnvironment(env, packagedRuntime) };
 }
 
 /** One consented, bounded HTTP batch. A 2xx receipt is not indexing proof. */
@@ -240,9 +247,10 @@ export async function captureStockAnalyticsBatch(args: {
 // the user's telemetry.metrics consent before sending it to the client.
 export function readPublicConfigResponse(
   env: NodeJS.ProcessEnv = process.env,
+  packagedRuntime?: boolean,
 ): AnalyticsConfigResponse {
-  const cfg = readPosthogConfig(env);
-  const telemetryEnv = cfg?.env ?? readTelemetryEnvironment(env);
+  const cfg = readPosthogConfig(env, packagedRuntime);
+  const telemetryEnv = cfg?.env ?? readTelemetryEnvironment(env, packagedRuntime);
   if (!cfg) return { enabled: false, env: telemetryEnv, key: null, host: null };
   return { enabled: true, env: cfg.env, key: cfg.key, host: cfg.host };
 }
@@ -354,10 +362,12 @@ const NOOP_SERVICE: AnalyticsService = {
 // opted out, the daemon will still drop the capture.
 export function createAnalyticsService(args: {
   env?: NodeJS.ProcessEnv;
+  packagedRuntime?: boolean;
   dataDir: string;
 }): AnalyticsService {
   const env = args.env ?? process.env;
-  const cfg = readPosthogConfig(env);
+  const packagedRuntime = args.packagedRuntime;
+  const cfg = readPosthogConfig(env, packagedRuntime);
   if (!cfg) return NOOP_SERVICE;
 
   // flushAt: 1 keeps the daemon-emit-then-respond pattern simple at the cost
@@ -386,6 +396,36 @@ export function createAnalyticsService(args: {
   // must never look like product errors. The library exposes `on('error')`.
   client.on?.('error', () => undefined);
 
+  const sharedProperties = async (
+    properties: Record<string, unknown>, appVersion: string, eventId: string,
+    deviceId: string, clientType: 'web' | 'desktop' | 'daemon' | 'external_mcp',
+    sessionId: string | null, captureSource: string, preserveUnknownAppVersion = false,
+  ) => {
+    // Normalize placeholders only for telemetry; the public version API keeps
+    // its existing resolution and packaged-runtime classification.
+    const versionEnv = { ...env, OD_APP_VERSION: normalizeTelemetryAppVersion(env.OD_APP_VERSION) ?? undefined };
+    const current = normalizeTelemetryAppVersion(appVersion)
+      ? resolveAppVersionInfo({ env: versionEnv, packageMetadata: { version: appVersion } })
+      : await readCurrentAppVersionInfo({ env: versionEnv });
+    // Without an explicit or version-inferred channel, classify by this
+    // service's packaged flag rather than execPath heuristics.
+    const channel = !env.OD_RELEASE_CHANNEL?.trim() && !env.OD_APP_CHANNEL?.trim()
+      && inferReleaseChannelFromVersion(current.version) === null
+      ? (normalizeTelemetryAppVersion(env.OD_APP_VERSION) || packagedRuntime ? 'stable' : 'development')
+      : current.channel;
+    return buildClientTelemetryParams(properties, {
+      eventId, deviceId, appSessionId: sessionId, appVersion: current.version,
+      ...(preserveUnknownAppVersion ? {} : { channel }), preserveUnknownAppVersion, clientType, captureSource, env: cfg.env,
+      platform: process.platform,
+      // os.release() is a kernel release on macOS/Linux, not the product OS
+      // version. Preserve the legacy $os_version below, but leave the new
+      // dimension unknown until a producer supplies the actual product version.
+      osVersion: process.platform === 'win32' ? DAEMON_OS_VERSION : null,
+      arch: process.arch,
+      reportedAt: new Date().toISOString(),
+    });
+  };
+
   return {
     capture: async ({ eventName, context, appVersion, properties, insertId }) => {
       // Defense-in-depth consent re-check. The route handler already gates
@@ -411,20 +451,23 @@ export function createAnalyticsService(args: {
         };
       }
       try {
+        const common = await sharedProperties({
+          ...properties, event_id: insertId, device_id: context.deviceId,
+          client_type: context.clientType,
+        }, appVersion, insertId, context.deviceId, context.clientType,
+        context.sessionId === context.deviceId ? null : context.sessionId, 'daemon/analytics');
+        const metric = isClientMetricEventName(eventName)
+          ? parseClientMetricEvent(eventName, { ...properties, ...common }) : null;
+        if (isClientMetricEventName(eventName) && !metric) {
+          return { status: 'failed', acknowledgement: 'none', errorType: 'enqueue_failed' };
+        }
         client.capture({
           distinctId: context.deviceId,
           event: eventName,
-          properties: {
+          properties: metric ? { ...metric, $insert_id: common.event_id } : {
             ...properties,
-            event_id: insertId,
-            event_schema_version: EVENT_SCHEMA_VERSION,
-            env: cfg.env,
-            ui_version: appVersion,
-            app_version: appVersion,
+            ui_version: common.app_version,
             session_id: context.sessionId,
-            // v2 rename: was `anonymous_id`. Value unchanged.
-            device_id: context.deviceId,
-            client_type: context.clientType,
             ...(context.entrySurface
               ? { entry_surface: context.entrySurface }
               : {}),
@@ -458,7 +501,8 @@ export function createAnalyticsService(args: {
             // $insert_id is PostHog's dedup key — passing the same id
             // from web and daemon prevents the mirrored result event
             // from being counted twice.
-            $insert_id: insertId,
+            ...common,
+            $insert_id: common.event_id,
           },
         });
         // posthog-node exposes local queueing here, not a per-event remote
@@ -478,7 +522,7 @@ export function createAnalyticsService(args: {
       }
     },
     captureSafety: async ({ eventName, distinctId, appVersion, properties, insertId }) => {
-      // No consent re-check here — that's the entire point of this surface.
+      // No consent re-check here: all stability events use the safety channel.
       // We still fall back gracefully when the installationId is missing
       // (cold start before the daemon has stamped one in app-config) by
       // synthesizing an anonymous distinct id rooted at the process boot.
@@ -495,24 +539,35 @@ export function createAnalyticsService(args: {
           distinctId && distinctId.length > 0
             ? distinctId
             : await readInstallationIdSafe(args.dataDir);
+        const backfill = eventName === 'desktop_unclean_exit' || eventName === 'daemon_unclean_exit';
+        const source = backfill ? { ...properties, app_version: processExitMetricFields(eventName, properties).previous_app_version,
+          app_session_id: properties.app_session_id ?? properties.previous_session_id ?? null } : properties;
+        const common = await sharedProperties(source, appVersion, resolvedInsertId,
+          resolvedDistinctId, 'daemon', null, 'daemon/safety', backfill);
+        const metric = isClientMetricEventName(eventName)
+          ? parseClientMetricEvent(eventName, { ...properties, ...common }) : null;
+        if (isClientMetricEventName(eventName) && !metric) return;
         client.capture({
-          distinctId: resolvedDistinctId,
+          distinctId: common.device_id ?? resolvedDistinctId,
           event: eventName,
-          properties: {
+          properties: metric ? { ...metric, $insert_id: common.event_id } : {
             ...properties,
-            event_id: resolvedInsertId,
-            event_schema_version: EVENT_SCHEMA_VERSION,
-            env: cfg.env,
-            ui_version: appVersion,
-            app_version: appVersion,
-            device_id: resolvedDistinctId,
-            client_type: 'daemon',
-            capture_source: 'daemon/safety',
+            ui_version: common.app_version,
             $os: DAEMON_OS_NAME,
             $os_version: DAEMON_OS_VERSION,
-            $insert_id: resolvedInsertId,
+            ...common,
+            $insert_id: common.event_id,
           },
         });
+        if (isProcessExitEventName(eventName)) {
+          const exitId = `${common.event_id}:exit`;
+          const exit = parseClientMetricEvent('client_process_exit', {
+            ...common, ...processExitMetricFields(eventName, properties), event_id: exitId,
+            device_id: common.device_id === SYNTHETIC_DISTINCT_ID ? null : common.device_id,
+          });
+          if (exit) client.capture({ distinctId: common.device_id ?? resolvedDistinctId, event: 'client_process_exit',
+            properties: { ...exit, $insert_id: exitId } });
+        }
       } catch {
         // Capture failures must never propagate. The whole point of this
         // path is best-effort observability into a degraded state.

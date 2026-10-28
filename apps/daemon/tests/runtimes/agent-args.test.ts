@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { test } from 'vitest';
 import {
   AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, grokBuild, join, kilo, kimi, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
@@ -423,26 +423,23 @@ test('pi fetchModels reads the model table from stdout', async () => {
   }
 });
 
-test('pi args forward extraAllowedDirs as --append-system-prompt flags', () => {
-  const args = pi.buildArgs(
-    '',
-    [],
-    ['/tmp/skills', '/tmp/design-systems'],
-    {},
-    {},
-  );
+test('pi args do not pass resource directories as system-prompt files', () => {
+  const root = mkdtempSync(join(tmpdir(), 'od-pi-resource-dirs-'));
+  try {
+    const dirs = ['skills', 'design-systems', 'task-inputs'].map((name) => join(root, name));
+    for (const dir of dirs) mkdirSync(dir);
 
-  assert.deepEqual(args, [
-    '--mode',
-    'rpc',
-    '--append-system-prompt',
-    '/tmp/skills',
-    '--append-system-prompt',
-    '/tmp/design-systems',
-  ]);
+    const args = pi.buildArgs('', [], dirs, {}, {});
+
+    // Pi reads an existing --append-system-prompt path as a file; directories
+    // cause EISDIR warnings. Resource paths already travel in the RPC prompt.
+    assert.deepEqual(args, ['--mode', 'rpc']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
-test('pi args filter relative paths from extraAllowedDirs', () => {
+test('pi args ignore both absolute and relative extraAllowedDirs', () => {
   const args = pi.buildArgs(
     '',
     [],
@@ -451,18 +448,10 @@ test('pi args filter relative paths from extraAllowedDirs', () => {
     {},
   );
 
-  // Relative paths should be filtered out.
-  assert.deepEqual(args, [
-    '--mode',
-    'rpc',
-    '--append-system-prompt',
-    '/tmp/skills',
-    '--append-system-prompt',
-    '/tmp/design-systems',
-  ]);
+  assert.deepEqual(args, ['--mode', 'rpc']);
 });
 
-test('pi args combine model, thinking, and extraAllowedDirs', () => {
+test('pi args preserve model and thinking when resource directories are supplied', () => {
   const args = pi.buildArgs(
     '',
     [],
@@ -478,8 +467,6 @@ test('pi args combine model, thinking, and extraAllowedDirs', () => {
     'openai/gpt-5',
     '--thinking',
     'medium',
-    '--append-system-prompt',
-    '/tmp/skills',
   ]);
 });
 
@@ -1180,7 +1167,7 @@ test('claude flags promptViaStdin and never embeds the prompt in argv', () => {
   assert.ok(args.includes('-p'), 'claude argv must include -p');
 });
 
-test('claude enables native Child behavior frames only for an observed OD Next Run', () => {
+test('claude enables native Child behavior frames when advertised without blocking older runtimes', () => {
   assert.equal(
     claude.buildArgs('', [], [], {}, {}).includes('--forward-subagent-text'),
     false,
@@ -1197,10 +1184,12 @@ test('claude enables native Child behavior frames only for an observed OD Next R
   } finally {
     agentCapabilities.delete('claude');
   }
-  assert.throws(
-    () => claude.buildArgs('', [], [], {}, { observeNativeChildBehavior: true }),
-    /advertised --forward-subagent-text support/,
-  );
+  const argsWithoutForwardText = claude.buildArgs('', [], [], {}, {
+    observeNativeChildBehavior: true,
+  });
+  assert.equal(argsWithoutForwardText.includes('--forward-subagent-text'), false);
+  assert.ok(argsWithoutForwardText.includes('--output-format'));
+  assert.ok(argsWithoutForwardText.includes('--permission-mode'));
 });
 
 // ---- Claude Code --add-dir capability (issue #430) -------------------------

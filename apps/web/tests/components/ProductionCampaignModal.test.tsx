@@ -178,6 +178,15 @@ describe("ProductionCampaignModal", () => {
 		expect(modalRule).not.toMatch(/(?:^|[;{]\s*)width:/);
 		expect(modalRule).not.toMatch(/(?:^|[;{]\s*)padding:/);
 	});
+	it("keeps the opend-touchpoint host background transparent inside the modal (OPEND-3478)", () => {
+		const hostRule = modalHostStyles.match(
+			/\.modal\s+:global\(opend-touchpoint\)\s*\{[^}]*\}/,
+		)?.[0];
+		expect(hostRule).toContain("background: transparent");
+		const modalRule = modalHostStyles.match(/\.modal\s*\{[^}]*\}/)?.[0];
+		expect(modalRule).not.toMatch(/border-radius:/);
+		expect(modalRule).not.toMatch(/overflow:\s*hidden/);
+	});
 	it("does not restart the production loader on an unchanged parent render", async () => {
 		(globalThis as CampaignHostGlobal).__openDesignCampaignTestHost = {
 			client: { osLocale: "en-US", type: "desktop" },

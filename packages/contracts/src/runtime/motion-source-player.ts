@@ -22,12 +22,42 @@ window.__odValidateMotionTimeline = function (root, tl) {
 };`;
 
 
+// Embedded verbatim in the portable community examples; the package test keeps
+// those offline copies aligned with project playback.
+export const MOTION_AUDIO_SYNC_RUNTIME = `// A render stall is not a request to seek the soundtrack. Only correct drift
+// after fresh, stable samples; explicit transport actions bypass that filter.
+function createMotionAudioSync(audio) {
+  var sampledAt = null, driftSince = null, previousDrift = 0, correctedAt = -Infinity, align = false;
+  return function (target, moving, force) {
+    var now = performance.now(), gap = sampledAt === null ? Infinity : now - sampledAt;
+    sampledAt = now;
+    if (force) { align = true; driftSince = null; }
+    if (align) {
+      if (audio.readyState > 0) {
+        if (Math.abs(audio.currentTime - target) > .01) audio.currentTime = target;
+        align = false; correctedAt = now;
+      }
+      return;
+    }
+    var drift = target - audio.currentTime;
+    if (!moving || audio.paused || audio.seeking || audio.readyState < 3 || gap > 200 || Math.abs(drift) <= .3 || now - correctedAt < 1500) {
+      driftSince = null; previousDrift = drift; return;
+    }
+    if (driftSince === null || drift * previousDrift <= 0 || Math.abs(drift - previousDrift) > .1) driftSince = now;
+    previousDrift = drift;
+    if (now - driftSince >= 750) {
+      audio.currentTime = target; correctedAt = now; driftSince = null;
+    }
+  };
+}`;
+
 // Shared by URL previews, srcdoc previews and the persisted editable source.
 // The renderer installs its flag before author scripts; it never sees chrome,
 // layout scaling, poster seeking, or wall-clock playback from this runtime.
-const PLAYER = `<script data-od-motion-source-player="6">
+const PLAYER = `<script data-od-motion-source-player="8">
 ${MOTION_TIMELINE_CHECK_SCRIPT}
 (function () {
+${MOTION_AUDIO_SYNC_RUNTIME}
   function boot() {
     if (window.__odMotionRender || window.__odMotionSourcePlayer) return;
     var root = document.querySelector('[data-composition-id][data-duration][data-width][data-height]');
@@ -44,6 +74,7 @@ ${MOTION_TIMELINE_CHECK_SCRIPT}
     var hosted = window.__odMotionPreview === true || new URL(location.href).searchParams.get('odMotionPreview') === '1';
     var thumbnail = window.__odMotionThumbnail === true || new URL(location.href).searchParams.get('odMotionThumbnail') === '1';
     var instance = Date.now().toString(36) + Math.random().toString(36).slice(2);
+    var hostMuted = false;
     var active = !hosted, playing = false, wantsPlay = true, pageActive = true, updateTimer = null;
     var applyPlayback = function () {};
     function requestActivity() { window.parent.postMessage({type:'${MOTION_PREVIEW_REQUEST}', id:instance, width:width, height:height}, '*'); }
@@ -52,23 +83,24 @@ ${MOTION_TIMELINE_CHECK_SCRIPT}
       if (!hosted || event.source !== window.parent || !data) return;
       if (data.type === '${MOTION_PREVIEW_PROBE}') { requestActivity(); return; }
       if (data.type !== '${MOTION_PREVIEW_ACTIVITY}' || typeof data.active !== 'boolean' || (data.active && data.id !== instance)) return;
+      hostMuted = data.muted === true;
       active = data.active; applyPlayback();
     }
     window.addEventListener('message', onActivity);
     var tracks = Array.prototype.map.call(document.querySelectorAll('audio[src]'), function (audio) {
       audio.pause(); audio.autoplay = false;
-      return { audio: audio, start: Number(audio.dataset.start || 0), duration: Number(audio.dataset.duration), volume: Number(audio.dataset.volume || 1), pending: false, blocked: false };
+      return { audio: audio, start: Number(audio.dataset.start || 0), duration: Number(audio.dataset.duration), volume: Number(audio.dataset.volume || 1), pending: false, blocked: false, sync: createMotionAudioSync(audio) };
     });
     var muted = thumbnail;
     function syncAudio(time, shouldPlay, force) {
       tracks.forEach(function (track) {
         var audio = track.audio, local = time - track.start;
-        if (thumbnail) { audio.muted = true; audio.pause(); return; }
+        if (thumbnail || hostMuted) { audio.muted = true; audio.pause(); return; }
         var trackActive = local >= 0 && local < track.duration;
         audio.volume = Math.max(0, Math.min(1, track.volume)); audio.muted = muted;
         if (!trackActive || !shouldPlay) audio.pause();
         var target = Math.max(0, Math.min(track.duration, local));
-        if (audio.readyState > 0 && (force || Math.abs(audio.currentTime - target) > .2)) audio.currentTime = target;
+        track.sync(target, trackActive && shouldPlay, force || (trackActive && shouldPlay && audio.paused && !track.pending && !track.blocked));
         if (trackActive && shouldPlay && audio.paused && !track.pending && !track.blocked) {
           track.pending = true;
           var promise = audio.play();
@@ -78,7 +110,7 @@ ${MOTION_TIMELINE_CHECK_SCRIPT}
             notice(error && error.name === 'NotAllowedError' ? '点击画面开启声音' : '音频无法播放，请检查素材');
           }).finally(function () {
             track.pending = false;
-            if (!active || !pageActive || !playing || !wantsPlay) audio.pause();
+            if (hostMuted || !active || !pageActive || !playing || !wantsPlay) audio.pause();
           });
           else track.pending = false;
         }
@@ -103,14 +135,17 @@ ${MOTION_TIMELINE_CHECK_SCRIPT}
       }
       var timingError = window.__odValidateMotionTimeline(root, tl);
       if (timingError) { tl.pause(); notice(timingError); return; }
-      var duration = tl.duration();
+      var duration = tl.duration(), applied = false;
       applyPlayback = function () {
+        var nextPlaying = active && pageActive && wantsPlay;
+        if (applied && nextPlaying === playing) { syncAudio(tl.time(), playing, false); return; }
+        applied = true;
         clearTimeout(updateTimer); updateTimer = null;
-        playing = active && pageActive && wantsPlay;
+        playing = nextPlaying;
         if (playing) {
           if (tl.time() >= duration) tl.seek(0, false);
           tl.play(); syncAudio(tl.time(), true, true); update();
-        } else { tl.pause(); syncAudio(tl.time(), false, true); }
+        } else { tl.pause(); syncAudio(tl.time(), false, false); }
       };
       function play() { wantsPlay = true; applyPlayback(); }
       function pause() { wantsPlay = false; applyPlayback(); }
@@ -119,7 +154,7 @@ ${MOTION_TIMELINE_CHECK_SCRIPT}
       window.__odMotionPlayer = {
         play: play, pause: pause, seek: seek, replay: replay,
         setMuted: function (value) { muted = thumbnail || !!value; syncAudio(tl.time(), playing, false); },
-        state: function () { return { playing: playing, active: active, time: tl.time(), duration: duration, muted: muted,
+        state: function () { return { playing: playing, active: active, time: tl.time(), duration: duration, muted: muted || hostMuted,
           audio: tracks.map(function (track) { return { paused: track.audio.paused, time: track.audio.currentTime, muted: track.audio.muted, volume: track.audio.volume, blocked: track.blocked }; }) }; }
       };
       root.addEventListener('click', function () {
@@ -163,7 +198,7 @@ export function injectMotionSourcePlayer(html: string): string {
   const existing = findRealTagOffset(html, /<script\b[^>]*\bdata-od-motion-source-player\b/i);
   if (existing >= 0) {
     const script = /^<script\b[^>]*>[\s\S]*?<\/script\s*>/i.exec(html.slice(existing));
-    if (!script || /data-od-motion-source-player="6"/.test(script[0])) return html;
+    if (!script || /data-od-motion-source-player="8"/.test(script[0])) return html;
     return html.slice(0, existing) + PLAYER + html.slice(existing + script[0].length);
   }
   const end = findRealTagOffset(html, HTML_TAG_PATTERNS.bodyClose);

@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
-import ts from "typescript";
+import { transformSync } from "esbuild";
 import { beforeAll, describe, expect, it } from "vitest";
 
 const execFileAsync = promisify(execFile);
@@ -12,10 +12,10 @@ const daemonRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".
 let compiledResolver: string;
 
 beforeAll(async () => {
-  compiledResolver = ts.transpileModule(
+  compiledResolver = transformSync(
     await fs.readFile(path.join(daemonRoot, "src/daemon-url.ts"), "utf8"),
-    { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } },
-  ).outputText;
+    { loader: "ts", format: "esm", target: "es2022" },
+  ).code;
 });
 
 type Layout = "mac" | "payload" | "source" | "dist";

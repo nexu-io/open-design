@@ -30,6 +30,20 @@ const brokenDeckStageHtml = `<!doctype html>
 </html>`;
 
 describe('buildSrcdoc', () => {
+
+  it('seeds presentation storage before authored scripts without allowing script injection', () => {
+    const value = '</script><script>window.injected = true</script>';
+    const doc = buildSrcdoc('<html><body><script>window.saved = localStorage.getItem("task");</script></body></html>', {
+      previewStorage: true,
+      previewStorageSeed: { generation: 'presentation-1', values: { task: value } },
+    });
+    const dom = new JSDOM(doc, { runScripts: 'dangerously' });
+    expect((dom.window as any).saved).toBe(value);
+    expect((dom.window as any).injected).toBeUndefined();
+    expect((dom.window as any).__odPreviewStorageSeed).toBeUndefined();
+    dom.window.close();
+  });
+
   it('preserves an artifact-authored base instead of overriding its navigation semantics', () => {
     const authored = '<base href="https://cdn.example/assets/">';
     const doc = buildSrcdoc(

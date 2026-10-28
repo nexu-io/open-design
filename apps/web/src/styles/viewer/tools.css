@@ -213,6 +213,8 @@
   z-index: 2;
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
+  max-width: calc(100% - 16px);
   gap: 4px;
 }
 /* The export pill wraps in a relative anchor when it opens a format popover
@@ -228,6 +230,9 @@
    stay on the design baseline. */
 .artifact-card .artifact-card-act {
   flex: none;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -249,6 +254,13 @@
   text-decoration: none;
   cursor: pointer;
   transition: background-color var(--duration-faster) var(--ease-out);
+}
+/* Wrap the pair when translations do not fit side by side. A single long
+   label may truncate, while its icon and the other action remain reachable. */
+.artifact-card-act-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* Hover deepens the same glass fill without changing geometry. */
 .artifact-card .artifact-card-act:hover {

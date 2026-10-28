@@ -3,7 +3,6 @@ import {
   composeOdNextStrategyBundleHeadV2,
   composeOdNextStrategyCorePromptV2,
   composeOdNextStrategyRequestPromptV2,
-  renderOdNextRuntimeFactsV2,
   composeOdNextStrategyStableRequestContextV2,
   odNextPromptCacheIdentityV2,
   resolveOdNextDeckFrameworkMode,
@@ -49,16 +48,13 @@ describe('comment identity host contract', () => {
 });
 
 describe('OD Next V2 prompt recipe', () => {
-  it('reports runtime capabilities without restricting deliverables to the scene catalog', () => {
-    const facts = renderOdNextRuntimeFactsV2({ ...recipe, planningFacts: {
-      capabilitySnapshotHash: A, inputRefs: ['request'],
-      productionRoutes: ['html', 'prototype-html'], outputKinds: ['prototype', 'html', 'source'],
-      nativeChildLifecycleVerified: true,
-    } });
-    expect(facts).toContain('nativeChildLifecycleVerified');
-    expect(facts).not.toContain('allowedProductionRoutes');
-    expect(facts).not.toContain('supportedOutputKinds');
-    expect(facts).not.toContain('Copy these exact values into the contract');
+  it('keeps runtime qualification out of the planning and delivery instructions', () => {
+    const prompt = composeOdNextStrategyRequestPromptV2(recipe);
+    expect(prompt).not.toContain('capabilitySnapshotHash');
+    expect(prompt).not.toContain('nativeChildLifecycleVerified');
+    expect(prompt).not.toContain('allowedProductionRoutes');
+    expect(prompt).not.toContain('supportedOutputKinds');
+    expect(prompt).not.toContain('Copy these exact values into the contract');
   });
   // OPEND-2589. The strategy admits a turn on the project's task type, not on
   // what this turn said, so a greeting or a stray keystroke enters the same
@@ -249,16 +245,6 @@ describe('OD Next V2 prompt recipe', () => {
     ).toContain('Do not print question-form as a heading');
   });
 
-  it('keeps host planning facts separate from the model output instructions', () => {
-    const withFacts = { ...recipe, planningFacts: {
-      capabilitySnapshotHash: B, inputRefs: ['request'], productionRoutes: ['html'],
-      outputKinds: ['prototype'], nativeChildLifecycleVerified: true,
-    } };
-    const head = composeOdNextStrategyBundleHeadV2(withFacts);
-    expect(head.coreSystemPrompt.outputContract).toBe(composeOdNextStrategyBundleHeadV2(recipe).coreSystemPrompt.outputContract);
-    expect(head.coreSystemPrompt.outputContract).not.toContain(B);
-    expect(renderOdNextRuntimeFactsV2(withFacts)).toContain(B);
-  });
   it('renders real stable request facts through the shared recipe owner', () => {
     const context = {
       agentId: 'codex',

@@ -1,5 +1,6 @@
 import type { Express } from 'express';
-import { type ChatSessionMode } from '@open-design/contracts';
+import { MESSAGES_STREAM_CONTENT_TYPE, type ChatMessage, type ChatSessionMode, type TaskDisplayProjection } from '@open-design/contracts';
+import { streamMessages } from '../../http/message-stream.js';
 import { readAnalyticsContext } from '../../analytics.js';
 import { nextForkedConversationTitle } from '../../conversation-fork-title.js';
 import { backfillBrandExtractionTranscriptForProject } from '../../brands/index.js';
@@ -8,6 +9,7 @@ import type { BoundWorkspaceResourceMutationGate } from '../../collab/workspace-
 import type { AuthorizeProjectRequest } from '../../collab/project-request-authority.js';
 import { TERMINAL_RUN_STATUSES } from '../../runtimes/runs.js';
 import { strategyTaskTurnsForRunIds } from '../../strategies/task-store.js';
+import { projectStrategyTaskByRunId } from '../../strategies/od-next/automatic-simple-production.js';
 
 import { registerProjectCommentRoutes } from './comments.js';
 import { cancelRunsOwnedBy } from './cancel-owned-runs.js';
@@ -393,7 +395,7 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     // A Full Plan turn spans several physical Runs and the daemon-issued
     // continuation carries no user prompt, so the client needs each message's
     // logical-task position to render one turn instead of an orphan answer.
-    const messages = listMessages(db, req.params.cid) as Array<Record<string, unknown>>;
+    const messages = listMessages(db, req.params.cid) as ChatMessage[];
     const turns = strategyTaskTurnsForRunIds(
       db,
       messages
@@ -401,21 +403,34 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
         .filter((runId): runId is string => typeof runId === 'string' && runId.length > 0),
       { projectId: req.params.id, conversationId: req.params.cid },
     );
-    res.json({
-      messages: messages.map((message) => {
-        const runId = typeof message['runId'] === 'string' ? message['runId'] : null;
-        const turn = runId ? turns.get(runId) : undefined;
-        if (!turn) return message;
-        return {
-          ...message,
-          strategyTaskExecutionId: turn.taskExecutionId,
-          strategyTaskRunIndex: turn.taskRunIndex,
-          strategyTaskDelivered: turn.delivered,
-          strategyTaskBlocked: turn.blocked,
-          strategyTaskBlockedText: turn.blockedText,
-        };
-      }),
+    const taskDisplays = new Map<string, TaskDisplayProjection | undefined>();
+    const responseMessages = messages.map((message) => {
+      const runId = typeof message.runId === 'string' ? message.runId : null;
+      const turn = runId ? turns.get(runId) : undefined;
+      if (!turn) return message;
+      if (!taskDisplays.has(turn.taskExecutionId)) {
+        let display;
+        try { display = projectStrategyTaskByRunId(db, runId!)?.display; }
+        catch { /* Unreadable legacy task facts must not prevent transcript loading. */ }
+        taskDisplays.set(turn.taskExecutionId, display);
+      }
+      const taskDisplay = taskDisplays.get(turn.taskExecutionId);
+      return {
+        ...message,
+        strategyTaskExecutionId: turn.taskExecutionId,
+        strategyTaskRunIndex: turn.taskRunIndex,
+        strategyTaskDelivered: turn.delivered,
+        strategyTaskBlocked: turn.blocked,
+        strategyTaskBlockedText: turn.blockedText,
+        ...(taskDisplay ? { taskDisplay } : {}),
+      };
     });
+    res.vary('Accept');
+    if (req.accepts(['application/json', MESSAGES_STREAM_CONTENT_TYPE]) === MESSAGES_STREAM_CONTENT_TYPE) {
+      await streamMessages(res, responseMessages);
+      return;
+    }
+    res.json({ messages: responseMessages });
   });
 
   // #6396: the daemon is the single writer of a daemon-backed assistant

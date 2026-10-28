@@ -56,4 +56,5 @@
   .od-spacer { flex: none; visibility: hidden; pointer-events: none; }
   .od-touch  { min-width: 44px; min-height: 44px; }
 }
+:root [hidden]:where(:not([hidden="until-found" i])) { display: none; }
 /* /OD-LAYOUT-PRIMITIVES v1 */

@@ -7,6 +7,8 @@
  * 用真实的 buildTurnBlocks 产出当输入,而不是手捏 shell 对象:
  * 手捏的话组件与数据层可能各自漂移,接起来才发现对不上。
  */
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render as rtlRender, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
@@ -82,10 +84,11 @@ describe('壳头', () => {
       .toContain('进行中');
   });
 
-  it('结束:纯文本「已完成」,默认收起,球撤掉', () => {
+  it('结束但量不到秒数:只写「用时」不写数字(P0-24 Q1),默认收起,球撤掉', () => {
     const [shell] = shellsOf(call('t1', 'Bash', { command: 'ls' }), 'succeeded');
     render(<ExecutionShell shell={shell as ShellData} />);
-    expect(screen.getByText('已完成')).toBeTruthy();
+    expect(screen.getByText('用时')).toBeTruthy();
+    expect(screen.queryByText('已完成')).toBeNull();
     expect(document.querySelector('[data-orb]')).toBeNull();
     expect(document.querySelector('details')?.open).toBe(false);
   });
@@ -108,13 +111,27 @@ describe('壳头', () => {
    * 没变的三样仍然钉在这里:不挂球、不是第四种 `status`(壳仍走 `stopped` 旗标)、
    * 不退成红色的「运行失败」。
    */
-  it('手动停止:状态词是「已取消」,不挂球(秒数停住,仍不是第四种状态)', () => {
+  it('手动停止:状态词是「已停止」(P0-24),不挂球(秒数停住,仍不是第四种状态)', () => {
     const [shell] = shellsOf(call('t1', 'Bash', { command: 'ls' }), 'canceled');
     render(<ExecutionShell shell={shell as ShellData} />);
-    expect(screen.getByText('已取消')).toBeTruthy();
+    expect(screen.getByText('已停止')).toBeTruthy();
     expect(screen.queryByText('进行中')).toBeNull();
     expect(screen.queryByText('运行失败')).toBeNull();
     expect(document.querySelector('[data-orb]')).toBeNull();
+    // PRD: 「已停止」灰色,与红色的「运行失败」区分
+    expect(screen.getByText('已停止').className).toMatch(/stStopped/);
+  });
+
+  // P0-24 推测项 A-04:回合标题写成「已停止 · 31s」—— 分隔符只挂在回合标题上
+  it('回合标题带 turnHead 钩子,分隔符只画在它的时长前(推测项 A-04)', () => {
+    const [shell] = shellsOf(call('t1', 'Bash', { command: 'ls' }), 'canceled');
+    const { container } = render(<ExecutionShell shell={shell as ShellData} />);
+    expect(container.querySelector('details')?.className).toMatch(/turnHead/);
+    // jsdom 下 import.meta.url 不是 file: 协议,按包根(vitest 的 cwd)取路径
+    const css = readFileSync(resolve(process.cwd(), 'src/components/chat/primitives/record.module.css'), 'utf8');
+    expect(css).toMatch(/\.turnHead > summary \.meta::before\s*\{[^}]*content:\s*'·'/);
+    // 时长是等宽字体,它的「·」画成小方块;分隔符必须走状态词那一套字体
+    expect(css).toMatch(/\.turnHead > summary \.meta::before\s*\{[^}]*font-family:\s*var\(--chat-font-sans\)/);
   });
 
   it('空态:没有内容时不出箭头(D21)', () => {
@@ -126,7 +143,8 @@ describe('壳头', () => {
   it('壳头耗时按粗档写(31s 而不是 31.0s)', () => {
     const [shell] = shellsOf(call('t1', 'Bash', { command: 'ls' }, { startedAt: 0, completedAt: 31_000 }), 'succeeded');
     render(<ExecutionShell shell={shell as ShellData} />);
-    expect(screen.getByText('31s')).toBeTruthy();
+    // P0-24 设计答复(2026-10-26):中文界面写「31 秒」
+    expect(screen.getByText('31 秒')).toBeTruthy();
   });
 });
 

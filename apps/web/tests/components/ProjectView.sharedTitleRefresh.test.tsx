@@ -843,6 +843,7 @@ describe('ProjectView shared-project title refresh on project-metadata-changed',
       conversation.id,
       workspace,
       expect.any(AbortSignal),
+      expect.any(Function),
     );
   });
 
@@ -880,6 +881,7 @@ describe('ProjectView shared-project title refresh on project-metadata-changed',
       conversation.id,
       workspace,
       expect.any(AbortSignal),
+      expect.any(Function),
     );
   });
 
@@ -1046,6 +1048,7 @@ describe('ProjectView shared-project title refresh on project-metadata-changed',
       conversation.id,
       workspaceA,
       expect.any(AbortSignal),
+      expect.any(Function),
     );
     await act(async () => {
       resolveOldWorkspaceARecovery?.([conversation]);

@@ -103,8 +103,18 @@ test('OPEND-3493: a second owner device approves updates and continues publishin
           expect(unapproved.status).toBe(409);
           const denied = await fetch(new URL(updatePath, cUrl), { method: 'POST', headers: { ...headers(MEMBER), 'content-type': 'application/json' }, body: JSON.stringify({ action: 'accept', version: initialVersion }) });
           expect(denied.status).toBe(403);
-          const offered = await action({ action: 'check', manual: true });
-          expect(await action({ action: 'dismiss', version: offered.latestVersion })).toMatchObject({ state: 'ignored' });
+          let offered = await action({ action: 'check', manual: true });
+          let dismissed = await action({ action: 'dismiss', version: offered.latestVersion });
+          // A concurrent publication invalidates only the exact old offer. Recheck
+          // that newer offer rather than expecting stale consent to dismiss it.
+          for (let attempt = 0; dismissed.state !== 'ignored' && attempt < 3; attempt++) {
+            expect(dismissed).toMatchObject({ state: 'confirmation_required', localVersion: offered.localVersion });
+            expect(dismissed.latestVersion).toBeGreaterThan(offered.latestVersion);
+            expect(await read(bUrl, OWNER)).toEqual({ status: 200, content: v1 });
+            offered = await action({ action: 'check', manual: true });
+            dismissed = await action({ action: 'dismiss', version: offered.latestVersion });
+          }
+          expect(dismissed).toMatchObject({ state: 'ignored', latestVersion: offered.latestVersion });
           expect((await action({ action: 'check' })).state).toBe('ignored');
           const reoffered = await action({ action: 'check', manual: true });
           const checkpointCommands = hub.commandLog.length;

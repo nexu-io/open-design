@@ -1031,7 +1031,7 @@ describe('RecentProjectsStrip', () => {
       const htmlFrame = container.querySelector<HTMLIFrameElement>('.recent-projects__card-thumb-html iframe');
       expect(htmlFrame).toBeTruthy();
       expect(htmlFrame?.getAttribute('src')).toBe(
-        '/api/projects/project-html/files/index.html?workspaceId=ws-1&workspaceMemberId=wm-1&v=200',
+        '/api/projects/project-html/files/index.html?workspaceId=ws-1&workspaceMemberId=wm-1&v=200&odMotionThumbnail=1',
       );
       expect(container.querySelector('.recent-projects__card-thumb-html .recent-projects__card-glyph')).toBeNull();
     });
@@ -1100,7 +1100,7 @@ describe('RecentProjectsStrip', () => {
       expect(deckCard?.querySelector('.recent-projects__deck-iframe')?.getAttribute('srcdoc'))
         .toContain('slide');
       expect(htmlCard?.querySelector('iframe')?.getAttribute('src')).toBe(
-        '/api/projects/project-html/files/index.html?workspaceId=ws-1&workspaceMemberId=wm-1&v=200',
+        '/api/projects/project-html/files/index.html?workspaceId=ws-1&workspaceMemberId=wm-1&v=200&odMotionThumbnail=1',
       );
       expect(deckCard?.querySelector('.recent-projects__card-glyph')).toBeNull();
       expect(htmlCard?.querySelector('.recent-projects__card-glyph')).toBeNull();

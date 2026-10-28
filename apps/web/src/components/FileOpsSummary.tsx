@@ -717,7 +717,7 @@ function ArtifactCard({
         />
       ) : null}
       {pending && !showPublish ? null : (
-        <span className={`artifact-card-acts${showPublish ? ` ${shareEntryStyles.cardActions}` : ''}`}>
+        <span className="artifact-card-acts">
           {showPublish && onPublish ? (
             <button
               type="button"
@@ -733,7 +733,7 @@ function ArtifactCard({
                   reuse the same semantic glyph as the right-side Share action,
                   scaled by the card action's 12px icon-box rule. */}
               <RemixIcon name="share-forward-line" size={12} />
-              <span className={shareEntryStyles.cardActionLabel}>{t('chat.artifact.publish')}</span>
+              <span className="artifact-card-act-label">{t('chat.artifact.publish')}</span>
             </button>
           ) : null}
           {pending ? null : needsFormatChoice && onExport ? (
@@ -748,7 +748,7 @@ function ArtifactCard({
               {...{ [ARTIFACT_ANCHOR_ATTR]: artifactAnchorId('export', item.name, anchorScope) }}
             >
               <ArtifactExportIcon />
-              {showPublish ? <span className={shareEntryStyles.cardActionLabel}>{t('chat.artifact.export')}</span> : t('chat.artifact.export')}
+              <span className="artifact-card-act-label">{t('chat.artifact.export')}</span>
             </button>
           ) : (
             /*
@@ -766,7 +766,7 @@ function ArtifactCard({
               data-testid={`artifact-card-export-${item.name}`}
             >
               <ArtifactExportIcon />
-              {t('chat.artifact.export')}
+              <span className="artifact-card-act-label">{t('chat.artifact.export')}</span>
             </a>
           )}
         </span>

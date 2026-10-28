@@ -1,3 +1,4 @@
+import { z } from 'zod';
 // Typed shapes for the browser-side `client_*` safety-telemetry namespace.
 //
 // These events do NOT go through the consent-gated product-analytics
@@ -55,7 +56,8 @@ export type ChatMeasurementDoubt =
   /** A stylesheet was still in flight — layout was not final. */
   | 'stylesheets_pending'
   /** Restored from bfcache; the clock origin is not the user's open. */
-  | 'bfcache_restore';
+  | 'bfcache_restore'
+  | 'missing_open_intent';
 
 /**
  * Attached to every timing-sensitive event. Headline dashboard numbers MUST
@@ -144,6 +146,9 @@ export interface ChatFirstPaintProps
   extends ChatCorrelationProps,
     ChatMeasurementTrustProps {
   open_kind: ChatOpenKind;
+  /** Explicit intent is comparable separately from an effect-local fallback. */
+  timing_origin?: 'navigation_intent' | 'surface_attach_fallback';
+  metric_schema_version?: 1;
   /** Open intent (route/conversation change) → first message row painted. */
   duration_ms: number;
   /** Messages in the conversation being opened. */
@@ -537,3 +542,67 @@ export type ChatObservabilityEvent =
   | { event: 'client_chat_scroll_heal'; props: ChatScrollHealProps };
 
 export type ChatObservabilityEventName = ChatObservabilityEvent['event'];
+
+/** OPEND-3720: metric fields are additive; legacy safety events keep their shape. */
+export type ResponsivenessInputArea = 'composer' | 'search' | 'settings' | 'other_input';
+export interface InputResponsivenessCounts {
+  area: ResponsivenessInputArea;
+  /** Trusted DOM keydowns, including those censored by the Event Timing floor. */
+  input_attempt_count: number;
+  /** Event Timing keydowns with duration >=16ms; denominator for sample rate. */
+  qualified_sample_count: number;
+  over_500ms_count: number;
+  max_input_to_presentation_ms: number | null;
+  max_queue_delay_ms: number | null;
+  sample_floor_ms: 16;
+}
+
+
+const count = z.number().int().safe().nonnegative();
+const ms = z.number().finite().nonnegative();
+// Fields only: client-metrics.ts supplies the common, versioned envelope.
+export const responsivenessWindowFields = {
+  measurement: z.enum(['long_task', 'event_timing']),
+  measurable: z.boolean(),
+  unavailable_reason: z.enum(['unsupported', 'background_or_sleep']).nullable(),
+  window_ms: ms.nullable(),
+  long_task_count: count.nullable().optional(),
+  severe_task_count: count.nullable().optional(),
+  max_duration_ms: ms.nullable().optional(),
+};
+export const inputResponsivenessFields = {
+  area: z.enum(['composer', 'search', 'settings', 'other_input']),
+  window_ms: ms,
+  input_attempt_count: count,
+  qualified_sample_count: count,
+  over_500ms_count: count,
+  max_input_to_presentation_ms: ms.nullable(),
+  max_queue_delay_ms: ms.nullable(),
+  sample_floor_ms: z.literal(16),
+};
+export const scrollFrameFields = {
+  measurable: z.boolean(), window_ms: ms.nullable(), frame_count: count.nullable(),
+  interval_count: count.nullable(), over_50ms_count: count.nullable(), max_frame_interval_ms: ms.nullable(),
+  sampling_truncated: z.boolean(),
+};
+export const responsivenessRecoveryFields = {
+  recovery_id: z.string().min(1).max(80).regex(/^[a-zA-Z0-9-]+$/),
+  previous_occurred_at: z.string().datetime({ offset: true }),
+  duration_ms: ms.nullable(), severe_task_count: count,
+  reason: z.enum(['unclean_exit_unknown', 'observed_severe_task']),
+};
+
+
+/** Parent-owned death observation; no PID, path or diagnostic content. */
+export const daemonExitObservationSchema = z.object({
+  process_instance_id: z.string().uuid(),
+  app_session_id: z.string().min(1).max(128).regex(/^[a-zA-Z0-9_.:-]+$/).nullable(),
+  launch_attempt_id: z.string().min(1).max(128).regex(/^[a-zA-Z0-9_.:-]+$/).nullable(),
+  app_version: z.string().min(1).max(128).nullable(),
+  occurred_at: z.string().datetime({ offset: true }),
+  exit_code: z.number().int().nullable(),
+  signal: z.string().max(24).regex(/^SIG[A-Z0-9]+$/).nullable(),
+  reason: z.enum(['killed', 'crash', 'oom', 'clean-exit', 'unknown']),
+  delivered: z.boolean(),
+});
+export type DaemonExitObservation = z.infer<typeof daemonExitObservationSchema>;

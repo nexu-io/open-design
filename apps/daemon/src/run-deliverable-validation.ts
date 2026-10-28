@@ -300,10 +300,10 @@ async function resolveDeliverable(
     ? files.filter((file) => file.kind === 'html')
     : [];
   const motionSource = motionSources.length === 1 ? motionSources[0] : null;
+  const baselineSelected = baselineEntry ? files.find((file) => filePath(file) === baselineEntry) : null;
   const selected = declared
     ? files.find((file) => filePath(file) === declared) ?? null
-    : (baselineEntry ? files.find((file) => filePath(file) === baselineEntry) ?? null : null)
-      ?? motionSource ?? inferredEntry(files, acceptedKinds);
+    : baselineSelected ?? motionSource ?? inferredEntry(files, acceptedKinds);
   if (!selected) {
     return { valid: false, validation: 'entry_missing' };
   }

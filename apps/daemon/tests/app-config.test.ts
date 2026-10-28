@@ -13,7 +13,7 @@ import {
   it,
 } from 'vitest';
 
-import { agentCliEnvForAgent, readAppConfig, writeAppConfig } from '../src/app-config.js';
+import { agentCliEnvForAgent, readAppConfig, readMetricsConsent, writeAppConfig } from '../src/app-config.js';
 import { spawnEnvForAgent } from '../src/runtimes/env.js';
 import { readOdNextRolloutPolicy } from '../src/strategies/od-next/rollout.js';
 import { isLocalSameOrigin } from '../src/origin-validation.js';
@@ -38,6 +38,27 @@ describe('app-config', () => {
 
   afterEach(async () => {
     await rm(dataDir, { recursive: true, force: true });
+  });
+
+  describe('strict metrics consent', () => {
+    it('distinguishes a missing first-install config from damaged and unreadable preferences', async () => {
+      expect(await readMetricsConsent(dataDir)).toEqual({ status: 'missing', metrics: true });
+      const file = path.join(dataDir, 'app-config.json');
+      await writeAppConfig(dataDir, { telemetry: { metrics: false, content: false } });
+      expect(await readMetricsConsent(dataDir)).toEqual({ status: 'available', metrics: false });
+      for (const damaged of ['{"telemetry":{"metrics":false}', 'null', '[]', '42', '{"telemetry":null}', '{"telemetry":{"metrics":"true"}}']) {
+        await writeFile(file, damaged);
+        expect(await readMetricsConsent(dataDir)).toEqual({ status: 'unavailable', metrics: false });
+      }
+      await rm(file);
+      await mkdir(file);
+      expect(await readMetricsConsent(dataDir)).toEqual({ status: 'unavailable', metrics: false });
+    });
+
+    it('preserves defaults on valid older configs without telemetry', async () => {
+      await writeFile(path.join(dataDir, 'app-config.json'), '{"onboardingCompleted":true}');
+      expect(await readMetricsConsent(dataDir)).toEqual({ status: 'available', metrics: true });
+    });
   });
 
   describe('readAppConfig', () => {

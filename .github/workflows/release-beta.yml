@@ -466,6 +466,32 @@ jobs:
           OPEN_DESIGN_RELEASE_FORCE: ${{ inputs.force && '1' || '' }}
         run: pnpm exec tools-release prepare beta
 
+  typecheck:
+    name: Validate web types independently
+    needs: metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout build commit
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ needs.metadata.outputs.commit }}
+          fetch-depth: 1
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check web source, tests and generated route types
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: pnpm --filter @open-design/web typecheck
+
   build_mac_arm64:
     name: Build beta mac_arm64
     needs: metadata
@@ -1141,12 +1167,12 @@ jobs:
         id: win_tools_pack_cache_key
         shell: pwsh
         env:
-          WIN_TOOLS_PACK_ORIGIN_KEY: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'apps/desktop/**', 'apps/packaged/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar-proto/**', 'packages/sidecar/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/workflows/release-beta.yml', '.github/scripts/release/cache/win.ps1') }}
+          WIN_TOOLS_PACK_ORIGIN_KEY: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'apps/desktop/**', 'apps/packaged/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar-proto/**', 'packages/sidecar/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/workflows/release-beta.yml', '.github/scripts/release/cache/win.ps1', '.github/scripts/release/cache/windows.ts', '.github/actions/defer-pack-cache/action.yml') }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:WIN_TOOLS_PACK_ORIGIN_KEY)) {
             throw "Windows tools-pack cache origin key is empty"
           }
-          $prefix = "tools-pack-win-v1-beta-$env:RUNNER_OS-"
+          $prefix = "tools-pack-win-v2-slim-beta-$env:RUNNER_OS-"
           "origin=$env:WIN_TOOLS_PACK_ORIGIN_KEY" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "prefix=$prefix" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "key=$prefix$env:WIN_TOOLS_PACK_ORIGIN_KEY" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
@@ -1156,7 +1182,7 @@ jobs:
         uses: actions/cache/restore@v5
         continue-on-error: true
         with:
-          path: ${{ runner.temp }}\tools-pack-cache
+          path: ${{ runner.temp }}/tools-pack-cache
           key: ${{ steps.win_tools_pack_cache_key.outputs.key }}
           restore-keys: |
             ${{ steps.win_tools_pack_cache_key.outputs.prefix }}
@@ -1343,33 +1369,6 @@ jobs:
         shell: pwsh
         run: Get-Content "${{ runner.temp }}\release-report\win_x64\summary.md" | Add-Content $env:GITHUB_STEP_SUMMARY
 
-      - name: Prune Windows tools-pack cache
-        shell: pwsh
-        continue-on-error: true
-        run: .\.github\scripts\release\cache\win.ps1
-
-      - name: Save Windows tools-pack cache
-        if: ${{ success() && (steps.win_tools_pack_cache_restore.outputs.cache-hit != 'true' || steps.win_tools_pack_build.outcome == 'failure') }}
-        uses: actions/cache/save@v5
-        continue-on-error: true
-        with:
-          path: ${{ runner.temp }}\tools-pack-cache
-          key: ${{ steps.win_tools_pack_cache_key.outputs.key }}
-
-      - name: Retain recent Windows tools-pack caches
-        if: ${{ success() }}
-        shell: pwsh
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $prefix = "${{ steps.win_tools_pack_cache_key.outputs.prefix }}"
-          $keep = 1
-          $caches = @(gh cache list --key $prefix --sort created_at --order desc --limit 100 --json id,key,createdAt | ConvertFrom-Json)
-          $stale = @($caches | Select-Object -Skip $keep)
-          foreach ($cache in $stale) { gh cache delete $cache.id }
-          "actionsCachePrefix=$prefix kept=$([Math]::Min($caches.Count, $keep)) deleted=$($stale.Count)"
-
       - name: Prepare win_x64 assets
         if: ${{ inputs.publish }}
         shell: pwsh
@@ -1423,6 +1422,15 @@ jobs:
           name: open-design-beta-win-x64-publish-manifest
           path: ${{ runner.temp }}\release-platform-manifests\win_x64.json
           if-no-files-found: error
+
+      # Cache persistence is optional and runs outside this release workflow.
+      - name: Defer Windows tools-pack cache save
+        if: ${{ success() && (steps.win_tools_pack_cache_restore.outputs.cache-hit != 'true' || steps.win_tools_pack_build.outcome == 'failure') }}
+        continue-on-error: true
+        uses: ./.github/actions/defer-pack-cache
+        with:
+          key: ${{ steps.win_tools_pack_cache_key.outputs.key }}
+          prefix: ${{ steps.win_tools_pack_cache_key.outputs.prefix }}
 
   build_linux_x64:
     name: Build beta linux_x64

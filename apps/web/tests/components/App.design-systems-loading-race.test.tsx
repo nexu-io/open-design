@@ -563,9 +563,11 @@ describe('App design-system catalog loading race', () => {
     expect(vi.mocked(fetchDesignSystems).mock.calls.slice(-2)).toEqual([
       [expect.objectContaining({ workspaceId: context.workspaceId }), {
         forceTeamMaterialization: true,
+        onReadResult: expect.any(Function),
       }],
       [expect.objectContaining({ workspaceId: context.workspaceId }), {
         forceTeamMaterialization: true,
+        onReadResult: expect.any(Function),
       }],
     ]);
 

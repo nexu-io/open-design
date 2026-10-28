@@ -4,6 +4,19 @@
  */
 // ---- Shared enums --------------------------------------------------------
 
+// Persisted product intent is independent of execution strategy or video engine.
+// Unknown preserves old projects without guessing their scene from discovery.
+export type TrackingProjectIntent =
+  | 'live-artifact'
+  | 'web-clone'
+  | 'document'
+  | 'webgl-experience'
+  | 'worker-visualizer'
+  | 'marketing'
+  | 'hyperframes'
+  | 'motion-design'
+  | 'unknown';
+
 export type TrackingProjectKind =
   | 'prototype'
   // `web_clone` / `wireframe` / `mobile` / `live_artifact` are prototype-kind

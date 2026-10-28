@@ -15,13 +15,15 @@ import {
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { closeDatabase, openDatabase } from '../../src/db.js';
+import { closeDatabase, openDatabase, upsertMessage } from '../../src/db.js';
 import { createStrategyRunWriteEvidenceRecorder, strategyRunWriteEvidence } from '../../src/strategies/od-next/run-write-evidence.js';
 import { createClaudeStreamHandler } from '../../src/runtimes/claude-stream.js';
 import { createRunSideEffectLedger, foldEventIntoRunSideEffectLedger } from '../../src/runtimes/run-lifecycle-analytics.js';
 
 import { createSnapshot, getSnapshot, pruneExpiredSnapshots } from '../../src/plugins/snapshots.js';
 import { reconcileDurableRunTerminals } from '../../src/runtimes/run-terminal-reconciliation.js';
+import { recordStrategyTaskRunLifecycle } from '../../src/strategies/task-display.js';
+import { projectStrategyTaskByRunId } from '../../src/strategies/od-next/automatic-simple-production.js';
 import {
   StrategyTaskTransitionConflictError,
   type CompareAndTransitionStrategyTaskInput,
@@ -221,6 +223,119 @@ describe('durable strategy task store', () => {
     vi.restoreAllMocks();
     closeDatabase();
     fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('projects one durable task clock including automatic handoff from actual execution start', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000);
+    let task = createTask(db, snapshot);
+    expect(projectStrategyTaskByRunId(db, 'run-request')?.display?.elapsedMs).toBeNull();
+    recordStrategyTaskRunLifecycle(db, { runId: 'run-request', phase: 'start', at: 1_000, status: 'running' });
+    recordStrategyTaskRunLifecycle(db, { runId: 'run-request', phase: 'end', at: 13_000, status: 'succeeded' });
+    task = getStrategyTaskExecution(db, task.taskExecutionId)!;
+    task = compareAndTransitionStrategyTaskExecution(db, {
+      taskExecutionId: task.taskExecutionId, expectedRevision: task.revision,
+      settlementReason: 'continued', settlementFacts: { physicalStatus: 'succeeded' },
+      to: { route: 'full_plan', inputStage: 'production', outcome: 'running', executionMode: 'simple' },
+      nextRun: { runId: 'run-production', sourceRunId: 'run-request' },
+    });
+    vi.mocked(Date.now).mockReturnValue(14_000);
+    expect(projectStrategyTaskByRunId(db, 'run-request')?.display).toMatchObject({
+      id: 'task-1', state: 'running', elapsedMs: 13_000,
+    });
+    recordStrategyTaskRunLifecycle(db, { runId: 'run-production', phase: 'start', at: 15_000, status: 'running' });
+    recordStrategyTaskRunLifecycle(db, { runId: 'run-production', phase: 'end', at: 43_000, status: 'succeeded' });
+    task = getStrategyTaskExecution(db, task.taskExecutionId)!;
+    compareAndTransitionStrategyTaskExecution(db, {
+      taskExecutionId: task.taskExecutionId, expectedRevision: task.revision,
+      settlementReason: 'ended', settlementFacts: { physicalStatus: 'succeeded' },
+      to: { route: 'full_plan', inputStage: 'production', outcome: 'completed', executionMode: 'simple' },
+    });
+    closeDatabase(); db = openDatabase(tempDir, { dataDir: tempDir });
+    vi.mocked(Date.now).mockReturnValue(100_000);
+    expect(projectStrategyTaskByRunId(db, 'run-request')?.display).toMatchObject({
+      id: 'task-1', state: 'completed', elapsedMs: 42_000, runIds: ['run-request', 'run-production'],
+    });
+  });
+
+  it('keeps question answers and ordinary follow-ups as independent display turns', () => {
+    let task = createTask(db, snapshot);
+    recordStrategyTaskRunLifecycle(db, { runId: task.latestRunId, phase: 'start', at: 1_000, status: 'running' });
+    recordStrategyTaskRunLifecycle(db, { runId: task.latestRunId, phase: 'end', at: 19_000, status: 'succeeded' });
+    task = getStrategyTaskExecution(db, task.taskExecutionId)!;
+    task = compareAndTransitionStrategyTaskExecution(db, {
+      taskExecutionId: task.taskExecutionId, expectedRevision: task.revision,
+      settlementReason: 'question', settlementFacts: { physicalStatus: 'succeeded', askedUserQuestion: true },
+      to: { route: 'full_plan', inputStage: 'request', outcome: 'completed', executionMode: null },
+    });
+    vi.spyOn(Date, 'now').mockReturnValue(319_000);
+    expect(projectStrategyTaskByRunId(db, task.latestRunId)?.display).toMatchObject({ state: 'waiting', elapsedMs: 18_000, ticking: false });
+    const answer = createStrategyTaskExecution(db, {
+      taskExecutionId: 'answer-task', projectId: task.projectId, conversationId: task.conversationId,
+      snapshotId: snapshot.snapshotId, selectedAgentId: AGENT_ID, initialRunId: 'answer-run',
+      continuedFromTaskExecutionId: task.taskExecutionId,
+      ...strategyTaskCreateIdentityFixture(), createdAt: 319_000,
+    });
+    expect(projectStrategyTaskByRunId(db, answer.latestRunId)?.display).toMatchObject({ id: 'answer-task', state: 'preparing', elapsedMs: null });
+    recordStrategyTaskRunLifecycle(db, { runId: answer.latestRunId, phase: 'start', at: 320_000, status: 'running' });
+    vi.mocked(Date.now).mockReturnValue(329_000);
+    expect(projectStrategyTaskByRunId(db, answer.latestRunId)?.display).toMatchObject({ id: 'answer-task', state: 'running', elapsedMs: 9_000 });
+    const ordinary = createStrategyTaskExecution(db, {
+      taskExecutionId: 'new-task', projectId: task.projectId, conversationId: task.conversationId,
+      snapshotId: snapshot.snapshotId, selectedAgentId: AGENT_ID, initialRunId: 'new-run',
+      continuedFromTaskExecutionId: task.taskExecutionId, ...strategyTaskCreateIdentityFixture(), createdAt: 329_000,
+    });
+    expect(projectStrategyTaskByRunId(db, ordinary.latestRunId)?.display).toMatchObject({ id: 'new-task', state: 'preparing', elapsedMs: null });
+  });
+
+  it('includes automatic handoff time when the successor fails before it starts', () => {
+    let task = createTask(db, snapshot);
+    recordStrategyTaskRunLifecycle(db,{runId:task.latestRunId,phase:'start',status:'running',at:1_000});
+    recordStrategyTaskRunLifecycle(db,{runId:task.latestRunId,phase:'end',status:'succeeded',at:13_000});
+    task = getStrategyTaskExecution(db,task.taskExecutionId)!;
+    compareAndTransitionStrategyTaskExecution(db, {
+      taskExecutionId:task.taskExecutionId,expectedRevision:task.revision,
+      settlementReason:'continued',settlementFacts:{physicalStatus:'succeeded'},
+      to:{route:'full_plan',inputStage:'production',outcome:'running',executionMode:'simple'},
+      nextRun:{runId:'run-production',sourceRunId:'run-request'},
+    });
+    recordStrategyTaskRunLifecycle(db,{runId:'run-production',phase:'end',status:'failed',at:15_000});
+    expect(projectStrategyTaskByRunId(db,'run-production')?.display).toMatchObject({state:'failed',elapsedMs:14_000,ticking:false});
+    recordStrategyTaskRunLifecycle(db,{runId:'run-production',phase:'prepare',status:'queued',at:300_000,attempt:1});
+    expect(projectStrategyTaskByRunId(db,'run-production')?.display).toMatchObject({state:'preparing',elapsedMs:14_000,ticking:false});
+    recordStrategyTaskRunLifecycle(db,{runId:'run-production',phase:'start',status:'running',at:301_000,attempt:1});
+    vi.spyOn(Date,'now').mockReturnValue(305_000);
+    expect(projectStrategyTaskByRunId(db,'run-production')?.display).toMatchObject({state:'running',elapsedMs:18_000,ticking:true});
+  });
+
+  it('keeps a legacy final Run completion marker authoritative after startup reconciliation', async () => {
+    const task = createTask(db,snapshot);
+    compareAndTransitionStrategyTaskExecution(db, {
+      taskExecutionId:task.taskExecutionId,expectedRevision:task.revision,
+      settlementReason:'ended',settlementFacts:{physicalStatus:'succeeded',todoUnfinished:true},
+      to:{route:'full_plan',inputStage:'request',outcome:'completed',executionMode:'simple'},
+    });
+    upsertMessage(db,'conversation-1',{id:'legacy-result',role:'assistant',runId:'run-request',runStatus:'succeeded',
+      content:'<od-done key="aaaaaaaaaaaaaaaa"/>Done',events:[{kind:'done_key',key:'aaaaaaaaaaaaaaaa'},
+        {kind:'text',text:'<od-done key="aaaaaaaaaaaaaaaa"/>Done'}]});
+    expect(projectStrategyTaskByRunId(db,'run-request')?.display).toMatchObject({state:'completed',elapsedMs:null});
+    const runDir = path.join(tempDir,'runs','run-request');
+    fs.mkdirSync(runDir,{recursive:true});
+    fs.writeFileSync(path.join(runDir,'state.json'),JSON.stringify({schemaVersion:1,id:'run-request',
+      projectId:'project-1',conversationId:'conversation-1',agentId:AGENT_ID,status:'succeeded',createdAt:100,updatedAt:200,terminalAt:200,langfuseCompletedAt:200}));
+    await reconcileDurableRunTerminals({analytics:{capture:vi.fn()},db,reportLangfuse:vi.fn(),runsLogDir:path.join(tempDir,'runs')});
+    expect(projectStrategyTaskByRunId(db,'run-request')?.display).toMatchObject({state:'completed',elapsedMs:null,ticking:false});
+  });
+
+  it('preserves accumulated time when explicitly resuming the same physical Run after failure', () => {
+    const task = createTask(db, snapshot);
+    recordStrategyTaskRunLifecycle(db, { runId: task.latestRunId, phase:'start', at:1_000, status:'running' });
+    recordStrategyTaskRunLifecycle(db, { runId: task.latestRunId, phase:'end', at:35_000, status:'failed' });
+    vi.spyOn(Date, 'now').mockReturnValue(335_000);
+    recordStrategyTaskRunLifecycle(db, { runId: task.latestRunId, phase:'prepare', at:335_000, status:'queued', attempt:1 });
+    expect(projectStrategyTaskByRunId(db,task.latestRunId)?.display).toMatchObject({state:'preparing',elapsedMs:34_000,ticking:false});
+    recordStrategyTaskRunLifecycle(db, { runId: task.latestRunId, phase:'start', at:336_000, status:'running', attempt:1 });
+    vi.mocked(Date.now).mockReturnValue(340_000);
+    expect(projectStrategyTaskByRunId(db,task.latestRunId)?.display).toMatchObject({state:'running',elapsedMs:38_000,ticking:true});
   });
 
   it('persists actual streamed Write evidence before close and does not erase it with a later filesystem zero', () => {
@@ -969,7 +1084,9 @@ describe('durable strategy task store', () => {
   });
 
   it.each([
-    ['running', 'completed'],
+    // P0-24 Q5: a Run still running when the daemon died is recorded as
+    // stopped on restart, so its task ends the way a stopped Run's does.
+    ['running', 'canceled'],
     ['canceled', 'canceled'],
   ] as const)(
     'reconciles a persisted %s physical Run after a real SQLite restart to %s',
@@ -1024,8 +1141,12 @@ describe('durable strategy task store', () => {
     },
   );
 
-  it('ends the task while retaining the physical failure when startup interrupts a Run', async () => {
+  // P0-24 Q5: the restart stops the Run rather than failing it; the task ends
+  // the way a stopped Run's does and keeps that physical fact.
+  it('ends the task as stopped when startup interrupts a Run', async () => {
     const task = createTask(db, snapshot, 'run-interrupted');
+    vi.spyOn(Date, 'now').mockReturnValue(20_000);
+    recordStrategyTaskRunLifecycle(db, {runId:'run-interrupted',phase:'start',status:'running',at:1_000});
     closeDatabase();
 
     const runDir = path.join(tempDir, 'runs', 'run-interrupted');
@@ -1038,7 +1159,7 @@ describe('durable strategy task store', () => {
       agentId: AGENT_ID,
       status: 'running',
       createdAt: 100,
-      updatedAt: 200,
+      updatedAt: 5_000,
       langfuseCompletedAt: 200,
     }));
 
@@ -1052,9 +1173,14 @@ describe('durable strategy task store', () => {
     });
 
     const persisted = getStrategyTaskExecution(db, task.taskExecutionId);
-    expect(persisted?.outcome).toBe('completed');
+    expect(persisted?.outcome).toBe('canceled');
     expect(persisted?.blockedContext).toBeUndefined();
-    expect(persisted?.runs.at(-1)).toMatchObject({ settlementReason: 'ended', settlementFacts: { physicalStatus: 'failed' } });
-    expect(JSON.parse(fs.readFileSync(path.join(runDir, 'state.json'), 'utf8')).status).toBe('failed');
+    expect(persisted?.runs.at(-1)).toMatchObject({ settlementReason: 'ended', settlementFacts: { physicalStatus: 'canceled' } });
+    expect(JSON.parse(fs.readFileSync(path.join(runDir, 'state.json'), 'utf8')).status).toBe('canceled');
+    expect(projectStrategyTaskByRunId(db, 'run-interrupted')?.display).toMatchObject({
+      state:'canceled',elapsedMs:4_000,ticking:false,
+    });
+    vi.mocked(Date.now).mockReturnValue(120_000);
+    expect(projectStrategyTaskByRunId(db, 'run-interrupted')?.display?.elapsedMs).toBe(4_000);
   });
 });

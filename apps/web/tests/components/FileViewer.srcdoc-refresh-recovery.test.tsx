@@ -46,6 +46,7 @@ function transportGeneration(frame: HTMLIFrameElement): string {
 }
 
 beforeEach(() => {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 800, height: 600, top: 0, left: 0, bottom: 600, right: 800 } as DOMRect);
   setExceptionTrackingContext({
     apiKey: 'phc_preview_test',
     host: 'https://posthog.test',
@@ -346,8 +347,8 @@ describe('FileViewer srcDoc file-watch refresh recovery', () => {
     expect(recoveredFrame).not.toBe(partialFrame);
     expect(recoveredFrame.srcdoc).toContain('data-od-lazy-srcdoc-transport');
 
-    const postHogCalls = fetchMock.mock.calls.filter(([input]) =>
-      String(input).includes('/i/v0/e/'));
+    const postHogCalls = fetchMock.mock.calls.filter(([input, init]) =>
+      String(input).includes('/i/v0/e/') && JSON.parse(String(init?.body ?? '{}')).event === 'client_preview_white_screen');
     expect(postHogCalls).toHaveLength(1);
     const [, postHogInit] = postHogCalls[0]!;
     expect(postHogInit).toBeDefined();
@@ -440,7 +441,8 @@ describe('FileViewer srcDoc file-watch refresh recovery', () => {
     });
 
     expect(screen.getByTestId('artifact-preview-frame')).toBe(parsingFrame);
-    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/i/v0/e/'))).toBe(false);
+    expect(fetchMock.mock.calls.some(([input, init]) => String(input).includes('/i/v0/e/')
+      && JSON.parse(String(init?.body ?? '{}')).event === 'client_preview_white_screen')).toBe(false);
   });
 
   it('recovers when a truncated document stays loading through the parsing grace period', () => {

@@ -32,20 +32,6 @@ export interface OdNextStrategyRequestRecipeV2 {
   taskProfileDigest: string;
   taskProfileVersion: string;
   taskType: Exclude<StrategyTaskTypeV2, 'generic'>;
-  planningFacts?: {
-    capabilitySnapshotHash: string;
-    inputRefs: ReadonlyArray<string>;
-    productionRoutes: ReadonlyArray<string>;
-    outputKinds: ReadonlyArray<string>;
-    /**
-     * Does the selected runtime have the verified structured native Child
-     * lifecycle that complex mode requires? The core strategy makes this a
-     * precondition for locking complex, so the Agent has to be told the answer
-     * — asked to judge a capability it cannot observe, it can only guess, and
-     * the safe guess is always simple.
-     */
-    nativeChildLifecycleVerified: boolean;
-  } | undefined;
   executionProfile: 'filesystem' | 'text_artifact';
   coreStrategy: string;
   generalOrchestration: string;
@@ -641,38 +627,13 @@ export function renderOdNextOutputContractV2(
   return OD_NEXT_PLAN_OUTPUT_INSTRUCTIONS;
 }
 
-/** Per-task host facts stay outside the cache-stable prefix. */
-export function renderOdNextRuntimeFactsV2(
-  input: OdNextStrategyRequestRecipeV2,
-  context: OdNextStrategyStableRequestContextV2 = {},
-): string {
-  const planningFacts = input.planningFacts;
-  if (!planningFacts) return '';
-  if (!SHA256_HEX.test(planningFacts.capabilitySnapshotHash)) {
-    throw new TypeError('OD Next planning capabilitySnapshotHash must be 64 lowercase hex characters.');
-  }
-  return `Runtime facts describe available capabilities, not restrictions on requested output.
-Use the actual tool interfaces for the user-requested format. Never serialize these facts into a contract.
-
-${stableJson({
-    taskProfileVersion: input.taskProfileVersion,
-    appliedSnapshot: input.snapshotId,
-    selectedAgentId: context.agentId?.trim() || 'selected-agent-id-from-runtime',
-    capabilitySnapshotHash: planningFacts.capabilitySnapshotHash,
-    inputRefs: planningFacts.inputRefs.length ? [...planningFacts.inputRefs] : ['user-request'],
-    nativeChildLifecycleVerified: planningFacts.nativeChildLifecycleVerified,
-  })}`;
-}
-
-/** Legacy markdown wrapper around the output contract and its runtime facts. */
+/** Legacy markdown wrapper around the Plan and delivery instructions. */
 function renderMachineOutputSection(
   input: OdNextStrategyRequestRecipeV2,
-  context: OdNextStrategyStableRequestContextV2,
 ): string {
-  const runtimeFacts = renderOdNextRuntimeFactsV2(input, context);
   return `## Plan and delivery output
 
-${renderOdNextOutputContractV2(input)}${runtimeFacts ? `\n\n${runtimeFacts}` : ''}`;
+${renderOdNextOutputContractV2(input)}`;
 }
 
 /** Compose the request-stage, cache-stable OD Next planning/Build recipe. */
@@ -724,7 +685,7 @@ export function composeOdNextStrategyRequestPromptV2(
     `## OD Next general orchestration\n\n${generalOrchestration}`,
     `## Task Skill — ${input.taskType}\n\nThis Task Skill provides scenario defaults. Apply only its relevant requirements; the user's explicit requested output takes precedence.\n\n${taskSkill}`,
     ...stageBlocks,
-    renderMachineOutputSection(input, context),
+    renderMachineOutputSection(input),
   ].filter((section) => section.length > 0);
   return sections.join('\n\n---\n\n');
 }

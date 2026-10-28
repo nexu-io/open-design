@@ -1,14 +1,14 @@
 {
-  "id": "0.26.0",
-  "title": "The first collaborative motion video Agent",
-  "body": "Share files or motion videos with one link, collect feedback from colleagues and clients, and validate PMF faster.\nKeep cloud and local versions in sync, reduce miscommunication, and help your team move forward efficiently.\nSync feedback back to the project for Agent to act on, keep the original link updated, and shorten delivery time.",
+  "id": "0.26.1",
+  "title": "OpenDesign Intelligent Router is here",
+  "body": "Understand your intent in one sentence and route the best skills straight to the work you want to create.\nShare work with a link so people can view it and comment exactly where changes are needed.\nMotion videos track smoothly, with audio dropouts and glitches fixed for steadier sync.",
   "imageUrl": "https://whatsnew.open-design.ai/0.18.0.webp",
-  "linkUrl": "https://github.com/nexu-io/open-design/releases/tag/open-design-v0.26.0",
+  "linkUrl": "https://github.com/nexu-io/open-design/releases/tag/open-design-v0.26.1",
   "ctaLabel": "View release notes",
   "locales": {
     "zh-CN": {
-      "title": "首个支持协作的动效视频 Agent",
-      "body": "一个链接分享文件或动效视频，收集同事和客户反馈，更快验证 PMF\n版本云端和本地同步更新，减少沟通偏差，让团队高效推进\n反馈同步回项目，交给 Agent 修改，原链接持续更新，缩短交付时间",
+      "title": "OpenDesign Intelligent Router 正式上线",
+      "body": "一句话就懂你：自动路由优质 skill，直奔你想要的作品\n支持链接分享作品：对方点开就能看，想改哪里就评哪里\n动效视频丝滑跟拍：修复音频断续、跳音问题，音画同步更稳",
       "ctaLabel": "查看更新说明"
     }
   }

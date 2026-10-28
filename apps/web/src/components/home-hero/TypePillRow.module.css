@@ -9,11 +9,14 @@
   max-width: 820px;
   margin: 18px auto 2px;
 }
-.pill, .menuItem {
+/* These product controls also carry the shared Button base class. Anchor
+   overrides to the row so production CSS chunk order cannot replace them. */
+.row .pill, .row .menuItem {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   min-height: 38px;
+  height: 38px;
   padding: 4px 12px;
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -25,11 +28,18 @@
   white-space: nowrap;
   box-shadow: none;
 }
-.pill:hover:not(:disabled), .menuItem:hover:not(:disabled), .menuItem:focus-visible:not(:disabled) {
+.row .pill:hover:not(:disabled), .row .menuItem:hover:not(:disabled), .row .menuItem:focus-visible:not(:disabled) {
   border-color: var(--border-strong);
   background: var(--bg-subtle);
 }
-.menuItem:focus-visible:not(:disabled) { outline: none; }
+.row .menuItem:focus-visible:not(:disabled) { outline: none; }
+.row .pill:disabled, .row .menuItem:disabled {
+  background: var(--bg-subtle);
+  border-color: transparent;
+  color: var(--text-faint);
+  cursor: not-allowed;
+  transform: none;
+}
 .icon {
   display: inline-flex;
   align-items: center;
@@ -40,7 +50,7 @@
   color: var(--text-muted);
   background: transparent;
 }
-.more { padding-inline: 15px; gap: 10px; }
+.row .more { padding-inline: 15px; gap: 10px; }
 .moreAnchor { position: relative; display: flex; }
 .menu {
   position: absolute;
@@ -57,7 +67,17 @@
   border-radius: 16px;
   box-shadow: var(--shadow-md);
 }
-.menu[data-side='top'] { top: auto; bottom: calc(100% + 8px); }
+.menu::after {
+  /* Absolute margins do not extend the shell's scroll range. A trailing box
+     makes the reveal scroll include the 16px gutter below the menu itself. */
+  content: '';
+  position: absolute;
+  top: 100%;
+  inset-inline-start: 0;
+  width: 1px;
+  height: 16px;
+  pointer-events: none;
+}
 .menuList {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -70,9 +90,9 @@
   scrollbar-width: none;
 }
 .menuList::-webkit-scrollbar { display: none; }
-.menuItem { height: 42px; min-height: 42px; border: 0; border-radius: 8px; justify-content: flex-start; padding: 7px 12px; }
+.row .menuItem { height: 42px; min-height: 42px; border: 0; border-radius: 8px; justify-content: flex-start; padding: 7px 12px; }
 @media (max-width: 480px) {
   .row { gap: 6px; }
-  .pill { padding-inline: 10px; }
-  .more { padding-inline: 12px; }
+  .row .pill { padding-inline: 10px; }
+  .row .more { padding-inline: 12px; }
 }

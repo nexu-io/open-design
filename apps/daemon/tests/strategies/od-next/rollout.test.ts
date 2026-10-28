@@ -8,6 +8,7 @@ import {
   stableOdNextAssignmentBucket,
 } from '../../../src/strategies/od-next/rollout.js';
 import { odNextRolloutAnalyticsProperties } from '../../../src/strategies/od-next/rollout-analytics.js';
+import { AGENT_DEFS } from '../../../src/runtimes/registry.js';
 
 function syntheticPolicy() {
   return readOdNextRolloutPolicy({
@@ -50,7 +51,6 @@ describe('OD Next controlled rollout', () => {
         agentId: 'opencode',
         agentVersion: '1.18.18',
         sourceKind: 'bundled',
-        runtimeCapabilityVerified: true,
       })).toMatchObject({ requestedMode: 'active', effectiveMode: 'active', eligible: true });
     }
   });
@@ -102,7 +102,7 @@ describe('OD Next controlled rollout', () => {
       expect(evaluateOdNextRollout({
         policy: readOdNextRolloutPolicy({}, { odNextStrategyMode: 'off' }),
         assignmentIdentity: 'project:conversation', taskType: 'discovery', agentId: 'amr',
-        agentVersion: '0.0.38', sourceKind: 'bundled', runtimeCapabilityVerified: true,
+        agentVersion: '0.0.38', sourceKind: 'bundled',
       })).toMatchObject({ requestedMode: 'active', effectiveMode: 'active', eligible: true });
     });
 
@@ -190,7 +190,7 @@ describe('OD Next controlled rollout', () => {
     );
   });
 
-  it('requires complete capability evidence without using CLI version as an admission pin', () => {
+  it('does not require capability registration or a CLI version pin', () => {
     const base = {
       assignmentIdentity: 'project:conversation',
       taskType: 'prototype' as const,
@@ -202,15 +202,14 @@ describe('OD Next controlled rollout', () => {
       policy: readOdNextRolloutPolicy({ OD_NEXT_STRATEGY_ROLLOUT: 'active' }),
       agentVersion: 'codex 9.9.9',
     })).toMatchObject({
-      effectiveMode: 'observe',
-      eligible: false,
-      reasonCodes: expect.arrayContaining(['od_next_rollout_x1_capability_fixture_unverified']),
+      effectiveMode: 'active',
+      eligible: true,
+      reasonCodes: [],
     });
     expect(evaluateOdNextRollout({
       ...base,
       policy: readOdNextRolloutPolicy({ OD_NEXT_STRATEGY_ROLLOUT: 'active' }),
       agentVersion: null,
-      runtimeCapabilityVerified: true,
     })).toMatchObject({
       effectiveMode: 'active',
       eligible: true,
@@ -222,7 +221,30 @@ describe('OD Next controlled rollout', () => {
     })).toMatchObject({ effectiveMode: 'active', eligible: true, syntheticCanary: true });
   });
 
-  it('gates task bucket, agent, version, bundled provenance, content, behavior, and assignment', () => {
+  it('uses all registered runtimes by default and preserves explicit agent scope', () => {
+    const added = { ...AGENT_DEFS[0]!, id: 'local-od-next-test-profile' };
+    AGENT_DEFS.push(added);
+    try {
+      const policy = readOdNextRolloutPolicy({});
+      expect(policy.eligibleAgents).toContain(added.id);
+      for (const agent of AGENT_DEFS) {
+        expect(evaluateOdNextRollout({
+          policy, assignmentIdentity: 'registered-runtime', taskType: 'prototype',
+          agentId: agent.id, agentVersion: null, sourceKind: 'bundled',
+        })).toMatchObject({ effectiveMode: 'active', eligible: true });
+      }
+      const pinned = readOdNextRolloutPolicy({ OD_NEXT_STRATEGY_AGENTS: 'qoder,byok-opencode' });
+      expect(pinned.eligibleAgents).toEqual(['qoder', 'byok-opencode']);
+      expect(evaluateOdNextRollout({
+        policy: pinned, assignmentIdentity: 'pinned', taskType: 'prototype',
+        agentId: 'hermes', agentVersion: null, sourceKind: 'bundled',
+      }).eligible).toBe(false);
+    } finally {
+      AGENT_DEFS.splice(AGENT_DEFS.indexOf(added), 1);
+    }
+  });
+
+  it('gates task bucket, agent, bundled provenance, content, behavior, and assignment', () => {
     const decision = evaluateOdNextRollout({
       policy: {
         ...syntheticPolicy(),
@@ -280,7 +302,6 @@ describe('OD Next controlled rollout', () => {
       agentId: 'codex',
       agentVersion: 'codex-e2e 0.0.0',
       sourceKind: 'bundled',
-      runtimeCapabilityVerified: true,
     } as const;
     const admitted = evaluateOdNextRollout({ policy: syntheticPolicy(), ...facts });
     expect(admitted).toMatchObject({ effectiveMode: 'active', eligible: true });

@@ -208,35 +208,83 @@ describe('TypePillRow — 更多 (OPEND-3146)', () => {
     expect(frames.size).toBe(0);
   });
 
-  it('flips an open menu above the trigger when resizing leaves too little room below', () => {
+  it('keeps the menu below and scrolls its nearest scrollport when a resize removes room', () => {
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: true }));
     vi.stubGlobal('innerHeight', 900);
-    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(364);
     renderRow();
+    const scrollport = screen.getByTestId('home-hero-type-pills').parentElement!;
+    scrollport.style.overflowY = 'auto';
+    let height = 800;
+    vi.spyOn(scrollport, 'clientHeight', 'get').mockImplementation(() => height);
+    vi.spyOn(scrollport, 'scrollHeight', 'get').mockReturnValue(1200);
+    vi.spyOn(scrollport, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 44, 1000, height));
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return this.dataset.testid === 'home-hero-type-pills-popover'
+        ? new DOMRect(300, 546 - scrollport.scrollTop, 220, 223) : new DOMRect();
+    });
     const trigger = screen.getByTestId('home-hero-type-pills-more');
-    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue(new DOMRect(400, 500, 80, 38));
     fireEvent.click(trigger);
     const popover = screen.getByTestId('home-hero-type-pills-popover');
     expect(popover.getAttribute('data-side')).toBe('bottom');
     expect(screen.getByRole('listbox').style.maxHeight).toBe('205px');
+    expect(scrollport.scrollTop).toBe(0);
 
     vi.stubGlobal('innerHeight', 650);
+    height = 550;
     fireEvent.resize(window);
-    expect(popover.getAttribute('data-side')).toBe('top');
+    expect(popover.getAttribute('data-side')).toBe('bottom');
     expect(screen.getByRole('listbox').style.maxHeight).toBe('205px');
+    expect(scrollport.scrollTop).toBe(191);
+    expect(popover.getBoundingClientRect().bottom).toBe(578);
+    // Internal list navigation must not scroll Home a second time.
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+    fireEvent.keyDown(document.activeElement!, { key: 'ArrowDown' });
+    expect(scrollport.scrollTop).toBe(191);
+    // More room never triggers a reverse scroll or flips the menu upward.
+    vi.stubGlobal('innerHeight', 900);
+    height = 800;
+    fireEvent.resize(window);
+    expect(scrollport.scrollTop).toBe(191);
     fireEvent.click(screen.getByTestId('home-hero-type-pill-document-more'));
     expect(screen.queryByRole('listbox')).toBeNull();
   });
 
-  it('constrains the menu to the roomier side when neither side fits its full height', () => {
+  it('reveals the full menu on opening in a short scrollport and cancels when closed', () => {
+    let frameId = 0;
+    const frames = new Map<number, FrameRequestCallback>();
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      frames.set(++frameId, callback);
+      return frameId;
+    });
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id));
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
     vi.stubGlobal('innerHeight', 350);
-    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(364);
     renderRow();
+    const scrollport = screen.getByTestId('home-hero-type-pills').parentElement!;
+    scrollport.style.overflowY = 'auto';
+    vi.spyOn(scrollport, 'clientHeight', 'get').mockReturnValue(300);
+    vi.spyOn(scrollport, 'scrollHeight', 'get').mockReturnValue(1000);
+    vi.spyOn(scrollport, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 44, 1000, 300));
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return this.dataset.testid === 'home-hero-type-pills-popover'
+        ? new DOMRect(300, 226 - scrollport.scrollTop, 220, 223) : new DOMRect();
+    });
     const trigger = screen.getByTestId('home-hero-type-pills-more');
-    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue(new DOMRect(200, 180, 80, 38));
     fireEvent.click(trigger);
-    expect(screen.getByTestId('home-hero-type-pills-popover').getAttribute('data-side')).toBe('top');
-    expect(screen.getByRole('listbox').style.maxHeight).toBe('138px');
+    expect(screen.getByTestId('home-hero-type-pills-popover').getAttribute('data-side')).toBe('bottom');
+    expect(screen.getByRole('listbox').style.maxHeight).toBe('205px');
+    expect(frames.size).toBe(1);
+    const pump = (now: number) => {
+      const callbacks = [...frames.values()];
+      frames.clear();
+      callbacks.forEach((callback) => callback(now));
+    };
+    pump(0);
+    pump(50);
+    expect(scrollport.scrollTop).toBeGreaterThan(0);
+    expect(scrollport.scrollTop).toBeLessThan(121);
     fireEvent.keyDown(document, { key: 'Escape' });
+    expect(frames.size).toBe(0);
     expect(screen.queryByRole('listbox')).toBeNull();
     expect(document.activeElement).toBe(trigger);
   });

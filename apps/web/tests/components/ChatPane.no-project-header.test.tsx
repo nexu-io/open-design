@@ -4,16 +4,13 @@
 // switcher above the chat card. The chat card's own `.chat-project-header`
 // row (which S3 #8129 kept for the inline rename) no longer renders on the
 // project page: renaming lives in the switcher's row menu (K2 #8183) and the
-// history control is portalled into the tabs dock. The pending-creation card
-// that hands off to the real chat drops the same row so nothing jumps at the
-// hand-off.
+// history control is portalled into the tabs dock.
 
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { forwardRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatPane } from '../../src/components/ChatPane';
-import { ProjectCreationPendingView } from '../../src/components/ProjectCreationPendingView';
 import { I18nProvider } from '../../src/i18n';
 
 vi.mock('../../src/components/ChatComposer', () => ({
@@ -68,23 +65,5 @@ describe('chat card has no project header row on the project page', () => {
     expect(row).not.toBeNull();
     expect(row?.querySelector('.chat-project-header-title')).toBeNull();
     expect(screen.getByTestId('conversation-history-trigger')).toBeTruthy();
-  });
-});
-
-describe('pending-creation card matches the real chat card', () => {
-  it('shows the prompt without a project-name header row', () => {
-    const view = render(
-      <I18nProvider initial="en">
-        <ProjectCreationPendingView
-          projectName="Coffee shop landing page"
-          prompt="Make a landing page for a coffee shop"
-          files={[]}
-          agentId="claude"
-        />
-      </I18nProvider>,
-    );
-    expect(view.container.querySelector('.chat-project-header')).toBeNull();
-    expect(screen.queryByTestId('pending-project-title')).toBeNull();
-    expect(screen.getByText('Make a landing page for a coffee shop')).toBeTruthy();
   });
 });

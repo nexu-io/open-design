@@ -1373,69 +1373,6 @@
   gap: 3px;
   overflow-y: auto;
 }
-.home-hero__plugin-hover-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px 14px;
-  align-items: center;
-  margin-top: 4px;
-  padding: 10px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--bg-subtle) 72%, var(--bg-panel));
-}
-.home-hero__plugin-hover-card strong {
-  display: block;
-  overflow: hidden;
-  color: var(--text-strong);
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.home-hero__plugin-hover-card p {
-  margin: 3px 0 0;
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.4;
-}
-.home-hero__plugin-hover-kicker {
-  display: block;
-  margin-bottom: 2px;
-  color: var(--text-faint);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-.home-hero__plugin-hover-meta {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 8px;
-  color: var(--text-faint);
-  font-size: 12px;
-}
-.home-hero__plugin-hover-meta span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.home-hero__plugin-hover-card button {
-  appearance: none;
-  padding: 6px 9px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-panel);
-  color: var(--text);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-.home-hero__plugin-hover-card button:hover {
-  border-color: var(--border-strong);
-  color: var(--accent);
-}
 .home-hero__mention-tabs {
   flex: 0 0 auto;
   display: flex;

@@ -1,6 +1,10 @@
 import type { Dict } from "../types";
 
 export const zhTW: Dict = {
+  "fileViewer.publishFileContentUnavailable": "部分已上傳檔案缺失或未通過完整性檢查，請重試。",
+  "fileViewer.publishFileConflict": "發佈或上傳狀態已變更，請重新整理分享面板後重試。",
+  "fileViewer.publishFileWorkspaceLocked": "此工作區已鎖定，請恢復存取權限後再發佈。",
+
   "collab.contentUpdate.available": "雲端有新版本",
   "collab.contentUpdate.updating": "正在更新…",
   "collab.contentUpdate.askAgain": "恢復更新提示",
@@ -514,7 +518,7 @@ export const zhTW: Dict = {
   "settings.cloudCalloutButton": "登入 / 註冊",
   "settings.modeApiMeta": "API 供應商",
   "settings.byokNoFileToolsNotice":
-    "BYOK 無法讀取、寫入或編輯專案檔案。需要變更程式碼時，請使用 Local CLI。",
+    "BYOK 透過 OpenCode 讀取、寫入和編輯專案檔案，需要已安裝且可用的 OpenCode。",
   "settings.byokDraftNotice":
     "填寫必填欄位後即可儲存此供應商；目前的設定將繼續維持生效。",
   "settings.codeAgent": "程式碼代理",
@@ -1028,7 +1032,6 @@ export const zhTW: Dict = {
   "homeHero.loadingContext": "正在載入上下文…",
   "homeHero.noResults": "找不到「{query}」的結果。",
   "homeHero.searchPrompt": "搜尋檔案、外掛、技能、MCP 伺服器與連接器。",
-  "homeHero.parameters": "{n} 個參數",
   "homeHero.details": "詳細資料",
   "homeHero.toRun": "執行",
   "homeHero.forNewLine": "換行",
@@ -2103,7 +2106,7 @@ export const zhTW: Dict = {
   "designs.status.notStarted": "未開始",
   "designs.status.queued": "等待中",
   "designs.status.running": "執行中",
-  "designs.status.awaitingInput": "等待回覆",
+  "designs.status.awaitingInput": "需要你回覆",
   "designs.status.incomplete": "未完成",
   "designs.status.succeeded": "已完成",
   "designs.status.published": "已發佈",
@@ -3521,11 +3524,12 @@ export const zhTW: Dict = {
 
   "fileViewer.publishFileRequiresTeam": "發布公開連結需要團隊工作區。請切換到團隊工作區，或使用「部署」發布此檔案。",
   "fileViewer.publishFileRequiresWorkspace": "產生分享連結需要登入工作區。請登入 OpenDesign Cloud，或改用「部署」分享此檔案。",
-    "fileViewer.publishFileTooLarge": "專案超過 20 MiB 分享上限。請減小 HTML 和引用資源的總大小後重試。",
+    "fileViewer.publishFileTooLarge": "內容超過服務端分享容量上限，請減少檔案大小後重試。",
     "fileViewer.publishFileEntryIndexConflict": "「{from}」引用了專案根目錄的 index.html，它與分享頁面的發布位置衝突。請將該 index.html 重新命名（如 {name}）並更新引用，或直接分享 index.html。",
     "fileViewer.copyFixForAgent": "複製給 Agent",
     "fileViewer.copyFixForAgentFailed": "複製失敗。請手動選取下方指令並複製。",
   "fileViewer.shareUpdateHint": "檔案有新變更，訪客看到的仍是上一版。",
+  "fileViewer.shareUpdatingLink": "正在更新連結…",
   "fileViewer.shareUpdateLink": "更新連結",
   "fileViewer.signInToUpdate": "登入後更新",
   "fileViewer.signInToShare": "登入後分享",
@@ -4471,6 +4475,9 @@ export const zhTW: Dict = {
   "notify.failureTitle": "任務失敗",
   "notify.successBody": "一輪回答已經寫完。",
   "notify.failureBody": "本輪任務出錯，請查看錯誤訊息。",
+  'notify.needsReplyBody': "需要你回覆",
+  'notify.runFailedBody': "執行失敗",
+  'notify.newReplyBody': "有新回覆",
   "updater.available": "有可用更新",
   "updater.activeRunsTitle": "OpenDesign 仍在執行任務",
   "updater.activeRunsBody": "仍有 {count} 個任務正在執行。現在重新啟動會中斷這些任務。",
@@ -5917,6 +5924,10 @@ export const zhTW: Dict = {
   'chat.record.thinkingTokens': "{count} tokens",
   'chat.record.thoughts': "思考過程",
   'chat.record.done': "已完成",
+  'chat.record.turnElapsed': "用時",
+  'chat.record.elapsedSeconds': "{n} 秒",
+  'chat.record.elapsedMinutes': "{m} 分 {s} 秒",
+  'chat.record.turnStopped': "已停止",
   'chat.record.failedTurn': "執行失敗",
   'chat.record.plan': "執行計畫 · {count} 步",
   'chat.record.planStep': "第 {current} / {total} 步",
@@ -5968,5 +5979,7 @@ export const zhTW: Dict = {
   'comment.unsentDiscardNotice': '有尚未送出的評論。再次點擊將捨棄並切換。',
   'comment.anchorState.reanchored': '基於較舊版本',
   'comment.anchorState.stale': '錨點可能已移動',
+  'comment.saveTargetMissing': '評論目標已不存在，請重新選擇元素；草稿已保留。',
+  'comment.savePreviewNotReady': '預覽正在重新整理，草稿已保留，請在完成後重試儲存。',
   'comment.anchorState.lost': '錨點已遺失',
 };

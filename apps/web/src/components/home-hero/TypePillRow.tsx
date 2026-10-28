@@ -9,10 +9,9 @@ import { smoothScrollTo } from '../../utils/smoothScrollToTop';
 import styles from './TypePillRow.module.css';
 
 const MENU_LIST_HEIGHT = 205; // Four 42px rows, four 4px gaps and half a row.
-const MENU_FRAME_HEIGHT = 18; // Two 8px paddings and two 1px borders.
-const MENU_GAP = 8;
 const VIEWPORT_GUTTER = 16;
 const KEYBOARD_SCROLL_MS = 120;
+const PAGE_REVEAL_MS = 200;
 
 interface Props {
   chips: HomeHeroChip[];
@@ -26,11 +25,11 @@ export function TypePillRow({ chips, activeChipId, disabled, labelFor, onPick }:
   const t = useT();
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const pendingFocusRef = useRef<'first' | 'last' | null>(null);
   const cancelScrollRef = useRef<(() => void) | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
-  const [placement, setPlacement] = useState({ side: 'bottom', maxHeight: MENU_LIST_HEIGHT });
   const menuId = useId();
   const byId = (ids: readonly string[]) => ids
     .map((id) => chips.find((chip) => chip.id === id))
@@ -40,30 +39,39 @@ export function TypePillRow({ chips, activeChipId, disabled, labelFor, onPick }:
 
   useLayoutEffect(() => {
     if (!moreOpen) return;
-    const updatePlacement = () => {
-      const trigger = triggerRef.current;
-      const list = listRef.current;
-      if (!trigger || !list) return;
-      const rect = trigger.getBoundingClientRect();
-      const above = Math.max(0, rect.top - MENU_GAP - VIEWPORT_GUTTER);
-      const below = Math.max(0, window.innerHeight - rect.bottom - MENU_GAP - VIEWPORT_GUTTER);
-      const desiredHeight = Math.min(MENU_LIST_HEIGHT, list.scrollHeight) + MENU_FRAME_HEIGHT;
-      const side = below < desiredHeight && above > below ? 'top' : 'bottom';
-      const maxHeight = Math.max(0, Math.min(MENU_LIST_HEIGHT,
-        (side === 'top' ? above : below) - MENU_FRAME_HEIGHT));
-      setPlacement((current) => current.side === side && current.maxHeight === maxHeight
-        ? current : { side, maxHeight });
+    let cancelReveal: (() => void) | undefined;
+    const revealMenu = () => {
+      const menu = menuRef.current;
+      if (!menu) return;
+      // The Home surface scrolls inside the shell, not on window. The menu's
+      // overflow provides the extra scroll range without moving the composer
+      // through a layout change or placing the menu over it.
+      let scrollport = menu.parentElement;
+      while (scrollport && !/^(auto|scroll)$/.test(getComputedStyle(scrollport).overflowY)) {
+        scrollport = scrollport.parentElement;
+      }
+      scrollport ??= document.scrollingElement as HTMLElement | null;
+      if (!scrollport) return;
+      cancelReveal?.();
+      const bottom = scrollport === document.scrollingElement
+        ? window.innerHeight
+        : Math.min(window.innerHeight,
+          scrollport.getBoundingClientRect().top + scrollport.clientTop + scrollport.clientHeight);
+      const delta = menu.getBoundingClientRect().bottom + VIEWPORT_GUTTER - bottom;
+      if (delta > 0) {
+        const target = Math.min(scrollport.scrollHeight - scrollport.clientHeight, scrollport.scrollTop + delta);
+        if (target > scrollport.scrollTop) cancelReveal = smoothScrollTo(scrollport, target, PAGE_REVEAL_MS);
+      }
     };
-    updatePlacement();
-    window.addEventListener('resize', updatePlacement);
-    window.addEventListener('scroll', updatePlacement, true);
-    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updatePlacement);
+    revealMenu();
+    window.addEventListener('resize', revealMenu);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(revealMenu);
     if (rootRef.current) observer?.observe(rootRef.current);
     if (triggerRef.current) observer?.observe(triggerRef.current);
     return () => {
-      window.removeEventListener('resize', updatePlacement);
-      window.removeEventListener('scroll', updatePlacement, true);
+      window.removeEventListener('resize', revealMenu);
       observer?.disconnect();
+      cancelReveal?.();
     };
   }, [moreOpen, moreChips.length]);
 
@@ -156,9 +164,9 @@ export function TypePillRow({ chips, activeChipId, disabled, labelFor, onPick }:
           }}>
           {t('homeHero.subTypeMore')}<Icon name="chevron-down" size={14} />
         </Button>
-        {moreOpen ? <div className={styles.menu} data-side={placement.side} data-testid="home-hero-type-pills-popover">
+        {moreOpen ? <div ref={menuRef} className={styles.menu} data-side="bottom" data-testid="home-hero-type-pills-popover">
           <div ref={listRef} id={menuId} className={styles.menuList} role="listbox"
-            style={{ maxHeight: placement.maxHeight }}
+            style={{ maxHeight: MENU_LIST_HEIGHT }}
             aria-label={t('homeHero.subTypeMore')}
             onKeyDown={(event) => {
               if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;

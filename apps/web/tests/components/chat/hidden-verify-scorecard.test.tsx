@@ -74,7 +74,9 @@ describe.each(['shell', 'prose'] as const)('hidden verification scorecards in %s
         vi.stubGlobal('fetch', fetchMock);
         // Exercise the real message client/DTO replay, not a daemon/database E2E.
         const rows = await listMessages('project-1', 'conversation-1');
-        expect(fetchMock).toHaveBeenCalledWith(endpoint, undefined);
+        expect(fetchMock).toHaveBeenCalledWith(endpoint, {
+          headers: { Accept: 'application/x-ndjson' },
+        });
         const row = rows[0];
         if (!row) throw new Error('Missing verification history fixture');
         loaded = row;

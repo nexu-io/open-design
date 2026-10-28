@@ -10,9 +10,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Agent, fetch as undiciFetch } from 'undici';
 import * as contracts from '@open-design/contracts';
 import type {
-  AppliedStrategyBindingV2,
-  OdNextRuntimeCapabilitySnapshotV1,
-  OpenDesignPlanContractV2,
   ProjectScenarioTaskProfile,
 } from '@open-design/contracts';
 
@@ -40,6 +37,7 @@ vi.mock('node:crypto', async (importOriginal) => {
 
 import { closeDatabase, listMessages, openDatabase, upsertMessage } from '../src/db.js';
 import { AGENT_DEFS } from '../src/runtimes/registry.js';
+import type { FrozenSkillPackageV1 } from '../src/strategies/od-next/frozen-skill-package.js';
 import { agentBinEnvKey } from '../src/runtimes/executables.js';
 import { execAgentFile } from '../src/runtimes/invocation.js';
 import {
@@ -52,10 +50,6 @@ import * as automaticProduction from '../src/strategies/od-next/automatic-simple
 import {
   getStrategyTaskExecution
 } from '../src/strategies/task-store.js';
-import {
-  hashOdNextRuntimeCapabilitySnapshotV1,
-  resolveBundledOdNextRuntimeCapability,
-} from '../src/runtimes/od-next-capability-gate.js';
 
 type StartedServer = {
   url: string;
@@ -74,7 +68,7 @@ let fixtureDetectionIsolation: Promise<{ root: string; home: string; bin: string
 let previousDetectionEnv: Record<string, string | undefined> = {};
 
 function fetch(input: Parameters<typeof undiciFetch>[0], init?: Parameters<typeof undiciFetch>[1]) {
-  const origin = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url).origin;
+  const origin = new URL(typeof input === 'string' ? input : 'url' in input ? input.url : input.href).origin;
   const client = fixtureHttpClients.get(origin);
   if (!client) throw new Error(`No fixture HTTP client owns ${origin}`);
   return undiciFetch(input, { ...init, dispatcher: client.dispatcher });
@@ -89,6 +83,7 @@ type RunStatus = {
   cancelRequested?: boolean;
   error?: string | null;
   errorCode?: string | null;
+  strategyRolloutDecision?: { effectiveMode: string; reasonCodes: string[] } | null;
   strategyTask?: {
     taskExecutionId: string;
     runMappings?: Array<{ runId: string; taskRunIndex: number }>;
@@ -132,44 +127,6 @@ const EXECUTION_PREFLIGHT = {
   templates: [],
   outputKinds: [{ id: 'prototype', supported: true }],
 };
-const DIRECT_ELIGIBLE = {
-  editableBaselineExists: true,
-  localAndUnambiguous: true,
-  canonicalDeliverableStable: true,
-  deliverableSetStable: true,
-  dependenciesBounded: true,
-};
-const INTAKE_PASSED = {
-  inputRefs: [{ id: 'request', accessible: true }],
-  selectedAgentAvailable: true,
-  nativeContinuation: 'verified' as const,
-  taskProfileAvailable: true,
-  dependencies: [],
-};
-
-function complexCapabilitySnapshot(): OdNextRuntimeCapabilitySnapshotV1 {
-  const withoutHash: Omit<OdNextRuntimeCapabilitySnapshotV1, 'snapshotHash'> = {
-    schema: 'open-design.od-next-runtime-capability-snapshot/v1',
-    runtimePath: 'codex',
-    agentId: 'codex',
-    agentCliVersion: 'synthetic-cli-simulating-fixture/1',
-    runtimeAdapterVersion: 'synthetic-adapter/1',
-    fixtureVersion: 'synthetic-gate/v1',
-    fixtureHash: `sha256:${'d'.repeat(64)}`,
-    nativeSessionContinuation: {
-      support: 'verified', evidenceLevel: 'L0', source: 'sanitized_fixture_replay',
-    },
-    nativeSubagents: {
-      support: 'verified', evidenceLevel: 'L2', source: 'sanitized_fixture_replay',
-    },
-    capturedAt: 100,
-  };
-  return {
-    ...withoutHash,
-    snapshotHash: hashOdNextRuntimeCapabilitySnapshotV1(withoutHash),
-  };
-}
-
 describe('OD Next automatic production through the real server', () => {
   let started: StartedServer | null = null;
   let binDir: string | null = null;
@@ -670,6 +627,111 @@ process.exit(127);
     }
   });
 
+  it('runs an unregistered non-resume Qoder through public cold production and follow-ups', async () => {
+    delete process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY;
+    const fixture = await createPublicRolloutFixture('qoder-cold', 'design');
+    started = fixture.started; binDir = fixture.binDir;
+    const qoder = await writePublicQoder(binDir);
+    const configured = await fetch(`${started.url}/api/app-config`, {
+      method: 'PUT', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ agentId: 'qoder', agentCliEnv: { qoder: { QODER_BIN: qoder.bin } }, odNextStrategyMode: 'active' }),
+    });
+    expect(configured.status).toBe(200);
+    expect(AGENT_DEFS.find(agent => agent.id === 'qoder')?.streamFormat).toBe('qoder-stream-json');
+    const uploaded = await fetch(`${started.url}/api/projects/${fixture.projectId}/files`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'brief.txt', content: 'QODER_ATTACHMENT_SENTINEL' }),
+    });
+    expect(uploaded.status).toBe(200);
+    const created = await postRun(started.url, {
+      ...publicRunRequest(fixture, 'Build the QODER_ORIGINAL_REQUEST page.', 'qoder-first'),
+      agentId: 'qoder', attachments: ['brief.txt'],
+    });
+    expect(created.strategyTask, JSON.stringify(created)).toBeDefined();
+    const task = await waitForTask(created.strategyTask!.taskExecutionId, 'completed');
+    expect(task.runs.map(run => run.inputStage)).toEqual(['request', 'production']);
+    const production = await waitForRunTerminal(started.url, task.latestRunId);
+    expect(production).toMatchObject({ status: 'succeeded', strategyRolloutDecision: { effectiveMode: 'active' } });
+    const invocations = await readProjectInvocations(qoder.logPath, fixture.projectId);
+    expect(invocations).toHaveLength(2);
+    expect(invocations[1]!.stdin).toContain('QODER_ORIGINAL_REQUEST');
+    expect(invocations[1]!.stdin).toContain('QODER_PLAN_SENTINEL');
+    expect(invocations[1]!.stdin).toContain('This is the production turn');
+    // Frozen attachments use task-input references rather than source names.
+    expect(invocations[1]!.stdin).toContain('task-input:attachments/attachment-001.txt');
+    expect(invocations[1]!.taskInputFiles).toEqual(expect.arrayContaining([
+      { name: 'attachment-001.txt', content: 'QODER_ATTACHMENT_SENTINEL' },
+    ]));
+    const events = await readFile(production.eventsLogPath, 'utf8');
+    expect(events).toContain('strategy_production_transport');
+    expect(events).toContain('cold_start');
+    const file = await fetch(`${started.url}/api/projects/${fixture.projectId}/files/index.html`);
+    expect(file.status).toBe(200);
+    expect(await file.text()).toContain('Qoder delivered');
+
+    const followup = await postRun(started.url, { ...publicRunRequest(fixture, 'Refine the page.', 'qoder-followup'), agentId: 'qoder' });
+    expect((await waitForRunTerminal(started.url, followup.runId as string)).status).toBe('succeeded');
+    const question = await postRun(started.url, { ...publicRunRequest(fixture, 'Ask for audience.', 'qoder-question'), agentId: 'qoder' });
+    const asked = await waitForTask(question.strategyTask!.taskExecutionId, 'completed');
+    expect(asked.runs[0]!.settlementReason).toBe('question');
+    const answer = await postRun(started.url, {
+      ...publicRunRequest(fixture, 'Audience: designers.', 'qoder-answer'),
+      agentId: 'qoder', taskExecutionId: asked.taskExecutionId,
+    });
+    expect((await waitForRunTerminal(started.url, answer.runId as string)).status).toBe('succeeded');
+    const all = await readProjectInvocations(qoder.logPath, fixture.projectId);
+    expect(all).toHaveLength(5);
+    expect(all.every(invocation => !invocation.argv.includes('resume'))).toBe(true);
+    expect(all.at(-1)!.stdin).toContain('Audience: designers.');
+  }, 30_000);
+
+  it.each(['JSON indentation', 'JSON key order', 'Base64 padding'] as const)(
+    'loads a mapped production Run after equivalent frozen Skill %s changes', async (representation) => {
+    delete process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY;
+    const caseId = representation.toLowerCase().replaceAll(' ', '-');
+    const fixture = await createPublicRolloutFixture('marker-frozen-representation', 'design');
+    started = fixture.started; binDir = fixture.binDir;
+    const skillDir = path.join(process.env.OD_DATA_DIR!, 'skills', 'representation-skill');
+    await mkdir(path.join(skillDir, 'references'), { recursive: true });
+    await writeFile(path.join(skillDir, 'references', 'guide.md'), 'frozen guide\n');
+    await writeFile(path.join(skillDir, 'SKILL.md'), '---\nname: representation-skill\ndescription: fixture\n---\n# FROZEN_BODY_SENTINEL\nRead references/guide.md before production.');
+    const created = await postRun(started.url, {
+      ...publicRunRequest(fixture, 'Build using the selected frozen Skill.', `frozen-${caseId}-first`),
+      skillIds: ['representation-skill'],
+    });
+    expect(created.strategyTask, JSON.stringify(created)).toBeDefined();
+    await waitForInvocationCount(fixture.logPath, fixture.projectId, 1);
+    const row = database().prepare(
+      'SELECT payload_json AS payload FROM strategy_task_frozen_skill_packages WHERE task_execution_id = ?',
+    ).get(created.strategyTask!.taskExecutionId) as { payload: string };
+    const frozen: FrozenSkillPackageV1 = JSON.parse(row.payload);
+    let payload = JSON.stringify(frozen, null, 2);
+    if (representation === 'JSON key order') {
+      payload = JSON.stringify({ selections: frozen.selections, schema: frozen.schema, identity: frozen.identity });
+    } else if (representation === 'Base64 padding') {
+      const file = frozen.selections[0]!.files[0]!;
+      const unpadded = file.bytesBase64.replace(/=+$/, '');
+      expect(unpadded).not.toBe(file.bytesBase64);
+      file.bytesBase64 = unpadded;
+      payload = JSON.stringify(frozen);
+    }
+    database().prepare(
+      'UPDATE strategy_task_frozen_skill_packages SET payload_json = ? WHERE task_execution_id = ?',
+    ).run(payload, created.strategyTask!.taskExecutionId);
+    await writeFile(`${fixture.logPath}.release`, 'continue');
+    const task = await waitForTask(created.strategyTask!.taskExecutionId, 'completed');
+    expect(task.runs.map(run => run.inputStage)).toEqual(['request', 'production']);
+    const production = await waitForRunTerminal(started.url, task.latestRunId);
+    expect(production).toMatchObject({ status: 'succeeded', errorCode: null });
+    expect(task.frozenSkillPackage?.selections[0]?.body).toContain('FROZEN_BODY_SENTINEL');
+    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(2);
+    const file = await fetch(`${started.url}/api/projects/${fixture.projectId}/files/index.html`);
+    expect(file.status).toBe(200);
+    expect(await file.text()).toContain('Frozen Skill delivered');
+    const next = await postRun(started.url, publicRunRequest(fixture, 'Continue refining.', `frozen-${caseId}-followup`));
+    expect((await waitForRunTerminal(started.url, next.runId as string)).status).toBe('succeeded');
+  }, 30_000);
+
   it('Discovery resumes Codex once and delivers multiple real files without the default canonical entry', async () => {
     const fixture = await createPublicRolloutFixture('marker-production', 'design');
     await verifyProductionHostProtocol(fixture, 'marker-production');
@@ -853,6 +915,7 @@ process.exit(127);
       taskExecutionId: asked.taskExecutionId,
     });
     expect(answer.strategyTask!.taskExecutionId).not.toBe(asked.taskExecutionId);
+    expect(answer.strategyTask!.display?.id).not.toBe(first.strategyTask!.display?.id);
     const task = await waitForTask(answer.strategyTask!.taskExecutionId, 'completed');
     expect(task.continuedFromTaskExecutionId).toBe(asked.taskExecutionId);
     expect(task.runs).toHaveLength(2);
@@ -959,6 +1022,35 @@ process.exit(127);
     expect((await waitForRunTerminal(started.url, next.runId as string)).status).toBe('succeeded');
     const task = await waitForTask(next.strategyTask!.taskExecutionId, 'completed');
     expect(task.continuedFromTaskExecutionId).toBe(first.strategyTask!.taskExecutionId);
+  }, 45_000);
+
+  it.each([
+    ['off', 'failed'], ['active', 'failed'], ['active', 'canceled'],
+  ] as const)('keeps the unterminated reply already streamed when a %s rollout Run ends %s', async (mode, ending) => {
+    const fixture = await createPublicRolloutFixture('unterminated-tail', 'design');
+    started = fixture.started; binDir = fixture.binDir;
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    if (mode === 'off') process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
+    const message = ending === 'failed'
+      ? 'Fail after an unterminated plan.'
+      : 'Stop after an unterminated plan.';
+    const run = await postRun(started.url, publicRunRequest(fixture, message, `unterminated-${mode}-${ending}`));
+    const runId = run.runId as string;
+    if (mode === 'off') expect(run.strategyTask).toBeUndefined();
+    else expect(run.strategyTask).toBeDefined();
+    if (ending === 'canceled') {
+      await vi.waitFor(async () => {
+        const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
+        expect(invocations.some(call => call.stdin.includes(message))).toBe(true);
+      });
+      // Let the streamed reply reach the daemon before stopping.
+      await new Promise(resolve => setTimeout(resolve, 200));
+      await fetch(`${started.url}/api/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' });
+    }
+    expect((await waitForRunTerminal(started.url, runId)).status).toBe(ending);
+    const reply = listMessages(database(), fixture.conversationId)
+      .find(entry => entry.runId === runId);
+    expect(reply?.content).toContain('Plan before the run ended.');
   }, 45_000);
 
   it('resumes current marker conversations with only the current request and host directives', async () => {
@@ -1680,7 +1772,7 @@ process.exit(127);
     await waitForRunTerminal(started.url, created.runId as string);
   });
 
-  it('binds adapter-family capability facts for an unrecognized new CLI version', async () => {
+  it('admits an unrecognized CLI version without a registered capability fixture', async () => {
     const agentCliVersion = 'codex-cli 99.0.0-forward-compatible';
     const fixture = await createPublicRolloutFixture(
       'synthetic-planning-facts',
@@ -1692,20 +1784,6 @@ process.exit(127);
     binDir = fixture.binDir;
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
 
-    const resolvedCapability = resolveBundledOdNextRuntimeCapability({
-      agentId: 'codex',
-      agentCliVersion,
-    });
-    expect(resolvedCapability).toMatchObject({
-      reason: 'capability_resolved',
-      snapshot: {
-        agentCliVersion,
-        recordedAgentCliVersion: 'codex-cli 0.147.0',
-        nativeSessionContinuation: { support: 'verified' },
-        nativeSubagents: { support: 'verified' },
-      },
-    });
-
     const created = await postRun(
       started.url,
       publicRunRequest(
@@ -1716,9 +1794,8 @@ process.exit(127);
     );
     expect(created.strategyTask).toMatchObject({ inputStage: 'request', terminal: false });
     const task = getStrategyTaskExecution(database(), created.taskExecutionId as string);
-    expect(task?.promptBundle.text).toContain(
-      resolvedCapability.snapshot!.snapshotHash.slice('sha256:'.length),
-    );
+    expect((await getRun(started.url, created.runId as string)).strategyRolloutDecision?.effectiveMode).toBe('active');
+    expect(task?.promptBundle.text).not.toMatch(/capability_snapshot_hash|native_child_lifecycle_verified|native_session_continuation|fixture_version/);
 
     const canceled = await fetch(
       `${started.url}/api/runs/${encodeURIComponent(created.runId as string)}/cancel`,
@@ -2953,6 +3030,28 @@ process.stdin.on('end', () => {
   console.log(JSON.stringify({ type: 'thread.started', thread_id: ${JSON.stringify(label.startsWith('marker-') ? THREAD_ID : 'public-rollout-session')} }));
   }
   console.log(JSON.stringify({ type: 'turn.started' }));
+  if (${JSON.stringify(label)} === 'marker-frozen-representation') {
+    const emit = (text) => {
+      console.log(JSON.stringify({ type: 'item.completed', item: { id: 'answer', type: 'agent_message', text } }));
+      console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1 } }));
+      setTimeout(() => process.exit(0), 5);
+    };
+    if (stdin.includes('This is the production turn')) {
+      fs.writeFileSync('index.html', '<!doctype html><html><body>Frozen Skill delivered</body></html>');
+      emit('Delivered index.html.');
+    } else if (stdin.includes('Continue refining.')) {
+      emit('Refinement complete.');
+    } else {
+      const key = /<od-production-ready key="([a-f0-9]+)"/.exec(stdin)?.[1];
+      if (!key) throw new Error('Current host marker key was not injected');
+      const waiting = setInterval(() => {
+        if (!fs.existsSync(logPath + '.release')) return;
+        clearInterval(waiting);
+        emit('Plan: build with the selected Skill.\\n<od-production-ready key="' + key + '" />');
+      }, 10);
+    }
+    return;
+  }
   if (stdin.includes('Hold the public rollout run open until canceled.') && !stdin.includes('Historical task context.')) {
     setInterval(() => {}, 1 << 30);
     return;
@@ -2962,6 +3061,20 @@ process.stdin.on('end', () => {
     process.on('SIGTERM', () => setTimeout(() => process.exit(0), 2500));
     fs.appendFileSync(logPath, JSON.stringify({ drainReady: true }) + '\\n');
     setInterval(() => {}, 1 << 30);
+    return;
+  }
+  if (stdin.includes('Fail after an unterminated plan.') || stdin.includes('Stop after an unterminated plan.')) {
+    // The reply's last line has no trailing newline, so the OD Next protocol
+    // still holds it when the Run ends without succeeding.
+    console.log(JSON.stringify({
+      type: 'item.completed', item: { id: 'plan', type: 'agent_message', text: 'Plan before the run ended.' },
+    }));
+    if (stdin.includes('Stop after an unterminated plan.')) {
+      setInterval(() => {}, 1 << 30);
+      return;
+    }
+    process.stderr.write('controlled failure after the plan\\n');
+    setTimeout(() => process.exit(1), 5);
     return;
   }
   if (${JSON.stringify(label)} === 'marker-tool-split' && !stdin.includes('This is the production turn')) {
@@ -3034,6 +3147,46 @@ process.stdin.on('end', () => {
   }));
   console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1 } }));
   setTimeout(() => process.exit(0), 5);
+});
+`, 'utf8');
+  await chmod(bin, 0o755);
+  return { bin, logPath };
+}
+
+async function writePublicQoder(dir: string): Promise<{ bin: string; logPath: string }> {
+  const bin = path.join(dir, 'qoder-public');
+  const logPath = path.join(dir, 'qoder-public.jsonl');
+  await writeFile(bin, `#!/usr/bin/env node
+const fs = require('node:fs');
+const path = require('node:path');
+const argv = process.argv.slice(2);
+if (argv.includes('--version')) { console.log('qodercli 0.3.0'); process.exit(0); }
+if (argv.includes('--help')) { console.log('Usage: qodercli -p --output-format stream-json --yolo'); process.exit(0); }
+let stdin = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', chunk => { stdin += chunk; });
+process.stdin.on('end', () => {
+  const inputDir = process.env.OD_TASK_INPUT_DIR;
+  const attachments = inputDir && path.join(inputDir, 'attachments');
+  const taskInputFiles = attachments && fs.existsSync(attachments)
+    ? fs.readdirSync(attachments).map(name => ({ name, content: fs.readFileSync(path.join(attachments, name), 'utf8') })) : [];
+  fs.appendFileSync(${JSON.stringify(logPath)}, JSON.stringify({ argv, stdin, cwd: process.cwd(), startedAt: Date.now(), taskInputFiles }) + '\\n');
+  const current = /<user_first_prompt>\\s*<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>\\s*<\\/user_first_prompt>/.exec(stdin)?.[1] || stdin;
+  let text = 'Follow-up complete.';
+  if (current.includes('This is the production turn')) {
+    fs.writeFileSync('index.html', '<!doctype html><html><body>Qoder delivered</body></html>');
+    text = 'Delivered index.html.';
+  } else if (current.includes('QODER_ORIGINAL_REQUEST')) {
+    const key = /<od-production-ready key="([a-f0-9]+)"/.exec(stdin)?.[1];
+    if (!key) throw new Error('Current host marker key was not injected');
+    text = 'QODER_PLAN_SENTINEL: one page.\\n<od-production-ready key="' + key + '" />';
+  } else if (current.includes('Ask for audience.')) {
+    text = '<question-form id="scope">{"questions":[{"id":"audience","label":"Who is this for?"}]}</question-form>';
+  }
+  const W = obj => fs.writeSync(1, JSON.stringify(obj) + '\\n');
+  W({ type: 'system', subtype: 'init', model: 'qoder-fixture', qodercli_version: '0.3.0' });
+  W({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
+  W({ type: 'result', is_error: false, stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 } });
 });
 `, 'utf8');
   await chmod(bin, 0o755);
@@ -3147,84 +3300,6 @@ async function stopOwnedServer(server: StartedServer): Promise<void> {
   if (server.server.listening) {
     await new Promise<void>((resolve) => server.server.close(() => resolve()));
   }
-}
-
-function planContract(
-  snapshotId: string,
-  strategy: AppliedStrategyBindingV2,
-  mode: 'repair' | 'direct' | 'complex' = 'repair',
-  capability = complexCapabilitySnapshot(),
-): OpenDesignPlanContractV2 {
-  return {
-    schema: 'open-design.plan-contract/v2',
-    strategy: {
-      id: 'od-next-strategy',
-      version: strategy.version,
-      packageHash: strategy.packageHash,
-      snapshotId,
-    },
-    taskProfile: {
-      schemaVersion: '2',
-      taskType: 'prototype',
-      taskProfileVersion: strategy.selectedTaskProfile.version,
-      goal: 'Build an operator prototype',
-      contextAndAudience: 'Product operators',
-      inputsAndReferences: ['request'],
-      constraints: [],
-      canonicalDeliverable: { id: 'prototype', kind: 'prototype', format: 'html' },
-      requiredDeliverables: [{ id: 'prototype', kind: 'prototype' }],
-      designSpec: {
-        source: 'resolved-baseline',
-        version: '1',
-        decisions: { palette: 'neutral' },
-      },
-      buildRequirements: [{ id: 'build', text: 'Build the prototype.' }],
-      assumptions: [],
-      risks: [],
-      taskSpecific: {},
-    },
-    fullPlan: {
-      executionMode: mode === 'complex' ? 'complex' : 'simple',
-      steps: mode === 'complex'
-        ? [
-            { id: 'shell', objective: 'Build shell', outputs: ['shell'] },
-            { id: 'flow', objective: 'Build flow', outputs: ['flow'], dependsOn: ['shell'] },
-          ]
-        : [{ id: 'build', objective: 'Build', outputs: ['prototype'] }],
-      readinessArtifacts: [],
-      buildPackages: mode === 'complex'
-        ? [
-            {
-              id: 'shell', objective: 'Build shell', inputs: ['design-spec'], outputs: ['shell'],
-              sharedConstraints: ['Use the frozen design spec.'], dependsOn: [],
-              allowedResources: ['project-source'],
-            },
-            {
-              id: 'flow', objective: 'Build flow', inputs: ['shell'], outputs: ['flow'],
-              sharedConstraints: ['Use the frozen design spec.'], dependsOn: ['shell'],
-              allowedResources: ['project-source'],
-            },
-          ]
-        : [],
-    },
-    runManifest: {
-      selectedAgentId: mode === 'complex' ? capability.agentId : 'codex',
-      capabilitySnapshotHash: mode === 'complex'
-        ? capability.snapshotHash.slice('sha256:'.length)
-        : 'c'.repeat(64),
-      inputRefs: ['request'],
-      productionRoutes: ['html'],
-      preflight: { intake: 'passed', execution: 'passed' },
-    },
-    decisionSummary: {
-      goal: 'Build an operator prototype',
-      deliverables: ['prototype'],
-      keyConstraints: [],
-      assumptions: [],
-      risks: [],
-      openDecisions: [],
-    },
-  };
 }
 
 async function writeStrategyCodex(dir: string, probeLogPath?: string): Promise<{ bin: string; logPath: string }> {
@@ -3472,7 +3547,7 @@ async function readProjectInvocations(logPath: string, projectId: string): Promi
     .filter(Boolean)
     .map((line) => JSON.parse(line) as Invocation)
     .filter((invocation) =>
-      invocation.argv[0] === 'exec'
+      (invocation.argv[0] === 'exec' || invocation.argv[0] === '-p')
       && invocation.cwd.includes(projectId),
     );
 }

@@ -96,7 +96,7 @@ function cleanString(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
 }
 
-function inferReleaseChannelFromVersion(version: string): string | null {
+export function inferReleaseChannelFromVersion(version: string): string | null {
   return releaseChannelFromVersion(version)
     ?? version.match(/^\d+\.\d+\.\d+-([0-9A-Za-z-]+)/)?.[1]?.split('.')[0]
     ?? null;

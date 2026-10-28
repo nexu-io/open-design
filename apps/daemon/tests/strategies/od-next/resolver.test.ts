@@ -9,18 +9,24 @@ describe('OD Next host intake preflight', () => {
     expect(runIntakePreflight({
       inputRefs: [{ id: 'request', accessible: true }, { id: 'brand', accessible: false }],
       selectedAgentAvailable: true,
-      nativeContinuation: 'unknown',
       taskProfileAvailable: false,
       dependencies: [{ id: 'font', available: false }],
     })).toEqual({
       status: 'blocked',
       reasonCodes: [
         'od_next_preflight_input_unavailable:brand',
-        'od_next_preflight_native_continuation_unverified',
         'od_next_preflight_task_profile_unavailable',
         'od_next_preflight_dependency_unavailable:font',
       ],
     });
+  });
 
+  it('accepts usable inputs without native continuation proof', () => {
+    expect(runIntakePreflight({
+      inputRefs: [{ id: 'request', accessible: true }],
+      selectedAgentAvailable: true,
+      taskProfileAvailable: true,
+      dependencies: [],
+    })).toEqual({ status: 'passed', reasonCodes: [] });
   });
 });

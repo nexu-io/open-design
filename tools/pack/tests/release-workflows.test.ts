@@ -184,7 +184,7 @@ describe("release workflows", () => {
     ]);
 
     expect(workflows.map((workflow) => countOccurrences(workflow, "keep=1"))).toEqual([2, 2, 0]);
-    expect(workflows.map((workflow) => countOccurrences(workflow, "$keep = 1"))).toEqual([1, 1, 1]);
+    expect(workflows.map((workflow) => countOccurrences(workflow, "uses: ./.github/actions/defer-pack-cache"))).toEqual([1, 1, 1]);
     for (const workflow of workflows) {
       expect(workflow).not.toContain("keep=3");
       expect(workflow).not.toContain("$keep = 3");
@@ -275,15 +275,16 @@ describe("release workflows", () => {
     }
     expect(win).not.toContain("tools\\release\\scripts\\build-platform.ps1");
     expect(win).toContain("uses: actions/cache/restore@v5");
-    expect(win).toContain("uses: actions/cache/save@v5");
-    expect(win).toContain("tools-pack-win-v1-beta-$env:RUNNER_OS-");
+    expect(win).not.toContain("uses: actions/cache/save@v5");
+    expect(win).toContain("uses: ./.github/actions/defer-pack-cache");
+    expect(win).toContain("tools-pack-win-v2-slim-beta-$env:RUNNER_OS-");
     expect(win).toContain('pnpm.cmd exec tools-pack win cleanup --dir "${{ runner.temp }}\\tools-pack" --namespace release-beta-win --json');
     expect(win).toContain('"tools-pack", "win", "build"');
     expect(buildWin).toContain('$buildArgs += "--require-vela-cli"');
     expect(buildWin).toContain('$updateArgs += "--require-vela-cli"');
     expect(win).toContain("tools-pack win validate-payload");
     expect(win).toContain("pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts");
-    expect(win).toContain(".\\.github\\scripts\\release\\cache\\win.ps1");
+    expect(win).toContain("uses: ./.github/actions/defer-pack-cache");
     for (const metadata of [betaMetadata, prereleaseMetadata, stableMetadata]) {
       expect(metadata).toContain("uses: pnpm/action-setup@v5");
       expect(metadata).toContain("run: pnpm install --frozen-lockfile");
@@ -412,7 +413,7 @@ describe("release workflows", () => {
         prereleaseMacJob.indexOf(nextStep),
       );
     }
-    expect(prereleaseWin).toContain("tools-pack-win-v1-prerelease-$env:RUNNER_OS-");
+    expect(prereleaseWin).toContain("tools-pack-win-v2-slim-prerelease-$env:RUNNER_OS-");
     expect(prereleaseWin).toContain("tools-pack win validate-payload");
     expect(prereleaseWin).toContain("release-build\\win_x64\\build.json");
     expect(prereleaseWin).toContain("tools-release write-report");

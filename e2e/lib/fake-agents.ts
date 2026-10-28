@@ -223,6 +223,9 @@ if (args.includes('--version')) {
 } else if (agentId === 'claude' && args[0] === '-p' && args.includes('--help')) {
   process.stdout.write('--add-dir --include-partial-messages\\n');
   process.exitCode = 0;
+} else if (agentId === 'opencode' && args[0] === 'run' && args.includes('--help')) {
+  process.stdout.write('--format --dir --session --dangerously-skip-permissions\\n');
+  process.exitCode = 0;
 } else if ((agentId === 'opencode' || agentId === 'cursor-agent') && args[0] === 'models') {
   process.stdout.write('fake/default\\n');
   process.exitCode = 0;
@@ -581,7 +584,6 @@ function odNextPromptIdentity(promptText) {
     const identity = {
       version: strategy[1],
       snapshotId: promptIdentity(promptText, 'applied snapshot'),
-      packageHash: promptIdentity(promptText, 'strategy package'),
       taskProfileVersion: '2.0.0',
       taskType: 'prototype',
     };

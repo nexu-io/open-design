@@ -16,6 +16,9 @@ import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { runDeliverableSyntaxToolCli } from './tools-deliverable-syntax-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
+import { byokProviderFromCliOptions } from './runtimes/byok-cli.js';
+import { BYOK_OPENCODE_AGENT_ID } from './runtimes/byok-opencode.js';
+import { redactSecrets } from './connectionTest.js';
 import { SidecarFactory } from '@open-design/sidecar';
 import { APP_KEYS, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
 import { EXPORT_FORMATS, EXPORT_IMAGE_FORMATS, mediaFailureNextStep, parseApiFailureDetail } from '@open-design/contracts';
@@ -130,6 +133,12 @@ const MCP_INSTALL_BOOLEAN_FLAGS = new Set([
   'uninstall',
   'remove',
 ]);
+
+// Hoisted for the same TDZ reason as the MEDIA / MCP flags above: `od run
+// notices` dispatches through SUBCOMMAND_MAP during module evaluation.
+const RUN_NOTICES_STRING_FLAGS = new Set(['daemon-url', 'workspace', 'workspace-member', 'after']);
+const RUN_NOTICES_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'watch']);
+const RUN_NOTICES_POLL_MS = 3_000;
 
 const RESEARCH_SEARCH_STRING_FLAGS = new Set([
   'query',
@@ -261,6 +270,11 @@ const PROJECT_RESOURCE_STRING_FLAGS = new Set([
   'workspace-member',
 ]);
 const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow', 'thumbnail']);
+const RUN_START_STRING_FLAGS = new Set([
+  ...PROJECT_RESOURCE_STRING_FLAGS,
+  'byok-protocol', 'byok-base-url', 'byok-api-version', 'byok-key-env',
+]);
+const RUN_START_BOOLEAN_FLAGS = new Set([...PROJECT_BOOLEAN_FLAGS, 'byok-keyless']);
 const WORKSPACE_STRING_FLAGS = new Set([
   'model',
   'daemon-url', 'workspace', 'view', 'visibility', 'owner', 'project',
@@ -3034,10 +3048,10 @@ otherwise a minimal \`od mcp --daemon-url <url>\` command is used.`);
 // code + a JSON envelope on stderr. Code agents read these to decide
 // whether the failure is recoverable (re-grant capabilities, prompt
 // the user, retry with --grant-caps, etc.).
-function exitWithStructuredError({ code, message, data }) {
+function exitWithStructuredError({ code, message, data }, byokApiKey) {
   const exit = RECOVERABLE_EXIT_CODES[code] ?? 1;
   const envelope = { error: { code, message, data: data ?? {} } };
-  process.stderr.write(JSON.stringify(envelope) + '\n');
+  process.stderr.write(serializeRunCliJson(envelope, byokApiKey) + '\n');
   process.exit(exit);
 }
 
@@ -7368,7 +7382,7 @@ function printProjectShareHelp() {
                     "link temporarily unavailable" plus its slug, and no URL.
                     When AMR cannot be reached, the last known link is shown
                     with a stale notice on stderr ("stale": true in --json).
-  od project share status <id> [--path <file>] [--json]
+  od project share status <id> [--path <file>] [--local-only] [--json]
                     Project binding history, or file lifecycle with --path.
   od project share stop <id> --path <file> --slug <slug> [--json]
                     Stop the stable public alias; its identity is retained for resume.
@@ -7429,7 +7443,7 @@ async function runProjectShare(args) {
     ...(['stop', 'retry-stop'].includes(action) ? ['slug'] : [])]);
   let flags;
   try {
-    flags = parseFlags(rest, { string: stringFlags, boolean: new Set(['json']) });
+    flags = parseFlags(rest, { string: stringFlags, boolean: new Set(['json', 'local-only']) });
   } catch {
     console.error('Usage: od project share <preflight|publish|resume|get|status|stop|retry-stop> <id> --path <file> [--json] (stop requires --slug <slug>). See --help for accepted flags.');
     process.exit(2);
@@ -7445,13 +7459,16 @@ async function runProjectShare(args) {
     console.error('Usage: od project share <preflight|publish|resume|get|status|stop|retry-stop> <id> --path <file> [--json] (stop requires --slug <slug>)');
     process.exit(2);
   }
+  if (flags['local-only'] && (action !== 'get' || !filePath)) {
+    console.error('--local-only requires share get/status with --path'); process.exit(2);
+  }
   // Validate before discovery; malformed invocations must not contact a daemon.
   const headers = workspaceHeadersFromExplicitFlags(flags) ?? {};
   const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
   let resp;
   try {
     resp = await fetch(
-      projectStatus ? `${base}/api/projects/${encodeURIComponent(id)}/share-state` : action === 'retry-stop' ? `${base}/api/public-file-stops/retry` : `${base}/api/projects/${encodeURIComponent(id)}/files/${encodeURIComponent(filePath)}/${action === 'preflight' ? 'share-plan' : 'publish-public'}`,
+      projectStatus ? `${base}/api/projects/${encodeURIComponent(id)}/share-state` : action === 'retry-stop' ? `${base}/api/public-file-stops/retry` : `${base}/api/projects/${encodeURIComponent(id)}/files/${encodeURIComponent(filePath)}/${action === 'preflight' ? 'share-plan' : 'publish-public'}${flags['local-only'] ? '?localOnly=true' : ''}`,
       action === 'retry-stop'
         ? { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify({ projectId: id, filePath, slug }) }
         : action === 'stop'
@@ -7486,6 +7503,7 @@ async function runProjectShare(args) {
   const blockers = action === 'preflight' && Array.isArray(data?.blockers) ? data.blockers : [];
   if (blockers.length) process.exitCode = 1;
   if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+  if (flags['local-only']) return console.log(`Local share content: ${data.freshness ?? 'unknown'}`);
   if (projectStatus) return console.log(JSON.stringify(data, null, 2));
   if (action === 'preflight') {
     console.log(`Share plan: ${data.fileCount} files, ${data.totalBytes} bytes.`);
@@ -7550,7 +7568,7 @@ async function runProject(args) {
                     Resume sharing through the same stable-alias lifecycle as the UI.
   od project share get <id> --path <file> [--json]
                     Read the current publication.
-  od project share status <id> [--path <file>] [--json]
+  od project share status <id> [--path <file>] [--local-only] [--json]
                     Project binding history, or file lifecycle with --path.
   od project share stop <id> --path <file> --slug <slug> [--json]
                     Stop the stable public alias; its identity is retained for resume.
@@ -8363,6 +8381,63 @@ Common options:
   }
 }
 
+/**
+ * `od run notices` — the same feed as `GET /api/run-notices` (P0-24 N10).
+ * Without `--watch` it prints what is there after `--after` and exits; with
+ * it, it keeps polling and prints each new notice once (ND-JSON with --json).
+ * A daemon restart starts a new epoch: the watcher resumes from its newest
+ * notice instead of replaying, matching the desktop client.
+ */
+async function runRunNotices(args) {
+  const flags = parseFlags(args, {
+    string: RUN_NOTICES_STRING_FLAGS,
+    boolean: RUN_NOTICES_BOOLEAN_FLAGS,
+  });
+  const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
+  const headers = workspaceHeadersFromExplicitFlags(flags) ?? {};
+  let after = Number.parseInt(flags.after ?? '0', 10);
+  if (!Number.isFinite(after) || after < 0) after = 0;
+  const fetchPage = async (from) => {
+    const resp = await fetch(`${base}/api/run-notices?after=${from}`, { headers });
+    if (!resp.ok) return { failure: resp };
+    return { data: await resp.json() };
+  };
+  const print = (notice) => {
+    if (flags.json) {
+      process.stdout.write(JSON.stringify(notice) + '\n');
+      return;
+    }
+    console.log(`${notice.seq}\t${notice.kind}\tproject=${notice.projectId}\tconversation=${notice.conversationId ?? '-'}\trun=${notice.runId}\t${notice.projectName ?? ''}`);
+  };
+  const first = await fetchPage(after);
+  if (first.failure) return structuredHttpFailure(first.failure);
+  if (!flags.watch) {
+    if (flags.json) return process.stdout.write(JSON.stringify(first.data, null, 2) + '\n');
+    for (const notice of first.data?.notices ?? []) print(notice);
+    return;
+  }
+  let epoch = first.data?.epoch;
+  for (const notice of first.data?.notices ?? []) print(notice);
+  after = Math.max(after, first.data?.latestSeq ?? 0);
+  for (;;) {
+    await new Promise((resolve) => setTimeout(resolve, RUN_NOTICES_POLL_MS));
+    let page;
+    try {
+      page = await fetchPage(after);
+    } catch {
+      continue;
+    }
+    if (page.failure) continue;
+    if (page.data?.epoch !== epoch) {
+      epoch = page.data?.epoch;
+      after = page.data?.latestSeq ?? 0;
+      continue;
+    }
+    for (const notice of page.data?.notices ?? []) print(notice);
+    after = Math.max(after, page.data?.latestSeq ?? 0);
+  }
+}
+
 async function runRun(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
@@ -8370,7 +8445,9 @@ async function runRun(args) {
                [--prompt-file <path|->] [--task-execution <id>]
                [--client-request-id <id>]
                [--skill <id>[,<id>]] [--plugin <id>] [--inputs <json>] [--grant-caps a,b]
-               [--agent claude|codex|opencode] [--model <id>] [--service-tier <id>]
+               [--agent <id>] [--model <id>] [--service-tier <id>]
+               [--byok-protocol <protocol>] [--byok-base-url <url>]
+               [--byok-api-version <version>] [--byok-key-env <env>] [--byok-keyless]
                [--workspace <id> --workspace-member <id>] [--follow] [--json]
   od run redesign [--path <folder>] [--message "<text>" | --prompt-file <path|->]
                [--agent claude] [--model <id>] [--service-tier <id>] [--follow] [--json]
@@ -8388,6 +8465,22 @@ async function runRun(args) {
   od run info   <runId>                     One run's status.
   od run result-package <runId> [--json]    Inspect run outputs and workspace
                                             provenance without applying them.
+  od run notices [--after <seq>] [--watch] [--json]
+                                            Turns that ended on this machine and
+                                            should reach the user (needs reply /
+                                            new reply / failed) — the feed the
+                                            desktop client turns into system
+                                            notifications. --watch keeps polling.
+
+BYOK start options:
+  BYOK requires --model <id>; Azure also requires --byok-base-url.
+  --byok-protocol <protocol>  anthropic|openai|azure|google|ollama|senseaudio|aihubmix.
+                              Selects byok-opencode unless --agent is explicit.
+  --byok-base-url <url>       Override the protocol's default service URL.
+  --byok-api-version <value>  Optional provider API version.
+  --byok-key-env <env>        Read the API key from this environment variable.
+  --byok-keyless             Explicitly use a provider without an API key.
+                              Use --model <id> to select the BYOK model.
 
 Common options:
   --daemon-url <url>         OpenDesign daemon HTTP base.
@@ -8398,9 +8491,10 @@ Common options:
   }
   const sub = args[0];
   const rest = args.slice(1);
+  if (sub === 'notices') return runRunNotices(rest);
   const flags = parseFlags(rest, {
-    string: PROJECT_RESOURCE_STRING_FLAGS,
-    boolean: PROJECT_BOOLEAN_FLAGS,
+    string: sub === 'start' ? RUN_START_STRING_FLAGS : PROJECT_RESOURCE_STRING_FLAGS,
+    boolean: sub === 'start' ? RUN_START_BOOLEAN_FLAGS : PROJECT_BOOLEAN_FLAGS,
   });
   const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
   const workspaceHeaders = workspaceHeadersFromExplicitFlags(flags) ?? {};
@@ -8644,7 +8738,21 @@ Common options:
         console.error('--project <projectId> is required');
         process.exit(2);
       }
+      let byokProvider;
+      try {
+        byokProvider = byokProviderFromCliOptions({
+          protocol: flags['byok-protocol'],
+          baseUrl: flags['byok-base-url'],
+          apiVersion: flags['byok-api-version'],
+          keyEnv: flags['byok-key-env'],
+          keyless: flags['byok-keyless'] === true,
+        }, process.env);
+      } catch (err) {
+        console.error(err.message);
+        process.exit(2);
+      }
       const body = { projectId: flags.project };
+      if (byokProvider) body.byokProvider = byokProvider;
       if (flags.conversation) body.conversationId = flags.conversation;
       const message = await readRunMessageFromFlags(flags);
       if (message) body.message = message;
@@ -8659,6 +8767,7 @@ Common options:
       }
       if (flags['design-system']) body.designSystemId = flags['design-system'];
       if (flags.agent) body.agentId = flags.agent;
+      else if (byokProvider) body.agentId = BYOK_OPENCODE_AGENT_ID;
       if (flags.model) body.model = flags.model;
       if (flags['service-tier']) body.serviceTier = flags['service-tier'];
       if (flags.inputs) {
@@ -8682,26 +8791,26 @@ Common options:
       if (!resp.ok) {
         if (resp.status === 409 && data?.error?.code === 'capabilities-required') {
           return exitWithStructuredError({
-            code:    'capabilities-required',
+            code:    data.error.code,
             message: data.error.message,
             data:    data.error.data,
-          });
+          }, byokProvider?.apiKey);
         }
         if (resp.status === 422 && data?.error?.code === 'missing-input') {
           return exitWithStructuredError({
-            code:    'missing-input',
+            code:    data.error.code,
             message: data.error.message,
             data:    data.error.data,
-          });
+          }, byokProvider?.apiKey);
         }
-        console.error(`POST /api/runs failed: ${resp.status} ${JSON.stringify(data)}`);
+        console.error(`POST /api/runs failed: ${resp.status} ${serializeRunCliJson(data, byokProvider?.apiKey)}`);
         process.exit(1);
       }
       if (flags.json && !flags.follow) {
-        return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        return process.stdout.write(serializeRunCliJson(data, byokProvider?.apiKey, 2) + '\n');
       }
-      console.log(`[run] started ${data.runId}`);
-      if (flags.follow) await streamRunEvents(base, data.runId, workspaceHeaders);
+      console.log(redactSecrets(`[run] started ${data.runId}`, [byokProvider?.apiKey]));
+      if (flags.follow) await streamRunEvents(base, data.runId, workspaceHeaders, byokProvider?.apiKey);
       return;
     }
     default:
@@ -8710,15 +8819,23 @@ Common options:
   }
 }
 
+function serializeRunCliJson(value, byokApiKey, indentation) {
+  // Only redact printed values; Run ids and task-chain decisions keep raw data.
+  const secrets = byokApiKey ? [byokApiKey, JSON.stringify(byokApiKey).slice(1, -1)] : [];
+  return JSON.stringify(value, (_key, entry) => (
+    typeof entry === 'string' && byokApiKey ? redactSecrets(entry, secrets) : entry
+  ), indentation);
+}
+
 // Stream the SSE events at /api/runs/:id/events as ND-JSON on stdout.
 // Each line is one event: { event, data } so a code agent can parse it
 // without needing an SSE library.
-async function streamRunEvents(base, initialRunId, workspaceHeaders = {}) {
+async function streamRunEvents(base, initialRunId, workspaceHeaders = {}, byokApiKey) {
   let runId = initialRunId;
   const visited = new Set();
   while (true) {
     if (visited.has(runId)) {
-      console.error(`run watch failed: cyclic strategy task chain at ${runId}`);
+      console.error(redactSecrets(`run watch failed: cyclic strategy task chain at ${runId}`, [byokApiKey]));
       process.exit(1);
     }
     visited.add(runId);
@@ -8750,7 +8867,7 @@ async function streamRunEvents(base, initialRunId, workspaceHeaders = {}) {
         const dataRaw = dataLines.join('\n');
         let parsed;
         try { parsed = JSON.parse(dataRaw); } catch { parsed = dataRaw; }
-        process.stdout.write(JSON.stringify({ event, data: parsed }) + '\n');
+        process.stdout.write(serializeRunCliJson({ event, data: parsed }, byokApiKey) + '\n');
         if (event !== 'end') continue;
         const task = parsed?.strategyTask;
         if (task && task.terminal !== true) {

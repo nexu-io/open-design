@@ -100,7 +100,11 @@ describe('POST /api/runs headless fallbacks', () => {
     expect(runsResponse.status).toBe(200);
     // The awaiting-input set rides along with every list (see
     // runs-list-awaiting-input.test.ts); with no runs it is simply empty.
-    await expect(runsResponse.json()).resolves.toEqual({ runs: [], awaitingInputProjectIds: [] });
+    await expect(runsResponse.json()).resolves.toEqual({
+      runs: [],
+      awaitingInputProjectIds: [],
+      awaitingInputConversationIds: [],
+    });
   });
 
   it('binds omitted conversationId to the seeded project conversation', async () => {

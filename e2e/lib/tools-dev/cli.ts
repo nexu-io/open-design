@@ -54,6 +54,12 @@ export function composeToolsDevEnv(
     // release-channel behavior can still opt back in explicitly.
     OD_RELEASE_CHANNEL: E2E_TOOLS_DEV_RELEASE_CHANNEL,
     ...extraEnv,
+    // Preserve caller preloads; use a file URL so spaces in checkout paths do
+    // not split NODE_OPTIONS. Descendant sidecars inherit the same isolation.
+    NODE_OPTIONS: [
+      extraEnv.NODE_OPTIONS ?? baseEnv.NODE_OPTIONS,
+      `--import=${new URL('./next-version-preload.ts', import.meta.url).href}`,
+    ].filter(Boolean).join(' '),
     CODEX_HOME: suite.codexHomeDir,
     OD_DATA_DIR: suite.dataDir,
     OD_MEDIA_CONFIG_DIR: suite.dataDir,

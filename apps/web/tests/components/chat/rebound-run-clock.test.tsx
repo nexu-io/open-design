@@ -88,7 +88,9 @@ describe('OPEND-2946: rebound run clocks use the physical start', () => {
     const folded = foldStrategyTaskTurns([first, second]);
     expect(folded).toHaveLength(1);
     const view = render(turn(folded[0]!));
-    expect(clocks(view.container)).toEqual(['10s', '20s']);
+    // P0-24 assumption A-01: auto-continued Runs share one header whose clock is
+    // the sum of each Run's own span (10s + 20s) — each physical start still counts.
+    expect(clocks(view.container)).toEqual(['30s']);
   });
 
   it('renders the same clocks before and after folding the recorded three-run history', () => {
@@ -103,6 +105,9 @@ describe('OPEND-2946: rebound run clocks use the physical start', () => {
     const joined = foldStrategyTaskTurns(history).filter(value => value.role === 'assistant');
     expect(joined).toHaveLength(1);
     const view = render(turn(joined[0]!));
-    expect(clocks(view.container)).toEqual(separate);
+    // P0-24 assumption A-01: the question Run keeps its own header; the two Runs
+    // the daemon auto-continued after the answer share one, summing their spans.
+    expect(separate).toEqual(['1m 20s', '2m 39s', '4m 42s']);
+    expect(clocks(view.container)).toEqual(['1m 20s', '7m 21s']);
   });
 });

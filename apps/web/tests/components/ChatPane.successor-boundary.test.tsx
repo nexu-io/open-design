@@ -31,12 +31,15 @@ describe('OPEND-3463 successor boundary arrival', () => {
     expect(oldRecord.textContent).toContain('29s');
     view.rerender(viewOf([first, pending]));
     const records = view.container.querySelectorAll('summary');
-    expect(records[0]!.textContent).toContain('Done');
+    // P0-24: a settled turn's header reads "Took", never "Done".
+    expect(records[0]!.textContent).toContain('Took');
     expect(records[0]!.textContent).toContain('29s');
     expect(foldStrategyTaskTurns([first, pending])).toHaveLength(2);
     view.rerender(viewOf([first, { ...pending, events: [{ kind: 'done_key', key: '2222222222222222' }] }]));
-    expect(view.container.querySelector('summary')!.textContent).toContain('Done');
-    expect(view.container.querySelector('summary')!.textContent).toContain('29s');
+    // P0-24 assumption A-01: once the auto-continued Run's boundary arrives the
+    // two Runs share one header, and the turn is still in progress.
+    expect(view.container.querySelector('summary')!.textContent).toContain('Working');
+    expect([...view.container.querySelectorAll('summary')].some(el => el.textContent?.includes('Took'))).toBe(false);
     expect(foldStrategyTaskTurns([first, { ...pending, events: [{ kind: 'done_key', key: '2222222222222222' }] }])).toHaveLength(1);
   });
   it('does not treat an unrelated status event as a physical Run boundary', () => {

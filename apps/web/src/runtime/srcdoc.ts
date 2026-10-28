@@ -38,6 +38,7 @@ import {
   PREVIEW_RUNTIME_STATE_VERSION,
 } from '@open-design/contracts/runtime/preview-runtime-state';
 import {
+  buildPreviewVisibilityGuard,
   buildPreviewSandboxShim,
   PREVIEW_REDIRECT_GUARD_MAX_HOPS,
   PREVIEW_REDIRECT_GUARD_SELF_REFRESH_MIN_DELAY_MS,
@@ -51,6 +52,7 @@ import {
   findRealTagEnd,
   findRealTagOffset,
   HTML_TAG_PATTERNS,
+  prependAfterDoctype,
 } from '@open-design/contracts/runtime/html-injection-points';
 
 export {
@@ -74,6 +76,7 @@ import { COMMENT_IDENTITY_HELPERS } from '@open-design/contracts';
 export type SrcdocOptions = {
   /** Host-scoped local progress, seeded before authored scripts by the lazy shell. */
   previewStorage?: boolean;
+  previewStorageSeed?: { generation: string; values: Record<string, string> };
   /** Live embedded motion preview only; do not enable for exports/captures. */
   motionPreview?: boolean;
   deck?: boolean;
@@ -366,7 +369,8 @@ export function buildSrcdoc(
   // accept. Only the title text changes; visible page content is untouched.
   const motionSource = options.motionPreview && !options.freezeMotion ? markMotionHostedPreview(wrapped) : wrapped;
   const withSafeTitle = sanitizeTitleInDoc(options.freezeMotion ? motionSource : injectMotionSourcePlayer(motionSource));
-  const withOdIds = annotateMissingOdIds(withSafeTitle);
+  const withVisibilityGuard = injectAfterHeadOpen(withSafeTitle, buildPreviewVisibilityGuard());
+  const withOdIds = annotateMissingOdIds(withVisibilityGuard);
   const withSourcePaths = options.editBridge ? annotateManualEditSourcePaths(withOdIds) : withOdIds;
   const withBase = options.baseHref ? injectBaseHref(withSourcePaths, options.baseHref) : withSourcePaths;
   const withPreviewBaseBridge = options.baseHref
@@ -375,7 +379,7 @@ export function buildSrcdoc(
   const withDeferredFonts = options.deferFontStylesheets
     ? deferTrustedFontStylesheets(withPreviewBaseBridge)
     : withPreviewBaseBridge;
-  const withShim = injectSandboxShim(withDeferredFonts, options.previewStorage);
+  const withShim = injectSandboxShim(withDeferredFonts, options.previewStorage, options.previewStorageSeed);
   const blockLoadTimeScriptRedirect = htmlHasLoadTimeLocationNavigation(withPreviewBaseBridge);
   // Always on: a redirect loop can freeze ANY previewed artifact, and the guard
   // is inert on documents that never self-redirect. Injected right after the
@@ -1462,7 +1466,9 @@ function injectAtDocumentStart(doc: string, payload: string): string {
 function injectAfterHeadOpen(doc: string, payload: string): string {
   const headEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.headOpen);
   if (headEnd >= 0) return doc.slice(0, headEnd) + payload + doc.slice(headEnd);
-  return payload + doc;
+  const htmlEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.htmlOpen);
+  if (htmlEnd >= 0) return `${doc.slice(0, htmlEnd)}<head>${payload}</head>${doc.slice(htmlEnd)}`;
+  return prependAfterDoctype(doc, payload);
 }
 
 function injectBeforeHeadEnd(doc: string, payload: string): string {
@@ -1543,8 +1549,11 @@ function escapeAttr(value: string): string {
 // links with target="_blank" to work in the sandboxed preview.
 // Empty hrefs return to the top; element anchors scroll into view.
 // Hash routers keep their same-document route and browser history.
-function injectSandboxShim(doc: string, persistStorage = false): string {
-  return injectAtDocumentStart(doc, buildPreviewSandboxShim() + (persistStorage ? buildPreviewStorageBridge() : ''));
+function injectSandboxShim(doc: string, persistStorage = false, seed?: SrcdocOptions['previewStorageSeed']): string {
+  const seedScript = persistStorage && seed
+    ? `<script>window.__odPreviewStorageSeed=${JSON.stringify(seed).replace(/</g, '\\u003c')};</script>`
+    : '';
+  return injectAtDocumentStart(doc, buildPreviewSandboxShim() + seedScript + (persistStorage ? buildPreviewStorageBridge() : ''));
 }
 
 function injectPreviewFocusGuard(doc: string): string {
@@ -2061,17 +2070,17 @@ function meaningfulDomFallbackTarget(el) {
   function generatedRootAnnotation(el, id){
     return id === 'path-0' && el && el.parentElement === document.body && el.id === 'root';
   }
-  function targetFrom(el, allowDomFallback, clickedEl, clickPoint, forceCommentIdentity){
+  function targetFrom(el, allowDomFallback, clickedEl, clickPoint, validateForSave){
     var id = annotatedElementIdFor(el);
     var selector = annotatedSelectorFor(el, esc);
-    if ((forceCommentIdentity || (commentEnabled && !inspectEnabled)) && (!clickedEl || clickedEl === el) && el && el.hasAttribute('data-od-comment-id')) {
+    if ((validateForSave || (commentEnabled && !inspectEnabled)) && (!clickedEl || clickedEl === el) && el && el.hasAttribute('data-od-comment-id')) {
       var identity = ownCommentIdentity(el);
       if (!identity) return null;
       id = identity.elementId;
       selector = identity.selector;
     }
-    if (allowDomFallback && id && generatedRootAnnotation(el, id)) return null;
-    if (!id && allowDomFallback && meaningfulDomFallbackTarget(el)) {
+    if (!validateForSave && allowDomFallback && id && generatedRootAnnotation(el, id)) return null;
+    if (!id && allowDomFallback && (validateForSave || meaningfulDomFallbackTarget(el))) {
       selector = domSelectorFor(el);
       if (selector) id = 'dom:' + selector;
     }
@@ -2655,6 +2664,15 @@ function meaningfulDomFallbackTarget(el) {
       if (frame) frame.scrollTo(Number(data.frameLeft || 0), Number(data.frameTop || 0));
       if (el) el.scrollTo(Number(data.canvasLeft || 0), Number(data.canvasTop || 0));
       setTimeout(postPreviewScroll, 0);
+      return;
+    }
+    if (data.type === 'od:comment-active-target' && data.validateForSave && typeof data.requestId === 'string') {
+      var saveNode = null;
+      try { saveNode = document.querySelector(String(data.selector)); } catch (_) {}
+      var saveTarget = saveNode && targetFrom(saveNode, true, null, null, true);
+      window.parent.postMessage(saveTarget
+        ? Object.assign({}, saveTarget, { type: 'od:comment-active-target-update', documentVersion: 'srcdoc:' + runtimeStateGeneration, requestId: data.requestId, requestedSelector: data.selector })
+        : { type: 'od:comment-location-missing', documentVersion: 'srcdoc:' + runtimeStateGeneration, requestId: data.requestId }, '*');
       return;
     }
     if (data.type === 'od:comment-active-target') {

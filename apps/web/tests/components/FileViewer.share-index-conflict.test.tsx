@@ -8,7 +8,6 @@ import type { ComponentProps } from 'react';
 import {
   buildWorkspacePermissions,
   buildWorkspaceSeatSummary,
-  type SharePlanSummary,
   type WorkspaceCollabContext,
 } from '@open-design/contracts';
 
@@ -106,7 +105,7 @@ function renderProjectFileViewer(
 }
 
 function stubFetch(
-  options: { publishStatus?: number; publishBody?: unknown; unpublishStatus?: number; sharePlan?: () => SharePlanSummary } = {},
+  options: { publishStatus?: number; publishBody?: unknown; unpublishStatus?: number } = {},
 ) {
   const { publishStatus = 200, publishBody, unpublishStatus = 200 } = options;
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -114,9 +113,7 @@ function stubFetch(
     if (url.includes('/api/workspace/context')) {
       return new Response(JSON.stringify({ context: teamWorkspaceContext() }), { status: 200 });
     }
-    if (url.includes('/share-plan') && options.sharePlan) {
-      return Response.json(options.sharePlan());
-    }
+    if (url.includes('/share-plan')) throw new Error('Client preflight must not run');
     if (url.includes('publish-public')) {
       if (init?.method === 'POST') {
         const body =
@@ -167,33 +164,31 @@ function posts(fetch: ReturnType<typeof vi.fn>) {
   return fetch.mock.calls.filter(([url, init]) => String(url).includes('publish-public') && init?.method === 'POST');
 }
 
-it('a share-plan blocker explains the conflict, disables publishing and copies the agent prompt', async () => {
-  const fetch = stubFetch({ sharePlan: () => ({
-    fileCount: 1, totalBytes: 10, exceedsSizeLimit: false, exclusions: [],
-    blockers: [{ code: 'entry-index-conflict', ...conflict }],
-  }) });
+it('a publish refusal explains the conflict and copies the agent prompt', async () => {
+  const fetch = stubFetch({ publishStatus: 409, publishBody: { error: { code: 'SHARE_ENTRY_INDEX_CONFLICT', message: 'refused', data: conflict } } });
   renderProjectFileViewer(teamWorkspaceContext(), props);
   fireEvent.click(await screen.findByRole('button', { name: /^share$/i }));
   const generate = await screen.findByRole('menuitem', { name: /generate and copy link/i });
+  expect(generate).toBeEnabled();
+  expect(posts(fetch)).toHaveLength(0);
+  await act(async () => { fireEvent.click(generate); });
   expect(await screen.findByText(conflictMessage)).toBeTruthy();
   expect(screen.getByText(/home\.html/)).toBeTruthy();
-  expect(generate).toBeDisabled();
-  fireEvent.click(generate);
-  expect(posts(fetch)).toHaveLength(0);
+  expect(posts(fetch)).toHaveLength(1);
+  expect(fetch.mock.calls.some(([url]) => String(url).includes('/share-plan'))).toBe(false);
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: /copy fix for agent/i })); });
   expect(write).toHaveBeenCalledExactlyOnceWith(conflict.agentPrompt);
   expect(screen.getByRole('button', { name: /^copied$/i })).toBeTruthy();
 });
 
 it('shows the prompt for manual copy when the clipboard is unavailable', async () => {
-  stubFetch({ sharePlan: () => ({
-    fileCount: 1, totalBytes: 10, exceedsSizeLimit: false, exclusions: [],
-    blockers: [{ code: 'entry-index-conflict', ...conflict }],
-  }) });
+  stubFetch({ publishStatus: 409, publishBody: { error: { code: 'SHARE_ENTRY_INDEX_CONFLICT', message: 'refused', data: conflict } } });
   write.mockRejectedValue(new Error('denied'));
   Object.defineProperty(document, 'execCommand', { configurable: true, value: vi.fn(() => false) });
   renderProjectFileViewer(teamWorkspaceContext(), props);
   fireEvent.click(await screen.findByRole('button', { name: /^share$/i }));
+  const generate = await screen.findByRole('menuitem', { name: /generate and copy link/i });
+  await act(async () => { fireEvent.click(generate); });
   await screen.findByText(conflictMessage);
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: /copy fix for agent/i })); });
   expect(screen.getByText(/couldn't copy/i)).toBeTruthy();

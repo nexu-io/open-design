@@ -32,8 +32,6 @@ it('personal publish/stop/resume reads retained root identity and reopens the sa
   const read = createVelaProjectShareState({
     dataRoot: root,
     readSession: () => ({ profile: 'local', apiUrl: 'https://api.example.test', controlKey: 'synthetic', user: null, configMtimeMs: null }),
-    fetchDirectory: async () => ({ ok: true, items: [{ ...context, workspaceName: 'Personal' }] }),
-    resolveLocalProjectOwner: () => 'owner',
     runCommand: async ({ args }) => {
       commands.push(args);
       if (args.join(' ') === 'team-projects ensure-private p') {
@@ -44,8 +42,9 @@ it('personal publish/stop/resume reads retained root identity and reopens the sa
     },
   });
   const app = express(); app.use(express.json());
+  app.use((req,_res,next)=>{req.headers['x-od-workspace-id'] ??= context.workspaceId;req.headers['x-od-workspace-member-id'] ??= context.workspaceMemberId;next();});
   registerCollabSyncRoutes(app, {
-    collab: runtime, publicFilePublicationStore: store, ...fixture, readProjectShareState: read,
+    collab: runtime, resolveLocalPublicShareOwner: () => 'owner', publicFilePublicationStore: store, ...fixture, readProjectShareState: read,
     verifyWorkspaceRequest: async () => context,
     resolveSharedProject: async projectId => ({ projectId, ownerMemberId: 'owner', sharedAt: new Date(1).toISOString() }),
     resolveProjectDir: () => root,
@@ -56,7 +55,7 @@ it('personal publish/stop/resume reads retained root identity and reopens the sa
     await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
     const address = server.address(); if (!address || typeof address === 'string') throw new Error('no listener');
     const url = `http://127.0.0.1:${address.port}/api/projects/p/files/index.html/publish-public`;
-    expect((await fetch(url)).status).toBe(200); // First-ever history registers no bytes.
+    expect((await fetch(url)).status).toBe(200); // A status read registers and uploads nothing.
     expect(uploads).toBe(0);
     const first = await fetch(url, { method: 'POST' });
     expect(first.status).toBe(200);

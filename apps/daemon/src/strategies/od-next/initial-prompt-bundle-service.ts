@@ -2,7 +2,6 @@ import path from 'node:path';
 
 import {
   OD_NEXT_BUNDLE_ECHO_GUARD_V2,
-  OdNextRuntimeCapabilitySnapshotV1Schema,
   detectOdNextDevicePlatformFromText,
   executionProfileFromStreamFormat,
   renderChatTurnHostProtocolInstructions,
@@ -42,12 +41,6 @@ import {
 import { renderRunContextPrompt } from '../../runtimes/chat-run-context.js';
 import type { RunWorkspaceScope } from '../../runtimes/project-amr-trace-env.js';
 import type { RuntimeAgentDef } from '../../runtimes/types.js';
-import type { DetectedRuntimeVersions } from '../../runtimes/detection.js';
-import {
-  evaluateOdNextExecutionEligibility,
-  hashOdNextRuntimeCapabilitySnapshotV1,
-  resolveBundledOdNextRuntimeCapability,
-} from '../../runtimes/od-next-capability-gate.js';
 import {
   renderFrozenSkillRosterContext,
   resolveFrozenSkillBundleBodies,
@@ -57,7 +50,6 @@ import {
   loadOdNextTaskInputSnapshot,
   type OdNextTaskInputSnapshotDescriptor,
 } from './task-input-snapshot.js';
-import { daemonOwnedOdNextPlanningCatalog } from './resolver.js';
 
 type SqliteDb = Parameters<typeof getProject>[0];
 type IntentSignals = ReturnType<typeof latchConversationIntentSignals>;
@@ -98,7 +90,6 @@ export interface OdNextInitialPromptMeta {
     syntheticCanary?: boolean;
     effectiveMode?: 'off' | 'observe' | 'active';
   } | null;
-  runtimeCapabilitySnapshot?: unknown;
 }
 
 interface DaemonSystemPromptResult {
@@ -156,18 +147,13 @@ function runScopedMcpServers(toolBundle: unknown): McpServerConfig[] {
   return Array.isArray(servers) ? servers as McpServerConfig[] : [];
 }
 
-/** Resolve and enrich the exact strategy recipe with daemon-owned runtime facts. */
+/** Resolve the installed strategy recipe using its existing execution profile. */
 export async function resolveOdNextPromptRecipeForRun(input: {
   db: SqliteDb;
   bundledPluginsDir: string;
   appliedPluginSnapshotId: unknown;
-  agentId: string;
   streamFormat: string;
   atomPromptsEnabled: boolean;
-  syntheticCanary: boolean;
-  automaticAdmission: boolean;
-  runtimeCapabilitySnapshot?: unknown;
-  getRuntimeVersions: () => Promise<DetectedRuntimeVersions | null>;
 }): Promise<OdNextStrategyRequestRecipeV2 | null> {
   const snapshotId = stringValue(input.appliedPluginSnapshotId);
   if (!snapshotId) return null;
@@ -186,74 +172,7 @@ export async function resolveOdNextPromptRecipeForRun(input: {
   });
   if (!resolvedRecipe) return null;
 
-  if (input.syntheticCanary && process.env.NODE_ENV === 'production') {
-    throw new Error('OD Next synthetic runtime planning facts are local-only.');
-  }
-  let capabilitySnapshot;
-  if (input.runtimeCapabilitySnapshot !== undefined) {
-    const parsed = OdNextRuntimeCapabilitySnapshotV1Schema.safeParse(
-      input.runtimeCapabilitySnapshot,
-    );
-    if (!parsed.success) {
-      throw new Error('OD Next runtime planning facts unavailable: frozen_snapshot_invalid');
-    }
-    if (parsed.data.agentId !== input.agentId) {
-      throw new Error('OD Next runtime planning facts unavailable: frozen_snapshot_runtime_mismatch');
-    }
-    const { snapshotHash, ...withoutHash } = parsed.data;
-    if (hashOdNextRuntimeCapabilitySnapshotV1(withoutHash) !== snapshotHash) {
-      throw new Error('OD Next runtime planning facts unavailable: frozen_snapshot_hash_mismatch');
-    }
-    capabilitySnapshot = parsed.data;
-  } else {
-    if (input.automaticAdmission) {
-      throw new Error('OD Next runtime planning facts unavailable: frozen_snapshot_missing');
-    }
-    // Compatibility fallback for explicitly selected/test strategy paths. The
-    // automatic active path must consume the snapshot frozen at admission.
-    const versions = await input.getRuntimeVersions();
-    if (!versions?.invocable) {
-      throw new Error('OD Next runtime planning facts unavailable: runtime_not_invocable');
-    }
-    const capability = resolveBundledOdNextRuntimeCapability({
-      agentId: input.agentId,
-      ...(versions.agentCliVersion
-        ? { agentCliVersion: versions.agentCliVersion }
-        : {}),
-      ...(versions.runtimeCompanionName
-        ? { runtimeCompanionName: versions.runtimeCompanionName }
-        : {}),
-      ...(versions.runtimeCompanionVersion
-        ? { runtimeCompanionVersion: versions.runtimeCompanionVersion }
-        : {}),
-    });
-    if (
-      !capability.snapshot
-      || (capability.reason !== 'capability_resolved' && !input.syntheticCanary)
-    ) {
-      throw new Error(
-        `OD Next runtime planning facts unavailable: ${capability.reason}`,
-      );
-    }
-    capabilitySnapshot = capability.snapshot;
-  }
-  const eligibility = evaluateOdNextExecutionEligibility(capabilitySnapshot, 'complex');
-  if (!eligibility.eligible && !input.syntheticCanary) {
-    throw new Error(
-      `OD Next runtime planning facts unavailable: ${eligibility.reason}`,
-    );
-  }
-  const catalog = daemonOwnedOdNextPlanningCatalog(resolvedRecipe.taskType);
-  return {
-    ...resolvedRecipe,
-    planningFacts: {
-      capabilitySnapshotHash: capabilitySnapshot.snapshotHash.replace(/^sha256:/, ''),
-      inputRefs: ['request'],
-      productionRoutes: catalog.productionRoutes,
-      outputKinds: catalog.outputKinds,
-      nativeChildLifecycleVerified: eligibility.eligible,
-    },
-  };
+  return resolvedRecipe;
 }
 
 /**
@@ -347,11 +266,6 @@ export function createOdNextInitialPromptBundleService(
       devicePlatformSignal: intentSignals.devicePlatform,
       workspaceScope: meta.workspaceScope,
       frozenSkillPackage,
-      odNextSyntheticCanary:
-        meta.strategyRolloutDecision?.syntheticCanary === true,
-      odNextAutomaticAdmission:
-        meta.strategyRolloutDecision?.effectiveMode === 'active',
-      runtimeCapabilitySnapshot: meta.runtimeCapabilitySnapshot,
     });
     const loadedTaskInputs = loadOdNextTaskInputSnapshot(
       taskInputSnapshot,

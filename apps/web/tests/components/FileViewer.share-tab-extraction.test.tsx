@@ -238,7 +238,7 @@ describe('Z11a · ShareTab 搬动前的 DOM 基线', () => {
 
 describe('OPEND-3796 share error explanations', () => {
   it.each([
-    ['network', 'Connection failed or timed out. Check the network and share status before retrying.'],
+    ['network', 'The share result could not be confirmed. Check its status before publishing again.'],
     ['session_setup', 'Local sharing preparation failed. Check the client configuration.'],
     ['invalid_receipt', 'The share result could not be confirmed. Check its status before publishing again.'],
     ['unknown', 'The share result could not be confirmed. Check its status before publishing again.'],

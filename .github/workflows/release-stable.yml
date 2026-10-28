@@ -722,12 +722,12 @@ jobs:
         id: win_tools_pack_cache_key
         shell: pwsh
         env:
-          WIN_TOOLS_PACK_ORIGIN_KEY: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'apps/desktop/**', 'apps/packaged/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar-proto/**', 'packages/sidecar/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/workflows/release-stable.yml', '.github/scripts/release/cache/win.ps1') }}
+          WIN_TOOLS_PACK_ORIGIN_KEY: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'apps/desktop/**', 'apps/packaged/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar-proto/**', 'packages/sidecar/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/workflows/release-stable.yml', '.github/scripts/release/cache/win.ps1', '.github/scripts/release/cache/windows.ts', '.github/actions/defer-pack-cache/action.yml') }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:WIN_TOOLS_PACK_ORIGIN_KEY)) {
             throw "Windows tools-pack cache origin key is empty"
           }
-          $prefix = "tools-pack-win-v7-stable-$env:RUNNER_OS-"
+          $prefix = "tools-pack-win-v2-slim-stable-$env:RUNNER_OS-"
           "origin=$env:WIN_TOOLS_PACK_ORIGIN_KEY" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "prefix=$prefix" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "key=$prefix$env:WIN_TOOLS_PACK_ORIGIN_KEY" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
@@ -862,35 +862,6 @@ jobs:
           path: ${{ runner.temp }}/release-report/win
           if-no-files-found: warn
 
-      - name: Prune Windows tools-pack cache
-        shell: pwsh
-        continue-on-error: true
-        run: ./.github/scripts/release/cache/win.ps1
-
-      - name: Save Windows tools-pack cache
-        if: ${{ success() && (steps.win_tools_pack_cache_restore.outputs.cache-hit != 'true' || steps.win_tools_pack_build.outputs.cache_failed == 'true') }}
-        uses: actions/cache/save@v5
-        continue-on-error: true
-        with:
-          path: ${{ runner.temp }}/tools-pack-cache
-          key: ${{ steps.win_tools_pack_cache_key.outputs.key }}
-
-      - name: Retain recent Windows tools-pack caches
-        if: ${{ success() }}
-        shell: pwsh
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $prefix = "${{ steps.win_tools_pack_cache_key.outputs.prefix }}"
-          $keep = 1
-          $caches = @(gh cache list --key $prefix --sort created_at --order desc --limit 100 --json id,key,createdAt | ConvertFrom-Json)
-          $stale = @($caches | Select-Object -Skip $keep)
-          foreach ($cache in $stale) {
-            gh cache delete $cache.id
-          }
-          "actionsCachePrefix=$prefix kept=$([Math]::Min($caches.Count, $keep)) deleted=$($stale.Count)"
-
       - name: Prepare windows release assets
         shell: pwsh
         run: |
@@ -944,6 +915,15 @@ jobs:
           name: open-design-release-win-release-assets
           path: ${{ runner.temp }}/release-assets
           retention-days: 1
+
+      # Cache persistence is optional and runs outside this release workflow.
+      - name: Defer Windows tools-pack cache save
+        if: ${{ success() && (steps.win_tools_pack_cache_restore.outputs.cache-hit != 'true' || steps.win_tools_pack_build.outputs.cache_failed == 'true') }}
+        continue-on-error: true
+        uses: ./.github/actions/defer-pack-cache
+        with:
+          key: ${{ steps.win_tools_pack_cache_key.outputs.key }}
+          prefix: ${{ steps.win_tools_pack_cache_key.outputs.prefix }}
 
   build_linux:
     name: Build release linux x64

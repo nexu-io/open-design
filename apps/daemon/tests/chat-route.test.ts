@@ -433,7 +433,9 @@ process.exit(0);
     );
   });
 
-  it('marks OpenCode tool-only runs failed when no assistant output is produced', async () => {
+  // P0-24 Q6 / P7: a clean exit with no reply is a normal end. A tool already
+  // ran, so the retry policy does not re-run it; the gap is kept as a diagnostic.
+  it('ends OpenCode tool-only runs normally when no assistant output is produced', async () => {
     const conversationId = `conv-${randomUUID()}`;
 
     await withFakeAgent(
@@ -471,10 +473,9 @@ process.exit(0);
         expect(response.ok).toBe(true);
         expect(body).toContain('"type":"tool_use"');
         expect(body).toContain('"type":"tool_result"');
-        expect(body).toContain('AGENT_EXECUTION_FAILED');
-        expect(body).toContain('Agent completed without producing any output');
-        expect(body).toContain('"status":"failed"');
-        expect(body).not.toContain('"status":"succeeded"');
+        expect(body).not.toContain('event: error');
+        expect(body).toContain('empty_reply_ended_normally');
+        expect(body).toContain('"status":"succeeded"');
 
         const runsResponse = await fetch(
           `${baseUrl}/api/runs?conversationId=${encodeURIComponent(conversationId)}`,
@@ -486,7 +487,7 @@ process.exit(0);
         expect(runsBody.runs).toHaveLength(1);
         expect(runsBody.runs[0]).toMatchObject({
           conversationId,
-          status: 'failed',
+          status: 'succeeded',
           exitCode: 0,
         });
       },
@@ -1809,7 +1810,10 @@ process.stdin.on('end', () => {
     );
   });
 
-  it('does not report plugin authoring as succeeded when the agent only emits planning text without artifacts', async () => {
+  // P0-24 N9: what a run produced never decides its status. A plugin-authoring
+  // run that exits cleanly without the generated-plugin files ended normally;
+  // the gap is kept as a diagnostic for the record, not a failure.
+  it('ends plugin authoring normally, with a diagnostic, when the agent emits only planning text', async () => {
     const projectId = `proj-plugin-authoring-${randomUUID()}`;
 
     const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
@@ -1872,12 +1876,63 @@ process.stdin.on('end', () => {
         const statusBody = await waitForRunStatus(baseUrl, runId);
 
         expect(eventsBody).toContain('先读取文档规范，再生成插件文件');
-        expect(statusBody.status).not.toBe('succeeded');
+        expect(eventsBody).toContain('plugin_authoring_artifacts_missing');
+        expect(eventsBody).not.toContain('AGENT_EXECUTION_FAILED');
+        expect(statusBody.status).toBe('succeeded');
 
         const filesResponse = await fetch(`${baseUrl}/api/projects/${projectId}/files`);
         expect(filesResponse.status).toBe(200);
         const filesBody = await filesResponse.json() as { files: Array<{ name: string }> };
         expect(filesBody.files.some((file) => file.name.startsWith('generated-plugin/'))).toBe(false);
+      },
+    );
+  });
+  // P0-24 N9: a version snapshot that cannot be written does not fail a run
+  // whose agent finished normally.
+  it('ends a run normally, with a diagnostic, when its HTML version snapshot cannot be written', async () => {
+    const projectId = `proj-snapshot-failure-${randomUUID()}`;
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'Snapshot failure fixture', skillId: null, designSystemId: null }),
+    });
+    expect(createProjectResponse.status).toBe(200);
+    const conversationsResponse = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`);
+    const conversationsBody = await conversationsResponse.json() as { conversations: Array<{ id: string }> };
+    const conversationId = conversationsBody.conversations[0]?.id;
+    expect(conversationId).toBeTruthy();
+
+    await withFakeAgent(
+      'opencode',
+      `
+const fs = require('node:fs');
+const path = require('node:path');
+process.stdin.resume();
+process.stdin.on('end', () => {
+  fs.writeFileSync(path.join(process.cwd(), 'index.html'), '<html><body>page</body></html>');
+  // A plain file where the version store's directory belongs blocks the snapshot.
+  fs.writeFileSync(path.join(process.cwd(), '.file-versions'), 'blocked');
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: '页面已写好。' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentId: 'opencode', projectId, conversationId, message: '做一个页面' }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`);
+        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('html_version_snapshot_failed');
+        expect(statusBody.status).toBe('succeeded');
       },
     );
   });
@@ -2009,7 +2064,9 @@ process.stdin.on('end', () => {
       },
     );
   });
-  it('still fails plugin authoring when a question-form tag wraps a non-renderable (non-JSON) body', async () => {
+  // P0-24 N9: the carve-out now only decides whether the missing-artifact
+  // diagnostic is recorded; the run ends normally either way.
+  it('still records missing plugin artifacts when a question-form tag wraps a non-renderable (non-JSON) body', async () => {
     // The clarification carve-out must match the web parser's renderable-form
     // contract (JSON body with a `questions` array), not just the opening
     // tag. A `<question-form>` whose body is not valid form JSON renders as
@@ -2068,7 +2125,7 @@ process.stdin.on('end', () => {
         const statusBody = await waitForRunStatus(baseUrl, runId);
 
         expect(eventsBody).toContain('ended before generating the required generated-plugin artifacts');
-        expect(statusBody.status).not.toBe('succeeded');
+        expect(statusBody.status).toBe('succeeded');
       },
     );
   });
@@ -3211,7 +3268,9 @@ process.stdin.on('end', () => {
     });
   });
 
-  it('fails plain-stream runs when stdout artifact persistence fails', async () => {
+  // P0-24 N9: failing to save the page does not fail a run whose agent
+  // finished normally; the reason stays as a diagnostic.
+  it('ends plain-stream runs normally, with a diagnostic, when stdout artifact persistence fails', async () => {
     await withFakeAgent(
       'qwen',
       `
@@ -3252,9 +3311,9 @@ process.exit(0);
         eventsController.abort();
         const statusBody = await waitForRunStatus(baseUrl, runId);
 
-        expect(eventsBody).toContain('event: error');
-        expect(eventsBody).toContain('plain-stream artifact');
-        expect(statusBody.status).toBe('failed');
+        expect(eventsBody).toContain('plain_stream_artifacts_persist_failed');
+        expect(eventsBody).not.toContain('event: error');
+        expect(statusBody.status).toBe('succeeded');
       },
     );
   });
@@ -3296,7 +3355,8 @@ process.exit(0);
     );
   });
 
-  it('marks reasoning-only stream runs failed when no assistant output is produced', async () => {
+  // P0-24 Q6: reasoning without a reply is still a normal end.
+  it('ends reasoning-only stream runs normally when no assistant output is produced', async () => {
     const reasoningLine = JSON.stringify({
       type: 'assistant',
       message: {
@@ -3337,18 +3397,49 @@ process.exit(0);
         const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
           signal: eventsController.signal,
         });
-        const eventsBody = await readSseUntil(
-          eventsResponse,
-          'Agent completed without producing any output',
-        );
+        const eventsBody = await readSseUntil(eventsResponse, 'event: end');
         eventsController.abort();
         const statusBody = await waitForRunStatus(baseUrl, runId);
 
         expect(eventsBody).toContain('"type":"thinking_delta"');
-        expect(eventsBody).toContain('AGENT_EXECUTION_FAILED');
-        expect(eventsBody).toContain('Agent completed without producing any output');
-        expect(eventsBody).not.toContain('"status":"succeeded"');
-        expect(statusBody.status).toBe('failed');
+        expect(eventsBody).toContain('empty_reply_ended_normally');
+        expect(eventsBody).not.toContain('event: error');
+        expect(statusBody.status).toBe('succeeded');
+      },
+    );
+  });
+
+  // P0-24 Q6: an empty reply still gets the automatic retry a transient empty
+  // response used to get; only an attempt that is not retried ends normally.
+  it('retries a completely empty reply, then ends it normally', async () => {
+    const resultLine = JSON.stringify({
+      type: 'result',
+      is_error: false,
+      usage: { input_tokens: 1, output_tokens: 0 },
+    });
+
+    await withFakeAgent(
+      'qodercli',
+      `
+console.log(${JSON.stringify(resultLine)});
+process.exit(0);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentId: 'qoder', message: 'answer nothing' }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`);
+        const eventsBody = await readSseUntil(eventsResponse, 'event: end');
+
+        expect(eventsBody).toContain('run_retry_attempted');
+        expect(eventsBody).toContain('empty_reply_ended_normally');
+        expect(statusBody.status).toBe('succeeded');
       },
     );
   });

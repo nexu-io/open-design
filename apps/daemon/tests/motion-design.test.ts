@@ -11,7 +11,6 @@ import { resolvePluginFolder } from '../src/plugins/registry.js';
 import { createBundledStrategyBindingV2, loadBundledStrategyPromptAssetsV2 } from '../src/plugins/strategy-package.js';
 import { readVerifiedProjectStrategyBinding, createAutomaticProjectStrategyBinding } from '../src/plugins/strategy-binding.js';
 import { evaluateOdNextRollout, readOdNextRolloutPolicy } from '../src/strategies/od-next/rollout.js';
-import { daemonOwnedOdNextPlanningCatalog } from '../src/strategies/od-next/resolver.js';
 
 const root = path.resolve(import.meta.dirname, '../../..');
 const metadata = { kind: 'video', intent: 'motion-design', videoModel: 'hyperframes-html' } as const;
@@ -29,7 +28,9 @@ describe('Motion Design official skill and OD Next route', () => {
     const binding = createBundledStrategyBindingV2({ plugin: resolved.record, taskType: 'motion-design' });
     const loaded = loadBundledStrategyPromptAssetsV2({ plugin: resolved.record, binding });
     expect(loaded.taskSkill).toBe(source);
-    expect(binding.selectedTaskProfile.taskType).toBe('motion-design');
+    expect(binding.selectedTaskProfile).toMatchObject({
+      taskType: 'motion-design', path: './assets/task-profiles/motion-design.md',
+    });
     expect(() => assertOdNextPlanningBuildOnlyV2(loaded.taskSkill, 'motion-design')).not.toThrow();
     expect(loaded.coreStrategy).toContain('OD Next Core Strategy');
     expect(loaded.generalOrchestration).toContain('bounded video-motion production exception');
@@ -52,7 +53,9 @@ describe('Motion Design official skill and OD Next route', () => {
     const input = { policy: readOdNextRolloutPolicy({}), assignmentIdentity: 'motion-test', taskType: 'motion-design' as const, agentId: 'codex', agentVersion: null, sourceKind: 'bundled', runtimeCapabilityVerified: true };
     expect(evaluateOdNextRollout(input).effectiveMode).toBe('active');
     expect(evaluateOdNextRollout({ ...input, routeApplicability: 'explicit_user' }).effectiveMode).toBe('off');
-    expect(daemonOwnedOdNextPlanningCatalog('motion-design').productionRoutes).toContain('html');
-    expect(daemonOwnedOdNextPlanningCatalog('motion-design').outputKinds).toContain('source');
+    // Production guidance is owned by the selected task asset, not a daemon catalogue.
+    expect(binding).toMatchObject({
+      taskProfile: 'motion-design', provenance: 'automatic_default',
+    });
   });
 });

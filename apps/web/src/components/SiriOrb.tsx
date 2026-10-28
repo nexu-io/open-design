@@ -26,7 +26,25 @@ interface Props {
    * Anything left unset follows `c1` under `literal`; see the constraints
    * documented in the stylesheet before reaching past these.
    */
-  colors?: { c1?: string; c2?: string; c5?: string };
+  colors?: { c1?: string; c2?: string; c5?: string; fill?: string };
+  /**
+   * `blur` drops the `contrast()` / `saturate()` passes from the mesh and keeps
+   * only the blur — the P0-24 design draft's failed orb is drawn that way
+   * (`.entry-nav-rail__failed-orb .SiriOrb_disc::before`). Default `full`.
+   */
+  filterMode?: 'full' | 'blur';
+  /**
+   * `wedge` swaps the eight-gradient mesh for the design draft's flat disc
+   * with one light/shadow wedge turning over it (the draft's orange orb,
+   * `[data-od-id="r:icon:p1"]`). Default `mesh`.
+   */
+  variant?: 'mesh' | 'wedge';
+  /**
+   * The design draft's sidebar orbs neither breathe nor scale: only the mesh
+   * turns (`.entry-nav-rail__recent-icon .SiriOrb_orb { animation: none }`,
+   * `.SiriOrb_disc { transform: none }`). Default false.
+   */
+  steady?: boolean;
   /**
    * Render the given accents literally — nothing lightens them and nothing
    * pushes their hue. Required to recolour the orb at all: the stock build is
@@ -66,6 +84,9 @@ export function SiriOrb({
   state = 'thinking',
   colors,
   literal = false,
+  filterMode = 'full',
+  variant = 'mesh',
+  steady = false,
   className,
   label,
 }: Props) {
@@ -84,6 +105,7 @@ export function SiriOrb({
     ...(colors?.c1 ? { '--c1': colors.c1 } : {}),
     ...(colors?.c2 ? { '--c2': colors.c2 } : {}),
     ...(colors?.c5 ? { '--c5': colors.c5 } : {}),
+    ...(colors?.fill ? { '--fill': colors.fill } : {}),
   } as CSSProperties;
 
   return (
@@ -93,6 +115,9 @@ export function SiriOrb({
         STATE_CLASS[state],
         m.tiny ? styles.isTiny : '',
         literal ? styles.isLiteral : '',
+        filterMode === 'blur' ? styles.isBlurOnly : '',
+        variant === 'wedge' ? styles.isWedge : '',
+        steady ? styles.isSteady : '',
         className,
       ]
         .filter(Boolean)

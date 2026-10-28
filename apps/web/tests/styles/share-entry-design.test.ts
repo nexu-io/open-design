@@ -51,18 +51,9 @@ describe('C0 toolbar / G1 card visual contract (◇ design provenance)', () => {
     });
   });
 
-  it('keeps the disabled card palette distinct from enabled hover', () => {
+  it('preserves collaboration disabled feedback without overriding enabled card styles', () => {
     expect(declarations(`${card}:disabled`)).toMatchObject({ background: '#F3F3F1', color: '#BDBDB8', opacity: '1' });
-    expect(declarations(`${card}:hover`)).toEqual({});
-    expect(declarations(`${card}:hover:not(:disabled)`)).toMatchObject({ background: '#EDEDF0', color: '#333333' });
-  });
-
-  it('uses G1 solid 30px card action rather than the export glass pill', () => {
-    expect(declarations(card)).toMatchObject({
-      'box-sizing': 'border-box', height: '30px', 'min-height': '30px', gap: '5px',
-      border: '0', 'border-radius': '6px', background: '#EDEDF0', color: '#333333',
-      'font-size': '12px', 'font-weight': '500', 'box-shadow': 'none',
-      'backdrop-filter': 'none', '-webkit-backdrop-filter': 'none',
-    });
+    expect(declarations(card)).toEqual({});
+    expect(declarations(`${card}:hover:not(:disabled)`)).toEqual({});
   });
 });

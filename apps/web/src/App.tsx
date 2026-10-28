@@ -21,6 +21,7 @@ import {
 import {
   deriveConfigureGlobals,
   projectKindFromMetadataToTracking,
+  projectIntentFromMetadataToTracking,
   fidelityToTracking,
 } from '@open-design/contracts/analytics';
 import type {
@@ -69,7 +70,6 @@ import {
 import type { ObservedPublicShareLink, ObservedShareUpdateRequest } from './components/share/observed-public-share-link';
 import type { ShareLoginReturn } from './components/share/share-login-return';
 import { SignedOutObservedShare } from './components/share/SignedOutObservedShare';
-import { ProjectCreationPendingView } from './components/ProjectCreationPendingView';
 import { projectsForWorkspaceChrome } from './runtime/workspace-chrome-projects';
 import { AmrArtifactUpgradeGate } from './components/AmrArtifactUpgradeGate';
 import { AmrArtifactUpgradeHomeCard } from './components/AmrArtifactUpgradeHomeCard';
@@ -170,6 +170,8 @@ import {
   stashHomePromptHandoff,
 } from './components/home-hero/plugin-authoring';
 import { goBack, navigate, useRoute, type Route } from './router';
+import { navigationTiming, navigationPage, usePageNavigationReady, observeNavigation } from './observability/navigation-timing';
+import { useStartupReady } from './observability/startup-ready';
 import {
   fetchDaemonConfig,
   DEFAULT_CONFIG,
@@ -193,6 +195,7 @@ import { isMacPlatform } from './utils/platform';
 import { randomUUID } from './utils/uuid';
 import { summarizeProjectNameFromPrompt } from './utils/projectName';
 import { armCompletionFeedbackOnFirstGesture } from './utils/notifications';
+import { useGlobalRunNotices } from './hooks/useGlobalRunNotices';
 import {
   amrArtifactUpgradeHomeMockOffer,
   type AmrArtifactUpgradeHomeOffer,
@@ -242,6 +245,10 @@ import {
   ProjectCreateError,
 } from './state/projects';
 import { useModalWindowDragGuard } from './hooks/useModalWindowDragGuard';
+import {
+  holdProjectRunStatusReads,
+  releaseProjectRunStatusReads,
+} from './hooks/useProjectRunStatuses';
 import { resumeThumbnailLoads, suspendThumbnailLoads } from './lib/thumbnail-load-gate';
 import type {
   PluginShareAction,
@@ -256,7 +263,7 @@ import {
   removeProjectFromDisplaySnapshots,
   writeProjectDisplaySnapshot,
 } from './state/project-display-cache';
-import { getOpenDesignHost, type OpenDesignHostProjectImportSuccess } from '@open-design/host';
+import { getOpenDesignHost, isOpenDesignHostAvailable, type OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import { useI18n } from './i18n';
 import { liveArtifactTabId } from './types';
 import type {
@@ -323,20 +330,27 @@ const CREATION_HANDOFF_SETTLE_DEADLINE_MS = 8_000;
  */
 interface PendingProjectCreation {
   projectId: string;
+  /**
+   * The seed conversation's id, minted with the project id and sent with the
+   * create, so the route and the chat pane name the final conversation from
+   * the first frame (OPEND-3334).
+   */
+  conversationId: string;
   name: string;
   prompt: string;
   /**
-   * `POST /api/projects` has answered and the row is persisted. Until then
-   * the standalone pending frame is the whole surface and the real
-   * ProjectView stays unmounted (an unpersisted id must not fan out reads);
-   * from then on ProjectView mounts and keeps drawing this record's chat
-   * card until its first transcript settles (OPEND-2170).
+   * `POST /api/projects` has answered and the row is persisted. ProjectView
+   * is mounted from the click either way; until then it holds every project
+   * read (an unpersisted id must not fan out reads) and draws only this
+   * record's optimistic first turn. The record stays until the first
+   * transcript settles (OPEND-2170).
    */
   created?: boolean;
   /**
    * The files the user staged on Home, still as local `File` objects. The
-   * preparing surface draws them from these bytes, so the first project frame
-   * shows the attachments without reading a project that is not persisted yet.
+   * optimistic first turn draws them from these bytes, so the first project
+   * frame shows the attachments without reading a project that is not
+   * persisted yet.
    */
   files: readonly File[];
 }
@@ -1067,6 +1081,15 @@ function AppInner() {
   const latestPersistedConfigRef = useRef(config);
   latestPersistedConfigRef.current = config;
   const settingsDraftConfigRef = useRef<AppConfig | null>(null);
+  // P0-24 N10: system notifications for turns that end anywhere on this
+  // machine, wherever the user is. Desktop only; the web keeps the
+  // per-conversation notifier in ProjectView.
+  useGlobalRunNotices({
+    enabled: isOpenDesignHostAvailable(),
+    workspaceContext,
+    notifications: config.notifications ?? DEFAULT_NOTIFICATIONS,
+    t,
+  });
   const completionFeedbackGestureConsumedRef = useRef(false);
   useEffect(() => {
     if (completionFeedbackGestureConsumedRef.current) return undefined;
@@ -1136,9 +1159,11 @@ function AppInner() {
   const [workspaceSkills, setWorkspaceSkills] = useState<{
     identity: string;
     items: SkillSummary[];
+    ready: boolean;
   }>(() => ({
     identity: currentWorkspaceCatalogIdentity,
     items: [],
+    ready: false,
   }));
   // A workspace-scoped response is safe to render only under the exact
   // identity it was fetched for. The replacement read starts in an effect, so
@@ -1156,9 +1181,11 @@ function AppInner() {
   const [workspaceDesignSystems, setWorkspaceDesignSystems] = useState<{
     identity: string;
     items: DesignSystemSummary[];
+    ready: boolean;
   }>(() => ({
     identity: currentWorkspaceCatalogIdentity,
     items: [],
+    ready: false,
   }));
   // Like skills and projects, a design-system catalog belongs to one exact
   // Workspace membership. Effects refresh after React commits, so merely
@@ -1177,12 +1204,17 @@ function AppInner() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [pendingProjectCreation, setPendingProjectCreation] =
     useState<PendingProjectCreation | null>(null);
+  // Seed conversation id per optimistic project, read by the create request.
+  // A ref, not the record: the record may already be cleared or replaced by a
+  // newer send when a slow create finally goes out.
+  const pendingProjectConversationIdsRef = useRef(new Map<string, string>());
   // Hard block from the Home pre-run balance gate. Hosted here, not in
   // EntryShell: the gate answers behind the optimistic pending frame, where
   // EntryShell is already unmounted (OPEND-2614).
   const [homeAmrBalanceGateBlock, setHomeAmrBalanceGateBlock] =
     useState<HomeAmrBalanceGateBlock | null>(null);
   const [appliedProjectListWitness, setAppliedProjectListWitness] = useState<{
+    displayKey: string;
     scopeKey: string;
     generation: number;
     workspaceView: WorkspaceProjectListView | undefined;
@@ -1344,8 +1376,10 @@ function AppInner() {
     [],
   );
   const handleCreationHandoffSettled = useCallback((projectId: string) => {
+    // Only a persisted project's record can be released: before the create
+    // answers, the record is what holds ProjectView's project reads.
     setPendingProjectCreation((current) =>
-      current?.projectId === projectId ? null : current,
+      current?.projectId === projectId && current.created ? null : current,
     );
   }, []);
   const pendingLocalProjectIdsRef = useRef<Set<string>>(new Set());
@@ -1395,6 +1429,7 @@ function AppInner() {
   // which probes CLI versions and can take seconds on cold start). The entry
   // view picks the right flag for whichever tab the user is currently on.
   const [agentsLoading, setAgentsLoading] = useState(true);
+  const [agentsReady, setAgentsReady] = useState(false);
   const [skillsLoading, setSkillsLoading] = useState(true);
   // Functional skills and design templates are two independent registry reads
   // that gate ONE loader: the EntryView must not stop spinning until both have
@@ -1416,6 +1451,8 @@ function AppInner() {
     generation: number;
   } | null>(null);
   const [promptTemplatesLoading, setPromptTemplatesLoading] = useState(true);
+  const [designTemplatesReady, setDesignTemplatesReady] = useState(false);
+  const [promptTemplatesReady, setPromptTemplatesReady] = useState(false);
   // Goes true once the daemon-persisted config (agentId/designSystemId/etc.)
   // has merged into local state. Auto-selection effects below wait on this
   // so they don't race ahead of the daemon-stored choice and overwrite it
@@ -1435,6 +1472,14 @@ function AppInner() {
   // can't overwrite the saved state with `''` before hydration lands.
   const [composioConfigLoading, setComposioConfigLoading] = useState(true);
   const route = useRoute();
+  useLayoutEffect(() => {
+    navigationTiming.observeRoute(route);
+  }, [route]);
+  useEffect(() => {
+    const onPageExit = () => navigationTiming.cancel('page_exit');
+    window.addEventListener('pagehide', onPageExit);
+    return () => window.removeEventListener('pagehide', onPageExit);
+  }, []);
   const routeRef = useRef(route);
   routeRef.current = route;
   const settingsReturnTargetRef = useRef<SettingsReturnTarget | null>(null);
@@ -1462,6 +1507,37 @@ function AppInner() {
     accountGeneration: projectDisplayAccountGeneration,
     context: workspaceContext,
     view: effectiveWorkspaceProjectView,
+  });
+  useStartupReady({
+    visible: route.kind === 'home' && daemonAppConfigReady,
+    interactive: route.kind === 'home' && daemonAppConfigReady && !workspaceContextLoading
+      && !workspaceContextState.identityChangePending && !projectsLoading
+      && appliedProjectListWitness?.displayKey === currentProjectDisplayKey
+      && projectListFailure?.displayKey !== currentProjectDisplayKey
+      && agentsReady && !agentsLoading && !skillsLoading && !dsLoading && !promptTemplatesLoading
+      && designTemplatesReady && promptTemplatesReady
+      && workspaceSkills.ready && workspaceDesignSystems.ready
+      && workspaceSkills.identity === currentWorkspaceCatalogIdentity
+      && workspaceDesignSystems.identity === currentWorkspaceCatalogIdentity,
+  });
+  // Page timing shares the authoritative Home gates, including scoped data.
+  // Independent data-driven destinations report Ready in their own component.
+  const pageWithSharedData = route.kind === 'home' && ['home', 'onboarding', 'projects', 'drafts', 'all-projects', 'design-systems', 'brands', 'settings'].includes(route.view);
+  usePageNavigationReady({
+    page: navigationPage(route),
+    visible: pageWithSharedData && daemonAppConfigReady,
+    ready: pageWithSharedData && daemonAppConfigReady && !workspaceContextLoading
+      && !workspaceContextState.identityChangePending && !projectsLoading
+      && appliedProjectListWitness?.displayKey === currentProjectDisplayKey
+      && projectListFailure?.displayKey !== currentProjectDisplayKey
+      && agentsReady && !agentsLoading && !skillsLoading && !dsLoading && !promptTemplatesLoading
+      && designTemplatesReady && promptTemplatesReady
+      && workspaceSkills.ready && workspaceDesignSystems.ready
+      && workspaceSkills.identity === currentWorkspaceCatalogIdentity
+      && workspaceDesignSystems.identity === currentWorkspaceCatalogIdentity
+      && (route.kind !== 'home' || route.view !== 'settings' || !composioConfigLoading),
+    failure: pageWithSharedData && projectListFailure?.displayKey === currentProjectDisplayKey,
+    scopeKey: currentProjectDisplayKey,
   });
   // Display snapshots are deliberately separate from authorization. They may
   // prevent a warm view from flashing a loader, but every network read and
@@ -1514,6 +1590,7 @@ function AppInner() {
   // proxy starved (see apps/packaged/src/index.ts ignore-connections-limit
   // note for the other half of that fix).
   const beginAgentStreamRequest = useCallback(() => {
+    setAgentsReady(false);
     agentStreamAbortRef.current?.abort();
     agentStreamAbortRef.current = new AbortController();
     agentStreamRequestSeqRef.current += 1;
@@ -1700,6 +1777,7 @@ function AppInner() {
         ? null
         : failure);
     setAppliedProjectListWitness({
+      displayKey: request.displayKey,
       scopeKey: request.scopeKey,
       generation: request.generation,
       workspaceView: request.workspaceView,
@@ -1745,8 +1823,8 @@ function AppInner() {
   // every subsequent capture() a no-op. When the user opts back in we
   // call opt_in_capturing to resume.
   useEffect(() => {
-    analytics.setConsent(config.telemetry?.metrics === true);
-  }, [analytics.setConsent, config.telemetry?.metrics]);
+    analytics.setConsent(daemonAppConfigReady && config.telemetry?.metrics === true);
+  }, [analytics.setConsent, daemonAppConfigReady, config.telemetry?.metrics]);
 
   // Sync PostHog's distinct_id with the anonymous installationId, both on
   // first opt-in (when the daemon stamps a fresh id) and on Delete-my-data
@@ -2259,6 +2337,7 @@ function AppInner() {
       })
         .then((list) => {
           if (cancelled || !isCurrentAgentStreamRequest(agentRequestId)) return;
+          setAgentsReady(true);
           reportAgentDetectDiagnostics(analytics.track, list);
           setAgents(
             mergeAmrModelsIntoAgents(
@@ -2294,8 +2373,10 @@ function AppInner() {
       // the `functional` half of this gate. Reading it here as well would
       // spend a second `/api/skills` request per launch, and the first one
       // would be the headerless (fail-closed) answer.
-      void fetchDesignTemplates().then((list) => {
+      let templatesReady = true;
+      void fetchDesignTemplates({ onReadResult: ready => { templatesReady = ready; } }).then((list) => {
         if (cancelled) return;
+        setDesignTemplatesReady(templatesReady);
         setDesignTemplates(list);
         markSkillRegistryReady('templates');
       });
@@ -2318,22 +2399,24 @@ function AppInner() {
           designSystemsCatalogIdentity,
           designSystemsRequestGeneration,
         );
-        void fetchDesignSystems(designSystemsContext).then((list) => {
-          if (
-            cancelled ||
-            workspaceContextStateRef.current.identityChangePending ||
-            designSystemsRequestGenerationRef.current.get(designSystemsCatalogIdentity)
-              !== designSystemsRequestGeneration ||
-            currentWorkspaceAccountGeneration() !== designSystemsAccountGeneration ||
-            workspaceIdentityCacheKey(workspaceContextRef.current)
-              !== designSystemsWorkspaceIdentity
-          ) return;
-          setWorkspaceDesignSystems({
-            identity: designSystemsCatalogIdentity,
-            items: list,
+        let ready = true;
+        void fetchDesignSystems(designSystemsContext, { onReadResult: success => { ready = success; } }).then((list) => {
+            if (
+              cancelled ||
+              workspaceContextStateRef.current.identityChangePending ||
+              designSystemsRequestGenerationRef.current.get(designSystemsCatalogIdentity)
+                !== designSystemsRequestGeneration ||
+              currentWorkspaceAccountGeneration() !== designSystemsAccountGeneration ||
+              workspaceIdentityCacheKey(workspaceContextRef.current)
+                !== designSystemsWorkspaceIdentity
+            ) return;
+            setWorkspaceDesignSystems({
+              identity: designSystemsCatalogIdentity,
+              items: list,
+              ready,
+            });
+            setDsLoading(false);
           });
-          setDsLoading(false);
-        });
       }
 
       const request = beginProjectListRequest(workspaceProjectViewRef.current);
@@ -2353,8 +2436,10 @@ function AppInner() {
         setTemplates(list);
       });
 
-      void fetchPromptTemplates().then((list) => {
+      let promptsReady = true;
+      void fetchPromptTemplates({ onReadResult: ready => { promptsReady = ready; } }).then((list) => {
         if (cancelled) return;
+        setPromptTemplatesReady(promptsReady);
         setPromptTemplates(list);
         setPromptTemplatesLoading(false);
       });
@@ -2703,7 +2788,8 @@ function AppInner() {
     const requestGeneration =
       (designSystemsRequestGenerationRef.current.get(issuedCatalogIdentity) ?? 0) + 1;
     designSystemsRequestGenerationRef.current.set(issuedCatalogIdentity, requestGeneration);
-    const list = await fetchDesignSystems(issuedContext, options);
+    let ready = true;
+    const list = await fetchDesignSystems(issuedContext, { ...options, onReadResult: success => { ready = success; } });
     if (
       workspaceContextStateRef.current.identityChangePending
       || designSystemsRequestGenerationRef.current.get(issuedCatalogIdentity)
@@ -2711,7 +2797,7 @@ function AppInner() {
       || currentWorkspaceAccountGeneration() !== issuedAccountGeneration
       || workspaceIdentityCacheKey(workspaceContextRef.current) !== issuedIdentity
     ) return;
-    setWorkspaceDesignSystems({ identity: issuedCatalogIdentity, items: list });
+    setWorkspaceDesignSystems({ identity: issuedCatalogIdentity, items: list, ready });
     // Bootstrap and this workspace-scoped refresh can overlap on launch.
     // Either response is a complete catalog for the active daemon identity,
     // so do not leave a successful refresh hidden behind bootstrap's loader
@@ -2750,7 +2836,8 @@ function AppInner() {
     const requestGeneration =
       (skillsRequestGenerationRef.current.get(issuedCatalogIdentity) ?? 0) + 1;
     skillsRequestGenerationRef.current.set(issuedCatalogIdentity, requestGeneration);
-    const list = await fetchSkills(read.context);
+    let ready = true;
+    const list = await fetchSkills(read.context, { onReadResult: success => { ready = success; } });
     // A read for the workspace the user has since LEFT must not restore that
     // workspace's catalog over the current one — see `beginWorkspaceScopedRead`.
     // Skipping the gate too is deliberate: this response is not an answer about
@@ -2764,6 +2851,7 @@ function AppInner() {
     setWorkspaceSkills({
       identity: issuedCatalogIdentity,
       items: list,
+      ready,
     });
     markSkillRegistryReady('functional');
   }, [markSkillRegistryReady]);
@@ -3108,6 +3196,7 @@ function AppInner() {
         const ordered = orderAgentsByRegistry(next);
         reportAgentDetectDiagnostics(analytics.track, ordered);
         if (isCurrentAgentStreamRequest(agentRequestId)) {
+          setAgentsReady(true);
           setAgents(mergeAmrModelsIntoAgents(ordered, amrModelsRef.current));
           setAgentsLoading(false);
         }
@@ -3184,6 +3273,8 @@ function AppInner() {
   const rollbackOptimisticProjectCreation = useCallback(
     (projectId: string, stagedFiles: readonly File[], notice: string | null) => {
       clearLocalProject(projectId);
+      releaseProjectRunStatusReads(projectId);
+      pendingProjectConversationIdsRef.current.delete(projectId);
       removeWorkspaceProjectTabs(projectId);
       setProjects((current) => current.filter((project) => project.id !== projectId));
       setPendingProjectCreation((current) =>
@@ -3230,6 +3321,7 @@ function AppInner() {
         ? null
         : workspaceResourceReadContext(createWorkspaceState);
       const optimisticProjectId = randomUUID();
+      const optimisticConversationId = randomUUID();
       const now = Date.now();
       const optimisticProject: Project = {
         id: optimisticProjectId,
@@ -3248,12 +3340,14 @@ function AppInner() {
           : {}),
       };
       rememberLocalProject(optimisticProjectId);
+      holdProjectRunStatusReads(optimisticProjectId);
       // A previous rollback's snapshot must not outlive the retry that
       // carries the same files; the new attempt owns them from here.
       clearHomeComposerAttachments();
       flushSync(() => {
         setPendingProjectCreation({
           projectId: optimisticProjectId,
+          conversationId: optimisticConversationId,
           name: optimisticProject.name,
           prompt: derivedPendingPrompt ?? '',
           files: stagedFiles,
@@ -3263,9 +3357,11 @@ function AppInner() {
           ...current.filter((project) => project.id !== optimisticProjectId),
         ]);
       });
+      pendingProjectConversationIdsRef.current.set(optimisticProjectId, optimisticConversationId);
       const optimisticRoute = {
         kind: 'project',
         projectId: optimisticProjectId,
+        conversationId: optimisticConversationId,
         fileName: null,
       } as const;
       openWorkspaceTab(optimisticRoute);
@@ -3327,8 +3423,12 @@ function AppInner() {
         if (input.autoSendFirstMessage && !optimisticProjectId) {
           optimisticProjectId = beginOptimisticProjectCreation(input).projectId;
         }
+        const optimisticConversationId = optimisticProjectId
+          ? pendingProjectConversationIdsRef.current.get(optimisticProjectId)
+          : undefined;
         result = await createProject({
           ...(optimisticProjectId ? { id: optimisticProjectId } : {}),
+          ...(optimisticConversationId ? { conversationId: optimisticConversationId } : {}),
           name: input.name,
           skillId: input.skillId,
           ...(input.skillCatalogScope
@@ -3368,6 +3468,7 @@ function AppInner() {
             project_source: 'create_button',
             project_id: null,
             project_kind: projectKindFromMetadataToTracking(metadata),
+            project_intent: projectIntentFromMetadataToTracking(metadata),
             fidelity,
             result: 'failed',
             error_code: errorCode,
@@ -3393,6 +3494,7 @@ function AppInner() {
             project_source: 'create_button',
             project_id: null,
             project_kind: projectKindFromMetadataToTracking(metadata),
+            project_intent: projectIntentFromMetadataToTracking(metadata),
             fidelity,
             ...(input.pluginId ? { plugin_id: input.pluginId } : {}),
             ...(input.pluginType ? { plugin_type: input.pluginType } : {}),
@@ -3410,6 +3512,7 @@ function AppInner() {
           }
         : result.project;
       if (optimisticProjectId) {
+        releaseProjectRunStatusReads(optimisticProjectId);
         // The files now belong to this project (uploaded below); a later Home
         // visit must not revive them into the composer.
         clearHomeComposerAttachments();
@@ -3539,6 +3642,7 @@ function AppInner() {
             project_source: 'create_button',
             project_id: result.project.id,
             project_kind: projectKindFromMetadataToTracking(metadata),
+            project_intent: projectIntentFromMetadataToTracking(metadata),
             fidelity,
             ...(input.pluginId ? { plugin_id: input.pluginId } : {}),
             ...(input.pluginType ? { plugin_type: input.pluginType } : {}),
@@ -4002,7 +4106,7 @@ function AppInner() {
     return { kind: 'resolved', name: authoritativeName };
   }, [rememberAuthoritativeProjectName]);
 
-  const handleOpenProject = useCallback(async (
+  const openProjectForNavigation = useCallback(async (
     id: string,
     fileName?: string,
     projectTitleHint?: ProjectTitleHint,
@@ -4231,6 +4335,37 @@ function AppInner() {
     rememberAuthoritativeProjectName,
     t,
   ]);
+
+  const handleOpenProject = useCallback(async (
+    id: string,
+    fileName?: string,
+    projectTitleHint?: ProjectTitleHint,
+  ): Promise<boolean> => {
+    const source = routeRef.current;
+    // Clicking an already-open project/file is not another project entry.
+    if (source.kind === 'project' && source.projectId === id) {
+      observeNavigation(() => navigationTiming.cancel('superseded'));
+      return openProjectForNavigation(id, fileName, projectTitleHint);
+    }
+    const openingAccountGeneration = currentWorkspaceAccountGeneration();
+    const openingAuthorizationGeneration = projectAuthorizationGenerationRef.current;
+    const navigationId = observeNavigation(() => navigationTiming.begin(source, { projectId: id }));
+    try {
+      const opened = await openProjectForNavigation(id, fileName, projectTitleHint);
+      if (!opened) {
+        if (currentWorkspaceAccountGeneration() !== openingAccountGeneration
+          || projectAuthorizationGenerationRef.current !== openingAuthorizationGeneration) {
+          if (navigationId) observeNavigation(() => navigationTiming.finish(navigationId, 'cancelled', 'scope_changed'));
+        } else {
+          if (navigationId) observeNavigation(() => navigationTiming.finish(navigationId, 'failed', 'open_unavailable'));
+        }
+      }
+      return opened;
+    } catch (error) {
+      if (navigationId) observeNavigation(() => navigationTiming.finish(navigationId, 'failed', 'open_unavailable'));
+      throw error;
+    }
+  }, [openProjectForNavigation]);
 
   useEffect(() => {
     if (!config.pet?.enabled || !daemonLive) {
@@ -4574,7 +4709,7 @@ function AppInner() {
   const handleSkillsChanged = useCallback(
     (affectedSkillId?: string) => {
       void refreshSkills();
-      void fetchDesignTemplates().then((list) => setDesignTemplates(list));
+      void fetchDesignTemplates({ onReadResult: setDesignTemplatesReady }).then((list) => setDesignTemplates(list));
       iframeKeepAlivePool.evictMatching(
         (entry) => {
           const proj = projectsRef.current.find((p) => p.id === entry.projectId);
@@ -4756,6 +4891,18 @@ function AppInner() {
     ? projectRouteWorkspaceContext.context
     : null;
   projectRouteWorkspaceContextRef.current = activeProjectWorkspaceContext;
+  useEffect(() => {
+    if (route.kind !== 'project') return;
+    const attempt = navigationTiming.getSnapshot();
+    if (!attempt || attempt.projectId !== route.projectId) return;
+    // These failures render an App-owned error surface, so ProjectView's
+    // business Ready hook will never mount to terminate the attempt.
+    if (projectRouteWorkspaceContext.failure) {
+      navigationTiming.finish(attempt.id, 'failed', 'scope_unavailable');
+    } else if (deepLinkResolutionFailure?.projectId === route.projectId) {
+      navigationTiming.finish(attempt.id, 'failed', 'project_unavailable');
+    }
+  }, [route, projectRouteWorkspaceContext.failure, deepLinkResolutionFailure]);
   // The post-generation upgrade gate belongs to the project that owns the
   // conversation, not whichever Workspace the navigation shell currently
   // selects. A bound project stays fail-closed until its exact membership and
@@ -5561,9 +5708,8 @@ function AppInner() {
   } else if (route.kind === 'home' && route.view === 'settings') {
     appMain = renderSettingsSurface('page');
   } else if (route.kind === 'project') {
-    // Keyed on the route, not on `activeProject`: the pending frame is built
-    // from the creation record alone so it shows on the tick the create request
-    // leaves, and survives a list refresh that has not seen the new row yet.
+    // Keyed on the route, not on `activeProject`: a newer send's record must
+    // not leak into another project's view.
     const pendingCreation =
       pendingProjectCreation?.projectId === route.projectId
         ? pendingProjectCreation
@@ -5577,26 +5723,6 @@ function AppInner() {
           ? deepLinkResolutionFailure.failure
           : undefined,
     });
-    // Same `div.app` element as the ProjectView branch below, deliberately.
-    // React reconciles one element across the pending -> real hand-off, so
-    // the `.app` entrance animation plays once for the whole transition
-    // instead of restarting when ProjectView takes over.
-    //
-    // The frame stands in for EVERY surface the route would otherwise show
-    // before ProjectView can mount (project list loading, workspace context
-    // resolving, a materialisation failure); once ProjectView mounts, the
-    // same record hands its chat card to the view (`creationHandoff`), which
-    // keeps it up until the first transcript settles (OPEND-2170).
-    const pendingFrame = pendingCreation ? (
-      <div className="app">
-        <ProjectCreationPendingView
-          projectName={activeProject?.name ?? pendingCreation.name}
-          prompt={pendingCreation.prompt}
-          files={pendingCreation.files}
-          agentId={config.agentId}
-        />
-      </div>
-    ) : null;
     const signedOutObservedShare = observedPublicShareLink
       && route.kind === 'project' && route.projectId === observedPublicShareLink.projectId
       && route.fileName === observedPublicShareLink.filePath
@@ -5629,28 +5755,36 @@ function AppInner() {
       && activeProject.workspaceId === null && activeProjectWorkspaceContext === null
       && amrLoginStatus?.loggedIn === false && amrLoginStatus.loginInFlight !== true
         ? observedPublicShareLink : null;
-    if (pendingFrame && !pendingCreation?.created) {
-      appMain = pendingFrame;
-    } else if (
-      routeSurfaceState === 'loading-projects'
-      || routeSurfaceState === 'resolving-deep-link'
-      || (
-        activeProject
-        && !projectResourceReadsCanStart(
-          activeProject.workspaceId,
-          projectRouteWorkspaceContext,
+    // A Home send's project is ProjectView from the click (OPEND-3334): the
+    // view mounts on the optimistic row, holds every project read until the
+    // create answers, and stays the same instance through the first turn.
+    // While the creation record lives, the route's own loading and failure
+    // surfaces do not replace it — the user is looking at the project they
+    // just created, and ProjectView's own authority hooks fail closed.
+    const creationOwnsSurface = pendingCreation !== null && activeProject !== null;
+    if (
+      !creationOwnsSurface
+      && (
+        routeSurfaceState === 'loading-projects'
+        || routeSurfaceState === 'resolving-deep-link'
+        || (
+          activeProject
+          && !projectResourceReadsCanStart(
+            activeProject.workspaceId,
+            projectRouteWorkspaceContext,
+          )
+          && projectRouteWorkspaceContext.loading
         )
-        && projectRouteWorkspaceContext.loading
       )
     ) {
-      appMain = pendingFrame ?? (
+      appMain = (
         <div className="entry-shell entry-shell--no-header">
           <CenteredLoader label={t('entry.loadingWorkspace')} />
         </div>
       );
-    } else if (routeSurfaceState !== 'ready') {
+    } else if (!creationOwnsSurface && routeSurfaceState !== 'ready') {
       const canRetry = routeSurfaceState === 'materialization-failed';
-      appMain = pendingFrame ?? signedOutShareFallback ?? (
+      appMain = signedOutShareFallback ?? (
         <div className="entry-shell entry-shell--no-header">
           <div className="centered-loader">
             <span role="alert">
@@ -5673,7 +5807,8 @@ function AppInner() {
         </div>
       );
     } else if (
-      activeProject
+      !creationOwnsSurface
+      && activeProject
       && !localObservedShare
       && projectRouteWorkspaceContext.failure
       && (
@@ -5681,7 +5816,7 @@ function AppInner() {
         || activeProjectWorkspaceContext === null
       )
     ) {
-      appMain = pendingFrame ?? signedOutShareFallback ?? (
+      appMain = signedOutShareFallback ?? (
         <div className="entry-shell entry-shell--no-header">
           <div className="centered-loader">
             <span role="alert">
@@ -5782,7 +5917,12 @@ function AppInner() {
           onRunActivityChange={handleProjectRunActivityChange}
           creationHandoff={
             pendingCreation
-              ? { prompt: pendingCreation.prompt, files: pendingCreation.files }
+              ? {
+                  prompt: pendingCreation.prompt,
+                  files: pendingCreation.files,
+                  conversationId: pendingCreation.conversationId,
+                  persisted: pendingCreation.created === true,
+                }
               : null
           }
           onCreationHandoffSettled={handleCreationHandoffSettled}

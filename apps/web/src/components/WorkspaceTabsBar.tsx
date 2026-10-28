@@ -26,11 +26,14 @@ import {
 } from '@open-design/contracts';
 import { Icon, type IconName } from './Icon';
 import {
+  hasAwaitingReplyTag,
   hasCompletionNotice,
+  ProjectAwaitingReplyTag,
   hasRunStatusGlyph,
   ProjectCompletionDot,
   ProjectFolderGlyph,
   ProjectRunStatusIcon,
+  STATUS_BALL_SIZE,
 } from './ProjectRunStatusIcon';
 import {
   ProjectHoverPreviewCard,
@@ -799,7 +802,28 @@ function leadGlyphFor(
     return <ProjectFolderGlyph size={14} />;
   }
   return (
-    <ProjectRunStatusIcon status={status} size={14} label={t(STATUS_LABEL_KEYS[status])} />
+    <ProjectRunStatusIcon status={status} size={STATUS_BALL_SIZE} label={t(STATUS_LABEL_KEYS[status])} />
+  );
+}
+
+/**
+ * P0-24 推测项 A-09 (OPEND-4216): the visible 「需要你回复」 tag after the name,
+ * the same one the rail's rows draw.
+ */
+function awaitingReplyTagFor(
+  tab: WorkspaceChromeTab,
+  runStatusByProjectId: ReadonlyMap<string, ProjectDisplayStatus>,
+  t: ReturnType<typeof useT>,
+): ReactNode {
+  if (tab.kind !== 'project') return null;
+  const status = runStatusByProjectId.get(tab.projectId);
+  if (!status || !hasAwaitingReplyTag(status)) return null;
+  return (
+    <ProjectAwaitingReplyTag
+      className="workspace-tabs-dropdown__row-reply-tag"
+      label={t(STATUS_LABEL_KEYS[status])}
+      testId="workspace-tabs-dropdown-reply-tag"
+    />
   );
 }
 
@@ -2252,6 +2276,7 @@ export function WorkspaceTabsBar({
                         {leadGlyphFor(tab, display, runStatusByProjectId, t)}
                       </span>
                       <span className="workspace-tabs-dropdown__row-label">{display.title}</span>
+                      {awaitingReplyTagFor(tab, runStatusByProjectId, t)}
                       {completionNoticeFor(tab, runStatusByProjectId, t)}
                       {active ? (
                         <Icon name="check" size={14} className="workspace-tabs-dropdown__row-check" />

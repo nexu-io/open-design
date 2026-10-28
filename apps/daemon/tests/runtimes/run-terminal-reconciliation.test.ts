@@ -21,6 +21,7 @@ describe('durable run terminal reconciliation', () => {
         run_id TEXT,
         run_status TEXT,
         ended_at INTEGER,
+        cancel_origin TEXT,
         events_json TEXT
       )
     `);
@@ -204,7 +205,9 @@ describe('durable run terminal reconciliation', () => {
     }));
   });
 
-  it('fails an interrupted run, repairs its message, and emits missing terminal telemetry once', async () => {
+  // P0-24 N1 / Q5: a run the restart interrupted is stopped, not failed; its
+  // reason (daemon_restart) is kept for analytics, without failure fields.
+  it('stops an interrupted run, repairs its message, and emits missing terminal telemetry once', async () => {
     const runId = 'run-interrupted';
     const runDir = path.join(tmpDir, runId);
     fs.mkdirSync(runDir, { recursive: true });
@@ -279,29 +282,18 @@ describe('durable run terminal reconciliation', () => {
     });
 
     expect(first).toMatchObject({ interrupted: 1, messagesReconciled: 1, analyticsReplayed: 1 });
-    expect(db.prepare(`SELECT run_status AS status, ended_at AS endedAt, events_json AS eventsJson FROM messages WHERE id = 'm1'`).get()).toMatchObject({
-      status: 'failed',
-      endedAt: expect.any(Number),
-      eventsJson: expect.stringContaining('daemon restarted'),
+    expect(db.prepare(`SELECT run_status AS status, ended_at AS endedAt, cancel_origin AS cancelOrigin, events_json AS eventsJson FROM messages WHERE id = 'm1'`).get()).toMatchObject({
+      status: 'canceled',
+      // P0-24 N1: the run ended at its last recorded activity (the persisted
+      // update at 2_000 is newer than the 1_500 event), not at restart time.
+      endedAt: 2_000,
+      cancelOrigin: 'daemon_shutdown',
     });
     expect(capture).toHaveBeenCalledWith(expect.objectContaining({
       eventName: 'run_finished',
       insertId: 'run-created-1-finish',
       properties: expect.objectContaining({
-        result: 'failed',
-        error_code: 'DAEMON_RESTARTED',
-        failure_category: 'process_exit',
-        failure_detail: 'interrupted',
-        failure_stage: 'finalize',
-        failure_mechanism: 'unknown',
-        failure_domain: 'cross_boundary',
-        evidence_level: 'lifecycle_signal',
-        repair_owner: 'shared_boundary',
-        admission_status: 'unknown',
-        admission_phase: 'unknown',
-        classifier_version: 'run-failure-v3',
-        retryable: true,
-        user_action: 'retry',
+        result: 'cancelled',
         terminal_trigger: 'daemon_restart',
         terminal_reconciled: true,
         terminal_integrity: 'reconciled',
@@ -318,15 +310,23 @@ describe('durable run terminal reconciliation', () => {
         tool_execution_evidence_incomplete: true,
       }),
     }));
+    // No internal reconciliation note is printed into the conversation (Q5).
+    const repaired = db.prepare(`SELECT events_json AS eventsJson FROM messages WHERE id = 'm1'`).get() as { eventsJson: string | null };
+    expect(repaired.eventsJson ?? '').not.toContain('reconciled after daemon restart');
+    const runFinished = (capture.mock.calls as unknown as Array<[{ properties: Record<string, unknown> }]>)[0]![0].properties;
+    // The stop reason survives for SLO eligibility, the way a live cancel reports it.
+    expect(runFinished).toMatchObject({ cancel_origin: 'daemon_shutdown', terminal_trigger: 'daemon_restart' });
+    expect(runFinished).not.toHaveProperty('error_code');
     expect(reportLangfuse).toHaveBeenCalledWith(expect.objectContaining({
-      persistedRunStatus: 'failed',
-      run: expect.objectContaining({ id: runId, status: 'failed' }),
+      persistedRunStatus: 'canceled',
+      run: expect.objectContaining({ id: runId, status: 'canceled' }),
     }));
 
     const recoveredState = JSON.parse(fs.readFileSync(path.join(runDir, 'state.json'), 'utf8'));
     expect(recoveredState).toMatchObject({
-      status: 'failed',
+      status: 'canceled',
       errorCode: 'DAEMON_RESTARTED',
+      terminalTrigger: 'daemon_restart',
       analyticsRecovery: { completedAt: expect.any(Number) },
       langfuseCompletedAt: expect.any(Number),
     });
@@ -522,7 +522,7 @@ describe('durable run terminal reconciliation', () => {
     }));
     const storageDb = new Database(':memory:');
     storageDb.exec(`CREATE TABLE messages (
-      id TEXT PRIMARY KEY, run_id TEXT, run_status TEXT, ended_at INTEGER, content TEXT NOT NULL DEFAULT '', events_json TEXT)`);
+      id TEXT PRIMARY KEY, run_id TEXT, run_status TEXT, ended_at INTEGER, cancel_origin TEXT, content TEXT NOT NULL DEFAULT '', events_json TEXT)`);
     storageDb.prepare(
       `INSERT INTO messages (id, run_id, run_status, content, events_json) VALUES ('m-storage', ?, 'failed', 'partial', '[]')`,
     ).run(runId);

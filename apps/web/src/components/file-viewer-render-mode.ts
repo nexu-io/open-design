@@ -239,6 +239,8 @@ export function htmlNeedsFocusGuard(source: string): boolean {
  */
 export function htmlNeedsPoweredPreview(source: string | null | undefined): boolean {
   if (!source) return false;
+  // Web Storage stays in srcDoc: the host restores localStorage within the
+  // workspace/member/project/file scope; sessionStorage remains document-local.
   // Hard requirement — SharedArrayBuffer only exists in a crossOriginIsolated
   // document, which ONLY the powered path provides.
   if (/\bSharedArrayBuffer\b/.test(source)) return true;

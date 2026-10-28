@@ -15,12 +15,12 @@
  *    这一档沿用「进行中」,而下方那行「已手动停止」在历史回合上是 hover 才揭示的,
  *    于是一轮停掉的活在屏幕上常驻的唯一说法是「进行中」。判据见 `head` 里的注释。)
  */
-import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useRef, useState, type MutableRefObject, type ReactElement, type ReactNode } from 'react';
 import { useT } from '../../i18n';
 import { Icon } from '../Icon';
 import type { ExecutionShell as ShellData, ImageRow as ImageRowData, ShellItem, ThinkingTokens, TodoSegment } from '../../runtime/chat/contract';
 import { isExpandable, isStruck } from '../../runtime/chat/contract';
-import { formatElapsed, formatShellElapsed, formatThinkingTokens } from '../../runtime/chat/format';
+import { formatElapsed, shellElapsedParts, formatThinkingTokens } from '../../runtime/chat/format';
 import { CountingNumber } from './CountingNumber';
 import { groupThinking, isThinking, type GroupedShellItem } from '../../runtime/chat/group-thinking';
 import type { RecordFileScope } from '../../runtime/chat/record-file-open';
@@ -63,6 +63,12 @@ export const SLOW_UPSTREAM_AFTER_MS = 60_000;
 export const WAITING_FIRST_OUTPUT_AFTER_MS = 60_000;
 
 export interface ExecutionShellProps {
+  /** Aggregated Runs share this existing status header and folding lifecycle. */
+  children?: ReactNode;
+  /** Carry a user's choice across automatic Run handoff, for this mounted turn only. */
+  foldPreference?: MutableRefObject<boolean | undefined>;
+  /** Task aggregation keeps each Run's local row semantics without another outer shell. */
+  bodyOnly?: boolean;
   shell: ShellData;
   onOpenFile?: (path: string) => void;
   /**
@@ -119,12 +125,24 @@ export function ExecutionShell({
   imageSrc,
   deferCollapsedBodies = true,
   concluded = false,
+  bodyOnly = false,
+  children,
+  foldPreference,
   odCardScope,
   onBrandBrowserAssistConfirm,
 }: ExecutionShellProps): ReactElement {
   const t = useT();
   const running = shell.status === 'running' && !shell.stopped;
-  const elapsed = formatShellElapsed(shell.elapsedMs);
+  /*
+   * P0-24 设计答复(2026-10-26):时长单位走多语言 —— 中文「0 秒」「1 分 20 秒」,
+   * 其他语言照旧「0s」「1m 20s」。档位见 `shellElapsedParts`。
+   */
+  const elapsedParts = shellElapsedParts(shell.elapsedMs);
+  const elapsed = elapsedParts === null
+    ? null
+    : elapsedParts.kind === 'seconds'
+      ? t('chat.record.elapsedSeconds', { n: elapsedParts.n })
+      : t('chat.record.elapsedMinutes', { m: elapsedParts.m, s: elapsedParts.s });
   /**
    * 模型此刻在想 —— **只用来挑出哪一格是「还在写的那一格」**,不再改变壳的形态。
    *
@@ -165,8 +183,8 @@ export function ExecutionShell({
    * 「停在哪一步」也藏了。
    */
   const lifecycleOpen = (running && !concluded) || shell.stopped;
-  const [open, setOpen] = useState(lifecycleOpen);
-  const [userToggled, setUserToggled] = useState(false);
+  const [open, setOpen] = useState(foldPreference?.current ?? lifecycleOpen);
+  const [userToggled, setUserToggled] = useState(foldPreference?.current !== undefined);
   useEffect(() => {
     if (!userToggled) setOpen(lifecycleOpen);
   }, [lifecycleOpen, userToggled]);
@@ -185,9 +203,12 @@ export function ExecutionShell({
   const openRef = useRef(open);
   openRef.current = open;
   const onToggle = useCallback((next: boolean) => {
-    if (next !== openRef.current) setUserToggled(true);
+    if (next !== openRef.current) {
+      setUserToggled(true);
+      if (foldPreference) foldPreference.current = next;
+    }
     setOpen(next);
-  }, []);
+  }, [foldPreference]);
 
   const head = (() => {
     if (shell.status === 'failed') {
@@ -210,12 +231,13 @@ export function ExecutionShell({
        * 右边还挂着一个 12 分钟的秒数。用户报的「仍显示 Working 4m 58s、误以为还在跑」
        * 就是这一帧(真机 run `b13328d8-d151-4628-9134-23ad9da4b64f`)。
        *
-       * 壳头是这一轮**唯一常驻**的状态陈述,所以由它把终态说出来。用的是记录卡自己
-       * 那一档词 `chat.record.canceled`(en "Canceled" / zh「已取消」),不是页脚那句
-       * 「已手动停止」—— 两处同时可见时(最后一轮)说的是同一件事的两句话,不是同一句
-       * 话说两遍;而原来那个「进行中 vs 已取消」的**自相矛盾**正好被这一改消掉。
+       * 壳头是这一轮**唯一常驻**的状态陈述,所以由它把终态说出来。
+       *
+       * P0-24 把这个词定为「已停止」(`chat.record.turnStopped`):被停止是中性结果,
+       * 不是取消也不是失败。不复用 `chat.record.canceled` —— 那个词还是待办勾选的
+       * 读屏文字(`StatusMark`),两处的意思不同。
        */
-      return <span>{t('chat.record.canceled')}</span>;
+      return <span className={styles.stStopped}>{t('chat.record.turnStopped')}</span>;
     }
     if (running) {
       /**
@@ -265,7 +287,15 @@ export function ExecutionShell({
         </>
       );
     }
-    return <span>{t('chat.record.done')}</span>;
+    /*
+     * P0-24:正常结束的一轮不替用户宣布「已完成」,只说「用时」,秒数紧跟在后面
+     * (`elapsed`,由 `Foldable` 的 meta 位画)。等用户回答的一轮也走这里 ——
+     * 它的运行已经正常结束,不能再说「已完成」。
+     *
+     * 状态词只有四种(进行中 / 用时 / 已停止 / 运行失败),和量不量得到时长无关:
+     * 改版前的旧消息没有起止时刻时,只写「用时」不写数字(产品裁决 Q1)。
+     */
+    return <span>{t('chat.record.turnElapsed')}</span>;
   })();
 
   /**
@@ -342,18 +372,7 @@ export function ExecutionShell({
    */
   const hasTodo = shell.items.some((item) => item.kind === 'todo' || item.kind === 'plan');
 
-  return (
-    <Foldable
-      summary={head}
-      variant="flat"
-      elapsed={elapsed ?? undefined}
-      open={open}
-      onToggle={onToggle}
-      expandable={items.length > 0}
-      deferBody={deferCollapsedBodies}
-      className={hasTodo ? styles.hasTodo : undefined}
-    >
-      {items.length
+  const body = children ?? (items.length
         ? items.map((item, i) => renderItem(item, i, {
             t, onOpenFile, fileScope,
             onRetryImage: runTerminal ? onRetryImage : undefined,
@@ -365,9 +384,12 @@ export function ExecutionShell({
             mutedThoughtsIndex: mutedThoughtsIndexOf(items, shell.items, firstThoughtsStack),
             odCardScope, onBrandBrowserAssistConfirm,
           }))
-        : null}
-    </Foldable>
-  );
+        : null);
+  if (bodyOnly) return <>{body}</>;
+  return <Foldable summary={head} variant="flat" elapsed={elapsed ?? undefined}
+    open={open} onToggle={onToggle} expandable={items.length > 0 || children != null}
+    deferBody={deferCollapsedBodies}
+    className={hasTodo ? `${styles.turnHead} ${styles.hasTodo}` : styles.turnHead}>{body}</Foldable>;
 }
 
 /**

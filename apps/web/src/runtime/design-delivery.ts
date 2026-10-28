@@ -29,18 +29,16 @@ export interface DesignDeliveryInput {
 }
 
 /**
- * Delivery failures retain the agent-process `succeeded` status, but they are
- * terminal user-facing failures and must follow the same retry path as a
- * failed process run.
+ * Whether a turn failed, as the user is told it did: only when the run itself
+ * ended in error (P0-24). A delivery outcome (`no_result` / `delivery_failed`)
+ * describes the artifact, not the run — whether files were produced, saved or
+ * usable never changes the turn's status, so it no longer earns the failure
+ * card or its retry path.
  */
 export function isRetryableAssistantTerminalFailure(
-  message: Pick<ChatMessage, 'runStatus' | 'resultDeliveryState'>,
+  message: Pick<ChatMessage, 'runStatus'>,
 ): boolean {
-  return (
-    message.runStatus === 'failed' ||
-    message.resultDeliveryState === 'no_result' ||
-    message.resultDeliveryState === 'delivery_failed'
-  );
+  return message.runStatus === 'failed';
 }
 
 /**

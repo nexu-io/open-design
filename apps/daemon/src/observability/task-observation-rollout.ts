@@ -47,7 +47,6 @@ import {
 import { normalizeTelemetryAppVersion } from '../app-version.js';
 import { buildStructuredMainRunObservationV1 } from './main-run-observation.js';
 import { getDetectedRuntimeVersions } from '../runtimes/detection.js';
-import { OD_NEXT_RUNTIME_PATH_DESCRIPTORS } from '../runtimes/od-next-capability-gate.js';
 import {
   adaptMainRunToolObservationsV1,
   adaptRuntimeChildObservationsV1,
@@ -68,6 +67,15 @@ import {
 } from './task-observation-otlp-exporter.js';
 
 export type TaskObservationRolloutMode = 'off' | 'observe' | 'send';
+
+// Existing adapter labels describe observation provenance only. Runtimes
+// without a known label still execute and export their available observations.
+const runtimeObservationAdapterVersions: ReadonlyMap<string, string> = new Map([
+  ['codex', 'od-codex-json-events/v1'],
+  ['claude', 'od-claude-stream-json/v1'],
+  ['opencode', 'od-opencode-json-events/v1'],
+  ['amr', 'od-vela-opencode-acp/v1'],
+]);
 
 export interface TaskObservationRolloutConfig {
   requestedMode: 'auto' | 'off' | 'observe' | 'send' | 'invalid';
@@ -507,9 +515,9 @@ async function taskAggregate(
       events: run.events,
     });
     const detectedVersions = getDetectedRuntimeVersions(run.agentId);
-    const runtimeAdapterVersion = OD_NEXT_RUNTIME_PATH_DESCRIPTORS.find(
-      (descriptor) => descriptor.agentId === run.agentId,
-    )?.runtimeAdapterVersion;
+    const runtimeAdapterVersion = run.agentId
+      ? runtimeObservationAdapterVersions.get(run.agentId)
+      : undefined;
     if (run.promptTelemetry && !run.promptTelemetry.odNextExactSend) {
       throw new Error(
         'Mapped OD Next Run is missing mandatory exact-send Prompt evidence.',

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { AGENT_DEFS } from '../../runtimes/registry.js';
 
 import type {
   OdNextRolloutDecision,
@@ -44,7 +45,6 @@ const DEFAULT_TASK_TYPES: readonly OdNextRolloutTaskType[] = [
   'discovery',
   'motion-design',
 ];
-const DEFAULT_AGENTS = ['codex', 'claude', 'opencode', 'amr'] as const;
 
 function bool(value: string | undefined, fallback: boolean): boolean {
   if (value === undefined) return fallback;
@@ -92,7 +92,7 @@ export function readOdNextRolloutPolicy(
     eligibleTaskTypes: taskTypes.length > 0 ? taskTypes : DEFAULT_TASK_TYPES,
     eligibleAgents: list(env.OD_NEXT_STRATEGY_AGENTS).length > 0
       ? list(env.OD_NEXT_STRATEGY_AGENTS)
-      : DEFAULT_AGENTS,
+      : AGENT_DEFS.map((agent) => agent.id),
     productionActiveApproved: bool(env.OD_NEXT_STRATEGY_PRODUCTION_ACTIVE_APPROVED, true),
     localSyntheticCanary: bool(env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY, false),
   };
@@ -123,8 +123,6 @@ export function evaluateOdNextRollout(input: {
   agentId: string | null;
   agentVersion: string | null;
   sourceKind: string | null;
-  runtimeCapabilityVerified?: boolean;
-  runtimeCapabilityReason?: string | null;
   routeApplicability?: 'eligible' | 'explicit_user' | 'not_applicable';
 }): OdNextRolloutDecision {
   const { policy } = input;
@@ -159,13 +157,6 @@ export function evaluateOdNextRollout(input: {
   const syntheticCanary = Boolean(
     policy.localSyntheticCanary && process.env.NODE_ENV !== 'production',
   );
-  // agentVersion is retained as diagnostic rollout evidence only. Runtime
-  // invocability is established by preflight and capability admission is
-  // keyed by runtime path + agent id + adapter/schema, not a version pin.
-  if (evaluateEligibility && !input.runtimeCapabilityVerified && !syntheticCanary) {
-    reasons.push('od_next_rollout_x1_capability_fixture_unverified');
-    if (input.runtimeCapabilityReason) reasons.push(`od_next_rollout_capability_${input.runtimeCapabilityReason}`);
-  }
   if (evaluateEligibility && !policy.productionActiveApproved && !syntheticCanary) {
     reasons.push('od_next_rollout_x2_active_unapproved');
   }
