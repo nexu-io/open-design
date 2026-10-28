@@ -2,11 +2,16 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { mergeProxyAwareEnv, resolveSystemProxyEnv } from '@open-design/platform';
+import {
+  mergeProxyAwareEnv,
+  normalizeNoProxyForHttpx,
+  resolveSystemProxyEnv,
+} from '@open-design/platform';
 import { readAppConfigSync } from '../app-config.js';
 import { resolveProjectRelativePath } from '../home-expansion.js';
 import { expandConfiguredEnv } from './paths.js';
 import { resolveAmrOpenCodeExecutable } from './executables.js';
+import { getAgentDef } from './registry.js';
 import { amrVelaProfileEnv } from '../integrations/vela-profile.js';
 import { resolveProjectRootFromNestedModule } from '../project-root.js';
 import {
@@ -24,6 +29,22 @@ type SpawnEnvOptions = {
 const RUNTIME_MODULE_PROJECT_ROOT = resolveProjectRootFromNestedModule(
   path.dirname(fileURLToPath(import.meta.url)),
 );
+
+function applyAgentProxyCompatibility(
+  agentId: string,
+  env: NodeJS.ProcessEnv,
+): void {
+  if (getAgentDef(agentId)?.proxyEnvCompatibility !== 'httpx') return;
+  const noProxy = env.NO_PROXY ?? env.no_proxy;
+  if (noProxy == null) return;
+
+  const normalized = normalizeNoProxyForHttpx(noProxy);
+  delete env.NO_PROXY;
+  delete env.no_proxy;
+  if (normalized == null) return;
+  env.NO_PROXY = normalized;
+  if (process.platform !== 'win32') env.no_proxy = normalized;
+}
 
 // Build the env passed to spawn() for a given agent adapter.
 //
@@ -161,11 +182,11 @@ export function spawnEnvForAgent(
       const opencodeBin = resolveAmrOpenCodeExecutable(env);
       if (opencodeBin) env.VELA_OPENCODE_BIN = opencodeBin;
     }
-    return finalizeRuntimeEnv(env, sandboxRuntime);
+    return finalizeRuntimeEnv(agentId, env, sandboxRuntime);
   }
   if (agentId === 'claude') {
     applyClaudeTaskToolEnv(env);
-    return finalizeRuntimeEnv(env, sandboxRuntime);
+    return finalizeRuntimeEnv(agentId, env, sandboxRuntime);
   }
   if (agentId === 'codex') {
     // Name the rollout root the codex CLI is about to write into. Child
@@ -181,7 +202,7 @@ export function spawnEnvForAgent(
       const home = os.homedir();
       if (home) env.CODEX_HOME = path.join(home, '.codex');
     }
-    return finalizeRuntimeEnv(env, sandboxRuntime);
+    return finalizeRuntimeEnv(agentId, env, sandboxRuntime);
   }
   if (agentId === 'opencode' || agentId === 'byok-opencode') {
     stripKeysCaseInsensitive(env, [
@@ -201,7 +222,7 @@ export function spawnEnvForAgent(
     if (!env.OPENCODE_DISABLE_PROJECT_CONFIG?.trim()) {
       env.OPENCODE_DISABLE_PROJECT_CONFIG = 'true';
     }
-    return finalizeRuntimeEnv(env, sandboxRuntime);
+    return finalizeRuntimeEnv(agentId, env, sandboxRuntime);
   }
   if (agentId === 'mimo') {
     stripKeysCaseInsensitive(env, [
@@ -217,9 +238,9 @@ export function spawnEnvForAgent(
     if (!env.MIMOCODE_DISABLE_PROJECT_CONFIG?.trim()) {
       env.MIMOCODE_DISABLE_PROJECT_CONFIG = 'true';
     }
-    return finalizeRuntimeEnv(env, sandboxRuntime);
+    return finalizeRuntimeEnv(agentId, env, sandboxRuntime);
   }
-  return finalizeRuntimeEnv(env, sandboxRuntime);
+  return finalizeRuntimeEnv(agentId, env, sandboxRuntime);
 }
 
 export function openDesignAmrRunAttempt(input: {
@@ -334,11 +355,13 @@ function reapplySandboxRuntimeEnv(
 }
 
 function finalizeRuntimeEnv(
+  agentId: string,
   env: NodeJS.ProcessEnv,
   sandboxRuntime: SandboxRuntimeConfig | null,
 ): NodeJS.ProcessEnv {
   const finalizedEnv = reapplySandboxRuntimeEnv(env, sandboxRuntime);
   applyWindowsUserCacheEnv(finalizedEnv);
+  applyAgentProxyCompatibility(agentId, finalizedEnv);
   return finalizedEnv;
 }
 
