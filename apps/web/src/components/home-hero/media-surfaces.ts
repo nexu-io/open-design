@@ -1,17 +1,21 @@
 import type { InputFieldSpec, ProjectKind } from '@open-design/contracts';
-import type { AudioKind, ProjectMetadata, PromptTemplateSummary } from '../../types';
+import type {
+  AudioKind,
+  MediaProviderCredentials,
+  ProjectMetadata,
+  PromptTemplateSummary,
+} from '../../types';
 import {
   AUDIO_DURATIONS_SEC,
   AUDIO_MODELS_BY_KIND,
   DEFAULT_AUDIO_MODEL,
-  DEFAULT_IMAGE_MODEL,
-  DEFAULT_VIDEO_MODEL,
   IMAGE_MODELS,
   MEDIA_ASPECTS,
   type MediaModel,
   VIDEO_LENGTHS_SEC,
   VIDEO_MODELS,
 } from '../../media/models';
+import { resolveDefaultMediaModel } from '../../media/default-model';
 
 export type HomeComposerMediaSurface = 'image' | 'video' | 'hyperframes' | 'audio';
 export const ELEVENLABS_DEFAULT_VOICE_ID = '21m00Tcm4TlvDq8ikWAM';
@@ -53,18 +57,20 @@ export function buildHomeMediaComposer(
     elevenLabsVoiceWarning?: string | null;
     elevenLabsVoicesLoading?: boolean;
     imageModels?: MediaModel[];
+    mediaProviders?: Record<string, MediaProviderCredentials>;
   } = {},
 ): HomeMediaComposerState {
   const imageModels = options.imageModels ?? IMAGE_MODELS;
   const inputs = normalizeHomeMediaInputs(
     surface,
     {
-      ...defaultInputsForSurface(surface, promptTemplates),
+      ...defaultInputsForSurface(surface, promptTemplates, options.mediaProviders),
       ...seedInputs,
     },
     promptTemplates,
     voiceOptions,
     imageModels,
+    options.mediaProviders,
   );
   const fields = fieldsForSurface(surface, inputs, voiceOptions, options, imageModels);
   const editableFieldNames = fields.map((field) => field.name);
@@ -85,6 +91,7 @@ export function normalizeHomeMediaInputs(
   promptTemplates: PromptTemplateSummary[] = [],
   voiceOptions: Array<{ voiceId: string; name: string }> = [],
   imageModels: MediaModel[] = IMAGE_MODELS,
+  mediaProviders?: Record<string, MediaProviderCredentials>,
 ): Record<string, unknown> {
   if (surface === 'image') {
     const ratio = validOption(stringValue(raw.ratio) || stringValue(raw.aspect), MEDIA_ASPECTS, '16:9');
@@ -95,7 +102,11 @@ export function normalizeHomeMediaInputs(
       aspect: ratio,
       template: validTemplateId(surface, stringValue(raw.template), promptTemplates),
       designSystem: stringValue(raw.designSystem) || 'the active project design system',
-      model: validOption(stringValue(raw.model), imageModels.map((m) => m.id), DEFAULT_IMAGE_MODEL),
+      model: validOption(
+        stringValue(raw.model),
+        imageModels.map((m) => m.id),
+        resolveDefaultMediaModel('image', mediaProviders),
+      ),
       ratio,
       resolution: validOption(stringValue(raw.resolution), MEDIA_RESOLUTIONS, DEFAULT_MEDIA_RESOLUTION),
     };
@@ -112,9 +123,7 @@ export function normalizeHomeMediaInputs(
       model: validOption(
         stringValue(raw.model),
         VIDEO_MODELS.filter((m) => m.id !== 'hyperframes-html').map((m) => m.id),
-        DEFAULT_VIDEO_MODEL === 'hyperframes-html'
-          ? VIDEO_MODELS.find((m) => m.id !== 'hyperframes-html')?.id ?? DEFAULT_VIDEO_MODEL
-          : DEFAULT_VIDEO_MODEL,
+        resolveDefaultMediaModel('video', mediaProviders),
       ),
       ratio,
       duration: validNumber(raw.duration, VIDEO_LENGTHS_SEC, 5),
@@ -311,12 +320,13 @@ function queryTemplateForSurface(surface: HomeComposerMediaSurface, inputs: Reco
 function defaultInputsForSurface(
   surface: HomeComposerMediaSurface,
   promptTemplates: PromptTemplateSummary[],
+  mediaProviders?: Record<string, MediaProviderCredentials>,
 ): Record<string, unknown> {
   if (surface === 'image') {
     return {
       template: firstTemplateId(surface, promptTemplates),
       designSystem: 'the active project design system',
-      model: DEFAULT_IMAGE_MODEL,
+      model: resolveDefaultMediaModel('image', mediaProviders),
       ratio: '16:9',
       resolution: DEFAULT_MEDIA_RESOLUTION,
     };
@@ -325,9 +335,7 @@ function defaultInputsForSurface(
     return {
       template: firstTemplateId(surface, promptTemplates),
       designSystem: 'the active project design system',
-      model: DEFAULT_VIDEO_MODEL === 'hyperframes-html'
-        ? VIDEO_MODELS.find((m) => m.id !== 'hyperframes-html')?.id ?? DEFAULT_VIDEO_MODEL
-        : DEFAULT_VIDEO_MODEL,
+      model: resolveDefaultMediaModel('video', mediaProviders),
       ratio: '16:9',
       duration: 5,
       resolution: DEFAULT_MEDIA_RESOLUTION,

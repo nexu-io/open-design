@@ -23,4 +23,15 @@ describe('Home image composer metadata', () => {
       imageModel: 'gpt-image-2',
     });
   });
+
+  it('seeds the configured provider model instead of the Cloud default', () => {
+    const composer = buildHomeMediaComposer('image', [], {}, [], {
+      mediaProviders: { openai: { apiKey: 'sk-test', baseUrl: '' } },
+    });
+
+    expect(metadataForHomeMediaComposer('image', composer.inputs, [])).toEqual({
+      kind: 'image',
+      imageModel: 'gpt-image-2',
+    });
+  });
 });
