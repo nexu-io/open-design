@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
 
 export const uk: Dict = {
+  "chat.runError.title.contentFiltered": "Вміст не пройшов перевірку безпеки",
+  "chat.runError.contentFilteredMessage": "Змініть опис або пов’язані матеріали й надішліть запит знову.",
   "collab.contentUpdate.available": "Нова версія в хмарі",
   "collab.contentUpdate.updating": "Оновлення…",
   "collab.contentUpdate.askAgain": "Відновити сповіщення про оновлення",

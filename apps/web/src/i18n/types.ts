@@ -2953,6 +2953,8 @@ export interface Dict {
    * 是产品文档里的两行,不是一句话的两种说法 —— 一个说「用不了」,一个说「做不了」。
    */
   'chat.runError.title.modelCapabilityUnsupported': string;
+  'chat.runError.title.contentFiltered': string;
+  'chat.runError.contentFilteredMessage': string;
   'chat.runError.title.upstreamUnavailable': string;
   'chat.runError.title.toolLoop': string;
   'chat.runError.title.outputInvalid': string;

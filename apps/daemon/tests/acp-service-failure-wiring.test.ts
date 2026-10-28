@@ -129,6 +129,44 @@ describe('ACP model-service failure classes — server wiring', () => {
     restoreEnv(originalEnv);
   });
 
+  it('persists content-filter classification and suppresses automatic retries after an ACP fatal', async () => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-acp-content-filter-bin-'));
+    await writeAcpCliShim(binDir, AGENT_BIN, {
+      logPath: path.join(binDir, 'invocations.jsonl'),
+      cliVersion: '0.38.0',
+      promptErrorMessage: 'opencode event stream: ' + JSON.stringify({
+        properties: {
+          error: {
+            name: 'ContentFilterError',
+            data: { message: "The response was blocked by the provider's content filter" },
+          },
+        },
+      }),
+      // A generic transport retry hint must not retry a known content refusal.
+      promptErrorRetryable: true,
+    });
+    isolateAgentDetection(binDir, agentHomeDir);
+    clearTelemetryEnv();
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    await putConfig(started.url, { agentId: AGENT_ID });
+    await detectAgents(started.url);
+
+    const conversationId = await createConversation(started.url);
+    const run = await sendRunAndWait(started.url, conversationId, 'draft a landing page');
+    expect(run.status).toBe('failed');
+    expect(await readPersistedRunErrorEvent(started.url, conversationId)).toMatchObject({
+      failureCategory: 'content_filter',
+      failureDetail: 'content_filter',
+    });
+    const events = await readRunEvents(run.eventsLogPath);
+    expect(events.some((event) => event.event === 'run_retry_attempted')).toBe(false);
+    expect(events.slice().reverse().find((event) => event.event === 'end')?.data).toMatchObject({
+      failureCategory: 'content_filter',
+      failureDetail: 'content_filter',
+      retryable: false,
+    });
+  });
+
   // The headline case. `UPSTREAM_UNAVAILABLE` is the one code the web has an
   // upstream-outage card for; without it this run reaches the client as
   // `AGENT_EXECUTION_FAILED`, whose card has a null messageKey — which hands the

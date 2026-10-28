@@ -1,6 +1,8 @@
 import type { Dict } from "../types";
 
 export const zhTW: Dict = {
+  "chat.runError.title.contentFiltered": "內容未通過安全檢查",
+  "chat.runError.contentFilteredMessage": "請調整描述或相關素材後重新傳送。",
   "collab.contentUpdate.available": "雲端有新版本",
   "collab.contentUpdate.updating": "正在更新…",
   "collab.contentUpdate.askAgain": "恢復更新提示",

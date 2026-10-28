@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
 
 export const hu: Dict = {
+  "chat.runError.title.contentFiltered": "A tartalom nem ment át a biztonsági ellenőrzésen",
+  "chat.runError.contentFilteredMessage": "Módosítsd a leírást vagy a kapcsolódó anyagokat, majd küldd el újra.",
   "collab.contentUpdate.available": "Új felhőverzió",
   "collab.contentUpdate.updating": "Frissítés…",
   "collab.contentUpdate.askAgain": "Frissítési értesítések visszaállítása",

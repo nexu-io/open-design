@@ -18,6 +18,7 @@ import type {
 } from '@open-design/contracts/analytics';
 import {
   AMR_CONTINUATION_ERROR_CODE,
+  isContentFilterError,
   isMembershipConcurrencyLimitFailure,
   isModelWindowLimitFailure,
 } from '@open-design/contracts';
@@ -927,7 +928,8 @@ function classification(
     'stream_disconnected',
     'network_error',
   ].includes(failure_detail);
-  const provider = (failure_category === 'model_unavailable' && !localModel)
+  const provider = failure_category === 'content_filter'
+    || (failure_category === 'model_unavailable' && !localModel)
     || (failure_category === 'upstream_unavailable' && !transport && !clientRequest)
     || (failure_category === 'rate_limit' && !policy);
   const environment = [
@@ -1092,6 +1094,14 @@ function classifyRunFailureBase(
       true,
       'retry',
     );
+  }
+
+  // A provider refusal is deterministic even when the transport labels the
+  // error retryable or reports an ACP fatal close. Claim it before auth,
+  // upstream and process-exit fallbacks can obscure the actionable cause.
+  if (isContentFilterError(text)) {
+    return classification('content_filter', 'content_filter',
+      inferFailureStageFromEvents(events, 'first_token_wait'), false, 'none');
   }
 
   // Risk control suspended the account. Claimed first because nothing further

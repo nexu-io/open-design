@@ -100,6 +100,13 @@ interface SpecCell {
 
 const SPEC_CELLS: readonly SpecCell[] = [
   {
+    label: 'S14 · 内容被安全策略拒绝',
+    code: 'AGENT_EXECUTION_FAILED',
+    failureDetail: 'content_filter',
+    title: '内容未通过安全检查',
+    body: '请调整描述或相关素材后重新发送。',
+  },
+  {
     label: 'S07 · 模型不可用',
     code: 'AMR_MODEL_UNAVAILABLE',
     title: '当前模型不可用',
@@ -266,5 +273,19 @@ describe('S30 · region copy follows the structured verdict, not raw English', (
     const card = screen.getByTestId('chat-run-error-card');
     expect(card.textContent).not.toContain('当前地区暂不支持此服务');
     expect(card.textContent).not.toContain('服务商暂不向你所在的地区提供服务，当前任务无法继续。');
+  });
+});
+
+describe('S14 keeps the polished copy for failures persisted by older clients', () => {
+  it('recognizes the raw provider refusal behind fatal_rpc_error', () => {
+    renderFailure('AGENT_EXECUTION_FAILED', 'fatal_rpc_error',
+      'json-rpc id 4: opencode event stream: {"properties":{"error":{"name":"ContentFilterError",'
+      + '"data":{"message":"The response was blocked by the provider content filter"}}}}');
+    const card = screen.getByTestId('chat-run-error-card');
+    expect(card.textContent).toContain('内容未通过安全检查');
+    expect(screen.getByTestId('chat-run-error-description').textContent)
+      .toBe('请调整描述或相关素材后重新发送。');
+    expect(card.textContent).not.toContain('ContentFilterError');
+    expect(card.textContent).not.toContain('模型服务暂不可用');
   });
 });

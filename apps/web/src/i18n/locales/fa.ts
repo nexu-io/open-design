@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
 
 export const fa: Dict = {
+  "chat.runError.title.contentFiltered": "محتوا از بررسی ایمنی عبور نکرد",
+  "chat.runError.contentFilteredMessage": "لطفاً توضیحات یا مطالب مرتبط را اصلاح کنید و دوباره ارسال کنید.",
   "collab.contentUpdate.available": "نسخه جدید ابری موجود است",
   "collab.contentUpdate.updating": "در حال به‌روزرسانی…",
   "collab.contentUpdate.askAgain": "فعال‌کردن دوباره اعلان‌های به‌روزرسانی",

@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
 
 export const ar: Dict = {
+  "chat.runError.title.contentFiltered": "لم يجتز المحتوى فحص السلامة",
+  "chat.runError.contentFilteredMessage": "يرجى تعديل الوصف أو المواد ذات الصلة ثم إعادة الإرسال.",
   "collab.contentUpdate.available": "يتوفر إصدار سحابي جديد",
   "collab.contentUpdate.updating": "جارٍ التحديث…",
   "collab.contentUpdate.askAgain": "استعادة تنبيهات التحديث",

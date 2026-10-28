@@ -1,6 +1,8 @@
 import type { Dict } from "../types";
 
 export const zhCN: Dict = {
+  "chat.runError.title.contentFiltered": "内容未通过安全检查",
+  "chat.runError.contentFilteredMessage": "请调整描述或相关素材后重新发送。",
   "collab.contentUpdate.available": "其他设备有更新",
   "collab.contentUpdate.updating": "正在同步…",
   "collab.contentUpdate.askAgain": "恢复更新提示",

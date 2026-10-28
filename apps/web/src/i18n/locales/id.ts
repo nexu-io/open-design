@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
 
 export const id: Dict = {
+  "chat.runError.title.contentFiltered": "Konten tidak lolos pemeriksaan keamanan",
+  "chat.runError.contentFilteredMessage": "Sesuaikan deskripsi atau materi terkait, lalu kirim ulang.",
   "collab.contentUpdate.available": "Versi cloud baru tersedia",
   "collab.contentUpdate.updating": "Memperbarui…",
   "collab.contentUpdate.askAgain": "Pulihkan pemberitahuan pembaruan",

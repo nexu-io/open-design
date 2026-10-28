@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
 
 export const tr: Dict = {
+  "chat.runError.title.contentFiltered": "İçerik güvenlik kontrolünü geçemedi",
+  "chat.runError.contentFilteredMessage": "Lütfen açıklamayı veya ilgili materyalleri düzenleyip tekrar gönderin.",
   "collab.contentUpdate.available": "Bulutta yeni sürüm var",
   "collab.contentUpdate.updating": "Güncelleniyor…",
   "collab.contentUpdate.askAgain": "Güncelleme bildirimlerini geri aç",

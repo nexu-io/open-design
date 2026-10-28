@@ -295,6 +295,7 @@ export type TrackingRunFailureCategory =
   | 'entitlement_required'
   | 'model_unavailable'
   | 'prompt_too_large'
+  | 'content_filter'
   | 'upstream_unavailable'
   | 'timeout'
   | 'empty_output'
@@ -303,6 +304,7 @@ export type TrackingRunFailureCategory =
   | 'user_cancel'
   | 'unknown';
 export type TrackingRunFailureDetail =
+  | 'content_filter'
   | 'auth_required'
   | 'stale_profile'
   | 'refresh_token_reused'

@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { decideSafeRunRetry } from '../src/run-retry-policy.js';
+
 vi.mock('../src/integrations/vela-errors.js', () => ({
   classifyAmrAccountFailure(text: string) {
     const value = String(text || '').toLowerCase();
@@ -117,6 +119,50 @@ function classify(
 }
 
 describe('classifyRunFailure', () => {
+  // Sanitized shape from the Windows stable 0.26.1 diagnostic bundle.
+  const contentFilterMessage = 'json-rpc id 4: opencode event stream: '
+    + JSON.stringify({
+      type: 'session.error',
+      properties: {
+        error: {
+          name: 'ContentFilterError',
+          data: { message: "The response was blocked by the provider's content filter" },
+        },
+      },
+    });
+
+  it.each(['amr', 'byok-opencode'])('names the provider content refusal before the ACP fatal fallback (%s)', (agentId) => {
+    const failure = classifyForAgent(agentId, 'AGENT_EXECUTION_FAILED', contentFilterMessage, [
+      errorEvent('AGENT_EXECUTION_FAILED', contentFilterMessage, true),
+      { event: 'diagnostic', data: { type: 'runtime_close', rpc_close_reason: 'fatal_rpc_error' } },
+    ]);
+    expect(failure).toMatchObject({
+      failure_category: 'content_filter',
+      failure_detail: 'content_filter',
+      failure_mechanism: 'provider_rejection',
+      failure_domain: 'provider_control_plane',
+      retryable: false,
+      user_action: 'none',
+    });
+    if (!failure) throw new Error('Expected a failed-run classification');
+    expect(decideSafeRunRetry({ result: 'failed', attemptCount: 0, failure })).toMatchObject({
+      shouldRetry: false,
+    });
+  });
+
+  it('does not turn a content-filter service outage into a content refusal', () => {
+    expect(classify('UPSTREAM_UNAVAILABLE', '503 service unavailable: content filter service unavailable'))
+      .toMatchObject({ failure_category: 'upstream_unavailable', retryable: true });
+  });
+
+  it('ignores a previous attempt content refusal when classifying a later upstream outage', () => {
+    expect(classify('UPSTREAM_UNAVAILABLE', '503 service unavailable', [
+      errorEvent('AGENT_EXECUTION_FAILED', contentFilterMessage),
+      { event: 'start', data: {} },
+      errorEvent('UPSTREAM_UNAVAILABLE', '503 service unavailable'),
+    ])).toMatchObject({ failure_category: 'upstream_unavailable', retryable: true });
+  });
+
   it('keeps a blocked task non-retryable without attributing its cause to a clean child exit', () => {
     expect(classifyRunFailure({
       result: 'failed',

@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
 
 export const th: Dict = {
+  "chat.runError.title.contentFiltered": "เนื้อหาไม่ผ่านการตรวจสอบความปลอดภัย",
+  "chat.runError.contentFilteredMessage": "โปรดปรับคำอธิบายหรือสื่อที่เกี่ยวข้องแล้วส่งอีกครั้ง",
   "collab.contentUpdate.available": "มีเวอร์ชันใหม่บนคลาวด์",
   "collab.contentUpdate.updating": "กำลังอัปเดต…",
   "collab.contentUpdate.askAgain": "เปิดการแจ้งเตือนอัปเดตอีกครั้ง",

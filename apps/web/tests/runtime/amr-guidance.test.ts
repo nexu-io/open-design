@@ -710,3 +710,23 @@ describe('resolveRunFailureUi', () => {
     }
   });
 });
+
+describe('content refusal guidance', () => {
+  it.each(['amr', 'byok-opencode', 'claude', 'codex', 'antigravity'])(
+    'uses the S14 copy for %s without offering a transient retry verdict', (agentId) => {
+      expect(resolveRunFailureUi('AGENT_EXECUTION_FAILED', 'content_filter', agentId))
+        .toMatchObject({
+          titleKey: 'chat.runError.title.contentFiltered',
+          messageKey: 'chat.runError.contentFilteredMessage',
+          primaryAction: 'contact-support',
+          secondaryRetry: false,
+        });
+    },
+  );
+
+  it('keeps a filter-service outage on the upstream-unavailable copy', () => {
+    expect(resolveRunFailureUi('UPSTREAM_UNAVAILABLE', 'upstream_5xx', 'amr',
+      '503 service unavailable: content filter service unavailable'))
+      .toMatchObject({ titleKey: 'chat.runError.title.upstreamUnavailable' });
+  });
+});

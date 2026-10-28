@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
 
 export const en: Dict = {
+  "chat.runError.title.contentFiltered": "Content did not pass the safety check",
+  "chat.runError.contentFilteredMessage": "Please adjust the description or related materials and send again.",
   "collab.contentUpdate.available": "Updates on another device",
   "collab.contentUpdate.updating": "Syncing…",
   "collab.contentUpdate.askAgain": "Restore update prompts",

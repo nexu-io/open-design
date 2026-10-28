@@ -4,6 +4,7 @@
 // its own module so ChatPane / ProjectView / AssistantMessage can import it
 // without a circular dependency.
 import {
+  isContentFilterError,
   isModelWindowLimitFailure,
   readMembershipConcurrencyResetAt,
   readModelWindowResetAt,
@@ -314,6 +315,7 @@ export type RunFailureMessageKey =
   | 'chat.runError.modelWindowLimitMessageNoTime'
   | 'chat.runError.membershipConcurrencyLimitMessage'
   | 'chat.runError.membershipConcurrencyLimitMessageNoTime'
+  | 'chat.runError.contentFilteredMessage'
   | 'chat.runError.upstreamUnavailableMessage'
   | 'chat.runError.toolLoopMessage'
   | 'chat.runError.outputInvalidMessage'
@@ -493,6 +495,7 @@ export type RunFailureTitleKey =
   // 「模型不存在」与「模型能力不支持」分列两行,S07 的「模型不可用」又是第三行;
   // 三句话不能共用一个键,否则谁改都盖到别人头上。
   | 'chat.runError.title.modelCapabilityUnsupported'
+  | 'chat.runError.title.contentFiltered'
   | 'chat.runError.title.upstreamUnavailable'
   | 'chat.runError.title.toolLoop'
   | 'chat.runError.title.outputInvalid'
@@ -1644,6 +1647,16 @@ function resolveRunFailureUiIgnoringSelfPromotion(
   rawMessage?: string | null,
   verdict?: RunFailureDaemonVerdict | null,
 ): RunFailureUi {
+  // Older clients persisted the provider's refusal as a generic ACP fatal.
+  // Recover the approved copy without changing unrelated named failures.
+  const legacyUnclassified = detail == null || detail === 'unknown'
+    || detail === 'fatal_rpc_error' || detail === 'stream_error' || detail === 'execution_failed';
+  if (detail === 'content_filter' || (legacyUnclassified && isContentFilterError(rawMessage))) {
+    return contactSupportOnly(
+      'chat.runError.title.contentFiltered',
+      'chat.runError.contentFilteredMessage',
+    );
+  }
   // An ACP agent CLI that answered `initialize` and then refused to open a
   // session. Resolved before every other branch, and before the static
   // agent-agnostic table, because this code carries a prescription of its own

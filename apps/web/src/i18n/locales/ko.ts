@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
 
 export const ko: Dict = {
+  "chat.runError.title.contentFiltered": "콘텐츠가 안전 검사를 통과하지 못했습니다",
+  "chat.runError.contentFilteredMessage": "설명이나 관련 자료를 수정한 후 다시 보내 주세요.",
   "collab.contentUpdate.available": "클라우드에 새 버전이 있습니다",
   "collab.contentUpdate.updating": "업데이트 중…",
   "collab.contentUpdate.askAgain": "업데이트 알림 복원",
