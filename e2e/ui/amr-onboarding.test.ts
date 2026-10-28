@@ -96,10 +96,8 @@ test('[P0] @critical onboarding lets AMR Cloud sign in and complete setup after 
   await expect
     .poll(() => page.evaluate(() => window.__amrOnboardingStatusCalls ?? 0))
     .toBeGreaterThan(statusCallsBeforeLogin);
-  // Login success lands on the model-source chooser. Hosted is recommended
-  // and selected by default; accepting it completes the streamlined flow.
-  await expectModelSourceChooser(page);
-  await continueWithModelSource(page, /OpenDesign Hosted/i);
+  // Login success completes onboarding directly with OpenDesign Hosted —
+  // there is no model-source chooser step anymore.
   await expectOnboardingFinished(page);
   await pollStoredConfig(page).toMatchObject({
     agentId: 'amr',
@@ -129,7 +127,6 @@ test('[P0] signed-out onboarding can open Local CLI setup without Cloud authoriz
 
   await page.getByRole('button', { name: /^Back$|返回/i }).click();
   await expect(cloudPrimaryButton(page)).toHaveText(/Sign in \/ Sign up|登录 \/ 注册/i);
-  await expect(page.getByRole('radiogroup')).toHaveCount(0);
 });
 
 test('[P0] signed-out onboarding can open BYOK setup without Cloud authorization', async ({ page }) => {
@@ -149,7 +146,6 @@ test('[P0] signed-out onboarding can open BYOK setup without Cloud authorization
 
   await page.getByRole('button', { name: /^Back$|返回/i }).click();
   await expect(cloudPrimaryButton(page)).toHaveText(/Sign in \/ Sign up|登录 \/ 注册/i);
-  await expect(page.getByRole('radiogroup')).toHaveCount(0);
 });
 
 test('[P0] Cloud status loading does not block signed-out Local CLI or BYOK setup', async ({ page }) => {
@@ -202,7 +198,6 @@ test('[P0] delayed active Cloud login stays out of Local setup and resumes after
   await expect(localPanel).toBeVisible();
   await expect(continueButton).toBeEnabled();
   await expect(continueButton).not.toHaveAttribute('aria-disabled', 'true');
-  await expect(page.getByRole('radiogroup')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Cancel sign-in/i })).toHaveCount(0);
   await expectStableCount(() => localPanel.count(), 1, {
     timeout: 2_500,
@@ -214,7 +209,12 @@ test('[P0] delayed active Cloud login stays out of Local setup and resumes after
   await page.evaluate(() => {
     window.__amrOnboardingCompleteLogin = true;
   });
-  await expectModelSourceChooser(page);
+  // The resumed login completes onboarding directly with OpenDesign Hosted.
+  await expectOnboardingFinished(page);
+  await pollStoredConfig(page).toMatchObject({
+    agentId: 'amr',
+    onboardingCompleted: true,
+  });
 });
 
 test('[P0] @critical onboarding Local CLI card lets the user pick an agent model before continuing', async ({ page }) => {
@@ -241,9 +241,9 @@ test('[P0] @critical onboarding Local CLI card lets the user pick an agent model
 
   await gotoOnboarding(page);
 
-  // Choose Local Agent after Cloud identity is resolved. Scanning auto-selects
-  // the default agent (codex), so its live model picker is available.
-  await openModelSourceSetup(page, /Local Agent/i);
+  // Open Local AI setup from the welcome page. Scanning auto-selects the
+  // default agent (codex), so its live model picker is available.
+  await openModelSourceSetup(page, /Local AI|本地 AI/i);
   const localPanel = page.locator('.onboarding-view__setup-panel');
   await expect(localPanel).toBeVisible();
   await selectOnboardingOption(localPanel, 'Model', 'GLM 5');
@@ -255,7 +255,7 @@ test('[P0] @critical onboarding Local CLI card lets the user pick an agent model
   );
 
   await page.getByRole('button', { name: /^Back$|返回/i }).click();
-  await expectModelSourceChooser(page);
+  await expect(connectLandingHeading(page)).toBeVisible();
 });
 
 test('[P0] onboarding Local CLI path completes setup with the selected agent model', async ({ page }) => {
@@ -283,7 +283,7 @@ test('[P0] onboarding Local CLI path completes setup with the selected agent mod
   });
   await gotoOnboarding(page);
 
-  await openModelSourceSetup(page, /Local Agent/i);
+  await openModelSourceSetup(page, /Local AI|本地 AI/i);
   const localPanel = page.locator('.onboarding-view__setup-panel');
   await expect(localPanel).toBeVisible();
   await selectOnboardingOption(localPanel, 'Model', 'GLM 5');
@@ -312,7 +312,7 @@ test('[P0] onboarding Local CLI path stays gated when no local CLI is available'
   await seedOnboardingConfig(page, config);
   await gotoOnboarding(page);
 
-  await openModelSourceSetup(page, /Local Agent/i);
+  await openModelSourceSetup(page, /Local AI|本地 AI/i);
   await expect(page.getByText('Local CLI')).toBeVisible();
   await expect(page.getByText(/No agents detected|No local CLI detected/i)).toBeVisible();
 
@@ -332,7 +332,7 @@ test('[P0] onboarding Local CLI path stays gated while local agent scan is still
   await seedOnboardingConfig(page, config);
   await gotoOnboarding(page);
 
-  await openModelSourceSetup(page, /Local Agent/i);
+  await openModelSourceSetup(page, /Local AI|本地 AI/i);
   await expect(page.getByRole('button', { name: /Scanning|扫描中/i })).toBeVisible();
 
   const continueButton = page.getByRole('button', { name: /^Continue$/i });
@@ -354,7 +354,7 @@ test('[P0] onboarding supports Local CLI when the AMR agent is unavailable', asy
   // No AMR runtime card exists anymore — the landing cloud button is the only
   // AMR affordance, and there is no "AMR Cloud" named control.
   await expect(page.getByRole('button', { name: /AMR Cloud/i })).toHaveCount(0);
-  await openModelSourceSetup(page, /Local Agent/i);
+  await openModelSourceSetup(page, /Local AI|本地 AI/i);
   await expect(page.getByText('Local CLI')).toBeVisible();
   await expect(page.getByRole('button', { name: /^Continue$/i })).toBeVisible();
 });
@@ -481,12 +481,16 @@ test('[P0] onboarding reload resumes an active Cloud login through completion', 
     window.__amrOnboardingCompleteLogin = true;
   });
 
-  await expectModelSourceChooser(page);
+  await expectOnboardingFinished(page);
   await expect(page.getByRole('button', { name: /Cancel sign-in/i })).toHaveCount(0);
+  await pollStoredConfig(page).toMatchObject({
+    agentId: 'amr',
+    onboardingCompleted: true,
+  });
 });
 
 // The AMR card + per-runtime model picker on the connect step were removed.
-// A signed-in user now accepts Hosted on the model-source chooser.
+// A signed-in user's "Continue (signed in)" now completes setup with Hosted.
 test('[P0] @critical onboarding signed-in AMR path finishes setup with the AMR runtime', async ({ page }) => {
   const config = await wireOnboardingMocks(page, {
     amrAvailable: true,
@@ -499,8 +503,6 @@ test('[P0] @critical onboarding signed-in AMR path finishes setup with the AMR r
   const primary = cloudPrimaryButton(page);
   await expect(primary).toHaveText(/Continue \(signed in\)|继续（已登录）/i);
   await clickCloudPrimary(page);
-  await expectModelSourceChooser(page);
-  await continueWithModelSource(page, /OpenDesign Hosted/i);
   await expectOnboardingFinished(page);
   await pollStoredConfig(page).toMatchObject({
     agentId: 'amr',
@@ -526,8 +528,6 @@ test('[P0] onboarding AMR runtime selection carries into the first Home run requ
   await gotoOnboarding(page);
 
   await clickCloudPrimary(page);
-  await expectModelSourceChooser(page);
-  await continueWithModelSource(page, /OpenDesign Hosted/i);
   await expectOnboardingFinished(page);
 
   const runBodies: Array<Record<string, unknown>> = [];
@@ -573,7 +573,6 @@ test('[P0] completed BYOK setup stays usable while the unrelated Cloud session i
   await dismissPrivacyDialog(page);
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
-  await expect(page.getByRole('heading', { name: /Choose your model source|选择模型来源/i })).toHaveCount(0);
   // PRODUCT INVARIANT: Cloud identity gates OpenDesign Cloud execution only.
   // A configured BYOK runtime neither redirects to onboarding nor starts a
   // passive Cloud login merely because the independent AMR status is signed out.
@@ -870,7 +869,7 @@ for (const destination of [
   });
 }
 
-test('[P0] onboarding configuration Back returns to the source chooser with the test gate locked', async ({ page }) => {
+test('[P0] onboarding configuration Back returns to the welcome page with the test gate locked', async ({ page }) => {
   const config = await wireOnboardingMocks(page, {
     amrAvailable: true,
     initialLoggedIn: true,
@@ -879,20 +878,15 @@ test('[P0] onboarding configuration Back returns to the source chooser with the 
   await seedOnboardingConfig(page, config);
   await gotoOnboarding(page);
 
-  await clickCloudPrimary(page);
-  await expectModelSourceChooser(page);
-  await continueWithModelSource(page, /Bring Your Own Key/i);
+  await openModelSourceSetup(page, /API Key/i);
   await expect(onboardingByokPanel(page)).toBeVisible();
 
   const continueButton = page.getByRole('button', { name: /^Continue$/i });
   await expect(continueButton).toHaveAttribute('aria-disabled', 'true');
   await expect(page.getByRole('heading', { name: /Bring your own key|自己的模型 Key/i })).toBeVisible();
   await page.getByRole('button', { name: /^Back$/i }).click();
-  await expectModelSourceChooser(page);
-  await expect(page.getByRole('radio', { name: /Bring Your Own Key/i })).toHaveAttribute(
-    'aria-checked',
-    'true',
-  );
+  await expect(connectLandingHeading(page)).toBeVisible();
+  await expect(cloudPrimaryButton(page)).toHaveText(/Continue \(signed in\)|继续（已登录）/i);
 });
 
 test('[P0] @critical onboarding BYOK path can fetch models, test the provider, and complete setup', async ({ page }) => {
@@ -929,7 +923,7 @@ test('[P0] @critical onboarding BYOK path can fetch models, test the provider, a
   await seedOnboardingConfig(page, config);
   await gotoOnboarding(page);
 
-  await openModelSourceSetup(page, /Bring Your Own Key/i);
+  await openModelSourceSetup(page, /API Key/i);
   const byokPanel = onboardingByokPanel(page);
   await expect(byokPanel).toBeVisible();
 
@@ -992,7 +986,7 @@ test('[P0] onboarding BYOK Continue tests the configuration and retries after fa
   await seedOnboardingConfig(page, config);
   await gotoOnboarding(page);
 
-  await openModelSourceSetup(page, /Bring Your Own Key/i);
+  await openModelSourceSetup(page, /API Key/i);
   const byokPanel = onboardingByokPanel(page);
   await expect(byokPanel).toBeVisible();
 
@@ -1039,7 +1033,7 @@ test('[P0] onboarding BYOK path supports Anthropic model selection and API key v
   await seedOnboardingConfig(page, config);
   await gotoOnboarding(page);
 
-  await openModelSourceSetup(page, /Bring Your Own Key/i);
+  await openModelSourceSetup(page, /API Key/i);
   await expect(page.getByRole('tab', { name: /^Anthropic$/i })).toHaveAttribute('aria-selected', 'true');
 
   const apiKeyField = onboardingField(page, 'API key');
@@ -1106,7 +1100,7 @@ test('[P0] onboarding BYOK successful test is invalidated when connection settin
   await seedOnboardingConfig(page, config);
   await gotoOnboarding(page);
 
-  await openModelSourceSetup(page, /Bring Your Own Key/i);
+  await openModelSourceSetup(page, /API Key/i);
   const byokPanel = onboardingByokPanel(page);
   const continueButton = page.getByRole('button', { name: /^Continue$/i });
 
@@ -1161,7 +1155,7 @@ test('[P0] onboarding BYOK successful test is invalidated when Base URL or model
   await seedOnboardingConfig(page, config);
   await gotoOnboarding(page);
 
-  await openModelSourceSetup(page, /Bring Your Own Key/i);
+  await openModelSourceSetup(page, /API Key/i);
   const byokPanel = onboardingByokPanel(page);
   const continueButton = page.getByRole('button', { name: /^Continue$/i });
 
@@ -1478,24 +1472,13 @@ function connectLandingHeading(page: Page): Locator {
   return page.getByRole('heading', { name: /Welcome to OpenDesign|欢迎使用 OpenDesign/i });
 }
 
-async function expectModelSourceChooser(page: Page) {
-  await expect(
-    page.getByRole('heading', { name: /Choose your model source|选择模型来源/i }),
-  ).toBeVisible({ timeout: T.long });
-  await expect(page.getByRole('radiogroup')).toBeVisible();
-}
-
-async function continueWithModelSource(page: Page, sourceName: RegExp) {
-  const source = page.getByRole('radio', { name: sourceName });
-  await expect(source).toBeVisible();
+// Local AI / API Key setup is opened straight from the welcome page's
+// "Or use your own AI" buttons; there is no model-source chooser step.
+async function openModelSourceSetup(page: Page, sourceButtonName: RegExp) {
+  const source = page.getByRole('button', { name: sourceButtonName });
+  await expect(source).toBeEnabled();
   await source.click();
-  await page.getByRole('button', { name: /^Continue$/i }).click();
-}
-
-async function openModelSourceSetup(page: Page, sourceName: RegExp) {
-  await clickCloudPrimary(page);
-  await expectModelSourceChooser(page);
-  await continueWithModelSource(page, sourceName);
+  await expect(page.locator('.onboarding-view__setup-panel')).toBeVisible({ timeout: T.long });
 }
 
 async function seedOnboardingConfig(page: Page, config: OnboardingConfig) {

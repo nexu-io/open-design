@@ -8,6 +8,7 @@ import { upstreamActivityAt } from "../runtime/chat/upstream-activity";
 import type { RecordFileScope } from "../runtime/chat/record-file-open";
 import { FileOpsSummary } from "./FileOpsSummary";
 import { messageArtifactRefs } from "../runtime/chat/artifact-refs";
+import { liveArtifactDeliveries } from "../runtime/live-artifact-delivery";
 import { assistantMessageNeverHadARun } from "../runtime/chat/host-authored-message";
 import {
   renderMarkdown,
@@ -478,11 +479,20 @@ function AssistantMessageImpl({
     () => dedupeToolUsesById(dropSupersededInFlightToolUses(events)),
     [events],
   );
+  // Folded history and live task continuations keep earlier Runs for display.
+  // Authenticate only the current Run's key and text: predecessor completion
+  // cannot finish this Run, and this Run's prose cannot complete an old marker.
+  // Slice before display normalization, since deduplication changes offsets.
+  const currentRunEvents = useMemo(
+    () => events.slice(message.strategyTaskPrefixEventCount ?? 0),
+    [events, message.strategyTaskPrefixEventCount],
+  );
+  const currentRunContent = message.content.slice(message.strategyTaskPrefixLength ?? 0);
   const completedWithAuthenticatedDone = useMemo(
     () =>
       message.runStatus === "succeeded" &&
-      eventsHaveAuthenticatedDoneConclusion(displayEvents),
-    [displayEvents, message.runStatus],
+      eventsHaveAuthenticatedDoneConclusion(currentRunEvents),
+    [currentRunEvents, message.runStatus],
   );
   /**
    * **这一轮的 done 标记到了没有** —— 和上面那个同一条判据,只是**不问 run 结没结束**。
@@ -503,8 +513,8 @@ function AssistantMessageImpl({
    * 边界钉在 `shell-collapse-on-done.test.tsx`。
    */
   const turnDoneMarkerLanded = useMemo(
-    () => eventsHaveAuthenticatedDoneConclusion(displayEvents),
-    [displayEvents],
+    () => eventsHaveAuthenticatedDoneConclusion(currentRunEvents),
+    [currentRunEvents],
   );
   // ChatPane owns one canonical conversation-level Todo card above the
   // composer. Strip TodoWrite snapshots from individual messages so plans do
@@ -722,6 +732,7 @@ function AssistantMessageImpl({
     [displayEvents, fileOpScope],
   );
   const rawProduced = message.producedFiles ?? [];
+  const liveDeliveries = useMemo(() => liveArtifactDeliveries(message.events), [message.events]);
   /**
    * 这一轮 agent 自己声明的「显示什么」—— `<od-focus …/>` 的 `show`。
    *
@@ -855,7 +866,7 @@ function AssistantMessageImpl({
    * 用意,原样保留)。第 1 条不受这道闸约束 —— 工具行本身带 `pending` 态,
    * 边跑边出卡是设计要的(D37)。
    */
-  const turnArtifactPanelEntries = useMemo(() => {
+  const rawTurnArtifactPanelEntries = useMemo(() => {
     /*
      * 两条支各自已经在消费点做过同一套边界处理
      * (`summaryArtifactOps` / `declaredArtifactFiles`):有 `show` 就按声明收窄,
@@ -866,6 +877,9 @@ function AssistantMessageImpl({
     if (streaming) return [];
     return orderArtifactCards(producedFilesAsFileOps(declaredArtifactFiles), artifactFocus);
   }, [artifactFocus, declaredArtifactFiles, streaming, summaryArtifactOps]);
+  const turnArtifactPanelEntries = liveDeliveries.length
+    ? rawTurnArtifactPanelEntries.filter(entry => entry.path !== 'template.html')
+    : rawTurnArtifactPanelEntries;
   // The single artifact the "next step" affordance anchors to: prefer the HTML
   // produced by THIS turn; if the final turn emitted none (a summary / continue
   // message) fall back to the most recently modified HTML in the project so
@@ -905,18 +919,16 @@ function AssistantMessageImpl({
     isBrandExtractionNextStepVariant(nextStepVariant) &&
     (message.content.includes('<od-card type="brand-browser-assist"') ||
       textNeedsBrandBrowserAssistFallback(message.content));
-  // A settled `completed` strategy verdict outranks a stale TodoWrite snapshot:
-  // the deliverable was verified on disk, so the footer must not report the
-  // turn as stopped with unfinished work (and must not withhold next steps).
+  // Files may exist while declared work remains. Only the existing completion
+  // signal or question handoff can suppress the unfinished-todo offer.
   const unfinishedTodos = streaming || completedWithAuthenticatedDone
     ? []
     : continuableUnfinishedTodos({
         events,
-        // The rendered text, so "did this turn ask?" is answered from the same
-        // source `hasPendingQuestionForm` reads.
-        content: message.content,
+        // Earlier Runs may contain answered forms; only this Run can end by
+        // asking. Keep the turn's latest Todo snapshot as the remaining work.
+        content: currentRunContent,
         runStatus: message.runStatus,
-        strategyTaskDelivered: message.strategyTaskDelivered,
       });
   const hasTodoSnapshot = events.some(
     (event) => event.kind === "tool_use" && isTodoWriteToolName(event.name),
@@ -1131,11 +1143,22 @@ function AssistantMessageImpl({
    *
    * 复制、时间这些**照旧**:它们说的是这段内容本身,不是某一轮的结果。
    */
+  /*
+   * ── 运行中只有一句状态(OPEND-3334)──────────────────────────────────
+   *
+   * 这一轮有执行记录壳时,壳头已经是「这一轮唯一常驻的状态陈述」(见
+   * `ExecutionShell` 的停止档注释)。页脚在流式期间再画一遍
+   * 「Preparing… / Thinking / Working」就是同一件事说两遍,而且它是旧样式的
+   * 扫光行 —— 首页乐观帧就是照它手抄的,交接时两种样式并排就是那一次跳动。
+   * 所以壳在、还在跑,页脚的运行态不画;终态(勾 / 已取消 / 未完成 / 时间)照旧。
+   */
+  const turnHasExecutionShell = turnFlow.some((entry) => entry.kind === 'shell');
   const hideRunStatus =
     message.id === errorCardOwnerId
     || hasPendingQuestionForm
     || assistantMessageNeverHadARun(message)
-    || failedTurnIsAnnouncedByTheShell;
+    || failedTurnIsAnnouncedByTheShell
+    || (streaming && turnHasExecutionShell);
   // "Next step" is a delivery affordance, not a generic terminal-state card.
   // Keep it out of pure Q&A, failures/cancellations and incomplete Todo turns;
   // only a successful turn that actually produced something may surface it.
@@ -1295,6 +1318,7 @@ function AssistantMessageImpl({
   return (
     <div
       id={`assistant-message-${message.id}`}
+      data-testid="assistant-message"
       className={`msg assistant${showRole ? '' : ' assistant-continuation'}`}
       /* 「接上一条,不再重复报名字」是状态,不是样式的私事 —— 给它自己的出口 */
       data-continuation={showRole ? 'false' : 'true'}
@@ -1348,6 +1372,11 @@ function AssistantMessageImpl({
         )}
         {/* 状态行 / 插件候选不属于执行记录,也没有流里的位置 —— 收在最后 */}
         {restBlocks.map((b, i) => renderOuterBlock(b, `rest-${i}`))}
+        {liveDeliveries.map(item => (
+          <Button key={item.id} onClick={() => onRequestOpenFile?.(item.tabId)}>
+            {item.title || t('tasks.liveArtifact')}
+          </Button>
+        ))}
         {/* #5517 shape: the collapsible tool-op summary lists only the ops the
             turn actually emitted, and the produced-files list stays its own
             flat block below it (name / size / Open / Download). Folding the
@@ -1417,6 +1446,7 @@ function AssistantMessageImpl({
                 footerProps={{
                   streaming,
                   hasUnfinishedTodos: unfinishedTodos.length > 0,
+                  unfinishedTodoCount: unfinishedTodos.length,
                   hasEmptyResponse,
                   canceled: message.runStatus === "canceled",
                   preparing,
@@ -1436,6 +1466,7 @@ function AssistantMessageImpl({
               <AssistantFooter
                 streaming={streaming}
                 hasUnfinishedTodos={unfinishedTodos.length > 0}
+                unfinishedTodoCount={unfinishedTodos.length}
                 hasEmptyResponse={hasEmptyResponse}
                 canceled={message.runStatus === "canceled"}
                 preparing={preparing}
@@ -2037,17 +2068,30 @@ function isFeedbackEligible({
 
 // The agent name without the trailing model id — the role header shows the
 // brand logo + name only, so the `· model` suffix is dropped there.
-export function assistantRoleName(
-  message: ChatMessage,
-  t: TranslateFn
-): string {
-  const fromName = message.agentName?.trim();
+/**
+ * The role-row name for an agent that has no message yet — the optimistic
+ * creation frame (OPEND-3334). Same resolution as {@link assistantRoleName}
+ * minus the `starting` event fallback, so the frame and the first real turn
+ * print the same name for the same agent.
+ */
+export function assistantRoleNameForAgent(
+  agentName: string | null | undefined,
+  agentId: string | null | undefined,
+): string | null {
+  const fromName = agentName?.trim();
   if (fromName) {
     const base = fromName.split(" · ")[0]?.trim() || fromName;
     return exactAgentDisplayName(base) ?? base;
   }
-  const fromId = agentDisplayName(message.agentId);
-  if (fromId) return fromId;
+  return agentDisplayName(agentId) ?? null;
+}
+
+export function assistantRoleName(
+  message: ChatMessage,
+  t: TranslateFn
+): string {
+  const resolved = assistantRoleNameForAgent(message.agentName, message.agentId);
+  if (resolved) return resolved;
   const starting = message.events?.find(
     (e) => e.kind === "status" && e.label === "starting" && e.detail
   ) as Extract<AgentEvent, { kind: "status" }> | undefined;
@@ -2100,6 +2144,11 @@ function appendRoleModel(label: string, model: string | null): string {
 interface AssistantFooterProps {
   streaming: boolean;
   hasUnfinishedTodos: boolean;
+  /**
+   * 还欠着几项(S24a 正文「本次任务仍有 {N} 项内容未完成。」的 N)。
+   * 和 `hasUnfinishedTodos` 同源(`unfinishedTodos.length`);不传或为 0 就不出那行正文。
+   */
+  unfinishedTodoCount?: number;
   hasEmptyResponse: boolean;
   canceled?: boolean;
   // Pre-output phase: streaming but nothing rendered yet. The label shimmers
@@ -2131,6 +2180,7 @@ interface AssistantFooterProps {
 export function AssistantFooter({
   streaming,
   hasUnfinishedTodos,
+  unfinishedTodoCount = 0,
   hasEmptyResponse,
   canceled = false,
   preparing = false,
@@ -2154,6 +2204,18 @@ export function AssistantFooter({
     !canceled &&
     !copyMarkdown &&
     !onFork &&
+    !onContinueRemaining
+  )
+    return null;
+  // A streaming turn whose status the execution shell already states has
+  // nothing left for this row to say (OPEND-3334): no empty row either.
+  if (
+    streaming &&
+    hideRunStatus &&
+    !forceVisible &&
+    !copyMarkdown &&
+    !onFork &&
+    !feedbackControls &&
     !onContinueRemaining
   )
     return null;
@@ -2198,6 +2260,15 @@ export function AssistantFooter({
               ? t("assistant.unfinishedLabel")
               : t("assistant.doneLabel")}
           </span>
+          {/* 产品《报错文案》S24c / S24a(OPEND-2849):这两档的状态词是「标题」,
+              紧跟一句正文。其余各档只有状态词。 */}
+          {!streaming && !hasEmptyResponse && (canceled || (hasUnfinishedTodos && unfinishedTodoCount > 0)) ? (
+            <span className="assistant-label-detail" data-testid="assistant-label-detail">
+              {canceled
+                ? t("assistant.canceledDetail")
+                : t("assistant.unfinishedDetail", { n: unfinishedTodoCount })}
+            </span>
+          ) : null}
         </>
       ) : null}
       {copyMarkdown || onFork || feedbackControls || onContinueRemaining ? (

@@ -71,6 +71,13 @@ const originalFetch = globalThis.fetch;
 function stubFetch() {
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    const shareMatch = /^\/api\/projects\/([^/]+)\/share-state$/.exec(url);
+    if (shareMatch) {
+      return new Response(JSON.stringify({
+        projectId: decodeURIComponent(shareMatch[1]!),
+        hasEverShared: false, bindingExists: false, publications: [],
+      }), { headers: { 'Content-Type': 'application/json' } });
+    }
     const moveMatch = /^\/api\/workspaces\/[^/]+\/projects\/([^/]+)\/move$/.exec(url);
     if (moveMatch && init?.method === 'POST') {
       const id = decodeURIComponent(moveMatch[1]!);
@@ -252,6 +259,43 @@ describe('EntryNavRail 最近浏览过 section', () => {
     expect(runRequests()).toHaveLength(before);
   });
 
+  it.each([false, true])('retires old project polling when the workspace catalog changes (empty: %s)', async (empty) => {
+    vi.useFakeTimers();
+    const tree = (context: WorkspaceCollabContext, projects: Project[]) => (
+      <I18nProvider initial="en">
+        <EntryNavRail
+          view="home"
+          onViewChange={() => {}}
+          onNewProject={() => {}}
+          open
+          context={context}
+          recentProjects={projects}
+        />
+      </I18nProvider>
+    );
+    const { rerender } = render(tree(signedInContext, [project('p1', 1)]));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    const oldRequests = () => vi.mocked(fetch).mock.calls.filter(([url]) =>
+      String(url) === '/api/runs?projectId=p1');
+    expect(oldRequests()).toHaveLength(1);
+
+    rerender(tree(teamContext, empty ? [] : [project('p2', 2)]));
+    // A replacement catalog starts its current rows immediately, without
+    // waiting for IntersectionObserver to retire the previous visible IDs.
+    if (!empty) {
+      expect(vi.mocked(fetch).mock.calls.some(([url]) =>
+        String(url) === '/api/runs?projectId=p2')).toBe(true);
+    }
+    await act(async () => { await vi.advanceTimersByTimeAsync(12_000); });
+    expect(oldRequests()).toHaveLength(1);
+    if (empty) expect(screen.queryByTestId('entry-nav-recent-toggle')).toBeNull();
+
+    // Returning from an empty/replaced catalog must still restart polling.
+    rerender(tree(signedInContext, [project('p1', 1)]));
+    await act(async () => { await vi.advanceTimersByTimeAsync(4_000); });
+    expect(oldRequests().length).toBeGreaterThan(1);
+  });
+
   it('renders nothing without projects', () => {
     renderRail({ recentProjects: [] });
     expect(screen.queryByTestId('entry-nav-recent-toggle')).toBeNull();
@@ -384,17 +428,19 @@ describe('EntryNavRail 最近浏览过 section', () => {
     // until the dialog's own red 删除 is pressed.
     let dialog = openDelete();
     expect(onDelete).not.toHaveBeenCalled();
-    expect(within(dialog).getByText('Delete "Project p1"?')).toBeTruthy();
+    await within(dialog).findByText('Delete "Project p1"?');
     expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeTruthy();
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(onDelete).not.toHaveBeenCalled();
 
     dialog = openDelete();
+    await within(dialog).findByText('Delete "Project p1"?');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByRole('alertdialog')).toBeNull();
 
     dialog = openDelete();
+    await within(dialog).findByText('Delete "Project p1"?');
     const confirm = within(dialog).getByRole('button', { name: 'Delete' });
     fireEvent.click(confirm);
     fireEvent.click(confirm);
@@ -415,6 +461,7 @@ describe('EntryNavRail 最近浏览过 section', () => {
     fireEvent.click(screen.getAllByTestId('entry-nav-recent-more')[0]!);
     fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Delete' }));
     const dialog = screen.getByRole('alertdialog');
+    await within(dialog).findByText('Delete "Project p1"?');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
     await waitFor(() => {
       expect(onDelete).toHaveBeenCalledWith('p1');

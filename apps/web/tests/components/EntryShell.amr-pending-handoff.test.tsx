@@ -11,12 +11,13 @@
 // behaviour (pending frame within one animation frame of the click); this
 // file pins the contract between EntryShell and App that makes it possible.
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import {
   buildWorkspacePermissions,
   buildWorkspaceSeatSummary,
   type AmrWalletSnapshot,
+  type WorkspaceBillingPreflight,
   type WorkspaceCollabContext,
 } from '@open-design/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -32,6 +33,9 @@ import type {
 } from '../../src/components/EntryShell';
 import { I18nProvider } from '../../src/i18n';
 import { checkAmrBalanceGate } from '../../src/runtime/amr-balance-gate';
+import { cachedHomeAmrFundingBlock, checkAmrFundingFeedback, invalidateAmrFundingFeedback } from '../../src/runtime/amr-funding-feedback';
+import { useWorkspaceInvalidation } from '../../src/collab/workspace-events';
+import { advanceWorkspaceAccountGeneration } from '../../src/collab/workspace-identity';
 import type { AgentInfo, AppConfig } from '../../src/types';
 import { EntryShellWithGateHost } from '../helpers/entry-shell-gate-host';
 import { setHomeHeroPrompt } from '../helpers/home-hero-lexical';
@@ -40,6 +44,11 @@ import { workspaceDirectoryFixture } from '../helpers/workspace-context';
 vi.mock('../../src/runtime/amr-balance-gate', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/runtime/amr-balance-gate')>();
   return { ...actual, checkAmrBalanceGate: vi.fn() };
+});
+
+vi.mock('../../src/collab/workspace-events', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/collab/workspace-events')>();
+  return { ...actual, useWorkspaceInvalidation: vi.fn(actual.useWorkspaceInvalidation) };
 });
 
 vi.mock('../../src/components/AmrBalanceDialog', () => ({
@@ -55,6 +64,11 @@ vi.mock('../../src/components/AmrBalanceDialog', () => ({
 type CreateInput = Parameters<ComponentProps<typeof EntryShell>['onCreateProject']>[0];
 
 const mockedCheckAmrBalanceGate = vi.mocked(checkAmrBalanceGate);
+let testAccountSequence = 0;
+beforeEach(() => {
+  testAccountSequence++;
+});
+
 const originalFetch = globalThis.fetch;
 const originalResizeObserver = globalThis.ResizeObserver;
 
@@ -75,7 +89,7 @@ function personalContext(): WorkspaceCollabContext {
   const role = 'owner' as const;
   const lifecycleState = 'active' as const;
   return {
-    workspaceId: 'ws-personal-2614',
+    workspaceId: `ws-personal-2614-${testAccountSequence}`,
     workspaceType: 'personal',
     workspaceMemberId: 'wm-personal-2614',
     role,
@@ -221,6 +235,7 @@ describe('OPEND-2614 · Home send hands off before the AMR gate', () => {
 
   afterEach(() => {
     cleanup();
+    invalidateAmrFundingFeedback();
     globalThis.fetch = originalFetch;
     globalThis.ResizeObserver = originalResizeObserver;
     mockedCheckAmrBalanceGate.mockReset();
@@ -239,7 +254,7 @@ describe('OPEND-2614 · Home send hands off before the AMR gate', () => {
       autoSendFirstMessage: true,
       amrGatePrecheckWitness: {
         workspaceType: 'personal',
-        workspaceId: 'ws-personal-2614',
+        workspaceId: `ws-personal-2614-${testAccountSequence}`,
         workspaceMemberId: 'wm-personal-2614',
       },
     });
@@ -294,8 +309,9 @@ describe('OPEND-2614 · Home send hands off before the AMR gate', () => {
   });
 });
 
-describe('zero wallet never bypasses the ordinary scoped preflight hand-off', () => {
+describe('Home memory funding gate', () => {
   let billingReads = 0;
+  let memoryPreflight: WorkspaceBillingPreflight | null = null;
 
   beforeEach(() => {
     globalThis.ResizeObserver = ResizeObserverMock as typeof ResizeObserver;
@@ -305,6 +321,7 @@ describe('zero wallet never bypasses the ordinary scoped preflight hand-off', ()
     resetWorkspaceBillingCache();
     resetTeamProjectsCache();
     billingReads = 0;
+    memoryPreflight = null;
     const workspace = personalContext();
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -316,6 +333,7 @@ describe('zero wallet never bypasses the ordinary scoped preflight hand-off', ()
         billingReads += 1;
         // The projection the rail shows: this member's wallet is at $0.
         return jsonResponse({
+          preflight: memoryPreflight,
           summary: null,
           workspaceBalance: {
             workspaceId: workspace.workspaceId,
@@ -338,6 +356,7 @@ describe('zero wallet never bypasses the ordinary scoped preflight hand-off', ()
 
   afterEach(() => {
     cleanup();
+    invalidateAmrFundingFeedback();
     globalThis.fetch = originalFetch;
     globalThis.ResizeObserver = originalResizeObserver;
     mockedCheckAmrBalanceGate.mockReset();
@@ -351,6 +370,234 @@ describe('zero wallet never bypasses the ordinary scoped preflight hand-off', ()
     await waitFor(() => expect(billingReads).toBeGreaterThan(0));
     await new Promise((resolve) => { setTimeout(resolve, 0); });
   }
+
+  async function primeHomeFunding() {
+    const h = harness('amr');
+    await waitForWalletInMemory();
+    const context = personalContext();
+    const original = globalThis.fetch;
+    let reads = 0;
+    let finishConfirmation!: (response: Response | Error) => void;
+    const preflight = {
+      schemaVersion: 1, workspaceId: context.workspaceId, workspaceMemberId: context.workspaceMemberId,
+      modelId: 'default', generatedAt: new Date().toISOString(), balanceUsd: '0', fundingCheck: 'insufficient',
+    };
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes('/api/workspace/billing/preflight?')) {
+        reads++;
+        if (reads > 1) return new Promise<Response>((resolve, reject) => {
+          finishConfirmation = (response) => response instanceof Error ? reject(response) : resolve(response);
+        });
+        return jsonResponse({ preflight });
+      }
+      return original(input, init);
+    });
+    await checkAmrFundingFeedback(context, 'default');
+    return { ...h,
+      fundingReads: () => reads,
+      confirm: (fundingCheck: string) => finishConfirmation(jsonResponse({ preflight: { ...preflight, fundingCheck } })),
+      confirmResponse: (response: Response | Error) => finishConfirmation(response),
+    };
+  }
+
+  it('refreshes a retained Home block after billing refresh without another send', async () => {
+    const h = await primeHomeFunding();
+    const before = billingReads;
+    // Move beyond the existing billing fetch burst window without sleeping.
+    const now = vi.spyOn(performance, 'now').mockReturnValue(performance.now() + 1_000);
+    try {
+      await act(async () => {
+        window.dispatchEvent(new Event('od:workspace-billing-refresh'));
+      });
+      await waitFor(() => expect(billingReads).toBeGreaterThan(before));
+      await waitFor(() => expect(h.fundingReads()).toBe(2));
+      expect(cachedHomeAmrFundingBlock(personalContext(), 'default')).not.toBeNull();
+      await act(async () => h.confirm('available'));
+      expect(cachedHomeAmrFundingBlock(personalContext(), 'default')).toBeNull();
+      expect(h.onBeginProjectCreation).not.toHaveBeenCalled();
+      await submitHome('Send only after the user asks.');
+      await waitFor(() => expect(h.onCreateProject).toHaveBeenCalledTimes(1));
+    } finally { now.mockRestore(); }
+  });
+
+
+  it('retries unknown on the next billing publication without a fixed cooldown, then stops after recovery', async () => {
+    const h = await primeHomeFunding();
+    let tick = performance.now();
+    const now = vi.spyOn(performance, 'now').mockImplementation(() => tick);
+    try {
+      for (const [index, verdict] of ['unknown', 'available'].entries()) {
+        tick += 1_000; // Only advance the existing display-fetch burst clock.
+        await act(async () => window.dispatchEvent(new Event('od:workspace-billing-refresh')));
+        await waitFor(() => expect(h.fundingReads()).toBe(index + 2));
+        await act(async () => h.confirm(verdict));
+        expect(h.onBeginProjectCreation).not.toHaveBeenCalled();
+      }
+      const reads = billingReads;
+      tick += 1_000;
+      await act(async () => window.dispatchEvent(new Event('od:workspace-billing-refresh')));
+      await waitFor(() => expect(billingReads).toBeGreaterThan(reads));
+      expect(h.fundingReads()).toBe(3);
+    } finally { now.mockRestore(); }
+  });
+
+  it('restores #8240 from the displayed wallet and plan without an independent hint', async () => {
+    const context = personalContext();
+    memoryPreflight = {
+      schemaVersion: 1, workspaceId: context.workspaceId, workspaceMemberId: context.workspaceMemberId,
+      modelId: null, generatedAt: new Date().toISOString(), balanceUsd: '0', funding: 'gateway', modelCovered: null,
+      codingPlan: { workspaceId: context.workspaceId, generatedAt: new Date().toISOString(), eligible: false, tier: null, windows: [] },
+    };
+    const h = harness('amr');
+    await waitForWalletInMemory();
+    invalidateAmrFundingFeedback();
+    const original = globalThis.fetch;
+    let finish!: (response: Response) => void;
+    globalThis.fetch = vi.fn((input, init) => String(input).includes('/api/workspace/billing/preflight?')
+      ? new Promise<Response>((resolve) => { finish = resolve; }) : original(input, init));
+    await submitHome('Restore the in-memory Home gate.');
+    expect(h.onBeginProjectCreation).not.toHaveBeenCalled();
+    expect(await screen.findByTestId('amr-balance-dialog')).toBeTruthy();
+    expect(h.onCreateProject).not.toHaveBeenCalled();
+    await act(async () => { finish(jsonResponse({ preflight: null })); });
+    expect(screen.getByTestId('amr-balance-dialog')).toBeTruthy();
+    expect(h.onBeginProjectCreation).not.toHaveBeenCalled();
+    expect(h.onCreateProject).not.toHaveBeenCalled();
+  });
+
+  it('keeps a cached backend insufficient verdict on Home before any project hand-off', async () => {
+    const h = await primeHomeFunding();
+    await submitHome('Keep this draft on Home.');
+    expect(h.onBeginProjectCreation).not.toHaveBeenCalled();
+    expect(await screen.findByTestId('amr-balance-dialog')).toBeTruthy();
+    expect(h.onCreateProject).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('amr-balance-dialog-dismiss'));
+    await waitFor(() => expect(screen.queryByTestId('amr-balance-dialog')).toBeNull());
+    h.confirm('available');
+    await waitFor(() => expect(screen.getByTestId('home-hero-submit')).toBeEnabled());
+    expect(h.rollback).not.toHaveBeenCalled();
+    expect(h.onCreateProject).not.toHaveBeenCalled();
+    expect(screen.getByTestId('home-hero-input')).toHaveTextContent('Keep this draft on Home.');
+  });
+
+  it('updates available funding without submitting until the user sends again', async () => {
+    const h = await primeHomeFunding();
+    await submitHome('Continue this draft.');
+    await screen.findByTestId('amr-balance-dialog');
+    expect(h.onBeginProjectCreation).not.toHaveBeenCalled();
+    await act(async () => { h.confirm('available'); });
+    expect(screen.getByTestId('amr-balance-dialog')).toBeTruthy();
+    expect(h.onCreateProject).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('amr-balance-dialog-dismiss'));
+    await waitFor(() => expect(screen.getByTestId('home-hero-submit')).toBeEnabled());
+    await submitHome('Continue this draft.');
+    await waitFor(() => expect(h.onCreateProject).toHaveBeenCalledTimes(1));
+    expect(h.calls).toEqual(['begin', 'gate', 'create']);
+    expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
+  });
+
+  it.each(['unknown', 'missing', 'unavailable', 'timeout'] as const)('keeps Home blocked after %s confirmation and permits a fresh retry', async (result) => {
+    const h = await primeHomeFunding();
+    await submitHome('Keep this draft until funding is confirmed.');
+    await screen.findByTestId('amr-balance-dialog');
+    await act(async () => {
+      if (result === 'unknown') h.confirm('unknown');
+      else if (result === 'timeout') h.confirmResponse(new DOMException('Funding check timed out', 'TimeoutError'));
+      else h.confirmResponse(result === 'missing' ? jsonResponse({ preflight: null }) : new Response(null, { status: 503 }));
+    });
+    expect(screen.queryByTestId('amr-balance-dialog')).not.toBeNull();
+    expect(h.onBeginProjectCreation).not.toHaveBeenCalled();
+    expect(h.onCreateProject).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('amr-balance-dialog-dismiss'));
+    await waitFor(() => expect(screen.getByTestId('home-hero-submit')).toBeEnabled());
+    expect(screen.getByTestId('home-hero-input')).toHaveTextContent('Keep this draft until funding is confirmed.');
+    await submitHome('Keep this draft until funding is confirmed.');
+    await screen.findByTestId('amr-balance-dialog');
+    expect(h.onBeginProjectCreation).not.toHaveBeenCalled();
+    await act(async () => { h.confirm('available'); });
+    expect(h.onCreateProject).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('amr-balance-dialog-dismiss'));
+    await waitFor(() => expect(screen.getByTestId('home-hero-submit')).toBeEnabled());
+    await submitHome('Keep this draft until funding is confirmed.');
+    await waitFor(() => expect(h.onCreateProject).toHaveBeenCalledTimes(1));
+  });
+
+  it.each(['billing-changed', 'billing-subscription-changed', 'wallet-balance-changed', 'coding-plan-usage-changed'] as const)(
+    '%s retains confirmed insufficiency without fetching or submitting', async (type) => {
+      const h = await primeHomeFunding();
+      const context = personalContext();
+      const handlers = [...vi.mocked(useWorkspaceInvalidation).mock.calls].reverse().find(
+        ([handlers]) => handlers['team-project-content-ready'],
+      )![0];
+      const invalidate = handlers[type]!;
+      const event = {
+        type, workspaceId: context.workspaceId, workspaceMemberId: context.workspaceMemberId,
+        revision: '2', eventId: 'quota-2',
+      };
+      const readCount = vi.mocked(globalThis.fetch).mock.calls.length;
+      await act(async () => {
+        invalidate({ ...event, workspaceId: 'other-workspace' } as never);
+      });
+      expect(cachedHomeAmrFundingBlock(context, 'default')).not.toBeNull();
+      if (type === 'wallet-balance-changed' || type === 'coding-plan-usage-changed') {
+        await act(async () => { invalidate({ ...event, workspaceMemberId: 'other-member' } as never); });
+        expect(cachedHomeAmrFundingBlock(context, 'default')).not.toBeNull();
+      }
+      await act(async () => {
+        // Repeated notifications only invalidate memory; they do not create a
+        // new funding request per event.
+        for (let i = 0; i < 8; i++) invalidate(event as never);
+      });
+      expect(cachedHomeAmrFundingBlock(context, 'default')).not.toBeNull();
+      expect(vi.mocked(globalThis.fetch).mock.calls.length).toBe(readCount);
+      expect(h.onCreateProject).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not continue an old send after the account changes during confirmation', async () => {
+    const h = await primeHomeFunding();
+    await submitHome('Keep the old account draft.');
+    await screen.findByTestId('amr-balance-dialog');
+    advanceWorkspaceAccountGeneration('new-home-account');
+    h.confirm('available');
+    await waitFor(() => expect(screen.queryByTestId('amr-balance-dialog')).toBeNull());
+    expect(h.onBeginProjectCreation).not.toHaveBeenCalled();
+    expect(h.onCreateProject).not.toHaveBeenCalled();
+  });
+
+  it.each(['unchanged', 'billing-event', 'ttl-expiry'] as const)(
+    'keeps twenty explicit sends blocked after insufficiency with %s', async (transition) => {
+      const h = await primeHomeFunding();
+      const now = Date.now();
+      let dateNow: ReturnType<typeof vi.spyOn> | undefined;
+      try {
+        for (let attempt = 1; attempt <= 20; attempt++) {
+          if (attempt === 9 && transition === 'billing-event') {
+            const handlers = [...vi.mocked(useWorkspaceInvalidation).mock.calls].reverse().find(
+              ([handlers]) => handlers['team-project-content-ready'],
+            )![0];
+            const context = personalContext();
+            await act(async () => handlers['wallet-balance-changed']!({
+              type: 'wallet-balance-changed', workspaceId: context.workspaceId,
+              workspaceMemberId: context.workspaceMemberId, revision: '9',
+            }));
+          }
+          if (attempt === 9 && transition === 'ttl-expiry') {
+            dateNow = vi.spyOn(Date, 'now').mockReturnValue(now + 31_000);
+          }
+          await submitHome(`Unfunded attempt ${attempt}`);
+          expect(h.onBeginProjectCreation, `attempt ${attempt} must stay on Home`).not.toHaveBeenCalled();
+          await screen.findByTestId('amr-balance-dialog');
+          await act(async () => h.confirm('insufficient'));
+          expect(h.onCreateProject).not.toHaveBeenCalled();
+          fireEvent.click(screen.getByTestId('amr-balance-dialog-dismiss'));
+          await waitFor(() => expect(screen.getByTestId('home-hero-submit')).toBeEnabled());
+        }
+      } finally {
+        dateNow?.mockRestore();
+      }
+    },
+  );
 
   it('confirmed sign-out still rolls back the pending frame and preserves the draft', async () => {
     const h = harness('amr');
@@ -395,6 +642,7 @@ describe('OPEND-3300 · local Team authority on a $0 Home send', () => {
 
   afterEach(() => {
     cleanup();
+    invalidateAmrFundingFeedback();
     globalThis.fetch = originalFetch;
     globalThis.ResizeObserver = originalResizeObserver;
     mockedCheckAmrBalanceGate.mockReset();

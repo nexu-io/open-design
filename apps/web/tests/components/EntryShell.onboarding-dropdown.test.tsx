@@ -205,4 +205,81 @@ describe('OnboardingDropdown', () => {
     expect(option.querySelector('[data-description]')).toBeNull();
     expect(option.querySelector('[data-label]')).toBeNull();
   });
+
+  it('offers a custom-value entry for a non-matching query when allowCustomValue is set', () => {
+    render(
+      <OnboardingDropdown
+        label="Model"
+        placeholder="Select a model"
+        value=""
+        options={[
+          { value: 'gpt-oss:120b', label: 'gpt-oss:120b' },
+          { value: 'qwen3-next:80b', label: 'qwen3-next:80b' },
+        ]}
+        onChange={vi.fn()}
+        searchable
+        searchPlaceholder="Search models"
+        allowCustomValue
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Select a model/ }));
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), {
+      target: { value: 'llama3.3:70b' },
+    });
+
+    const options = screen.getAllByRole('option');
+    // The custom entry is appended after any real matches, not prepended.
+    const lastOption = options[options.length - 1];
+    expect(lastOption?.textContent).toContain('Use "llama3.3:70b"');
+  });
+
+  it('does not offer a custom entry when the query matches an existing option', () => {
+    render(
+      <OnboardingDropdown
+        label="Model"
+        placeholder="Select a model"
+        value=""
+        options={[{ value: 'gpt-oss:120b', label: 'gpt-oss:120b' }]}
+        onChange={vi.fn()}
+        searchable
+        searchPlaceholder="Search models"
+        allowCustomValue
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Select a model/ }));
+    // Case-insensitive match against an existing option value.
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), {
+      target: { value: 'GPT-OSS:120B' },
+    });
+
+    expect(screen.queryByText(/^Use "/)).toBeNull();
+    expect(screen.getAllByRole('option')).toHaveLength(1);
+  });
+
+  it('selects the trimmed custom value when the custom entry is clicked', () => {
+    const onChange = vi.fn();
+    render(
+      <OnboardingDropdown
+        label="Model"
+        placeholder="Select a model"
+        value=""
+        options={[{ value: 'gpt-oss:120b', label: 'gpt-oss:120b' }]}
+        onChange={onChange}
+        searchable
+        searchPlaceholder="Search models"
+        allowCustomValue
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Select a model/ }));
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), {
+      target: { value: '  llama3.3:70b  ' },
+    });
+
+    fireEvent.click(screen.getByRole('option', { name: /Use "llama3.3:70b"/ }));
+
+    expect(onChange).toHaveBeenCalledWith('llama3.3:70b');
+  });
 });

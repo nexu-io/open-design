@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { expect, vi } from 'vitest';
 import type Database from 'better-sqlite3';
 import { startServer } from '../../../src/server.js';
+import { getStrategyTaskExecution } from '../../../src/strategies/task-store.js';
 import { closeDatabase, getAgentSessionRecord, openDatabase } from '../../../src/db.js';
 import type { DshProfileExecuteCommand } from '../../../src/agent-protocol/dsh-profile/types.js';
 
@@ -27,7 +28,8 @@ type GenerationServerFixture = {
   state(extra?: Record<string, unknown>): void;
   session(): ReturnType<typeof getAgentSessionRecord>;
   commands(): DshProfileExecuteCommand[];
-  turn(extra?: Record<string, unknown>): Promise<{
+  turn(extra?: Record<string, unknown>, followProduction?: boolean): Promise<{
+    initialStatus: Record<string, unknown>;
     runId: string;
     taskExecutionId: string | undefined;
     status: Record<string, unknown>;
@@ -94,21 +96,31 @@ export async function generationServer(strategy = false): Promise<GenerationServ
     session: () => getAgentSessionRecord(db, conversationId, 'deepseek-harness'),
     commands: (): DshProfileExecuteCommand[] => readFileSync(statePath + '.commands', 'utf8')
       .trim().split('\n').filter(Boolean).map(line => JSON.parse(line)),
-    async turn(extra: Record<string, unknown> = {}) {
+    async turn(extra: Record<string, unknown> = {}, followProduction = strategy) {
       const run = await post('/api/runs', {
         projectId, conversationId, assistantMessageId: randomUUID(), clientRequestId: randomUUID(),
         agentId: 'deepseek-harness', message: 'HISTORY_SENTINEL\nCURRENT_SENTINEL',
         currentPrompt: 'CURRENT_SENTINEL', ...extra,
       });
-      const runId = run.runId;
-      assert(typeof runId === 'string');
+      const initialRunId = run.runId;
+      assert(typeof initialRunId === 'string');
+      let runId = initialRunId;
       const taskExecutionId = typeof run.taskExecutionId === 'string' ? run.taskExecutionId : undefined;
       // Completion is the actual SSE terminal/child-close boundary, with a failure budget.
       const response = await fetch(url + '/api/runs/' + runId + '/events', { signal: AbortSignal.timeout(10_000) });
       expect(response.status).toBe(200);
-      const events = await response.text();
+      let events = await response.text();
+      const initialStatus = await json(await fetch(url + '/api/runs/' + runId));
+      if (followProduction && taskExecutionId) {
+        const task = getStrategyTaskExecution(db, taskExecutionId);
+        assert(task?.runs[1], 'Keyed planning reply must create a real production continuation');
+        runId = task.runs[1].runId;
+        const continuation = await fetch(url + '/api/runs/' + runId + '/events', { signal: AbortSignal.timeout(10_000) });
+        expect(continuation.status).toBe(200);
+        events = await continuation.text();
+      }
       const status = await json(await fetch(url + '/api/runs/' + runId));
-      return { runId, taskExecutionId, status, events };
+      return { initialStatus, runId, taskExecutionId, status, events };
     },
     async close() {
       await shutdown();

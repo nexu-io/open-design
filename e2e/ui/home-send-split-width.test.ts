@@ -40,7 +40,7 @@ async function installSplitWidthProbe(page: Page): Promise<void> {
       const slot = document.querySelector('.split-chat-slot') as HTMLElement | null;
       if (slot && slot.getClientRects().length > 0) {
         const width = Math.round(slot.getBoundingClientRect().width);
-        const pending = document.querySelector('[data-testid="project-creation-pending-view"]') !== null;
+        const pending = document.querySelector('[data-creation-phase="pending"]') !== null;
         const user = document.querySelector('[data-testid="chat-log"] .msg.user') !== null;
         const key = `${width}|${pending}|${user}`;
         if (key !== last) {
@@ -70,13 +70,12 @@ async function sendFromHome(page: Page, prompt: string): Promise<void> {
  */
 async function expectStableSplitWidth(page: Page, expectedWidth?: number): Promise<void> {
   await expect(page.locator('[data-testid="chat-log"] .msg.user').first()).toBeVisible({ timeout: T.long });
-  await expect(page.locator('[data-testid="project-creation-pending-view"]')).toHaveCount(0, { timeout: T.medium });
-  await expect(page.locator('[data-testid="project-creation-pending-chat"]')).toHaveCount(0, { timeout: T.medium });
+  await expect(page.locator('[data-creation-phase="pending"]')).toHaveCount(0, { timeout: T.medium });
   // Let any width transition that was still running finish before reading.
   await page.waitForTimeout(400);
   const log = await page.evaluate(() => window.__odSplitWidthLog ?? []);
   const firstPending = log.findIndex((entry) => entry.pending);
-  expect(firstPending, 'the hand-off frame was sampled').toBeGreaterThanOrEqual(0);
+  expect(firstPending, 'the pending phase was sampled').toBeGreaterThanOrEqual(0);
   const stretch = log.slice(firstPending);
   const readable = stretch
     .map((entry) => `${Math.round(entry.at - stretch[0]!.at)}ms ${entry.width}px${entry.pending ? ' pending' : ''}${entry.user ? ' user' : ''}`)

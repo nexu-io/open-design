@@ -492,7 +492,7 @@ test('[P0] BYOK autosave waits until required fields are valid', async ({ page }
   });
 });
 
-test('[P1] BYOK file-tools limitation notice is reachable from Settings', async ({ page }) => {
+test('[P1] BYOK OpenCode file-access notice is reachable from Settings', async ({ page }) => {
   await openExecutionSettingsWithAgents(
     page,
     {
@@ -529,12 +529,12 @@ test('[P1] BYOK file-tools limitation notice is reachable from Settings', async 
   const trigger = dialog.getByTestId('settings-byok-no-file-tools-trigger');
   const notice = dialog.getByTestId('settings-byok-no-file-tools-notice');
   await expect(trigger).toBeVisible();
-  await expect(trigger).toHaveAccessibleName(/BYOK can't read, write, or edit project files/i);
+  await expect(trigger).toHaveAccessibleName('BYOK uses OpenCode to read, write, and edit project files. OpenCode must be installed and available.');
 
   await trigger.hover();
   await expect(notice).toBeVisible();
-  await expect(notice).toContainText("BYOK can't read, write, or edit project files");
-  await expect(notice).toContainText('Local CLI');
+  await expect(notice).toContainText('BYOK uses OpenCode to read, write, and edit project files');
+  await expect(notice).toContainText('OpenCode must be installed and available');
 
   await dialog.getByRole('tab', { name: /Google Gemini/i }).click();
   await expect(dialog.getByTestId('settings-byok-no-file-tools-trigger')).toBeVisible();

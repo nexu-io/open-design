@@ -13,8 +13,8 @@
 //   - the activity still ends on the server's own schedule, on a timer, with no
 //     network involved at all.
 //
-// The Test channel does not opt in, so every case here also has to leave its
-// retry semantics exactly where they were.
+// Callers that opt into neither request suspension nor Production fallback
+// retain the generic lifecycle's existing bounded retry behavior.
 
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -286,6 +286,7 @@ describe("offline fallback stops the client asking", () => {
 	});
 
 	it("retires a cache-replayed activity on its own end time, with no network", async () => {
+		vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
 		const load = vi
 			.fn<Load>()
 			.mockResolvedValueOnce(offlineDecision(120_000))
@@ -459,10 +460,10 @@ describe("a 5xx fallback keeps a slow heartbeat", () => {
 		expect(load).toHaveBeenCalledTimes(4);
 	});
 
-	// The guard against over-fixing. A device with no network answers every
-	// request the same way for the same reason, and its recovery IS announced,
-	// so a heartbeat there is pure battery with nothing to buy.
-	it("starts no heartbeat when the transport is what failed", async () => {
+	// Explicit device-offline stops probes until a recovery event. A transport
+	// failure alone does not tell us whether the device lost its connection.
+	it("cancels the transport-failure heartbeat when the device goes offline", async () => {
+		const online = vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
 		const load = vi
 			.fn<Load>()
 			.mockResolvedValueOnce({ kind: "decision", value: first, key: "same", validForMs: 3_600_000 })
@@ -484,6 +485,10 @@ describe("a 5xx fallback keeps a slow heartbeat", () => {
 		expect(load).toHaveBeenCalledTimes(2);
 
 		// Well past the bound, and past the poll tick that follows it.
+		online.mockReturnValue(false);
+		act(() => {
+			window.dispatchEvent(new Event("offline"));
+		});
 		await act(async () => {
 			await vi.advanceTimersByTimeAsync(SERVER_FAULT_HEARTBEAT_MS + 30_000);
 		});
@@ -491,6 +496,7 @@ describe("a 5xx fallback keeps a slow heartbeat", () => {
 
 		// And this is silence by design, not a hook that has stopped working:
 		// the event that does announce this failure's recovery still asks.
+		online.mockReturnValue(true);
 		act(() => {
 			window.dispatchEvent(new Event("online"));
 		});

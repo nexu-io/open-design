@@ -21,6 +21,9 @@ const pendingNormalization = new Set([
   'apps/web/src/styles/home/entry-layout.css',
   'apps/web/src/components/EntryNavRail.module.css',
   'apps/web/src/styles/workspace/design-files.css',
+  // The current share chrome added this 400-weight panel copy after the
+  // normalization test landed; keep it explicit until that design is revised.
+  'apps/web/src/styles/shell.css',
   // The chat panel (#7518) draws to its own delivered spec, which uses 400 for
   // bare buttons, record rows and pills (see `w77-bare-button-weight.test.ts`).
   // Reconciling that spec with the ladder is tracked with the chat module port

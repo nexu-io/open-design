@@ -1,6 +1,9 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 
-import { saveAsDialogOptionsForFilename } from '../../src/main/runtime.js';
+import { EventEmitter } from 'node:events';
+import type { BrowserWindow } from 'electron';
+
+import { attachDownloadSaveAsDialog, saveAsDialogOptionsForFilename } from '../../src/main/runtime.js';
 
 // Every programmatic export that streams a download must trigger the native
 // Save As dialog — including the screenshot PDF, which is the default Export PDF
@@ -44,4 +47,24 @@ describe('saveAsDialogOptionsForFilename', () => {
     expect(saveAsDialogOptionsForFilename('notes.txt')).toBeNull();
     expect(saveAsDialogOptionsForFilename('noext')).toBeNull();
   });
+});
+
+
+test.each(['completed', 'cancelled', 'interrupted'])('reports only the initiating window download after %s and detaches on close', state => {
+  const session = new EventEmitter();
+  const contents = { session, isDestroyed: () => false, send: vi.fn() };
+  const window = Object.assign(new EventEmitter(), { webContents: contents });
+  const item = Object.assign(new EventEmitter(), {
+    getFilename: () => 'first-export.pdf', getURL: () => 'blob:export-one', setSaveDialogOptions: vi.fn(),
+  });
+  attachDownloadSaveAsDialog(window as unknown as BrowserWindow);
+  session.emit('will-download', {}, item, {});
+  expect(item.listenerCount('done')).toBe(0);
+  session.emit('will-download', {}, item, contents);
+  expect(item.setSaveDialogOptions).toHaveBeenCalledOnce();
+  expect(contents.send).not.toHaveBeenCalled();
+  item.emit('done', {}, state);
+  expect(contents.send).toHaveBeenCalledExactlyOnceWith('od:download-finished', { url: 'blob:export-one', state });
+  window.emit('closed');
+  expect(session.listenerCount('will-download')).toBe(0);
 });

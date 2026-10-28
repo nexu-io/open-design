@@ -120,6 +120,32 @@ async function startContextServer(
   };
 }
 
+describe('independent billing preflight', () => {
+  it('reads backend funding directly without waiting for display billing or the directory', async () => {
+    const display = vi.fn(() => new Promise<never>(() => {}));
+    const preflight = {
+      schemaVersion: 1 as const, workspaceId: 'wm-1', workspaceMemberId: 'member',
+      modelId: 'model', generatedAt: new Date().toISOString(), balanceUsd: '0',
+      modelCovered: false, funding: 'gateway' as const, fundingCheck: 'insufficient' as const,
+      codingPlan: { workspaceId: 'wm-1', generatedAt: new Date().toISOString(), eligible: false, tier: null, windows: [] },
+    };
+    const legacy = vi.fn(async () => { throw new Error('early hints must not call legacy preflight'); });
+    const api = await startContextServer({ fetchBilling: display, fetchWorkspaceDirectory: display, fetchBillingPreflight: legacy, fetchBillingFundingCheck: async () => preflight });
+    const response = await api.req('/api/workspace/billing/preflight?workspaceId=wm-1&modelId=model');
+    expect(response.status).toBe(200);
+    expect(response.body.preflight).toEqual(preflight);
+    expect(display).not.toHaveBeenCalled();
+    expect(legacy).not.toHaveBeenCalled();
+  });
+  it('preserves upstream authorization failure and treats missing capability as unavailable', async () => {
+    const read = vi.fn().mockRejectedValueOnce(new Error('API request failed with status 403: forbidden')).mockResolvedValueOnce(null);
+    const api = await startContextServer({ fetchBillingFundingCheck: read });
+    expect((await api.req('/api/workspace/billing/preflight?workspaceId=wm-1')).status).toBe(403);
+    expect((await api.req('/api/workspace/billing/preflight?workspaceId=wm-1')).status).toBe(503);
+    expect((await api.req('/api/workspace/billing/preflight')).status).toBe(400);
+  });
+});
+
 describe('parseWorkspaceCollabContext', () => {
   it('accepts a well-formed team context and derives permissions/seats', () => {
     expect(parseWorkspaceCollabContext(TEAM_CONTEXT)).toEqual(TEAM_CONTEXT_PARSED);

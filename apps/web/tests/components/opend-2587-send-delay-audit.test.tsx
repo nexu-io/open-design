@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// Real ProjectView, ChatPane, ChatComposer and AMR gate; defer the billing HTTP response.
+// Real ProjectView, ChatPane, ChatComposer and AMR gate; defer the optional funding HTTP response or the local sign-in read.
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import {
   buildWorkspacePermissions,
@@ -12,8 +12,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { composerText, flushMounts, typeAndSettle } from '../helpers/lexical-composer';
 import { ProjectView } from '../../src/components/ProjectView';
 import type { ProjectWorkspaceScopeState } from '../../src/collab/useProjectWorkspaceScope';
+import { invalidateAmrFundingFeedback } from '../../src/runtime/amr-funding-feedback';
 import { resetWorkspaceContextCache } from '../../src/collab/useWorkspaceContext';
-import { streamViaDaemon } from '../../src/providers/daemon';
+import { fetchAmrWalletSnapshot, streamViaDaemon } from '../../src/providers/daemon';
 import {
   createConversation,
   listConversations,
@@ -236,7 +237,7 @@ function stubFetch() {
     'fetch',
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url.startsWith('/api/workspace/billing?') && pendingBilling) return pendingBilling;
+      if (url.startsWith('/api/workspace/billing/preflight?') && pendingBilling) return pendingBilling;
       if (url.includes('/api/workspace/context')) {
         return new Response(JSON.stringify({ context: CALLER_CONTEXT }), { status: 200 });
       }
@@ -279,6 +280,8 @@ describe('OPEND-2587 real composer and transcript during delayed local reception
     window.sessionStorage.clear();
     window.localStorage.clear();
     resetWorkspaceContextCache();
+    invalidateAmrFundingFeedback();
+    vi.mocked(fetchAmrWalletSnapshot).mockResolvedValue(null);
     pendingBilling = null;
     stubFetch();
     mockedListConversations.mockImplementation(async (projectId: string) => [
@@ -292,7 +295,10 @@ describe('OPEND-2587 real composer and transcript during delayed local reception
     mockedFetchProjectFiles.mockResolvedValue([]);
     mockedFetchBrands.mockResolvedValue([]);
     mockedStreamViaDaemon.mockResolvedValue(undefined);
-    workspaceScopeMocks.projectScope = { loading: true, scope: null };
+    workspaceScopeMocks.projectScope = { loading: false, scope: {
+      kind: 'team', projectId: PROJECT_ID, workspaceId: TEAM_WORKSPACE, visibility: 'personal',
+      context: { ...CALLER_CONTEXT, workspaceType: 'team' },
+    } };
     workspaceScopeMocks.ambientContext = CALLER_CONTEXT;
     workspaceScopeMocks.billingResponse = null;
     projectCollabMocks.writerAuthority = 'allowed';
@@ -302,16 +308,13 @@ describe('OPEND-2587 real composer and transcript during delayed local reception
 
   afterEach(() => {
     cleanup();
+    invalidateAmrFundingFeedback();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
     resetWorkspaceContextCache();
   });
 
-  async function sendWithDelayedBilling() {
-    let resolveBilling!: (value: Response) => void;
-    pendingBilling = new Promise((resolve) => { resolveBilling = resolve; });
-    // Real balance gate + ProjectView + ChatPane + ChatComposer, deferred HTTP boundary.
-    // Keep the subsequent run provider off live services.
+  async function sendPrompt() {
     mockedStreamViaDaemon.mockReturnValue(new Promise(() => {}));
     renderProjectView();
     await screen.findByTestId('chat-composer-input');
@@ -319,33 +322,40 @@ describe('OPEND-2587 real composer and transcript during delayed local reception
     await typeAndSettle(PROMPT);
     await waitFor(() => expect(screen.getByTestId('chat-send')).not.toBeDisabled());
     fireEvent.click(screen.getByTestId('chat-send'));
+    expect(await screen.findByTestId('user-message')).toHaveTextContent(PROMPT);
+  }
+
+  async function sendWithDelayedBilling() {
+    let resolveBilling!: (value: Response) => void;
+    pendingBilling = new Promise((resolve) => { resolveBilling = resolve; });
+    await sendPrompt();
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(
-      ([url]) => String(url).startsWith('/api/workspace/billing?'),
+      ([url]) => String(url).startsWith('/api/workspace/billing/preflight?'),
     )).toBe(true));
-    expect(screen.getByTestId('user-message')).toHaveTextContent(PROMPT);
+    const requests = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/api/workspace/billing/preflight?'));
+    expect(new URL(String(requests[0]![0]), 'http://localhost').searchParams.get('workspaceId')).toBe(TEAM_WORKSPACE);
+    // Optional billing must not serialize the send or leave it preparing.
+    await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalledTimes(1));
+    return (status = 200) => resolveBilling(new Response(JSON.stringify({ preflight: null }), { status }));
+  }
+
+  async function sendWithDelayedSignIn() {
+    let resolveSignIn!: (value: null) => void;
+    vi.mocked(fetchAmrWalletSnapshot).mockReturnValueOnce(new Promise((resolve) => { resolveSignIn = resolve; }));
+    await sendPrompt();
+    await waitFor(() => expect(fetchAmrWalletSnapshot).toHaveBeenCalledTimes(1));
     expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
-    return (status = 200) => {
-      const observedAt = new Date().toISOString();
-      resolveBilling(new Response(JSON.stringify({
-        workspaceRuntime: {
-          workspaceId: TEAM_WORKSPACE, workspaceMemberId: TEAM_MEMBER,
-          status: 'fresh', observedAt,
-          hardExpiresAt: new Date(Date.now() + 60_000).toISOString(),
-        },
-        authoritativeWorkspaceRead: {
-          workspaceId: TEAM_WORKSPACE, workspaceMemberId: TEAM_MEMBER, observedAt,
-        },
-        workspaceBalance: {
-          billingScopeVersion: 2, workspaceId: TEAM_WORKSPACE,
-          workspaceMemberId: TEAM_MEMBER, balanceUsd: '10.00', updatedAt: observedAt,
-        },
-      }), { status }));
+    return async () => {
+      await act(async () => resolveSignIn(null));
+      await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalledTimes(1));
     };
   }
 
-  it('retains the sent message during an unresolved local billing request and admits it once', async () => {
+  it('clears the composer and admits the send once while the optional funding request is unresolved', async () => {
     const releaseBilling = await sendWithDelayedBilling();
-    expect(composerText().trim()).toBe(PROMPT);
+    // OPEND-3392: the turn is already painted, so the composer must not keep
+    // showing the sent prompt while the optional funding hint is in flight.
+    await waitFor(() => expect(composerText().trim()).toBe(''));
     // Diagnostic repeat-click witness: no second turn is submitted.
     const send = screen.queryByTestId('chat-send');
     if (send && !(send as HTMLButtonElement).disabled) fireEvent.click(send);
@@ -363,32 +373,37 @@ describe('OPEND-2587 real composer and transcript during delayed local reception
     expect(screen.queryByRole('button', { name: 'chat.stop' })).not.toBeInTheDocument();
   });
 
-  it('shows the existing disabled preparing action while local admission is pending', async () => {
-    await sendWithDelayedBilling();
+  it('shows the disabled preparing action while local sign-in is pending', async () => {
+    const releaseSignIn = await sendWithDelayedSignIn();
     expect(screen.queryByTestId('chat-send')).not.toBeInTheDocument();
     const pending = screen.getByTestId('chat-send-pending');
     expect(pending).toBeDisabled();
     expect(pending).toHaveAttribute('aria-busy', 'true');
     expect(pending).toHaveAccessibleName('assistant.statusPreparing');
+    await releaseSignIn();
   });
 
-  it('keeps preparing as the only action when the retained draft is cleared during admission', async () => {
-    await sendWithDelayedBilling();
+  it('keeps preparing as the only action while the cleared composer waits on sign-in', async () => {
+    const releaseSignIn = await sendWithDelayedSignIn();
     await typeAndSettle('');
     expect(screen.getByTestId('chat-send-pending')).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'chat.stop' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('chat-send')).not.toBeInTheDocument();
     expect(screen.getByTestId('user-message')).toHaveTextContent(PROMPT);
+    await releaseSignIn();
   });
 
-  it('releases preparing when the billing endpoint rejects admission', async () => {
+  it('keeps the admitted run active when the optional funding endpoint fails', async () => {
     const releaseBilling = await sendWithDelayedBilling();
     await act(async () => releaseBilling(503));
     await waitFor(() => expect(composerText().trim()).toBe(''));
     expect(screen.queryByTestId('chat-send-pending')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'chat.stop' })).not.toBeInTheDocument();
-    expect(screen.getByTestId('chat-send')).toBeDisabled();
-    expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'chat.stop' })).toBeEnabled();
+    expect(screen.queryByTestId('chat-send')).not.toBeInTheDocument();
+    expect(mockedStreamViaDaemon).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByTestId('user-message')).toHaveLength(1);
+    expect(screen.queryByTestId('amr-balance-dialog')).not.toBeInTheDocument();
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).startsWith('/api/workspace/billing?'))).toBe(false);
   });
 
 });

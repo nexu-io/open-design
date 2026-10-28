@@ -45,7 +45,7 @@ export function createStrategyRunWriteEvidenceRecorder(db: Database.Database) {
       const filesWritten = runFilesWrittenForRun(run);
       if (filesWritten <= (lastToolCount.get(run) ?? 0)) return;
       const task = taskForRun(run.id);
-      if (!task?.intentResolution) return;
+      if (!task) return;
       recordStrategyRunWriteEvidence(db, {
         taskExecutionId: task.taskExecutionId, runId: run.id,
         filesWritten, unknown: false, source: 'tool_stream',
@@ -54,7 +54,7 @@ export function createStrategyRunWriteEvidenceRecorder(db: Database.Database) {
     },
     finish(run: EvidenceRun): void {
       const task = taskForRun(run.id);
-      if (!task?.intentResolution) return;
+      if (!task) return;
       const evidence = strategyRunWriteEvidence(run);
       recordStrategyRunWriteEvidence(db, {
         taskExecutionId: task.taskExecutionId, runId: run.id,

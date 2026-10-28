@@ -50,6 +50,10 @@ async function startCollabStubServer(): Promise<StubServer> {
       });
       res.setHeader('content-type', 'application/json');
       const { method, url } = { method: req.method ?? '', url: req.url ?? '' };
+      if (method === 'GET' && url.startsWith('/api/workspace/billing/preflight?')) {
+        res.end(JSON.stringify({ preflight: { workspaceId: 'personal-1', modelId: 'model/a+b', fundingCheck: 'insufficient' } }));
+        return;
+      }
       if (method === 'GET' && url === '/api/projects/p1/presence') {
         res.end(JSON.stringify({ present: [{ memberId: 'm-42', name: 'Ma Shu', role: 'member' }] }));
         return;
@@ -132,6 +136,18 @@ async function runCli(args: string[]): Promise<{ stdout: string; stderr: string;
 }
 
 describe('od collab CLI', () => {
+  it('reads independent funding feedback through the same endpoint as the UI', async () => {
+    stub = await startCollabStubServer();
+    const result = await runCli([
+      'workspace', 'billing', 'preflight', '--workspace', 'personal-1',
+      '--model', 'model/a+b', '--json', '--daemon-url', stub.baseUrl,
+    ]);
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({ preflight: { fundingCheck: 'insufficient' } });
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]?.url).toBe('/api/workspace/billing/preflight?workspaceId=personal-1&modelId=model%2Fa%2Bb');
+  });
+
   it('passes the selected model through the daemon billing contract', async () => {
     stub = await startCollabStubServer();
     const result = await runCli([

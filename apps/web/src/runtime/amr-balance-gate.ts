@@ -17,12 +17,44 @@ export type AmrBalanceGateResult =
 
 export const HOME_AMR_BALANCE_RETRY_DELAYS_MS = [400, 1_200] as const;
 
-/** A cached wallet alone cannot prove that a task is unfunded. */
+/** Home may provisionally hold a known empty wallet when its scoped plan
+ * reading also shows no funding. The caller must confirm asynchronously and
+ * resume only after funding is confirmed; unknown/timeout cannot submit the draft.
+ * Missing plan data and available quota cannot be turned into insufficiency. */
 export function amrBalanceGateFromMemory(
-  _balanceUsd: string | null | undefined,
-  _options: { profile?: string | null; updatedAt?: string | null } = {},
-): null {
-  return null;
+  balanceUsd: string | null | undefined,
+  options: {
+    profile?: string | null;
+    updatedAt?: string | null;
+    scope?: AmrBalanceGateScope;
+    modelId?: string | null;
+    preflight?: WorkspaceBillingPreflight | null;
+  } = {},
+): (Extract<AmrBalanceGateResult, { kind: 'hard' }> & { reason: 'insufficient' }) | null {
+  const balance = balanceUsd?.trim();
+  const { scope, preflight } = options;
+  if (!balance || !Number.isFinite(Number(balance)) || Number(balance) > 0 || !scope || !preflight) return null;
+  if (preflight.schemaVersion !== 1 || preflight.workspaceId !== scope.workspaceId ||
+    preflight.workspaceMemberId !== scope.workspaceMemberId ||
+    (preflight.modelId !== null && preflight.modelId !== (options.modelId ?? null)) ||
+    preflight.fundingCheck === 'available' || preflight.funding === 'wallet') return null;
+
+  const plan = preflight.codingPlan;
+  if (!plan || plan.workspaceId !== scope.workspaceId) return null;
+  // A null-model display read describes member quota, not model coverage.
+  // Only a definitely exhausted, not-yet-reset window can hold an eligible plan.
+  const exhausted = plan.eligible === true && plan.windows.some((window) =>
+    /^0+$/.test(window.remainingCredits) && window.resetsAt != null &&
+    Date.parse(window.resetsAt) > Date.now());
+  if (plan.eligible !== false && !exhausted) return null;
+  return {
+    kind: 'hard', reason: 'insufficient',
+    snapshot: {
+      status: 'available', profile: options.profile?.trim() || 'default', user: null,
+      balanceUsd: balance, updatedAt: options.updatedAt ?? preflight.generatedAt,
+      fetchedAt: new Date().toISOString(), stale: true, source: 'daemon_cache',
+    },
+  };
 }
 
 /**
@@ -227,40 +259,23 @@ export async function fetchAmrBalanceCardWalletSnapshot(
   };
 }
 
-async function checkWorkspaceBalanceGate(
-  scope: AmrBalanceGateScope,
-): Promise<AmrBalanceGateResult> {
-  const [accountSnapshot, workspaceSnapshot] = await Promise.all([
-    fetchAmrWalletSnapshot().catch(() => null),
-    fetchWorkspaceWalletSnapshot(scope, null).catch(() => null),
-  ]);
-  if (accountSnapshot?.status === 'signed_out') {
-    const fresh = await fetchAmrWalletSnapshot({ refresh: true }).catch(() => null);
-    if (fresh?.status === 'signed_out')
-      return { kind: 'hard', reason: 'signed_out', snapshot: fresh };
-  }
-  // Preserve exact-member authority. Older CLI responses have no preflight;
-  // lack of quota evidence must never become a wallet-only hard block.
-  if (!workspaceSnapshot) return { kind: 'unavailable' };
-  return { kind: 'allow' };
-}
-
+/** Only sign-in can be checked here. Workspace funding is admitted by Link
+ * as the run starts; a display-billing outage must not delay or reject a send.
+ * Exact-member authoritative reads remain required for card amounts/recovery. */
 export async function checkAmrBalanceGate(
-  scope?: AmrBalanceGateScope,
+  _scope?: AmrBalanceGateScope,
   _modelId?: string | null,
 ): Promise<AmrBalanceGateResult> {
   try {
-    if (scope) return await checkWorkspaceBalanceGate(scope);
     const cached = await fetchAmrWalletSnapshot().catch(() => null);
     if (cached?.status === 'signed_out') {
       const fresh = await fetchAmrWalletSnapshot({ refresh: true }).catch(() => null);
       if (fresh?.status === 'signed_out')
         return { kind: 'hard', reason: 'signed_out', snapshot: fresh };
     }
-    // An unscoped legacy account cannot prove which pool will fund the run.
     return { kind: 'allow' };
   } catch {
-    return scope ? { kind: 'unavailable' } : { kind: 'allow' };
+    return { kind: 'allow' };
   }
 }
 

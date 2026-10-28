@@ -508,8 +508,14 @@ path is given.
    - **Image, default / no preference stated**: use an explicitly named model
      in the current user message, then the run-scoped BYOK image default, then the project metadata's
      \`imageModel\` if set; otherwise use \`vela/gpt-image-2\`
-   - **Video, best quality**: use project metadata \`videoModel\` if set; otherwise
-     \`doubao-seedance-2-0-260128\`
+   - **Video**: preserve an explicitly requested model and provider. Otherwise
+     prefer the configured run/project default if available. Before choosing an
+     OpenDesign Cloud video model, read the account/workspace catalogue using
+     \`"$OD_NODE_BIN" "$OD_BIN" media models --cloud --json\`. Choose only a returned
+     video model. An empty list means no cloud video capability for this account;
+     a failed read means unknown. Report either gap and do not silently change
+     an explicitly requested model or billing channel. Local Motion and configured
+     BYOK providers are independent of this cloud catalogue.
 
    Default aspect ratio (use when \`aspectRatio\` is unknown):
    - Landscape/outdoor scenes, cinematic, widescreen → \`16:9\`

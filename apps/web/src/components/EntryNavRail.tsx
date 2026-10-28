@@ -87,6 +87,8 @@ import { MessageCenter } from './MessageCenter';
 import type { EntrySettingsSection } from './EntrySettingsMenu';
 import type { Project } from '../types';
 import { isRtlLocale, useI18n } from '../i18n';
+import { communityForLocale } from '../lib/community-links';
+import { FeishuIcon } from './chat/support-brand-icons';
 import { useDismissOnOutsideInteraction } from '../hooks/useDismissOnOutsideInteraction';
 import {
   beginWorkspaceScopedRead,
@@ -143,7 +145,6 @@ const ACCOUNT_MENU_MIN_HEIGHT = 200;
 const REPO_URL = 'https://github.com/nexu-io/open-design';
 const GITHUB_HELP_URL = `${REPO_URL}/issues/new`;
 const GITHUB_FEATURE_URL = `${REPO_URL}/pulls`;
-const DISCORD_URL = 'https://discord.gg/mHAjSMV6gz';
 const X_URL = 'https://x.com/OpenDesignHQ';
 const CONTACT_EMAIL_URL = 'mailto:support@open-design.ai';
 const externalLinkProps = { target: '_blank', rel: 'noreferrer noopener' } as const;
@@ -497,14 +498,24 @@ function RailRecentSection({
   const recentListRef = useRef<HTMLUListElement>(null);
   // Keep the full catalog navigable, but poll only rows intersecting its
   // scrollport. The list's existing height cap bounds the status request set.
-  // `null` until the observer has reported once; never reset on a catalog
-  // hand-over, so a re-render cannot blank the rows' glyphs.
-  const [visibleProjectIds, setVisibleProjectIds] = useState<string[] | null>(null);
+  // Visibility belongs to a particular identity and catalog. An empty catalog
+  // removes the list DOM without unmounting this component, so an observer
+  // callback cannot be relied on to retire the previous catalog's IDs.
+  const visibilityScope = JSON.stringify([
+    workspaceIdentityCacheKey(workspaceContext ?? null),
+    items.map((project) => project.id).sort(),
+  ]);
+  const [visibleProjects, setVisibleProjects] = useState<{
+    scope: string;
+    ids: string[];
+  } | null>(null);
   useEffect(() => {
     const list = recentListRef.current;
     if (!open || !list || typeof IntersectionObserver === 'undefined') return;
+    let active = true;
     const visible = new Set<string>();
     const observer = new IntersectionObserver((entries) => {
+      if (!active) return;
       for (const entry of entries) {
         const id = (entry.target as HTMLElement).dataset.projectId;
         if (!id) continue;
@@ -512,22 +523,28 @@ function RailRecentSection({
         else visible.delete(id);
       }
       const next = [...visible].sort();
-      setVisibleProjectIds((prev) =>
-        prev && prev.length === next.length && prev.every((id, index) => id === next[index])
+      setVisibleProjects((prev) =>
+        prev?.scope === visibilityScope
+          && prev.ids.length === next.length
+          && prev.ids.every((id, index) => id === next[index])
           ? prev
-          : next);
+          : { scope: visibilityScope, ids: next });
     }, { root: list });
     for (const row of list.children) observer.observe(row);
-    return () => observer.disconnect();
-  }, [items, open]);
+    return () => {
+      active = false;
+      observer.disconnect();
+    };
+  }, [items, open, visibilityScope]);
   // Until the observer has spoken, ask for the head of the list — the rows the
   // cap shows on a desktop window — in the same commit that paints them
   // (OPEND-2762). The observer's first report lands a frame later, and waiting
   // for it is what left the rows a round trip ahead of their glyphs.
   const runStatusProjectIds = useMemo(
-    () => visibleProjectIds
-      ?? items.slice(0, RECENT_STATUS_HEAD_ROWS).map((project) => project.id),
-    [visibleProjectIds, items],
+    () => visibleProjects?.scope === visibilityScope
+      ? visibleProjects.ids
+      : items.slice(0, RECENT_STATUS_HEAD_ROWS).map((project) => project.id),
+    [visibleProjects, visibilityScope, items],
   );
   const runStatusByProjectId = useProjectRunStatuses(runStatusProjectIds, {
     enabled: open,
@@ -613,6 +630,8 @@ function RailRecentSection({
       {deleteFlow.target ? (
         <ProjectDeleteConfirmDialog
           projectName={deleteFlow.target.name}
+          activeShareCount={deleteFlow.activeShareCount}
+          shareReadStatus={deleteFlow.shareReadStatus}
           pending={deleteFlow.pending}
           failed={deleteFlow.failed}
           onCancel={deleteFlow.cancel}
@@ -1381,7 +1400,6 @@ export function EntryTopRightCluster({
     window.open(billingUpgradeUrl, '_blank', 'noopener,noreferrer');
     window.setTimeout(() => {
       notifyWorkspaceBillingRefresh();
-      notifyWorkspaceContextRefresh();
     }, 3000);
   }
 
@@ -2015,7 +2033,8 @@ function RailSocialRow({
   // tooltip: the bubble is the only place the icons say what they do, so
   // the copy leads with the payoff (Discord hands out credits) rather
   // than naming the destination.
-  const communityLabel = t('entry.discordAria');
+  const community = communityForLocale(locale);
+  const communityLabel = t('entry.communityAria');
   const xLabel = t('entry.xAria');
   const mailLabel = t('entry.mailAria');
   const btnClass = 'entry-nav-rail__menu-social-btn od-tooltip';
@@ -2038,14 +2057,17 @@ function RailSocialRow({
     <div className="entry-nav-rail__menu-social" data-testid="entry-nav-rail-social">
       <a
         className={btnClass}
-        href={DISCORD_URL}
+        href={community.href}
         {...externalLinkProps}
         aria-label={communityLabel}
         {...hint(communityLabel)}
         data-testid="entry-nav-rail-discord"
-        onClick={() => track('discord')}
+        data-community-platform={community.platform}
+        onClick={() => track(community.platform)}
       >
-        <Icon name="discord" size={glyph} />
+        {community.platform === 'feishu'
+          ? <FeishuIcon monochrome width={glyph} height={glyph} />
+          : <Icon name="discord" size={glyph} />}
       </a>
       <a
         className={btnClass}

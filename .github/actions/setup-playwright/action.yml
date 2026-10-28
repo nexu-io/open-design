@@ -99,8 +99,9 @@ runs:
         package_dir="${PACKAGE_JSON_PATH%/*}"
         pnpm -C "$package_dir" exec playwright install chromium
 
-    - name: Pin Blacksmith apt mirror to the canonical archive
-      if: ${{ steps.preinstalled-playwright.outputs.enabled != 'true' }}
+    - name: Prepare Blacksmith apt for Playwright dependencies
+      id: playwright-apt
+      if: ${{ runner.os == 'Linux' && steps.preinstalled-playwright.outputs.enabled != 'true' }}
       shell: bash
       env:
         RUNNER_LABELS_JSON: ${{ inputs.runner-labels }}
@@ -110,18 +111,39 @@ runs:
         # index file before falling back, so the `apt-get update` inside
         # `playwright install --with-deps` hangs until the job timeout.
         # Browser OS deps are NOT fully preinstalled on the Blacksmith image
-        # (xvfb, fonts, libasound are missing), so apt must stay in the path;
-        # pin the canonical archive so it stays deterministic instead.
+        # (xvfb, fonts, libasound are missing), so apt must stay in the path.
+        # Use HTTPS: a timed-out HTTP mirror can discard the staged indexes,
+        # leaving apt unable to find browser dependencies. Treat any index
+        # refresh failure as an error, with bounded retries for transport faults.
         case "$RUNNER_LABELS_JSON" in
           *'"blacksmith-'*) ;;
           *) exit 0 ;;
         esac
         mirrorlist=/etc/apt/blacksmith-ubuntu-mirrors.txt
         if [ -f "$mirrorlist" ]; then
-          printf 'http://archive.ubuntu.com/ubuntu\tpriority:1\n' | sudo tee "$mirrorlist"
+          printf 'https://archive.ubuntu.com/ubuntu\tpriority:1\n' | sudo tee "$mirrorlist"
         fi
+        # Playwright invokes apt-get itself. Persist these options so its update
+        # cannot return success with incomplete package indexes. A unique file
+        # avoids overwriting runner policy; the cleanup step removes it even
+        # when browser installation fails.
+        apt_config="$(sudo mktemp /etc/apt/apt.conf.d/99-open-design-playwright-XXXXXX)"
+        echo "config-path=$apt_config" >> "$GITHUB_OUTPUT"
+        printf '%s\n' \
+          'Acquire::Retries "3";' \
+          'Acquire::http::Timeout "30";' \
+          'Acquire::https::Timeout "30";' \
+          'APT::Update::Error-Mode "any";' \
+          | sudo tee "$apt_config"
 
     - name: Install Playwright browsers
       if: ${{ steps.preinstalled-playwright.outputs.enabled != 'true' }}
       shell: bash
       run: ${{ inputs.install-command }}
+
+    - name: Clean up Playwright apt configuration
+      if: ${{ always() && steps.playwright-apt.outputs.config-path != '' }}
+      shell: bash
+      env:
+        PLAYWRIGHT_APT_CONFIG: ${{ steps.playwright-apt.outputs.config-path }}
+      run: sudo rm -f -- "$PLAYWRIGHT_APT_CONFIG"

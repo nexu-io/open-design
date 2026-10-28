@@ -2,15 +2,23 @@
 name: gsap-timeline
 description: |
   Official GSAP skill for timelines — gsap.timeline(), position parameter, nesting, playback. Use when sequencing animations, choreographing keyframes, or when the user asks about animation sequencing, timelines, or animation order (in GSAP or when recommending a library that supports timelines).
+zh_name: "GSAP · 时间轴"
+zh_description: "GSAP 时间轴动效：编排连续动画、标签、错峰和播放控制。"
 triggers:
+  - "动效"
+  - "动画"
+  - "motion"
+  - "时间轴"
+  - "编排"
   - "gsap timeline"
   - "animation timeline"
   - "sequenced animation"
   - "motion choreography"
 license: MIT
 od:
-  mode: prototype
+  mode: utility
   category: animation-motion
+  source-commit: aed9cfd3277740755f6bfc1155c7aa645403b760
   upstream: "https://github.com/greensock/gsap-skills"
 ---
 

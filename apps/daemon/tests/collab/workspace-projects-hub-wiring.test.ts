@@ -715,8 +715,11 @@ describe('server.ts wiring (source boundary)', () => {
     const helperBody = source.slice(helperStart, configStart);
     expect(helperBody).toContain('getTeamProjectMaterialization(');
     expect(helperBody).toContain('target.workspaceId');
+    expect(helperBody).toContain('getWorkspaceProjectByProjectId(db, target.projectId)');
+    expect(helperBody).toContain('binding?.workspaceId === target.workspaceId');
+    expect(helperBody).toContain('{ ...target, resourceId: binding.resourceHubResourceId }');
     expect(helperBody).toContain(
-      'teamProjectContentResourceId(target.projectId, target)',
+      'teamProjectContentResourceId(target.projectId, boundTarget)',
     );
     expect(helperBody).toContain(
       'latestTeamProjectMaterializationVersion(',

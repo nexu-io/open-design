@@ -1,0 +1,8 @@
+.controls { display: flex; align-items: center; gap: 6px; }
+.dialog { width: min(440px, calc(100vw - 32px)); }
+.dialog .preference { display: flex; flex-direction: row; align-items: flex-start; gap: 8px; margin: 18px 0; font-size: 13px; }
+.dialog .preference input { width: auto; flex-shrink: 0; margin-top: 2px; padding: 0; }
+.footer { display: flex; justify-content: flex-end; gap: 8px; }
+.error { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--text-secondary); }
+.available { gap: 6px; }
+.dot { width: 6px; height: 6px; flex-shrink: 0; border-radius: 50%; background: var(--accent); }

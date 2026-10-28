@@ -1,3 +1,5 @@
+import { afterAll } from "vitest";
+import { parseClientMetricEvent } from '@open-design/contracts/analytics';
 /**
  * Coverage for the packaged main-process startup-failure telemetry
  * (apps/packaged/src/startup-telemetry.ts).
@@ -14,12 +16,13 @@
  *
  * @see apps/packaged/src/startup-telemetry.ts
  */
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  reportDaemonExit,
   STARTUP_FAILURE_EVENT,
   captureStartupFailure,
   classifyStartupFailure,
@@ -28,7 +31,37 @@ import {
   resolveStartupDistinctId,
   readErrnoFields,
   scrubUserPaths,
+  reportLaunchEvent,
 } from '../src/startup-telemetry.js';
+
+const optedOutRoot = mkdtempSync(join(tmpdir(), 'od-startup-consent-'));
+// Startup safety delivery must also work with product analytics disabled.
+writeFileSync(join(optedOutRoot, 'app-config.json'), JSON.stringify({ telemetry: { metrics: false } }));
+afterAll(() => rmSync(optedOutRoot, { recursive: true, force: true }));
+
+describe('launch timing transport', () => {
+  it('preserves occurrence identity/time and does not invent an installation identity', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response('{}'));
+    const args = {
+      posthogKey: 'test-key', posthogHost: 'https://telemetry.invalid',
+      installationRoot: null, namespace: 'test', appVersion: '0.25.1', channel: 'beta',
+      event: 'client_launch_attempt' as const,
+      properties: { metric_schema_version: 1, telemetry_capability: 'supported', startup_type: 'cold', launch_type: 'warm', measurement_boundary: 'process_entry', started_at: '2026-10-16T00:00:00.000Z', event_id: 'event-1', occurred_at: '2026-10-16T00:00:00.000Z', app_session_id: 'session-1', launch_attempt_id: 'launch-1' },
+    };
+    await reportLaunchEvent(args, { fetchImpl });
+    expect(fetchImpl).not.toHaveBeenCalled();
+    const root = mkdtempSync(join(tmpdir(), 'od-launch-identity-'));
+    try {
+      writeFileSync(join(root, 'installation.json'), JSON.stringify({ installationId: 'installation-1' }));
+      await reportLaunchEvent({ dataRoot: optedOutRoot, ...args, installationRoot: root }, { fetchImpl, now: () => '2026-10-16T00:00:02.000Z' });
+      const body = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body));
+      expect(body.properties).toMatchObject({ event_schema_version: 4, client_type: 'desktop' });
+      expect(parseClientMetricEvent(body.event, body.properties)).not.toBeNull();
+      expect(body).toMatchObject({ event: 'client_launch_attempt', distinct_id: 'installation-1', timestamp: args.properties.occurred_at,
+        properties: { ...args.properties, $insert_id: 'event-1', reported_at: '2026-10-16T00:00:02.000Z', channel: 'beta', app_version: '0.25.1' } });
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+});
 
 // Verbatim daemon log tail from issue #4638.
 const ISSUE_4638_LOG = `Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'better-sqlite3' imported from /Applications/Open Design.app/Contents/Resources/app/prebundled/daemon/chunks/server-PULTSXNL.mjs
@@ -346,6 +379,7 @@ describe('reportStartupFailure', () => {
     const fetchImpl = vi.fn().mockResolvedValue(new Response('ok'));
     await reportStartupFailure(
       {
+        dataRoot: optedOutRoot,
         error: new Error(DAEMON_EXIT_MESSAGE),
         isPathAccess: false,
         posthogKey: 'phc_test',
@@ -361,7 +395,7 @@ describe('reportStartupFailure', () => {
         now: () => '2026-06-23T00:00:00.000Z',
       },
     );
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
     const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
     const props = (JSON.parse(init.body as string) as { properties: Record<string, unknown> })
       .properties;
@@ -378,6 +412,7 @@ describe('reportStartupFailure', () => {
     await expect(
       reportStartupFailure(
         {
+        dataRoot: optedOutRoot,
           error: new Error(DAEMON_EXIT_MESSAGE),
           isPathAccess: false,
           posthogKey: 'phc_test',
@@ -401,6 +436,7 @@ describe('reportStartupFailure', () => {
     const fetchImpl = vi.fn();
     await reportStartupFailure(
       {
+        dataRoot: optedOutRoot,
         error: new Error(DAEMON_EXIT_MESSAGE),
         isPathAccess: false,
         posthogKey: null,
@@ -429,6 +465,7 @@ describe('reportStartupFailure', () => {
     error.stack = `${error.message}\n    at file:///Users/liudetao/App/Contents/Resources/app/prebundled/daemon/server.mjs:1:1`;
     await reportStartupFailure(
       {
+        dataRoot: optedOutRoot,
         error,
         isPathAccess: false,
         posthogKey: 'phc_test',
@@ -462,6 +499,7 @@ describe('reportStartupFailure', () => {
     const fetchImpl = vi.fn().mockResolvedValue(new Response('ok'));
     await reportStartupFailure(
       {
+        dataRoot: optedOutRoot,
         error: new Error('boom'),
         isPathAccess: false,
         posthogKey: 'phc_test',
@@ -536,6 +574,7 @@ SqliteError: database disk image is malformed
     });
     await reportStartupFailure(
       {
+        dataRoot: optedOutRoot,
         error: spawnError,
         isPathAccess: false,
         posthogKey: 'phc_test',
@@ -564,6 +603,7 @@ SqliteError: database disk image is malformed
     delete (empty as { stack?: string }).stack;
     await reportStartupFailure(
       {
+        dataRoot: optedOutRoot,
         error: empty,
         isPathAccess: false,
         posthogKey: 'phc_test',
@@ -586,6 +626,7 @@ SqliteError: database disk image is malformed
     const fetchImpl = vi.fn().mockResolvedValue(new Response('ok'));
     await reportStartupFailure(
       {
+        dataRoot: optedOutRoot,
         error: new Error(DAEMON_EXIT_MESSAGE),
         isPathAccess: false,
         posthogKey: 'phc_test',
@@ -641,6 +682,7 @@ describe('errno triplet privacy', () => {
     });
     await reportStartupFailure(
       {
+        dataRoot: optedOutRoot,
         error: err,
         isPathAccess: false,
         posthogKey: 'phc_test',
@@ -693,6 +735,7 @@ describe('daemon_log_tail (unparseable log recovery)', () => {
     const fetchImpl = vi.fn().mockResolvedValue(new Response('ok'));
     await reportStartupFailure(
       {
+        dataRoot: optedOutRoot,
         error: new Error(DAEMON_EXIT_MESSAGE),
         isPathAccess: false,
         posthogKey: 'phc_test',
@@ -764,4 +807,96 @@ describe('daemon_log_tail (unparseable log recovery)', () => {
     const props = await captureProps(async () => '\n   \n\n');
     expect(props.daemon_log_tail).toBeNull();
   });
+});
+
+it.each(['false', 'corrupt', 'unavailable'])('reports startup exits when metrics consent is %s', async state => {
+  const root = mkdtempSync(join(tmpdir(), 'od-exit-consent-'));
+  const fetchImpl = vi.fn();
+  try {
+    writeFileSync(join(root, 'app-config.json'), state === 'false' ? '{"telemetry":{"metrics":false}}' : '{');
+    await reportStartupFailure({ dataRoot: state === 'unavailable' ? null : root, error: new Error('daemon failed'),
+      isPathAccess: false, posthogKey: 'phc_test', posthogHost: null, distinctId: 'installation-1',
+      appVersion: '1.0.0', namespace: 'test', source: 'packaged' }, { fetchImpl });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const payloads = fetchImpl.mock.calls.map(([, init]) => JSON.parse(init.body));
+    const exit = payloads.find(p => p.event === 'client_process_exit');
+    expect(exit).toBeDefined();
+    for (const key of ['path', 'url', 'content', 'prompt', 'pid', 'error_message']) expect(exit.properties).not.toHaveProperty(key);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+it.each(['daemon', 'web'])('correlates injected %s startup failure with its launch and emits a private-data-free exit metric', async role => {
+  const fetchImpl = vi.fn().mockResolvedValue(new Response('ok'));
+  await reportStartupFailure({ dataRoot: optedOutRoot,
+    error: new Error(`daemon exited before reporting status (code=1, signal=none); see /private/${role}/latest.log for details`),
+    isPathAccess: false, posthogKey: 'phc_test', posthogHost: null, distinctId: 'installation-1',
+    appVersion: '1.0.0-beta.1', namespace: 'test', source: 'packaged',
+    launchContext: { app_session_id: 'session-1', launch_attempt_id: 'launch-1' } }, { fetchImpl, readLogTail: async () => null });
+  const payloads = fetchImpl.mock.calls.map(([, init]) => JSON.parse((init as RequestInit).body as string));
+  const exit = payloads.find(p => p.event === 'client_process_exit');
+  expect(exit.properties).toMatchObject({ app_session_id: 'session-1', launch_attempt_id: 'launch-1',
+    app_version: '1.0.0-beta.1', reason: 'crash', process_role: role });
+  for (const key of ['log_path', 'native_module_path', 'error_stack', 'error_message', 'daemon_log_tail', 'pid']) expect(exit.properties).not.toHaveProperty(key);
+});
+
+
+describe('runtime daemon death safety capture', () => {
+  const observation = {
+    process_instance_id: '00000000-0000-4000-8000-000000000001',
+    app_session_id: 'dead-session', launch_attempt_id: 'dead-launch', app_version: '1.2.3',
+    occurred_at: '2026-10-19T01:02:03.000Z', exit_code: null, signal: 'SIGKILL', reason: 'killed' as const,
+    delivered: false,
+  };
+  it.each([200, 503])('persists evidence and acknowledges only successful HTTP (%s)', async status => {
+    const root = mkdtempSync(join(tmpdir(), 'od-runtime-exit-'));
+    try {
+      writeFileSync(join(root, 'installation.json'), JSON.stringify({ installationId: 'installation-1' }));
+      writeFileSync(join(root, 'app-config.json'), JSON.stringify({ telemetry: { metrics: false } }));
+      const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response('', { status }));
+      await reportDaemonExit({ dataRoot: root, installationRoot: root, namespace: 'test',
+        posthogKey: 'test-key', posthogHost: 'https://capture.invalid',
+        observation: { ...observation, pid: 987654, content: 'private-content', path: '/private/path' } as typeof observation },
+        { fetchImpl });
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      const body = JSON.parse(fetchImpl.mock.calls[0]![1]!.body as string);
+      expect(body.properties).toMatchObject({ process_role: 'daemon', reason: 'killed', signal: 'SIGKILL',
+        process_instance_id: observation.process_instance_id, app_session_id: 'dead-session', launch_attempt_id: 'dead-launch',
+        occurred_at: observation.occurred_at, occurrence_time_source: 'observed', is_backfill: false,
+        event_id: `${observation.process_instance_id}-unclean-exit:exit`,
+        $insert_id: `${observation.process_instance_id}-unclean-exit:exit` });
+      expect(parseClientMetricEvent(body.event, body.properties)).not.toBeNull();
+      for (const field of ['pid', 'path', 'content', 'delivered']) expect(body.properties).not.toHaveProperty(field);
+      expect(JSON.parse(readFileSync(join(root, 'diagnostics', 'daemon-exit-observation.json'), 'utf8')))
+        .toEqual({ ...observation, delivered: status === 200 });
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+  it('does not recreate consumed evidence after a delayed acknowledgement', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'od-runtime-exit-'));
+    let resolve!: (response: Response) => void;
+    try {
+      const sending = reportDaemonExit({ dataRoot: root, installationRoot: root, namespace: 'test',
+        posthogKey: 'test', posthogHost: null, observation }, { fetchImpl: () => new Promise(r => { resolve = r; }) });
+      const path = join(root, 'diagnostics', 'daemon-exit-observation.json');
+      rmSync(path); resolve(new Response('', { status: 200 })); await sending;
+      expect(() => readFileSync(path)).toThrow();
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+});
+
+
+it('uses explicit same-instance V8 OOM evidence before runtime signal capture', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'od-runtime-oom-'));
+  const instanceId = '00000000-0000-4000-8000-000000000002';
+  try {
+    mkdirSync(join(root, 'diagnostics', 'fatal-reports'), { recursive: true });
+    writeFileSync(join(root, 'diagnostics', 'daemon-health.json'), JSON.stringify({ bootId: instanceId, pid: 987654, startedAt: Date.now() - 1000 }));
+    writeFileSync(join(root, 'diagnostics', 'fatal-reports', 'report.json'), JSON.stringify({ header: { processId: 987654, trigger: 'OOMError' } }));
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response('', { status: 200 }));
+    await reportDaemonExit({ dataRoot: root, installationRoot: root, namespace: 'test', posthogKey: 'test', posthogHost: null,
+      observation: { process_instance_id: instanceId, app_session_id: null, launch_attempt_id: null, app_version: '1.2.3',
+        occurred_at: new Date().toISOString(), exit_code: null, signal: 'SIGABRT', reason: 'killed', delivered: false } }, { fetchImpl });
+    const body = JSON.parse(fetchImpl.mock.calls[0]![1]!.body as string);
+    expect(body.properties).toMatchObject({ reason: 'oom', signal: 'SIGABRT' });
+    expect(JSON.stringify(body)).not.toContain('987654');
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });

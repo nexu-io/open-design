@@ -40,7 +40,25 @@ export async function fetchVelaBillingPreflight(
   modelId: string | null,
   options: FetchVelaBillingOptions = {},
 ): Promise<WorkspaceBillingPreflight | null> {
-  const args = ['preflight', '--workspace-id', workspaceId, '--format', 'json'];
+  return fetchVelaFundingPreview('preflight', workspaceId, modelId, options);
+}
+
+/** Optional send-time hint; old CLI/API failures stay unknown without a legacy fallback. */
+export async function fetchVelaBillingFundingCheck(
+  workspaceId: string,
+  modelId: string | null,
+  options: FetchVelaBillingOptions = {},
+): Promise<WorkspaceBillingPreflight | null> {
+  return fetchVelaFundingPreview('funding-check', workspaceId, modelId, options);
+}
+
+async function fetchVelaFundingPreview(
+  command: 'preflight' | 'funding-check',
+  workspaceId: string,
+  modelId: string | null,
+  options: FetchVelaBillingOptions,
+): Promise<WorkspaceBillingPreflight | null> {
+  const args = [command, '--workspace-id', workspaceId, '--format', 'json'];
   if (modelId) args.push('--model', modelId);
   let stdout: string;
   try {
@@ -68,6 +86,7 @@ export function parseBillingPreflight(
       !raw.workspaceMemberId?.trim() || raw.modelId !== modelId || !date(raw.generatedAt) ||
       typeof raw.balanceUsd !== 'string' || !/^-?\d+(\.\d+)?$/.test(raw.balanceUsd) ||
       !['coding_plan', 'wallet', 'gateway'].includes(raw.funding) ||
+      (raw.fundingCheck !== undefined && !['available', 'insufficient', 'unknown'].includes(raw.fundingCheck)) ||
       (raw.modelCovered !== null && typeof raw.modelCovered !== 'boolean') ||
       !plan || plan.workspaceId !== workspaceId || !date(plan.generatedAt) ||
       typeof plan.eligible !== 'boolean' ||
@@ -594,7 +613,7 @@ const defaultRunVelaBilling = async (
         VELA_INVOCATION_SOURCE: 'open-design',
       },
       maxBuffer: 4 * 1024 * 1024,
-      ...(args[0] === 'preflight' ? { timeoutMs: BILLING_PREFLIGHT_TIMEOUT_MS } : {}),
+      ...(args[0] === 'preflight' || args[0] === 'funding-check' ? { timeoutMs: BILLING_PREFLIGHT_TIMEOUT_MS } : {}),
       onStderr: (value) => {
         stderr = value;
       },

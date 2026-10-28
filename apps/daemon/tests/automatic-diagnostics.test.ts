@@ -77,3 +77,17 @@ it('does not create a second fault for the terminal callback following an observ
   expect(observe(run, { id: 3, timestamp: 3, event: 'run_retry_attempted', data: {} })).toBeNull();
   expect(observe(run, { id: 4, timestamp: 4, event: 'end', data: { status: 'failed' } })).not.toBeNull();
 });
+it('keeps the reason of a source known to be absent instead of a consent verdict', async () => {
+  const f = fixture();
+  const service = new AutomaticDiagnostics({ ...f.options,
+    sources: async () => [{ name: 'agent-cli-logs/amr/opencode', absolutePath: '', kind: 'text' as const, omitReason: 'source_not_located' }] });
+  cleanup.push(async () => { await service.stop(); });
+  const id = service.record({ sourceId: 'run:absent', at: Date.now(), kind: 'run_error' })!;
+  await service.tick();
+  const { readdirSync, readFileSync } = await import('node:fs');
+  const { gunzipSync } = await import('node:zlib');
+  const dir = join(service.outbox.directory, id);
+  const archive = Buffer.concat(readdirSync(dir).filter((n) => /^\d+$/.test(n)).sort((a, b) => +a - +b).map((n) => readFileSync(join(dir, n))));
+  const collection = gunzipSync(archive).toString().trim().split('\n').map((l) => JSON.parse(l)).at(-1);
+  expect(collection.notes).toEqual([{ name: 'agent-cli-logs/amr/opencode', reason: 'source_not_located' }]);
+});

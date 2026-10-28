@@ -1,3 +1,4 @@
+import { renderDeliverableSkillCatalog } from '@open-design/contracts';
 import {
   closeSync,
   constants,
@@ -101,7 +102,9 @@ export function loadBundledStrategyPromptAssetsV2(input: {
     binding: loaded.binding,
     coreStrategy: decode(loaded.corePath),
     generalOrchestration: decode(loaded.orchestrationPath),
-    taskSkill: decode(loaded.selectedProfilePath),
+    taskSkill: decode(loaded.selectedProfilePath)
+      .replaceAll('{{SKILL_CATALOG}}', renderDeliverableSkillCatalog(path.join(input.plugin.fsPath, 'assets/task-profiles')))
+      .replaceAll('{{SKILL_ROOT}}', path.join(input.plugin.fsPath, 'assets/task-profiles')),
     taskResources: loaded.selectedResourcePaths.map((resourcePath) => ({
       path: resourcePath,
       text: decode(resourcePath),

@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en" data-od-preview-ready="false">
+<head>
+<meta name="od-motion-output" content="video">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Motion Reel 2026 — Showreel</title>
+<script src="assets/gsap.min.js"></script>
+<style>
+@font-face{font-family:ArchivoX;src:url('assets/archivo-expanded-black.ttf') format('truetype');font-display:block}
+@font-face{font-family:ArchivoC;src:url('assets/archivo-condensed-black.ttf') format('truetype');font-display:block}
+@font-face{font-family:ArchivoB;src:url('assets/archivo-extrabold.ttf') format('truetype');font-display:block}
+@font-face{font-family:InstrumentI;src:url('assets/instrument-serif-italic.ttf') format('truetype');font-display:block}
+@font-face{font-family:JBMono;src:url('assets/jetbrains-mono-medium.ttf') format('truetype');font-display:block}
+@font-face{font-family:JBMonoB;src:url('assets/jetbrains-mono-bold.ttf') format('truetype');font-display:block}
+:root{--bg:#202020;--ink:#FAFAFA;--accent:#87EA5C}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#000;overflow:hidden}
+#viewport{position:fixed;inset:0;overflow:hidden;background:var(--bg)}
+#main{position:absolute;left:50%;top:50%;width:1920px;height:1080px;transform-origin:center;background:var(--bg);overflow:hidden}
+#main canvas{display:block;width:1920px;height:1080px}
+#controls{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:100;display:flex;align-items:center;gap:14px;width:min(900px,92vw);padding:12px 18px;border-radius:14px;background:#101214dd;color:#fff;font:600 13px ui-monospace,Menlo,monospace;opacity:0;transition:opacity .2s}
+#controls:hover,#controls:focus-within{opacity:1}
+#controls button{font:inherit;letter-spacing:.06em;background:var(--accent);color:#0B0B0C;border:0;border-radius:999px;padding:9px 16px;cursor:pointer;min-width:88px}
+#controls button:focus-visible,#scrub:focus-visible{outline:3px solid #fff;outline-offset:2px}
+#scrub{flex:1;accent-color:var(--accent)}
+#tc{min-width:110px;text-align:right;font-variant-numeric:tabular-nums}
+/* The OD export bridge marks frame capture; keep preview controls out of the film. */
+html.od-export #controls{display:none!important}
+html.od-export #main{left:0!important;top:0!important;transform:none!important}
+</style>
+</head>
+<body>
+<div id="viewport">
+  <div id="main" data-composition-id="main" data-start="0" data-duration="15" data-width="1920" data-height="1080">
+    <canvas id="stage" width="1920" height="1080"></canvas>
+    <audio id="soundtrack" src="assets/soundtrack.mp3" data-start="0" data-duration="15" data-track-index="2" data-volume="1" preload="auto"></audio>
+  </div>
+</div>
+<div id="controls">
+  <button id="playBtn" type="button" aria-label="Play or pause">PAUSE</button>
+  <input id="scrub" type="range" min="0" max="15" step="0.01" value="0" aria-label="Timeline position">
+  <span id="tc">0.00 / 15.00</span>
+</div>
+
+<script>
+/* ============================================================
+   Motion Reel 2026 — a frame-faithful rebuild of the viral
+   "15-second motion designer showreel" (@stephanlivera).
+   Seven chapters at 128 BPM. One canvas, one clock: render(t)
+   draws every frame purely from timeline time.
+   ============================================================ */
+const CFG = {
+  duration: 15, w: 1920, h: 1080, bpm: 128, reducedAt: 14.6,
+  brand: 'OPEN DESIGN', role: 'motion designer', year: '2026',
+  dark: '#202020', ink: '#26251E', green: '#87EA5C', paper: '#FAFAFA', deep: '#007106', pale: '#D0FFB5',
+  footer: ['SHOWREEL 2026', '15 SECONDS', 'EVERY FRAME WRITTEN IN CODE', 'AVAILABLE FOR NEW PROJECTS']
+};
+const BEAT = 60 / CFG.bpm;
+const F = { wide: '"ArchivoX", "Arial Black", sans-serif', cond: '"ArchivoC", "Arial Narrow", sans-serif', bold: '"ArchivoB", Arial, sans-serif', serif: '"InstrumentI", Georgia, serif', mono: '"JBMono", ui-monospace, Menlo, monospace', monoB: '"JBMonoB", ui-monospace, Menlo, monospace' };
+const cv = document.getElementById('stage');
+const ctx = cv.getContext('2d');
+const E = n => gsap.parseEase(n);
+const EZ = { o2: E('power2.out'), o3: E('power3.out'), i3: E('power3.in'), io3: E('power3.inOut'), o4: E('power4.out'), i4: E('power4.in'), expo: E('expo.out'), expoIn: E('expo.in'), expoIO: E('expo.inOut'), back: E('back.out(1.7)'), backIn: E('back.in(1.7)'), el: E('elastic.out(1,0.3)'), bounce: E('bounce.out'), io2: E('power2.inOut'), lin: p => p, io1: E('sine.inOut') };
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const lerp = (a, b, p) => a + (b - a) * p;
+const TAU = Math.PI * 2;
+function rnd(i) { const s = Math.sin(i * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); }
+const fnt = (size, fam) => `${size}px ${fam}`;
+
+/* ---------- drawing helpers ---------- */
+function circle(x, y, r, fill) { if (r <= 0) return; ctx.fillStyle = fill; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); }
+function ring(x, y, r, color, width, a = 1) { if (r <= 0 || a <= 0) return; ctx.save(); ctx.globalAlpha = a; ctx.strokeStyle = color; ctx.lineWidth = width; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.stroke(); ctx.restore(); }
+function text(s, x, y, size, fam, color, align = 'left', a = 1, track = 0) {
+  if (a <= 0) return; ctx.save(); ctx.globalAlpha = a; ctx.font = fnt(size, fam); ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'alphabetic';
+  if ('letterSpacing' in ctx) ctx.letterSpacing = track + 'px'; ctx.fillText(s, x, y); ctx.restore();
+}
+// A word drawn glyph by glyph; fx(i) returns {dx, dy, sx, sy, a, blur:[vx,vy]}
+// The Open Design mark (apps/web/public/logo.svg, 82×82 viewBox), drawn centred.
+const OD_MARK = new Path2D('M41 0.726562C76.5753 0.726562 82 6.15121 82 41.7266C82 77.3019 76.5753 82.7266 41 82.7266C5.42465 82.7266 0 77.3019 0 41.7266C0 6.15121 5.42465 0.726562 41 0.726562ZM40.8906 16.4258C26.9164 16.4258 15.5879 27.7543 15.5879 41.7285C15.5879 46.7757 15.5879 58.0219 15.5879 63.665C15.588 65.5281 17.091 67.0312 18.9541 67.0312H40.8906C54.8647 67.0311 66.1932 55.7026 66.1934 41.7285C66.1934 27.7544 54.8647 16.4259 40.8906 16.4258ZM40.8906 21.4863C52.0699 21.4864 61.1328 30.5492 61.1328 41.7285C61.1327 52.9078 52.0699 61.9706 40.8906 61.9707C29.7113 61.9707 20.6485 52.9078 20.6484 41.7285C20.6484 30.5491 29.7113 21.4863 40.8906 21.4863ZM32.6445 32.2549C31.9921 32.0027 31.3503 32.6469 31.5996 33.3037L39.3145 53.6045C39.6345 54.4468 40.877 54.2162 40.877 53.3145V41.6836H52.665C53.5605 41.6836 53.7908 40.4368 52.9551 40.1133L32.6445 32.2549Z');
+function odMark(x, y, size, color, rot = 0) {
+  if (size <= 0) return;
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rot); const k = size / 82; ctx.scale(k, k); ctx.translate(-41, -41.7266);
+  ctx.fillStyle = color; ctx.fill(OD_MARK); ctx.restore();
+}
+// The mark's outline drawn up to `p` (0 → 1) of its length, for the opener's draw-on.
+function odMarkStroke(x, y, size, color, rot, p, lw) {
+  if (size <= 0 || p <= 0) return;
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rot); const k = size / 82; ctx.scale(k, k); ctx.translate(-41, -41.7266);
+  ctx.strokeStyle = color; ctx.lineWidth = lw / k; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.setLineDash([340 * p, 340]); ctx.stroke(OD_MARK); ctx.restore();
+}
+// Largest size up to `max` at which `s` fits `width` in family `fam`.
+function fitSize(s, fam, max, width) { ctx.font = fnt(max, fam); return Math.min(max, max * width / ctx.measureText(s).width); }
+function word(s, cx, y, size, fam, color, fx, track = 0) {
+  ctx.font = fnt(size, fam); ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+  const ws = [...s].map(ch => ctx.measureText(ch).width + track), total = ws.reduce((a, b) => a + b, 0) - track;
+  let x = cx - total / 2;
+  [...s].forEach((ch, i) => {
+    const f = fx ? fx(i) : {}, a = f.a ?? 1;
+    if (a > 0.002) {
+      const bl = f.blur || [0, 0], n = Math.hypot(bl[0], bl[1]) > 2 ? 6 : 0;
+      for (let k = n; k >= 0; k--) {
+        ctx.save(); ctx.globalAlpha = a * (k ? 0.14 : 1); ctx.fillStyle = color;
+        ctx.translate(x + ws[i] / 2 + (f.dx || 0) - bl[0] * k / 6, y + (f.dy || 0) - bl[1] * k / 6); ctx.scale(f.sx || 1, f.sy || 1);
+        ctx.fillText(ch, -ws[i] / 2 + track / 2, 0); ctx.restore();
+      }
+    }
+    x += ws[i];
+  });
+  return total;
+}
+function blurCopies(n, vx, vy, draw) { for (let k = n; k >= 0; k--) { ctx.save(); ctx.globalAlpha *= k ? 0.12 : 1; ctx.translate(-vx * k / n, -vy * k / n); draw(); ctx.restore(); } }
+
+// faint dot grid on the dark chapters, baked once
+const dotGrid = (() => { const c = document.createElement('canvas'); c.width = CFG.w; c.height = CFG.h; const g = c.getContext('2d'); g.fillStyle = 'rgba(255,255,255,.07)'; for (let y = 30; y < CFG.h; y += 60) for (let x = 30; x < CFG.w; x += 60) g.fillRect(x - 1.5, y - 1.5, 3, 3); return c; })();
+
+/* ---------- chapters ---------- */
+// [start, label, background, hud ink]
+const CH = [[0, '01 — IDENTITY', CFG.dark, CFG.paper], [2.0, '01 — IDENTITY', CFG.green, CFG.ink], [3.5, '02 — EASING', CFG.paper, CFG.ink], [5.5, '03 — MORPHING', CFG.deep, CFG.paper], [7.45, '04 — SYSTEMS', CFG.dark, CFG.paper], [9.75, '05 — DEPTH', CFG.dark, CFG.paper], [11.2, '06 — KINETIC TYPE', CFG.dark, CFG.paper], [13.1, '07 — END', CFG.green, CFG.ink]];
+
+/* 01 — identity: a dot, a ring, a starburst with orbiting type */
+function identity(t) {
+  ctx.drawImage(dotGrid, 0, 0);
+  const cx = 960, cy = 540;
+  // the opening ring and dot
+  const r0 = lerp(90, 180, EZ.o3(seg(t, 0.1, 0.5)));
+  ring(cx, cy, r0, 'rgba(250,250,250,.35)', 2, 1 - seg(t, 0.9, 1.2));
+  const big = EZ.expo(seg(t, 0.45, 0.8));
+  ring(cx, cy, lerp(200, 430, big), 'rgba(250,250,250,.18)', 6, big * (1 - seg(t, 1.0, 1.3)));
+  ring(cx, cy, 760, 'rgba(250,250,250,.12)', 2, seg(t, 0.8, 1.0) * (1 - seg(t, 1.5, 1.7)));
+  // rays burst from the dot, thicken and spin, then draw back behind the mark
+  const burst = EZ.expo(seg(t, 0.4, 0.85)), thick = EZ.o3(seg(t, 0.6, 0.95)), retract = EZ.i3(seg(t, 1.05, 1.4)), collapse = EZ.i3(seg(t, 1.55, 1.82));
+  const clear = EZ.o3(seg(t, 0.95, 1.05));
+  if (burst > 0 && retract < 1) {
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(t * 1.4); ctx.strokeStyle = CFG.green; ctx.lineCap = 'round';
+    for (let i = 0; i < 16; i++) {
+      const a = i / 16 * TAU, len = (i % 2 ? 300 : 380) * burst * (1 - retract * 0.45) * (1 + 0.05 * Math.sin(t * 9 + i)), r0 = lerp(30, 250, clear) + 120 * retract;
+      ctx.globalAlpha = 1 - retract; ctx.lineWidth = lerp(3, 16, thick) * (1 - retract * 0.6); ctx.beginPath(); ctx.moveTo(Math.cos(a) * r0, Math.sin(a) * r0); ctx.lineTo(Math.cos(a) * Math.max(r0, len), Math.sin(a) * Math.max(r0, len)); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  // the mark draws on, fills with a flash, breathes, then collapses
+  const draw = EZ.io3(seg(t, 0.62, 1.05)), fill = EZ.back(seg(t, 1.0, 1.2));
+  const turn = Math.sin(t * 2.2) * 0.1 * (1 - collapse) + EZ.io3(seg(t, 1.5, 1.8)) * 2.4, size = 440 * (1 - collapse * 0.85) * (1 + 0.03 * Math.sin(t * 9));
+  if (collapse < 1) {
+    const handover = seg(t, 1.0, 1.08);
+    if (handover < 1) { ctx.save(); ctx.globalAlpha = 1 - handover; odMarkStroke(cx, cy, size, CFG.green, turn, draw, 10); ctx.restore(); }
+    if (fill > 0) odMark(cx, cy, size * lerp(1.12, 1, fill), CFG.green, turn);
+    const flash = seg(t, 1.0, 1.35);
+    if (flash > 0 && flash < 1) ring(cx, cy, 240 + flash * 360, `rgba(250,250,250,${(0.8 * (1 - flash)).toFixed(3)})`, 6 * (1 - flash) + 1, 1);
+  }
+  circle(cx, cy, lerp(15, 26, EZ.back(seg(t, 0.15, 0.45))) * Math.max(0, 1 - seg(t, 0.45, 0.6)) * (1 - collapse), CFG.green);
+  // orbiting type ring
+  const tr = EZ.o3(seg(t, 0.95, 1.2)) * (1 - seg(t, 1.5, 1.65));
+  if (tr > 0) {
+    ring(cx, cy, 420, 'rgba(135,234,92,.55)', 2, tr);
+    const label = ` ${CFG.brand} · MOTION REEL · ${CFG.year} · SHOWREEL ·`.repeat(2);
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(-t * 0.5); ctx.font = fnt(22, F.mono); ctx.fillStyle = CFG.paper; ctx.globalAlpha = tr * 0.85; ctx.textAlign = 'center';
+    [...label].forEach((ch, i) => { ctx.save(); ctx.rotate(i / label.length * TAU); ctx.fillText(ch, 0, -340); ctx.restore(); });
+    ctx.restore();
+  }
+  // the cream circle that wipes into the title
+  const wipe = EZ.i3(seg(t, 1.82, 2.0));
+  if (wipe > 0) { const R = 40 + wipe * 1300; circle(cx, cy, R + 14, 'rgba(0,113,6,.55)'); circle(cx, cy, R + 6, 'rgba(135,234,92,.45)'); circle(cx, cy, R, CFG.paper); }
+}
+
+/* 01b — the brand title on orange */
+function title(t) {
+  const cx = 960, cy = 540;
+  const grow = EZ.o3(seg(t, 0, 0.25)); // the orange disc opens inside the cream ring
+  if (grow < 1) { ctx.fillStyle = CFG.paper; ctx.fillRect(0, 0, CFG.w, CFG.h); circle(cx, cy, 1300 * grow, CFG.green); }
+  const ln = EZ.expo(seg(t, 0.15, 0.6));
+  ctx.fillStyle = CFG.ink; ctx.globalAlpha = 0.85; ctx.fillRect(144, 228, (1776 - 144) * ln, 3); ctx.globalAlpha = 1;
+  text('N° 01', 144, 270, 22, F.mono, CFG.ink, 'left', seg(t, 0.4, 0.6));
+  text('SHOWREEL — ' + CFG.year, 1776, 270, 22, F.mono, CFG.ink, 'right', seg(t, 0.4, 0.6));
+  // letters slide in from the left, squeeze and stretch, then settle wide
+  // one display line per word, each as large as the original's single word
+  const lines = CFG.brand.split(' '), size = Math.min(270, ...lines.map(l => fitSize(l, F.wide, 300, 1600)));
+  const base = lines.length > 1 ? [520, 520 + size * 0.95] : [640];
+  let n = 0;
+  lines.forEach((line, k) => {
+    const i0 = n; n += line.length;
+    word(line, cx, base[k], size, F.wide, CFG.ink, (j) => {
+      const i = i0 + j, s = seg(t, 0.02 + i * 0.035, 0.32 + i * 0.035), e = EZ.expo(s);
+      const squeeze = Math.sin(seg(t, 0.4, 0.95) * Math.PI) * (i === 1 ? 0.45 : i % 2 ? 0.12 : -0.08);
+      const out = EZ.i3(seg(t, 1.3, 1.55));
+      return { dx: (1 - e) * -900 + out * -260, sx: 1 - squeeze, sy: 1, a: s > 0 ? 1 : 0, blur: [(1 - s) * 220 + out * 260, 0] };
+    }, -6);
+  });
+  const sub = EZ.o3(seg(t, 0.85, 1.15));
+  text(CFG.role, cx, base[base.length - 1] + 130 + (1 - sub) * 30, 104, F.serif, CFG.ink, 'center', sub * (1 - seg(t, 1.3, 1.45)));
+}
+
+/* 02 — easing: six ways to get from A to B */
+const EASES = [['linear', EZ.lin, CFG.ink], ['ease-in-out', EZ.io3, CFG.deep], ['expo-out', EZ.expo, CFG.green], ['back-out', E('back.out(2.2)'), CFG.ink], ['elastic', EZ.el, CFG.deep], ['bounce', EZ.bounce, CFG.green]];
+function easing(t) {
+  // diagonal wipe from orange plus flying ink blots on the way in
+  const wipe = EZ.io3(seg(t, 0, 0.25));
+  if (wipe < 1) {
+    ctx.fillStyle = CFG.green; ctx.beginPath(); const k = wipe * 3200; ctx.moveTo(0, 0); ctx.lineTo(Math.max(0, 1920 * 1.6 - k), 0); ctx.lineTo(0, Math.max(0, 1080 * 1.6 - k)); ctx.closePath(); ctx.fill();
+    for (let i = 0; i < 6; i++) { const x = 360 + i * 260 + wipe * 300, y = 700 - i * 40 + (1 - wipe) * 80; ctx.save(); ctx.translate(x, y); ctx.rotate(-0.6); ctx.scale(1.8, 1); circle(0, 0, 22, CFG.ink); ctx.restore(); }
+  }
+  const out = EZ.i3(seg(t, 1.88, 2.05)), enter = seg(t, 0.15, 0.45);
+  ctx.save(); ctx.globalAlpha = 1 - out;
+  text('Six ways to get from A to B.', 144, 192, 70, F.serif, CFG.ink, 'left', EZ.o3(enter));
+  text('SAME DISTANCE · SAME DURATION (0.8s)', 1340, 192, 18, F.mono, 'rgba(38,37,30,.55)', 'left', EZ.o3(enter));
+  const x0 = 658, x1 = 1700;
+  text('A', x0, 280, 18, F.mono, CFG.ink, 'center', enter); text('B', x1, 280, 18, F.mono, CFG.ink, 'center', enter);
+  EASES.forEach(([name, ez, colr], i) => {
+    const y = 330 + i * 92, e = EZ.o3(seg(t, 0.08 + i * 0.02, 0.28 + i * 0.02));
+    text(String(i + 1).padStart(2, '0'), 150, y + 8, 18, F.mono, CFG.green, 'left', e);
+    text(name, 196, y + 8, 22, F.mono, CFG.ink, 'left', e);
+    // curve icon
+    ctx.save(); ctx.globalAlpha = e; ctx.strokeStyle = 'rgba(38,37,30,.25)'; ctx.lineWidth = 1.5; ctx.strokeRect(456, y - 26, 64, 52);
+    ctx.strokeStyle = colr === CFG.ink ? CFG.ink : colr; ctx.lineWidth = 3; ctx.beginPath();
+    for (let s = 0; s <= 32; s++) { const q = s / 32, yy = y + 18 - ez(q) * 40; s ? ctx.lineTo(460 + q * 56, yy) : ctx.moveTo(460, yy); } ctx.stroke(); ctx.restore();
+    // track with ticks
+    ctx.save(); ctx.globalAlpha = e * 0.3; ctx.fillStyle = CFG.ink; ctx.fillRect(x0, y, (x1 - x0) * e, 2);
+    for (let k = 0; k <= 10; k++) ctx.fillRect(x0 + (x1 - x0) * k / 10 - 1, y - 8, 2, 16 * (k % 5 === 0 ? 1.5 : 1)); ctx.restore();
+    // ball runs 0.8s on the beat, with a smeared trail
+    const p = seg(t, 0.55, 1.35), v = ez(p), bx = lerp(x0, x1, v), prev = lerp(x0, x1, ez(seg(t - 1 / 30, 0.55, 1.35)));
+    const speed = (bx - prev);
+    ctx.save(); ctx.globalAlpha = e;
+    for (let k = 6; k >= 1; k--) { ctx.globalAlpha = e * 0.1; circle(bx - speed * k * 0.6, y, 24, colr); }
+    ctx.globalAlpha = e; ctx.translate(bx, y); ctx.scale(1 + Math.min(1.2, Math.abs(speed) / 60), 1); circle(0, 0, 24, colr); ctx.restore();
+    // arrival rings
+    const arrive = seg(t, 1.38, 1.7);
+    if (arrive > 0) ring(x1, y, 24 + 14 * EZ.o3(arrive), colr === CFG.ink ? CFG.ink : colr, 2, (1 - arrive * 0.4) * e);
+  });
+  ctx.restore();
+  // everything streaks away to the right
+  if (out > 0) for (let i = 0; i < 6; i++) { const y = 330 + i * 92 + (i - 2.5) * 40 * out; ctx.save(); ctx.translate(1700 + out * 400 - i * 120 * out, y); ctx.scale(1 + out * 4, 1 - out * 0.5); circle(0, 0, 24, EASES[i][2]); ctx.restore(); }
+}
+
+/* 03 — morphing: one shape, four forms, an orbit that follows */
+const NP = 160;
+// polygons as (angle, radius) vertices; the radius at any angle is where that ray meets the outline
+function polyR(verts, a) {
+  const n = verts.length; a = ((a % TAU) + TAU) % TAU;
+  for (let i = 0; i < n; i++) {
+    const [a0, r0] = verts[i], [a1raw, r1] = verts[(i + 1) % n]; let a1 = a1raw; if (a1 <= a0) a1 += TAU;
+    let aa = a; if (aa < a0) aa += TAU;
+    if (aa >= a0 && aa <= a1) {
+      const x0 = Math.cos(a0) * r0, y0 = Math.sin(a0) * r0, x1 = Math.cos(a1) * r1, y1 = Math.sin(a1) * r1, dx = Math.cos(a), dy = Math.sin(a);
+      const den = dx * (y1 - y0) - dy * (x1 - x0); return den === 0 ? r0 : (x0 * (y1 - y0) - y0 * (x1 - x0)) / den;
+    }
+  }
+  return 1;
+}
+const TRI = [0, 1, 2].map(i => [((i / 3) * TAU + TAU) % TAU, 1.3]);
+const STAR = Array.from({ length: 10 }, (_, i) => [((-Math.PI / 2 + i / 10 * TAU) % TAU + TAU) % TAU, i % 2 ? 0.5 : 1.2]).sort((p, q) => p[0] - q[0]);
+function shapeR(kind, a) {
+  if (kind === 'circle') return 1;
+  if (kind === 'tri') return polyR(TRI, a);
+  if (kind === 'star') return polyR(STAR, a);
+  if (kind === 'square') { const c = Math.abs(Math.cos(a)), s = Math.abs(Math.sin(a)); return 0.86 / Math.pow(Math.pow(c, 6) + Math.pow(s, 6), 1 / 6); }
+}
+const FORMS = [['circle', 0.0], ['tri', 0.75], ['star', 1.25], ['square', 1.7]];
+function formAt(t) {
+  let k = 0; for (let i = 0; i < FORMS.length; i++) if (t >= FORMS[i][1]) k = i;
+  const next = Math.min(k + 1, FORMS.length - 1), p = k === next ? 0 : EZ.expoIO(seg(t, FORMS[next][1] - 0.3, FORMS[next][1]));
+  return { a: FORMS[k][0], b: FORMS[p > 0 ? next : k][0], p };
+}
+function shapePath(form, R, rot) {
+  ctx.beginPath();
+  for (let i = 0; i <= NP; i++) { const a = i / NP * TAU, r = R * lerp(shapeR(form.a, a), shapeR(form.b, a), form.p), x = Math.cos(a + rot) * r, y = Math.sin(a + rot) * r; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+  ctx.closePath();
+}
+function morphing(t) {
+  const cx = 960, cy = 540, appear = EZ.back(seg(t, 0.05, 0.35)), out = EZ.i3(seg(t, 1.85, 1.95));
+  // guide lines and readouts
+  ctx.save(); ctx.globalAlpha = 0.18 * appear; ctx.fillStyle = CFG.paper; ctx.fillRect(220, cy, 1480, 1); ctx.fillRect(cx, 120, 1, 840); ctx.restore();
+  const f = formAt(t), names = { circle: 'CIRCLE', tri: 'TRIANGLE', star: 'STAR', square: 'SQUIRCLE' };
+  text(`MORPH · ${names[f.a]} → ${names[FORMS[Math.min(FORMS.findIndex(x => x[0] === f.a) + 1, 3)][0]]}`, 270, 512, 18, F.mono, 'rgba(250,250,250,.75)', 'left', appear);
+  text(`r 1.00 · ROT ${String((t * 120 % 360).toFixed(1)).padStart(5, '0')}°`, 1650, 512, 18, F.mono, 'rgba(250,250,250,.75)', 'right', appear);
+  text('STEPS ' + (Math.min(3, Math.floor(t / 0.5)) + 1) + '/4', 1650, 540, 18, F.mono, 'rgba(250,250,250,.5)', 'right', appear);
+  text('270', 230, 528, 16, F.mono, 'rgba(250,250,250,.45)', 'left', appear); text('90', 1690, 528, 16, F.mono, 'rgba(250,250,250,.45)', 'right', appear);
+  const R = 200 * appear * (1 - out) + 0.001, rot = 0.25 * Math.sin(t * 3) * f.p;
+  // orange echo outlines trail the rotation
+  ctx.save(); ctx.translate(cx, cy); ctx.strokeStyle = 'rgba(135,234,92,.65)'; ctx.lineWidth = 2;
+  ctx.strokeStyle = '#9CF078'; ctx.lineWidth = 2.5;
+  for (let k = 1; k <= 7; k++) { const ff = formAt(Math.max(0, t - k * 0.03)); ctx.globalAlpha = 0.85 - k * 0.08; shapePath(ff, R * (1 + k * 0.03), (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.13 * (ff.a === 'circle' && ff.p === 0 ? 0 : 1)); ctx.stroke(); }
+  ctx.globalAlpha = 1; ctx.fillStyle = CFG.paper; shapePath(f, R, rot); ctx.fill(); ctx.restore();
+  // orbit: twelve satellites echo the current form
+  for (let i = 0; i < 12; i++) {
+    const a = i / 12 * TAU - t * 0.5, rr = 380 * EZ.back(seg(t, 0.15 + i * 0.01, 0.45 + i * 0.01)) * (1 - out);
+    ctx.save(); ctx.translate(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); ctx.rotate(a + t); ctx.fillStyle = CFG.paper; shapePath(f, 22, 0); ctx.fill(); ctx.restore();
+  }
+}
+
+/* 04 — systems: a truchet field with an orange wave */
+const CELL = 120, COLS = 17, ROWS = 10, OX = (1920 - COLS * CELL) / 2, OY = (1080 - ROWS * CELL) / 2;
+function truchet(t, appearAt, fadeCenter) {
+  ctx.lineCap = 'butt';
+  for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) {
+    const x = OX + i * CELL, y = OY + j * CELL, dc = Math.max(Math.abs(i - (COLS - 1) / 2), Math.abs(j - (ROWS - 1) / 2));
+    const show = EZ.o3(seg(t, appearAt + dc * 0.02, appearAt + dc * 0.02 + 0.1));
+    const hide = fadeCenter ? seg(fadeCenter - dc * 0.04, 0, 0.12) : 0;
+    if (show <= 0 || hide >= 1) continue;
+    // the orange wave travels left → right twice, flipping tiles as it passes
+    const w1 = clamp(1 - Math.abs((t - 0.6) * 9 - i) / 3), w2 = clamp(1 - Math.abs((t - 1.3) * 9 - (COLS - i)) / 3);
+    const flip = (rnd(i * 31 + j * 7) > 0.5 ? 1 : 0) + (t > 0.6 + i / 9 ? 1 : 0) + (t > 1.3 + (COLS - i) / 9 ? 1 : 0);
+    const turn = EZ.back(clamp(((t - 0.6) * 9 - i) / 1.2)) + EZ.back(clamp(((t - 1.3) * 9 - (COLS - i)) / 1.2));
+    const stay = clamp(((t - 0.6) * 9 - i) / 2) * (1 - clamp(((t - 1.3) * 9 - (COLS - i)) / 2));
+    const orange = Math.max(w1, w2, stay * 0.85);
+    ctx.save(); ctx.translate(x + CELL / 2, y + CELL / 2); ctx.rotate(((rnd(i * 31 + j * 7) > 0.5 ? 1 : 0) + turn) * Math.PI / 2); ctx.scale(show * (1 - hide), show * (1 - hide));
+    ctx.strokeStyle = orange > 0.05 ? `rgb(${Math.round(lerp(250, 135, orange))},${Math.round(lerp(250, 234, orange))},${Math.round(lerp(250, 92, orange))})` : CFG.paper;
+    ctx.lineWidth = 28; ctx.beginPath(); ctx.arc(-CELL / 2, -CELL / 2, CELL / 2, 0, Math.PI / 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(CELL / 2, CELL / 2, CELL / 2, Math.PI, Math.PI * 1.5); ctx.stroke(); ctx.restore();
+  }
+}
+function systems(t) {
+  ctx.drawImage(dotGrid, 0, 0);
+  // the morph ends as a cream tile that splits into the grid
+  const tile = EZ.o3(seg(t, 0, 0.1)) * (1 - seg(t, 0.12, 0.24));
+  if (tile > 0) { ctx.fillStyle = CFG.paper; const s = 180 * tile; ctx.fillRect(960 - s, 540 - s, s * 2, s * 2); ctx.strokeStyle = CFG.dark; ctx.lineWidth = 3; for (let k = -1; k <= 1; k += 2) { ctx.beginPath(); ctx.moveTo(960 + k * s / 3, 540 - s); ctx.lineTo(960 + k * s / 3, 540 + s); ctx.moveTo(960 - s, 540 + k * s / 3); ctx.lineTo(960 + s, 540 + k * s / 3); ctx.stroke(); } }
+  truchet(t, 0.08, t > 2.05 ? (t - 2.05) * 3 : 0);
+  const lab = seg(t, 0.5, 0.7) * (1 - seg(t, 2.0, 2.2));
+  if (lab > 0) { ctx.fillStyle = CFG.dark; ctx.globalAlpha = lab; ctx.fillRect(700, 930, 520, 44); ctx.globalAlpha = 1; text('TRUCHET · 170 TILES · SEED 0x2A', 960, 960, 18, F.mono, CFG.paper, 'center', lab); }
+}
+
+/* 05 — depth: a field of points folds into a lantern, then a torus */
+function depth(t) {
+  ctx.drawImage(dotGrid, 0, 0);
+  const plane = 1 - EZ.io3(seg(t, 0.05, 0.4)), torus = EZ.io3(seg(t, 0.7, 1.05));
+  const U = 30, V = 18, ry = -0.6 + t * 1.6, rx = lerp(1.05, 0.35, EZ.o3(seg(t, 0, 0.5))) + torus * 0.5;
+  const out = EZ.i3(seg(t, 1.35, 1.45));
+  for (let u = 0; u < U; u++) for (let v = 0; v <= V; v++) {
+    const a = u / U * TAU, b = v / V * Math.PI, bb = v / V * TAU;
+    // lantern: a sphere pinched at the poles
+    const lr = 300 * Math.pow(Math.sin(b), 0.6), lx = Math.cos(a) * lr, ly = Math.cos(b) * 300, lz = Math.sin(a) * lr;
+    const tx = (260 + 110 * Math.cos(bb)) * Math.cos(a), ty = 110 * Math.sin(bb), tz = (260 + 110 * Math.cos(bb)) * Math.sin(a);
+    const px = (u / U - 0.5) * 2700, pz = (v / V - 0.5) * 1500, py = 40 * Math.sin(u * 0.5 + t * 4) * Math.cos(v * 0.4);
+    let x = lerp(lerp(lx, tx, torus), px, plane), y = lerp(lerp(ly, ty, torus), py, plane), z = lerp(lerp(lz, tz, torus), pz, plane);
+    const x2 = x * Math.cos(ry) + z * Math.sin(ry), z2 = -x * Math.sin(ry) + z * Math.cos(ry);
+    const y2 = y * Math.cos(rx) - z2 * Math.sin(rx), z3 = y * Math.sin(rx) + z2 * Math.cos(rx);
+    const s = 1200 / (1200 + z3 + 400 * plane), X = 960 + x2 * s, Y = 520 + y2 * s;
+    const accent = (u * 7 + v * 3) % 11 === 0, front = z3 < 60;
+    ctx.globalAlpha = (front || plane > 0.5 ? 0.95 : 0.35) * (1 - out);
+    // dashes follow the motion direction, dots when still
+    ctx.fillStyle = accent ? CFG.green : CFG.paper; const len = 4 + 10 * torus + 3 * plane;
+    ctx.save(); ctx.translate(X, Y); ctx.rotate(a + ry); ctx.fillRect(-len * s, -2 * s, len * 2 * s, 4 * s); ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+  text(`WIREFRAME · FOCAL 1200 · ROT Y ${(((ry * 57.3) % 360) + 360) % 360 | 0}.${(t * 10 | 0) % 10}°`, 960, 860, 18, F.mono, 'rgba(250,250,250,.6)', 'center', seg(t, 0.3, 0.5) * (1 - out));
+}
+
+/* 06 — kinetic type: EASE IN. EASE OUT. NEVER LINEAR. */
+const KT = [ // [start, word, bg, ink, family, cap height, target width (0 = natural), entrance]
+  [0.05, 'EASE', CFG.green, CFG.ink, F.wide, 264, 1730, 'L'],
+  [0.28, 'IN.', CFG.dark, CFG.paper, F.wide, 336, 0, 'U'],
+  [0.53, 'EASE', CFG.paper, CFG.deep, F.cond, 768, 1680, 'D'],
+  [0.78, 'OUT.', CFG.deep, CFG.paper, F.wide, 336, 0, 'R'],
+  [1.03, 'NEVER', CFG.pale, CFG.ink, F.wide, 192, 1730, 'W'],
+  [1.28, '~NEVER', CFG.pale, CFG.ink, F.wide, 110, 0, 'M'],
+  [1.43, 'LINEAR.', CFG.dark, CFG.paper, F.bold, 216, 0, 'L']
+];
+function kinetic(t) {
+  let k = -1; KT.forEach((c, i) => { if (t >= c[0]) k = i; });
+  if (k < 0) { ctx.drawImage(dotGrid, 0, 0); return; }
+  const [at, w, bg, col, fam, capH, targetW, mode] = KT[k], size = capH / 0.72, lt = t - at, end = k < KT.length - 1 ? KT[k + 1][0] - at : 99;
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, CFG.w, CFG.h); if (bg === CFG.dark) ctx.drawImage(dotGrid, 0, 0);
+  const e = EZ.expo(seg(lt, 0, 0.16)), cy = 540 + size * 0.36;
+  if (mode === 'M') { // outlined marquee rows around a solid line
+    for (let r = -2; r <= 2; r++) {
+      const off = ((lt * (r % 2 ? -900 : 900)) % 1180), row = ' NEVER NEVER NEVER NEVER ';
+      ctx.save(); ctx.font = fnt(size, F.wide); ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+      if (r === 0) { ctx.fillStyle = col; ctx.fillText(row, 960 + off * 0.3, 540 + size * 0.36); }
+      else { ctx.strokeStyle = col; ctx.globalAlpha = 0.55; ctx.lineWidth = 2; ctx.strokeText(row, 960 + off, 540 + r * 175 + size * 0.36); }
+      ctx.restore();
+    }
+    return;
+  }
+  const exit = mode === 'L' && k === KT.length - 1 ? EZ.i3(seg(lt, 0.35, 0.55)) : 0;
+  const dirs = { L: [-1, 0], R: [1, 0], U: [0, -1], D: [0, 1], W: [0, 1] };
+  const d = dirs[mode];
+  ctx.font = fnt(size, fam); const natural = ctx.measureText(w).width, sx = targetW ? targetW / natural : 1;
+  ctx.save(); ctx.translate(960, 0); ctx.scale(sx, 1); ctx.translate(-960, 0);
+  const total = word(w.replace('~', ''), 960, cy, size, fam, col, (i) => {
+    const s = seg(lt, i * 0.015, 0.1 + i * 0.015), ee = EZ.expo(s);
+    const wave = mode === 'W' ? -(i - 2) * 95 * (1 - EZ.io3(seg(lt, 0.06, 0.18))) : 0;
+    return { dx: (1 - ee) * 260 * d[0] + exit * -1500, dy: (1 - ee) * 500 * d[1] + wave, a: s > 0 ? 1 : 0, blur: [(1 - s) * 220 * d[0] - exit * 500, (1 - s) * 200 * d[1]] };
+  }, size * -0.02);
+  if (w.endsWith('.')) { // the orange full stop lands a beat later
+    ctx.font = fnt(size, fam); const dotX = 960 + total / 2 + size * 0.06, dp = EZ.back(seg(lt, 0.08, 0.2));
+    circle(dotX - exit * 1500, cy - size * 0.07, size * 0.075 * dp, CFG.green);
+  }
+  ctx.restore();
+}
+
+/* 07 — end card: a black burst, confetti, the brand */
+function endCard(t) {
+  const cx = 960, cy = 540;
+  const open = EZ.o3(seg(t, 0, 0.18));
+  if (open < 1) { ctx.fillStyle = CFG.dark; ctx.fillRect(0, 0, CFG.w, CFG.h); circle(cx - 300, cy, 2400 * open, CFG.green); ring(cx, cy, 700 * open + 200, 'rgba(250,250,250,.7)', 10, 1 - open); }
+  const halo = seg(t, 0.06, 0.7);
+  if (halo > 0 && halo < 1) ring(cx, cy, 320 + EZ.o3(halo) * 900, `rgba(250,250,250,${(0.75 * (1 - halo)).toFixed(3)})`, 8 * (1 - halo) + 2, 1);
+  // confetti in four inks
+  const pc = [CFG.ink, CFG.paper, CFG.deep, CFG.ink];
+  for (let i = 0; i < 60; i++) {
+    const a = rnd(i) * TAU, sp = 200 + rnd(i + 5) * 700, life = seg(t, 0.1, 1.6), r = sp * EZ.o3(life);
+    const x = cx + Math.cos(a) * r - 300 * EZ.io3(seg(t, 0.45, 0.85)), y = cy + Math.sin(a) * r * 0.75 + 120 * life * life;
+    ctx.globalAlpha = (1 - seg(t, 1.1, 1.6)) * (t > 0.1 ? 1 : 0); circle(x, y, 3 + rnd(i + 9) * 5, pc[i % 4]);
+  }
+  ctx.globalAlpha = 1;
+  // the mark spins in the centre, then slides left and settles upright
+  const slide = EZ.io3(seg(t, 0.45, 0.85)), mx = lerp(cx, 336, slide), my = lerp(cy, 430, slide), ms = lerp(1, 0.48, slide);
+  const burst = EZ.back(seg(t, 0.05, 0.3));
+  odMark(mx, my, 380 * burst * ms, CFG.ink, (1 - slide) * (t * 2.2 + 0.3));
+  // brand letters streak in from the right, one line per word
+  const lines = CFG.brand.split(' '), bs = Math.min(216, ...lines.map(l => fitSize(l, F.wide, 216, 1250)));
+  const rows = lines.map((_, k) => 456 + k * bs * 0.85), last = rows[rows.length - 1];
+  let n = 0;
+  lines.forEach((line, k) => {
+    const i0 = n; n += line.length;
+    ctx.font = fnt(bs, F.wide); const bw = ctx.measureText(line).width - 4 * (line.length - 1);
+    word(line, 504 + bw / 2, rows[k], bs, F.wide, CFG.ink, (j) => { const s = seg(t, 0.55 + (i0 + j) * 0.03, 0.8 + (i0 + j) * 0.03), e = EZ.expo(s); return { dx: (1 - e) * 600, a: s > 0 ? 1 : 0, blur: [(1 - s) * -300, 0] }; }, -4);
+  });
+  const sub = EZ.o3(seg(t, 0.85, 1.15));
+  text(CFG.role, 518, last + 128 + (1 - sub) * 20, 104, F.serif, CFG.ink, 'left', sub);
+  const ly = last + 170, ln = EZ.expo(seg(t, 1.0, 1.4)); ctx.fillStyle = CFG.ink; ctx.fillRect(518, ly, 1140 * ln, 2);
+  const ft = EZ.o3(seg(t, 1.15, 1.45));
+  let fx = 518; CFG.footer.forEach((s, i) => { if (i) { if (i === 3) circle(fx + 14, ly + 28, 6, CFG.ink); text(i === 3 ? '' : '·', fx + 10, ly + 34, 18, F.mono, CFG.ink, 'left', ft); fx += 36; } text(s, fx, ly + 34, 18, F.mono, CFG.ink, 'left', ft, 1); ctx.font = fnt(18, F.mono); fx += ctx.measureText(s).width + s.length * 1; });
+}
+
+const DRAW = [identity, title, easing, morphing, systems, depth, kinetic, endCard];
+
+/* ---------- frame chrome ---------- */
+function hud(t, ink) {
+  const k = CH.reduce((n, c, i) => t >= c[0] ? i : n, 0), dim = ink === CFG.ink ? 'rgba(38,37,30,.55)' : 'rgba(250,250,250,.55)';
+  const a = seg(t, 0.25, 0.5), sz = 14, tr = 2;
+  text(CFG.brand, 80, 80, sz, F.monoB, ink, 'left', a, tr); ctx.font = fnt(sz, F.monoB);
+  text('MOTION REEL — ' + CFG.year, 80 + ctx.measureText(CFG.brand).width + CFG.brand.length * tr + 24, 80, sz, F.mono, dim, 'left', a, tr);
+  text(CH[k][1], 1840, 80, sz, F.monoB, ink, 'right', a, tr);
+  const fr = Math.floor(t * 60) % 60, sec = Math.floor(t);
+  text(`00:00:${String(sec).padStart(2, '0')}:${String(fr).padStart(2, '0')}`, 80, 1012, sz, F.monoB, ink, 'left', a, tr); text('60 FPS', 258, 1012, sz, F.mono, dim, 'left', a, tr);
+  const beat = Math.floor(t / BEAT), bar = Math.min(8, Math.floor(beat / 4) + 1);
+  text(`${CFG.bpm} BPM`, 1590, 1012, sz, F.mono, dim, 'left', a, tr);
+  ctx.save(); ctx.globalAlpha = a; ctx.strokeStyle = ink; ctx.fillStyle = ink; ctx.lineWidth = 1.5;
+  for (let i = 0; i < 4; i++) { const x = 1690 + i * 17; if (beat % 4 === i) ctx.fillRect(x, 1001, 11, 11); else ctx.strokeRect(x + 0.75, 1001.75, 9.5, 9.5); }
+  ctx.restore();
+  text(`BAR ${bar}/8`, 1840, 1012, sz, F.monoB, ink, 'right', a, tr);
+  ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = ink;
+  [[44, 44, 1, 1], [1876, 44, -1, 1], [44, 1036, 1, -1], [1876, 1036, -1, -1]].forEach(([x, y, sx, sy]) => { ctx.fillRect(x, y, 20 * sx, 2 * sy); ctx.fillRect(x, y, 2 * sx, 20 * sy); });
+  ctx.globalAlpha = a * 0.7; ctx.fillRect(44, 1049, 1832 * t / CFG.duration, 2); ctx.restore();
+}
+
+/* ---------- render ---------- */
+function render(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const k = CH.reduce((n, c, i) => t >= c[0] ? i : n, 0);
+  ctx.fillStyle = CH[k][2]; ctx.fillRect(0, 0, CFG.w, CFG.h);
+  DRAW[k](Math.max(0, t - CH[k][0]));
+  let ink = CH[k][3];
+  if (k === 6) { const kk = KT.reduce((n, c, i) => t - CH[6][0] >= c[0] ? i : n, -1); if (kk >= 0) ink = KT[kk][2] === CFG.dark || KT[kk][2] === CFG.deep ? CFG.paper : CFG.ink; }
+  hud(t, ink);
+}
+
+/* ---------- master timeline: the only clock ---------- */
+gsap.ticker.lagSmoothing(0);
+const tl = gsap.timeline({ paused: true });
+const clock = { t: 0 };
+tl.to(clock, { t: CFG.duration, duration: CFG.duration, ease: 'none' }, 0);
+tl.eventCallback('onUpdate', () => render(tl.time()));
+window.__timelines = { main: tl };
+render(0);
+Promise.all(['700 10px ArchivoX', '700 10px ArchivoC', '700 10px ArchivoB', '10px InstrumentI', '10px JBMono', '10px JBMonoB'].map(f => document.fonts.load(f))).then(() => render(tl.time()), () => render(tl.time()));
+
+/* ---------- preview shell (outside the composition) ---------- */
+const main = document.getElementById('main');
+const playBtn = document.getElementById('playBtn'), scrub = document.getElementById('scrub'), tcEl = document.getElementById('tc');
+function fit() {
+  const s = Math.min(window.innerWidth / CFG.w, window.innerHeight / CFG.h);
+  main.style.transform = 'translate(-50%,-50%) scale(' + s + ')';
+}
+// Inside an Open Design project the motion source player wraps the stage,
+// fits it and adds its own controls; leave both to it there.
+const hostPlayer = () => window.__odMotionSourcePlayer || main.parentElement.id !== 'viewport';
+const ownFit = fit;
+fit = function () { if (hostPlayer()) { main.style.transform = 'translate(-50%,-50%)'; return; } ownFit(); };
+window.addEventListener('resize', fit); fit();
+document.addEventListener('DOMContentLoaded', () => setTimeout(() => {
+  fit(); if (hostPlayer()) document.getElementById('controls').style.display = 'none';
+}, 0));
+function sync() {
+  const t = tl.time();
+  scrub.value = t; tcEl.textContent = t.toFixed(2) + ' / ' + CFG.duration.toFixed(2);
+  playBtn.textContent = tl.isActive() ? 'PAUSE' : (t >= CFG.duration - 0.01 ? 'REPLAY' : 'PLAY');
+}
+gsap.ticker.add(sync);
+playBtn.addEventListener('click', () => {
+  if (tl.time() >= CFG.duration - 0.01) tl.restart(); else if (tl.paused()) tl.play(); else tl.pause();
+  sync();
+});
+scrub.addEventListener('input', () => { tl.pause(); tl.time(parseFloat(scrub.value)); sync(); });
+window.addEventListener('keydown', e => { if (e.code === 'Space' && e.target === document.body) { e.preventDefault(); playBtn.click(); } });
+const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+if (reduce) { tl.pause(); tl.time(CFG.reducedAt); }
+else document.fonts.ready.then(() => tl.play(0));
+sync();
+</script>
+<script>
+// Video export seeks with timeline callbacks suppressed, so the onUpdate
+// drawing also runs from a per-frame loop whenever the timeline time moves.
+(function install() {
+  var tls = window.__timelines;
+  var tl = tls && tls[Object.keys(tls)[0]];
+  if (!tl) { setTimeout(install, 50); return; }
+  var draw = tl.eventCallback('onUpdate');
+  if (!draw) return;
+  var drawnAt = null;
+  tl.eventCallback('onUpdate', function () { drawnAt = tl.time(); return draw.apply(this, arguments); });
+  (function loop() {
+    if (window.__odFrameRenderer && !document.documentElement.classList.contains('od-export')) {
+      document.documentElement.classList.add('od-export');
+    }
+    requestAnimationFrame(loop);
+    var t = tl.time();
+    if (t !== drawnAt) { drawnAt = t; draw(); }
+  })();
+})();
+</script>
+<script>
+// Preview bake: mark ready once the timeline reaches the poster frame.
+(function () {
+  var POSTER_AT = 5.8;
+  function check() {
+    var tls = window.__timelines;
+    var tl = tls && tls[Object.keys(tls)[0]];
+    if (tl && tl.time() >= POSTER_AT) {
+      document.documentElement.setAttribute('data-od-preview-ready', 'true');
+      return;
+    }
+    requestAnimationFrame(check);
+  }
+  requestAnimationFrame(check);
+})();
+</script>
+<script>
+// Sound starts with the film. If the browser blocks unmuted autoplay, the first
+// gesture on the page turns it on; the master timeline owns play, pause and seek.
+(function() {
+  // BEGIN shared motion audio sync
+// A render stall is not a request to seek the soundtrack. Only correct drift
+// after fresh, stable samples; explicit transport actions bypass that filter.
+function createMotionAudioSync(audio) {
+  var sampledAt = null, driftSince = null, previousDrift = 0, correctedAt = -Infinity, align = false;
+  return function (target, moving, force) {
+    var now = performance.now(), gap = sampledAt === null ? Infinity : now - sampledAt;
+    sampledAt = now;
+    if (force) { align = true; driftSince = null; }
+    if (align) {
+      if (audio.readyState > 0) {
+        if (Math.abs(audio.currentTime - target) > .01) audio.currentTime = target;
+        align = false; correctedAt = now;
+      }
+      return;
+    }
+    var drift = target - audio.currentTime;
+    if (!moving || audio.paused || audio.seeking || audio.readyState < 3 || gap > 200 || Math.abs(drift) <= .3 || now - correctedAt < 1500) {
+      driftSince = null; previousDrift = drift; return;
+    }
+    if (driftSince === null || drift * previousDrift <= 0 || Math.abs(drift - previousDrift) > .1) driftSince = now;
+    previousDrift = drift;
+    if (now - driftSince >= 750) {
+      audio.currentTime = target; correctedAt = now; driftSince = null;
+    }
+  };
+}
+  // END shared motion audio sync
+  const audio=document.getElementById('soundtrack');
+  if (!audio || typeof audio.play !== 'function' || window.__odFrameRenderer) return;
+  const controls=document.getElementById('controls');
+  const button=document.createElement('button');button.type='button';controls.appendChild(button);
+  // Gallery thumbnails load the page in an opaque sandbox; those stay silent until asked.
+  let enabled=window.origin!=='null',pending=false,chosen=false;
+  const timeline=()=>window.__timelines&&window.__timelines.main;
+  const syncAudio=createMotionAudioSync(audio);
+  let wasPlaying=false,lastTime=0;
+  function label() { button.textContent=enabled?'Sound off':'Sound on';button.setAttribute('aria-label',enabled?'Mute sound':'Enable sound');button.setAttribute('aria-pressed',String(enabled)); }
+  function play() { if(pending||!audio.paused)return;pending=true;audio.play().catch(()=>{enabled=false;label();if(!chosen)waitForGesture();}).finally(()=>{pending=false;}); }
+  function waitForGesture() {
+    const start=event=>{
+      if(event.target===button)return;
+      document.removeEventListener('pointerdown',start,true);document.removeEventListener('keydown',start,true);
+      if(chosen||enabled)return;
+      const tl=timeline();enabled=true;label();if(tl)syncAudio(tl.time(),true,true);play();
+    };
+    document.addEventListener('pointerdown',start,true);document.addEventListener('keydown',start,true);
+  }
+  label();
+  button.onclick=()=>{chosen=true;enabled=!enabled;label();const tl=timeline();if(enabled&&tl){if(tl.progress()>=1)tl.restart();else tl.play();syncAudio(tl.time(),true,true);play();}else audio.pause();};
+  document.getElementById('scrub').addEventListener('input',event=>{if(enabled)syncAudio(Number(event.target.value),false,true);});
+  function sync() {
+    if (window.__odMotionSourcePlayer) return;
+    const tl=timeline();
+    if(tl&&enabled&&!window.__odFrameRenderer){
+      const time=tl.time(),moving=!tl.paused()&&tl.progress()<1;
+      syncAudio(time,moving,(moving&&!wasPlaying)||time<lastTime-.1);
+      wasPlaying=moving;lastTime=time;
+      if(moving)play();else audio.pause();
+    }else { audio.pause();wasPlaying=false; }
+    requestAnimationFrame(sync);
+  }sync();
+})();
+</script>
+</body>
+</html>

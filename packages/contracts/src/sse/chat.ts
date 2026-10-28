@@ -467,6 +467,13 @@ export interface ChatSseRunRetryAttemptedPayload {
   retry_attempt_index: number;
   /** How many automatic attempts this run is allowed. 1 today. */
   retry_max_attempts: number;
+  /**
+   * The failure category that triggered this retry (the daemon's run-failure
+   * classification). The chat reads exactly one value: `'rate_limit'`, to say
+   * "model service is busy" instead of the generic "retrying" (product copy
+   * S09a, OPEND-2849). Optional because older daemons may omit it.
+   */
+  failure_category?: string;
 }
 
 /**

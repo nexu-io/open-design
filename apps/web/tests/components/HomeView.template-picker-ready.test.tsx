@@ -1,14 +1,6 @@
 // @vitest-environment jsdom
 
-// The task-type picker must not become clickable before Home has chosen the
-// composer's initial type.
-//
-// On a first visit Home seeds 原型 once the plugin catalog arrives, from an
-// effect that runs after the catalog commit. The picker used to enable on that
-// catalog commit, one render before the seeded type landed, so a click in
-// between opened a menu that the arriving type then closed. On loaded CI
-// machines that is exactly where `pickHomeTemplate` clicks, and the first case
-// of several HomeView suites failed to find `home-hero-template-menu`.
+// A fresh composer exposes unselected entry pills after the catalog loads.
 
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -20,10 +12,10 @@ interface PickerRender {
 
 const pickerRenders: PickerRender[] = [];
 
-vi.mock('../../src/components/home-hero/TemplatePicker', () => ({
-  TemplatePicker: ({ activeChipId, disabled = false }: PickerRender) => {
+vi.mock('../../src/components/home-hero/TypePillRow', () => ({
+  TypePillRow: ({ activeChipId, disabled = false }: PickerRender) => {
     pickerRenders.push({ activeChipId, disabled });
-    return <div data-testid="home-hero-template-trigger" data-type={activeChipId ?? ''} />;
+    return <div data-testid="home-hero-type-pills" data-type={activeChipId ?? ''} />;
   },
 }));
 
@@ -68,7 +60,7 @@ afterEach(() => {
 });
 
 describe('HomeView — task-type picker readiness', () => {
-  it('enables the picker only once the first-visit type is selected', async () => {
+  it('enables the entry pills without implicitly selecting a type', async () => {
     vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (url) => {
       const body = url === '/api/plugins' ? { plugins: [PROTOTYPE_PLUGIN] } : {};
       return new Response(JSON.stringify(body), {
@@ -79,12 +71,12 @@ describe('HomeView — task-type picker readiness', () => {
 
     render(<HomeView projects={[]} onSubmit={() => undefined} onOpenProject={() => undefined} />);
     await waitFor(() => {
-      expect(screen.getByTestId('home-hero-template-trigger').getAttribute('data-type')).toBe('prototype');
+      expect(pickerRenders.some((props) => !props.disabled)).toBe(true);
     });
 
     expect(pickerRenders[0]?.disabled).toBe(true);
     const enabled = pickerRenders.filter((props) => !props.disabled);
     expect(enabled.length).toBeGreaterThan(0);
-    expect(enabled.every((props) => props.activeChipId === 'prototype')).toBe(true);
+    expect(enabled.every((props) => props.activeChipId === null)).toBe(true);
   });
 });

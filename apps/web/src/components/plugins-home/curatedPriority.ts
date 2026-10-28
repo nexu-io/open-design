@@ -125,6 +125,16 @@ const CURATED_HYPERFRAMES_PLUGIN_IDS = [
   'video-template-hyperframes-flight-map-route',
 ] as const;
 
+// Motion design: the featured paper story leads the five templates in Home
+// and Community; the other four retain their editorial order.
+export const CURATED_MOTION_DESIGN_PLUGIN_IDS = [
+  'example-motion-visual-lesson',
+  'example-motion-future',
+  'example-motion-showreel',
+  'example-motion-ui-morph',
+  'example-motion-product-promo',
+] as const;
+
 export const CURATED_PLUGIN_IDS_BY_CHIP = {
   prototype: CURATED_PROTOTYPE_PLUGIN_IDS,
   wireframe: CURATED_WIREFRAME_PLUGIN_IDS,
@@ -135,6 +145,7 @@ export const CURATED_PLUGIN_IDS_BY_CHIP = {
   image: CURATED_IMAGE_PLUGIN_IDS,
   video: CURATED_VIDEO_PLUGIN_IDS,
   hyperframes: CURATED_HYPERFRAMES_PLUGIN_IDS,
+  'motion-design': CURATED_MOTION_DESIGN_PLUGIN_IDS,
 };
 
 const CURATED_GLOBAL_IDS = [
@@ -147,6 +158,7 @@ const CURATED_GLOBAL_IDS = [
   ...CURATED_IMAGE_PLUGIN_IDS,
   ...CURATED_VIDEO_PLUGIN_IDS,
   ...CURATED_HYPERFRAMES_PLUGIN_IDS,
+  ...CURATED_MOTION_DESIGN_PLUGIN_IDS,
 ];
 
 const CURATED_GLOBAL_RANK = new Map<string, number>(

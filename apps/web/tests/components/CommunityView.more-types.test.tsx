@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 //
-// OPEND-3098 / OPEND-3118: the Community filter row is 原型 / 幻灯片 / 文档 /
-// 图片 + 更多, and 更多 holds a FIXED list — HyperFrames, 视频, 音频, 实时产物,
-// WebGL — rendered whether or not the catalogue has a template of that kind
+// OPEND-3098 / OPEND-3118: the Community filter row is 原型 / 动效设计 / 幻灯片 /
+// 文档 / 图片 + 更多, and 更多 holds a FIXED set in Home order — HyperFrames,
+// WebGL, 实时产物, 视频, 音频 — whether or not the catalogue has that kind
 // yet (an empty kind shows the empty state, it is not hidden). Document and
 // WebGL templates are classified out of the plugin catalogue like every other
 // kind, so their tabs grid the bundled examples instead of sitting empty.
@@ -11,6 +11,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CommunityView } from '../../src/components/CommunityView';
+import { orderedCreateChips } from '../../src/components/home-hero/chips';
 import { Icon } from '../../src/components/Icon';
 
 vi.mock('../../src/analytics/provider', () => ({
@@ -93,13 +94,14 @@ function openMore() {
 }
 
 describe('CommunityView — 更多 is a fixed list (OPEND-3098)', () => {
-  it('always offers HyperFrames, Video, Audio, Live Artifact, WebGL in that order — even with none published', async () => {
+  it('keeps Motion design permanently second and orders 更多 like Home, even with none published', async () => {
     serveCatalogue([LANDING]);
     render(<CommunityView />);
     await waitFor(() => expect(cards().length).toBe(1));
 
     expect(inlineTabs().map((tab) => tab.getAttribute('data-chip'))).toEqual([
       'prototype',
+      'motion-design',
       'deck',
       'document',
       'image',
@@ -107,10 +109,22 @@ describe('CommunityView — 更多 is a fixed list (OPEND-3098)', () => {
     const popover = openMore();
     expect(
       Array.from(popover.querySelectorAll('button')).map((button) => button.getAttribute('data-chip')),
-    ).toEqual(['hyperframes', 'video', 'audio', 'live-artifact', 'webgl']);
+    ).toEqual(['hyperframes', 'webgl', 'live-artifact', 'video', 'audio']);
     expect(
       Array.from(popover.querySelectorAll('button')).map((button) => button.textContent?.trim()),
-    ).toEqual(['HyperFrames', 'Video', 'Audio', 'Live Artifact', 'WebGL']);
+    ).toEqual(['HyperFrames', 'WebGL', 'Live Artifact', 'Video', 'Audio']);
+    expect([
+      ...inlineTabs(),
+      ...Array.from(popover.querySelectorAll('button')),
+    ].map((button) => button.getAttribute('data-chip'))).toEqual(
+      orderedCreateChips().map((chip) => chip.id).filter((id) => id !== 'web-clone'),
+    );
+
+    fireEvent.click(inlineTabs()[1]!);
+    expect(screen.getByText('No Motion design templates yet')).toBeTruthy();
+    expect(inlineTabs()[1]!.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(inlineTabs()[0]!);
+    expect(inlineTabs()[1]!.getAttribute('data-chip')).toBe('motion-design');
   });
 
   it('shows the empty state for a 更多 kind with nothing published, and keeps 更多 for the other four', async () => {
@@ -125,12 +139,13 @@ describe('CommunityView — 更多 is a fixed list (OPEND-3098)', () => {
     // The picked kind is promoted inline after 图片 so the selection is visible.
     expect(inlineTabs().map((tab) => tab.getAttribute('data-chip'))).toEqual([
       'prototype',
+      'motion-design',
       'deck',
       'document',
       'image',
       'audio',
     ]);
-    expect(inlineTabs()[4]!.classList.contains('is-active')).toBe(true);
+    expect(inlineTabs()[5]!.classList.contains('is-active')).toBe(true);
     expect(cards()).toHaveLength(0);
     expect(screen.getByTestId('community-empty-state')).toBeTruthy();
     expect(screen.getByText('No Audio templates yet')).toBeTruthy();
@@ -139,7 +154,7 @@ describe('CommunityView — 更多 is a fixed list (OPEND-3098)', () => {
     const popover = openMore();
     expect(
       Array.from(popover.querySelectorAll('button')).map((button) => button.getAttribute('data-chip')),
-    ).toEqual(['hyperframes', 'video', 'live-artifact', 'webgl']);
+    ).toEqual(['hyperframes', 'webgl', 'live-artifact', 'video']);
   });
 
   it('wears the Home webgl chip (sparkles glyph) and hands WebGL templates to the Home webgl chip as a prototype', async () => {
@@ -178,8 +193,8 @@ describe('CommunityView — 文档 tab (OPEND-3118)', () => {
     render(<CommunityView />);
     await waitFor(() => expect(cards().length).toBe(1));
 
-    fireEvent.click(inlineTabs()[2]!);
-    expect(inlineTabs()[2]!.getAttribute('data-chip')).toBe('document');
+    const documentTab = inlineTabs().find((tab) => tab.getAttribute('data-chip') === 'document')!;
+    fireEvent.click(documentTab);
     expect(screen.queryByTestId('community-empty-state')).toBeNull();
     expect(cards().map((card) => card.querySelector('.community-template-card__title')?.textContent)).toEqual([
       'Modern Résumé',

@@ -16,6 +16,9 @@
 // `tests/collab/workspace-resource-mutation.test.ts`'s job).
 
 import http from 'node:http';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
@@ -34,6 +37,7 @@ import {
   getConversation,
   getPreviewComment,
   getProjectPreviewComment,
+  getProject,
   getWorkspaceProject,
   getWorkspaceProjectByProjectId,
   insertConversation,
@@ -48,7 +52,9 @@ import {
   updateProject,
   upsertPreviewComment,
 } from '../src/db.js';
-import { enforceWorkspaceResourceMutation } from '../src/collab/workspace-resource-mutation.js';
+import { createLocalCommentFiles } from '../src/collab/local-comment-files.js';
+import { resolveLocalProjectCommentWorkspaceContext } from '../src/collab/project-comment-workspace-context.js';
+import { enforceWorkspaceResourceMutation, resolveOptionalLocalWorkspaceRequestAuthority } from '../src/collab/workspace-resource-mutation.js';
 import { verifyWorkspaceRequestContext } from '../src/collab/request-workspace-context.js';
 import { createCachedWorkspaceDirectoryFetcher } from '../src/collab/vela-workspace-context.js';
 import { registerProjectCommentRoutes } from '../src/routes/project/comments.js';
@@ -181,6 +187,7 @@ async function startServer(
       upsertPreviewComment,
       getPreviewComment,
       getProjectPreviewComment,
+  getProject,
       updatePreviewCommentStatus,
       updatePreviewCommentAnchor,
       deletePreviewComment,
@@ -211,6 +218,45 @@ async function startServer(
 }
 
 describe('project comments — workspace mutation gate', () => {
+  it('explicit remote pull works without SSE, requires fresh authority, and returns local conversation comments', async () => {
+    const pullCommentsNow = vi.fn(async () => {
+      upsertPreviewComment(database!, TEAM_PROJECT, 'conv-team', { id: 'visitor-feedback', target: COMMENT_TARGET, note: 'Visitor feedback' });
+      return true;
+    });
+    let authorized = false;
+    const base = await startServer({
+      resolveFreshWorkspaceContext: async () => authorized
+        ? { ok: true, context: activeTeamContext() }
+        : { ok: false, status: 403, code: 'WORKSPACE_PROJECT_PERMISSION_DENIED', message: 'denied' },
+      pullCommentsNow,
+    });
+    const url = `${base}/api/projects/${TEAM_PROJECT}/conversations/conv-team/comments/pull`;
+    const denied = await fetch(url, { method: 'POST', headers: workspaceHeaders(OTHER_MEMBER_ID, 'member') });
+    expect(denied.status).toBe(403);
+    expect(pullCommentsNow).not.toHaveBeenCalled();
+    authorized = true;
+    const response = await fetch(url, { method: 'POST', headers: workspaceHeaders(OTHER_MEMBER_ID, 'member') });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ pulled: true, comments: [{ note: 'Visitor feedback' }] });
+    expect(pullCommentsNow).toHaveBeenCalledTimes(1);
+    expect(pullCommentsNow).toHaveBeenCalledWith(TEAM_PROJECT, expect.objectContaining({ workspaceMemberId: OTHER_MEMBER_ID }));
+    const { stdout } = await promisify(execFile)(process.execPath, [
+      fileURLToPath(new URL('../../../node_modules/tsx/dist/cli.mjs', import.meta.url)),
+      fileURLToPath(new URL('../src/cli.ts', import.meta.url)),
+      'comment', 'pull', TEAM_PROJECT, 'conv-team', '--daemon-url', base,
+      '--workspace', WORKSPACE_ID, '--workspace-member', OTHER_MEMBER_ID, '--json',
+    ], { env: { ...process.env, NODE_OPTIONS: '' }, timeout: 15000 });
+    expect(JSON.parse(stdout)).toMatchObject({ pulled: true, comments: [{ note: 'Visitor feedback' }] });
+    expect(pullCommentsNow).toHaveBeenCalledTimes(2);
+    const wrongConversation = await fetch(`${base}/api/projects/${TEAM_PROJECT}/conversations/conv-personal/comments/pull`,
+      { method: 'POST', headers: workspaceHeaders(OTHER_MEMBER_ID, 'member') });
+    expect(wrongConversation.status).toBe(404);
+    expect(pullCommentsNow).toHaveBeenCalledTimes(2);
+    pullCommentsNow.mockResolvedValueOnce(false);
+    const unavailable = await fetch(url, { method: 'POST', headers: workspaceHeaders(OTHER_MEMBER_ID, 'member') });
+    expect(unavailable.status).toBe(503);
+    expect(await unavailable.json()).toEqual({ error: 'COMMENT_PULL_UNAVAILABLE' });
+  });
   it('keeps the repaired anchor internal while a Member comments through a public routing conversation', async () => {
     const baseUrl = await startServer({
       resolveWorkspaceContext: async () => ({
@@ -510,6 +556,41 @@ describe('project comments — workspace mutation gate', () => {
     },
   );
 
+  it('persists a trustworthy author display name on local create instead of the membership id', async () => {
+    const base = await startServer({
+      resolveWorkspaceContext: async () => ({ ok: true, context: activeTeamContext() }),
+      resolveCurrentAuthorDisplayName: () => 'Alice Zhang',
+    });
+    const response = await fetch(`${base}/api/projects/${TEAM_PROJECT}/conversations/conv-team/comments`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...workspaceHeaders(OTHER_MEMBER_ID, 'member') },
+      body: JSON.stringify({ target: COMMENT_TARGET, note: 'Own comment',
+        authorDisplayName: 'Forged Name', authorKey: 'forged-key' }),
+    });
+    expect(response.status).toBe(200);
+    const { comment } = await response.json() as { comment: Record<string, unknown> };
+    expect(comment).toMatchObject({ authorMemberId: OTHER_MEMBER_ID, authorKind: 'member', authorDisplayName: 'Alice Zhang' });
+    expect(comment.authorKey).toBeUndefined();
+    const stored = listProjectPreviewComments(database!, TEAM_PROJECT)[0];
+    expect(stored).toMatchObject({ authorDisplayName: 'Alice Zhang', authorMemberId: OTHER_MEMBER_ID });
+  });
+
+  it('keeps the local author display empty when trusted profile name and email are absent', async () => {
+    const base = await startServer({
+      resolveWorkspaceContext: async () => ({ ok: true, context: activeTeamContext() }),
+      resolveCurrentAuthorDisplayName: () => null,
+    });
+    const response = await fetch(`${base}/api/projects/${TEAM_PROJECT}/conversations/conv-team/comments`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...workspaceHeaders(OTHER_MEMBER_ID, 'member') },
+      body: JSON.stringify({ target: COMMENT_TARGET, note: 'No profile', authorDisplayName: 'Forged' }),
+    });
+    expect(response.status).toBe(200);
+    const { comment } = await response.json() as { comment: Record<string, unknown> };
+    expect(comment.authorDisplayName).toBeUndefined();
+    expect(comment.authorMemberId).toBe(OTHER_MEMBER_ID);
+  });
+
   it('uses the verified project A scope after ambient identity moved to B', async () => {
     const projectContext = activeTeamContext();
     const pushedScopes: Array<{ workspaceId: string; workspaceMemberId: string }> = [];
@@ -661,6 +742,32 @@ describe('project comments — workspace mutation gate', () => {
       'conv-team',
       removeTarget!.id,
     )).not.toBeNull();
+  });
+
+  it('keeps a claimed private creator annotation local while the signed-in directory/control plane is unavailable', async () => {
+    const directory = vi.fn(async () => ({ ok: false as const, items: [], reason: 'network' as const }));
+    const pulled = vi.fn(async () => true);
+    const baseUrl = await startServer({
+      resolveWorkspaceContext: (req: unknown, projectId: string) => resolveLocalProjectCommentWorkspaceContext({
+        binding: getWorkspaceProjectByProjectId(database!, projectId), revoked: false,
+        local: resolveOptionalLocalWorkspaceRequestAuthority(req), fallbackContext: () => activeTeamContext(),
+      }),
+      resolveFreshWorkspaceContext: (req: unknown) => verifyWorkspaceRequestContext({ req, fetchWorkspaceDirectory: directory }),
+      prepareCommentFile: (projectId: string, filePath: string) => createLocalCommentFiles(database!).identity(projectId, filePath),
+      pullCommentsNow: pulled,
+    });
+    const url = `${baseUrl}/api/projects/${PERSONAL_PROJECT}/conversations/conv-personal/comments`;
+    const headers = { 'Content-Type': 'application/json', ...workspaceHeaders(OWNER_MEMBER_ID, 'owner') };
+    const saved = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ target: COMMENT_TARGET, note: 'offline local first' }) });
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toMatchObject({ comment: { authorMemberId: OWNER_MEMBER_ID, sourceFileId: expect.any(String), note: 'offline local first' } });
+    expect(directory).not.toHaveBeenCalled();
+    expect(getProject(database!, PERSONAL_PROJECT)?.metadata?._commentFiles).toBeUndefined();
+    expect(database!.prepare('SELECT COUNT(*) AS n FROM public_file_publications').get()).toEqual({ n: 0 });
+    const cloud = await fetch(`${url}/pull`, { method: 'POST', headers });
+    expect(cloud.status).toBe(503);
+    expect(directory).toHaveBeenCalledTimes(1);
+    expect(pulled).not.toHaveBeenCalled();
   });
 
   it('fails closed before saving or relaying when project scope authority is unavailable', async () => {

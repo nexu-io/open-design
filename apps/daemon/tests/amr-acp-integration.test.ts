@@ -27,7 +27,8 @@ import {
   DEFAULT_AMR_RECHARGE_URL,
   classifyAmrAccountFailure,
 } from '../src/integrations/vela-errors.js';
-import { AmrModelLoadingCache } from '../src/runtimes/amr-model-cache.js';
+import { AmrModelLoadingCache, amrRunModels } from '../src/runtimes/amr-model-cache.js';
+import { getRememberedLiveModels, resetLiveModelsForTests } from '../src/runtimes/models.js';
 import {
   amrAgentDef,
   fetchVelaPresetModels,
@@ -220,6 +221,14 @@ describe('AMR runtime def', () => {
     expect(models.map((model) => model.id)).not.toContain('seedream-5-0');
     expect(models.map((model) => model.id)).not.toContain('seedream-5-0-pro');
     expect(models.map((model) => model.id)).not.toContain('seedance-2');
+  });
+
+  it('orders the model every plan can use ahead of other DeepSeek defaults', () => {
+    const models = parseVelaModelJson(JSON.stringify({
+      source: 'preset',
+      data: [{ id: 'deepseek-v4-flash' }, { id: 'deepseek-v4-pro' }, { id: 'deepseek-v4.1-flash' }],
+    }), 'preset');
+    expect(models.map((model) => model.id)).toEqual(['deepseek-v4.1-flash', 'deepseek-v4-flash', 'deepseek-v4-pro']);
   });
 
   it('parses Vela JSON catalog ids through normalizeVelaModelId on the live AMR path', () => {
@@ -534,6 +543,44 @@ process.exit(2);
 });
 
 describe('AMR model loading cache', () => {
+  it('waits for the caller catalog instead of settling for the preset when asked', async () => {
+    const cache = new AmrModelLoadingCache(1_000);
+    const fetchers = {
+      fetchPreset: async () => [{ id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' }],
+      fetchRemote: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        return [{ id: 'deepseek-v4.1-flash', label: 'deepseek-v4.1-flash', default: true }];
+      },
+    };
+    const catalog = await cache.getAuthoritative('vela:local', fetchers, 1_000);
+    expect(catalog.source).toBe('remote');
+    expect(catalog.models?.map((m) => m.id)).toEqual(['deepseek-v4.1-flash']);
+  });
+
+  it('falls back to the preset once the caller catalog wait runs out', async () => {
+    const cache = new AmrModelLoadingCache(1_000);
+    const catalog = await cache.getAuthoritative('vela:local', {
+      fetchPreset: async () => [{ id: 'preset-a', label: 'preset-a' }],
+      fetchRemote: () => new Promise(() => {}),
+    }, 20);
+    expect(catalog.source).toBe('preset');
+  });
+
+  it('prefers a remembered caller catalog over a later preset seed', () => {
+    resetLiveModelsForTests();
+    try {
+      const preset = { source: 'preset' as const, models: [{ id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' }] };
+      expect(amrRunModels('amr', 'scope', preset).map((m) => m.id)).toEqual(['deepseek-v4-flash']);
+      expect(getRememberedLiveModels('amr', 'scope').map((m) => m.id)).toEqual(['deepseek-v4-flash']);
+
+      const remote = { source: 'remote' as const, models: [{ id: 'deepseek-v4.1-flash', label: 'deepseek-v4.1-flash', default: true }] };
+      amrRunModels('amr', 'scope', remote);
+      expect(amrRunModels('amr', 'scope', preset).map((m) => m.id)).toEqual(['deepseek-v4.1-flash']);
+    } finally {
+      resetLiveModelsForTests();
+    }
+  });
+
   it('returns preset immediately, coalesces remote refreshes, then serves remote', async () => {
     const cache = new AmrModelLoadingCache(1_000);
     let remoteCalls = 0;

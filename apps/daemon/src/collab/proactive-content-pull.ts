@@ -212,6 +212,8 @@ export interface ProactiveContentPullTarget {
 }
 
 export interface ProactiveContentPullDeps {
+  /** Owner content goes through explicit overwrite authority, not member receipts. */
+  observeOwnedContent?: (scope: ProactiveContentPullTarget, version?: number) => Promise<void>;
   /** This daemon's own `workspace_projects` row for the project, or null when
    *  it was never bound locally. */
   getLocalBinding: (
@@ -477,7 +479,8 @@ type PullDecision =
         | 'identity-error'
         | 'owner-missing'
         | 'owner-error'
-        | 'self-owner';
+        | 'self-owner'
+        | 'owner-handled';
     };
 
 const MAX_CATALOG_PROPAGATION_RETRIES = 5;
@@ -748,6 +751,14 @@ export function createProactiveContentPull(
       };
     }
     if (owner === identity.workspaceMemberId) {
+      if (deps.observeOwnedContent) {
+        await deps.observeOwnedContent({
+          projectId: event.projectId!, workspaceId: targetWorkspaceId,
+          resourceTeamId: identity.resourceTeamId, viewerMemberId: identity.workspaceMemberId,
+          ownerMemberId: owner,
+        }, event.version);
+        return { kind: 'skip', retryable: false, reason: 'owner-handled' };
+      }
       return { kind: 'skip', retryable: false, reason: 'self-owner' };
     }
     const scope = {
@@ -1687,7 +1698,13 @@ export function createProactiveContentPull(
       ? projects.filter((project) => expectedProjectIds.has(project.projectId))
       : projects;
     for (const project of projectsToInspect) {
-      if (project.ownerMemberId === identity.workspaceMemberId) continue;
+      if (project.ownerMemberId === identity.workspaceMemberId) {
+        if (deps.observeOwnedContent) await deps.observeOwnedContent({
+          projectId: project.projectId, workspaceId, resourceTeamId: identity.resourceTeamId,
+          viewerMemberId: identity.workspaceMemberId, ownerMemberId: project.ownerMemberId,
+        });
+        continue;
+      }
       const target: ProactiveContentPullTarget = {
         projectId: project.projectId,
         workspaceId,

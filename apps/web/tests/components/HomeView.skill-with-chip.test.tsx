@@ -5,6 +5,7 @@ import { act } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SkillSummary } from '@open-design/contracts';
+import newGenerationManifest from '../../../../plugins/_official/scenarios/od-new-generation/open-design.json';
 
 vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
   PlaceholderCarousel: () => null,
@@ -68,7 +69,7 @@ function pluginRecord(id: string, title: string, tags: string[], od: Record<stri
 const CATALOG = [
   pluginRecord('example-web-prototype', 'Web Prototype', ['prototype'], { mode: 'prototype' }),
   pluginRecord('example-simple-deck', 'Simple Deck', ['deck'], { mode: 'deck' }),
-  pluginRecord('od-new-generation', 'New generation', [], {}),
+  pluginRecord('od-new-generation', 'New generation', [], newGenerationManifest.od),
   pluginRecord('od-media-generation', 'Media generation', [], {}),
 ];
 
@@ -220,6 +221,20 @@ async function submitAndRead(onSubmit: SubmitSpy) {
 }
 
 describe('HomeView — @-mentioning a Skill on top of a picked task type', () => {
+  it('sends a free-form motion-design brief with the real bundled required-input manifest', async () => {
+    stubFetch();
+    stubAnimationFrame();
+    const onSubmit = submitSpy();
+    renderHome(onSubmit);
+    await act(async () => { requestHomeChip('motion-design'); });
+    await waitFor(() => expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Motion design'));
+    const prompt = '帮我做一段 15 秒的专注计时器产品介绍，产品名叫「一刻」，横版，不需要配音。';
+    setHomeHeroPrompt(prompt);
+    await settle();
+    expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(false);
+    const payload = await submitAndRead(onSubmit);
+    expect(payload).toMatchObject({ prompt, automaticStrategyTaskProfile: 'motion-design', pluginId: null });
+  });
   afterEach(() => {
     vi.unstubAllGlobals();
     cleanup();

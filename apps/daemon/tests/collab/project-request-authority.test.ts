@@ -57,6 +57,20 @@ function context(overrides: Record<string, unknown> = {}) {
 }
 
 describe('createAuthorizeProjectRequest', () => {
+  it('blocks owner content writes during receipt while reads and comments remain available', async () => {
+    const row = { workspaceId: 'workspace-a', visibility: 'team', resourceState: 'active', createdByWorkspaceMemberId: 'member-a' };
+    const sendApiError = vi.fn();
+    const authorize = createAuthorizeProjectRequest({
+      db: {}, getWorkspaceProject: () => row, getWorkspaceProjectByProjectId: () => row,
+      isProjectReceivingContent: () => true, sendApiError,
+    });
+    const req = request({ workspaceId: 'workspace-a', memberId: 'member-a' });
+    expect(await authorize(req, response(), 'project-a', { mode: 'read' })).toBe(true);
+    expect(await authorize(req, response(), 'project-a', { mode: 'write', capability: 'comment' })).toBe(true);
+    expect(await authorize(req, response(), 'project-a', { mode: 'write', capability: 'writeFiles' })).toBe(false);
+    expect(sendApiError).toHaveBeenLastCalledWith(expect.anything(), 409, 'PROJECT_BUSY', expect.any(String));
+  });
+
   it('keeps a first-open placeholder readable/commentable but blocks content writes', async () => {
     const row = {
       workspaceId: 'workspace-a',

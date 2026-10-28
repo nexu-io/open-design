@@ -1,4 +1,9 @@
+import { pendingCommentFileRetirements } from './collab/comment-file-retirements.js';
+import { withCommentFileDeletion, type CommentFileDeletion } from './collab/comment-file-deletion.js';
 import type { Express, Response } from 'express';
+import { publicFileMutationHandler } from './routes/public-file-mutation-handler.js';
+import type { PublicFileMutations } from './collab/public-file-mutations.js';
+import { deleteProjectWorkspaceArtifacts } from './chat-artifacts/store.js';
 import {
   PROJECT_EXPORT_MANIFEST_SCHEMA,
   isExportFormat,
@@ -50,6 +55,8 @@ import type { WorkspaceDirectoryFetchResult } from './collab/vela-workspace-cont
 import type { BoundWorkspaceResourceMutationGate } from './collab/workspace-resource-mutation.js';
 
 export interface RegisterImportRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'ids' | 'paths' | 'imports' | 'auth' | 'projectStore' | 'conversations' | 'projectFiles' | 'validation'> {
+  publicFileMutations?: PublicFileMutations;
+  stopPublicFilesBeforeDelete?: CommentFileDeletion;
   fetchProjectCreationWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>;
   enforceWorkspaceProjectMutation?: BoundWorkspaceResourceMutationGate;
 }
@@ -195,9 +202,9 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
   // Replace an existing project's working directory in-place. Mirrors
   // the same trust-gate, realpath, and data-dir checks as folder import,
   // but updates metadata.baseDir on an existing project record.
-  app.post('/api/projects/:id/working-dir', async (req, res) => {
+  app.post('/api/projects/:id/working-dir', publicFileMutationHandler(ctx.publicFileMutations, async (req, res) => {
     try {
-      const projectId = req.params.id;
+      const projectId = typeof req.params.id === 'string' ? req.params.id : '';
       const existing = getProject(db, projectId);
       if (!existing) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
@@ -311,21 +318,37 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       }
 
       const entryFile = await detectEntryFile(normalizedPath);
-      const existingMeta = existing.metadata ?? {};
-      const { orchestratorWorkspace: _existingOrchestratorWorkspace, ...preservedMeta } =
-        existingMeta;
-      const nextMeta = {
-        ...preservedMeta,
-        kind: existingMeta.kind ?? 'prototype',
-        baseDir: normalizedPath,
-        importedFrom: 'folder' as const,
-        entryFile,
-        ...(normalizedOrchestratorWorkspace
-          ? { orchestratorWorkspace: normalizedOrchestratorWorkspace }
-          : {}),
-        ...(trustedPickerImport ? { fromTrustedPicker: true as const } : {}),
-      };
-      const updated = updateProject(db, projectId, { metadata: nextMeta });
+      const previousRoot = await fs.promises.realpath(existing.metadata?.baseDir ?? projectDir(PROJECTS_DIR, projectId)).catch(() => null);
+      const replacing = previousRoot !== normalizedPath;
+      const pendingRetirements = pendingCommentFileRetirements(db, projectId);
+      if (!replacing && pendingRetirements.some(row => !row.committed)) throw new Error('COMMENT_FILE_RETIREMENT_PENDING');
+      let updated: ReturnType<typeof updateProject> = null;
+      await withCommentFileDeletion(replacing || pendingRetirements.length ? ctx.stopPublicFilesBeforeDelete : undefined, projectId, undefined, async () => {
+        const existingMeta = getProject(db, projectId)?.metadata ?? {};
+        const { orchestratorWorkspace: _existingOrchestratorWorkspace, ...preservedMeta } =
+          existingMeta;
+        const nextMeta = {
+          ...preservedMeta,
+          kind: existingMeta.kind ?? 'prototype',
+          baseDir: normalizedPath,
+          importedFrom: 'folder' as const,
+          entryFile,
+          ...(normalizedOrchestratorWorkspace
+            ? { orchestratorWorkspace: normalizedOrchestratorWorkspace }
+            : {}),
+          ...(trustedPickerImport ? { fromTrustedPicker: true as const } : {}),
+        };
+        // End every old local pointer with the root switch, including local-only
+        // notes with no admitted fact. Remote retirement may fail afterward.
+        return db.transaction((): void | false => {
+          updated = updateProject(db, projectId, { metadata: nextMeta });
+          if (!updated) throw new Error('PROJECT_NOT_FOUND');
+          if (!replacing) return false;
+          deleteProjectWorkspaceArtifacts(db, projectId);
+        })();
+      }, replacing ? undefined : 'committed-retry');
+      // Retirement adopts reserved metadata after the root mutation commits.
+      updated = getProject(db, projectId);
       if (!updated) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
@@ -339,7 +362,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
     } catch (err: any) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
     }
-  });
+  }));
 
   app.post('/api/import/folder', async (req, res) => {
     try {

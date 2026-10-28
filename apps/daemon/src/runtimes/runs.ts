@@ -4,7 +4,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
 import {
-  strategyTaskProvesDelivery,
   todoSnapshotHasUnfinishedWork,
   turnEndedByAskingUser,
 } from '@open-design/contracts';
@@ -1636,17 +1635,9 @@ export function createChatRunService({
     // if the last TodoWrite looked done. Absence of any TodoWrite snapshot keeps
     // the flag false, so a text-only answer stays "Completed".
     //
-    // A settled strategy verdict outranks the TodoWrite narration: the task
-    // reaches `completed` only once the deliverable was verified on disk, and
-    // the agent's own checklist is routinely left with a stale `pending` item.
-    // Truncation stays an independent term — a cut-off generation is unfinished
-    // whatever verdict was recorded.
-    // The normal composer teaches the model this run's nonce; a matching
-    // marker plus conclusion is therefore stronger than a stale self-reported
-    // Todo snapshot. OD Next's frozen Harness prompt currently bypasses that
-    // per-turn instruction, so its normal completion authority remains
-    // strategyTaskProvesDelivery below (the marker path is unreachable unless
-    // a future frozen bundle explicitly adopts the protocol).
+    // File evidence and task completion do not cancel unfinished todos.
+    // Keep the existing authenticated completion signal and question handoff;
+    // truncation remains independent and always counts as unfinished.
     const authenticatedDoneProvesDelivery =
       status === 'succeeded' && run.authenticatedDoneConclusion === true;
     // A clarification turn writes its plan, asks its question, and exits 0. It
@@ -1662,8 +1653,8 @@ export function createChatRunService({
       status === 'succeeded' && turnEndedByAskingUser(run.askUserScanText);
     // Counter-evidence the host holds against its own turn. It is a term of its
     // own, deliberately OUTSIDE the marker/todo clause below, because that whole
-    // clause is the agent's account of its own work: the completion marker, the
-    // strategy verdict and the TodoWrite snapshot can each veto "unfinished",
+    // clause is the agent's account of its own work: the completion marker and
+    // TodoWrite snapshot can each veto "unfinished",
     // and a run that apologised for a failed generation reached `succeeded` with
     // a green check because the marker vetoed a `cancelled` todo. A failure the
     // daemon watched happen is not something the turn's own narration may
@@ -1676,8 +1667,7 @@ export function createChatRunService({
     run.endedWithUnfinishedWork =
       Boolean(run.truncatedMidTurn)
       || hostRecordedDeliveryFailure
-      || (!strategyTaskProvesDelivery(run.strategyTask)
-        && !authenticatedDoneProvesDelivery
+      || (!authenticatedDoneProvesDelivery
         && !endedByAskingUser
         && todoSnapshotHasUnfinishedWork(run.lastTodoSnapshot));
     // Commit the terminal Run snapshot before exposing its terminal event. The
@@ -2189,6 +2179,17 @@ export function createChatRunService({
     return true;
   };
 
+  /** Like signalProcessGroup, but true only when the signal was delivered. */
+  const deliverProcessGroupSignal = (processGroupId, signal) => {
+    if (process.platform === 'win32' || !Number.isInteger(processGroupId)) return false;
+    try {
+      process.kill(-processGroupId, signal);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const processGroupIsAlive = (processGroupId) => {
     if (process.platform === 'win32' || !Number.isInteger(processGroupId)) return false;
     try {
@@ -2218,12 +2219,18 @@ export function createChatRunService({
    * bounded SIGTERM/SIGKILL escalation while the direct child is still alive.
    * The captured child/pgid key makes repeated verdict/close callbacks
    * idempotent and prevents a retry generation from targeting its successor.
+   *
+   * `onChildSignal` runs once, after the first signal was actually delivered
+   * to a direct child that was still alive, i.e. only when the daemon, not
+   * the child itself, ends it. A child that exits during `gracefulWaitMs`, a
+   * child already gone when signalled, and a failed dispatch never trigger it.
    */
   const terminateProcessTree = (run, child, processGroupId, {
     gracefulWaitMs = 0,
     termGraceMs = cancelGraceMs(),
     killGraceMs = forceWaitMs(),
     reason = 'run_terminal',
+    onChildSignal = undefined as (() => void) | undefined,
   } = {}) => {
     const key = child ?? processGroupId;
     run.processTreeTerminations ??= new Map();
@@ -2232,6 +2239,12 @@ export function createChatRunService({
     }
 
     run.processTreeTerminationPending = (run.processTreeTerminationPending ?? 0) + 1;
+    let childSignalReported = false;
+    const reportChildSignal = () => {
+      if (childSignalReported) return;
+      childSignalReported = true;
+      onChildSignal?.();
+    };
     const task = (async () => {
       if (process.platform !== 'win32' && Number.isInteger(processGroupId)) {
         if (!processGroupIsAlive(processGroupId)) {
@@ -2244,11 +2257,13 @@ export function createChatRunService({
           return { quiescent: true, forced: false, remainingPids: [] };
         }
         if (gracefulWaitMs > 0) closeRunStdin(run);
-        signalProcessGroup(processGroupId, 'SIGTERM');
+        const childAliveBeforeTerm = !childHasExited(child);
+        if (deliverProcessGroupSignal(processGroupId, 'SIGTERM') && childAliveBeforeTerm) reportChildSignal();
         if (await waitForProcessGroupExit(processGroupId, termGraceMs)) {
           return { quiescent: true, forced: false, remainingPids: [] };
         }
-        signalProcessGroup(processGroupId, 'SIGKILL');
+        const childAliveBeforeKill = !childHasExited(child);
+        if (deliverProcessGroupSignal(processGroupId, 'SIGKILL') && childAliveBeforeKill) reportChildSignal();
         const quiescent = await waitForProcessGroupExit(processGroupId, killGraceMs);
         return {
           quiescent,
@@ -2265,11 +2280,11 @@ export function createChatRunService({
           return { quiescent: true, forced: false, remainingPids: [] };
         }
         if (gracefulWaitMs > 0) closeRunStdin(run);
-        signalChildProcess(child, null, 'SIGTERM');
+        if (signalChildProcess(child, null, 'SIGTERM')) reportChildSignal();
         if (await waitForChildExit(child, termGraceMs)) {
           return { quiescent: true, forced: false, remainingPids: [] };
         }
-        signalChildProcess(child, null, 'SIGKILL');
+        if (signalChildProcess(child, null, 'SIGKILL')) reportChildSignal();
         const quiescent = await waitForChildExit(child, killGraceMs);
         return {
           quiescent,
@@ -2293,7 +2308,9 @@ export function createChatRunService({
       const terminationPids = pids.length > 0 || childExitedDuringGrace
         ? pids
         : [child.pid];
-      const result = await stopProcesses(terminationPids, { termGraceMs, killGraceMs });
+      const childStillOwned = !childExitedDuringGrace && !childHasExited(child);
+      const onSignal = (pid) => { if (childStillOwned && pid === child.pid) reportChildSignal(); };
+      const result = await stopProcesses(terminationPids, { termGraceMs, killGraceMs, onSignal });
 
       const verificationSnapshots = await listProcessSnapshots();
       enumerationVerified &&= verificationSnapshots.length > 0;
@@ -2311,6 +2328,7 @@ export function createChatRunService({
         const followUp = await stopProcesses(remainingPids, {
           termGraceMs: 0,
           killGraceMs,
+          onSignal,
         });
         forcedPids = [...new Set([...forcedPids, ...followUp.forcedPids])];
         const finalSnapshots = await listProcessSnapshots();

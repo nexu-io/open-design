@@ -72,6 +72,7 @@ import { rewriteCliArgsForDefaultStart } from "./cli-args.js";
 import { ensureDaemonGateForDesktop } from "./desktop-auth-gate.js";
 import { loadWorkspaceLocalEnv } from "./local-env.js";
 import { resolveSharedPortsFromRunningState } from "./shared-ports.js";
+import { resolveDevVelaEnv } from "./vela-runtime.js";
 
 type CliOptions = ToolDevOptions & {
   envFile?: string | string[];
@@ -409,6 +410,13 @@ async function spawnDaemonRuntime(
 
   try {
     await ensureDaemonCliBuild(config, logHandle);
+    const velaLogs: string[] = [];
+    const velaEnv = resolveDevVelaEnv(config.workspaceRoot, process.env, (message) => velaLogs.push(message));
+    if (velaLogs.length > 0) {
+      const message = `${velaLogs.join("\n")}\n`;
+      process.stderr.write(message);
+      await logHandle.write(message);
+    }
     await logHandle.write(`\n[tools-dev] launching daemon at ${new Date().toISOString()}\n`);
     if (webPort != null) await logHandle.write(`[tools-dev] trusting web origin port ${webPort}\n`);
     if (spawnOptions.requireDesktopAuth) {
@@ -425,6 +433,7 @@ async function spawnDaemonRuntime(
       appName: APP_KEYS.DAEMON,
       config,
       env: {
+        ...velaEnv,
         [SIDECAR_ENV.DAEMON_PORT]: String(daemonPort ?? 0),
         ...(webPort == null ? {} : { [SIDECAR_ENV.WEB_PORT]: String(webPort) }),
         ...(options.parentPid == null ? {} : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),

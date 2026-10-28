@@ -1103,9 +1103,11 @@ describe('ProjectView daemon reattach restore', () => {
     fetchDesignSystem.mockResolvedValue(null);
     getTemplate.mockResolvedValue(null);
     listActiveChatRuns.mockResolvedValue([]);
-    fetchChatRunStatus.mockResolvedValue({
-      id: 'run-request',
-      status: 'succeeded',
+    // The successor is a distinct physical Run. Its status must not be
+    // inferred from either the predecessor's success or the task projection.
+    fetchChatRunStatus.mockImplementation(async (runId: string) => ({
+      id: runId,
+      status: runId === 'run-production' ? 'running' : 'succeeded',
       createdAt: startedAt,
       updatedAt: startedAt + 1,
       exitCode: 0,
@@ -1126,12 +1128,13 @@ describe('ProjectView daemon reattach restore', () => {
         nextRunId: 'run-production',
         terminal: false,
       },
-    });
+    }));
     reattachDaemonRun.mockImplementation(async () => new Promise<void>(() => {}));
 
     renderProjectView();
 
     await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    expect(fetchChatRunStatus).toHaveBeenCalledWith('run-production', null);
     expect(reattachDaemonRun).toHaveBeenCalledWith(expect.objectContaining({
       runId: 'run-production',
       initialLastEventId: null,
@@ -1153,6 +1156,73 @@ describe('ProjectView daemon reattach restore', () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(reattachDaemonRun).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a failed production failed when a refresh finds its task already completed', async () => {
+    const startedAt = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-task-failed-production',
+        role: 'assistant',
+        agentId: 'codex',
+        content: 'Decision summary.\n',
+        events: [],
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-request',
+        runStatus: 'succeeded',
+        lastRunEventId: '41',
+        strategyTaskExecutionId: 'task-1',
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    // Orchestration ended, but the production Run itself failed. Only the
+    // physical Run can say how production went; `completed` must not read as success.
+    fetchChatRunStatus.mockImplementation(async (runId: string) => ({
+      id: runId,
+      status: runId === 'run-production' ? 'failed' : 'succeeded',
+      createdAt: startedAt,
+      updatedAt: startedAt + 1,
+      exitCode: runId === 'run-production' ? 1 : 0,
+      signal: null,
+      strategyTask: {
+        taskExecutionId: 'task-1',
+        strategy: {
+          id: 'od-next-strategy',
+          version: '2.0.0',
+          packageHash: 'a'.repeat(64),
+          snapshotId: 'snapshot-1',
+        },
+        inputStage: 'production',
+        outcome: 'completed',
+        route: 'full_plan',
+        executionMode: 'simple',
+        activeRunId: 'run-production',
+        settlementReason: 'ended',
+        settlementFacts: { physicalStatus: 'failed' },
+        terminal: true,
+      },
+    }));
+    reattachDaemonRun.mockImplementation(async () => new Promise<void>(() => {}));
+
+    renderProjectView();
+
+    await waitFor(() => expect(fetchChatRunStatus).toHaveBeenCalledWith('run-production', null));
+    await waitFor(() => {
+      const saved = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter((message) => message?.id === 'msg-task-failed-production')
+        .at(-1);
+      expect(saved).toMatchObject({ runId: 'run-production', runStatus: 'failed' });
+    });
   });
 
   it('does not replay a projected successor into its predecessor when that successor message is already hydrated', async () => {

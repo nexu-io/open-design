@@ -54,7 +54,7 @@ beforeEach(async () => {
   );
   await writeFile(
     path.join(folder, 'examples', 'wrapped', 'inner.html'),
-    '<!DOCTYPE html><title>wrapped</title><img src="./hero.png"><p>wrapped body</p>',
+    '<!DOCTYPE html><title>wrapped</title><style>@font-face{font-family:F;src:url(\'assets/display.ttf\') format("truetype")}body{background:url("data:image/png;base64,AA")}i{background:url(../../../escape.png)}</style><img src="./hero.png"><p>wrapped body</p>',
   );
   await writeFile(
     path.join(folder, 'open-design.json'),
@@ -180,6 +180,18 @@ describe('GET /api/plugins/:id/example/:name', () => {
     expect(body).toContain(
       `/api/plugins/${encodeURIComponent(PLUGIN_ID)}/asset/examples/wrapped/hero.png`,
     );
+  });
+
+  it('lets inline stylesheets load bundled fonts through the asset route', async () => {
+    const resp = await fetch(`${baseUrl}/api/plugins/${PLUGIN_ID}/example/wrapped`);
+    expect(resp.status).toBe(200);
+    expect(resp.headers.get('content-security-policy') ?? '').toContain("font-src 'self' data:");
+    const body = await resp.text();
+    expect(body).toContain(
+      `url('/api/plugins/${encodeURIComponent(PLUGIN_ID)}/asset/examples/wrapped/assets/display.ttf')`,
+    );
+    expect(body).toContain('url("data:image/png;base64,AA")');
+    expect(body).toContain('url(../../../escape.png)');
   });
 
   it('rejects traversal segments with 400', async () => {

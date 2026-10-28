@@ -46,6 +46,12 @@ This file is the single source of truth for agents entering this repository. Rea
 - New project-owned entrypoints, modules, scripts, tests, reporters, and configs should default to TypeScript.
 - Residual JavaScript is limited to generated output, vendored dependencies, explicitly documented compatibility build artifacts, and the allowlist in `scripts/guard.ts`.
 
+## Local validation scope
+
+- Run focused tests for changed files and affected integration boundaries.
+- Do not run full daemon or web suites locally unless explicitly requested by the user. This also applies to final regression; full suites run in PR CI.
+- Run `pnpm guard` and `pnpm typecheck` before publication. If CI fails, investigate the failing lane and rerun the relevant focused tests.
+
 ## Windows native
 
 - macOS, Linux, and WSL2 are the primary supported paths. Windows native is best-effort — file an issue if it doesn't work.
@@ -273,6 +279,21 @@ Every user-facing capability must be reachable through both the web UI **and** t
 - Git commits must not include `Co-authored-by` trailers or any other co-author metadata.
 
 ## Pull request expectations
+
+- Open Design team PR titles begin with a verified, scope-matching Plane item:
+  `[OPEND-3693] fix(web): restore home scrolling`. Spaces around the identifier
+  are accepted; consecutive identifiers link all items, with code lines assigned
+  only to the first. Preserve the prefix when editing a title.
+- This policy adds no required PR-body link or delivery-owner fields; continue
+  filling the existing repository template. External contributors are exempt
+  from the Plane gate. Internal accounts, including ODCrew, must pass
+  `quality/plane` once the integration and required check are deployed.
+- Emergency bypass requires `lefarcen` or `mrcfps` to Approve the current commit
+  with `quality-bypass: <specific reason>` in the review. A normal approval does
+  not bypass the gate. New commits or revoked approval require a new decision.
+- Quality reports use the primary requirement's engineering role, not the bug
+  assignee or repair PR author. Product and test code are counted separately;
+  post-QA repairs do not enlarge the original delivery denominator.
 
 - Opening a PR uses `.github/pull_request_template.md`; fill every section, not just the title.
 - "Why" must answer both the author's use case (what made you write this PR) and the pain being addressed (user problem, technical debt, prod issue, or unblocker), not just a one-line restatement of the title.

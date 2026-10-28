@@ -12,6 +12,7 @@ vi.mock('../src/integrations/vela-command.js', async (importOriginal) => ({
 import {
   BILLING_PREFLIGHT_TIMEOUT_MS,
   fetchVelaBillingPreflight,
+  fetchVelaBillingFundingCheck,
   parseBillingPreflight,
 } from '../src/integrations/vela-billing.js';
 
@@ -63,6 +64,7 @@ describe('Vela billing preflight adapter', () => {
       { workspaceId: 'other' },
       { modelId: 'other' },
       { generatedAt: 'bad' },
+      { fundingCheck: 'reject_everything' },
       {
         codingPlan: {
           ...preview.codingPlan,
@@ -116,5 +118,31 @@ describe('Vela billing preflight adapter', () => {
       ['billing', 'preflight', '--workspace-id', 'ws', '--format', 'json', '--model', 'model'],
       expect.objectContaining({ timeoutMs: BILLING_PREFLIGHT_TIMEOUT_MS }),
     );
+  });
+});
+
+
+describe('isolated Vela funding-check adapter', () => {
+  it('calls the new command with the same bounded process runner', async () => {
+    runVelaCommandMock.mockReset();
+    runVelaCommandMock.mockResolvedValue(JSON.stringify({ ...preview, fundingCheck: 'available' }));
+    expect(await fetchVelaBillingFundingCheck('ws', 'model')).toMatchObject({ fundingCheck: 'available' });
+    expect(runVelaCommandMock).toHaveBeenCalledExactlyOnceWith(
+      ['billing', 'funding-check', '--workspace-id', 'ws', '--format', 'json', '--model', 'model'],
+      expect.objectContaining({ timeoutMs: BILLING_PREFLIGHT_TIMEOUT_MS }),
+    );
+  });
+  it.each(['unknown command funding-check', 'API request failed with status 404', 'API request failed with status 503', 'timeout'])(
+    'does not retry or fall back to legacy preflight on %s', async (message) => {
+      const run = vi.fn(async (_args: string[]) => { throw new Error(message); });
+      expect(await fetchVelaBillingFundingCheck('ws', 'model', { run })).toBeNull();
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(run.mock.calls[0]?.[0]).toEqual(['funding-check', '--workspace-id', 'ws', '--format', 'json', '--model', 'model']);
+    },
+  );
+  it('preserves authorization failure', async () => {
+    await expect(fetchVelaBillingFundingCheck('ws', 'model', {
+      run: async () => { throw new Error('API request failed with status 403'); },
+    })).rejects.toThrow('403');
   });
 });

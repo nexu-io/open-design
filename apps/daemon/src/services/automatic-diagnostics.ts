@@ -2,7 +2,7 @@ import { readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { userInfo } from 'node:os';
 import { buildAutomaticDiagnostics, DIAGNOSTIC_MAX_BYTES, redactJsonValue,
-  type AutomaticDiagnosticManifest, type LogSource } from '@open-design/diagnostics';
+  type AutomaticDiagnosticManifest, type AutomaticDiagnosticSource, type LogSource } from '@open-design/diagnostics';
 import { DiagnosticOutbox, type DiagnosticIncident } from '../storage/diagnostic-outbox.js';
 import { DiagnosticRelay, DiagnosticRelayError, type DiagnosticDevice } from '../integrations/diagnostic-relay.js';
 import { DiagnosticConsentFence } from './diagnostic-consent.js';
@@ -15,7 +15,7 @@ export interface FaultEvidence {
 interface Options {
   dataRoot: string; relayOrigin: string | null;
   consent(): boolean;
-  sources(evidence: FaultEvidence): Promise<LogSource[]>;
+  sources(evidence: FaultEvidence): Promise<AutomaticDiagnosticSource[]>;
   baselineSources?(): Promise<LogSource[]>;
   context?(): unknown;
   onDelivered?(incidentId: string, receipt: string, evidence: FaultEvidence): void;
@@ -31,6 +31,7 @@ export class AutomaticDiagnostics {
   private readonly relay: DiagnosticRelay | null;
   private readonly consentFence: DiagnosticConsentFence;
   private consentBarrier: Promise<void> = Promise.resolve();
+  private observedLogIdentities = false;
   constructor(private readonly options: Options) {
     this.outbox = new DiagnosticOutbox(options.dataRoot);
     this.consentFence = new DiagnosticConsentFence(this.outbox.directory, this.hasConsent());
@@ -61,6 +62,7 @@ export class AutomaticDiagnostics {
   start(): void {
     this.outbox.recoverRuns(this.hasConsent());
     if (this.consentFence.needsBaseline) this.baselineConsent();
+    else if (this.allowed()) this.extendConsent();
     this.timer = setInterval(() => { void this.tick(); }, 15_000);
     this.timer.unref();
     void this.tick();
@@ -94,6 +96,12 @@ export class AutomaticDiagnostics {
       if (this.options.baselineSources) await this.consentFence.baseline(await this.options.baselineSources());
     })().catch(() => { /* unknown pre-boundary files are omitted conservatively */ });
   }
+  /** Sources introduced after opting in get a boundary at first sight instead of being omitted forever. */
+  private extendConsent(): void {
+    this.consentBarrier = (async () => {
+      if (this.options.baselineSources) await this.consentFence.extend(await this.options.baselineSources());
+    })().catch(() => { /* unknown pre-boundary files are omitted conservatively */ });
+  }
   tick(): Promise<void> {
     if (this.active) return this.active;
     if (this.stopped) return Promise.resolve();
@@ -101,6 +109,12 @@ export class AutomaticDiagnostics {
       console.warn('[diagnostics] background delivery deferred');
     }).finally(() => { this.active = null; });
     return this.active;
+  }
+  private async fencedSources(evidence: FaultEvidence): Promise<AutomaticDiagnosticSource[]> {
+    const sources = await this.options.sources(evidence);
+    // Sources already known to be absent keep their reason rather than a consent verdict.
+    const fenced = await this.consentFence.apply(sources.filter((source) => !source.omitReason));
+    return sources.map((source) => source.omitReason ? source : fenced.shift()!);
   }
   private async cleanup(reserve = 0): Promise<void> {
     const removed = this.outbox.prune(Date.now(), this.hasConsent(), reserve);
@@ -138,6 +152,11 @@ export class AutomaticDiagnostics {
     await this.consentBarrier;
     await this.cleanup();
     if (!this.allowed()) return;
+    if (!this.observedLogIdentities && this.options.baselineSources) {
+      // Once per process, after the launcher has rotated this session's logs.
+      this.observedLogIdentities = true;
+      await this.consentFence.observe(await this.options.baselineSources()).catch(() => { /* retried next start */ });
+    }
     this.controller = new AbortController();
     const signal = this.controller.signal;
     // A bounded batch yields to normal daemon work even during a fault storm.
@@ -159,7 +178,7 @@ export class AutomaticDiagnostics {
           const evidence = JSON.parse(item.summary) as FaultEvidence;
           let username: string | undefined; try { username = userInfo().username; } catch { /* optional */ }
           const { manifest } = await buildAutomaticDiagnostics({ directory: staging, incidentId: item.id,
-            summary: evidence, sources: await this.consentFence.apply(await this.options.sources(evidence)), redaction: { username }, signal });
+            summary: evidence, sources: await this.fencedSources(evidence), redaction: { username }, signal });
           signal.throwIfAborted();
           if (!this.allowed()) throw new DiagnosticRelayError('consent_disabled', 0, true);
           await rm(directory, { recursive: true, force: true });

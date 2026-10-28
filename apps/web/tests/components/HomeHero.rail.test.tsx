@@ -108,6 +108,12 @@ function renderHero(overrides: Partial<React.ComponentProps<typeof HomeHero>> = 
 }
 
 function typePill(chipId: string): HTMLElement | null {
+  if (screen.queryByTestId('home-hero-type-pills')) {
+    const inline = screen.queryByTestId(`home-hero-type-pill-${chipId}`);
+    if (inline) return inline;
+    if (!screen.queryByTestId('home-hero-type-pills-popover')) fireEvent.click(screen.getByTestId('home-hero-type-pills-more'));
+    return screen.queryByTestId(`home-hero-type-pill-${chipId}-more`);
+  }
   if (!screen.queryByTestId('home-hero-template-menu')) fireEvent.click(homeTemplateTrigger());
   return screen.queryByTestId('home-hero-template-menu')?.querySelector(`[data-chip="${chipId}"]`) ?? null;
 }
@@ -119,7 +125,7 @@ function pickTemplate(chipId: string) {
 }
 
 describe('HomeHero intent rail', () => {
-  it('offers every creation type in the dropdown', () => {
+  it('offers three initial types and every remaining type through More', () => {
     renderHero();
     // The row is a curated entry set, not the whole create catalog (product,
     // 2026-08-31). Everything else — Brand Kit's own action, the migrate
@@ -136,9 +142,12 @@ describe('HomeHero intent rail', () => {
     }
   });
 
-  it('no longer renders the inline template rail below the composer', () => {
+  it('shows the three entry pills without restoring the old template browser', () => {
     renderHero({ onStartBlankProject: vi.fn() });
 
+    expect(screen.queryByTestId('home-hero-template-picker')).toBeNull();
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('What would you like to create?');
+    for (const id of HOME_TYPE_ROW_IDS) expect(screen.getByTestId(`home-hero-type-pill-${id}`)).toBeTruthy();
     expect(screen.queryByTestId('home-hero-template-section')).toBeNull();
     expect(screen.queryByTestId('home-hero-template-toggle')).toBeNull();
     expect(screen.queryByTestId('home-hero-blank-project')).toBeNull();
@@ -191,18 +200,21 @@ describe('HomeHero intent rail', () => {
     expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
   });
 
-  it('switches the creation type without a clear control', () => {
+  it('requires clearing the selected type before choosing another', () => {
     const onClearActiveChip = vi.fn();
     const { onPickChip } = renderHero({ activeChipId: 'prototype', onClearActiveChip });
-    expect(screen.queryByTestId('home-hero-template-clear')).toBeNull();
-    pickTemplate('deck');
-    expect(onPickChip).toHaveBeenCalledWith(findChip('deck'));
+    expect(screen.getByTestId('home-hero-template-clear')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('home-hero-template-trigger').querySelector('.home-hero__footer-select-label')!);
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(onPickChip).not.toHaveBeenCalled();
     expect(onClearActiveChip).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('home-hero-template-clear'));
+    expect(onClearActiveChip).toHaveBeenCalledOnce();
   });
 
   it('tracks the committed template on the footer pill and resets it on clear', () => {
     // The pill mirrors the committed chip: it must pick the label up when a
-    // template becomes active and fall back to the empty "Template" kicker the
+    // template becomes active and return to the entry row the
     // moment the chip is cleared (issue: the pill stayed "Slide deck").
     const baseProps = {
       prompt: '',
@@ -224,7 +236,8 @@ describe('HomeHero intent rail', () => {
     } as React.ComponentProps<typeof HomeHero>;
 
     const { rerender } = render(<HomeHero {...baseProps} activeChipId={null} />);
-    expect(homeTemplateTrigger().textContent).toContain('Creation type');
+    expect(screen.queryByTestId('home-hero-template-picker')).toBeNull();
+    expect(screen.getByTestId('home-hero-type-pills')).toBeTruthy();
     expect(typePill('deck')).toBeTruthy();
 
     // Picking a template from the menu commits the chip through the host.
@@ -232,7 +245,8 @@ describe('HomeHero intent rail', () => {
     expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Slide deck');
 
     rerender(<HomeHero {...baseProps} activeChipId={null} />);
-    expect(homeTemplateTrigger().textContent).toContain('Creation type');
+    expect(screen.queryByTestId('home-hero-template-picker')).toBeNull();
+    expect(screen.getByTestId('home-hero-type-pills')).toBeTruthy();
   });
 
   it('uses the active creation chip as the only clear control for a chip-bound plugin', () => {
@@ -503,8 +517,9 @@ describe('HomeHero intent rail', () => {
       pendingPluginId: 'od-figma-migration',
       pendingChipId: 'figma',
     });
-    expect(homeTemplateTrigger().disabled).toBe(true);
-    fireEvent.click(homeTemplateTrigger());
+    const entries = within(screen.getByTestId('home-hero-type-pills')).getAllByRole('button');
+    expect(entries.every((entry) => (entry as HTMLButtonElement).disabled)).toBe(true);
+    fireEvent.click(entries[0]!);
     expect(screen.queryByTestId('home-hero-template-menu')).toBeNull();
     expect(onPickChip).not.toHaveBeenCalled();
   });

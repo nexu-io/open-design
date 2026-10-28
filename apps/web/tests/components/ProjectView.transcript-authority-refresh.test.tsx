@@ -255,13 +255,13 @@ describe('ProjectView transcript visibility across authority confirmation', () =
     vi.mocked(listMessages).mockResolvedValueOnce([history]).mockReturnValueOnce(refresh.promise);
     const view = render(projectView());
     await waitFor(() => expect(view.getByText(history.content)).toBeTruthy());
-    expect(listMessages).toHaveBeenNthCalledWith(1, project.id, conversation.id, OWNER, expect.any(AbortSignal));
+    expect(listMessages).toHaveBeenNthCalledWith(1, project.id, conversation.id, OWNER, expect.any(AbortSignal), expect.any(Function));
     expect(vi.mocked(listMessages).mock.calls[0]?.[3]?.aborted).toBe(false);
 
     workspace.scope = readableScope();
     await act(async () => { view.rerender(projectView()); });
     await waitFor(() => expect(listMessages).toHaveBeenCalledTimes(2));
-    expect(listMessages).toHaveBeenNthCalledWith(2, project.id, conversation.id, MEMBER, expect.any(AbortSignal));
+    expect(listMessages).toHaveBeenNthCalledWith(2, project.id, conversation.id, MEMBER, expect.any(AbortSignal), expect.any(Function));
     expect(vi.mocked(listMessages).mock.calls[1]?.[3]?.aborted).toBe(false);
     try {
       expect(view.queryByText(history.content)).not.toBeNull();
@@ -374,7 +374,7 @@ describe('ProjectView transcript visibility across authority confirmation', () =
         // Real React effects run here: the scope read starts and the queue
         // drain gets the same commit. No timer or effect-order mock intervenes.
         await act(async () => { view.rerender(projectView()); });
-        expect(listMessages).toHaveBeenNthCalledWith(2, project.id, conversation.id, MEMBER, expect.any(AbortSignal));
+        expect(listMessages).toHaveBeenNthCalledWith(2, project.id, conversation.id, MEMBER, expect.any(AbortSignal), expect.any(Function));
         expect(vi.mocked(listMessages).mock.calls[1]?.[3]?.aborted).toBe(false);
         expect(streamViaDaemon).not.toHaveBeenCalled();
         expect(view.getByText(history.content)).toBeTruthy();
@@ -431,7 +431,7 @@ describe('ProjectView transcript visibility across authority confirmation', () =
     workspace.scope = readableScope(differentMember);
     try {
       await act(async () => { view.rerender(projectView()); });
-      expect(listMessages).toHaveBeenNthCalledWith(2, project.id, conversation.id, differentMember, expect.any(AbortSignal));
+      expect(listMessages).toHaveBeenNthCalledWith(2, project.id, conversation.id, differentMember, expect.any(AbortSignal), expect.any(Function));
       expect(vi.mocked(listMessages).mock.calls[1]?.[3]?.aborted).toBe(false);
       expect(view.queryByText(history.content)).toBeNull();
       expect(streamViaDaemon).not.toHaveBeenCalled();

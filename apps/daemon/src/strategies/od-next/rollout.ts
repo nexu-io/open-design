@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { AGENT_DEFS } from '../../runtimes/registry.js';
 
 import type {
   OdNextRolloutDecision,
@@ -15,7 +16,7 @@ export type {
 } from '@open-design/contracts';
 
 /**
- * The single app-config field this policy consults. Structural on purpose: the
+ * Legacy app-config shape accepted for source compatibility. The retired field is ignored. the
  * daemon's `AppConfigPrefs`, a partially read config, and a test literal all
  * satisfy it without this module depending on the config reader.
  */
@@ -41,8 +42,9 @@ const DEFAULT_TASK_TYPES: readonly OdNextRolloutTaskType[] = [
   'ppt',
   'marketing',
   'hyperframes',
+  'discovery',
+  'motion-design',
 ];
-const DEFAULT_AGENTS = ['codex', 'claude', 'opencode', 'amr'] as const;
 
 function bool(value: string | undefined, fallback: boolean): boolean {
   if (value === undefined) return fallback;
@@ -59,51 +61,13 @@ function envMode(value: string | undefined): OdNextRolloutMode | null {
   return trimmed === 'observe' || trimmed === 'active' ? trimmed : 'off';
 }
 
-function configuredMode(value: unknown): OdNextRolloutMode | null {
-  return value === 'off' || value === 'observe' || value === 'active' ? value : null;
-}
-
-/**
- * Which authority decides the requested mode, and what it decided.
- *
- * OD Next is the default route. An installation that configured nothing runs
- * `active`, so the strategy decides how a run behaves unless someone asked it
- * not to.
- *
- * That inverts which case is load-bearing. While the strategy was opt-in, the
- * question was whether anyone had asked for it, and an installation that lost
- * its saved mode simply kept the behaviour it already had. Now the question is
- * whether anyone asked against it, and an installation that loses its saved
- * mode is switched back on. So the invariant this function has to keep is:
- * an installation that opted out reads `off` through every later release.
- *
- * That rests on the config never reading as unconfigured unless it genuinely
- * is. `off` is a value the config carries, and the read path in `app-config.ts`
- * keeps three states apart rather than two: no file at all is the only one that
- * reaches the default below. A file that exists but cannot be believed —
- * malformed JSON, a non-object body, a mode this build does not recognise —
- * resolves to `off` before it gets here, because "we cannot read your choice"
- * must not become "you chose OD Next". See
- * `OD_NEXT_MODE_WHEN_CONFIG_UNREADABLE`.
- *
- * `assertWritableControlValues` covers the write path for the same reason, but
- * only the write path: it cannot do anything about a file that was already bad
- * on disk, hand-edited, or written by another version.
- *
- * `OD_NEXT_STRATEGY_ROLLOUT` outranks the saved `odNextStrategyMode` so that a
- * pinned process stays pinned: an operator debugging one daemon, a packaged
- * smoke run, and a test all set the mode for one process without overwriting
- * the user's choice, and without a user's saved choice overriding theirs. The
- * config is what survives a restart; the env var is what wins inside one.
- */
+/** User Labs preference is retired. Process overrides remain an engineering rollback. */
 function resolveRequestedMode(
   env: NodeJS.ProcessEnv,
-  appConfig: OdNextRolloutAppConfig | null | undefined,
+  _appConfig: OdNextRolloutAppConfig | null | undefined,
 ): { mode: OdNextRolloutMode; source: OdNextRolloutModeSource } {
   const fromEnv = envMode(env.OD_NEXT_STRATEGY_ROLLOUT);
   if (fromEnv) return { mode: fromEnv, source: 'env' };
-  const fromConfig = configuredMode(appConfig?.odNextStrategyMode);
-  if (fromConfig) return { mode: fromConfig, source: 'app_config' };
   return { mode: 'active', source: 'default' };
 }
 
@@ -113,7 +77,7 @@ export function readOdNextRolloutPolicy(
 ): OdNextRolloutPolicy {
   const taskTypes = list(env.OD_NEXT_STRATEGY_TASK_TYPES).filter(
     (value): value is OdNextRolloutTaskType => (
-      value === 'prototype' || value === 'ppt' || value === 'marketing' || value === 'hyperframes'
+      value === 'prototype' || value === 'ppt' || value === 'marketing' || value === 'hyperframes' || value === 'discovery' || value === 'motion-design'
     ),
   );
   const percent = Number(env.OD_NEXT_STRATEGY_ASSIGNMENT_PERCENT ?? '100');
@@ -128,7 +92,7 @@ export function readOdNextRolloutPolicy(
     eligibleTaskTypes: taskTypes.length > 0 ? taskTypes : DEFAULT_TASK_TYPES,
     eligibleAgents: list(env.OD_NEXT_STRATEGY_AGENTS).length > 0
       ? list(env.OD_NEXT_STRATEGY_AGENTS)
-      : DEFAULT_AGENTS,
+      : AGENT_DEFS.map((agent) => agent.id),
     productionActiveApproved: bool(env.OD_NEXT_STRATEGY_PRODUCTION_ACTIVE_APPROVED, true),
     localSyntheticCanary: bool(env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY, false),
   };
@@ -142,6 +106,7 @@ export function odNextTaskTypeForProjectScenarioBinding(
     || binding.taskProfile === 'ppt'
     || binding.taskProfile === 'marketing'
     || binding.taskProfile === 'hyperframes'
+    || binding.taskProfile === 'motion-design'
     ? binding.taskProfile
     : null;
 }
@@ -158,8 +123,6 @@ export function evaluateOdNextRollout(input: {
   agentId: string | null;
   agentVersion: string | null;
   sourceKind: string | null;
-  runtimeCapabilityVerified?: boolean;
-  runtimeCapabilityReason?: string | null;
   routeApplicability?: 'eligible' | 'explicit_user' | 'not_applicable';
 }): OdNextRolloutDecision {
   const { policy } = input;
@@ -194,13 +157,6 @@ export function evaluateOdNextRollout(input: {
   const syntheticCanary = Boolean(
     policy.localSyntheticCanary && process.env.NODE_ENV !== 'production',
   );
-  // agentVersion is retained as diagnostic rollout evidence only. Runtime
-  // invocability is established by preflight and capability admission is
-  // keyed by runtime path + agent id + adapter/schema, not a version pin.
-  if (evaluateEligibility && !input.runtimeCapabilityVerified && !syntheticCanary) {
-    reasons.push('od_next_rollout_x1_capability_fixture_unverified');
-    if (input.runtimeCapabilityReason) reasons.push(`od_next_rollout_capability_${input.runtimeCapabilityReason}`);
-  }
   if (evaluateEligibility && !policy.productionActiveApproved && !syntheticCanary) {
     reasons.push('od_next_rollout_x2_active_unapproved');
   }

@@ -54,9 +54,9 @@ describe('recvpYC6eTaifb — home hero blank space above the title (empty worksp
     // the plain headline; what this case guards is that the centered variant
     // still overrides whatever the base is, not the base number itself.
     expect(ruleValue(baseHero, 'padding')).toBe('116px 0 var(--spacing-4)');
-    // The centering itself (the other candidate cause) stays intact too.
+    // Center when the hero fits, and keep its top reachable when it overflows.
     const centeredView = cssDeclarations(homeHeroCss, '.home-view--centered');
-    expect(ruleValue(centeredView, 'justify-content')).toBe('center');
+    expect(ruleValue(centeredView, 'justify-content')).toBe('safe center');
   });
 });
 

@@ -437,7 +437,8 @@
   display: grid;
   gap: 8px;
   width: calc(100% - var(--spacing-16, 16px));
-  margin: 0 auto;
+  /* Breathing room above the social row that follows in the footer. */
+  margin: 0 auto 6px;
   padding: 8px;
   box-sizing: border-box;
   border: 1px solid var(--border);
@@ -476,20 +477,67 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
-  height: 30px;
-  overflow: hidden;
-  padding: 0 16px;
+  min-height: 30px;
+  padding: 5px 12px;
+  box-sizing: border-box;
   border-radius: var(--radius-pill, 999px);
   background: var(--accent);
   color: #00ff08;
   font-size: 12px;
   font-weight: 700;
   line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* Long localized labels (e.g. "Regisztráció / Bejelentkezés") wrap
+     instead of truncating the call to action. */
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+/* A wrapped label hugs its icon instead of centering each line away from it;
+   a single-line label stays centered by the badge's justify-content. */
+.entry-local-mode-tip__login-badge > span {
+  min-width: 0;
+  text-align: start;
+}
+/* `--accent` is the user's accent color, written inline on the root and not
+   theme-aware; the default #353535 is exactly the dark panel color, so the
+   call to action vanished into the card in dark mode. */
+[data-theme="dark"] .entry-local-mode-tip__login-badge {
+  background: var(--bg);
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) .entry-local-mode-tip__login-badge {
+    background: var(--bg);
+  }
 }
 .entry-local-mode-tip p {
   margin: 0;
+}
+/* Signed-out pitch: title + one supporting line, kept tight as one group.
+   The green icon chip reuses the onboarding welcome ribbon's colors so both
+   entry points read as the same free-credits offer. */
+.entry-local-mode-tip__pitch {
+  display: grid;
+  gap: 2px;
+  padding: 2px 2px 0;
+}
+.entry-local-mode-tip__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.entry-local-mode-tip__title-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-pill, 999px);
+  background: color-mix(in srgb, var(--brand) 40%, var(--brand-soft));
+  color: var(--brand-text);
 }
 /* While the vela device-auth flow is pending the card stops being a button:
    the body swaps to a progress line + cancel, so the hover lift would lie. */
@@ -501,23 +549,54 @@
   border-color: var(--border);
   background: var(--bg-panel);
 }
-.entry-local-mode-tip__cancel {
-  justify-self: start;
-  margin-top: 2px;
-  padding: 3px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: transparent;
+.entry-local-mode-tip__login-badge.is-pending {
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+}
+/* Sign-in fallback + cancel: quiet centered text lines under the pending
+   button, never a nested card (it jumped the rail card's height). */
+.entry-local-mode-tip__activation {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px 4px;
   color: var(--text-muted);
   font-size: 11px;
+  line-height: 1.45;
+  text-align: center;
+}
+.entry-local-mode-tip__activation-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--text-strong);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+  text-underline-offset: 2px;
+}
+.entry-local-mode-tip__activation-link:hover {
+  text-decoration-color: currentColor;
+}
+.entry-local-mode-tip__cancel {
+  justify-self: center;
+  /* Plain text link: opt out of the global button box (min-height). */
+  min-height: 0;
+  height: auto;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
   line-height: 1.4;
   cursor: pointer;
-  transition: border-color 120ms, background 120ms, color 120ms;
+  transition: color 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .entry-local-mode-tip__cancel:hover {
-  border-color: var(--border-strong);
-  background: var(--bg-subtle);
-  color: var(--text);
+  color: var(--text-strong);
+}
+.entry-local-mode-tip__error {
+  color: var(--red);
 }
 
 /* ---------- Rail account skeleton (RailAccountSyncTip) ----------
@@ -3395,50 +3474,43 @@
   color: var(--text-strong);
 }
 
-/* Capsule treatment for the activation-retry card on THIS view only — the
- * base `.amr-login-activation` rule (artifacts.css) stays untouched so
- * Settings/AmrLoginPill and CloudSignInTip keep their compact inline card.
- * Compound selector (not cascade order) guarantees this wins over the base
- * padding/radius regardless of stylesheet import order. */
-.amr-login-activation.onboarding-cloud__activation {
-  padding: 16px;
-  border-radius: 28px;
-}
-
-/* Keep the retry controls centered in the activation card. They deliberately
- * retain their intrinsic width instead of stretching from the left edge — the
- * primary "Open sign-in page" action should read as the card's focal CTA. */
-.onboarding-cloud__activation .amr-login-activation__actions {
-  width: 100%;
+/* Sign-in fallback on the cloud landing: one quiet line under the primary
+ * button rather than a card, so the pending state keeps a single focal CTA
+ * and a single cancel. Settings/AmrLoginPill and CloudSignInTip keep their
+ * own `.amr-login-activation` card (artifacts.css). */
+.onboarding-cloud__activation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
   justify-content: center;
-  gap: 8px;
-}
-
-.onboarding-cloud__activation .amr-login-activation__open {
-  flex: 0 0 auto;
-  justify-content: center;
-}
-
-.onboarding-cloud__activation-dismiss {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  padding: 4px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: transparent;
+  gap: 4px 6px;
+  margin: 14px 0 0;
   color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: border-color 120ms, background 120ms, color 120ms;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
 }
 
-.onboarding-cloud__activation-dismiss:hover {
-  border-color: var(--border-strong);
-  background: var(--bg-subtle);
-  color: var(--text);
+.onboarding-cloud__activation-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--text-strong);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+  text-underline-offset: 3px;
+  transition: text-decoration-color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.onboarding-cloud__activation-link:hover {
+  text-decoration-color: currentColor;
+}
+
+.onboarding-cloud__activation-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 /* Two runtime-choice buttons ("local CLI" or "your own key") on one row,

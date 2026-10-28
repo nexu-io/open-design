@@ -649,6 +649,36 @@ describe('streamViaDaemon', () => {
     expect(body.appliedPluginSnapshotId).toBe('snap-plugin-1');
   });
 
+  it('forwards the plugin identity when the applied snapshot id is empty', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/events') {
+        return sseResponse('event: end\ndata: {"code":0,"status":"succeeded"}\n\n');
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'use the plugin' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+      appliedPluginSnapshotId: '',
+      pluginId: 'plugin-alpha',
+      pluginInputs: { tone: 'warm' },
+    });
+
+    const [, createRunInit] = fetchMock.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit];
+    const body = JSON.parse(String(createRunInit.body));
+    expect(body.pluginId).toBe('plugin-alpha');
+    expect(body.pluginInputs).toEqual({ tone: 'warm' });
+    expect(body).not.toHaveProperty('appliedPluginSnapshotId');
+  });
+
   it('drops prior assistant turns from another agent when composing daemon transcript', async () => {
     const handlers = createDaemonHandlers();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
@@ -759,14 +789,10 @@ describe('streamViaDaemon', () => {
     expect(transcript).toContain('small answer');
   });
 
-  // PR #3157 form-loop investigation: weak / medium plain-stream models
-  // (GPT-OSS-120B Medium, Gemini 3.5 Flash through Antigravity's `agy`)
-  // pattern-match on the literal `<question-form>` markup the agent
-  // emitted on turn 1 and re-emit an identical form on turn 2 even when
-  // the OD-side OVERRIDE block explicitly forbids it. Stripping the
-  // markup from prior assistant turns at the transcript layer kills the
-  // echo source entirely.
-  it('strips question-form markup from prior assistant turns to kill the form-echo loop', () => {
+  // Historical forms are context, not reusable UI templates or proof that the
+  // user answered. Keep their information and let the agent decide what is
+  // useful to ask next; this normalizer cannot erase native session history.
+  it('represents historical question forms without losing questions or claiming they were answered', () => {
     const sanitized = sanitizePriorAssistantTurnForTranscript(
       [
         'Got it — let me ask a few questions:',
@@ -783,10 +809,13 @@ describe('streamViaDaemon', () => {
     expect(sanitized).not.toContain('<question-form');
     expect(sanitized).not.toContain('</question-form>');
     expect(sanitized).not.toContain('"questions": [');
-    expect(sanitized).toContain('question-form was emitted here on a prior turn');
+    expect(sanitized).toContain('What are we making?');
+    expect(sanitized).toContain('I will lock the brief.');
+    expect(sanitized).toContain('historical context');
+    expect(sanitized).not.toContain('already answered');
   });
 
-  it('also strips ```json fenced form-schema echoes that some models add alongside the form tag', () => {
+  it('keeps standalone question JSON as information rather than assuming it is a form echo', () => {
     const sanitized = sanitizePriorAssistantTurnForTranscript(
       [
         'Got it — 请告诉我以下信息：',
@@ -806,9 +835,16 @@ describe('streamViaDaemon', () => {
       ].join('\n'),
     );
 
-    expect(sanitized).not.toContain('```json');
+    expect(sanitized).toContain('```json');
+    expect(sanitized).toContain('"questions": [');
+    expect(sanitized).toContain('我们要做什么？');
     expect(sanitized).not.toContain('<question-form');
-    expect(sanitized).toContain('form schema was echoed here on a prior turn');
+    expect(sanitized).not.toContain('already answered');
+  });
+
+  it('preserves historical form examples inside a code fence', () => {
+    const example = '```xml\n<question-form>{"questions":[{"label":"Explain this markup?"}]}</question-form>\n```';
+    expect(sanitizePriorAssistantTurnForTranscript(example)).toBe(example);
   });
 
   it('preserves unrelated ```json fences (regular JSON snippets without "questions") so model output stays intact', () => {
@@ -1033,8 +1069,9 @@ describe('streamViaDaemon', () => {
 
     // User's <question-form> mention survives.
     expect(transcript).toContain('Why does <question-form id="discovery"> render');
-    // Assistant's emission is replaced with the placeholder.
-    expect(transcript).toContain('question-form was emitted here on a prior turn');
+    // The assistant form becomes historical information, without inferring answers.
+    expect(transcript).toContain('Previous assistant question form');
+    expect(transcript).not.toContain('already answered');
     expect(transcript).not.toContain('<question-form id="discovery" title="Brief">');
   });
 
@@ -1056,7 +1093,8 @@ describe('streamViaDaemon', () => {
       { id: '2', role: 'user', content: 'react native' },
     ]);
 
-    expect(transcript).toContain('question-form was emitted here on a prior turn');
+    expect(transcript).toContain('Previous assistant question form');
+    expect(transcript).not.toContain('already answered');
     expect(transcript).not.toContain('<ask-question id="discovery" title="Brief">');
   });
 

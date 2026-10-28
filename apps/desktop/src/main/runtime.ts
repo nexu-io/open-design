@@ -1,5 +1,7 @@
+import { classifyProcessExit } from "@open-design/contracts/analytics";
+import { reportDesktopObservabilityEvent } from "./observability.js";
 import { execFile } from "node:child_process";
-import { createHmac, randomBytes } from "node:crypto";
+import { createHmac, randomBytes, randomUUID } from "node:crypto";
 import { appendFile, mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { release } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
@@ -387,6 +389,7 @@ export type DesktopStatusSnapshot = {
 };
 
 export type DesktopRuntime = {
+  ownsWebContents(id: number): boolean;
   close(): Promise<void>;
   click(input: DesktopClickInput): Promise<DesktopClickResult>;
   console(): DesktopConsoleResult;
@@ -402,6 +405,7 @@ export type DesktopRuntime = {
 };
 
 export type DesktopRuntimeOptions = {
+  telemetryContext?: { app_session_id: string; launch_attempt_id: string | null; app_version: string | null };
   // Per-process secret shared with the daemon at startup (over its
   // sidecar IPC) so the main process can mint HMAC tokens for the
   // `dialog:pick-and-import` flow. The secret stays in main-process
@@ -1867,12 +1871,20 @@ export function saveAsDialogOptionsForFilename(filename: string): SaveAsDialogOp
   return { title: "Save As", defaultPath: filename, filters, properties: ["dontAddToRecent"] };
 }
 
-function attachDownloadSaveAsDialog(window: BrowserWindow): void {
-  window.webContents.session.on("will-download", (_event, item) => {
+export function attachDownloadSaveAsDialog(window: BrowserWindow): void {
+  const contents = window.webContents;
+  const session = contents.session;
+  const onDownload = (_event: Electron.Event, item: Electron.DownloadItem, source: Electron.WebContents) => {
+    if (source !== contents) return;
     const options = saveAsDialogOptionsForFilename(item.getFilename());
-    if (!options) return;
-    item.setSaveDialogOptions(options);
-  });
+    if (options) item.setSaveDialogOptions(options);
+    const url = item.getURL();
+    item.once("done", (_done, state) => {
+      if (!contents.isDestroyed()) contents.send("od:download-finished", { url, state });
+    });
+  };
+  session.on("will-download", onDownload);
+  window.once("closed", () => session.removeListener("will-download", onDownload));
 }
 
 function parsePrintReadyPdfOptions(value: unknown): PrintReadyPdfOptions {
@@ -1968,22 +1980,13 @@ async function reportRendererCrash(
     // reachable from main-process Node fetch.
     const baseUrl = (await (options.discoverDaemonUrl?.() ?? options.discoverUrl())) ?? null;
     if (!baseUrl) return;
-    const url = new URL("/api/observability/event", baseUrl).toString();
-    await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        event: "desktop_renderer_crash",
-        properties: {
-          reason: properties.reason,
-          exit_code: properties.exit_code,
-          // Marks the single crash that tripped the loop breaker, so a crash
-          // loop is one flagged event instead of thousands of anonymous ones.
-          loop_tripped: properties.loop_tripped ?? false,
-          // Present on the bounded recovery-attempt signal; null on real crashes.
-          recovery_attempt: properties.recovery_attempt ?? null,
-        },
-      }),
+    await reportDesktopObservabilityEvent(async () => baseUrl, "desktop_renderer_crash", {
+      ...options.telemetryContext,
+      event_id: randomUUID(), occurred_at: new Date().toISOString(),
+      reason: properties.reason, exit_reason: classifyProcessExit(properties.reason),
+      exit_code: properties.exit_code, loop_tripped: properties.loop_tripped ?? false,
+      recovery_suppressed: properties.loop_tripped ?? false,
+      recovery_attempt: properties.recovery_attempt ?? null,
     });
   } catch {
     // Best-effort. The user is already in a degraded state — failing to
@@ -2997,6 +3000,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   void tick();
 
   return {
+    ownsWebContents(id: number): boolean { return !window.isDestroyed() && window.webContents.id === id; },
     async click(input) {
       if (window.isDestroyed()) return { clicked: false, found: false };
       const selector = JSON.stringify(input.selector);

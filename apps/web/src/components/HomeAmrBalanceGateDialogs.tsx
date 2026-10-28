@@ -5,8 +5,7 @@ import { AmrBalanceDialog } from './AmrBalanceDialog';
 import { AmrOwnerTopUpDialog } from './chat/AmrOwnerTopUpDialog';
 
 /**
- * A hard block from the Home pre-run balance gate (empty wallet or signed
- * out). The dialog resolves the promise the submit handler is awaiting:
+ * A Home gate for confirmed insufficient funding or sign-out. The dialog resolves the promise the submit handler is awaiting:
  * 'retry' (sign-in completed / recharge landed) re-runs the gate and continues
  * the very same create-and-run; 'dismiss' hands the composer back to the user.
  */
@@ -36,11 +35,10 @@ interface Props {
 }
 
 /**
- * Host for the Home balance-gate dialog. It is mounted by App rather than by
- * EntryShell because the gate now resolves behind the optimistic pending frame
- * (OPEND-2614): the Home send hands off to the project route on the click
- * tick, EntryShell unmounts with it, and the verdict — including this dialog —
- * lands over the pending frame. A dismiss rolls the hand-off back to Home.
+ * App owns this dialog both before navigation (a cached insufficient hint)
+ * and behind the pending project frame (the asynchronous sign-in gate).
+ * Dismissing a cached hint keeps the Home draft; dismissing a sign-in block
+ * rolls the optimistic hand-off back to Home.
  */
 export function HomeAmrBalanceGateDialogs({ block, metricsConsent, installationId }: Props) {
   if (!block) return null;

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { TestRuntimeDeploymentCatalogPage } from "@open-design/contracts/api/touchpointTestRuntime";
 import { emitWebTouchpointDiagnostic } from "./touchpoint-component";
 import type { TouchpointStaticAction } from "./touchpoint-static-actions";
 
@@ -68,25 +69,21 @@ function validDeployment(value: unknown): value is TestDeployment {
 	);
 }
 
-/** Malformed responses are failures, not authoritative empty directories. Preserve server ordering. */
-function readDirectory(value: unknown): TestDeployment[] {
+/** Validate every row, including non-OD rows, before accepting any part of a page. */
+function readDirectory(value: unknown): TestRuntimeDeploymentCatalogPage<TestDeployment> {
 	if (
 		!record(value) ||
 		!Array.isArray(value.deployments) ||
 		!value.deployments.every(validDeployment)
 	)
 		throw new Error("touchpoint_test_catalog_invalid");
-	const deployments: TestDeployment[] = value.deployments;
 	if (
-		new Set(deployments.map((deployment) => deployment.id)).size !==
-		deployments.length
+		"nextCursor" in value &&
+		value.nextCursor !== null &&
+		(typeof value.nextCursor !== "string" || !value.nextCursor.trim())
 	)
 		throw new Error("touchpoint_test_catalog_invalid");
-	return deployments.filter((deployment) =>
-		TEST_CAMPAIGN_PLACEMENTS.some((key) =>
-			deployment.snapshot.placementKeys.includes(key),
-		),
-	);
+	return value as unknown as TestRuntimeDeploymentCatalogPage<TestDeployment>;
 }
 
 // JSON object key ordering is not a deployment change; array order remains meaningful.
@@ -99,7 +96,7 @@ function canonical(value: unknown): string {
 			.join(",")}}`;
 	return JSON.stringify(value) ?? "null";
 }
-function sameDeployment(left: TestDeployment, right: TestDeployment): boolean {
+export function sameTestDeployment(left: TestDeployment, right: TestDeployment): boolean {
 	return (
 		left.id === right.id &&
 		left.activityId === right.activityId &&
@@ -112,6 +109,7 @@ type SelectionState = {
 	owner: string | null;
 	deployments: TestDeployment[];
 	selected: TestDeployment | null;
+	catalogCompleteness: "complete" | "unknown" | null;
 };
 
 /**
@@ -123,29 +121,51 @@ export function useTestDeploymentSelection({
 	enabled,
 	owner,
 	manual,
+	initialSelection = null,
+	onSelection,
+	pauseAutomaticRequests,
+	onRequestResult,
 }: {
 	enabled: boolean;
 	owner: string | null;
 	manual: boolean;
+	/** An already-authorized in-process selection, never an offline directory grant. */
+	initialSelection?: TestDeployment | null;
+	onSelection?: (selected: TestDeployment | null) => void;
+	pauseAutomaticRequests?: () => boolean;
+	/** Only a completed directory read clears its own failure state. */
+	onRequestResult?: (failed: boolean) => void;
 }) {
 	const [state, setState] = useState<SelectionState>({
-		owner: null,
-		deployments: empty,
-		selected: null,
+		owner,
+		deployments: enabled && initialSelection ? [initialSelection] : empty,
+		selected: enabled ? initialSelection : null,
+		catalogCompleteness: null,
 	});
+	// Response acceptance and manual commands update this ref before publishing
+	// React state. Their authority effects never run inside a replayable updater.
+	const stateRef = useRef(state);
 	useEffect(() => {
-		setState({ owner, deployments: empty, selected: null });
+		if (!enabled || stateRef.current.owner !== owner) {
+			stateRef.current = { owner, deployments: empty, selected: null, catalogCompleteness: null };
+			setState(stateRef.current);
+		}
 		if (!enabled) return;
 		let disposed = false;
 		let request: AbortController | null = null;
 		let timeout: ReturnType<typeof setTimeout> | undefined;
+		let failed = false;
 		const cancel = () => {
 			request?.abort();
 			request = null;
 			clearTimeout(timeout);
 		};
+		const pause = () => {
+			failed = true;
+			onRequestResult?.(true);
+		};
 		const refresh = async () => {
-			if (disposed || request || document.hidden) return;
+			if (disposed || request || document.hidden || navigator.onLine === false) return;
 			const controller = new AbortController();
 			request = controller;
 			const current = () =>
@@ -156,47 +176,91 @@ export function useTestDeploymentSelection({
 				emitWebTouchpointDiagnostic({
 					code: "touchpoint_test_catalog_timeout",
 				});
+				pause();
 			}, REQUEST_TIMEOUT_MS);
 			try {
-				const response = await fetch("/api/touchpoints/test-runtime/deployments", {
-					cache: "no-store",
-					signal: controller.signal,
-				});
+				// One attempt, controller and deadline for the entire walk. Intermediate
+				// pages cannot select, clear, or renew runtime authority.
+				const deployments: TestDeployment[] = [];
+				const ids = new Set<string>();
+				const cursors = new Set<string>();
+				let cursor: string | null = null;
+				let catalogCompleteness: SelectionState["catalogCompleteness"] = "complete";
+				do {
+					const query = cursor === null ? "" : `?${new URLSearchParams({ cursor })}`;
+					const response = await fetch(`/api/touchpoints/test-runtime/deployments${query}`, {
+						cache: "no-store",
+						signal: controller.signal,
+					});
+					if (!current()) return;
+					if (!response.ok) {
+						if ([401, 403, 410].includes(response.status)) {
+							onSelection?.(null);
+							stateRef.current = { owner, deployments: empty, selected: null, catalogCompleteness: null };
+							setState(stateRef.current);
+						}
+						throw new Error("touchpoint_test_catalog_failed");
+					}
+					const body: unknown = await response.json();
+					if (!current()) return;
+					const page = readDirectory(body);
+					// A legacy first page is accepted, but omission in a paginated walk
+					// cannot establish that all remaining rows were read.
+					if (page.nextCursor === undefined) {
+						if (cursor !== null) throw new Error("touchpoint_test_catalog_invalid");
+						catalogCompleteness = "unknown";
+					}
+					for (const deployment of page.deployments) {
+						if (ids.has(deployment.id)) throw new Error("touchpoint_test_catalog_invalid");
+						ids.add(deployment.id);
+						if (TEST_CAMPAIGN_PLACEMENTS.some(key => deployment.snapshot.placementKeys.includes(key)))
+							deployments.push(deployment);
+					}
+					cursor = page.nextCursor ?? null;
+					if (cursor !== null) {
+						if (cursors.has(cursor)) throw new Error("touchpoint_test_catalog_invalid");
+						cursors.add(cursor);
+					}
+				} while (cursor !== null);
 				if (!current()) return;
-				if (!response.ok) throw new Error("touchpoint_test_catalog_failed");
-				const deployments = readDirectory(await response.json());
-				if (!current()) return;
-				setState((previous) => {
-					if (disposed) return previous;
+				failed = false;
+				onRequestResult?.(false);
+				{
+					const previous = stateRef.current;
 					const old =
 						previous.owner === owner
 							? previous
-							: { owner, deployments: empty, selected: null };
+							: { owner, deployments: empty, selected: null, catalogCompleteness: null };
 					const stable = deployments.map((next) => {
 						const existing = old.deployments.find((value) => value.id === next.id);
-						return existing && sameDeployment(existing, next) ? existing : next;
+						return existing && sameTestDeployment(existing, next) ? existing : next;
 					});
 					// Normal clients follow the server's newest-first order; debug selection stays manual.
 					const selected =
 						(manual
 							? stable.find((value) => value.id === old.selected?.id)
 							: stable[0]) ?? null;
+					onSelection?.(selected);
 					if (
+						old.catalogCompleteness === catalogCompleteness &&
 						old.selected === selected &&
 						old.deployments.length === stable.length &&
 						old.deployments.every((value, index) => value === stable[index])
 					)
-						return previous;
-					return { owner, deployments: stable, selected };
-				});
+						return;
+					stateRef.current = { owner, deployments: stable, selected, catalogCompleteness };
+					setState(stateRef.current);
+				}
 			} catch (error) {
-				if (current())
+				if (current()) {
 					emitWebTouchpointDiagnostic({
 						code:
 							error instanceof Error
 								? error.message
 								: "touchpoint_test_catalog_failed",
 					});
+					pause();
+				}
 			} finally {
 				if (request === controller) {
 					request = null;
@@ -212,7 +276,11 @@ export function useTestDeploymentSelection({
 			else wake();
 		};
 		void refresh();
-		const interval = setInterval(() => void refresh(), POLL_MS);
+		// OPEND-3436: a failed catalog or runtime round waits for one recovery
+		// event. A successful empty directory still uses normal discovery polling.
+		const interval = setInterval(() => {
+			if (!failed && !pauseAutomaticRequests?.()) void refresh();
+		}, POLL_MS);
 		window.addEventListener("focus", wake);
 		window.addEventListener("online", wake);
 		window.addEventListener("pageshow", wake);
@@ -228,26 +296,31 @@ export function useTestDeploymentSelection({
 			window.removeEventListener("offline", cancel);
 			document.removeEventListener("visibilitychange", visibility);
 		};
-	}, [enabled, owner, manual]);
+	}, [enabled, owner, manual, onSelection, pauseAutomaticRequests, onRequestResult]);
 
 	const select = useCallback(
 		(id: string) => {
 			if (!enabled || !manual) return;
-			setState((previous) => {
-				if (previous.owner !== owner) return previous;
+			{
+				const previous = stateRef.current;
+				if (previous.owner !== owner) return;
 				const selected =
 					previous.deployments.find((deployment) => deployment.id === id) ?? null;
-				return previous.selected === selected
-					? previous
-					: { ...previous, selected };
-			});
+				if (previous.selected !== selected) onSelection?.(null);
+				if (previous.selected !== selected) {
+					stateRef.current = { ...previous, selected };
+					setState(stateRef.current);
+				}
+			}
 		},
-		[enabled, owner, manual],
+		[enabled, owner, manual, onSelection],
 	);
 	const current = enabled && state.owner === owner;
 	return {
 		deployments: current ? state.deployments : empty,
 		selected: current ? state.selected : null,
+		/** Legacy one-page catalogs are accepted without claiming they are exhaustive. */
+		catalogCompleteness: current ? state.catalogCompleteness : null,
 		select,
 	};
 }

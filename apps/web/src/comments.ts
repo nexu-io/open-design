@@ -11,29 +11,11 @@ import type {
   PreviewCommentTarget,
   PreviewVisualMarkKind,
 } from './types';
+import { overlayBoundsFromSnapshot, resolveCommentAnchor } from './comments/anchor';
+import type { CommentAnchorResolution, PreviewCommentSnapshot } from './comments/anchor';
 
-export interface PreviewCommentSnapshot {
-  filePath: string;
-  elementId: string;
-  selector: string;
-  label: string;
-  text: string;
-  position: { x: number; y: number; width: number; height: number };
-  hoverPoint?: { x: number; y: number };
-  htmlHint: string;
-  style?: PreviewAnnotationStyle;
-  selectionKind?: PreviewCommentSelectionKind;
-  memberCount?: number;
-  podMembers?: PreviewCommentMember[];
-  slideIndex?: number;
-}
-
-export interface CommentOverlayBounds {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-}
+export { overlayBoundsFromSnapshot, resolveCommentAnchor };
+export type { CommentAnchorResolution, PreviewCommentSnapshot };
 
 export interface VisualAnnotationTarget {
   filePath: string;
@@ -202,74 +184,36 @@ export function liveCommentTargetMapsEqual(
   return true;
 }
 
-export function overlayBoundsFromSnapshot(
-  snapshot: PreviewCommentSnapshot,
-  scale: number,
-  offset: { x: number; y: number } = { x: 0, y: 0 },
-): CommentOverlayBounds {
-  const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
-  const position = normalizePosition(snapshot.position);
-  return {
-    left: offset.x + position.x * safeScale,
-    top: offset.y + position.y * safeScale,
-    width: Math.max(1, position.width * safeScale),
-    height: Math.max(1, position.height * safeScale),
-  };
-}
-
 export function liveSnapshotForComment(
   comment: PreviewComment,
   snapshots: Map<string, PreviewCommentSnapshot>,
 ): PreviewCommentSnapshot | null {
-  // Legacy single-user behavior — exact elementId match, plus free-pin fallback.
-  // The team-collab drift ladder lives in resolveCommentAnchor (opted into by the
-  // collab UI) so this path is unchanged for existing single-user callers.
   const snapshot = snapshots.get(comment.elementId);
-  if (snapshot && snapshot.filePath === comment.filePath && isValidCommentOverlayPosition(snapshot.position)) {
-    return snapshot;
-  }
-  if (comment.elementId.startsWith('pin-') && isValidCommentOverlayPosition(comment.position)) {
-    return ghostSnapshotFromComment(comment);
-  }
-  return null;
+  if (snapshot && snapshot.filePath === comment.filePath && isValidCommentOverlayPosition(snapshot.position)) return snapshot;
+  return comment.elementId.startsWith('pin-') && isValidCommentOverlayPosition(comment.position)
+    ? ghostSnapshotFromComment(comment)
+    : null;
 }
 
-export interface CommentAnchorResolution {
-  /** Where the ladder landed. See {@link PreviewCommentAnchorState}. */
-  state: PreviewCommentAnchorState;
-  /**
-   * Overlay to render: the live snapshot for anchored/reanchored/stale, or a
-   * ghost pin (at last-good position) for `lost`. Null only when there is no
-   * position at all to render even a ghost.
-   */
-  snapshot: PreviewCommentSnapshot | null;
+function validPosition(position: PreviewComment['position'] | undefined): PreviewCommentSnapshot['position'] | undefined {
+  return position && isValidCommentOverlayPosition(position) ? normalizePosition(position) : undefined;
 }
 
-/**
- * Team collaboration comment drift ladder. Resolves a stored comment against
- * the live DOM snapshots without relying on an injected stable id:
- *   0. exact anchor hit + matching version → `anchored` (older version → `reanchored`)
- *   1. content-based fuzzy match (selector / htmlHint / text, position tie-break) → `stale`
- *   2. nothing found → `lost` (ghost pin at lastGoodPosition, explicitly badged by the UI)
- * The explicit stale/lost states are the safety net: drift is surfaced, never
- * silently mis-pointed.
- */
-export function resolveCommentAnchor(
-  comment: PreviewComment,
-  snapshots: Map<string, PreviewCommentSnapshot>,
-  currentVersion?: number,
-): CommentAnchorResolution {
-  const exact = snapshots.get(comment.elementId);
-  if (exact && exact.filePath === comment.filePath && isValidCommentOverlayPosition(exact.position)) {
-    return { state: anchoredOrReanchored(comment, currentVersion), snapshot: exact };
-  }
-  if (comment.elementId.startsWith('pin-') && isValidCommentOverlayPosition(comment.position)) {
-    return { state: anchoredOrReanchored(comment, currentVersion), snapshot: ghostSnapshotFromComment(comment) };
-  }
-  const fuzzy = fuzzyFindSnapshot(comment, snapshots);
-  if (fuzzy) return { state: 'stale', snapshot: fuzzy };
-  const ghostPos = validPosition(comment.lastGoodPosition) ?? validPosition(comment.position);
-  return { state: 'lost', snapshot: ghostPos ? ghostSnapshotFromComment(comment, ghostPos) : null };
+function ghostSnapshotFromComment(comment: PreviewComment, position?: PreviewCommentSnapshot['position']): PreviewCommentSnapshot {
+  return {
+    filePath: comment.filePath,
+    elementId: comment.elementId,
+    selector: comment.selector,
+    label: comment.label,
+    text: trimContextText(comment.text),
+    position: normalizePosition(position ?? comment.position),
+    htmlHint: trimHtmlHint(comment.htmlHint),
+    style: normalizeStyle(comment.style),
+    selectionKind: comment.selectionKind === 'pod' ? 'pod' : 'element',
+    memberCount: comment.memberCount,
+    podMembers: normalizeMembers(comment.podMembers),
+    slideIndex: comment.slideIndex,
+  };
 }
 
 export interface AnchorWriteBack {
@@ -300,86 +244,6 @@ export function planLostAnchorWriteBacks(
     out.push({ commentId: comment.id, anchorState: 'lost', lastGoodPosition });
   }
   return out;
-}
-
-function anchoredOrReanchored(
-  comment: PreviewComment,
-  currentVersion: number | undefined,
-): PreviewCommentAnchorState {
-  if (
-    typeof currentVersion === 'number'
-    && typeof comment.anchoredVersion === 'number'
-    && comment.anchoredVersion !== currentVersion
-  ) {
-    return 'reanchored';
-  }
-  return 'anchored';
-}
-
-// Content-based recovery: find the live snapshot that best matches the comment's
-// selector / htmlHint / text. A weak position-proximity bonus only breaks ties;
-// a match must carry a real content signal (score >= 2), never position alone.
-function fuzzyFindSnapshot(
-  comment: PreviewComment,
-  snapshots: Map<string, PreviewCommentSnapshot>,
-): PreviewCommentSnapshot | null {
-  const wantSelector = String(comment.selector || '').trim();
-  const wantHint = trimHtmlHint(comment.htmlHint || '');
-  const wantText = trimContextText(comment.text || '');
-  const wantPos = validPosition(comment.lastGoodPosition) ?? validPosition(comment.position);
-  let best: PreviewCommentSnapshot | null = null;
-  let bestScore = 0;
-  for (const snap of snapshots.values()) {
-    if (snap.filePath !== comment.filePath) continue;
-    if ((snap.slideIndex ?? -1) !== (comment.slideIndex ?? -1)) continue;
-    if (!isValidCommentOverlayPosition(snap.position)) continue;
-    let score = 0;
-    if (wantSelector && String(snap.selector || '').trim() === wantSelector) score += 4;
-    if (wantHint && trimHtmlHint(snap.htmlHint) === wantHint) score += 3;
-    if (wantText && trimContextText(snap.text) === wantText) score += 2;
-    if (wantPos) score += positionProximityScore(snap.position, wantPos);
-    if (score > bestScore) {
-      bestScore = score;
-      best = snap;
-    }
-  }
-  return bestScore >= 2 ? best : null;
-}
-
-function positionProximityScore(
-  a: PreviewCommentSnapshot['position'],
-  b: PreviewCommentSnapshot['position'],
-): number {
-  const na = normalizePosition(a);
-  const nb = normalizePosition(b);
-  const dist = Math.hypot(na.x + na.width / 2 - (nb.x + nb.width / 2), na.y + na.height / 2 - (nb.y + nb.height / 2));
-  return Math.max(0, 1 - dist / 400);
-}
-
-function validPosition(
-  position: PreviewComment['position'] | undefined,
-): PreviewCommentSnapshot['position'] | undefined {
-  return position && isValidCommentOverlayPosition(position) ? normalizePosition(position) : undefined;
-}
-
-function ghostSnapshotFromComment(
-  comment: PreviewComment,
-  position?: PreviewCommentSnapshot['position'],
-): PreviewCommentSnapshot {
-  return {
-    filePath: comment.filePath,
-    elementId: comment.elementId,
-    selector: comment.selector,
-    label: comment.label,
-    text: trimContextText(comment.text),
-    position: normalizePosition(position ?? comment.position),
-    htmlHint: trimHtmlHint(comment.htmlHint),
-    style: normalizeStyle(comment.style),
-    selectionKind: comment.selectionKind === 'pod' ? 'pod' : 'element',
-    memberCount: comment.memberCount,
-    podMembers: normalizeMembers(comment.podMembers),
-    slideIndex: comment.slideIndex,
-  };
 }
 
 export function commentToAttachment(

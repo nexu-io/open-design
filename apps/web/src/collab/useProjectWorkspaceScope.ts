@@ -389,6 +389,13 @@ export function useProjectWorkspaceScope(
   callerWorkspaceContext: WorkspaceCollabContext | null = null,
   persistedProjectWorkspaceId?: string | null,
   initialScope?: ProjectWorkspaceScope | null,
+  /**
+   * False while the project row does not exist on the daemon yet (a Home send
+   * whose create has not answered, OPEND-3334): no read is made and the scope
+   * stays loading, so nothing downstream treats the project as readable.
+   * Flipping it true starts the first read.
+   */
+  enabled = true,
 ): ProjectWorkspaceScopeState {
   const epochRef = useRef(0);
   const pinnedAuthorityRef = useRef<{
@@ -588,6 +595,7 @@ export function useProjectWorkspaceScope(
     };
     const refreshRevision = refreshRequest.revision;
 
+    if (!enabled) return () => controller.abort();
     if (refreshRevision === 0 && initialScopeCanSeed && seededFromInitialScopeRef.current) {
       return () => controller.abort();
     }
@@ -742,6 +750,7 @@ export function useProjectWorkspaceScope(
     };
   }, [
     boundWorkspaceId,
+    enabled,
     projectId,
     refreshRequest,
     requestAuthorityKey,

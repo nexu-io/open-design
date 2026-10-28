@@ -372,7 +372,21 @@ export type OpenDesignHostUpdaterOpenDialogRequest = {
 
 export type OpenDesignHostUpdaterOpenDialogListener = (request: OpenDesignHostUpdaterOpenDialogRequest) => void;
 
+export type OpenDesignHostDownloadResult = {
+  url: string;
+  state: "completed" | "cancelled" | "interrupted";
+};
+
 export type OpenDesignHostBridge = {
+  startup?: {
+    context(): Promise<{ launch_attempt_id: string; app_session_id: string } | null>;
+    signal(value: { launch_attempt_id: string; app_session_id: string;
+      readiness_point: 'first_visible' | 'interactive_ready'; required_data_ready?: boolean; actions_ready?: boolean }): Promise<boolean>;
+  };
+  /** Optional on older hosts. Reports actual disk completion, never initiation. */
+  downloads?: {
+    subscribe(listener: (result: OpenDesignHostDownloadResult) => void): () => void;
+  };
   // Optional so older host builds still satisfy the bridge shape; callers
   // must feature-detect before invoking.
   appearance?: {

@@ -21,6 +21,7 @@ let directory: string | undefined;
 const previousBin = process.env.DSH_BIN;
 const previousHome = process.env.DSH_HOME;
 const previousState = process.env.OD_DSH_GENERATION_STATE;
+const previousRollout = process.env.OD_NEXT_STRATEGY_ROLLOUT;
 afterEach(async () => {
   if (started) {
     const active = started;
@@ -30,6 +31,7 @@ afterEach(async () => {
   }
   if (previousBin === undefined) delete process.env.DSH_BIN; else process.env.DSH_BIN = previousBin;
   if (previousHome === undefined) delete process.env.DSH_HOME; else process.env.DSH_HOME = previousHome;
+  if (previousRollout === undefined) delete process.env.OD_NEXT_STRATEGY_ROLLOUT; else process.env.OD_NEXT_STRATEGY_ROLLOUT = previousRollout;
   if (previousState === undefined) delete process.env.OD_DSH_GENERATION_STATE; else process.env.OD_DSH_GENERATION_STATE = previousState;
   if (directory) rmSync(directory, { recursive: true, force: true });
 });
@@ -45,6 +47,7 @@ it('uses spawned generations for cold turns, same-generation resume, upgrade, ro
     : '#!/bin/sh\nexec ' + quote(process.execPath) + ' ' + quote(fixture) + ' "$@"\n');
   chmodSync(bin, 0o700);
   writeFileSync(statePath, JSON.stringify({ generation: 'generation-1' }));
+  process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
   process.env.DSH_BIN = bin;
   process.env.DSH_HOME = directory;
   process.env.OD_DSH_GENERATION_STATE = statePath;
@@ -64,7 +67,7 @@ it('uses spawned generations for cold turns, same-generation resume, upgrade, ro
   expect(config.status).toBe(200);
   const project = await fetch(`${url}/api/projects`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ id: `generation_${randomUUID()}`, name: 'Generation test', metadata: { kind: 'prototype' }, skipDiscoveryBrief: true }),
+    body: JSON.stringify({ id: `generation_${randomUUID()}`, name: 'Generation test', metadata: { kind: 'prototype' }, conversationMode: 'chat', skipDiscoveryBrief: true }),
   });
   expect(project.status).toBe(200);
   const projectBody = await json(project);

@@ -82,9 +82,11 @@ function detectClientType(): 'desktop' | 'web' | 'unknown' {
 import { BackoffController } from '../lib/backoff';
 import { parseSseFrame } from './sse';
 import {
+  persistedArtifactFilesOf,
   summarizeArtifactsForTranscript,
+  summarizeHistoricalQuestionForms,
   type PersistedArtifactFileRef,
-} from '../artifacts/strip';
+} from '@open-design/contracts';
 import { trackRunProgress, trackRunStart, trackRunTerminal } from '../observability/stuck-run';
 import { setChatCorrelation } from '../observability/chat-context';
 import { chatSurfaceRunEnded, chatSurfaceRunStarted } from '../observability/chat-health';
@@ -231,80 +233,14 @@ function isSameTranscriptAgentFamily(agentId: string, targetAgentId: string): bo
   return API_MODE_AGENT_IDS.has(agentId);
 }
 
-// Strip OD-specific markup that the agent emitted on a prior turn but
-// that the model would otherwise pattern-match as a template to echo.
-// Today this is `<question-form>` blocks (and the `<ask-question>` alias the
-// UI parser and the daemon open-tag matcher both accept) and the ```json
-// fenced schemas
-// some models (GPT-OSS-120B Medium, Gemini 3.5 Flash) emit alongside
-// them — leaving those literal in the transcript causes weak/medium
-// plain-stream models to re-emit an identical form on the user's
-// follow-up turn, looking like the discovery form loop never breaks
-// (see PR #3157 form-loop investigation). If we only scrubbed the canonical
-// tag, an alias-form turn would replay verbatim and re-trigger that loop.
-//
-// User content is preserved verbatim — a user message that legitimately
-// quotes `<question-form>` (e.g. discussing the markup with the agent)
-// must not be mangled.
+/** Format previous assistant output as context without inferring user answers. */
 export function sanitizePriorAssistantTurnForTranscript(
   content: string,
   persistedArtifactFiles: ReadonlyArray<PersistedArtifactFileRef> = [],
 ): string {
-  let sanitized = content.replace(
-    // `\1` backreference keeps the open/close tag names matched so we never
-    // splice across a `<question-form>…</ask-question>` mismatch.
-    /<(question-form|ask-question)\b[^>]*>[\s\S]*?<\/\1>/g,
-    '[question-form was emitted here on a prior turn; the user already answered, see their reply below.]',
+  return summarizeHistoricalQuestionForms(
+    summarizeArtifactsForTranscript(content, persistedArtifactFiles),
   );
-  // Strip ```json (or plain ```) fenced blocks whose body matches the
-  // form schema shape — `"questions": [` is the strongest tell. A
-  // generic JSON snippet without that key (e.g. an API response the
-  // agent shared) is left intact.
-  sanitized = sanitized.replace(
-    /```(?:json)?\s*\n([\s\S]*?)\n```/g,
-    (match, body: string) => {
-      if (/"questions"\s*:\s*\[/.test(body)) {
-        return '[form schema was echoed here on a prior turn; stripped to avoid a loop.]';
-      }
-      return match;
-    },
-  );
-  // Replace prior-turn `<artifact>` HTML with a one-line summary — but ONLY
-  // for artifacts whose save to the project files is confirmed by the
-  // message's producedFiles record. persistArtifact has refusal and
-  // write-failure branches; on those paths the transcript copy is the only
-  // surviving artifact body, so an unconfirmed block stays verbatim (the
-  // 12K truncation below still bounds it) and a follow-up turn can repair it.
-  // For confirmed saves the agent reads/edits the file from disk, never from
-  // this transcript copy, so re-sending the whole document each turn is pure
-  // waste — the summary keeps identifier/title/type plus the saved file name.
-  // Runs before truncateForTranscript so the summarized message no longer
-  // trips the 12K cap. Uses markdown-aware detection so a literal
-  // `<artifact>` recited in a code fence survives.
-  sanitized = summarizeArtifactsForTranscript(sanitized, persistedArtifactFiles);
-  return sanitized;
-}
-
-// producedFiles → the persistence evidence summarizeArtifactsForTranscript
-// matches artifact blocks against. producedFiles is the whole per-turn file
-// diff — tool-written files included — so a name collision with an unrelated
-// same-turn file must not count as proof the <artifact> body was saved. Only
-// artifact-originated saves qualify: persistArtifact always writes an explicit
-// (non-inferred) manifest, whereas tool-written files surface with no manifest
-// or a daemon-inferred one (`metadata.inferred === true`). Within that
-// narrowed set, the manifest identifier is the strongest link (it survives
-// `-2`/`-3` collision renames); the file name is the fallback for artifact
-// saves whose manifest predates identifier metadata.
-function persistedArtifactFilesOf(message: ChatMessage): PersistedArtifactFileRef[] {
-  return (message.producedFiles ?? [])
-    .filter((file) => file.artifactManifest && file.artifactManifest.metadata?.inferred !== true)
-    .map((file) => {
-      const identifier = file.artifactManifest?.metadata?.identifier;
-      return {
-        name: file.name,
-        identifier: typeof identifier === 'string' && identifier ? identifier : undefined,
-      };
-    });
 }
 
 export function buildDaemonTranscript(history: ChatMessage[], targetAgentId?: string): string {
@@ -385,6 +321,12 @@ export interface DaemonAgentRetryState {
    * 一闪而过,最需要解释的那 30 秒照旧沉默。
    */
   phase: 'retrying' | 'cleared';
+  /**
+   * 这次重跑是因为什么。只在 daemon 判为限流(`failure_category: 'rate_limit'`,
+   * 逐字取自 `run_retry_attempted`)时带上 —— 那一行要改说「模型服务请求繁忙」
+   * (产品《报错文案》S09a,OPEND-2849)。其他原因不带,那一行照旧说「正在重试」。
+   */
+  cause?: 'rate_limit';
 }
 
 /** Upstream reconnect progress emitted by an agent runtime (not browser SSE). */
@@ -573,6 +515,8 @@ export interface DaemonStreamOptions {
   research?: ResearchOptions;
   context?: RunContextSelection;
   appliedPluginSnapshotId?: string | null;
+  pluginId?: string;
+  pluginInputs?: Record<string, unknown>;
   mediaExecution?: MediaExecutionPolicy;
   titleGeneration?: { enabled?: boolean };
   locale?: string;
@@ -1055,6 +999,8 @@ export async function streamViaDaemon({
   research,
   context,
   appliedPluginSnapshotId,
+  pluginId,
+  pluginInputs,
   mediaExecution,
   titleGeneration,
   locale,
@@ -1100,7 +1046,11 @@ export async function streamViaDaemon({
     ...(byokProvider ? { byokProvider } : {}),
     ...(byokMediaDefaults ? { byokMediaDefaults } : {}),
     locale,
-    ...(appliedPluginSnapshotId ? { appliedPluginSnapshotId } : {}),
+    ...(appliedPluginSnapshotId
+      ? { appliedPluginSnapshotId }
+      : pluginId
+        ? { pluginId, ...(pluginInputs ? { pluginInputs } : {}) }
+        : {}),
     ...(context ? { context } : {}),
     ...(research ? { research } : {}),
     ...(mediaExecution ? { mediaExecution } : {}),
@@ -1682,17 +1632,39 @@ export async function listActiveChatRuns(
 export async function listProjectRuns(
   workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<ChatRunStatusResponse[]> {
+  return (await listProjectRunsWithScope(workspaceContext)).runs;
+}
+
+/**
+ * The catalogue-wide listing, plus whether the daemon refused it outright.
+ *
+ * `scopeRequired` is the deterministic 400 `PROJECT_SCOPE_REQUIRED` answer once
+ * any run belongs to a Workspace-bound project. Asking again cannot change it,
+ * so interval pollers must stop instead of repeating the same failed request
+ * (each one was also captured as a diagnostic incident).
+ */
+export async function listProjectRunsWithScope(
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<{ runs: ChatRunStatusResponse[]; scopeRequired: boolean }> {
   try {
     const resp = await fetch('/api/runs', {
       ...(workspaceContext
         ? { headers: workspaceProjectHeaders(workspaceContext) }
         : {}),
     });
-    if (!resp.ok) return [];
+    if (!resp.ok) {
+      const body = (await resp.json().catch(() => null)) as
+        | { error?: { code?: string } }
+        | null;
+      return {
+        runs: [],
+        scopeRequired: resp.status === 400 && body?.error?.code === 'PROJECT_SCOPE_REQUIRED',
+      };
+    }
     const body = (await resp.json()) as ChatRunListResponse;
-    return body.runs ?? [];
+    return { runs: body.runs ?? [], scopeRequired: false };
   } catch {
-    return [];
+    return { runs: [], scopeRequired: false };
   }
 }
 
@@ -2122,6 +2094,7 @@ async function consumeDaemonPhysicalRun({
                 attempt,
                 max: Number.isFinite(max) && max > 0 ? max : attempt,
                 phase: 'retrying',
+                ...(data.failure_category === 'rate_limit' ? { cause: 'rate_limit' as const } : {}),
               });
             }
             continue;
@@ -2300,6 +2273,7 @@ async function consumeDaemonPhysicalRun({
       }
     }
 
+    // `completed` ends orchestration; only the physical Run can declare success.
     if (endStrategyTask?.terminal) {
       // Surface the terminal projection before the status/error handlers run,
       // so a blocked verdict (with its gate attribution) is stamped onto the
@@ -2367,9 +2341,6 @@ async function consumeDaemonPhysicalRun({
           endStatus = 'failed';
           pendingStructuredError ??= createStrategyTaskBlockedError(endStrategyTask);
         }
-      } else if (endStrategyTask.outcome === 'completed') {
-        endStatus = 'succeeded';
-        serverDeclaredSuccess = true;
       }
     }
 

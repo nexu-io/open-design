@@ -11,7 +11,7 @@ import {
 	screen,
 	waitFor,
 } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 
 const openExternalUrlMock = vi.hoisted(() => vi.fn(async () => true));
 type CampaignHostGlobal = typeof globalThis & {
@@ -177,6 +177,15 @@ describe("ProductionCampaignModal", () => {
 		expect(modalRule).toContain("background: transparent");
 		expect(modalRule).not.toMatch(/(?:^|[;{]\s*)width:/);
 		expect(modalRule).not.toMatch(/(?:^|[;{]\s*)padding:/);
+	});
+	it("keeps the opend-touchpoint host background transparent inside the modal (OPEND-3478)", () => {
+		const hostRule = modalHostStyles.match(
+			/\.modal\s+:global\(opend-touchpoint\)\s*\{[^}]*\}/,
+		)?.[0];
+		expect(hostRule).toContain("background: transparent");
+		const modalRule = modalHostStyles.match(/\.modal\s*\{[^}]*\}/)?.[0];
+		expect(modalRule).not.toMatch(/border-radius:/);
+		expect(modalRule).not.toMatch(/overflow:\s*hidden/);
 	});
 	it("does not restart the production loader on an unchanged parent render", async () => {
 		(globalThis as CampaignHostGlobal).__openDesignCampaignTestHost = {
@@ -516,8 +525,11 @@ describe("ProductionCampaignModal", () => {
 		);
 		vi.stubGlobal("fetch", fetchMock);
 		render(<ProductionCampaignModal authenticated sessionSubject="user-a" />);
-		await screen.findByTestId("campaign-custom-element");
-		window.dispatchEvent(new Event("focus"));
+		// Insertion precedes async mounting; renew only after the lease is visible.
+		await screen.findByRole("dialog");
+		await act(async () => {
+			window.dispatchEvent(new Event("focus"));
+		});
 		await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
 		expect(fetchMock.mock.calls[1]?.[0]).toContain(
 			`activeDecisionId=${active.touchpointDecisionId}`,
@@ -655,6 +667,57 @@ describe("Production campaign live refresh", () => {
 		await act(async () => {});
 		return view;
 	};
+
+	it.each(["success", "failure", "stale"] as const)(
+		"handles modal navigation completion: %s",
+		async (outcome) => {
+			let dispatchAction!: (id: string) => Promise<void>;
+			vi.spyOn(OpenDesignTouchpointElement.prototype, "mount").mockImplementation(
+				async (_entry, _digest, _context, _urls, _actions, options) => {
+					dispatchAction = options!.dispatchAction!;
+				},
+			);
+			Object.defineProperty(navigator, "userActivation", {
+				configurable: true, value: { isActive: true },
+			});
+			vi.stubGlobal("fetch", vi.fn(async (_input, init) =>
+				new Response(JSON.stringify(init?.method === "POST" ? { ok: true } : decision()), { status: 200 }),
+			));
+			let finishNavigation!: (accepted: boolean) => void;
+			openExternalUrlMock.mockImplementationOnce(() => new Promise<boolean>((resolve) => {
+				finishNavigation = resolve;
+			}));
+			const view = await open();
+			await tick(16);
+			expect(screen.queryByRole("dialog")).not.toBeNull();
+			let completion!: Promise<unknown>;
+			await act(async () => {
+				completion = dispatchAction("learn").catch((error: Error) => error.message);
+			});
+			expect(screen.queryByRole("dialog")).not.toBeNull();
+			if (outcome === "stale") {
+				view.rerender(<ProductionCampaignModal authenticated sessionSubject="new-user" />);
+				await tick(16);
+			}
+			let result: unknown;
+			await act(async () => {
+				finishNavigation(outcome !== "failure");
+				result = await completion;
+			});
+			if (outcome === "success") {
+				expect(screen.queryByRole("dialog")).toBeNull();
+				await tick(30_000);
+				expect(screen.queryByRole("dialog")).toBeNull();
+			} else {
+				expect(screen.queryByRole("dialog")).not.toBeNull();
+				if (outcome === "failure") {
+					expect(result).toBe("touchpoint_action_denied");
+					await act(async () => { await dispatchAction("learn"); });
+					expect(screen.queryByRole("dialog")).toBeNull();
+				}
+			}
+		},
+	);
 
 	it("discovers a newly published campaign at 30 seconds without a focus event", async () => {
 		await open();
@@ -1126,6 +1189,27 @@ describe("Production campaign live refresh", () => {
 });
 
 describe("Production campaign action guard", () => {
+	it("rejects an action when the host cannot open the external page", async () => {
+		const { dispatchProductionCampaignAction } = await import(
+			"../../src/components/ProductionCampaignModal"
+		);
+		Object.defineProperty(navigator, "userActivation", {
+			configurable: true,
+			value: { isActive: true },
+		});
+		vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 204 })));
+		openExternalUrlMock.mockResolvedValueOnce(false);
+		const accepted = await dispatchProductionCampaignAction(
+			decision() as any,
+			"learn",
+			1,
+			() => 1,
+			Date.now() + 10_000,
+		);
+		expect(openExternalUrlMock).toHaveBeenCalledWith("https://example.com");
+		expect(accepted).toBe(false);
+	});
+
 	it.each([500, 502, 503])(
 		"consumes an authorized action when telemetry returns %s",
 		async (status) => {
@@ -1714,6 +1798,64 @@ describe("ProductionCampaignModal mount lifetime", () => {
 	});
 });
 
+// OPEND-3286: the CTA lives in the component's open ShadowRoot, which a
+// light-DOM `querySelector("button")` cannot reach, so entry focus used to fall
+// back to the `.modal` container and the platform painted a ring around the
+// whole campaign on every re-entry.
+describe("ProductionCampaignModal initial focus", () => {
+	const enter = async () => {
+		const view = render(
+			<ProductionCampaignModal authenticated sessionSubject="user-a" />,
+		);
+		await screen.findByRole("dialog");
+		return view;
+	};
+	beforeEach(() => {
+		(globalThis as CampaignHostGlobal).__openDesignCampaignTestHost = {
+			client: { osLocale: "en-US", type: "desktop" },
+		};
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => new Response(JSON.stringify(decision()), { status: 200 })),
+		);
+	});
+	it("focuses the CTA inside the ShadowRoot on entry and on re-entry", async () => {
+		vi.spyOn(OpenDesignTouchpointElement.prototype, "mount").mockImplementation(
+			async function (this: OpenDesignTouchpointElement) {
+				const cta = document.createElement("button");
+				cta.type = "button";
+				cta.textContent = "Try now";
+				this.shadowRoot?.replaceChildren(cta);
+			},
+		);
+		for (let entry = 0; entry < 2; entry += 1) {
+			const view = await enter();
+			const host = document.querySelector("opend-touchpoint")!;
+			const cta = host.shadowRoot!.querySelector("button")!;
+			await waitFor(() => expect(host.shadowRoot!.activeElement).toBe(cta));
+			expect(document.activeElement).toBe(host);
+			expect(document.activeElement).not.toBe(
+				screen.getByRole("dialog").firstElementChild,
+			);
+			view.unmount();
+			// Leaving and coming back: drop the device impression so the same
+			// activity presents again, as the acceptance re-entry does.
+			localStorage.clear();
+		}
+	});
+	it("falls back to the container without a focus ring when content has no control", async () => {
+		await enter();
+		const modal = screen.getByRole("dialog").firstElementChild;
+		await waitFor(() => expect(document.activeElement).toBe(modal));
+		expect(modal?.getAttribute("tabindex")).toBe("-1");
+		const focusRule = modalHostStyles.match(/\.modal:focus\s*\{[^}]*\}/)?.[0];
+		expect(focusRule).toContain("outline: none");
+		// Focus stays trapped on the container instead of escaping the modal.
+		fireEvent.keyDown(document, { key: "Tab" });
+		expect(document.activeElement).toBe(modal);
+	});
+});
+
 describe("ProductionCampaignModal device impressions", () => {
 	const marker = (subject = "user-a", activity = "campaign-1") =>
 		`touchpoint-displayed:v1:${encodeURIComponent(subject)}:${encodeURIComponent(activity)}`;
@@ -1735,33 +1877,41 @@ describe("ProductionCampaignModal device impressions", () => {
 		"requestAnimationFrame",
 		"cancelAnimationFrame",
 	] as const;
+	let verification: MockInstance<typeof touchpointComponent.verifyWebTouchpoint>;
 	/**
-	 * Faking frames on its own is not enough, and on its own makes it worse: the
-	 * frame is requested only once `verifyWebTouchpoint` resolves, and that is
-	 * real asynchronous crypto which no amount of fake time can hurry. A single
-	 * fixed advance can therefore run out before the frame is even asked for.
-	 *
-	 * So step until the marker lands, and keep the two waits inside a step
-	 * separate. The real queue has to TURN for the crypto to finish; fake time
-	 * has to MOVE for the frame that records the impression to fire. Advancing
-	 * alone couples them — a step would buy exactly one turn of the real queue,
-	 * so a box that is slow at the crypto runs out of steps long before it runs
-	 * out of fake milliseconds. Yielding first decouples them. A healthy mount
-	 * leaves on the first step, so the budget is only ever paid by a mount that
-	 * is genuinely stuck, and the assertion then names that as the cause.
+	 * Verification and mount must settle on their real completion promises,
+	 * without spending authorization time while native crypto is pending.
+	 * Flush the decision at the current instant, wait for the actual mount,
+	 * then advance the single virtual frame that records the visible impression.
 	 */
-	const advanceToRecordedImpression = async (subject = "user-a", activity = "campaign-1") => {
-		for (let step = 0; step < 300 && localStorage.getItem(marker(subject, activity)) === null; step += 1)
-			await act(async () => {
-				for (let turn = 0; turn < 8; turn += 1) await new Promise(resolve => setImmediate(resolve));
-				await vi.advanceTimersByTimeAsync(16);
-			});
-		expect(
-			localStorage.getItem(marker(subject, activity)),
-			"impression never recorded — the mount it follows most likely never resolved",
-		).toBe("1");
+	const advanceToRecordedImpression = async (
+		subject = "user-a",
+		activity = "campaign-1",
+	) => {
+		if (localStorage.getItem(marker(subject, activity)) === "1") return;
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(0);
+		});
+		const result = verification.mock.results.at(-1);
+		if (!result || result.type !== "return")
+			throw new Error("impression readiness requires a started content verification");
+		await act(async () => {
+			await result.value;
+			const mount = vi
+				.mocked(OpenDesignTouchpointElement.prototype.mount)
+				.mock.results.at(-1);
+			if (!mount || mount.type !== "return")
+				throw new Error("verified content did not start a mount");
+			await mount.value;
+		});
+		await act(async () => {
+			await vi.advanceTimersToNextFrame();
+		});
+		expect(localStorage.getItem(marker(subject, activity))).toBe("1");
 	};
 	beforeEach(() => {
+		// Observe the real verifier; neither its crypto nor integrity checks are mocked.
+		verification = vi.spyOn(touchpointComponent, "verifyWebTouchpoint");
 		(globalThis as CampaignHostGlobal).__openDesignCampaignTestHost = {
 			client: { osLocale: "en-US", type: "desktop" },
 		};
@@ -1894,12 +2044,46 @@ describe("ProductionCampaignModal device impressions", () => {
 		expect(document.querySelector("opend-touchpoint")).toBe(host);
 	});
 
-	// The same tab switch, but with time actually passing. The case above toggles
-	// visibility on the real clock with nothing in between, so it cannot tell "the
-	// lease was left alone" from "nothing had time to lapse". Forty-five seconds
-	// of a sixty-second authorization puts a poll tick inside the hidden spell and
-	// still leaves the lease the server's to renew, which is the shape a user
-	// actually produces by reading a mail and coming back.
+	it("waits for real verification without spending the authorization clock", async () => {
+		vi.useFakeTimers({ toFake: [...IMPRESSION_TIMERS] });
+		const now = new Date("2026-01-01T00:00:00.000Z");
+		vi.setSystemTime(now);
+		const digest = crypto.subtle.digest.bind(crypto.subtle);
+		let releaseVerification!: () => void;
+		const verificationGate = new Promise<void>((resolve) => {
+			releaseVerification = resolve;
+		});
+		let verificationStarted!: () => void;
+		const started = new Promise<void>((resolve) => {
+			verificationStarted = resolve;
+		});
+		vi.spyOn(crypto.subtle, "digest").mockImplementation(async (...args) => {
+			verificationStarted();
+			await verificationGate;
+			return digest(...args);
+		});
+		render(<ProductionCampaignModal authenticated sessionSubject="user-a" />);
+		const impression = advanceToRecordedImpression();
+		// Observe failures after releasing the external boundary, not as an
+		// unhandled rejection while the test is still inspecting pending work.
+		void impression.catch(() => undefined);
+		try {
+			await started;
+			expect(Date.now()).toBe(now.getTime());
+			expect(OpenDesignTouchpointElement.prototype.mount).not.toHaveBeenCalled();
+			expect(localStorage.getItem(marker())).toBeNull();
+		} finally {
+			releaseVerification();
+			await impression;
+		}
+		expect(localStorage.getItem(marker())).toBe("1");
+		expect(screen.getByRole("dialog")).toBeTruthy();
+	});
+
+	// The same tab switch, but with time actually passing. The visibility-only
+	// case cannot distinguish "the lease was left alone" from "nothing lapsed".
+	// Forty-five seconds of a sixty-second authorization puts a poll tick inside
+	// the hidden spell and still leaves the lease the server's to renew.
 	it("keeps the same host through a background spell shorter than its authorization", async () => {
 		vi.useFakeTimers({ toFake: [...IMPRESSION_TIMERS] });
 		vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
@@ -1909,7 +2093,8 @@ describe("ProductionCampaignModal device impressions", () => {
 		vi.stubGlobal("fetch", fetchMock);
 
 		render(<ProductionCampaignModal authenticated sessionSubject="user-a" />);
-		await act(async () => { await vi.advanceTimersByTimeAsync(16); });
+		// The dialog is presented once verified content has mounted.
+		await advanceToRecordedImpression();
 		const dialog = screen.getByRole("dialog");
 		const host = document.querySelector("opend-touchpoint");
 		expect(host).not.toBeNull();
@@ -1956,9 +2141,9 @@ describe("ProductionCampaignModal device impressions", () => {
 			vi.fn(async () => new Response(JSON.stringify(decision()), { status: 200 })),
 		);
 		render(<ProductionCampaignModal authenticated sessionSubject="user-a" />);
-		await act(async () => { await vi.advanceTimersByTimeAsync(16); });
-		expect(screen.getByRole("dialog")).toBeTruthy();
+		// The dialog is presented once verified content has mounted.
 		await advanceToRecordedImpression();
+		expect(screen.getByRole("dialog")).toBeTruthy();
 
 		// Asleep past the sixty-second authorization this decision carries. The
 		// lease retires on its own deadline while the page is hidden.
@@ -1973,6 +2158,9 @@ describe("ProductionCampaignModal device impressions", () => {
 		await act(async () => { fireEvent(document, new Event("visibilitychange")); });
 		await act(async () => { await vi.advanceTimersByTimeAsync(16); });
 		expect(screen.queryByRole("dialog")).toBeNull();
+		// The frame is presented only after verification, so the published offer
+		// itself is observed through its (still hidden) host element.
+		expect(document.querySelector("opend-touchpoint")).toBeNull();
 
 		// Control. Both assertions above are absences, and an absence is what a
 		// lifecycle that never came back at all also looks like — a `wake` that
@@ -1985,6 +2173,8 @@ describe("ProductionCampaignModal device impressions", () => {
 		localStorage.removeItem(marker());
 		await act(async () => { fireEvent(document, new Event("visibilitychange")); });
 		await act(async () => { await vi.advanceTimersByTimeAsync(16); });
+		expect(document.querySelector("opend-touchpoint")).not.toBeNull();
+		await advanceToRecordedImpression();
 		expect(screen.getByRole("dialog")).toBeTruthy();
 	});
 	it("keeps the displayed campaign on screen when a failed poll later recovers", async () => {
@@ -2009,6 +2199,18 @@ describe("ProductionCampaignModal device impressions", () => {
 		// because nothing can write it until the presentation is open.
 		vi.useFakeTimers({ toFake: [...IMPRESSION_TIMERS] });
 		vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+		let mounted!: () => void;
+		const mountedPromise = new Promise<void>((resolve) => {
+			mounted = resolve;
+		});
+		vi
+			.spyOn(OpenDesignTouchpointElement.prototype, "mount")
+			.mockImplementation(async function (this: OpenDesignTouchpointElement) {
+				this.shadowRoot?.replaceChildren(
+					document.createTextNode("Verified campaign"),
+				);
+				mounted();
+			});
 		let calls = 0;
 		const fetchMock = vi.fn(async () => {
 			calls += 1;
@@ -2020,24 +2222,30 @@ describe("ProductionCampaignModal device impressions", () => {
 		await act(async () => {
 			await vi.advanceTimersByTimeAsync(16);
 		});
-		expect(document.querySelector("opend-touchpoint")).not.toBeNull();
+		// Insertion precedes async mounting. Keep the host stable, then wait for
+		// the real impression that the current lifecycle records after mounting.
+		await act(async () => {
+			await mountedPromise;
+		});
+		const host = document.querySelector("opend-touchpoint");
+		expect(host).not.toBeNull();
 		await advanceToRecordedImpression();
 		await act(async () => {
 			await vi.advanceTimersByTimeAsync(30_000);
 		});
 		expect(calls).toBe(2);
-		expect(document.querySelector("opend-touchpoint")).not.toBeNull();
+		expect(document.querySelector("opend-touchpoint")).toBe(host);
 		act(() => {
 			window.dispatchEvent(new Event("online"));
 		});
 		await act(async () => {
 			await vi.advanceTimersByTimeAsync(1_500);
 		});
-		// The failing attempt and its recovery both have to have happened, or the
-		// two surviving hosts below would only mean nothing ever disturbed them.
+		// The failed poll and the online-triggered recovery must both happen.
 		expect(calls).toBe(3);
-		expect(document.querySelector("opend-touchpoint")).not.toBeNull();
+		expect(document.querySelector("opend-touchpoint")).toBe(host);
 		expect(screen.queryByRole("dialog")).not.toBeNull();
+		expect(OpenDesignTouchpointElement.prototype.mount).toHaveBeenCalledTimes(1);
 	});
 	it.each(["no-decision", "stale-revocation"] as const)(
 		"keeps the displayed campaign on screen when a retained %s poll recovers",
@@ -2066,12 +2274,11 @@ describe("ProductionCampaignModal device impressions", () => {
 			vi.stubGlobal("fetch", fetchMock);
 			render(<ProductionCampaignModal authenticated sessionSubject="user-a" />);
 			await waitFor(() => expect(calls).toBe(1));
+			// A requested response is not a mounted host. Observe its real visibility
+			// record before capturing identity or starting the recovery poll.
+			await waitFor(() => expect(localStorage.getItem(marker())).toBe("1"));
 			const host = document.querySelector("opend-touchpoint");
 			expect(host).not.toBeNull();
-			// The host is inserted before its asynchronous mount finishes. Wait for
-			// the visibility record so this test cannot race a focus refresh against
-			// creation of the open-presentation guard it is meant to exercise.
-			await waitFor(() => expect(localStorage.getItem(marker())).toBe("1"));
 			await act(async () => {
 				fireEvent(window, new Event("focus"));
 			});
@@ -2175,8 +2382,10 @@ describe("ProductionCampaignModal device impressions", () => {
 		const view = render(
 			<ProductionCampaignModal authenticated sessionSubject="user-a" />,
 		);
-		await screen.findByRole("dialog");
+		await waitFor(() => expect(verify).toHaveBeenCalled());
 		await act(async () => {});
+		// A rejected verification releases the page instead of leaving a backdrop.
+		expect(screen.queryByRole("dialog")).toBeNull();
 		expect(localStorage.getItem(marker())).toBeNull();
 		view.unmount();
 		verify.mockRestore();

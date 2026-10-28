@@ -1,9 +1,18 @@
+import { withCommentFileDeletion, type CommentFileDeletion } from '../../collab/comment-file-deletion.js';
+import { injectMotionSourcePlayer, isMotionVideoComposition, markMotionHostedPreview, MOTION_PREVIEW_OUTPUT_HEADER } from '@open-design/contracts/runtime/motion-source-player';
 import { createHash, randomUUID } from 'node:crypto';
+import { trackedCommentFilePaths } from '../../collab/local-comment-files.js';
+import { CommentPreparationError, prepareCommentIdentity } from '../../services/comment-preparation.js';
+import { ProjectPublicFileStopPendingError } from '../../collab/project-public-file-stop.js';
+import type { ProjectDeleteResponse } from '@open-design/contracts';
+import { publicFileMutationHandler } from '../public-file-mutation-handler.js';
+import { createPublicFileMutations, type PublicFileMutations } from '../../collab/public-file-mutations.js';
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import { load } from 'cheerio';
 import {
   deleteWorkspaceArtifact,
+  deleteWorkspaceArtifactsInFolder,
   renameWorkspaceArtifactPath,
 } from '../../chat-artifacts/store.js';
 import type { Express, Request, Response } from 'express';
@@ -19,6 +28,7 @@ import {
 } from '@open-design/contracts/runtime/preview-build-focus';
 import {
   buildPreviewFocusGuard,
+  buildPreviewVisibilityGuard,
   buildPreviewRedirectGuard,
   buildPreviewSandboxShim,
   PREVIEW_URL_GUARD_MAX_HTML_BYTES,
@@ -37,6 +47,8 @@ import {
   PREVIEW_RUNTIME_STATE_VERSION,
 } from '@open-design/contracts/runtime/preview-runtime-state';
 import {
+  ANNOTATED_SELECTOR_HELPERS,
+  COMMENT_IDENTITY_HELPERS,
   automaticStrategyTaskProfileForProjectMetadata,
   defaultScenarioPluginIdForProjectMetadata,
   type ChatSessionMode,
@@ -101,7 +113,7 @@ import {
 import { connectorService } from '../../connectors/service.js';
 import type { RouteDeps } from '../../server-context.js';
 import { listSkills } from '../../skills.js';
-import { isSafeId } from '../../projects.js';
+import { isSafeId, validateProjectPath } from '../../projects.js';
 import {
   ensureTeamProjectCommentConversations,
   getFirstProjectConversation,
@@ -331,6 +343,9 @@ function assertProjectCreatePreparationWithinDeadline(
 }
 
 export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'agents' | 'validation' | 'collabSync'> {
+  /** Stop public bindings before any catalog/local deletion; production supplies this capability. */
+  stopPublicFilesBeforeDelete?: CommentFileDeletion;
+  publicFileMutations?: PublicFileMutations;
   /**
    * Request-wide deadline for the read-only preparation POST /api/projects
    * runs before its transaction. Production keeps the 15s default; tests and
@@ -395,6 +410,7 @@ export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | '
    * All optional and no-op off-team / when the collab cloud is unconfigured.
    */
   resolveAuthorMemberId?: (authorization: string | undefined) => Promise<string | undefined>;
+  resolveCurrentAuthorDisplayName?: () => string | null;
   resolveWorkspaceContext?: (
     req: Request,
     projectId: string,
@@ -423,6 +439,8 @@ export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | '
     comment: PreviewComment,
     context: WorkspaceCollabContext | null,
   ) => boolean | void;
+  prepareCommentFile?: (projectId: string, filePath: string, context: WorkspaceCollabContext | null) => Promise<string | undefined>;
+  pullCommentsNow?: (projectId: string, context: WorkspaceCollabContext) => Promise<boolean>;
   onCommentsRead?: (
     projectId: string,
     context: WorkspaceCollabContext | null,
@@ -827,6 +845,8 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
   var activeCommentElementId = null;
   var activeCommentSelector = null;
   var activeTargetPending = false;
+  // Hash/history navigation keeps this document; only a new load changes its identity.
+  var commentDocumentVersion = 'url:' + window.location.href;
   function postReady(){
     window.parent.postMessage({ type: 'od:url-selection-bridge-ready', href: window.location.href }, '*');
   }
@@ -886,11 +906,8 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     (document.head || document.documentElement).appendChild(style);
   }
   function active(){ return commentEnabled; }
-  function annotatedSelectorFor(el){
-    var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
-    if (!id) return null;
-    return el.hasAttribute('data-od-id') ? '[data-od-id="' + esc(id) + '"]' : '[data-screen-label="' + esc(id) + '"]';
-  }
+${ANNOTATED_SELECTOR_HELPERS}
+${COMMENT_IDENTITY_HELPERS}
   function domSelectorFor(el){
     if (!el || !el.tagName || el === document.documentElement || el === document.body) return null;
     var parts = [];
@@ -922,6 +939,13 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
       if (cs.display === 'none' || cs.visibility === 'hidden' || cs.pointerEvents === 'none') return false;
     } catch (_) { return false; }
     return true;
+  }
+  function visibleCommentTarget(el){
+    try {
+      var rect = el.getBoundingClientRect();
+      var cs = window.getComputedStyle(el);
+      return rect.width >= 1 && rect.height >= 1 && cs.display !== 'none' && cs.visibility !== 'hidden' && Number(cs.opacity) !== 0;
+    } catch (_) { return false; }
   }
   function meaningfulDomFallbackTarget(el){
     if (!visibleTarget(el)) return false;
@@ -965,15 +989,23 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
       };
     } catch (_) { return null; }
   }
-  function targetFrom(el, allowDomFallback, clickedEl, clickPoint){
-    var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
-    if (allowDomFallback && id && generatedRootAnnotation(el, id)) return null;
-    var selector = annotatedSelectorFor(el);
-    if (!id && allowDomFallback && meaningfulDomFallbackTarget(el)) {
+  function targetFrom(el, allowDomFallback, clickedEl, clickPoint, validateForSave){
+    var id = annotatedElementIdFor(el);
+    var selector = annotatedSelectorFor(el, esc);
+    if ((!clickedEl || clickedEl === el) && el && el.hasAttribute('data-od-comment-id')) {
+      var identity = ownCommentIdentity(el);
+      if (!identity) return null;
+      id = identity.elementId;
+      selector = identity.selector;
+    }
+    if (!validateForSave && allowDomFallback && id && generatedRootAnnotation(el, id)) return null;
+    if (!id && allowDomFallback && (validateForSave || meaningfulDomFallbackTarget(el))) {
       selector = domSelectorFor(el);
       if (selector) id = 'dom:' + selector;
     }
-    if (!id || !selector) return null;
+    // Identity uniqueness has already counted the whole document, including
+    // hidden duplicates. Visibility is a separate location/geometry gate.
+    if (!id || !selector || !visibleCommentTarget(el)) return null;
     var rect = el.getBoundingClientRect();
     var tag = el.tagName ? el.tagName.toLowerCase() : 'element';
     var cls = typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\\s+/).slice(0, 2).join('.') : '';
@@ -1005,7 +1037,7 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
   }
   function allTargets(){
     var includeDomFallback = commentEnabled && mode === 'picker';
-    var nodes = includeDomFallback ? document.querySelectorAll('body *') : document.querySelectorAll('[data-od-id], [data-screen-label]');
+    var nodes = includeDomFallback ? document.querySelectorAll('body *') : document.querySelectorAll('[data-od-id], [data-screen-label], [data-od-comment-id]');
     var items = [];
     var seen = Object.create(null);
     for (var i = 0; i < nodes.length; i++) {
@@ -1034,6 +1066,7 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     }, 120);
   }
   function findCommentTargetByIdentity(elementId, selector){
+    if (String(elementId || '').indexOf('cmt:') === 0 || commentSelectorClaimsIdentity(selector)) return strictCommentNode(elementId, selector);
     var el = null;
     if (selector) {
       try { el = document.querySelector(String(selector)); } catch (_) { el = null; }
@@ -1092,6 +1125,7 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     for (var i = 0; i < candidates.length; i++) {
       var clicked = candidates[i];
       var el = clicked;
+      if (clicked && clicked.hasAttribute('data-od-comment-id')) return { target: clicked, clicked: clicked };
       while (el && el !== document.documentElement) {
         if (allowDomFallback && meaningfulDomFallbackTarget(el)) return { target: el, clicked: clicked };
         if (el.getAttribute && (el.hasAttribute('data-od-id') || el.hasAttribute('data-screen-label'))) {
@@ -1328,9 +1362,30 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
       }
       return;
     }
+    if (data.type === 'od:comment-active-target' && data.validateForSave && typeof data.requestId === 'string') {
+      var saveNode = null;
+      try { saveNode = document.querySelector(String(data.selector)); } catch (_) {}
+      var saveTarget = saveNode && targetFrom(saveNode, true, null, null, true);
+      window.parent.postMessage(saveTarget
+        ? Object.assign({}, saveTarget, { type: 'od:comment-active-target-update', documentVersion: commentDocumentVersion, requestId: data.requestId, requestedSelector: data.selector })
+        : { type: 'od:comment-location-missing', documentVersion: commentDocumentVersion, requestId: data.requestId }, '*');
+      return;
+    }
     if (data.type === 'od:comment-active-target') {
       activeCommentElementId = data.elementId ? String(data.elementId) : null;
       activeCommentSelector = data.selector ? String(data.selector) : null;
+      if ((String(activeCommentElementId || '').indexOf('cmt:') === 0 || commentSelectorClaimsIdentity(activeCommentSelector)) && data.locate && typeof data.requestId === 'string') {
+        var target = findCommentTargetByIdentity(activeCommentElementId, activeCommentSelector);
+        var payload = target && targetFrom(target, true);
+        if (payload) {
+          try { target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' }); } catch (_) {}
+          payload = targetFrom(target, true);
+        }
+        window.parent.postMessage(payload
+          ? Object.assign({}, payload, { type: 'od:comment-active-target-update', requestId: data.requestId })
+          : { type: 'od:comment-location-missing', requestId: data.requestId }, '*');
+        return;
+      }
       schedulePostActiveCommentTarget();
     }
   });
@@ -1338,7 +1393,7 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     if (!commentEnabled || mode !== 'picker') return;
     var result = closestTarget(ev);
     if (!result) return;
-    var payload = targetFrom(result.target, true);
+    var payload = targetFrom(result.target, true, result.clicked);
     if (!payload || payload.elementId === hoveredId) return;
     hoveredId = payload.elementId;
     window.parent.postMessage(Object.assign({}, payload, { type: 'od:comment-hover' }), '*');
@@ -1799,6 +1854,7 @@ function applyUrlPreviewBridgesToHtml(
   transformed: string | Buffer,
   mime: string,
   requestedBridge: unknown,
+  requestedMotionPreview?: unknown,
 ): string | Buffer {
   if (
     !(
@@ -1809,7 +1865,8 @@ function applyUrlPreviewBridgesToHtml(
       wantsUrlPreviewBuildFocusBridge(requestedBridge) ||
       wantsUrlPreviewSandboxGuard(requestedBridge) ||
       wantsUrlPreviewFocusGuard(requestedBridge) ||
-      wantsUrlPreviewRedirectGuard(requestedBridge)
+      wantsUrlPreviewRedirectGuard(requestedBridge) ||
+      requestedMotionPreview === '1'
     ) ||
     !/^text\/html(?:;|$)/i.test(mime)
   ) {
@@ -1817,10 +1874,11 @@ function applyUrlPreviewBridgesToHtml(
   }
 
   let html = Buffer.isBuffer(transformed) ? transformed.toString('utf8') : transformed;
+  html = injectAfterHeadOpen(html, 'data-od-preview-hidden-guard', buildPreviewVisibilityGuard());
   // Sanitize the <title> so Cmd+P -> "Save as PDF" produces a Teams-safe
   // filename. URL-load iframes cannot rely on the host rewriting the document
   // title after load, and powered previews are intentionally cross-origin.
-  html = daemonSanitizeTitleInDoc(html);
+  html = injectMotionSourcePlayer(daemonSanitizeTitleInDoc(html));
   // Guards must run before authored scripts. injectAfterHeadOpen prepends at
   // the start of <head>; apply in reverse runtime order so the final document
   // executes sandbox -> redirect -> observability -> focus.
@@ -1837,6 +1895,9 @@ function applyUrlPreviewBridgesToHtml(
     html = injectUrlPreviewBridge(html, 'sandbox');
   }
   if (wantsUrlPreviewBuildFocusBridge(requestedBridge)) {
+    // Only marked video motion waits for the building preview host. Legacy
+    // HyperFrames and ordinary documents retain their authored playback.
+    html = markMotionHostedPreview(html);
     html = injectUrlPreviewBridge(html, 'buildfocus');
   }
   if (wantsUrlPreviewScrollBridge(requestedBridge)) {
@@ -2040,6 +2101,7 @@ function cloneProjectMetadataForDuplicate(sourceProject: any): Record<string, un
     sourceProject?.metadata && typeof sourceProject.metadata === 'object'
       ? { ...sourceProject.metadata }
       : {};
+  delete sourceMetadata._commentFiles;
   delete sourceMetadata.baseDir;
   delete sourceMetadata.projectLocationId;
   delete sourceMetadata.fromTrustedPicker;
@@ -2169,6 +2231,7 @@ function buildDesignSystemCopyPendingPrompt(input: {
 
 export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDeps) {
   const { db, design } = ctx;
+  const projectMutations = ctx.publicFileMutations ?? createPublicFileMutations();
   const projectCreatePreparationTimeoutMs =
     typeof ctx.projectCreatePreparationTimeoutMs === 'number'
     && Number.isFinite(ctx.projectCreatePreparationTimeoutMs)
@@ -2790,6 +2853,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         .filter((row) => row.resourceHubResourceId)
         .map((row) => [`${row.resourceHubResourceId}\0${row.id}`, row] as const),
     );
+    const canReconcile = projectMutations.captureReconciliation();
     const tombstoned = locallyTombstonedTeamProjects(localRows, ctx);
     let remoteProjects: VelaTeamProjectRecord[];
     try {
@@ -2800,6 +2864,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     const seenResourceIds = new Set<string>();
     const visibleProjects = remoteProjects
       .filter((project) => project.workspaceId === ctx.workspaceId)
+      .filter((project) => canReconcile(project.projectId))
       .filter((project) => project.access.canView)
       .filter((project) => !remoteTeamProjectWasUnsharedLocally(project, tombstoned, ctx));
     for (const project of visibleProjects) {
@@ -3552,6 +3617,14 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       // ignore
     }
   }
+  function commitConfirmedVisibility(id: string, ctx: WorkspaceProjectContext, visibility: 'personal' | 'team') {
+    // Preserve the retained root and transport's confirmed sync state. Only
+    // explicit moves write policy; ACK must be durable before the response.
+    updateWorkspaceProject(db, ctx.workspaceId, id, {
+      visibility,
+      ...(visibility === 'personal' ? { syncState: 'local_only' as const } : {}),
+    });
+  }
   function ownerForTeamShare(summary: any, ctx: WorkspaceProjectContext, visibility: 'personal' | 'team') {
     if (visibility !== 'team') return summary?.createdByWorkspaceMemberId ?? null;
     return summary?.createdByWorkspaceMemberId ?? ctx.workspaceMemberId;
@@ -3566,8 +3639,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       visibility,
       createdByWorkspaceMemberId: ownerForTeamShare(summary, ctx, visibility),
       updatedByWorkspaceMemberId: ctx.workspaceMemberId,
-      resourceHubResourceId: visibility === 'team' ? projectResourceIdFor(id, workspaceProjectPrincipal(ctx)) : null,
-      cloudTombstonedAt: visibility === 'team' ? null : Date.now(),
+      resourceHubResourceId: getWorkspaceProjectByProjectId(db, id)?.resourceHubResourceId ?? summary?.resourceHubResourceId ?? null,
+      cloudTombstonedAt: null,
       syncState: visibility === 'team' ? 'pending_upload' : 'local_only',
     };
   }
@@ -3577,7 +3650,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       resourceState: row.resourceState,
       createdByWorkspaceMemberId: row.createdByWorkspaceMemberId ?? null,
       updatedByWorkspaceMemberId: row.updatedByWorkspaceMemberId ?? null,
-      resourceHubResourceId: row.resourceHubResourceId ?? null,
+      // Creator ensure is durable even when the following root transport fails.
+      resourceHubResourceId: getWorkspaceProjectByProjectId(db, row.id)?.resourceHubResourceId ?? row.resourceHubResourceId ?? null,
       cloudTombstonedAt: row.cloudTombstonedAt ?? null,
       syncState: row.syncState ?? 'local_only',
       version: row.workspaceVersion ?? 1,
@@ -3599,7 +3673,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     return /team_project_owner_conflict/i.test(String(error));
   }
 
-  app.post('/api/workspaces/:workspaceId/projects/:projectId/move', async (req, res) => {
+  const withVisibilityMoveLocks = projectMutations.withMoves;
+
+  app.post('/api/workspaces/:workspaceId/projects/:projectId/move', async (req, res) => withVisibilityMoveLocks([req.params.projectId], async () => {
     try {
       const ctx = await authoritativeWorkspaceProjectContext(req, res, req.params.workspaceId);
       if (!ctx) return;
@@ -3671,6 +3747,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         restoreWorkspaceProjectRow(row);
         throw new TeamProjectSyncError(error);
       }
+      commitConfirmedVisibility(project.id, ctx, visibility);
       if (visibility === 'team') {
         const ensureCommentAnchor = db.transaction(() => {
           ensureTeamProjectCommentConversations(db, project.id);
@@ -3694,9 +3771,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       }
       sendApiError(res, 400, 'BAD_REQUEST', String(err));
     }
-  });
+  }));
 
-  app.post('/api/workspaces/:workspaceId/projects/batch-move', async (req, res) => {
+  app.post('/api/workspaces/:workspaceId/projects/batch-move', async (req, res) => withVisibilityMoveLocks(parseProjectIds(req.body?.projectIds) ?? [], async () => {
     try {
       const ctx = await authoritativeWorkspaceProjectContext(req, res, req.params.workspaceId);
       if (!ctx) return;
@@ -3728,13 +3805,32 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         }
       });
       moveMany(projectIds);
+      const completed: string[] = [];
       try {
-        await requestTeamVisibility(projectIds, ctx, visibility);
+        for (const id of projectIds) {
+          await requestTeamVisibility([id], ctx, visibility);
+          completed.push(id);
+          commitConfirmedVisibility(id, ctx, visibility);
+        }
       } catch (error) {
+        const uncompensated = new Set<string>();
+        for (const id of completed.reverse()) {
+          const previous = previousRows.find((item: any) => item?.id === id);
+          if (!previous || previous.workspaceVisibility === visibility) continue;
+          try {
+            await requestTeamVisibility([id], ctx, previous.workspaceVisibility);
+          } catch (compensationError) {
+            // A distributed batch cannot roll back a remote outage with SQL.
+            // Preserve confirmed remote successes locally rather than lie about
+            // their policy, and report the original batch as failed/retryable.
+            uncompensated.add(id);
+            console.warn('[od] project batch move compensation failed:', id, compensationError);
+          }
+        }
         const rollbackMany = db.transaction((items: any[]) => {
           for (const item of items) restoreWorkspaceProjectRow(item);
         });
-        rollbackMany(previousRows.filter(Boolean));
+        rollbackMany(previousRows.filter((item: any) => item && !uncompensated.has(item.id)));
         throw new TeamProjectSyncError(error);
       }
       if (visibility === 'team') {
@@ -3761,7 +3857,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       }
       sendApiError(res, 400, 'BAD_REQUEST', String(err));
     }
-  });
+  }));
 
   app.post('/api/workspaces/:workspaceId/projects/batch-delete', async (req, res) => {
     try {
@@ -3869,6 +3965,13 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       if (typeof id !== 'string' || !isSafeId(id)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
       }
+      const requestedConversationId = req.body?.conversationId;
+      if (
+        requestedConversationId !== undefined
+        && (typeof requestedConversationId !== 'string' || !isSafeId(requestedConversationId))
+      ) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'invalid conversation id');
+      }
       if (typeof name !== 'string' || !name.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'name required');
       }
@@ -3881,6 +3984,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       // originalBaseDir / importedFrom='folder' — only the import path
       // owns those state fields.
       if (metadata && typeof metadata === 'object') {
+        if ('_commentFiles' in metadata) return sendApiError(res, 400, 'BAD_REQUEST', '_commentFiles is daemon-owned');
         if ('baseDir' in metadata) {
           return sendApiError(
             res, 400, 'BAD_REQUEST',
@@ -4117,7 +4221,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
                   }
                 : null;
       const now = Date.now();
-      const cid = randomId();
+      const cid = requestedConversationId ?? randomId();
       const initialSessionMode = normalizeChatSessionMode(
         req.body?.conversationMode ?? req.body?.sessionMode,
       );
@@ -4126,6 +4230,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         || req.body?.automaticStrategyTaskProfile === 'ppt'
         || req.body?.automaticStrategyTaskProfile === 'marketing'
         || req.body?.automaticStrategyTaskProfile === 'hyperframes'
+        || req.body?.automaticStrategyTaskProfile === 'motion-design'
           ? req.body.automaticStrategyTaskProfile
           : null;
       if (
@@ -5155,6 +5260,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       // patching other metadata without ever losing their import root.
       if (patch.metadata === null) {
         const existing = getProject(db, req.params.id);
+        if (existing?.metadata?._commentFiles) return sendApiError(res, 400, 'BAD_REQUEST', '_commentFiles is daemon-owned');
         if (existing?.metadata?.strategyBinding) {
           return sendApiError(
             res,
@@ -5183,6 +5289,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       if (patch.metadata && typeof patch.metadata === 'object') {
         const existing = getProject(db, req.params.id);
         const existingMeta = existing?.metadata;
+        if ('_commentFiles' in patch.metadata) return sendApiError(res, 400, 'BAD_REQUEST', '_commentFiles is daemon-owned');
+        if (existingMeta?._commentFiles) patch.metadata._commentFiles = existingMeta._commentFiles;
         if (
           'localCatalogScopes' in patch.metadata
           && !sameLocalCatalogScopes(
@@ -5461,7 +5569,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     }
   });
 
-  app.delete('/api/projects/:id', async (req, res) => {
+  app.delete('/api/projects/:id', publicFileMutationHandler(ctx.publicFileMutations, async (req, res) => {
     try {
       const project = getProject(db, req.params.id);
       if (!project) {
@@ -5477,19 +5585,23 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         project.id,
         'delete',
       )) return;
-      // spec 04 §11: a team-visible project must be unshared from the hub
-      // BEFORE it disappears locally — mirrors the 'personal' branch of
-      // /move's `requestTeamVisibility`, the one other place this daemon
-      // already knows how to take a project out of the team space. Without
-      // this, `dbDeleteProject` only ever touches THIS caller's own
-      // `workspace_projects` row: the hub's published resource (and every
-      // OTHER member's already-bound local row) never learns the project is
-      // gone, so teammates keep seeing it. `enforceWorkspaceProjectMutation`
-      // just above already proved the caller may mutate this exact row, so
-      // no separate `canShareProjects` gate is layered on top here — the
-      // whole project is about to stop existing regardless.
+      let shareResiduals: ProjectDeleteResponse['shareResiduals'];
+      try {
+        await ctx.stopPublicFilesBeforeDelete?.(project.id);
+      } catch (error) {
+        // Only a durable, unchanged stop intent permits local-only deletion.
+        // Team removal retains its existing unshare/catalog safety boundary.
+        if (!(error instanceof ProjectPublicFileStopPendingError)
+          || !error.canContinueLocalDelete
+          || getWorkspaceProjectByProjectId(db, project.id)?.visibility !== 'personal') throw error;
+        shareResiduals = error.shareResiduals;
+      }
+      // Permanent deletion removes a registered root; moving to private does
+      // not. Pending public-stop residuals permit local-only private deletion,
+      // so retain their cloud identity for the existing stop retry pipeline.
       const workspaceRow = getWorkspaceProjectByProjectId(db, project.id);
-      if (workspaceRow?.visibility === 'team') {
+      if (workspaceRow && !shareResiduals?.length
+        && (workspaceRow.visibility === 'team' || workspaceRow.resourceHubResourceId)) {
         // Same context the gate above allowed this delete under — NOT a fresh
         // header read, which is null for a headerless caller and would skip the
         // hub work while still deleting locally.
@@ -5506,21 +5618,21 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             'workspace context is required to unshare this project before deleting it',
           );
         }
-        await requestTeamVisibility([project.id], teamCtx, 'personal');
+        await collabSync.requestTeamDelete(project.id, workspaceProjectPrincipal(teamCtx));
+        try { collabSync.invalidateTeamProjectCatalog?.(); } catch { /* Best-effort display cache. */ }
       }
       // Stop any live agent run in this project before its row and directory
       // are removed, otherwise the CLI subprocess is orphaned — it keeps
       // billing and writes into a directory that no longer exists (#5468).
-      await cancelRunsOwnedBy(design.runs, { projectId: req.params.id });
+      await cancelRunsOwnedBy(design.runs, { projectId: project.id });
       dbDeleteProject(db, req.params.id);
       await removeProjectDir(PROJECTS_DIR, req.params.id).catch(() => {});
-      /** @type {import('@open-design/contracts').OkResponse} */
-      const body = { ok: true };
+      const body: ProjectDeleteResponse = { ok: true, ...(shareResiduals?.length ? { shareResiduals } : {}) };
       res.json(body);
     } catch (err: any) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err));
     }
-  });
+  }));
 
   // SSE stream of file-changed events for a project. Drives preview live-reload.
   // Receipt of a `file-changed` event triggers a file-list refresh, which
@@ -5785,6 +5897,9 @@ export function registerProjectArtifactRoutes(app: Express, ctx: RegisterProject
 }
 
 export interface RegisterProjectFileRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'uploads' | 'node' | 'projectStore' | 'projectFiles' | 'documents' | 'artifacts' | 'projectPreviewScopes'> {
+  isProjectEditingBusy?: (projectId: string) => boolean;
+  publicFileMutations?: PublicFileMutations;
+  stopPublicFilesBeforeDelete?: CommentFileDeletion;
   verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority;
   authorizeProjectRequest?: AuthorizeProjectRequest;
   /** Startup-hydrated O(1) quarantine lookup for stale Team mirrors. */
@@ -5826,7 +5941,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     ctx.verifyWorkspaceRequestAuthority,
     ctx.isProjectUnmaterializedPlaceholder,
   );
-  const { listFiles, listProjectFolders, createProjectFolder, deleteProjectFolder, searchProjectFiles, readProjectFile, resolveProjectDir, resolveProjectFilePath, parseByteRange, renameProjectFile, deleteProjectFile, writeProjectFile, sanitizeName, sanitizePath, ensureProject } = ctx.projectFiles;
+  const { listFiles, listProjectFolders, createProjectFolder, deleteProjectFolder, searchProjectFiles, readProjectFile, resolveProjectDir, resolveProjectFilePath, resolveProjectDeletePath, parseByteRange, renameProjectFile, deleteProjectFile, writeProjectFile, sanitizeName, sanitizePath, ensureProject } = ctx.projectFiles;
   const { buildDocumentPreview } = ctx.documents;
   const { validateArtifactManifestInput } = ctx.artifacts;
   const { projectPreviewScopes } = ctx;
@@ -6141,6 +6256,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
   }
 
   function htmlHasPoweredPreviewSignal(source: string): boolean {
+    if (/\b(?:local|session)Storage\b/.test(source)) return true;
     if (/\bSharedArrayBuffer\b/.test(source)) return true;
     if (/\bnew\s+(?:Worker|SharedWorker)\s*\(/.test(source)) return true;
     if (/\bimportScripts\s*\(/.test(source)) return true;
@@ -6673,7 +6789,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     }
   });
 
-  app.delete('/api/projects/:id/folders', async (req, res) => {
+  app.delete('/api/projects/:id/folders', publicFileMutationHandler(ctx.publicFileMutations, async (req, res) => {
     try {
       const { path: folderPath } = req.body || {};
       if (typeof folderPath !== 'string' || !folderPath.trim()) {
@@ -6693,19 +6809,22 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         project.id,
         'writeFiles',
       )) return;
-      await deleteProjectFolder(
-        PROJECTS_DIR,
-        req.params.id,
-        folderPath,
-        project.metadata,
-      );
+      const target = await resolveProjectDeletePath(PROJECTS_DIR, project.id, folderPath, project.metadata);
+      if (!target.name) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'target must be a non-root folder');
+      }
+      await withCommentFileDeletion(ctx.stopPublicFilesBeforeDelete, project.id, { folderPath: target.name }, async () => {
+        if (!(await ctx.node.fs.promises.stat(target.filePath)).isDirectory()) throw new Error('target must be a non-root folder');
+        await deleteProjectFolder(PROJECTS_DIR, req.params.id, folderPath, project.metadata);
+      });
+      deleteWorkspaceArtifactsInFolder(db, project.id, target.name);
       /** @type {import('@open-design/contracts').DeleteProjectFolderResponse} */
       const body = { ok: true };
       res.json(body);
     } catch (err: any) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
     }
-  });
+  }));
 
   app.get('/api/projects/:id/design-system-package-audit', async (req, res) => {
     try {
@@ -7005,6 +7124,12 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       );
       const skipHtmlPreviewBridge =
         /^text\/html(?:;|$)/i.test(meta.mime) && meta.size > PREVIEW_URL_GUARD_MAX_HTML_BYTES;
+      // Large HTML keeps its original streamed GET path. The existing cover
+      // HEAD still needs actual identity, including self-contained video sources.
+      if (skipHtmlPreviewBridge && req.method === 'HEAD') {
+        const file = await readProjectFile(PROJECTS_DIR, projectId, relPath, project?.metadata);
+        res.setHeader(MOTION_PREVIEW_OUTPUT_HEADER, isMotionVideoComposition(file.buffer.toString('utf8')) ? 'video' : 'html');
+      }
 
       await sendProjectFile(
         req,
@@ -7022,10 +7147,15 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
             projectsRoot: PROJECTS_DIR,
             readProjectFile,
           });
+          if (/^text\/html(?:;|$)/i.test(file.mime)) {
+            const html = Buffer.isBuffer(transformed) ? transformed.toString('utf8') : String(transformed);
+            res.setHeader(MOTION_PREVIEW_OUTPUT_HEADER, isMotionVideoComposition(html) ? 'video' : 'html');
+          }
           const bridged = applyUrlPreviewBridgesToHtml(
             transformed,
             file.mime,
             req.query.odPreviewBridge,
+            req.query.odMotionPreview,
           );
           const workspaceId = typeof req.query.workspaceId === 'string'
             ? req.query.workspaceId
@@ -7123,6 +7253,10 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       );
       const skipPoweredTransform =
         /^text\/html(?:;|$)/i.test(meta.mime) && meta.size > PREVIEW_URL_GUARD_MAX_HTML_BYTES;
+      if (skipPoweredTransform && req.method === 'HEAD') {
+        const file = await readProjectFile(PROJECTS_DIR, projectId, relPath, project?.metadata);
+        res.setHeader(MOTION_PREVIEW_OUTPUT_HEADER, isMotionVideoComposition(file.buffer.toString('utf8')) ? 'video' : 'html');
+      }
       await sendProjectFile(
         req,
         res,
@@ -7139,7 +7273,11 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
             projectsRoot: PROJECTS_DIR,
             readProjectFile,
           });
-          return applyUrlPreviewBridgesToHtml(transformed, file.mime, req.query.odPreviewBridge);
+          if (/^text\/html(?:;|$)/i.test(file.mime)) {
+            const html = Buffer.isBuffer(transformed) ? transformed.toString('utf8') : String(transformed);
+            res.setHeader(MOTION_PREVIEW_OUTPUT_HEADER, isMotionVideoComposition(html) ? 'video' : 'html');
+          }
+          return applyUrlPreviewBridgesToHtml(transformed, file.mime, req.query.odPreviewBridge, req.query.odMotionPreview);
         },
       );
     } catch (err: any) {
@@ -7153,7 +7291,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     }
   });
 
-  app.delete(/^\/api\/projects\/([^/]+)\/raw\/(.+)$/u, async (req, res) => {
+  app.delete(/^\/api\/projects\/([^/]+)\/raw\/(.+)$/u, publicFileMutationHandler(ctx.publicFileMutations, async (req, res) => {
     try {
       const params = req.params as unknown as { 0?: string; 1?: string };
       const projectId = String(params[0] ?? '');
@@ -7173,7 +7311,10 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         project.id,
         'writeFiles',
       )) return;
-      await deleteProjectFile(PROJECTS_DIR, projectId, rawSplat, project?.metadata);
+      const target = await resolveProjectDeletePath(PROJECTS_DIR, projectId, rawSplat, project?.metadata);
+      await withCommentFileDeletion(ctx.stopPublicFilesBeforeDelete, projectId, target.name, async () => {
+        await deleteProjectFile(PROJECTS_DIR, projectId, rawSplat, project?.metadata);
+      });
       await markProjectFileVersionStoreDeleted(PROJECTS_DIR, projectId, rawSplat, project?.metadata);
       // Tombstone, not delete: an HTML card must be able to say "the current
       // file is gone" rather than silently opening whatever later takes the
@@ -7192,10 +7333,13 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         res,
         status,
         status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-        String(err),
+        // Never expose filesystem error messages: they contain daemon-owned paths.
+        status === 404 ? 'file not found'
+          : err instanceof ProjectPublicFileStopPendingError ? 'PUBLIC_FILE_STOP_PENDING'
+          : 'file could not be deleted',
       );
     }
-  });
+  }));
 
   app.get('/api/projects/:id/files/:name/preview', async (req, res) => {
     try {
@@ -7270,7 +7414,9 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       // one would only manufacture history that never existed, inside a
       // project the member is told they cannot modify. The read itself is
       // never refused: browsing history stays open (飞书 recvq56vFjQKfT).
-      if (workingFileContent !== null && versions.length === 0
+      // Passive preparation-proof reads must never manufacture history.
+      // Default history browsing retains the existing authorized bootstrap.
+      if (req.query.bootstrap !== '0' && workingFileContent !== null && versions.length === 0
         && await requestCanWriteWorkspaceProject(
           req,
           getWorkspaceProject,
@@ -7401,6 +7547,39 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
         String(err?.message || err),
       );
+    }
+  });
+
+  // Explicit authorized source mutation; preview/comment permissions never call this.
+  app.post(/^\/api\/projects\/([^/]+)\/files\/(.+)\/comment-identities\/prepare$/u, async (req, res) => {
+    try {
+      if (!req.get('x-od-workspace-id')?.trim() || !req.get('x-od-workspace-member-id')?.trim()) {
+        return sendApiError(res, 403, 'WORKSPACE_CONTEXT_REQUIRED', 'Authenticated workspace source-edit authority required');
+      }
+      const projectId = String(req.params[0] ?? '');
+      const fileName = String(req.params[1] ?? '');
+      if (rejectInternalVersionPath(res, fileName)) return;
+      const project = getProject(db, projectId);
+      if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      const authority = await ctx.verifyWorkspaceRequestAuthority?.(req);
+      if (!authority) return sendApiError(res, 503, 'WORKSPACE_AUTHORITY_UNAVAILABLE', 'Source-edit authority could not be verified');
+      if (!authority.ok) return sendApiError(res, authority.status, authority.code, authority.message);
+      const verified = authority.context;
+      const resource = getWorkspaceProject(db, verified.workspaceId, project.id);
+      if (!resource || verified.workspaceId !== req.get('x-od-workspace-id')?.trim() ||
+          verified.workspaceMemberId !== req.get('x-od-workspace-member-id')?.trim() ||
+          !workspaceResourceAccess(resource, workspaceResourceContextFromVerified(verified)).canMutate) {
+        return sendApiError(res, 403, 'WORKSPACE_PROJECT_PERMISSION_DENIED', 'Verified source-write permission required');
+      }
+      if (!await enforceWorkspaceProjectMutation(
+        req, res, sendApiError, getWorkspaceProject, getWorkspaceProjectByProjectId,
+        db, project.id, 'writeFiles',
+      )) return;
+      const busy = () => ctx.isProjectEditingBusy?.(project.id) ?? true;
+      res.json(await prepareCommentIdentity(PROJECTS_DIR, project.id, fileName, req.body, project.metadata, busy));
+    } catch (err) {
+      if (err instanceof CommentPreparationError) return sendApiError(res, err.status, err.code, err.message);
+      sendApiError(res, 500, 'COMMENT_PREPARATION_FAILED', 'Source save or version verification failed; reload source before explicitly retrying. No rollback was attempted.');
     }
   });
 
@@ -7563,9 +7742,10 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         next();
       });
     },
-    async (req, res) => {
+    publicFileMutationHandler(ctx.publicFileMutations, async (req, res) => {
       try {
-        const uploadProject = getProject(db, req.params.id);
+        const projectId = typeof req.params.id === 'string' ? req.params.id : '';
+        const uploadProject = getProject(db, projectId);
         const cleanupRejectedUpload = () => {
           if (req.file?.path) fs.promises.unlink(req.file.path).catch(() => {});
         };
@@ -7580,13 +7760,13 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           getWorkspaceProject,
           getWorkspaceProjectByProjectId,
           db,
-          req.params.id,
+          projectId,
           'writeFiles',
         )) {
           cleanupRejectedUpload();
           return;
         }
-        await ensureProject(PROJECTS_DIR, req.params.id, uploadProject?.metadata);
+        await ensureProject(PROJECTS_DIR, projectId, uploadProject?.metadata);
         if (req.file) {
           try {
             const buf = await fs.promises.readFile(req.file.path);
@@ -7614,7 +7794,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
                 : undefined;
               const meta = await writeProjectFile(
                 PROJECTS_DIR,
-                req.params.id,
+                projectId,
                 desiredName,
                 buf,
                 {},
@@ -7643,7 +7823,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
             const { meta, versionCapture } = uploadProject && requestedSource
               ? await withProjectFileVersionLock(
                 PROJECTS_DIR,
-                req.params.id,
+                projectId,
                 desiredName,
                 uploadProject.metadata,
                 (versionLock) => writeAndCapture(versionLock),
@@ -7715,14 +7895,14 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           const meta = artifact === true
             ? await createProjectArtifactFile({
               projectsRoot: PROJECTS_DIR,
-              projectId: req.params.id,
+              projectId: projectId,
               input: { name, content, encoding, artifactManifest },
               metadata: uploadProject?.metadata,
               writeProjectFile,
             })
             : await writeProjectFile(
               PROJECTS_DIR,
-              req.params.id,
+              projectId,
               name,
               buf,
               {
@@ -7761,7 +7941,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         const { meta, versionCapture } = uploadProject && requestedSource
           ? await withProjectFileVersionLock(
             PROJECTS_DIR,
-            req.params.id,
+            projectId,
             desiredName,
             uploadProject.metadata,
             (versionLock) => writeAndCapture(versionLock),
@@ -7805,17 +7985,18 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         }
         sendApiError(res, 500, 'INTERNAL_ERROR', 'upload failed');
       }
-    },
+    }),
   );
 
-  app.post('/api/projects/:id/files/rename', async (req, res) => {
+  app.post('/api/projects/:id/files/rename', publicFileMutationHandler(ctx.publicFileMutations, async (req, res) => {
     try {
+      const projectId = typeof req.params.id === 'string' ? req.params.id : '';
       const { from, to } = req.body || {};
       if (typeof from !== 'string' || typeof to !== 'string') {
         return sendApiError(res, 400, 'BAD_REQUEST', 'from and to required');
       }
       if (rejectInternalVersionPath(res, from) || rejectInternalVersionPath(res, to)) return;
-      const project = getProject(db, req.params.id);
+      const project = getProject(db, projectId);
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
@@ -7829,16 +8010,23 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         project.id,
         'writeFiles',
       )) return;
+      // Use the exact validation/sanitization of renameProjectFile BEFORE any
+      // filesystem, version-store, artifact or alias mutation.
+      const oldName = validateProjectPath(from);
+      const newName = sanitizePath(to);
+      const tracked = trackedCommentFilePaths(db, projectId).some(filePath =>
+        [oldName, newName].some(name => filePath === name || filePath.startsWith(name + '/')));
+      if (tracked) return sendApiError(res, 409, 'CONFLICT', 'COMMENT_FILE_TRACKED_RENAME_UNSUPPORTED');
       const result = await renameProjectFile(
         PROJECTS_DIR,
-        req.params.id,
-        from,
-        to,
+        projectId,
+        oldName,
+        newName,
         project?.metadata,
       );
       await renameProjectFileVersionStore(
         PROJECTS_DIR,
-        req.params.id,
+        projectId,
         result.oldName,
         result.newName,
         project?.metadata,
@@ -7848,7 +8036,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       // and stays put, so an HTML card keeps opening the renamed latest while
       // an image card keeps opening its own frozen bytes.
       try {
-        renameWorkspaceArtifactPath(db, req.params.id, result.oldName, result.newName);
+        renameWorkspaceArtifactPath(db, projectId, result.oldName, result.newName);
       } catch (error) {
         console.warn('[chat-artifacts] rename bookkeeping failed', error);
       }
@@ -7865,10 +8053,13 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       }
       sendApiError(res, 400, 'BAD_REQUEST', message);
     }
-  });
+  }));
 
-  app.delete('/api/projects/:id/files/:name', async (req, res) => {
+  app.delete('/api/projects/:id/files/:name', publicFileMutationHandler(ctx.publicFileMutations, async (req, res) => {
     try {
+      if (typeof req.params.id !== 'string' || typeof req.params.name !== 'string') {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'project and file path are required');
+      }
       if (rejectInternalVersionPath(res, req.params.name)) return;
       const delProject = getProject(db, req.params.id);
       if (!delProject) {
@@ -7884,7 +8075,10 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         delProject.id,
         'writeFiles',
       )) return;
-      await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params.name, delProject?.metadata);
+      const target = await resolveProjectDeletePath(PROJECTS_DIR, req.params.id, req.params.name, delProject?.metadata);
+      await withCommentFileDeletion(ctx.stopPublicFilesBeforeDelete, delProject.id, target.name, async () => {
+        await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params.name, delProject?.metadata);
+      });
       await markProjectFileVersionStoreDeleted(PROJECTS_DIR, req.params.id, req.params.name, delProject?.metadata);
       try {
         deleteWorkspaceArtifact(db, req.params.id, req.params.name);
@@ -7900,10 +8094,13 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         res,
         status,
         status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-        String(err),
+        // Never expose filesystem error messages: they contain daemon-owned paths.
+        status === 404 ? 'file not found'
+          : err instanceof ProjectPublicFileStopPendingError ? 'PUBLIC_FILE_STOP_PENDING'
+          : 'file could not be deleted',
       );
     }
-  });
+  }));
 
 }
 
@@ -8000,7 +8197,7 @@ export function registerProjectUploadRoutes(app: Express, ctx: RegisterProjectUp
         /** @type {import('@open-design/contracts').UploadProjectFilesResponse} */
         const body = { files: out };
         res.json(body);
-      } catch (err: any) {
+      } catch {
         sendApiError(res, 500, 'INTERNAL_ERROR', 'upload failed');
       }
     },

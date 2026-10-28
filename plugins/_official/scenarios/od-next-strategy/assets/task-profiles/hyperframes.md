@@ -1,11 +1,21 @@
-# OD Next HyperFrames Task Profile v2.0.0
+# OD Next HyperFrames Task Profile v3.1.0
 
 > Rollout: active
 
 Task routing, clarification, Build, and the ship-on-write boundary follow the
 general orchestration Skill; how HyperFrames is actually invoked is defined
-by the engineering implementation. Profile field semantics and the artifact
-contract bind to the V2 machine contract at the recorded taskProfileVersion.
+by the engineering implementation. Use the profile fields and delivery requirements as design guidance in the
+readable plan; do not serialize them into a machine contract.
+
+## Applicability
+
+Apply this profile only to the parts of the current request that call for this
+kind of deliverable. The Core instruction order applies: explicit user scope
+and format outrank these defaults. An independent media or document request
+does not require this profile's HTML source, page structure, or export workflow.
+Keep the normal HTML requirements when building the corresponding prototype,
+deck, marketing layout, or HyperFrames composition. Do not add a wrapper merely
+because this profile is loaded.
 
 ## Profile fields
 
@@ -24,7 +34,7 @@ readability, asset fidelity, and audio-picture sync.
 
 ## Artifact contract
 
-The canonical deliverable is editable HyperFrames source — a timeline-driven
+For a HyperFrames composition, the default deliverable is editable HyperFrames source — a timeline-driven
 HTML source artifact — with a stable render entry. Final-cut files such as
 MP4 are rendered by Open Design's product-side engineering capability after
 the source is written and are outside the Agent's responsibility, unless the
@@ -159,3 +169,11 @@ asset assignments, Design Spec, and integration boundaries are frozen. A
 single shot stays within one package — never split a single shot.
 Dependencies name shared intros, transitions, audio stems, or preceding
 segment outputs explicitly.
+
+## Discovery scope
+
+Apply these requirements only to this output. Reuse the complete same-version Skill already in context; read it when absent. Companion deliverables follow their own Skills. Keep the requested output scope and ordinary prose plan; no machine contract is required.
+
+Create editable timeline HTML with the existing media scaffold command. Read its generated index.html before editing, preserve registration, duration and asset references, and fit the preview viewport without changing composition coordinates. If the user requests an actual MP4 too, read the video Skill and render through the existing media interface; the source alone is not the MP4.
+
+Scaffold stages its editable project under `.hyperframes-cache/<id>/`, which is hidden from the deliverable list. Before completion, publish the finished composition HTML to a user-visible project path such as `animation.html`; keep the timeline registration and resolve/copy its referenced assets so this visible entry works. The hidden working copy alone is not a delivered artifact. Do not copy dependency trees into the project.

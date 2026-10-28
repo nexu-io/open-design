@@ -30,6 +30,12 @@ export function useProjectDetail(
   workspaceContext: WorkspaceCollabContext | null = null,
   persistedProjectWorkspaceId?: string | null,
   initialDetail?: ProjectDetailSeed | null,
+  /**
+   * False while the project row does not exist on the daemon yet (a Home send
+   * whose create has not answered, OPEND-3334): no read is made and the state
+   * stays loading. Flipping it true starts the first read.
+   */
+  enabled = true,
 ): ProjectDetailState {
   const initialDetailCanSeed = Boolean(
     initialDetail?.project.id === projectId
@@ -114,6 +120,7 @@ export function useProjectDetail(
   );
 
   useEffect(() => {
+    if (!enabled) return;
     if (initialDetailCanSeed && !initialDetailConsumedRef.current) {
       initialDetailConsumedRef.current = true;
       return;
@@ -121,7 +128,7 @@ export function useProjectDetail(
     const controller = new AbortController();
     void fetchOnce(controller.signal);
     return () => controller.abort();
-  }, [fetchOnce, initialDetailCanSeed]);
+  }, [enabled, fetchOnce, initialDetailCanSeed]);
 
   const refresh = useCallback(() => fetchOnce(), [fetchOnce]);
 

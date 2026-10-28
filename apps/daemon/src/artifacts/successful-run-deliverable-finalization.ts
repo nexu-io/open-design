@@ -29,8 +29,8 @@ export function deliverableSyntaxFinalizerEnabled(
 
 /**
  * Resolve the canonical output and run the syntax finalizer for every
- * successful physical Run. Strategy protocol state is intentionally absent
- * from this boundary: a complete HTML artifact is sufficient evidence.
+ * successful physical Run. Media export validity is owned by the exporter,
+ * independent of task orchestration and model-authored plans.
  */
 export async function finalizeSuccessfulRunDeliverable(input: {
   artifactCount: number;
@@ -43,6 +43,8 @@ export async function finalizeSuccessfulRunDeliverable(input: {
   repairState?: DeliverableSyntaxRepairState;
   touchedPaths?: string[];
   baselineEntryFile?: string;
+  allowIndependentOutput?: boolean;
+  allowMultipleOutputCandidates?: boolean;
   syntaxFinalizerEnabled?: boolean;
 }): Promise<SuccessfulRunDeliverableFinalizationResult> {
   const deliverable = await validateRunDeliverable({
@@ -55,6 +57,8 @@ export async function finalizeSuccessfulRunDeliverable(input: {
     artifactCount: input.artifactCount,
     ...(input.touchedPaths ? { touchedPaths: input.touchedPaths } : {}),
     ...(input.baselineEntryFile ? { baselineEntryFile: input.baselineEntryFile } : {}),
+    ...(input.allowIndependentOutput ? { allowIndependentOutput: true } : {}),
+    ...(input.allowMultipleOutputCandidates ? { allowMultipleOutputCandidates: true } : {}),
   });
   if (
     !deliverable.valid

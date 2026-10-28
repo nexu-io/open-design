@@ -105,7 +105,7 @@ describe('EntryNavRail sign-out (recvqbkcLqIFH7)', () => {
     );
 
     expect(screen.getByTestId('entry-cloud-signin-tip')).toBeTruthy();
-    expect(screen.getByText('登录')).toBeTruthy();
-    expect(screen.getByText('登录即可享受云端协作')).toBeTruthy();
+    expect(screen.getByText('注册 / 登录')).toBeTruthy();
+    expect(screen.getByText('注册即领免费额度')).toBeTruthy();
   });
 });

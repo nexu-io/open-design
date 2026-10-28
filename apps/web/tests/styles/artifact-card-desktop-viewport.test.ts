@@ -64,7 +64,7 @@ function desktopScaledFrame(css: string, frameSelector: string) {
   const body = rule(css, frameSelector);
   const width = /(^|;)\s*width:\s*(\d+)px/.exec(body);
   const height = /(^|;)\s*height:\s*(\d+)px/.exec(body);
-  const scale = /transform:\s*scale\(\s*calc\(\s*100cqw\s*\/\s*(\d+)px/.exec(body);
+  const scale = /scale\((?:min\()?\s*calc\(\s*100cqw\s*\/\s*(\d+)px/.exec(body);
   return {
     body,
     width: width ? Number(width[2]) : null,
@@ -93,17 +93,24 @@ describe('产物卡缩略图的渲染视口', () => {
     expect(frame.width).toBeGreaterThanOrEqual(DESKTOP_VIEWPORT_FLOOR);
   });
 
-  it('缩小走容器查询,除数就是那个固定宽度 —— 两个数不许各写各的', () => {
+  it('按宽、高共同缩放并居中,除数与固定视口一致', () => {
     const frame = desktopScaledFrame(tools, '.artifact-card-frame');
-    expect(frame.scaleDivisor, '.artifact-card-frame 的 transform 不是 scale(calc(100cqw / <宽>px ...))').not.toBeNull();
+    expect(frame.scaleDivisor).not.toBeNull();
     expect(frame.scaleDivisor).toBe(frame.width);
-    expect(frame.body).toContain('transform-origin');
+    expect(frame.body).toContain('scale(min(');
+    expect(frame.body).toContain(`100cqh / var(--artifact-frame-height, ${frame.height}px)`);
+    expect(frame.body).toContain('translate(-50%, -50%)');
+    expect(frame.body).toContain('transform-origin: center');
   });
 
-  it('固定视口的宽高比 = 卡面的宽高比,所以按宽度缩放两个方向都正好铺满', () => {
+  it('普通 HTML 的桌面视口比例仍为 16:10,外框有统一高度上限', () => {
     const thumb = rule(tools, '.artifact-card-thumb');
     const ratio = /aspect-ratio:\s*(\d+)\s*\/\s*(\d+)/.exec(thumb);
     expect(ratio, '.artifact-card-thumb 没有 aspect-ratio').toBeTruthy();
+    // An auto width can shrink to 384px when the 16:10 box reaches 240px,
+    // leaving an asymmetric gap inside a 406px single card.
+    expect(thumb).toContain('width: 100%');
+    expect(thumb).toContain('max-height: var(--chat-artifact-max-height, 240px)');
     const [w, h] = [Number(ratio![1]), Number(ratio![2])];
     const frame = desktopScaledFrame(tools, '.artifact-card-frame');
     expect(frame.height, '.artifact-card-frame 没有固定的 px 高度').not.toBeNull();
@@ -118,7 +125,7 @@ describe('产物卡缩略图的渲染视口', () => {
      * 实测:去掉这一行,`.artifact-card-frame` 的 scale 从 0.140 变成 1.111,
      * 1440px 的页面在一张 202px 的卡里铺成 1600px 宽 —— 整个卡面只剩左上角。
      */
-    expect(rule(tools, '.artifact-card-thumb')).toContain('container-type: inline-size');
+    expect(rule(tools, '.artifact-card-thumb')).toContain('container-type: size');
   });
 
   it('和首页项目网格是同一套写法(那边是 16/9 的 1280x720)', () => {

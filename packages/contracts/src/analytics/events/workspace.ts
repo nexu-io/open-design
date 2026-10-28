@@ -68,6 +68,7 @@ export interface AccountMenuClickProps extends TrackingWorkspaceDimensions {
     | 'feature_request'
     | 'github'
     | 'discord'
+    | 'feishu'
     | 'twitter'
     | 'email'
     | 'logout';
@@ -137,6 +138,10 @@ export interface CommunityTemplateClickProps extends TrackingWorkspaceDimensions
   resource_scope?: TrackingWorkspaceScope;
   filter_type?: 'category' | 'subtype';
   filter_value?: string;
+  /** use_prompt only: the surface whose Use control was clicked. */
+  use_source?: 'card' | 'detail_modal';
+  /** use_prompt only: plain Use, or Use that also loads the template prompt. */
+  use_action?: 'use' | 'use_with_query';
 }
 
 export interface ExtensionMarketplaceClickProps extends TrackingWorkspaceDimensions {
@@ -226,6 +231,8 @@ export interface ProjectCommentCreateResultProps extends TrackingWorkspaceDimens
   result: 'success';
   target_project_relation: TrackingProjectRelation;
   comment_level: 'top_level' | 'reply';
+  /** Saved comment from the existing successful create result. */
+  comment_id?: string;
   project_id: string;
   project_kind: TrackingProjectKind | null;
 }

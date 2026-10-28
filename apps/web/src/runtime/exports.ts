@@ -25,6 +25,7 @@ import {
   captureHostPage,
   isOpenDesignHostAvailable,
   printHostPdf,
+  subscribeHostDownloads,
 } from '@open-design/host';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import {
@@ -82,6 +83,33 @@ function triggerDownload(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
+export type DownloadExportResult = 'desktop' | 'cancelled' | 'download';
+
+/** Keep the native save result associated with this exact blob, including cancellation. */
+async function saveExportDownload(blob: Blob, filename: string): Promise<DownloadExportResult> {
+  const url = URL.createObjectURL(blob);
+  let unsubscribe: (() => void) | null = null;
+  const completion = new Promise<DownloadExportResult>((resolve, reject) => {
+    unsubscribe = subscribeHostDownloads(result => {
+      if (result.url !== url) return;
+      if (result.state === 'interrupted') reject(new Error('Export download interrupted'));
+      else resolve(result.state === 'completed' ? 'desktop' : 'cancelled');
+    });
+    if (!unsubscribe) resolve('download');
+  });
+  try {
+    triggerHrefDownload(url, filename);
+    return await completion;
+  } finally {
+    if (unsubscribe) {
+      (unsubscribe as () => void)();
+      URL.revokeObjectURL(url);
+    } else {
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    }
+  }
+}
+
 export function exportAsHtml(html: string, title: string): void {
   const doc = buildSrcdoc(html);
   const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
@@ -94,7 +122,7 @@ export async function exportProjectAsHtml(opts: {
   fallbackTitle: string;
   versionId?: string;
   workspaceContext?: WorkspaceCollabContext | null;
-}): Promise<void> {
+}): Promise<DownloadExportResult> {
   const url = `/api/projects/${encodeURIComponent(opts.projectId)}/export/html`;
   const resp = await fetch(url, {
     method: 'POST',
@@ -121,7 +149,7 @@ export async function exportProjectAsHtml(opts: {
   const blob = await resp.blob();
   const filename = filenameFromContentDisposition(resp)
     ?? `${safeFilename(opts.fallbackTitle, 'artifact')}.html`;
-  triggerDownload(blob, filename);
+  return saveExportDownload(blob, filename);
 }
 
 // A file is treated as a preview-chrome wrapper only when it lives inside
@@ -360,7 +388,7 @@ ${list(assetFiles)}
 `;
 }
 
-export function exportAsZip(html: string, title: string): void {
+export function exportAsZip(html: string, title: string): Promise<DownloadExportResult> {
   const doc = buildSrcdoc(html);
   const slug = safeFilename(title, 'artifact');
   const blob = buildZip([
@@ -382,7 +410,7 @@ export function exportAsZip(html: string, title: string): void {
       }),
     },
   ]);
-  triggerDownload(blob, `${slug}.zip`);
+  return saveExportDownload(blob, `${slug}.zip`);
 }
 
 export function exportAsMd(source: string, title: string): void {
@@ -628,7 +656,7 @@ type WindowWithSaveFilePicker = Window & {
 export type ImageExportTarget = {
   filename: string;
   method: 'download' | 'picker';
-  save: (blob: Blob) => Promise<void> | void;
+  save: (blob: Blob) => Promise<void | DownloadExportResult> | void;
 };
 
 type ImageExportTargetOptions = {
@@ -644,9 +672,7 @@ function downloadImageExportTarget(filename: string): ImageExportTarget {
   return {
     filename,
     method: 'download',
-    save: (blob) => {
-      triggerDownload(blob, filename);
-    },
+    save: (blob) => saveExportDownload(blob, filename),
   };
 }
 
@@ -806,7 +832,7 @@ export async function exportProjectAsPdf(opts: {
     if (!resp.ok) throw new Error(`desktop PDF export unavailable (${resp.status})`);
     const body = await resp.json().catch(() => ({}));
     if (body?.canceled === true) return 'cancelled';
-    if (body && body.ok === false) throw new Error(body.error || 'desktop PDF export failed');
+    if (body?.ok !== true) throw new Error(body?.error || 'desktop PDF export failed');
     return 'desktop';
   } catch (err) {
     console.warn('[exportProjectAsPdf] falling back to programmatic PDF:', err);
@@ -878,7 +904,7 @@ export async function exportProjectAsZip(opts: {
   fallbackTitle: string;
   versionId?: string;
   workspaceContext?: WorkspaceCollabContext | null;
-}): Promise<void> {
+}): Promise<DownloadExportResult> {
   if (opts.versionId) {
     const segments = opts.filePath
       .split('/')
@@ -894,12 +920,10 @@ export async function exportProjectAsZip(opts: {
           })
         : await fetch(url);
       if (!resp.ok) throw new Error(`version html export request failed (${resp.status})`);
-      exportAsZip(await resp.text(), opts.fallbackTitle);
-      return;
+      return exportAsZip(await resp.text(), opts.fallbackTitle);
     } catch (err) {
       console.warn('[exportProjectAsZip] falling back to single-file ZIP:', err);
-      exportAsZip(opts.fallbackHtml, opts.fallbackTitle);
-      return;
+      return exportAsZip(opts.fallbackHtml, opts.fallbackTitle);
     }
   }
   const root = archiveRootFromFilePath(opts.filePath);
@@ -914,10 +938,10 @@ export async function exportProjectAsZip(opts: {
       : await fetch(url);
     if (!resp.ok) throw new Error(`archive request failed (${resp.status})`);
     const blob = await resp.blob();
-    triggerDownload(blob, archiveFilenameFrom(resp, opts.fallbackTitle, root));
+    return saveExportDownload(blob, archiveFilenameFrom(resp, opts.fallbackTitle, root));
   } catch (err) {
     console.warn('[exportProjectAsZip] falling back to single-file ZIP:', err);
-    exportAsZip(opts.fallbackHtml, opts.fallbackTitle);
+    return exportAsZip(opts.fallbackHtml, opts.fallbackTitle);
   }
 }
 
@@ -947,7 +971,7 @@ export async function exportProjectAsZip(opts: {
 export type ExportUnavailableReason = 'no-renderer' | 'unreachable';
 
 export type ProjectScreenshotExportResult =
-  | { ok: true }
+  | { ok: true; completion?: DownloadExportResult }
   | { ok: false; unavailable: true; reason: ExportUnavailableReason }
   | { ok: false; error: string };
 
@@ -1027,8 +1051,8 @@ export async function exportProjectAsPptx(opts: {
     const base = opts.fileName.replace(/^.*\//, '').replace(/\.html?$/i, '');
     const slug = safeFilename(opts.title || base, 'deck');
     const fromHeader = filenameFromContentDisposition(resp);
-    triggerDownload(blob, fromHeader || `${slug}.${format}`);
-    return { ok: true };
+    const completion = await saveExportDownload(blob, fromHeader || `${slug}.${format}`);
+    return completion === 'download' ? { ok: true } : { ok: true, completion };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : 'export download failed' };
   }

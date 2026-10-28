@@ -79,6 +79,7 @@ describe("mac standalone prebundle policy", () => {
       "blake3-wasm",
       "fsevents",
       "hyperframes",
+      "gsap",
       "node-pty",
     ]);
     expect(MAC_PREBUNDLE_POLICIES.daemonSidecar.externals).toEqual([
@@ -88,6 +89,7 @@ describe("mac standalone prebundle policy", () => {
       "blake3-wasm",
       "fsevents",
       "hyperframes",
+      "gsap",
       "node-pty",
     ]);
     expect(MAC_PREBUNDLE_POLICIES.webSidecar.externals).toEqual(["@open-design/sidecar"]);
@@ -100,6 +102,7 @@ describe("mac standalone prebundle policy", () => {
       "better-sqlite3": "12.10.0",
       "blake3-wasm": "2.1.5",
       "hyperframes": "0.8.1",
+      "gsap": "3.14.2",
       "node-pty": "1.1.0",
       "sharp": "0.35.3",
     });

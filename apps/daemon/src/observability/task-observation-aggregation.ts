@@ -14,6 +14,7 @@ import {
   type PromptBoundaryEvidenceV1,
   type SafeDeliverableSyntaxTelemetryV1,
   type StrategyInputStageV2,
+  type StrategySettlementFactsV2,
 } from '@open-design/contracts';
 import type Database from 'better-sqlite3';
 import type { EvalContextV2 } from './eval-context.js';
@@ -93,7 +94,8 @@ export interface StrategyTaskObservationRootV1 {
   taskExecutionId: string;
   projectId: string;
   conversationId: string;
-  status: StrategyTaskOutcome;
+  status: StrategyTaskOutcome | 'failed';
+  roundSettlements?: Array<{ runId: string; reason: string; facts?: StrategySettlementFactsV2 }>;
   route: StrategyTaskExecutionRecord['route'];
   executionMode: StrategyTaskExecutionRecord['executionMode'];
   taskType: string | null;
@@ -647,7 +649,7 @@ export function aggregateStrategyTaskObservations(input: {
         knownChildUsage: usageSummary(stageChildren),
       };
     });
-  const taskType = input.taskType ?? input.task.planContract?.taskProfile.taskType ?? null;
+  const taskType = input.taskType ?? input.task.planContract?.taskProfile?.taskType ?? null;
   const limitations = aggregateLimitations({
     missingRunIds,
     children,
@@ -655,6 +657,10 @@ export function aggregateStrategyTaskObservations(input: {
     taskType,
   });
 
+  // Prefer the physical observation; stored settlement facts fill missing evidence only.
+  const observedTerminalStatus = taskRuns.at(-1)?.status;
+  const terminalStatus = observedTerminalStatus && observedTerminalStatus !== 'unknown'
+    ? observedTerminalStatus : input.task.runs.at(-1)?.settlementFacts?.physicalStatus;
   return {
     schema: 'open-design.strategy-task-observation/v1',
     root: {
@@ -662,7 +668,10 @@ export function aggregateStrategyTaskObservations(input: {
       taskExecutionId: input.task.taskExecutionId,
       projectId: input.task.projectId,
       conversationId: input.task.conversationId,
-      status: input.task.outcome,
+      status: input.task.outcome === 'completed' && (terminalStatus === 'failed' || terminalStatus === 'canceled')
+        ? terminalStatus : input.task.outcome,
+      roundSettlements: input.task.runs.flatMap(run => run.settlementReason
+        ? [{ runId: run.runId, reason: run.settlementReason, ...(run.settlementFacts ? { facts: run.settlementFacts } : {}) }] : []),
       route: input.task.route,
       executionMode: input.task.executionMode,
       taskType,
@@ -1130,6 +1139,7 @@ export function buildLegacyTaskObservationPayload(
       executionMode: aggregate.root.executionMode,
       taskType: aggregate.root.taskType,
       outcome: aggregate.root.status,
+      roundSettlements: aggregate.root.roundSettlements,
       strategyId: aggregate.root.strategyId,
       strategyVersion: aggregate.root.strategyVersion,
       strategyPackageHash: aggregate.root.strategyPackageHash,

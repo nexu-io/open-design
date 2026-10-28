@@ -25,7 +25,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { existsSync, realpathSync } from 'node:fs';
-import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -114,6 +114,16 @@ async function readJsonFile<T>(filePath: string): Promise<T | null> {
     return JSON.parse(await readFile(filePath, 'utf8')) as T;
   } catch {
     return null;
+  }
+}
+
+/** Restore owner write access to frozen directories only during fixture teardown. */
+async function makeFixtureDirectoriesWritable(target: string): Promise<void> {
+  const stat = await lstat(target);
+  if (stat.isSymbolicLink() || !stat.isDirectory()) return;
+  await chmod(target, 0o700);
+  for (const entry of await readdir(target)) {
+    await makeFixtureDirectoriesWritable(join(target, entry));
   }
 }
 
@@ -284,6 +294,9 @@ describe.skipIf(process.platform === 'win32')('leftover agent after a daemon abo
         try { process.kill(-spawned.marker.pid, 'SIGKILL'); } catch { /* gone */ }
         try { process.kill(spawned.marker.grandchildPid, 'SIGKILL'); } catch { /* gone */ }
       }
+      // OD Next freezes Run input directories as 0555. Both daemons are now
+      // stopped; unfreeze our owned fixture tree before recursive removal.
+      await makeFixtureDirectoriesWritable(root);
       await rm(root, { force: true, recursive: true });
     }
 

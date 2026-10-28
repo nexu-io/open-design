@@ -233,14 +233,70 @@ describe("workload convergence", () => {
     expect(stale.stderr).toContain("postinstallIntent requires convergence schema.version 10");
   });
 
-  test("keeps broad test workloads on tracked-tree inputs until their closure is proven", () => {
+  test("declares schema-v10 CI shards with trusted evidence and canonical setup plans", () => {
     const config = JSON.parse(readFileSync(
       path.join(repoRoot, ".github", "config", "convergence.json"),
       "utf8",
     )) as any;
 
-    expect(config.workflows.ci.workloads.daemon_unit_tests.inputs).toEqual(["*"]);
-    expect(config.workflows.ci.workloads.e2e_vitest.inputs).toEqual(["*"]);
+    expect(config.schema.version).toBe(10);
+    expect(config.workflows.ci.policy).toBe("ci-v2");
+    for (const shard of [1, 2, 3, 4]) {
+      const workload = config.workflows.ci.workloads[`daemon_unit_${shard}`];
+      expect(workload.inputs).toEqual(["suite://daemon"]);
+      expect(workload.postinstallIntent).toBe("ci-daemon");
+      expect(workload.success).toEqual({ [`Daemon tests (${shard}/4)`]: ["Run daemon test shard"] });
+    }
+    expect(config.workflows.ci.workloads.e2e_vitest).toMatchObject({
+      inputs: ["suite://e2e-runtime"],
+      postinstallIntent: "ci-e2e",
+      success: { "E2E Vitest": ["Prebuild workspace type declarations", "E2E Vitest"] },
+    });
+    expect(config.workflows.ci.matrices.daemon).toHaveLength(4);
+    expect(config.workflows.ci.matrices.web).toHaveLength(2);
+    expect(config.workflows.ci.matrices.ui_p0).toHaveLength(6);
+  });
+
+  test("authorizes isolated CI publication only on the repository default branch", () => {
+    const result = spawnSync("python3", ["-c", `
+import os, sys
+from unittest.mock import patch
+sys.path.insert(0, sys.argv[1])
+import convergence as c
+payload = {"repository":{"id":42,"full_name":"nexu-io/open-design","default_branch":"main"}}
+env = {"GITHUB_EVENT_NAME":"workflow_dispatch", "GITHUB_REPOSITORY":"nexu-io/open-design",
+       "GITHUB_REPOSITORY_ID":"42", "GITHUB_RUN_ID":"12", "GITHUB_RUN_ATTEMPT":"1",
+       "GITHUB_REF":"refs/heads/main"}
+with patch.dict(os.environ, env), patch("convergence.event_payload", return_value=payload):
+    context = c.producer_context(payload)
+    candidate = {**context, "workflow":"ci", "policy":"ci-v2"}
+    with patch("convergence.prepare_publication") as validation:
+        c.require_isolated_candidate(candidate)
+        validation.assert_called_once()
+    with patch.dict(os.environ, {"GITHUB_REF":"refs/heads/topic"}):
+        try: c.require_isolated_candidate(candidate)
+        except c.ConfigError: pass
+        else: raise AssertionError("accepted CI publication outside the default branch")
+`, path.dirname(convergenceScript)], { cwd: repoRoot, encoding: "utf8" });
+    expect(result.status, result.stderr).toBe(0);
+  });
+
+  test("selects the newest same-name artifact after a failed-job rerun", () => {
+    const result = spawnSync("python3", ["-c", `
+import sys
+from unittest.mock import patch
+sys.path.insert(0, sys.argv[1])
+from lib import github as g
+older = {"id": 20, "name": "handoff-convergence-ci-results", "expired": False, "created_at": "2026-09-21T08:16:09Z"}
+newer = {"id": 10, "name": "handoff-convergence-ci-results", "expired": False, "created_at": "2026-09-21T08:22:11Z"}
+with patch("lib.github.run_artifacts", return_value=[older, newer]):
+    assert g.latest_run_artifact("example/repo", 12, newer["name"])["id"] == 10
+with patch("lib.github.run_artifacts", return_value=[older, {**newer, "created_at": ""}]):
+    try: g.latest_run_artifact("example/repo", 12, newer["name"])
+    except g.GitHubError: pass
+    else: raise AssertionError("accepted artifact without creation time")
+`, path.dirname(convergenceScript)], { cwd: repoRoot, encoding: "utf8" });
+    expect(result.status, result.stderr).toBe(0);
   });
 
   test("materializes the convergence handoff from the GitHub event context", () => {
@@ -300,6 +356,70 @@ describe("workload convergence", () => {
       env: { ...process.env, GITHUB_EVENT_PATH: eventPath, GITHUB_OUTPUT: outputPath },
     });
     expect(readFileSync(outputPath, "utf8")).toContain("publish=true");
+  });
+
+  test("skips a changed producer control plane before comparing its policy", () => {
+    const fixture = createRepository();
+    const baseSha = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: fixture.root, encoding: "utf8",
+    }).trim();
+    const config = JSON.parse(readFileSync(fixture.configPath, "utf8"));
+    config.workflows.ci.policy = "test-v2";
+    writeFileSync(fixture.configPath, JSON.stringify(config));
+    writeFileSync(path.join(fixture.root, "control.txt"), "changed control");
+    execFileSync("git", ["add", "."], { cwd: fixture.root });
+    execFileSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com",
+      "commit", "-qm", "change control policy"], { cwd: fixture.root });
+    const headSha = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: fixture.root, encoding: "utf8",
+    }).trim();
+    runPlan(fixture);
+
+    const eventPath = path.join(fixture.root, "event.json");
+    const outputPath = path.join(fixture.root, "github-output.txt");
+    const handoffRoot = path.join(fixture.root, "handoff-root");
+    writeFileSync(eventPath, JSON.stringify({
+      repository: { id: 42, full_name: "example/repo" },
+      pull_request: { head: { sha: headSha }, base: { sha: baseSha } },
+    }));
+    execFileSync("python3", [
+      convergenceScript, "--root", fixture.root, "--config", fixture.configPath,
+      "handoff", "--pending", fixture.pendingPath,
+      "--products-root", path.join(fixture.root, "products"),
+      "--handoff-root", handoffRoot,
+    ], {
+      cwd: fixture.root,
+      env: {
+        ...process.env,
+        GITHUB_EVENT_NAME: "pull_request",
+        GITHUB_EVENT_PATH: eventPath,
+        GITHUB_REPOSITORY: "example/repo",
+        GITHUB_REPOSITORY_ID: "42",
+        GITHUB_RUN_ID: "12",
+        GITHUB_RUN_ATTEMPT: "1",
+        GITHUB_OUTPUT: outputPath,
+      },
+    });
+
+    execFileSync("git", ["checkout", "--detach", baseSha], { cwd: fixture.root });
+    execFileSync("git", ["remote", "add", "origin", fixture.root], { cwd: fixture.root });
+    writeFileSync(eventPath, JSON.stringify({
+      repository: { id: 42, full_name: "example/repo" },
+      workflow_run: {
+        id: 12, run_attempt: 1, name: "ci", event: "pull_request", head_sha: headSha,
+        head_repository: { full_name: "example/repo" },
+      },
+    }));
+    writeFileSync(outputPath, "");
+    execFileSync("python3", [
+      convergenceScript, "--root", fixture.root, "--config", fixture.configPath,
+      "admit", "--handoff-root", handoffRoot,
+    ], {
+      cwd: fixture.root,
+      env: { ...process.env, GITHUB_EVENT_PATH: eventPath, GITHUB_OUTPUT: outputPath },
+    });
+    expect(readFileSync(outputPath, "utf8")).toContain("publish=false");
+    expect(readFileSync(outputPath, "utf8")).toContain("reason=producer-control-plane-changed");
   });
 
   test("rejects dependency cycles and dangling suites before planning", () => {

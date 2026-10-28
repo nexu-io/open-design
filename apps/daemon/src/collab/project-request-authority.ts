@@ -211,6 +211,8 @@ export function createAuthorizeProjectRequest(deps: {
   isProjectRevoked?: (db: unknown, projectId: string) => boolean;
   /** A bound first-open placeholder may be read but is never content authority. */
   isProjectUnmaterializedPlaceholder?: (db: unknown, projectId: string) => boolean;
+  /** A receive owns the project content until its local commit finishes. */
+  isProjectReceivingContent?: (projectId: string) => boolean;
   sendApiError: (
     res: Response,
     status: number,
@@ -253,6 +255,10 @@ export function createAuthorizeProjectRequest(deps: {
         : sendApiError(res, status, code, message, details),
     });
     if (!allowed) return false;
+    if (options.mode === 'write' && options.capability !== 'comment' && deps.isProjectReceivingContent?.(projectId)) {
+      sendApiError(res, 409, 'PROJECT_BUSY', 'project is receiving cloud content');
+      return false;
+    }
     if (
       options.mode !== 'read'
       && options.capability !== 'comment'

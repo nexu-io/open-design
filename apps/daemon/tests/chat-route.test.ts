@@ -8,15 +8,16 @@ import {
   mkdtempSync,
   promises as fsp,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { delimiter, join, resolve } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
-  bufferedAntigravityGeminiFirstTokenAt,
   composeLiveInstructionPrompt,
   describeStablePromptCache,
   designSystemIdFromPluginSnapshot,
@@ -26,6 +27,8 @@ import {
   startServer,
 } from '../src/server.js';
 import { skillCwdAliasSegment } from '../src/cwd-aliases.js';
+import { amrModelLoadingCache } from '../src/runtimes/amr-model-cache.js';
+import { resetLiveModelsForTests } from '../src/runtimes/models.js';
 import { getAgentDef } from '../src/agents.js';
 import { readAppConfig, writeAppConfig } from '../src/app-config.js';
 import { readMemoryConfig, writeMemoryConfig } from '../src/memory.js';
@@ -103,6 +106,7 @@ describe('/api/chat', () => {
   let server: http.Server;
   let baseUrl: string;
   let originalMemoryConfig: Awaited<ReturnType<typeof readMemoryConfig>> | null = null;
+  const originalStrategyMode = process.env.OD_NEXT_STRATEGY_ROLLOUT;
   const originalPath = process.env.PATH;
   const originalAgentHome = process.env.OD_AGENT_HOME;
   const tempDirs: string[] = [];
@@ -144,7 +148,7 @@ describe('/api/chat', () => {
     };
   }
 
-  async function runAmrModelRequest(model: string): Promise<{
+  async function runAmrModelRequest(model: string, extraEnv: Record<string, string> = {}): Promise<{
     body: string;
     invocations: string[];
     responseOk: boolean;
@@ -158,7 +162,9 @@ describe('/api/chat', () => {
     const previousLogSetModel = process.env.FAKE_VELA_LOG_SET_MODEL;
     const previousLogPrompt = process.env.FAKE_VELA_LOG_PROMPT;
     const invocationLog = join(tmpdir(), `od-amr-model-request-${randomUUID()}.jsonl`);
+    const previousExtraEnv = Object.fromEntries(Object.keys(extraEnv).map((key) => [key, process.env[key]]));
     try {
+      Object.assign(process.env, extraEnv);
       process.env.VELA_RUNTIME_KEY = `fake-runtime-key-${randomUUID()}`;
       process.env.VELA_LINK_URL = 'https://amr-link.open-design.ai/v1';
       process.env.FAKE_VELA_INVOCATION_LOG = invocationLog;
@@ -213,6 +219,10 @@ child.on('exit', (code, signal) => {
       return { body, invocations, responseOk };
     } finally {
       rmSync(invocationLog, { force: true });
+      for (const [key, value] of Object.entries(previousExtraEnv)) {
+        if (value == null) delete process.env[key];
+        else process.env[key] = value;
+      }
       if (previousRuntimeKey == null) delete process.env.VELA_RUNTIME_KEY;
       else process.env.VELA_RUNTIME_KEY = previousRuntimeKey;
       if (previousLinkUrl == null) delete process.env.VELA_LINK_URL;
@@ -260,6 +270,8 @@ child.on('exit', (code, signal) => {
   }
 
   beforeAll(async () => {
+    // These direct-chat fixtures exercise legacy runtime transport, not Task orchestration.
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
     if (process.env.OD_DATA_DIR) {
       originalMemoryConfig = await readMemoryConfig(process.env.OD_DATA_DIR);
       await writeMemoryConfig(process.env.OD_DATA_DIR, {
@@ -292,6 +304,8 @@ child.on('exit', (code, signal) => {
   });
 
   afterAll(async () => {
+    if (originalStrategyMode == null) delete process.env.OD_NEXT_STRATEGY_ROLLOUT;
+    else process.env.OD_NEXT_STRATEGY_ROLLOUT = originalStrategyMode;
     for (const dir of tempDirs.splice(0)) {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -327,7 +341,15 @@ child.on('exit', (code, signal) => {
     expect(body).toContain('AGENT_UNAVAILABLE');
   });
 
-  it('keeps serving when delivered-session persistence has no conversation row', async () => {
+  it.each([false, true])('keeps serving without a conversation row (project bound: %s)', async (projectBound) => {
+    const projectId = projectBound ? `unbound_chat_${randomUUID()}` : undefined;
+    if (projectId) {
+      const created = await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: 'Unpersisted legacy chat' }),
+      });
+      expect(created.status).toBe(200);
+    }
     const conversationId = `missing-conversation-${randomUUID()}`;
 
     await withFakeAgent(
@@ -349,6 +371,7 @@ process.exit(0);
           body: JSON.stringify({
             agentId: 'opencode',
             conversationId,
+            ...(projectId ? { projectId } : {}),
             message: 'ask for clarification',
           }),
         });
@@ -666,6 +689,87 @@ process.stdin.on('end', () => {
             externalDirectory[`${cwd}/**`] === 'allow',
         );
         expect(allowedCwd).toBeTruthy();
+      },
+    );
+  });
+
+  it('allowlists the active skill root that lives outside the repository skills dir', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for OpenCode skill permission tests');
+    }
+
+    // #8173: the skill preamble advertises the skill's absolute root as its
+    // fallback path, but the allowlist was built from the repository `skills/`
+    // tree alone. A skill installed under the daemon data dir — the same shape
+    // as the bundled plugin folder in the report — landed outside it, so
+    // OpenCode asked for `external_directory` approval on a file OD itself told
+    // the agent to open.
+    const skillId = `od-skill-root-${randomUUID().slice(0, 8)}`;
+    const userSkillDir = join(process.env.OD_DATA_DIR, 'skills', skillId);
+    mkdirSync(join(userSkillDir, 'references'), { recursive: true });
+    writeFileSync(
+      join(userSkillDir, 'SKILL.md'),
+      `---\nname: ${skillId}\ndescription: External directory allowlist fixture.\n---\n`
+        + '# Fixture\n\nRead `references/layouts.md` before writing anything.\n',
+    );
+    writeFileSync(join(userSkillDir, 'references', 'layouts.md'), '# Layouts\n');
+    tempDirs.push(userSkillDir);
+
+    const projectId = `proj-${randomUUID()}`;
+    const markerDir = await fsp.mkdtemp(join(tmpdir(), 'od-opencode-skill-dir-'));
+    tempDirs.push(markerDir);
+    const envFile = join(markerDir, 'opencode-config-content.json');
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'OpenCode skill root permission fixture',
+        skillId,
+      }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    await withFakeAgent(
+      'opencode',
+      `
+const fs = require('node:fs');
+process.stdin.resume();
+process.stdin.on('end', () => {
+  fs.writeFileSync(${JSON.stringify(envFile)}, process.env.OPENCODE_CONFIG_CONTENT || '');
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'skill-permission-ok' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            skillId,
+            message: 'hello',
+          }),
+        });
+        expect(response.ok).toBe(true);
+        expect(await response.text()).toContain('skill-permission-ok');
+
+        const parsed = JSON.parse(readFileSync(envFile, 'utf8')) as {
+          permission?: { external_directory?: Record<string, string> };
+        };
+        const externalDirectory = parsed.permission?.external_directory ?? {};
+        const roots = new Set([userSkillDir, realpathSync(userSkillDir)]);
+        const allowedRoot = [...roots].find(
+          (root) =>
+            externalDirectory[root] === 'allow' &&
+            externalDirectory[`${root}/**`] === 'allow',
+        );
+
+        expect(allowedRoot).toBeTruthy();
       },
     );
   });
@@ -1154,6 +1258,24 @@ process.exit(1);
     expect(body).toContain('"status":"succeeded"');
   });
 
+  // AMR 0.24.1, 10/5-10/7: 9 runs from 7 users failed with "session/set_model
+  // modelId is not available" because the saved model had left the AMR catalog.
+  it('switches to the AMR catalog default when vela rejects a delisted model', async () => {
+    const { body, invocations, responseOk } = await runAmrModelRequest('claude-opus-4.8', {
+      FAKE_VELA_SET_MODEL_UNAVAILABLE: 'claude-opus-4.8',
+    });
+
+    expect(responseOk).toBe(true);
+    expect(invocations[0]).toBe('new');
+    expect(invocations[1]).toBe('set_model_rejected:claude-opus-4.8');
+    expect(invocations[2]).toMatch(/^set_model:(deepseek-v4-flash|deepseek-v3\.2)$/);
+    expect(invocations[3]).toBe('prompt');
+    expect(body).toContain('"label":"model_fallback"');
+    expect(body).toContain('claude-opus-4.8 is no longer available in AMR.');
+    expect(body).not.toContain('AMR_MODEL_UNAVAILABLE');
+    expect(body).toContain('"status":"succeeded"');
+  });
+
   it('survives transient AMR Link catalog failures without aborting the run', async () => {
     // The run preflight resolves the AMR catalog through the shared
     // AmrModelLoadingCache, which degrades to the offline `vela model preset`
@@ -1424,6 +1546,87 @@ child.on('exit', (code, signal) => {
       else process.env.FAKE_VELA_MODEL_PRESET_JSON = previousPreset;
       if (previousList == null) delete process.env.FAKE_VELA_MODEL_LIST_JSON;
       else process.env.FAKE_VELA_MODEL_LIST_JSON = previousList;
+    }
+  });
+
+  it('resolves an AMR default model from the caller catalog, not the shared preset seed', async () => {
+    // A free-tier caller: the bundled preset lists deepseek-v4-flash first, but
+    // the per-user catalog only allows deepseek-v4.1-flash. A run started before
+    // that catalog arrives must not turn `default` into a model vela rejects.
+    const saved = Object.fromEntries([
+      'VELA_RUNTIME_KEY', 'VELA_LINK_URL', 'FAKE_VELA_MODEL_PRESET_JSON', 'FAKE_VELA_MODEL_LIST_JSON',
+      'FAKE_VELA_MODEL_LIST_DELAY_MS', 'FAKE_VELA_ALLOWED_MODELS', 'FAKE_VELA_LOG_SET_MODEL_REQUEST', 'FAKE_VELA_INVOCATION_LOG',
+    ].map((key) => [key, process.env[key]]));
+    const invocationLog = join(mkdtempSync(join(tmpdir(), 'od-amr-default-model-')), 'vela.log');
+    try {
+      amrModelLoadingCache.resetForTests();
+      resetLiveModelsForTests();
+      process.env.VELA_RUNTIME_KEY = `fake-runtime-key-${randomUUID()}`;
+      process.env.VELA_LINK_URL = 'https://amr-link.open-design.ai/v1';
+      process.env.FAKE_VELA_MODEL_PRESET_JSON = JSON.stringify({
+        source: 'preset',
+        data: [{ id: 'deepseek-v4-flash' }, { id: 'deepseek-v4-pro' }],
+      });
+      process.env.FAKE_VELA_MODEL_LIST_JSON = JSON.stringify({
+        source: 'remote',
+        data: [
+          { id: 'deepseek-v4.1-flash', enabled: true, default: true },
+          { id: 'deepseek-v4-flash', enabled: false },
+          { id: 'deepseek-v4-pro', enabled: false },
+        ],
+      });
+      process.env.FAKE_VELA_MODEL_LIST_DELAY_MS = '1500';
+      process.env.FAKE_VELA_ALLOWED_MODELS = 'deepseek-v4.1-flash';
+      process.env.FAKE_VELA_LOG_SET_MODEL_REQUEST = '1';
+      process.env.FAKE_VELA_INVOCATION_LOG = invocationLog;
+      const workspaceFixture =
+        await createPersonalWorkspaceBoundProjectFixture('AMR default model fixture');
+
+      await withFakeAgent(
+        'vela',
+        `
+const { spawn } = require('node:child_process');
+const fixture = ${JSON.stringify(FAKE_VELA_FIXTURE)};
+const child = spawn(process.execPath, [fixture, ...process.argv.slice(2)], {
+  stdio: 'inherit',
+  env: process.env,
+});
+child.on('exit', (code, signal) => {
+  if (signal) process.kill(process.pid, signal);
+  process.exit(code ?? 0);
+});
+`,
+        async () => {
+          const createResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...workspaceFixture.headers },
+            body: JSON.stringify({
+              agentId: 'amr',
+              projectId: workspaceFixture.projectId,
+              model: 'default',
+              message: 'hello',
+              currentPrompt: 'hello',
+            }),
+          });
+          expect(createResponse.status).toBe(202);
+          const { runId } = await createResponse.json() as { runId: string };
+          const statusBody = await waitForRunStatus(baseUrl, runId);
+          const requested = readFileSync(invocationLog, 'utf8')
+            .split('\n')
+            .filter(Boolean)
+            .map((line) => (JSON.parse(line) as { method: string }).method)
+            .filter((method) => method.startsWith('set_model_request:'));
+          expect(requested).toEqual(['set_model_request:deepseek-v4.1-flash']);
+          expect(statusBody.status).toBe('succeeded');
+        },
+      );
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value == null) delete process.env[key];
+        else process.env[key] = value;
+      }
+      amrModelLoadingCache.resetForTests();
+      resetLiveModelsForTests();
     }
   });
 
@@ -2855,137 +3058,162 @@ process.exit(1);
     );
   });
 
-  it('suppresses Antigravity auth stdout and emits AGENT_AUTH_REQUIRED without an event: stdout delta', async () => {
-    await withFakeAgent(
-      'agy',
-      `
+  // OPEND-3495. The fake `agy` enforces the real CLI's prompt contract
+  // instead of echoing whatever it is handed:
+  //   - `-p/--print <text>` ignores stdin entirely (agy 1.1.1 changelog: "no
+  //     longer reading stdin when a prompt is provided via a flag"), so a
+  //     daemon that puts a pointer in `-p` and the prompt on stdin gets a reply
+  //     that never saw the prompt;
+  //   - `--input-format stream-json` (requires `--output-format stream-json`)
+  //     reads NDJSON `{"event":"user","message":{"content":…}}` messages from
+  //     stdin and answers with agy's stream-json events (see
+  //     tests/fixtures/antigravity-stream-json).
+  // The reply reports what actually arrived, so the test can only pass when
+  // the composed prompt reaches agy through the channel agy reads.
+  const FAKE_AGY_CONTRACT = `
 const args = process.argv.slice(2);
 if (args[0] === '--version') {
-  console.log('1.107.0-test');
+  console.log('1.3.1');
   process.exit(0);
 }
-// Simulate agy chat - printing the OAuth prompt and exiting 0
-process.stdout.write('Authentication required. Please visit the URL to log in: https://accounts.google.com/o/oauth2/auth?client_id=12345&redirect_uri=antigravity-redirect\\n');
-process.stdout.write('Waiting for authentication (timeout 30s)...\\n');
-process.stdout.write('Error: authentication timed out.\\n');
-process.exit(0);
-`,
-      async () => {
-        const createResponse = await fetch(`${baseUrl}/api/runs`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            agentId: 'antigravity',
-            message: 'hello',
-          }),
-        });
-        expect(createResponse.status).toBe(202);
-        const { runId } = await createResponse.json() as { runId: string };
+if (args.includes('-p') || args.includes('--print') || args.includes('--prompt')) {
+  process.stdout.write('I do not see any instructions in your message.\\n');
+  process.exit(0);
+}
+const inputIndex = args.indexOf('--input-format');
+const outputIndex = args.indexOf('--output-format');
+if (inputIndex === -1 || args[inputIndex + 1] !== 'stream-json' || outputIndex === -1 || args[outputIndex + 1] !== 'stream-json') {
+  process.stderr.write('Error: no prompt provided\\n');
+  process.exit(2);
+}
+let stdin = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { stdin += chunk; });
+process.stdin.on('end', () => {
+  const emit = (event) => process.stdout.write(JSON.stringify(event) + '\\n');
+  const conversation_id = 'agy-fake-1';
+  emit({ event: 'init', conversation_id, init: { cwd: process.cwd(), tools: ['run_command'], permission_mode: 'request-review' } });
+  const messages = stdin.split('\\n').filter((line) => line.trim()).map((line) => JSON.parse(line));
+  if (messages.length !== 1 || messages[0].event !== 'user' || typeof messages[0].message?.content !== 'string') {
+    process.stderr.write('error: stream input "user" message has no content\\n');
+    emit({ event: 'result', result: { conversation_id, status: 'ERROR', response: '', error: 'stream input "user" message has no content', duration_seconds: 0, num_turns: 0 } });
+    process.exit(1);
+  }
+  const content = messages[0].message.content;
+  emit({ event: 'step_update', step_update: { conversation_id, step_index: 0, state: 'DONE', step_type: 'user_input' } });
+  const reply = 'RECEIVED ' + content.length + ' chars ending ' + JSON.stringify(content.slice(-40));
+  emit({ event: 'step_update', step_update: { conversation_id, step_index: 1, state: 'DONE', step_type: 'agent_response', text_delta: reply, duration_seconds: 0.5, usage: { input_tokens: 9, output_tokens: 3, thinking_tokens: 0, cache_read_tokens: 0, total_tokens: 12 } } });
+  emit({ event: 'result', result: { conversation_id, status: 'SUCCESS', response: reply, duration_seconds: 0.6, num_turns: 1, usage: { input_tokens: 9, output_tokens: 3, thinking_tokens: 0, cache_read_tokens: 0, total_tokens: 12 } } });
+  process.exit(0);
+});
+`;
 
-        const eventsController = new AbortController();
-        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
-          signal: eventsController.signal,
-        });
-        const eventsBody = await readSseUntil(eventsResponse, 'AGENT_AUTH_REQUIRED');
-        eventsController.abort();
-        const statusBody = await waitForRunStatus(baseUrl, runId);
+  function fakeAgyReplaying(name: string, exitCode: number): string {
+    const fixtures = fileURLToPath(new URL('./fixtures/antigravity-stream-json/', import.meta.url));
+    const stdout = readFileSync(join(fixtures, `${name}.stdout.ndjson`), 'utf8');
+    const stderr = readFileSync(join(fixtures, `${name}.stderr.txt`), 'utf8');
+    return `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.3.1');
+  process.exit(0);
+}
+process.stdin.resume();
+process.stdin.on('end', () => {
+  process.stdout.write(${JSON.stringify(stdout)});
+  process.stderr.write(${JSON.stringify(stderr)});
+  process.exit(${exitCode});
+});
+`;
+  }
 
-        expect(eventsBody).toContain('event: error');
-        expect(eventsBody).toContain('AGENT_AUTH_REQUIRED');
-        expect(eventsBody).not.toContain('event: stdout');
-        expect(eventsBody).not.toContain('accounts.google.com');
-        expect(statusBody.status).toBe('failed');
-      },
-    );
+  it('delivers the whole composed prompt to Antigravity through agy stream-json stdin', async () => {
+    const marker = 'OPEND_3495_END_OF_USER_REQUEST';
+    await withFakeAgent('agy', FAKE_AGY_CONTRACT, async () => {
+      const createResponse = await fetch(`${baseUrl}/api/runs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentId: 'antigravity',
+          message: `${'Pad the composed prompt past the Windows command-line cap. '.repeat(700)}${marker}`,
+        }),
+      });
+      expect(createResponse.status).toBe(202);
+      const { runId } = await createResponse.json() as { runId: string };
+
+      const eventsController = new AbortController();
+      const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+        signal: eventsController.signal,
+      });
+      const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+      eventsController.abort();
+      const statusBody = await waitForRunStatus(baseUrl, runId);
+
+      expect(eventsBody).toContain('"type":"text_delta","delta":"RECEIVED ');
+      expect(eventsBody).toContain(marker);
+      expect(eventsBody).not.toContain('I do not see any instructions');
+      expect(eventsBody).not.toContain('event: stdout');
+      expect(eventsBody).toContain('"type":"usage"');
+      expect(statusBody.status).toBe('succeeded');
+    });
   });
 
-  it('parses successful Antigravity Gemini JSONL output instead of forwarding raw stdout', async () => {
-    await withFakeAgent(
-      'agy',
-      `
-const args = process.argv.slice(2);
-if (args[0] === '--version') {
-  console.log('1.107.0-test');
-  process.exit(0);
-}
-process.stdout.write(JSON.stringify({ type: 'init', session_id: 'agy-1', model: 'gemini-3.5-flash' }) + '\\n');
-process.stdout.write(JSON.stringify({ type: 'message', role: 'assistant', content: 'Hello from Antigravity.', delta: true }) + '\\n');
-process.stdout.write(JSON.stringify({ type: 'result', status: 'success', stats: { input_tokens: 4, output_tokens: 5, cached: 0, duration_ms: 25 } }) + '\\n');
-process.exit(0);
-`,
-      async () => {
-        const createResponse = await fetch(`${baseUrl}/api/runs`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            agentId: 'antigravity',
-            message: 'hello',
-          }),
-        });
-        expect(createResponse.status).toBe(202);
-        const { runId } = await createResponse.json() as { runId: string };
+  it('reports a signed-out Antigravity CLI as AGENT_AUTH_REQUIRED', async () => {
+    await withFakeAgent('agy', fakeAgyReplaying('signed-out', 1), async () => {
+      const createResponse = await fetch(`${baseUrl}/api/runs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: 'antigravity', message: 'hello' }),
+      });
+      expect(createResponse.status).toBe(202);
+      const { runId } = await createResponse.json() as { runId: string };
 
-        const eventsController = new AbortController();
-        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
-          signal: eventsController.signal,
-        });
-        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
-        eventsController.abort();
-        const statusBody = await waitForRunStatus(baseUrl, runId);
+      const eventsController = new AbortController();
+      const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+        signal: eventsController.signal,
+      });
+      const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+      eventsController.abort();
+      const statusBody = await waitForRunStatus(baseUrl, runId);
 
-        expect(eventsBody).toContain('event: agent');
-        expect(eventsBody).toContain('"type":"text_delta","delta":"Hello from Antigravity."');
-        expect(eventsBody).toContain('"type":"usage"');
-        expect(eventsBody).not.toContain('event: stdout');
-        expect(eventsBody).not.toContain('"role":"assistant"');
-        expect(statusBody.status).toBe('succeeded');
-      },
-    );
+      expect(eventsBody).toContain('event: error');
+      expect(eventsBody).toContain('AGENT_AUTH_REQUIRED');
+      expect(eventsBody).toContain('open a terminal and run `agy` once');
+      expect(eventsBody).not.toContain('event: stdout');
+      expect(statusBody.status).toBe('failed');
+    });
   });
 
-  it('forwards Antigravity plain stdout JSONL when it lacks the Gemini init marker', async () => {
-    await withFakeAgent(
-      'agy',
-      `
-const args = process.argv.slice(2);
-if (args[0] === '--version') {
-  console.log('1.107.0-test');
-  process.exit(0);
-}
-process.stdout.write(JSON.stringify({ type: 'error', message: 'requested JSONL output' }) + '\\n');
-process.exit(0);
-`,
-      async () => {
-        const createResponse = await fetch(`${baseUrl}/api/runs`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            agentId: 'antigravity',
-            message: 'return JSONL',
-          }),
-        });
-        expect(createResponse.status).toBe(202);
-        const { runId } = await createResponse.json() as { runId: string };
+  it('reports an exhausted Antigravity quota as RATE_LIMITED', async () => {
+    await withFakeAgent('agy', fakeAgyReplaying('quota-exhausted', 3), async () => {
+      const createResponse = await fetch(`${baseUrl}/api/runs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: 'antigravity', message: 'hello' }),
+      });
+      expect(createResponse.status).toBe(202);
+      const { runId } = await createResponse.json() as { runId: string };
 
-        const eventsController = new AbortController();
-        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
-          signal: eventsController.signal,
-        });
-        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
-        eventsController.abort();
-        const statusBody = await waitForRunStatus(baseUrl, runId);
+      const eventsController = new AbortController();
+      const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+        signal: eventsController.signal,
+      });
+      const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+      eventsController.abort();
+      const statusBody = await waitForRunStatus(baseUrl, runId);
 
-        expect(eventsBody).toContain('event: stdout');
-        expect(eventsBody).toContain('requested JSONL output');
-        expect(eventsBody).not.toContain('event: error');
-        expect(statusBody.status).toBe('succeeded');
-      },
-    );
+      expect(eventsBody).toContain('event: error');
+      expect(eventsBody).toContain('RATE_LIMITED');
+      expect(eventsBody).toContain('Individual quota reached');
+      expect(eventsBody).toContain('Switch Model picker');
+      expect(eventsBody).not.toContain('event: stdout');
+      expect(statusBody.status).toBe('failed');
+    });
   });
 
   it('fails plain-stream runs when stdout artifact persistence fails', async () => {
     await withFakeAgent(
-      'agy',
+      'qwen',
       `
 const args = process.argv.slice(2);
 if (args[0] === '--version') {
@@ -3008,7 +3236,7 @@ process.exit(0);
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            agentId: 'antigravity',
+            agentId: 'qwen',
             projectId,
             message: 'emit blocked artifact',
           }),
@@ -3029,97 +3257,6 @@ process.exit(0);
         expect(statusBody.status).toBe('failed');
       },
     );
-  });
-
-  it('fails Antigravity Gemini JSONL output with no visible assistant content', async () => {
-    await withFakeAgent(
-      'agy',
-      `
-const args = process.argv.slice(2);
-if (args[0] === '--version') {
-  console.log('1.107.0-test');
-  process.exit(0);
-}
-process.stdout.write(JSON.stringify({ type: 'init', session_id: 'agy-1', model: 'gemini-3.5-flash' }) + '\\n');
-process.stdout.write(JSON.stringify({ type: 'result', status: 'success', stats: { input_tokens: 4, output_tokens: 0, cached: 0, duration_ms: 25 } }) + '\\n');
-process.exit(0);
-`,
-      async () => {
-        const createResponse = await fetch(`${baseUrl}/api/runs`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            agentId: 'antigravity',
-            message: 'hello',
-          }),
-        });
-        expect(createResponse.status).toBe(202);
-        const { runId } = await createResponse.json() as { runId: string };
-
-        const eventsController = new AbortController();
-        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
-          signal: eventsController.signal,
-        });
-        const eventsBody = await readSseUntil(eventsResponse, 'Agent completed without producing any output');
-        eventsController.abort();
-        const statusBody = await waitForRunStatus(baseUrl, runId);
-
-        expect(eventsBody).toContain('event: agent');
-        expect(eventsBody).toContain('"type":"usage"');
-        expect(eventsBody).toContain('event: error');
-        expect(eventsBody).toContain('AGENT_EXECUTION_FAILED');
-        expect(eventsBody).not.toContain('event: stdout');
-        expect(statusBody.status).toBe('failed');
-      },
-    );
-  });
-
-  it('preserves the first buffered stdout timestamp for Antigravity Gemini assistant text', () => {
-    const timestamp = bufferedAntigravityGeminiFirstTokenAt(
-      [{
-        receivedAt: 1_234,
-        text: [
-          JSON.stringify({ type: 'init', session_id: 'agy-1', model: 'gemini-3.5-flash' }),
-          JSON.stringify({ type: 'message', role: 'assistant', content: 'Hello from Antigravity.', delta: true }),
-          JSON.stringify({ type: 'result', status: 'success', stats: { input_tokens: 4, output_tokens: 5 } }),
-        ].join('\n'),
-      }],
-    );
-
-    expect(timestamp).toBe(1_234);
-  });
-
-  it('stamps Antigravity Gemini assistant text from the chunk that completes the first assistant message', () => {
-    const timestamp = bufferedAntigravityGeminiFirstTokenAt([
-      {
-        receivedAt: 1_234,
-        text: `${JSON.stringify({ type: 'init', session_id: 'agy-1', model: 'gemini-3.5-flash' })}\n`,
-      },
-      {
-        receivedAt: 5_678,
-        text: `${JSON.stringify({ type: 'message', role: 'assistant', content: 'Hello from Antigravity.', delta: true })}\n`,
-      },
-      {
-        receivedAt: 9_999,
-        text: `${JSON.stringify({ type: 'result', status: 'success', stats: { input_tokens: 4, output_tokens: 5 } })}\n`,
-      },
-    ]);
-
-    expect(timestamp).toBe(5_678);
-  });
-
-  it('does not stamp a first token timestamp for Antigravity Gemini streams without assistant text', () => {
-    const timestamp = bufferedAntigravityGeminiFirstTokenAt(
-      [{
-        receivedAt: 1_234,
-        text: [
-          JSON.stringify({ type: 'init', session_id: 'agy-1', model: 'gemini-3.5-flash' }),
-          JSON.stringify({ type: 'result', status: 'success', stats: { input_tokens: 4, output_tokens: 0 } }),
-        ].join('\n'),
-      }],
-    );
-
-    expect(timestamp).toBeNull();
   });
 
   it('surfaces Qoder assistant error records through the SSE error channel', async () => {

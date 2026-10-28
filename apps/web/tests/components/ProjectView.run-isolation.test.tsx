@@ -1441,15 +1441,15 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining(`workspaceId=${encodeURIComponent(workspaceA.workspaceId)}`),
-      { cache: 'no-store' },
+      expect.objectContaining({ cache: 'no-store' }),
     );
     // The ambient workspace must never be consulted for a project bound to
-    // another one, and the run has to spawn under the same workspace the
-    // wallet was checked against.
+    // another one. Display billing stays scoped, but is not run admission.
     const billingUrls = fetchMock.mock.calls
       .map(([input]) => String(input))
       .filter((url) => url.includes('/api/workspace/billing'));
     expect(billingUrls.length).toBeGreaterThan(0);
+    expect(billingUrls.some((url) => url.includes('freshness=authoritative'))).toBe(false);
     expect(
       billingUrls.filter((url) =>
         url.includes(`workspaceId=${encodeURIComponent(workspaceB.workspaceId)}`),
@@ -2329,6 +2329,7 @@ describe('ProjectView conversation run isolation', () => {
         project.id,
         'conv-b',
         expect.anything(),
+        true,
       );
     });
     // The daemon GET is project-scoped for a Team share, so a comment whose
@@ -2358,6 +2359,7 @@ describe('ProjectView conversation run isolation', () => {
       project.id,
       'conv-b',
       expect.anything(),
+      true,
     ));
 
     fireEvent.click(screen.getByTestId('attach-first-comment'));
@@ -3307,7 +3309,11 @@ describe('ProjectView conversation run isolation', () => {
     },
   );
 
-  it('routes keyless local Ollama BYOK chats through OpenCode with provider metadata', async () => {
+  it.each([
+    'http://localhost:11434',
+    'http://127.0.0.1:11434',
+    'http://[::1]:11434',
+  ])('routes keyless local Ollama BYOK chats at %s through OpenCode with provider metadata', async (baseUrl) => {
     listMessages.mockResolvedValue([]);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
 
@@ -3316,7 +3322,7 @@ describe('ProjectView conversation run isolation', () => {
       mode: 'api',
       apiProtocol: 'ollama',
       apiKey: '',
-      baseUrl: 'http://localhost:11434',
+      baseUrl,
       model: 'llama3.2',
     });
 
@@ -3330,7 +3336,8 @@ describe('ProjectView conversation run isolation', () => {
       agentId: 'byok-opencode',
       byokProvider: expect.objectContaining({
         protocol: 'ollama',
-        baseUrl: 'http://localhost:11434',
+        apiKey: '',
+        baseUrl,
         model: 'llama3.2',
         requiresApiKey: false,
       }),

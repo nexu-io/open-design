@@ -180,6 +180,9 @@ describe('GET /api/workspace/projects/team', () => {
           calls.push(workspaceId ?? '');
           return PROJECTS;
         },
+        ensurePrivate: async () => { throw new Error('list must not ensure'); },
+        setVisibility: async () => { throw new Error('list must not change policy'); },
+        getRegistration: async () => null,
         get: async () => null,
         upsert: async () => {},
         remove: async () => {},
@@ -290,6 +293,9 @@ describe('GET /api/workspace/projects/team', () => {
         list: async () => {
           throw new Error('catalog should not be read off-team');
         },
+        ensurePrivate: async () => { throw new Error('list must not ensure'); },
+        setVisibility: async () => { throw new Error('list must not change policy'); },
+        getRegistration: async () => null,
         get: async () => null,
         upsert: async () => {},
         remove: async () => {},

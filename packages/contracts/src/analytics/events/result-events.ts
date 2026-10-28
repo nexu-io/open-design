@@ -3,6 +3,7 @@
  * *_result event prop types (run, feedback, settings, packaged).
  */
 import type { ApiFailureReason, ApiFailureStage } from '../../api/failure-detail.js';
+import type { TrackingProjectIntent } from './shared-enums.js';
 import type {
   AnalyticsAttributionQuality,
   AnalyticsDistributionMechanism,
@@ -11,6 +12,7 @@ import type {
   AnalyticsPublisherClass,
   TrackingRuntimeType,
 } from '../public-params.js';
+import type { StrategySettlementFactsV2 } from '../../plugins/strategy-v2.js';
 import type { ReleaseChannel } from '@open-design/release';
 import type { ArtifactOriginEntrySurface, ArtifactOriginStatus } from '../../api/files.js';
 import type { AgentDiagnosticReason, AgentDiagnosticSeverity } from '../../api/registry.js';
@@ -81,6 +83,8 @@ export interface ProjectCreateResultProps {
   project_source: TrackingProjectSource;
   project_id: string | null;
   project_kind: TrackingProjectKind | null;
+  /** Saved product scene; optional for producers predating this dimension. */
+  project_intent?: TrackingProjectIntent;
   design_system?: string;
   target_platforms?: string;
   companion_surfaces?: string;
@@ -357,6 +361,8 @@ export interface RunCreatedProps extends RunTaskLineageProps {
   // `TrackingDesignSystemRunEntryFrom` set; both unions stay
   // distinct so the dashboard can split funnels cleanly.
   entry_from?: TrackingRunEntrySource;
+  /** Explicit saved-comment attachments of this Run; not proof of a public-share comment. */
+  comment_ids?: string[];
   /** v4 name; entry_from remains during the compatibility window. */
   entry_source?: TrackingRunEntrySource;
   // Session-dimension run context (0-based `turn_index` within the browser
@@ -385,6 +391,8 @@ export interface RunCreatedProps extends RunTaskLineageProps {
   conversation_id: string | null;
   run_id: string;
   project_kind: TrackingProjectKind | null;
+  /** Frozen from project metadata at physical Run creation, independent of strategy. */
+  project_intent?: TrackingProjectIntent;
   design_system_id?: string;
   design_system_source: TrackingDesignSystemSource;
   // Official preset vs user-built; `design_system_slug` carries the concrete
@@ -512,6 +520,10 @@ export interface RunCreatedProps extends RunTaskLineageProps {
    * common case.
    */
   od_next_blocked_reason_code?: string;
+  /** Orchestration action: question, continued, or ended. */
+  od_next_settlement_reason?: string;
+  /** Independent physical-run and reply facts, not a success verdict. */
+  od_next_settlement_facts?: StrategySettlementFactsV2;
 }
 
 export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
@@ -1086,6 +1098,18 @@ export interface ArtifactDeployResultProps extends TrackingFailureDetailProps {
 // for publish, or removal is confirmed for unpublish), regardless of whether a
 // newer request superseded this one in the UI. Clicking the publish button
 // reports separately as ui_click element 'publish_file'.
+/** Queue acceptance is separate from a click or a successful physical Run. */
+export interface ProjectCommentSendResultProps {
+  page_name: 'artifact';
+  area: 'comment_popover';
+  project_id: string;
+  project_kind: TrackingProjectKind | null;
+  result: 'accepted' | 'queued' | 'rejected';
+  submitted_comment_ids: string[];
+  /** Returned subset of explicitly saved comments; excludes temporary board notes. */
+  comment_ids: string[];
+}
+
 export interface ArtifactPublishResultProps extends TrackingFailureDetailProps {
   page_name: 'artifact';
   area: 'share_option_popover';
@@ -1097,6 +1121,11 @@ export interface ArtifactPublishResultProps extends TrackingFailureDetailProps {
   // confirmed (the one actionable failure), 'publish_failed' otherwise.
   error_code?: TrackingPublishErrorCode;
   publish_duration_ms: number;
+  /** Stable alias already known to this attempt, never a full public URL. */
+  publish_id?: string;
+  /** Only the committed receipt supplies version and time. */
+  share_version?: number;
+  published_at?: number;
   project_id: string;
   project_kind: TrackingProjectKind | null;
   // The daemon's own error code (e.g. PUBLIC_FILE_PUBLISH_UNAVAILABLE,

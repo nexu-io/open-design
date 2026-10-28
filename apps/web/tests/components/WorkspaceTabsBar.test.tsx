@@ -2039,6 +2039,11 @@ describe('WorkspaceTabsBar dock dropdown project actions', () => {
           },
         }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
+      if (url === '/api/projects/' + project.id + '/share-state') {
+        return new Response(JSON.stringify({ projectId: project.id, bindingExists: false, hasEverShared: false, publications: [] }), {
+          status: 200, headers: { 'Content-Type': 'application/json' },
+        });
+      }
       if (url.startsWith('/api/runs?')) {
         return new Response(JSON.stringify({ runs: [], awaitingInputProjectIds: [] }), {
           status: 200,
@@ -2152,7 +2157,9 @@ describe('WorkspaceTabsBar dock dropdown project actions', () => {
     expect(screen.queryByTestId('project-delete-confirm-dialog')).toBeNull();
 
     fireEvent.click(within(await openRowMenu()).getByRole('menuitem', { name: 'designs.menuDelete' }));
-    fireEvent.click(within(await screen.findByTestId('project-delete-confirm-dialog')).getByTestId('project-delete-confirm-accept'));
+    const accept = within(await screen.findByTestId('project-delete-confirm-dialog')).getByTestId('project-delete-confirm-accept');
+    await waitFor(() => expect(accept).toBeEnabled());
+    fireEvent.click(accept);
     await waitFor(() => expect(remove).toHaveBeenCalledWith(project.id));
     await waitFor(() => expect(screen.queryByTestId('project-delete-confirm-dialog')).toBeNull());
   });

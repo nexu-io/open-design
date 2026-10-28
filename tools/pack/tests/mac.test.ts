@@ -409,6 +409,7 @@ describe("runElectronBuilder", () => {
     await runElectronBuilder(config, paths, ["dir"]);
 
     return JSON.parse(await readFile(paths.appBuilderConfigPath, "utf8")) as {
+      files: string[];
       afterSign?: string;
       mac?: {
         notarize?: boolean;
@@ -416,22 +417,37 @@ describe("runElectronBuilder", () => {
     };
   }
 
-  it("does not explicitly disable electron-builder notarization for notarized mac builds", async () => {
+  it("notarizes signed mac builds only through the retrying afterSign hook", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
     try {
       const builderConfig = await prepareElectronBuilderConfig(root, { macNotarize: true });
 
       expect(builderConfig.afterSign).toContain("notarize.cjs");
-      expect(builderConfig.mac).not.toHaveProperty("notarize");
+      expect(builderConfig.mac?.notarize).toBe(false);
     } finally {
       await rm(root, { force: true, recursive: true });
     }
   });
 
-  it("keeps signed-only mac builds from invoking electron-builder notarization", async () => {
+  it("excludes dependency dotenv credentials from the packaged app", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
     try {
       const builderConfig = await prepareElectronBuilderConfig(root, { macNotarize: false });
+
+      expect(builderConfig.files).toEqual(expect.arrayContaining(["!**/.env", "!**/.env.*"]));
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it.each([
+    { mode: "signed-only", signed: true, macNotarize: false },
+    { mode: "unsigned", signed: false, macNotarize: false },
+    { mode: "unsigned with notarization requested", signed: false, macNotarize: true },
+  ])("does not invoke either notarization path for $mode mac builds", async ({ signed, macNotarize }) => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
+    try {
+      const builderConfig = await prepareElectronBuilderConfig(root, { signed, macNotarize });
 
       expect(builderConfig.afterSign).toBeUndefined();
       expect(builderConfig.mac?.notarize).toBe(false);

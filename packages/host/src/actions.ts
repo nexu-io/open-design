@@ -1,6 +1,7 @@
 import { OPEN_DESIGN_HOST_UPDATER_ACTIONS } from "./protocol.js";
 import type {
   OpenDesignHostActionResult,
+  OpenDesignHostDownloadResult,
   OpenDesignHostBrowserClearDataOptions,
   OpenDesignHostCaptureOptions,
   OpenDesignHostCaptureResult,
@@ -309,4 +310,12 @@ export async function setHostUpdaterMenuLabels(
   } catch (error) {
     return unavailable(error instanceof Error ? error.message : String(error));
   }
+}
+
+/** Observe native download completion when the host supports it. */
+export function subscribeHostDownloads(
+  listener: (result: OpenDesignHostDownloadResult) => void,
+  scope: OpenDesignHostGlobalScope = globalThis,
+): (() => void) | null {
+  return getOpenDesignHost(scope)?.downloads?.subscribe(listener) ?? null;
 }

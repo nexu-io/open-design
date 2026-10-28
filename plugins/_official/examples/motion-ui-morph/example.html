@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en" data-od-preview-ready="false">
+<head>
+<meta name="od-motion-output" content="video">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>One Shape — UI Motion</title>
+<script src="assets/gsap.min.js"></script>
+<style>
+@font-face{font-family:Geist;src:url('assets/geist-regular.ttf') format('truetype');font-weight:400;font-display:block}
+@font-face{font-family:Geist;src:url('assets/geist-medium.ttf') format('truetype');font-weight:500;font-display:block}
+@font-face{font-family:Geist;src:url('assets/geist-semibold.ttf') format('truetype');font-weight:600;font-display:block}
+:root{--bg:#EDEDE8;--ink:#0A0A0A;--accent:#0A0A0A}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#000;overflow:hidden}
+#viewport{position:fixed;inset:0;overflow:hidden;background:var(--bg)}
+#main{position:absolute;left:50%;top:50%;width:1920px;height:1080px;transform-origin:center;background:var(--bg);overflow:hidden}
+#main canvas{display:block;width:1920px;height:1080px}
+#controls{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:100;display:flex;align-items:center;gap:14px;width:min(900px,92vw);padding:12px 18px;border-radius:14px;background:#101214dd;color:#fff;font:600 13px ui-monospace,Menlo,monospace;opacity:0;transition:opacity .2s}
+#controls:hover,#controls:focus-within{opacity:1}
+#controls button{font:inherit;letter-spacing:.06em;background:#fff;color:#0A0A0A;border:0;border-radius:999px;padding:9px 16px;cursor:pointer;min-width:88px}
+#controls button:focus-visible,#scrub:focus-visible{outline:3px solid #fff;outline-offset:2px}
+#scrub{flex:1;accent-color:#fff}
+#tc{min-width:110px;text-align:right;font-variant-numeric:tabular-nums}
+/* The OD export bridge marks frame capture; keep preview controls out of the film. */
+html.od-export #controls{display:none!important}
+html.od-export #main{left:0!important;top:0!important;transform:none!important}
+</style>
+</head>
+<body>
+<div id="viewport">
+  <div id="main" data-composition-id="main" data-start="0" data-duration="14" data-width="1920" data-height="1080">
+    <canvas id="stage" width="1920" height="1080"></canvas>
+    <audio id="soundtrack" src="assets/soundtrack.mp3" data-start="0" data-duration="14" data-track-index="2" data-volume="1" preload="auto"></audio>
+  </div>
+</div>
+<div id="controls">
+  <button id="playBtn" type="button" aria-label="Play or pause">PAUSE</button>
+  <input id="scrub" type="range" min="0" max="14" step="0.01" value="0" aria-label="Timeline position">
+  <span id="tc">0.00 / 14.00</span>
+</div>
+
+<script>
+/* ============================================================
+   One Shape — a frame-faithful rebuild of the viral code-only
+   UI motion piece (@twoclipping). One element never cuts: it
+   morphs button → loader → check → island → player → volume →
+   toggle → tabs → chart → ⌘K → toast → button, driven by a
+   cursor, 120 BPM, 7 bars. render(t) is a pure function of
+   time; springs are closed-form step responses summed per change.
+   ============================================================ */
+const CFG = { duration: 14, w: 1920, h: 1080, reducedAt: 8.6, bg: '#EDEDE8', ink: '#0A0A0A', track: '#D0D1CA', grey: '#8A8A86', soft: '#F2F2EF' };
+const F = (w, s) => `${w} ${s}px "Geist", "Inter", "Helvetica Neue", Arial, sans-serif`;
+const cv = document.getElementById('stage');
+const ctx = cv.getContext('2d');
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const lerp = (a, b, p) => a + (b - a) * p;
+const TAU = Math.PI * 2;
+// closed-form spring step: settles in ~0.35s with a tiny overshoot
+function spring(dt, w = 20, z = 0.8) { if (dt <= 0) return 0; z = Math.min(z, 0.99); const wd = w * Math.sqrt(1 - z * z); return 1 - Math.exp(-z * w * dt) * (Math.cos(wd * dt) + (z * w / wd) * Math.sin(wd * dt)); }
+// a value that changes target many times = sum of one spring per change
+function track(t, keys, w, z) { let v = keys[0][1]; for (let i = 1; i < keys.length; i++) v += (keys[i][1] - keys[i - 1][1]) * spring(t - keys[i][0], w, z); return v; }
+const ease = p => p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+
+/* ---------- the one shape ---------- */
+// [time, w, h, radius, fill]
+const SHAPE = [
+  [0.00, 648, 202, 101, CFG.ink], [0.50, 230, 230, 115, CFG.ink], [1.50, 864, 216, 108, CFG.ink], [2.00, 994, 634, 72, CFG.ink],
+  [3.60, 1080, 187, 94, CFG.ink], [5.25, 490, 288, 144, CFG.track], [6.60, 1166, 173, 87, '#FFFFFF'], [7.60, 1094, 850, 60, '#FFFFFF'],
+  [10.00, 1080, 828, 48, '#FFFFFF'], [10.60, 1080, 560, 48, '#FFFFFF'], [11.90, 950, 187, 94, CFG.ink], [12.70, 648, 202, 101, CFG.ink]
+];
+const geo = (i) => SHAPE.map(s => [s[0], s[i]]);
+const GW = geo(1), GH = geo(2), GR = geo(3);
+function hex(c) { const n = parseInt(c.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+function fillAt(t) {
+  let c = hex(SHAPE[0][4]);
+  for (let i = 1; i < SHAPE.length; i++) { const p = clamp(spring(t - SHAPE[i][0], 16, 0.97)), a = hex(SHAPE[i - 1][4]), b = hex(SHAPE[i][4]); if (p > 0) c = c.map((_, k) => lerp(c[k], b[k], p)); }
+  // stretch past max on the volume slider and the toggle flip turn the track black
+  return c;
+}
+function roundRect(x, y, w, h, r) { r = Math.min(r, w / 2, h / 2); ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+
+/* ---------- content helpers ---------- */
+// each state's content fades in after the shape starts moving and out before the next change
+function life(t, a, b) { return clamp((t - a - 0.06) / 0.14) * clamp((b - t - 0.02) / 0.12); }
+function txt(s, x, y, size, weight, color, align = 'left', a = 1) { if (a <= 0) return; ctx.save(); ctx.globalAlpha *= a; ctx.font = F(weight, size); ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.fillText(s, x, y); ctx.restore(); }
+function blurIn(a, draw) { // a short blur on content swaps, approximated by soft offset copies
+  if (a <= 0) return; ctx.save(); ctx.globalAlpha = a; draw(); if (a < 0.95) { ctx.globalAlpha = (1 - a) * 0.25; ctx.translate(0, 3); draw(); ctx.translate(0, -6); draw(); } ctx.restore();
+}
+function rollNumber(from, to, p) { const v = Math.round(lerp(from, to, p)); return v.toLocaleString('en-US'); }
+// album art: warm-to-violet square, baked once from a smooth field
+const ART = (() => { const q = document.createElement('canvas'); q.width = 64; q.height = 64; const g = q.getContext('2d'), im = g.createImageData(64, 64);
+  for (let y = 0; y < 64; y++) for (let x = 0; x < 64; x++) { const o = (y * 64 + x) * 4, u = x / 63, v = y / 63, k = clamp(v * 0.9 + u * 0.2 - 0.1), w = Math.exp(-(((u - 0.25) / 0.35) ** 2 + ((v - 0.15) / 0.3) ** 2));
+    im.data[o] = lerp(lerp(246, 236, k), 250, w * 0.5); im.data[o + 1] = lerp(lerp(160, 96, k), 190, w * 0.5) - (v > 0.75 ? (v - 0.75) * 260 : 0); im.data[o + 2] = lerp(lerp(98, 120, k), 90, w * 0.4) + (v > 0.7 ? (v - 0.7) * 520 : 0); im.data[o + 3] = 255; }
+  g.putImageData(im, 0, 0); return q; })();
+function art(x, y, s, r) { ctx.save(); roundRect(x, y, s, s, r); ctx.clip(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(ART, x, y, s, s); ctx.restore(); }
+
+/* ---------- cursor ---------- */
+// waypoints [t, x, y, pressed] in the 1440 stage space
+const CUR = [[0, 980, 1040, 0], [0.38, 880, 770, 0], [0.48, 880, 770, 1], [0.56, 880, 770, 0], [0.9, 1010, 820, 0], [1.4, 1110, 900, 0], [1.7, 1020, 760, 0], [2.3, 760, 900, 0], [2.42, 760, 900, 1], [2.5, 760, 900, 0],
+  [2.9, 650, 830, 0], [2.98, 650, 830, 1], [3.45, 1000, 830, 1], [3.52, 1000, 830, 0], [3.9, 520, 730, 0], [3.98, 520, 730, 1], [4.6, 1260, 730, 1], [4.85, 1330, 730, 1], [4.95, 1330, 730, 0],
+  [5.6, 780, 740, 0], [6.15, 780, 740, 0], [6.22, 780, 740, 1], [6.3, 780, 740, 0], [6.85, 720, 740, 0], [7.0, 1060, 735, 0], [7.08, 1060, 735, 1], [7.16, 1060, 735, 0],
+  [7.6, 480, 760, 0], [8.3, 960, 640, 0], [8.8, 1210, 560, 0], [9.15, 650, 380, 0], [9.22, 650, 380, 1], [9.3, 650, 380, 0], [9.9, 800, 820, 0], [10.3, 820, 720, 0],
+  [11.0, 1180, 1040, 0], [11.55, 1180, 1040, 0], [12.4, 950, 1100, 0], [13.2, 1000, 1080, 0], [14.0, 980, 1040, 0]];
+function cursorAt(t) {
+  let i = 0; while (i < CUR.length - 1 && CUR[i + 1][0] <= t) i++;
+  const a = CUR[i], b = CUR[Math.min(i + 1, CUR.length - 1)], p = b[0] > a[0] ? ease(clamp((t - a[0]) / (b[0] - a[0]))) : 0;
+  return { x: lerp(a[1], b[1], p), y: lerp(a[2], b[2], p), down: a[3] && (b[3] || p < 0.5) };
+}
+function drawCursor(c) {
+  ctx.save(); ctx.translate(c.x, c.y); const s = c.down ? 0.86 : 1; ctx.scale(s * 1.35, s * 1.35);
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 30); ctx.lineTo(7, 23); ctx.lineTo(12, 34); ctx.lineTo(17, 32); ctx.lineTo(12, 21); ctx.lineTo(21, 21); ctx.closePath();
+  ctx.fillStyle = '#111'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.2; ctx.lineJoin = 'round'; ctx.stroke(); ctx.fill(); ctx.restore();
+}
+
+/* ---------- state contents (drawn relative to the shape's box) ---------- */
+function contents(t, x, y, w, h) {
+  const cx = x + w / 2, cy = y + h / 2;
+  // 0 / 12: Generate button
+  const btn = Math.max(life(t, -1, 0.5), life(t, 12.7, 99));
+  txt('Generate', cx, cy + 2, 62, 500, '#fff', 'center', btn);
+  // 1: loader
+  const ld = life(t, 0.5, 1.0);
+  if (ld > 0) { ctx.save(); ctx.globalAlpha = ld; ctx.strokeStyle = '#fff'; ctx.lineWidth = 12; ctx.lineCap = 'round'; ctx.beginPath(); const a0 = t * 9; ctx.arc(cx, cy, 50, a0, a0 + 4.6); ctx.stroke(); ctx.restore(); }
+  // 2: check
+  const ck = life(t, 1.0, 1.5);
+  if (ck > 0) { ctx.save(); ctx.globalAlpha = ck; ctx.strokeStyle = '#6E6E6E'; ctx.lineWidth = 16; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; const d = clamp((t - 1.06) / 0.2); ctx.beginPath(); ctx.moveTo(cx - 40, cy + 2); ctx.lineTo(cx - 12, cy + 28); ctx.lineTo(cx + 40, cy - 26); ctx.setLineDash([140, 140]); ctx.lineDashOffset = 140 * (1 - d); ctx.stroke(); ctx.restore(); }
+  // 3: dynamic island
+  const il = life(t, 1.5, 2.0);
+  if (il > 0) { ctx.save(); ctx.globalAlpha = il; art(x + 50, cy - 56, 112, 26); ctx.fillStyle = '#9A9A9A'; for (let i = 0; i < 7; i++) { const hh = 14 + 26 * Math.abs(Math.sin(t * 9 + i * 1.3)); ctx.fillRect(x + w - 180 + i * 16, cy - hh / 2, 8, hh); } ctx.restore(); }
+  // 4: music player with play/pause morph and a scrub
+  const pl = life(t, 2.0, 3.6);
+  if (pl > 0) blurIn(pl, () => {
+    const p = 66;
+    art(x + p, y + 48, 172, 36);
+    txt('motion study 02', x + p + 214, y + 112, 52, 600, '#fff'); txt('made in code', x + p + 214, y + 170, 38, 400, '#8C8C8C');
+    const prog = t < 2.98 ? 0.27 + (t - 2.0) * 0.006 : t < 3.45 ? lerp(0.276, 0.82, ease(seg(t, 2.98, 3.45))) : 0.82;
+    const by = y + 312, bx = x + p, bw = w - p * 2;
+    ctx.fillStyle = '#2A2A2A'; roundRect(bx, by - 6, bw, 12, 6); ctx.fill(); ctx.fillStyle = '#fff'; roundRect(bx, by - 6, bw * prog, 12, 6); ctx.fill();
+    if (t > 2.95 && t < 3.55) { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(bx + bw * prog, by, 18, 0, TAU); ctx.fill(); }
+    const secs = Math.round(prog * 178), rem = 178 - secs;
+    txt(`${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`, bx, by + 66, 34, 400, '#7A7A7A'); txt(`-${Math.floor(rem / 60)}:${String(rem % 60).padStart(2, '0')}`, bx + bw, by + 66, 34, 400, '#7A7A7A', 'right');
+    const iy = y + h - 120;
+    // prev / next
+    ctx.fillStyle = '#fff';
+    const tri = (x0, dir) => { ctx.beginPath(); ctx.moveTo(x0, iy - 22); ctx.lineTo(x0 + 34 * dir, iy); ctx.lineTo(x0, iy + 22); ctx.closePath(); ctx.fill(); };
+    ctx.fillRect(cx - 250, iy - 24, 7, 48); tri(cx - 208, -1); tri(cx - 178, -1);
+    ctx.fillRect(cx + 243, iy - 24, 7, 48); tri(cx + 208, 1); tri(cx + 178, 1);
+    // pause → play morph on the click at 2.42
+    const m = spring(t - 2.42, 22, 0.85);
+    const bars = [[-24, -28, 16, 56], [8, -28, 16, 56]];
+    ctx.beginPath();
+    ctx.moveTo(cx - 22, iy - lerp(28, 30, m)); ctx.lineTo(cx + lerp(-6, 30, m), iy - lerp(28, 0, m)); ctx.lineTo(cx + lerp(-6, 30, m), iy + lerp(28, 0, m)); ctx.lineTo(cx - 22, iy + lerp(28, 30, m)); ctx.closePath(); ctx.fill();
+    if (m < 0.98) { ctx.globalAlpha *= 1 - m; ctx.fillRect(cx + 8, iy - 28, 16, 56); ctx.globalAlpha = 1; }
+  });
+  // 5: volume slider that stretches past max
+  const vl = life(t, 3.6, 5.25);
+  if (vl > 0) blurIn(vl, () => {
+    const p = 60, ix = x + p;
+    ctx.fillStyle = '#fff'; ctx.fillRect(ix, cy - 12, 14, 24); ctx.beginPath(); ctx.moveTo(ix + 14, cy - 12); ctx.lineTo(ix + 34, cy - 28); ctx.lineTo(ix + 34, cy + 28); ctx.lineTo(ix + 14, cy + 12); ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 5; ctx.lineCap = 'round'; const lvl = t < 3.98 ? 0.18 : t < 4.6 ? lerp(0.18, 1, ease(seg(t, 3.98, 4.6))) : 1;
+    for (let k = 0; k < 2; k++) if (lvl > 0.3 + k * 0.4) { ctx.beginPath(); ctx.arc(ix + 36, cy, 18 + k * 14, -0.7, 0.7); ctx.stroke(); }
+    const tx0 = ix + 100, tw = x + w - p - tx0;
+    ctx.fillStyle = '#333'; roundRect(tx0, cy - 9, tw, 18, 9); ctx.fill(); ctx.fillStyle = '#fff'; roundRect(tx0, cy - 9, tw * lvl, 18, 9); ctx.fill();
+  });
+  // 6: toggle
+  const tg = life(t, 5.25, 6.6);
+  if (tg > 0) {
+    const on = spring(t - 6.24, 16, 0.85), lead = spring(t - 6.22, 26, 0.85);
+    const r = 120, left = x + 24 + (w - 48 - 2 * r) * on, right = x + 24 + 2 * r + (w - 48 - 2 * r) * lead;
+    ctx.save(); ctx.globalAlpha = tg; ctx.shadowColor = 'rgba(0,0,0,.18)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 6; ctx.fillStyle = '#fff'; roundRect(Math.min(left, right - 2 * r), cy - r, Math.max(2 * r, right - left), 2 * r, r); ctx.fill(); ctx.restore();
+  }
+  // 7: tabs with a liquid indicator (two edges on different springs)
+  const tb = life(t, 6.6, 7.6);
+  if (tb > 0) blurIn(tb, () => {
+    const pad = 16, seg3 = (w - pad * 2) / 3, lab = ['Day', 'Week', 'Month'];
+    const leadE = spring(t - 7.06, 26, 0.85), trailE = spring(t - 7.06, 14, 0.9);
+    const L = x + pad + lerp(0, 2 * seg3, trailE), R = x + pad + seg3 + lerp(0, 2 * seg3, leadE);
+    ctx.fillStyle = CFG.ink; roundRect(L, y + pad, R - L, h - pad * 2, (h - pad * 2) / 2); ctx.fill();
+    lab.forEach((s, i) => { const mid = x + pad + seg3 * (i + 0.5), inside = mid > L && mid < R; txt(s, mid, cy + 2, 46, 500, inside ? '#fff' : '#5A5A5A', 'center'); });
+  });
+  // 8: chart that draws itself, tooltip on hover, Month → Week
+  const ch = life(t, 7.6, 10.0);
+  if (ch > 0) blurIn(ch, () => {
+    const p = 64, lab = ['Day', 'Week', 'Month'], tw = 520, tx = cx - tw / 2 + 60, ty = y + 56, th = 74, s3 = tw / 3;
+    const week = spring(t - 9.24, 20, 0.85);
+    const iL = tx + lerp(2 * s3, s3, spring(t - 9.24, 14, 0.9)), iR = tx + lerp(3 * s3, 2 * s3, spring(t - 9.24, 26, 0.85));
+    ctx.fillStyle = CFG.ink; roundRect(iL, ty, iR - iL, th, th / 2); ctx.fill();
+    lab.forEach((s, i) => { const mid = tx + s3 * (i + 0.5); txt(s, mid, ty + th / 2 + 2, 34, 500, mid > iL && mid < iR ? '#fff' : '#6A6A6A', 'center'); });
+    const roll = seg(t, 7.72, 8.15), roll2 = seg(t, 9.28, 9.7);
+    const num = week > 0.02 ? rollNumber(84320, 19204, ease(roll2)) : rollNumber(80369, 84320, ease(roll));
+    txt(num, x + p, y + 240, 132, 600, CFG.ink); txt('total views', x + p, y + 318, 40, 400, '#7A7A7A');
+    // chart area
+    const gx = x + p, gw = w - p * 2, gy = y + 420, gh = h - 420 - 70;
+    ctx.fillStyle = 'rgba(0,0,0,.08)'; [0, 0.5, 1].forEach(k => ctx.fillRect(gx, gy + gh * k, gw, 2));
+    const month = k => 0.12 + 0.62 * k + 0.07 * Math.sin(k * 12) + 0.05 * Math.sin(k * 23 + 1);
+    const weekF = k => 0.38 + 0.12 * k + 0.05 * Math.sin(k * 14 + 2) + 0.03 * Math.sin(k * 29);
+    const f = k => lerp(month(k), weekF(k), ease(roll2));
+    const drawP = clamp((t - 7.8) / 0.5);
+    ctx.beginPath(); const N = 80;
+    for (let i = 0; i <= N * drawP; i++) { const k = i / N, X = gx + gw * k, Y = gy + gh - gh * f(k); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); }
+    ctx.lineWidth = 7; ctx.strokeStyle = CFG.ink; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
+    if (drawP >= 1) { ctx.lineTo(gx + gw, gy + gh); ctx.lineTo(gx, gy + gh); ctx.closePath(); ctx.fillStyle = 'rgba(0,0,0,.06)'; ctx.fill(); }
+    // tooltip follows the cursor
+    const hov = seg(t, 8.15, 8.3) * (1 - seg(t, 8.95, 9.05));
+    if (hov > 0) { const c = cursorAt(t), sx = (c.x - 240) * 1 , k = clamp((c.x - (gx - x) - x + x - gx + gx - x) / gw + (gx - gx)), kk = clamp((c.x - gx) / gw), X = gx + gw * kk, Y = gy + gh - gh * f(kk);
+      ctx.save(); ctx.globalAlpha = hov; ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 2; ctx.setLineDash([6, 6]); ctx.beginPath(); ctx.moveTo(X, gy); ctx.lineTo(X, gy + gh); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = CFG.ink; ctx.beginPath(); ctx.arc(X, Y, 16, 0, TAU); ctx.fill(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(X, Y, 7, 0, TAU); ctx.fill();
+      const val = Math.round(80364 * f(kk) / f(0.93)).toLocaleString('en-US'); ctx.font = F(600, 34); const bw = ctx.measureText(val).width + 44;
+      ctx.fillStyle = CFG.ink; roundRect(X - bw / 2, Y - 116, bw, 70, 16); ctx.fill(); txt(val, X, Y - 80, 34, 600, '#fff', 'center'); ctx.restore(); }
+  });
+  // 9: command palette, type to filter, enter
+  const cp = life(t, 10.0, 11.9);
+  if (cp > 0) blurIn(cp, () => {
+    const p = 56, typed = 'frame'.slice(0, Math.max(0, Math.floor((t - 10.45) / 0.11) + 1)) || '';
+    // search glass
+    ctx.strokeStyle = '#333'; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(x + p + 16, y + 92, 16, 0, TAU); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x + p + 28, y + 104); ctx.lineTo(x + p + 42, y + 118); ctx.stroke();
+    if (t < 10.45) { txt('Type a command', x + p + 74, y + 96, 44, 400, '#A8A8A4'); }
+    else txt(typed, x + p + 74, y + 96, 44, 500, CFG.ink);
+    if (Math.floor(t * 2.4) % 2 === 0) { ctx.font = F(500, 44); const cx2 = x + p + 74 + (t < 10.45 ? 0 : ctx.measureText(typed).width + 4); ctx.fillStyle = CFG.ink; ctx.fillRect(cx2, y + 70, 3, 52); }
+    ctx.fillStyle = 'rgba(0,0,0,.07)'; ctx.fillRect(x, y + 168, w, 2);
+    const all = [['New project', '⌘N'], ['Export video', '⌘E'], ['Frame rate · 60fps', ''], ['Motion blur', '']], filt = [['Frame rate · 60fps', ''], ['Every frame is code', '✓']];
+    const list = t < 10.5 ? all : filt;
+    const sel = t < 10.5 ? -1 : t < 11.25 ? 0 : 1, enter = seg(t, 11.5, 11.62);
+    list.forEach(([s, k], i) => {
+      const ry = y + 230 + i * 120, fade = t < 10.5 ? clamp(1 - i * 0.28) : 1;
+      if (i === sel) { ctx.fillStyle = enter > 0 && i === 1 ? `rgba(10,10,10,${0.06 + 0.94 * enter})` : 'rgba(0,0,0,.06)'; roundRect(x + 28, ry - 50, w - 56, 100, 20); ctx.fill(); }
+      const onDark = enter > 0.5 && i === 1;
+      ctx.fillStyle = onDark ? '#444' : 'rgba(0,0,0,.06)'; roundRect(x + p, ry - 28, 56, 56, 12); ctx.fill();
+      ctx.strokeStyle = onDark ? '#fff' : '#555'; ctx.lineWidth = 3; ctx.strokeRect(x + p + 18, ry - 10, 20, 20);
+      txt(s, x + p + 84, ry + 2, 42, 500, onDark ? '#fff' : CFG.ink, 'left', fade);
+      if (k) txt(k, x + w - p, ry + 2, 34, 400, onDark ? '#fff' : '#A0A09C', 'right', fade);
+    });
+  });
+  // 10: toast
+  const to = life(t, 11.9, 12.7);
+  if (to > 0) blurIn(to, () => {
+    const done = spring(t - 12.25, 18, 0.85);
+    ctx.fillStyle = lerp(0, 1, done) > 0.5 ? '#fff' : '#3A3A3A'; ctx.beginPath(); ctx.arc(x + 80, cy, 24, 0, TAU); ctx.fill();
+    if (done > 0.3) { ctx.strokeStyle = CFG.ink; ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x + 70, cy + 1); ctx.lineTo(x + 78, cy + 9); ctx.lineTo(x + 92, cy - 8); ctx.stroke(); }
+    txt('Every frame is code', x + 124, cy + 2, 44, 500, '#fff');
+  });
+}
+
+/* ---------- background, baked once (smooth field, no dithered gradient) ---------- */
+const BG = (() => { const q = document.createElement('canvas'); q.width = 192; q.height = 108; const g = q.getContext('2d'), im = g.createImageData(192, 108), base = hex(CFG.bg);
+  for (let y = 0; y < 108; y++) for (let x = 0; x < 192; x++) { const d = Math.hypot((x - 96) / 96, (y - 54) / 54), k = 4 - d * 6, o = (y * 192 + x) * 4; im.data[o] = base[0] + k; im.data[o + 1] = base[1] + k; im.data[o + 2] = base[2] + k; im.data[o + 3] = 255; }
+  g.putImageData(im, 0, 0); const c = document.createElement('canvas'); c.width = CFG.w; c.height = CFG.h; const cg = c.getContext('2d'); cg.imageSmoothingQuality = 'high'; cg.drawImage(q, 0, 0, CFG.w, CFG.h); return c; })();
+
+/* ---------- render ---------- */
+function render(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(BG, 0, 0);
+  // the 1440 stage of the original, centred and scaled to the 1080 frame
+  ctx.translate(960, 540); ctx.scale(0.75, 0.75); ctx.translate(-720, -720);
+  let w = track(t, GW, 20, 0.82), h = track(t, GH, 20, 0.82), r = track(t, GR, 20, 0.9);
+  // stretch past max while dragging the volume, then spring back
+  const stretch = (spring(t - 4.6, 18, 0.8) - spring(t - 4.95, 18, 0.7)) * 90; w += stretch;
+  const x = 720 - w / 2, y = 720 - h / 2, fc = fillAt(t);
+  let fill = `rgb(${fc.map(Math.round)})`;
+  if (t > 6.22 && t < 6.7) { const on = clamp(spring(t - 6.24, 16, 0.97)); const c = fc.map((v, k) => lerp(v, 10, on)); fill = `rgb(${c.map(Math.round)})`; }
+  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.16)'; ctx.shadowBlur = 50; ctx.shadowOffsetY = 18; ctx.fillStyle = fill; roundRect(x, y, w, h, r); ctx.fill(); ctx.restore();
+  ctx.save(); roundRect(x, y, w, h, r); ctx.clip(); contents(t, x, y, w, h); ctx.restore();
+  drawCursor(cursorAt(t));
+}
+
+/* ---------- master timeline: the only clock ---------- */
+gsap.ticker.lagSmoothing(0);
+const tl = gsap.timeline({ paused: true });
+const clock = { t: 0 };
+tl.to(clock, { t: CFG.duration, duration: CFG.duration, ease: 'none' }, 0);
+tl.eventCallback('onUpdate', () => render(tl.time()));
+window.__timelines = { main: tl };
+render(0);
+Promise.all(['400 10px Geist', '500 10px Geist', '600 10px Geist'].map(f => document.fonts.load(f))).then(() => render(tl.time()), () => render(tl.time()));
+
+/* ---------- preview shell (outside the composition) ---------- */
+const main = document.getElementById('main');
+const playBtn = document.getElementById('playBtn'), scrub = document.getElementById('scrub'), tcEl = document.getElementById('tc');
+function fit() {
+  const s = Math.min(window.innerWidth / CFG.w, window.innerHeight / CFG.h);
+  main.style.transform = 'translate(-50%,-50%) scale(' + s + ')';
+}
+// Inside an Open Design project the motion source player wraps the stage,
+// fits it and adds its own controls; leave both to it there.
+const hostPlayer = () => window.__odMotionSourcePlayer || main.parentElement.id !== 'viewport';
+const ownFit = fit;
+fit = function () { if (hostPlayer()) { main.style.transform = 'translate(-50%,-50%)'; return; } ownFit(); };
+window.addEventListener('resize', fit); fit();
+document.addEventListener('DOMContentLoaded', () => setTimeout(() => {
+  fit(); if (hostPlayer()) document.getElementById('controls').style.display = 'none';
+}, 0));
+function sync() {
+  const t = tl.time();
+  scrub.value = t; tcEl.textContent = t.toFixed(2) + ' / ' + CFG.duration.toFixed(2);
+  playBtn.textContent = tl.isActive() ? 'PAUSE' : (t >= CFG.duration - 0.01 ? 'REPLAY' : 'PLAY');
+}
+gsap.ticker.add(sync);
+playBtn.addEventListener('click', () => {
+  if (tl.time() >= CFG.duration - 0.01) tl.restart(); else if (tl.paused()) tl.play(); else tl.pause();
+  sync();
+});
+scrub.addEventListener('input', () => { tl.pause(); tl.time(parseFloat(scrub.value)); sync(); });
+window.addEventListener('keydown', e => { if (e.code === 'Space' && e.target === document.body) { e.preventDefault(); playBtn.click(); } });
+const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+if (reduce) { tl.pause(); tl.time(CFG.reducedAt); }
+else document.fonts.ready.then(() => tl.play(0));
+sync();
+</script>
+<script>
+// Video export seeks with timeline callbacks suppressed, so the onUpdate
+// drawing also runs from a per-frame loop whenever the timeline time moves.
+(function install() {
+  var tls = window.__timelines;
+  var tl = tls && tls[Object.keys(tls)[0]];
+  if (!tl) { setTimeout(install, 50); return; }
+  var draw = tl.eventCallback('onUpdate');
+  if (!draw) return;
+  var drawnAt = null;
+  tl.eventCallback('onUpdate', function () { drawnAt = tl.time(); return draw.apply(this, arguments); });
+  (function loop() {
+    if (window.__odFrameRenderer && !document.documentElement.classList.contains('od-export')) {
+      document.documentElement.classList.add('od-export');
+    }
+    requestAnimationFrame(loop);
+    var t = tl.time();
+    if (t !== drawnAt) { drawnAt = t; draw(); }
+  })();
+})();
+</script>
+<script>
+// Preview bake: mark ready once the timeline reaches the poster frame.
+(function () {
+  var POSTER_AT = 8.8;
+  function check() {
+    var tls = window.__timelines;
+    var tl = tls && tls[Object.keys(tls)[0]];
+    if (tl && tl.time() >= POSTER_AT) {
+      document.documentElement.setAttribute('data-od-preview-ready', 'true');
+      return;
+    }
+    requestAnimationFrame(check);
+  }
+  requestAnimationFrame(check);
+})();
+</script>
+<script>
+// Sound starts with the film. If the browser blocks unmuted autoplay, the first
+// gesture on the page turns it on; the master timeline owns play, pause and seek.
+(function() {
+  // BEGIN shared motion audio sync
+// A render stall is not a request to seek the soundtrack. Only correct drift
+// after fresh, stable samples; explicit transport actions bypass that filter.
+function createMotionAudioSync(audio) {
+  var sampledAt = null, driftSince = null, previousDrift = 0, correctedAt = -Infinity, align = false;
+  return function (target, moving, force) {
+    var now = performance.now(), gap = sampledAt === null ? Infinity : now - sampledAt;
+    sampledAt = now;
+    if (force) { align = true; driftSince = null; }
+    if (align) {
+      if (audio.readyState > 0) {
+        if (Math.abs(audio.currentTime - target) > .01) audio.currentTime = target;
+        align = false; correctedAt = now;
+      }
+      return;
+    }
+    var drift = target - audio.currentTime;
+    if (!moving || audio.paused || audio.seeking || audio.readyState < 3 || gap > 200 || Math.abs(drift) <= .3 || now - correctedAt < 1500) {
+      driftSince = null; previousDrift = drift; return;
+    }
+    if (driftSince === null || drift * previousDrift <= 0 || Math.abs(drift - previousDrift) > .1) driftSince = now;
+    previousDrift = drift;
+    if (now - driftSince >= 750) {
+      audio.currentTime = target; correctedAt = now; driftSince = null;
+    }
+  };
+}
+  // END shared motion audio sync
+  const audio=document.getElementById('soundtrack');
+  if (!audio || typeof audio.play !== 'function' || window.__odFrameRenderer) return;
+  const controls=document.getElementById('controls');
+  const button=document.createElement('button');button.type='button';controls.appendChild(button);
+  // Gallery thumbnails load the page in an opaque sandbox; those stay silent until asked.
+  let enabled=window.origin!=='null',pending=false,chosen=false;
+  const timeline=()=>window.__timelines&&window.__timelines.main;
+  const syncAudio=createMotionAudioSync(audio);
+  let wasPlaying=false,lastTime=0;
+  function label() { button.textContent=enabled?'Sound off':'Sound on';button.setAttribute('aria-label',enabled?'Mute sound':'Enable sound');button.setAttribute('aria-pressed',String(enabled)); }
+  function play() { if(pending||!audio.paused)return;pending=true;audio.play().catch(()=>{enabled=false;label();if(!chosen)waitForGesture();}).finally(()=>{pending=false;}); }
+  function waitForGesture() {
+    const start=event=>{
+      if(event.target===button)return;
+      document.removeEventListener('pointerdown',start,true);document.removeEventListener('keydown',start,true);
+      if(chosen||enabled)return;
+      const tl=timeline();enabled=true;label();if(tl)syncAudio(tl.time(),true,true);play();
+    };
+    document.addEventListener('pointerdown',start,true);document.addEventListener('keydown',start,true);
+  }
+  label();
+  button.onclick=()=>{chosen=true;enabled=!enabled;label();const tl=timeline();if(enabled&&tl){if(tl.progress()>=1)tl.restart();else tl.play();syncAudio(tl.time(),true,true);play();}else audio.pause();};
+  document.getElementById('scrub').addEventListener('input',event=>{if(enabled)syncAudio(Number(event.target.value),false,true);});
+  function sync() {
+    if (window.__odMotionSourcePlayer) return;
+    const tl=timeline();
+    if(tl&&enabled&&!window.__odFrameRenderer){
+      const time=tl.time(),moving=!tl.paused()&&tl.progress()<1;
+      syncAudio(time,moving,(moving&&!wasPlaying)||time<lastTime-.1);
+      wasPlaying=moving;lastTime=time;
+      if(moving)play();else audio.pause();
+    }else { audio.pause();wasPlaying=false; }
+    requestAnimationFrame(sync);
+  }sync();
+})();
+</script>
+</body>
+</html>

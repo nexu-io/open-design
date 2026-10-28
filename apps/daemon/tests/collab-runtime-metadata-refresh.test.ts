@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createCollabRuntime, type CollabRuntime } from '../src/collab/runtime.js';
 import type { ResourcePublishAdapter } from '../src/collab/publish-scheduler.js';
 import type { ResourceHubPrincipal } from '../src/collab/resource-principal.js';
+import { teamProjectRegistration } from './team-project-registration-fixture.js';
 import {
   closeDatabase,
   ensureWorkspaceProject,
@@ -44,6 +45,7 @@ describe('shared-project metadata refresh', () => {
       describeProject: () => ({ name: projectName }),
       teamProjectCatalog: {
         upsert,
+        getRegistration: teamProjectRegistration,
         remove: vi.fn(async () => {}),
       },
     });
@@ -84,6 +86,7 @@ describe('shared-project metadata refresh', () => {
       describeProject: () => ({ name: 'Owner renamed project' }),
       teamProjectCatalog: {
         upsert,
+        getRegistration: teamProjectRegistration,
         remove: vi.fn(async () => {}),
       },
       onMetadataRefreshPending,
@@ -162,6 +165,7 @@ describe('shared-project metadata refresh', () => {
       describeProject: () => ({ name: 'Durable renamed project' }),
       teamProjectCatalog: {
         upsert,
+        getRegistration: teamProjectRegistration,
         remove: vi.fn(async () => {}),
       },
     });
@@ -185,12 +189,13 @@ describe('shared-project metadata refresh', () => {
     );
   });
 
-  it('cancels a pending metadata retry before removing the exact Team share', async () => {
+  it('cancels a pending metadata retry before making the exact Team share private', async () => {
     vi.useFakeTimers();
     const upsert = vi.fn()
       .mockRejectedValueOnce(new Error('catalog temporarily unavailable'))
       .mockResolvedValue(undefined);
     const remove = vi.fn(async () => {});
+    const setVisibility = vi.fn(async () => {});
     const unpublish = vi.fn(async () => {});
     const principal: ResourceHubPrincipal = {
       memberId: 'owner-member',
@@ -201,7 +206,7 @@ describe('shared-project metadata refresh', () => {
     runtime = createCollabRuntime({
       adapter: { publish: vi.fn(), unpublish },
       describeProject: () => ({ name: 'Owner renamed project' }),
-      teamProjectCatalog: { upsert, remove },
+      teamProjectCatalog: { upsert, remove, setVisibility, getRegistration: teamProjectRegistration },
     });
     runtime.rememberTeamShare('shared-project', principal, 'pending_upload');
     runtime.refreshTeamProjectMetadata('shared-project');
@@ -212,11 +217,10 @@ describe('shared-project metadata refresh', () => {
     await vi.advanceTimersByTimeAsync(60_000);
 
     expect(upsert).toHaveBeenCalledTimes(1);
-    expect(unpublish).toHaveBeenCalledWith({
-      projectId: 'shared-project',
-      principal,
-    });
-    expect(remove).toHaveBeenCalledWith('shared-project', principal);
+    expect(setVisibility).toHaveBeenCalledWith('shared-project', 'private', principal);
+    expect(unpublish).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+    expect(runtime.projectSyncState('shared-project', principal)).toBe('local_only');
   });
 
   it('persists metadata repair separately from content sync state across restart', () => {

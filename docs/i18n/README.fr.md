@@ -1,13 +1,9 @@
-<h1 align="center">OpenDesign : l'alternative open source à Claude Design</h1>
+<h1 align="center">OpenDesign : le premier espace de travail collaboratif avec des agents de design IA</h1>
 
-> ⚡ **[OpenDesign Cloud — le service de modèles officiel.](https://open-design.ai/zh/pricing/)** Une seule recharge pour utiliser des modèles d'agents et d'images dans OpenDesign : GPT, Claude et DeepSeek pour les agents ; GPT Image 2.0, Seedream 5.0 Pro et Nano Banana 2.0 pour les images.
->
-> 🚀 **[DeepSeek V4 Flash et V4 Pro sont maintenant disponibles.](https://open-design.ai/zh/pricing/)** Mettez une intelligence de premier plan au service des prototypes, présentations, systèmes de design et tâches quotidiennes des agents. Les membres OpenDesign peuvent utiliser les deux modèles sans limite pendant deux semaines, directement dans l'application.
->
-> 🧩 **[DeepSeek Harness est maintenant pris en charge.](https://open-design.ai/zh/agents/deepseek-harness-design/)** Connectez l'Agent Harness officiel `dsh` de DeepSeek à OpenDesign en tant que runtime natif, avec raisonnement structuré, appels d'outils, découverte des modèles, annulation et reprise de session. Les fichiers générés restent dans le workflow OpenDesign pour la prévisualisation en direct et la livraison.
+> ✨ **[Fêtons les 100K étoiles GitHub avec OpenDesign Go](https://open-design.ai/pricing/)** — Les crédits Go sont doublés : **8 $ US le premier mois, avec jusqu’à 120 $ US de crédits mensuels pour les modèles éligibles du Design Plan**. Utilisez-les sur plus de 10 modèles, dont GPT-6 Luna, DeepSeek V4.1 Flash, GLM-5.3 Flash-X et MiMo V2.6 Flash. Tous les forfaits individuels incluent un accès API pour Codex, Claude Code, DSH, OpenCode et d'autres outils.
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Bannière OpenDesign — le titre &quot;L’alternative open source à Claude Design&quot; sur une scène de colonnes et de personnages drapés devant un fond de code, avec des cartes présentant les systèmes de design, les plugins, les agents de code et les fournisseurs média" width="100%" />
+  <img src="../../docs/assets/readme-hero-design-agent.webp" alt="OpenDesign : le premier espace de travail collaboratif avec des agents de design IA" width="100%" />
 </p>
 
 <p align="center">
@@ -31,79 +27,65 @@
 
 ## Qu'est-ce qu'OpenDesign
 
-🎨 **L'alternative open source à Claude Design.** &nbsp;🖥️ **Application de bureau native et local-first pour macOS et Windows.** &nbsp;⚡ **Skills composables, systèmes de design `DESIGN.md` fidèles à votre marque et plugins prêts à l'emploi.** &nbsp;🖼️ Génère des **prototypes web · bureau · mobile**, des **tableaux de bord / artefacts en direct**, des **présentations**, des **images**, de la **vidéo**, ainsi que des motion graphics **HyperFrames**. 🔒 Aperçu en iframe sandboxée · export HTML / PDF / PPTX / MP4. &nbsp;🤖 **Fonctionne avec DeepSeek Harness (`dsh`) · Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Amp · Hermes · Kimi · Antigravity et 26 exécutables CLI locaux distincts**, ou tout point de terminaison compatible OpenAI via BYOK.
+OpenDesign est **le premier espace de travail collaboratif avec des agents de design IA**. Partez d'un brief, puis utilisez votre agent de code habituel ou OpenDesign Cloud pour créer un prototype fidèle à votre système de design. Partagez-le avec votre équipe, recueillez ses retours et laissez l'agent l'améliorer dans le même projet.
 
-OpenDesign ouvre la boucle **agent-native** proposée par Anthropic avec Claude Design — comprendre le brief, fixer la direction, générer l'artefact en continu, le critiquer et le livrer — en la transformant en un **système de fichiers de skills fonctionnels, de modèles de rendu, de systèmes de design et de plugins**. Les agents de code déjà installés sur votre ordinateur peuvent les lire, les écrire et les remixer. Votre CLI devient le moteur de design, votre ordinateur le studio et le `DESIGN.md` de votre équipe le contrat de marque.
-
-C'est aussi l'**alternative à Figma pour l'ère des agents** — au lieu de déplacer des pixels sur un canevas, il livre des artefacts d'une seule page en CSS réel, en polices réelles, en composants réels, exportés directement en HTML / PDF / PPTX / MP4 — déjà façonnés par votre système de design, déjà exécutables au sein de l'agent que vous utilisez chaque jour.
+Ce processus est ouvert et extensible. OpenDesign est sous licence Apache 2.0 et met à disposition des compétences, des modèles, des systèmes de design et des plugins que les équipes peuvent examiner et adapter à leurs méthodes.
 
 
 ---
 
 ## Visite du produit
 
-Un aperçu rapide du workflow principal d'OpenDesign. Commencez sur **Home** avec un brief, explorez les skills réutilisables dans **Plugins** et transformez les références de marque en **Design System**. Entrez ensuite dans le **Studio** d'un projet pour créer et affiner prototypes, présentations, applications mobiles, images, documents et HyperFrames au même endroit.
-
 ### Pages principales
 
 <table>
 <tr>
-<td valign="top">
-<img src="../../docs/screenshots/product-tour/home.png" alt="Page d’accueil OpenDesign avec types d’artefacts, champ de brief, sélecteur de modèle et exemples" /><br/>
-<sub><b>Home</b> — Choisissez un type d'artefact, saisissez un brief, puis définissez le système de design, le répertoire de travail et le modèle avant de commencer.</sub>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png"><img src="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png" alt="Home — Partez d&#x27;un brief ou d&#x27;un exemple." width="500" /></a><br/>
+<sub><b>Home</b> — Partez d&#x27;un brief ou d&#x27;un exemple.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp"><img src="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp" alt="All projects — Retrouvez vos systèmes de design, médias et prototypes." width="500" /></a><br/>
+<sub><b>All projects</b> — Retrouvez vos systèmes de design, médias et prototypes.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png"><img src="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png" alt="Design Systems — Examinez les ressources de marque et améliorez-les avec un agent." width="500" /></a><br/>
+<sub><b>Design Systems</b> — Examinez les ressources de marque et améliorez-les avec un agent.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png"><img src="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png" alt="Plugins — Trouvez des compétences et lancez-les avec Try it." width="500" /></a><br/>
+<sub><b>Plugins</b> — Trouvez des compétences et lancez-les avec Try it.</sub>
 </td>
 </tr>
 </table>
+
+### Studio — créer et améliorer dans un même projet
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/plugins.png" alt="Page Plugins d’OpenDesign présentant le catalogue de skills officiels" /><br/>
-<sub><b>Plugins</b> — Parcourez les skills officiels par catégorie, recherchez dans le catalogue et lancez un workflow avec <code>Try it</code>.</sub>
+<img src="../../docs/screenshots/product-tour/studio-prototype-2026.webp" alt="Prototype — Créez et améliorez des expériences web interactives avec votre agent et un aperçu en direct." /><br/>
+<sub><b>Prototype</b> — Créez et améliorez des expériences web interactives avec votre agent et un aperçu en direct.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/design-system.png" alt="Aperçu du système de design Shopify dans le Studio OpenDesign" /><br/>
-<sub><b>Design System</b> — Extrayez et affinez le langage visuel d'une marque, prévisualisez le résultat et continuez à créer avec lui dans le même espace de travail.</sub>
+<img src="../../docs/screenshots/product-tour/studio-slides-2026.png" alt="Slides — Créez des présentations, vérifiez les diapositives et les notes, puis exportez-les." /><br/>
+<sub><b>Slides</b> — Créez des présentations, vérifiez les diapositives et les notes, puis exportez-les.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-image-2026.webp" alt="Image — Générez des visuels depuis la conversation, examinez le résultat, puis téléchargez-le ou ouvrez-le." /><br/>
+<sub><b>Image</b> — Générez des visuels depuis la conversation, examinez le résultat, puis téléchargez-le ou ouvrez-le.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4"><img src="../../docs/screenshots/product-tour/studio-hyperframes-poster-2026.png" alt="HyperFrames — Créez des animations graphiques avec votre agent et exportez-les en MP4." /></a><br/>
+<sub><b>HyperFrames</b> — Créez des animations graphiques avec votre agent et exportez-les en MP4. <a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4">Voir la vidéo</a>.</sub>
 </td>
 </tr>
 </table>
 
-### Studio — de nombreux types d'artefacts dans un seul projet
-
-Dans le Studio d'un projet, la conversation, les fichiers générés et la prévisualisation en direct restent réunis pour six types d'artefacts :
-
-<table>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-prototype.png" alt="Aperçu d’un prototype web dans le Studio OpenDesign" /><br/>
-<sub><b>Prototype</b> — Générez ou reconstruisez des expériences web, inspectez la page rendue et itérez sur place avec l'agent.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-deck.png" alt="Aperçu d’une présentation de plusieurs diapositives dans le Studio OpenDesign" /><br/>
-<sub><b>Présentation</b> — Créez des présentations de plusieurs diapositives, examinez les miniatures et les notes du présentateur, puis exportez lorsqu'elles sont prêtes.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-mobile-app.png" alt="Aperçu d’un artefact d’application mobile dans le Studio OpenDesign" /><br/>
-<sub><b>Application mobile</b> — Générez et peaufinez des interfaces mobiles dans un aperçu d'appareil, avec la conversation, les fichiers de sortie et les prochaines étapes à côté.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-image.png" alt="Aperçu d’une image générée dans le Studio OpenDesign" /><br/>
-<sub><b>Image</b> — Générez des ressources visuelles depuis la conversation du projet, prévisualisez le résultat en taille réelle, puis téléchargez-le ou ouvrez-le.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-document.png" alt="Aperçu d’un document multipage dans le Studio OpenDesign" /><br/>
-<sub><b>Document</b> — Créez des guides multipages et des documents éditoriaux soignés, vérifiez la mise en page rendue, puis exportez ou partagez.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-hyperframe.png" alt="Aperçu d’une animation HyperFrame dans le Studio OpenDesign" /><br/>
-<sub><b>HyperFrame</b> — Créez des motion graphics pilotés par le code, prévisualisez l'animation dans Studio et exportez la vidéo finale.</sub>
-</td>
-</tr>
-</table>
 ---
 
 ## Compatibilité des plateformes
@@ -252,29 +234,12 @@ Chaque présentation s'exporte en **HTML** (fichier unique, ressources intégré
 
 ## Pourquoi OpenDesign
 
-> **En avril 2026, Anthropic a publié Claude Design — la première fois qu'un LLM cessait d'écrire de la prose pour livrer directement des artefacts de design.** C'est devenu viral. Mais c'est resté propriétaire, payant uniquement, dans le cloud uniquement, verrouillé sur le modèle d'Anthropic, les skills d'Anthropic, la surface d'Anthropic. Pas de paiement à l'usage, pas d'auto-hébergement, pas de déploiement Vercel, pas de remplacement par votre propre agent.
-
-OpenDesign (OD) est l'alternative open source. La même boucle, le même modèle mental orienté artefact, sans aucun verrouillage :
-
 - 🤖 **Agent-native, agnostique au modèle.** Nous ne livrons pas d'agent. Les `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` déjà présents dans votre `PATH` sont le moteur de design. Changez-en d'un seul clic.
 - 🧠 **Qualité professionnelle par défaut.** Chaque rendu lit le `DESIGN.md` du package actif comme contrat de marque central. Le dépôt fournit 151 packages de systèmes de design ; les packages historiques peuvent ne contenir que `DESIGN.md`, tandis que les plus récents peuvent ajouter `manifest.json`, `tokens.css`, des composants, des assets et leur provenance. Déposez un dossier, le sélecteur le trouve.
 - 🖥️ **Local-first, BYOK à chaque couche.** Applications de bureau natives pour macOS (Apple Silicon et Intel) et Windows (x64), avec une AppImage Linux dans la voie de publication optionnelle. L'analyse d'usage et la relecture de session nécessitent un consentement ; la télémétrie de sécurité et de fiabilité, expurgée des données sensibles, reste active. Avant de décrire des chemins de données du daemon, les contributeurs et opérateurs DOIVENT lire [`AGENTS.md` → **Daemon data directory contract**](../../AGENTS.md#daemon-data-directory-contract). Ce README NE DOIT PAS répéter ce contrat.
 - 🌍 **Composable sur quatre plans.** Les **plugins** portent les workflows · les **skills fonctionnels** le comportement de l'agent · les **modèles de design** les plans de rendu · les **systèmes de design** la marque. Ces quatre éléments sont des répertoires portables et versionnables que chacun peut créer et publier.
-- 🔁 **Rafraîchissez une base de code existante.** Confiez un dépôt `git` + un `DESIGN.md` à l'agent et il refactorise vos vrais composants selon les spécifications de la marque. Des plugins dédiés migrent les workflows Figma / Pencil vers du code React / Next.js / Vue.
-- 🔒 **Confidentialité par conviction.** Tout s'exécute là où vivent vos données — votre ordinateur, le serveur de votre équipe, votre projet Vercel. Lorsque le réseau est nécessaire, le proxy BYOK est protégé contre la SSRF.
-
-### Comparaison
-
-| | Claude Design | Figma | Lovable / v0 / Bolt | **OpenDesign** |
-|---|---|---|---|---|
-| Open source | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
-| Auto-hébergement / bureau | ❌ | ❌ | ❌ | **✅ macOS + Windows + Docker** |
-| Agent-native (s'exécute dans votre CLI) | Anthropic uniquement | ❌ | Agent cloud uniquement | **✅ 26 CLI + BYOK** |
-| `DESIGN.md` de qualité professionnelle | Propriétaire | Theme JSON | Tokens limités | **✅ 151 systèmes fournis** |
-| Skills / plugins / modèles | Fermé | Boutique de plugins | Fermé | **✅ Plus de 100 skills fonctionnels · catalogue séparé de modèles de rendu · 277 plugins** |
-| HyperFrames (HTML→MP4) | ❌ | ❌ | ❌ | **✅ Première classe** |
-| Rafraîchir un dépôt existant à la marque | ❌ | ❌ | ❌ | **✅ via agent + `DESIGN.md`** |
-| Facturation minimale | Pro / Max / Team | Pro / Org | Pro / Team | **BYOK · tout point de terminaison compatible** |
+- 🔁 **Rafraîchissez une base de code existante.** Confiez un dépôt `git` + un `DESIGN.md` à l'agent et il refactorise vos vrais composants selon les spécifications de la marque.
+- 🔒 **Confidentialité par conviction.** Les projets peuvent fonctionner localement ou sur votre propre déploiement. Les requêtes aux modèles cloud et à OpenDesign Cloud sont envoyées aux services correspondants. Le proxy BYOK inclut des protections contre la SSRF.
 
 ---
 
@@ -356,7 +321,7 @@ Node `~24`, pnpm `10.33.x`. Sous WSL2, consultez le [guide WSL2](../wsl-setup.md
 `brief → plugin → direction → système de design → artefact → transmission → mémoire`
 
 1. **Un PM soumet un brief.** Le sélecteur de plugins propose landing page · pitch deck · tableau de bord · publication sociale · spec PM · tableau de scores OKR…
-2. **Un designer (ou l'agent) verrouille la direction.** Pas de marque ? Choisissez parmi 5 directions sélectionnées. Vous avez une marque ? Déposez une capture d'écran / une URL → l'agent se connecte à GitHub, importe Figma, et codifie un `DESIGN.md` réutilisable.
+2. **Un designer (ou l'agent) verrouille la direction.** Pas de marque ? Choisissez parmi 5 directions sélectionnées. Vous avez une marque ? Déposez une capture d'écran / une URL → l'agent se connecte à GitHub et codifie un `DESIGN.md` réutilisable.
 3. **L'agent crée le premier livrable.** Le plugin, le skill fonctionnel ou le modèle de design et le `DESIGN.md` sont associés. Les exécutions CLI avec système de fichiers écrivent les fichiers canoniques du projet et l'aperçu suit leurs modifications ; les exécutions BYOK/API sans outils de fichiers renvoient un bloc `<artifact>` complet.
 4. **Transmettez à l'ingénierie.** L'artefact est du véritable HTML/CSS — déposez-le dans Cursor, Codex ou Claude Code pour continuer à construire en code. Ou exportez en PPTX / PDF / MP4 directement vers le marketing.
 5. **OpenDesign devient plus intelligent à mesure que vous l'utilisez.** Vos captures d'écran, polices, palettes et artefacts confirmés s'accumulent comme valeurs par défaut pour la session suivante. Moins de retouches, moins de dérive.
@@ -433,9 +398,9 @@ Protocole et séparation des répertoires → [`docs/skills-protocol.md`](../../
 
 **IA et LLM** — `claude` · `cohere` · `mistral-ai` · `minimax` · `together-ai` · `replicate` · `runwayml` · `elevenlabs` · `ollama` · `x-ai`
 
-**Outils pour développeurs** — `cursor` · `vercel` · `linear-app` · `framer` · `expo` · `clickhouse` · `mongodb` · `supabase` · `hashicorp` · `posthog` · `sentry` · `warp` · `webflow` · `sanity` · `mintlify` · `lovable` · `composio` · `opencode-ai` · `voltagent`
+**Outils pour développeurs** — `cursor` · `vercel` · `linear-app` · `expo` · `clickhouse` · `mongodb` · `supabase` · `hashicorp` · `posthog` · `sentry` · `warp` · `sanity` · `mintlify` · `composio` · `opencode-ai` · `voltagent`
 
-**Productivité** — `notion` · `figma` · `miro` · `airtable` · `superhuman` · `intercom` · `zapier` · `cal` · `clay` · `raycast`
+**Productivité** — `notion` · `miro` · `airtable` · `superhuman` · `intercom` · `zapier` · `cal` · `clay` · `raycast`
 
 **Fintech** — `stripe` · `coinbase` · `binance` · `kraken` · `mastercard` · `revolut` · `wise`
 
@@ -491,7 +456,7 @@ Les plugins sont à parité totale entre l'**interface web** et le **CLI `od`** 
 od plugin list                       # list installed plugins (--task-kind / --mode / --tag filters)
 od plugin search "landing page"      # search by keyword
 od plugin info od-default            # inspect a plugin's metadata, inputs, capabilities
-od plugin install od-figma-migration # install from a registry; also accepts ./local-folder or an https://… link
+od plugin install od-default        # install from a registry; also accepts ./local-folder or an https://… link
 od plugin apply od-default --input brief="a one-page pitch for our seed round"
 od plugin upgrade od-default         # upgrade
 od plugin uninstall od-default       # uninstall
@@ -740,11 +705,10 @@ Si cela vous a fait gagner trente minutes, mettez-lui une ★. Les étoiles ne p
 
 | Projet | Rôle |
 |---|---|
-| Claude Design | Le produit propriétaire dont ce dépôt est l'alternative open source. |
 | [`alchaincyf/huashu-design`](https://github.com/alchaincyf/huashu-design) | La boussole de la philosophie de design — workflow de designer junior, protocole de ressources de marque, checklist anti-AI-slop, critique en cinq dimensions. |
 | [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) | Le skill de PPT web de style magazine, intégré tel quel sous [`design-templates/guizang-ppt/`](../../design-templates/guizang-ppt/). Par défaut pour le mode présentation. |
 | [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill) | La famille HTML PPT Studio — 15 modèles de présentation, 36 thèmes, 31 mises en page de page, runtime d'animation, mode présentateur à cartes magnétiques. |
-| [`OpenCoworkAI/open-codesign`](https://github.com/OpenCoworkAI/open-codesign) | La première alternative open source à Claude Design ; des patterns UX que nous empruntons (boucle d'artefact en flux, iframe sandboxée, panneau d'agent en direct). |
+| [`OpenCoworkAI/open-codesign`](https://github.com/OpenCoworkAI/open-codesign) | des patterns UX que nous empruntons (boucle d'artefact en flux, iframe sandboxée, panneau d'agent en direct). |
 | [`multica-ai/multica`](https://github.com/multica-ai/multica) | L'architecture daemon + adaptateur — détection d'agents par scan du PATH, daemon local comme unique processus privilégié. |
 | [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md) | Source historique du schéma `DESIGN.md` original en 9 sections et de 70 systèmes dérivés de l'upstream ; les packages actuels peuvent étendre cette base. |
 | [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills) | Source des 57 skills de design ajoutés sous `design-systems/`. |

@@ -1,0 +1,127 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-motion-future",
+  "title": "The Future Is Already Here",
+  "title_i18n": {
+    "en": "The Future Is Already Here",
+    "id": "Masa Depan Sudah Tiba",
+    "de": "Die Zukunft ist schon da",
+    "zh-CN": "未来已来",
+    "zh-TW": "未來已來",
+    "pt-BR": "O futuro já chegou",
+    "es-ES": "El futuro ya está aquí",
+    "ru": "Будущее уже здесь",
+    "fa": "آینده همین حالاست",
+    "ar": "المستقبل هنا بالفعل",
+    "ja": "未来はもう来ている",
+    "ko": "미래는 이미 와 있다",
+    "pl": "Przyszłość już tu jest",
+    "hu": "A jövő már itt van",
+    "fr": "Le futur est déjà là",
+    "uk": "Майбутнє вже тут",
+    "tr": "Gelecek çoktan geldi",
+    "th": "อนาคตมาถึงแล้ว",
+    "it": "Il futuro è già qui"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-10-09T00:00:00Z",
+  "description": "A 20-second electric-blue tech reel, rebuilt from the viral original: 3D cubes, a word tunnel, liquid chrome type, a FUTURE.EXE desktop, a countdown, glass objects and a chrome FUTURE hero, cut to 120 BPM.",
+  "description_i18n": {
+    "en": "A 20-second electric-blue tech reel, rebuilt from the viral original: 3D cubes, a word tunnel, liquid chrome type, a FUTURE.EXE desktop, a countdown, glass objects and a chrome FUTURE hero, cut to 120 BPM.",
+    "id": "Reel teknologi biru elektrik 20 detik, dibuat ulang dari versi viral aslinya: kubus 3D, terowongan kata, tipografi krom cair, desktop FUTURE.EXE, hitung mundur, objek kaca, dan judul krom FUTURE, dipotong pada 120 BPM.",
+    "de": "Ein 20-sekündiges Tech-Reel in Elektroblau, nachgebaut nach dem viralen Original: 3D-Würfel, ein Worttunnel, flüssige Chrom-Typo, ein FUTURE.EXE-Desktop, ein Countdown, Glasobjekte und ein Chrom-FUTURE als Finale, geschnitten auf 120 BPM.",
+    "zh-CN": "按爆款原片复刻的 20 秒电光蓝科技短片：3D 方块、文字隧道、液态金属大字、FUTURE.EXE 桌面、倒计时、玻璃质感物体和镀铬 FUTURE 收尾，120 BPM 卡点剪辑。",
+    "zh-TW": "按爆款原片復刻的 20 秒電光藍科技短片：3D 方塊、文字隧道、液態金屬大字、FUTURE.EXE 桌面、倒數計時、玻璃質感物件和鍍鉻 FUTURE 收尾，120 BPM 卡點剪輯。",
+    "pt-BR": "Um reel tech de 20 segundos em azul elétrico, recriado a partir do original viral: cubos 3D, um túnel de palavras, tipografia em cromo líquido, um desktop FUTURE.EXE, contagem regressiva, objetos de vidro e um FUTURE cromado no final, cortado a 120 BPM.",
+    "es-ES": "Un reel tecnológico de 20 segundos en azul eléctrico, recreado a partir del original viral: cubos 3D, un túnel de palabras, tipografía de cromo líquido, un escritorio FUTURE.EXE, una cuenta atrás, objetos de cristal y un FUTURE cromado de cierre, montado a 120 BPM.",
+    "ru": "20-секундный технологичный рил в электрик-синем, воссозданный по вирусному оригиналу: 3D-кубы, туннель из слов, жидкий хромированный шрифт, рабочий стол FUTURE.EXE, обратный отсчёт, стеклянные объекты и хромированное FUTURE в финале, монтаж под 120 BPM.",
+    "fa": "ریل فناوری ۲۰ ثانیه‌ای با آبی الکتریک که از روی نسخهٔ اصلی پربازدید بازسازی شده: مکعب‌های سه‌بعدی، تونل کلمات، تایپوگرافی کروم مایع، دسکتاپ FUTURE.EXE، شمارش معکوس، اشیای شیشه‌ای و FUTURE کرومی در پایان، با تدوین ۱۲۰ BPM.",
+    "ar": "ريل تقني مدته 20 ثانية بالأزرق الكهربائي، أُعيد بناؤه من الأصل الفيروسي: مكعبات ثلاثية الأبعاد، نفق كلمات، طباعة كروم سائل، سطح مكتب FUTURE.EXE، عدّ تنازلي، أجسام زجاجية وختام بكلمة FUTURE كرومية، بمونتاج على 120 BPM.",
+    "ja": "バズった原作を再現した、エレクトリックブルーの 20 秒テックリール。3D キューブ、ワードトンネル、液体クロームの文字、FUTURE.EXE のデスクトップ、カウントダウン、ガラスのオブジェクト、クロームの FUTURE で締める。120 BPM でカット。",
+    "ko": "바이럴 원본을 재현한 20초 일렉트릭 블루 테크 릴: 3D 큐브, 단어 터널, 리퀴드 크롬 타이포, FUTURE.EXE 데스크톱, 카운트다운, 유리 오브젝트, 크롬 FUTURE 엔딩. 120 BPM 컷 편집.",
+    "pl": "20-sekundowy techniczny reel w elektrycznym błękicie, odtworzony z wiralowego oryginału: sześciany 3D, tunel słów, typografia z płynnego chromu, pulpit FUTURE.EXE, odliczanie, szklane obiekty i chromowany napis FUTURE na finał, cięty w 120 BPM.",
+    "hu": "20 másodperces elektromos kék tech reel a virális eredeti alapján újraépítve: 3D kockák, szóalagút, folyékony króm betűk, FUTURE.EXE asztal, visszaszámlálás, üvegtárgyak és króm FUTURE zárás, 120 BPM-re vágva.",
+    "fr": "Un reel tech de 20 secondes en bleu électrique, reconstruit d’après l’original viral : cubes 3D, tunnel de mots, typographie en chrome liquide, bureau FUTURE.EXE, compte à rebours, objets en verre et FUTURE chromé en final, monté à 120 BPM.",
+    "uk": "20-секундний технологічний рил в електрик-синьому, відтворений за вірусним оригіналом: 3D-куби, тунель зі слів, рідкий хромований шрифт, робочий стіл FUTURE.EXE, зворотний відлік, скляні об’єкти та хромоване FUTURE у фіналі, монтаж під 120 BPM.",
+    "tr": "Viral orijinalden yeniden kurulan 20 saniyelik elektrik mavisi teknoloji reel’i: 3D küpler, kelime tüneli, sıvı krom yazı, FUTURE.EXE masaüstü, geri sayım, cam nesneler ve krom FUTURE finali, 120 BPM kurgu.",
+    "th": "เทครีลสีน้ำเงินไฟฟ้ายาว 20 วินาที สร้างใหม่ตามต้นฉบับไวรัล: ลูกบาศก์ 3D อุโมงค์คำ ตัวอักษรโครมเหลว เดสก์ท็อป FUTURE.EXE นับถอยหลัง วัตถุแก้ว และปิดท้ายด้วย FUTURE สีโครม ตัดต่อที่ 120 BPM",
+    "it": "Un reel tech di 20 secondi in blu elettrico, ricostruito dall’originale virale: cubi 3D, un tunnel di parole, tipografia in cromo liquido, un desktop FUTURE.EXE, un conto alla rovescia, oggetti in vetro e un FUTURE cromato finale, montato a 120 BPM."
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io/open-design"
+  },
+  "homepage": "https://github.com/nexu-io/open-design",
+  "tags": [
+    "example",
+    "first-party",
+    "video",
+    "motion-design",
+    "tech",
+    "3d",
+    "kinetic-typography",
+    "viral-remake"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "poster": "./assets/cover.jpg",
+      "motion": "static",
+      "galleryPosterOnly": true,
+      "bakeStillAtSec": 17.2
+    },
+    "useCase": {
+      "query": {
+        "en": "Make a 20-second high-energy tech reel titled \"The future is already here\", cut to 120 BPM in electric blue, black, white and chrome. Open with 3D cubes multiplying from 1 to 64, then SIGNAL, a scanning retina with 97.2%, a word tunnel that reads WAKE UP, and THE FUTURE in liquid chrome. Show a FUTURE.EXE desktop window, a LOADING 99% bar and a 3-2-1 countdown, then four glass objects labelled PRISM, BOLT, PLANET and MIND, a ring vortex and a checker grid. Land on a big chrome 3D FUTURE with IS ALREADY HERE. and end on a glitch into END OF TRANSMISSION. Heavy display type (Unbounded Black), a thin monospace HUD with timecode and frame labels, hard cuts on the beat.",
+        "id": "Buat reel teknologi penuh energi 20 detik berjudul \"The future is already here\", dipotong pada 120 BPM dengan warna biru elektrik, hitam, putih, dan krom. Buka dengan kubus 3D yang berlipat dari 1 menjadi 64, lalu SIGNAL, retina yang dipindai dengan 97.2%, terowongan kata bertuliskan WAKE UP, dan THE FUTURE dalam krom cair. Tampilkan jendela desktop FUTURE.EXE, bilah LOADING 99%, dan hitung mundur 3-2-1, lalu empat objek kaca berlabel PRISM, BOLT, PLANET, dan MIND, pusaran cincin, dan grid papan catur. Akhiri pada FUTURE krom 3D besar dengan IS ALREADY HERE. lalu glitch menjadi END OF TRANSMISSION. Tipografi display tebal (Unbounded Black), HUD monospace tipis dengan timecode dan label frame, potongan tajam mengikuti ketukan.",
+        "de": "Erstelle ein energiegeladenes 20-Sekunden-Tech-Reel mit dem Titel „The future is already here“, geschnitten auf 120 BPM in Elektroblau, Schwarz, Weiß und Chrom. Starte mit 3D-Würfeln, die sich von 1 auf 64 vervielfachen, dann SIGNAL, eine gescannte Netzhaut mit 97.2 %, ein Worttunnel mit WAKE UP und THE FUTURE in flüssigem Chrom. Zeig ein FUTURE.EXE-Desktopfenster, einen LOADING-99-%-Balken und einen 3-2-1-Countdown, dann vier Glasobjekte mit den Labels PRISM, BOLT, PLANET und MIND, einen Ringwirbel und ein Schachbrettraster. Lande auf einem großen Chrom-3D-FUTURE mit IS ALREADY HERE. und ende mit einem Glitch zu END OF TRANSMISSION. Schwere Display-Schrift (Unbounded Black), ein dünnes Monospace-HUD mit Timecode und Frame-Labels, harte Schnitte auf dem Beat.",
+        "zh-CN": "做一支 20 秒的高能科技短片，主题是「未来已来」（The future is already here），120 BPM 卡点，配色为电光蓝、黑、白和镀铬。开场是 3D 方块从 1 个裂变到 64 个，接着是 SIGNAL、扫描中的视网膜和 97.2%、写着 WAKE UP 的文字隧道、液态金属质感的 THE FUTURE。然后出现 FUTURE.EXE 桌面窗口、LOADING 99% 进度条和 3-2-1 倒计时，再是标着 PRISM、BOLT、PLANET、MIND 的四个玻璃质感物体、环形漩涡和棋盘格网格。最后落在巨大的镀铬 3D 字 FUTURE 和 IS ALREADY HERE.，以故障效果切到 END OF TRANSMISSION 收尾。粗重的展示字体（Unbounded Black），细等宽字体的 HUD 带时间码和画面标签，全程按节拍硬切。",
+        "zh-TW": "做一支 20 秒的高能科技短片，主題是「未來已來」（The future is already here），120 BPM 卡點，配色為電光藍、黑、白和鍍鉻。開場是 3D 方塊從 1 個裂變到 64 個，接著是 SIGNAL、掃描中的視網膜和 97.2%、寫著 WAKE UP 的文字隧道、液態金屬質感的 THE FUTURE。然後出現 FUTURE.EXE 桌面視窗、LOADING 99% 進度條和 3-2-1 倒數，再是標著 PRISM、BOLT、PLANET、MIND 的四個玻璃質感物件、環形漩渦和棋盤格網格。最後落在巨大的鍍鉻 3D 字 FUTURE 和 IS ALREADY HERE.，以故障效果切到 END OF TRANSMISSION 收尾。粗重的展示字體（Unbounded Black），細等寬字體的 HUD 帶時間碼和畫面標籤，全程按節拍硬切。",
+        "pt-BR": "Crie um reel tech de 20 segundos cheio de energia chamado \"The future is already here\", cortado a 120 BPM em azul elétrico, preto, branco e cromo. Abra com cubos 3D se multiplicando de 1 para 64, depois SIGNAL, uma retina sendo escaneada com 97.2%, um túnel de palavras com WAKE UP e THE FUTURE em cromo líquido. Mostre uma janela de desktop FUTURE.EXE, uma barra LOADING 99% e uma contagem 3-2-1, depois quatro objetos de vidro rotulados PRISM, BOLT, PLANET e MIND, um vórtice de anéis e uma grade quadriculada. Termine num grande FUTURE cromado em 3D com IS ALREADY HERE. e feche com um glitch para END OF TRANSMISSION. Tipografia display pesada (Unbounded Black), um HUD monoespaçado fino com timecode e rótulos de quadro, cortes secos no ritmo.",
+        "es-ES": "Crea un reel tecnológico de 20 segundos lleno de energía titulado \"The future is already here\", montado a 120 BPM en azul eléctrico, negro, blanco y cromo. Empieza con cubos 3D que se multiplican de 1 a 64, después SIGNAL, una retina escaneada con 97.2 %, un túnel de palabras que dice WAKE UP y THE FUTURE en cromo líquido. Muestra una ventana de escritorio FUTURE.EXE, una barra LOADING 99 % y una cuenta atrás 3-2-1, luego cuatro objetos de cristal con las etiquetas PRISM, BOLT, PLANET y MIND, un vórtice de anillos y una cuadrícula de ajedrez. Termina en un gran FUTURE cromado en 3D con IS ALREADY HERE. y cierra con un glitch hacia END OF TRANSMISSION. Tipografía display pesada (Unbounded Black), un HUD monoespaciado fino con código de tiempo y etiquetas de plano, cortes secos al ritmo.",
+        "ru": "Сделай 20-секундный энергичный технологичный рил под названием «The future is already here», смонтированный под 120 BPM, в электрик-синем, чёрном, белом и хроме. Начни с 3D-кубов, которые размножаются от 1 до 64, затем SIGNAL, сканируемая сетчатка с 97.2%, туннель из слов WAKE UP и THE FUTURE из жидкого хрома. Покажи окно рабочего стола FUTURE.EXE, полосу LOADING 99% и отсчёт 3-2-1, затем четыре стеклянных объекта с подписями PRISM, BOLT, PLANET и MIND, кольцевой вихрь и шахматную сетку. Заверши большим хромированным 3D-словом FUTURE с IS ALREADY HERE. и глитчем в END OF TRANSMISSION. Тяжёлый акцидентный шрифт (Unbounded Black), тонкий моноширинный HUD с таймкодом и подписями кадров, жёсткие склейки в такт.",
+        "fa": "یک ریل فناوری پرانرژی ۲۰ ثانیه‌ای با عنوان «The future is already here» بساز، با تدوین ۱۲۰ BPM و رنگ‌های آبی الکتریک، مشکی، سفید و کروم. با مکعب‌های سه‌بعدی که از ۱ به ۶۴ تکثیر می‌شوند شروع کن، سپس SIGNAL، شبکیه‌ای در حال اسکن با 97.2%، تونل کلماتی با WAKE UP و THE FUTURE از کروم مایع. پنجرهٔ دسکتاپ FUTURE.EXE، نوار LOADING 99% و شمارش معکوس ۳-۲-۱ را نشان بده، بعد چهار شیء شیشه‌ای با برچسب‌های PRISM، BOLT، PLANET و MIND، گردابی از حلقه‌ها و شبکهٔ شطرنجی. روی FUTURE کرومی سه‌بعدی بزرگ با IS ALREADY HERE. فرود بیا و با گلیچ به END OF TRANSMISSION تمام کن. فونت نمایشی سنگین (Unbounded Black)، HUD نازک تک‌فاصله با تایم‌کد و برچسب فریم، برش‌های تند روی ضرب.",
+        "ar": "اصنع ريلًا تقنيًا عالي الطاقة مدته 20 ثانية بعنوان \"The future is already here\"، بمونتاج على 120 BPM وبألوان الأزرق الكهربائي والأسود والأبيض والكروم. ابدأ بمكعبات ثلاثية الأبعاد تتضاعف من 1 إلى 64، ثم SIGNAL، وشبكية عين تُمسح مع 97.2%، ونفق كلمات يقول WAKE UP، وTHE FUTURE بالكروم السائل. اعرض نافذة سطح مكتب FUTURE.EXE وشريط LOADING 99% وعدًا تنازليًا 3-2-1، ثم أربعة أجسام زجاجية بعناوين PRISM وBOLT وPLANET وMIND، ودوامة حلقات وشبكة شطرنجية. انتهِ بكلمة FUTURE كروم ثلاثية الأبعاد ضخمة مع IS ALREADY HERE. ثم خلل بصري إلى END OF TRANSMISSION. خط عرض ثقيل (Unbounded Black)، وواجهة HUD رفيعة بخط أحادي المسافة مع رمز زمني وعناوين إطارات، وقطعات حادة على الإيقاع.",
+        "ja": "「The future is already here」をテーマに、120 BPM でカットするエレクトリックブルー・黒・白・クロームの 20 秒ハイエナジーなテックリールを作って。3D キューブが 1 から 64 に増える開幕、SIGNAL、97.2% と表示されるスキャン中の網膜、WAKE UP と書かれたワードトンネル、液体クロームの THE FUTURE。FUTURE.EXE のデスクトップウィンドウ、LOADING 99% のバー、3-2-1 のカウントダウン、PRISM・BOLT・PLANET・MIND とラベルのついた 4 つのガラスのオブジェクト、リングの渦、チェッカーグリッド。最後は巨大なクローム 3D の FUTURE と IS ALREADY HERE. に着地し、グリッチで END OF TRANSMISSION へ。重いディスプレイ書体（Unbounded Black）、タイムコードとフレームラベル付きの細い等幅 HUD、ビートに合わせたハードカット。",
+        "ko": "\"The future is already here\"를 주제로 한 20초 하이 에너지 테크 릴을 만들어 줘. 120 BPM 컷, 일렉트릭 블루·검정·흰색·크롬. 3D 큐브가 1개에서 64개로 늘어나며 시작하고, SIGNAL, 97.2%가 뜨는 스캔 중인 망막, WAKE UP이 적힌 단어 터널, 리퀴드 크롬 THE FUTURE. FUTURE.EXE 데스크톱 창, LOADING 99% 바, 3-2-1 카운트다운, PRISM·BOLT·PLANET·MIND 라벨이 붙은 유리 오브젝트 4개, 링 소용돌이, 체커 그리드. 마지막은 거대한 크롬 3D FUTURE와 IS ALREADY HERE.로 착지하고 글리치로 END OF TRANSMISSION에서 끝내. 굵은 디스플레이 서체(Unbounded Black), 타임코드와 프레임 라벨이 있는 얇은 고정폭 HUD, 비트에 맞춘 하드 컷.",
+        "pl": "Stwórz 20-sekundowy, energetyczny reel technologiczny zatytułowany „The future is already here”, cięty w 120 BPM, w elektrycznym błękicie, czerni, bieli i chromie. Zacznij od sześcianów 3D mnożących się z 1 do 64, potem SIGNAL, skanowana siatkówka z 97.2%, tunel słów z napisem WAKE UP i THE FUTURE z płynnego chromu. Pokaż okno pulpitu FUTURE.EXE, pasek LOADING 99% i odliczanie 3-2-1, następnie cztery szklane obiekty podpisane PRISM, BOLT, PLANET i MIND, wir pierścieni i szachownicę. Zakończ wielkim chromowanym 3D FUTURE z IS ALREADY HERE. i glitchem w END OF TRANSMISSION. Ciężki krój display (Unbounded Black), cienki monospace HUD z kodem czasowym i etykietami klatek, ostre cięcia w rytm.",
+        "hu": "Készíts egy 20 másodperces, energikus tech reelt „The future is already here” címmel, 120 BPM-re vágva, elektromos kék, fekete, fehér és króm színekben. Kezdd 3D kockákkal, amelyek 1-ről 64-re sokszorozódnak, aztán SIGNAL, egy szkennelt retina 97.2%-kal, egy WAKE UP feliratú szóalagút és folyékony krómból THE FUTURE. Mutass egy FUTURE.EXE asztali ablakot, egy LOADING 99% sávot és egy 3-2-1 visszaszámlálást, majd négy PRISM, BOLT, PLANET és MIND feliratú üvegtárgyat, egy gyűrűörvényt és egy sakktáblarácsot. Érkezz meg egy nagy króm 3D FUTURE-re az IS ALREADY HERE. sorral, és zárd egy glitch-csel END OF TRANSMISSION-be. Nehéz display betű (Unbounded Black), vékony monospace HUD időkóddal és képkockacímkékkel, kemény vágások ütemre.",
+        "fr": "Crée un reel tech de 20 secondes très énergique intitulé « The future is already here », monté à 120 BPM en bleu électrique, noir, blanc et chrome. Ouvre sur des cubes 3D qui se multiplient de 1 à 64, puis SIGNAL, une rétine scannée avec 97.2 %, un tunnel de mots qui dit WAKE UP et THE FUTURE en chrome liquide. Montre une fenêtre de bureau FUTURE.EXE, une barre LOADING 99 % et un compte à rebours 3-2-1, puis quatre objets en verre étiquetés PRISM, BOLT, PLANET et MIND, un vortex d’anneaux et une grille en damier. Termine sur un grand FUTURE chromé en 3D avec IS ALREADY HERE. et finis par un glitch vers END OF TRANSMISSION. Typo d’affichage lourde (Unbounded Black), un HUD fin en chasse fixe avec timecode et libellés de plans, coupes franches sur le temps.",
+        "uk": "Зроби 20-секундний енергійний технологічний рил під назвою «The future is already here», змонтований під 120 BPM, в електрик-синьому, чорному, білому й хромі. Почни з 3D-кубів, що розмножуються від 1 до 64, далі SIGNAL, сітківка, яку сканують, із 97.2%, тунель зі слів WAKE UP і THE FUTURE з рідкого хрому. Покажи вікно робочого столу FUTURE.EXE, смугу LOADING 99% і відлік 3-2-1, потім чотири скляні об’єкти з підписами PRISM, BOLT, PLANET і MIND, кільцевий вихор і шахову сітку. Заверши великим хромованим 3D-словом FUTURE з IS ALREADY HERE. і глітчем у END OF TRANSMISSION. Важкий акцидентний шрифт (Unbounded Black), тонкий моноширинний HUD з таймкодом і підписами кадрів, жорсткі склейки в такт.",
+        "tr": "\"The future is already here\" başlıklı, 120 BPM’e göre kesilmiş, elektrik mavisi, siyah, beyaz ve krom renklerde 20 saniyelik yüksek enerjili bir teknoloji reel’i yap. 1’den 64’e çoğalan 3D küplerle aç, ardından SIGNAL, 97.2% gösteren taranan bir retina, WAKE UP yazan bir kelime tüneli ve sıvı kromdan THE FUTURE. Bir FUTURE.EXE masaüstü penceresi, LOADING 99% çubuğu ve 3-2-1 geri sayımı göster; sonra PRISM, BOLT, PLANET ve MIND etiketli dört cam nesne, halka girdabı ve dama ızgarası. Büyük krom 3D FUTURE ve IS ALREADY HERE. ile bitir, bir glitch ile END OF TRANSMISSION’a geç. Kalın display yazı (Unbounded Black), zaman kodlu ve kare etiketli ince monospace HUD, vuruşta sert kesmeler.",
+        "th": "สร้างเทครีลพลังสูงยาว 20 วินาทีชื่อ \"The future is already here\" ตัดตามจังหวะ 120 BPM ในโทนน้ำเงินไฟฟ้า ดำ ขาว และโครม เปิดด้วยลูกบาศก์ 3D ที่ทวีคูณจาก 1 เป็น 64 ตามด้วย SIGNAL เรตินาที่กำลังถูกสแกนพร้อม 97.2% อุโมงค์คำที่เขียนว่า WAKE UP และ THE FUTURE แบบโครมเหลว แสดงหน้าต่างเดสก์ท็อป FUTURE.EXE แถบ LOADING 99% และนับถอยหลัง 3-2-1 แล้วตามด้วยวัตถุแก้วสี่ชิ้นที่ติดป้าย PRISM, BOLT, PLANET และ MIND วังวนวงแหวน และกริดลายตาราง จบที่ตัวอักษรโครม 3D ขนาดใหญ่ FUTURE พร้อม IS ALREADY HERE. แล้วกลิตช์ไปสู่ END OF TRANSMISSION ใช้ฟอนต์ดิสเพลย์หนา (Unbounded Black) HUD ฟอนต์โมโนสเปซบางพร้อมไทม์โค้ดและป้ายเฟรม และตัดฉับตามจังหวะ",
+        "it": "Crea un reel tech di 20 secondi ad alta energia intitolato \"The future is already here\", montato a 120 BPM in blu elettrico, nero, bianco e cromo. Apri con cubi 3D che si moltiplicano da 1 a 64, poi SIGNAL, una retina scansionata con 97.2%, un tunnel di parole che dice WAKE UP e THE FUTURE in cromo liquido. Mostra una finestra desktop FUTURE.EXE, una barra LOADING 99% e un conto alla rovescia 3-2-1, poi quattro oggetti in vetro etichettati PRISM, BOLT, PLANET e MIND, un vortice di anelli e una griglia a scacchi. Chiudi su un grande FUTURE cromato in 3D con IS ALREADY HERE. e finisci con un glitch verso END OF TRANSMISSION. Tipografia display pesante (Unbounded Black), un sottile HUD monospazio con timecode ed etichette di fotogramma, tagli netti a tempo."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "The Future Is Already Here"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        },
+        {
+          "ref": "motion-design"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}

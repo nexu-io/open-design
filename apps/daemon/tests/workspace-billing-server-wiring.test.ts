@@ -4,6 +4,7 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { register } from 'prom-client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 type StartedServer = {
@@ -34,6 +35,7 @@ const MANAGED_ENV = [
   'VELA_BIN',
   'VELA_CONTROL_KEY',
   'OD_TEST_VELA_LOG',
+  'OD_TEST_VELA_SNAPSHOT_STDERR',
 ] as const;
 
 let authority: Server | null = null;
@@ -68,6 +70,9 @@ afterEach(async () => {
     else process.env[key] = value;
   }
   savedEnv.clear();
+  // Each test re-imports the server module graph, which re-registers its
+  // metrics on the process-wide prom-client registry.
+  register.clear();
   vi.resetModules();
 }, 30_000);
 
@@ -143,6 +148,64 @@ describe('server workspace billing runtime wiring', () => {
     expect(commandLog.match(/billing summary --format json/g)).toHaveLength(1);
     expect(commandLog).toContain('profile=test billing workspace-snapshot');
   }, 60_000);
+
+  it('keeps workspace directory/context caches when a billing projection is forbidden (OPEND-3553)', async () => {
+    scratch = await mkdtemp(join(tmpdir(), 'od-billing-forbidden-wiring-'));
+    const authorityUrl = await startAuthority();
+    const velaBin = await writeVelaStub(scratch);
+    const dataDir = join(scratch, 'data');
+    await mkdir(dataDir, { recursive: true });
+    await writeFile(join(dataDir, 'app-config.json'), JSON.stringify({
+      agentCliEnv: {
+        amr: { OPEN_DESIGN_AMR_PROFILE: 'test' },
+      },
+    }), 'utf8');
+    setEnv({
+      AMR_HOME: join(scratch, 'empty-amr-home'),
+      OD_COLLAB_TRANSPORT: 'off',
+      OD_DATA_DIR: dataDir,
+      OD_RESOURCE_TRANSPORT: 'off',
+      OD_TEAM_PROJECTS_TRANSPORT: 'off',
+      OD_WORKSPACE_CONTEXT_SOURCE: 'vela',
+      OPEN_DESIGN_AMR_PROFILE: 'prod',
+      VELA_API_URL: authorityUrl,
+      VELA_BIN: velaBin,
+      VELA_CONTROL_KEY: 'billing-forbidden-control-key',
+      OD_TEST_VELA_LOG: join(scratch, 'vela-calls.log'),
+      // Vela maps internal billing failures to 403 as well; a billing
+      // projection rejection is not a membership revocation.
+      OD_TEST_VELA_SNAPSHOT_STDERR:
+        'API request failed with status 403: {"error":"workspace_billing_scope_forbidden"}',
+    });
+
+    vi.resetModules();
+    const serverModule = (await import('../src/server.js')) as unknown as {
+      startServer(options: { port: number; returnServer: true }): Promise<StartedServer>;
+    };
+    const metrics = await import('../src/metrics/workspace-authority.js');
+    metrics.__resetWorkspaceAuthorityMetricsForTests();
+    delete process.env.OD_DATA_DIR;
+    daemon = await serverModule.startServer({ port: 0, returnServer: true });
+
+    const billingUrl =
+      `${daemon.url}/api/workspace/billing?scope=workspace&workspaceId=${PERSONAL.workspaceId}`;
+    const response = await fetch(billingUrl, { headers: workspaceHeaders() });
+    expect(response.status).toBe(200);
+    await response.json();
+    // The projection fetch may settle after the response; wait for it.
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline) {
+      const log = await readFile(process.env.OD_TEST_VELA_LOG!, 'utf8').catch(() => '');
+      if (log.includes('billing workspace-snapshot')) break;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    const authRejects = (await metrics.workspaceAuthorityInvalidationsTotal.get()).values
+      .filter((value) => value.labels.reason === 'auth_reject')
+      .reduce((sum, value) => sum + value.value, 0);
+    expect(authRejects).toBe(0);
+  }, 60_000);
 });
 
 function setEnv(values: Record<string, string>): void {
@@ -192,6 +255,10 @@ async function writeVelaStub(root: string): Promise<string> {
 const args = process.argv.slice(2);
 appendFileSync(process.env.OD_TEST_VELA_LOG, 'profile=' + (process.env.OPEN_DESIGN_AMR_PROFILE || '') + ' ' + args.join(' ') + '\\n');
 if (args[0] !== 'billing') process.exit(1);
+if (process.env.OD_TEST_VELA_SNAPSHOT_STDERR && args[1] === 'workspace-snapshot') {
+  process.stderr.write(process.env.OD_TEST_VELA_SNAPSHOT_STDERR + '\\n');
+  process.exit(1);
+}
 if (process.env.OPEN_DESIGN_AMR_PROFILE !== 'test' && args[1] === 'workspace-snapshot') {
   process.stderr.write('API request failed with status 403: workspace_not_authorized\\n');
   process.exit(1);

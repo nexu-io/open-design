@@ -3,6 +3,8 @@ import { lstat, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
+  renderDeckFrameworkDirective,
+  renderLegacyDeckCompatibilityDirective,
   OD_NEXT_DEVICE_FRAME_ROOT,
   OD_NEXT_MANAGED_RESOURCE_FILES,
   OD_NEXT_STRATEGY_ID,
@@ -108,9 +110,18 @@ export async function loadOdNextTaskResourcesForSnapshot(input: {
   if (!resolved.ok) {
     throw new Error(`Bundled OD Next strategy is unavailable: ${resolved.errors.join('; ')}`);
   }
-  return loadBundledStrategyPromptAssetsV2({ plugin: resolved.record, binding })
-    .taskResources
-    .map((resource) => ({ path: resource.path, text: resource.text }));
+  const resources = loadBundledStrategyPromptAssetsV2({ plugin: resolved.record, binding })
+    .taskResources.map((resource) => ({ path: resource.path, text: resource.text }));
+  if (binding.selectedTaskProfile.taskType === 'discovery') {
+    // Same host-owned source as explicitly selected PPT; load only when needed.
+    resources.push({ path: 'deck-framework.md', text: [
+      '# HTML deck host protocol',
+      'Apply only to PPT outputs. If editing existing deck/template HTML, follow the compatibility section and preserve its scaffold. For a new deck use the canonical section. Do not create a deck solely because this file exists.',
+      '## Existing deck or selected template', renderLegacyDeckCompatibilityDirective('filesystem'),
+      '## New deck only', renderDeckFrameworkDirective('filesystem'),
+    ].join('\n\n') });
+  }
+  return resources;
 }
 
 function digest(text: string): string {

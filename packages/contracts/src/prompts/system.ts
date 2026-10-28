@@ -1,3 +1,4 @@
+import { COMMENT_IDENTITY_EDIT_DIRECTIVE } from './comment-identity.js';
 /**
  * Prompt composer. The base is the OD-adapted "expert designer" system
  * prompt (see ./official-system.ts) — a full identity, workflow, and
@@ -586,6 +587,7 @@ export function composeSystemPrompt({
     parts.push(ACTIVE_DESIGN_SYSTEM_VISUAL_DIRECTION_OVERRIDE);
   }
 
+  parts.push(`\n\n---\n\n${COMMENT_IDENTITY_EDIT_DIRECTIVE}`);
   return parts.join('');
 }
 

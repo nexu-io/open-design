@@ -17,7 +17,6 @@ import {
   hasAmrFundingRecovered,
   type AmrBalanceGateScope,
 } from '../runtime/amr-balance-gate';
-import { formatVelaBalanceUsd } from '../providers/daemon';
 import { AmrLoginPill } from './AmrLoginPill';
 import { Icon } from './Icon';
 import styles from './AmrBalanceDialog.module.css';
@@ -29,11 +28,15 @@ export const WALLET_WATCH_INTERVAL_MS = 5_000;
 export const WALLET_WATCH_TIMEOUT_MS = 10 * 60_000;
 
 interface Props {
-  /** Why the send was hard-blocked: empty wallet, or not signed in at all. */
+  /** Backend funding rejection, or a pre-send sign-in block. */
   reason: 'insufficient' | 'signed_out';
   modelId?: string | null;
   fundingScope?: AmrBalanceGateScope;
-  /** Raw wallet balance string from the blocking snapshot; null hides the badge. */
+  /**
+   * Raw wallet balance string from the blocking snapshot. Not rendered: the
+   * finalized S06 copy (OPEND-2849) carries no amount. Kept so callers keep
+   * passing the snapshot they gated on.
+   */
   balanceUsd: string | null;
   /** OpenDesign Cloud profile from the blocking snapshot; picks the console origin. */
   profile: string | null;
@@ -76,21 +79,19 @@ interface Props {
   workspaceContext?: WorkspaceCollabContext | null;
   metricsConsent: boolean;
   installationId: string | null | undefined;
-  /** Dismissal only ("not now" / Esc); the blocked payload stays parked. */
+  /** Dismissal only ("not now" / Esc); does not retry a failed run. */
   onClose: () => void;
   /** The blocking condition just cleared (sign-in completed, or the wallet
    *  watch saw the recharge land) — the caller resumes the parked task. */
   onResolved: () => void;
 }
 
-// HARD pre-run blocker for OpenDesign Cloud tasks: the run cannot possibly
-// succeed, so the send is stopped BEFORE any run spawns — unlike the
-// post-failure AMR_INSUFFICIENT_BALANCE error card which appears after a run
-// already burned its startup. It fires at the moment of PEAK intent — the
-// user just wrote a task and pressed send — so it must read as "one step from
-// starting", never as an error. Two variants with distinct copy AND CTAs:
+// Sign-in blocks and live backend funding rejections share this dialog.
+// Wallet balance alone cannot decide admission: Coding Plan quota and
+// automatic recharge may still fund the request. Two variants share CTAs
+// with the in-conversation card:
 //
-//   insufficient — signed in, wallet definitively empty. The CTA must LAND on
+//   insufficient — the backend rejected funding. The CTA must LAND on
 //     the surface that fixes it rather than drop the user on a page to hunt for
 //     it, and WHICH surface that is depends on the caller's plan (spec T58):
 //     a 非 Max owner is sold a plan (`workspaceUpgradeUrl` → this runtime
@@ -100,33 +101,20 @@ interface Props {
 //     `upgradeIntent`; both destinations are the same shared decision points the
 //     account menu and the UpgradeCard use. It has NOT been `billing=checkout`
 //     since #7122; the older comment here said so long after that stopped being
-//     true. Balance badge shown.
+//     true.
 //
 //   signed_out — OpenDesign Cloud selected but no account session. The CTA
 //     is the in-app sign-in (AmrLoginPill: spawns vela login, surfaces the
 //     activation link when the browser doesn't auto-open, polls until done);
 //     sending the user to the wallet website would be a dead end.
 //
-// Both variants AUTO-RESUME: a completed sign-in fires `onResolved`
-// immediately, and clicking the wallet CTA arms a bounded wallet watch that
-// fires `onResolved` once the recharge lands — so the parked task continues
-// without the user having to re-send it.
-//
-// Both variants keep the benefits list (they sell the service to exactly the
-// not-yet-committed cohort). The caller preserves the payload (home keeps
-// the composer draft; chat parks the full send in the queue).
-//
-// This is now the ONLY balance dialog, and the only balance it opens for is $0.
-// The softer low-balance reminder used to have its own centered dialog
-// (AmrLowBalanceDialog); product deleted it on 2026-09-06 — "软提醒弹窗就是产品
-// 告诉我不要这个的,只用弹那个插画的就行" (T53) — and then retired the whole
-// low-balance tier on 2026-09-07: "这个要不先不要了,跟产品说了一下,不要这个了"
-// (T66). A positive balance now produces no dialog and no card anywhere.
+// Sign-in or post-recharge funding recovery fires `onResolved`, allowing the
+// caller to release pending sends. A failed run stays in history for the user
+// to retry explicitly. Local cached amounts never trigger this dialog.
 export function AmrBalanceDialog({
   reason,
   modelId,
   fundingScope,
-  balanceUsd,
   profile,
   entrySource,
   upgradeIntent = 'pricing',
@@ -138,7 +126,6 @@ export function AmrBalanceDialog({
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
-  const formattedBalance = formatVelaBalanceUsd(balanceUsd);
   const signedOut = reason === 'signed_out';
   const signInEntrySource =
     entrySource === 'home_balance_gate_upgrade'
@@ -283,12 +270,11 @@ export function AmrBalanceDialog({
         {signedOut ? t('chat.amrBalanceGate.signedOutTitle') : t('chat.amrBalanceGate.title')}
       </h2>
       <p className={styles.message}>
+        {/* Product copy S04 / S06 (OPEND-2849): the insufficient variant no
+            longer quotes the balance — the finalized sentence has no amount. */}
         {signedOut
           ? t('chat.amrBalanceGate.signedOutMessage')
-          : // The insufficient variant always carries a definitive balance
-            // (that's what made the gate fire); the fallback is belt and
-            // suspenders for a malformed snapshot.
-            t('chat.amrBalanceGate.message', { balance: formattedBalance ?? '$0.00' })}
+          : t('chat.amrBalanceGate.message')}
       </p>
       <div className={styles.benefitsCard}>
         <span className={styles.benefitsTitle}>

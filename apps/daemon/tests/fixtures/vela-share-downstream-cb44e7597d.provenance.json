@@ -1,0 +1,135 @@
+{
+  "revision": "cb44e7597d674095a6f182b76082f106cca61016",
+  "generatedAt": "2026-09-21T20:24:33.041Z",
+  "source": "production createApp + public POST writer + authenticated member POST + authenticated pull + PostgreSQL",
+  "identityPolicy": "Only synthetic reserved example.test accounts; no production user data accessed or output rewritten",
+  "request": {
+    "path": "/api/v1/collab/projects/share-management-project/comments?authorKinds=member,user&sinceSeq=0",
+    "status": 200,
+    "etag": "\"collab-comments:4\""
+  },
+  "memberOnly": {
+    "comments": [
+      {
+        "id": "capture-member",
+        "note": "Member feedback",
+        "label": "Hero heading",
+        "filePath": "index.html",
+        "htmlHint": "h1",
+        "memberId": "member-owner",
+        "selector": "h1",
+        "createdAt": 1790022273026,
+        "elementId": "heading",
+        "projectId": "share-management-project",
+        "authorMemberId": "member-owner"
+      }
+    ],
+    "latestSeq": 4
+  },
+  "sinceSeq2": {
+    "comments": [
+      {
+        "id": "capture-member",
+        "note": "Member feedback",
+        "label": "Hero heading",
+        "filePath": "index.html",
+        "htmlHint": "h1",
+        "memberId": "member-owner",
+        "selector": "h1",
+        "createdAt": 1790022273026,
+        "elementId": "heading",
+        "projectId": "share-management-project",
+        "authorMemberId": "member-owner"
+      },
+      {
+        "id": "14d9db5d-7862-4e3d-b0fc-9876e1691a92",
+        "deleted": true,
+        "memberId": null,
+        "projectId": "share-management-project",
+        "authorMemberId": null,
+        "authorKind": "user",
+        "authorAppUserId": "share-fixture-viewer-app",
+        "authorDisplayName": "External viewer"
+      }
+    ],
+    "latestSeq": 4
+  },
+  "databaseEvents": [
+    {
+      "seq": "1",
+      "comment_id": "b783dab2-8961-4fa7-950e-56b5cc199560",
+      "member_id": null,
+      "author_kind": "user",
+      "author_app_user_id": "share-fixture-viewer-app",
+      "author_display_name": "External viewer",
+      "payload": {
+        "id": "b783dab2-8961-4fa7-950e-56b5cc199560",
+        "note": "Please adjust the spacing",
+        "status": "open",
+        "filePath": "index.html",
+        "htmlHint": "<h1>Not a label source</h1>",
+        "selector": "h1",
+        "elementId": "heading"
+      },
+      "created_at": "2026-09-21T20:24:33.007Z"
+    },
+    {
+      "seq": "2",
+      "comment_id": "14d9db5d-7862-4e3d-b0fc-9876e1691a92",
+      "member_id": null,
+      "author_kind": "user",
+      "author_app_user_id": "share-fixture-viewer-app",
+      "author_display_name": "External viewer",
+      "payload": {
+        "id": "14d9db5d-7862-4e3d-b0fc-9876e1691a92",
+        "note": "Please adjust the spacing",
+        "label": "Hero heading",
+        "status": "open",
+        "filePath": "index.html",
+        "htmlHint": "<h1>Not a label source</h1>",
+        "selector": "h1",
+        "elementId": "heading"
+      },
+      "created_at": "2026-09-21T20:24:33.020Z"
+    },
+    {
+      "seq": "3",
+      "comment_id": "capture-member",
+      "member_id": "member-owner",
+      "author_kind": "member",
+      "author_app_user_id": null,
+      "author_display_name": null,
+      "payload": {
+        "id": "capture-member",
+        "note": "Member feedback",
+        "label": "Hero heading",
+        "filePath": "index.html",
+        "htmlHint": "h1",
+        "memberId": "member-owner",
+        "selector": "h1",
+        "createdAt": 1790022273026,
+        "elementId": "heading",
+        "projectId": "share-management-project",
+        "authorMemberId": "member-owner"
+      },
+      "created_at": "2026-09-21T20:24:33.025Z"
+    },
+    {
+      "seq": "4",
+      "comment_id": "14d9db5d-7862-4e3d-b0fc-9876e1691a92",
+      "member_id": null,
+      "author_kind": "user",
+      "author_app_user_id": "share-fixture-viewer-app",
+      "author_display_name": "External viewer",
+      "payload": {
+        "id": "14d9db5d-7862-4e3d-b0fc-9876e1691a92",
+        "deleted": true,
+        "memberId": "member-owner",
+        "projectId": "share-management-project",
+        "authorMemberId": null
+      },
+      "created_at": "2026-09-21T20:24:33.028Z"
+    }
+  ],
+  "note": "databaseEvents is provenance, not the wire DTO. Do not inject event seq/created_at into comments when absent from raw response. Legacy member payload omits authorKind; this means member. Tombstone may omit anchor and label."
+}

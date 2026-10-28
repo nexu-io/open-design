@@ -3,6 +3,25 @@ import { createCollabPublishWatcher } from '../src/collab/collab-publish-watcher
 import type { ResourceHubPrincipal } from '../src/collab/resource-principal.js';
 
 describe('collab publish watcher', () => {
+  it('reattaches after directory promotion without publishing received content', async () => {
+    const notifyChanged = vi.fn();
+    const unsubscribe = vi.fn();
+    const handlers: Array<() => void> = [];
+    const watcher = createCollabPublishWatcher({
+      notifyChanged, publishInitialContent: false, listProjectIds: () => ['p1'],
+      shouldPublish: async () => true,
+      subscribeFiles: (_id, handler) => { handlers.push(handler); return { unsubscribe }; },
+    });
+    await watcher.reconcile();
+    await watcher.refresh('p1');
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    expect(handlers).toHaveLength(2);
+    expect(notifyChanged).not.toHaveBeenCalled();
+    handlers[1]!();
+    expect(notifyChanged).toHaveBeenCalledWith('p1');
+    watcher.dispose();
+  });
+
   it('publishes current content once when it first watches an owned+shared project', async () => {
     const notifyChanged = vi.fn();
     const onChangeHandlers = new Map<string, () => void>();

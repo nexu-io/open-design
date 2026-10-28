@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { appendFileSync, existsSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { randomUUID } from 'node:crypto';
 
@@ -26,7 +26,7 @@ if (process.argv.includes('--models')) {
 const lifecycle = (event: string) => appendFileSync(statePath + '.lifecycle', JSON.stringify({ event, pid: process.pid }) + '\n');
 process.on('exit', () => lifecycle('exit'));
 lifecycle('ready');
-emit({ ...identity, type: 'ready', compatibility_generation: state.generation });
+emit({ ...identity, type: 'ready', ...(state.generation == null ? {} : { compatibility_generation: state.generation }) });
 const input = createInterface({ input: process.stdin });
 input.on('close', () => lifecycle('stdin-end'));
 let sessionId = '';
@@ -51,6 +51,15 @@ input.on('line', (line) => {
     emit({ type: 'tool_call', request_id: command.request_id, call_id: 'read', name: 'Read', arguments: '{}' });
     emit({ type: 'tool_result', request_id: command.request_id, call_id: 'read', name: 'Read', output: 'done', is_error: false });
     return;
+  }
+  if (state.planning && attempts === 0) {
+    const key = /<od-production-ready key="([a-f0-9]+)"/.exec(command.prompt)?.[1];
+    if (!key) throw new Error('Production marker key missing from frozen bundle');
+    writeFileSync(statePath, JSON.stringify({ ...state, generation: state.nextGeneration }));
+    emit({ type: 'text', request_id: command.request_id,
+      content: `Fixture plan.\n<od-production-ready key="${key}" />` });
+    emit({ type: 'result', request_id: command.request_id, session_id: sessionId, status: 'completed', resume_rejected: false });
+    process.exit(0);
   }
   if (state.question) {
     emit({ type: 'text', request_id: command.request_id,

@@ -19,6 +19,7 @@ import {
   type AuthorizedTeamProjectPullReceipt,
 } from '../../src/collab/authorized-team-project-pull.js';
 import { projectResourceIdFor } from '../../src/integrations/vela-team-projects.js';
+import { createVelaCliTeamProjectCatalog } from '../../src/collab/vela-cli-team-projects.js';
 
 const roots: string[] = [];
 const NOW = Date.parse('2026-07-26T10:00:00.500Z');
@@ -77,6 +78,40 @@ afterEach(async () => {
 });
 
 describe('authorized staged team-project pull', () => {
+  it.each(['arbitrary-server-root', 'project-project-1'])('accepts a fresh receiver receipt for the exact catalog root %s', async resourceId => {
+    const { liveDir } = await fixture();
+    const catalog = createVelaCliTeamProjectCatalog({ supportsTeamProjects: () => true,
+      run: async () => JSON.stringify({ projectId: 'project-1', workspaceId: SCOPE.workspaceId,
+        ownerMemberId: SCOPE.ownerMemberId, visibility: 'team', resourceId,
+        createdAt: '2026-01-01T00:00:00Z' }),
+    });
+    const registration = await catalog.getRegistration('project-1', {
+      teamId: SCOPE.workspaceId, memberId: SCOPE.ownerMemberId, role: 'member', lifecycleState: 'active',
+    });
+    expect(registration?.resourceId).toBe(resourceId);
+    // Trusted catalog identity is carried into receipt validation.
+    const exactScope = { ...SCOPE, resourceId: registration!.resourceId! };
+    const staged = await stageAuthorizedTeamProjectPull({ projectId: 'project-1', liveDir,
+      scope: exactScope, expectedVersion: 7, now: () => NOW,
+      run: async args => {
+        await writeFile(path.join(args[2]!, 'index.html'), 'catalog-bound content');
+        return JSON.stringify(receipt({ resourceId }));
+      },
+    });
+    try {
+      expect(staged.receipt.resourceId).toBe(resourceId);
+      expect(await readFile(path.join(staged.stageDir, 'index.html'), 'utf8')).toBe('catalog-bound content');
+      expect(await readFile(path.join(liveDir, 'index.html'), 'utf8')).toBe('old');
+    } finally { await staged.cleanup(); }
+  });
+  it('rejects a selected-resource receipt instead of the trusted exact root', async () => {
+    const { liveDir } = await fixture();
+    await expect(stageAuthorizedTeamProjectPull({ projectId: 'project-1', liveDir,
+      scope: { ...SCOPE, resourceId: 'server-root' }, expectedVersion: 7, now: () => NOW,
+      run: async () => JSON.stringify(receipt({ resourceId: 'selected-file-resource' })),
+    })).rejects.toThrow('binding does not match');
+    expect(await readFile(path.join(liveDir, 'index.html'), 'utf8')).toBe('old');
+  });
   it('runs the exact-version Vela command into a random empty same-parent stage', async () => {
     const { root, liveDir } = await fixture();
     const calls: Array<{ args: string[]; workspaceId: string | undefined }> = [];

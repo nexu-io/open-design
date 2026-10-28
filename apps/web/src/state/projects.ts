@@ -12,8 +12,10 @@ import { BackoffController, type BackoffOptions } from '../lib/backoff';
 import { markProjectCreatedByViewer } from '../collab/useProjectCollab';
 import {
   API_ERROR_CODES,
+  MESSAGES_STREAM_CONTENT_TYPE,
   isSameWorkspacePrincipal,
   type ApiErrorCode,
+  type ProjectDeleteShareResidual,
 } from '@open-design/contracts';
 import type {
   AppliedPluginSnapshot,
@@ -43,6 +45,7 @@ import type {
   WorkspaceProjectsResponse,
 } from '@open-design/contracts';
 import { randomUUID } from '../utils/uuid';
+import { readMessageStream } from './read-message-stream';
 import { markProjectDisplaySnapshotsDirty } from './project-display-cache';
 import {
   workspaceIdentityCacheKey,
@@ -749,6 +752,8 @@ export async function createProject(
     pendingPrompt?: string;
     metadata?: ProjectMetadata;
     conversationMode?: ChatSessionMode;
+    /** Optional caller-minted id for the seeded conversation (same handoff). */
+    conversationId?: string;
     // Plan §3.A1 / spec §11.5 — POST /api/projects accepts a pluginId
     // (or pre-applied snapshot id) to resolve and pin a plugin to the new
     // project. Used by the PluginLoopHome flow on Home.
@@ -1141,6 +1146,7 @@ export async function patchProject(
 export async function deleteProject(
   id: string,
   workspaceContext?: WorkspaceCollabContext | null,
+  onShareResiduals?: (rows: ReadonlyArray<ProjectDeleteShareResidual>) => void,
 ): Promise<true> {
   try {
     const resp = await fetch(`/api/projects/${encodeURIComponent(id)}`, {
@@ -1182,6 +1188,15 @@ export async function deleteProject(
         return true;
       }
       throw new ProjectDeleteError(message, resp.status, code);
+    }
+    // This response is the only delivery of orphaned share information. Hand it
+    // to the app-level queue before cache cleanup/navigation can remove its origin.
+    const payload: unknown = await resp.json().catch(() => null);
+    if (payload && typeof payload === 'object' && 'shareResiduals' in payload && Array.isArray(payload.shareResiduals)) {
+      const rows = payload.shareResiduals.filter((row): row is ProjectDeleteShareResidual =>
+        row && typeof row === 'object' && typeof row.filePath === 'string'
+        && typeof row.slug === 'string' && typeof row.retrying === 'boolean');
+      if (rows.length) onShareResiduals?.(rows.map(row => Object.freeze({ ...row })));
     }
     // Drop per-project browser caches once the project is gone server-side so
     // they do not accumulate in localStorage for the lifetime of the profile.
@@ -1457,16 +1472,18 @@ export async function listMessages(
   conversationId: string,
   workspaceContext?: WorkspaceCollabContext | null,
   signal?: AbortSignal,
+  onProgress?: () => void,
 ): Promise<ChatMessage[]> {
   try {
     const resp = await fetch(
       `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`,
-      workspaceContext || signal
-        ? {
-            ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
-            ...(signal ? { signal } : {}),
-          }
-        : undefined,
+      {
+        headers: {
+          Accept: MESSAGES_STREAM_CONTENT_TYPE,
+          ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+        },
+        ...(signal ? { signal } : {}),
+      },
     );
     if (!resp.ok) {
       const failure = await readProjectMessageListError(resp);
@@ -1476,6 +1493,9 @@ export async function listMessages(
         failure.code,
         failure.retryable,
       );
+    }
+    if (resp.headers.get('content-type')?.split(';')[0]?.trim() === MESSAGES_STREAM_CONTENT_TYPE) {
+      return await readMessageStream(resp, signal, onProgress);
     }
     const json = (await resp.json()) as { messages: ChatMessage[] };
     return json.messages ?? [];
@@ -1707,9 +1727,13 @@ function readCachedTabs(
 ): OpenTabsState | null {
   if (typeof window === 'undefined') return null;
   try {
-    return normalizeTabsState(JSON.parse(
+    const cached = normalizeTabsState(JSON.parse(
       window.localStorage.getItem(tabsCacheKey(projectId, workspaceContext)) ?? 'null',
     ));
+    // An existing cache is a saved user choice, even for older entries without
+    // this marker or an intentionally empty selection. Defaults must not win
+    // while the debounced daemon save is still pending.
+    return cached ? { ...cached, hasSavedState: true } : null;
   } catch {
     return null;
   }
@@ -1734,6 +1758,7 @@ function writeCachedTabs(
 ): OpenTabsState {
   const next: OpenTabsState = {
     ...state,
+    hasSavedState: true,
     updatedAt: Date.now(),
   };
   if (typeof window !== 'undefined') {

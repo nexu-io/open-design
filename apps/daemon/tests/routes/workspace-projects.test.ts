@@ -14,6 +14,18 @@ import {
   type WorkspaceDirectoryFetchResult,
 } from '../../src/collab/vela-workspace-context.js';
 import { recoverPersistedTeamShareOwnership } from '../../src/collab/persisted-team-share.js';
+import { withTeamProjectCatalog } from '../team-project-registration-fixture.js';
+
+// The HTTP suite supplies its catalog transport explicitly. No production
+// legacy-policy mode is needed to exercise the real runtime and move routes.
+vi.mock('../../src/collab/runtime.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/collab/runtime.js')>();
+  return {
+    ...actual,
+    createCollabRuntime: (options: import('../../src/collab/runtime.js').CreateCollabRuntimeOptions) =>
+      actual.createCollabRuntime(withTeamProjectCatalog(options)),
+  };
+});
 
 describe('workspace project routes', () => {
   let server: http.Server;
@@ -607,7 +619,8 @@ describe('workspace project routes', () => {
       id: moveProjectId,
       visibility: 'team',
       syncState: 'synced',
-      resourceHubResourceId: projectResourceIdFor(moveProjectId, workspacePrincipal('member-direct', workspaceId, 'admin')),
+      // Default dev transport does not return an authoritative root.
+      resourceHubResourceId: null,
       cloudTombstonedAt: null,
       createdByWorkspaceMemberId: 'member-direct',
     });
@@ -654,7 +667,7 @@ describe('workspace project routes', () => {
     expect(syncedProject).toMatchObject({
       id: moveProjectId,
       syncState: 'synced',
-      resourceHubResourceId: projectResourceIdFor(moveProjectId, workspacePrincipal('member-direct', workspaceId, 'admin')),
+      resourceHubResourceId: null,
       createdByWorkspaceMemberId: 'member-direct',
     });
     expect(syncedProject.pendingSyncIntent).toBeUndefined();
@@ -665,7 +678,7 @@ describe('workspace project routes', () => {
       body: JSON.stringify({ visibility: 'personal' }),
     });
     // An admin who shared the project can move it back out of the team; the
-    // project returns to personal/local-only and drops its resource binding.
+    // project returns to personal/local-only; this dev fixture has no root.
     expect(moveBackResp.status).toBe(200);
     const movedBack = await moveBackResp.json() as { project: any };
     expect(movedBack.project).toMatchObject({
@@ -863,6 +876,71 @@ describe('workspace project routes', () => {
 
     const othersTeam = await list('member-share-owner', '?owner=others&visibility=team');
     expect(othersTeam.projects.map((item) => item.id)).not.toContain(projectId);
+  });
+
+  it('S1-T2: owner team move grants another member read and comment but not file edits, then revokes access', async () => {
+    const projectId = `workspace-team-scope-flow-${Date.now()}`;
+    const projectUrl = `${baseUrl}/api/projects/${projectId}`;
+    const owner = headers('member-team-flow-owner', {
+      'x-od-workspace-type': 'team',
+      'x-od-workspace-role': 'owner',
+    });
+    const member = headers('member-team-flow-reader', { 'x-od-workspace-type': 'team' });
+    await createProject(projectId, 'Team scope authorization flow');
+    const conversation = await fetch(`${projectUrl}/conversations`, {
+      method: 'POST',
+      headers: owner,
+      body: JSON.stringify({ title: 'Team comment fixture', sessionMode: 'chat' }),
+    });
+    expect(conversation.status).toBe(200);
+    const { conversation: { id: conversationId } } = await conversation.json() as { conversation: { id: string } };
+    const move = (visibility: 'team' | 'personal') => fetch(
+      `${baseUrl}/api/workspaces/${workspaceId}/projects/${projectId}/move`,
+      { method: 'POST', headers: owner, body: JSON.stringify({ visibility }) },
+    );
+    const shared = await move('team');
+    expect(shared.status).toBe(200);
+    await expect(shared.json()).resolves.toMatchObject({ project: {
+      id: projectId,
+      visibility: 'team',
+      createdByWorkspaceMemberId: 'member-team-flow-owner',
+    } });
+    const seededFile = await fetch(`${projectUrl}/files`, {
+      method: 'POST',
+      headers: owner,
+      body: JSON.stringify({ name: 'index.html', content: '<h1>Shared team project</h1>' }),
+    });
+    expect(seededFile.status).toBe(200);
+
+    const memberProject = await fetch(projectUrl, { headers: member });
+    expect(memberProject.status).toBe(200);
+    const memberFiles = await fetch(`${projectUrl}/files`, { headers: member });
+    expect(memberFiles.status).toBe(200);
+    await expect(memberFiles.json()).resolves.toMatchObject({ files: [expect.objectContaining({ name: 'index.html' })] });
+    const commentUrl = `${projectUrl}/conversations/${conversationId}/comments`;
+    const commentPayload = JSON.stringify({
+      target: {
+        filePath: 'index.html', elementId: 'hero', selector: '[data-od-id="hero"]',
+        label: 'h1.hero', text: 'Shared team project', htmlHint: '<h1>',
+        position: { x: 0, y: 0, width: 0, height: 0 },
+      },
+      note: 'A second team member can comment without edit access',
+    });
+    const memberComment = await fetch(commentUrl, { method: 'POST', headers: member, body: commentPayload });
+    expect(memberComment.status).toBe(200);
+    await expect(memberComment.json()).resolves.toMatchObject({ comment: { note: 'A second team member can comment without edit access' } });
+    const deniedEdit = await fetch(`${projectUrl}/files`, {
+      method: 'POST',
+      headers: member,
+      body: JSON.stringify({ name: 'blocked.html', content: 'not an editor' }),
+    });
+    expect(deniedEdit.status).toBe(403);
+
+    expect((await move('personal')).status).toBe(200);
+    const revokedProject = await fetch(projectUrl, { headers: member });
+    expect(revokedProject.status).toBe(403);
+    expect((await fetch(`${projectUrl}/files`, { headers: member })).status).toBe(403);
+    expect((await fetch(commentUrl, { method: 'POST', headers: member, body: commentPayload })).status).toBe(403);
   });
 
   it('enforces workspace project permissions on direct project and file write routes', async () => {
@@ -1832,6 +1910,59 @@ describe('workspace project routes', () => {
   // `visibility: 'team'` card and the project re-shared itself a moment after
   // the user unshared it, with no way to undo (a remote summary is never
   // `canMoveToPersonal`). The local `cloudTombstonedAt` is the truth here.
+  it('a cached list during remote demotion cannot rebind the staged personal row to team', async () => {
+    const projectId = 'demotion-list-barrier';
+    const memberId = 'member-cleanup-fail';
+    const retainedRoot = 'arbitrary-demotion-root';
+    let entered!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const remoteBarrier = new Promise<void>(resolve => { release = resolve; });
+    const rebindWorkspaceProject = vi.fn();
+    const updateWorkspaceProject = vi.fn();
+    const deps = workspaceProjectRouteDeps({ workspaceId, projectId,
+      dbDeleteProject: vi.fn(), removeProjectDir: vi.fn(), updateWorkspaceProject, rebindWorkspaceProject,
+      workspaceRowOverrides: { workspaceVisibility: 'team', resourceHubResourceId: retainedRoot,
+        syncState: 'synced', createdByWorkspaceMemberId: memberId },
+      teamProjectCatalog: { list: vi.fn(async () => [{ id: 'cached-row', workspaceId, projectId,
+        resourceId: retainedRoot, ownerMemberId: memberId, displayName: 'Cached team row',
+        syncState: 'synced', lastSyncedVersionId: 'v1', createdAt: new Date(1).toISOString(),
+        updatedAt: new Date(1).toISOString(), access: { canView: true, canComment: true, canEdit: true, frozen: false } }]), upsert: vi.fn() },
+      collabSync: { requestTeamShare: vi.fn(), requestTeamUnshare: async () => { entered(); await remoteBarrier; } },
+    });
+    const row = deps.projectStore.getWorkspaceProjectByProjectId(deps.db, projectId)!;
+    const applyPatch = (patch: Record<string, unknown>) => Object.assign(row, patch,
+      { workspaceVisibility: patch.visibility ?? row.workspaceVisibility });
+    updateWorkspaceProject.mockImplementation((_db, _ws, _id, patch) => applyPatch(patch));
+    rebindWorkspaceProject.mockImplementation((_db, _id, patch) => applyPatch(patch));
+    const app = express();
+    app.use(express.json());
+    registerProjectRoutes(app, deps);
+    const routeServer = await listen(app);
+    const requestHeaders = headers(memberId, { 'x-od-workspace-type': 'team', 'x-od-workspace-role': 'admin' });
+    const move = fetch(`${routeServer.url}/api/workspaces/${workspaceId}/projects/${projectId}/move`, {
+      method: 'POST', headers: requestHeaders, body: JSON.stringify({ visibility: 'personal' }),
+    });
+    try {
+      await started;
+      expect(row.workspaceVisibility).toBe('personal');
+      const list = await fetch(`${routeServer.url}/api/workspaces/${workspaceId}/projects?view=all`, { headers: requestHeaders });
+      expect(list.status).toBe(200);
+      await list.json();
+      release();
+      const moved = await move;
+      expect(moved.status).toBe(200);
+      expect(row.workspaceVisibility).toBe('personal');
+      expect(row.resourceHubResourceId).toBe(retainedRoot);
+      expect(rebindWorkspaceProject).not.toHaveBeenCalled();
+      expect(await moved.json()).toMatchObject({ project: { visibility: 'personal', resourceHubResourceId: retainedRoot } });
+    } finally {
+      release();
+      await move;
+      await close(routeServer.server);
+    }
+  });
+
   it('does not resurrect a project the member just unshared from a stale team catalog', async () => {
     const projectId = `workspace-unshare-tombstone-${Date.now()}`;
     const memberId = 'member-unshare-tombstone';
@@ -2156,6 +2287,45 @@ describe('workspace project routes', () => {
     } finally {
       await close(routeServer.server);
     }
+  });
+
+  it('retains the authoritative arbitrary root persisted by explicit share through batch move and demotion', async () => {
+    const projectId = 'batch-authoritative-root';
+    const serverRoot = 'server-root-unrelated-to-project-id';
+    const updateWorkspaceProject = vi.fn();
+    const deps = workspaceProjectRouteDeps({ workspaceId, projectId,
+      dbDeleteProject: vi.fn(), removeProjectDir: vi.fn(), updateWorkspaceProject });
+    const row = deps.projectStore.getWorkspaceProjectByProjectId(deps.db, projectId)!;
+    updateWorkspaceProject.mockImplementation((_db, _workspace, _project, patch) => {
+      Object.assign(row, patch, { workspaceVisibility: patch.visibility ?? row.workspaceVisibility });
+    });
+    // This is the supported runtime seam: ensure/retain completes before share
+    // returns. Returning a version alone does not register a ResourceHub root.
+    deps.collabSync = {
+      requestTeamShare: vi.fn(async () => {
+        updateWorkspaceProject(deps.db, workspaceId, projectId, { resourceHubResourceId: serverRoot });
+        return { version: 7 };
+      }),
+      requestTeamDelete: vi.fn(async () => {}),
+      requestTeamUnshare: vi.fn(async () => {}),
+      refreshTeamProjectMetadata: vi.fn(),
+    };
+    const app = express();
+    app.use(express.json());
+    registerProjectRoutes(app, deps);
+    const routeServer = await listen(app);
+    try {
+      for (const visibility of ['team', 'personal']) {
+        const response = await fetch(`${routeServer.url}/api/workspaces/${workspaceId}/projects/batch-move`, {
+          method: 'POST', headers: headers('member-cleanup-fail', { 'x-od-workspace-role': 'admin' }),
+          body: JSON.stringify({ projectIds: [projectId], visibility }),
+        });
+        expect(response.status).toBe(200);
+        const body = await response.json() as { projects: Array<{ visibility: string; resourceHubResourceId: string | null }> };
+        expect(body.projects[0]).toMatchObject({ visibility, resourceHubResourceId: serverRoot });
+        expect(row.resourceHubResourceId).toBe(serverRoot);
+      }
+    } finally { await close(routeServer.server); }
   });
 
   it('does not mark workspace projects as team-visible when durable team share publishing fails', async () => {

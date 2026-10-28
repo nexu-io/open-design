@@ -126,9 +126,28 @@ async function readProject(projectId: string, context: WorkspaceCollabContext | 
   if (!sameSummary(previous, next)) emit();
 }
 
+/**
+ * Projects whose create has not answered yet (a Home send's optimistic row,
+ * OPEND-3334). The row is listed by the rail and the tab switcher from the
+ * click, but it does not exist on the daemon: asking about it is a read of a
+ * project nobody may read yet. Its status is "not started" either way.
+ */
+const unpersistedProjectIds = new Set<string>();
+
+/** Hold run-status reads for a project until its create answers. */
+export function holdProjectRunStatusReads(projectId: string): void {
+  unpersistedProjectIds.add(projectId);
+}
+
+/** The create answered (or was rolled back): the project may be asked about. */
+export function releaseProjectRunStatusReads(projectId: string): void {
+  unpersistedProjectIds.delete(projectId);
+}
+
 /** Ask about each id not already being asked about. Answers land as they come. */
 function refresh(ids: Iterable<string>, contextFor: (projectId: string) => WorkspaceCollabContext | null): void {
   for (const projectId of ids) {
+    if (unpersistedProjectIds.has(projectId)) continue;
     if (inFlight.has(projectId)) continue;
     inFlight.add(projectId);
     void readProject(projectId, contextFor(projectId)).finally(() => {
@@ -214,6 +233,7 @@ export function resetProjectRunStatusStore(): void {
   summaries.clear();
   acknowledged = null;
   inFlight.clear();
+  unpersistedProjectIds.clear();
   subscriptions.clear();
   stopFeed();
   version += 1;

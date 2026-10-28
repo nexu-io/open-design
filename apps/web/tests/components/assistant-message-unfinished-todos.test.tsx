@@ -122,7 +122,7 @@ describe('AssistantMessage unfinished todo state', () => {
 
     // 完成度由 composer 上方那张固定清单卡拥有,这条消息自己不再摆一个完成状态行
     expect(document.querySelector('[data-testid="assistant-label"]')).toBeNull();
-    expect(screen.queryByText('Stopped with unfinished work')).toBeNull();
+    expect(screen.queryByText('Task not finished yet')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Continue remaining tasks' })).toBeNull();
   });
 
@@ -185,7 +185,7 @@ describe('AssistantMessage unfinished todo state', () => {
      * 按钮要有回调才画得出来,所以这里只钉住那句话:出口本身在
      * `tests/components/chat/todo-recall.test.tsx` 里验。
      */
-    expect(screen.getByText('Stopped with unfinished work')).toBeTruthy();
+    expect(screen.getByText('Task not finished yet')).toBeTruthy();
   });
 
   /*
@@ -227,7 +227,7 @@ describe('AssistantMessage unfinished todo state', () => {
     // ① 一行,只有一行
     const labels = document.querySelectorAll('[data-testid="assistant-label"]');
     expect(labels).toHaveLength(1);
-    expect(labels[0]?.textContent).toBe('Stopped with unfinished work');
+    expect(labels[0]?.textContent).toBe('Task not finished yet');
     // 没跑完的那几档用 `<i class="dot">`,跑完才换成画绿勾的 `<svg class="dot">`。
     // 旧轮次不许被这枚绿勾说成「已完成」。
     // (壳头自己那句「Done」是另一回事 —— 它说的是进程跑完了,不是活干完了)

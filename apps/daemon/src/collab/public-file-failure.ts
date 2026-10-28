@@ -2,9 +2,28 @@ import {
   normalizeUpstreamCode,
   normalizeUpstreamStatus,
   type ApiFailureDetail,
+  type ApiFailureReason,
   type ApiFailureStage,
 } from '@open-design/contracts';
 import { velaCommandStderr } from '../integrations/vela-command.js';
+
+type VelaFailure = Omit<ApiFailureDetail, 'stage'>;
+class SafeVelaCommandError extends Error {
+  constructor(message: string, readonly failure: VelaFailure) { super(message); }
+}
+
+/** Carry only classified tokens through privacy boundaries. Never retain the
+ * child error, cause, argv, paths, stdout or stderr in the replacement error.
+ * Callers may override the reason only when a local phase proves it.
+ */
+export function safeVelaCommandError(
+  message: 'VELA_PINNED_COMMAND_FAILED' | 'PUBLIC_SHARE_PUBLISH_FAILED',
+  error: unknown,
+  reason?: ApiFailureReason,
+): Error {
+  const { stage: _stage, ...failure } = classifyVelaCommandFailure('snapshot', error);
+  return new SafeVelaCommandError(message, reason ? { reason } : failure);
+}
 
 /**
  * Classify a rejected `vela resource …` command into closed tokens.
@@ -20,6 +39,7 @@ export function classifyVelaCommandFailure(
   stage: ApiFailureStage,
   error: unknown,
 ): ApiFailureDetail {
+  if (error instanceof SafeVelaCommandError) return { stage, ...error.failure };
   const code = typeof error === 'object' && error !== null
     ? (error as { code?: unknown }).code
     : undefined;
@@ -34,6 +54,23 @@ export function classifyVelaCommandFailure(
     return { stage, reason: 'cli_missing' };
   }
   const stderr = velaCommandStderr(error);
+  // Vela's --json errors carry errorCode/status separately from the diagnostic
+  // text. Parse only that envelope; do not extract arbitrary fields from bodies.
+  let envelope: { status?: unknown; errorCode?: unknown } | undefined;
+  try {
+    const value: unknown = JSON.parse(stderr.trim());
+    if (value && typeof value === 'object' && !Array.isArray(value) && 'error' in value
+      && typeof value.error === 'string') {
+      envelope = { status: 'status' in value ? value.status : undefined,
+        errorCode: 'errorCode' in value ? value.errorCode : undefined };
+    }
+  } catch { /* Legacy Vela prints a plain-text Error line. */ }
+  const status = normalizeUpstreamStatus(envelope?.status);
+  if (status !== undefined) {
+    const upstreamCode = normalizeUpstreamCode(envelope?.errorCode);
+    return { stage, reason: 'upstream_http', upstreamStatus: status,
+      ...(upstreamCode !== undefined ? { upstreamCode } : {}) };
+  }
   const api = /API request failed with status (\d{3})(?:: ([^\s]+))?/.exec(stderr);
   if (api) {
     const upstreamStatus = normalizeUpstreamStatus(Number(api[1]));
@@ -55,6 +92,35 @@ export function classifyVelaCommandFailure(
     return { stage, reason: 'network' };
   }
   return { stage, reason: 'unknown' };
+}
+
+export type PublicShareBootstrapStage =
+  | 'bootstrap' | 'bootstrap_content_preflight' | 'bootstrap_directory_preflight'
+  | 'bootstrap_root_push' | 'bootstrap_root_version' | 'bootstrap_catalog_upsert' | 'bootstrap_catalog_readback';
+
+export type PublicShareDiagnosticStage =
+  | PublicShareBootstrapStage
+  | 'remote_state' | 'resume_guard' | 'resume_command' | 'resume_record' | 'resume_prepare';
+
+/** Bounded share lifecycle failures only: never include command output, identities or URLs. */
+export function logPublicShareDiagnostic(entry: {
+  operation: 'state_read' | 'resume' | 'bootstrap';
+  stage: PublicShareDiagnosticStage;
+  status: number;
+  errorCode: string;
+  requestId: string | undefined;
+  startedAt: number;
+  staleFallback?: boolean;
+  failure?: Pick<ApiFailureDetail, 'reason' | 'upstreamStatus'>;
+}): void {
+  console.warn('[od] public share diagnostic', JSON.stringify({
+    operation: entry.operation, stage: entry.stage, status: entry.status, errorCode: entry.errorCode,
+    ...(entry.requestId ? { requestId: entry.requestId } : {}),
+    ...(entry.staleFallback !== undefined ? { staleFallback: entry.staleFallback } : {}),
+    ...(entry.failure ? { reason: entry.failure.reason,
+      ...(entry.failure.upstreamStatus !== undefined ? { upstreamStatus: entry.failure.upstreamStatus } : {}) } : {}),
+    durationMs: Math.max(0, Date.now() - entry.startedAt),
+  }));
 }
 
 /**

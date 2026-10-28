@@ -1,4 +1,12 @@
 // @ts-nocheck
+import { observeDiscoveryEvent } from './strategies/od-next/discovery-observation.js';
+import { assertCommentFileNotPending } from './collab/comment-file-retirements.js';
+import { captureJsonBodySize } from './http/json-body-size.js';
+
+import { usesProductionMarker, composeResumedRequest } from './strategies/od-next/request-resume.js';
+import { todoSnapshotHasUnfinishedWork } from '@open-design/contracts';
+import { createUserDesignSystem } from './design-systems/index.js';
+import { resolveWorkspaceScope } from './collab/workspace-scope.js';
 import { startEvidenceDelivery } from './services/evidence-delivery.js';
 import type {
   DesktopExportArtifactInput,
@@ -25,35 +33,19 @@ import {
   composeOdNextStrategyCorePromptV2,
   OD_NEXT_BUNDLE_ECHO_GUARD_V2,
   odNextStrategyRecipeIdentityV2,
-  renderOdNextRuntimeFactsV2,
   composeOdNextStrategyStableRequestContextV2,
   executionProfileFromStreamFormat,
   PLUGIN_SHARE_ACTION_PLUGIN_IDS,
   renderChatTurnHostProtocolInstructions,
   resolveOdNextDeckFrameworkMode,
 } from '@open-design/contracts';
-import {
-  advanceAuthenticatedDoneCapture,
-  isTodoWriteToolName,
-  stopReasonIsTruncation,
-  todoItemsFromTodoWriteInput,
-} from '@open-design/contracts';
-import {
-  renderUnfinishedTodoRecall,
-  recalledTodosFromTodoWriteInput,
-  type RecalledTodo,
-} from '@open-design/contracts';
+
 import type {
   CollabCloudMemberDirectoryEntry,
   TeamProject,
   WorkspaceCollabContext,
 } from '@open-design/contracts';
-import {
-  detectOdNextDevicePlatformFromText,
-  resolveOdNextDevicePlatform,
-  selectOdNextDeviceFrameContextV2,
-  selectOdNextLayoutPrimitivesCss,
-} from '@open-design/contracts';
+
 import {
   loadOdNextTaskResourcesForSnapshot,
   materializeOdNextDeviceFrames,
@@ -142,14 +134,13 @@ import {
   selectPromptImagePaths,
 } from './runtimes/chat-prompt-inputs.js';
 import {
+  agentStdinPromptPayload,
   recordPromptDeliveredAtSpawn,
   runtimeReadsPlainTextPromptFromStdin,
   applyClaudeStreamJsonRunBookkeeping,
   assertValidRuntimeDefFirstOutputTimeoutMs,
   assertValidRuntimeDefInactivityTimeoutMs,
-  bufferedAntigravityGeminiFirstTokenAt,
   classifyChatRunCloseStatus,
-  looksLikeGeminiJsonEventStream,
   resolveAcpStageTimeoutMs,
   resolveActiveInactivityTimeoutMs,
   resolveChatRunArtifactQuietPeriodMs,
@@ -211,9 +202,7 @@ export {
   applyClaudeStreamJsonRunBookkeeping,
   assertValidRuntimeDefFirstOutputTimeoutMs,
   assertValidRuntimeDefInactivityTimeoutMs,
-  bufferedAntigravityGeminiFirstTokenAt,
   classifyChatRunCloseStatus,
-  looksLikeGeminiJsonEventStream,
   resolveAcpStageTimeoutMs,
   resolveActiveInactivityTimeoutMs,
   resolveChatRunArtifactQuietPeriodMs,
@@ -260,8 +249,6 @@ import {
 import {
   findKnownModel,
   getRememberedLiveModels,
-  preferFreshLiveModels,
-  rememberLiveModels,
   resolveDefaultModelFromOptions,
   resolveModelForAgent,
   resolveModelForServiceTier,
@@ -288,6 +275,12 @@ import {
 } from './integrations/vela.js';
 import { isAbortedOperationError } from './integrations/aborted-error.js';
 import { projectResourceIdFor } from './integrations/vela-team-projects.js';
+import { normalizeCurrentFileComment, parseCommentFileState } from './collab/comment-file-facts.js';
+import { createLocalCommentFiles } from './collab/local-comment-files.js';
+import { createCommentFileDeletion } from './collab/comment-file-deletion.js';
+import { createCommentFilePublisher } from './collab/comment-file-publisher.js';
+import { createCommentFilePublicationCoordination } from './collab/comment-file-publication-coordination.js';
+import { runVelaCommand, velaWorkspaceCommandOptions } from './integrations/vela-command.js';
 import {
   getTeamProjectMaterialization,
   latestTeamProjectMaterializationVersion,
@@ -300,7 +293,7 @@ import {
   amrAccountFailureDetails,
   classifyAmrAccountFailureSignal,
 } from './integrations/vela-errors.js';
-import { amrModelLoadingCache } from './runtimes/amr-model-cache.js';
+import { AMR_DEFAULT_MODEL_CATALOG_WAIT_MS, amrModelLoadingCache, amrRunModels } from './runtimes/amr-model-cache.js';
 import {
   fetchVelaPresetModels,
   fetchVelaRemoteModelsWithRetry,
@@ -369,7 +362,6 @@ import {
 import {
   backfillDesignSystemWorkspaceResources,
   buildUserDesignSystemArchive,
-  createUserDesignSystem,
   deleteUserDesignSystem,
   digestDesignSystemContext,
   isTeamSyncedUserDesignSystem,
@@ -402,10 +394,7 @@ import {
   workspaceTeamDesignSystemBindingResourceId,
 } from './design-systems/workspace-team-binding.js';
 import { ownedDesignSystemSourceIsReady } from './design-systems/team-owner-materialization.js';
-import {
-  createDesignSystemBackingProjectPreparer,
-  createLinkedProjectTeamResourceShareService,
-} from './design-systems/team-project-share.js';
+import { createLinkedProjectTeamResourceShareService } from './design-systems/team-project-share.js';
 import { prepareDesignTokenContractRebuild } from './design-systems/token-contract-rebuild.js';
 import { registerBrandRoutes } from './brand-routes.js';
 import {
@@ -470,8 +459,7 @@ import {
 } from './memory.js';
 import { runAutoExtractionCleanup } from './memory-cleanup.js';
 import { attachAcpSession } from './agent-protocol/index.js';
-import { attachPiRpcSession } from './agent-protocol/index.js';
-import { attachDshProfileSession } from './agent-protocol/index.js';
+
 import { stageAmrImagePaths } from './media/amr-image-staging.js';
 import { ingestRoutineConnectorEvolution } from './automation-routine-evolution.js';
 import { createClaudeStreamHandler } from './runtimes/claude-stream.js';
@@ -512,18 +500,8 @@ import {
   getDetectedRuntimeVersions,
   ensureDetectedRuntimeCapabilities,
 } from './runtimes/detection.js';
-import { resolveBundledOdNextRuntimeCapability } from './runtimes/od-next-capability-gate.js';
+
 import {
-  createOdNextNativeBuildPackageBindings,
-  nativeBuildPackageBindingMap,
-} from './strategies/od-next/native-build-package.js';
-import {
-  resolveAutomaticContinuationEvidence,
-  type OdNextComplexProductionResolver,
-  type OdNextExecutionPreflightResolver,
-} from './strategies/od-next/automatic-continuation-service.js';
-import {
-  antigravityAuthGuidance,
   antigravityQuotaGuidance,
   classifyAgentAuthFailure,
   classifyAgentServiceFailure,
@@ -562,18 +540,16 @@ import {
 } from './strategies/od-next/initial-prompt-bundle-service.js';
 import { createOdNextRunProtocol } from './strategies/od-next/protocol.js';
 import {
-  blockAutomaticContinuation,
+  endFailedAutomaticContinuation,
   prepareAutomaticStrategyContinuation,
   projectStrategyTask,
-  odNextTurnMayInferDirectEditCompletion,
-  odNextTurnMayInferProductionCompletion,
 } from './strategies/od-next/automatic-simple-production.js';
-import { readOdNextRolloutPolicy } from './strategies/od-next/rollout.js';
-import { createStrategyRunWriteEvidenceRecorder, strategyRunWriteEvidence } from './strategies/od-next/run-write-evidence.js';
-import { recoverPlanningIntentResolution } from './strategies/od-next/intent-resolution-recovery.js';
-import { isStrategyIntentResolutionRun, requiresStrategyIntentResolution, validateStrategyIntentResolutionReply } from './strategies/od-next/intent-resolution.js';
-import { startIntentResolution } from './strategies/od-next/intent-resolution-store.js';
+
+import { createStrategyRunWriteEvidenceRecorder } from './strategies/od-next/run-write-evidence.js';
+
 import {
+  getStrategyTaskExecution,
+  persistStrategyResumeText,
   getStrategyTaskExecutionByRunId,
   reconcileStrategyTaskRunTerminal,
   isInitialStrategyTaskRun,
@@ -592,7 +568,7 @@ import {
   type RunLifecycleStreamEventMarkers,
 } from './run-lifecycle-tracer.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
-import { promptBudgetAnalyticsFromDiagnostic } from './run-diagnostics.js';
+
 import { classifyRunFailure, isResumableFailure } from './run-failure-classification.js';
 import {
   deliverableSyntaxFinalizerEnabled,
@@ -659,13 +635,7 @@ import {
 } from './connectionTest.js';
 import { listProviderModels } from './integrations/provider-models.js';
 import { importClaudeDesignZip } from './design/index.js';
-import {
-  defaultBaseUrlForFinalizeProtocol,
-  finalizeDesignPackage,
-  FinalizePackageLockedError,
-  FinalizeUpstreamError,
-  isFinalizeProviderProtocol,
-} from './design/index.js';
+
 import { buildDocumentPreview } from './document-preview.js';
 import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
 import { loadCraftSections, resolveCraftRequirements } from './craft.js';
@@ -675,7 +645,7 @@ import { generateMedia } from './media/index.js';
 import { resolveHyperFramesCliPath } from './media/hyperframes-runtime.js';
 import { listElevenLabsVoiceOptions } from './integrations/elevenlabs-voices.js';
 import { searchResearch, ResearchError } from './research/index.js';
-import { openBrowser } from './browser/index.js';
+
 import {
   AUDIO_DURATIONS_SEC,
   AUDIO_MODELS_BY_KIND,
@@ -746,7 +716,7 @@ import {
   chatScrollForensicsBodyParser,
   chatScrollForensicsHandler,
 } from './diagnostics-client-evidence.js';
-import { DIAGNOSTICS_EXPORT_PATH } from '@open-design/diagnostics';
+import { DIAGNOSTIC_DELIVERY_LOG_PREFIX, DIAGNOSTICS_EXPORT_PATH } from '@open-design/diagnostics';
 import {
   createProjectArchiveStream,
   createBatchArchiveStream,
@@ -775,6 +745,7 @@ import {
   searchProjectFiles,
   stageProjectDirsForDelete,
   resolveProjectFilePath,
+  resolveProjectDeletePath,
   writeProjectFile,
   reconcileHtmlArtifactManifest,
 } from './projects.js';
@@ -783,6 +754,7 @@ import { ArtifactPublicationBlockedError } from './artifacts/publication-guard.j
 import {
   appendMessageStatusEvent,
   confirmPreviewCommentPinSeq,
+  confirmPreviewCommentAuthorKey,
   deleteConversation,
   deletePreviewComment,
   deleteProject as dbDeleteProject,
@@ -933,7 +905,7 @@ import { setMessageArtifactHtmlVersionIds } from './chat-artifacts/store.js';
 import { registerVelaRoutes } from './routes/vela.js';
 import { registerFinalizeRoutes, registerImportRoutes, registerProjectExportRoutes } from './import-export-routes.js';
 import { registerHandoffRoutes } from './routes/handoff.js';
-import { EmptyTranscriptError, synthesizeHandoffPrompt } from './design/index.js';
+
 import { TranscriptExportLockedError } from './transcript-export.js';
 import { registerChatRoutes } from './routes/chat.js';
 import { registerRunRoutes } from './routes/runs.js';
@@ -962,7 +934,21 @@ import {
 import { registerTeamResourceRoutes } from './routes/team-resources.js';
 import { registerTeamResourceShareRoutes } from './routes/team-resource-share.js';
 import { createCollabRuntime } from './collab/runtime.js';
-import { createSqlitePublicFilePublicationStore } from './collab/public-file-publication-store.js';
+import { createPublicFileStopStartup, createSqlitePublicFilePublicationStore } from './collab/public-file-publication-store.js';
+import { sourcePathForCurrentPublication } from './collab/comment-relay-publication-mapping.js';
+import { recordPersonalPublishedCommentMutation } from './collab/published-comment-mutation.js';
+import { createPublicFilePublicationRecorder } from './collab/public-file-publication-recording.js';
+import { enqueuePublishedFileComments } from './collab/published-file-comment-backfill.js';
+import { createVelaPublicFileStop } from './collab/vela-public-file-stop.js';
+import { createShareContentFingerprints } from './collab/share-content-fingerprint.js';
+import { createShareBindingOutbox } from './collab/share-binding-outbox.js';
+import { createShareBindingStartup } from './collab/share-binding-startup.js';
+import { createVelaShareBindingPrepare } from './collab/vela-share-binding-prepare.js';
+import { cleanupAbandonedPinnedVelaSessions } from './collab/vela-pinned-command.js';
+import { createProjectPublicFileStop } from './collab/project-public-file-stop.js';
+import { createPublicFileMutations } from './collab/public-file-mutations.js';
+import { resolveLocalProjectCommentWorkspaceContext } from './collab/project-comment-workspace-context.js';
+import { commentRelayScope, personalCommentRelayFilePaths } from './collab/comment-relay-scope.js';
 import {
   createActiveWorkspaceSelectionStore,
 } from './collab/active-workspace-selection.js';
@@ -981,7 +967,7 @@ import {
   impossibleTeamShareRows,
   projectCollabScope,
 } from './collab/team-share-scope.js';
-import { resolveWorkspaceScope } from './collab/workspace-scope.js';
+
 import {
   AmrWorkspaceScopeRequiredError,
   openDesignAmrTraceEnvForRun,
@@ -1062,7 +1048,17 @@ import {
   createRememberedTeamResourceScopes,
   type RememberedTeamResourceScopeLease,
 } from './collab/remembered-team-resource-scopes.js';
-import { readVelaControlApiContext } from './integrations/vela.js';
+import { createCommentSyncStateService } from './collab/comment-sync-state.js';
+import { registerCommentSyncStateRoutes } from './routes/project/comments.js';
+import { createCommentAlignmentService, runVelaCommentAlignment } from './collab/comment-alignment.js';
+import { registerCommentAlignmentRoutes } from './routes/project/comments.js';
+import { createShareAliasReservations } from './collab/share-alias-reservation.js';
+import { createSharePublicationCompletion } from './collab/share-publication-completion.js';
+import { resolvePublicShareLink } from './collab/public-share-viewer-url.js';
+import { ensurePublicShareProject } from './collab/public-share-project-bootstrap.js';
+import { createVelaProjectShareState } from './collab/vela-project-share-state.js';
+import { registerPublicFileStopRetryRoutes } from './routes/public-file-stop-retry.js';
+import { runPinnedVelaCommand } from './collab/vela-pinned-command.js';
 import {
   fetchBillingCheckoutUrl,
   fetchVelaBillingCatalog,
@@ -1074,6 +1070,9 @@ import { createAccountBillingSummaryCache } from './collab/account-billing-summa
 import { createEventRefreshCoordinator } from './collab/event-refresh-coordinator.js';
 import { createWorkspaceExactAuthorityCache } from './collab/workspace-exact-authority-cache.js';
 import { createCollabPublishWatcher } from './collab/collab-publish-watcher.js';
+import { createOwnedContentSync, type OwnedContentSync } from './collab/owned-content-sync.js';
+import { createSqliteOwnedContentStore, type OwnedContentScope } from './collab/owned-content-store.js';
+import { applyOwnedProjectContent, contentFiles, ownedContentFingerprint } from './collab/owned-content-files.js';
 import {
   isUnmaterializedSharedPlaceholder,
   SHARED_PROJECT_PLACEHOLDER_METADATA_KEY,
@@ -1105,8 +1104,10 @@ import {
 } from './collab/resource-principal.js';
 import { createCollabCloudClientFromEnv } from './integrations/collab-cloud.js';
 import { createCollabCloudService } from './collab/collab-cloud-service.js';
+import { createCommentInboundStore } from './collab/comment-inbound-store.js';
 import {
   commentRelayLocalBindingMatches,
+  commentRelayRecordPromotedToTeam,
   createCommentRelayOutboxStore,
 } from './collab/comment-relay-outbox.js';
 import { createWorkspaceInvalidationPoller } from './collab/workspace-invalidation-poller.js';
@@ -1194,6 +1195,7 @@ import {
   isZeroConfigClipperLibraryRequest,
   parseHostHeader,
 } from './origin-validation.js';
+import { projectPoweredPreviewOriginDecision } from './http/powered-preview-origin.js';
 import { registerLibraryRoutes } from './routes/library.js';
 import {
   libraryExtensionAllowedOrigins,
@@ -1236,6 +1238,36 @@ import {
 } from './http/local-daemon-request.js';
 import { renderOAuthResultPage } from './http/oauth-result-page.js';
 import { bearerTokenFromRequest, createToolRequestAuth } from './http/tool-request-auth.js';
+import {
+  advanceAuthenticatedDoneCapture,
+  isTodoWriteToolName,
+  stopReasonIsTruncation,
+  todoItemsFromTodoWriteInput,
+} from '@open-design/contracts';
+import {
+  renderUnfinishedTodoRecall,
+  recalledTodosFromTodoWriteInput,
+  type RecalledTodo,
+} from '@open-design/contracts';
+import {
+  detectOdNextDevicePlatformFromText,
+  resolveOdNextDevicePlatform,
+  selectOdNextDeviceFrameContextV2,
+  selectOdNextLayoutPrimitivesCss,
+} from '@open-design/contracts';
+import { attachPiRpcSession } from './agent-protocol/index.js';
+import { attachDshProfileSession } from './agent-protocol/index.js';
+import { promptBudgetAnalyticsFromDiagnostic } from './run-diagnostics.js';
+import {
+  defaultBaseUrlForFinalizeProtocol,
+  finalizeDesignPackage,
+  FinalizePackageLockedError,
+  FinalizeUpstreamError,
+  isFinalizeProviderProtocol,
+} from './design/index.js';
+import { openBrowser } from './browser/index.js';
+import { EmptyTranscriptError, synthesizeHandoffPrompt } from './design/index.js';
+import { readVelaControlApiContext } from './integrations/vela.js';
 
 /**
  * `OD_PROJECT_CREATE_PREPARATION_TIMEOUT_MS` shortens the POST /api/projects
@@ -1914,12 +1946,18 @@ export function createOpenDesignToolEnv({
   projectDir,
   projectId,
   workspaceScope,
+  runId,
+  conversationId,
+  analyticsContext,
 }: {
   daemonUrl: string;
   hyperFramesBin?: string;
   projectDir?: string | null;
   projectId?: string | null;
   workspaceScope?: RunWorkspaceScope | null;
+  runId?: string | null;
+  conversationId?: string | null;
+  analyticsContext?: AnalyticsContext | null;
 }): NodeJS.ProcessEnv {
   const scope = workspaceScope?.projectId === projectId ? workspaceScope : null;
   return {
@@ -1928,6 +1966,12 @@ export function createOpenDesignToolEnv({
     OD_HYPERFRAMES_BIN: hyperFramesBin,
     OD_NODE_BIN,
     OD_DAEMON_URL: daemonUrl,
+    OD_STOCK_RUN_ID: runId ?? '',
+    OD_STOCK_SESSION_ID: conversationId ?? '',
+    OD_STOCK_ANALYTICS_DEVICE_ID: analyticsContext?.deviceId ?? '',
+    OD_STOCK_ANALYTICS_SESSION_ID: analyticsContext?.sessionId ?? '',
+    OD_STOCK_ANALYTICS_CLIENT_TYPE: analyticsContext?.clientType ?? '',
+    OD_STOCK_ANALYTICS_LOCALE: analyticsContext?.locale ?? '',
     // Always overwrite ambient/configured identities, including unbound runs.
     // An older bound Run without a member keeps its Workspace id so the CLI
     // rejects the incomplete pair rather than silently reading another library.
@@ -2068,7 +2112,6 @@ function filesystemEmptyAnswerFallbackText(fileNames) {
 export function __forTestFilesystemEmptyAnswerFallbackText(fileNames) {
   return filesystemEmptyAnswerFallbackText(fileNames);
 }
-
 
 export function shouldReportRunCompletedFromMessage(saved, body = {}) {
   return Boolean(
@@ -2551,8 +2594,8 @@ export function createFinalizedMessageTelemetryReporter({
   return reportFinalized;
 }
 
-export function shouldReportRunCompletionTelemetryFallbackStatus(status: unknown): boolean {
-  return status === 'failed' || status === 'canceled';
+export function shouldReportRunCompletionTelemetryFallbackStatus(status: unknown, taskOwned = false): boolean {
+  return status === 'failed' || status === 'canceled' || (status === 'succeeded' && taskOwned);
 }
 
 const PROJECT_PREVIEW_SCOPE_TTL_MS = 60 * 60 * 1000;
@@ -2787,6 +2830,13 @@ function rewriteKnownAgentStreamError(agentId, message, failureText = '') {
   ) {
     return 'The run failed due to an unknown upstream streaming error. Please retry.';
   }
+  // agy reports a per-model quota exhaustion as
+  //   RESOURCE_EXHAUSTED (code 429): Individual quota reached. …
+  // Point the user at agy's model picker, the only way to switch to a model
+  // with quota left.
+  if (agentId === 'antigravity' && /individual quota reached/i.test(combined)) {
+    return antigravityQuotaGuidance();
+  }
   // An ACP handshake refusal that reaches one of the stderr-tail fallbacks is
   // deliberately NOT reworded here. The daemon has no locale, so a sentence
   // composed at this layer lands in `run.error` untranslated and the chat
@@ -2900,9 +2950,18 @@ const pluginShareTaskStore = createPluginShareTaskStore({
 // files live under metadata.baseDir.
 let projectMetadataLookup: ((id: string) => Record<string, unknown> | null) | null = null;
 
+/** Reserve names in multipart order, even when directory preparation finishes out of order. */
+function queueProjectUploadNaming(req) {
+  const previous = req._uploadNamingTail ?? Promise.resolve();
+  let release: () => void;
+  req._uploadNamingTail = new Promise<void>((resolve) => { release = resolve; });
+  return { previous, release: () => release() };
+}
+
 const projectUpload = multer({
   storage: multer.diskStorage({
     destination: async (req, _file, cb) => {
+      const naming = queueProjectUploadNaming(req);
       try {
         // Route uploads into the project's actual root: for folder-imported
         // projects (metadata.baseDir set) attachments need to land alongside
@@ -2923,11 +2982,17 @@ const projectUpload = multer({
           subdir,
           meta,
         );
+        // Multer invokes filename synchronously from this callback. Keep
+        // directory I/O concurrent, but let earlier file parts reserve first.
+        await naming.previous;
         (req as any)._uploadRelDir = relDir;
         (req as any)._uploadAbsDir = absDir;
         cb(null, absDir);
       } catch (err) {
+        await naming.previous;
         cb(err, '');
+      } finally {
+        naming.release();
       }
     },
     filename: (req, file, cb) => {
@@ -3101,14 +3166,7 @@ export interface StartServerOptions {
   staticDir?: string;
   /** Opaque child-process environment supplied by the runtime integration seam. */
   inheritedEnvironment?: (baseEnv?: NodeJS.ProcessEnv) => Record<string, string>;
-  /** Daemon-owned host capability facts. HTTP/model output cannot populate it. */
-  odNextExecutionPreflightResolver?: OdNextExecutionPreflightResolver | null;
-  /**
-   * Daemon-owned, runtime-neutral capability/Child facts for complex OD Next
-   * Production. Runtime adapters normalize their native events before this
-   * boundary; HTTP bodies, assistant prose, and raw stdout are never inputs.
-   */
-  odNextComplexProductionResolver?: OdNextComplexProductionResolver | null;
+
 }
 
 export function startAmrTerminalReportDeliveryAfterBind(
@@ -3127,6 +3185,12 @@ export interface StartServerResult {
   routeInventory: import('./route-registration-guard.js').RouteRegistration[];
 }
 
+/** Production callback shared by the registered comment routes and HTTP regression tests. */
+export function createPersonalPublishedCommentMutationHandler(db: Database.Database) {
+  return (comment: PreviewComment, context: WorkspaceCollabContext | null, deleted: boolean) =>
+    recordPersonalPublishedCommentMutation(db, comment, context, deleted);
+}
+
 export async function startServer({
   port = 7456,
   host = normalizeDaemonBindHost(process.env.OD_BIND_HOST),
@@ -3138,8 +3202,6 @@ export async function startServer({
   runtime = null,
   staticDir = STATIC_DIR,
   inheritedEnvironment = () => ({}),
-  odNextExecutionPreflightResolver = null,
-  odNextComplexProductionResolver = null,
 }: StartServerOptions = {}) {
   host = normalizeDaemonBindHost(host);
   let resolvedPort = port;
@@ -3218,7 +3280,7 @@ export async function startServer({
   // exactly the incidents it was built for, and silently: the uploader reports
   // `res.ok` and the export continues without the evidence.
   app.use(CHAT_SCROLL_FORENSICS_PATH, chatScrollForensicsBodyParser);
-  app.use(express.json({ limit: '4mb' }));
+  app.use(express.json({ limit: '4mb', verify: captureJsonBodySize }));
   const projectPreviewScopes = createProjectPreviewScopeRegistry();
 
   // Plan §3.K1 — API-token middleware.
@@ -3398,10 +3460,23 @@ export async function startServer({
     /^\/projects\/[^/]+\/(?:raw|preview)\/|^\/codex-pets\/[^/]+\/spritesheet$|^\/asset-cache$/;
   const _POWERED_PREVIEW_SAFE_RE = /^\/projects\/[^/]+\/powered\/.+$/u;
 
-  // Reject cross-origin requests to API endpoints.
-  // Health/version remain open for monitoring probes.
-  // Non-browser clients (no Origin header) are always allowed.
+  // Reserve project preview hosts before API exceptions and static serving.
+  app.use((req, res, next) => {
+    const projectPreviewDecision = projectPoweredPreviewOriginDecision(req, resolvedPort);
+    if (projectPreviewDecision === 'reject') {
+      return res.status(403).json({
+        error: 'Powered preview origin cannot access this API route',
+      });
+    }
+    res.locals.projectPoweredPreview = projectPreviewDecision === 'allow';
+    next();
+  });
+
+  // Reject cross-origin requests to API endpoints. Normal non-browser
+  // clients (no Origin header) retain their existing access.
   app.use('/api', (req, res, next) => {
+    if (res.locals.projectPoweredPreview === true) return next();
+
     // Live artifact previews have stricter local-daemon validation and
     // loopback CORS handling on the route itself. Let that middleware produce
     // the structured error shape and preflight headers for preview embeds.
@@ -3742,7 +3817,6 @@ export async function startServer({
 
   // ---- Projects (DB-backed) -------------------------------------------------
 
-
   // Team collaboration subsystem: presence + author-side publish scheduler.
   // Product team workspaces publish and pull through the login-backed Vela CLI;
   // non-Vela local modes retain the in-memory adapter for isolated development.
@@ -3953,9 +4027,9 @@ export async function startServer({
   const teamResourceVersions = createTeamResourceVersionStore(RUNTIME_DATA_DIR);
   const teamProjectContentResourceId = (
     projectId: string,
-    scope: { resourceTeamId: string; ownerMemberId: string },
+    scope: { resourceTeamId: string; ownerMemberId: string; resourceId?: string },
   ) =>
-    projectResourceIdFor(projectId, {
+    scope.resourceId ?? projectResourceIdFor(projectId, {
       teamId: scope.resourceTeamId,
       memberId: scope.ownerMemberId,
       role: 'member',
@@ -4241,15 +4315,15 @@ export async function startServer({
           visibility: 'team',
           createdByWorkspaceMemberId: input.ownerMemberId ?? input.updatedByMemberId ?? null,
           updatedByWorkspaceMemberId: input.updatedByMemberId ?? input.ownerMemberId ?? null,
-          resourceHubResourceId: projectResourceIdFor(input.projectId, input.principal),
+          resourceHubResourceId: getWorkspaceProjectByProjectId(db, input.projectId)?.resourceHubResourceId ?? null,
           cloudTombstonedAt: null,
           syncState: 'synced',
         }
       : {
           visibility: 'personal',
           updatedByWorkspaceMemberId: input.updatedByMemberId ?? input.ownerMemberId ?? null,
-          resourceHubResourceId: null,
-          cloudTombstonedAt: Date.now(),
+          resourceHubResourceId: getWorkspaceProjectByProjectId(db, input.projectId)?.resourceHubResourceId ?? null,
+          cloudTombstonedAt: null,
           syncState: 'local_only',
         };
     const persist = db.transaction(() => {
@@ -4283,10 +4357,63 @@ export async function startServer({
     _projectId: string,
     _workspaceId?: string,
   ): void => {};
+  let ownedContentSync: OwnedContentSync | null = null;
+  let ownerProjectHasActiveRun = (_projectId: string): boolean => true;
+  const publicFileMutations = createPublicFileMutations();
+  const localCommentFiles = createLocalCommentFiles(db);
+  const commentFileRun = (workspaceId: string) => (args: string[]) =>
+    runVelaCommand(args, velaWorkspaceCommandOptions(workspaceId));
+  const commentFilePublications = createCommentFilePublicationCoordination({
+    isBusy: projectId => ownerProjectHasActiveRun(projectId),
+    wake: (projectId, principal) => {
+      collab.scheduler.notifyChanged(projectId, 'run-settled', principal);
+      collab.scheduler.runBoundary(projectId, principal);
+    },
+  });
+  const publishWithCommentFiles = createCommentFilePublisher({
+    db, localFiles: localCommentFiles, runForWorkspace: commentFileRun,
+    resolveRoot: projectId => resolveProjectShareDir(PROJECTS_DIR, projectId, getProject(db, projectId), resolveProjectDir),
+    listFiles: contentFiles,
+  });
   const collab = createCollabRuntime({
+    coordinatePublication: (projectId, principal, publish) => {
+      const operation = () => velaCliTeamProjectCatalog
+        ? publishWithCommentFiles(projectId, principal, publish) : publish();
+      const coordinated = () => ownedContentSync ? ownedContentSync.withPublication(projectId, principal, operation) : operation();
+      return principal && velaCliTeamProjectCatalog
+        ? publicFileMutations.run(projectId, () => commentFilePublications.run(projectId, principal, coordinated), { joinCurrent: true }) : coordinated();
+    },
     workspaceContext: workspaceContextProvider,
+    ...(velaCliTeamProjectCatalog ? {
+      resolveResourceId: async (projectId: string, principal?: ResourceHubPrincipal | null) => {
+        if (!principal) throw new Error('TEAM_PROJECT_ROOT_UNAVAILABLE');
+        const row = getWorkspaceProjectByProjectId(db, projectId);
+        if (row && (row.workspaceId !== principal.teamId || row.resourceState !== 'active'
+          || row.cloudTombstonedAt != null)) throw new Error('TEAM_PROJECT_ROOT_UNAVAILABLE');
+        if (row?.resourceHubResourceId?.trim()) return row.resourceHubResourceId;
+        // Rootless old local data is resolved from the existing catalog identity,
+        // not migrated to a generated alias. Native Vela enforces viewer access.
+        const registration = await velaCliTeamProjectCatalog.getRegistration(projectId, principal);
+        if (!registration || registration.visibility !== 'team' || !registration.resourceId?.trim()) {
+          throw new Error('TEAM_PROJECT_ROOT_UNAVAILABLE');
+        }
+        return registration.resourceId;
+      },
+      retainRegistration: (registration: import('@open-design/contracts').PublicShareProjectRegistration, principal: ResourceHubPrincipal) => {
+        const row = getWorkspaceProjectByProjectId(db, registration.projectId);
+        if (row?.workspaceId !== principal.teamId || row.resourceState !== 'active'
+          || row.createdByWorkspaceMemberId !== principal.memberId || row.cloudTombstonedAt != null
+          || registration.workspaceId !== principal.teamId || registration.ownerMemberId !== principal.memberId) {
+          throw new Error('TEAM_PROJECT_REGISTRATION_SCOPE_MISMATCH');
+        }
+        updateWorkspaceProject(db, principal.teamId, registration.projectId, {
+          resourceHubResourceId: registration.resourceId,
+          updatedAt: SYNC_KEEPS_UPDATED_AT,
+        });
+      },
+    } : {}),
     canPublishProjectContent: (projectId) =>
-      !projectIsUnmaterializedSharedPlaceholder(projectId),
+      !projectIsUnmaterializedSharedPlaceholder(projectId) && !ownedContentSync?.isApplying(projectId),
     resolveProjectDir: async (projectId) => {
       const project = getProject(db, projectId);
       if (project) await ensureProject(PROJECTS_DIR, projectId, project.metadata);
@@ -4387,6 +4514,7 @@ export async function startServer({
   void backfillDesignSystemWorkspaceResources(db, USER_DESIGN_SYSTEMS_DIR).catch((error) => {
     console.warn('[od] design-system workspace-resource backfill failed:', error);
   });
+  const publicFilePublicationStore = createSqlitePublicFilePublicationStore(db);
   const collabCloudClient = velaCliCollabClient ?? createCollabCloudClientFromEnv();
   const resolveBoundProjectWorkspaceContext = async (
     projectId: string,
@@ -4410,7 +4538,6 @@ export async function startServer({
     const membership = directory.items.find(
       (item) =>
         item.workspaceId === workspaceId
-        && item.workspaceType === 'team'
         && item.memberStatus === 'active'
         && item.lifecycleState !== 'deleted',
     );
@@ -4426,6 +4553,7 @@ export async function startServer({
     ...(velaCliTeamProjectCatalog ? { teamProjectCatalog: velaCliTeamProjectCatalog } : {}),
   });
 
+
   // Collab cloud (C-lane §D2.5/§D4): cross-daemon comment sync + member
   // directory. The client is null (all calls degrade to no-op) unless
   // OD_COLLAB_CLOUD_URL is set. The service ties it to the one workspace context
@@ -4436,33 +4564,112 @@ export async function startServer({
     ? createCollabCloudService({
         client: collabCloudClient,
         commentOutbox: createCommentRelayOutboxStore(db),
+        // C3-LITE member comment pages (BO1), served by the AMR API through the
+        // Vela CLI. The HTTP relay (OD_COLLAB_CLOUD_URL) has no paged route, so
+        // it keeps the legacy pull. An unusable cursor is rebuilt from a fresh
+        // snapshot in the same drain (BO2).
+        ...(velaCliCollabClient ? { memberCommentStore: createCommentInboundStore(db) } : {}),
+        isMemberSyncProjectShared: (projectId) => {
+          const binding = getWorkspaceProjectByProjectId(db, projectId);
+          return binding?.visibility === 'team' && binding.resourceState !== 'deleted';
+        },
+        onMemberSyncRebuildRequired: ({ projectId, code }) =>
+          console.warn(`[od] collab member comment cursor rebuilding (${code}) for project ${projectId}`),
+        commentRelayScope: (projectId, filePath, context) => commentRelayScope({
+          binding: getWorkspaceProjectByProjectId(db, projectId),
+          context,
+          projectId,
+          filePath,
+          publications: publicFilePublicationStore,
+        }),
+        listPersonalCommentRelayFilePaths: (projectId, context) =>
+          personalCommentRelayFilePaths({
+            binding: getWorkspaceProjectByProjectId(db, projectId),
+            context,
+            projectId,
+            publications: publicFilePublicationStore,
+          }),
+        // Deliberately unguarded: if the query throws, the batch must fail and
+        // keep its cursor. Swallowing the error here would report "no such
+        // comment" and acknowledge a deletion we never applied.
+        // The server asserted which publication a comment belongs to; this turns
+        // that into the local file it was written against. Everything here is a
+        // gate, and each one is load-bearing:
+        //
+        // - the binding must be this workspace's, active, and created by the
+        //   member we are resolving for — a publication slug alone says which
+        //   share, not that this daemon's user may read into it;
+        // - a comment with no slug (written before the field existed) resolves
+        //   to null rather than to whatever is published now. That fallback is
+        //   exactly how a stopped share's late comment lands on a live one.
+        //
+        // Ambiguity throws out of `sourcePathForCurrentPublication`, which keeps
+        // the batch cursor so the batch can be retried rather than acknowledged.
+        resolvePublishedCommentSourcePath: ({ projectId, publicationSlug, publishedPath, context }) => {
+          if (!publicationSlug) return null;
+          const binding = getWorkspaceProjectByProjectId(db, projectId);
+          const ownerMemberId = binding?.createdByWorkspaceMemberId?.trim() || '';
+          if (
+            !binding
+            || !ownerMemberId
+            || binding.resourceState === 'deleted'
+            || binding.workspaceId?.trim() !== context.workspaceId?.trim()
+          ) return null;
+          return sourcePathForCurrentPublication(db, {
+            resourceTeamId: context.workspaceId,
+            ownerMemberId,
+            projectId,
+            slug: publicationSlug,
+            publishedPath,
+          });
+        },
+        resolveStoredCommentLocation: (projectId, commentId) => {
+          const stored = getProjectPreviewComment(db, projectId, commentId);
+          if (!stored) return { found: false };
+          return { found: true, filePath: stored.filePath?.trim() || null };
+        },
         resolveLocalProjectRelayBinding: (projectId) => {
           const binding = getWorkspaceProjectByProjectId(db, projectId);
           const workspaceId = binding?.workspaceId?.trim() ?? '';
           const ownerMemberId = binding?.createdByWorkspaceMemberId?.trim() || null;
           if (
             !workspaceId
-            || binding?.visibility !== 'team'
+            || (binding?.visibility !== 'team' && binding?.visibility !== 'personal')
             || binding?.resourceState === 'deleted'
           ) return null;
           return { workspaceId, ownerMemberId };
+        },
+        captureCommentRelayProjectBinding: publicFileMutations.captureReconciliation,
+        validateCommentRelayFile: (record) => {
+          assertCommentFileNotPending(db, record.projectId, { sourceFileId: record.comment.sourceFileId });
+          const state = parseCommentFileState(getProject(db, record.projectId)?.metadata?._commentFiles);
+          const fact = state?.files.find(item => item.sourceFileId === record.comment.sourceFileId);
+          if (!fact || fact.sourceFilePath !== (record.comment.sourceFilePath ?? record.comment.filePath)) {
+            throw new Error('COMMENT_FILE_AUTHORITY_UNAVAILABLE');
+          }
+          return fact.retired ? 'retired' : 'current';
         },
         validateCommentRelayProjectBinding: (record) =>
           commentRelayLocalBindingMatches(
             record,
             getWorkspaceProjectByProjectId(db, record.projectId),
           ),
+        isCommentRelayRecordPromotedToTeam: (record) =>
+          commentRelayRecordPromotedToTeam(
+            record,
+            getWorkspaceProjectByProjectId(db, record.projectId),
+          ),
         resolveCommentRelayWorkspaceContext: async (queuedIdentity) => {
-          const context = await resolveAuthoritativeTeamWorkspaceContext(
-            queuedIdentity.workspaceId,
-            { fresh: true, backgroundFresh: true },
+          const context = await resolveBoundProjectWorkspaceContext(
+            queuedIdentity.projectId,
+            { fresh: true },
           );
-          const principal = contextToResourceHubPrincipal(context);
           if (
             !context
-            || !principal
-            || principal.memberId !== queuedIdentity.workspaceMemberId
-            || principal.teamId !== queuedIdentity.teamId
+            || context.workspaceMemberId !== queuedIdentity.workspaceMemberId
+            // Public-file publication scopes use the persisted workspace id as
+            // their resource-team id; relay scope independently proves it.
+            || context.workspaceId !== queuedIdentity.workspaceId
           ) return null;
           return context;
         },
@@ -4488,16 +4695,25 @@ export async function startServer({
         resolveProjectWorkspaceContext: resolveBoundProjectWorkspaceContext,
         resolveLocalConversationId: (projectId) =>
           getProjectCommentAnchorConversationId(db, projectId),
-        mergeComment: ({ projectId, conversationId, comment }) =>
-          mergeSyncedPreviewComment(db, projectId, conversationId, comment),
+        mergeComment: ({ projectId, conversationId, comment, stream }) => {
+          if (!comment.deleted) assertCommentFileNotPending(db, projectId, { sourceFileId: comment.sourceFileId });
+          const normalized = normalizeCurrentFileComment(
+            parseCommentFileState(getProject(db, projectId)?.metadata?._commentFiles), comment,
+          );
+          return normalized ? mergeSyncedPreviewComment(db, projectId, conversationId, normalized, { stream }) : 'unchanged';
+        },
         onError: (error) => console.warn('[od] collab cloud sync error:', error),
-        onCommentPushed: ({ projectId, commentId, seq }) => {
+        onCommentPushed: ({ projectId, commentId, seq, memberId, authorKey }) => {
           confirmPreviewCommentPinSeq(db, projectId, commentId, seq);
+          if (authorKey) confirmPreviewCommentAuthorKey(db, projectId, commentId, memberId, authorKey);
         },
         // Collab realtime hop-2 (reference path): when the ~5s comment self-poll
         // merges any teammate change into local storage (a new comment, a
         // strictly-newer edit/status change, or a delete tombstone all count),
         // push a thin `comment-changed` onto the project's existing events SSE.
+        // The service calls this at most once per pull round (a multi-page
+        // drain plus its legacy pull is one signal), so a burst of merged rows
+        // costs the web one list read, not one per page or row.
         // The open project view re-fetches the comment list on receipt, so the
         // owner sees a member's freshly-synced comment without waiting for the
         // web poll tick.
@@ -4639,17 +4855,18 @@ export async function startServer({
   /**
    * Drop catalog rows this member has already moved back to "personal".
    *
-   * A move to personal deletes the hub catalog row in the same request, but
-   * every display read above goes through a stale-while-revalidate cache, so
-   * for up to one TTL the list still carries the row that was just deleted.
+   * A move to personal changes the hub policy in the same request, but
+   * display reads use stale-while-revalidate caches, so for up to one TTL
+   * the list can still carry the pre-transition team row.
    * That is long enough to paint the "shared" badge back onto a project the
    * user just made private — the unshare looks like it silently reverted. It
    * would also let the publish watcher re-adopt the project as owned-and-
    * shared and republish it.
    *
-   * `cloudTombstonedAt` on the local workspace row is the truth for "this
-   * member unshared it"; a re-share clears it (see `workspaceProjectMovePatch`
-   * in routes/project). The filter runs on the cache OUTPUT, not inside it, so
+   * The runtime's explicit-private suppression is immediate without deleting
+   * the retained root. Persisted legacy tombstones are still respected. On a
+   * fresh daemon these caches are cold and the team-only server list is policy
+   * authority. The filter runs on cache OUTPUT, not inside it, so
    * a value cached before the unshare is still gated. Owner scoping keeps a
    * teammate's own share of the same project id visible.
    */
@@ -4666,9 +4883,9 @@ export async function startServer({
         .filter((row: any) => row.workspaceVisibility === 'personal' && row.cloudTombstonedAt != null)
         .map((row: any) => row.id),
     );
-    if (tombstoned.size === 0) return projects;
     return projects.filter(
-      (entry) => !(entry.ownerMemberId === memberId && tombstoned.has(entry.projectId)),
+      (entry) => !(entry.ownerMemberId === memberId && (tombstoned.has(entry.projectId)
+        || collab.isTeamShareSuppressed(entry.projectId, { teamId: workspaceId, memberId }))),
     );
   };
   const teamProjectsForDisplay = async (
@@ -4732,6 +4949,7 @@ export async function startServer({
     // the result is carried through every catalog/list/tombstone step below.
     const capturedWorkspaceId = requestedWorkspaceId.trim();
     return {
+      captureReconciliation: publicFileMutations.captureReconciliation,
       getWorkspaceIdentity: async () => {
         if (!capturedWorkspaceId) return null;
         const directory = await fetchWorkspaceDirectory().catch(() => ({
@@ -4783,6 +5001,7 @@ export async function startServer({
               },
             )).map((record) => ({
               projectId: record.projectId,
+              visibility: record.visibility,
               ownerMemberId: record.ownerMemberId,
               displayName: record.displayName,
               catalogRevisionAt: Number.isFinite(Date.parse(record.updatedAt))
@@ -4995,8 +5214,13 @@ export async function startServer({
   // pulled copy is never watched, so an inbound pull can't loop into a publish and
   // a member can't publish edits to someone else's project.
   const collabPublishWatcher = createCollabPublishWatcher({
-    notifyChanged: (projectId, principal) =>
-      collab.scheduler.notifyChanged(projectId, 'file-change', principal),
+    publishInitialContent: false,
+    notifyChanged: (projectId, principal) => {
+      if (!ownedContentSync) return;
+      void ownedContentSync.shouldPublish(projectId, principal).then((changed) => {
+        if (changed) collab.scheduler.notifyChanged(projectId, 'file-change', principal);
+      }).catch(() => console.warn('[od] could not check local project changes'));
+    },
     listProjectIds: () => listProjects(db).map((project: { id: string }) => project.id),
     shouldPublish: async (projectId) => {
       if (projectIsUnmaterializedSharedPlaceholder(projectId)) return false;
@@ -5070,83 +5294,82 @@ export async function startServer({
     projectId,
     { fresh: false },
   );
-  const resolveLocalProjectCommentWorkspaceContext = async (
+  const resolveProjectLocalCommentWorkspaceContext = async (
     req: any,
     projectId: string,
   ) => {
     const binding = getWorkspaceProjectByProjectId(db, projectId);
-    if (revokedTeamProjectMirrors.has(projectId)) {
-      return {
-        ok: false as const,
-        status: 403 as const,
-        code: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
-        message: 'workspace project read is not allowed',
-      };
-    }
-    if (!binding?.workspaceId) {
-      return { ok: true as const, context: null };
-    }
-    if (binding.resourceState === 'deleted') {
-      return {
-        ok: false as const,
-        status: 403 as const,
-        code: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
-        message: 'workspace project read is not allowed',
-      };
-    }
-    const local = resolveOptionalLocalWorkspaceRequestAuthority(req);
-    if (!local.ok) return local;
-    if (local.context) {
-      if (
-        local.context.workspaceId !== binding.workspaceId
-        || (
-          binding.visibility !== 'team'
-          && binding.createdByWorkspaceMemberId
-          && local.context.workspaceMemberId
-            !== binding.createdByWorkspaceMemberId
-        )
-      ) {
-        return {
-          ok: false as const,
-          status: 403 as const,
-          code: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
-          message: 'workspace project access is not allowed',
-        };
-      }
-      return {
-        ok: true as const,
-        context: {
-          ...local.context,
-          workspaceType: binding.visibility === 'team' ? 'team' : 'personal',
-          ...(binding.visibility === 'team'
-            ? { teamId: binding.workspaceId }
-            : { teamId: null }),
-        },
-      };
-    }
-    const persistedMemberId = binding.createdByWorkspaceMemberId?.trim()
-      || 'local-user';
-    return {
-      ok: true as const,
-      context: workspaceContextFromDirectoryItem({
-        workspaceId: binding.workspaceId,
-        workspaceName: binding.workspaceId,
-        workspaceType: binding.visibility === 'team' ? 'team' : 'personal',
+    const persistedMemberId = binding?.createdByWorkspaceMemberId?.trim() || 'local-user';
+    return resolveLocalProjectCommentWorkspaceContext({
+      binding,
+      revoked: revokedTeamProjectMirrors.has(projectId),
+      local: resolveOptionalLocalWorkspaceRequestAuthority(req),
+      fallbackContext: () => workspaceContextFromDirectoryItem({
+        workspaceId: binding?.workspaceId ?? '',
+        workspaceName: binding?.workspaceId ?? '',
+        workspaceType: binding?.visibility === 'team' ? 'team' : 'personal',
         workspaceMemberId: persistedMemberId,
         role: 'member',
         memberStatus: 'active',
         lifecycleState: 'active',
       }, configuredAmrEnv()),
-    };
+    });
   };
   const resolveProjectCommentWorkspaceContext = (
     req: any,
     projectId: string,
-  ) => resolveLocalProjectCommentWorkspaceContext(req, projectId);
+  ) => resolveProjectLocalCommentWorkspaceContext(req, projectId);
   const resolveProjectCommentReadWorkspaceContext = (
     req: any,
     projectId: string,
-  ) => resolveLocalProjectCommentWorkspaceContext(req, projectId);
+  ) => resolveProjectLocalCommentWorkspaceContext(req, projectId);
+  // Align is a read: it never resumes a share, re-enqueues an outbox, advances a
+  // cursor or writes a tombstone. The session is re-read after the comparison and
+  // a change between the two reads yields `unknown` rather than a result attributed
+  // to a session that is no longer the one that ran it.
+  const commentAlignment = createCommentAlignmentService({
+    db,
+    readCursor: (projectId, context) => collabCloud?.readMergedCommentCursor(projectId, context) ?? null,
+    compare: async (projectId, context, request) => {
+      const session = readVelaControlApiContext(process.env, configuredAmrEnv());
+      if (!session?.controlKey || !session.apiUrl) return { state: 'unknown', reason: 'unavailable' };
+      const result = await runVelaCommentAlignment({
+        projectId, workspaceId: context.workspaceId, request, session, dataRoot: RUNTIME_DATA_DIR,
+      });
+      const current = readVelaControlApiContext(process.env, configuredAmrEnv());
+      if (current?.controlKey !== session.controlKey || current?.apiUrl !== session.apiUrl) {
+        return { state: 'unknown', reason: 'unavailable' };
+      }
+      return result;
+    },
+  });
+
+  registerCommentSyncStateRoutes(app, {
+    db,
+    authorize: resolveProjectCommentReadWorkspaceContext,
+    service: createCommentSyncStateService(db, async scope => {
+      const session = readVelaControlApiContext(process.env, configuredAmrEnv());
+      if (!session?.controlKey) return false;
+      if (!session.apiUrl) return null;
+      const directory = await fetchVelaWorkspaceDirectory({ readSession: () => session });
+      const current = readVelaControlApiContext(process.env, configuredAmrEnv());
+      if (current?.controlKey !== session.controlKey || current?.apiUrl !== session.apiUrl) return null;
+      if (!directory.ok) return null;
+      return directory.items.some(item => item.workspaceId === scope.workspaceId
+        && item.workspaceMemberId === scope.workspaceMemberId
+        && item.memberStatus === 'active'
+        && item.lifecycleState !== 'deleted' && item.lifecycleState !== 'deleting');
+    }, { readAlign: scope => commentAlignment.read(scope),
+      readProjectShareState: createVelaProjectShareState({
+        dataRoot: RUNTIME_DATA_DIR, configuredEnv: configuredAmrEnv, registerLocallyOwnedProject: false,
+      }),
+      readCredential: () => {
+        const current = readVelaControlApiContext(process.env, configuredAmrEnv());
+        return current?.apiUrl && current.controlKey
+          ? { apiUrl: current.apiUrl, controlKey: current.controlKey } : null;
+      },
+    }),
+  });
   const resolveFreshProjectCommentWorkspaceContext = async (
     req: any,
     projectId: string,
@@ -5168,6 +5391,12 @@ export async function startServer({
     }
     return verifiedWorkspaceContextForRequest(req, projectId);
   };
+  // Registered after the fresh-context resolver it depends on: a route wired
+  // before its authorizer exists captures `undefined` and authorizes nothing.
+  registerCommentAlignmentRoutes(app, {
+    db, alignment: commentAlignment,
+    authorize: resolveFreshProjectCommentWorkspaceContext,
+  });
   const verifiedTeamMirrorScope = async (
     scope: TeamMirrorPullScope,
   ): Promise<boolean> => {
@@ -5186,6 +5415,98 @@ export async function startServer({
         && item.workspaceId === scope.resourceTeamId,
     );
   };
+  const resolveTeamProjectResourceId = async (projectId: string, scope: TeamMirrorPullScope): Promise<string> => {
+    if (!velaCliTeamProjectCatalog || !(await verifiedTeamMirrorScope(scope))) {
+      throw new Error('TEAM_PROJECT_ROOT_UNAVAILABLE');
+    }
+    const registration = await velaCliTeamProjectCatalog.getRegistration(projectId, {
+      teamId: scope.resourceTeamId, memberId: scope.ownerMemberId,
+      role: 'member', lifecycleState: 'active', workspaceType: 'team',
+    });
+    const binding = getWorkspaceProjectByProjectId(db, projectId);
+    if (!registration || registration.workspaceId !== scope.workspaceId
+      || registration.visibility !== 'team' || !registration.resourceId?.trim()
+      || (binding && (binding.workspaceId !== scope.workspaceId
+        || binding.cloudTombstonedAt != null
+        || (binding.resourceHubResourceId != null && binding.resourceHubResourceId !== registration.resourceId)))) {
+      throw new Error('TEAM_PROJECT_ROOT_BINDING_MISMATCH');
+    }
+    return registration.resourceId;
+  };
+  const ownedContentStore = createSqliteOwnedContentStore(db);
+  const ownedProjectDirectory = (scope: OwnedContentScope): string => resolveProjectDir(PROJECTS_DIR, scope.projectId);
+  ownedContentSync = createOwnedContentSync({
+    store: ownedContentStore,
+    head: (scope) => collab.publishedHead(scope.projectId, {
+      teamId: scope.resourceTeamId, memberId: scope.ownerMemberId,
+      role: 'member', lifecycleState: 'active', workspaceType: 'team',
+    }),
+    hasContent: async (scope) => {
+      const project = getProject(db, scope.projectId);
+      if (!project || isUnmaterializedSharedPlaceholder(project)) return false;
+      const entry = await fs.promises.lstat(ownedProjectDirectory(scope)).catch(() => null);
+      return Boolean(entry?.isDirectory() && !entry.isSymbolicLink());
+    },
+    isSupported: (scope) => !getProject(db, scope.projectId)?.metadata?.baseDir,
+    isBusy: (projectId) => ownerProjectHasActiveRun(projectId),
+    fingerprint: (scope) => ownedContentFingerprint(ownedProjectDirectory(scope)),
+    publicationScope: (projectId, principal) => {
+      const binding = getWorkspaceProjectByProjectId(db, projectId);
+      if (!binding?.workspaceId || !binding.createdByWorkspaceMemberId) return null;
+      const memberId = principal?.memberId ?? binding.createdByWorkspaceMemberId;
+      const teamId = principal?.teamId ?? binding.workspaceId;
+      if (memberId !== binding.createdByWorkspaceMemberId || teamId !== binding.workspaceId) return null;
+      return { projectId, workspaceId: binding.workspaceId, resourceTeamId: teamId,
+        viewerMemberId: memberId, ownerMemberId: memberId };
+    },
+    apply: async (capturedScope, expectedVersion) => {
+      const scope = velaCliTeamProjectCatalog
+        ? { ...capturedScope, resourceId: await resolveTeamProjectResourceId(capturedScope.projectId, capturedScope) }
+        : capturedScope;
+      let remoteProject: Awaited<ReturnType<typeof resolveSharedProject>> = null;
+      const authorize = async () => {
+        if (!(await verifiedTeamMirrorScope(scope))) throw new Error('owner workspace is unavailable');
+        remoteProject = await resolveSharedProject(scope.projectId, scope);
+        if (!remoteProject || remoteProject.ownerMemberId !== scope.viewerMemberId) throw new Error('owner project is no longer shared');
+        if (velaCliTeamProjectCatalog
+          && await resolveTeamProjectResourceId(scope.projectId, scope) !== scope.resourceId) throw new Error('owner project root changed');
+        if (remoteProject.metadata?.baseDir) throw Object.assign(new Error('imported project content is not supported'), { code: 'PROJECT_DIRECTORY_UNSUPPORTED' });
+        const binding = getWorkspaceProjectByProjectId(db, scope.projectId);
+        if (binding && (binding.workspaceId !== scope.workspaceId || binding.visibility !== 'team'
+          || (binding.createdByWorkspaceMemberId != null && binding.createdByWorkspaceMemberId !== scope.ownerMemberId))) {
+          throw new Error('owner project binding does not match');
+        }
+      };
+      return applyOwnedProjectContent({
+        projectsRoot: PROJECTS_DIR, scope, expectedVersion, authorize,
+        isBusy: () => ownerProjectHasActiveRun(scope.projectId),
+        commit: () => {
+          if (!remoteProject) throw new Error('owner project authority is unavailable');
+          materializePulledTeamMirror(db, {
+            id: scope.projectId, name: remoteProject.name ?? scope.projectId,
+            skillId: remoteProject.skillId ?? null, designSystemId: remoteProject.designSystemId ?? null,
+            metadata: remoteProject.metadata ?? undefined,
+            createdAt: remoteProject.createdAt ?? Date.now(), updatedAt: remoteProject.updatedAt ?? Date.now(),
+          }, scope);
+          const project = getProject(db, scope.projectId);
+          if (project?.metadata?.sharedProjectPlaceholderAt) {
+            const metadata = { ...project.metadata };
+            delete metadata.sharedProjectPlaceholderAt;
+            updateProject(db, scope.projectId, { metadata, updatedAt: SYNC_KEEPS_UPDATED_AT });
+          }
+        },
+      });
+    },
+    onChange: (scope) => emitProjectEvent(scope.projectId, {
+      type: 'project-content-transfer-state', projectId: scope.projectId, at: Date.now(),
+    }),
+    onApplied: async (scope) => {
+      await collabPublishWatcher.refresh(scope.projectId);
+      emitProjectEvent(scope.projectId, { type: 'file-changed', path: '', kind: 'change' });
+      emitProjectEvent(scope.projectId, { type: 'project-metadata-changed', projectId: scope.projectId, at: Date.now() });
+      emitWorkspaceEvent(scope.workspaceId, { type: 'team-project-content-ready', projectId: scope.projectId, workspaceId: scope.workspaceId, at: Date.now() });
+    },
+  });
   const projectContentTransferStates =
     createProjectContentTransferStateStore({
       onChange: (scope, state) => {
@@ -5201,12 +5522,118 @@ export async function startServer({
     _scope: TeamMirrorPullScope,
     _version: number,
   ): Promise<void> => {};
+  // The store is already bound earlier in this same scope (see the
+  // `createSqlitePublicFilePublicationStore` call above, next to the
+  // design-system backfill). Re-declaring it here is what a merge produced when
+  // two lanes each added their own binding in different hunks: git saw no
+  // conflict, and `tsc` did not object — only esbuild did, at transform time.
+  const shareBindingOutbox = createShareBindingOutbox(db);
+  const retryShareBindingsAtStartup = createShareBindingStartup(shareBindingOutbox, {
+    publications: publicFilePublicationStore,
+    mutations: publicFileMutations,
+    prepare: createVelaShareBindingPrepare({ configuredEnv: configuredAmrEnv, dataRoot: RUNTIME_DATA_DIR }),
+    // An outstanding stop intent wins over completion of the same publication.
+    isCurrent: task => !publicFilePublicationStore.listStops().some(stop =>
+      stop.resourceTeamId === task.resourceTeamId && stop.ownerMemberId === task.ownerMemberId
+      && stop.projectId === task.projectId && stop.filePath === task.receipt.filePath
+      && stop.slug === task.receipt.slug
+      && (!stop.publicationRevision || stop.publicationRevision === task.publicationRevision)),
+  });
+  registerPublicFileStopRetryRoutes(app, {
+    // No projectId: the original project may have been deleted already.
+    verify: req => verifiedWorkspaceContextForRequest(req),
+    store: publicFilePublicationStore,
+    prepare: createVelaPublicFileStop({ configuredEnv: configuredAmrEnv, dataRoot: RUNTIME_DATA_DIR }),
+    mutations: publicFileMutations,
+  });
+  const retryPublicFileStopsAtStartup = createPublicFileStopStartup(
+    publicFilePublicationStore,
+    createVelaPublicFileStop({ configuredEnv: configuredAmrEnv, dataRoot: RUNTIME_DATA_DIR }),
+    publicFileMutations,
+  );
+  const recordPublicFilePublication = createPublicFilePublicationRecorder(
+    db, publicFilePublicationStore, enqueuePublishedFileComments,
+  );
+  const resolveLocalProjectOwner = (projectId: string, workspaceId: string): string | null => {
+    const binding = getWorkspaceProjectByProjectId(db, projectId);
+    if (!binding || binding.workspaceId !== workspaceId || binding.resourceState !== 'active'
+      || binding.cloudTombstonedAt != null || !getProject(db, projectId)
+      || projectIsUnmaterializedSharedPlaceholder(projectId)) return null;
+    return typeof binding.createdByWorkspaceMemberId === 'string' ? binding.createdByWorkspaceMemberId : null;
+  };
   const collabSyncRoutes = registerCollabSyncRoutes(app, {
     collab,
-    publicFilePublicationStore: createSqlitePublicFilePublicationStore(db),
+    publicFilePublicationStore,
+    // Recording a publication and queueing its existing comments for backfill
+    // is ONE transaction. Without this the route falls back to a bare
+    // `publicationStore.set`, which records the share and silently drops the
+    // backfill intent — the publish succeeds, and the comments the person
+    // already wrote never reach the share page.
+    //
+    // The recorder also refuses to proceed without a publication witness
+    // (slug + revision token read back after the write), so a half-written
+    // publication cannot enqueue work that later resolves against nothing.
+    recordPublicFilePublication,
+    resolveLocalPublicShareOwner: resolveLocalProjectOwner,
+    resolvePublicShareLink: (projectId, slug, amr) => resolvePublicShareLink(projectId, slug, amr, process.env, configuredAmrEnv()),
+    sharePublishing: {
+      sourceFileId: (scope, project) => localCommentFiles.identity(scope.projectId, scope.filePath, project?.metadata?._commentFiles),
+      admitFileReceipt: (scope, resourceId, versionId, entryPath, run) => localCommentFiles.admit({
+        projectId: scope.projectId, workspaceId: scope.resourceTeamId, creatorMemberId: scope.ownerMemberId,
+        resourceId, versionId, paths: [{ sourceFilePath: scope.filePath, entryPath, sourceFileId: scope.sourceFileId }], run,
+      }),
+      ensureProject: (scope, principal, run) => ensurePublicShareProject({
+        projectId: scope.projectId, principal, run, describeProject: describeCollabProject,
+        retainRoot: registration => {
+          const binding = getWorkspaceProjectByProjectId(db, registration.projectId);
+          if (!binding || binding.workspaceId !== registration.workspaceId
+            || binding.createdByWorkspaceMemberId !== registration.ownerMemberId
+            || binding.resourceState !== 'active' || binding.cloudTombstonedAt != null) {
+            throw new Error('PUBLIC_SHARE_PROJECT_BINDING_UNAVAILABLE');
+          }
+          updateWorkspaceProject(db, registration.workspaceId, registration.projectId, {
+            resourceHubResourceId: registration.resourceId,
+          });
+        },
+      }),
+      reservations: createShareAliasReservations(db),
+      outbox: shareBindingOutbox,
+      complete: createSharePublicationCompletion(db, recordPublicFilePublication, shareBindingOutbox, true),
+      prepare: async scope => {
+        const identity = Object.freeze({ ...scope });
+        const configuredEnv = { ...configuredAmrEnv() };
+        const currentSession = readVelaControlApiContext(process.env, configuredEnv);
+        if (!currentSession?.controlKey || !currentSession.apiUrl) throw new Error('PUBLIC_SHARE_SESSION_UNAVAILABLE');
+        const session = Object.freeze({ ...currentSession });
+        const directory = await fetchVelaWorkspaceDirectory({ readSession: () => session });
+        if (!directory.ok || !directory.items.some(item => item.workspaceId === identity.resourceTeamId
+          && item.workspaceMemberId === identity.ownerMemberId && item.memberStatus === 'active'
+          && item.lifecycleState !== 'deleted' && item.lifecycleState !== 'deleting')) {
+          throw new Error('PUBLIC_SHARE_IDENTITY_UNAVAILABLE');
+        }
+        return { run: args => runPinnedVelaCommand({ args, session,
+          workspaceId: identity.resourceTeamId, dataRoot: RUNTIME_DATA_DIR, configuredEnv }) };
+      },
+      retry: () => {
+        // A fresh bounded pass can see tasks created after the startup pass.
+        void createShareBindingStartup(shareBindingOutbox, {
+          publications: publicFilePublicationStore, mutations: publicFileMutations,
+          prepare: createVelaShareBindingPrepare({ configuredEnv: configuredAmrEnv, dataRoot: RUNTIME_DATA_DIR }),
+          isCurrent: task => !publicFilePublicationStore.listStops().some(stop =>
+            stop.resourceTeamId === task.resourceTeamId && stop.ownerMemberId === task.ownerMemberId
+            && stop.projectId === task.projectId && stop.filePath === task.receipt.filePath
+            && stop.slug === task.receipt.slug),
+        })().catch(() => { console.warn('[od] share binding retry unavailable'); });
+      },
+    },
+    readProjectShareState: createVelaProjectShareState({ dataRoot: RUNTIME_DATA_DIR, configuredEnv: configuredAmrEnv, resolveLocalProjectOwner }),
+    shareContentFingerprints: createShareContentFingerprints(db, publicFilePublicationStore),
+    publicFileMutations,
+    ownedContentSync,
     verifyWorkspaceRequest: verifiedWorkspaceContextForRequest,
     verifyWorkspaceReadRequest: verifiedWorkspaceReadContextForRequest,
     verifyWorkspaceScope: verifiedTeamMirrorScope,
+    ...(velaCliTeamProjectCatalog ? { resolveTeamProjectResourceId } : {}),
     readContentTransferState: (projectId, scope) =>
       projectContentTransferStates.read({ projectId, ...scope }),
     beginContentTransfer: (projectId, scope, version) =>
@@ -5247,7 +5674,8 @@ export async function startServer({
           updatedAt: input.updatedAt,
         });
       },
-      materializeTeamMirror: (input, scope) => materializePulledTeamMirror(db, input, scope),
+      materializeTeamMirror: (input, scope, fileReceipt) =>
+        materializePulledTeamMirror(db, input, scope, undefined, { fileReceipt }),
       materializeTeamPlaceholder: (input, scope) =>
         materializePulledTeamMirror(db, input, scope, undefined, { placeholder: true }),
       materializeAuthorizedTeamMirror: (input, scope, receipt) =>
@@ -5386,6 +5814,10 @@ export async function startServer({
   const proactiveTeamProjectMaterializedVersion = (
     target: ProactiveContentPullTarget,
   ) => {
+    const binding = getWorkspaceProjectByProjectId(db, target.projectId);
+    const boundTarget = binding?.workspaceId === target.workspaceId && binding.resourceHubResourceId
+      ? { ...target, resourceId: binding.resourceHubResourceId }
+      : target;
     const authorized = getTeamProjectMaterialization(
       db,
       target.workspaceId,
@@ -5396,10 +5828,10 @@ export async function startServer({
       teamResourceVersions.get(
         target.workspaceId,
         'project-content',
-        teamProjectContentResourceId(target.projectId, target),
+        teamProjectContentResourceId(target.projectId, boundTarget),
       ),
       target.projectId,
-      target,
+      boundTarget,
     );
     return version == null ? null : String(version);
   };
@@ -5412,7 +5844,7 @@ export async function startServer({
   const backgroundPullSizeGuard = createBackgroundPullSizeGuard({
     maxEntries: backgroundPullMaxEntriesFromEnv(),
     maxCumulativeEntries: backgroundPullMaxCumulativeEntriesFromEnv(),
-    inspect: (scope, version) =>
+    inspect: async (scope, version) =>
       inspectAuthorizedTeamProjectPull({
         projectId: scope.projectId,
         scope: {
@@ -5420,6 +5852,7 @@ export async function startServer({
           resourceTeamId: scope.resourceTeamId,
           viewerMemberId: scope.viewerMemberId,
           ownerMemberId: scope.ownerMemberId,
+          ...(velaCliTeamProjectCatalog ? { resourceId: await resolveTeamProjectResourceId(scope.projectId, scope) } : {}),
         },
         expectedVersion: version,
       }),
@@ -5438,6 +5871,9 @@ export async function startServer({
       ),
   });
   const proactiveContentPull = createProactiveContentPull({
+    observeOwnedContent: async (scope, version) => {
+      await ownedContentSync!.request(scope, { action: 'check' }, version);
+    },
     assessBackgroundContentPull: (target, version) =>
       backgroundPullSizeGuard.assess(target, version),
     getLocalBinding: (projectId) => {
@@ -5722,11 +6158,11 @@ export async function startServer({
         throw error;
       }
     },
-    onAccessRevoked: ({ workspaceId }) => {
-      workspaceDirectoryAuthority.invalidate('auth_reject');
-      workspaceExactAuthorityCache.invalidate(workspaceId);
-      workspaceExactContextCache.invalidate(workspaceId, 'auth_reject');
-    },
+    // No onAccessRevoked hook on purpose (OPEND-3553): billing is
+    // display-only, and Vela also answers internal billing failures with 403.
+    // A rejected billing projection only marks this runtime entry; membership
+    // revocation is owned by the workspace directory and the hub
+    // `workspace-access-revoked` event, never by a billing response.
     onStateChange: (state) => {
       // The request that created a runtime already receives this state in its
       // response. Background catch-up/retry/poll completion needs a thin nudge
@@ -7281,41 +7717,28 @@ export async function startServer({
   ) => JSON.stringify([workspaceId, resourceId]);
   const designSystemsTeamShare = createLinkedProjectTeamResourceShareService({
     resource: designSystemsTeamResourceShare,
-    prepare: createDesignSystemBackingProjectPreparer({
-      resolveProjectId: async (resourceId, scope) =>
-        (await listAllDesignSystems({
-          workspaceId: scope.principal.teamId,
-          workspaceMemberId: scope.principal.memberId,
-        }))
-          .find((candidate) => candidate.id === resourceId)
-          ?.projectId ?? null,
-      ensureProjectId: async (resourceId, scope) =>
-        (await ensureUserDesignSystemWorkspaceProject(db, resourceId, {
-          workspaceId: scope.principal.teamId,
-          workspaceMemberId: scope.principal.memberId,
-        }))?.project.id ?? null,
-      projectExists: (projectId) => Boolean(getProject(db, projectId)),
-      getProjectBinding: (projectId) =>
-        getWorkspaceProjectByProjectId(db, projectId),
-      publishProject: (projectId, scope) =>
-        collab.requestTeamShare(projectId, scope.principal),
-      unpublishProject: (projectId, scope) =>
-        collab.requestTeamUnshare(projectId, scope.principal),
-      persistVisibility: ({ projectId, scope, visibility }) =>
-        persistWorkspaceProjectVisibility({
-          projectId,
-          principal: scope.principal,
-          visibility,
-          ownerMemberId: scope.principal.memberId,
-          updatedByMemberId: scope.principal.memberId,
-        }),
-      onPrepared: ({ resourceId, projectId, scope }) => {
-        designSystemBackingProjects.set(
-          designSystemBackingProjectKey(scope.principal.teamId, resourceId),
-          projectId,
-        );
-      },
-    }),
+    prepare: async (resourceId, scope) => {
+      const projectId = (await listAllDesignSystems({
+        workspaceId: scope.principal.teamId,
+        workspaceMemberId: scope.principal.memberId,
+      })).find((candidate) => candidate.id === resourceId)?.projectId ?? '';
+      const key = designSystemBackingProjectKey(scope.principal.teamId, resourceId);
+      designSystemBackingProjects.delete(key);
+      return {
+        projectId,
+        transition: async (visibility) => {
+          // A design-system resource action is not a project policy action.
+          // Unshare/compensation cannot demote its independently shared project.
+          if (visibility !== 'team' || !projectId) return;
+          const binding = getWorkspaceProjectByProjectId(db, projectId);
+          if (binding?.workspaceId !== scope.principal.teamId || binding.visibility !== 'team'
+            || binding.resourceState !== 'active' || binding.cloudTombstonedAt != null
+            || binding.createdByWorkspaceMemberId !== scope.principal.memberId) return;
+          await collab.syncExistingTeamProject(projectId, scope.principal);
+          designSystemBackingProjects.set(key, projectId);
+        },
+      };
+    },
   });
   const designSystemsTeamList = cachedTeamResourceList(
     designSystemsTeamShare,
@@ -7328,9 +7751,10 @@ export async function startServer({
   ) => {
     const workspaceId = scope.principal.teamId;
     const key = designSystemBackingProjectKey(workspaceId, resourceId);
-    const projectId = designSystemBackingProjects.get(key);
-    // The linked service already persisted the backing project before it
-    // resolved. `emitTeamProjectsChanged` invalidates the exact Workspace's
+    const rememberedProjectId = designSystemBackingProjects.get(key);
+    const projectId = rememberedProjectId && getWorkspaceProjectByProjectId(db, rememberedProjectId)?.visibility === 'team'
+      ? rememberedProjectId : null;
+    // Only an independently team-visible backing project was synchronized. `emitTeamProjectsChanged` invalidates the exact Workspace's
     // project catalogs before emitting; the resource route invalidates its
     // own listing before it calls this helper.
     emitTeamProjectsChanged(workspaceId, {
@@ -7892,7 +8316,7 @@ export async function startServer({
         runsDir: path.join(RUNTIME_DATA_DIR, 'runs'), dataDir: RUNTIME_DATA_DIR }, { agentId: '*' }),
       context: () => currentAppVersionInfo(),
       onDelivered: (incidentId, receipt, evidence) => {
-        console.info('[diagnostics] incident delivered', incidentId, JSON.parse(receipt).object_key);
+        console.info(DIAGNOSTIC_DELIVERY_LOG_PREFIX, incidentId, JSON.parse(receipt).object_key);
         void analyticsService.captureSafety({ eventName: 'diagnostic_bundle_uploaded',
           appVersion: currentAppVersion(), properties: { diagnostic_incident_id: incidentId,
             diagnostic_object_key: JSON.parse(receipt).object_key, run_id: evidence.runId,
@@ -7935,7 +8359,21 @@ export async function startServer({
           const incidentId = automaticDiagnostics?.record(fault);
           if (incidentId) run.diagnosticIncidentIds = [...new Set([...(run.diagnosticIncidentIds ?? []), incidentId])].slice(-100);
         }
-        if (record.event === 'end') automaticDiagnostics?.finishRun(run.id);
+        if (record.event === 'end') {
+          automaticDiagnostics?.finishRun(run.id);
+          if (run.projectId) queueMicrotask(() => {
+            commentFilePublications.settled(run.projectId);
+            const binding = getWorkspaceProjectByProjectId(db, run.projectId);
+            if (!ownerProjectHasActiveRun(run.projectId) && binding?.visibility === 'team'
+              && binding.createdByWorkspaceMemberId && binding.resourceState === 'active'
+              && (getProject(db, run.projectId)?.metadata?._commentFiles || run.artifactPaths?.some(name => /\.html?$/i.test(name)))) {
+              const principal = { teamId: binding.workspaceId, memberId: binding.createdByWorkspaceMemberId,
+                role: 'member', lifecycleState: 'active', workspaceType: 'team' };
+              collab.scheduler.notifyChanged(run.projectId, 'run-settled', principal);
+              collab.scheduler.runBoundary(run.projectId, principal);
+            }
+          });
+        }
         if (record.event === 'run_retry_finished' && record.data?.retry_result === 'success') {
           automaticDiagnostics?.recovered(run.id, record.timestamp);
         }
@@ -8039,7 +8477,10 @@ export async function startServer({
     run: any;
     status: string;
   }) => {
-    if (!shouldReportRunCompletionTelemetryFallbackStatus(status)) return;
+    // Headless Task consumers do not save a final assistant message. Keep the UI
+    // grace period and durable delivery gates, but also settle successful Tasks.
+    const taskOwned = status === 'succeeded' && Boolean(getStrategyTaskExecutionByRunId(db, run.id));
+    if (!shouldReportRunCompletionTelemetryFallbackStatus(status, taskOwned)) return;
     const timer = setTimeout(() => {
       terminalTelemetryFallbackTimers.delete(timer);
       if (reportedRuns.has(run.id)) return;
@@ -8078,6 +8519,17 @@ export async function startServer({
   // client, an OD Next automatic continuation, a scheduled Automation, or a
   // live-artifact refresh. Starting a Run any other way drops its analytics
   // silently, which is what OPEND-2365 was.
+  ownerProjectHasActiveRun = (projectId) => design.runs.list({ projectId, status: 'active' }).length > 0;
+  // Recover delayed root work without a UI subscriber. Existing persisted
+  // content checkpoints decide whether bytes changed; receipts/creator CAS,
+  // never snapshot equality, authorize the retirement before the next upload.
+  for (const share of listTeamWorkspaceProjectShares(db)) {
+    const restored = recoverPersistedTeamShareOwnership(share);
+    if (!restored || !getProject(db, restored.projectId)?.metadata?._commentFiles) continue;
+    void ownedContentSync?.shouldPublish(restored.projectId, restored.principal).then(changed => {
+      if (changed) collab.scheduler.notifyChanged(restored.projectId, 'comment-files-reopen', restored.principal);
+    }).catch(() => console.warn('[comments] startup content check deferred'));
+  }
   const runAnalyticsLifecycle = createRunAnalyticsLifecycle({
     db,
     design,
@@ -8095,6 +8547,7 @@ export async function startServer({
     claimAssistantMessage: (run, options) =>
       pinAssistantMessageOnRunCreate(db, run, options),
     analyticsLifecycle: runAnalyticsLifecycle,
+    coordinateStart: (run, starter) => commentFilePublications.start(run.projectId, starter),
   });
   // Runs are process-local, but their terminal obligations are durable. On a
   // fresh daemon boot, repair stale message rows and replay any PostHog or
@@ -8105,7 +8558,6 @@ export async function startServer({
     appVersion: currentAppVersion(),
     appVersionInfo: currentAppVersionInfo(),
     db,
-    recoverBeforeInterrupt: (state, states, now) => recoverPlanningIntentResolution(db, state, states, now),
     reportLangfuse: reportRunCompletedFromDaemon,
     finalizeTerminalLocally: createAmrTerminalReportFinalizer(amrTerminalReportOutbox),
     taskObservationModeForRun: (runId) => taskObservationRollout.modeForRun(runId),
@@ -8258,9 +8710,9 @@ export async function startServer({
   // Powered-preview isolation info. Reports the daemon's own directly-reachable
   // http origin so the web host can render WebGL/Worker/WASM/SharedArrayBuffer
   // artifacts in a cross-origin-isolated iframe (see the /powered route and
-  // apps/web/src/runtime/powered-preview.ts). The web host always swaps this
-  // loopback hostname before loading powered files; the /api origin middleware
-  // then treats that swapped browser origin as preview-only.
+  // apps/web/src/runtime/powered-preview.ts). The web host derives a separate
+  // loopback hostname per project; the /api origin middleware reserves each
+  // hostname for that project's powered GETs.
   app.get('/api/preview/isolation', (_req, res) => {
     const reportHost = reportHostForPoweredPreview();
     const baseOrigin = resolvedPort ? `http://${reportHost}:${resolvedPort}` : null;
@@ -8268,6 +8720,7 @@ export async function startServer({
     /** @type {import('@open-design/contracts').ProjectPreviewIsolationResponse} */
     const body = {
       supported: Boolean(baseOrigin),
+      projectOrigins: true,
       baseOrigin,
       pathPrefix: 'powered',
     };
@@ -8388,6 +8841,7 @@ export async function startServer({
       revokedTeamProjectMirrors.has(projectId),
     isProjectUnmaterializedPlaceholder: (_db, projectId) =>
       projectIsUnmaterializedSharedPlaceholder(projectId),
+    isProjectReceivingContent: (projectId) => ownedContentSync?.isApplying(projectId) ?? false,
     sendApiError,
   });
   // Legacy registrars still receive the historical bound mutation-gate shape,
@@ -8438,6 +8892,7 @@ export async function startServer({
     readProjectFile,
     resolveProjectDir,
     resolveProjectFilePath,
+    resolveProjectDeletePath,
     parseByteRange,
     renameProjectFile,
     deleteProjectFile,
@@ -8703,8 +9158,29 @@ export async function startServer({
   });
   registerSocialShareRoutes(app, { http: httpDeps });
   const projectCreatePreparationTimeoutMs = projectCreatePreparationTimeoutMsFromEnv();
+  const stopProjectPublicFiles = createProjectPublicFileStop(
+    publicFilePublicationStore,
+    createVelaPublicFileStop({ configuredEnv: configuredAmrEnv, dataRoot: RUNTIME_DATA_DIR }),
+  );
+  const stopPublicFilesBeforeDelete = createCommentFileDeletion({
+    db, localFiles: localCommentFiles,
+    hasActiveRun: ownerProjectHasActiveRun, runForWorkspace: commentFileRun,
+    stopPublicFiles: stopProjectPublicFiles,
+    isPresent: async (projectId, filePath) => {
+      try {
+        const target = await resolveProjectFilePath(PROJECTS_DIR, projectId, filePath, getProject(db, projectId)?.metadata);
+        await fs.promises.lstat(target.filePath);
+        return true;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') return false;
+        throw error;
+      }
+    },
+  });
   registerProjectRoutes(app, {
     db,
+    publicFileMutations,
+    stopPublicFilesBeforeDelete,
     design,
     // Test seam for the POST /api/projects preparation deadline; production
     // keeps the route's 15s default when the variable is unset or invalid.
@@ -8791,6 +9267,10 @@ export async function startServer({
         invalidatePresenceReadCache(projectId);
         return result;
       },
+      requestTeamDelete: async (projectId, principal) => {
+        await collab.requestTeamDelete(projectId, principal);
+        invalidatePresenceReadCache(projectId);
+      },
       materializeTeamProject: async (projectId, principal) => {
         const outcome = await collabSyncRoutes.pullSharedProject(projectId, {
           workspaceId: principal.teamId,
@@ -8808,7 +9288,15 @@ export async function startServer({
         workspaceTeamProjectCatalog?.invalidate();
       },
     },
-    ...(workspaceTeamProjectCatalog ? { teamProjectCatalog: workspaceTeamProjectCatalog } : {}),
+    ...(workspaceTeamProjectCatalog ? { teamProjectCatalog: {
+      ...workspaceTeamProjectCatalog,
+      // List reconciliation is a policy consumer too: a cached Team row must
+      // not resurrect a project whose creator explicitly made it private.
+      list: async (principal: ResourceHubPrincipal) => withoutLocallyUnsharedProjects(
+        await workspaceTeamProjectCatalog.list(principal),
+        { workspaceId: principal.teamId, workspaceMemberId: principal.memberId },
+      ),
+    } } : {}),
     // Second witness for the team-share invariant: refuse a team share aimed at
     // a workspace the directory says is personal, even if the caller's headers
     // claim otherwise. See collab/team-share-scope.ts.
@@ -8817,7 +9305,26 @@ export async function startServer({
     // server-authoritative author, gate status/delete on the caller vs the
     // comment author / project owner, and push the comment lifecycle (create/edit,
     // status change, tombstone) to the cross-daemon relay.
+    prepareCommentFile: async (projectId, filePath, context) => {
+      if (!/\.html?$/i.test(filePath)) return undefined;
+      assertCommentFileNotPending(db, projectId, { filePath });
+      const state = parseCommentFileState(getProject(db, projectId)?.metadata?._commentFiles);
+      const current = state?.files.find(fact => !fact.retired && fact.sourceFilePath === filePath);
+      if (current) return current.sourceFileId;
+      if (!context || !velaCliTeamProjectCatalog) return localCommentFiles.identity(projectId, filePath);
+      const binding = getWorkspaceProjectByProjectId(db, projectId);
+      if (binding?.workspaceId !== context.workspaceId || binding.createdByWorkspaceMemberId !== context.workspaceMemberId) {
+        throw new Error('COMMENT_FILE_AUTHORITY_UNAVAILABLE');
+      }
+      // New private annotations are local-first. Their UUID is durable now;
+      // only explicit publication admits a receipt, never this save path.
+      return localCommentFiles.identity(projectId, filePath);
+    },
     resolveWorkspaceContext: resolveProjectCommentWorkspaceContext,
+    resolveCurrentAuthorDisplayName: () => {
+      const user = readVelaControlApiContext(process.env, configuredAmrEnv())?.user;
+      return user?.name?.trim() || user?.email?.trim() || null;
+    },
     resolveReadWorkspaceContext: resolveProjectCommentReadWorkspaceContext,
     resolveFreshWorkspaceContext: resolveFreshProjectCommentWorkspaceContext,
     resolveProjectOwnerMemberId: async (projectId, context) => {
@@ -8827,6 +9334,13 @@ export async function startServer({
         workspaceMemberId: context.workspaceMemberId,
       });
     },
+    isCommentRelayEligible: (projectId, filePath, context) => Boolean(commentRelayScope({
+      binding: getWorkspaceProjectByProjectId(db, projectId),
+      context,
+      projectId,
+      filePath,
+      publications: publicFilePublicationStore,
+    })),
     isSharedProject: async (projectId, context) => {
       if (!context || context.workspaceType !== 'team') return false;
       return Boolean(
@@ -8836,8 +9350,12 @@ export async function startServer({
         }),
       );
     },
+    onPublishedCommentMutation: createPersonalPublishedCommentMutationHandler(db),
     ...(collabCloud
       ? {
+          // Explicit UI/CLI request runs even when no project SSE subscriber
+          // has ever existed; never rely on the hub's in-memory dirty mark.
+          pullCommentsNow: (projectId, context) => collabCloud.pullProject(projectId, context),
           onCommentsRead: async (
             projectId,
             leasedContext,
@@ -8937,6 +9455,8 @@ export async function startServer({
   });
   registerImportRoutes(app, {
     db,
+    publicFileMutations,
+    stopPublicFilesBeforeDelete,
     http: httpDeps,
     uploads: uploadDeps,
     node: nodeDeps,
@@ -9248,6 +9768,10 @@ export async function startServer({
   });
   registerProjectFileRoutes(app, {
     db,
+    isProjectEditingBusy: (projectId) => design.runs.list().some((run) =>
+      run.projectId === projectId && !design.runs.isTerminal(run.status)),
+    publicFileMutations,
+    stopPublicFilesBeforeDelete,
     http: httpDeps,
     paths: pathDeps,
     uploads: uploadDeps,
@@ -9293,7 +9817,7 @@ export async function startServer({
     authorizeProjectToolRequest,
   });
 
-  registerVelaRoutes(app, {
+  const velaRoutesLifecycle = registerVelaRoutes(app, {
     paths: { RUNTIME_DATA_DIR },
     appConfig: { readAppConfig },
     http: { getPublicBaseUrl },
@@ -9824,9 +10348,6 @@ export async function startServer({
     platformHintSignal,
     devicePlatformSignal = null,
     frozenSkillPackage,
-    odNextSyntheticCanary = false,
-    odNextAutomaticAdmission = false,
-    runtimeCapabilitySnapshot,
   }) => {
     const project =
       typeof projectId === 'string' && projectId
@@ -10493,23 +11014,13 @@ export async function startServer({
     }
 
     // Strategy identity, package/profile drift checks, atom loading, runtime
-    // capability facts, and local-only synthetic policy are owned by the OD
-    // Next prompt service. This composition root only supplies detected runtime
-    // versions and process configuration.
+    // profile selection are owned by the OD Next prompt service.
     const odNextStrategyRecipe = await resolveOdNextPromptRecipeForRun({
       db,
       bundledPluginsDir: BUNDLED_PLUGINS_DIR,
       appliedPluginSnapshotId,
-      agentId,
       streamFormat,
       atomPromptsEnabled: bundledAtomPromptsEnabled,
-      syntheticCanary: odNextSyntheticCanary,
-      automaticAdmission: odNextAutomaticAdmission,
-      runtimeCapabilitySnapshot,
-      getRuntimeVersions: () => ensureDetectedRuntimeVersions(
-        agentId,
-        agentCliEnvForAgent(appConfigForPrompt?.agentCliEnv, agentId),
-      ),
     });
 
     // Hoisted verbatim out of the composeSystemPrompt() call so the exact same
@@ -10620,7 +11131,8 @@ export async function startServer({
       && freeformDeckSignal === true;
     const isOdNextDeckRequest = odNextStrategyRecipe?.taskType === 'ppt'
       || odNextDeckIntent;
-    const hasSelectedDeckSeed = odNextStrategyRecipe?.taskType === 'ppt' && Boolean(
+    const inspectDeckScaffold = isOdNextDeckRequest || odNextStrategyRecipe?.taskType === 'discovery';
+    const hasSelectedDeckSeed = inspectDeckScaffold && Boolean(
       template?.files?.some((file) => /\.html?$/i.test(file.name))
       || /(?:^|\/)assets\/template\.html\b/i.test(skillBody ?? '')
       || frozenSkillPackage?.selections?.some((selection) =>
@@ -10630,7 +11142,7 @@ export async function startServer({
     );
     let hasExistingDeckArtifact = false;
     if (
-      odNextStrategyRecipe?.taskType === 'ppt'
+      inspectDeckScaffold
       && typeof projectId === 'string'
       && projectId
     ) {
@@ -10663,7 +11175,9 @@ export async function startServer({
           // resolves to null and adds no bytes.
           planToolNote: planToolNoteForRuntime(agentId, streamFormat),
           executionProfile: executionProfileFromStreamFormat(streamFormat),
-          deckIntent: odNextDeckIntent,
+          // Discovery reads the staged framework through the selected PPT Skill.
+          // Suppress the stable-context renderer's eager deck-intent fallback too.
+          deckIntent: odNextStrategyRecipe.taskType !== 'discovery' && odNextDeckIntent,
           deckFrameworkMode: odNextDeckFrameworkMode,
           metadata,
           template,
@@ -10697,7 +11211,6 @@ export async function startServer({
       assertOdNextSemanticRequestFactProducerCoverage('daemon_system_prompt', {
         strategy_task_skill: odNextStrategyRecipe.taskSkill,
         strategy_task_type: odNextStrategyRecipe.taskType,
-        strategy_runtime_capability_facts: odNextStrategyRecipe.planningFacts,
         project_and_design_context: {
           metadata,
           template,
@@ -10719,18 +11232,14 @@ export async function startServer({
       ? composeOdNextStrategyCorePromptV2(odNextStrategyRecipe)
       : composeSystemPrompt(systemPromptInputs);
     // OD Next sends a canonical XML tree, not this Markdown string. The tree's
-    // cache-stable head, its per-task identity, and the runtime-owned planning
-    // facts are three separate products of the same verified recipe, so they are
-    // composed here together and placed in different bundle slots downstream.
+    // cache-stable head and per-task identity are composed here together and
+    // placed in their existing bundle slots downstream.
     const odNextBundleHead = odNextStrategyRecipe
       ? composeOdNextStrategyBundleHeadV2(odNextStrategyRecipe)
       : null;
     const odNextRecipeIdentity = odNextStrategyRecipe
       ? odNextStrategyRecipeIdentityV2(odNextStrategyRecipe)
       : null;
-    const odNextRuntimeFacts = odNextStrategyRecipe
-      ? renderOdNextRuntimeFactsV2(odNextStrategyRecipe, odNextStableRequestContext ?? {})
-      : '';
     // The chat handler also needs to know where the active skill lives
     // on disk so it can stage a per-project copy of its side files
     // before spawning the agent. Returning that here avoids a second
@@ -10741,7 +11250,7 @@ export async function startServer({
       prompt,
       odNextBundleHead,
       odNextRecipeIdentity,
-      odNextRuntimeFacts,
+      odNextRuntimeFacts: '',
       odNextStableContextPrompt: odNextStableRequestContext
         ? composeOdNextStrategyStableRequestContextV2(
             odNextStableRequestContext,
@@ -10914,7 +11423,7 @@ export async function startServer({
         'OD Next Run retains an immutable input owner but has no persisted task mapping.',
       );
     }
-    const strategyRunMapping = strategyTaskAtStart?.runs.find(
+    let strategyRunMapping = strategyTaskAtStart?.runs.find(
       (mapping) => mapping.runId === run.id,
     ) ?? null;
     if (
@@ -10945,18 +11454,27 @@ export async function startServer({
         'OD Next Run, request, immutable input owner, and persisted task mapping are not one exact scope.',
       );
     }
-    const persistedStrategyFinalText = strategyRunMapping?.finalText.text ?? null;
+    let persistedStrategyFinalText = strategyRunMapping?.finalText.text ?? null;
     const isOdNextInitialRun = Boolean(strategyTaskAtStart && isInitialStrategyTaskRun(strategyTaskAtStart, run.id));
-    const isIntentResolution = Boolean(strategyTaskAtStart && isStrategyIntentResolutionRun(strategyTaskAtStart, run.id));
+    let discoveryPromptRecorded = false;
+    const recordDiscoveryPromptDelivered = () => {
+      if (discoveryPromptRecorded || !strategyTaskAtStart?.promptBundle.text.includes('skill_name="discovery"')) return;
+      discoveryPromptRecorded = true;
+      const data = { type: 'skill_discovery_policy', skillId: 'deliverable-discovery',
+        injected: persistedStrategyFinalText?.includes('skill_name="discovery"') === true,
+        skillRoot: path.join(BUNDLED_PLUGINS_DIR, 'scenarios/od-next-strategy/assets/task-profiles'),
+        source: isOdNextInitialRun ? 'request' : 'production_continuation' };
+      observeDiscoveryEvent(run, { event: 'diagnostic', data });
+      design.runs.emit(run, 'diagnostic', data);
+    };
     const hasExplicitCurrentPrompt = Object.prototype.hasOwnProperty.call(
       chatBody,
       'currentPrompt',
     );
     const strategyProtocol = strategyTaskAtStart
-      ? createOdNextRunProtocol(strategyRunMapping)
+      ? createOdNextRunProtocol(strategyRunMapping, run.doneKey ?? '')
       : null;
     let strategyProtocolResult = null;
-    let strategyToolUseCount = 0;
     let pendingStrategyContinuation = null;
     const {
       agentId,
@@ -11140,7 +11658,9 @@ export async function startServer({
       message.trim().length > 0
     ) {
       try {
-        await extractFromMessage(RUNTIME_DATA_DIR, message);
+        await extractFromMessage(RUNTIME_DATA_DIR, message, {
+          extractionOrigin: { projectId: run.projectId, conversationId: run.conversationId, runId: run.id, assistantMessageId: run.assistantMessageId },
+        });
       } catch (err) {
         console.warn('[memory] extractFromMessage failed', err);
       }
@@ -11879,6 +12399,7 @@ export async function startServer({
         skillsDir: SKILLS_DIR,
         designSystemsDir: DESIGN_SYSTEMS_DIR,
         linkedDirs,
+        activeSkillDirs,
       }),
       ...(odNextTaskInputSnapshot
         ? [odNextTaskInputSnapshot.projectionAccessRoot]
@@ -11981,17 +12502,20 @@ export async function startServer({
       // stored concrete session models from comparing against raw `default`.
       try {
         const resumeProbe = await resolveAmrModelProbe({ dataDir: RUNTIME_DATA_DIR, env: process.env, readAppConfig });
-        const resumeCatalog = await amrModelLoadingCache.get(resumeProbe.cacheKey, {
-          fetchPreset: () => fetchVelaPresetModels(resumeProbe.launchPath, resumeProbe.env),
-          fetchRemote: () => fetchVelaRemoteModelsWithRetry(resumeProbe.launchPath, resumeProbe.env),
-        });
-        const resumeLiveModels = preferFreshLiveModels(
-          resumeCatalog.models ?? [],
-          getRememberedLiveModels(def.id, requestedLiveModelScope),
-        );
-        const resumeModelIds = new Set(resumeLiveModels.map((c) => c?.id).filter(Boolean));
         const askedForDefault =
           typeof model !== 'string' || !model.trim() || model.trim().toLowerCase() === 'default';
+        const resumeFetchers = {
+          fetchPreset: () => fetchVelaPresetModels(resumeProbe.launchPath, resumeProbe.env),
+          fetchRemote: () => fetchVelaRemoteModelsWithRetry(resumeProbe.launchPath, resumeProbe.env),
+        };
+        // A `default` request resolves against the caller's own catalog; the
+        // preset seed is shared by every plan and would pick a model this
+        // caller may not be entitled to.
+        const resumeCatalog = askedForDefault && !hasDefaultModelEnvOverride
+          ? await amrModelLoadingCache.getAuthoritative(resumeProbe.cacheKey, resumeFetchers, AMR_DEFAULT_MODEL_CATALOG_WAIT_MS)
+          : await amrModelLoadingCache.get(resumeProbe.cacheKey, resumeFetchers);
+        const resumeLiveModels = amrRunModels(def.id, requestedLiveModelScope, resumeCatalog);
+        const resumeModelIds = new Set(resumeLiveModels.map((c) => c?.id).filter(Boolean));
         const defaultRunModel = resolveDefaultModelFromOptions(resumeLiveModels);
         if (
           !safeModel ||
@@ -12011,8 +12535,12 @@ export async function startServer({
         // the probe failure and applies the identical fallback.
       }
     }
+    const previousMarkerTask = isOdNextInitialRun && strategyTaskAtStart?.continuedFromTaskExecutionId
+      ? getStrategyTaskExecution(db, strategyTaskAtStart.continuedFromTaskExecutionId) : null;
+    const requiresProtocolMigration = Boolean(previousMarkerTask && !usesProductionMarker(previousMarkerTask));
     const resolvedAgentResumeCtx =
       agentSupportsSessionResume && run.conversationId
+        && !requiresProtocolMigration
         ? resolveAgentResumeContext(db, {
             conversationId: run.conversationId,
             agentId: def.id,
@@ -12049,12 +12577,25 @@ export async function startServer({
       strategyTaskAtStart
       && !isOdNextInitialRun
       && !agentResumeCtx.isResuming
+      && !strategyRunMapping?.coldStartFinalText
     ) {
-      const blocked = blockAutomaticContinuation(db, { runId: run.id });
-      if (blocked) run.strategyTask = projectStrategyTask(blocked, run.id);
+      const ended = endFailedAutomaticContinuation(db, { runId: run.id });
+      if (ended) run.strategyTask = projectStrategyTask(ended, run.id);
       throw new Error(
         'OD Next continuation requires the locked native session; cold re-seeding is forbidden.',
       );
+    }
+    if (strategyRunMapping?.coldStartFinalText) {
+      const transport = agentResumeCtx.isResuming ? 'resume' : 'cold_start';
+      if (transport === 'cold_start') {
+        strategyRunMapping = { ...strategyRunMapping, finalText: strategyRunMapping.coldStartFinalText };
+        persistedStrategyFinalText = strategyRunMapping.finalText.text;
+      }
+      design.runs.emit(run, 'diagnostic', {
+        type: 'strategy_production_transport', transport,
+        sourceRunId: strategyRunMapping.sourceRunId,
+        promptSha256: strategyRunMapping.finalText.sha256,
+      });
     }
     const publishNativeSessionRecoveryMetadata = () => {
       if (!run.nativeSessionRecovery) return;
@@ -12338,6 +12879,18 @@ export async function startServer({
           odNextTaskInputSnapshot?.requestInputText ?? '',
         ].filter(Boolean).join('\n\n---\n\n')
       : '';
+    let readyResumedRequest: string | null = null;
+    if (isOdNextInitialRun && previousMarkerTask && agentResumeCtx.isResuming) {
+      const incremental = composeResumedRequest(strategyTaskAtStart, previousMarkerTask);
+      if (incremental && requiresReadyCompatibility) {
+        // Retain the frozen bundle until the spawned profile validates continuity.
+        readyResumedRequest = incremental;
+      } else if (incremental) {
+        const finalText = persistStrategyResumeText(db, run.id, incremental);
+        strategyRunMapping = { ...strategyRunMapping, finalText, resumeFinalText: finalText };
+        persistedStrategyFinalText = finalText.text;
+      }
+    }
     const composePayload = (includeStableForPayload: boolean, userRequestPrompt: string) => strategyTaskAtStart
       ? {
           composedPrompt: persistedStrategyFinalText!,
@@ -12507,8 +13060,8 @@ export async function startServer({
     let visibleAssistantText = '';
     // Reply text handed to the background memory extractor at child-close.
     // Captures the GUARDED, visible reply from BOTH channels a run can emit on:
-    // structured agents' `agent` `text_delta` (Claude/Codex/Gemini/Copilot/ACP/
-    // qoder/pi-rpc) and the plain/BYOK/antigravity family's `stdout` chunks. So
+    // structured agents' `agent` `text_delta` (Claude/Codex/Gemini/Antigravity/
+    // Copilot/ACP/qoder/pi-rpc) and the plain/BYOK family's `stdout` chunks. So
     // every agent family contributes its actual reply, and none leak raw
     // transport frames (system:init, stream_event, hooks). Kept separate from
     // `visibleAssistantText` so the filesystem empty-output guard that reads
@@ -12575,11 +13128,12 @@ export async function startServer({
       }
     };
     const send = (event, data) => {
+      recordRunTelemetry('skill discovery', () => {
+        if (event === 'agent') recordDiscoveryPromptDelivered();
+        observeDiscoveryEvent(run, { event, data });
+      });
       if (event === 'agent' && data?.type === 'usage') {
         physicalSessionUsage.observe(event, data);
-      }
-      if (strategyProtocol && event === 'agent' && data?.type === 'tool_use') {
-        strategyToolUseCount += 1;
       }
       if (
         strategyProtocol
@@ -12595,7 +13149,7 @@ export async function startServer({
         && event === 'stdout'
         && typeof data?.chunk === 'string'
       ) {
-        const chunk = strategyProtocol.push(data.chunk);
+        const chunk = strategyProtocol.push(data.chunk, false);
         if (!chunk) return;
         data = { ...data, chunk };
       }
@@ -12687,7 +13241,7 @@ export async function startServer({
       }
       // Accumulate the visible reply for the memory extractor from whichever
       // channel this agent family uses: `agent` text_delta (structured streams)
-      // or `stdout` chunks (plain/BYOK/antigravity). Both carry already-guarded,
+      // or `stdout` chunks (plain/BYOK). Both carry already-guarded,
       // user-visible text, so this never captures thinking, tool traffic, or raw
       // transport frames.
       if (memoryReplyText.length < MEMORY_REPLY_CAP) {
@@ -13042,8 +13596,7 @@ export async function startServer({
         hasNativeSession: !!run.conversationId && !!liveSessionId,
       });
       if (
-        allowRetry && !isIntentResolution &&
-        postToolResumeDecision?.shouldRetry &&
+        allowRetry && postToolResumeDecision?.shouldRetry &&
         !design.runs.isTerminal(run.status) &&
         run.conversationId &&
         liveSessionId
@@ -13103,7 +13656,7 @@ export async function startServer({
         attemptCount: run.retryAttemptCount ?? 0,
         sideEffects,
       });
-      if (allowRetry && !isIntentResolution && decision.shouldRetry && !design.runs.isTerminal(run.status)) {
+      if (allowRetry && decision.shouldRetry && !design.runs.isTerminal(run.status)) {
         run.retryOriginalFailure ??= failure ?? undefined;
         if ((run.retryAttemptCount ?? 0) === 0) {
           run.retryOriginFailure = failure ? { ...failure } : null;
@@ -13152,7 +13705,7 @@ export async function startServer({
         sideEffects.liveArtifactSeen
       );
       const resumableFailure =
-        !isIntentResolution && result === 'failed' &&
+        result === 'failed' &&
         runtimeResumesSessionById(def) &&
         !!run.conversationId &&
         !!liveSessionId &&
@@ -13394,6 +13947,9 @@ export async function startServer({
       ));
     };
 
+    // The catalog default an AMR turn switches to when vela rejects the
+    // selected model, e.g. one that has left the catalog since it was saved.
+    let amrFallbackModel = null;
     if (def.id === 'amr' && resolvedBin && agentLaunch.launchPath) {
       const launchPath = agentLaunch.launchPath ?? resolvedBin;
       const modelProbeEnv = launchPath
@@ -13428,27 +13984,29 @@ export async function startServer({
       // AMR became unusable in packaged nightlies. Reusing the cache keeps that
       // blocking probe off the per-run hot path and degrades to preset instead
       // of fail-closing; vela's own `session/set_model` remains the final gate.
+      const userAskedForDefault =
+        typeof model !== 'string' ||
+        !model.trim() ||
+        model.trim().toLowerCase() === 'default';
       let liveModels = [];
       try {
         const probe = await resolveAmrModelProbe({ dataDir: RUNTIME_DATA_DIR, env: process.env, readAppConfig });
-        const catalog = await amrModelLoadingCache.get(probe.cacheKey, {
+        const fetchers = {
           fetchPreset: () => fetchVelaPresetModels(probe.launchPath, probe.env),
           fetchRemote: () => fetchVelaRemoteModelsWithRetry(probe.launchPath, probe.env),
-        });
-        liveModels = catalog.models ?? [];
+        };
+        const catalog = userAskedForDefault && !hasDefaultModelEnvOverride
+          ? await amrModelLoadingCache.getAuthoritative(probe.cacheKey, fetchers, AMR_DEFAULT_MODEL_CATALOG_WAIT_MS)
+          : await amrModelLoadingCache.get(probe.cacheKey, fetchers);
+        liveModels = amrRunModels(def.id, amrModelScope, catalog);
       } catch (error) {
         // Do not swallow silently: a probe failure here is exactly what made
         // the packaged AMR breakage undiagnosable (the old `catch {}` left no
         // trace in any log or diagnostics bundle). Record it and degrade to the
         // remembered catalog below.
         console.warn('[amr] model catalog preflight probe failed', error);
-        liveModels = [];
+        liveModels = getRememberedLiveModels(def.id, amrModelScope);
       }
-      const rememberedLiveModels = getRememberedLiveModels(def.id, amrModelScope);
-      if (liveModels.length > 0) {
-        rememberLiveModels(def.id, liveModels, amrModelScope);
-      }
-      liveModels = preferFreshLiveModels(liveModels, rememberedLiveModels);
       const liveModelIds = new Set(
         liveModels.map((candidate) => candidate?.id).filter(Boolean),
       );
@@ -13456,10 +14014,6 @@ export async function startServer({
       // concrete id via the agent-wide cached model order; if it still is not,
       // adopt the catalog's enabled default so the spawn layer always has a
       // usable real id.
-      const userAskedForDefault =
-        typeof model !== 'string' ||
-        !model.trim() ||
-        model.trim().toLowerCase() === 'default';
       const defaultRunModel = resolveDefaultModelFromOptions(liveModels);
       if (
         !safeModel ||
@@ -13512,6 +14066,7 @@ export async function startServer({
         ));
         return finishStrategyAwarePhysicalRun('failed', 1, null);
       }
+      amrFallbackModel = defaultRunModel && defaultRunModel !== safeModel ? defaultRunModel : null;
       // NOTE: when the selected model is absent from the (possibly preset-only
       // or stale) catalog we intentionally do NOT fail-close. The cached/preset
       // catalog can lag the live one, and a logged-in user picked a concrete
@@ -13553,13 +14108,10 @@ export async function startServer({
         )
       : false;
 
-    // Antigravity's `agy` is silent on stdout/stderr in print mode for
-    // both auth-missing and quota-exhausted failures — the actual
-    // RESOURCE_EXHAUSTED / "not logged in" payload only surfaces in
-    // its `--log-file`. We allocate a per-run temp path, pipe agy's
-    // log to it via buildArgs, then read it in the empty-output guard
-    // to disambiguate the silent-failure cause. Other adapters ignore
-    // this field.
+    // Antigravity's `agy` writes its diagnostics to a `--log-file`. We
+    // allocate a per-run temp path and pipe agy's log to it via buildArgs:
+    // the model lock below waits there for agy to confirm it read the
+    // settings.json model override. Other adapters ignore this field.
     const agentLogFilePath =
       def.id === 'antigravity'
         ? path.join(os.tmpdir(), `od-agy-${run.id}.log`)
@@ -13688,33 +14240,6 @@ export async function startServer({
     let args;
     const observeClaudeNativeChildBehavior =
       def.id === 'claude' && strategyTaskAtStart !== null;
-    const nativeBuildPackageBindings =
-      def.id === 'claude'
-      && strategyTaskAtStart?.executionMode === 'complex'
-      && strategyTaskAtStart.inputStage === 'production'
-      && strategyTaskAtStart.planContract
-      && strategyTaskAtStart.planContractHash
-      && strategyRunMapping
-        ? (() => {
-            const version = run.preflightAgentCliVersion
-              ?? getDetectedRuntimeVersions(def.id)?.agentCliVersion;
-            const capability = resolveBundledOdNextRuntimeCapability({
-              agentId: def.id,
-              agentCliVersion: version,
-            });
-            if (capability.reason !== 'capability_resolved') {
-              throw new TypeError(
-                'Claude native Build Package bindings require the exact verified CLI tuple.',
-              );
-            }
-            return createOdNextNativeBuildPackageBindings({
-              taskExecutionId: strategyTaskAtStart.taskExecutionId,
-              taskRunIndex: strategyRunMapping.taskRunIndex,
-              planContractHash: strategyTaskAtStart.planContractHash,
-              plan: strategyTaskAtStart.planContract,
-            });
-          })()
-        : [];
     try {
       // Optional argv flags are gated on the `--help` capability map, which used
       // to be filled only by `GET /api/agents`. Probe it here so a daemon that
@@ -13736,9 +14261,6 @@ export async function startServer({
             def.id === 'codex'
             && run.externalPluginAnalytics?.externalPluginId
               === OPEN_DESIGN_PLUGIN_ID,
-          ...(nativeBuildPackageBindings.length > 0
-            ? { nativeBuildPackageBindings }
-            : {}),
           ...(observeClaudeNativeChildBehavior
             ? { observeNativeChildBehavior: true }
             : {}),
@@ -13964,9 +14486,10 @@ export async function startServer({
     };
     let forcedChildShutdownTimers = [];
     let acpAttemptTermination = null;
+    let acpCompletionShutdownRequested = false;
     const beginAcpAttemptTermination = (
       reason = 'acp_terminal',
-      { gracefulWaitMs = 0 } = {},
+      { gracefulWaitMs = 0, onChildSignal = undefined as (() => void) | undefined } = {},
     ) => {
       if (acpAttemptTermination) return acpAttemptTermination;
       acpAttemptTermination = design.runs.terminateProcessTree(
@@ -13978,6 +14501,7 @@ export async function startServer({
           termGraceMs: inactivityKillGraceMs,
           killGraceMs: inactivityKillGraceMs,
           reason,
+          onChildSignal,
         },
       );
       return acpAttemptTermination;
@@ -14284,6 +14808,9 @@ export async function startServer({
       projectDir: cwd,
       projectId: typeof projectId === 'string' ? projectId : null,
       workspaceScope: run.workspaceScope,
+      runId: run.id,
+      conversationId: run.conversationId,
+      analyticsContext: run.analyticsContext ?? null,
     });
     if (run.cancelRequested || design.runs.isTerminal(run.status)) {
       cleanupPromptFile();
@@ -14477,18 +15004,9 @@ export async function startServer({
       }
       lifecycle.mark('launch_preflight_end');
       lifecycle.mark('process_spawn_start');
-      if (isIntentResolution) {
-        if (run.cancelRequested || design.runs.isTerminal(run.status)) {
-          cleanupPromptFile();
-          revokeToolToken('child_exit');
-          unregisterChatAgentEventSink();
-          cleanupOdNextRunInputProjection();
-          return;
-        }
-        startIntentResolution(db, strategyTaskAtStart.taskExecutionId, run.id);
-      }
-      // A plain-text stdin prompt is handed over as a complete file at spawn;
-      // framed stdin protocols (stream-json, JSON-RPC) keep the pipe. The
+      // A whole-prompt stdin prompt (plain text, or the runtime's own
+      // one-shot framing) is handed over as a complete file at spawn; live
+      // stdin protocols (Claude stream-json, JSON-RPC) keep the pipe. The
       // agent stays on record until its process group is gone, so a daemon
       // started after this one dies can reap it. See runtimes/agent-process.ts.
       const spawnedAgent = spawnAgentProcess({
@@ -14498,7 +15016,7 @@ export async function startServer({
         cwd: effectiveCwd,
         windowsVerbatimArguments: invocation.windowsVerbatimArguments,
         stdin: stdinMode === 'pipe' && runtimeReadsPlainTextPromptFromStdin(def)
-          ? { prompt: composed }
+          ? { prompt: agentStdinPromptPayload(def, composed) }
           : stdinMode,
         runDir: path.join(RUNTIME_DATA_DIR, 'runs', run.id),
         runId: run.id,
@@ -14657,6 +15175,7 @@ export async function startServer({
           }
         : null;
       const memoryOptions = {
+        extractionOrigin: { projectId: run.projectId, conversationId: run.conversationId, runId: run.id, assistantMessageId: run.assistantMessageId },
         projectRoot: PROJECT_ROOT,
         chatAgentId: typeof agentId === 'string' ? agentId : null,
         chatModel: typeof safeModel === 'string' ? safeModel : null,
@@ -14879,19 +15398,6 @@ export async function startServer({
     let agentStreamErrorObservedBeforeCancellation = false;
     let acpFatalErrorObservedBeforeCancellation = false;
     run.runtimeFailureObservedBeforeCancellation = false;
-    // Holds buffered plain-text stdout chunks for agents (currently
-    // antigravity) where we need to inspect the full output at close
-    // time before deciding whether to forward it. The auth-prompt guard
-    // in the close handler suppresses the buffer when the output is an
-    // OAuth prompt; otherwise the flush below sends the chunks in order.
-    const plaintextStdoutBuffer: BufferedStdoutChunk[] = [];
-    // Arrival time of the first buffered plain-text stdout chunk
-    // (antigravity). First-token timing is stamped from this value only
-    // when the buffer is actually flushed to the client at close time. If
-    // the auth-prompt guard suppresses the buffer (the OAuth login URL is
-    // printed to stdout), no token ever reaches the user, so TTFT must not
-    // be recorded for that failure mode. See PR #3412.
-    let firstBufferedStdoutAt: number | null = null;
     // Tracks whether any stream the run is using actually emitted user-
     // visible content or a deliverable. Only the streams routed through
     // `sendAgentEvent` contribute to this flag; ACP sessions and plain stdout
@@ -15400,41 +15906,6 @@ export async function startServer({
       }
       emitAgentEvent(ev);
     };
-    const parseBufferedAntigravityGeminiJsonEventStream = () => {
-      if (
-        def.id !== 'antigravity' ||
-        plaintextStdoutBuffer.length === 0
-      ) {
-        return false;
-      }
-      const bufferedStdout = plaintextStdoutBuffer.map((chunk) => chunk.text).join('');
-      if (!looksLikeGeminiJsonEventStream(bufferedStdout)) return false;
-      trackingSubstantiveOutput = true;
-      const firstTokenAt = bufferedAntigravityGeminiFirstTokenAt(plaintextStdoutBuffer);
-      if (firstTokenAt !== null) noteFirstTokenAt(firstTokenAt);
-      const handler = createJsonEventStreamHandler('gemini', sendAgentEvent);
-      handler.feed(bufferedStdout);
-      handler.flush();
-      plaintextStdoutBuffer.length = 0;
-      return true;
-    };
-    const flushBufferedPlaintextStdout = () => {
-      // Stamp from the first chunk's arrival only once the buffer is known to
-      // be visible; suppressed OAuth prompts must never report a first token.
-      if (plaintextStdoutBuffer.length > 0 && firstBufferedStdoutAt !== null) {
-        noteFirstTokenAt(firstBufferedStdoutAt);
-      }
-      for (const chunk of plaintextStdoutBuffer) {
-        const strippedText = visibleStdoutControlStripper.write(chunk.text);
-        const visibleText = titleMarkerStripper.strip(strippedText);
-        if (visibleText) send('stdout', { chunk: visibleText });
-      }
-      const flushedControlText = visibleStdoutControlStripper.flush();
-      const flushedTitleMarkerText =
-        titleMarkerStripper.strip(flushedControlText) + titleMarkerStripper.flush();
-      if (flushedTitleMarkerText) send('stdout', { chunk: flushedTitleMarkerText });
-      plaintextStdoutBuffer.length = 0;
-    };
     const publishRuntimeChildEvidenceCoverage = (coverage) => {
       if (!strategyTaskAtStart || !coverage) return;
       sendAgentEvent({
@@ -15595,13 +16066,6 @@ export async function startServer({
               }),
             }
           : {}),
-        ...(nativeBuildPackageBindings.length > 0
-          ? {
-              nativeBuildPackageBindings: nativeBuildPackageBindingMap(
-                nativeBuildPackageBindings,
-              ),
-            }
-          : {}),
       });
       child.stdout.on('data', (chunk) => claude.feed(chunk));
       child.on('close', (code, signal) => {
@@ -15744,6 +16208,7 @@ export async function startServer({
         executionProfile,
         completePromptOnTurnEnd: def.acpTurnEndCompletesPrompt === true,
         ...(def.id === 'amr' ? { modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE' } : {}),
+        ...(def.id === 'amr' && amrFallbackModel ? { fallbackModel: amrFallbackModel } : {}),
         // Resume the prior upstream session (drives `session/load`) when the
         // resume-identity guard says it is safe; otherwise a fresh session/new.
         ...(def.resumesSessionViaAcpLoad === true && agentResumePromptPolicy.resumeSessionId
@@ -15755,7 +16220,15 @@ export async function startServer({
         onPromptComplete: () => clearFirstOutputWatchdog(),
         onTerminal: (kind) => beginAcpAttemptTermination(
           `acp_${kind}`,
-          { gracefulWaitMs: kind === 'completed' ? 500 : 0 },
+          kind === 'completed'
+            ? {
+              gracefulWaitMs: 500,
+              // Only an exit the daemon causes speaks for the completed
+              // turn; vela exiting non-zero on its own during the grace
+              // wait is still its own failure.
+              onChildSignal: () => { acpCompletionShutdownRequested = true; },
+            }
+            : { gracefulWaitMs: 0 },
         ),
         send: (event, data, meta) => {
           if (event === 'error') {
@@ -15932,8 +16405,8 @@ export async function startServer({
               currentStableSections,
             });
             if (strategyTaskAtStart && !isOdNextInitialRun && !agentResumeCtx.isResuming) {
-              const blocked = blockAutomaticContinuation(db, { runId: run.id });
-              if (blocked) run.strategyTask = projectStrategyTask(blocked, run.id);
+              const ended = endFailedAutomaticContinuation(db, { runId: run.id });
+              if (ended) run.strategyTask = projectStrategyTask(ended, run.id);
               return {
                 rejection: {
                   code: 'AGENT_SESSION_RESUME_FAILED',
@@ -15941,8 +16414,15 @@ export async function startServer({
                 },
               };
             }
+            let prompt = agentResumePromptPolicy.skipTranscript ? composed : fullTranscriptCandidate ?? composed;
+            if (readyResumedRequest && agentResumePromptPolicy.skipTranscript) {
+              const finalText = persistStrategyResumeText(db, run.id, readyResumedRequest);
+              strategyRunMapping = { ...strategyRunMapping, finalText, resumeFinalText: finalText };
+              persistedStrategyFinalText = finalText.text;
+              prompt = finalText.text;
+            }
             return {
-              prompt: agentResumePromptPolicy.skipTranscript ? composed : fullTranscriptCandidate ?? composed,
+              prompt,
               resumeSessionId: agentResumePromptPolicy.resumeSessionId,
             };
           },
@@ -16032,7 +16512,7 @@ export async function startServer({
           lifecycle.mark('model_call_start');
           lifecycle.mark('stdin_write_start');
         },
-        onPromptSendEnd: () => lifecycle.mark('stdin_write_end'),
+        onPromptSendEnd: () => { lifecycle.mark('stdin_write_end'); recordRunTelemetry('discovery prompt', recordDiscoveryPromptDelivered); },
         onTurnComplete: () => clearFirstOutputWatchdog(),
       });
       acpSession = codexSession;
@@ -16080,21 +16560,6 @@ export async function startServer({
         publishRuntimeChildEvidenceCoverage(handler.childEvidenceCoverage(
           code === 0 && signal === null && !run.cancelRequested && !agentStreamError,
         ));
-      });
-    } else if (def.id === 'antigravity') {
-      // Buffer stdout until close so the auth-prompt guard can suppress
-      // the OAuth URL before forwarding it to the client as assistant
-      // text. agy exits 0 after printing the auth URL on stdout, so the
-      // chunks would otherwise arrive before the close-time classifier
-      // detects them as an auth prompt. First-token timing is deliberately
-      // NOT stamped here — only the first chunk's arrival time is recorded,
-      // and `firstTokenAt` is stamped from it at flush time so the
-      // suppressed OAuth-prompt path never reports a TTFT (PR #3412).
-      child.stdout.on('data', (chunk) => {
-        noteAgentActivity();
-        const receivedAt = Date.now();
-        if (firstBufferedStdoutAt === null) firstBufferedStdoutAt = receivedAt;
-        plaintextStdoutBuffer.push({ text: String(chunk), receivedAt });
       });
     } else {
       // Plain / BYOK mode: guard raw stdout chunks (#3247).
@@ -16321,12 +16786,18 @@ export async function startServer({
           resumeSessionId: agentResumePromptPolicy.resumeSessionId,
         }).autoReseedFullTranscript
       ) {
-        if (strategyTaskAtStart && !isOdNextInitialRun) {
-          const blocked = blockAutomaticContinuation(db, { runId: run.id });
-          if (blocked) run.strategyTask = projectStrategyTask(blocked, run.id);
+        const resumeSideEffects = runSideEffectsForRun(run);
+        const safeColdProduction = strategyRunMapping?.coldStartFinalText
+          && !resumeSideEffects.toolCallSeen && !resumeSideEffects.artifactWriteSeen
+          && !resumeSideEffects.liveArtifactSeen && !resumeSideEffects.userVisibleOutputSeen;
+        if (strategyTaskAtStart && ((!isOdNextInitialRun && !safeColdProduction)
+          || resumeSideEffects.toolCallSeen || resumeSideEffects.artifactWriteSeen
+          || resumeSideEffects.liveArtifactSeen || resumeSideEffects.userVisibleOutputSeen)) {
+          const ended = endFailedAutomaticContinuation(db, { runId: run.id });
+          if (ended) run.strategyTask = projectStrategyTask(ended, run.id);
           send('error', createSseErrorPayload(
             'AGENT_SESSION_RESUME_FAILED',
-            'The locked OD Next native session is unavailable; the task was blocked without cold re-seeding.',
+            'The OD Next native session is unavailable and a safe cold restart cannot be proven.',
             { retryable: false },
           ));
           return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
@@ -16376,7 +16847,6 @@ export async function startServer({
         markRpcCloseReason('fatal_rpc_error');
         return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
       }
-      parseBufferedAntigravityGeminiJsonEventStream();
       flushAgentTitleMarkerBuffer();
       if (agentStreamErrorObservedBeforeCancellation && agentStreamError) {
         markRpcCloseReason('stream_error');
@@ -16440,15 +16910,12 @@ export async function startServer({
         ));
         return finishWithRetryDecision('failed', code, signal);
       }
-      // Plain-stream auth-failure guard: plain adapters (today
-      // antigravity, deepseek's TUI variants) may exit cleanly with
-      // visible stdout that's actually an auth prompt — agy prints
-      // "Authentication required. Please visit the URL to log in:
-      // <URL>" + "Error: authentication timed out." rather than
-      // failing with a non-zero exit. Without this guard the chat
-      // shows that raw prompt as the agent's "reply", and the user
-      // has no way to actually complete OAuth from inside the chat.
-      // Override the apparent success with a proper
+      // Plain-stream auth-failure guard: plain adapters (e.g. deepseek's
+      // TUI variants) may exit cleanly with visible stdout that's actually
+      // an auth prompt rather than failing with a non-zero exit. Without
+      // this guard the chat shows that raw prompt as the agent's "reply",
+      // and the user has no way to actually complete the login from inside
+      // the chat. Override the apparent success with a proper
       // AGENT_AUTH_REQUIRED error carrying actionable guidance.
       if (
         code === 0 &&
@@ -16471,13 +16938,7 @@ export async function startServer({
       }
       // Plain-stream empty-output guard: plain agents send raw stdout
       // chunks without structured event tracking. Detect auth failures
-      // and quota / upstream errors when exit 0 but no stdout was
-      // seen. agy in print mode is silent on stdout/stderr for both
-      // missing-auth AND quota-exhausted failures; the daemon piped
-      // agy's `--log-file` to `agentLogFilePath` precisely so this
-      // guard can grep the upstream error code (RESOURCE_EXHAUSTED 429
-      // for quota, "not logged into Antigravity" for auth) and route
-      // to the right user-facing guidance.
+      // and quota / upstream errors when exit 0 but no stdout was seen.
       if (
         code === 0 &&
         !run.cancelRequested &&
@@ -16485,65 +16946,31 @@ export async function startServer({
         !childStdoutSeen
       ) {
         markRpcCloseReason('empty_output');
-        let combinedDetail = `${agentStderrTail}\n${agentStdoutTail}`;
-        if (def.id === 'antigravity' && agentLogFilePath) {
-          try {
-            const logContent = await fs.promises.readFile(agentLogFilePath, 'utf8');
-            // Keep the last 8 KB — quota / auth lines all land near the
-            // tail (after the spawn / model-config preamble).
-            combinedDetail = `${combinedDetail}\n${logContent.slice(-8192)}`;
-          } catch {
-            // Missing log file (agy didn't write it, mounted tmpfs is
-            // read-only, etc.) is fine — fall through to the generic
-            // empty-output message.
-          }
-        }
+        const combinedDetail = `${agentStderrTail}\n${agentStdoutTail}`;
         const authFailure = classifyAgentAuthFailure(agentId, combinedDetail);
-        const serviceFailure = !authFailure
-          ? classifyAgentServiceFailure(combinedDetail)
-          : null;
-        const isAntigravityQuota =
-          def.id === 'antigravity' && serviceFailure === 'RATE_LIMITED';
-        // Antigravity-only fallback: if neither classifier matched but
-        // the run was silent, lean on the empirical observation that
-        // an empty agy print-mode exit almost always means
-        // missing-OAuth (the only other silent path is quota, which
-        // the log-file check above already caught).
-        const useAntigravityAuthFallback =
-          !authFailure && !serviceFailure && def.id === 'antigravity';
-        const errorCode =
-          authFailure || useAntigravityAuthFallback
-            ? 'AGENT_AUTH_REQUIRED'
-            : isAntigravityQuota
-              ? 'RATE_LIMITED'
-              : 'AGENT_EXECUTION_FAILED';
         const msg = authFailure
           ? authFailure.message ?? `${def.name} authentication expired. Please re-authenticate and retry.`
-          : isAntigravityQuota
-            ? antigravityQuotaGuidance()
-            : useAntigravityAuthFallback
-              ? antigravityAuthGuidance()
-              : `${def.name} returned an empty response. This may indicate an expired session — try re-authenticating the agent.`;
+          : `${def.name} returned an empty response. This may indicate an expired session — try re-authenticating the agent.`;
         send('error', createSseErrorPayload(
-          errorCode,
+          authFailure ? 'AGENT_AUTH_REQUIRED' : 'AGENT_EXECUTION_FAILED',
           msg,
           { retryable: true },
         ));
         return finishWithRetryDecision('failed', 0, signal);
       }
-      // ACP agents that don't shut down on stdin.end() (e.g. Devin for
-      // Terminal) are forced to exit via SIGTERM from attachAcpSession after
+      // Native agents that don't shut down on stdin.end() (e.g. Devin or Pi)
+      // are forced to exit via SIGTERM after
       // a clean prompt completion. Without an override, the chat run would
       // be marked `failed` because `code === 0` fails (code is null on a
       // signal exit). `completedSuccessfully()` reports whether the ACP
       // session resolved without a fatal error or abort.
       //
-      // Scope the override narrowly to the exact forced-shutdown shape this
-      // PR introduces: code is null AND signal is SIGTERM AND the ACP
-      // session reported clean completion. Any other post-response failure
-      // (non-zero exit code, SIGKILL, SIGSEGV, etc.) still propagates as
-      // `failed`, preserving the existing close-status behavior for genuine
-      // post-response process problems.
+      // The override covers SIGTERM (or vela's code 130) after clean
+      // completion, and any exit after the daemon itself signalled the
+      // completed attempt (`acpCompletionShutdownRequested`; Windows reports
+      // that kill as code 1 with no signal). Other post-response failures,
+      // including a non-zero exit during the grace wait, still propagate as
+      // `failed`.
       const acpCleanCompletion =
         typeof acpSession?.completedSuccessfully === 'function' &&
         acpSession.completedSuccessfully();
@@ -16553,17 +16980,16 @@ export async function startServer({
         code,
         signal,
         acpCleanCompletion,
+        acpCompletionShutdownRequested: acpCompletionShutdownRequested || (
+          typeof acpSession?.completionShutdownRequested === 'function' &&
+          acpSession.completionShutdownRequested()
+        ),
         artifactQuietShutdownRequested,
         turnCompletedCleanly: !!run.turnCompletedCleanly,
         artifactProducedThisRun:
           runArtifactSideEffects.artifactWriteSeen ||
           runArtifactSideEffects.liveArtifactSeen,
       });
-      // Authentication guards above have now ruled out Antigravity's OAuth
-      // prompt. Publish any remaining guarded plaintext before a close error
-      // so both the emit-time admission ledger and durable-log reconciliation
-      // observe the genuine assistant response before the terminal boundary.
-      flushBufferedPlaintextStdout();
       // Skip the close-handler failure emit when the run is already
       // terminal: the inactivity watchdog (failForInactivity) finishes the
       // run — sending its error and clearing run.clients/eventsLogStream —
@@ -16868,33 +17294,8 @@ export async function startServer({
           }
         }
         let deliverableValid = false;
-        // A turn that emitted no Runtime State can still have delivered. The
-        // coordinator may only infer that Direct Edit completion from verified
-        // physical delivery, so resolve the evidence here too — otherwise the
-        // inference has nothing to accept and correct work is discarded.
-        const mayInferDirectEditCompletion = Boolean(
-          strategyTaskAtStart
-          && (
-            odNextTurnMayInferDirectEditCompletion(
-              strategyTaskAtStart,
-              strategyProtocolResult,
-            )
-            || odNextTurnMayInferProductionCompletion(
-              strategyTaskAtStart,
-              strategyProtocolResult,
-            )
-          ),
-        );
-        const strategyPlanningOnly = isIntentResolution || strategyTaskAtStart?.executionIntent === 'plan_only'
-          || strategyProtocolResult?.runtimeState?.executionIntent === 'plan_only';
-        const strategyCompletionCandidate = Boolean(
-          strategyTaskAtStart
-          && !strategyPlanningOnly
-          && (
-            strategyProtocolResult?.runtimeState?.outcome === 'completed'
-            || mayInferDirectEditCompletion
-          ),
-        );
+        const strategyPlanningOnly = strategyTaskAtStart?.executionIntent === 'plan_only';
+        const strategyCompletionCandidate = Boolean(strategyTaskAtStart && !strategyPlanningOnly);
         let processTreeQuiescentForFinalization = true;
         // Every successful physical Run can produce a final Web deliverable,
         // even when OD Next Runtime State is absent. Resolve the settled
@@ -16905,6 +17306,8 @@ export async function startServer({
         }
         await resolveRunArtifactOutcomeBeforeFinishAsync();
         const deliverableFinalization = await finalizeSuccessfulRunDeliverable({
+          allowIndependentOutput: Boolean(strategyTaskAtStart),
+          allowMultipleOutputCandidates: run.strategyRolloutDecision?.taskType === 'discovery',
           ...(run.artifactOutcome?.diff && baselineEntryFile ? { baselineEntryFile } : {}),
           projectsRoot: PROJECTS_DIR,
           projectId: run.projectId ?? null,
@@ -17084,55 +17487,6 @@ export async function startServer({
         }
         if (strategyTaskAtStart && strategyProtocolResult) {
           let automaticContinuationChatBody = null;
-          let executionPreflight;
-          let complexRuntimeEvidence;
-          try {
-            let resolution: ReturnType<typeof validateStrategyIntentResolutionReply> | null = null;
-            if (isIntentResolution) {
-              try {
-                resolution = validateStrategyIntentResolutionReply(strategyTaskAtStart, {
-                  runId: run.id, parsed: strategyProtocolResult, toolUseCount: strategyToolUseCount,
-                  completionEvidence: { physicalStatus: 'succeeded', deliverableValid, ...strategyRunWriteEvidence(run) },
-                });
-              } catch {
-                // The coordinator below persists and rejects the actual reply.
-                // Invalid supplemental output must never prepare production facts.
-              }
-            }
-            const effectiveParsed = resolution?.parsed ?? strategyProtocolResult;
-            const planningOnly = resolution ? resolution.executionIntent === 'plan_only' : strategyPlanningOnly;
-            const intentPending = requiresStrategyIntentResolution(strategyTaskAtStart, effectiveParsed);
-            if (!planningOnly && !intentPending) {
-              const lockedPlan = effectiveParsed.planContract ?? effectiveParsed.repairPlanContract ?? strategyTaskAtStart.planContract;
-              const evidence = await resolveAutomaticContinuationEvidence({
-                plan: lockedPlan,
-                phase: effectiveParsed.runtimeState?.outcome === 'completed'
-                  ? 'completion'
-                  : 'eligibility',
-                task: strategyTaskAtStart,
-                run,
-                localSyntheticCanary: readOdNextRolloutPolicy().localSyntheticCanary
-                  && process.env.NODE_ENV !== 'production',
-                executionPreflightResolver: odNextExecutionPreflightResolver,
-                complexProductionResolver: odNextComplexProductionResolver,
-                runtimeCapabilitySnapshot: chatBody.runtimeCapabilitySnapshot,
-              });
-              executionPreflight = evidence.executionPreflight;
-              complexRuntimeEvidence = evidence.complexRuntimeEvidence;
-            }
-          } catch (error) {
-            if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
-            send('error', createSseErrorPayload(
-              'OD_NEXT_EXECUTION_PREFLIGHT_FAILED',
-              error instanceof Error ? error.message : String(error),
-              { retryable: false },
-            ));
-            finishStrategyAwarePhysicalRun('failed', 1, signal);
-            return;
-          }
-          // Cancellation can win while the daemon-owned resolver is awaiting
-          // host facts. Never let the stale continuation allocate a new Run or
-          // mutate the already-terminal task after that boundary.
           if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
           let transition;
           try {
@@ -17141,27 +17495,12 @@ export async function startServer({
               service: internalRunCreation,
               task: strategyTaskAtStart,
               parsed: strategyProtocolResult,
-              toolUseCount: strategyToolUseCount,
-              // OPEND-2765: the production stage closes with the keyed host
-              // protocols, whose follow-up suggestions are user-visible prose.
-              ...(typeof chatBody.locale === 'string' && chatBody.locale
-                ? { locale: chatBody.locale }
-                : {}),
-              ...(executionPreflight ? { executionPreflight } : {}),
-              ...(complexRuntimeEvidence ? { complexRuntimeEvidence } : {}),
-              ...(
-                strategyTaskAtStart.intentResolution
-                || strategyProtocolResult.runtimeState?.outcome === 'completed'
-                || strategyPlanningOnly
-                || mayInferDirectEditCompletion
-                  ? {
-                      completionEvidence: {
-                        physicalStatus: 'succeeded',
-                        deliverableValid,
-                        ...strategyRunWriteEvidence(run),
-                      },
-                    }
-                  : {}),
+              locale: typeof locale === 'string' ? locale : undefined,
+              completionEvidence: {
+                physicalStatus: 'succeeded', deliverableValid,
+                truncated: run.truncatedMidTurn === true,
+                todoUnfinished: todoSnapshotHasUnfinishedWork(run.lastTodoSnapshot),
+              },
               createMeta: (stage, instruction, taskRunIndex) => {
                 const identity = createHash('sha256')
                   .update(`${strategyTaskAtStart.taskExecutionId}:${stage}:${taskRunIndex}`)
@@ -17191,13 +17530,14 @@ export async function startServer({
                 };
                 automaticContinuationChatBody = {
                   ...meta,
+                  // The frozen task/source/index identify this internal request.
+                  // A fresh host-protocol nonce must not change its retry identity.
                   requestFingerprint: createHash('sha256')
                     .update(JSON.stringify({
                       taskExecutionId: strategyTaskAtStart.taskExecutionId,
                       sourceRunId: run.id,
                       stage,
                       taskRunIndex,
-                      instruction,
                       projectId: meta.projectId,
                       conversationId: meta.conversationId,
                       agentId: meta.agentId,
@@ -17294,9 +17634,7 @@ export async function startServer({
         completeCodexEvidenceCollection();
         // Best-effort cleanup of the per-run agy log file on every close
         // path — successful, failed, cancelled, or non-zero exit — so
-        // /tmp doesn't accumulate one file per Antigravity run. The log
-        // is read inside the empty-output guard above before this finally
-        // runs, so the read always happens before the unlink.
+        // /tmp doesn't accumulate one file per Antigravity run.
         if (agentLogFilePath) {
           fs.promises.unlink(agentLogFilePath).catch(() => {});
         }
@@ -17307,7 +17645,7 @@ export async function startServer({
       // The complete plain-text prompt became the child's stdin at spawn
       // (runtimes/agent-process.ts), so there is nothing left to write. A
       // spawn that failed (no PID) never received it.
-      if (typeof child.pid === 'number') recordPromptDeliveredAtSpawn(run, lifecycle);
+      if (typeof child.pid === 'number') { recordPromptDeliveredAtSpawn(run, lifecycle); recordRunTelemetry('discovery prompt', recordDiscoveryPromptDelivered); }
     } else if (writePromptToChildStdin && child.stdin) {
       const promptInputFormat = def.promptInputFormat ?? 'text';
       lifecycle.mark('model_call_start');
@@ -17315,6 +17653,7 @@ export async function startServer({
       const markStdinWriteEnd = (err?: Error | null) => {
         if (err) return;
         lifecycle.mark('stdin_write_end');
+        recordRunTelemetry('discovery prompt', recordDiscoveryPromptDelivered);
       };
       // Plain-text prompts never get here: they are delivered at spawn.
       // stream-json is the one prompt still pumped through a live pipe; a
@@ -17571,6 +17910,7 @@ export async function startServer({
       },
     },
     telemetry: {
+      taskTelemetryForRun: (runId) => taskObservationRollout.telemetryForRun(runId),
       reportRunCompletionTelemetryFallback,
       resolveRunProjectKindForAnalytics,
       runArtifactBaselines,
@@ -18084,7 +18424,6 @@ export async function startServer({
   // Restore the plugin-runs-must-go-through-daemon gate by adding it
   // to chat-routes.ts if needed.
 
-
   registerChatRoutes(app, {
     db,
     design,
@@ -18110,7 +18449,7 @@ export async function startServer({
   //   - `apps/daemon/sidecar/server.ts`     → expects `{ url, server }`
   //   - `apps/daemon/tests/version-route.test.ts` → expects `{ url, server }`
   return await new Promise((resolve, reject) => {
-    let daemonShutdownStarted = false;
+    let daemonShutdownPromise: Promise<void> | null = null;
     const clearTerminalTelemetryFallbackTimers = () => {
       for (const timer of terminalTelemetryFallbackTimers) clearTimeout(timer);
       terminalTelemetryFallbackTimers.clear();
@@ -18147,23 +18486,27 @@ export async function startServer({
       collabPublishWatcher.dispose();
       collabCloud?.dispose();
     };
-    const shutdownDaemonRuns = async () => {
-      if (daemonShutdownStarted) return;
-      daemonShutdownStarted = true;
-      daemonShuttingDown = true;
-      amrTerminalReportDelivery.stop();
-      clearTerminalTelemetryFallbackTimers();
-      const shutdownGraceMs = resolveChatRunShutdownGraceMs();
-      await design.runs.shutdownActive({ graceMs: shutdownGraceMs });
-      // Cleanup runs independently of user terminal classification. Give
-      // confirmed closed writers at most three additional seconds at shutdown.
-      const cleanupDrain = await codexThreadCleanupOwner.drain(shutdownGraceMs);
-      if (cleanupDrain.pending > 0) {
-        console.warn('[codex] closed-thread cleanup shutdown deadline reached', cleanupDrain);
-      }
-      await terminalService.shutdownActive();
-      await browserSessionService.shutdownActive();
-      await design.analytics.shutdown();
+    const shutdownDaemonRuns = (): Promise<void> => {
+      if (daemonShutdownPromise) return daemonShutdownPromise;
+      daemonShutdownPromise = (async () => {
+        daemonShuttingDown = true;
+        await velaRoutesLifecycle.close();
+        amrTerminalReportDelivery.stop();
+        clearTerminalTelemetryFallbackTimers();
+        const shutdownGraceMs = resolveChatRunShutdownGraceMs();
+        await design.runs.shutdownActive({ graceMs: shutdownGraceMs });
+        // Cleanup runs independently of user terminal classification. Give
+        // confirmed closed writers at most three additional seconds at shutdown.
+        const cleanupDrain = await codexThreadCleanupOwner.drain(shutdownGraceMs);
+        if (cleanupDrain.pending > 0) {
+          console.warn('[codex] closed-thread cleanup shutdown deadline reached', cleanupDrain);
+        }
+        await terminalService.shutdownActive();
+        await browserSessionService.shutdownActive();
+        await telemetry.flushStockTelemetry();
+        await design.analytics.shutdown();
+      })();
+      return daemonShutdownPromise;
     };
     let server;
     try {
@@ -18209,19 +18552,42 @@ export async function startServer({
           return;
         }
         resolvedPort = boundPort;
+        void cleanupAbandonedPinnedVelaSessions(RUNTIME_DATA_DIR).then(({ failed }) => {
+          if (failed) console.warn('[od] private CLI session cleanup incomplete');
+        }).catch(() => { console.warn('[od] private CLI session cleanup unavailable'); });
+        void retryShareBindingsAtStartup().then(result => {
+          if (result.deferred || result.failed || result.persistenceFailures) {
+            console.warn(`[od] public share binding completion pending: ${JSON.stringify(result)}`);
+          }
+        }).catch(() => { console.warn('[od] public share binding completion unavailable'); });
+        void retryPublicFileStopsAtStartup().then((result) => {
+          if (result.deferred || result.failed || result.persistenceFailures) {
+            console.warn(
+              `[od] public share cleanup incomplete: ${JSON.stringify(result)}; queued links may remain public`,
+            );
+          }
+        }).catch(() => {
+          console.warn(
+            "[od] public share cleanup could not read its queue; queued links may remain public",
+          );
+        });
         startAmrTerminalReportDeliveryAfterBind(amrTerminalReportDelivery, boundPort);
         messageEventPayloadHeal ??= startMessageEventPayloadHeal({ db });
         // Only once listening: a startup-time fatal report would add lines to
         // the log tail that packaged startup telemetry samples.
         daemonHealth?.enableFatalReports();
         daemonHealth?.setAppVersion(currentAppVersion());
-        daemonHealth?.attachSink(({ eventName, properties, insertId }) =>
-          analyticsService.captureSafety({
-            eventName,
-            appVersion: currentAppVersion(),
-            properties,
-            insertId,
-          }));
+        daemonHealth?.attachSink(({ eventName, properties, insertId }) => {
+          const capture = { eventName, appVersion: currentAppVersion(), properties, insertId };
+          // Periodic health/metric events wait for the installation identity
+          // like every other stability metric (OPEND-4220 retest 2). Fault
+          // signals (unclean exit, memory pressure) stay immediate.
+          return eventName === 'client_process_memory_sample'
+            || eventName === 'daemon_storage_snapshot'
+            || eventName === 'daemon_health_summary'
+            ? telemetry.captureStabilityMetric(capture)
+            : analyticsService.captureSafety(capture);
+        });
         // When binding to all interfaces report localhost for local callers;
         // when binding to a specific address (e.g. a Tailscale IP) report that
         // address so remote callers and the sidecar use the correct URL.

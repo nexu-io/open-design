@@ -20,6 +20,7 @@ import {
   writeMemoryIndex,
 } from '../memory.js';
 import {
+  captureExtractionOrigin,
   clearExtractions as clearMemoryExtractions,
   listExtractions as listMemoryExtractions,
   removeExtraction as removeMemoryExtraction,
@@ -548,6 +549,9 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
   app.post('/api/memory/extract', async (req, res) => {
     try {
       const body = asRecord(req.body);
+      // This endpoint has no authoritative daemon run. Retain only the
+      // explicit request scope; never trust a caller-provided run claim.
+      const extractionOrigin = captureExtractionOrigin({ projectId: body.projectId, conversationId: body.conversationId, assistantMessageId: body.assistantMessageId });
       const userMessage =
         typeof body.userMessage === 'string' ? body.userMessage : '';
       const assistantMessage =
@@ -559,7 +563,7 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
       }
       const changed = hasAssistant
         ? []
-        : await extractFromMessage(RUNTIME_DATA_DIR, userMessage);
+        : await extractFromMessage(RUNTIME_DATA_DIR, userMessage, extractionOrigin ? { extractionOrigin } : undefined);
       // BYOK chat config — only forwarded by the web app for API-mode
       // chats. We strip the surface to the five fields pickProvider()
       // actually consumes and validate the provider against the four
@@ -601,6 +605,7 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
               RUNTIME_DATA_DIR,
               { userMessage, assistantMessage },
               {
+                extractionOrigin,
                 projectRoot: PROJECT_ROOT,
                 chatAgentId: null,
                 chatProvider,
