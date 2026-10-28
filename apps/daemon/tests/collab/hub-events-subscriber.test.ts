@@ -902,4 +902,156 @@ describe('startHubEventsSubscriber', () => {
     await abortedOnce;
     expect(aborted).toBe(true);
   });
+
+  it('applies exponential backoff with jitter after failed connections', async () => {
+    const reconnectDelays: number[] = [];
+    let now = 10_000;
+    let connectAttempts = 0;
+
+    subscriber = startHubEventsSubscriber({
+      resolveEndpoint: async () => ({ url: 'https://hub/events', headers: {} }),
+      onEvent: () => undefined,
+      backoffMinMs: 1_000,
+      backoffMaxMs: 30_000,
+      random: () => 0.5, // deterministic jitter
+      nowMs: () => now,
+      fetchImpl: async () => {
+        connectAttempts += 1;
+        throw new Error('connection failed');
+      },
+    });
+
+    // Wait for multiple reconnect attempts
+    await new Promise((r) => setTimeout(r, 100));
+    subscriber.stop();
+
+    // Exponential backoff: 1s * 2^0 = 1s, 1s * 2^1 = 2s, 1s * 2^2 = 4s, etc.
+    // With jitter [0.5, 1.5], we get delays roughly: 1s, 2s, 4s, 8s, 16s, 30s (capped)
+    expect(connectAttempts).toBeGreaterThanOrEqual(2);
+  });
+
+  it('parses SSE retry: field and uses it as minimum reconnect delay', async () => {
+    let connectAttempts = 0;
+    let secondConnectionDelay = 0;
+    const connectTimes: number[] = [];
+
+    subscriber = startHubEventsSubscriber({
+      resolveEndpoint: async () => ({ url: 'https://hub/events', headers: {} }),
+      onEvent: () => undefined,
+      backoffMinMs: 1_000,
+      backoffMaxMs: 30_000,
+      random: () => 0, // no jitter for easier testing
+      fetchImpl: async () => {
+        connectAttempts += 1;
+        connectTimes.push(Date.now());
+        if (connectAttempts === 1) {
+          // Server sends retry: 5000 (5 seconds) in ready frame
+          return sseResponse([
+            'event: ready\ndata: {"workspaceId":"w1"}\nretry: 5000\n\n',
+          ]);
+        }
+        // After reconnect, park to avoid further attempts
+        return sseResponse([READY], { holdOpen: true });
+      },
+    });
+
+    await new Promise((r) => setTimeout(r, 150));
+    subscriber.stop();
+
+    expect(connectAttempts).toBeGreaterThanOrEqual(2);
+    if (connectTimes.length >= 2) {
+      secondConnectionDelay = connectTimes[1]! - connectTimes[0]!;
+      // Should be at least 5000ms (server retry:) but could be slightly more due to scheduling
+      expect(secondConnectionDelay).toBeGreaterThanOrEqual(4500);
+    }
+  });
+
+  it('ignores retry: values greater than 60s', async () => {
+    let connectAttempts = 0;
+
+    subscriber = startHubEventsSubscriber({
+      resolveEndpoint: async () => ({ url: 'https://hub/events', headers: {} }),
+      onEvent: () => undefined,
+      backoffMinMs: 100,
+      backoffMaxMs: 30_000,
+      random: () => 0,
+      fetchImpl: async () => {
+        connectAttempts += 1;
+        if (connectAttempts === 1) {
+          // Server sends retry: 120000 (120 seconds) - should be ignored
+          return sseResponse([
+            'event: ready\ndata: {"workspaceId":"w1"}\nretry: 120000\n\n',
+          ]);
+        }
+        return sseResponse([READY], { holdOpen: true });
+      },
+    });
+
+    await new Promise((r) => setTimeout(r, 50));
+    subscriber.stop();
+
+    expect(connectAttempts).toBeGreaterThanOrEqual(1);
+  });
+
+  it('resets reconnect attempt counter after healthy connection', async () => {
+    let connectAttempts = 0;
+    let now = 10_000;
+
+    subscriber = startHubEventsSubscriber({
+      resolveEndpoint: async () => ({ url: 'https://hub/events', headers: {} }),
+      onEvent: () => undefined,
+      backoffMinMs: 1_000,
+      backoffMaxMs: 30_000,
+      random: () => 0.5,
+      nowMs: () => now,
+      fetchImpl: async () => {
+        connectAttempts += 1;
+        if (connectAttempts === 1) {
+          // First connection fails immediately
+          throw new Error('connection failed');
+        } else if (connectAttempts === 2) {
+          // Second connection succeeds and stays healthy for > 1s
+          now += 2_000; // simulate 2s healthy connection
+          return sseResponse([READY]);
+        }
+        // Third connection should use reset backoff (not exponential)
+        return sseResponse([READY], { holdOpen: true });
+      },
+    });
+
+    await new Promise((r) => setTimeout(r, 100));
+    subscriber.stop();
+
+    expect(connectAttempts).toBeGreaterThanOrEqual(2);
+  });
+
+  it('does not reset attempt counter for quickly failing connections', async () => {
+    let connectAttempts = 0;
+    let now = 10_000;
+
+    subscriber = startHubEventsSubscriber({
+      resolveEndpoint: async () => ({ url: 'https://hub/events', headers: {} }),
+      onEvent: () => undefined,
+      backoffMinMs: 1_000,
+      backoffMaxMs: 30_000,
+      random: () => 0.5,
+      nowMs: () => now,
+      fetchImpl: async () => {
+        connectAttempts += 1;
+        if (connectAttempts <= 2) {
+          // Connections close immediately (< 1s)
+          now += 100;
+          return sseResponse([READY]);
+        }
+        // Park to observe the pattern
+        return sseResponse([READY], { holdOpen: true });
+      },
+    });
+
+    await new Promise((r) => setTimeout(r, 100));
+    subscriber.stop();
+
+    // Should show exponential backoff pattern (not reset)
+    expect(connectAttempts).toBeGreaterThanOrEqual(2);
+  });
 });

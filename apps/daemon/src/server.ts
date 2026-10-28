@@ -6448,6 +6448,34 @@ export async function startServer({
       });
     }
   };
+
+  /**
+   * Run catch-up tasks with staggered delays (0-5s random jitter) and
+   * concurrency limit (1-2 concurrent tasks) to avoid thundering herd after
+   * SSE reconnect. Each task is wrapped in a delay+catch so one failure does
+   * not stop others.
+   */
+  const staggeredCatchUp = async (tasks: Array<() => Promise<void>>): Promise<void> => {
+    const delayedTasks = tasks.map((task, index) => {
+      const jitterMs = Math.floor(Math.random() * 5000);
+      return async () => {
+        await new Promise(resolve => setTimeout(resolve, jitterMs));
+        return task().catch(() => undefined);
+      };
+    });
+    const concurrency = 2;
+    const executing: Array<Promise<void>> = [];
+    for (const task of delayedTasks) {
+      const promise = task().then(() => {
+        executing.splice(executing.indexOf(promise), 1);
+      });
+      executing.push(promise);
+      if (executing.length >= concurrency) {
+        await Promise.race(executing);
+      }
+    }
+    await Promise.all(executing);
+  };
   const syncWorkspaceDirectoryRealtimeHealth = (): void => {
     const currentIdentity = currentWorkspaceDirectoryIdentity();
     workspaceDirectoryAuthority.setRealtimeHealthy(
@@ -7042,26 +7070,20 @@ export async function startServer({
       }
       // Close the disconnect gap: one catch-up cycle over the same reads the
       // pollers watch, plus a comment pull for open projects.
-      void refreshWorkspaceDigestFaces(
-        subscribedWorkspaceId,
-        { revalidate: true },
-      )
-        .then(() =>
-          pollWorkspaceInvalidationForWorkspace(subscribedWorkspaceId),
-        )
-        .catch(() => undefined);
-      void reconcileWorkspaceProjectsFromRemote(subscribedWorkspaceId)
-        .catch(() => undefined);
-      void proactiveContentPull.catchUpPublishedHeads(subscribedWorkspaceId)
-        .catch(() => undefined);
-      void collabCloud?.pollOnce().catch(() => undefined);
-      workspaceBillingRuntime.reconnect(subscribedWorkspaceId);
-      // Same catch-up principle for the design-system/plugin/skill resource
-      // reconciler: a missed 'team-resources-changed' push during the
-      // disconnect window is closed by one full re-check across every kind
-      // this daemon drives it for (no resourceKind => reconcile all).
-      void reconcileTeamResourcesFromRemote(undefined, subscribedWorkspaceId, 'catch-up')
-        .catch(() => undefined);
+      // Run tasks with staggered delays (0-5s jitter) and concurrency 1-2 to
+      // avoid thundering herd when ~1000 workspaces reconnect simultaneously.
+      void staggeredCatchUp([
+        async () => {
+          await refreshWorkspaceDigestFaces(subscribedWorkspaceId, { revalidate: true });
+          await pollWorkspaceInvalidationForWorkspace(subscribedWorkspaceId);
+        },
+        () => reconcileWorkspaceProjectsFromRemote(subscribedWorkspaceId),
+        () => proactiveContentPull.catchUpPublishedHeads(subscribedWorkspaceId),
+        () => collabCloud?.pollOnce() ?? Promise.resolve(),
+        // Billing refresh after reconnect (not on disconnect) with jitter
+        () => workspaceBillingRuntime.reconnect(subscribedWorkspaceId),
+        () => reconcileTeamResourcesFromRemote(undefined, subscribedWorkspaceId, 'catch-up'),
+      ]);
     },
     onSourceGap: ({ workspaceId, identityKey, listenerEpoch }) => {
       if (

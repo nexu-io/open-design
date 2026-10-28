@@ -360,6 +360,8 @@ export interface HubEventsSubscriberOptions {
   backoffMaxMs?: number;
   /** Injectable jitter source for deterministic reconnect tests. */
   random?: () => number;
+  /** Injectable clock for deterministic backoff tests. */
+  nowMs?: () => number;
 }
 
 export interface HubEventsSubscriber {
@@ -375,11 +377,14 @@ export function startHubEventsSubscriber(options: HubEventsSubscriberOptions): H
   const backoffMinMs = options.backoffMinMs ?? 1_000;
   const backoffMaxMs = options.backoffMaxMs ?? 30_000;
   const random = options.random ?? Math.random;
+  const nowMs = options.nowMs ?? Date.now;
 
   let stopped = false;
   let isConnected = false;
   let everConnected = false;
-  let backoffMs = backoffMinMs;
+  let reconnectAttempt = 0;
+  let serverRetryMs: number | null = null;
+  let lastHealthyConnectionAt: number | null = null;
   let abortController: AbortController | null = null;
   let wakeSleep: (() => void) | null = null;
   let endpointGeneration = 0;
@@ -407,13 +412,30 @@ export function startHubEventsSubscriber(options: HubEventsSubscriberOptions): H
         resolve();
       };
     });
-  const jitteredBackoff = (ms: number): number =>
-    Math.max(
-      1,
-      Math.floor(
-        ms * (1 + Math.min(0.999_999, Math.max(0, random())) * 0.5),
-      ),
-    );
+  
+  /**
+   * Compute exponential backoff with jitter:
+   * delay = max(serverRetry, baseMs * 2^attempt * jitter[0.5, 1.5])
+   * capped at maxMs (30s).
+   */
+  const computeReconnectDelay = (): number => {
+    const baseDelay = backoffMinMs * Math.pow(2, reconnectAttempt);
+    const jitter = 0.5 + random();
+    const exponentialDelay = Math.floor(baseDelay * jitter);
+    const effectiveMin = serverRetryMs ?? backoffMinMs;
+    return Math.min(Math.max(effectiveMin, exponentialDelay), backoffMaxMs);
+  };
+
+  /**
+   * Parse SSE retry: field (milliseconds). Ignore values > 60s or invalid.
+   */
+  const parseRetryField = (value: string): number | null => {
+    const trimmed = value.trim();
+    if (!/^\d+$/.test(trimmed)) return null;
+    const ms = Number(trimmed);
+    if (!Number.isFinite(ms) || ms > 60_000) return null;
+    return ms;
+  };
 
   async function consumeStream(
     endpoint: HubEventsEndpoint,
@@ -551,6 +573,10 @@ export function startHubEventsSubscriber(options: HubEventsSubscriberOptions): H
           for (const line of rawEvent.split('\n')) {
             if (line.startsWith('event:')) eventName = line.slice(6).trim();
             else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+            else if (line.startsWith('retry:')) {
+              const retryValue = parseRetryField(line.slice(6));
+              if (retryValue !== null) serverRetryMs = retryValue;
+            }
           }
           const data = dataLines.join('\n');
           if (eventName === 'ready') {
@@ -580,11 +606,11 @@ export function startHubEventsSubscriber(options: HubEventsSubscriberOptions): H
             scopeVerified = true;
             verifiedWorkspaceId = actualWorkspaceId;
             verifiedCapabilities = [...ready.capabilities];
-            // A verified connection has recovered from prior transport
-            // failures. Terminal revocation below deliberately overrides this
-            // with the maximum retry delay.
-            backoffMs = backoffMinMs;
+            // A verified connection has recovered from prior transport failures.
+            // Terminal revocation below deliberately overrides this with the
+            // maximum retry delay.
             setConnected(true, endpoint.identityKey);
+            lastHealthyConnectionAt = nowMs();
             revisionClocksEnabled = ready.capabilities.includes(
               BILLING_REVISION_CLOCKS_CAPABILITY,
             );
@@ -752,31 +778,49 @@ export function startHubEventsSubscriber(options: HubEventsSubscriberOptions): H
         if (generation !== endpointGeneration) continue;
         if (!endpoint) {
           // Signed out / no team workspace — idle at max backoff, keep probing.
-          await sleep(jitteredBackoff(backoffMaxMs));
+          await sleep(computeReconnectDelay());
           continue;
         }
         const outcome = await consumeStream(endpoint);
         if (generation !== endpointGeneration) {
-          backoffMs = backoffMinMs;
+          reconnectAttempt = 0;
+          serverRetryMs = null;
           continue;
         }
         // Server closed cleanly (deploy/restart) — reconnect promptly. A
         // terminal revocation or untrusted ready frame must not become a
         // one-request-per-second loop; probe only at the bounded maximum until
         // membership, deployment, or scope changes.
-        backoffMs = outcome === 'closed' ? backoffMinMs : backoffMaxMs;
+        if (outcome !== 'closed') {
+          // Terminal revocation or rejected connection — do not reset attempt
+          reconnectAttempt = Math.min(reconnectAttempt + 1, 10);
+        }
+        // For clean closes, check if the connection was healthy long enough
+        // to reset the backoff attempt counter (stayed connected for at least
+        // the backoff base duration).
+        if (
+          outcome === 'closed' &&
+          lastHealthyConnectionAt !== null &&
+          nowMs() - lastHealthyConnectionAt >= backoffMinMs
+        ) {
+          reconnectAttempt = 0;
+        }
       } catch (error) {
         // Deliberately aborting the old workspace stream is not a transport
         // failure and must not surface a misleading reconnect warning.
-        if (!stopped && generation === endpointGeneration) options.onError?.(error);
+        if (!stopped && generation === endpointGeneration) {
+          options.onError?.(error);
+          reconnectAttempt = Math.min(reconnectAttempt + 1, 10);
+        }
       }
       if (stopped) break;
       if (generation !== endpointGeneration) {
-        backoffMs = backoffMinMs;
+        reconnectAttempt = 0;
+        serverRetryMs = null;
         continue;
       }
-      await sleep(jitteredBackoff(backoffMs));
-      backoffMs = Math.min(backoffMs * 2, backoffMaxMs);
+      const delay = computeReconnectDelay();
+      await sleep(delay);
     }
   })();
 
@@ -790,6 +834,8 @@ export function startHubEventsSubscriber(options: HubEventsSubscriberOptions): H
     refreshEndpoint() {
       if (stopped) return;
       endpointGeneration += 1;
+      reconnectAttempt = 0;
+      serverRetryMs = null;
       abortController?.abort();
       wakeSleep?.();
     },

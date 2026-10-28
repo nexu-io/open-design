@@ -8,7 +8,7 @@ import type {
   WorkspaceTeamBillingPlanId,
   WorkspaceWalletBalance,
 } from '@open-design/contracts';
-import { runVelaCommand } from './vela-command.js';
+import { runVelaCommand, velaCommandStdout } from './vela-command.js';
 
 // A-lane billing 收口. Instead of the daemon holding billing credentials, it
 // shells out to `vela billing summary --format json`, which authenticates with
@@ -22,6 +22,82 @@ import { runVelaCommand } from './vela-command.js';
 
 /** Run `vela billing <args>` and resolve its stdout. */
 export type RunVelaBilling = (args: string[]) => Promise<string>;
+
+/**
+ * Vela CLI machine-readable error format (vela PR #393).
+ * For billing commands run with `--format json`, on failure the CLI writes
+ * ONE JSON line to stdout, exits with code 1.
+ * Example: {"error":"fetch billing summary: API request failed with status 503: database_busy (retry after 2s)","errorCode":"database_busy","code":"database_busy","status":503,"retryAfterMs":2000}
+ */
+interface VelaBillingErrorPayload {
+  error: string;
+  errorCode?: string;
+  code?: string;
+  status?: number;
+  retryAfterMs?: number;
+}
+
+/**
+ * Parse one vela CLI failure stdout (vela PR #393). Billing commands invoked
+ * with `--format json` write a single JSON line on failure and exit 1.
+ * Extra or non-JSON lines, missing fields, and older CLIs that print nothing
+ * are ignored. `retryAfterMs` above 60s is not a usable hint.
+ */
+export function readVelaBillingCommandFailure(stdout: string): {
+  status?: number;
+  code?: string;
+  retryAfterMs?: number;
+} | null {
+  if (!stdout) return null;
+  for (const line of stdout.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('{')) continue;
+    let payload: VelaBillingErrorPayload;
+    try {
+      payload = JSON.parse(trimmed) as VelaBillingErrorPayload;
+    } catch {
+      continue;
+    }
+    if (!payload || typeof payload !== 'object' || typeof payload.error !== 'string') {
+      continue;
+    }
+    const failure: { status?: number; code?: string; retryAfterMs?: number } = {};
+    if (typeof payload.status === 'number' && Number.isFinite(payload.status)) {
+      failure.status = payload.status;
+    }
+    const code = typeof payload.code === 'string' && payload.code.trim()
+      ? payload.code.trim()
+      : typeof payload.errorCode === 'string' && payload.errorCode.trim()
+        ? payload.errorCode.trim()
+        : '';
+    if (code) failure.code = code;
+    if (
+      typeof payload.retryAfterMs === 'number' &&
+      Number.isInteger(payload.retryAfterMs) &&
+      payload.retryAfterMs >= 0 &&
+      payload.retryAfterMs <= 60_000
+    ) {
+      failure.retryAfterMs = payload.retryAfterMs;
+    }
+    return failure;
+  }
+  return null;
+}
+
+/**
+ * Copy status, code, and retryAfterMs from a failed billing command's stdout
+ * onto the rejection so workspace billing retries can honor Retry-After.
+ */
+function enrichVelaBillingError(error: unknown): unknown {
+  if (!error || typeof error !== 'object') return error;
+  const failure = readVelaBillingCommandFailure(velaCommandStdout(error));
+  if (!failure) return error;
+  const target = error as { status?: number; code?: string; retryAfterMs?: number };
+  if (failure.status !== undefined) target.status = failure.status;
+  if (failure.code !== undefined) target.code = failure.code;
+  if (failure.retryAfterMs !== undefined) target.retryAfterMs = failure.retryAfterMs;
+  return error;
+}
 
 /** Wall-clock budget for `vela billing preflight`. A hung CLI must not pin
  * recovery polling or the workspace billing route. */
@@ -137,7 +213,10 @@ export function isVelaWorkspaceAuthorizationError(error: unknown): boolean {
   ) {
     return true;
   }
-  const message = error instanceof Error ? error.message : String(error ?? '');
+  const message = [
+    error instanceof Error ? error.message : String(error ?? ''),
+    velaCommandStdout(error),
+  ].join('\n');
   return (
     /api request failed with status (?:401|403)(?::|\b)/i.test(message) ||
     /\b(?:workspace_not_authorized|workspace_access_revoked|auth_required)\b/i.test(
@@ -598,7 +677,14 @@ function parseTeamPlanId(value: unknown): WorkspaceTeamBillingPlanId | null {
 }
 
 function resolveVelaBillingRunner(options: FetchVelaBillingOptions): RunVelaBilling {
-  return options.run ?? ((args) => defaultRunVelaBilling(args, options.configuredEnv));
+  const run = options.run ?? ((args) => defaultRunVelaBilling(args, options.configuredEnv));
+  return async (args) => {
+    try {
+      return await run(args);
+    } catch (error) {
+      throw enrichVelaBillingError(error);
+    }
+  };
 }
 
 const defaultRunVelaBilling = async (
@@ -632,6 +718,7 @@ const defaultRunVelaBilling = async (
 function isWorkspaceBillingSnapshotUnsupported(error: unknown, stderr: string): boolean {
   const detail = [
     stderr,
+    velaCommandStdout(error),
     error instanceof Error ? error.message : String(error),
   ].join('\n').toLowerCase();
   return (

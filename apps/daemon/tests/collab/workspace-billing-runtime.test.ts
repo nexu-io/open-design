@@ -761,8 +761,13 @@ describe('WorkspaceBillingRuntimeCoordinator', () => {
 
     runtime.setRealtimeHealthy('workspace-a', false);
     await Promise.resolve();
-    expect(calls).toBe(3);
-    expect(runtime.peek(KEY_A)?.state.reason).toBe('reconnect');
+    // Disconnect must not start a second billing refresh. Polling resumes on
+    // the next floor tick instead.
+    expect(calls).toBe(2);
+
+    await vi.advanceTimersByTimeAsync(10);
+    await vi.waitFor(() => expect(calls).toBe(3));
+    expect(runtime.peek(KEY_A)?.state.reason).toBe('poll-floor');
     runtime.dispose();
   });
 
@@ -1047,11 +1052,12 @@ describe('WorkspaceBillingRuntimeCoordinator', () => {
     expect(webReadAfterErrorSignal.state.status).toBe('error');
     expect(calls).toBe(1);
 
-    await vi.advanceTimersByTimeAsync(5_000);
+    // Jitter can stretch 5s/15s up to 1.2x. Advance past that ceiling.
+    await vi.advanceTimersByTimeAsync(6_000);
     await vi.waitFor(() => expect(calls).toBe(2));
     expect(runtime.peek(KEY_A)?.state.status).toBe('error');
 
-    await vi.advanceTimersByTimeAsync(15_000);
+    await vi.advanceTimersByTimeAsync(18_000);
     await vi.waitFor(() => expect(calls).toBe(3));
     expect(runtime.peek(KEY_A)).toMatchObject({
       projection: { workspaceBalance: { balanceUsd: '5.00' } },
@@ -1530,6 +1536,185 @@ describe('WorkspaceBillingRuntimeCoordinator', () => {
     held.get('workspace-d')!.resolve(projection('workspace-d', 'member-d', '1'));
     await Promise.all(reads);
     expect(peak).toBeLessThanOrEqual(2);
+    runtime.dispose();
+  });
+
+  it('applies jitter to retry delays', async () => {
+    vi.useFakeTimers();
+    let fetchCount = 0;
+    const retryDelays: number[] = [];
+    let lastFetchTime = 0;
+
+    const runtime = createWorkspaceBillingRuntimeCoordinator({
+      fetchProjection: async () => {
+        const now = Date.now();
+        if (fetchCount > 0) {
+          retryDelays.push(now - lastFetchTime);
+        }
+        lastFetchTime = now;
+        fetchCount += 1;
+        throw new Error('simulated fetch failure');
+      },
+      retryDelaysMs: [5_000, 15_000, 30_000],
+      scheduler: {
+        now: () => Date.now(),
+        setTimeout: (cb, ms) => setTimeout(cb, ms),
+        clearTimeout: (timer) => clearTimeout(timer),
+        setInterval: (cb, ms) => setInterval(cb, ms),
+        clearInterval: (timer) => clearInterval(timer),
+        random: () => 0.5, // deterministic jitter: 0.8 + 0.5 * 0.4 = 1.0
+      },
+    });
+
+    void runtime.read(KEY_A);
+    
+    // Wait for initial fetch + 2 retries
+    await vi.waitFor(() => expect(fetchCount).toBeGreaterThanOrEqual(1));
+    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.waitFor(() => expect(fetchCount).toBeGreaterThanOrEqual(2));
+    await vi.advanceTimersByTimeAsync(15_000);
+    await vi.waitFor(() => expect(fetchCount).toBeGreaterThanOrEqual(3));
+
+    // Verify jitter was applied (should be exactly base delay with jitter=1.0)
+    expect(retryDelays[0]).toBeGreaterThanOrEqual(4_000); // 5s * 0.8
+    expect(retryDelays[0]).toBeLessThanOrEqual(6_000);     // 5s * 1.2
+    
+    runtime.dispose();
+  });
+
+  it('does not refresh billing on disconnect (setRealtimeHealthy false)', async () => {
+    let fetchCount = 0;
+    const runtime = createWorkspaceBillingRuntimeCoordinator({
+      fetchProjection: async () => {
+        fetchCount += 1;
+        return projection('workspace-a', 'member-a', '1.00');
+      },
+    });
+
+    runtime.setClientInterests({
+      clientId: 'test',
+      clientGeneration: '1',
+      interests: [KEY_A],
+    });
+
+    await runtime.read(KEY_A, { clientId: 'test', clientGeneration: '1' });
+    const afterConnect = fetchCount;
+
+    // Simulate disconnect
+    runtime.setRealtimeHealthy('workspace-a', false);
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Should NOT have triggered a billing refresh
+    expect(fetchCount).toBe(afterConnect);
+
+    runtime.dispose();
+  });
+
+  it('refreshes billing after reconnect with explicit reconnect() call', async () => {
+    let fetchCount = 0;
+    const runtime = createWorkspaceBillingRuntimeCoordinator({
+      fetchProjection: async () => {
+        fetchCount += 1;
+        return projection('workspace-a', 'member-a', `${fetchCount}.00`);
+      },
+    });
+
+    runtime.setClientInterests({
+      clientId: 'test',
+      clientGeneration: '1',
+      interests: [KEY_A],
+    });
+
+    await runtime.read(KEY_A, { clientId: 'test', clientGeneration: '1' });
+    const afterConnect = fetchCount;
+
+    // Simulate disconnect (should NOT refresh)
+    runtime.setRealtimeHealthy('workspace-a', false);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(fetchCount).toBe(afterConnect);
+
+    // Simulate reconnect via explicit reconnect() call
+    runtime.reconnect('workspace-a');
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Should have triggered a billing refresh
+    expect(fetchCount).toBe(afterConnect + 1);
+
+    runtime.dispose();
+  });
+
+  it('keeps the jittered retry floor when retryAfterMs is shorter', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    let calls = 0;
+    const runtime = createWorkspaceBillingRuntimeCoordinator({
+      fetchProjection: async () => {
+        calls += 1;
+        if (calls === 1) {
+          throw Object.assign(new Error('database_busy'), {
+            code: 'database_busy',
+            status: 503,
+            retryAfterMs: 2_000,
+          });
+        }
+        return projection('workspace-a', 'member-a', '1.00');
+      },
+      retryDelaysMs: [5_000],
+      scheduler: {
+        now: () => Date.now(),
+        setTimeout: (callback, delayMs) => setTimeout(callback, delayMs),
+        clearTimeout: (timer) => clearTimeout(timer),
+        setInterval: (callback, delayMs) => setInterval(callback, delayMs),
+        clearInterval: (timer) => clearInterval(timer),
+        random: () => 0,
+      },
+    });
+
+    await runtime.read(KEY_A);
+    expect(calls).toBe(1);
+    await vi.advanceTimersByTimeAsync(3_999);
+    expect(calls).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await vi.waitFor(() => expect(calls).toBe(2));
+    runtime.dispose();
+  });
+
+  it('extends the jittered retry floor up to retryAfterMs from a 503', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    let calls = 0;
+    const runtime = createWorkspaceBillingRuntimeCoordinator({
+      fetchProjection: async () => {
+        calls += 1;
+        if (calls === 1) {
+          throw Object.assign(new Error('database_busy'), {
+            code: 'database_busy',
+            status: 503,
+            retryAfterMs: 8_000,
+          });
+        }
+        return projection('workspace-a', 'member-a', '1.00');
+      },
+      retryDelaysMs: [5_000],
+      scheduler: {
+        now: () => Date.now(),
+        setTimeout: (callback, delayMs) => setTimeout(callback, delayMs),
+        clearTimeout: (timer) => clearTimeout(timer),
+        setInterval: (callback, delayMs) => setInterval(callback, delayMs),
+        clearInterval: (timer) => clearInterval(timer),
+        random: () => 1,
+      },
+    });
+
+    await runtime.read(KEY_A);
+    await vi.advanceTimersByTimeAsync(7_999);
+    expect(calls).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await vi.waitFor(() => expect(calls).toBe(2));
+    expect(runtime.peek(KEY_A)?.state).toMatchObject({
+      status: 'fresh',
+      errorCode: null,
+    });
     runtime.dispose();
   });
 });
