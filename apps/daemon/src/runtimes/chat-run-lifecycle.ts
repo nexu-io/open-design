@@ -148,6 +148,42 @@ export function applyClaudeStreamJsonRunBookkeeping(
 }
 
 /**
+ * Whether a decoded Claude stream event represents progress toward an answer
+ * or a tool action. Raw stdout and thinking deltas are deliberately excluded:
+ * a CLI can keep emitting reasoning frames after the model has stopped making
+ * forward progress, which must not keep the run's inactivity watchdog alive.
+ */
+export function claudeStreamEventCountsAsActionableProgress(ev: unknown): boolean {
+  if (!ev || typeof ev !== 'object') return false;
+  const event = ev as { type?: unknown; delta?: unknown };
+  if (event.type === 'text_delta') {
+    return typeof event.delta === 'string' && event.delta.length > 0;
+  }
+  return event.type === 'tool_use'
+    || event.type === 'tool_result'
+    || event.type === 'artifact'
+    || event.type === 'turn_end'
+    || event.type === 'usage';
+}
+
+/**
+ * Production runs represent an explicit deliverable request. A clean CLI exit
+ * with only a text acknowledgement must not be reported as success unless the
+ * run actually created or registered an artifact.
+ */
+export function productionRunMissingArtifact(params: {
+  inputStage?: unknown;
+  code: number | null;
+  cancelRequested: boolean;
+  artifactProducedThisRun: boolean;
+}): boolean {
+  return params.inputStage === 'production'
+    && params.code === 0
+    && !params.cancelRequested
+    && !params.artifactProducedThisRun;
+}
+
+/**
  * Whether an emission from a runtime adapter counts as *agent progress* for the
  * inactivity clock (`run.lastAgentActivityAt`, exported to analytics as
  * `last_progress_age_ms`).

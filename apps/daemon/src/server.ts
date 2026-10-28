@@ -138,6 +138,8 @@ import {
   recordPromptDeliveredAtSpawn,
   runtimeReadsPlainTextPromptFromStdin,
   applyClaudeStreamJsonRunBookkeeping,
+  claudeStreamEventCountsAsActionableProgress,
+  productionRunMissingArtifact,
   assertValidRuntimeDefFirstOutputTimeoutMs,
   assertValidRuntimeDefInactivityTimeoutMs,
   classifyChatRunCloseStatus,
@@ -200,6 +202,8 @@ export {
 } from './runtimes/chat-prompt-inputs.js';
 export {
   applyClaudeStreamJsonRunBookkeeping,
+  claudeStreamEventCountsAsActionableProgress,
+  productionRunMissingArtifact,
   assertValidRuntimeDefFirstOutputTimeoutMs,
   assertValidRuntimeDefInactivityTimeoutMs,
   classifyChatRunCloseStatus,
@@ -14569,7 +14573,9 @@ export async function startServer({
         const timeoutDescription =
           reason === 'first_output'
             ? 'without emitting a first output'
-            : 'without emitting any new output';
+            : def.streamFormat === 'claude-stream-json'
+              ? 'without producing a response or making tool progress'
+              : 'without emitting any new output';
         const message =
           `Agent stalled ${timeoutDescription} for ${Math.round(timeoutMs / 1000)}s. ` +
           'The model or CLI likely hung while generating. ' +
@@ -15116,7 +15122,10 @@ export async function startServer({
     // long time in non-streamed reasoning still keep the run alive.
     child.stdout.on('data', (chunk) => {
       childStdoutSeen = true;
-      noteAgentActivity();
+      // Claude's decoded event handler owns its inactivity clock. Raw JSONL
+      // chunks and thinking-only frames are not evidence of actionable model
+      // progress, so they must not keep a stalled tool call alive.
+      if (def.streamFormat !== 'claude-stream-json') noteAgentActivity();
       agentStdoutTail = `${agentStdoutTail}${chunk}`.slice(-2000);
     });
 
@@ -16000,7 +16009,9 @@ export async function startServer({
           return;
         }
         lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
-        noteAgentActivity();
+        if (claudeStreamEventCountsAsActionableProgress(ev)) {
+          noteAgentActivity();
+        }
         if (ev?.type === 'text_delta' && typeof ev.delta === 'string') {
           const visibleDelta = titleMarkerStripper.strip(ev.delta);
           if (visibleDelta) {
@@ -16520,7 +16531,9 @@ export async function startServer({
     // instead of raw SIGTERM (applies to pi-rpc and acp-json-rpc).
     run.acpSession = acpSession;
     child.stderr.on('data', (chunk) => {
-      noteAgentActivity();
+      // For Claude stream-json, stderr diagnostics do not prove that the model
+      // is still progressing toward a response or tool action.
+      if (def.streamFormat !== 'claude-stream-json') noteAgentActivity();
       emitVisibleAgentStderr(chunk);
     });
 
@@ -16822,6 +16835,24 @@ export async function startServer({
         ));
         return finishWithRetryDecision('failed', code, signal);
       }
+      const runArtifactSideEffects = runSideEffectsForRun(run);
+      const artifactProducedThisRun =
+        runArtifactSideEffects.artifactWriteSeen ||
+        runArtifactSideEffects.liveArtifactSeen;
+      if (productionRunMissingArtifact({
+        inputStage: strategyTaskAtStart?.inputStage,
+        code,
+        cancelRequested: !!run.cancelRequested,
+        artifactProducedThisRun,
+      })) {
+        markRpcCloseReason('empty_output');
+        send('error', createSseErrorPayload(
+          'AGENT_EXECUTION_FAILED',
+          'The production run finished without creating an artifact. The selected model may have skipped its file-writing tool. Retry with a tool-capable model or ask it to create the requested file.',
+          { retryable: true },
+        ));
+        return finishWithRetryDecision('failed', code, signal);
+      }
       if (
         code === 0 &&
         !run.cancelRequested &&
@@ -16900,7 +16931,6 @@ export async function startServer({
       const acpCleanCompletion =
         typeof acpSession?.completedSuccessfully === 'function' &&
         acpSession.completedSuccessfully();
-      const runArtifactSideEffects = runSideEffectsForRun(run);
       const status = classifyChatRunCloseStatus({
         cancelRequested: !!run.cancelRequested,
         code,
@@ -16912,9 +16942,7 @@ export async function startServer({
         ),
         artifactQuietShutdownRequested,
         turnCompletedCleanly: !!run.turnCompletedCleanly,
-        artifactProducedThisRun:
-          runArtifactSideEffects.artifactWriteSeen ||
-          runArtifactSideEffects.liveArtifactSeen,
+        artifactProducedThisRun,
       });
       // Skip the close-handler failure emit when the run is already
       // terminal: the inactivity watchdog (failForInactivity) finishes the
