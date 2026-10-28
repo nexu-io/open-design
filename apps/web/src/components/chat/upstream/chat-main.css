@@ -11639,7 +11639,6 @@ body.entry-resizing:where([data-chat-root], [data-chat-root] *) { cursor: col-re
   position: relative;
   flex: 1 1 auto;
   min-width: 0;
-  -webkit-app-region: no-drag;
 }
 .workspace-tabs-dropdown__trigger:where([data-chat-root], [data-chat-root] *) {
   appearance: none;

@@ -15,7 +15,7 @@ import {
   type SetStateAction,
 } from 'react';
 import { AnimatePresence } from 'motion/react';
-import { WorkspaceEditLayout } from './workspace/WorkspaceEditLayout';
+import { WorkspaceEditLayout, WorkspacePreviewToggle } from './workspace/WorkspaceEditLayout';
 import { createHtmlArtifactManifest, inferLegacyManifest } from '../artifacts/manifest';
 import { resolveHtmlPointerArtifactTarget } from '../artifacts/pointer';
 import { validateHtmlArtifact } from '../artifacts/validate';
@@ -108,6 +108,7 @@ import {
   peekOnboardingSessionId,
 } from '../analytics/onboarding-session';
 import { navigate } from '../router';
+import { CONVERSATION_MOVED_EVENT, type ConversationMovedDetail } from '../state/conversation-events';
 import { agentDisplayName, agentModelDisplayName } from '../utils/agentLabels';
 import { isMacPlatform } from '../utils/platform';
 import {
@@ -195,6 +196,7 @@ import {
   listConversations,
   listMessages,
   loadTabs,
+  moveConversation as moveConversationApi,
   patchConversation,
   patchProject,
   ProjectConversationsHttpError,
@@ -2259,7 +2261,12 @@ export function ProjectView({
   const [floatingConversationOpen, setFloatingConversationOpen] = useState(false);
   const floatingConversationExpanded = workspaceFocused && floatingConversationOpen;
   useEffect(() => { setFloatingConversationOpen(false); }, [workspaceFocused, activeConversationId]);
-  const [conversationPlacement, setConversationPlacement] = useState<ConversationPlacement>('left');
+  const [conversationPlacement, setConversationPlacement] = useState<ConversationPlacement>(
+    () => routeFileName || projectIsDesignSystemProject ? 'left' : 'full',
+  );
+  const previousSplitPlacementRef = useRef<Exclude<ConversationPlacement, 'full'>>('left');
+  if (conversationPlacement !== 'full') previousSplitPlacementRef.current = conversationPlacement;
+  const previewPanelId = `project-preview-${project.id}`;
   // Read by `renderPreferredChatPanelWidth` instead of closing over
   // `workspaceFocused` directly, so that callback's identity (and therefore
   // the ResizeObserver effect keyed on it, below) doesn't need to depend on
@@ -3521,6 +3528,16 @@ export function ProjectView({
     setOpenRequest({ name, nonce: Date.now() });
   }, []);
 
+  // Artifact discovery may prepare tabs in the background. Only an explicit
+  // user action reveals the preview beside the conversation.
+  const revealArtifact = useCallback((name: string) => {
+    if (!name) return;
+    setConversationPlacement((placement) => placement === 'full'
+      ? previousSplitPlacementRef.current
+      : placement);
+    requestOpenFile(name);
+  }, [requestOpenFile]);
+
   useEffect(() => {
     if (!activeConversationId || pendingConversationPreviewRef.current !== activeConversationId
       || !messagesInitialized || messagesConversationId !== activeConversationId) return;
@@ -4063,8 +4080,8 @@ export function ProjectView({
   // (the parsed segment) so back/forward navigation triggers the same path.
   useEffect(() => {
     if (!routeFileName) return;
-    requestOpenFile(routeFileName);
-  }, [routeFileName, requestOpenFile]);
+    revealArtifact(routeFileName);
+  }, [routeFileName, revealArtifact]);
 
   // Sync the URL when the active tab changes, so reload + share-link both
   // land back on the same view. Replace (not push) on tab activation so the
@@ -4079,7 +4096,9 @@ export function ProjectView({
   const lastSyncedRouteKeyRef = useRef<string | null>(null);
   const lastSeenRouteConversationIdRef = useRef<string | null>(null);
   useEffect(() => {
-    const target = !pendingConversationPreviewRef.current && openTabsState.active && (
+    // Hidden background tabs must not turn a chat-only URL into a file link.
+    const target = (workspaceFocused || conversationPlacement !== 'full')
+      && !pendingConversationPreviewRef.current && openTabsState.active && (
       openTabsState.tabs.includes(openTabsState.active)
       || projectFileNames.has(openTabsState.active)
       || isLiveArtifactTabId(openTabsState.active)
@@ -4119,6 +4138,8 @@ export function ProjectView({
     project.id,
     activeConversationId,
     routeConversationId,
+    conversationPlacement,
+    workspaceFocused,
   ]);
 
   const handleEnsureProject = useCallback(async (): Promise<string | null> => {
@@ -9117,18 +9138,8 @@ export function ProjectView({
     setWorkspaceFocused(false);
     await handleNewConversation();
   }, [handleNewConversation]);
-  useEffect(() => {
-    onRailConversationsChange?.({
-      projectId: project.id,
-      conversations,
-      activeConversationId,
-      creating: creatingConversation || !messagesInitialized || projectCollab.viewerOnly,
-      newConversationPlacement: railNewConversationPlacement,
-      onCreate: createFromRail,
-      onSelect: handleSelectConversation,
-    });
-  }, [onRailConversationsChange, project.id, conversations, activeConversationId, creatingConversation, messagesInitialized, projectCollab.viewerOnly, railNewConversationPlacement, createFromRail, handleSelectConversation]);
-  useEffect(() => () => onRailConversationsChange?.(null), [onRailConversationsChange]);
+  const railConversationsLoading = conversations.length === 0 && activeConversationId === null
+    && pendingEmptyConversationSeed === null && !conversationLoadError;
 
   const refreshConversationsForProgrammaticBrandRetry = useCallback(
     async (conversationId: string): Promise<boolean> => {
@@ -9197,6 +9208,40 @@ export function ProjectView({
     ],
   );
 
+  // Moving the open conversation follows it into the target project; moving
+  // any other one just drops it from this list.
+  const handleMoveConversation = useCallback(
+    async (id: string, targetProjectId: string) => {
+      const moved = await moveConversationApi(
+        project.id,
+        id,
+        targetProjectId,
+        projectRunWorkspaceContext,
+      );
+      if (!moved) return false;
+      onProjectsRefresh();
+      if (id === activeConversationId) {
+        navigate({ kind: 'project', projectId: targetProjectId, conversationId: id, fileName: null });
+        return true;
+      }
+      setConversations((curr) => curr.filter((c) => c.id !== id));
+      return true;
+    },
+    [project.id, activeConversationId, onProjectsRefresh, projectRunWorkspaceContext],
+  );
+  // A conversation moved INTO this project from elsewhere in the rail.
+  useEffect(() => {
+    function onMoved(event: Event) {
+      const { toProjectId } = (event as CustomEvent<ConversationMovedDetail>).detail;
+      if (toProjectId !== project.id) return;
+      void listConversations(project.id, { workspaceContext: projectRunWorkspaceContext }).then((list) => {
+        if (list.length > 0) setConversations(list);
+      });
+    }
+    window.addEventListener(CONVERSATION_MOVED_EVENT, onMoved);
+    return () => window.removeEventListener(CONVERSATION_MOVED_EVENT, onMoved);
+  }, [project.id, projectRunWorkspaceContext]);
+
   const handleRenameConversation = useCallback(
     async (id: string, title: string) => {
       const trimmed = title.trim() || null;
@@ -9212,6 +9257,22 @@ export function ProjectView({
     },
     [project.id, projectRunWorkspaceContext],
   );
+  useEffect(() => {
+    onRailConversationsChange?.({
+      projectId: project.id,
+      conversations,
+      conversationsLoading: railConversationsLoading,
+      activeConversationId: railConversationsLoading ? routeConversationId : activeConversationId,
+      creating: creatingConversation || !messagesInitialized || projectCollab.viewerOnly,
+      newConversationPlacement: railNewConversationPlacement,
+      onCreate: createFromRail,
+      onSelect: handleSelectConversation,
+      onRename: projectCollab.viewerOnly ? undefined : handleRenameConversation,
+      onDelete: projectCollab.viewerOnly ? undefined : handleDeleteConversation,
+      onMove: projectCollab.viewerOnly ? undefined : handleMoveConversation,
+    });
+  }, [onRailConversationsChange, project.id, conversations, activeConversationId, railConversationsLoading, routeConversationId, creatingConversation, messagesInitialized, projectCollab.viewerOnly, railNewConversationPlacement, createFromRail, handleSelectConversation, handleRenameConversation, handleDeleteConversation, handleMoveConversation]);
+  useEffect(() => () => onRailConversationsChange?.(null), [onRailConversationsChange]);
 
   const handleConversationSessionModeChange = useCallback(
     async (id: string, sessionMode: ChatSessionMode) => {
@@ -9814,10 +9875,10 @@ export function ProjectView({
   // driven by ChatPane's composer ref, so ProjectView no longer wires them here.
   const handleArtifactShare = useCallback(
     (fileName: string) => {
-      requestOpenFile(fileName);
+      revealArtifact(fileName);
       setShareRequest({ name: fileName, nonce: Date.now() });
     },
-    [requestOpenFile],
+    [revealArtifact],
   );
   const pendingProjectShare = useProjectShareRequest();
   useEffect(() => {
@@ -9831,10 +9892,10 @@ export function ProjectView({
   // zip / standalone HTML / save-as-template) instead of a bare file download.
   const handleArtifactDownload = useCallback(
     (fileName: string) => {
-      requestOpenFile(fileName);
+      revealArtifact(fileName);
       setDownloadRequest({ name: fileName, nonce: Date.now() });
     },
-    [requestOpenFile],
+    [revealArtifact],
   );
 
   const handleBrowserUsePrompt = useCallback((text: string) => {
@@ -10955,6 +11016,13 @@ export function ProjectView({
           ].filter(Boolean).join(' ')}
           aria-hidden={(chatSlotHidden && !floatingConversationExpanded) || undefined}
         >
+          {!workspaceFocused && conversationPlacement === 'full' ? (
+            <WorkspacePreviewToggle
+              expanded={false}
+              panelId={previewPanelId}
+              onToggle={() => setConversationPlacement(previousSplitPlacementRef.current)}
+            />
+          ) : null}
           {/* The project switcher occupies the chat header.
               Focus mode releases this dock for the preview's dock host. */}
           {!workspaceFocused ? (
@@ -11023,7 +11091,7 @@ export function ProjectView({
               onUpdateQueuedSend={updateQueuedChatSend}
               onReorderQueuedSends={reorderCurrentConversationQueuedChatSends}
               onSendQueuedNow={sendQueuedChatSendNow}
-              onRequestOpenFile={requestOpenFile}
+              onRequestOpenFile={revealArtifact}
               onRequestPluginDetails={handleOpenContextPluginDetails}
               onRequestDesignSystemDetails={handleOpenContextDesignSystemDetails}
               onRequestPluginFolderAgentAction={handlePluginFolderAgentAction}
@@ -11252,7 +11320,10 @@ export function ProjectView({
             onBlur={handleChatResizeBlur}
           />
         ) : null}
-        <WorkspaceEditLayout key={project.id}>
+        <WorkspaceEditLayout key={project.id} panelId={previewPanelId} onCollapse={() => {
+          setWorkspaceFocused(false);
+          setConversationPlacement('full');
+        }}>
         <FileWorkspace
           projectId={project.id}
           projectName={currentProject.name}

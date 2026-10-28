@@ -13,12 +13,19 @@
   /* Align Home with the heading: 40px card top + 0.5px border + 8px inset. */
   padding: 48.5px 8px 15.5px;
   --rail-ink-quiet: #5c5c5c;
+  /* The icon column is window chrome: its empty space drags the window. */
+  -webkit-app-region: drag;
 }
 .rail :global(.entry-nav-rail__btn) {
   width: 40px;
   height: 40px;
   padding: 0;
   justify-content: center;
+}
+.rail button,
+.rail a,
+.rail [role='button'] {
+  -webkit-app-region: no-drag;
 }
 .rail :global(.entry-nav-rail__btn-label) {
   display: none;
@@ -99,7 +106,7 @@
 }
 .rail :global(.entry-nav-rail__btn)[aria-current='page'] {
   background: color-mix(in srgb, var(--text-strong) 10%, transparent);
-  color: var(--selected);
+  color: #121212;
 }
 .rail :global(.entry-nav-rail__btn):focus-visible {
   outline: 2px solid var(--accent);

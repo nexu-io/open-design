@@ -68,22 +68,20 @@ function prefersReducedMotion(): boolean {
   );
 }
 
-export function smoothScrollToTop(container: HTMLElement): void {
+/** Animate any vertical scroll target. Returns a way to cancel an in-flight reveal. */
+export function smoothScrollTo(
+  container: HTMLElement,
+  target: number,
+  duration = Math.min(MAX_DURATION_MS, MIN_DURATION_MS + Math.abs(container.scrollTop - target) / DISTANCE_PER_MS),
+): () => void {
   inFlight.get(container)?.();
-
-  container.scrollLeft = 0;
   const from = container.scrollTop;
-  if (from <= 0) return;
+  if (from === target) return () => {};
 
   if (prefersReducedMotion() || typeof requestAnimationFrame !== 'function') {
-    container.scrollTop = 0;
-    return;
+    container.scrollTop = target;
+    return () => {};
   }
-
-  const duration = Math.min(
-    MAX_DURATION_MS,
-    MIN_DURATION_MS + from / DISTANCE_PER_MS,
-  );
 
   let frame = 0;
   let start: number | null = null;
@@ -100,7 +98,7 @@ export function smoothScrollToTop(container: HTMLElement): void {
   const step = (now: number) => {
     if (start === null) start = now;
     const t = Math.min(1, (now - start) / duration);
-    container.scrollTop = from * (1 - EASE_OUT(t));
+    container.scrollTop = from + (target - from) * EASE_OUT(t);
     if (t < 1) {
       frame = requestAnimationFrame(step);
     } else {
@@ -112,4 +110,10 @@ export function smoothScrollToTop(container: HTMLElement): void {
   container.addEventListener('touchstart', cancel, { passive: true });
   inFlight.set(container, cancel);
   frame = requestAnimationFrame(step);
+  return cancel;
+}
+
+export function smoothScrollToTop(container: HTMLElement): void {
+  container.scrollLeft = 0;
+  smoothScrollTo(container, 0);
 }

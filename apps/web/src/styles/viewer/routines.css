@@ -1008,7 +1008,7 @@
   pointer-events: none;
 }
 .workspace-file-chrome > .ws-tabs-bar {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   height: 30px;
   min-width: 0;
   pointer-events: auto;
@@ -1042,7 +1042,7 @@
   position: static;
   width: 24px;
   height: 24px;
-  margin: 0 0 0 auto;
+  margin: 0;
   pointer-events: auto;
 }
 .workspace-shell--project > .workspace-tabs-chrome > .workspace-tabs-home-chrome,
@@ -1073,12 +1073,12 @@
   min-width: 32px;
   margin: 0;
 }
-.workspace-shell--desktop[data-host-platform='darwin'] .split-chat-tabs-dock {
+.workspace-shell--desktop[data-host-platform='darwin'] .split:not([data-conversation-placement='right']) .split-chat-tabs-dock {
   /* Leave room beside the macOS window controls without pushing the title
      deep into the project card. */
   padding-left: 20px;
 }
-html.is-window-fullscreen .workspace-shell--desktop[data-host-platform='darwin'] .split-chat-tabs-dock {
+html.is-window-fullscreen .workspace-shell--desktop[data-host-platform='darwin'] .split:not([data-conversation-placement='right']) .split-chat-tabs-dock {
   padding-left: 0;
 }
 .workspace-shell--project .app .workspace {
@@ -1120,10 +1120,11 @@ html.is-window-fullscreen .workspace-shell--desktop[data-host-platform='darwin']
 .workspace-shell--desktop.workspace-shell--project .split-chat-tabs-dock {
   -webkit-app-region: drag;
 }
-.workspace-shell--desktop.workspace-shell--project .ws-tabs-shell > *,
-.workspace-shell--desktop.workspace-shell--project .ws-tabs-shell > * *,
-.workspace-shell--desktop.workspace-shell--project .split-chat-tabs-dock > *,
-.workspace-shell--desktop.workspace-shell--project .split-chat-tabs-dock > * * {
+/* Only real controls opt out of the drag. A blanket `> *` opt-out also
+   swallowed the static title row and the empty stretch of the tab row, which
+   span the whole strip, so the window could not be dragged from it. */
+.workspace-shell--desktop.workspace-shell--project .ws-tabs-shell :is(button, a, input, textarea, select, [role='button'], [role='tab'], [role='menu'], [contenteditable], .ws-tab),
+.workspace-shell--desktop.workspace-shell--project .split-chat-tabs-dock :is(button, a, input, textarea, select, [role='button'], [role='tab'], [role='menu'], [contenteditable], .ws-tab) {
   -webkit-app-region: no-drag;
 }
 /* ── Project-route tab-strip dock (workspaceTabsDock.ts) ──────────────────
@@ -1216,7 +1217,8 @@ html.is-window-fullscreen .workspace-shell--desktop[data-host-platform='darwin']
   min-width: 0;
   /* The header owns both transcript-aligned insets. */
   margin-inline: 0;
-  -webkit-app-region: no-drag;
+  /* Static title + a small menu button now, not a full-width trigger: leave
+     the row draggable; the button opts out on its own. */
 }
 .workspace-tabs-dropdown__trigger:where(:not([data-chat-root], [data-chat-root] *)) {
   appearance: none;
@@ -1797,19 +1799,24 @@ html.is-window-fullscreen .workspace-shell--desktop[data-host-platform='darwin']
 /* This shell rule also owns the data-chat-root pane, whose upstream styles
    otherwise reset the card surface. */
 .workspace-shell .app .split-chat-slot > .pane {
-  border: 0.5px solid #f7f7f7;
+  /* Hairline drawn as an inset outline, not a border, so it takes no layout
+     space: the 8px card-to-card gaps then measure 8px from the box AND from
+     the visible fill (per product: 所有卡片的间距统一成 8px). */
+  border: 0;
+  outline: 0.5px solid #f7f7f7;
+  outline-offset: -0.5px;
   border-radius: 16px;
   background: #fff;
   box-shadow: var(--shadow-sm);
 }
 [data-theme='dark'] .workspace-shell .app .split-chat-slot > .pane {
   background: var(--bg-panel);
-  border-color: var(--border);
+  outline-color: var(--border);
 }
 @media (prefers-color-scheme: dark) {
   html:not([data-theme]) .workspace-shell .app .split-chat-slot > .pane {
     background: var(--bg-panel);
-    border-color: var(--border);
+    outline-color: var(--border);
   }
 }
 .app .split-chat-slot > .pane:where(:not([data-chat-root], [data-chat-root] *)) {
@@ -1830,13 +1837,6 @@ html.is-window-fullscreen .workspace-shell--desktop[data-host-platform='darwin']
   width: var(--project-chat-handle-width, 8px);
   min-width: 0;
   background: transparent;
-}
-
-.app .split-resize-handle:where(:not([data-chat-root], [data-chat-root] *))::after {
-  /* No painted strip in any state (rest, hover, or drag) — the gutter always
-     shows the shared ground. The col-resize cursor on the handle remains the
-     drag affordance. */
-  display: none;
 }
 
 .app .split-resize-handle:hover:where(:not([data-chat-root], [data-chat-root] *)),
@@ -3026,8 +3026,11 @@ html.is-window-fullscreen .workspace-shell--desktop[data-host-platform='darwin']
      only tab-to-content gap (10px, was 18px). */
   margin: 0 8px 8px 0;
   padding: 0;
-  /* Same hairline as the chat card (#F7F7F7) — see the note there. */
-  border: var(--stroke-thin) solid #f7f7f7;
+  /* Same hairline as the chat card (#F7F7F7), drawn as an inset outline for
+     the same reason — see the note there. */
+  border: 0;
+  outline: var(--stroke-thin) solid #f7f7f7;
+  outline-offset: calc(-1 * var(--stroke-thin));
   border-radius: 16px;
   box-shadow: none;
   /* Same effect as the top tab strip: no fill, no frost of its own — the
@@ -3040,11 +3043,12 @@ html.is-window-fullscreen .workspace-shell--desktop[data-host-platform='darwin']
   backdrop-filter: none;
   overflow: hidden;
 }
-/* Focus mode hides the chat card, so the workspace is the only card — give it
-   the 8px left gap back (in split mode the left is 0 to keep the inter-card gap
-   at 8px). */
+/* Focus mode hides the chat card, so the workspace is the only card. Its left
+   edge lines up with the search button above it (per product), which sits 4px
+   left of the overlay rail's 56px column — same -4px as Home's card
+   (.entry:not(.entry--rail-open) .entry-main--scroll). */
 .app .split.split-focus .workspace:where(:not([data-chat-root], [data-chat-root] *)) {
-  margin-left: 8px;
+  margin-left: -4px;
 }
 .app .ws-tabs-shell:where(:not([data-chat-root], [data-chat-root] *)) {
   /* 8px above/below the 30px controls; keep the 12px side insets. */
@@ -4550,9 +4554,9 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled:w
   flex: 1 1 0;
   min-width: 0;
 }
-/* The open recent-project rail already leaves an 8px inset before the preview.
-   Do not add the focus-mode workspace gutter when the chat is collapsed. */
-.workspace-shell--project:has(.project-recent-rail[data-open='true']) .app .split.split-focus .workspace {
+/* Keep the whole preview inside the app's clipping boundary, including when
+   the recent-project rail is collapsed. A negative inset clips its corners. */
+.workspace-shell--project:has(.project-recent-rail) .app .split.split-focus .workspace {
   margin-left: 0;
 }
 .project-recent-rail__actions.entry-nav-rail__search-row {
@@ -4571,7 +4575,7 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled:w
 .project-recent-rail__actions .entry-nav-rail__collapse {
   margin-left: 0;
 }
-.workspace-shell--project:has(.project-recent-rail[data-open='false']) .split-chat-tabs-dock {
+.workspace-shell--project:has(.project-recent-rail[data-open='false']) .split:not([data-conversation-placement='right']) .split-chat-tabs-dock {
   padding-left: 80px;
 }
 /* When the preview starts beside the collapsed rail, reserve the 72px
@@ -4579,4 +4583,18 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled:w
 .workspace-shell--project:has(.project-recent-rail[data-open='false']) .split.split-focus [data-testid='workspace-tab-chrome'],
 .workspace-shell--project:has(.project-recent-rail[data-open='false']) .split[data-conversation-placement='right'] [data-testid='workspace-tab-chrome'] {
   left: 80px;
+}
+
+/* The project header begins at x=8 and its window controls end at x=69.
+   Leave space for them before the collapsed rail's search/toggle pair, and
+   move the adjacent title/file tabs by the same amount. */
+.workspace-shell--desktop[data-host-platform='darwin']:has(.project-recent-rail[data-open='false']) .project-recent-rail__actions {
+  left: 76px;
+}
+.workspace-shell--desktop[data-host-platform='darwin']:has(.project-recent-rail[data-open='false']) .split:not([data-conversation-placement='right']) .split-chat-tabs-dock {
+  padding-left: 104px;
+}
+.workspace-shell--desktop[data-host-platform='darwin']:has(.project-recent-rail[data-open='false']) .split.split-focus [data-testid='workspace-tab-chrome'],
+.workspace-shell--desktop[data-host-platform='darwin']:has(.project-recent-rail[data-open='false']) .split[data-conversation-placement='right'] [data-testid='workspace-tab-chrome'] {
+  left: 104px;
 }

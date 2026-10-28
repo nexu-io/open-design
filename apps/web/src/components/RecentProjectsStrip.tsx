@@ -2772,7 +2772,7 @@ export function projectCategory(project: Project): ProjectCategory {
 /** The glyph each kind chip leads with — the same icon that kind wears in the
  *  Home type rail, so a card and the rail name the same thing the same way. */
 const PROJECT_TAG_ICON: Record<ProjectCardCategory, IconName> = {
-  prototype: 'artboard',
+  prototype: 'pencil-ruler',
   'live-artifact': 'bar-chart-box',
   'web-clone': 'globe',
   slide: 'present',

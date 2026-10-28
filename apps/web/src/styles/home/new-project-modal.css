@@ -1,6 +1,5 @@
 /* ============================================================
-   New project modal — wraps NewProjectPanel in a centered modal
-   surface, triggered by the "+" button on the entry nav rail.
+   Compact name-and-folder entry point for a new project.
    ============================================================ */
 .new-project-modal-backdrop {
   position: fixed;
@@ -10,14 +9,14 @@
   -webkit-backdrop-filter: var(--scrim-backdrop);
   backdrop-filter: var(--scrim-backdrop);
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   padding: 48px 32px 32px;
   overflow: hidden;
 }
 .new-project-modal {
   width: 100%;
-  max-width: 840px;
+  max-width: 420px;
   max-height: calc(100vh - 80px);
   background: var(--bg-panel);
   border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
@@ -46,10 +45,12 @@
   letter-spacing: -0.01em;
   color: var(--text-strong);
 }
-.new-project-modal__close {
+button.new-project-modal__close {
   appearance: none;
   width: 32px;
+  min-width: 32px;
   height: 32px;
+  min-height: 32px;
   border-radius: var(--radius-pill);
   border: 1px solid transparent;
   background: transparent;
@@ -62,6 +63,7 @@
   transition: background 140ms var(--ease-out), color 140ms var(--ease-out);
 }
 .new-project-modal__close svg {
+  flex-shrink: 0;
   display: block;
   width: 14px !important;
   height: 14px !important;
@@ -78,22 +80,19 @@
 .new-project-modal__body {
   flex: 1 1 auto;
   min-height: 0;
-  padding: 10px 0 20px;
-  overflow: hidden;
+  padding: 16px 24px 24px;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
 }
-/* NewProjectPanel expects a bounded flex parent; without this chain the
-   panel grows to full content height and `.newproj { overflow: hidden }`
-   clips the bottom of tall tabs (prototype, template, media). */
-.new-project-modal__body .newproj {
-  flex: 1 1 auto;
-  min-height: 0;
-  padding-top: 0;
+.new-project-modal__form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 .new-project-modal__status {
   flex: 0 0 auto;
-  margin: 10px 24px 0;
+  margin: 12px 0 0;
   padding: 9px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);

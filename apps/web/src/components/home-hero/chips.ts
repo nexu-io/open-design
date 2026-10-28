@@ -104,7 +104,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   {
     id: 'prototype',
     label: 'Prototype',
-    icon: 'artboard',
+    icon: 'pencil-ruler',
     group: 'create',
     description: 'Interactive app mockups',
     // Prototype now binds to the bundled `example-web-prototype` plugin,
@@ -405,12 +405,12 @@ export const CREATE_RAIL_ORDER = [
   'audio',
 ] as const;
 
-// The Home type row is an explicit product decision, not a width computation
-// (2026-08-31): three entry types stay inline, and 更多 holds exactly two.
-// Everything else in the create catalog stays reachable through the composer's
-// template picker instead of widening this row.
+// Home exposes ten creation types: three primary cards and seven secondary
+// entries, in the same order in the cards and the compact type row.
 export const HOME_TYPE_ROW_IDS: readonly string[] = ['prototype', 'deck', 'document'];
-export const HOME_TYPE_ROW_MORE_IDS: readonly string[] = ['image', 'web-clone'];
+export const HOME_TYPE_ROW_MORE_IDS: readonly string[] = [
+  'image', 'web-clone', 'hyperframes', 'webgl', 'live-artifact', 'video', 'audio',
+];
 
 // Chip ids the onboarding "build a design system" teaser intentionally omits.
 // Video and Audio are the trailing pure-media outputs in CREATE_RAIL_ORDER and

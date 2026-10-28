@@ -655,6 +655,24 @@
   overflow: hidden;
   z-index: 30;
 }
+/* Keep the project editor inside the preview card. Its own column takes
+   space from the canvas, so the page remains visible to its right. */
+.manual-edit-workspace.has-embedded-editor {
+  --manual-edit-embedded-width: clamp(220px, calc(100% - 208px), 320px);
+}
+.manual-edit-workspace.has-embedded-editor > .manual-edit-right {
+  left: 8px;
+  right: auto;
+  box-sizing: border-box;
+  width: var(--manual-edit-embedded-width);
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-panel);
+}
+.manual-edit-workspace.has-embedded-editor > .manual-edit-canvas {
+  left: calc(var(--manual-edit-embedded-width) + 16px);
+}
 .manual-edit-workspace > .manual-edit-right.manual-edit-floating {
   right: auto;
   bottom: auto;

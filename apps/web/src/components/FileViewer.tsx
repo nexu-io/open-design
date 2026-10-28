@@ -8631,13 +8631,11 @@ function HtmlViewer({
   const [manualEditHoverTarget, setManualEditHoverTarget] = useState<ManualEditTarget | null>(null);
   const [manualEditPageStylesOpen, setManualEditPageStylesOpen] = useState(false);
   const workspaceDockOwner = useId();
-  // One owner claims the shared column across comment/edit switches, so a
-  // closing panel cannot release the slot now occupied by its replacement.
+  // Comments use the external dock; the edit inspector lives inside the
+  // preview beside the canvas, so opening it does not reserve another column.
   const workspaceDock = useWorkspaceEditDock(
     workspaceDockOwner,
-    workspaceActive && mode === 'preview' && (manualEditMode
-      ? Boolean(selectedManualEditTarget || manualEditPageStylesOpen)
-      : commentPanelOpen),
+    workspaceActive && mode === 'preview' && !manualEditMode && commentPanelOpen,
   );
   const manualEditDocked = workspaceDock !== null;
   useLayoutEffect(() => {
@@ -14510,7 +14508,7 @@ function HtmlViewer({
     boardSideDockStacked ? 'comment-preview-layer-side-dock-stacked' : '',
     showDeckThumbnailRail ? 'comment-preview-layer-with-deck-rail' : '',
   ].filter(Boolean).join(' ');
-  // Project workspaces open page settings immediately in the external dock;
+  // Project workspaces open page settings in the preview's embedded editor;
   // standalone viewers retain their compact, selection-driven floating card.
   const manualEditPageCardActive =
     manualEditMode && !selectedManualEditTarget && manualEditPageStylesOpen;
@@ -16059,13 +16057,13 @@ function HtmlViewer({
           )
         ) : mode === 'preview' ? (
           <div
-            className={`${manualEditMode ? 'manual-edit-workspace' : commentPreviewLayoutClass} preview-viewport preview-viewport-${previewViewport}${drawOverlayOpen ? ' preview-draw-active' : ''}`}
+            className={`${manualEditMode ? 'manual-edit-workspace' : commentPreviewLayoutClass} preview-viewport preview-viewport-${previewViewport}${manualEditMode && manualEditDocked && manualEditPanelActive ? ' has-embedded-editor' : ''}${drawOverlayOpen ? ' preview-draw-active' : ''}`}
             data-testid={manualEditMode ? undefined : 'comment-preview-layout'}
             ref={manualEditMode ? undefined : setCommentComposerHostRef}
             style={previewViewportStyle(previewViewport, previewScale, boardPreviewCanvasSize, boardPreviewScaleOptions)}
             onMouseLeave={manualEditMode ? clearManualEditHover : undefined}
           >
-            {workspaceDock
+            {workspaceDock && !manualEditMode
               ? workspaceDock.target && createPortal(manualEditPanel, workspaceDock.target)
               : manualEditPanel}
             {manualEditHoverAffordance}

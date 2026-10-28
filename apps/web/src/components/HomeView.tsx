@@ -89,8 +89,9 @@ import {
   pluginInputsAreValid,
   requiredInputsAreUserFillable,
 } from '../utils/pluginRequiredInputs';
-import { HomeHero, type ExamplePromptInfo, type HomeHeroHandle } from './HomeHero';
-import { findChip, HOME_HERO_CHIPS, type HomeHeroChip } from './home-hero/chips';
+import { HomeHero, pluginMatchesExampleChip, type ExamplePromptInfo, type HomeHeroHandle } from './HomeHero';
+import { CommunityView, communityTypeForChip } from './CommunityView';
+import { findChip, HOME_HERO_CHIPS, HOME_TYPE_ROW_MORE_IDS, type HomeHeroChip } from './home-hero/chips';
 import { homeHeroChipLabel } from './home-hero/chip-labels';
 import type { PlaceholderScenario } from './home-hero/placeholderScenarios';
 import { consumePendingHomeChip, HOME_CHIP_INTENT_EVENT } from '../runtime/home-intent';
@@ -124,6 +125,7 @@ import {
   copyTemplatePrompt,
   isPromptArtifact,
   TemplatePreviewModal,
+  type TemplateDemo,
 } from './CommunityTemplatePreview';
 import { SkillDetailsModal } from './SkillDetailsModal';
 import type { PluginLoopSubmit } from './PluginLoopHome';
@@ -427,6 +429,11 @@ function readHomeComposerChipDraft(): HomeComposerChipDraft | null {
 
 function writeHomeComposerChipDraft(draft: HomeComposerChipDraft | null): void {
   writeHomeComposerDraft(HOME_COMPOSER_CHIP_KEY, draft ? JSON.stringify(draft) : null);
+}
+
+/** Start a newly named project at the type cards, retaining the typed brief. */
+export function resetHomeCreationType(): void {
+  writeHomeComposerChipDraft(null);
 }
 
 // Drop the persisted draft once a run is actually created, so the just-sent
@@ -783,6 +790,29 @@ export function HomeView({
         .find((template) => template.id === detailsRecord.id) ?? null
     );
   }, [detailsRecord, plugins, locale, t, workspaceContext]);
+  // The entry row's covers: the first poster-backed community template of
+  // each Home type, keyed by chip id. Types with no community counterpart
+  // (or no poster yet) are simply absent and fall back to their icon.
+  const entryTypeCovers = useMemo(() => {
+    const covers: Partial<Record<string, TemplateDemo>> = {};
+    for (const template of buildCommunityTemplates(plugins, locale, t, workspaceContext)) {
+      if (!template.cardMedia?.poster) continue;
+      for (const chipId of HOME_TYPE_ROW_MORE_IDS) {
+        if (!covers[chipId] && communityTypeForChip(chipId) === template.type) {
+          covers[chipId] = template;
+        }
+      }
+    }
+    return covers;
+  }, [plugins, locale, t, workspaceContext]);
+  // WebGL templates belong to Community's Prototype category. Reuse that
+  // gallery with the full WebGL slice rather than the legacy preset list.
+  const isWebglGallery = active?.chipId === 'webgl';
+  const galleryType = isWebglGallery ? 'Prototype' : communityTypeForChip(active?.chipId ?? null);
+  const galleryCatalog = useMemo(
+    () => isWebglGallery ? plugins.filter((record) => pluginMatchesExampleChip(record, 'webgl')) : plugins,
+    [plugins, isWebglGallery],
+  );
   // Same synchronous single-flight gate the Community remix path uses: the
   // lightweight preview's Remix kicks off one project create; clicks landing
   // before React re-renders must all see the lock immediately, so a plain
@@ -2949,6 +2979,25 @@ export function HomeView({
         // recommendation engine and `RecommendedStartRegion` are left intact;
         // only this mount point is gone.
         recommendationSlot={artifactUpgradeSlot}
+        entryTypeCovers={entryTypeCovers}
+        templateGallery={variant !== 'dock' && galleryType ? (
+          <CommunityView
+            contentOnly
+            selectedType={galleryType}
+            catalog={galleryCatalog}
+            onUsePrompt={(target) => {
+              const record = plugins.find((plugin) => plugin.id === target.templateId);
+              if (record) useExamplePlugin(record, isWebglGallery ? 'webgl' : target.chipId, target.prompt);
+            }}
+            onUsePlugin={(record, action, target) => {
+              void routePluginUse(record, action, undefined, isWebglGallery ? { ...target, chipId: 'webgl' } : target);
+            }}
+            onRemixTemplate={({ templateId }) => {
+              const record = plugins.find((plugin) => plugin.id === templateId);
+              if (record) void duplicateExamplePlugin(record);
+            }}
+          />
+        ) : undefined}
       />
 
       {/* Home stays focused on the composer and starter examples. Existing

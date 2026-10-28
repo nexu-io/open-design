@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -20,11 +20,13 @@ import {
   listMessages,
   loadTabs,
 } from '../../src/state/projects';
-import { fetchPreviewComments } from '../../src/providers/registry';
+import { fetchProjectFiles, fetchPreviewComments } from '../../src/providers/registry';
 import {
   getHtmlSourceSnapshot,
   setHtmlSourceSnapshot,
 } from '../../src/components/html-source-snapshot-cache';
+
+import { navigate } from '../../src/router';
 
 const evictProjectMock = vi.fn();
 
@@ -113,15 +115,23 @@ vi.mock('../../src/components/AvatarMenu', () => ({
 
 vi.mock('../../src/components/FileWorkspace', () => ({
   DESIGN_SYSTEM_TAB: '__design_system__',
-  FileWorkspace: () => <div data-testid="file-workspace" />,
+  FileWorkspace: ({ openRequest, tabsState }: { openRequest?: { name: string } | null; tabsState: { active: string | null } }) => (
+    <div data-testid="file-workspace" data-open-request={openRequest?.name} data-active-tab={tabsState.active} />
+  ),
 }));
 
 vi.mock('../../src/components/Loading', () => ({
   CenteredLoader: () => <div data-testid="loader" />,
 }));
 
-vi.mock('../../src/components/ChatPane', () => ({
-  ChatPane: () => <div data-testid="chat-pane" />,
+vi.mock('../../src/components/chat/ProjectChatPane', () => ({
+  ChatPane: ({ onConversationPlacementChange, onRequestOpenFile }: {
+    onConversationPlacementChange: (placement: 'right') => void;
+    onRequestOpenFile: (name: string) => void;
+  }) => <div data-testid="chat-pane">
+    <button onClick={() => onConversationPlacementChange('right')}>Move chat right</button>
+    <button onClick={() => onRequestOpenFile('index.html')}>Open artifact</button>
+  </div>,
 }));
 
 const mockedUseIframeKeepAlivePool = vi.mocked(useIframeKeepAlivePool);
@@ -183,11 +193,12 @@ const designSystem: DesignSystemSummary = {
 function renderProjectView(props?: {
   skills?: SkillSummary[];
   designSystems?: DesignSystemSummary[];
+  routeFileName?: string;
 }) {
   return render(
     <ProjectView
       project={project}
-      routeFileName={null}
+      routeFileName={props?.routeFileName ?? null}
       config={config}
       agents={[] as AgentInfo[]}
       skills={props?.skills ?? [skill]}
@@ -224,11 +235,73 @@ describe('ProjectView preview keep-alive invalidation', () => {
     mockedListMessages.mockResolvedValue([]);
     mockedLoadTabs.mockResolvedValue({ tabs: [], active: null });
     mockedFetchPreviewComments.mockResolvedValue([]);
+    vi.mocked(fetchProjectFiles).mockResolvedValue([]);
   });
 
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+  });
+
+  it('keeps restored artifact tabs hidden until the user clicks an artifact', async () => {
+    mockedLoadTabs.mockResolvedValue({ tabs: ['index.html'], active: 'index.html' });
+    renderProjectView();
+    const preview = await screen.findByTestId('file-workspace');
+    const split = screen.getByTestId('workspace-edit-layout').parentElement!;
+    await waitFor(() => expect(preview).toHaveAttribute('data-active-tab', 'index.html'));
+    expect(split).toHaveAttribute('data-conversation-placement', 'full');
+    expect(vi.mocked(navigate).mock.calls.at(-1)?.[0]).toMatchObject({ fileName: null });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open artifact' }));
+    expect(split).toHaveAttribute('data-conversation-placement', 'left');
+    expect(preview).toHaveAttribute('data-open-request', 'index.html');
+    expect(screen.getByTestId('file-workspace')).toBe(preview);
+    expect(vi.mocked(navigate).mock.calls.at(-1)?.[0]).toMatchObject({ fileName: 'index.html' });
+  });
+
+  it('keeps newly discovered output hidden and restores the chosen side on artifact click', async () => {
+    vi.mocked(fetchProjectFiles).mockResolvedValue([{
+      name: 'index.html', path: 'index.html', type: 'file', size: 1,
+      mtime: 1, mime: 'text/html', kind: 'html',
+    }]);
+    renderProjectView();
+    const preview = await screen.findByTestId('file-workspace');
+    const split = screen.getByTestId('workspace-edit-layout').parentElement!;
+    await waitFor(() => expect(preview).toHaveAttribute('data-active-tab', 'index.html'));
+    expect(split).toHaveAttribute('data-conversation-placement', 'full');
+    fireEvent.click(screen.getByRole('button', { name: 'Move chat right' }));
+    fireEvent.click(screen.getByRole('button', { name: 'workspace.collapsePreview' }));
+    expect(split).toHaveAttribute('data-conversation-placement', 'full');
+    fireEvent.click(screen.getByRole('button', { name: 'Open artifact' }));
+    expect(split).toHaveAttribute('data-conversation-placement', 'right');
+  });
+
+  it('opens an explicitly linked file immediately', async () => {
+    renderProjectView({ routeFileName: 'index.html' });
+    const preview = await screen.findByTestId('file-workspace');
+    expect(preview).toHaveAttribute('data-open-request', 'index.html');
+    expect(screen.getByTestId('workspace-edit-layout').parentElement)
+      .toHaveAttribute('data-conversation-placement', 'left');
+  });
+
+  it('collapses and restores the preview without remounting it or losing pane placement', async () => {
+    renderProjectView();
+    await screen.findByTestId('chat-pane');
+    const preview = screen.getByTestId('file-workspace');
+    const layout = screen.getByTestId('workspace-edit-layout');
+    const split = layout.parentElement!;
+    fireEvent.click(screen.getByRole('button', { name: 'Move chat right' }));
+    expect(split).toHaveAttribute('data-conversation-placement', 'right');
+    fireEvent.click(screen.getByRole('button', { name: 'workspace.collapsePreview' }));
+    expect(split).toHaveAttribute('data-conversation-placement', 'full');
+    const expand = screen.getByRole('button', { name: 'workspace.expandPreview' });
+    expect(expand).toHaveAttribute('aria-expanded', 'false');
+    expect(expand).toHaveAttribute('aria-controls', layout.id);
+    expect(screen.getByTestId('file-workspace')).toBe(preview);
+    fireEvent.click(expand);
+    expect(split).toHaveAttribute('data-conversation-placement', 'right');
+    expect(screen.getByTestId('file-workspace')).toBe(preview);
+    expect(screen.queryByRole('button', { name: 'workspace.expandPreview' })).toBeNull();
   });
 
   it('evicts the active preview when registry prompt context changes for the open project', async () => {

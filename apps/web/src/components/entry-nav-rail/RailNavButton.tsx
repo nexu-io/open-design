@@ -46,6 +46,7 @@ export function NavButton({
       title={title}
       data-tooltip={title}
       data-tooltip-placement={title ? 'right' : undefined}
+      data-tooltip-tone={title && iconOnly ? 'inverse' : undefined}
       {...(testId ? { 'data-testid': testId } : {})}
     >
       <span className="entry-nav-rail__btn-icon" aria-hidden>{children}</span>

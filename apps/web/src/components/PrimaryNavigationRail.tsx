@@ -41,15 +41,11 @@ export function PrimaryNavigationRail({
       aria-label={t('entry.primaryNavAria')}
     >
       <NavButton iconOnly active={homeActive} ariaLabel={homeLabel} label={homeLabel} title={homeLabel} onClick={onHome} testId={`${testIdPrefix}-home`}>
-        <Icon name="home" size={18} />
+        <Icon name={homeActive ? 'home-filled' : 'home'} size={18} />
       </NavButton>
-      <DestinationModules hidePersonalProjects={hidePersonalProjects} context={context} view={view} onViewChange={onViewChange} testIdPrefix={testIdPrefix} />
+      <DestinationModules hidePersonalProjects={hidePersonalProjects} context={context} view={view} onViewChange={onViewChange} testIdPrefix={testIdPrefix}
+        onOpenSettings={onOpenSettings} settingsActive={settingsActive} />
       <div className={styles.footer} data-testid="primary-navigation-footer">
-        {onOpenSettings ? <NavButton iconOnly active={settingsActive}
-          ariaLabel={t('entry.accountSettings')} label={t('entry.accountSettings')}
-          title={t('entry.accountSettings')} onClick={() => onOpenSettings()} testId="entry-settings-button">
-          <Icon name="settings" size={16} />
-        </NavButton> : null}
         {accountHostRef ? <div ref={accountHostRef} className={styles.accountHost} data-testid="primary-navigation-account-host" /> : null}
       </div>
     </nav>
@@ -62,7 +58,11 @@ function DestinationModules({
   view,
   onViewChange,
   testIdPrefix,
+  onOpenSettings,
+  settingsActive,
 }: {
+  onOpenSettings?: () => void;
+  settingsActive: boolean;
   context: WorkspaceCollabContext | null;
   view: EntryHomeView | null;
   onViewChange: (view: EntryHomeView) => void;
@@ -82,7 +82,7 @@ function DestinationModules({
         onClick={() => onViewChange('community')}
         testId={`${testIdPrefix}-community`}
       >
-        <Icon name="orbit" size={16} />
+        <Icon name={view === 'community' ? 'orbit-filled' : 'orbit'} size={16} />
       </NavButton>
       {context && !hidePersonalProjects ? (
         <NavButton
@@ -119,7 +119,7 @@ function DestinationModules({
         onClick={() => onViewChange('design-systems')}
         testId={`${testIdPrefix}-design-systems`}
       >
-        <Icon name="palette" size={16} />
+        <Icon name={view === 'design-systems' ? 'palette-filled' : 'palette'} size={16} />
       </NavButton>
       <NavButton
         iconOnly
@@ -130,8 +130,15 @@ function DestinationModules({
         onClick={() => onViewChange('plugins')}
         testId={`${testIdPrefix}-plugins`}
       >
-        <Icon name="puzzle" size={16} />
+        <Icon name={view === 'plugins' ? 'integrations-filled' : 'puzzle'} size={16} />
       </NavButton>
+      {/* Directly under 插件 (per product): at the rail's foot it sat a whole
+          screen away from the destinations it belongs with. */}
+      {onOpenSettings ? <NavButton iconOnly active={settingsActive}
+        ariaLabel={t('entry.accountSettings')} label={t('entry.accountSettings')}
+        title={t('entry.accountSettings')} onClick={() => onOpenSettings()} testId="entry-settings-button">
+        <Icon name="settings" size={16} />
+      </NavButton> : null}
     </div>
   );
 }

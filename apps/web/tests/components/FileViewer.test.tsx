@@ -2802,7 +2802,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(urlFrame?.getAttribute('data-od-active')).toBe('false');
   });
 
-  it('opens the project edit dock immediately and releases it when the viewer becomes inactive', async () => {
+  it('opens the project editor inside the preview and releases it when the viewer becomes inactive', async () => {
     const file = baseFile({ name: 'docked.html', path: 'docked.html', mime: 'text/html', kind: 'html' });
     const viewer = (active: boolean) => (
       <WorkspaceEditLayout>
@@ -2815,25 +2815,27 @@ describe('FileViewer SVG artifacts', () => {
     const dock = screen.getByTestId('workspace-edit-dock');
     expect(dock).not.toBeVisible();
     fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
-    await waitFor(() => expect(dock).toBeVisible());
-    expect(within(dock).getByRole('button', { name: 'Close edit panel' })).toBeVisible();
-    expect(within(dock).queryByRole('button', { name: 'Move edit panel' })).toBeNull();
+    const editor = await screen.findByRole('complementary', { name: 'Manual editor' });
+    expect(editor.parentElement).toHaveClass('manual-edit-workspace', 'has-embedded-editor');
+    expect(dock).not.toBeVisible();
+    expect(within(editor).getByRole('button', { name: 'Close edit panel' })).toBeVisible();
+    expect(within(editor).queryByRole('button', { name: 'Move edit panel' })).toBeNull();
     const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
     const frameSource = frame.srcdoc;
-    fireEvent.keyDown(screen.getByRole('separator', { name: 'Resize side panel' }), { key: 'ArrowLeft' });
+    expect(screen.queryByRole('separator', { name: 'Resize side panel' })).toBeNull();
     expect(screen.getByTestId('artifact-preview-frame')).toBe(frame);
     expect(frame.srcdoc).toBe(frameSource);
     act(() => window.dispatchEvent(new MessageEvent('message', {
       source: frame.contentWindow,
       data: { type: 'od-edit-select', target: manualEditTarget('hero-card', 'Hero card', 20) },
     })));
-    expect(await within(dock).findByText('Hero card')).toBeVisible();
+    expect(await within(editor).findByText('Hero card')).toBeVisible();
     view.rerender(viewer(false));
-    await waitFor(() => expect(dock).not.toBeVisible());
+    await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Manual editor' })).toBeNull());
     expect(dock.childElementCount).toBe(0);
   });
 
-  it('shares the project right dock between comments and editing without reserving another preview column', async () => {
+  it('switches between the external comment dock and embedded editor', async () => {
     const file = baseFile({ name: 'comment-dock.html', path: 'comment-dock.html', mime: 'text/html', kind: 'html' });
     const viewer = (active: boolean) => (
       <WorkspaceEditLayout>
@@ -2855,16 +2857,18 @@ describe('FileViewer SVG artifacts', () => {
     expect(separator).toHaveAttribute('aria-valuenow', '330');
 
     fireEvent.click(edit);
-    expect(await within(dock).findByRole('button', { name: 'Close edit panel' })).toBeVisible();
+    expect(await screen.findByRole('complementary', { name: 'Manual editor' })).toBeVisible();
+    expect(dock).not.toBeVisible();
     expect(screen.queryByTestId('comment-side-panel')).toBeNull();
     expect(comments).toHaveAttribute('aria-pressed', 'false');
-    expect(separator).toHaveAttribute('aria-valuenow', '330');
+    expect(screen.queryByRole('separator')).toBeNull();
 
     fireEvent.click(comments);
     expect(await within(dock).findByTestId('comment-side-panel')).toBeVisible();
+    expect(screen.queryByRole('complementary', { name: 'Manual editor' })).toBeNull();
     expect(within(dock).queryByRole('button', { name: 'Close edit panel' })).toBeNull();
     expect(edit).toHaveAttribute('aria-pressed', 'false');
-    expect(separator).toHaveAttribute('aria-valuenow', '330');
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '330');
     view.rerender(viewer(false));
     await waitFor(() => expect(dock).not.toBeVisible());
     expect(dock.childElementCount).toBe(0);
@@ -2875,7 +2879,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '330');
   });
 
-  it.each(['Save', 'Cancel'])('returns the dock to page settings after %s and can close and reopen it', async (action) => {
+  it.each(['Save', 'Cancel'])('returns the embedded editor to page settings after %s and can close and reopen it', async (action) => {
     render(<WorkspaceEditLayout>
       <FileViewer projectId="project-1" projectKind="prototype"
         file={baseFile({ name: 'dock-actions.html', path: 'dock-actions.html', mime: 'text/html', kind: 'html' })}
@@ -2884,29 +2888,30 @@ describe('FileViewer SVG artifacts', () => {
     const toggle = screen.getByTestId('manual-edit-mode-toggle');
     fireEvent.click(toggle);
     const dock = screen.getByTestId('workspace-edit-dock');
-    await waitFor(() => expect(dock).toBeVisible());
+    const editor = await screen.findByRole('complementary', { name: 'Manual editor' });
+    expect(dock).not.toBeVisible();
     const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
     const select = () => act(() => window.dispatchEvent(new MessageEvent('message', {
       source: frame.contentWindow,
       data: { type: 'od-edit-select', target: manualEditTarget('hero-card', 'Hero card', 20) },
     })));
     select();
-    expect(await within(dock).findByText('Hero card')).toBeVisible();
-    fireEvent.click(within(dock).getByRole('button', { name: action }));
-    await waitFor(() => expect(within(dock).queryByText('Hero card')).toBeNull());
-    expect(dock).toBeVisible();
+    expect(await within(editor).findByText('Hero card')).toBeVisible();
+    fireEvent.click(within(editor).getByRole('button', { name: action }));
+    await waitFor(() => expect(within(screen.getByRole('complementary', { name: 'Manual editor' })).queryByText('Hero card')).toBeNull());
+    expect(screen.getByRole('complementary', { name: 'Manual editor' })).toBeVisible();
     expect(toggle).toHaveAttribute('aria-pressed', 'true');
-    fireEvent.click(within(dock).getByRole('button', { name: 'Close edit panel' }));
-    await waitFor(() => expect(dock).not.toBeVisible());
+    fireEvent.click(within(screen.getByRole('complementary', { name: 'Manual editor' })).getByRole('button', { name: 'Close edit panel' }));
+    await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Manual editor' })).toBeNull());
     expect(toggle).toHaveAttribute('aria-pressed', 'true');
     select();
-    expect(await within(dock).findByText('Hero card')).toBeVisible();
+    expect(await screen.findByText('Hero card')).toBeVisible();
     fireEvent.click(toggle);
-    await waitFor(() => expect(dock).not.toBeVisible());
+    await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Manual editor' })).toBeNull());
     expect(toggle).toHaveAttribute('aria-pressed', 'false');
   });
 
-  it.each(['Save', 'Comments'])('retains a failed text save in the project edit dock when clicking %s', async (action) => {
+  it.each(['Save', 'Comments'])('retains a failed text save in the embedded editor when clicking %s', async (action) => {
     vi.stubGlobal('fetch', vi.fn(async (url: unknown, opts?: { method?: string }) => {
       if (String(url).includes('/files') && opts?.method === 'POST') {
         return new Response(JSON.stringify({ error: { message: 'disk full' } }), {
@@ -2922,7 +2927,8 @@ describe('FileViewer SVG artifacts', () => {
     </WorkspaceEditLayout>);
     fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
     const dock = screen.getByTestId('workspace-edit-dock');
-    await waitFor(() => expect(dock).toBeVisible());
+    const editor = await screen.findByRole('complementary', { name: 'Manual editor' });
+    expect(dock).not.toBeVisible();
     const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
     act(() => window.dispatchEvent(new MessageEvent('message', {
       source: frame.contentWindow,
@@ -2932,17 +2938,17 @@ describe('FileViewer SVG artifacts', () => {
         outerHtml: '<p data-od-id="copy">Original</p>',
       } },
     })));
-    fireEvent.change(await within(dock).findByDisplayValue('Original'), { target: { value: 'Unsaved copy' } });
+    fireEvent.change(await within(editor).findByDisplayValue('Original'), { target: { value: 'Unsaved copy' } });
     fireEvent.click(action === 'Save'
-      ? within(dock).getByRole('button', { name: 'Save' })
+      ? within(editor).getByRole('button', { name: 'Save' })
       : screen.getByTestId('comment-panel-toggle'));
     expect(await screen.findByText(/Could not save the edited file \(500/)).toBeVisible();
-    expect(within(dock).getByDisplayValue('Unsaved copy')).toBeVisible();
+    expect(within(editor).getByDisplayValue('Unsaved copy')).toBeVisible();
     expect(screen.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.queryByTestId('comment-side-panel')).toBeNull();
   });
 
-  it.each(['sidebar', 'inline', 'sidebar over active inline'])('waits for the %s text save to finish before switching the shared dock to comments', async (editSource) => {
+  it.each(['sidebar', 'inline', 'sidebar over active inline'])('waits for the %s text save before switching from the embedded editor to comments', async (editSource) => {
     const source = '<html><body><p data-od-id="copy">Original</p></body></html>';
     const saved = deferredResponse();
     const writes: string[] = [];
@@ -2963,7 +2969,8 @@ describe('FileViewer SVG artifacts', () => {
     </WorkspaceEditLayout>);
     fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
     const dock = screen.getByTestId('workspace-edit-dock');
-    await waitFor(() => expect(dock).toBeVisible());
+    const editor = await screen.findByRole('complementary', { name: 'Manual editor' });
+    expect(dock).not.toBeVisible();
     const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
     act(() => window.dispatchEvent(new MessageEvent('message', {
       source: frame.contentWindow,
@@ -2973,7 +2980,7 @@ describe('FileViewer SVG artifacts', () => {
         outerHtml: '<p data-od-id="copy">Original</p>',
       } },
     })));
-    const originalText = await within(dock).findByDisplayValue('Original');
+    const originalText = await within(editor).findByDisplayValue('Original');
     const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
     if (editSource === 'sidebar over active inline') {
       act(() => window.dispatchEvent(new MessageEvent('message', {
@@ -3010,7 +3017,7 @@ describe('FileViewer SVG artifacts', () => {
     }
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0]).toContain('Saved before comments');
-    expect(within(dock).getByDisplayValue(editSource !== 'inline' ? 'Saved before comments' : 'Original')).toBeVisible();
+    expect(within(editor).getByDisplayValue(editSource !== 'inline' ? 'Saved before comments' : 'Original')).toBeVisible();
     expect(screen.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.queryByTestId('comment-side-panel')).toBeNull();
     await act(async () => saved.resolve(new Response(JSON.stringify({
@@ -3018,7 +3025,7 @@ describe('FileViewer SVG artifacts', () => {
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })));
     expect(await within(dock).findByTestId('comment-side-panel')).toBeVisible();
     expect(screen.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'false');
-    expect(within(dock).queryByRole('button', { name: 'Close edit panel' })).toBeNull();
+    expect(screen.queryByRole('complementary', { name: 'Manual editor' })).toBeNull();
     expect(writes).toHaveLength(1);
   });
 
@@ -3044,7 +3051,8 @@ describe('FileViewer SVG artifacts', () => {
     </WorkspaceEditLayout>);
     fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
     const dock = screen.getByTestId('workspace-edit-dock');
-    await waitFor(() => expect(dock).toBeVisible());
+    const editor = await screen.findByRole('complementary', { name: 'Manual editor' });
+    expect(dock).not.toBeVisible();
     const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
     act(() => window.dispatchEvent(new MessageEvent('message', {
       source: frame.contentWindow,
@@ -3053,9 +3061,9 @@ describe('FileViewer SVG artifacts', () => {
         outerHtml: '<main data-od-id="hero"><p data-od-id="child">Hero</p></main>',
       } },
     })));
-    expect(await within(dock).findByTitle('Hero container')).toBeVisible();
+    expect(await within(editor).findByTitle('Hero container')).toBeVisible();
     if (change === 'padding') {
-      const paddingRow = Array.from(dock.querySelectorAll('.cc-quad'))
+      const paddingRow = Array.from(editor.querySelectorAll('.cc-quad'))
         .find((row) => row.querySelector('.cc-quad-head span')?.textContent === 'Padding') as HTMLElement;
       fireEvent.change(within(paddingRow).getByRole('textbox', { name: 'Top' }), { target: { value: '24' } });
     } else {

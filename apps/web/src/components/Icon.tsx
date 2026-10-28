@@ -28,6 +28,7 @@ export type IconName =
   | 'download'
   | 'draw'
   | 'edit'
+  | 'edit-box'
   | 'external-link'
   | 'eye'
   | 'eye-off'
@@ -76,6 +77,8 @@ export type IconName =
   | 'more-horizontal'
   | 'more-vertical'
   | 'orbit'
+  | 'orbit-filled'
+  | 'pencil-ruler'
   | 'remix-loop'
   | 'make-same'
   | 'paint-bucket'
@@ -211,6 +214,9 @@ const REMIX_ICON: Partial<Record<IconName, string>> = {
   'more-horizontal': 'more-line',
   'more-vertical': 'more-2-line',
   orbit: 'planet-line',
+  'orbit-filled': 'planet-fill',
+  'pencil-ruler': 'pencil-ruler-2-line',
+  'edit-box': 'edit-box-line',
   'paint-bucket': 'paint-line',
   palette: 'palette-line',
   'palette-filled': 'palette-fill',

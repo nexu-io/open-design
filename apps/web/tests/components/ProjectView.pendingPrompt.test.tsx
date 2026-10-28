@@ -86,6 +86,7 @@ vi.mock('../../src/providers/anthropic', () => ({
 }));
 
 vi.mock('../../src/providers/daemon', () => ({
+  fetchVelaLoginStatus: vi.fn().mockResolvedValue(null),
   fetchChatRunStatus: vi.fn(),
   listActiveChatRuns: vi.fn().mockResolvedValue([]),
   listProjectRuns: vi.fn().mockResolvedValue([]),
@@ -218,7 +219,7 @@ vi.mock('../../src/components/Loading', () => ({
   CenteredLoader: () => <div data-testid="loader" />,
 }));
 
-vi.mock('../../src/components/ChatPane', () => ({
+vi.mock('../../src/components/chat/ProjectChatPane', () => ({
   ChatPane: (props: MockChatPaneProps) => {
     chatPaneSpy(props);
     return (
@@ -650,6 +651,10 @@ describe('ProjectView pending prompt seeding', () => {
         workspaceItems: [workspaceItem],
       },
     }));
+    expect(screen.getByTestId('workspace-edit-layout').parentElement)
+      .toHaveAttribute('data-conversation-placement', 'full');
+    expect(screen.getByRole('button', { name: 'workspace.expandPreview' }))
+      .toHaveAttribute('aria-expanded', 'false');
   });
 
   it('auto-sends the session-carried prompt when the project projection drops pendingPrompt', async () => {

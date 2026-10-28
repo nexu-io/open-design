@@ -40,6 +40,132 @@
   width: 100%;
   max-width: 960px;
 }
+/* Home owns the bottom composer; other destinations keep their scroll runout. */
+.entry-main--scroll:has(> .entry-main__inner > .entry-main__view-home[data-active='true']) {
+  overflow: hidden;
+}
+.entry-main__inner:has(> .entry-main__view-home[data-active='true']) {
+  /* Bound the entire Home column to the panel instead of letting the gallery
+     determine its height. Only the content above the composer may scroll. */
+  position: absolute;
+  inset: 0;
+  height: auto;
+  min-height: 0;
+  padding-bottom: 16px;
+}
+.entry-main__view-home > .home-view:not(.home-view--dock) {
+  flex: 1;
+  min-height: 0;
+}
+.entry-main__view-home > .home-view:not(.home-view--dock) > .home-hero {
+  flex: 1;
+  min-height: 0;
+  max-width: none;
+  padding: 0;
+}
+.home-hero__content {
+  display: contents;
+}
+.entry-main__view-home .home-hero:not(.home-hero--dock) > .home-hero__content {
+  --home-hero-scroll-top-pad: calc(var(--entry-inner-pad-top, 0px) + clamp(24px, 15dvh, 144px));
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-6);
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  /* Scroll to the white card's top edge, not the inner column's: pull up
+     over .entry-main__inner's top padding and give it back as padding, so
+     the resting layout is unchanged but scrolled content reaches the edge. */
+  margin-top: calc(-1 * var(--entry-inner-pad-top, 0px));
+  padding-top: var(--home-hero-scroll-top-pad);
+}
+/* Progressive frosted band at the top of that column, 24px tall — only while
+   something is scrolled under it (same two-layer recipe as
+   .entry-main--scroll::before/::after). */
+.entry-main__view-home .home-hero:not(.home-hero--dock)::before,
+.entry-main__view-home .home-hero:not(.home-hero--dock)::after {
+  content: '';
+  position: absolute;
+  top: calc(-1 * var(--entry-inner-pad-top, 0px));
+  left: 0;
+  right: 0;
+  z-index: 20;
+  pointer-events: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  transition: backdrop-filter 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.entry-main__view-home .home-hero:not(.home-hero--dock)::before {
+  height: 24px;
+  -webkit-mask-image: linear-gradient(to bottom, #000 40%, transparent);
+  mask-image: linear-gradient(to bottom, #000 40%, transparent);
+}
+.entry-main__view-home .home-hero:not(.home-hero--dock)::after {
+  height: 12px;
+  -webkit-mask-image: linear-gradient(to bottom, #000, transparent);
+  mask-image: linear-gradient(to bottom, #000, transparent);
+}
+.entry-main__view-home .home-hero.is-content-scrolled:not(.home-hero--dock)::before {
+  -webkit-backdrop-filter: var(--material-edge-soft-backdrop, none);
+  backdrop-filter: var(--material-edge-soft-backdrop, none);
+}
+.entry-main__view-home .home-hero.is-content-scrolled:not(.home-hero--dock)::after {
+  -webkit-backdrop-filter: var(--material-edge-strong-backdrop, none);
+  backdrop-filter: var(--material-edge-strong-backdrop, none);
+}
+/* Entry state (no type picked): the heading + cards block sits on the
+   column's vertical centre — equal space from the panel's top edge and to the
+   composer's top edge (per product). `safe` falls back to top alignment when
+   the block outgrows the column, so it scrolls instead of clipping. */
+.entry-main__view-home .home-hero:not(.home-hero--dock) > .home-hero__content--centered {
+  --home-hero-scroll-top-pad: var(--entry-inner-pad-top, 0px);
+  justify-content: safe center;
+  /* From the white card's top edge the column's top is 1px border + this
+     padding; its foot is only the hero's 6px gap above the composer. A
+     bottom padding 5px short of the top one evens the two. */
+  padding-top: var(--home-hero-scroll-top-pad);
+  padding-bottom: calc(var(--entry-inner-pad-top, 0px) - 5px);
+}
+/* Keep wheel/trackpad scrolling without a visible scrollbar. */
+.entry-main__view-home .home-hero:not(.home-hero--dock) > .home-hero__content {
+  scrollbar-width: none;
+}
+.entry-main__view-home .home-hero:not(.home-hero--dock) > .home-hero__content::-webkit-scrollbar {
+  display: none;
+}
+.entry-main__view-home .home-hero__content > * {
+  flex-shrink: 0;
+}
+/* The embedded community gallery shares its cards and responsive grid, while
+   Home supplies the scroll area and the gap above the bottom composer. */
+.home-hero__content > .community-template-view[data-content-only] {
+  /* Same column as the composer card below (.home-hero__composer-card). */
+  width: 100%;
+  max-width: 820px;
+  padding: 0;
+}
+.home-hero__content .community-template-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.home-hero__content .community-template-grid[data-layout='masonry'] {
+  column-width: auto;
+  column-count: 3;
+}
+@container (max-width: 600px) {
+  .home-hero__content .community-template-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .home-hero__content .community-template-grid[data-layout='masonry'] {
+    column-count: 2;
+  }
+}
+.entry-main__view-home .home-hero:not(.home-hero--dock) > .home-hero__composer-card {
+  flex-shrink: 0;
+}
 /* Break from the hero above. Was 52px (64 with the column's own 12px flex
    gap); product pulled the whole module up 50px on 2026-08-21, so 2px here —
    the 12px gap carries the separation now. */
@@ -60,8 +186,7 @@
   flex-direction: column;
   align-items: center;
   gap: var(--spacing-6);
-  /* Keep the title, composer and type pills together. The extra 28px puts
-     the type row 32px above the bottom edge in the reference home layout. */
+  /* Keep the creation types, title and composer together. */
   padding: 144px 0 var(--spacing-4);
 }
 .home-hero__brand {
@@ -158,17 +283,6 @@
     color: var(--text-strong);
   }
 }
-/* Optical centring for headlines that end in full-width punctuation (per
-   product: 以输入框为中心对齐). That last glyph draws in the left ~0.45em of a
-   full-em advance, so a box-centred line puts its INK ~0.275em left of the
-   composer card underneath — visible as the headline hanging left of a column
-   where everything else lines up. Pulling the margin box in by the blank makes
-   flex cross-axis centring hand back half of it, which is exactly the shift the
-   ink needs. Measured against the live card: -0.55em lands it within 0.1px.
-   `.home-hero__title` sets `margin: 0 0 …`, so this has to come after it. */
-.home-hero__title--optical-trim {
-  margin-right: -0.55em;
-}
 /* Quiet second line under the headline: same 14px grey the rest of the page's
    secondary text uses. Carries the old title → composer gap (20px). */
 .home-hero__subtitle {
@@ -178,6 +292,39 @@
   line-height: 1.45;
   color: var(--text-muted);
   text-align: center;
+}
+/* Title + subtitle pinned to the left edge of the 820px column the entry cards
+   and the picked type's gallery share (same width as .home-hero__composer-card). */
+.home-hero__heading--start {
+  align-self: center;
+  width: 100%;
+  max-width: 820px;
+  text-align: left;
+}
+/* The heading scrolls away with the Home gallery. It used to pin to the
+   card's top edge on a solid/frosted surface, which read as a white band
+   over the page wash once the gallery scrolled underneath. */
+.entry-main__view-home .home-hero:not(.home-hero--dock) .home-hero__heading-sticky {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+/* Headline pair + postcard ornament (HeroPostcard) on one row while the
+   entry cards show. The row carries the subtitle's gap to the cards so the
+   ornament is centred on the text block alone. */
+.home-hero__heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-20);
+  margin-bottom: var(--spacing-20);
+}
+.home-hero__heading-text {
+  min-width: 0;
+}
+.home-hero__heading-row .home-hero__subtitle {
+  margin-bottom: 0;
 }
 /* ---------- Output-type tab bar ----------
    Sits below the input card, Manus-style: the selected creation mode
@@ -290,10 +437,8 @@
   gap: 8px;
   width: 100%;
   max-width: 820px;
-  /* 24px between the composer card above and the pills' own edge (per
-     product): .home-hero's 6px flex gap and this row's 2px top padding both
-     count toward it, so 16px lives here. */
-  margin: 16px auto 2px;
+  /* The 6px hero gap and 2px padding complete the 24px gap to the title. */
+  margin: 0 auto 16px;
   padding: 2px 0;
 }
 .home-hero__type-pill {
@@ -1164,7 +1309,9 @@
   align-items: center;
   pointer-events: none;
   user-select: none;
-  font-size: 13px;
+  /* Same metrics as the typed text (.home-hero__lexical .composer-editable),
+     so the sample line and its caret don't jump when the user starts typing. */
+  font-size: var(--font-size-14);
   line-height: 1.6;
   color: var(--text-soft);
   overflow: hidden;
@@ -1178,12 +1325,15 @@
   white-space: nowrap;
 }
 .home-hero__carousel-caret {
+  /* Mirrors the native caret the editor shows once focused: 1px wide, 17px
+     tall (the 14px font's glyph box) and the editor's `caret-color`. */
   flex: none;
-  width: 1.5px;
-  align-self: stretch;
-  margin: 3px 0 3px 2px;
+  align-self: flex-start;
+  width: 1px;
+  height: 17px;
+  /* The native caret sits 2px below the 22.4px line box's top, not centred. */
+  margin: 2px 0 0 1px;
   background: var(--accent);
-  border-radius: 1px;
   animation: home-hero-caret-blink 1.05s steps(1, end) infinite;
 }
 @keyframes home-hero-caret-blink {
@@ -1949,13 +2099,14 @@
   left: 0;
   z-index: 90;
 }
-/* Docked variant only: flip the panel above the trigger. The module's own
+/* Bottom composers: flip the panel above the trigger. The module's own
    `panelUp` cannot do it alone — the rule above is what actually positions
    this panel on the Home surfaces, and it out-ranks the module class, so the
-   dock has to restate the anchor. The card's `overflow: hidden` already lifts
+   bottom layouts must restate the anchor. The card's `overflow: hidden` already lifts
    while this panel is open (see the `:has()` rule further down), so hanging it
    upward is free. */
-.home-hero--dock .home-hero__working-dir-picker [data-testid='working-dir-panel'] {
+.home-hero--dock .home-hero__working-dir-picker [data-testid='working-dir-panel'],
+.entry-main__view-home .home-hero__working-dir-picker [data-testid='working-dir-panel'] {
   top: auto;
   bottom: calc(100% + 6px);
 }
@@ -4009,15 +4160,14 @@
   background-color: transparent;
   background-image: none;
 }
-/* Selected template: same selected pair as the nav rail's active item
-   (极浅品牌背景 var(--brand-surface) under deep brand green var(--brand-ink)). */
+/* Match the neighboring add/design-system controls while retaining type ink. */
 .home-hero__footer-option--select[data-field-name='template'].has-selection {
   max-width: 250px;
   border-color: transparent;
-  background-color: var(--brand-surface);
+  background-color: var(--bg-panel);
   background-image: none;
   color: var(--brand-ink);
-  /* No stroke (per product): the pale brand fill alone marks the selection.
+  /* No stroke (per product): the neutral fill matches adjacent controls.
      The 1px border stays declared transparent above so the pill's box metrics
      match the bordered design-system pill beside it. */
   box-shadow: none;
@@ -4036,14 +4186,14 @@
    restated here. */
 .home-hero__footer-option--select[data-field-name='template'].has-selection:hover {
   border-color: transparent;
-  background-color: var(--brand-surface);
+  background-color: var(--bg-panel);
   color: var(--brand-ink);
   box-shadow: none;
 }
 .home-hero__footer-option--select[data-field-name='template'].has-selection.is-open,
 .home-hero__footer-option--select[data-field-name='template'].has-selection:focus-within {
   border-color: transparent;
-  background-color: var(--brand-surface);
+  background-color: var(--bg-panel);
   color: var(--brand-ink);
   /* Strokeless through open/focus too — the generic template hover rule above
      would otherwise swap in shadow-xs. */
@@ -4089,7 +4239,7 @@
 .home-hero__template-option.has-selection .home-hero__template-kicker {
   color: var(--text-faint);
 }
-/* Icon + label in the nav rail's deep brand green on the pale wash. */
+/* Retain the selected type's green icon and label on the neutral fill. */
 .home-hero__template-option.has-selection .home-hero__footer-option-icon {
   color: var(--brand-ink);
 }
@@ -4169,9 +4319,6 @@
   cursor: default;
   opacity: 0.55;
 }
-/* The pill's leading icon doubles as the creation-type clear button. Hovering
-   anywhere on the pill (or focusing its clear control) swaps the type glyph to
-   an ×, so the affordance appears before the pointer has to find the icon. */
 /* The composer-row pill borrows the shared compact icon slot, which is 13px —
    3px under the 16px `Icon`s it holds and 3px under the attach / palette
    glyphs it sits beside. Pin it to 16 here rather than widening every compact
@@ -4181,38 +4328,40 @@
   height: 16px;
   flex-basis: 16px;
 }
-.home-hero__template-icon--clearable {
-  position: relative;
+.home-hero__template-trigger .home-hero__template-clear,
+.home-hero__template-trigger .home-hero__template-clear:hover:not(:disabled),
+.home-hero__template-trigger .home-hero__template-clear:active:not(:disabled) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  /* Reduce the trigger's 6px gap to 4px before the close button.
+     Extend into the trailing padding to retain the 4px right inset;
+     centering the 28px circle in the 36px pill keeps 4px above and below. */
+  margin-left: -2px;
+  margin-right: -13px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  opacity: 1;
+  transform: none;
   cursor: pointer;
 }
-.home-hero__template-icon--clearable .home-hero__template-icon-glyph,
-.home-hero__template-icon--clearable .home-hero__template-icon-clear {
-  transition: opacity var(--duration-faster) var(--curve-easy-ease);
+.home-hero__template-trigger .home-hero__template-clear:hover:not(:disabled),
+.home-hero__template-trigger .home-hero__template-clear:active:not(:disabled),
+.home-hero__template-trigger .home-hero__template-clear:focus-visible {
+  background: #121212;
+  color: #fff;
 }
-.home-hero__template-icon--clearable .home-hero__template-icon-clear {
-  position: absolute;
-  /* Centre with a transform, NOT `inset: 0; margin: auto`. This glyph is
-     deliberately WIDER than its slot (22px in a 14px box — see TemplatePicker
-     for why), and auto margins are not allowed to resolve negative: the spec
-     zeroes margin-left and solves for the right instead, which parked the ×
-     4px off the slot's centre and out of line with the icons beside it. */
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  opacity: 0;
-}
-.home-hero__template-option:hover .home-hero__template-icon--clearable .home-hero__template-icon-glyph,
-.home-hero__template-option:focus-within .home-hero__template-icon--clearable .home-hero__template-icon-glyph {
-  opacity: 0;
-}
-.home-hero__template-option:hover .home-hero__template-icon--clearable .home-hero__template-icon-clear,
-.home-hero__template-option:focus-within .home-hero__template-icon--clearable .home-hero__template-icon-clear {
-  opacity: 1;
-}
-.home-hero__template-icon--clearable:focus-visible {
+.home-hero__template-trigger .home-hero__template-clear:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-  border-radius: var(--radius-sm);
+  border-radius: 50%;
 }
 
 .home-hero__template-list-head {
@@ -4476,6 +4625,13 @@
 .home-hero--dock[data-collapsed='true'] .home-hero__prompt-flow,
 .home-hero--dock[data-collapsed='true'] .home-hero__lexical .composer-input-editor {
   max-height: var(--home-hero-line);
+}
+/* …and the folded bar does not scroll (per product: 输入框里带东西时不允许滚动，
+   只显示一行). The surface is the prompt's scroller, so it is clipped to the
+   first line here; `clip` (not `hidden`) also stops caret-follow scrolling. */
+.home-hero--dock[data-collapsed='true'] .home-hero__prompt-flow > .home-hero__prompt-surface {
+  max-height: var(--home-hero-line);
+  overflow: clip;
 }
 .home-hero--dock:not([data-collapsed='true']) .home-hero__lexical .composer-input-editor,
 .home-hero--dock:not([data-collapsed='true']) .home-hero__lexical .composer-editable {

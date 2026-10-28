@@ -42,6 +42,10 @@ const TEMPLATE_HOME_TARGET: Record<TemplateType, Pick<CommunityTemplateUseTarget
   'Audio': { chipId: 'audio', projectKind: 'audio' },
 };
 
+export function communityTypeForChip(chipId: string | null): TemplateType | undefined {
+  return COMMUNITY_TAB_TYPES.find((type) => TEMPLATE_HOME_TARGET[type].chipId === chipId);
+}
+
 function templateUseTarget(template: TemplateDemo): CommunityTemplateUseTarget {
   return {
     templateId: template.id,
@@ -55,7 +59,7 @@ function templateUseTarget(template: TemplateDemo): CommunityTemplateUseTarget {
  *  read as one taxonomy. */
 const TEMPLATE_TYPE_ICON: Record<TemplateType, IconName> = {
   'Slides': 'present',
-  'Prototype': 'artboard',
+  'Prototype': 'pencil-ruler',
   'Document': 'file-text',
   'Live Artifact': 'bar-chart-box',
   'Image': 'image',
@@ -65,6 +69,10 @@ const TEMPLATE_TYPE_ICON: Record<TemplateType, IconName> = {
 };
 
 interface CommunityViewProps {
+  /** Home embeds the same gallery, with its composer owning the type. */
+  selectedType?: TemplateType;
+  contentOnly?: boolean;
+  catalog?: InstalledPluginRecord[];
   /** Hand the user into Home with a starting prompt derived from the chosen
    *  template. The `templateId` is threaded through so the destination knows
    *  which card was remixed. */
@@ -102,6 +110,9 @@ interface CommunityViewProps {
 const MASONRY_TYPES = new Set<TemplateType>(['Image', 'Video']);
 
 export function CommunityView({
+  selectedType,
+  contentOnly = false,
+  catalog,
   onRemixTemplate,
   onUsePrompt,
   onUsePlugin,
@@ -117,11 +128,12 @@ export function CommunityView({
     // React StrictMode replays mount effects in development. Keep one
     // Community exposure per mounted view so local validation and production
     // dashboards share the same one-view/one-event contract.
-    if (pageViewRecordedRef.current) return;
+    if (contentOnly || pageViewRecordedRef.current) return;
     pageViewRecordedRef.current = true;
     trackPageView(analytics.track, { page_name: 'community' });
-  }, [analytics.track]);
-  const [plugins, setPlugins] = useState<InstalledPluginRecord[]>([]);
+  }, [analytics.track, contentOnly]);
+  const [loadedPlugins, setPlugins] = useState<InstalledPluginRecord[]>([]);
+  const plugins = catalog ?? loadedPlugins;
   // The gallery card opens the FULL plugin details modal (Use split action +
   // Share + close) — the same surface the plugin library uses — while the
   // lightweight footer-Remix preview belongs to the creation page's template
@@ -129,7 +141,8 @@ export function CommunityView({
   // from `InstalledPluginRecord`, not from the card view-model.
   const [detailsRecord, setDetailsRecord] = useState<InstalledPluginRecord | null>(null);
   // The tab row leads with Prototype, mirroring the Home type row's order.
-  const [activeType, setActiveType] = useState<TemplateType>('Prototype');
+  const [tabType, setActiveType] = useState<TemplateType>('Prototype');
+  const activeType = selectedType ?? tabType;
   // Mirror the picked type into whatever composer the host has on screen. Runs
   // on mount too: this gallery is ALWAYS filtered to one type (unlike Home,
   // which starts unbound), so the composer should open already carrying it.
@@ -175,6 +188,7 @@ export function CommunityView({
     return () => window.clearTimeout(timer);
   }, [remixingId]);
   useEffect(() => {
+    if (catalog) return;
     let cancelled = false;
     // `listPlugins` resolves to [] on a failed/aborted fetch, so a daemon that
     // is not up yet simply leaves the grid empty instead of throwing.
@@ -182,7 +196,7 @@ export function CommunityView({
       if (!cancelled) setPlugins(rows);
     });
     return () => { cancelled = true; };
-  }, []);
+  }, [catalog]);
   const templates = useMemo(
     () => buildCommunityTemplates(plugins, locale, t, workspaceContext),
     [plugins, locale, t, workspaceContext],
@@ -266,8 +280,14 @@ export function CommunityView({
   };
 
   return (
-    <section className="community-template-view" aria-labelledby="community-template-title">
+    <section
+      className="community-template-view"
+      data-content-only={contentOnly || undefined}
+      aria-labelledby={contentOnly ? undefined : 'community-template-title'}
+      aria-label={contentOnly ? t('community.title') : undefined}
+    >
       {/* Header (title + filter row) scrolls away with the grid. */}
+      {contentOnly ? null : (
       <div className="community-template-view__header">
       <header className="community-template-view__hero">
         <div>
@@ -303,6 +323,7 @@ export function CommunityView({
         </div>
       </div>
       </div>
+      )}
 
       {/* The layout is per-type: the two media tabs break out of the shared
           16:9 grid into an uncropped masonry (see plugin-marketplace-demo.css).
@@ -417,7 +438,7 @@ export function CommunityView({
   );
 }
 
-function TemplateThumb({ template }: { template: TemplateDemo }) {
+export function TemplateThumb({ template }: { template: TemplateDemo }) {
   // Same visibility contract the plugins-home gallery hands MediaSurface (see
   // PreviewSurface.tsx): the wide margin MOUNTS the clip so its first frame is
   // ready before the tile scrolls in and scrolling back never remounts it,

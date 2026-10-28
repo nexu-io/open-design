@@ -191,6 +191,7 @@ import { Toast } from '../../Toast';
 import { supportChannels } from '../support-channels';
 import { ExportLogsAction } from '../ExportLogsAction';
 import { repoConnectCopy } from '../../design-system-github-evidence';
+import { ConversationStartHero } from '../ConversationStartHero';
 import { isRenderableSketchJson, SketchPreview } from '../../SketchPreview';
 import type { SettingsSection } from '../../SettingsDialog';
 
@@ -4126,9 +4127,12 @@ export function ChatPane({
                       />
                     ) : (
                       <>
-                        {/* #5517 leaves the empty conversation pane clean — no
-                            "start a conversation" title or starter template
-                            cards; only the connect-repo note below survives. */}
+                        {/* Home's opening (per product: 新会话的空白区显示首页内容).
+                            Picking a type fills this composer, not Home's. */}
+                        <ConversationStartHero
+                          disabled={questionFormSubmitDisabled}
+                          onPickPrompt={(prompt) => composerRef.current?.setDraft(prompt)}
+                        />
                         {connectRepoNeeded ? (
                           <div className="chat-connect-repo" role="note">
                             <span className="chat-connect-repo-icon" aria-hidden>

@@ -1,0 +1,29 @@
+/* Home's opening, inside the empty conversation pane. Typography comes from
+   the shared `.home-hero__*` classes; this file only fits it to a column that
+   is usually far narrower than Home's 820px. */
+.root {
+  container-type: inline-size;
+  width: 100%;
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 24px 4px 8px;
+  text-align: left;
+}
+.heading {
+  margin-bottom: 20px;
+}
+.title,
+.subtitle {
+  text-align: left;
+}
+
+/* A chat column cannot hold the cards' two-up grid or the postcard beside the
+   headline: stack the cards in one column and drop the ornament. */
+@container (max-width: 560px) {
+  .heading > :last-child:not(:global(.home-hero__heading-text)) {
+    display: none;
+  }
+  .root [data-testid='home-hero-type-cards'] > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

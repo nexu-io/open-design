@@ -538,7 +538,7 @@ const BLANK_PAGE_PRESETS: ProjectPagePreset[] = [
     category: 'prototype',
     titleKey: 'homeHero.chip.prototype',
     descriptionKey: 'homeHero.chip.prototypeDesc',
-    icon: 'layout',
+    icon: 'pencil-ruler',
     fileBaseName: 'prototype',
     source: 'blank',
     featured: true,
@@ -1102,7 +1102,7 @@ const PROJECT_PAGE_CATEGORIES: Array<{
   labelKey: keyof Dict;
 }> = [
   { id: 'slides', icon: 'present', labelKey: 'homeHero.chip.deck' },
-  { id: 'prototype', icon: 'layout', labelKey: 'homeHero.chip.prototype' },
+  { id: 'prototype', icon: 'pencil-ruler', labelKey: 'homeHero.chip.prototype' },
   { id: 'wireframe', icon: 'grid', labelKey: 'homeHero.chip.wireframe' },
   { id: 'mobile', icon: 'smartphone', labelKey: 'homeHero.chip.mobile' },
   { id: 'document', icon: 'file-text', labelKey: 'homeHero.chip.document' },
@@ -4124,7 +4124,7 @@ export function FileWorkspace({
           data-testid="workspace-add-tab"
           onClick={() => setLauncherOpen((open) => !open)}
         >
-          <Icon name="plus-circle" size={18} />
+          <Icon name="plus" size={18} />
         </button>
       ) : null}
     </div>
@@ -6917,7 +6917,7 @@ function iconForPageKind(kind: ProjectPageKind): IconName {
     case 'slides':
       return 'present';
     case 'prototype':
-      return 'layout';
+      return 'pencil-ruler';
     case 'wireframe':
       return 'grid';
     case 'mobile':

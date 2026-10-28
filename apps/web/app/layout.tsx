@@ -15,6 +15,7 @@ import '../src/components/DesignSystemFoundations.module.css';
 import '../src/components/workspace/WorkspaceEditLayout.module.css';
 import '../src/components/ManualEditPanel.module.css';
 // Persistent sidebar controls must also survive a direct project-page load.
+import '../src/components/PrimaryNavigationRail.module.css';
 import '../src/components/ProjectRecentRail.module.css';
 import '../src/components/entry-nav-rail/RailRecentSection.module.css';
 import '../src/components/entry-nav-rail/RailConversationTree.module.css';

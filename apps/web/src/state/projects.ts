@@ -22,6 +22,8 @@ import type {
   ImportFolderResponse,
   InstalledPluginRecord,
   LocalCatalogScope,
+  MoveConversationRequest,
+  MoveConversationResponse,
   PluginDuplicateProjectResponse,
   PluginInstallOutcome,
   PluginShareAction,
@@ -34,6 +36,7 @@ import type {
   WorkspaceProjectsResponse,
 } from '@open-design/contracts';
 import { randomUUID } from '../utils/uuid';
+import { CONVERSATION_MOVED_EVENT, type ConversationMovedDetail } from './conversation-events';
 import { markProjectDisplaySnapshotsDirty } from './project-display-cache';
 import {
   workspaceIdentityCacheKey,
@@ -1387,6 +1390,42 @@ export async function deleteConversation(
     return resp.ok;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Move a conversation into another personal project. The daemon copies the
+ * files its messages reference, so the moved transcript still resolves them.
+ * Resolves `null` on any failure.
+ */
+export async function moveConversation(
+  projectId: string,
+  conversationId: string,
+  targetProjectId: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<MoveConversationResponse | null> {
+  try {
+    const resp = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/move`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+        },
+        body: JSON.stringify({ targetProjectId } satisfies MoveConversationRequest),
+      },
+    );
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as MoveConversationResponse;
+    evictConversationsRead(projectId, workspaceContext);
+    evictConversationsRead(targetProjectId, workspaceContext);
+    window.dispatchEvent(new CustomEvent<ConversationMovedDetail>(CONVERSATION_MOVED_EVENT, {
+      detail: { conversationId, fromProjectId: projectId, toProjectId: targetProjectId },
+    }));
+    return json;
+  } catch {
+    return null;
   }
 }
 

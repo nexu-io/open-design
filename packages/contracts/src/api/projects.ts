@@ -691,6 +691,21 @@ export interface UpdateConversationRequest {
   sessionMode?: ChatSessionMode;
 }
 
+/** `POST /api/projects/:id/conversations/:cid/move` — personal projects only. */
+export interface MoveConversationRequest {
+  targetProjectId: string;
+}
+
+export interface MoveConversationResponse extends ConversationResponse {
+  targetProjectId: string;
+  /** Target-project paths written for files the transcript references. */
+  copiedFiles: string[];
+  /** Referenced files copied under a numbered name to avoid a clash. */
+  renamedFiles: { from: string; to: string }[];
+  /** Source paths not copied (unreadable, or a clashing supporting asset). */
+  skippedFiles: string[];
+}
+
 export interface MessagesResponse {
   messages: ChatMessage[];
 }

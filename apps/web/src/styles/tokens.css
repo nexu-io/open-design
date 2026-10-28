@@ -59,6 +59,9 @@
      lighter again, #EAFFEB → #F2FFF2, which only widens that margin). */
   --brand-ink: #007106;
   --brand-surface: #F2FFF2;
+  /* Rail project folder while a conversation is dragged over it (per product
+     #EAFFEB). */
+  --drop-target-surface: #EAFFEB;
   /* Composer send button: saturated green glyph on a near-black disc (the
      supplied mark, 发送按钮.svg). Theme-independent — the pair is the mark
      itself. */
@@ -208,6 +211,7 @@
   --brand-text: #adf788;
   --brand-ink: #adf788;
   --brand-surface: #164111;
+  --drop-target-surface: #1d5a16;
 
   --green: #3BBF7D;
   --green-bg: #164111;
@@ -271,6 +275,7 @@
     --brand-text: #adf788;
     --brand-ink: #adf788;
     --brand-surface: #164111;
+    --drop-target-surface: #1d5a16;
 
     --green: #3BBF7D;
     --green-bg: #164111;

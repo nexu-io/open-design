@@ -51,18 +51,22 @@ type CoverState = ProjectCoverOverride | null | undefined;
  * other's state. One claim arbitrates both kinds across every row, so opening
  * anything closes whatever was open.
  */
-type PopupClaim = { rowId: string; kind: 'preview' | 'menu' } | null;
+export type PopupClaim = { rowId: string; kind: 'preview' | 'menu' } | null;
 let popupClaim: PopupClaim = null;
-const popupClaimListeners = new Set<() => void>();
+export const popupClaimListeners = new Set<() => void>();
 
-function claimPopup(next: PopupClaim) {
+export function currentPopupClaim(): PopupClaim {
+  return popupClaim;
+}
+
+export function claimPopup(next: PopupClaim) {
   popupClaim = next;
   for (const listener of popupClaimListeners) listener();
 }
 
 /** Release only if this row still holds it — a later claim must not be undone
  *  by an earlier row's pointer-leave arriving afterwards. */
-function releasePopup(rowId: string, kind: 'preview' | 'menu') {
+export function releasePopup(rowId: string, kind: 'preview' | 'menu') {
   if (popupClaim?.rowId === rowId && popupClaim.kind === kind) claimPopup(null);
 }
 
@@ -72,14 +76,14 @@ function releasePopup(rowId: string, kind: 'preview' | 'menu') {
  *  and the content column starts 12px past it. 24 therefore clears the rail by a
  *  visible margin and still reads as attached to the row rather than floating
  *  loose over the page. */
-const POPUP_GAP_PX = 24;
+export const POPUP_GAP_PX = 24;
 
 /**
  * The ⋮ mark (supplied artwork; Remix's `more-2-line`). Inlined rather than
  * added to the shared icon set: no `IconName` maps to that glyph today, and
  * this is the only place it appears.
  */
-function MoreDotsMark() {
+export function MoreDotsMark() {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -100,7 +104,27 @@ function MoreDotsMark() {
  * neither glyph exists in the shared icon set — `pencil`/`trash` are close but
  * not these drawings, and product asked for these.
  */
-function RenameMark() {
+/** 新建会话's speech-bubble mark, shared by the rail's create row and the
+ *  project folders' hover action. */
+export function NewConversationMark() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width={16} height={16} fill="currentColor" aria-hidden focusable="false">
+      <path d="M2 8.99374C2 5.68349 4.67654 3 8.00066 3H15.9993C19.3134 3 22 5.69478 22 8.99374V21H8.00066C4.68659 21 2 18.3052 2 15.0063V8.99374ZM20 19V8.99374C20 6.79539 18.2049 5 15.9993 5H8.00066C5.78458 5 4 6.78458 4 8.99374V15.0063C4 17.2046 5.79512 19 8.00066 19H20ZM14 11H16V13H14V11ZM8 11H10V13H8V11Z" />
+    </svg>
+  );
+}
+
+/** The project folders' hover 新建会话 action (supplied artwork; Remix's
+ *  `edit-line`). */
+export function NewConversationActionMark() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width={16} height={16} fill="currentColor" aria-hidden focusable="false">
+      <path d="M6.41421 15.89L16.5563 5.74785L15.1421 4.33363L5 14.4758V15.89H6.41421ZM7.24264 17.89H3V13.6473L14.435 2.21231C14.8256 1.82179 15.4587 1.82179 15.8492 2.21231L18.6777 5.04074C19.0682 5.43126 19.0682 6.06443 18.6777 6.45495L7.24264 17.89ZM3 19.89H21V21.89H3V19.89Z" />
+    </svg>
+  );
+}
+
+export function RenameMark() {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -116,7 +140,7 @@ function RenameMark() {
   );
 }
 
-function DeleteMark() {
+export function DeleteMark() {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -141,6 +165,8 @@ export function RailRecentRow({
   onOpen,
   onRename,
   onDelete,
+  onNewConversation,
+  newConversationDisabled = false,
 }: {
   project: Project;
   workspaceContext?: WorkspaceCollabContext | null;
@@ -153,6 +179,10 @@ export function RailRecentRow({
   onOpen?: (id: string) => void | Promise<unknown>;
   onRename?: (id: string, name: string) => void;
   onDelete?: (id: string) => Promise<boolean | void> | boolean | void;
+  /** Project folders only: a hover action beside the ⋮ that starts a new
+   *  conversation in this project. */
+  onNewConversation?: () => void;
+  newConversationDisabled?: boolean;
 }) {
   const t = useT();
   const snapshotKey = projectCoverSnapshotKey(
@@ -282,7 +312,7 @@ export function RailRecentRow({
   return (
     <div
       ref={rootRef}
-      className="entry-nav-rail__recent-row"
+      className={`entry-nav-rail__recent-row${onNewConversation ? ' has-new-conversation' : ''}`}
       onPointerEnter={(event) => {
         // Touch has no hover to leave; the panel would stick until the next tap.
         if (event.pointerType !== 'mouse' && event.pointerType !== 'pen') return;
@@ -366,6 +396,21 @@ export function RailRecentRow({
           )}
         </button>
       )}
+      {onNewConversation && !renaming ? (
+        <button
+          type="button"
+          className="entry-nav-rail__recent-more entry-nav-rail__recent-new-conversation"
+          aria-label={t('entry.newConversation')}
+          disabled={newConversationDisabled}
+          data-testid="entry-nav-recent-new-conversation"
+          onClick={(event) => {
+            event.stopPropagation();
+            onNewConversation();
+          }}
+        >
+          <NewConversationActionMark />
+        </button>
+      ) : null}
       {onRename || onDelete ? (
         <button
           type="button"

@@ -1078,7 +1078,7 @@ export function DesignFilesPanel({
         </button>
         <div className="df-card-meta">
           <span className="recent-projects__card-kind" title={categoryLabel(category, t)}>
-            <Icon name="artboard" size={14} />
+            <Icon name="pencil-ruler" size={14} />
           </span>
           <div className="df-card-meta-text">
             {renameState ? (

@@ -58,6 +58,7 @@ import {
   type HomeHeroChip,
 } from './home-hero/chips';
 import { homeHeroChipLabel } from './home-hero/chip-labels';
+import { HeroPostcard } from './home-hero/HeroPostcard';
 import { RotatingTitleWord } from './home-hero/RotatingTitleWord';
 import { ScenarioArt } from './home-hero/ScenarioArt';
 import { useEdgeAutoScroll, EdgeScrollZones } from './home-hero/EdgeAutoScroll';
@@ -88,7 +89,8 @@ import { ContextChipHoverCard } from './ContextChipHoverCard';
 import { workspaceContextDetailLine, workspaceContextKindLabel } from './workspace-context';
 import { FigmaHelpModal } from './FigmaHelpModal';
 import { TemplatePicker } from './home-hero/TemplatePicker';
-import { TypePillRow } from './home-hero/TypePillRow';
+import { TypeEntryCards } from './home-hero/TypeEntryCards';
+import type { TemplateDemo } from './CommunityTemplatePreview';
 import { LibraryPicker } from './LibraryPicker';
 import { assetTitle } from './LibraryAssetMeta';
 import { libraryAssetRawUrl } from '../providers/registry';
@@ -237,6 +239,10 @@ interface Props {
   // the composer card — before the template section — so a brand-new user sees
   // their recommended entry without scrolling.
   recommendationSlot?: ReactNode;
+  /** Community content replaces the starter rows for a selected creation type. */
+  templateGallery?: ReactNode;
+  /** Community poster per type id for the entry row's covers. */
+  entryTypeCovers?: Partial<Record<string, TemplateDemo>>;
   /**
    * `page` is Home's own full column — headline, composer, type row, examples.
    * `dock` is the composer ALONE, for surfaces that want Home's input without
@@ -272,10 +278,6 @@ const HOME_MENTION_ALL_TAB_PREVIEW = 6;
 // short lead, and let the chip's `title` carry the full one. Counted in code
 // points, so an emoji or a surrogate pair spends one slot, not two.
 const LEAD_CHIP_TITLE_MAX_CHARS = 8;
-// Full-width CJK punctuation whose glyph sits in the left half of a full-em
-// advance, leaving the rest blank. A headline ending in one of these needs the
-// optical nudge above; anything else centres honestly.
-const FULL_WIDTH_TRAILING_PUNCTUATION = /[？！。，、；：）】」』]$/u;
 
 /** The slot a headline translation writes to opt into the rotating noun. A
  *  locale whose `homeHero.title` has no `{word}` renders as a plain sentence,
@@ -288,10 +290,6 @@ const TITLE_WORD_SLOT = '{word}';
  *  ("Let’s create wireframes?" — "a Image" is what article-splicing gets
  *  you). Each locale therefore owns both halves of its own sentence. */
 const TITLE_WORD_SEPARATOR = ',';
-
-function endsWithFullWidthPunctuation(value: string): boolean {
-  return FULL_WIDTH_TRAILING_PUNCTUATION.test(value.trim());
-}
 
 function leadChipTitle(title: string): string {
   const chars = Array.from(title);
@@ -409,6 +407,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onStartBlankProject,
     executionSwitcher,
     recommendationSlot,
+    templateGallery,
+    entryTypeCovers,
     variant = 'page',
     collapseSignal,
   },
@@ -420,6 +420,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   // below to drop the furniture (headline, type row, example grid) rather than
   // to change how the composer itself behaves.
   const isDock = variant === 'dock';
+  // Frosts the band over Home's scroll column once content slides under it.
+  const [contentScrolled, setContentScrolled] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [mentionTab, setMentionTab] = useState<HomeMentionTab>('all');
   const [hoveredPlugin, setHoveredPlugin] = useState<InstalledPluginRecord | null>(null);
@@ -1505,10 +1507,46 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     : undefined;
   let optionRenderIndex = 0;
 
+  const headline = (
+    <>
+      {/* The heading hangs on the left edge of the 820px column the entry
+          cards and the picked type's gallery share (per product), never on its
+          centre line. */}
+      <h1 className="home-hero__title home-hero__heading--start" aria-label={titleAriaLabel}>
+        {/* A locale opts into the rotating noun by putting `{word}` in its
+            own headline string — en / zh-CN / zh-TW do; the other 16 keep a
+            plain sentence and fall straight through to the `else`. Nothing
+            here knows which locale is which, so any translation can join
+            later by editing one string. */}
+        {titleParts ? (
+          <>
+            {titleParts.lead}
+            <RotatingTitleWord
+              words={titleRotatingWords}
+              pinned={titlePinnedWord}
+              colorByWord={{
+                [homeHeroChipLabel('prototype', t)]: '#028BFD',
+                [homeHeroChipLabel('deck', t)]: '#FB9942',
+                [homeHeroChipLabel('document', t)]: '#4AC26B',
+              }}
+            />
+            {titleParts.tail}
+          </>
+        ) : (
+          t('homeHero.title')
+        )}
+      </h1>
+      {/* One quiet line under the headline (per product). */}
+      <p className="home-hero__subtitle home-hero__heading--start">
+        {t('homeHero.subtitle')}
+      </p>
+    </>
+  );
+
   return (
     <section
       ref={homeHeroRef}
-      className={`home-hero${isDock ? ' home-hero--dock' : ''}`}
+      className={`home-hero${isDock ? ' home-hero--dock' : ''}${contentScrolled && !isDock ? ' is-content-scrolled' : ''}`}
       data-testid="home-hero"
       data-variant={variant}
       /* Docked only: an untouched, unfocused composer shows its input line and
@@ -1529,55 +1567,98 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         isDock && ((carouselActive && !composerFocused) || forcedCollapsed) ? 'true' : undefined
       }
     >
+      <div
+        className={`home-hero__content${activeChipId || isDock ? '' : ' home-hero__content--centered'}`}
+        onScroll={(event) => setContentScrolled(event.currentTarget.scrollTop > 0)}
+      >
       {/* Hero header: one plain question. The animated pixel-scan wordmark that
           used to stand here is gone (per product) — the headline carries the
           moment instead, with no motion behind it. */}
-      {/* The headline is box-centred like everything else in this column, but a
-          line that ENDS in full-width CJK punctuation carries ~half an em of
-          blank inside that last glyph's advance — so the ink reads ~0.27em
-          left of the composer card below it. The modifier pulls the margin box
-          in by that blank (see home-hero.css); flex cross-axis centring then
-          lands the ink on the card's own centre line. Keyed off the string, not
-          the locale: any translation that ends in ？！。 gets it, and Latin
-          headlines (a narrow "?") are left alone. */}
       {isDock ? null : (
-        <>
-          <h1
-            className={
-              'home-hero__title' +
-              (endsWithFullWidthPunctuation(t('homeHero.title'))
-                ? ' home-hero__title--optical-trim'
-                : '')
-            }
-            aria-label={titleAriaLabel}
-          >
-            {/* A locale opts into the rotating noun by putting `{word}` in its
-                own headline string — en / zh-CN / zh-TW do; the other 16 keep a
-                plain sentence and fall straight through to the `else`. Nothing
-                here knows which locale is which, so any translation can join
-                later by editing one string. */}
-            {titleParts ? (
-              <>
-                {titleParts.lead}
-                <RotatingTitleWord
-                  words={titleRotatingWords}
-                  pinned={titlePinnedWord}
-                  colorByWord={{
-                    [homeHeroChipLabel('prototype', t)]: '#028BFD',
-                    [homeHeroChipLabel('deck', t)]: '#FB9942',
-                    [homeHeroChipLabel('document', t)]: '#4AC26B',
-                  }}
-                />
-                {titleParts.tail}
-              </>
-            ) : (
-              t('homeHero.title')
-            )}
-          </h1>
-          {/* One quiet line under the headline (per product). */}
-          <p className="home-hero__subtitle">{t('homeHero.subtitle')}</p>
-        </>
+        <div className="home-hero__heading-sticky">
+          {activeChipId ? (
+            headline
+          ) : (
+            /* While the entry cards show, the headline pair hangs on their left
+               edge and the postcard ornament sits on its right, sized to the
+               pair's height. */
+            <div className="home-hero__heading-row home-hero__heading--start">
+              <div className="home-hero__heading-text">{headline}</div>
+              <HeroPostcard />
+            </div>
+          )}
+        </div>
       )}
+
+      {activeChipId || isDock ? null : (
+        <TypeEntryCards
+          chips={templateChips}
+          disabled={pluginsLoading || pendingChipId !== null || pendingPluginId !== null}
+          labelFor={(id) => homeHeroChipLabel(id, t)}
+          descriptionFor={(id) => homeHeroChipDescription(id, t)}
+          covers={entryTypeCovers}
+          onPick={handlePickTaskChip}
+        />
+      )}
+
+      {/* No second-level category row under a picked type (per product,
+          2026-08-25): picking a type already narrows the examples, and a
+          second filter strip between the composer and them re-asked a
+          question the pill had just answered. The examples below now show the
+          picked type's full set. */}
+
+      {isDock ? null : recommendationSlot}
+
+      {isDock ? null : templateGallery ?? (examplePluginPresets.length > 0 && activeChipId ? (
+        <PluginPromptPresets
+          chipId={activeChipId}
+          plugins={examplePluginPresets}
+          activePluginId={activePluginRecord?.id ?? null}
+          pendingPluginId={pendingPluginId}
+          locale={locale}
+          onPick={pickExamplePluginPreset}
+          onPreview={onOpenPluginDetails}
+          pulseFirstPreset={guidePulseFirstPreset}
+          workspaceContext={workspaceContext}
+        />
+      ) : activePromptExamples.length > 0 ? (
+        <div
+          className="home-hero__prompt-examples"
+          data-testid="home-hero-prompt-examples"
+        >
+          <div
+            className={`home-hero__prompt-examples-grid${activeChipId === 'web-clone' ? ' home-hero__prompt-examples-grid--sites' : ''}`}
+          >
+            {activePromptExamples.map((example, index) =>
+              webCloneExampleSite(example) ? (
+                <WebClonePromptExampleCard
+                  key={example}
+                  example={example}
+                  pulse={guidePulseFirstPreset && index === 0}
+                  onPick={usePromptExample}
+                />
+              ) : (
+                <button
+                  key={example}
+                  type="button"
+                  className={`home-hero__prompt-example${guidePulseFirstPreset && index === 0 ? ' home-hero__attention-sheen' : ''}`}
+                  data-testid="home-hero-prompt-example"
+                  onClick={() => usePromptExample(example)}
+                >
+                  <span>{example}</span>
+                </button>
+              ),
+            )}
+          </div>
+        </div>
+      ) : null)}
+
+      {error ? (
+        <div role="alert" className="home-hero__error">
+          {error}
+        </div>
+      ) : null}
+      </div>
 
       {/* #5517 wraps the input card + workdir row into one visible composer
           card so they read as a single surface. */}
@@ -2542,82 +2623,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       </div>
       </div>
 
-      {/* Creation types, horizontal, under the working-directory row (per
-          product, 2026-08-21). They spent a round as a dropdown pill inside the
-          composer's foot row; out here the whole catalog is one glance.
-
-          The row is the EMPTY state's whole job: an untouched Home shows this
-          and nothing else. Picking a type retires it — the composer's pill now
-          names the choice, the categories below narrow it, and the examples
-          answer it, so a second full catalog under all three was just repeating
-          the question. The pill's × brings the row back. */}
-      {activeChipId || isDock ? null : (
-        <TypePillRow
-          chips={templateChips}
-          activeChipId={activeChipId}
-          disabled={pluginsLoading || pendingChipId !== null || pendingPluginId !== null}
-          labelFor={(id) => homeHeroChipLabel(id, t)}
-          onPick={handlePickTaskChip}
-        />
-      )}
-
-      {/* No second-level category row under a picked type (per product,
-          2026-08-25): picking a type already narrows the examples, and a
-          second filter strip between the composer and them re-asked a
-          question the pill had just answered. The examples below now show the
-          picked type's full set. */}
-
-      {isDock ? null : recommendationSlot}
-
-      {isDock ? null : examplePluginPresets.length > 0 && activeChipId ? (
-        <PluginPromptPresets
-          chipId={activeChipId}
-          plugins={examplePluginPresets}
-          activePluginId={activePluginRecord?.id ?? null}
-          pendingPluginId={pendingPluginId}
-          locale={locale}
-          onPick={pickExamplePluginPreset}
-          onPreview={onOpenPluginDetails}
-          pulseFirstPreset={guidePulseFirstPreset}
-          workspaceContext={workspaceContext}
-        />
-      ) : activePromptExamples.length > 0 ? (
-        <div
-          className="home-hero__prompt-examples"
-          data-testid="home-hero-prompt-examples"
-        >
-          <div
-            className={`home-hero__prompt-examples-grid${activeChipId === 'web-clone' ? ' home-hero__prompt-examples-grid--sites' : ''}`}
-          >
-            {activePromptExamples.map((example, index) =>
-              webCloneExampleSite(example) ? (
-                <WebClonePromptExampleCard
-                  key={example}
-                  example={example}
-                  pulse={guidePulseFirstPreset && index === 0}
-                  onPick={usePromptExample}
-                />
-              ) : (
-                <button
-                  key={example}
-                  type="button"
-                  className={`home-hero__prompt-example${guidePulseFirstPreset && index === 0 ? ' home-hero__attention-sheen' : ''}`}
-                  data-testid="home-hero-prompt-example"
-                  onClick={() => usePromptExample(example)}
-                >
-                  <span>{example}</span>
-                </button>
-              ),
-            )}
-          </div>
-        </div>
-      ) : null}
-
-      {error ? (
-        <div role="alert" className="home-hero__error">
-          {error}
-        </div>
-      ) : null}
       {previewHomeFile && previewHomeFileUrl ? createPortal(
         <div
           className="staged-preview-modal"
@@ -4131,7 +4136,7 @@ function ShortcutsMenu({
 }
 
 // Scenario subtitle shown under the title on the illustrated card rail.
-function homeHeroChipDescription(chipId: string, t: ReturnType<typeof useT>): string {
+export function homeHeroChipDescription(chipId: string, t: ReturnType<typeof useT>): string {
   switch (chipId) {
     case 'prototype': return t('homeHero.chip.prototypeDesc');
     case 'web-clone': return t('homeHero.chip.webCloneDesc');

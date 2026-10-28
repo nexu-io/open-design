@@ -243,6 +243,8 @@ import {
   ENTRY_RAIL_STATE_EVENT,
   ENTRY_RAIL_TOGGLE_EVENT,
   ENTRY_SEARCH_OPEN_EVENT,
+  ENTRY_NEW_PROJECT_OPEN_EVENT,
+  takeNewProjectRequest,
   RAIL_OPEN_STORAGE_KEY,
   readStoredRailOpen,
 } from './entryRailBridge';
@@ -310,6 +312,7 @@ type EntryCreateProjectInput = Omit<CreateInput, 'metadata'> & {
   initialRunContext?: RunContextSelection | null;
   conversationMode?: ChatSessionMode;
   autoSendFirstMessage?: boolean;
+  startOnHome?: boolean;
   /** Exact workspace/member authority checked by the Home AMR preflight. */
   amrGatePrecheckWitness?: AmrBalanceGateScope;
   requestId?: string;
@@ -1073,6 +1076,8 @@ export function EntryShell({
     }
   }, [workspaceLoading, isWorkspaceOnlyView, hasWorkspaceContext]);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [creatingBlankConversation, setCreatingBlankConversation] = useState(false);
+  const creatingBlankConversationRef = useRef(false);
   // Hard block from the pre-run balance gate on a home submit (empty wallet
   // or signed out); non-null renders the AmrBalanceDialog on the home page —
   // the project is never created, so the composer draft stays put. The dialog
@@ -1186,6 +1191,16 @@ export function EntryShell({
       : setLocalProviderModelsCache;
   const [newProjectInitialTab, setNewProjectInitialTab] =
     useState<CreateTab>('prototype');
+  useEffect(() => {
+    const openRequestedProject = () => {
+      if (!takeNewProjectRequest()) return;
+      setNewProjectInitialTab('prototype');
+      setNewProjectOpen(true);
+    };
+    window.addEventListener(ENTRY_NEW_PROJECT_OPEN_EVENT, openRequestedProject);
+    openRequestedProject();
+    return () => window.removeEventListener(ENTRY_NEW_PROJECT_OPEN_EVENT, openRequestedProject);
+  }, []);
   const [integrationTab, setIntegrationTab] = useState<IntegrationTab>(integrationInitialTab);
   // Lazy initializer, so a handoff published by a surface that then navigated
   // here — the `/marketplace/<id>` detail route, which `App` renders outside
@@ -1432,36 +1447,33 @@ export function EntryShell({
     setNewProjectOpen(true);
   }
 
-  function startBlankProjectFromRail() {
-    void Promise.resolve(
-      onCreateProject({
+  async function startBlankProjectFromRail() {
+    if (creatingBlankConversationRef.current) return;
+    creatingBlankConversationRef.current = true;
+    setCreatingBlankConversation(true);
+    try {
+      await onCreateProject({
         name: t('common.untitled'),
         skillId: null,
         designSystemId: null,
-        // No user-typed name exists yet — mark it `generated` (the same tag
-        // `handleCreateProjectFromDesignSystem` and the New Project panel's
-        // blank/no-name path use) so `canAutoRenameProjectFromPrompt` stays
-        // eligible once the user's first in-project prompt or the agent's
-        // own generated title arrives. Without this the project is stuck at
-        // "未命名" forever: this rail (the Drafts / All-projects empty-state
-        // "创建" button) is the only reachable way to open a truly metadata-
-        // less blank project, and every other create path already tags its
-        // fallback name with a `nameSource` the rename gate recognizes.
+        // Keep the fallback name eligible for automatic naming after the
+        // first message. A blank conversation never submits a prompt.
         metadata: { kind: 'other', nameSource: 'generated' },
-      }),
-    ).catch((err) => {
-      console.warn('Failed to create blank project from entry rail', err);
-    });
+      });
+    } catch (err) {
+      console.warn('Failed to create blank conversation from entry rail', err);
+    } finally {
+      creatingBlankConversationRef.current = false;
+      setCreatingBlankConversation(false);
+    }
   }
 
   function handleCreate(input: CreateInput) {
-    // The NewProjectModal no longer asks the user to pick a plugin.
-    // Each project kind is silently bound to its default scenario
-    // pipeline at creation time so the user lands in a running flow
-    // without having to reason about pipeline internals. The mapping
-    // is intentionally explicit so future kind-specific scenarios
-    // (e.g. a deck- or image-specialized pipeline) can take over a
-    // single row without touching the form.
+    // A named blank project starts with Home's creation choices. Bind the
+    // selected scenario only when the user submits the first prompt.
+    if (input.metadata.kind === 'other') {
+      return onCreateProject({ ...input, startOnHome: true });
+    }
     const pluginId = defaultPluginIdForMetadata(input.metadata);
     const pluginInputs = defaultPluginInputsForCreate(input, pluginId);
     return onCreateProject({
@@ -1815,7 +1827,9 @@ export function EntryShell({
               area: 'nav',
               element: 'new_project_plus',
             });
-            openNewProject();
+            // 新建会话 lands on the home composer; the project is only created
+            // once the user actually sends a prompt from there.
+            navigate({ kind: 'home', view: 'home' });
           }}
           onOpenSearch={() => setProjectSearchOpen(true)}
           open={view !== 'home' || railOpen}

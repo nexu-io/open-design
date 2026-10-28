@@ -8,7 +8,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CommunityView } from '../src/components/CommunityView';
+import { CommunityView, communityTypeForChip } from '../src/components/CommunityView';
 
 const analytics = vi.hoisted(() => ({ track: vi.fn() }));
 
@@ -27,10 +27,14 @@ function plugin(fixture: PluginFixture) {
     id: fixture.id,
     title: fixture.title,
     version: '1.0.0',
+    capabilitiesGranted: [],
+    updatedAt: 0,
+    installedAt: 0,
+    fsPath: `/plugins/_official/${fixture.id}`,
     trust: 'bundled' as const,
     sourceKind: 'bundled' as const,
     source: `/plugins/_official/${fixture.id}`,
-    manifest: { name: fixture.id, title: fixture.title, ...fixture.manifest },
+    manifest: { name: fixture.id, version: '1.0.0', title: fixture.title, ...fixture.manifest },
   };
 }
 
@@ -187,6 +191,48 @@ function clickTab(label: string) {
 }
 
 describe('CommunityView analytics', () => {
+  it('embeds the same catalogue without tabs and follows the composer type', () => {
+    const onUsePrompt = vi.fn();
+    // Home passes the visible catalogue, just like listPlugins does.
+    const catalog = [PITCH_DECK, SALES_DECK, LANDING_PROTOTYPE, IMAGE_TEMPLATE, DESIGN_SYSTEM_PLUGIN];
+    const { rerender } = render(
+      <CommunityView contentOnly catalog={catalog} selectedType={communityTypeForChip('prototype')} />,
+    );
+    expect(renderedCards().map((card) => card.dataset.templateType)).toEqual(['Prototype']);
+    expect(document.querySelector('.community-template-view__header')).toBeNull();
+    expect(readFacets()).toHaveLength(0);
+
+    rerender(<CommunityView contentOnly catalog={catalog} selectedType={communityTypeForChip('deck')} onUsePrompt={onUsePrompt} />);
+    expect(renderedCards().map((card) => card.dataset.templateType)).toEqual(['Slides', 'Slides']);
+    fireEvent.click(renderedCards()[0]!.querySelector('.community-template-card__prompt-btn')!);
+    expect(onUsePrompt).toHaveBeenCalledWith(expect.objectContaining({
+      templateId: PITCH_DECK.id, chipId: 'deck', projectKind: 'deck',
+    }));
+
+    rerender(<CommunityView contentOnly catalog={catalog} selectedType={communityTypeForChip('image')} />);
+    expect(renderedCards().map((card) => card.dataset.templateType)).toEqual(['Image']);
+    expect(document.querySelector('.community-template-grid')?.getAttribute('data-layout')).toBe('masonry');
+    expect(fetchMock.mock.calls.some(([url]) => url === '/api/plugins')).toBe(false);
+    expect(analytics.track.mock.calls.some(([event]) => event === 'page_view')).toBe(false);
+  });
+
+  it('shows the full community catalogue for the type on Home', () => {
+    const extraDecks = Array.from({ length: 4 }, (_, index) => plugin({
+      id: `example-extra-deck-${index}`,
+      title: `Extra Deck ${index}`,
+      manifest: { od: { mode: 'deck', preview: { type: 'html', entry: './example.html' } } },
+    }));
+    const catalog = [PITCH_DECK, SALES_DECK, ...extraDecks];
+    const { rerender } = render(
+      <CommunityView contentOnly catalog={catalog} selectedType="Slides" />,
+    );
+    expect(renderedCards()).toHaveLength(6);
+
+    rerender(<CommunityView catalog={catalog} />);
+    clickTab('Slides');
+    expect(renderedCards()).toHaveLength(6);
+  });
+
   it('records one page exposure when StrictMode replays mount effects', async () => {
     render(
       <StrictMode>
@@ -211,10 +257,12 @@ describe('CommunityView catalogue source', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/plugins', undefined);
 
     // The row mirrors the Home type row's taxonomy and order — Prototype leads
-    // — and renders all four kinds even though the fixture catalogue has no
-    // Document template yet.
+    // — and renders every kind even though the fixture catalogue has no
+    // Document or media template yet.
     const facets = readFacets();
-    expect(facets.map((facet) => facet.label)).toEqual(['Prototype', 'Slides', 'Document', 'Image']);
+    expect(facets.map((facet) => facet.label)).toEqual([
+      'Prototype', 'Slides', 'Document', 'Image', 'HyperFrames', 'Live Artifact', 'Video', 'Audio',
+    ]);
 
     // The card caption is the template's own title now — the type line it used
     // to carry is what the filters above the grid already say. Asserted before
@@ -224,7 +272,7 @@ describe('CommunityView catalogue source', () => {
 
     // Each tab grids exactly the plugins the daemon served for its kind — not
     // a bundled demo array. Document is empty until document templates ship.
-    expect(readFacetCardCounts()).toEqual([1, 2, 0, 1]);
+    expect(readFacetCardCounts()).toEqual([1, 2, 0, 1, 0, 0, 0, 0]);
   });
 
   it('leaves hidden and design-system plugins out of the gallery', async () => {

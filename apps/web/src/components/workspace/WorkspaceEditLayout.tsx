@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useT } from '../../i18n';
+import { Button } from '@open-design/components';
+import { Icon } from '../Icon';
 import styles from './WorkspaceEditLayout.module.css';
 
 const DEFAULT_WIDTH = 320;
@@ -35,8 +37,30 @@ export function useWorkspaceEditDock(owner: string, visible: boolean) {
   return dock;
 }
 
+export function WorkspacePreviewToggle({ expanded, onToggle, panelId }: {
+  expanded: boolean;
+  onToggle: () => void;
+  panelId: string;
+}) {
+  const t = useT();
+  const label = t(expanded ? 'workspace.collapsePreview' : 'workspace.expandPreview');
+  return <Button
+    className={styles.previewToggle}
+    data-expanded={expanded}
+    aria-label={label}
+    title={label}
+    aria-expanded={expanded}
+    aria-controls={panelId}
+    onClick={onToggle}
+  ><Icon name={expanded ? 'chevron-right' : 'plus-circle'} size={16} /></Button>;
+}
+
 /** A sibling of the preview card, so its background belongs to the app shell. */
-export function WorkspaceEditLayout({ children }: { children: ReactNode }) {
+export function WorkspaceEditLayout({ children, onCollapse, panelId }: {
+  children: ReactNode;
+  onCollapse?: () => void;
+  panelId?: string;
+}) {
   const t = useT();
   const rootRef = useRef<HTMLDivElement>(null);
   const [target, setTarget] = useState<HTMLDivElement | null>(null);
@@ -84,12 +108,15 @@ export function WorkspaceEditLayout({ children }: { children: ReactNode }) {
     <EditDockContext.Provider value={context}>
       <div
         ref={rootRef}
+        id={panelId}
         className={styles.layout}
+        data-collapsible={Boolean(onCollapse) || undefined}
         data-testid="workspace-edit-layout"
         data-resizing={dragging || undefined}
         style={{ gridTemplateColumns: `minmax(0, 1fr) ${active ? DIVIDER_WIDTH : 0}px ${active ? width : 0}px` }}
       >
         <div ref={setTabChrome} className={styles.tabChrome} data-testid="workspace-tab-chrome" />
+        {onCollapse && panelId ? <WorkspacePreviewToggle expanded onToggle={onCollapse} panelId={panelId} /> : null}
         <TabChromeContext.Provider value={tabChrome}>{children}</TabChromeContext.Provider>
         <div
           className={styles.divider}

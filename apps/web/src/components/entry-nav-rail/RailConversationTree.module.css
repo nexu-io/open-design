@@ -22,7 +22,9 @@
 .children li + li { margin-top: 1px; }
 .conversation {
   display: flex;
+  align-items: center;
   justify-content: flex-start;
+  gap: 9px;
   width: 100%;
   min-width: 0;
   min-height: 36px;
@@ -37,5 +39,62 @@
   text-align: left;
 }
 .conversation span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Same 18px glyph slot as the project rows, so titles share their column. */
+.conversation .conversationIcon { flex: 0 0 18px; display: inline-flex; align-items: center; justify-content: center; overflow: visible; }
 .selected { background: var(--bg-subtle); }
 .status { padding: 8px; color: var(--text-muted); }
+
+/* Navigation rows stay still while pressed; only the selection fill changes. */
+button.conversation:active:not(:disabled),
+button.create:active:not(:disabled) {
+  transform: none;
+}
+
+/* Same ⋮ reserve as the project rows: the title ellipsizes earlier while the
+   row is hovered or its menu is open, so the overlaid trigger never sits on
+   top of text. */
+.conversationRow:hover .conversation,
+.conversationRow:focus-within .conversation { padding-right: 36px; }
+
+/* 移动到: the item hosts its own flyout, so hovering from the item into the
+   list never leaves the item. The flyout's left padding bridges the gap to
+   the panel, keeping that hover continuous. */
+.moveItem { position: relative; }
+.moveChevron { display: inline-flex; margin-left: auto; color: var(--text-muted); }
+.moveFlyout {
+  position: absolute;
+  top: -5px;
+  left: 100%;
+  padding-left: 8px;
+}
+.moveFlyoutUp { top: auto; bottom: -5px; }
+/* Reuses the rail menu's surface; it is not itself viewport-anchored. */
+.moveFlyout .moveMenu {
+  position: static;
+  transform: none;
+  width: max-content;
+  min-width: 160px;
+  max-width: 240px;
+  max-height: min(320px, 60vh);
+  overflow-y: auto;
+}
+.moveName { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.moveEmpty { padding: 7px 8px; color: var(--text-muted); font-size: 13px; white-space: nowrap; }
+
+/* A project folder while a conversation is dragged over it. */
+.dropTarget {
+  border-radius: 12px;
+  background: var(--drop-target-surface);
+}
+/* The row's own hover fill would otherwise paint grey over the green. */
+.dropTarget :global(.entry-nav-rail__recent-row),
+.dropTarget :global(.entry-nav-rail__recent-row) * { background: transparent; }
+
+/* Drag ghost: Chromium snapshots a draggable without its own layer onto an
+   opaque ground, so the corners outside the row's rounded fill came out white.
+   An identity transform gives it a layer; the radius matches the fill. */
+.conversationRow[draggable='true'],
+.children li[draggable='true'] {
+  border-radius: 12px;
+  transform: translate(0, 0);
+}

@@ -41,6 +41,7 @@ vi.mock('../../src/providers/anthropic', () => ({
 }));
 
 vi.mock('../../src/providers/daemon', () => ({
+  fetchVelaLoginStatus: vi.fn().mockResolvedValue(null),
   fetchChatRunStatus: vi.fn(),
   listActiveChatRuns: vi.fn().mockResolvedValue([]),
   listProjectRuns: vi.fn().mockResolvedValue([]),
@@ -183,7 +184,7 @@ function renderProjectView(props?: {
   routeFileName?: string | null;
   routeConversationId?: string | null;
 }) {
-  return render(
+  const view = render(
     <ProjectView
       project={props?.project ?? project}
       routeFileName={props?.routeFileName ?? null}
@@ -206,6 +207,10 @@ function renderProjectView(props?: {
       onProjectsRefresh={vi.fn()}
     />,
   );
+  // Tab URL synchronization applies after the user reveals the workspace.
+  const expand = screen.queryByRole('button', { name: 'workspace.expandPreview' });
+  if (expand) fireEvent.click(expand);
+  return view;
 }
 
 describe('ProjectView tab URL hydration', () => {

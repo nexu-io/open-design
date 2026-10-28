@@ -3,7 +3,8 @@ import type { Project } from '../types';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { useI18n } from '../i18n';
 import { RailRecentSection } from './EntryNavRail';
-import { RailNewConversation, type RailConversationModel } from './entry-nav-rail/RailConversationTree';
+import { RailConversationsSection } from './entry-nav-rail/RailConversationsSection';
+import { RailNewConversation, RailNewProject, type RailConversationModel } from './entry-nav-rail/RailConversationTree';
 import { navigate } from '../router';
 import { Icon } from './Icon';
 import styles from './ProjectRecentRail.module.css';
@@ -30,8 +31,9 @@ function readRailWidth(): number {
   } catch { return RAIL_WIDTH_DEFAULT; }
 }
 
-export function ProjectRecentRail({ projects, context, onOpen, onRename, onDelete, conversationModel, controlsHostRef }: {
+export function ProjectRecentRail({ projects, context, onOpen, onRename, onDelete, conversationModel, controlsHostRef, onNewConversation }: {
   projects: Project[];
+  onNewConversation?: () => void;
   controlsHostRef?: Ref<HTMLDivElement>;
   conversationModel?: RailConversationModel | null;
   context: WorkspaceCollabContext | null;
@@ -129,7 +131,7 @@ export function ProjectRecentRail({ projects, context, onOpen, onRename, onDelet
     window.dispatchEvent(new CustomEvent(ENTRY_RAIL_STATE_EVENT, { detail: { open } }));
   }, [open]);
   return (<>
-    <aside ref={railRef} id="project-recent-rail" className="project-recent-rail" data-open={open} style={{ width: open ? width : 0 }} aria-label={t('recentProjects.collectionRecent')}>
+    <aside ref={railRef} id="project-recent-rail" className="project-recent-rail" data-open={open} style={{ width: open ? width : 0 }} aria-label={t('chat.conversationsHeading')}>
       <div ref={actionsRef} className="project-recent-rail__actions entry-nav-rail__search-row" style={{ width: open ? width - 8 : 72 }}>
         <button type="button" className="entry-nav-rail__search" aria-label={t('common.search')} title={t('common.search')} onClick={() => setSearchOpen(true)}>
           <Icon name="search" size={16} />
@@ -141,12 +143,16 @@ export function ProjectRecentRail({ projects, context, onOpen, onRename, onDelet
       {open ? <div className="entry-nav-rail__panel">
         <div className="entry-nav-rail__group">
           <div className={recentSectionStyles.fixedAction}>
-            <RailNewConversation disabled={!conversationModel || conversationModel.creating} onClick={() => { void conversationModel?.onCreate(); }} />
+            <RailNewConversation onClick={onNewConversation ?? (() => navigate({ kind: 'home', view: 'home' }))} />
+            <RailNewProject />
           </div>
           <RailRecentSection
             section="personal"
             scrollable
-            afterList={<RailRecentSection projects={projects} workspaceContext={context} onOpen={async (id) => { await onOpen(id); }} onRename={onRename} onDelete={onDelete} label={t('recentProjects.collectionRecent')} />}
+            afterList={<RailConversationsSection projects={projects} context={context} model={conversationModel}
+              onOpenConversation={async (projectId, conversationId) => {
+                if (await onOpen(projectId) !== false) navigate({ kind: 'project', projectId, conversationId, fileName: null });
+              }} />}
             conversationModel={conversationModel}
             onOpenConversation={async (projectId, conversationId) => {
               if (await onOpen(projectId) !== false) navigate({ kind: 'project', projectId, conversationId, fileName: null });
@@ -156,7 +162,7 @@ export function ProjectRecentRail({ projects, context, onOpen, onRename, onDelet
             onOpen={async (id) => { await onOpen(id); }}
             onRename={onRename}
             onDelete={onDelete}
-            label={t('workspaceSwitcher.draftsTooltip')}
+            label={t('entry.navProjects')}
           />
         </div>
         <div ref={controlsHostRef} className={styles.footer} data-testid="project-rail-footer" />
@@ -175,7 +181,7 @@ export function ProjectRecentRail({ projects, context, onOpen, onRename, onDelet
       className={`project-recent-rail__resizer${resizing ? ' is-resizing' : ''}`}
       role="separator"
       aria-orientation="vertical"
-      aria-label={t('recentProjects.collectionRecent')}
+      aria-label={t('chat.conversationsHeading')}
       aria-controls="project-recent-rail"
       aria-valuemin={RAIL_WIDTH_MIN}
       aria-valuemax={RAIL_WIDTH_MAX}

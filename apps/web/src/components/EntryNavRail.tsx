@@ -64,7 +64,8 @@ import { MarqueeLabel } from './MarqueeLabel';
 import { PlanWordmark, planBadgeTierForWorkspace } from './PlanWordmark';
 import { RemixIcon } from './RemixIcon';
 import { InviteDialog } from './InviteDialog';
-import { RailNewConversation, RailProjectFolder, type RailConversationModel } from './entry-nav-rail/RailConversationTree';
+import { RailNewConversation, RailNewProject, RailProjectFolder, type RailConversationModel } from './entry-nav-rail/RailConversationTree';
+import { RailConversationsSection } from './entry-nav-rail/RailConversationsSection';
 import { RailRecentRow } from './entry-nav-rail/RailRecentRow';
 import { useProjectRunStatuses } from '../hooks/useProjectRunStatuses';
 import { MessageCenter } from './MessageCenter';
@@ -375,9 +376,8 @@ export function RailRecentSection({
   useEffect(() => setShowAll(false), [workspaceContext?.workspaceId]);
   const storageKey = section === 'personal' ? 'od.entry.railPersonalOpen' : RECENT_SECTION_STORAGE_KEY;
   const [open, setOpen] = useState(() => readStoredRecentOpen(storageKey, section === 'recent'));
-  useEffect(() => {
-    if (section === 'personal' && conversationModel?.activeConversationId) setOpen(true);
-  }, [section, conversationModel?.activeConversationId]);
+  // Selecting a conversation must not override the user's Projects disclosure.
+  // Its active item is also available in the separate Conversations section.
   const items = useMemo(
     () => {
       const sorted = [...projects].sort((a, b) => section === 'personal'
@@ -534,6 +534,9 @@ export function RailRecentSection({
             aria-controls={listId}
             onClick={() => setShowAll(value => !value)}
           >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
+              <path d="M5 10C3.9 10 3 10.9 3 12C3 13.1 3.9 14 5 14C6.1 14 7 13.1 7 12C7 10.9 6.1 10 5 10ZM19 10C17.9 10 17 10.9 17 12C17 13.1 17.9 14 19 14C20.1 14 21 13.1 21 12C21 10.9 20.1 10 19 10ZM12 10C10.9 10 10 10.9 10 12C10 13.1 10.9 14 12 14C13.1 14 14 13.1 14 12C14 10.9 13.1 10 12 10Z" />
+            </svg>
             {showAll ? t('chat.input.collapse') : t('recentProjects.viewAll')}
           </Button>}
         </div>
@@ -2181,24 +2184,28 @@ export function EntryNavRail({
 
         {context ? (
           <div className="entry-nav-rail__team-section">
-            <RailNewConversation onClick={onNewProject} />
+            <RailNewConversation onClick={onNewProject} disabled={newProjectDisabled} />
+            <RailNewProject />
+            {/* Same shape as ProjectRecentRail: one scroll body carries both
+                lists, so an expanded 查看全部 scrolls instead of being clipped. */}
             <RailRecentSection
               section="personal"
+              scrollable
+              afterList={(
+                <RailConversationsSection
+                  projects={recentProjects ?? personalProjects ?? []}
+                  moveTargets={personalProjects ?? []}
+                  context={context}
+                  onOpenConversation={onOpenConversation}
+                />
+              )}
               onOpenConversation={onOpenConversation}
               projects={personalProjects ?? []}
               onOpen={onOpenRecentProject}
               onRename={onRenameRecentProject}
               onDelete={onDeleteRecentProject}
               workspaceContext={context}
-              label={t('workspaceSwitcher.draftsTooltip')}
-            />
-            <RailRecentSection
-              projects={recentProjects ?? []}
-              onOpen={onOpenRecentProject}
-              onRename={onRenameRecentProject}
-              onDelete={onDeleteRecentProject}
-              workspaceContext={context}
-              label={t('recentProjects.collectionRecent')}
+              label={t('entry.navProjects')}
             />
             {/* Product decision (2026-07-20): 成员 and 数据大盘 leave the rail
                 entirely — both surfaces live in B's console and the rail should
