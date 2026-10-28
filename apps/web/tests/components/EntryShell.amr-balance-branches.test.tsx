@@ -345,3 +345,8 @@ describe('T58 · 首页余额耗尽的身份 × 订阅四格', () => {
     expect(screen.queryByTestId('amr-balance-owner-dialog')).toBeNull();
   });
 });
+
+vi.mock('../../src/providers/registry', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/registry')>('../../src/providers/registry');
+  return { ...actual, openExternalUrl: async (url: string) => { window.open(url, '_blank', 'noopener,noreferrer'); return true; } };
+});

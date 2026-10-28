@@ -154,14 +154,14 @@ test('[P0] @critical AMR insufficient-balance failures open a dialog and preserv
     });
   });
 
-  await page.addInitScript(() => {
-    const opened: string[] = [];
-    (window as Window & { __openedUrls?: string[] }).__openedUrls = opened;
-    const originalOpen = window.open.bind(window);
-    window.open = ((...args: Parameters<typeof window.open>) => {
-      if (typeof args[0] === 'string') opened.push(args[0]);
-      return originalOpen(...args);
-    }) as typeof window.open;
+  const opened: string[] = [];
+  await page.route('**/api/amr/web-intent', async (route) => {
+    const { target } = route.request().postDataJSON() as { target: string };
+    await route.fulfill({ json: { url: `http://localhost:5173${target}` } });
+  });
+  await page.route('**/api/system/open-external', async (route) => {
+    opened.push((route.request().postDataJSON() as { url: string }).url);
+    await route.fulfill({ json: { ok: true } });
   });
 
   const amr = await setupAmrWorkspace(page, {
@@ -210,21 +210,17 @@ test('[P0] @critical AMR insufficient-balance failures open a dialog and preserv
 
   // 卡上那颗唯一的出口是真的通的 —— 个人档 owner 落在 plans 深链上,归因来源
   // 记 `chat_upgrade_card`(和白卡那颗〔充值〕的 `chat_error_recharge` 分开记,
-  // 漏斗要读得出「卡」和「报错卡」各带来多少)。放在最后:它会真的开一个新窗口,
-  // 不让那件事横在本用例后续的输入动作前面。
+  // 漏斗要读得出「卡」和「报错卡」各带来多少。
   await upgradeCard.getByRole('button').click();
   await expect
-    .poll(async () =>
-      page.evaluate(() => {
-        const opened = (window as Window & { __openedUrls?: string[] }).__openedUrls ?? [];
-        return opened.find((href) => {
-          const url = new URL(href, window.location.href);
+    .poll(() =>
+        opened.find((href) => {
+          const url = new URL(href);
           return (
             url.searchParams.get('od_origin') === 'open_design' &&
             url.searchParams.get('od_entry_source') === 'chat_upgrade_card'
           );
-        }) ?? null;
-      }),
+        }) ?? null,
     )
     .toBeTruthy();
 });

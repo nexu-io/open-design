@@ -1,3 +1,4 @@
+import { openExternalUrl } from "../providers/registry";
 import { useEffect, useId, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Dialog, VisuallyHidden } from '@open-design/components';
@@ -154,11 +155,8 @@ export function AmrArtifactUpgradeDialog({
       resolvedDeviceId: getResolvedDeviceId(),
       installationId,
     });
-    window.open(
-      attributedAmrUrl(amrPlansUrlForProfile(profile), attribution, deviceId),
-      '_blank',
-      'noopener,noreferrer',
-    );
+    void openExternalUrl(
+      attributedAmrUrl(amrPlansUrlForProfile(profile), attribution, deviceId));
     onClose();
   };
 

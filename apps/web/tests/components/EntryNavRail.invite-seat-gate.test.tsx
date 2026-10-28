@@ -292,3 +292,8 @@ describe('EntryNavRail workspace-switcher invite target (recvqgbyLNk4eE)', () =>
     expect(menu().queryByRole('menuitem', { name: /邀请同事/ })).toBeNull();
   });
 });
+
+vi.mock('../../src/providers/registry', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/registry')>('../../src/providers/registry');
+  return { ...actual, openExternalUrl: async (url: string) => { window.open(url, '_blank', 'noopener,noreferrer'); return true; } };
+});

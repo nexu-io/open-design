@@ -578,7 +578,7 @@ interface Props {
   onDesignSystemsRefresh?: () => Promise<void> | void;
   onPersistComposioKey: (composio: AppConfig['composio']) => Promise<void> | void;
   onOpenSettings: (section?: EntrySettingsSection) => void;
-  onCompleteOnboarding: () => void;
+  onCompleteOnboarding: () => boolean | void;
   onSignedOut?: () => void | Promise<void>;
   onAmrLoginStatusChange?: (status: VelaLoginStatus | null) => void;
   artifactUpgradeSlot?: ReactNode;
@@ -1772,9 +1772,9 @@ export function EntryShell({
   }
 
   function finishOnboarding() {
-    onCompleteOnboarding();
+    const restored = onCompleteOnboarding();
     refreshWorkspaceSurfacesAfterOnboarding();
-    changeView('home');
+    if (!restored) changeView('home');
   }
 
   // #5517: the GitHub/Discord/X/mail badges and the settings chip leave the
@@ -2606,7 +2606,8 @@ function OnboardingView({
 
   useEffect(() => {
     if (
-      step !== 0
+      amrLoginError !== null
+      || step !== 0
       || runtime !== null
       || amrLoginPending
       || amrStatus?.loginInFlight !== true
@@ -2617,7 +2618,7 @@ function OnboardingView({
     // active. Returning to the Cloud landing must resume observation of that
     // hydrated attempt instead of leaving its stale cancel state indefinitely.
     startHydratedAmrLoginPoll();
-  }, [amrLoginPending, amrStatus?.loginInFlight, runtime, step]);
+  }, [amrLoginError, amrLoginPending, amrStatus?.loginInFlight, runtime, step]);
 
   useEffect(() => {
     if (
@@ -2966,9 +2967,9 @@ function OnboardingView({
   }
 
   function continueAfterCloudSignIn(): void {
+    if (passiveReauthCompletedRef.current) return;
+    passiveReauthCompletedRef.current = true;
     if (config.onboardingCompleted === true && hasRestorableModelSourceConfig) {
-      if (passiveReauthCompletedRef.current) return;
-      passiveReauthCompletedRef.current = true;
       clearOnboardingSessionId();
       onFinish();
       return;
@@ -3098,6 +3099,35 @@ function OnboardingView({
   // Cloud login lands on Hosted directly (see `continueAfterCloudSignIn`),
   // except when a completed setup has a restorable Local/BYOK configuration,
   // which signing in never overwrites.
+  async function reopenCloudSignIn() {
+    const next = await fetchVelaLoginStatus();
+    if (!next) { setAmrLoginError(t('settings.amrLoginErrorCompact')); return; }
+    setAmrStatus(next); onAmrLoginStatusChange?.(next);
+    if (isAmrSessionAuthenticated(next)) { continueAfterCloudSignIn(); return; }
+    if (next?.activationUrl && next.loginInFlight) {
+      window.open(next.activationUrl, '_blank', 'noopener,noreferrer');
+    } else {
+      setAmrLoginError(t('settings.amrLoginErrorCompact'));
+    }
+  }
+
+  async function retryCloudSignIn() {
+    if (amrLoginPending) return;
+    setAmrLoginError(null);
+    const next = await fetchVelaLoginStatus();
+    if (!next) { setAmrLoginError(t('settings.amrLoginErrorCompact')); return; }
+    setAmrStatus(next); onAmrLoginStatusChange?.(next);
+    if (isAmrSessionAuthenticated(next)) { continueAfterCloudSignIn(); return; }
+    if (next?.loginInFlight) {
+      amrLoginPollCancelledRef.current = false;
+      setAmrLoginPending(true);
+      try { if (await pollAmrLoginCompletion()) continueAfterCloudSignIn(); }
+      finally { setAmrLoginPending(false); }
+    } else {
+      await handleAmrSignInToContinue(undefined, true);
+    }
+  }
+
   async function handleCloudSignIn() {
     if (amrLoginBusy || amrLoginCancelPending) return;
     const cardAttribution = recordAmrEntry(
@@ -3120,14 +3150,16 @@ function OnboardingView({
 
   async function handleAmrSignInToContinue(
     attribution?: AmrEntryAttribution | null,
+    retry = false,
   ) {
-    if (amrLoginBusy || amrLoginCancelPending) return;
+    if ((!retry && amrLoginBusy) || amrLoginCancelPending) return;
     amrLoginPollCancelledRef.current = false;
     amrLoginCancelRequestedRef.current = false;
     setAmrLoginError(null);
     setAmrLoginPending(true);
     try {
       const currentStatus = await fetchVelaLoginStatus();
+      if (!currentStatus) { setAmrLoginError(t('settings.amrLoginErrorCompact')); return; }
       if (amrLoginPollCancelledRef.current) return;
       if (currentStatus) {
         setAmrStatus(currentStatus);
@@ -3231,7 +3263,7 @@ function OnboardingView({
           authAttemptId,
         });
         console.error('[amr-login] startVelaLogin failed', loginResult);
-        setAmrLoginError(loginResult.error || t('settings.amrLoginErrorCompact'));
+        setAmrLoginError(t('settings.amrLoginErrorCompact'));
         return;
       }
       if (await pollAmrLoginCompletion()) {
@@ -3332,6 +3364,11 @@ function OnboardingView({
         notifyWorkspaceBillingRefresh();
         notifyTeamProjectsChanged();
         return true;
+      }
+      if (outcome === 'cancelled') {
+        setAmrLoginError(null);
+        notifyAmrLoginStatusChanged('login-canceled');
+        return false;
       }
       if (outcome === 'stopped' || outcome === 'timed-out') {
         if (outcome === 'timed-out') {
@@ -3702,11 +3739,12 @@ function OnboardingView({
     const amrStatusResolving = !amrStatusResolved;
     return (
       <section
-        className="onboarding-view onboarding-view--cloud"
+        className={`onboarding-view onboarding-view--cloud ${onboardingWelcomeStyles.welcome}`}
         aria-label={t('settings.welcomeTitle')}
       >
         <div className="onboarding-cloud__pane">
           <div className="onboarding-cloud__center">
+            <img className={onboardingWelcomeStyles.logo} src="/auth-symbol.svg" alt="OpenDesign" />
             <h1 className="onboarding-cloud__title">{t('settings.onboardingCloudTitle')}</h1>
             <p className="onboarding-cloud__body">{t('settings.onboardingCloudBody')}</p>
             <div className={onboardingWelcomeStyles.signInAction}>
@@ -3752,9 +3790,7 @@ function OnboardingView({
               >
                 <Icon name="log-in" size={17} />
                 <span>
-                  {cloudBusy
-                    ? t('settings.amrSigningIn')
-                    : amrStatusResolving
+                  {amrStatusResolving
                       ? t('common.loading')
                       : amrSignedIn
                         ? t('settings.onboardingCloudContinue')
@@ -3762,22 +3798,9 @@ function OnboardingView({
                 </span>
               </button>
             </div>
-            {amrLoginError ? (
-              <span className="onboarding-cloud__error" role="alert">
-                {amrLoginError}
-              </span>
-            ) : null}
-            {/* Everything under the primary button shares one grid cell, so
-                the cell is always as tall as its tallest state and switching
-                between "own AI" choices and the pending sign-in controls never
-                moves the button. The idle layer stays mounted (hidden) while
-                signing in to keep reserving that height. */}
             <div className={onboardingWelcomeStyles.belowAction}>
               <div
-                className={`${onboardingWelcomeStyles.belowLayer} ${
-                  cloudBusy ? onboardingWelcomeStyles.belowLayerHidden : ''
-                }`}
-                aria-hidden={cloudBusy ? true : undefined}
+                className={onboardingWelcomeStyles.belowLayer}
               >
                 <div className={onboardingWelcomeStyles.alternatives}>
                   <div className={onboardingWelcomeStyles.divider}>
@@ -3787,6 +3810,7 @@ function OnboardingView({
                     <Button
                       variant="subtle"
                       className="onboarding-cloud__alt-btn"
+                      disabled={cloudBusy || amrLoginCancelPending}
                       onClick={() => {
                         emitOnboardingClick('local_coding_agent', 'select_runtime', {
                           runtime_type: 'local_cli',
@@ -3802,6 +3826,7 @@ function OnboardingView({
                     <Button
                       variant="subtle"
                       className="onboarding-cloud__alt-btn"
+                      disabled={cloudBusy || amrLoginCancelPending}
                       onClick={() => {
                         emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
                         setRuntime('byok');
@@ -3814,44 +3839,6 @@ function OnboardingView({
                   </div>
                 </div>
               </div>
-              {cloudBusy ? (
-                <div className={onboardingWelcomeStyles.belowLayer}>
-                  {/* Manual device-auth fallback, mirroring Settings' AmrLoginPill:
-                      vela auto-opens the browser, but when that fails silently (e.g.
-                      corp-managed hosts) the pending login otherwise looks like a
-                      dead button — surface the activation link the status poll
-                      already carries. */}
-                  {amrStatus?.activationUrl
-                  && (activationHintDue || amrStatus.browserOpenFailed) ? (
-                    <p className="onboarding-cloud__activation" role="status">
-                      <span>
-                        {amrStatus.browserOpenFailed
-                          ? <AmrActivationHintText browserOpenFailed />
-                          : t('settings.onboardingActivationPrompt')}
-                      </span>
-                      <a
-                        className="onboarding-cloud__activation-link"
-                        href={amrStatus.activationUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {amrStatus.browserOpenFailed
-                          ? t('settings.amrActivationOpen')
-                          : t('settings.onboardingActivationReopen')}
-                        <Icon name="external-link" size={12} />
-                      </a>
-                    </p>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="onboarding-cloud__cancel"
-                    onClick={handleCancelAmrLogin}
-                    disabled={amrLoginCancelPending}
-                  >
-                    {t('settings.amrCancelSignIn')}
-                  </button>
-                </div>
-              ) : null}
             </div>
           </div>
           <footer className="onboarding-cloud__footer">
@@ -3861,9 +3848,33 @@ function OnboardingView({
             </span>
           </footer>
         </div>
-        <div className="onboarding-cloud__art" aria-hidden="true">
-          <img src="/onboarding/onboarding-cloud-art.webp" alt="" />
-        </div>
+        {cloudBusy || amrLoginError ? (
+          <aside className={onboardingWelcomeStyles.loginStatus} aria-live="polite" data-testid="onboarding-login-status">
+            {amrLoginError ? (
+              <>
+                <p role="alert">{t('settings.amrLoginErrorCompact')}</p>
+                <Button onClick={() => void retryCloudSignIn()} disabled={amrLoginPending}>
+                  {t('preview.retry')}
+                </Button>
+              </>
+            ) : (
+              <>
+                <div className={onboardingWelcomeStyles.signing} role="status">
+                  <Icon name="log-in" size={18} />
+                  {t('settings.amrSigningIn')}
+                </div>
+                {amrStatus?.activationUrl && (activationHintDue || amrStatus.browserOpenFailed) ? (
+                  <Button variant="ghost" onClick={() => void reopenCloudSignIn()}>
+                    {t('settings.onboardingActivationReopen')}
+                  </Button>
+                ) : null}
+                <Button variant="ghost" onClick={handleCancelAmrLogin} disabled={amrLoginCancelPending}>
+                  {t('settings.amrCancelSignIn')}
+                </Button>
+              </>
+            )}
+          </aside>
+        ) : null}
       </section>
     );
   }

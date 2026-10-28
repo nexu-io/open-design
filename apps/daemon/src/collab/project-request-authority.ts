@@ -182,8 +182,9 @@ export async function enforceLocalProjectDataPlaneRequest(input: {
  * Build the one project data-plane authority gate used by route modules.
  *
  * Persisted project binding is the local namespace and creator witness. Local
- * project data-plane requests never synchronously depend on Vela membership
- * availability; cloud share/sync/billing boundaries perform their own fresh
+ * Scoped local reads do not synchronously depend on Vela membership. Headerless
+ * Team reads require a verified account membership or its offline snapshot;
+ * cloud share/sync/billing boundaries perform their own fresh
  * authorization. Unbound pre-Workspace local projects retain legacy behavior.
  */
 export function createAuthorizeProjectRequest(deps: {
@@ -213,6 +214,9 @@ export function createAuthorizeProjectRequest(deps: {
   isProjectUnmaterializedPlaceholder?: (db: unknown, projectId: string) => boolean;
   /** A receive owns the project content until its local commit finishes. */
   isProjectReceivingContent?: (projectId: string) => boolean;
+  /** Verify headerless Team reads against the current local account. */
+  authorizeHeaderlessTeamRead?: (workspaceId: string, memberId?: string) => Promise<'allowed' | 'forbidden' | 'unavailable'>;
+  getHeaderlessTeamMember?: (workspaceId: string) => string | null;
   sendApiError: (
     res: Response,
     status: number,
@@ -255,6 +259,25 @@ export function createAuthorizeProjectRequest(deps: {
         : sendApiError(res, status, code, message, details),
     });
     if (!allowed) return false;
+    const binding = getWorkspaceProjectByProjectId(db, projectId);
+    const scopedRequest = options.mode === 'read' && options.allowNavigationQuery
+      ? requestWithWorkspaceNavigationScope(req) : req;
+    const claimed = scopedRequest === 'conflict' ? 'missing' : workspaceResourceContextFromRequest(scopedRequest);
+    const claimedMember = claimed && claimed !== 'missing' ? claimed.workspaceMemberId : undefined;
+    if (options.mode === 'read' && binding?.visibility === 'team'
+      && binding.workspaceId && deps.authorizeHeaderlessTeamRead) {
+      const outcome = claimedMember
+        ? await deps.authorizeHeaderlessTeamRead(binding.workspaceId, claimedMember)
+        : await deps.authorizeHeaderlessTeamRead(binding.workspaceId);
+      if (outcome !== 'allowed') {
+        sendApiError(res, outcome === 'forbidden' ? 403 : 503,
+          outcome === 'forbidden' ? 'WORKSPACE_PROJECT_PERMISSION_DENIED' : 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+          outcome === 'forbidden' ? 'workspace project read is not allowed' : 'workspace membership is unavailable');
+        return false;
+      }
+      const member = deps.getHeaderlessTeamMember?.(binding.workspaceId);
+      if (member && req.path?.endsWith('/workspace-scope')) res.setHeader('x-od-verified-team-member', member);
+    }
     if (options.mode === 'write' && options.capability !== 'comment' && deps.isProjectReceivingContent?.(projectId)) {
       sendApiError(res, 409, 'PROJECT_BUSY', 'project is receiving cloud content');
       return false;

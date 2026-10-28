@@ -213,6 +213,7 @@ export const fa: Dict = {
   'chat.runError.clientEnvironmentCause.network': 'شبکه در دسترس نیست',
   'chat.runError.clientEnvironmentCause.hostPolicy': 'توسط سیاست سیستم مسدود شد',
   'chat.runError.clientEnvironmentCause.localStorage': 'خواندن/نوشتن حافظه محلی ناموفق بود',
+  'account.openFailed': 'Could not open the account page. Please try again.',
   'common.cancel': 'لغو',
   'chat.selectFromLibrary': 'وارد کردن از کتابخانه',
   'chat.importFigma': 'وارد کردن از Figma',

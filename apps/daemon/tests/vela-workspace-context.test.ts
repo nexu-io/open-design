@@ -250,6 +250,30 @@ describe('createCachedWorkspaceDirectoryFetcher', () => {
     });
   });
 
+  it.each([401, 403])('does not expire new credentials after an old directory request returns %s', async (status) => {
+    const amrHome = mkdtempSync(join(tmpdir(), 'od-vela-directory-rotation-'));
+    tempDirs.push(amrHome);
+    vi.stubEnv('AMR_HOME', amrHome);
+    const configPath = join(amrHome, 'config.json');
+    const saveCredentials = (suffix: string) => writeFileSync(configPath, JSON.stringify({
+      profiles: { prod: {
+        apiUrl: 'https://vela.example', linkUrl: 'https://link.example',
+        controlKey: `control-${suffix}`, runtimeKey: `runtime-${suffix}`,
+      } },
+    }));
+    saveCredentials('old');
+    await expect(fetchVelaWorkspaceDirectory({
+      fetch: async (_url, init) => {
+        expect(new Headers(init?.headers).get('authorization')).toBe('Bearer control-old');
+        // Login completes while the old authority request is in flight.
+        saveCredentials('new');
+        return jsonResponse(status, { error: 'unauthenticated' });
+      },
+    })).resolves.toMatchObject({ ok: false, reason: 'unauthorized', status });
+    expect(readVelaLoginStatus()).toMatchObject({ loggedIn: true, sessionState: 'authenticated' });
+    expect(readVelaControlApiContext()?.controlKey).toBe('control-new');
+  });
+
   it('keeps a transport failure distinct from an expired authorization result', async () => {
     await expect(fetchVelaWorkspaceDirectory({
       readSession: () => SESSION,

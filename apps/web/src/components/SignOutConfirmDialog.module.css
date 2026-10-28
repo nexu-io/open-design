@@ -1,0 +1,6 @@
+.dialog { width: min(440px, calc(100vw - 32px)); padding: 24px; border-radius: 16px; background: #fafafa; color: #494949; }
+.account { display: flex; align-items: center; gap: 12px; margin: 12px 0 8px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; overflow-wrap: anywhere; }
+.avatar { display: grid; place-items: center; flex-shrink: 0; width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, #88e04c, #125800); color: white; font-weight: 600; }
+.actions.actions { display: flex; justify-content: flex-end; gap: 8px; }
+.actions button { min-height: 44px; min-width: 104px; border-radius: 10px; background: #eee; font-size: 14px; font-weight: 600; }
+.confirm.confirm { background: #202020; color: white; }

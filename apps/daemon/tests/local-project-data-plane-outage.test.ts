@@ -12,6 +12,8 @@ import {
   openDatabase,
 } from '../src/db.js';
 import { startServer } from '../src/server.js';
+import { createTeamMembershipSnapshotStore } from '../src/collab/team-membership-snapshot.js';
+import type { WorkspaceDirectoryItem } from '@open-design/contracts';
 
 describe('local project data plane during Workspace authority outage', () => {
   let daemon: {
@@ -75,6 +77,20 @@ describe('local project data plane during Workspace authority outage', () => {
     vi.stubEnv('OD_COLLAB_TRANSPORT', 'off');
     vi.stubEnv('OD_RESOURCE_TRANSPORT', 'off');
     vi.stubEnv('OD_TEAM_PROJECTS_TRANSPORT', 'off');
+    // A previously verified account can continue reading its Team offline.
+    const amrDir = path.join(dataDir, 'offline-test-amr');
+    await mkdir(amrDir, { recursive: true });
+    vi.stubEnv('AMR_HOME', amrDir);
+    vi.stubEnv('VELA_PROFILE', 'local');
+    const writeAccount = (userId: string) => writeFile(path.join(amrDir, 'config.json'), JSON.stringify({
+      profiles: { local: { runtimeKey: 'offline-runtime', user: { id: userId, email: `${userId}@example.test` } } },
+    }));
+    await writeAccount('account-a');
+    createTeamMembershipSnapshotStore(dataDir).save(
+      { profile: 'local', apiUrl: `http://127.0.0.1:${authorityAddress.port}`, userId: 'account-a' },
+      [{ workspaceId, workspaceMemberId: memberId, workspaceType: 'team', memberStatus: 'active', lifecycleState: 'active' } as WorkspaceDirectoryItem],
+    );
+
 
     daemon = await startServer({ port: 0, returnServer: true }) as typeof daemon;
     if (!daemon) throw new Error('daemon failed to start');
@@ -166,14 +182,20 @@ describe('local project data plane during Workspace authority outage', () => {
     const raw = await fetch(`${daemon.url}/api/projects/${projectId}/raw/index.html`);
     expect(raw.status).toBe(200);
     expect(await raw.text()).toContain('Offline preview');
-    expect(workspaceDirectoryRequests, 'raw file read').toBe(directoryRequestsAfterStartup);
+    expect(workspaceDirectoryRequests, 'initial raw file read').toBeLessThanOrEqual(directoryRequestsAfterStartup + 1);
+    await writeAccount('account-b');
+    const otherAccount = await fetch(`${daemon.url}/api/projects/${projectId}/raw/index.html`);
+    expect(otherAccount.status).toBe(503);
+    await writeAccount('account-a');
+
+    const directoryRequestsAfterAccountSwitch = workspaceDirectoryRequests;
 
     const scope = await fetch(`${daemon.url}/api/projects/${projectId}/workspace-scope`);
     expect(scope.status).toBe(200);
     await expect(scope.json()).resolves.toMatchObject({
       scope: { kind: 'team', workspaceId },
     });
-    expect(workspaceDirectoryRequests, 'workspace scope read').toBe(directoryRequestsAfterStartup);
+    expect(workspaceDirectoryRequests, 'workspace scope read').toBeLessThanOrEqual(directoryRequestsAfterAccountSwitch + 1);
 
     const previewUrl = await fetch(
       `${daemon.url}/api/projects/${projectId}/preview-url?file=index.html`,
@@ -183,7 +205,7 @@ describe('local project data plane during Workspace authority outage', () => {
     const preview = await fetch(new URL(previewPath, daemon.url));
     expect(preview.status).toBe(200);
     expect(await preview.text()).toContain('Offline preview');
-    expect(workspaceDirectoryRequests, 'preview read').toBe(directoryRequestsAfterStartup);
+    expect(workspaceDirectoryRequests, 'preview read').toBeLessThanOrEqual(directoryRequestsAfterAccountSwitch + 1);
 
     const write = await fetch(`${daemon.url}/api/projects/${projectId}/files`, {
       method: 'POST',
@@ -191,7 +213,7 @@ describe('local project data plane during Workspace authority outage', () => {
       body: JSON.stringify({ name: 'offline.txt', content: 'saved locally' }),
     });
     expect(write.status).toBe(200);
-    expect(workspaceDirectoryRequests, 'file write').toBe(directoryRequestsAfterStartup);
+    expect(workspaceDirectoryRequests, 'file write').toBeLessThanOrEqual(directoryRequestsAfterAccountSwitch + 1);
 
     const mirrorRead = await fetch(
       `${daemon.url}/api/projects/${mirrorProjectId}/raw/index.html`,
@@ -248,7 +270,7 @@ describe('local project data plane during Workspace authority outage', () => {
     );
     expect(mirrorComment.status, await mirrorComment.clone().text()).toBe(200);
     expect(workspaceDirectoryRequests, 'read-only mirror access')
-      .toBe(directoryRequestsAfterStartup);
+      .toBeLessThanOrEqual(directoryRequestsAfterAccountSwitch + 1);
 
     const run = await fetch(`${daemon.url}/api/runs`, {
       method: 'POST',
@@ -260,7 +282,7 @@ describe('local project data plane during Workspace authority outage', () => {
       }),
     });
     expect(run.status).toBe(202);
-    expect(workspaceDirectoryRequests, 'run creation').toBe(directoryRequestsAfterStartup);
+    expect(workspaceDirectoryRequests, 'run creation').toBeLessThanOrEqual(directoryRequestsAfterAccountSwitch + 1);
 
     const routine = await fetch(`${daemon.url}/api/routines`, {
       method: 'POST',
@@ -275,7 +297,7 @@ describe('local project data plane during Workspace authority outage', () => {
       }),
     });
     expect(routine.status).toBe(201);
-    expect(workspaceDirectoryRequests, 'routine creation').toBe(directoryRequestsAfterStartup);
+    expect(workspaceDirectoryRequests, 'routine creation').toBeLessThanOrEqual(directoryRequestsAfterAccountSwitch + 1);
 
     const orbitConfig = await fetch(`${daemon.url}/api/app-config`, {
       method: 'PUT',
@@ -289,7 +311,7 @@ describe('local project data plane during Workspace authority outage', () => {
       }),
     });
     expect(orbitConfig.status).toBe(200);
-    expect(workspaceDirectoryRequests, 'Orbit config write').toBe(directoryRequestsAfterStartup);
+    expect(workspaceDirectoryRequests, 'Orbit config write').toBeLessThanOrEqual(directoryRequestsAfterAccountSwitch + 1);
 
     // Comment relay is an actual cloud boundary and may attempt a background
     // authority refresh. The local write must still succeed synchronously when

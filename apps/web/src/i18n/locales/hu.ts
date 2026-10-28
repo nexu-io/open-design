@@ -213,6 +213,7 @@ export const hu: Dict = {
   'chat.runError.clientEnvironmentCause.network': 'a hálózat nem érhető el',
   'chat.runError.clientEnvironmentCause.hostPolicy': 'rendszerszabályzat blokkolta',
   'chat.runError.clientEnvironmentCause.localStorage': 'a helyi tároló olvasása/írása sikertelen',
+  'account.openFailed': 'Could not open the account page. Please try again.',
   'common.cancel': 'Mégse',
   'chat.selectFromLibrary': 'Importálás a könyvtárból',
   'chat.importFigma': 'Importálás Figmából',

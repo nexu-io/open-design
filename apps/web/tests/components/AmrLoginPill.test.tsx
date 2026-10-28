@@ -384,7 +384,7 @@ describe('AmrLoginPill', () => {
   it('bridges the attributed management URL even though its click stops propagation', async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = typeof input === 'string' ? input : input.toString();
-      if (url === '/api/attribution/bridge-url') {
+      if (url === '/api/amr/web-intent') {
         return jsonResponse({ body: { url: 'https://open-design.ai/amr/dashboard?od_bridge=odbr_12345678' } });
       }
       if (url === '/api/system/open-external') return jsonResponse({ body: { ok: true } });
@@ -424,7 +424,7 @@ describe('AmrLoginPill', () => {
       expect.objectContaining({ method: 'POST' }),
     );
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      '/api/attribution/bridge-url',
+      '/api/amr/web-intent',
       expect.objectContaining({
         method: 'POST',
         body: expect.stringContaining('od_device_id=od-install-abc'),
@@ -630,10 +630,8 @@ describe('AmrLoginPill', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeTruthy();
     });
-    expect(screen.getByRole('alert').textContent).toBe(
-      'profile "prod" api URL: is not configured',
-    );
-    expect(screen.queryByText('Sign-in failed.')).toBeNull();
+    expect(screen.getByRole('alert').textContent).toBe('Sign-in failed.');
+    expect(screen.queryByText('profile "prod" api URL: is not configured')).toBeNull();
     expect(screen.queryByText('Signing in…')).toBeNull();
   });
 
@@ -833,6 +831,7 @@ describe('AmrLoginPill', () => {
       ) {
         return jsonResponse({ status: 202, body: { pid: 4242 } });
       }
+      if (url.endsWith('/api/integrations/vela/status')) return jsonResponse({body: {loggedIn:false, loginInFlight:false, user:null, profile:'local', configPath:'/x'}});
       throw new Error(`unexpected fetch: ${url}`);
     });
     globalThis.fetch = fetchMock as typeof fetch;
@@ -969,85 +968,13 @@ describe('AmrLoginPill', () => {
     }
   });
 
-  it('cancels the canonical attempt when the pre-start status refresh is non-OK', async () => {
-    const canonicalAuthAttemptId = '22222222-2222-4222-8222-222222222222';
-    let releaseLogin!: (response: Response) => void;
-    const heldLoginResponse = new Promise<Response>((resolve) => {
-      releaseLogin = resolve;
-    });
-    const cancelAttemptIds: string[] = [];
-    let statusCalls = 0;
-    const fetchMock = vi.fn(async (input, init) => {
-      const url = typeof input === 'string' ? input : (input as URL).toString();
-      if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
-        return heldLoginResponse;
-      }
-      if (url.endsWith('/api/integrations/vela/status')) {
-        statusCalls += 1;
-        return jsonResponse({ status: 503, body: { error: 'unavailable' } });
-      }
-      if (
-        url.endsWith('/api/integrations/vela/login/cancel') &&
-        init?.method === 'POST'
-      ) {
-        const body = JSON.parse(String(init.body)) as { authAttemptId: string };
-        cancelAttemptIds.push(body.authAttemptId);
-        return jsonResponse({
-          body: {
-            canceled: body.authAttemptId === canonicalAuthAttemptId,
-          },
-        });
-      }
-      throw new Error(`unexpected fetch: ${url}`);
-    });
+  it('does not start a new login when the existing result cannot be checked', async () => {
+    const fetchMock = vi.fn(async (_input: unknown) => jsonResponse({status:503,body:{error:'unavailable'}}));
     globalThis.fetch = fetchMock as typeof fetch;
-
-    renderPill({
-      skipInitialRefresh: true,
-      revealPendingCancelAction: true,
-      initialStatus: {
-        loggedIn: false,
-        loginInFlight: false,
-        profile: 'prod',
-        user: null,
-        configPath: '/x',
-      },
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        '/api/integrations/vela/login',
-        expect.objectContaining({ method: 'POST' }),
-      );
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    await waitFor(() => {
-      expect(cancelAttemptIds).toHaveLength(1);
-      expect(statusCalls).toBe(1);
-    });
-
-    releaseLogin(jsonResponse({
-      status: 202,
-      body: { pid: 123, authAttemptId: canonicalAuthAttemptId },
-    }));
-
-    await waitFor(() => {
-      expect(cancelAttemptIds).toEqual([
-        expect.stringMatching(
-          /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
-        ),
-        canonicalAuthAttemptId,
-      ]);
-      expect(screen.getByText('Canceled')).toBeTruthy();
-    });
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(statusCalls).toBe(1);
-    expect(screen.queryByText('Signing in…')).toBeNull();
+    renderPill({skipInitialRefresh:true,initialStatus:{loggedIn:false,loginInFlight:false,profile:'local',user:null,configPath:'/x'}});
+    fireEvent.click(screen.getByRole('button',{name:'Sign in'}));
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
+    expect(fetchMock.mock.calls.every(call => String(call[0]).endsWith('/status'))).toBe(true);
   });
 
   it('only surfaces activation details from the pill when explicitly enabled', async () => {
@@ -1111,6 +1038,8 @@ describe('AmrLoginPill', () => {
 
     renderPill();
     fireEvent.click(await screen.findByRole('button', { name: 'Sign in' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
 
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 2100));
@@ -1250,6 +1179,7 @@ describe('AmrLoginPill', () => {
           body: loggedIn
             ? {
                 loggedIn: true,
+                credentialRevision: 'revision-a',
                 profile: 'local',
                 configPath: '/x',
                 user: { id: 'u', email: 'leaf@example.com', plan: 'free' },
@@ -1276,7 +1206,7 @@ describe('AmrLoginPill', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy();
     });
-    expect(onSignedOut).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onSignedOut).toHaveBeenCalledTimes(1));
     expect(screen.queryByTestId('sign-out-confirm-dialog')).toBeNull();
   });
 

@@ -55,6 +55,7 @@ import {
 import {
   currentWorkspaceAccountGeneration,
   currentWorkspaceContextRequestToken,
+  resolveBoundProjectWorkspaceContext,
 } from '../collab/useWorkspaceContext';
 import type { WorkspaceResourceReadIdentity } from '../collab/workspace-identity';
 import type {
@@ -456,16 +457,23 @@ export async function bootstrapProjectRoute(
           return { kind: 'forbidden' };
         }
       } else if (context) {
-        // Headerless scope is discovery only. Once it names the exact persisted
-        // Workspace/member pair, prove that claim through the ordinary
-        // fail-closed authorization lane before trusting it as ProjectView's
-        // seed. This also ensures an already-known Team route never completes
-        // with headerless scope as its last authorization request.
+        // A local scope can describe a Team project's stored owner; it does
+        // not prove the currently signed-in user still belongs to that Team.
+        const discoveredContext = context;
+        const verifiedMember = scopeResponse.headers.get('x-od-verified-team-member');
+        const checkedContext = body.scope.kind === 'team'
+          ? verifiedMember
+            ? { ...discoveredContext, workspaceMemberId: verifiedMember }
+            : await resolveBoundProjectWorkspaceContext(discoveredContext.workspaceId)
+          : discoveredContext;
+        if (!checkedContext) return { kind: 'forbidden' };
+        // Headerless scope is discovery only. Re-read the persisted binding
+        // using the current member before using it as the ProjectView seed.
         const exactScopeResponse = await fetch(
           `/api/projects/${encodeURIComponent(projectId)}/workspace-scope`,
           {
             cache: 'no-store',
-            headers: workspaceProjectHeaders(context),
+            headers: workspaceProjectHeaders(checkedContext),
           },
         );
         if (!exactScopeResponse.ok) {
@@ -479,8 +487,8 @@ export async function bootstrapProjectRoute(
           !exactBody.scope
           || exactBody.scope.projectId !== projectId
           || !exactContext
-          || exactBody.scope.workspaceId !== context.workspaceId
-          || workspaceIdentityCacheKey(exactContext) !== workspaceIdentityCacheKey(context)
+          || exactBody.scope.workspaceId !== checkedContext.workspaceId
+          || !isSameWorkspacePrincipal(exactContext, checkedContext)
         ) {
           return { kind: 'forbidden' };
         }

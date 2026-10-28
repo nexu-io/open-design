@@ -213,6 +213,7 @@ export const uk: Dict = {
   'chat.runError.clientEnvironmentCause.network': 'мережа недоступна',
   'chat.runError.clientEnvironmentCause.hostPolicy': 'заблоковано системною політикою',
   'chat.runError.clientEnvironmentCause.localStorage': 'не вдалося прочитати або записати локальне сховище',
+  'account.openFailed': 'Could not open the account page. Please try again.',
   'common.cancel': 'Скасувати',
   'chat.selectFromLibrary': 'Імпортувати з бібліотеки',
   'chat.importFigma': 'Імпортувати з Figma',

@@ -1,3 +1,4 @@
+import type { AmrLogoutRequest, AmrLogoutResponse } from "@open-design/contracts";
 /**
  * Daemon provider — fetch-based SSE client for /api/runs. The daemon can
  * emit three event streams depending on the agent's streamFormat:
@@ -1296,6 +1297,7 @@ export interface VelaLiveAccount {
 }
 
 export interface VelaLoginStatus {
+  loginError?: string;
   loggedIn: boolean;
   sessionState?: import('@open-design/contracts').AmrSessionState;
   credentialRevision?: string;
@@ -1528,12 +1530,13 @@ export async function cancelVelaLogin(
   }
 }
 
-export async function velaLogout(): Promise<{ ok: boolean }> {
+export async function velaLogout(target: AmrLogoutRequest): Promise<Omit<Partial<AmrLogoutResponse>, "ok"> & {ok:boolean;status:number}> {
   try {
-    const resp = await fetch('/api/integrations/vela/logout', { method: 'POST' });
-    return { ok: resp.ok };
+    const resp = await fetch('/api/integrations/vela/logout', { method: 'POST', headers: {'Content-Type':'application/json'}, body:JSON.stringify(target) });
+    const body = await resp.json().catch(()=>null) as AmrLogoutResponse | null;
+    return { ...body, ok: resp.ok, status:resp.status };
   } catch {
-    return { ok: false };
+    return { ok: false, status:0 };
   }
 }
 

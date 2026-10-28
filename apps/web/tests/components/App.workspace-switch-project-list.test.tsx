@@ -947,7 +947,7 @@ describe('App project list across a workspace switch', () => {
           },
         }), {
           status: 200,
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/json', 'x-od-verified-team-member': 'member-ws-a' },
         });
       }
       if (pathname === `/api/projects/${boundProjectA.id}`) {
@@ -960,12 +960,12 @@ describe('App project list across a workspace switch', () => {
           resolvedDir: '/tmp/project-in-a',
         }), {
           status: 200,
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/json', 'x-od-verified-team-member': 'member-ws-a' },
         });
       }
       return new Response('{}', {
         status: 200,
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'x-od-verified-team-member': 'member-ws-a' },
       });
     }));
     vi.mocked(listProjects).mockImplementation(() => new Promise<Project[]>(() => {}));
@@ -1043,7 +1043,7 @@ describe('App project list across a workspace switch', () => {
           },
         }), {
           status: 200,
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/json', 'x-od-verified-team-member': 'member-ws-a' },
         });
       }
       if (pathname === `/api/projects/${boundProjectA.id}`) {
@@ -1056,12 +1056,12 @@ describe('App project list across a workspace switch', () => {
           resolvedDir: '/tmp/project-in-a',
         }), {
           status: 200,
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/json', 'x-od-verified-team-member': 'member-ws-a' },
         });
       }
       return new Response('{}', {
         status: 200,
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'x-od-verified-team-member': 'member-ws-a' },
       });
     }));
     vi.mocked(listProjects).mockImplementation(() => new Promise<Project[]>(() => {}));
@@ -1085,7 +1085,7 @@ describe('App project list across a workspace switch', () => {
         },
       }), {
         status: 200,
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'x-od-verified-team-member': 'member-ws-a' },
       }));
       await scopeResponse.promise;
     });

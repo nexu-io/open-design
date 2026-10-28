@@ -12,6 +12,7 @@ export * from './api/agent-setup.js';
 export * from './api/attribution.js';
 export * from './api/amrWallet.js';
 export * from './api/amr-auth.js';
+export * from './api/amr-web-intent.js';
 export * from './api/automations.js';
 export * from './api/artifacts.js';
 export * from './api/artifact-lint.js';

@@ -213,6 +213,7 @@ export const ja: Dict = {
   'chat.runError.clientEnvironmentCause.network': 'ネットワークに到達できません',
   'chat.runError.clientEnvironmentCause.hostPolicy': 'システムポリシーによりブロック',
   'chat.runError.clientEnvironmentCause.localStorage': 'ローカルストレージの読み書きに失敗',
+  'account.openFailed': 'Could not open the account page. Please try again.',
   'common.cancel': 'キャンセル',
   'chat.selectFromLibrary': 'ライブラリからインポート',
   'chat.importFigma': 'Figma からインポート',

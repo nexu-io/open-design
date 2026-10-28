@@ -109,6 +109,29 @@ describe('createAuthorizeProjectRequest', () => {
     );
   });
 
+  it.each(['allowed', 'forbidden', 'unavailable'] as const)(
+    'checks the current account for headerless Team reads: %s', async (outcome) => {
+      const row = { workspaceId: 'workspace-a', visibility: 'team', resourceState: 'active' };
+      const sendApiError = vi.fn();
+      const verify = vi.fn(async () => outcome);
+      const authorize = createAuthorizeProjectRequest({ db: {}, getWorkspaceProject: () => row,
+        getWorkspaceProjectByProjectId: () => row, authorizeHeaderlessTeamRead: verify, sendApiError });
+      expect(await authorize(request({}), response(), 'project-a', { mode: 'read' })).toBe(outcome === 'allowed');
+      expect(verify).toHaveBeenCalledWith('workspace-a');
+      if (outcome !== 'allowed') expect(sendApiError).toHaveBeenCalledWith(expect.anything(),
+        outcome === 'forbidden' ? 403 : 503, expect.any(String), expect.any(String));
+    },
+  );
+
+  it('checks claimed team membership against the current account', async () => {
+    const row = { workspaceId: 'workspace-a', visibility: 'team', resourceState: 'active' };
+    const verify = vi.fn(async () => 'forbidden' as const);
+    const authorize = createAuthorizeProjectRequest({ db: {}, getWorkspaceProject: () => row,
+      getWorkspaceProjectByProjectId: () => row, authorizeHeaderlessTeamRead: verify, sendApiError: vi.fn() });
+    expect(await authorize(request({ workspaceId: 'workspace-a', memberId: 'removed-member' }), response(), 'project-a', { mode: 'read' })).toBe(false);
+    expect(verify).toHaveBeenCalledWith('workspace-a', 'removed-member');
+  });
+
   it('serves a headerless bound-project read from local binding without remote authority', async () => {
     const row = {
       workspaceId: 'workspace-a',

@@ -108,6 +108,14 @@ describe('resolveAmrProfile', () => {
 });
 
 describe('readVelaLoginStatus', () => {
+  it('does not publish credentials with an unfinished receipt after a daemon restart', () => {
+    writeConfig({ profiles: { local: { controlKey: 'pending-control', runtimeKey: 'pending-runtime', pendingLogin: { deviceId: 'attempt' }, user: {id: 'u', email: 'u@example.test'} } } });
+    const env = { OPEN_DESIGN_AMR_PROFILE: 'local' };
+    expect(readVelaLoginStatus(env)).toMatchObject({loggedIn: false, sessionState: 'signed_out'});
+    expect(readVelaControlApiContext(env)).toBeNull();
+    expect(readVelaControlApiContext(env, {}, true)?.controlKey).toBe('pending-control');
+  });
+
   afterEach(() => clearVelaAuthorizationState());
 
   it('marks only the rejected credential revision as requiring sign-in again', () => {
@@ -540,6 +548,25 @@ describe('spawnVelaLogin', () => {
       if (originalResourceRoot === undefined) delete process.env.OD_RESOURCE_ROOT;
       else process.env.OD_RESOURCE_ROOT = originalResourceRoot;
     }
+  });
+
+  it('keeps login pending until the daemon accepts the saved credentials', async () => {
+    let allowAcceptance: () => void = () => undefined;
+    let observePersistence: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => { allowAcceptance = resolve; });
+    const persisted = new Promise<void>((resolve) => { observePersistence = resolve; });
+    const baseEnv = {...process.env, HOME: tmpHome, OPEN_DESIGN_AMR_PROFILE: 'local'};
+    await spawnVelaLogin({
+      baseEnv,
+      configuredEnv: {VELA_BIN: FAKE_VELA},
+      acceptCredentials: () => { observePersistence(); return gate; },
+    });
+    await persisted;
+    expect(readVelaLoginStatus(baseEnv)).toMatchObject({loggedIn: false, loginInFlight: true});
+    expect(JSON.parse(readFileSync(path.join(tmpHome, '.amr', 'config.json'), 'utf8')).profiles.local.controlKeyId).toBe('fake-control-key-id');
+    allowAcceptance();
+    // Real child stdio drain and close are the completion boundary here.
+    await vi.waitFor(() => expect(readVelaLoginStatus(baseEnv)).toMatchObject({loggedIn: true, loginInFlight: false}));
   });
 
   it('spawns the configured vela binary and writes/reads only the feature-test AMR profile', async () => {

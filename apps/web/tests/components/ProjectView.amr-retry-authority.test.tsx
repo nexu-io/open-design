@@ -240,7 +240,7 @@ describe('ProjectView Cloud retry across authority confirmation', () => {
     ['login arrives before the first transcript read', true, false, 'before-first-read'],
     ['confirmed scope is ready before history', false, false, 'during-refresh'],
     ['settled scope has a genuinely different role', false, true, 'during-refresh'],
-  ] as const)('preserves the Settings Cloud retry until it can send: %s', async (_name, scopeSettlesLate, scopeRoleChanged, loginTiming) => {
+  ] as const)('restores the Settings Cloud context without automatically sending: %s', async (_name, scopeSettlesLate, scopeRoleChanged, loginTiming) => {
     const failed: ChatMessage = {
       id: 'failed-local-before-settings', role: 'assistant',
       content: 'Partial work awaiting the requested Cloud retry', createdAt: 2,
@@ -309,7 +309,7 @@ describe('ProjectView Cloud retry across authority confirmation', () => {
         expect(view.getByTestId('composer-fixture-send')).toBeDisabled();
         expect(streamViaDaemon).not.toHaveBeenCalled();
         // A real scope projection must not discard the Settings intent before
-        // the authoritative transcript can admit the eventual retry.
+        // the authoritative transcript can finish restoring the conversation.
         expect(discarded).not.toHaveBeenCalled();
         await act(async () => {
           login.resolve(signedIn);
@@ -328,8 +328,8 @@ describe('ProjectView Cloud retry across authority confirmation', () => {
         expect(streamViaDaemon).not.toHaveBeenCalled();
         return;
       }
-      await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
-      expect(consumed).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(consumed).toHaveBeenCalledTimes(1));
+      expect(streamViaDaemon).not.toHaveBeenCalled();
       expect(discarded).not.toHaveBeenCalled();
     } finally {
       view.unmount();

@@ -535,6 +535,8 @@ stdin.on('end', () => {
 // handler above ignores login mode so delayed login tests can keep this
 // process alive without opening the ACP stdio bridge.
 function loginAndExit() {
+  const completionReceipt = argv.includes('--completion-receipt=stdin-v1');
+  if (completionReceipt) stdout.write('OPEN_DESIGN_AMR_AUTH_COMPLETION\tstdin-v1\n');
   const logLoginLifecycle = (event) => {
     if (!env.FAKE_VELA_LOGIN_INVOCATION_LOG) return;
     appendFileSync(env.FAKE_VELA_LOGIN_INVOCATION_LOG, `${JSON.stringify({
@@ -650,6 +652,7 @@ function loginAndExit() {
       profiles: {
         [profileName]: {
           controlKey: 'fake-control-key-0000000000000000000000',
+          controlKeyId: 'fake-control-key-id',
           runtimeKey: 'fake-runtime-key-0000000000000000000000',
           apiUrl:
             profileName === 'local' ? 'http://localhost:18080' : '',
@@ -665,6 +668,15 @@ function loginAndExit() {
       },
     };
     writeFileSync(file, JSON.stringify(payload, null, 2), 'utf8');
+    if (completionReceipt) {
+      stdout.write('OPEN_DESIGN_AMR_AUTH_COMPLETION\tcredentials_persisted\n');
+      stdin.once('data', (data) => {
+        if (String(data).trim() !== 'credentials_accepted') exit(1);
+        stdout.write(`Login successful for ${userEmail}.\n`);
+        exit(0);
+      });
+      return;
+    }
     stdout.write(`Login successful for ${userEmail}.\n`);
     exit(0);
   };

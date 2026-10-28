@@ -1,3 +1,4 @@
+import { prepareAmrWebUrl } from "./amr-web-intent";
 import {
   PUBLIC_FILE_MANUAL_REVOKE_REQUIRED,
   SHARE_ENTRY_INDEX_CONFLICT,
@@ -1447,8 +1448,11 @@ function popupBlockedMessage(): string {
 }
 
 export async function openExternalUrl(url: string): Promise<boolean> {
-  const bridgedUrl = await bridgeFirstPartyUrl(url);
-  const targetUrl = bridgedUrl ?? url;
+  let accountUrl: string;
+  try { accountUrl = await prepareAmrWebUrl(url); }
+  catch { window.dispatchEvent(new CustomEvent('amr-web-intent-error', { detail: url })); return false; }
+  const bridgedUrl = await bridgeFirstPartyUrl(accountUrl);
+  const targetUrl = bridgedUrl ?? accountUrl;
   if (isOpenDesignHostAvailable()) {
     const opened = await openHostExternalUrl(targetUrl);
     if (opened.ok) return true;

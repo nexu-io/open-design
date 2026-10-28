@@ -5,7 +5,7 @@ export const AMR_LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
 export const AMR_LOGIN_STARTUP_SETTLE_MS = 3000;
 export const AMR_LOGIN_STATUS_EVENT = 'od:amr-login-status-change';
 
-export type AmrLoginPollOutcome = 'pending' | 'signed-in' | 'stopped' | 'timed-out';
+export type AmrLoginPollOutcome = 'pending' | 'signed-in' | 'stopped' | 'timed-out' | 'cancelled';
 export type AmrLoginStatusEventReason =
   | 'login-started'
   | 'login-canceled'
@@ -23,6 +23,7 @@ export function amrLoginPollOutcome(
   now: number = Date.now(),
 ): AmrLoginPollOutcome {
   if (isAmrSessionAuthenticated(status)) return 'signed-in';
+  if (status?.loginError === 'login_cancelled') return 'cancelled';
   if (
     status?.loginInFlight === false &&
     now - startedAt >= AMR_LOGIN_STARTUP_SETTLE_MS

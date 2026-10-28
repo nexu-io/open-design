@@ -161,7 +161,7 @@ describe('ChatPane fixed Cloud actions and existing Settings auth continuation',
     expect(onArm).not.toHaveBeenCalled();
   });
 
-  it('consumes an externally armed intent once only after an exact fresh mount', async () => {
+  it('restores an externally armed intent without running until the user retries', async () => {
     fetchVelaLoginStatusMock.mockResolvedValue(signedIn);
     const onRetry = vi.fn();
     const onConsume = onceConsumer();
@@ -178,10 +178,12 @@ describe('ChatPane fixed Cloud actions and existing Settings auth continuation',
     fetchVelaLoginStatusMock.mockReturnValue(freshRead.promise);
     renderChat(onRetry, { ...props, amrAuthRetryMountId: 'mount-fresh' });
     await act(async () => { freshRead.resolve(signedIn); await freshRead.promise; });
-    expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(onRetry).not.toHaveBeenCalled();
     await observeStatus(signedIn);
-    expect(onRetry).toHaveBeenCalledTimes(1);
-    expect(onRetry).toHaveBeenCalledWith(expect.objectContaining({ id: 'msg-amr-auth' }), 'authorize_and_retry');
+    expect(onRetry).not.toHaveBeenCalled();
+    expect(onConsume).toHaveBeenCalled();
+    fireEvent.click(within(screen.getByTestId('chat-run-error-card')).getByRole('button', { name: 'promptTemplates.retry' }));
+    expect(onRetry).toHaveBeenCalledWith(expect.objectContaining({ id: 'msg-amr-auth' }), 'manual_retry');
     expect(onConsume.mock.calls.every(([candidate]) => candidate === pending)).toBe(true);
   });
 
@@ -201,7 +203,7 @@ describe('ChatPane fixed Cloud actions and existing Settings auth continuation',
     expect(onConsume).not.toHaveBeenCalled();
     expect(onRetry).not.toHaveBeenCalled();
     await observeStatus(signedIn);
-    expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(onRetry).not.toHaveBeenCalled();
   });
 
   it('consumes a Settings handoff on a fresh exact mount even without an inline AMR failure', async () => {
@@ -216,9 +218,9 @@ describe('ChatPane fixed Cloud actions and existing Settings auth continuation',
       onConsumeAmrAuthRetryContinuation: onConsume,
     });
     await act(async () => { freshRead.resolve(signedIn); await freshRead.promise; });
-    expect(onRetry).toHaveBeenCalledTimes(1);
-    expect(onRetry).toHaveBeenCalledWith(expect.objectContaining({ id: 'msg-local-auth' }), 'switch_runtime_retry');
-    expect(onConsume).toHaveBeenCalledTimes(1);
+    expect(onRetry).not.toHaveBeenCalled();
+
+    expect(onConsume).toHaveBeenCalled();
   });
 
   it('requires an observed login attempt and personal adoption before same-mount retry', async () => {
@@ -250,7 +252,7 @@ describe('ChatPane fixed Cloud actions and existing Settings auth continuation',
     await observeStatus({ ...signedOut, loginInFlight: true });
     await observeStatus(signedIn);
     await observeStatus(signedIn);
-    expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(onRetry).not.toHaveBeenCalled();
     expect(onConsume).toHaveBeenCalled();
   });
 

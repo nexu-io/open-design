@@ -1,3 +1,4 @@
+import { openExternalUrl } from "../providers/registry";
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Dialog } from '@open-design/components';
@@ -153,11 +154,8 @@ export function GoPlanSunsetDialog({
         conversionSource: 'go_plan_sunset_modal',
       },
     );
-    window.open(
-      attributedAmrUrl(amrPlansUrlForProfile(profile), attribution),
-      '_blank',
-      'noopener,noreferrer',
-    );
+    void openExternalUrl(
+      attributedAmrUrl(amrPlansUrlForProfile(profile), attribution));
   };
 
   if (!active || typeof document === 'undefined') return null;

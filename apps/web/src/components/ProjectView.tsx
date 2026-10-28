@@ -1,3 +1,4 @@
+import { openExternalUrl } from "../providers/registry";
 import { useStartupReady } from '../observability/startup-ready';
 import { navigationTiming, useProjectNavigationReady, observeNavigation } from '../observability/navigation-timing';
 import { withLiveArtifactDeliveries } from '../runtime/live-artifact-delivery';
@@ -3259,11 +3260,8 @@ export function ProjectView({
       resolvedDeviceId: getResolvedDeviceId(),
       installationId: config.installationId,
     });
-    window.open(
-      attributedAmrUrl(url, attribution, deviceId),
-      '_blank',
-      'noopener,noreferrer',
-    );
+    void openExternalUrl(
+      attributedAmrUrl(url, attribution, deviceId));
   }, [
     amrBalanceCardProfile,
     analytics.track,

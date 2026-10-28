@@ -213,6 +213,7 @@ export const ar: Dict = {
   'chat.runError.clientEnvironmentCause.network': 'تعذّر الوصول إلى الشبكة',
   'chat.runError.clientEnvironmentCause.hostPolicy': 'تم الحظر بواسطة سياسة النظام',
   'chat.runError.clientEnvironmentCause.localStorage': 'فشل القراءة/الكتابة في التخزين المحلي',
+  'account.openFailed': 'Could not open the account page. Please try again.',
   'common.cancel': 'إلغاء',
   'chat.selectFromLibrary': 'استيراد من المكتبة',
   'chat.importFigma': 'استيراد من Figma',

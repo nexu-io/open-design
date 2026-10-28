@@ -413,8 +413,8 @@ test('[P0] onboarding cancel during a slow AMR status check does not start login
 
   const cancelSignIn = page.getByRole('button', { name: /Cancel sign-in/i });
   await expect(cancelSignIn).toBeVisible();
-  await expect(page.getByRole('button', { name: /Local AI|本地 AI/i })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /API Key/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Local AI|本地 AI/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /API Key/i })).toBeVisible();
   await cancelSignIn.click();
 
   const primary = cloudPrimaryButton(page);
@@ -449,8 +449,8 @@ test('[P0] onboarding reload restores and cancels an active Cloud login', async 
   await seedOnboardingConfig(page, config);
   await gotoOnboarding(page);
   await expect(page.getByRole('button', { name: /Cancel sign-in/i })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Local AI|本地 AI/i })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /API Key/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Local AI|本地 AI/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /API Key/i })).toBeVisible();
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);

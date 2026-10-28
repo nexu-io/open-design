@@ -212,6 +212,7 @@ vi.mock('../../src/providers/registry', async () => {
   );
   return {
     ...actual,
+    openExternalUrl: async (url: string) => { window.open(url, '_blank', 'noopener,noreferrer'); return true; },
     deletePreviewComment: vi.fn(),
     fetchDesignSystem: vi.fn(),
     fetchLiveArtifacts: vi.fn().mockResolvedValue([]),

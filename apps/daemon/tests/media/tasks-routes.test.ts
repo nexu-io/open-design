@@ -320,7 +320,7 @@ describe('media task route recovery', () => {
     }
   });
 
-  it('uses the tool grant and persisted project binding without querying Workspace authority', async () => {
+  it('checks the current Team membership before a tool grant reads a task', async () => {
     const dataDir = process.env.OD_DATA_DIR;
     const db = openDatabase(process.cwd(), dataDir === undefined ? {} : { dataDir });
     const projectId = `project_${randomUUID()}`;
@@ -345,16 +345,10 @@ describe('media task route recovery', () => {
       allowedEndpoints: ['/api/media/tasks/:id/wait'],
       allowedOperations: ['media:generate'],
     }).token;
-    let authorityMode: 'active' | 'outage' | 'removed' = 'removed';
     let authorityRequests = 0;
     authorityServer = http.createServer((_req, res) => {
       authorityRequests += 1;
       res.setHeader('content-type', 'application/json');
-      if (authorityMode === 'outage') {
-        res.statusCode = 503;
-        res.end(JSON.stringify({ error: 'authority unavailable' }));
-        return;
-      }
       res.end(JSON.stringify({
         items: [{
           workspaceId,
@@ -362,7 +356,7 @@ describe('media task route recovery', () => {
           workspaceType: 'team',
           workspaceMemberId: 'member-creator',
           role: 'owner',
-          memberStatus: authorityMode === 'removed' ? 'removed' : 'active',
+          memberStatus: 'removed',
           lifecycleState: 'active',
         }],
       }));
@@ -398,15 +392,8 @@ describe('media task route recovery', () => {
     );
 
     const removed = await waitForMissingTask();
-    expect(removed.status).toBe(404);
+    expect(removed.status).toBe(403);
 
-    authorityMode = 'outage';
-    const unavailable = await waitForMissingTask();
-    expect(unavailable.status).toBe(404);
-
-    authorityMode = 'active';
-    const authorized = await waitForMissingTask();
-    expect(authorized.status).toBe(404);
     expect(authorityRequests).toBe(startupAuthorityRequests);
   });
 

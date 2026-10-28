@@ -49,7 +49,11 @@ beforeEach(() => {
   } catch {
     // ignore
   }
-  globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({}), { status: 200 })) as typeof fetch;
+  globalThis.fetch = vi.fn(async (input) => new Response(JSON.stringify(
+    String(input).includes('/api/integrations/vela/status')
+      ? { loggedIn: true, profile: 'prod', credentialRevision: 'revision-a', user: { id: 'user-a', email: 'user@example.test' } }
+      : { ok: true },
+  ), { status: 200 })) as typeof fetch;
 });
 
 afterEach(() => {
@@ -83,6 +87,7 @@ describe('EntryNavRail sign-out (recvqbkcLqIFH7)', () => {
     // recvqgMWpJZqhL: sign-out now goes through an explicit confirmation
     // dialog; the real logout chain (including the dismissal reset) only
     // runs after confirming.
+    await waitFor(() => expect(screen.getByTestId('sign-out-confirm-accept')).toBeEnabled());
     fireEvent.click(screen.getByTestId('sign-out-confirm-accept'));
 
     // The sign-out handler's `resetCloudSignInTipDismissal()` call runs

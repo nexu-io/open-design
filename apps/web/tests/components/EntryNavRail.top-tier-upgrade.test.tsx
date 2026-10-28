@@ -235,3 +235,8 @@ describe('account menu billing card — 升级 at the top plan tier', () => {
     expect(billingCard().queryByRole('button', { name: '升级' })).toBeNull();
   });
 });
+
+vi.mock('../../src/providers/registry', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/registry')>('../../src/providers/registry');
+  return { ...actual, openExternalUrl: async (url: string) => { window.open(url, '_blank', 'noopener,noreferrer'); return true; } };
+});

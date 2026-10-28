@@ -1,3 +1,4 @@
+import { openExternalUrl } from "../providers/registry";
 import { reportProjectFailure } from '../observability/experience-diagnostics';
 // Horizontal "Recent projects" rail for the Home view.
 //
@@ -1263,7 +1264,7 @@ export function RecentProjectsStrip({
                 onClick={() => {
                   trackCollection('invite_teammates');
                   if (inviteTarget.kind === 'vela') {
-                    window.open(inviteTarget.url, '_blank', 'noopener,noreferrer');
+                    void openExternalUrl(inviteTarget.url);
                   } else if (inviteTarget.kind === 'local') {
                     setInviteOpen(true);
                   }
@@ -2077,7 +2078,7 @@ export function RecentProjectsStrip({
         onUpgrade={
           inviteUpgradeUrl
             ? () => {
-                window.open(inviteUpgradeUrl, '_blank', 'noopener,noreferrer');
+                void openExternalUrl(inviteUpgradeUrl);
               }
             : undefined
         }

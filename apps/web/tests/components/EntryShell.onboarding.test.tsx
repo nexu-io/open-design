@@ -1676,7 +1676,8 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
         sourceDetail: 'onboarding_amr_card',
       },
     });
-    expect(screen.getByText('Signing in…')).toBeTruthy();
+    expect(screen.getByTestId('onboarding-login-status').textContent).toContain('Signing in…');
+    expect(screen.getByTestId('onboarding-login-status').contains(screen.getByRole('button', { name: /Cancel sign-in/i }))).toBe(true);
     expect(screen.queryByText('Not signed in')).toBeNull();
     expect(signIn.hasAttribute('disabled')).toBe(true);
     await vi.advanceTimersByTimeAsync(2000);
@@ -1685,7 +1686,7 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     expect(screen.getByRole('button', { name: /Cancel sign-in/i })).toBeTruthy();
   });
 
-  it('shows daemon startup errors when AMR sign-in fails immediately', async () => {
+  it('shows a simple retry state when AMR sign-in fails immediately', async () => {
     const startupError = 'profile "prod" api URL: is not configured';
     const fetchMock = vi.fn(async (input, init) => {
       const url = String(input);
@@ -1703,9 +1704,9 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     await clickCloudSignIn();
 
     await waitFor(() => {
-      expect(screen.getByRole('alert').textContent).toBe(startupError);
+      expect(screen.getByRole('alert').textContent).toBe('Sign-in failed.');
     });
-    expect(screen.queryByText('Sign-in failed.')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
     expect(screen.queryByText('Signing in…')).toBeNull();
   });
 
@@ -1748,9 +1749,12 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     expect(screen.queryByText("Sign-in page didn't open?")).toBeNull();
 
     await vi.advanceTimersByTimeAsync(3000);
-    const reopen = screen.getByRole('link', { name: /Reopen/i });
-    expect(screen.getByText("Sign-in page didn't open?")).toBeTruthy();
-    expect(reopen.getAttribute('href')).toBe('https://amr.example/activate');
+    const reopen = screen.getByRole('button', { name: /Reopen/i });
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    fireEvent.click(reopen);
+    await act(async () => {});
+    expect(open).toHaveBeenCalledWith('https://amr.example/activate', '_blank', 'noopener,noreferrer');
+    open.mockRestore();
     expect(screen.getAllByRole('button', { name: /cancel/i })).toHaveLength(1);
   });
 
@@ -1764,13 +1768,7 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     await act(async () => {});
     await vi.advanceTimersByTimeAsync(2100);
 
-    expect(screen.getByText('Couldn’t open the sign-in page')).toBeTruthy();
-    expect(
-      screen.getByText('Your browser didn’t open automatically. Please try signing in again.'),
-    ).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Open sign-in page/i }).getAttribute('href')).toBe(
-      'https://amr.example/activate',
-    );
+    expect(screen.getByRole('button', { name: /Reopen/i })).toBeTruthy();
   });
 
   it('clears AMR login pending when canceled and allows a fresh sign-in attempt', async () => {
@@ -1792,8 +1790,8 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     await act(async () => {});
     expect(screen.getByText('Signing in…')).toBeTruthy();
     expect(signIn.hasAttribute('disabled')).toBe(true);
-    expect(screen.queryByRole('button', { name: /Local AI/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /API Key/i })).toBeNull();
+    expect((screen.getByRole('button', { name: /Local AI/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: /API Key/i }) as HTMLButtonElement).disabled).toBe(true);
 
     fireEvent.click(screen.getByRole('button', { name: /Cancel sign-in/i }));
     await act(async () => {});
@@ -2119,10 +2117,10 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     fireEvent.click(signIn);
     await act(async () => {});
 
-    expect(screen.getByText('Signing in…')).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toContain('Sign-in failed.');
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await act(async () => {});
     await vi.advanceTimersByTimeAsync(2000);
-    expect(screen.getByText('Signing in…')).toBeTruthy();
-
     await vi.advanceTimersByTimeAsync(4000);
     await vi.waitFor(() => {
       expect(props.onCompleteOnboarding).toHaveBeenCalledTimes(1);

@@ -213,6 +213,7 @@ export const pl: Dict = {
   'chat.runError.clientEnvironmentCause.network': 'sieć nieosiągalna',
   'chat.runError.clientEnvironmentCause.hostPolicy': 'zablokowane przez zasady systemowe',
   'chat.runError.clientEnvironmentCause.localStorage': 'odczyt/zapis pamięci lokalnej nie powiódł się',
+  'account.openFailed': 'Could not open the account page. Please try again.',
   'common.cancel': 'Anuluj',
   'chat.selectFromLibrary': 'Importuj z biblioteki',
   'chat.importFigma': 'Importuj z Figmy',

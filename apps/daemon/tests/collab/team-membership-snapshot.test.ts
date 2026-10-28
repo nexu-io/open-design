@@ -1,0 +1,27 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { afterEach, expect, it } from 'vitest';
+import { createTeamMembershipSnapshotStore } from '../../src/collab/team-membership-snapshot.js';
+import type { WorkspaceDirectoryItem } from '@open-design/contracts';
+const dir = mkdtempSync(path.join(tmpdir(), 'od-team-memberships-'));
+afterEach(() => rmSync(dir, { recursive: true, force: true }));
+it('persists only verified active teams per account and replaces stale membership', () => {
+  const a = { profile: 'local', apiUrl: 'http://127.0.0.1:1234', userId: 'A' };
+  const b = { ...a, userId: 'B' };
+  const item = (workspaceId: string, status = 'active') => ({ workspaceId, workspaceMemberId: 'member-a', workspaceType: 'team', memberStatus: status, lifecycleState: 'active' }) as WorkspaceDirectoryItem;
+  createTeamMembershipSnapshotStore(dir).save(a, [item('team-a'), item('removed', 'removed')]);
+  const restored = createTeamMembershipSnapshotStore(dir);
+  expect(restored.has(a, 'team-a')).toBe(true);
+  expect(restored.member(a, 'team-a')).toBe('member-a');
+  expect(restored.has(b, 'team-a')).toBe(false);
+  expect(restored.has(a, 'removed')).toBe(false);
+  restored.forget(a, 'team-a');
+  expect(restored.has(a, 'team-a')).toBe(false);
+  restored.save(a, [item('team-a'), item('team-b')]);
+  restored.forget(a, 'team-a');
+  expect(restored.has(a, 'team-a')).toBe(false);
+  expect(restored.has(a, 'team-b')).toBe(true);
+  restored.remove(a);
+  expect(restored.has(a, 'team-b')).toBe(false);
+});

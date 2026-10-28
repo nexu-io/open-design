@@ -1269,6 +1269,8 @@ import {
 import { openBrowser } from './browser/index.js';
 import { EmptyTranscriptError, synthesizeHandoffPrompt } from './design/index.js';
 import { readVelaControlApiContext } from './integrations/vela.js';
+import { createTeamMembershipSnapshotStore } from './collab/team-membership-snapshot.js';
+import { authorizeHeaderlessTeamRead } from './collab/headerless-team-read.js';
 
 /**
  * `OD_PROJECT_CREATE_PREPARATION_TIMEOUT_MS` shortens the POST /api/projects
@@ -3879,6 +3881,12 @@ export async function startServer({
       configuredAmrEnv(),
     ),
   });
+  const teamMembershipSnapshots = createTeamMembershipSnapshotStore(RUNTIME_DATA_DIR);
+  const currentTeamSnapshotIdentity = () => {
+    const session = readVelaControlApiContext(process.env, configuredAmrEnv());
+    const userId = session?.user?.id?.trim();
+    return session && userId ? { profile: session.profile, apiUrl: session.apiUrl, userId } : null;
+  };
   const workspaceDirectoryAuthority = createWorkspaceDirectoryAuthorityBroker({
     fetchDirectory: async () => {
       const result = await fetchVelaWorkspaceDirectory({
@@ -3903,8 +3911,14 @@ export async function startServer({
       mode: workspaceAuthorityCacheMode,
       ...input,
     }),
-    onAcceptedResult: (result, identity) =>
-      workspaceExactAuthorityCache.observe(identity, result.items),
+    onAcceptedResult: (result, identity) => {
+      workspaceExactAuthorityCache.observe(identity, result.items);
+      const account = currentTeamSnapshotIdentity();
+      if (account && identity === velaWorkspaceDirectoryIdentity(readVelaControlApiContext, configuredAmrEnv())) {
+        try { teamMembershipSnapshots.save(account, result.items); }
+        catch (error) { console.warn('[workspace] membership snapshot could not be saved', error); }
+      }
+    },
   });
   const fetchWorkspaceDirectory = workspaceDirectoryAuthority.read;
   const fetchFreshMutationWorkspaceDirectory =
@@ -8845,6 +8859,24 @@ export async function startServer({
     db,
     getWorkspaceProject,
     getWorkspaceProjectByProjectId,
+    authorizeHeaderlessTeamRead: async (workspaceId, memberId) => {
+      if (process.env.OD_WORKSPACE_CONTEXT_SOURCE?.trim() !== 'vela') return 'allowed';
+      return authorizeHeaderlessTeamRead({
+        workspaceId,
+        account: currentTeamSnapshotIdentity(),
+        currentIdentity: () => velaWorkspaceDirectoryIdentity(readVelaControlApiContext, configuredAmrEnv()),
+        fetchDirectory: fetchWorkspaceDirectory,
+        hasSnapshot: (account, id) => teamMembershipSnapshots.has(account, id),
+        snapshotMember: (account, id) => teamMembershipSnapshots.member(account, id),
+        expectedMemberId: memberId,
+        onUnauthorized: (account) => { try { teamMembershipSnapshots.remove(account); } catch {} },
+        onMembershipLost: (account, id) => { try { teamMembershipSnapshots.forget(account, id); } catch {} },
+      });
+    },
+    getHeaderlessTeamMember: (workspaceId) => {
+      const account = currentTeamSnapshotIdentity();
+      return account ? teamMembershipSnapshots.member(account, workspaceId) : null;
+    },
     isProjectRevoked: (_db, projectId) =>
       revokedTeamProjectMirrors.has(projectId),
     isProjectUnmaterializedPlaceholder: (_db, projectId) =>

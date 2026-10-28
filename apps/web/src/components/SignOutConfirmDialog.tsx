@@ -1,16 +1,20 @@
 import { useId } from 'react';
 import { createPortal } from 'react-dom';
 import {
+  Button,
   Dialog,
   DialogDescription,
   DialogFooter,
   DialogTitle,
 } from '@open-design/components';
 import { useT } from '../i18n';
+import styles from './SignOutConfirmDialog.module.css';
 
 interface Props {
   /** Disables both actions while the sign-out request is in flight. */
   busy?: boolean;
+  email?: string | null;
+  confirmDisabled?: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 }
@@ -23,38 +27,39 @@ interface Props {
  * alertdialog shape (Dialog + title/description/footer primitives) instead of
  * inventing a new popup.
  */
-export function SignOutConfirmDialog({ busy = false, onCancel, onConfirm }: Props) {
+export function SignOutConfirmDialog({ busy = false, email, confirmDisabled = false, onCancel, onConfirm }: Props) {
   const t = useT();
   const titleId = useId();
   const dialog = (
     <Dialog
-      className="modal-confirm"
+      className={`modal-confirm ${styles.dialog}`}
       role="alertdialog"
-      onClose={onCancel}
+      onClose={() => { if (!busy) onCancel(); }}
       closeOnEscape
       ariaLabelledBy={titleId}
       data-testid="sign-out-confirm-dialog"
     >
       <DialogTitle id={titleId}>{t('signOut.confirmTitle')}</DialogTitle>
       <DialogDescription>{t('signOut.confirmMessage')}</DialogDescription>
-      <DialogFooter className="row">
-        <button
+      {email ? <div className={styles.account}><span className={styles.avatar} aria-hidden>{email.slice(0, 1).toUpperCase()}</span><span>{email}</span></div> : null}
+      <DialogFooter className={styles.actions}>
+        <Button
           type="button"
           onClick={onCancel}
           disabled={busy}
           data-testid="sign-out-confirm-cancel"
         >
           {t('common.cancel')}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          className="primary"
+          className={styles.confirm}
           onClick={onConfirm}
-          disabled={busy}
+          disabled={busy || confirmDisabled}
           data-testid="sign-out-confirm-accept"
         >
           {t('signOut.confirmAction')}
-        </button>
+        </Button>
       </DialogFooter>
     </Dialog>
   );

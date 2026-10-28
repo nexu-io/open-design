@@ -882,7 +882,16 @@ export async function fetchVelaWorkspaceDirectory(
       recordDiagnosticFailure({ source: 'workspace-directory', status: response.status, env: process.env });
       if (response.status === 401 || response.status === 403) {
         if (!options.readSession) {
-          markVelaAuthorizationExpired(process.env, configuredEnv);
+          const currentEnv = typeof options.configuredEnv === 'function'
+            ? options.configuredEnv()
+            : configuredEnv;
+          const current = readVelaControlApiContext(process.env, currentEnv);
+          // A response from before re-login must not expire the new credentials.
+          if (current?.profile === session.profile
+            && current.apiUrl === session.apiUrl
+            && current.controlKey === session.controlKey) {
+            markVelaAuthorizationExpired(process.env, currentEnv);
+          }
         }
         return {
           ok: false,

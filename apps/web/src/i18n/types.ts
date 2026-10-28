@@ -101,6 +101,7 @@ export interface Dict {
   'workspaceInvite.errorNoWorkspace': string;
   'workspaceInvite.errorUnreachable': string;
   // Common
+  'account.openFailed': string;
   'common.cancel': string;
   'chat.selectFromLibrary': string;
   'chat.importFigma': string;

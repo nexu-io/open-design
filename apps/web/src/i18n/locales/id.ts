@@ -213,6 +213,7 @@ export const id: Dict = {
   'chat.runError.clientEnvironmentCause.network': 'jaringan tidak dapat dijangkau',
   'chat.runError.clientEnvironmentCause.hostPolicy': 'diblokir oleh kebijakan sistem',
   'chat.runError.clientEnvironmentCause.localStorage': 'gagal membaca/menulis penyimpanan lokal',
+  'account.openFailed': 'Could not open the account page. Please try again.',
   'common.cancel': 'Batal',
   'chat.selectFromLibrary': 'Impor dari pustaka',
   'chat.importFigma': 'Impor dari Figma',

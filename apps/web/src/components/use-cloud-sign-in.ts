@@ -32,6 +32,8 @@ export function useCloudSignIn({ onLoginSuccess }: { onLoginSuccess?: () => void
   const [state, setState] = useState<CloudSignInState>('idle');
   const [status, setStatus] = useState<VelaLoginStatus | null>(null);
   const cancelledRef = useRef(false);
+  const completedRef = useRef(false);
+  const pollGeneration = useRef(0);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -45,31 +47,40 @@ export function useCloudSignIn({ onLoginSuccess }: { onLoginSuccess?: () => void
   async function begin() {
     if (state === 'signing') return;
     cancelledRef.current = false;
+    completedRef.current = false;
+    const generation = ++pollGeneration.current;
     setState('signing');
     setStatus(null);
     const current = await fetchVelaLoginStatus();
-    if (cancelledRef.current || !mountedRef.current) return;
+    if (cancelledRef.current || !mountedRef.current || generation !== pollGeneration.current) return;
     if (isAmrSessionAuthenticated(current)) {
       finishSignedIn();
       return;
     }
-    const result = await startVelaLogin();
-    if (cancelledRef.current || !mountedRef.current) return;
+    if (!current) { setState('error'); return; }
+    const result = current.loginInFlight ? { ok: true, alreadyRunning: true } : await startVelaLogin();
+    if (cancelledRef.current || !mountedRef.current || generation !== pollGeneration.current) return;
     if (!result.ok && !result.alreadyRunning) {
       console.error('[amr-login] startVelaLogin failed', result);
       setState('error');
       return;
     }
     const startedAt = Date.now();
-    while (!cancelledRef.current && mountedRef.current) {
+    while (!cancelledRef.current && mountedRef.current && generation === pollGeneration.current) {
       await new Promise((resolve) => window.setTimeout(resolve, AMR_LOGIN_POLL_INTERVAL_MS));
-      if (cancelledRef.current || !mountedRef.current) return;
+      if (cancelledRef.current || !mountedRef.current || generation !== pollGeneration.current) return;
       const next = await fetchVelaLoginStatus();
-      if (cancelledRef.current || !mountedRef.current) return;
+      if (cancelledRef.current || !mountedRef.current || generation !== pollGeneration.current) return;
       if (next) setStatus(next);
       const outcome = amrLoginPollOutcome(next, startedAt);
       if (outcome === 'signed-in') {
         finishSignedIn();
+        return;
+      }
+      if (outcome === 'cancelled') {
+        setState('idle');
+        setStatus(null);
+        notifyAmrLoginStatusChanged('login-canceled');
         return;
       }
       if (outcome === 'stopped' || outcome === 'timed-out') {
@@ -87,6 +98,8 @@ export function useCloudSignIn({ onLoginSuccess }: { onLoginSuccess?: () => void
   }
 
   function finishSignedIn() {
+    if (completedRef.current) return;
+    completedRef.current = true;
     // A requested post-login action belongs to the still-mounted caller;
     // broadcast refresh may unmount this tip before the caller can record it.
     if (mountedRef.current && !cancelledRef.current) onLoginSuccess?.();
@@ -97,13 +110,32 @@ export function useCloudSignIn({ onLoginSuccess }: { onLoginSuccess?: () => void
     if (mountedRef.current) setState('idle');
   }
 
+  async function reopen() {
+    const next = await fetchVelaLoginStatus();
+    if (!mountedRef.current || cancelledRef.current) return;
+    if (!next) { ++pollGeneration.current; setState('error'); return; }
+    setStatus(next);
+    if (isAmrSessionAuthenticated(next)) { finishSignedIn(); return; }
+    if (next.loginInFlight && next.activationUrl) window.open(next.activationUrl, '_blank', 'noopener,noreferrer');
+    else { ++pollGeneration.current; setState('error'); }
+  }
+
   async function cancel() {
+    ++pollGeneration.current;
     cancelledRef.current = true;
+    const result = await cancelVelaLogin(status?.authAttemptId ?? undefined);
+    const next = await fetchVelaLoginStatus();
+    if (!mountedRef.current) return;
+    if (isAmrSessionAuthenticated(next)) {
+      cancelledRef.current = false;
+      finishSignedIn();
+      return;
+    }
+    if (!result.ok || result.canceled !== true) { setStatus(next); setState('error'); return; }
     setState('idle');
-    setStatus(null);
-    await cancelVelaLogin();
+    setStatus(next);
     notifyAmrLoginStatusChanged('login-canceled');
   }
 
-  return { state, status, begin, cancel };
+  return { state, status, begin, cancel, reopen };
 }

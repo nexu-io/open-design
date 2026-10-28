@@ -1,3 +1,4 @@
+import { openExternalUrl } from "../providers/registry";
 import { reportExperienceEvent } from '../observability/experience-diagnostics';
 import { conversationMetaLabel } from '../runtime/chat/conversation-time';
 export { conversationMetaLabel } from '../runtime/chat/conversation-time';
@@ -2262,12 +2263,8 @@ export function ChatPane({
     }
     if (onConsumeAmrAuthRetryContinuation(amrAuthRetryContinuation)) {
       amrAuthRetrySignedOutWitnessRef.current = null;
-      onRetry(
-        retryAssistant,
-        retryAssistant.agentId === 'amr'
-          ? 'authorize_and_retry'
-          : 'switch_runtime_retry',
-      );
+      // Authentication restores the conversation, not execution permission.
+      // The user retries explicitly once the account and Workspace are ready.
     }
   }, [
     activeConversationId,
@@ -2540,11 +2537,8 @@ export function ChatPane({
       resolvedDeviceId: getResolvedDeviceId(),
       installationId: config?.installationId,
     });
-    window.open(
-      attributedAmrUrl(amrPlansUrlForProfile(amrProfile), attribution, deviceId),
-      '_blank',
-      'noopener,noreferrer',
-    );
+    void openExternalUrl(
+      attributedAmrUrl(amrPlansUrlForProfile(amrProfile), attribution, deviceId));
   }, [amrProfile, analytics.track, config?.installationId, config?.telemetry?.metrics]);
   const visibleRecoveryActionTypes = useMemo(() => {
     const actions: TrackingRunRecoveryActionType[] = [];

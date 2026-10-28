@@ -1,3 +1,4 @@
+import { openExternalUrl } from "../providers/registry";
 import { useId } from 'react';
 import { Button, VisuallyHidden } from '@open-design/components';
 import { useAnalytics } from '../analytics/provider';
@@ -44,11 +45,8 @@ export function AmrArtifactUpgradeHomeCard({
       resolvedDeviceId: getResolvedDeviceId(),
       installationId,
     });
-    window.open(
-      attributedAmrUrl(amrPlansUrlForProfile(profile), attribution, deviceId),
-      '_blank',
-      'noopener,noreferrer',
-    );
+    void openExternalUrl(
+      attributedAmrUrl(amrPlansUrlForProfile(profile), attribution, deviceId));
     onDismiss();
   };
 

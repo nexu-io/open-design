@@ -1,3 +1,4 @@
+import { openExternalUrl } from "../providers/registry";
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Dialog } from '@open-design/components';
@@ -226,11 +227,8 @@ export function AmrBalanceDialog({
       resolvedDeviceId: getResolvedDeviceId(),
       installationId,
     });
-    window.open(
-      attributedAmrUrl(upgradeUrl, attribution, deviceId),
-      '_blank',
-      'noopener,noreferrer',
-    );
+    void openExternalUrl(
+      attributedAmrUrl(upgradeUrl, attribution, deviceId));
   };
   const benefits = [
     t('chat.amrBalanceGate.benefit1'),

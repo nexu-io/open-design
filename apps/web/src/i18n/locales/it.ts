@@ -213,6 +213,7 @@ export const it: Dict = {
   'chat.runError.clientEnvironmentCause.network': 'rete irraggiungibile',
   'chat.runError.clientEnvironmentCause.hostPolicy': 'bloccato da un criterio di sistema',
   'chat.runError.clientEnvironmentCause.localStorage': 'lettura/scrittura dell’archivio locale non riuscita',
+  'account.openFailed': 'Could not open the account page. Please try again.',
   'common.cancel': 'Annulla',
   'chat.selectFromLibrary': 'Importa dalla libreria',
   'chat.importFigma': 'Importa da Figma',

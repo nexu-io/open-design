@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isAmrSessionAuthenticated } from '../../src/components/amrLoginPolling';
+import { amrLoginPollOutcome, isAmrSessionAuthenticated } from '../../src/components/amrLoginPolling';
 
 describe('isAmrSessionAuthenticated', () => {
   it('does not treat credential presence as an authenticated session after authoritative expiry', () => {
@@ -22,4 +22,11 @@ describe('isAmrSessionAuthenticated', () => {
       configPath: '/redacted/config.json',
     })).toBe(true);
   });
+});
+
+ it('distinguishes browser cancellation from failure, while completed login wins', () => {
+  const status = { loggedIn: false, loginInFlight: false, loginError: 'login_cancelled', profile: 'prod', user: null, configPath: '/redacted/config.json' };
+  expect(amrLoginPollOutcome(status, 0, 4000)).toBe('cancelled');
+  expect(amrLoginPollOutcome({ ...status, loggedIn: true }, 0, 4000)).toBe('signed-in');
+  expect(amrLoginPollOutcome({ ...status, loginError: 'login_failed' }, 0, 4000)).toBe('stopped');
 });

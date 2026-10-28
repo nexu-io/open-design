@@ -213,6 +213,7 @@ export const th: Dict = {
   'chat.runError.clientEnvironmentCause.network': 'เข้าถึงเครือข่ายไม่ได้',
   'chat.runError.clientEnvironmentCause.hostPolicy': 'ถูกบล็อกโดยนโยบายของระบบ',
   'chat.runError.clientEnvironmentCause.localStorage': 'อ่านหรือเขียนที่จัดเก็บในเครื่องไม่สำเร็จ',
+  'account.openFailed': 'Could not open the account page. Please try again.',
   'common.cancel': 'ยกเลิก',
   'chat.selectFromLibrary': 'นำเข้าจากไลบรารี',
   'chat.importFigma': 'นำเข้าจาก Figma',

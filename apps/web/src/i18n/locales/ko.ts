@@ -213,6 +213,7 @@ export const ko: Dict = {
   'chat.runError.clientEnvironmentCause.network': '네트워크에 연결할 수 없음',
   'chat.runError.clientEnvironmentCause.hostPolicy': '시스템 정책에 의해 차단됨',
   'chat.runError.clientEnvironmentCause.localStorage': '로컬 저장소 읽기/쓰기 실패',
+  'account.openFailed': 'Could not open the account page. Please try again.',
   'common.cancel': '취소',
   'chat.selectFromLibrary': '라이브러리에서 가져오기',
   'chat.importFigma': 'Figma에서 가져오기',

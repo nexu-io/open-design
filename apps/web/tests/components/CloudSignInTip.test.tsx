@@ -11,7 +11,7 @@
  * a new browser tab.
  */
 
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -19,6 +19,7 @@ import {
   RailAccountSyncTip,
   resetCloudSignInTipDismissal,
 } from '../../src/components/CloudSignInTip';
+import { resetCoalescedGet } from '../../src/lib/coalesced-get';
 import { AMR_LOGIN_TIMEOUT_MS } from '../../src/components/amrLoginPolling';
 import { I18nProvider } from '../../src/i18n';
 
@@ -184,6 +185,7 @@ describe('CloudSignInTip', () => {
     ).toBe(true);
 
     vi.useRealTimers();
+    resetCoalescedGet();
     const retryCard = await screen.findByTestId('entry-cloud-signin-tip');
     fireEvent.click(retryCard);
     await act(async () => {
@@ -192,7 +194,7 @@ describe('CloudSignInTip', () => {
       await Promise.resolve();
     });
 
-    expect(spawnCount).toBe(2);
+    await waitFor(() => expect(spawnCount).toBe(2));
   });
 
   // Regression for 飞书 recvqbkcLqIFH7: this card used to have a close "×"

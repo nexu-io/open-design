@@ -213,6 +213,7 @@ export const esES: Dict = {
   'chat.runError.clientEnvironmentCause.network': 'red inaccesible',
   'chat.runError.clientEnvironmentCause.hostPolicy': 'bloqueado por una directiva del sistema',
   'chat.runError.clientEnvironmentCause.localStorage': 'fallo de lectura/escritura en el almacenamiento local',
+  'account.openFailed': 'Could not open the account page. Please try again.',
   'common.cancel': 'Cancelar',
   'chat.selectFromLibrary': 'Importar de la biblioteca',
   'chat.importFigma': 'Importar de Figma',

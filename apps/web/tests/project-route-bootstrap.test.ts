@@ -55,11 +55,35 @@ afterEach(() => {
 });
 
 describe('bootstrapProjectRoute', () => {
+  it('opens an offline team project with the daemon-verified member', async () => {
+    const calls: string[] = [];
+    const memberId = 'current-member';
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.endsWith('/workspace-scope')) {
+        const requested = new Headers(init?.headers).get('x-od-workspace-member-id');
+        return new Response(JSON.stringify({ scope: {
+          kind: 'team', projectId: PROJECT_ID, workspaceId: CONTEXT_A.workspaceId,
+          visibility: 'team', context: { ...SCOPE_CONTEXT_A, workspaceMemberId: requested ?? CONTEXT_A.workspaceMemberId },
+        } }), { status: 200, headers: requested ? {} : { 'x-od-verified-team-member': memberId } });
+      }
+      return new Response(JSON.stringify({ project: PROJECT_A }), { status: 200 });
+    }));
+    await expect(bootstrapProjectRoute(PROJECT_ID, { accountGeneration: 25 })).resolves.toMatchObject({
+      kind: 'found', scope: { context: { workspaceMemberId: memberId } },
+    });
+    expect(calls).toHaveLength(3);
+    expect(calls).not.toContain('/api/workspace/directory');
+  });
   it('revalidates a headerless team discovery with exact scope and detail reads', async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       calls.push({ url, init });
+      if (url === '/api/workspace/directory') {
+        return new Response(JSON.stringify({ items: [CONTEXT_A] }), { status: 200 });
+      }
       if (url.endsWith('/workspace-scope')) {
         return new Response(JSON.stringify({
           scope: {
@@ -89,19 +113,51 @@ describe('bootstrapProjectRoute', () => {
       },
     });
 
-    expect(calls).toHaveLength(3);
+    expect(calls).toHaveLength(4);
     expect(new Headers(calls[0]?.init?.headers).has('x-od-workspace-id')).toBe(false);
-    expect(new Headers(calls[1]?.init?.headers).get('x-od-workspace-id'))
-      .toBe(CONTEXT_A.workspaceId);
-    expect(new Headers(calls[1]?.init?.headers).get('x-od-workspace-member-id'))
-      .toBe(CONTEXT_A.workspaceMemberId);
-    expect(calls[1]?.url).toContain('/workspace-scope');
-    expect(new Headers(calls[2]?.init?.headers).get('x-od-workspace-id'))
-      .toBe(CONTEXT_A.workspaceId);
-    expect(new Headers(calls[2]?.init?.headers).get('x-od-workspace-member-id'))
-      .toBe(CONTEXT_A.workspaceMemberId);
-    expect(calls[2]?.url).not.toContain('/workspace-scope');
-    expect(calls.every((call) => call.init?.cache === 'no-store')).toBe(true);
+    expect(calls[1]?.url).toBe('/api/workspace/directory');
+    expect(new Headers(calls[2]?.init?.headers).get('x-od-workspace-id')).toBe(CONTEXT_A.workspaceId);
+    expect(new Headers(calls[2]?.init?.headers).get('x-od-workspace-member-id')).toBe(CONTEXT_A.workspaceMemberId);
+    expect(calls[2]?.url).toContain('/workspace-scope');
+    expect(new Headers(calls[3]?.init?.headers).get('x-od-workspace-id')).toBe(CONTEXT_A.workspaceId);
+    expect(new Headers(calls[3]?.init?.headers).get('x-od-workspace-member-id')).toBe(CONTEXT_A.workspaceMemberId);
+    expect(calls[3]?.url).toContain(`/api/projects/${PROJECT_ID}`);
+  });
+
+  it('does not trust a stored Team member when the signed-in account is not a member', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/workspace/directory') return new Response(JSON.stringify({ items: [CONTEXT_B] }), { status: 200 });
+      if (url.endsWith('/workspace-scope')) return new Response(JSON.stringify({ scope: {
+        kind: 'team', projectId: PROJECT_ID, workspaceId: CONTEXT_A.workspaceId,
+        visibility: 'team', context: SCOPE_CONTEXT_A,
+      } }), { status: 200 });
+      return new Response(JSON.stringify({ project: PROJECT_A }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(bootstrapProjectRoute(PROJECT_ID, { accountGeneration: 20 })).resolves.toEqual({ kind: 'forbidden' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses the current member for a shared Team project owned by another member', async () => {
+    const member = { ...CONTEXT_A, workspaceMemberId: 'another-team-member', role: 'member' as const };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/workspace/directory') return new Response(JSON.stringify({ items: [member] }), { status: 200 });
+      if (url.endsWith('/workspace-scope')) {
+        const requestedMember = new Headers(init?.headers).get('x-od-workspace-member-id');
+        return new Response(JSON.stringify({ scope: {
+          kind: 'team', projectId: PROJECT_ID, workspaceId: CONTEXT_A.workspaceId,
+          visibility: 'team', context: { ...SCOPE_CONTEXT_A, workspaceMemberId: requestedMember ?? CONTEXT_A.workspaceMemberId },
+        } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ project: PROJECT_A }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await bootstrapProjectRoute(PROJECT_ID, { accountGeneration: 21 });
+    expect(result).toMatchObject({ kind: 'found', scope: { context: { workspaceMemberId: member.workspaceMemberId } } });
+    const detail = fetchMock.mock.calls.find(([url]) => String(url).endsWith(`/api/projects/${PROJECT_ID}`));
+    expect(new Headers(detail?.[1]?.headers).get('x-od-workspace-member-id')).toBe(member.workspaceMemberId);
   });
 
   it('uses an exact opening witness for the first scope read and partitions coalescing by identity', async () => {

@@ -213,6 +213,7 @@ export const de: Dict = {
   'chat.runError.clientEnvironmentCause.network': 'Netzwerk nicht erreichbar',
   'chat.runError.clientEnvironmentCause.hostPolicy': 'durch eine Systemrichtlinie blockiert',
   'chat.runError.clientEnvironmentCause.localStorage': 'Lesen/Schreiben im lokalen Speicher fehlgeschlagen',
+  'account.openFailed': 'Could not open the account page. Please try again.',
   'common.cancel': 'Abbrechen',
   'chat.selectFromLibrary': 'Aus Bibliothek importieren',
   'chat.importFigma': 'Aus Figma importieren',

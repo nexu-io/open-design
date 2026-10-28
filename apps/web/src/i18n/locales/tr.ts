@@ -213,6 +213,7 @@ export const tr: Dict = {
   'chat.runError.clientEnvironmentCause.network': 'ağa ulaşılamıyor',
   'chat.runError.clientEnvironmentCause.hostPolicy': 'sistem ilkesi tarafından engellendi',
   'chat.runError.clientEnvironmentCause.localStorage': 'yerel depolama okuma/yazma hatası',
+  'account.openFailed': 'Could not open the account page. Please try again.',
   'common.cancel': 'İptal et',
   'chat.selectFromLibrary': 'Kitaplıktan içe aktar',
   'chat.importFigma': 'Figma\'dan içe aktar',

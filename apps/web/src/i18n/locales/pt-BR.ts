@@ -213,6 +213,7 @@ export const ptBR: Dict = {
   'chat.runError.clientEnvironmentCause.network': 'rede inacessível',
   'chat.runError.clientEnvironmentCause.hostPolicy': 'bloqueado por uma política do sistema',
   'chat.runError.clientEnvironmentCause.localStorage': 'falha de leitura/gravação no armazenamento local',
+  'account.openFailed': 'Could not open the account page. Please try again.',
   'common.cancel': 'Cancelar',
   'chat.selectFromLibrary': 'Importar da biblioteca',
   'chat.importFigma': 'Importar do Figma',
