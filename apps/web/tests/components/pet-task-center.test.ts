@@ -64,10 +64,10 @@ describe('buildPetTaskCenter', () => {
     ]);
   });
 
-  // #1247 / #1060 — a succeeded run that ended with unfinished declared work
-  // must NOT read as plain "recently completed"; it files as `incomplete` so its
-  // dot never renders the success color.
-  it('files a succeeded-but-unfinished run as incomplete, never succeeded', () => {
+  // P0-24 — the run record alone names the outcome, the same rule as the
+  // sidebar: unfinished declared work no longer files a delivered run as
+  // `incomplete`.
+  it('files a succeeded-but-unfinished run as succeeded', () => {
     const center = buildPetTaskCenter(projects, [
       run('unfinished', 'p1', 'succeeded', 10, { endedWithUnfinishedWork: true }),
       run('finished', 'p2', 'succeeded', 12, { endedWithUnfinishedWork: false }),
@@ -75,7 +75,7 @@ describe('buildPetTaskCenter', () => {
 
     expect(center.recent).toEqual([
       { projectId: 'p2', projectName: 'Brand Deck', status: 'succeeded', updatedAt: 12 },
-      { projectId: 'p1', projectName: 'Landing Page', status: 'incomplete', updatedAt: 10 },
+      { projectId: 'p1', projectName: 'Landing Page', status: 'succeeded', updatedAt: 10 },
     ]);
   });
 

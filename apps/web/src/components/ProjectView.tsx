@@ -2,6 +2,7 @@ import { useStartupReady } from '../observability/startup-ready';
 import { navigationTiming, useProjectNavigationReady, observeNavigation } from '../observability/navigation-timing';
 import { withLiveArtifactDeliveries } from '../runtime/live-artifact-delivery';
 import { readRetriedErrorSurface, retriedErrorSurfaceKey, writeRetriedErrorSurface } from '../runtime/chat/retried-error-surface';
+import { runOutcomeAwaitsRunRecord, settleTurnFromRunRecord } from '../runtime/chat/pending-disconnect';
 import type { ObservedPublicShareLink, ObservedShareUpdateRequest } from './share/observed-public-share-link';
 import type { ShareLoginReturn } from './share/share-login-return';
 import {
@@ -84,9 +85,12 @@ import {
   strategyTaskParkedOnSucceededRun,
   strategyTaskRunIndex,
 } from '../runtime/strategy-question-continuation';
+import { acknowledgeProjectCompletion, useProjectRunSummaries } from '../hooks/useProjectRunStatuses';
 import {
+  eventsEndedByAskingUser,
   isTodoWriteToolName,
   isWorkspaceLifecycleReadable,
+  turnEndedByAskingUser,
   workspaceBillingAuthorityContext,
   workspacePrincipalKey,
   type AmrWalletSnapshot,
@@ -4425,6 +4429,34 @@ export function ProjectView({
     reattachTextBuffersRef.current.clear();
   }, []);
 
+  /*
+   * P0-24 "已查看": the user has seen this project's latest result whenever this
+   * view is showing it with the window in front — including a run that ends
+   * while they are here in another conversation (product answer P2). Keep the
+   * project's run status live while it is open, and spend its new-result
+   * notice (the sidebar's blue dot) as soon as one appears or the window comes
+   * back to the front. Opening the project from anywhere — the rail, search,
+   * the project list, a notification or a link — goes through here.
+   */
+  const viewedProjectRunSummaries = useProjectRunSummaries([project.id], {
+    workspaceContext: projectRunWorkspaceContext,
+  });
+  const viewedProjectRunSummary = viewedProjectRunSummaries.get(project.id);
+  useEffect(() => {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return undefined;
+    const spendViewedNotice = () => {
+      if (document.hidden || !document.hasFocus()) return;
+      acknowledgeProjectCompletion(project.id);
+    };
+    spendViewedNotice();
+    window.addEventListener('focus', spendViewedNotice);
+    document.addEventListener('visibilitychange', spendViewedNotice);
+    return () => {
+      window.removeEventListener('focus', spendViewedNotice);
+      document.removeEventListener('visibilitychange', spendViewedNotice);
+    };
+  }, [project.id, viewedProjectRunSummary]);
+
   const notifyCompletedRun = useCallback((last: ChatMessage) => {
     // Round 7 (mrcfps @ useDesignMdState.ts:131): a chat turn just
     // settled — conversation updatedAt almost certainly moved, so
@@ -4432,43 +4464,54 @@ export function ProjectView({
     // file mutations or live artifacts.
     setDesignMdRefreshKey((n) => n + 1);
 
-    const status =
-      last.resultDeliveryState === 'no_result' ||
-      last.resultDeliveryState === 'delivery_failed'
-        ? 'failed'
-        : last.runStatus;
+    // P0-24: the run record alone names the outcome. A delivery outcome
+    // (`no_result` / `delivery_failed`) no longer turns a finished run into a
+    // failure notification; a stopped run sends nothing.
+    const status = last.runStatus;
     if (status !== 'succeeded' && status !== 'failed') return;
 
-    const cfg = config.notifications ?? DEFAULT_NOTIFICATIONS;
-    if (cfg.soundEnabled) {
-      playSound(status === 'succeeded' ? cfg.successSoundId : cfg.failureSoundId);
-    }
+    // P0-24 N10: on the desktop every turn is announced by the app-root feed
+    // (`useGlobalRunNotices`), wherever the user is; announcing here too would
+    // notify twice. The web has no global feed and keeps this one.
+    if (isOpenDesignHostAvailable()) return;
 
-    if (cfg.desktopEnabled) {
-      // System notifications are useful only when the task is not already in
-      // front of the user. Sounds remain independent feedback for both states.
-      const isHidden = typeof document !== 'undefined' && document.hidden;
-      const isFocused = typeof document === 'undefined' ? true : document.hasFocus();
-      if (isHidden || !isFocused) {
-        const title = status === 'succeeded'
-          ? t('notify.successTitle')
-          : t('notify.failureTitle');
-        const fallbackBody = status === 'succeeded'
-          ? t('notify.successBody')
-          : t('notify.failureBody');
-        const trimmed = (last.content ?? '').trim();
-        const body = trimmed ? trimmed.slice(0, 80) : fallbackBody;
-        void showCompletionNotification({
-          status,
-          title,
-          body,
-          onClick: () => {
-            if (typeof window !== 'undefined') window.focus();
-          },
-        });
+    // Feedback is only for a turn the user is not watching: this view shows the
+    // active conversation, so "not viewing" is the window being hidden or
+    // unfocused.
+    const isHidden = typeof document !== 'undefined' && document.hidden;
+    const isFocused = typeof document === 'undefined' ? true : document.hasFocus();
+    if (!isHidden && isFocused) return;
+
+    // The sound belongs to the notification (P0-24 rule ④, product answer Q2):
+    // "桌面通知" decides whether one is shown, "提示音" whether it makes a sound.
+    // Desktop notifications off, permission denied or the show failing all
+    // mean no notification, and so no sound either.
+    const cfg = config.notifications ?? DEFAULT_NOTIFICATIONS;
+    if (!cfg.desktopEnabled) return;
+
+    // Fixed copy, never the reply text: a reply can open with markup such as
+    // `<question-form …>` or `<od-done …/>`, which must not reach the body.
+    const asksUser =
+      status === 'succeeded'
+      && (turnEndedByAskingUser(last.content) || eventsEndedByAskingUser(last.events));
+    const body = status === 'failed'
+      ? t('notify.runFailedBody')
+      : asksUser
+        ? t('notify.needsReplyBody')
+        : t('notify.newReplyBody');
+    void showCompletionNotification({
+      status,
+      title: project.name,
+      body,
+      onClick: () => {
+        if (typeof window !== 'undefined') window.focus();
+      },
+    }).then((result) => {
+      if (result === 'shown' && cfg.soundEnabled) {
+        playSound(status === 'succeeded' ? cfg.successSoundId : cfg.failureSoundId);
       }
-    }
-  }, [config.notifications, t]);
+    });
+  }, [config.notifications, project.name, t]);
 
   // Fire completion feedback from assistant run-status transitions rather than
   // from the local SSE listener state. A run can finish while its conversation
@@ -4485,6 +4528,9 @@ export function ProjectView({
       }
       if (message.runStatus !== 'succeeded' && message.runStatus !== 'failed') continue;
       if (message.runStatus === 'succeeded' && designDeliveryVerificationPending(message)) continue;
+      // P0-24 N15: the browser losing the stream is not the run's outcome. Do
+      // not notify, and do not mark it notified: the real result still will.
+      if (runOutcomeAwaitsRunRecord(message)) continue;
       if (!keys.some((key) => activeCompletionNotificationRunsRef.current.has(key))) continue;
       if (keys.some((key) => completedNotificationRunsRef.current.has(key))) continue;
       for (const key of keys) completedNotificationRunsRef.current.add(key);
@@ -7064,13 +7110,16 @@ export function ProjectView({
         // survive, but still apply the daemon's authoritative `resumable` flag so
         // ChatPane's Continue affordance reflects the daemon's view after a reload.
         if (spuriouslyFailedPending && status.status === 'failed') {
-          if (typeof status.resumable !== 'undefined') {
-            updateMessageById(
-              message.id,
-              (prev) => ({ ...prev, resumable: status.resumable }),
-              true,
-            );
-          }
+          // The record confirms the failure, so the disconnect marker (if any)
+          // no longer stands for "outcome unknown" (N15 / Q7).
+          updateMessageById(
+            message.id,
+            (prev) => ({
+              ...settleTurnFromRunRecord(prev),
+              ...(typeof status.resumable !== 'undefined' ? { resumable: status.resumable } : {}),
+            }),
+            true,
+          );
           // Clear stale retry count — this run is authoritatively done.
           transientFailedRetriesRef.current.delete(runId);
           genericDisconnectRetriesRef.current.delete(runId);
@@ -7288,9 +7337,8 @@ export function ProjectView({
               true,
               { telemetryFinalized: true },
             );
-            if (deliveryOutcome === 'no_result' || deliveryOutcome === 'delivery_failed') {
-              setError(artifactPersistenceError ?? DESIGN_RESULT_MISSING_DETAIL);
-            }
+            // P0-24 (PRD C7/C8, Q3): no pane-level failure card for a run that
+            // ended normally without a deliverable; the message keeps the outcome.
             await auditDesignSystemWorkspaceAfterRun(message.id);
             // Clear stale retry count for successfully recovered run.
             transientFailedRetriesRef.current.delete(runId);
@@ -7831,9 +7879,8 @@ export function ProjectView({
                   true,
                   { telemetryFinalized: true },
                 );
-                if (deliveryOutcome === 'no_result' || deliveryOutcome === 'delivery_failed') {
-                  setError(artifactPersistenceError ?? DESIGN_RESULT_MISSING_DETAIL);
-                }
+                // P0-24 (PRD C7/C8, Q3): no pane-level failure card for a run that
+                // ended normally without a deliverable; the message keeps the outcome.
                 await auditDesignSystemWorkspaceAfterRun(message.id);
               })();
               onProjectsRefresh();
@@ -8114,7 +8161,7 @@ export function ProjectView({
                     updateMessageById(
                       message.id,
                       (prev) => ({
-                        ...prev,
+                        ...settleTurnFromRunRecord(prev),
                         runStatus: latestRunStatus.status,
                         endedAt: latestRunStatus.updatedAt,
                         ...(latestRunStatus.resumable !== undefined
@@ -9957,17 +10004,18 @@ export function ProjectView({
             !liveHtml.trim();
           if (emptyApiResponse) {
             const endedAt = Date.now();
-            const diagnostic = t('assistant.emptyResponseMessage');
+            // P0-24 Q6 (same as P7): a model stream that ends with no reply is a
+            // normal end, not a failure. The turn keeps the `empty_response`
+            // marker other logic reads, without a 运行失败 body text.
             updateMessageById(
               assistantId,
               (prev) => ({
                 ...prev,
                 endedAt,
-                runStatus: 'failed',
+                runStatus: 'succeeded',
                 events: [
                   ...(prev.events ?? []),
                   { kind: 'status', label: 'empty_response', detail: config.model },
-                  { kind: 'text', text: diagnostic },
                 ],
               }),
               true,
@@ -9979,7 +10027,7 @@ export function ProjectView({
               controller,
               cancelController,
             );
-            if (ownsCurrentRun) updateConversationLatestRun('failed', endedAt);
+            if (ownsCurrentRun) updateConversationLatestRun('succeeded', endedAt);
             void refreshProjectFiles().catch(() => {
               // Retain the last accepted file list while the daemon recovers.
             });
@@ -10210,7 +10258,9 @@ export function ProjectView({
                 return updated;
               });
               if (deliveryOutcome === 'no_result' || deliveryOutcome === 'delivery_failed') {
-                setError(artifactPersistenceError ?? DESIGN_RESULT_MISSING_DETAIL);
+                // P0-24 (PRD C7/C8, Q3): a run that ended normally but delivered no
+                // file is not a failure, so no pane-level failure card. The outcome stays
+                // recorded on the message (resultDeliveryState), as Q3 accepted.
                 releaseCommentsAfterUnsuccessfulRun(runSavedComments);
               }
               await auditDesignSystemWorkspaceAfterRun(assistantId);
@@ -10456,7 +10506,7 @@ export function ProjectView({
                   if (runMayFinalize) {
                     if (latestRunStatus.status === 'canceled') setError(null);
                     updateAssistant((prev) => ({
-                      ...prev,
+                      ...settleTurnFromRunRecord(prev),
                       endedAt: latestRunStatus.updatedAt,
                       runStatus: latestRunStatus.status,
                       ...(latestRunStatus.resumable !== undefined

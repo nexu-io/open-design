@@ -1,0 +1,20 @@
+/*
+ * P0-24 推测项 A-09(测试用例 X21 / OPEND-4216):项目在等用户回答时,项目名后面
+ * 出一枚看得见的「需要你回复」标签。取值是研发从设计稿量出来的(清单 3.1):
+ * 橙底 #FF8D02、白字、11px、600、行高 18px、内边距 1px 6px、全圆角。
+ * 设计还没给对照表、深色取值和截断规则(D2 / D7),到了统一替换;深色模式先用同一组值。
+ */
+.replyTag {
+  flex: none;
+  margin-left: 6px;
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #ff8d02;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+}

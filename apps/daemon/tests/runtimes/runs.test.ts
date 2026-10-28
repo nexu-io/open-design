@@ -1608,6 +1608,45 @@ describe('run event log persistence', () => {
     });
   });
 
+  it('stamps startedAt at the first start event only, and persists it (P0-24 N3)', () => {
+    const runs = createRunsWithLog(tmpDir);
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1', assistantMessageId: 'm1', agentId: 'claude' });
+    const statePath = path.join(tmpDir, run.id, 'state.json');
+
+    expect(runs.statusBody(run).startedAt).toBeNull();
+    run.status = 'running';
+    runs.emit(run, 'start', { status: 'running' }, 1_000);
+    runs.emit(run, 'start', { status: 'running' }, 2_000);
+
+    expect(run.startedAt).toBe(1_000);
+    expect(runs.statusBody(run).startedAt).toBe(1_000);
+    expect(JSON.parse(fs.readFileSync(statePath, 'utf8')).startedAt).toBe(1_000);
+  });
+
+  it('keeps a pre-upgrade record without startedAt absent, not null, through hydration and persist', () => {
+    // A state.json written before the stamp existed has no startedAt. Reading it
+    // as null would say "never started" and drop the project from the sidebar
+    // fold; absent lets clients fall back to createdAt.
+    const beforeUpgrade = createRunsWithLog(tmpDir);
+    const run = beforeUpgrade.create({ projectId: 'p1', conversationId: 'c1', assistantMessageId: 'm1', agentId: 'claude' });
+    const statePath = path.join(tmpDir, run.id, 'state.json');
+    const { startedAt: _dropped, ...legacy } = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    fs.writeFileSync(
+      statePath,
+      `${JSON.stringify({ ...legacy, status: 'succeeded', terminalAt: legacy.updatedAt })}\n`,
+      'utf8',
+    );
+
+    const afterUpgrade = createRunsWithLog(tmpDir);
+    const [listed] = afterUpgrade.list({ projectId: 'p1' });
+    expect(listed).toBeDefined();
+    expect('startedAt' in afterUpgrade.statusBody(listed!)).toBe(false);
+
+    // A later persist must not freeze null into the record either.
+    afterUpgrade.emit(listed!, 'diagnostic', { type: 'probe' });
+    expect('startedAt' in JSON.parse(fs.readFileSync(statePath, 'utf8'))).toBe(false);
+  });
+
   it('persists a restart-safe terminal state and telemetry checkpoints', () => {
     const runs = createRunsWithLog(tmpDir);
     const run = runs.create({
@@ -2105,21 +2144,21 @@ describe('run event log persistence', () => {
     });
 
     expect(reused.kind).toBe('reused');
+    // P0-24 Q5: the interrupted run is stopped, its reason kept on the record,
+    // and its replayed terminal frame says canceled with no error frame.
     expect(reused.run).toMatchObject({
       id: original.id,
-      status: 'failed',
+      status: 'canceled',
       errorCode: 'DAEMON_RESTARTED',
-      error: 'Run interrupted because the daemon restarted.',
+      error: null,
     });
     expect(afterRestart.statusBody(reused.run).terminalTrigger).toBe('daemon_restart');
-    expect(reused.run.events.slice(-2)).toMatchObject([
-      { event: 'error', data: { error: { code: 'DAEMON_RESTARTED' } } },
-      { event: 'end', data: { status: 'failed' } },
-    ]);
+    expect(reused.run.events.at(-1)).toMatchObject({ event: 'end', data: { status: 'canceled' } });
+    expect(reused.run.events.some((record: { event: string }) => record.event === 'error')).toBe(false);
     expect(fs.readdirSync(tmpDir)).toEqual([original.id]);
     expect(JSON.parse(fs.readFileSync(statePath, 'utf8'))).toMatchObject({
       id: original.id,
-      status: 'failed',
+      status: 'canceled',
       errorCode: 'DAEMON_RESTARTED',
       terminalRecoveryReason: 'daemon_restart',
     });

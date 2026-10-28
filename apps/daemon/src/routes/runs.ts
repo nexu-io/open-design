@@ -41,6 +41,7 @@ import {
   type BoundWorkspaceResourceMutationGate,
   type WorkspaceResourceAccessInput,
 } from '../collab/workspace-resource-mutation.js';
+import type { RunNoticeLog } from '../runtimes/run-notices.js';
 import {
   codexSessionIdFromRunEvents,
   readCodexRolloutFirstCall,
@@ -51,6 +52,7 @@ import {
   getFirstProjectConversation,
   getConversation,
   getProject,
+  listConversationsAwaitingInput,
   listProjectsAwaitingInput,
   normalizeConversationSessionMode,
   updateProject,
@@ -734,7 +736,22 @@ export interface RegisterRunRoutesDeps {
   amrWorkspaceScope?: {
     isSignedIn: () => boolean | Promise<boolean>;
   };
+  /** Global run notices (P0-24 N10); omitted in fixtures that do not exercise them. */
+  runNotices?: RunNoticeLog;
 }
+
+/**
+ * A response that swallows the authorizer's error body. The notice feed asks
+ * the project gate a yes/no question per notice; a denial must hide that one
+ * notice, not answer the whole request with the denial.
+ */
+const SILENT_RESPONSE = {
+  status() { return this; },
+  json() { return this; },
+  setHeader() { return this; },
+  send() { return this; },
+  end() { return this; },
+} as unknown as ApiResponse;
 
 const AGUI_NATIVE_EVENT_KINDS: ReadonlySet<OdNativeEvent['kind']> = new Set([
   'message_chunk',
@@ -2898,6 +2915,53 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     res.json({ activeRunCount });
   });
 
+  /*
+   * P0-24 推测项 A-06 (N10): the notices the desktop client turns into
+   * system notifications. Permission takes the most conservative reading:
+   *
+   *  · a project with no Workspace binding (pre-Workspace local) is visible;
+   *  · a bound project is visible only when the caller's asserted Workspace
+   *    identity passes the same read gate the project's own routes use — so a
+   *    Team project's notice reaches only a client currently in that Team,
+   *    and a member whose access was revoked locally sees nothing;
+   *  · a caller with no identity at all (headerless CLI) sees no bound
+   *    project; `od run notices --workspace … --workspace-member …` asserts one.
+   *
+   * Notices carry no reply text, so the worst a wrong grant could reveal is a
+   * project name and that a turn ended. The response is loopback-only.
+   */
+  app.get('/api/run-notices', async (req: ApiRequest, res: ApiResponse) => {
+    // Same loopback / DNS-rebinding guard as the active-count probe: the feed
+    // names projects, so a foreign page must not read it through the browser.
+    const local = validateLocalDaemonRequest(req);
+    if (!local.ok) {
+      return sendApiError(res, 403, 'FORBIDDEN', local.message, { details: local.details });
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    const afterRaw = typeof req.query?.after === 'string' ? Number(req.query.after) : 0;
+    const after = Number.isFinite(afterRaw) && afterRaw > 0 ? Math.floor(afterRaw) : 0;
+    if (!ctx.runNotices) {
+      return res.json({ epoch: 'unavailable', latestSeq: 0, notices: [] });
+    }
+    const requestContext = workspaceResourceContextFromRequest(req);
+    const body = await ctx.runNotices.read(after, async (notice) => {
+      const binding = ctx.projectStore?.getWorkspaceProjectByProjectId(db, notice.projectId);
+      if (!binding) return true;
+      if (requestContext === null || !ctx.authorizeProjectRequest) return false;
+      try {
+        return await ctx.authorizeProjectRequest(
+          req,
+          SILENT_RESPONSE,
+          notice.projectId,
+          { mode: 'read' },
+        );
+      } catch {
+        return false;
+      }
+    });
+    res.json(body);
+  });
+
   app.get('/api/runs', async (req: ApiRequest, res: ApiResponse) => {
     const { projectId, conversationId, status } = req.query;
     const runs = design.runs.list({ projectId, conversationId, status });
@@ -2963,9 +3027,21 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     const awaitingInputProjectIds = visibleProjectIds.size
       ? [...listProjectsAwaitingInput(db)].filter((id) => visibleProjectIds.has(id))
       : [];
+    // Per conversation too: a project shows "needs your reply" only when the
+    // conversation that most recently started a Run is the one waiting
+    // (P0-24). Same visibility rule — only conversations the runs expose.
+    const visibleConversationIds = new Set(
+      visibleRuns
+        .map((run) => run.conversationId)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0),
+    );
+    const awaitingInputConversationIds = visibleConversationIds.size
+      ? [...listConversationsAwaitingInput(db)].filter((id) => visibleConversationIds.has(id))
+      : [];
     const body = {
       runs: visibleRuns.map(statusWithStrategyTask),
       awaitingInputProjectIds,
+      awaitingInputConversationIds,
     };
     res.json(body);
   });

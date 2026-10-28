@@ -459,7 +459,9 @@ describe('retry target resolution', () => {
     });
   });
 
-  it('keeps earlier delivery-failure retry attempts visible while reusing the original user turn', () => {
+  // P0-24: a delivery outcome does not make the run a failure, so a turn whose
+  // run succeeded is not a retry target even when nothing was delivered.
+  it('does not treat succeeded runs with a delivery outcome as retry targets', () => {
     const firstFailure: ChatMessage = {
       ...failedAssistant,
       id: 'assistant-1',
@@ -485,12 +487,7 @@ describe('retry target resolution', () => {
       resultDeliveryState: 'delivery_failed',
     };
 
-    expect(resolveRetryTarget([userMessage, firstFailure, secondFailure], secondFailure.id)).toEqual({
-      failedAssistant: secondFailure,
-      userMsg: userMessage,
-      priorMessages: [],
-      preservedAttempts: [firstFailure, secondFailure],
-    });
+    expect(resolveRetryTarget([userMessage, firstFailure, secondFailure], secondFailure.id)).toBeNull();
   });
 
   it('rejects non-terminal, non-last, or non-user-preceded retry targets', () => {

@@ -91,6 +91,12 @@ export interface ShellText {
    * 拿不到就是 `undefined`,界面上什么都不显示 —— 与工具行同一条纪律(§2.2b)。
    */
   elapsedMs?: number;
+  /**
+   * 合并标题后这段推理属于第几段自动续跑(P0-24 推测项 A-01,`continueRun`)。
+   * 只在合并过的回合里出现;`groupThinking` 不把两段的推理并成一格 ——
+   * 中间隔着一次进程重启,两边的耗时各算各的。
+   */
+  segment?: number;
 }
 
 /** 「执行计划 · N 步」 */

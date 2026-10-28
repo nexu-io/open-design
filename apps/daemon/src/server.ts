@@ -909,6 +909,7 @@ import { registerHandoffRoutes } from './routes/handoff.js';
 import { TranscriptExportLockedError } from './transcript-export.js';
 import { registerChatRoutes } from './routes/chat.js';
 import { registerRunRoutes } from './routes/runs.js';
+import { composeRunTerminalHooks, createRunNoticeLog } from './runtimes/run-notices.js';
 import { registerStrategyRolloutRoutes } from './routes/strategy-rollout.js';
 import { registerTerminalRoutes } from './routes/terminal.js';
 import { registerBrowserSessionRoutes } from './routes/browser-sessions.js';
@@ -3564,6 +3565,10 @@ export async function startServer({
   const db = openDatabase(PROJECT_ROOT, { dataDir: RUNTIME_DATA_DIR });
   daemonHealth?.setStorageProbe(() => readSqlitePageStats({ db, file: db.name }));
   const amrTerminalReportOutbox = createAmrTerminalReportOutboxStore(db);
+  // P0-24 N10: notices for turns that end while this process runs (never replayed).
+  const runNotices = createRunNoticeLog({
+    projectName: (projectId) => getProject(db, projectId)?.name ?? null,
+  });
   const amrTerminalReportDelivery = createAmrTerminalReportDeliveryService({
     store: amrTerminalReportOutbox,
     env: { ...process.env, OD_DATA_DIR: RUNTIME_DATA_DIR },
@@ -8390,7 +8395,10 @@ export async function startServer({
           : null;
         if (promptBudget) run.promptBudgetDiagnostics = promptBudget;
       },
-      onTerminal: createAmrTerminalReportFinalizer(amrTerminalReportOutbox),
+      onTerminal: composeRunTerminalHooks(
+        createAmrTerminalReportFinalizer(amrTerminalReportOutbox),
+        runNotices.record,
+      ),
       beforeFinish: (run, status, _code, _signal, terminalAt) => {
         if (run.deliverableSyntaxValidation?.metrics) {
           run.deliverableSyntaxValidation = {
@@ -13527,9 +13535,26 @@ export async function startServer({
       status,
       code = null,
       signal = null,
-      { allowRetry = true } = {},
+      {
+        allowRetry = true,
+        // P0-24 Q6: an empty reply is a normal end, but a transient one may
+        // still be retried. The guard hands its error frame here instead of
+        // sending it: the frame goes out only if this attempt is retried, and
+        // an attempt that is not retried ends `succeeded` without it.
+        emptyReplyError = null,
+        skipCloseDiagnostic = false,
+      } = {},
     ) => {
-      lifecycle.mark('finalize_start');
+      if (!skipCloseDiagnostic) lifecycle.mark('finalize_start');
+      if (emptyReplyError) {
+        // Classify and decide retry from exactly the inputs the sent frame
+        // used to leave on the run, so retry behaviour does not change.
+        run.error = emptyReplyError.error?.message ?? run.error;
+        run.errorCode = emptyReplyError.error?.code ?? run.errorCode;
+      }
+      const sendEmptyReplyErrorBeforeRetry = () => {
+        if (emptyReplyError) send('error', emptyReplyError);
+      };
       // Success releases the held tail itself, before it reads the verdict.
       if (
         strategyProtocol && status !== 'succeeded'
@@ -13549,13 +13574,15 @@ export async function startServer({
       // them from a generic process exit. Clear the pending value immediately
       // so a scheduled retry cannot inherit the previous attempt's reason.
       const rpcCloseReason = deriveRpcCloseReason(status, code, signal);
-      design.runs.emit(run, 'diagnostic', {
-        type: 'runtime_close',
-        rpc_close_reason: rpcCloseReason,
-        status,
-        ...(typeof code === 'number' ? { exit_code: code } : {}),
-        ...(signal ? { signal } : {}),
-      });
+      if (!skipCloseDiagnostic) {
+        design.runs.emit(run, 'diagnostic', {
+          type: 'runtime_close',
+          rpc_close_reason: rpcCloseReason,
+          status,
+          ...(typeof code === 'number' ? { exit_code: code } : {}),
+          ...(signal ? { signal } : {}),
+        });
+      }
       pendingRpcCloseReason = null;
       const result = runResultFromStatus(status);
       const errorCode = deriveRunErrorCode({
@@ -13655,6 +13682,7 @@ export async function startServer({
           resumed: agentResumeCtx.isResuming,
         });
         publishNativeSessionRecoveryMetadata();
+        sendEmptyReplyErrorBeforeRetry();
         design.runs.emit(run, 'run_retry_attempted', {
           ...retryAnalyticsBase(postToolResumeDecision, failure, errorCode),
           retry_reason: postToolResumeDecision.retryReason,
@@ -13692,6 +13720,7 @@ export async function startServer({
         run.retryStrategy = decision.retryStrategy;
         run.retryFinalResult = undefined;
         run.retrySuppressedReason = undefined;
+        sendEmptyReplyErrorBeforeRetry();
         design.runs.emit(run, 'run_retry_attempted', {
           ...retryAnalyticsBase(decision, failure, errorCode),
           retry_reason: decision.retryReason,
@@ -13699,6 +13728,24 @@ export async function startServer({
         });
         scheduleRetryRestart(decision.retryDelayMs);
         return true;
+      }
+      if (emptyReplyError) {
+        // Not retried: the agent exited cleanly with nothing to say, which is
+        // a normal end (P0-24 Q6, same as P7). Keep the evidence as a
+        // diagnostic, not as an error the turn would display.
+        run.error = null;
+        run.errorCode = null;
+        send('agent', {
+          type: 'diagnostic',
+          name: 'empty_reply_ended_normally',
+          source: 'daemon-run-finalize',
+          code: emptyReplyError.error?.code ?? null,
+          message: emptyReplyError.error?.message ?? null,
+        });
+        return finishWithRetryDecision('succeeded', code, signal, {
+          allowRetry: false,
+          skipCloseDiagnostic: true,
+        });
       }
       // Resume-on-failure: a terminal *resumable* failure (transient mid-stream
       // drop / inactivity) on a session-resuming runtime is not a dead end.
@@ -16855,13 +16902,17 @@ export async function startServer({
         !agentProducedOutput
       ) {
         markRpcCloseReason('empty_output');
-        send('error', createSseErrorPayload(
-          'AGENT_EXECUTION_FAILED',
-          'Agent completed without producing any output. The model or provider may have returned an empty response. Check the agent logs for upstream errors, then try re-authenticating the agent or switching models.',
-          { retryable: true },
-        ));
-        return finishWithRetryDecision('failed', code, signal);
+        return finishWithRetryDecision('failed', code, signal, {
+          emptyReplyError: createSseErrorPayload(
+            'AGENT_EXECUTION_FAILED',
+            'Agent completed without producing any output. The model or provider may have returned an empty response. Check the agent logs for upstream errors, then try re-authenticating the agent or switching models.',
+            { retryable: true },
+          ),
+        });
       }
+      // P0-24 N9: a plugin-authoring run that exited cleanly without the
+      // generated-plugin files still ended normally — what it produced never
+      // decides the run's status. Keep the evidence as a diagnostic only.
       if (
         code === 0 &&
         !run.cancelRequested &&
@@ -16869,12 +16920,12 @@ export async function startServer({
         !(await hasGeneratedPluginArtifacts(cwd)) &&
         !emittedRenderableQuestionForm(run.askUserScanText)
       ) {
-        send('error', createSseErrorPayload(
-          'AGENT_EXECUTION_FAILED',
-          'Plugin authoring ended before generating the required generated-plugin artifacts.',
-          { retryable: true },
-        ));
-        return finishWithRetryDecision('failed', code, signal);
+        send('agent', {
+          type: 'diagnostic',
+          name: 'plugin_authoring_artifacts_missing',
+          source: 'daemon-run-finalize',
+          message: 'Plugin authoring ended before generating the required generated-plugin artifacts.',
+        });
       }
       // Plain-stream auth-failure guard: plain adapters (e.g. deepseek's
       // TUI variants) may exit cleanly with visible stdout that's actually
@@ -16914,15 +16965,22 @@ export async function startServer({
         markRpcCloseReason('empty_output');
         const combinedDetail = `${agentStderrTail}\n${agentStdoutTail}`;
         const authFailure = classifyAgentAuthFailure(agentId, combinedDetail);
-        const msg = authFailure
-          ? authFailure.message ?? `${def.name} authentication expired. Please re-authenticate and retry.`
-          : `${def.name} returned an empty response. This may indicate an expired session — try re-authenticating the agent.`;
-        send('error', createSseErrorPayload(
-          authFailure ? 'AGENT_AUTH_REQUIRED' : 'AGENT_EXECUTION_FAILED',
-          msg,
-          { retryable: true },
-        ));
-        return finishWithRetryDecision('failed', 0, signal);
+        if (authFailure) {
+          // A login problem is a real failure, not an empty reply.
+          send('error', createSseErrorPayload(
+            'AGENT_AUTH_REQUIRED',
+            authFailure.message ?? `${def.name} authentication expired. Please re-authenticate and retry.`,
+            { retryable: true },
+          ));
+          return finishWithRetryDecision('failed', 0, signal);
+        }
+        return finishWithRetryDecision('failed', 0, signal, {
+          emptyReplyError: createSseErrorPayload(
+            'AGENT_EXECUTION_FAILED',
+            `${def.name} returned an empty response. This may indicate an expired session — try re-authenticating the agent.`,
+            { retryable: true },
+          ),
+        });
       }
       // Native agents that don't shut down on stdin.end() (e.g. Devin or Pi)
       // are forced to exit via SIGTERM after
@@ -17139,7 +17197,6 @@ export async function startServer({
             }
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            const failureMessage = `Failed to persist plain-stream artifact(s): ${message}`;
             console.warn(`[plain-stream] failed to persist stdout artifact(s): ${message}`);
             send('agent', {
               type: 'diagnostic',
@@ -17147,11 +17204,8 @@ export async function startServer({
               source: 'daemon-run-finalize',
               message,
             });
-            send('error', createSseErrorPayload(
-              'AGENT_EXECUTION_FAILED',
-              failureMessage,
-            ));
-            return finishWithRetryDecision('failed', 1, null);
+            // P0-24 N9: failing to save the page does not fail a run whose
+            // agent finished normally; the diagnostic above keeps the reason.
           }
         }
       }
@@ -17414,16 +17468,17 @@ export async function startServer({
           const details = err instanceof AiHtmlVersionSnapshotError
             ? { failures: err.failures }
             : undefined;
-          send('error', createSseErrorPayload(
-            'HTML_VERSION_SNAPSHOT_FAILED',
+          // P0-24 N9: a failed version snapshot does not fail a run whose
+          // agent finished normally; keep the reason as a diagnostic.
+          console.warn(`[html-version-snapshot] ${message}`);
+          send('agent', {
+            type: 'diagnostic',
+            name: 'html_version_snapshot_failed',
+            source: 'daemon-run-finalize',
+            code: 'HTML_VERSION_SNAPSHOT_FAILED',
             message,
-            {
-              retryable: false,
-              ...(details ? { details } : {}),
-            },
-          ));
-          finishStrategyAwarePhysicalRun('failed', 1, signal);
-          return;
+            ...(details ? { details } : {}),
+          });
         }
         try {
           persistDeliveredAgentSessionState();
@@ -17817,6 +17872,7 @@ export async function startServer({
   registerRunRoutes(app, {
     db,
     design,
+    runNotices,
     resources: { listAllSkillLikeEntries },
     http: httpDeps,
     paths: { BUNDLED_PLUGINS_DIR, PROJECTS_DIR, RUNTIME_DATA_DIR },

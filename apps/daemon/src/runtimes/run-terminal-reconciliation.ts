@@ -25,6 +25,7 @@ import { deriveRunErrorCode, runResultFromStatus } from '../run-result.js';
 import { runAskedUserQuestion } from './run-artifacts.js';
 import {
   interruptDurableRunAfterDaemonRestart,
+  lastRecordedRunActivityAt,
   RESTART_ERROR_CODE,
   RESTART_ERROR_MESSAGE,
   type RestartRecoverableDurableRunState,
@@ -319,11 +320,21 @@ function reconcileMessages(
     const status = state && TERMINAL_STATUSES.has(state.status) ? state.status : 'failed';
     db.prepare(
       `UPDATE messages
-          SET run_status = ?, ended_at = COALESCE(ended_at, ?)
+          SET run_status = ?, ended_at = COALESCE(ended_at, ?),
+              cancel_origin = COALESCE(cancel_origin, ?)
         WHERE id = ? AND run_status IN ('queued', 'running')`,
-    ).run(status, state?.updatedAt ?? now, row.id);
+    ).run(
+      status,
+      state?.updatedAt ?? now,
+      status === 'canceled' ? state?.cancelOrigin ?? null : null,
+      row.id,
+    );
     const isDaemonRestart = state?.terminalRecoveryReason === 'daemon_restart'
       || state?.errorCode === RESTART_ERROR_CODE;
+    // P0-24 Q5: a Run the restart stopped is just stopped. Its message already
+    // says canceled, and the footer reports it; an extra status row would
+    // print the internal reconciliation note into the conversation.
+    if (status === 'canceled' && isDaemonRestart) continue;
     appendMessageStatusEvent(db, row.id, status === 'failed'
       ? {
           label: 'error',
@@ -412,7 +423,8 @@ export async function reconcileDurableRunTerminals(
         // A validated local verdict can correct a previously derived restart
         // failure. Its stale marker would otherwise replay a failed SSE end
         // even though the durable status has now been repaired to succeeded.
-        if (recovered.status === 'succeeded' && entry.state.status === 'failed'
+        if (recovered.status === 'succeeded'
+          && (entry.state.status === 'failed' || entry.state.status === 'canceled')
           && entry.state.errorCode === RESTART_ERROR_CODE
           && entry.state.terminalRecoveryReason === 'daemon_restart') {
           delete next.terminalRecoveryReason;
@@ -438,7 +450,11 @@ export async function reconcileDurableRunTerminals(
   }
 
   for (const entry of states) {
-    if (!interruptDurableRunAfterDaemonRestart(entry.state, now)) continue;
+    if (!interruptDurableRunAfterDaemonRestart(
+      entry.state,
+      now,
+      () => lastRecordedRunActivityAt(entry.state, readEvents(options.runsLogDir, entry.state.id)),
+    )) continue;
     writeState(entry.filePath, entry.state);
     interruptedRunIds.add(entry.state.id);
     result.interrupted += 1;
@@ -573,7 +589,11 @@ export async function reconcileDurableRunTerminals(
           ? state.errorCode ?? RESTART_ERROR_CODE
           : deriveRunErrorCode(state)
         : undefined;
-      const failure = failed
+      // A canceled Run is classified too, the way the live path does, so its
+      // replay carries `cancel_origin` / `terminal_trigger` — the SLO
+      // eligibility signal. P0-24 Q5 makes a restart-interrupted Run canceled,
+      // and without this its replay would lose the stop reason entirely.
+      const failure = failed || state.status === 'canceled'
         ? classifyRunFailure({
             result: runResult,
             status: state,

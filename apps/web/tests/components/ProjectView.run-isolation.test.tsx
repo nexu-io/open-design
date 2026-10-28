@@ -706,7 +706,8 @@ const config: AppConfig = {
     soundEnabled: true,
     successSoundId: 'success-sound',
     failureSoundId: 'failure-sound',
-    desktopEnabled: false,
+    // On: since P0-24 Q2 the sound belongs to a shown notification.
+    desktopEnabled: true,
   },
 };
 
@@ -887,6 +888,8 @@ describe('ProjectView conversation run isolation', () => {
   let conversationAMessages: ChatMessage[] = [runningAssistant];
 
   beforeEach(() => {
+    // P0-24 Q2: the sound plays only once a notification was actually shown.
+    showCompletionNotification.mockResolvedValue('shown');
     window.localStorage.clear();
     workspaceScopeMocks.ambientContext = null;
     workspaceScopeMocks.ambientLoading = false;
@@ -1154,8 +1157,10 @@ describe('ProjectView conversation run isolation', () => {
     fireEvent.click(screen.getByTestId('conversation-select-conv-a'));
 
     await waitFor(() => expect(playSound).toHaveBeenCalledWith('success-sound'));
+    // P0-24 rule ④: the title names the project and the body is fixed copy —
+    // never the reply text, which can open with markup.
     expect(showCompletionNotification).toHaveBeenCalledWith(
-      expect.objectContaining({ status: 'succeeded', body: 'done' }),
+      expect.objectContaining({ status: 'succeeded', title: 'Project', body: 'notify.newReplyBody' }),
     );
   });
 
@@ -2031,7 +2036,31 @@ describe('ProjectView conversation run isolation', () => {
     fireEvent.click(screen.getByTestId('conversation-select-conv-a'));
 
     await waitFor(() => expect(playSound).toHaveBeenCalledWith('success-sound'));
+    expect(showCompletionNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'succeeded', body: 'notify.newReplyBody' }),
+    );
+  });
+
+  it('plays no sound when desktop notifications are off (P0-24 Q2)', async () => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    renderProjectView({
+      ...config,
+      notifications: { ...config.notifications!, desktopEnabled: false },
+    });
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('streaming'));
+    fireEvent.click(screen.getByTestId('conversation-select-conv-b'));
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-b'));
+    resolveConversationBMessages?.([]);
+    await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('idle'));
+    conversationAMessages = [succeededAssistant];
+    fireEvent.click(screen.getByTestId('conversation-select-conv-a'));
+
+    await waitFor(() => expect(screen.getByTestId('assistant-summary').textContent).toContain('|succeeded|done'));
+    await act(async () => {});
     expect(showCompletionNotification).not.toHaveBeenCalled();
+    expect(playSound).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -2047,7 +2076,10 @@ describe('ProjectView conversation run isolation', () => {
       },
     },
   ])(
-    'keeps the foreground $label system notification silent while preserving its sound',
+    // P0-24 rule ④: the user is viewing this conversation, so no notification
+    // is due — and the sound follows the notification. A delivery failure is
+    // not a failure at all, so it would never use the failure sound either.
+    'keeps a foreground $label silent: no notification and no sound',
     async ({ terminalMessage }) => {
       vi.spyOn(document, 'hasFocus').mockReturnValue(true);
       vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
@@ -2071,7 +2103,11 @@ describe('ProjectView conversation run isolation', () => {
       conversationAMessages = [terminalMessage];
       fireEvent.click(screen.getByTestId('conversation-select-conv-a'));
 
-      await waitFor(() => expect(playSound).toHaveBeenCalledWith('failure-sound'));
+      // The terminal turn is on screen, so the feedback effect has seen it.
+      await waitFor(() => expect(screen.getByTestId('assistant-summary').textContent)
+        .toContain(`|${terminalMessage.runStatus}|done`));
+      await act(async () => {});
+      expect(playSound).not.toHaveBeenCalled();
       expect(showCompletionNotification).not.toHaveBeenCalled();
     },
   );
@@ -2127,9 +2163,9 @@ describe('ProjectView conversation run isolation', () => {
         ]),
       );
     });
-    expect(screen.getByTestId('chat-error').textContent).toMatch(
-      /finished without producing a deliverable project file/i,
-    );
+    // P0-24 (PRD C7/C8, Q3): the reason stays on the turn (above) but no
+    // pane-level failure card is raised for a run that ended normally.
+    expect(screen.getByTestId('chat-error').textContent).toBe('');
     expect(reattachDaemonRun).not.toHaveBeenCalled();
   });
 
@@ -3706,7 +3742,9 @@ describe('ProjectView conversation run isolation', () => {
   });
 
   it.each(['no_result', 'delivery_failed'] as const)(
-    'starts a replacement run when retrying a %s delivery failure',
+    // P0-24: a delivery outcome does not make the run a failure, so asking to
+    // "retry" it is not a failed-turn retry and must not replace the turn.
+    'does not replace a %s turn as if it had failed',
     async (resultDeliveryState) => {
       const userMessage: ChatMessage = {
         id: `user-${resultDeliveryState}`,
@@ -3740,16 +3778,14 @@ describe('ProjectView conversation run isolation', () => {
       await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
       await waitFor(() => expect(screen.getByTestId('chat-retry')).toBeTruthy());
 
-      fireEvent.click(screen.getByTestId('chat-retry'));
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('chat-retry'));
+      });
+      await act(async () => {});
 
-      await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
-      const retryCall = streamViaDaemon.mock.calls[0]?.[0] as {
-        assistantMessageId?: string;
-        history?: ChatMessage[];
-      };
-      expect(retryCall.assistantMessageId).toBeTruthy();
-      expect(retryCall.assistantMessageId).not.toBe(deliveryFailure.id);
-      expect(retryCall.history).toEqual([userMessage]);
+      expect(streamViaDaemon).not.toHaveBeenCalled();
+      expect(screen.getByTestId('assistant-summary').textContent)
+        .toContain(`${deliveryFailure.id}|succeeded|The design result was not delivered.`);
     },
   );
 

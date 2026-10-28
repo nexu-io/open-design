@@ -193,6 +193,7 @@ import { isMacPlatform } from './utils/platform';
 import { randomUUID } from './utils/uuid';
 import { summarizeProjectNameFromPrompt } from './utils/projectName';
 import { armCompletionFeedbackOnFirstGesture } from './utils/notifications';
+import { useGlobalRunNotices } from './hooks/useGlobalRunNotices';
 import {
   amrArtifactUpgradeHomeMockOffer,
   type AmrArtifactUpgradeHomeOffer,
@@ -260,7 +261,7 @@ import {
   removeProjectFromDisplaySnapshots,
   writeProjectDisplaySnapshot,
 } from './state/project-display-cache';
-import { getOpenDesignHost, type OpenDesignHostProjectImportSuccess } from '@open-design/host';
+import { getOpenDesignHost, isOpenDesignHostAvailable, type OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import { useI18n } from './i18n';
 import { liveArtifactTabId } from './types';
 import type {
@@ -1078,6 +1079,15 @@ function AppInner() {
   const latestPersistedConfigRef = useRef(config);
   latestPersistedConfigRef.current = config;
   const settingsDraftConfigRef = useRef<AppConfig | null>(null);
+  // P0-24 N10: system notifications for turns that end anywhere on this
+  // machine, wherever the user is. Desktop only; the web keeps the
+  // per-conversation notifier in ProjectView.
+  useGlobalRunNotices({
+    enabled: isOpenDesignHostAvailable(),
+    workspaceContext,
+    notifications: config.notifications ?? DEFAULT_NOTIFICATIONS,
+    t,
+  });
   const completionFeedbackGestureConsumedRef = useRef(false);
   useEffect(() => {
     if (completionFeedbackGestureConsumedRef.current) return undefined;

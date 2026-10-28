@@ -9,6 +9,7 @@
  * 且今天没有别的 agent 在动的那三格。别的差异写在交付报告里,不在这里下手。
  *
  *   ① 回合状态行的「已完成」  `729fa43ce7:components.css:2753-2756`
+ *      (P0-24 Q6:这一格连同 ⑤ 那枚勾已随状态词去掉,用例已删。)
  *        .fb .fin { …; margin-inline-end: 4px; font-size: var(--font-size-14);
  *                   color: var(--brand-text); }
  *      ⚠️ 这一条是**新基线才改的**:`361b78253e` 上它还是 `var(--t-cap)`(12px)。
@@ -54,7 +55,6 @@ import { fileURLToPath } from 'node:url';
 import { I18nProvider } from '../../../src/i18n';
 import { QuestionFormView } from '../../../src/components/QuestionForm';
 import type { QuestionForm } from '../../../src/artifacts/question-form';
-import { AssistantFooter } from '../../../src/components/AssistantMessage';
 import { visualStyleCardsForContext } from '../../../src/runtime/visual-style-catalog';
 import { Reconnect } from '../../../src/components/chat/Reconnect';
 import { ChatRoot } from '../../../src/components/chat/ChatRoot';
@@ -118,11 +118,8 @@ beforeAll(() => {
  * 写死字面值而不是写 `var(--…)`:验收标准是「算出来的和稿子逐字节相同」。 */
 const T_LEAD = '14px'; //        --t-lead  = --font-size-14   components.css:109
 const T_CAP = '12px'; //         --t-cap   = --font-size-12   components.css:106
-const FONT_SIZE_14 = '14px'; //  --font-size-14              tokens.css:293
 const T_BODY = '13px'; //        --t-body  = --font-size-13   components.css:108
 const TOOL_INK = '#A3A3A3'; //   `.tool` 的字面色             components.css:2157
-/** 面板排版基线的字重(`ChatRoot.module.css` 的 `.vars` / `.root`)。 */
-const BASELINE_WEIGHT = '500';
 
 function pick(root: HTMLElement, selector: string): Element {
   const el = root.querySelector(selector);
@@ -130,46 +127,7 @@ function pick(root: HTMLElement, selector: string): Element {
   return el;
 }
 
-/* ══ ① 回合状态行的「已完成」 ═══════════════════════════════════════════ */
-
-describe('① 回合状态行「已完成」 —— 稿子 `.fb .fin`(729fa43ce7:2753)', () => {
-  const mountFooter = (): HTMLElement =>
-    render(
-      <I18nProvider>
-        <AssistantFooter
-          streaming={false}
-          preparing={false}
-          hasUnfinishedTodos={false}
-          hasEmptyResponse={false}
-          canceled={false}
-          isLast
-          createdAt={Date.UTC(2026, 0, 1, 6, 32)}
-          copyMarkdown="done"
-        />
-      </I18nProvider>,
-    ).container;
-
-  it('防真空:量尺盖到了这一格,而且 var() 解得开', () => {
-    const measured = CSS.resolved(pick(mountFooter(), '[data-testid="assistant-label"]'));
-    expect(measured['font-size'], '样式链没盖到回合状态行').not.toBe(UNSET);
-    expect(measured['font-size'], 'token 没解开 —— 下面的比较都不成立').toMatch(/^\d+px$/);
-    // 反向对照:这一格的字色早就对上了(`theater.css` 的完成档 = --brand-text),
-    // 所以「量尺读得出非默认值」这件事本身是成立的。
-    expect(measured['color']).toBe('#0d5400');
-  });
-
-  it('字号是 14 —— 稿子把它从 --t-cap 提到了 --font-size-14', () => {
-    expect(CSS.resolved(pick(mountFooter(), '[data-testid="assistant-label"]'))['font-size']).toBe(
-      FONT_SIZE_14,
-    );
-  });
-
-  it('字重跟面板基线走 500 —— 稿子这一条一个字重都不写', () => {
-    expect(CSS.resolved(pick(mountFooter(), '[data-testid="assistant-label"]'))['font-weight']).toBe(
-      BASELINE_WEIGHT,
-    );
-  });
-});
+// P0-24 Q6: the settled status word this measured was removed; status lives in the turn header.
 
 /* ══ ② 确认卡卡头 ═══════════════════════════════════════════════════════ */
 
@@ -374,34 +332,7 @@ describe('④-3 视觉方向卡的卡头内距 —— 稿子 `.card:has(> .cbody
   });
 });
 
-/* ══ ⑤ 回合状态行那枚勾 ═════════════════════════════════════════════════ */
-
-describe('⑤ 「已完成」那枚勾 —— 稿子 `.fb .fin > .tick`(729fa43ce7:2776)', () => {
-  /*
-   * 算出来的胜出值:`width: 16px; height: 16px`(上一版是 13)。
-   * 和 ① 是同一格的两半 —— 字号 14 的中文旁边配 16 的勾,两个一起改才完整。
-   */
-  it('勾是 16 × 16,不是 13', () => {
-    const container = render(
-      <I18nProvider>
-        <AssistantFooter
-          streaming={false}
-          preparing={false}
-          hasUnfinishedTodos={false}
-          hasEmptyResponse={false}
-          canceled={false}
-          isLast
-          createdAt={Date.UTC(2026, 0, 1, 6, 32)}
-          copyMarkdown="done"
-        />
-      </I18nProvider>,
-    ).container;
-    const measured = CSS.resolved(pick(container, '.assistant-label .dot'));
-    expect(measured['width'], '量尺没盖到那枚勾').not.toBe(UNSET);
-    expect(measured['width']).toBe('16px');
-    expect(measured['height']).toBe('16px');
-  });
-});
+// P0-24 Q6: the settled status word this measured was removed; status lives in the turn header.
 
 /* ══ ③ 重连行 ═══════════════════════════════════════════════════════════ */
 
