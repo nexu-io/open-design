@@ -655,6 +655,42 @@ describe('finalizeDesignPackage (pipeline integration)', () => {
     expect(result.designSystemId).toBe('shadcn');
   });
 
+  it('reads usage out of a wrapped Chat Completions envelope', async () => {
+    const { db, projectsRoot, designSystemsRoot } = setupPipeline({
+      designSystemId: 'shadcn',
+      designSystemBody: '# shadcn\n',
+    });
+    const fetchImpl = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          data: {
+            object: 'chat.completion',
+            choices: [
+              { message: { role: 'assistant', content: '# DESIGN.md\nwrapped\n' } },
+            ],
+            usage: { prompt_tokens: 4321, completion_tokens: 876 },
+          },
+          success: true,
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    ) as any;
+
+    const result = await finalizeDesignPackage(db, projectsRoot, designSystemsRoot, PROJECT_ID, {
+      apiKey: 'sk-test',
+      baseUrl: 'https://api.cline.bot/api/v1',
+      model: 'cline-pass/deepseek-v4.1-flash',
+      protocol: 'openai',
+      fetchImpl,
+    } as any);
+
+    // The envelope wraps the completion and its usage together. A run that
+    // writes DESIGN.md but reports zero tokens means only one of the two
+    // extractors was looking at the normalized payload.
+    expect(result.inputTokens).toBe(4321);
+    expect(result.outputTokens).toBe(876);
+  });
+
   it('emits design system "none" in the prompt when no design_system_id is set', async () => {
     const { db, projectsRoot, designSystemsRoot } = setupPipeline({
       designSystemId: null,

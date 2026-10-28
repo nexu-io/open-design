@@ -414,8 +414,13 @@ export async function finalizeDesignPackage(
         `upstream ${providerLabel(protocol)} returned non-JSON body: ${message}`,
       );
     }
-    const designMd = extractDesignMd(payload, protocol);
-    const { inputTokens, outputTokens } = extractTokenUsage(payload, protocol);
+    // Gateways that wrap the completion in a `data` envelope put `usage` inside
+    // it too. Normalize once here and hand the same object to both extractors:
+    // unwrapping is idempotent, so normalizing per extractor would log the shim
+    // firing twice for one response and weaken its removal signal.
+    const completion = normalizeOpenAICompletion(payload);
+    const designMd = extractDesignMd(completion, protocol);
+    const { inputTokens, outputTokens } = extractTokenUsage(completion, protocol);
 
     // Phase 9: atomic write. Mirror PR #493: writeFileSync({flag:'wx'}) →
     // reopen for fsync → rename. On any failure unlink tmp; rethrow so the
