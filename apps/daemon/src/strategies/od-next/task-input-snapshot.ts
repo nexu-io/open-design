@@ -160,6 +160,7 @@ function removeSnapshotTreeWithPlatformPrimitive(target: string): void {
     {
       env: { ...process.env, OD_SNAPSHOT_DELETE_TARGET: target },
       stdio: 'ignore',
+      windowsHide: true,
       windowsVerbatimArguments: true,
     },
   );

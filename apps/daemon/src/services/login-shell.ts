@@ -14,7 +14,7 @@ export function execFileBuffered(
   opts: ExecFileOptions = {},
 ): Promise<BufferedCommandResult> {
   return new Promise((resolve) => {
-    execFile(command, [...args], { timeout: 120_000, maxBuffer: 1024 * 1024, ...opts }, (error, stdout, stderr) => {
+    execFile(command, [...args], { timeout: 120_000, maxBuffer: 1024 * 1024, windowsHide: true, ...opts }, (error, stdout, stderr) => {
       resolve({
         ok: !error,
         code: error && 'code' in error ? error.code : undefined,
