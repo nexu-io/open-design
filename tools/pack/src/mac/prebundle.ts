@@ -31,7 +31,7 @@ export const MAC_PREBUNDLE_RUNTIME_DEPENDENCIES = {
   "hyperframes": "0.8.1",
   "gsap": "3.14.2",
   "node-pty": "1.1.0",
-  "sharp": "0.35.3",
+  "sharp": "0.35.5",
 } as const;
 
 // npm 11 synthesizes a `node-gyp rebuild` install step for fsevents even

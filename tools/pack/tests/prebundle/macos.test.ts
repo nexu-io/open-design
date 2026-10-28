@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -104,7 +105,7 @@ describe("mac standalone prebundle policy", () => {
       "hyperframes": "0.8.1",
       "gsap": "3.14.2",
       "node-pty": "1.1.0",
-      "sharp": "0.35.3",
+      "sharp": "0.35.5",
     });
     expect(MAC_PREBUNDLE_COPIED_RUNTIME_DEPENDENCIES).toEqual({ "fsevents": "2.3.3" });
     expect(MAC_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH).toBe("app/prebundled/daemon/daemon-cli.mjs");
@@ -161,6 +162,27 @@ describe("mac standalone prebundle policy", () => {
       ).toBe(false);
     },
   );
+
+  it("pins sharp to the patched workspace override", () => {
+    // The packaged app installs these pins with npm outside the pnpm
+    // workspace, so the workspace `sharp` override does not reach them. Keep
+    // the packaged Sharp in lockstep with the patched workspace version.
+    const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
+    const rootManifest = JSON.parse(readFileSync(join(workspaceRoot, "package.json"), "utf8")) as {
+      pnpm: { overrides: Record<string, string> };
+    };
+    const workspaceYaml = readFileSync(join(workspaceRoot, "pnpm-workspace.yaml"), "utf8");
+    const releaseManifest = JSON.parse(readFileSync(join(workspaceRoot, "tools", "release", "package.json"), "utf8")) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    const workspaceSharp = rootManifest.pnpm.overrides.sharp;
+
+    expect(workspaceSharp).toBeDefined();
+    expect(MAC_PREBUNDLE_RUNTIME_DEPENDENCIES.sharp).toBe(workspaceSharp);
+    expect(workspaceYaml).toMatch(new RegExp(`^\\s+sharp: ${workspaceSharp.replaceAll(".", "\\.")}$`, "m"));
+    expect(releaseManifest.dependencies?.sharp ?? releaseManifest.devDependencies?.sharp).toBe(workspaceSharp);
+  });
 });
 
 describe("findForbiddenMacPrebundleInputs", () => {

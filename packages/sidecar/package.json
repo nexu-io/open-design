@@ -25,8 +25,8 @@
   "devDependencies": {
     "@typescript/native": "npm:typescript@7.0.2",
     "@types/node": "24.12.2",
-    "esbuild": "0.28.0",
-    "vitest": "4.1.6"
+    "esbuild": "0.28.2",
+    "vitest": "4.1.12"
   },
   "engines": {
     "node": "~24"

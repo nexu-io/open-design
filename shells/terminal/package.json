@@ -17,7 +17,7 @@
     "@open-design/sidecar": "workspace:*",
     "@open-design/standalone": "workspace:*",
     "@types/node": "24.12.2",
-    "vitest": "4.1.6"
+    "vitest": "4.1.12"
   },
   "engines": {"node": "~24"}
 }
