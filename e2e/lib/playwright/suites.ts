@@ -70,6 +70,7 @@ export const uiP0Groups = {
     files: [
       "ui/app-design-files.test.ts",
       "ui/app-manual-edit.test.ts",
+      "ui/share-comment-location.test.ts",
       "ui/workspace-team-design-system-picker.test.ts",
     ],
   },
@@ -119,6 +120,7 @@ const uiP0CoverageFiles = [
   "ui/api-empty-response.test.ts",
   "ui/app-design-files.test.ts",
   "ui/app-manual-edit.test.ts",
+      "ui/share-comment-location.test.ts",
   "ui/app-restoration.test.ts",
   "ui/app.test.ts",
   "ui/critical-smoke.test.ts",

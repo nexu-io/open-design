@@ -1908,6 +1908,7 @@ process.stdin.on("end", () => {
       files: [
         "ui/app-design-files.test.ts",
         "ui/app-manual-edit.test.ts",
+        "ui/share-comment-location.test.ts",
         "ui/workspace-team-design-system-picker.test.ts",
       ],
     });

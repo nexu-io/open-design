@@ -1,3 +1,4 @@
+import { NESTED_COMMENT_HELPERS } from '@open-design/contracts';
 import { withCommentFileDeletion, type CommentFileDeletion } from '../../collab/comment-file-deletion.js';
 import { injectMotionSourcePlayer, isMotionVideoComposition, markMotionHostedPreview, MOTION_PREVIEW_OUTPUT_HEADER } from '@open-design/contracts/runtime/motion-source-player';
 import { createHash, randomUUID } from 'node:crypto';
@@ -908,6 +909,7 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
   function active(){ return commentEnabled; }
 ${ANNOTATED_SELECTOR_HELPERS}
 ${COMMENT_IDENTITY_HELPERS}
+${NESTED_COMMENT_HELPERS}
   function domSelectorFor(el){
     if (!el || !el.tagName || el === document.documentElement || el === document.body) return null;
     var parts = [];
@@ -990,6 +992,7 @@ ${COMMENT_IDENTITY_HELPERS}
     } catch (_) { return null; }
   }
   function targetFrom(el, allowDomFallback, clickedEl, clickPoint, validateForSave){
+    if (el && nestedCommentAnchors.has(el)) return nestedCommentPayload(el);
     var id = annotatedElementIdFor(el);
     var selector = annotatedSelectorFor(el, esc);
     if ((!clickedEl || clickedEl === el) && el && el.hasAttribute('data-od-comment-id')) {
@@ -1009,11 +1012,14 @@ ${COMMENT_IDENTITY_HELPERS}
     var rect = el.getBoundingClientRect();
     var tag = el.tagName ? el.tagName.toLowerCase() : 'element';
     var cls = typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\\s+/).slice(0, 2).join('.') : '';
-    var html = '';
-    try {
-      var match = (el.outerHTML || '').replace(/\\s+/g, ' ').match(/^<[^>]+>/);
-      html = match ? match[0] : '';
-    } catch (_) {}
+    // Do not serialize descendants or megabytes of iframe srcdoc just for a hint.
+    var html = '<' + tag;
+    for (var attr of el.attributes) {
+      if (attr.name === 'srcdoc') continue;
+      html += ' ' + attr.name + '="' + attr.value.slice(0, 160).replace(/"/g, '&quot;') + '"';
+      if (html.length >= 180) break;
+    }
+    html += '>';
     var payload = {
       type: 'od:comment-target',
       elementId: id,
@@ -1047,6 +1053,11 @@ ${COMMENT_IDENTITY_HELPERS}
         items.push(item);
       }
     }
+    if (isNestedCommentAnchor(activeCommentElementId, activeCommentSelector)) {
+      var nested = resolveNestedComment(activeCommentElementId, activeCommentSelector);
+      var payload = nested && nestedCommentPayload(nested);
+      if (payload) items.push(payload);
+    }
     return items;
   }
   function postTargets(){
@@ -1066,6 +1077,7 @@ ${COMMENT_IDENTITY_HELPERS}
     }, 120);
   }
   function findCommentTargetByIdentity(elementId, selector){
+    if (isNestedCommentAnchor(elementId, selector)) return resolveNestedComment(elementId, selector);
     if (String(elementId || '').indexOf('cmt:') === 0 || commentSelectorClaimsIdentity(selector)) return strictCommentNode(elementId, selector);
     var el = null;
     if (selector) {
@@ -1085,6 +1097,7 @@ ${COMMENT_IDENTITY_HELPERS}
     if (!el) return;
     var payload = targetFrom(el, commentEnabled && mode === 'picker');
     if (payload) window.parent.postMessage(Object.assign({}, payload, { type: 'od:comment-active-target-update' }), '*');
+    else if (isNestedCommentAnchor(activeCommentElementId, activeCommentSelector)) schedulePostTargets();
   }
   function schedulePostActiveCommentTarget(){
     if (!active() || !activeCommentElementId || activeTargetPending) return;
@@ -1374,11 +1387,11 @@ ${COMMENT_IDENTITY_HELPERS}
     if (data.type === 'od:comment-active-target') {
       activeCommentElementId = data.elementId ? String(data.elementId) : null;
       activeCommentSelector = data.selector ? String(data.selector) : null;
-      if ((String(activeCommentElementId || '').indexOf('cmt:') === 0 || commentSelectorClaimsIdentity(activeCommentSelector)) && data.locate && typeof data.requestId === 'string') {
+      if ((isNestedCommentAnchor(activeCommentElementId, activeCommentSelector) || String(activeCommentElementId || '').indexOf('cmt:') === 0 || commentSelectorClaimsIdentity(activeCommentSelector)) && data.locate && typeof data.requestId === 'string') {
         var target = findCommentTargetByIdentity(activeCommentElementId, activeCommentSelector);
         var payload = target && targetFrom(target, true);
-        if (payload) {
-          try { target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' }); } catch (_) {}
+        if (payload || (target && nestedCommentPayload(target, true))) {
+          try { target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' }); scrollNestedComment(target); } catch (_) {}
           payload = targetFrom(target, true);
         }
         window.parent.postMessage(payload
@@ -6256,6 +6269,8 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
   }
 
   function htmlHasPoweredPreviewSignal(source: string): boolean {
+    // Nested comment anchors require readable child documents on the isolated project origin.
+    if (/<iframe(?=[\s/>])|\bcreateElement\s*\(\s*["\']iframe["\']/i.test(source)) return true;
     if (/\b(?:local|session)Storage\b/.test(source)) return true;
     if (/\bSharedArrayBuffer\b/.test(source)) return true;
     if (/\bnew\s+(?:Worker|SharedWorker)\s*\(/.test(source)) return true;
@@ -7264,7 +7279,17 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         relPath,
         project?.metadata,
         () => setPoweredPreviewHeaders(res),
-        skipPoweredTransform ? undefined : async (file) => {
+        skipPoweredTransform ? (wantsUrlPreviewSelectionBridge(req.query.odPreviewBridge)
+          ? (file) => {
+            // Keep large artifacts streaming by default, but an explicitly requested
+            // comment bridge must still acknowledge readiness and resolve anchors.
+            let html = file.buffer.toString('utf8');
+            html = injectUrlPreviewBridge(html, 'selection');
+            if (wantsUrlPreviewScrollBridge(req.query.odPreviewBridge)) html = injectUrlPreviewBridge(html, 'scroll');
+            if (wantsUrlPreviewSnapshotBridge(req.query.odPreviewBridge)) html = injectUrlPreviewBridge(html, 'snapshot');
+            return html;
+          }
+          : undefined) : async (file) => {
           const transformed = await maybeResolveVitePreviewHtml({
             file,
             projectId,

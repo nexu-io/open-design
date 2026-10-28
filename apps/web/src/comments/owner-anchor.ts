@@ -19,7 +19,8 @@ export function commentUsesIdentity(comment: Pick<PreviewComment, 'elementId' | 
 }
 
 export function ownerCommentNeedsLocation(comment: PreviewComment, collabEnabled: boolean): boolean {
-  return (collabEnabled || commentUsesIdentity(comment))
+  return (collabEnabled || commentUsesIdentity(comment)
+    || comment.elementId.startsWith('od-frame-v1:') || comment.selector.startsWith('od-frame-v1:'))
     && !comment.elementId.startsWith('pin-') && comment.selectionKind !== 'pod';
 }
 
