@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { tmpdir } from 'node:os';
 import { createVelaProjectShareState, currentFileSharePublication, parseProjectShareState } from '../src/collab/vela-project-share-state.js';
+import { runPinnedVelaCommand } from '../src/collab/vela-pinned-command.js';
+import type { runVelaCommand } from '../src/integrations/vela-command.js';
 const slug = '93a3c7e6-198d-4b72-9f70-0bbfdf9f9c55';
 it.each(['active', 'stopped'] as const)('preserves authoritative %s history', status => {
   expect(parseProjectShareState(JSON.stringify({ projectId: 'p', bindingExists: true, publications: [{ sourceFilePath: 'pages/local.html', slug, status }] }), 'p'))
@@ -86,6 +88,20 @@ it('treats a CLI share_not_found failure (non-zero exit, structured stdout) as n
   const read = createVelaProjectShareState({ dataRoot: tmpdir(), readSession: () => session,
     fetchDirectory: async () => ({ ok: true, items: [{ workspaceId: 'w', workspaceName: 'W', workspaceType: 'personal', workspaceMemberId: 'o', role: 'owner', memberStatus: 'active', lifecycleState: 'active' }] }), runCommand });
   await expect(read({ projectId: 'p', resourceTeamId: 'w', ownerMemberId: 'o' })).resolves.toEqual({ projectId: 'p', bindingExists: false, hasEverShared: false, publications: [] });
+});
+
+it('maps a share_not_found failure through the real pinned runner to the empty history', async () => {
+  const session = { profile: 'test' as const, apiUrl: 'https://example.test', controlKey: 'synthetic', user: null, configMtimeMs: null };
+  // The pinned runner replaces this rejection with a sanitized error whose
+  // stdout is gone; only its classified tokens survive, so the verdict must be
+  // read from the classification rather than the raw CLI output.
+  const run = vi.fn<typeof runVelaCommand>().mockRejectedValue(Object.assign(new Error('Command failed with exit code 1'),
+    { code: 1, stdout: '{"error":"get project share status: API request failed with status 404: share_not_found","errorCode":"share_not_found","status":404}', stderr: '' }));
+  const runCommand = (input: Parameters<typeof runPinnedVelaCommand>[0]) => runPinnedVelaCommand(input, run);
+  const read = createVelaProjectShareState({ dataRoot: tmpdir(), readSession: () => session,
+    fetchDirectory: async () => ({ ok: true, items: [{ workspaceId: 'w', workspaceName: 'W', workspaceType: 'personal', workspaceMemberId: 'o', role: 'owner', memberStatus: 'active', lifecycleState: 'active' }] }), runCommand });
+  await expect(read({ projectId: 'p', resourceTeamId: 'w', ownerMemberId: 'o' })).resolves.toEqual({ projectId: 'p', bindingExists: false, hasEverShared: false, publications: [] });
+  expect(run).toHaveBeenCalledTimes(1);
 });
 
 it('still surfaces unrelated CLI failures as unavailable instead of an empty history', async () => {

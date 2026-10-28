@@ -4,6 +4,7 @@ import { ensurePrivateVelaTeamProject } from './vela-cli-team-projects.js';
 import type { PublicFilePublicationScope } from './public-file-publication-store.js';
 import { readVelaControlApiContext } from '../integrations/vela.js';
 import { fetchVelaWorkspaceDirectory } from './vela-workspace-context.js';
+import { velaCommandFailureDetail } from './public-file-failure.js';
 import { runPinnedVelaCommand } from './vela-pinned-command.js';
 import { parseAmrShareLink, type AmrShareLink } from './public-share-viewer-url.js';
 
@@ -80,6 +81,15 @@ function isShareNotFoundReply(value: unknown): boolean {
 }
 
 function isShareNotFoundFailure(error: unknown): boolean {
+  // The pinned runner replaces CLI failures with a sanitized error that keeps
+  // only classified tokens; the share_not_found verdict survives there, not in
+  // the discarded stdout. Unsantized rejections (injected tests, alternative
+  // runners) still fall back to inspecting the raw channels.
+  const failure = velaCommandFailureDetail(error);
+  if (failure) {
+    return failure.reason === 'upstream_http' && failure.upstreamStatus === 404
+      && failure.upstreamCode === SHARE_NOT_FOUND_ERROR_CODE;
+  }
   const stdout = (error as { stdout?: unknown } | null | undefined)?.stdout;
   const stderr = (error as { stderr?: unknown } | null | undefined)?.stderr;
   return [stdout, stderr, error instanceof Error ? error.message : String(error)]
