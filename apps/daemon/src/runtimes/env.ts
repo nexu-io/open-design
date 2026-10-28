@@ -7,6 +7,7 @@ import { readAppConfigSync } from '../app-config.js';
 import { resolveProjectRelativePath } from '../home-expansion.js';
 import { expandConfiguredEnv } from './paths.js';
 import { resolveAmrOpenCodeExecutable } from './executables.js';
+import { prepareAmrMacKeychainLauncher } from './amr-macos-keychain.js';
 import { amrVelaProfileEnv } from '../integrations/vela-profile.js';
 import { resolveProjectRootFromNestedModule } from '../project-root.js';
 import {
@@ -159,7 +160,11 @@ export function spawnEnvForAgent(
     }
     if (!env.VELA_OPENCODE_BIN?.trim()) {
       const opencodeBin = resolveAmrOpenCodeExecutable(env);
-      if (opencodeBin) env.VELA_OPENCODE_BIN = opencodeBin;
+      if (opencodeBin) {
+        env.VELA_OPENCODE_BIN = sandboxRuntime || isSandboxModeEnabled(env)
+          ? opencodeBin
+          : prepareAmrMacKeychainLauncher(env, opencodeBin);
+      }
     }
     return finalizeRuntimeEnv(env, sandboxRuntime);
   }
