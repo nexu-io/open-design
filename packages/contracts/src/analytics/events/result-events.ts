@@ -3,6 +3,7 @@
  * *_result event prop types (run, feedback, settings, packaged).
  */
 import type { ApiFailureReason, ApiFailureStage } from '../../api/failure-detail.js';
+import type { TrackingProjectIntent } from './shared-enums.js';
 import type {
   AnalyticsAttributionQuality,
   AnalyticsDistributionMechanism,
@@ -82,6 +83,8 @@ export interface ProjectCreateResultProps {
   project_source: TrackingProjectSource;
   project_id: string | null;
   project_kind: TrackingProjectKind | null;
+  /** Saved product scene; optional for producers predating this dimension. */
+  project_intent?: TrackingProjectIntent;
   design_system?: string;
   target_platforms?: string;
   companion_surfaces?: string;
@@ -388,6 +391,8 @@ export interface RunCreatedProps extends RunTaskLineageProps {
   conversation_id: string | null;
   run_id: string;
   project_kind: TrackingProjectKind | null;
+  /** Frozen from project metadata at physical Run creation, independent of strategy. */
+  project_intent?: TrackingProjectIntent;
   design_system_id?: string;
   design_system_source: TrackingDesignSystemSource;
   // Official preset vs user-built; `design_system_slug` carries the concrete
