@@ -1,3 +1,4 @@
+import { readLauncherHost } from "@open-design/launcher-proto";
 import { access, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
@@ -11,6 +12,9 @@ async function loadElectronApp() {
   const electron = await import("electron");
   return electron.app;
 }
+
+/** The host's code resources may differ from its installed executable. */
+function packagedResourcesPath(): string { return readLauncherHost()?.running.resourcesPath ?? process.resourcesPath; }
 
 export const PACKAGED_CONFIG_PATH_ENV = "OD_PACKAGED_CONFIG_PATH";
 export const PACKAGED_NAMESPACE_ENV = "OD_PACKAGED_NAMESPACE";
@@ -92,11 +96,14 @@ async function readJsonIfExists(filePath: string): Promise<RawPackagedConfig | n
 }
 
 function resolveDefaultConfigPath(): string {
-  return join(process.resourcesPath, "open-design-config.json");
+  return join(packagedResourcesPath(), "open-design-config.json");
 }
 
 async function readRawPackagedConfig(): Promise<RawPackagedConfig> {
-  const explicit = process.env[PACKAGED_CONFIG_PATH_ENV];
+  // A tools-pack cold start may still name the installed outer's config.
+  // Hosted payload code must read its own version/resources, with only the
+  // namespace root frozen by the host.
+  const explicit = readLauncherHost()?.running.source === "payload" ? undefined : process.env[PACKAGED_CONFIG_PATH_ENV];
   if (explicit != null && explicit.length > 0) {
     const config = await readJsonIfExists(resolve(explicit));
     if (config == null) throw new Error(`packaged config not found at ${explicit}`);
@@ -170,13 +177,13 @@ function resolvePackagedWebStandaloneRoot(
   const configured = resolveOptionalPath(value);
   if (configured != null) return configured;
   if (webOutputMode !== "standalone") return null;
-  return join(process.resourcesPath, "open-design-web-standalone");
+  return join(packagedResourcesPath(), "open-design-web-standalone");
 }
 
 async function resolvePackagedRelativeEntry(value: string | undefined): Promise<string | null> {
   const cleaned = cleanOptionalString(value);
   if (cleaned == null) return null;
-  const entry = join(process.resourcesPath, cleaned);
+  const entry = join(packagedResourcesPath(), cleaned);
   if (!(await pathExists(entry))) {
     throw new Error(`configured packaged entry not found at ${entry}`);
   }
@@ -189,16 +196,16 @@ export async function readPackagedConfig(): Promise<PackagedConfig> {
     process.env[PACKAGED_NAMESPACE_ENV] ?? raw.namespace ?? SIDECAR_DEFAULTS.namespace,
   );
   const electronApp = await loadElectronApp();
-  const namespaceBaseRoot = resolvePackagedNamespaceBaseRoot(
+  const namespaceBaseRoot = readLauncherHost()?.namespaceBaseRoot ?? resolvePackagedNamespaceBaseRoot(
     raw.namespaceBaseRoot,
     electronApp.getPath("userData"),
   );
-  const resourceRoot = resolveOptionalPath(raw.resourceRoot) ?? join(process.resourcesPath, "open-design");
+  const resourceRoot = resolveOptionalPath(raw.resourceRoot) ?? join(packagedResourcesPath(), "open-design");
   const relativeNodeCommand =
     raw.nodeCommandRelative == null || raw.nodeCommandRelative.length === 0
       ? join("open-design", "bin", "node")
       : raw.nodeCommandRelative;
-  const nodeCommandCandidate = join(process.resourcesPath, relativeNodeCommand);
+  const nodeCommandCandidate = join(packagedResourcesPath(), relativeNodeCommand);
   const nodeCommand = (await pathExists(nodeCommandCandidate)) ? nodeCommandCandidate : null;
   const allowWebOutputModeOverride = isTruthyEnv(process.env[PACKAGED_WEB_OUTPUT_MODE_OVERRIDE_ENV]);
   const webOutputMode = resolvePackagedWebOutputMode(

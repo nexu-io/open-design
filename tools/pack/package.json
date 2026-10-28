@@ -22,7 +22,8 @@
     "@open-design/sidecar-proto": "workspace:*",
     "cac": "6.7.14",
     "electron-builder": "26.8.1",
-    "resedit": "1.7.2"
+    "resedit": "1.7.2",
+    "@open-design/launcher": "workspace:*"
   },
   "optionalDependencies": {
     "@powerformer/vela-cli": "0.1.7"

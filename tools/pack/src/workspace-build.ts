@@ -207,6 +207,7 @@ function workspaceBuildOutputFiles(config: ToolPackConfig): string[] {
     "packages/platform/dist/index.d.ts",
     "packages/sidecar/dist/index.mjs",
     "packages/sidecar/dist/supervisor.mjs",
+    "packages/sidecar/dist/adopted-supervisor.mjs",
     "packages/sidecar/dist/index.d.ts",
     "packages/download/dist/index.mjs",
     "packages/download/dist/index.d.ts",

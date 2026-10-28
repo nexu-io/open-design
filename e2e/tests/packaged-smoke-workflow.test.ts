@@ -1598,6 +1598,9 @@ process.stdin.on("end", () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
     const workspaceUnit = sectionBetween(workflow, "  workspace_unit_tests:", "  daemon_unit_tests:");
 
+    expect(workspaceUnit).toContain("pnpm --filter @open-design/launcher-proto test");
+    expect(workspaceUnit).toContain("pnpm --filter @open-design/launcher test");
+
     expect(workspaceUnit).toContain(`if [ "\${{ fromJSON(needs.plan.outputs.scopes).tools_pack_tests_required }}" = "true" ]; then
             pnpm --filter @open-design/desktop build
             pnpm --filter @open-design/desktop test

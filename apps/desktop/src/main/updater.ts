@@ -1,3 +1,4 @@
+import { readLauncherHost } from "@open-design/launcher-proto";
 import type { UpdateStageMetric } from '@open-design/contracts/analytics';
 import { recordUpdateStage, recordUpdateLifecycle, type UpdateLifecycleObservation } from "./update-lifecycle-observations.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -635,7 +636,12 @@ export function createDesktopUpdater(
   async function restoreStoreState(): Promise<DesktopUpdateStatusSnapshot | null> {
     const opened = await openStore();
     if (!opened.ok) return opened.status;
-    const restoredMetadata = await clearInterruptedIncomingDownload(opened.root, opened.metadata, logger);
+    let restoredMetadata = await clearInterruptedIncomingDownload(opened.root, opened.metadata, logger);
+    const failedHostedVersion = readLauncherHost()?.rolledBackFromVersion;
+    if (failedHostedVersion != null && restoredMetadata.active?.artifact.type === "payload" && restoredMetadata.active.version === failedHostedVersion) {
+      restoredMetadata = { ...restoredMetadata, active: undefined, incoming: undefined, installFrozen: undefined, installResult: undefined };
+      await writeStoreMetadata(opened.root, restoredMetadata);
+    }
     const storedActive = restoredMetadata.active;
     const launcherPayloadContextValid = storedActive != null
       && storedActive.artifact.type === "installer"
@@ -841,6 +847,11 @@ export function createDesktopUpdater(
         return observeCheck(selected.state === DESKTOP_UPDATE_STATES.ERROR
           ? setFailurePreservingActive(selected.error)
           : setState(selected.state, selected.error));
+      }
+      if (selected.candidate.artifact.type === "payload" && selected.candidate.version === readLauncherHost()?.rolledBackFromVersion) {
+        logUpdateEvent("check-not-available", { candidateVersion: selected.candidate.version, skippedReason: "rolled-back" });
+        candidate = null;
+        return observeCheck(setState(DESKTOP_UPDATE_STATES.NOT_AVAILABLE));
       }
       // Same-version installer reinstall (disaster posture): when the installed
       // outer is below min, the installer must be offered even with no newer
@@ -1190,14 +1201,16 @@ export function createDesktopUpdater(
   ): Promise<DeferredLaunchResult & { launchPath?: string }> {
     if (config.openDryRun) return {};
     if (config.platform !== "darwin" && config.platform !== "win32") return {};
-    try {
-      await access(launchPath);
-      const launcherTarget = await lstat(launchPath);
-      if (launcherTarget.isSymbolicLink() || !launcherTarget.isFile()) {
-        return { error: `launcher payload executable is not a plain file: ${launchPath}` };
+    if (readLauncherHost() == null) {
+      try {
+        await access(launchPath);
+        const launcherTarget = await lstat(launchPath);
+        if (launcherTarget.isSymbolicLink() || !launcherTarget.isFile()) {
+          return { error: `launcher payload executable is not a plain file: ${launchPath}` };
+        }
+      } catch (launchPathError) {
+        return { error: launchPathError instanceof Error ? launchPathError.message : String(launchPathError) };
       }
-    } catch (launchPathError) {
-      return { error: launchPathError instanceof Error ? launchPathError.message : String(launchPathError) };
     }
     const result = await launchAppAfterQuit({
       appPid: processPid,

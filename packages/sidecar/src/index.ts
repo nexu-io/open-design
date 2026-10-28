@@ -70,6 +70,7 @@ export type {
   SpawnedSidecar,
 } from "./operations.js";
 export {
+  adoptSidecarProcess,
   bootstrapSidecarProcess,
   convergeSidecarLaunch,
   findSidecarProcesses,

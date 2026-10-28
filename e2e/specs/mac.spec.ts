@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { getSidecarStatus, invokeSidecar, stopSidecar } from '@open-design/sidecar';
 
 import { createFakeAgentRuntimes, type FakeAgentRuntime } from '@/fake-agents';
 import { T } from '@/timeouts';
@@ -376,6 +377,7 @@ type UpgradePersistenceSeed = {
 };
 
 type DesktopIdentityMarker = {
+  physicalExecutablePath: string;
   appPath: string;
   executablePath: string;
   pid: number;
@@ -733,7 +735,7 @@ macDescribe('packaged mac runtime smoke', () => {
         updateInstall = terminalUpdate.update;
 
         const identity = await readDesktopIdentityMarker();
-        assertPayloadDesktopIdentity(identity, postUpdateInspect.launcher, updaterVersion);
+        assertPayloadDesktopIdentity(identity, postUpdateInspect.launcher, updaterVersion, installedAppPath);
         expect(postUpdateInspect.launcher.attempt).toBeNull();
         assertSettledDesktopHandoff(postUpdateInspect.launcher.handoff);
 
@@ -769,7 +771,7 @@ macDescribe('packaged mac runtime smoke', () => {
         expect(coldInspect.launcher.attempt).toBeNull();
         assertSettledDesktopHandoff(coldInspect.launcher.handoff);
         const coldIdentity = await readDesktopIdentityMarker();
-        assertPayloadDesktopIdentity(coldIdentity, coldInspect.launcher, updaterVersion);
+        assertPayloadDesktopIdentity(coldIdentity, coldInspect.launcher, updaterVersion, installedAppPath);
         expect(coldIdentity.pid).not.toBe(identity.pid);
         const coldPptxInspect = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', persistedPptxExpression]);
         const coldPptx = assertPptxExportEvalValue(coldPptxInspect.eval?.value);
@@ -960,6 +962,48 @@ macDescribe('packaged mac runtime smoke', () => {
   // preference on, a payload downloaded in a previous session must apply on
   // the next cold start's first scheduler tick — install, quit, and relaunch —
   // without any user-facing updater action.
+  const hostedHeadlessTest = !verifyCoreOnly ? test : test.skip;
+  hostedHeadlessTest('restores a headless installed host through LaunchServices without replacing its process', async () => {
+    await resetPackagedRuntimeState();
+    const install = await runToolsPackJson<MacInstallResult>('install');
+    const stamp = { app: 'desktop', channel: updateScenario.channel, namespace, source: 'packaged', mode: 'headless' };
+    try {
+      await seedPackagedOnboardingComplete();
+      await execFileAsync('/usr/bin/open', ['--env', 'OD_UPDATE_ENABLED=0', '-g', '-j', install.installedAppPath, '--args', '--headless']);
+      let headless: DesktopStatus | null = null;
+      const deadline = Date.now() + 120_000;
+      while (Date.now() < deadline) {
+        headless = await getSidecarStatus<DesktopStatus>(stamp).catch(() => null);
+        if (headless?.state === 'running') break;
+        await delay(500);
+      }
+      expect(headless?.state).toBe('running');
+      const pid = headless!.pid;
+      expect(pid).toBeTypeOf('number');
+      expectPathInside(await readPhysicalExecutablePath(pid!), install.installedAppPath);
+      expect(headless?.windowVisible).not.toBe(true);
+      await execFileAsync('/usr/bin/open', [install.installedAppPath]);
+      let restored: DesktopStatus | null = null;
+      const restoreDeadline = Date.now() + 120_000;
+      while (Date.now() < restoreDeadline) {
+        restored = await getSidecarStatus<DesktopStatus>(stamp).catch(() => null);
+        if (restored?.windowVisible === true) break;
+        await delay(500);
+      }
+      expect(restored?.pid).toBe(pid);
+      expect(restored?.windowVisible).toBe(true);
+      const health = await invokeSidecar<{ ok: boolean; value?: unknown }>(stamp, 'eval', { expression: healthExpression });
+      expect(health.ok).toBe(true);
+      expect(assertHealthEvalValue(health.value).health.version).toBe(updateScenario.expectedCurrentVersion);
+      await execFileAsync('/usr/bin/open', [install.installedAppPath]);
+      expect((await getSidecarStatus<DesktopStatus>(stamp))?.pid).toBe(pid);
+    } finally {
+      await stopSidecar(stamp);
+      await runToolsPackJson<MacStopResult>('stop');
+      await runToolsPackJson<MacUninstallResult>('uninstall');
+    }
+  }, 300_000);
+
   const silentUpdateTest = !verifyCoreOnly && updateFixture === 'tools-serve' ? test : test.skip;
   silentUpdateTest('applies a downloaded payload silently on the next cold start', async () => {
     const updateEnv = captureUpdateEnv();
@@ -2622,6 +2666,10 @@ async function buildCorruptedMacPayloadFixture(payloadZipPath: string, workDir: 
     const executablePath = join(extractRoot, executableRelPath);
     await writeFile(executablePath, '#!/bin/sh\nexit 87\n', 'utf8');
     await chmod(executablePath, 0o755);
+    // Hosted launchers import payload code without running its executable.
+    // Corrupt that entry too so the fixture exercises both architectures.
+    const resources = join(dirname(dirname(executablePath)), 'Resources');
+    await writeFile(join(resources, 'app', 'prebundled', 'packaged-main.mjs'), 'process.exit(87);\n', 'utf8');
   });
 }
 
@@ -2735,6 +2783,12 @@ async function waitForUpdaterPopupMatching(
   throw new Error(`${label}: updater popup timed out: ${formatUnknown(lastResult)}`);
 }
 
+async function readPhysicalExecutablePath(pid: number): Promise<string> {
+  const physical = await execFileAsync('/bin/ps', ['-ww', '-p', String(pid), '-o', 'command=']);
+  // Electron switches follow the executable; preserve spaces in the app path.
+  return physical.stdout.trim().split(' --', 1)[0]!;
+}
+
 async function readDesktopIdentityMarker(): Promise<DesktopIdentityMarker> {
   const status = (await runToolsPackJson<MacInspectResult>('inspect')).status;
   if (typeof status?.executablePath !== 'string' || typeof status.pid !== 'number') {
@@ -2743,14 +2797,20 @@ async function readDesktopIdentityMarker(): Promise<DesktopIdentityMarker> {
   const marker = '/Contents/MacOS/';
   const markerIndex = status.executablePath.indexOf(marker);
   const appPath = markerIndex < 0 ? status.executablePath : status.executablePath.slice(0, markerIndex);
-  return { appPath, executablePath: status.executablePath, pid: status.pid, version: 1 };
+  const physicalExecutablePath = await readPhysicalExecutablePath(status.pid);
+  return { appPath, executablePath: status.executablePath, physicalExecutablePath, pid: status.pid, version: 1 };
 }
 
 function assertPayloadDesktopIdentity(
   identity: DesktopIdentityMarker,
   launcher: LauncherSnapshot,
   version: string,
+  installedAppPath: string | null,
 ): void {
+  // Hosted installs report the logical payload to the historical daemon bridge,
+  // while the OS must keep executing the stable installed app.
+  expect(installedAppPath).not.toBeNull();
+  expectPathInside(identity.physicalExecutablePath, installedAppPath!);
   const payloadRoot = join(launcher.versionsRoot, version, 'payload');
   expect(identity.pid).toBeGreaterThan(0);
   expectPathInside(identity.appPath, payloadRoot);

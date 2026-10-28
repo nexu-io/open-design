@@ -4,10 +4,12 @@ import { basename, dirname, join, resolve, sep } from "node:path";
 
 import {
   LAUNCHER_SCHEMA_VERSION,
+  readLauncherHost,
   compareLauncherVersions,
   type LauncherChannel,
   type LauncherDesktopHandoffDescriptor,
   type LauncherHandoffResumeRequest,
+  type LauncherHost,
   type LauncherPaths,
   type LauncherRuntimeDescriptor,
   type LauncherVersionPaths,
@@ -87,6 +89,12 @@ type ResolvedPayloadConfig = {
 
 export type ResolvePackagedLauncherRuntimeOptions = {
   currentExecutablePath?: string;
+  /**
+   * Identity published by a hosting thin launcher. When it hosts a
+   * payload, its selection is authoritative: the launcher already selected,
+   * pre-armed or rolled back, so this process must not re-derive any of it.
+   */
+  host?: LauncherHost | null;
   /**
    * Pointer from `--od-launcher-delegated-*` argv: the spawning parent
    * pre-armed attempt.json for this pointer, so a matching attempt marks the
@@ -453,6 +461,20 @@ export async function resolvePackagedLauncherRuntime(
   paths: PackagedNamespacePaths,
   options: ResolvePackagedLauncherRuntimeOptions = {},
 ): Promise<PackagedLauncherRuntime> {
+  const host = options.host ?? readLauncherHost();
+  if (host != null) {
+    const descriptor = host.snapshot();
+    const launcherPaths = resolveLauncherPaths({ channel: descriptor.channel, namespace: descriptor.namespace, root: paths.installationRoot });
+    return {
+      config, descriptor, launcherPaths, paths,
+      desktopExecutablePath: host.running.source === "payload" ? host.running.executablePath : null,
+      electronNodeCommand: null, installedLaunchPath: host.installedAppPath,
+      payloadDesktopProcess: host.running.source === "payload",
+      selection: host.selection == null ? { selected: false, reason: "no-runtime-target" } : { ...host.selection, selected: true },
+      source: host.running.source === "payload" ? "payload" : "current-package",
+      targetVersion: host.running.source === "payload" ? host.running.version : null,
+    };
+  }
   const channel = inferLauncherChannel(config);
   const launcherPaths = resolveLauncherPaths({
     channel,
@@ -487,10 +509,7 @@ export async function resolvePackagedLauncherRuntime(
     ? handoff.target
     : null;
   const selection = selectLauncherRuntimeTarget({
-    attempted,
-    delegated: options.delegated ?? null,
-    resume: requestedResume,
-    runtime: descriptor,
+    attempted, delegated: options.delegated ?? null, resume: requestedResume, runtime: descriptor,
   });
   const persistedInstall = await readLauncherInstallDescriptor(launcherPaths, channel, config.namespace).catch(() => null);
   // Track the stable launch path of the CURRENT launcher executable (the
@@ -627,6 +646,8 @@ export async function recordPackagedLauncherRuntimeFailedAttempt(
 }
 
 export async function confirmPackagedLauncherRuntime(runtime: PackagedLauncherRuntime): Promise<void> {
+  const host = readLauncherHost();
+  if (host != null) { await host.reportReady(); return; }
   if (runtime.source !== "payload") return;
   if (!runtime.payloadDesktopProcess) return;
   if (runtime.desktopExecutablePath == null) return;

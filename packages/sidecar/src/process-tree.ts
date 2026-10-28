@@ -11,6 +11,7 @@ import {
   isSidecarLauncherCommand,
   sidecarStampKey,
   SIDECAR_STAMP_CONTRACT,
+  SIDECAR_ADOPT_PARENT_ARG,
   type SidecarStamp,
 } from "./stamp.js";
 
@@ -59,6 +60,12 @@ export function collectSidecarGenerationPids(
 ): number[] {
   const stampKey = sidecarStampKey(stampInput);
   const roots = new Set(rootPids.filter((pid): pid is number => typeof pid === "number"));
+  // In adoption mode the stamped supervisor is a child of the OS-owned app.
+  // Add only its actual, explicitly declared parent, never an arbitrary PID.
+  for (const root of processes.filter(p => roots.has(p.pid))) {
+    const marker = `${SIDECAR_ADOPT_PARENT_ARG}=${root.ppid}`;
+    if (root.ppid > 1 && root.command.split(/\s+/).includes(marker) && processes.some(p => p.pid === root.ppid)) roots.add(root.ppid);
+  }
   const ownedProcesses = processes.filter((processInfo) => {
     if (roots.has(processInfo.pid)) return true;
     const nestedStamp = readProcessStampFromCommand(processInfo.command, SIDECAR_STAMP_CONTRACT);
