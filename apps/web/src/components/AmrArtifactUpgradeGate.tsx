@@ -59,6 +59,21 @@ function hasOpenModal(): boolean {
   ) !== null;
 }
 
+/**
+ * True while a session sits at its first-work milestone: exactly one
+ * successful artifact run so far and no Home offer consumed for it yet. The
+ * gate checks this when Home becomes visible and again right before delivery,
+ * so an offer captured for a session that produced more work in between is
+ * discarded instead of published late (#6394).
+ */
+function atFirstWorkMilestone(
+  artifactRuns: ReadonlyMap<string, number>,
+  homeOfferedSessions: ReadonlySet<string>,
+  sessionKey: string,
+): boolean {
+  return artifactRuns.get(sessionKey) === 1 && !homeOfferedSessions.has(sessionKey);
+}
+
 function homeOfferForRoute(
   projectId: string | null,
   conversationId: string | null,
@@ -99,6 +114,10 @@ export function AmrArtifactUpgradeGate({
   const openRef = useRef(false);
   const pendingSendRef = useRef<PendingSendDecision | null>(null);
   const eligibleSessionsRef = useRef<Set<string>>(new Set());
+  // Successful artifact runs per session. The Home offer is tied to the
+  // first-work milestone, so it qualifies only while this count is exactly
+  // one; later generations in the same session never re-qualify it.
+  const artifactRunsRef = useRef<Map<string, number>>(new Map());
   const promptedSessionsRef = useRef<Set<string>>(new Set());
   const homeOfferedSessionsRef = useRef<Set<string>>(new Set());
   const seenRunIdsRef = useRef<Set<string>>(new Set());
@@ -134,6 +153,10 @@ export function AmrArtifactUpgradeGate({
       }
       seenRunIdsRef.current.add(detail.runId);
       eligibleSessionsRef.current.add(sessionKey);
+      artifactRunsRef.current.set(
+        sessionKey,
+        (artifactRunsRef.current.get(sessionKey) ?? 0) + 1,
+      );
     };
     window.addEventListener(DAEMON_RUN_FINISHED_EVENT, handleRunFinished);
     return () => window.removeEventListener(DAEMON_RUN_FINISHED_EVENT, handleRunFinished);
@@ -207,8 +230,11 @@ export function AmrArtifactUpgradeGate({
       homeVisible
       && !previous.homeVisible
       && previous.offer
-      && eligibleSessionsRef.current.has(previous.offer.sessionKey)
-      && !homeOfferedSessionsRef.current.has(previous.offer.sessionKey)
+      && atFirstWorkMilestone(
+        artifactRunsRef.current,
+        homeOfferedSessionsRef.current,
+        previous.offer.sessionKey,
+      )
     ) {
       setPendingHomeOffer({
         offer: previous.offer,
@@ -241,6 +267,11 @@ export function AmrArtifactUpgradeGate({
       pendingHomeOffer.planResolved
       && cloudModelSelected
       && isFreePlanTier(pendingHomeOffer.plan)
+      && atFirstWorkMilestone(
+        artifactRunsRef.current,
+        homeOfferedSessionsRef.current,
+        pendingHomeOffer.offer.sessionKey,
+      )
       && !hasOpenModal()
     ) {
       homeOfferedSessionsRef.current.add(pendingHomeOffer.offer.sessionKey);

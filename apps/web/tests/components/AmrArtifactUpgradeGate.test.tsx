@@ -244,6 +244,238 @@ describe('AmrArtifactUpgradeGate', () => {
     expect(onHomeOfferChange).toHaveBeenCalledTimes(2);
   });
 
+  // #6394: the Home card is the first-work moment. A session that already
+  // produced several works before the user returned to Home has passed it.
+  it('withholds the first-work Home card once a session already produced several works', async () => {
+    const onHomeOfferChange = vi.fn();
+    const view = render(
+      <AmrArtifactUpgradeGate
+        {...BASE_PROPS}
+        plan="free"
+        planResolved
+        onHomeOfferChange={onHomeOfferChange}
+      />,
+    );
+
+    act(() => publishFinishedRun({ runId: 'run-1' }));
+    act(() => publishFinishedRun({ runId: 'run-2' }));
+    view.rerender(
+      <AmrArtifactUpgradeGate
+        {...BASE_PROPS}
+        activeProjectId={null}
+        activeConversationId={null}
+        activeFileName={null}
+        homeVisible
+        plan="free"
+        planResolved
+        onHomeOfferChange={onHomeOfferChange}
+      />,
+    );
+
+    // Control: a session still at its first work is offered as before.
+    view.rerender(
+      <AmrArtifactUpgradeGate
+        {...BASE_PROPS}
+        activeConversationId="conversation-2"
+        activeFileName="live:artifact-2"
+        homeVisible={false}
+        plan="free"
+        planResolved
+        onHomeOfferChange={onHomeOfferChange}
+      />,
+    );
+    act(() => publishFinishedRun({ runId: 'run-3', conversationId: 'conversation-2' }));
+    view.rerender(
+      <AmrArtifactUpgradeGate
+        {...BASE_PROPS}
+        activeProjectId={null}
+        activeConversationId={null}
+        activeFileName={null}
+        homeVisible
+        plan="free"
+        planResolved
+        onHomeOfferChange={onHomeOfferChange}
+      />,
+    );
+
+    await waitFor(() => expect(onHomeOfferChange).toHaveBeenCalledWith(expect.objectContaining({
+      sessionKey: JSON.stringify(['project-1', 'conversation-2']),
+    })));
+    expect(onHomeOfferChange).not.toHaveBeenCalledWith(expect.objectContaining({
+      sessionKey: JSON.stringify(['project-1', 'conversation-1']),
+    }));
+    expect(onHomeOfferChange).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not re-offer a session on a later Home visit after its first-work card was shown', async () => {
+    const onHomeOfferChange = vi.fn();
+    const view = render(
+      <AmrArtifactUpgradeGate
+        {...BASE_PROPS}
+        plan="free"
+        planResolved
+        onHomeOfferChange={onHomeOfferChange}
+      />,
+    );
+
+    act(() => publishFinishedRun({ runId: 'run-1' }));
+    view.rerender(
+      <AmrArtifactUpgradeGate
+        {...BASE_PROPS}
+        activeProjectId={null}
+        activeConversationId={null}
+        activeFileName={null}
+        homeVisible
+        plan="free"
+        planResolved
+        onHomeOfferChange={onHomeOfferChange}
+      />,
+    );
+    await waitFor(() => expect(onHomeOfferChange).toHaveBeenCalledWith(expect.objectContaining({
+      sessionKey: JSON.stringify(['project-1', 'conversation-1']),
+    })));
+
+    view.rerender(
+      <AmrArtifactUpgradeGate
+        {...BASE_PROPS}
+        homeVisible={false}
+        plan="free"
+        planResolved
+        onHomeOfferChange={onHomeOfferChange}
+      />,
+    );
+    act(() => publishFinishedRun({ runId: 'run-2' }));
+    act(() => publishFinishedRun({ runId: 'run-3' }));
+    view.rerender(
+      <AmrArtifactUpgradeGate
+        {...BASE_PROPS}
+        activeProjectId={null}
+        activeConversationId={null}
+        activeFileName={null}
+        homeVisible
+        plan="free"
+        planResolved
+        onHomeOfferChange={onHomeOfferChange}
+      />,
+    );
+    await act(async () => { await Promise.resolve(); });
+
+    expect(onHomeOfferChange).toHaveBeenCalledTimes(1);
+  });
+
+  // The plan can still be resolving when Home first shows. The offer is not
+  // delivered then and is only retried on a later visit while the session is
+  // still at its first work; more work in between retires it for good.
+  it('retries a first-work offer skipped while the plan was unresolved only if the session stayed at one work', async () => {
+    const onHomeOfferChange = vi.fn();
+    const view = render(
+      <AmrArtifactUpgradeGate
+        {...BASE_PROPS}
+        plan={null}
+        planResolved={false}
+        onHomeOfferChange={onHomeOfferChange}
+      />,
+    );
+
+    act(() => publishFinishedRun({ runId: 'run-1' }));
+    view.rerender(
+      <AmrArtifactUpgradeGate
+        {...BASE_PROPS}
+        activeProjectId={null}
+        activeConversationId={null}
+        activeFileName={null}
+        homeVisible
+        plan={null}
+        planResolved={false}
+        onHomeOfferChange={onHomeOfferChange}
+      />,
+    );
+    await waitFor(() => expect(onHomeOfferChange).toHaveBeenCalledWith(null));
+    expect(onHomeOfferChange).toHaveBeenCalledTimes(1);
+
+    view.rerender(
+      <AmrArtifactUpgradeGate
+        {...BASE_PROPS}
+        homeVisible={false}
+        plan="free"
+        planResolved
+        onHomeOfferChange={onHomeOfferChange}
+      />,
+    );
+    view.rerender(
+      <AmrArtifactUpgradeGate
+        {...BASE_PROPS}
+        activeProjectId={null}
+        activeConversationId={null}
+        activeFileName={null}
+        homeVisible
+        plan="free"
+        planResolved
+        onHomeOfferChange={onHomeOfferChange}
+      />,
+    );
+    await waitFor(() => expect(onHomeOfferChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      sessionKey: JSON.stringify(['project-1', 'conversation-1']),
+    })));
+    expect(onHomeOfferChange).toHaveBeenCalledTimes(2);
+  });
+
+  it('retires a first-work offer skipped while the plan was unresolved once the session produced more work', async () => {
+    const onHomeOfferChange = vi.fn();
+    const view = render(
+      <AmrArtifactUpgradeGate
+        {...BASE_PROPS}
+        plan={null}
+        planResolved={false}
+        onHomeOfferChange={onHomeOfferChange}
+      />,
+    );
+
+    act(() => publishFinishedRun({ runId: 'run-1' }));
+    view.rerender(
+      <AmrArtifactUpgradeGate
+        {...BASE_PROPS}
+        activeProjectId={null}
+        activeConversationId={null}
+        activeFileName={null}
+        homeVisible
+        plan={null}
+        planResolved={false}
+        onHomeOfferChange={onHomeOfferChange}
+      />,
+    );
+    await waitFor(() => expect(onHomeOfferChange).toHaveBeenCalledWith(null));
+
+    view.rerender(
+      <AmrArtifactUpgradeGate
+        {...BASE_PROPS}
+        homeVisible={false}
+        plan="free"
+        planResolved
+        onHomeOfferChange={onHomeOfferChange}
+      />,
+    );
+    act(() => publishFinishedRun({ runId: 'run-2' }));
+    view.rerender(
+      <AmrArtifactUpgradeGate
+        {...BASE_PROPS}
+        activeProjectId={null}
+        activeConversationId={null}
+        activeFileName={null}
+        homeVisible
+        plan="free"
+        planResolved
+        onHomeOfferChange={onHomeOfferChange}
+      />,
+    );
+    await act(async () => { await Promise.resolve(); });
+
+    expect(onHomeOfferChange).not.toHaveBeenCalledWith(expect.objectContaining({
+      sessionKey: JSON.stringify(['project-1', 'conversation-1']),
+    }));
+    expect(onHomeOfferChange).toHaveBeenCalledTimes(1);
+  });
+
   it('does not reinterpret a paid project session through the ambient Free plan on Home', async () => {
     const onHomeOfferChange = vi.fn();
     const view = render(
