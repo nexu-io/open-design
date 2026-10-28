@@ -17,6 +17,7 @@ const localDevelopment = Object.freeze({
   concurrency: 1,
   targets: Object.freeze([
     "packages/release",
+    "packages/path-config",
     "packages/contracts",
     "packages/standalone",
     "packages/components",

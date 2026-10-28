@@ -16,6 +16,7 @@
     "@electron/notarize": "3.1.1",
     "@electron/rebuild": "4.0.4",
     "@open-design/launcher-proto": "workspace:*",
+    "@open-design/path-config": "workspace:*",
     "@open-design/platform": "workspace:*",
     "@open-design/release": "workspace:*",
     "@open-design/sidecar": "workspace:*",

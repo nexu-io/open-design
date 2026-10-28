@@ -1,3 +1,4 @@
+import { apiFetch } from '../runtime/web-path';
 import { readCachedVisiblePlugins } from '../state/projects';
 import { usePageNavigationReady } from '../observability/navigation-timing';
 // Plan G4 / spec §11.6 — Marketplace catalog grid.
@@ -38,7 +39,7 @@ export function MarketplaceView() {
     let cancelled = false;
     void Promise.all([
       listPlugins(),
-      fetch('/api/marketplaces')
+      apiFetch('/api/marketplaces')
         .then((r) => { if (!r.ok) setLoadFailed(true); return r.ok ? r.json() : { marketplaces: [] }; })
         .then((d) => (d?.marketplaces ?? []) as Marketplace[]),
     ]).then(([rows, mps]) => {

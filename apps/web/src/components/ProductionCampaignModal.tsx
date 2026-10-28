@@ -1,3 +1,4 @@
+import { apiFetch } from '../runtime/web-path';
 import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useI18n } from "../i18n";
 import { getOpenDesignHost } from "@open-design/host";
@@ -138,7 +139,7 @@ export async function dispatchProductionCampaignAction(
 		PRODUCTION_ACTION_TELEMETRY_TIMEOUT_MS,
 	);
 	try {
-		response = await fetch("/api/touchpoints/production-runtime/events", {
+		response = await apiFetch("/api/touchpoints/production-runtime/events", {
 			method: "POST",
 			headers: { "content-type": "application/json" },
 			signal: telemetryController.signal,

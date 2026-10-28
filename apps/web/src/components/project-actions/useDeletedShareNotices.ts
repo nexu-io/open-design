@@ -1,3 +1,4 @@
+import { apiFetch } from '../../runtime/web-path';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ProjectDeleteShareResidual, PublicFileStopListResponse, WorkspaceCollabContext } from '@open-design/contracts';
 import { currentWorkspaceAccountGeneration, workspaceAccountScopedCacheKey, workspaceProjectHeaders } from '../../collab/workspace-identity';
@@ -65,7 +66,7 @@ export function useDeletedShareNotices(context: WorkspaceCollabContext | null, v
     recovery.current = controller;
     void (async () => {
       try {
-        const response = await fetch('/api/public-file-stops', {
+        const response = await apiFetch('/api/public-file-stops', {
           signal: controller.signal, headers: workspaceProjectHeaders(origin),
         });
         if (!response.ok || controller.signal.aborted) return;
@@ -152,7 +153,7 @@ export function useDeletedShareNotices(context: WorkspaceCollabContext | null, v
     };
     patch(rows => rows.map(candidate => matches(candidate) ? { ...candidate, busy: true, failed: false } : candidate));
     try {
-      const response = await fetch('/api/public-file-stops/retry', {
+      const response = await apiFetch('/api/public-file-stops/retry', {
         method: 'POST', signal: controller.signal,
         headers: { 'content-type': 'application/json', ...(notice.context ? workspaceProjectHeaders(notice.context) : {}) },
         body: JSON.stringify({ projectId: notice.projectId, filePath: row.filePath, slug: row.slug }),

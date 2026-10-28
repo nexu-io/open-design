@@ -1,3 +1,6 @@
+import { rewriteKnownInternalBrowserPaths as rewriteDeploymentPaths } from '@open-design/path-config';
+import { webPathConfig } from './web-path';
+export { rewriteKnownInternalBrowserPaths } from '@open-design/path-config';
 import { buildPreviewStorageBridge } from './preview-storage';
 import { injectMotionSourcePlayer, markMotionHostedPreview } from '@open-design/contracts/runtime/motion-source-player';
 /**
@@ -358,6 +361,7 @@ export function buildSrcdoc(
   html: string,
   options: SrcdocOptions = {}
 ): string {
+  html = rewriteDeploymentPaths(html, webPathConfig.basePath);
   const head = html.trimStart().slice(0, 64).toLowerCase();
   const isFullDoc = head.startsWith("<!doctype") || head.startsWith("<html");
   const wrapped = isFullDoc

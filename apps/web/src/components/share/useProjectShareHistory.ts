@@ -1,3 +1,4 @@
+import { apiFetch } from '../../runtime/web-path';
 import { useEffect, useState } from 'react';
 import type { ProjectShareHistoryResponse, WorkspaceCollabContext } from '@open-design/contracts';
 import { currentWorkspaceAccountGeneration, workspaceAccountScopedCacheKey, workspaceProjectHeaders } from '../../collab/workspace-identity';
@@ -37,7 +38,7 @@ export function useProjectShareHistoryState(projectId: string | undefined, conte
       void (async () => {
         let value: unknown;
         try {
-          const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/share-state`, {
+          const response = await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/share-state`, {
             cache: 'no-store', signal: controller?.signal,
             ...(context ? { headers: workspaceProjectHeaders(context) } : {}),
           });

@@ -1,3 +1,4 @@
+import { apiFetch } from '../runtime/web-path';
 import { CodingPlanUsage } from './CodingPlanUsage';
 import planCardStyles from './PersonalPlanCard.module.css';
 // Team-edition entry navigation rail (Lovart/Manus-style labeled column).
@@ -2229,7 +2230,7 @@ export function EntryNavRail({
       const cacheKey = `workspace-directory:${workspaceIdentityCacheKey(read.context)}`;
       if (options.force) evictCoalescedGet(cacheKey);
       const readDirectory = async () => {
-        const response = await fetch('/api/workspace/directory', { cache: 'no-store' });
+        const response = await apiFetch('/api/workspace/directory', { cache: 'no-store' });
         if (!response.ok) throw new Error(`directory ${response.status}`);
         const body = (await response.json()) as WorkspaceDirectoryResponse;
         return body.items ?? [];
@@ -2273,7 +2274,7 @@ export function EntryNavRail({
     });
     setWorkspaceSwitchingId(workspaceId);
     try {
-      const response = await fetch('/api/workspace/active', {
+      const response = await apiFetch('/api/workspace/active', {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({

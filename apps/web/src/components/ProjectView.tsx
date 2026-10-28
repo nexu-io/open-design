@@ -1,3 +1,4 @@
+import { apiFetch } from '../runtime/web-path';
 import { useStartupReady } from '../observability/startup-ready';
 import { navigationTiming, useProjectNavigationReady, observeNavigation } from '../observability/navigation-timing';
 import { withLiveArtifactDeliveries } from '../runtime/live-artifact-delivery';
@@ -10819,7 +10820,7 @@ export function ProjectView({
           : undefined;
         if (userText.length > 0) {
           try {
-            await fetch('/api/memory/extract', {
+            await apiFetch('/api/memory/extract', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({

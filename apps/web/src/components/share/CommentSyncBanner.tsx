@@ -1,3 +1,4 @@
+import { apiFetch } from '../../runtime/web-path';
 import { useState } from 'react';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { useI18n } from '../../i18n';
@@ -57,7 +58,7 @@ export function CommentSyncBanner({ projectId, workspaceContext, filePath, inclu
     if (!projectId || !filePath || retrying) return;
     setRetrying(true);
     try {
-      const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/comment-sync-state?filePath=${encodeURIComponent(filePath)}`, {
+      const response = await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/comment-sync-state?filePath=${encodeURIComponent(filePath)}`, {
         method: 'POST', cache: 'no-store', headers: retryHeaders,
       });
       if (!response.ok) throw new Error(`Comment backfill retry failed: ${response.status}`);
@@ -73,7 +74,7 @@ export function CommentSyncBanner({ projectId, workspaceContext, filePath, inclu
     if (!projectId || retrying) return;
     setRetrying(true);
     try {
-      await fetch(`/api/projects/${encodeURIComponent(projectId)}/comments/align`, {
+      await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/comments/align`, {
         method: 'POST', cache: 'no-store', headers: retryHeaders,
       });
     } catch {

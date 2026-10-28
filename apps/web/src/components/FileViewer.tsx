@@ -1,3 +1,4 @@
+import { apiFetch } from '../runtime/web-path';
 import { validateCommentSaveTarget } from '../comments/validate-save-target';
 import { previewStorageKey, readPreviewStorage, savePreviewStorageMessage } from '../runtime/preview-storage';
 import { commentSelectorsMatch, commentUsesIdentity, ownerCommentNeedsLocation, resolveOwnerCommentAnchor } from '../comments/owner-anchor';
@@ -16433,7 +16434,7 @@ function HtmlViewer({
     commentReadScopeRef.current = scopeKey;
     setCommentReadState(null);
     let cancelled = false;
-    void fetch(`/api/projects/${encodeURIComponent(projectId)}/comments/read`, {
+    void apiFetch(`/api/projects/${encodeURIComponent(projectId)}/comments/read`, {
       headers: workspaceContext ? workspaceProjectHeaders(workspaceContext) : undefined,
     }).then(async (response) => {
       if (!response.ok || cancelled) return;
@@ -16448,7 +16449,7 @@ function HtmlViewer({
     // The daemon clamps this client timestamp and returns its authoritative,
     // monotonic marker. Do not optimistically commit a browser clock value:
     // a future clock or failed PUT must not hide comments.
-    void fetch(`/api/projects/${encodeURIComponent(projectId)}/comments/read`, {
+    void apiFetch(`/api/projects/${encodeURIComponent(projectId)}/comments/read`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json', ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}) },
       body: JSON.stringify({ readAt: Date.now() }),

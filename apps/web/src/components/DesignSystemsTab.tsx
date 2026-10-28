@@ -1,3 +1,4 @@
+import { apiFetch } from '../runtime/web-path';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { coalescedGet, evictCoalescedGet } from '../lib/coalesced-get';
 import { Button, VisuallyHidden } from '@open-design/components';
@@ -461,7 +462,7 @@ export function DesignSystemsTab({
       const scopedWorkspaceIdentity = workspaceIdentityCacheKey(context);
       const cacheKey = `workspace-design-systems-team:${scopedWorkspaceIdentity}`;
       const readTeamIndex = async () => {
-        const res = await fetch('/api/workspace/design-systems/team', {
+        const res = await apiFetch('/api/workspace/design-systems/team', {
           cache: 'no-store',
           headers: workspaceProjectHeaders(context),
         });
@@ -590,7 +591,7 @@ export function DesignSystemsTab({
     setSharingId(system.id);
     notifyActionLoading(loadingLabel);
     try {
-      const res = await fetch(`/api/workspace/design-systems/${encodeURIComponent(system.id)}/share`, {
+      const res = await apiFetch(`/api/workspace/design-systems/${encodeURIComponent(system.id)}/share`, {
         method: 'POST',
         headers: workspaceProjectHeaders(context),
       });
@@ -655,7 +656,7 @@ export function DesignSystemsTab({
     const startedAt = performance.now();
     notifyActionLoading(t('dsManager.unshareFromTeam'));
     try {
-      const res = await fetch(`/api/workspace/design-systems/${encodeURIComponent(system.id)}/share`, {
+      const res = await apiFetch(`/api/workspace/design-systems/${encodeURIComponent(system.id)}/share`, {
         method: 'DELETE',
         headers: workspaceProjectHeaders(context),
       });

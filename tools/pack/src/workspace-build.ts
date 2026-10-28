@@ -11,6 +11,7 @@ import { processWebSourcemaps } from "./web-sourcemaps.js";
 export const WORKSPACE_BUILD_PACKAGES = [
   { directory: "packages/release", name: "@open-design/release" },
   { directory: "packages/components", name: "@open-design/components" },
+  { directory: "packages/path-config", name: "@open-design/path-config" },
   { directory: "packages/contracts", name: "@open-design/contracts" },
   { directory: "packages/registry-protocol", name: "@open-design/registry-protocol" },
   { directory: "packages/sidecar-proto", name: "@open-design/sidecar-proto" },
@@ -195,6 +196,8 @@ function workspaceBuildOutputFiles(config: ToolPackConfig): string[] {
     "packages/components/dist/index.d.ts",
     "packages/release/dist/index.mjs",
     "packages/release/dist/index.d.ts",
+    "packages/path-config/dist/index.mjs",
+    "packages/path-config/dist/index.d.ts",
     "packages/contracts/dist/index.mjs",
     "packages/contracts/dist/index.d.ts",
     "packages/registry-protocol/dist/index.mjs",
@@ -237,6 +240,7 @@ function workspaceBuildArtifacts(config: ToolPackConfig): WorkspaceBuildArtifact
   const artifacts = [
     "packages/components/dist",
     "packages/release/dist",
+    "packages/path-config/dist",
     "packages/contracts/dist",
     "packages/registry-protocol/dist",
     "packages/sidecar-proto/dist",

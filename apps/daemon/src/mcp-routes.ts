@@ -17,7 +17,13 @@ const MCP_REGISTRATION_REFRESH_DELAY_MS = 5_000;
 
 export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
   const { isLocalSameOrigin, resolvedPortRef, sendApiError } = ctx.http;
+  const getPublicUrl = ctx.http.getPublicUrl ?? ((req: any, path: string) => {
+    const proto = req.protocol || 'http';
+    const host = req.get('host') || `localhost:${process.env.OD_PORT ?? '7456'}`;
+    return `${proto}://${host}${path}`;
+  });
   const { OD_BIN, RUNTIME_DATA_DIR, PROJECTS_DIR } = ctx.paths;
+  const webBasePath = ctx.paths.WEB_BASE_PATH ?? '';
   const { pendingAuth, daemonUrlRef, inheritedEnvironment } = ctx.mcp;
   const getResolvedPort = () => resolvedPortRef.current;
   const getDaemonUrl = () => daemonUrlRef.current;
@@ -70,7 +76,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
     const webPortRaw = process.env[SIDECAR_ENV.WEB_PORT];
     const webPortNum = webPortRaw ? Number(webPortRaw) : Number.NaN;
     const webBaseUrl = Number.isFinite(webPortNum) && webPortNum > 0
-      ? `http://127.0.0.1:${webPortNum}`
+      ? `http://127.0.0.1:${webPortNum}${webBasePath}`
       : null;
     return buildMcpInstallPayload({
       cliPath,
@@ -255,7 +261,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
           .status(400)
           .json({ error: 'server is configured for no managed OAuth' });
       }
-      const redirectUri = mcpOAuthCallbackUrl(req);
+      const redirectUri = mcpOAuthCallbackUrl(req, getPublicUrl);
       console.log(
         `[mcp-oauth] start serverId=${serverId} url=${server.url} redirect=${redirectUri}`,
       );
@@ -396,19 +402,8 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
 
 }
 
-function getPublicBaseUrl(req: any) {
-  const env = process.env.OD_PUBLIC_BASE_URL;
-  if (env && /^https?:\/\//i.test(env)) {
-    return env.replace(/\/+$/u, '');
-  }
-  const proto = req.protocol || 'http';
-  const host = req.get('host');
-  if (!host) return `http://localhost:${process.env.OD_PORT ?? '7456'}`;
-  return `${proto}://${host}`;
-}
-
-function mcpOAuthCallbackUrl(req: any) {
-  return `${getPublicBaseUrl(req)}/api/mcp/oauth/callback`;
+function mcpOAuthCallbackUrl(req: any, getPublicUrl: (req: any, path: string) => string) {
+  return getPublicUrl(req, '/api/mcp/oauth/callback');
 }
 
 function renderOAuthResultPage(opts: any) {

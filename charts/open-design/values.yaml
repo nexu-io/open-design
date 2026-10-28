@@ -8,6 +8,9 @@ image:
   repository: ghcr.io/nexu-io/od
   pullPolicy: IfNotPresent
   tag: "latest"
+  # Browser-visible path baked into this image at build time through
+  # OD_WEB_BASE_PATH. Must match config.webBasePath.
+  webBasePath: ""
 
 config:
 # The runtime environment for the Node.js process. 
@@ -16,6 +19,9 @@ config:
   nodeEnv: "production"
   allowedOrigins: ""
   publicBaseUrl: ""
+  # Fixed browser-visible path. The frontend image must be built with the
+  # same OD_WEB_BASE_PATH value, for example /open-design.
+  webBasePath: ""
   nodeOptions: "--max-old-space-size=192"
   webPort: 7456
   bindHost: "127.0.0.1"

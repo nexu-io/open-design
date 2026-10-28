@@ -1,3 +1,4 @@
+import { apiFetch } from '../../runtime/web-path';
 import { useEffect, useState } from 'react';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import {
@@ -38,7 +39,7 @@ export function useBatchProjectShareCount(
       void (async () => {
         try {
           const counts = await Promise.all(ids.map(async (projectId) => {
-            const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/share-state`, {
+            const response = await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/share-state`, {
               cache: 'no-store', signal: controller?.signal, headers: workspaceProjectHeaders(context),
             });
             const value: unknown = response.ok ? await response.json() : null;

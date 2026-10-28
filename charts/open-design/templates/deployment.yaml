@@ -37,7 +37,7 @@ spec:
             {{- toYaml .Values.authProxy.securityContext | nindent 12 }}
           command: ["/bin/sh", "-c"]
           args:
-            - envsubst '$PROXY_PORT $OD_BIND_HOST $OD_WEB_PORT $PROXY_API_TOKEN' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf
+            - envsubst '$PROXY_PORT $OD_BIND_HOST $OD_WEB_PORT $PROXY_API_TOKEN $OD_WEB_BASE_PATH' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf
           envFrom:
             - configMapRef:
                 name: {{ include "open-design.fullname" . }}

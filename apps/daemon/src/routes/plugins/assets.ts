@@ -1,3 +1,4 @@
+import { rewriteKnownInternalBrowserPaths } from '@open-design/path-config';
 import type { Express, Request, Response } from 'express';
 import type * as BetterSqlite3 from 'better-sqlite3';
 import path from 'node:path';
@@ -19,6 +20,8 @@ export interface RegisterPluginAssetRoutesDeps {
   pluginAssetCache: { get(url: string): Promise<{ buf: Buffer; contentType: string }> };
   AssetCacheError: new (...args: unknown[]) => Error & { status: number };
   assetCacheRewriteUrl: (url: string) => string;
+  publicPath?: (path: string) => string;
+  webBasePath?: string;
   isCacheableExternalUrl: (url: string) => boolean;
   assembleExample: (templateHtml: string, slidesHtml: string, title: string) => string;
 }
@@ -49,6 +52,8 @@ interface InstalledPluginLike {
 
 export function registerPluginAssetRoutes(app: Express, deps: RegisterPluginAssetRoutesDeps): void {
   const { db, pluginAssetCache, AssetCacheError, assetCacheRewriteUrl, isCacheableExternalUrl, assembleExample } = deps;
+  const publicPath = deps.publicPath ?? ((value: string) => value);
+  const webBasePath = deps.webBasePath ?? '';
   const routeParam = (value: string | string[] | undefined): string => Array.isArray(value) ? value[0] ?? '' : value ?? '';
   const requestWithNavigationScope = (req: Request): Request | 'conflict' => {
     const workspaceId = typeof req.query.workspaceId === 'string'
@@ -254,12 +259,12 @@ export function registerPluginAssetRoutes(app: Express, deps: RegisterPluginAsse
       const suffix = splitAt === -1 ? '' : value.slice(splitAt);
       const normalized = path.posix.normalize(path.posix.join(safeBase, rel));
       if (normalized === '.' || normalized === '..' || normalized.startsWith('../') || path.posix.isAbsolute(normalized)) return null;
-      return `/api/plugins/${encodeURIComponent(pluginId)}/asset/${normalized}${scopeAssetSuffix(suffix)}`;
+      return publicPath(`/api/plugins/${encodeURIComponent(pluginId)}/asset/${normalized}${scopeAssetSuffix(suffix)}`);
     };
     const withAttrs = html.replace(/(\s(?:src|href|poster)\s*=\s*)(['"])([^'"]+)(\2)/gi, (match, attr, quote, rawValue, closeQuote) => {
       const value = String(rawValue).trim();
       if (/^https?:\/\//i.test(value) && !/\bhref\b/i.test(String(attr)) && isCacheableExternalUrl(value)) {
-        return `${attr}${quote}${assetCacheRewriteUrl(value)}${closeQuote}`;
+        return `${attr}${quote}${publicPath(assetCacheRewriteUrl(value))}${closeQuote}`;
       }
       const rewritten = pluginAssetUrl(value);
       return rewritten === null ? match : `${attr}${quote}${rewritten}${closeQuote}`;
@@ -275,12 +280,13 @@ export function registerPluginAssetRoutes(app: Express, deps: RegisterPluginAsse
     });
     const withQuoted = withStyles.replace(/(['"])(https?:\/\/[^'"]+)\1/g, (match, quote, rawValue) => {
       const value = String(rawValue).trim();
-      return isCacheableExternalUrl(value) ? `${quote}${assetCacheRewriteUrl(value)}${quote}` : match;
+      return isCacheableExternalUrl(value) ? `${quote}${publicPath(assetCacheRewriteUrl(value))}${quote}` : match;
     });
-    return withQuoted.replace(/url\(\s*(https?:\/\/[^)'"\s]+)\s*\)/gi, (match, rawValue) => {
+    const withCssUrls = withQuoted.replace(/url\(\s*(https?:\/\/[^)'"\s]+)\s*\)/gi, (match, rawValue) => {
       const value = String(rawValue).trim();
-      return isCacheableExternalUrl(value) ? `url(${assetCacheRewriteUrl(value)})` : match;
+      return isCacheableExternalUrl(value) ? `url(${publicPath(assetCacheRewriteUrl(value))})` : match;
     });
+    return rewriteKnownInternalBrowserPaths(withCssUrls, webBasePath);
   }
 
   function collectPluginPreviewCandidates(plugin: InstalledPluginLike): string[] {

@@ -9,6 +9,7 @@ ARG http_proxy
 ARG https_proxy
 ARG no_proxy
 ARG NO_PROXY
+ARG OD_WEB_BASE_PATH=
 
 ENV HTTP_PROXY=${HTTP_PROXY}
 ENV HTTPS_PROXY=${HTTPS_PROXY}
@@ -16,6 +17,7 @@ ENV http_proxy=${http_proxy}
 ENV https_proxy=${https_proxy}
 ENV no_proxy=${no_proxy}
 ENV NO_PROXY=${NO_PROXY}
+ENV OD_WEB_BASE_PATH=${OD_WEB_BASE_PATH}
 ENV CI=true
 
 RUN apk add --no-cache python3 make g++
@@ -86,6 +88,8 @@ COPY data ./data
 
 FROM ${RUNTIME_IMAGE}
 
+ARG OD_WEB_BASE_PATH=
+
 RUN apk add --no-cache tini poppler-utils bash git && \
     addgroup -S -g 1001 open-design && \
     adduser -S -D -H -u 1001 -G open-design open-design
@@ -114,6 +118,7 @@ ENV NODE_ENV=production
 ENV NODE_OPTIONS=--max-old-space-size=192
 ENV OD_BIND_HOST=0.0.0.0
 ENV OD_PORT=7456
+ENV OD_WEB_BASE_PATH=${OD_WEB_BASE_PATH}
 
 EXPOSE 7456
 

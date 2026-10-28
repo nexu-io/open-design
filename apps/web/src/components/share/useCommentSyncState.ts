@@ -1,3 +1,4 @@
+import { apiFetch } from '../../runtime/web-path';
 import { useEffect, useRef, useState } from 'react';
 import type { CommentSyncState, WorkspaceCollabContext } from '@open-design/contracts';
 import { currentWorkspaceAccountGeneration, workspaceAccountScopedCacheKey, workspaceProjectHeaders } from '../../collab/workspace-identity';
@@ -60,7 +61,7 @@ export function useCommentSyncState(
         let value: unknown;
         try {
           const query = filePath ? `?filePath=${encodeURIComponent(filePath)}` : '';
-          const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/comment-sync-state${query}`, {
+          const response = await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/comment-sync-state${query}`, {
             cache: 'no-store', signal: controller?.signal,
             ...(context ? { headers: workspaceProjectHeaders(context) } : {}),
           });
