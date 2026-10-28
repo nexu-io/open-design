@@ -100,6 +100,60 @@ describe('HomeView media composer options', () => {
     expect(homeTemplateTrigger()).toBeTruthy();
   });
 
+  it('uses the configured MiniMax image route in created project metadata', async () => {
+    stubFetch();
+    const onSubmit = vi.fn();
+    renderHome({
+      onSubmit,
+      mediaProviders: {
+        minimax: { apiKey: 'test-key', baseUrl: '', model: 'image-01' },
+      },
+    });
+
+    await clickHomeRailChip('image');
+    await setHomePrompt('Create a MiniMax product image.');
+    await submitHome();
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+        projectMetadata: expect.objectContaining({
+          kind: 'image',
+          imageModel: 'minimax-image-01',
+        }),
+      }));
+    });
+  });
+
+  it('keeps Vela as the default image route for an OAuth-only OpenAI marker', async () => {
+    stubFetch();
+    const onSubmit = vi.fn();
+    renderHome({
+      onSubmit,
+      mediaProviders: {
+        openai: {
+          apiKey: '',
+          apiKeyConfigured: true,
+          apiKeyTail: 'oauth',
+          baseUrl: '',
+          source: 'oauth-codex',
+        },
+      },
+    });
+
+    await clickHomeRailChip('image');
+    await setHomePrompt('Create a managed product image.');
+    await submitHome();
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+        projectMetadata: expect.objectContaining({
+          kind: 'image',
+          imageModel: 'vela/gpt-image-2',
+        }),
+      }));
+    });
+  });
+
   it('defaults to Design mode with no mode picker in the composer', async () => {
     stubFetch();
     const onSubmit = vi.fn();
