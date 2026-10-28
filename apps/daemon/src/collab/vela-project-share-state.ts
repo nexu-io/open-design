@@ -4,6 +4,7 @@ import { ensurePrivateVelaTeamProject } from './vela-cli-team-projects.js';
 import type { PublicFilePublicationScope } from './public-file-publication-store.js';
 import { readVelaControlApiContext } from '../integrations/vela.js';
 import { fetchVelaWorkspaceDirectory } from './vela-workspace-context.js';
+import { velaCommandFailureDetail } from './public-file-failure.js';
 import { runPinnedVelaCommand } from './vela-pinned-command.js';
 import { parseAmrShareLink, type AmrShareLink } from './public-share-viewer-url.js';
 
@@ -50,19 +51,66 @@ export function createVelaProjectShareState(options: {
           args, session, workspaceId: identity.resourceTeamId, dataRoot: options.dataRoot, configuredEnv,
         }));
     }
-    const output = await (options.runCommand ?? runPinnedVelaCommand)({
-      args: ['share', 'project-status', identity.projectId, '--json'], session,
-      workspaceId: identity.resourceTeamId, dataRoot: options.dataRoot, configuredEnv,
-    });
+    let output: string;
+    try {
+      output = await (options.runCommand ?? runPinnedVelaCommand)({
+        args: ['share', 'project-status', identity.projectId, '--json'], session,
+        workspaceId: identity.resourceTeamId, dataRoot: options.dataRoot, configuredEnv,
+      });
+    } catch (error) {
+      // The CLI exits non-zero while its stdout still carries the structured
+      // 404 body. A cloud "no share record" answer for this project is the
+      // authoritative empty history — never-shared projects (including ones
+      // created before workspace attribution began registering them) must
+      // stay deletable instead of surfacing SHARE_STATE_UNAVAILABLE.
+      if (!isShareNotFoundFailure(error)) throw error;
+      return neverSharedProjectShareState(identity.projectId);
+    }
     return parseProjectShareState(output, identity.projectId);
   };
 }
 
-/** Missing/unauthorized/error replies never become an empty history. */
+/** The CLI reports a project with no cloud share record as a structured 404
+ * ("errorCode":"share_not_found") — on stdout with a non-zero exit code, or,
+ * if a future revision makes the command exit zero, as the parsed body. */
+const SHARE_NOT_FOUND_ERROR_CODE = 'share_not_found';
+
+function isShareNotFoundReply(value: unknown): boolean {
+  return !!value && typeof value === 'object' && 'errorCode' in value
+    && (value as { errorCode?: unknown }).errorCode === SHARE_NOT_FOUND_ERROR_CODE;
+}
+
+function isShareNotFoundFailure(error: unknown): boolean {
+  // The pinned runner replaces CLI failures with a sanitized error that keeps
+  // only classified tokens; the share_not_found verdict survives there, not in
+  // the discarded stdout. Unsantized rejections (injected tests, alternative
+  // runners) still fall back to inspecting the raw channels.
+  const failure = velaCommandFailureDetail(error);
+  if (failure) {
+    return failure.reason === 'upstream_http' && failure.upstreamStatus === 404
+      && failure.upstreamCode === SHARE_NOT_FOUND_ERROR_CODE;
+  }
+  const stdout = (error as { stdout?: unknown } | null | undefined)?.stdout;
+  const stderr = (error as { stderr?: unknown } | null | undefined)?.stderr;
+  return [stdout, stderr, error instanceof Error ? error.message : String(error)]
+    .some(channel => typeof channel === 'string' && isShareNotFoundReply(safeJsonParse(channel)));
+}
+
+function safeJsonParse(text: string): unknown {
+  try { return JSON.parse(text); } catch { return null; }
+}
+
+function neverSharedProjectShareState(projectId: string): ProjectShareState {
+  return { projectId, bindingExists: false, hasEverShared: hasEverShared({ bindingExists: false }), publications: [] };
+}
+
+/** Missing/unauthorized/error replies never become an empty history — except
+ * the explicit structured share_not_found 404, which IS the empty history. */
 export function parseProjectShareState(output: string, projectId: string): ProjectShareState {
   let value: unknown;
   try { value = JSON.parse(output); }
   catch { throw new Error('SHARE_STATE_INVALID'); }
+  if (isShareNotFoundReply(value)) return neverSharedProjectShareState(projectId);
   if (!value || typeof value !== 'object' || !('projectId' in value) || value.projectId !== projectId
     || !('bindingExists' in value) || typeof value.bindingExists !== 'boolean'
     || !('publications' in value) || !Array.isArray(value.publications)) throw new Error('SHARE_STATE_INVALID');

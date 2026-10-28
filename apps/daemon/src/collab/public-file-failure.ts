@@ -5,7 +5,7 @@ import {
   type ApiFailureReason,
   type ApiFailureStage,
 } from '@open-design/contracts';
-import { velaCommandStderr } from '../integrations/vela-command.js';
+import { velaCommandStderr, velaCommandStdout } from '../integrations/vela-command.js';
 
 type VelaFailure = Omit<ApiFailureDetail, 'stage'>;
 class SafeVelaCommandError extends Error {
@@ -23,6 +23,14 @@ export function safeVelaCommandError(
 ): Error {
   const { stage: _stage, ...failure } = classifyVelaCommandFailure('snapshot', error);
   return new SafeVelaCommandError(message, reason ? { reason } : failure);
+}
+
+/** Read the classified tokens carried by a `safeVelaCommandError` replacement.
+ * Callers that must branch on a sanitized failure (e.g. a not-found verdict)
+ * consume these closed tokens instead of the discarded raw diagnostics.
+ * Returns undefined for any other error, including the original CLI rejection. */
+export function velaCommandFailureDetail(error: unknown): Readonly<VelaFailure> | undefined {
+  return error instanceof SafeVelaCommandError ? error.failure : undefined;
 }
 
 /**
@@ -56,15 +64,21 @@ export function classifyVelaCommandFailure(
   const stderr = velaCommandStderr(error);
   // Vela's --json errors carry errorCode/status separately from the diagnostic
   // text. Parse only that envelope; do not extract arbitrary fields from bodies.
+  // A --json command prints the structured envelope on stdout and only then
+  // exits non-zero (see `velaCommandStdout`), so both channels can carry it;
+  // stderr wins when both do, preserving the legacy reading of plain output.
   let envelope: { status?: unknown; errorCode?: unknown } | undefined;
-  try {
-    const value: unknown = JSON.parse(stderr.trim());
-    if (value && typeof value === 'object' && !Array.isArray(value) && 'error' in value
-      && typeof value.error === 'string') {
-      envelope = { status: 'status' in value ? value.status : undefined,
-        errorCode: 'errorCode' in value ? value.errorCode : undefined };
-    }
-  } catch { /* Legacy Vela prints a plain-text Error line. */ }
+  for (const channel of [stderr, velaCommandStdout(error)]) {
+    try {
+      const value: unknown = JSON.parse(channel.trim());
+      if (value && typeof value === 'object' && !Array.isArray(value) && 'error' in value
+        && typeof value.error === 'string') {
+        envelope = { status: 'status' in value ? value.status : undefined,
+          errorCode: 'errorCode' in value ? value.errorCode : undefined };
+        break;
+      }
+    } catch { /* Legacy Vela prints a plain-text Error line. */ }
+  }
   const status = normalizeUpstreamStatus(envelope?.status);
   if (status !== undefined) {
     const upstreamCode = normalizeUpstreamCode(envelope?.errorCode);
