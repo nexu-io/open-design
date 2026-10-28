@@ -106,6 +106,8 @@ interface ExceptionTrackingContext {
   platform?: string;
   osVersion?: string;
   arch?: string;
+  /** Bootstrap had no installation id yet (fresh install, not opted out). */
+  identityPending?: boolean;
 }
 
 interface BufferedSafetyEvent {
@@ -131,6 +133,41 @@ let installationDistinctId: string | null = null;
 const buffer: BufferedSafetyEvent[] = [];
 let installed = false;
 
+// Upper bound on how long stability metrics wait for the installation id. If
+// the id never arrives (e.g. a failed config write), held metrics are released
+// under the bootstrap identity rather than lost.
+const IDENTITY_HOLD_MS = 60_000;
+let identityHoldTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Metrics are held while a fresh install has not minted its installation id. */
+function holdsMetricsForIdentity(): boolean {
+  return context?.identityPending === true && installationDistinctId == null;
+}
+
+/** Every safety event except exceptions waits for the installation id, so
+ * legacy stability events (e.g. client_boot_timing) share the session identity
+ * too. Exceptions keep flowing immediately: capture beats attribution. */
+function heldForIdentity(eventName: string): boolean {
+  return eventName !== '$exception';
+}
+
+function releaseHeldMetrics(): void {
+  if (identityHoldTimer !== null) { clearTimeout(identityHoldTimer); identityHoldTimer = null; }
+  if (context) context = { ...context, identityPending: false };
+  drainBuffer();
+}
+
+function drainBuffer(): void {
+  if (context == null || buffer.length === 0) return;
+  const holding = holdsMetricsForIdentity();
+  const keep: BufferedSafetyEvent[] = [];
+  for (const item of buffer.splice(0, buffer.length)) {
+    if (holding && heldForIdentity(item.eventName)) keep.push(item);
+    else dispatch(item);
+  }
+  buffer.push(...keep);
+}
+
 export function setExceptionTrackingContext(next: ExceptionTrackingContext): void {
   context = {
     ...next,
@@ -138,12 +175,17 @@ export function setExceptionTrackingContext(next: ExceptionTrackingContext): voi
     // resolved its config before the id was minted (OPEND-4220).
     distinctId: installationDistinctId ?? next.distinctId,
     appSessionId: next.appSessionId ?? context?.appSessionId,
+    // A later re-bridge that does not know about identity keeps the hold.
+    identityPending: next.identityPending ?? context?.identityPending,
   };
-  if (buffer.length === 0) return;
-  const drain = buffer.splice(0, buffer.length);
-  for (const item of drain) {
-    dispatch(item);
+  // Invariant (OPEND-4220 retest 2): on a fresh install, stability metrics
+  // emitted before the installation id exists are held, not sent under the
+  // anonymous id, so one first session never splits across device ids — e.g.
+  // a navigation's `started` and its terminal events. Exceptions still flow.
+  if (holdsMetricsForIdentity() && identityHoldTimer === null) {
+    identityHoldTimer = setTimeout(() => { identityHoldTimer = null; releaseHeldMetrics(); }, IDENTITY_HOLD_MS);
   }
+  drainBuffer();
 }
 
 export function clearExceptionTrackingContext(): void {
@@ -153,6 +195,7 @@ export function clearExceptionTrackingContext(): void {
   // nothing leaks.
   context = null;
   installationDistinctId = null;
+  if (identityHoldTimer !== null) { clearTimeout(identityHoldTimer); identityHoldTimer = null; }
 }
 
 // Switches the safety channel to the installation identity once it exists.
@@ -163,8 +206,10 @@ export function clearExceptionTrackingContext(): void {
 export function patchExceptionTrackingDistinctId(distinctId: string | null): void {
   if (!distinctId) return;
   installationDistinctId = distinctId;
-  if (!context || context.distinctId === distinctId) return;
-  context = { ...context, distinctId };
+  if (!context) return;
+  if (context.distinctId !== distinctId) context = { ...context, distinctId };
+  // Held first-session metrics now go out under the installation id.
+  releaseHeldMetrics();
 }
 
 // Patches only the appVersion field on an existing context. Safe to call
@@ -329,7 +374,7 @@ function enqueue(eventName: string, properties: Record<string, unknown>): void {
     body: { properties },
     timestamp,
   };
-  if (context == null) {
+  if (context == null || (holdsMetricsForIdentity() && heldForIdentity(eventName))) {
     if (buffer.length >= MAX_BUFFER_SIZE) buffer.shift();
     buffer.push(item);
     return;

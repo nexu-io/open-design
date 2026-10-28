@@ -123,6 +123,23 @@ async function settled(h: ReturnType<typeof harness>, eventName: string) {
 }
 
 describe('run analytics lifecycle', () => {
+  it('freezes persisted Motion intent for creation, terminal and recovery independently of discovery routing', async () => {
+    const project = { id: 'motion-project', name: 'Motion', metadataJson: JSON.stringify({ kind: 'video', videoModel: 'hyperframes-html', intent: 'motion-design' }) };
+    const db = { prepare: () => ({ get: () => project }) };
+    const h = harness(undefined, db);
+    h.lifecycle.install({
+      run: fakeRun({ projectId: project.id }),
+      body: { projectId: project.id, analyticsHints: { projectKind: 'hyperframes' } },
+      requestAnalyticsContext: CONTEXT as never,
+    });
+    expect((await settled(h, 'run_created')).properties.project_intent).toBe('motion-design');
+    project.metadataJson = JSON.stringify({ intent: 'hyperframes' });
+    h.settle({ status: 'succeeded' });
+    expect((await settled(h, 'run_finished')).properties.project_intent).toBe('motion-design');
+    expect(h.recoveries).toHaveLength(2);
+    expect(h.recoveries.every((row) => row.properties.project_intent === 'motion-design')).toBe(true);
+  });
+
   it.each([
     { attachments: undefined, expected: undefined },
     { attachments: [], expected: [] },

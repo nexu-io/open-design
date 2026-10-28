@@ -60,11 +60,15 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
   if (mode === 'cancel') return;
   if (mode === 'error') W({ type: 'message_update', assistantMessageEvent: { type: 'error', reason: 'Native Pi fixture failure' } });
   W({ type: 'agent_end' });
-  if (mode === 'nonzero') process.exit(143);
+  // Exercise a natural failure during the grace period, after the turn ends.
+  if (mode === 'nonzero') setTimeout(() => process.exit(143), 80);
 });
 `, 'utf8');
     await chmod(bin, 0o755);
-    process.env.PI_GRACEFUL_SHUTDOWN_MS = '10';
+    // Natural failure must arrive during the production grace period. The
+    // test-only fast shutdown belongs to the cases that exercise host teardown.
+    if (mode === 'nonzero') delete process.env.PI_GRACEFUL_SHUTDOWN_MS;
+    else process.env.PI_GRACEFUL_SHUTDOWN_MS = '10';
     started = await startServer({ port: 0, returnServer: true }) as StartedServer;
     const config = await fetch(`${started.url}/api/app-config`, {
       method: 'PUT', headers: { 'content-type': 'application/json' },

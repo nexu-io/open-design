@@ -18503,13 +18503,17 @@ export async function startServer({
         // the log tail that packaged startup telemetry samples.
         daemonHealth?.enableFatalReports();
         daemonHealth?.setAppVersion(currentAppVersion());
-        daemonHealth?.attachSink(({ eventName, properties, insertId }) =>
-          analyticsService.captureSafety({
-            eventName,
-            appVersion: currentAppVersion(),
-            properties,
-            insertId,
-          }));
+        daemonHealth?.attachSink(({ eventName, properties, insertId }) => {
+          const capture = { eventName, appVersion: currentAppVersion(), properties, insertId };
+          // Periodic health/metric events wait for the installation identity
+          // like every other stability metric (OPEND-4220 retest 2). Fault
+          // signals (unclean exit, memory pressure) stay immediate.
+          return eventName === 'client_process_memory_sample'
+            || eventName === 'daemon_storage_snapshot'
+            || eventName === 'daemon_health_summary'
+            ? telemetry.captureStabilityMetric(capture)
+            : analyticsService.captureSafety(capture);
+        });
         // When binding to all interfaces report localhost for local callers;
         // when binding to a specific address (e.g. a Tailscale IP) report that
         // address so remote callers and the sidecar use the correct URL.

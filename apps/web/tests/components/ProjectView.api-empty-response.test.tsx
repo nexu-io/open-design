@@ -1269,7 +1269,7 @@ async function waitForBoardSendReady() {
 
 async function sendTestPrompt() {
   await waitFor(() => {
-    expect(mockedListMessages).toHaveBeenCalledWith(project.id, 'conv-project-1', null, expect.any(AbortSignal));
+    expect(mockedListMessages).toHaveBeenCalledWith(project.id, 'conv-project-1', null, expect.any(AbortSignal), expect.any(Function));
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
   await waitFor(() => expect(screen.getByRole('button', { name: 'send' })).toBeTruthy());

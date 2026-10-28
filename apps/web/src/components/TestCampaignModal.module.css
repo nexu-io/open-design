@@ -5,6 +5,8 @@
 .backdrop { position: fixed; inset: 0; display: grid; place-items: center; background: rgb(0 0 0 / 45%); z-index: 1000; }
 .modal { max-width: calc(100vw - 32px); max-height: calc(100vh - 32px); overflow: auto; background: transparent; }
 .modal > * { display: block; max-width: 100%; }
+/* OPEND-3478: material draws the rounded card; solid :host fill shows as corner blocks. */
+.modal :global(opend-touchpoint) { background: transparent; }
 /* Focused only as the trap's fallback when content has no control; it is not itself a control, so it paints no platform focus ring. */
 .modal:focus { outline: none; }
 

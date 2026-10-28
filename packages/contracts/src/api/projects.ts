@@ -830,6 +830,18 @@ export interface MessagesResponse {
   messages: ChatMessage[];
 }
 
+/**
+ * Opt-in representation of GET /api/projects/:id/conversations/:cid/messages.
+ * Each UTF-8 line is one record. A matching end count is required before a
+ * client may treat the transcript as complete; EOF alone can be a broken read.
+ * The default application/json representation remains MessagesResponse.
+ */
+export const MESSAGES_STREAM_CONTENT_TYPE = 'application/x-ndjson';
+
+export type MessagesStreamRecord =
+  | { type: 'message'; message: ChatMessage }
+  | { type: 'end'; count: number };
+
 export type DeployProviderId = 'vercel-self' | 'cloudflare-pages';
 export type DeploymentStatus =
   | 'deploying'
