@@ -137,7 +137,7 @@ async function startServer(
   routeOverrides: Record<string, unknown> = {},
 ) {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-comment-ws-gate-'));
-  const db = openDatabase(tempDir);
+  const db = openDatabase(tempDir, { dataDir: path.join(tempDir, '.od') });
   database = db;
   const now = Date.now();
   for (const [id, conv] of [

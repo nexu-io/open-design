@@ -28,7 +28,7 @@ afterEach(() => {
 
 function fixture(now = 1_800_000_000_000) {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-amr-terminal-delivery-'));
-  const db = openDatabase(tempDir);
+  const db = openDatabase(tempDir, { dataDir: path.join(tempDir, '.od') });
   return { db, store: createAmrTerminalReportOutboxStore(db, () => now), now };
 }
 
@@ -58,7 +58,7 @@ describe('AMR terminal report delivery', () => {
     `).run('legacy-run', now - 5_000);
     legacy.close();
 
-    const reopened = openDatabase(tempDir);
+    const reopened = openDatabase(tempDir, { dataDir: path.join(tempDir, '.od') });
     const first = createAmrTerminalReportOutboxStore(reopened, () => now);
     const claimed = first.claimDue(now, 10_000);
     const second = createAmrTerminalReportOutboxStore(reopened, () => now);
@@ -236,7 +236,7 @@ describe('AMR terminal report delivery', () => {
     expect(store.claimDue(now + 999, 1_000)).toEqual([]);
 
     closeDatabase();
-    const reopened = openDatabase(tempDir!);
+    const reopened = openDatabase(tempDir!, { dataDir: path.join(tempDir!, '.od') });
     const recovered = createAmrTerminalReportOutboxStore(reopened, () => now + 1_000);
     const run = vi.fn(async (args: string[], _options?: VelaCommandOptions) => JSON.stringify({
       runId: args[3], outcome: args[5], terminalAt: args[7], recorded: false,

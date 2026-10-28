@@ -38,7 +38,7 @@ it.each(['raw', 'files'] as const)('DELETE %s post-unlink authority failure free
 async function exercise(route: 'raw' | 'files', fail: boolean, missing = false, fsReject = false, remoteReject = false) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'od-file-stop-'));
   const projects = path.join(root, 'projects');
-  const db = openDatabase(root);
+  const db = openDatabase(root, { dataDir: path.join(root, '.od') });
   let server: http.Server | undefined;
   try {
     const projectId = 'project';

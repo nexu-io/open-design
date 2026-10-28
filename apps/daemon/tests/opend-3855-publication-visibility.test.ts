@@ -31,7 +31,7 @@ it.each(['personal', 'team', 'personal-failure-retry', 'personal-association-fai
   'OPEND-3855: selected-file publication preserves %s visibility without a root upload', async mode => {
     const visibility = mode === 'team' ? 'team' : 'personal';
     const root = await mkdtemp(join(tmpdir(), 'od-3855-'));
-    const db = openDatabase(root);
+    const db = openDatabase(root, { dataDir: join(root, '.od') });
     const runtime = createCollabRuntime({ workspaceContext: { current: async () => context } });
     const app = express(); app.use(express.json());
     const server = createServer(app);

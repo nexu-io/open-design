@@ -17,7 +17,7 @@ import { registerCommentSyncStateRoutes } from '../src/routes/project/comments.j
 
 it('supplies scoped K8 over HTTP with unknown, login recovery, isolated retry and historical failure', async () => {
   const root = mkdtempSync(join(tmpdir(), 'od-k8-'));
-  const db = openDatabase(root);
+  const db = openDatabase(root, { dataDir: join(root, '.od') });
   const app = express(); const server = createServer(app);
   let available: boolean | null = null;
   let fail = false;

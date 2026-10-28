@@ -73,7 +73,7 @@ function cloudComment(id: string, patch: Partial<CollabCloudComment> = {}): Coll
 
 function seededDb() {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-collab-cloud-'));
-  const db = openDatabase(tempDir);
+  const db = openDatabase(tempDir, { dataDir: path.join(tempDir, '.od') });
   insertProject(db, { id: 'p1', name: 'Project', createdAt: 1, updatedAt: 1 });
   insertConversation(db, { id: 'conv-local', projectId: 'p1', title: 'Chat', createdAt: 1, updatedAt: 1 });
   return db;
@@ -655,7 +655,7 @@ function fakeClient() {
 describe('createCollabCloudService', () => {
   it('repairs a dedicated comment anchor for every active Team project and is idempotent', () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-collab-cloud-anchor-repair-'));
-    const db = openDatabase(tempDir);
+    const db = openDatabase(tempDir, { dataDir: path.join(tempDir, '.od') });
     for (const id of ['team-empty', 'team-existing', 'personal-empty', 'team-deleted']) {
       insertProject(db, { id, name: id, createdAt: 1, updatedAt: 1 });
     }
@@ -724,7 +724,7 @@ describe('createCollabCloudService', () => {
 
   it('re-homes Team comments before deleting an ordinary conversation but preserves Personal cascade deletion', () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-collab-cloud-anchor-delete-'));
-    const db = openDatabase(tempDir);
+    const db = openDatabase(tempDir, { dataDir: path.join(tempDir, '.od') });
     for (const projectId of ['team-project', 'personal-project'] as const) {
       insertProject(db, { id: projectId, name: projectId, createdAt: 1, updatedAt: 1 });
       ensureWorkspaceProject(db, {
@@ -788,7 +788,7 @@ describe('createCollabCloudService', () => {
 
   it('re-homes remote comments onto a stable empty local anchor', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-collab-cloud-anchor-'));
-    const db = openDatabase(tempDir);
+    const db = openDatabase(tempDir, { dataDir: path.join(tempDir, '.od') });
     insertProject(db, {
       id: 'p1',
       name: 'Pulled Team mirror',

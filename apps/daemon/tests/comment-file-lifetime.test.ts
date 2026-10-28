@@ -11,7 +11,7 @@ const f1 = '11111111-1111-4111-8111-111111111111';
 const f2 = '22222222-2222-4222-8222-222222222222';
 function setup() {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-comment-lifetime-'));
-  const db = openDatabase(dir);
+  const db = openDatabase(dir, { dataDir: path.join(dir, '.od') });
   insertProject(db, { id: 'p', name: 'P', createdAt: 1, updatedAt: 1 });
   insertConversation(db, { id: 'c', projectId: 'p', title: 'C', createdAt: 1, updatedAt: 1 });
   return db;

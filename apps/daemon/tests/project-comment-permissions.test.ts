@@ -69,7 +69,7 @@ async function startServer({
   measurement?: 'noop' | 'recording' | 'throwing' | 'rejecting' | 'pending';
 } = {}) {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-comment-perms-'));
-  const db = openDatabase(tempDir);
+  const db = openDatabase(tempDir, { dataDir: path.join(tempDir, '.od') });
   insertProject(db, {
     id: PROJECT,
     name: 'Project',

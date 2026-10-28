@@ -51,10 +51,6 @@ export function registryRootsForDataDir(dataDir: string): RegistryRoots {
   };
 }
 
-export function defaultRegistryRoots(): RegistryRoots {
-  return registryRootsForDataDir(path.resolve(process.env.OD_DATA_DIR ?? path.join(process.cwd(), '.od')));
-}
-
 export interface ScannedPlugin {
   record: InstalledPluginRecord;
   warnings: string[];

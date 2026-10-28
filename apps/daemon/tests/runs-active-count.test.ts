@@ -54,7 +54,7 @@ function sendApiError(
 
 async function startServer() {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-runs-active-count-'));
-  const db = openDatabase(tempDir);
+  const db = openDatabase(tempDir, { dataDir: path.join(tempDir, '.od') });
   const now = Date.now();
   for (const id of [TEAM_PROJECT, UNBOUND_PROJECT]) {
     insertProject(db, { id, name: id, createdAt: now, updatedAt: now });

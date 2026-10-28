@@ -22,7 +22,7 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startServer } from '../src/server.js';
 import {
-  defaultRegistryRoots,
+  registryRootsForDataDir,
   resolvePluginFolder,
   upsertInstalledPlugin,
 } from '../src/plugins/registry.js';
@@ -57,7 +57,7 @@ function workspaceHeaders(memberId: string, role: 'owner' | 'admin' | 'member', 
 }
 
 async function seedPluginFolder(pluginId: string): Promise<string> {
-  const pluginsRoot = defaultRegistryRoots().userPluginsRoot;
+  const pluginsRoot = registryRootsForDataDir(process.env.OD_DATA_DIR!).userPluginsRoot;
   const folder = path.join(pluginsRoot, pluginId);
   await mkdir(folder, { recursive: true });
   await writeFile(

@@ -29,7 +29,7 @@ afterEach(() => {
 
 function createFixture() {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "od-amr-terminal-reports-"));
-  const db = openDatabase(tempDir);
+  const db = openDatabase(tempDir, { dataDir: path.join(tempDir, '.od') });
   const outbox = createAmrTerminalReportOutboxStore(db);
   const runs = createRuns({
     createSseResponse: () => ({
@@ -123,7 +123,7 @@ describe("AMR terminal report outbox", () => {
     expect(outbox.listPending()).toEqual(expected);
 
     closeDatabase();
-    const reopened = openDatabase(tempDir!);
+    const reopened = openDatabase(tempDir!, { dataDir: path.join(tempDir!, '.od') });
     const reopenedOutbox = createAmrTerminalReportOutboxStore(reopened);
     reopenedOutbox.enqueue({
       runId: run.id,
@@ -307,7 +307,7 @@ describe("AMR terminal report outbox", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-05T05:00:00.000Z"));
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "od-amr-terminal-reports-"));
-    const db = openDatabase(tempDir);
+    const db = openDatabase(tempDir, { dataDir: path.join(tempDir, '.od') });
     const outbox = createAmrTerminalReportOutboxStore(db);
     const runsLogDir = path.join(tempDir, "runs");
     const bareRuns = createRuns({
@@ -336,7 +336,7 @@ describe("AMR terminal report outbox", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-05T06:00:00.000Z"));
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "od-amr-terminal-reports-"));
-    const db = openDatabase(tempDir);
+    const db = openDatabase(tempDir, { dataDir: path.join(tempDir, '.od') });
     const outbox = createAmrTerminalReportOutboxStore(db);
     const runsLogDir = path.join(tempDir, "runs");
     const recoveringRuns = createRuns({

@@ -42,7 +42,7 @@ afterEach(() => {
 
 function seededDb(): Db {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-sync-seq-'));
-  const db = openDatabase(tempDir);
+  const db = openDatabase(tempDir, { dataDir: path.join(tempDir, '.od') });
   insertProject(db, { id: 'p1', name: 'Project', createdAt: 1, updatedAt: 1 });
   insertConversation(db, { id: 'conv-local', projectId: 'p1', title: 'Chat', createdAt: 1, updatedAt: 1 });
   return db;

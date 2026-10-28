@@ -22,7 +22,7 @@ import { listProjectFileVersions } from '../../src/project-file-versions.js';
 it.each(['personal', 'team'] as const)('explicit HTTP/CLI preparation uses %s write authority, real source save/readback, conflict and retry', async (visibility) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'od-comment-source-http-'));
   const projects = path.join(root, 'projects');
-  const db = openDatabase(root);
+  const db = openDatabase(root, { dataDir: path.join(root, '.od') });
   let server: http.Server | undefined;
   let busy = false;
   let authorityMode: 'normal' | 'unavailable' | 'reader' | 'locked' = 'normal';

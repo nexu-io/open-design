@@ -123,7 +123,7 @@ function seedConversation(
 
 async function startServer() {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-runs-awaiting-'));
-  const db = openDatabase(tempDir);
+  const db = openDatabase(tempDir, { dataDir: path.join(tempDir, '.od') });
   const now = Date.now();
   for (const id of [TEAM_PROJECT, UNBOUND_PROJECT, ANSWERED_PROJECT, QUIET_PROJECT, RUNLESS_PROJECT]) {
     insertProject(db, { id, name: id, createdAt: now, updatedAt: now });

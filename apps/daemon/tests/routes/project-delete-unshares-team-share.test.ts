@@ -115,7 +115,7 @@ async function startServer(
 ) {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-project-delete-unshare-'));
   projectsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-project-delete-unshare-dir-'));
-  const db = openDatabase(tempDir);
+  const db = openDatabase(tempDir, { dataDir: path.join(tempDir, '.od') });
 
   const collab = createCollabRuntime({
     adapter: hub.adapter,
@@ -299,7 +299,7 @@ it('deletes a personal project with durable per-file residuals and retries indep
   const stopped: string[] = [];
   if (!tempDir) throw new Error('missing test data root');
   closeDatabase();
-  const reopened = createSqlitePublicFilePublicationStore(openDatabase(tempDir));
+  const reopened = createSqlitePublicFilePublicationStore(openDatabase(tempDir, { dataDir: path.join(tempDir, '.od') }));
   const startup = createPublicFileStopStartup(reopened, async key => ({ ...scope, stop: async () => { stopped.push(key.slug); } }));
   expect(await startup()).toMatchObject({ stopped: 1, failed: 0 });
   await startup(); expect(stopped).toEqual(['retry.html']);
@@ -488,7 +488,7 @@ describe('member-side convergence after an owner unshare (spec 04 §11, known ga
     // completed, so the hub is provably already in the "unshared" state by
     // the time the member's row is read below.
     const memberTempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-project-delete-unshare-member-'));
-    const memberDb = openDatabase(memberTempDir);
+    const memberDb = openDatabase(memberTempDir, { dataDir: path.join(memberTempDir, '.od') });
     try {
       insertProject(memberDb, { id: projectId, name: 'Team shared', createdAt: now, updatedAt: now });
       ensureWorkspaceProject(memberDb, {

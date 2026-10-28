@@ -164,7 +164,7 @@ describe('explicit project policy and stable root', () => {
   });
   it('demotion leaves the real SQLite public-link and comment records unchanged', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'od-explicit-demotion-'));
-    const db = openDatabase(dir);
+    const db = openDatabase(dir, { dataDir: join(dir, '.od') });
     try {
       insertProject(db, { id: 'p', name: 'P', createdAt: 1, updatedAt: 1 });
       insertConversation(db, { id: 'c', projectId: 'p', title: 'C', createdAt: 1, updatedAt: 1 });

@@ -114,7 +114,7 @@ it.each(['team', 'private-team', 'personal', 'stopped', 'lookup-error', 'lookup-
   expect(captured.comments[2]).not.toHaveProperty('publicationSlug');
   expect(captured.comments[3]).not.toHaveProperty('publicationSlug');
   root = mkdtempSync(join(tmpdir(), 'od-alias-wire-'));
-  const db = openDatabase(root);
+  const db = openDatabase(root, { dataDir: join(root, '.od') });
   const projectId = 'share-management-project';
   insertProject(db, { id: projectId, name: 'Capture', createdAt: 1, updatedAt: 1 });
   insertConversation(db, { id: 'local', projectId, title: 'Local', createdAt: 1, updatedAt: 1 });
@@ -200,7 +200,7 @@ it.each(['allowed', 'unpublished', 'foreign-project', 'absent', 'lookup-throws',
     const target = decoded.comments[1]!;
     const tombstone = decoded.comments[3]!;
     root = mkdtempSync(join(tmpdir(), 'od-tombstone-scope-'));
-    const db = openDatabase(root);
+    const db = openDatabase(root, { dataDir: join(root, '.od') });
     for (const id of ['share-management-project', 'foreign']) {
       insertProject(db, { id, name: id, createdAt: 1, updatedAt: 1 });
       insertConversation(db, { id: `local-${id}`, projectId: id, title: 'Local', createdAt: 1, updatedAt: 1 });

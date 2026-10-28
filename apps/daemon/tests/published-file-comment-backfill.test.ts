@@ -23,7 +23,7 @@ let root: string | undefined;
 afterEach(() => { closeDatabase(); if (root) rmSync(root, { recursive: true, force: true }); root = undefined; });
 function setup() {
   root = mkdtempSync(join(tmpdir(), 'od-backfill-'));
-  const db = openDatabase(root);
+  const db = openDatabase(root, { dataDir: join(root, '.od') });
   migratePublicFilePublications(db);
   const scope = { sourceFileId: '', resourceTeamId: 'w', ownerMemberId: 'owner', projectId: 'p', filePath: 'pages/work.html' };
   for (const projectId of ['p', 'other']) {
@@ -232,7 +232,7 @@ it('rolls back publication and ALL queued rows if any enqueue fails', () => {
 });
 it('persists mapping and intent across database reopen', () => {
   const s = setup(); s.add('a'); s.publish(); const before = s.outbox.listDue(Date.now());
-  closeDatabase(); const reopened = openDatabase(root!);
+  closeDatabase(); const reopened = openDatabase(root!, { dataDir: join(root!, '.od') });
   const queue = createCommentRelayOutboxStore(reopened);
   expect(queue.listDue(Date.now())).toEqual(before); expect(queue.isPublicationCurrent!(before[0]!)).toBe(true);
 });
@@ -313,7 +313,7 @@ it.each(['pending-edit', 'after-ack', 'restart', 'stopped', 'republished', 'othe
     if (scenario === 'stopped') s.publications.delete(s.scope);
     if (scenario === 'republished') s.publications.set(s.scope, s.publication);
     let queue = s.outbox;
-    if (scenario === 'restart') { closeDatabase(); queue = createCommentRelayOutboxStore(openDatabase(root!)); }
+    if (scenario === 'restart') { closeDatabase(); queue = createCommentRelayOutboxStore(openDatabase(root!, { dataDir: join(root!, '.od') })); }
     queue.enqueue({
       workspaceId: original.workspaceId,
       workspaceMemberId: scenario === 'other-principal' ? 'other' : original.workspaceMemberId,

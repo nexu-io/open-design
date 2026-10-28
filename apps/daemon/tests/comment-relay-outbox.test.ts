@@ -56,7 +56,7 @@ afterEach(() => {
 
 function seededDb() {
 	tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "od-comment-relay-outbox-"));
-	const db = openDatabase(tempDir);
+	const db = openDatabase(tempDir, { dataDir: path.join(tempDir, '.od') });
 	insertProject(db, { id: "p1", name: "Project", createdAt: 1, updatedAt: 1 });
 	insertConversation(db, {
 		id: "conv-local",
@@ -166,7 +166,7 @@ describe("durable Team comment relay outbox", () => {
 		expect(first.listDue(100)[0]?.eventKey).toBe(original.eventKey);
 		expect(first.acknowledge(first.listDue(100)[0]!, "delivered")).toBe(true);
 		closeDatabase();
-		const reopened = openDatabase(tempDir!);
+		const reopened = openDatabase(tempDir!, { dataDir: path.join(tempDir!, '.od') });
 		const second = createCommentRelayOutboxStore(reopened, () => 100);
 		second.enqueue({
 			...input,
@@ -515,7 +515,7 @@ describe("durable Team comment relay outbox", () => {
 		// A real restart closes the SQLite handle. Reopen both the durable outbox
 		// and publication witness rather than merely constructing another service.
 		closeDatabase();
-		const reopened = openDatabase(tempDir!);
+		const reopened = openDatabase(tempDir!, { dataDir: path.join(tempDir!, '.od') });
 		const restartedPublications = createSqlitePublicFilePublicationStore(
 			reopened,
 			() => 100,
@@ -719,7 +719,7 @@ describe("durable Team comment relay outbox", () => {
 		service.dispose();
 		// Cancellation and the unrelated controls survive restart independently.
 		closeDatabase();
-		const reopened = openDatabase(tempDir!);
+		const reopened = openDatabase(tempDir!, { dataDir: path.join(tempDir!, '.od') });
 		const restartedPublications = createSqlitePublicFilePublicationStore(
 			reopened,
 			() => 100,
@@ -1099,7 +1099,7 @@ describe("durable Team comment relay outbox", () => {
 
 		// A new service + newly opened SQLite handle sees and drains the same row.
 		closeDatabase();
-		const reopened = openDatabase(tempDir!);
+		const reopened = openDatabase(tempDir!, { dataDir: path.join(tempDir!, '.od') });
 		const reopenedOutbox = createCommentRelayOutboxStore(reopened, () => 200);
 		const confirmed: Array<{
 			commentId: string;
@@ -2060,7 +2060,7 @@ describe("durable Team comment relay outbox", () => {
 		service.dispose();
 		closeDatabase();
 
-		const reopened = openDatabase(tempDir!);
+		const reopened = openDatabase(tempDir!, { dataDir: path.join(tempDir!, '.od') });
 		const restartedOutbox = createCommentRelayOutboxStore(
 			reopened,
 			() => 1_400,

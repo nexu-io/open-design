@@ -24,7 +24,7 @@ const context: WorkspaceCollabContext = {
 };
 function setup() {
   root = mkdtempSync(join(tmpdir(), 'od-align-'));
-  const db = openDatabase(root);
+  const db = openDatabase(root, { dataDir: join(root, '.od') });
   insertProject(db, { id: 'p', name: 'P', createdAt: 1, updatedAt: 1 });
   insertConversation(db, { id: 'local', projectId: 'p', title: 'C', createdAt: 1, updatedAt: 1 });
   return db;

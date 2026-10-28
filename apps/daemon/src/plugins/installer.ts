@@ -24,7 +24,6 @@ import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { x as tarExtract } from 'tar';
 import {
-  defaultRegistryRoots,
   deleteInstalledPlugin,
   getInstalledPlugin,
   resolvePluginFolder,
@@ -77,9 +76,12 @@ export type PluginInstallErrorCode =
 
 export interface InstallOptions {
   source: string;
-  // Forwarded from daemon runtime context; defaults to defaultRegistryRoots()
-  // so daemon tests can point at a sandboxed data root.
-  roots?: RegistryRoots;
+  // The registry root this install writes into. Required: the daemon resolves
+  // it once from RUNTIME_DATA_DIR (AGENTS.md -> "Daemon data directory
+  // contract"), and tests point it at a sandbox. A default here used to
+  // recompute the data root from env/cwd, which silently wrote plugin bytes
+  // outside the resolved root.
+  roots: RegistryRoots;
   // 50 MiB default mirrors spec §7.2; tests pin a tighter cap.
   maxBytes?: number;
   // When true (the default), an existing install with the same id is
@@ -719,12 +721,34 @@ function sanitizeRelativePath(input: string): string {
     .join(path.sep);
 }
 
+/**
+ * The registry root a plugin install or uninstall writes into.
+ *
+ * The daemon resolves this once from `RUNTIME_DATA_DIR` and passes it in
+ * (AGENTS.md -> "Daemon data directory contract"). It is deliberately not
+ * defaulted here: a default that recomputed the data root from env or cwd
+ * silently wrote plugin bytes outside the resolved root.
+ */
+function requireRegistryRoots(
+  roots: RegistryRoots | undefined,
+  operation: 'install' | 'uninstall',
+): RegistryRoots {
+  if (roots == null) {
+    throw new Error(
+      `plugin ${operation} requires an explicit registry root (RegistryRoots); ` +
+        'pass the daemon-resolved plugin roots derived from RUNTIME_DATA_DIR — ' +
+        'see AGENTS.md -> "Daemon data directory contract".',
+    );
+  }
+  return roots;
+}
+
 export async function* installFromLocalFolder(
   db: SqliteDb,
   opts: InstallOptions & { _stagedFolder?: string; _stagedSourceKind?: PluginSourceKind },
 ): AsyncGenerator<InstallEvent, void, void> {
   const warnings: string[] = [];
-  const roots = opts.roots ?? defaultRegistryRoots();
+  const roots = requireRegistryRoots(opts.roots, 'install');
   // When called from the archive backend, the bytes are already on disk
   // under `_stagedFolder`; the public `source` field still records
   // provenance (github:owner/repo, https://example.com/foo.tgz, etc.).
@@ -877,8 +901,11 @@ export function isSafePluginId(id: string): boolean {
 export async function uninstallPlugin(
   db: SqliteDb,
   id: string,
-  roots: RegistryRoots = defaultRegistryRoots(),
+  roots: RegistryRoots,
 ): Promise<UninstallResult> {
+  // `roots` is required by the signature; this also guards untyped callers so
+  // an omission fails loudly instead of reaching `path.join(undefined, id)`.
+  roots = requireRegistryRoots(roots, 'uninstall');
   // A plugin id is a single safe folder name — never a path. Validate it
   // BEFORE it reaches `path.join(...) + rm -rf`, so an id carrying traversal
   // segments (e.g. a URL-encoded `../../…`) cannot escape the plugin registry

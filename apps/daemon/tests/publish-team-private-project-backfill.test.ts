@@ -38,7 +38,7 @@ const target = { filePath: FILE, elementId: 'hero', selector: 'h1', label: 'Hero
 // written right after publishing, and later showed two pins numbered 1.
 it('publishing a private team-workspace project preserves personal visibility and delivers exact-file comments once with distinct pins', async () => {
   const root = await mkdtemp(join(tmpdir(), 'od-publish-team-private-'));
-  const db = openDatabase(root);
+  const db = openDatabase(root, { dataDir: join(root, '.od') });
   const context: WorkspaceCollabContext = {
     workspaceId: 'w', teamId: 'w', workspaceMemberId: 'owner', workspaceType: 'team', role: 'owner',
     memberStatus: 'active', lifecycleState: 'active', billingState: 'active', planId: null, providerMode: 'platform_credits',
@@ -140,7 +140,7 @@ it('publishing a private team-workspace project preserves personal visibility an
 // not a transient state waiting for automatic catalog promotion.
 it('a personal backfill queued in a team workspace is delivered without changing project visibility', async () => {
   const root = await mkdtemp(join(tmpdir(), 'od-relay-team-private-'));
-  const db = openDatabase(root);
+  const db = openDatabase(root, { dataDir: join(root, '.od') });
   const context: WorkspaceCollabContext = {
     workspaceId: 'w', teamId: 'w', workspaceMemberId: 'owner', workspaceType: 'team', role: 'owner',
     memberStatus: 'active', lifecycleState: 'active', billingState: 'active', planId: null, providerMode: 'platform_credits',
@@ -194,7 +194,7 @@ it('a personal backfill queued in a team workspace is delivered without changing
 
 it('a stopped private-in-team publication is cancelled without waiting for team promotion', async () => {
   const root = await mkdtemp(join(tmpdir(), 'od-relay-team-private-cap-'));
-  const db = openDatabase(root);
+  const db = openDatabase(root, { dataDir: join(root, '.od') });
   const context = {
     workspaceId: 'w', teamId: 'w', workspaceMemberId: 'owner', workspaceType: 'team', role: 'owner',
     memberStatus: 'active', lifecycleState: 'active', billingState: 'active', planId: null, providerMode: 'platform_credits',
@@ -256,7 +256,7 @@ it('only the same creator in the same workspace is re-queued as Team relay', () 
 // Publication must not overwrite or claim a concurrent explicit team transition.
 async function publishWithCatalogRace(initialVisibility: 'personal' | 'team') {
   const root = await mkdtemp(join(tmpdir(), 'od-publish-team-race-'));
-  const db = openDatabase(root);
+  const db = openDatabase(root, { dataDir: join(root, '.od') });
   const context: WorkspaceCollabContext = {
     workspaceId: 'w', teamId: 'w', workspaceMemberId: 'owner', workspaceType: 'team', role: 'owner',
     memberStatus: 'active', lifecycleState: 'active', billingState: 'active', planId: null, providerMode: 'platform_credits',

@@ -43,7 +43,7 @@ afterEach(() => {
 describe('preview comment persistence', () => {
   it('keeps critique migration wired while adding pod columns on a fresh database', () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-comments-'));
-    const db = openDatabase(tempDir);
+    const db = openDatabase(tempDir, { dataDir: path.join(tempDir, '.od') });
 
     const previewColumns = db
       .prepare(`PRAGMA table_info(preview_comments)`)
@@ -60,7 +60,7 @@ describe('preview comment persistence', () => {
 
   it('adds the team-collab anchor columns on a fresh database', () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-comments-'));
-    const db = openDatabase(tempDir);
+    const db = openDatabase(tempDir, { dataDir: path.join(tempDir, '.od') });
     expect(tableColumnNames(db.prepare(`PRAGMA table_info(preview_comments)`).all())).toEqual(
       expect.arrayContaining([
         'anchor_state',
@@ -350,7 +350,7 @@ describe('preview comment persistence', () => {
     );
     legacyDb.close();
 
-    const db = openDatabase(tempDir);
+    const db = openDatabase(tempDir, { dataDir: path.join(tempDir, '.od') });
     const table = db
       .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'preview_comments'`)
       .get() as { sql?: string } | undefined;
@@ -760,7 +760,7 @@ describe('preview comment agent payload', () => {
 
 function seededDb() {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-comments-'));
-  const db = openDatabase(tempDir);
+  const db = openDatabase(tempDir, { dataDir: path.join(tempDir, '.od') });
   insertProject(db, {
     id: 'project-1',
     name: 'Project',

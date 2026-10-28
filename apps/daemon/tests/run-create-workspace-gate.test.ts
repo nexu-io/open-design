@@ -78,7 +78,7 @@ function workspaceHeaders(memberId: string, role: 'owner' | 'admin' | 'member') 
 }
 
 function seedPluginSnapshot(projectId: string) {
-  const db = openDatabase(tempDir!);
+  const db = openDatabase(tempDir!, { dataDir: path.join(tempDir!, '.od') });
   const snapshot = createSnapshot(db, {
     projectId,
     pluginId: 'scope-test-plugin',
@@ -99,7 +99,7 @@ function seedPluginSnapshot(projectId: string) {
 }
 
 function snapshotProjectId(snapshotId: string): string | null {
-  const row = openDatabase(tempDir!)
+  const row = openDatabase(tempDir!, { dataDir: path.join(tempDir!, '.od') })
     .prepare('SELECT project_id AS projectId FROM applied_plugin_snapshots WHERE id = ?')
     .get(snapshotId) as { projectId?: string | null } | undefined;
   return typeof row?.projectId === 'string' ? row.projectId : null;
@@ -248,7 +248,7 @@ async function startServer(opts?: {
   strategyTaskAtPhysicalCancel = null;
   runsServiceStub = null;
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-run-ws-gate-'));
-  const db = openDatabase(tempDir);
+  const db = openDatabase(tempDir, { dataDir: path.join(tempDir, '.od') });
   const now = Date.now();
   for (const id of [TEAM_PROJECT, PERSONAL_PROJECT, UNBOUND_PROJECT]) {
     insertProject(db, {
@@ -926,7 +926,7 @@ describe('POST /api/runs — workspace mutation gate', () => {
       isAmrSignedIn: () => true,
       verifyWorkspaceRequestAuthority,
     });
-    const db = openDatabase(tempDir!);
+    const db = openDatabase(tempDir!, { dataDir: path.join(tempDir!, '.od') });
 
     const response = await fetch(`${baseUrl}/api/runs`, {
       method: 'POST',
@@ -1021,7 +1021,7 @@ describe('POST /api/runs — workspace mutation gate', () => {
     expect(response.status).toBe(404);
     expect(await response.json()).toMatchObject({ error: { code: 'plugin-not-found' } });
     expect(calls).toEqual(['plugin']);
-    expect(getWorkspaceProjectByProjectId(openDatabase(tempDir!), UNBOUND_PROJECT))
+    expect(getWorkspaceProjectByProjectId(openDatabase(tempDir!, { dataDir: path.join(tempDir!, '.od') }), UNBOUND_PROJECT))
       .toMatchObject({
         workspaceId: WORKSPACE_ID,
         createdByWorkspaceMemberId: OWNER_MEMBER_ID,
@@ -1063,9 +1063,9 @@ describe('POST /api/runs — workspace mutation gate', () => {
       error: { code: 'snapshot-not-found' },
     });
     expect(snapshotProjectId(snapshot.snapshotId)).toBe(TEAM_PROJECT);
-    expect(getProject(openDatabase(tempDir!), TEAM_PROJECT)?.appliedPluginSnapshotId)
+    expect(getProject(openDatabase(tempDir!, { dataDir: path.join(tempDir!, '.od') }), TEAM_PROJECT)?.appliedPluginSnapshotId)
       .toBe(snapshot.snapshotId);
-    expect(getProject(openDatabase(tempDir!), PERSONAL_PROJECT)?.appliedPluginSnapshotId ?? null)
+    expect(getProject(openDatabase(tempDir!, { dataDir: path.join(tempDir!, '.od') }), PERSONAL_PROJECT)?.appliedPluginSnapshotId ?? null)
       .toBeNull();
   });
 
@@ -1093,7 +1093,7 @@ describe('POST /api/runs — workspace mutation gate', () => {
     });
     expect(createdRunCount).toBe(0);
     expect(snapshotProjectId(snapshot.snapshotId)).toBe(TEAM_PROJECT);
-    expect(getProject(openDatabase(tempDir!), PERSONAL_PROJECT)?.appliedPluginSnapshotId ?? null)
+    expect(getProject(openDatabase(tempDir!, { dataDir: path.join(tempDir!, '.od') }), PERSONAL_PROJECT)?.appliedPluginSnapshotId ?? null)
       .toBeNull();
   });
 
@@ -1126,7 +1126,7 @@ describe('POST /api/runs — workspace mutation gate', () => {
       expect(loadPluginRegistryView).not.toHaveBeenCalled();
       expect(createdRunCount).toBe(0);
       expect(snapshotProjectId(snapshot.snapshotId)).toBe(PERSONAL_PROJECT);
-      expect(getProject(openDatabase(tempDir!), PERSONAL_PROJECT)?.appliedPluginSnapshotId)
+      expect(getProject(openDatabase(tempDir!, { dataDir: path.join(tempDir!, '.od') }), PERSONAL_PROJECT)?.appliedPluginSnapshotId)
         .toBe(snapshot.snapshotId);
     },
   );
@@ -1154,7 +1154,7 @@ describe('POST /api/runs — workspace mutation gate', () => {
       appliedPluginSnapshotId: snapshot.snapshotId,
     });
     expect(snapshotProjectId(snapshot.snapshotId)).toBe(PERSONAL_PROJECT);
-    expect(getProject(openDatabase(tempDir!), PERSONAL_PROJECT)?.appliedPluginSnapshotId)
+    expect(getProject(openDatabase(tempDir!, { dataDir: path.join(tempDir!, '.od') }), PERSONAL_PROJECT)?.appliedPluginSnapshotId)
       .toBe(snapshot.snapshotId);
   });
 });
@@ -1437,7 +1437,7 @@ describe('POST /api/runs — one-time Personal adoption for signed-in AMR', () =
       expect(response.status).toBe(202);
       expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
       expect(
-        getWorkspaceProjectByProjectId(openDatabase(tempDir!), UNBOUND_PROJECT),
+        getWorkspaceProjectByProjectId(openDatabase(tempDir!, { dataDir: path.join(tempDir!, '.od') }), UNBOUND_PROJECT),
       ).toMatchObject({
         workspaceId: WORKSPACE_ID,
         visibility: 'personal',
@@ -1484,7 +1484,7 @@ describe('POST /api/runs — one-time Personal adoption for signed-in AMR', () =
 
     expect((await run(OWNER_MEMBER_ID, 'owner')).status).toBe(202);
     expect(
-      getWorkspaceProjectByProjectId(openDatabase(tempDir!), UNBOUND_PROJECT),
+      getWorkspaceProjectByProjectId(openDatabase(tempDir!, { dataDir: path.join(tempDir!, '.od') }), UNBOUND_PROJECT),
     ).toMatchObject({
       workspaceId: WORKSPACE_ID,
       visibility: 'personal',
@@ -1522,7 +1522,7 @@ describe('POST /api/runs — one-time Personal adoption for signed-in AMR', () =
       expect(response.status).toBe(202);
       expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
       expect(
-        getWorkspaceProjectByProjectId(openDatabase(tempDir!), UNBOUND_PROJECT),
+        getWorkspaceProjectByProjectId(openDatabase(tempDir!, { dataDir: path.join(tempDir!, '.od') }), UNBOUND_PROJECT),
       ).toBeUndefined();
     },
   );
@@ -1564,7 +1564,7 @@ describe('POST /api/runs — one-time Personal adoption for signed-in AMR', () =
       error: { code: 'AMR_PERSONAL_WORKSPACE_REQUIRED' },
     });
     expect(
-      getWorkspaceProjectByProjectId(openDatabase(tempDir!), UNBOUND_PROJECT),
+      getWorkspaceProjectByProjectId(openDatabase(tempDir!, { dataDir: path.join(tempDir!, '.od') }), UNBOUND_PROJECT),
     ).toBeUndefined();
   });
 
@@ -1598,7 +1598,7 @@ describe('POST /api/runs — one-time Personal adoption for signed-in AMR', () =
     expect(response.status).toBe(202);
     expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
     expect(
-      getWorkspaceProjectByProjectId(openDatabase(tempDir!), UNBOUND_PROJECT),
+      getWorkspaceProjectByProjectId(openDatabase(tempDir!, { dataDir: path.join(tempDir!, '.od') }), UNBOUND_PROJECT),
     ).toMatchObject({
       workspaceId: WORKSPACE_ID,
       visibility: 'personal',
@@ -1643,7 +1643,7 @@ describe('POST /api/runs — one-time Personal adoption for signed-in AMR', () =
       expect(isAmrSignedIn).not.toHaveBeenCalled();
       expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
       expect(
-        getWorkspaceProjectByProjectId(openDatabase(tempDir!), UNBOUND_PROJECT),
+        getWorkspaceProjectByProjectId(openDatabase(tempDir!, { dataDir: path.join(tempDir!, '.od') }), UNBOUND_PROJECT),
       ).toBeUndefined();
     },
   );
@@ -1672,7 +1672,7 @@ describe('POST /api/runs — one-time Personal adoption for signed-in AMR', () =
     expect(response.status).toBe(202);
     expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
     expect(
-      getWorkspaceProjectByProjectId(openDatabase(tempDir!), UNBOUND_PROJECT),
+      getWorkspaceProjectByProjectId(openDatabase(tempDir!, { dataDir: path.join(tempDir!, '.od') }), UNBOUND_PROJECT),
     ).toBeUndefined();
   });
 });

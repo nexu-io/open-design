@@ -19,7 +19,7 @@ afterEach(() => { closeDatabase(); if (root) rmSync(root, { recursive: true, for
 
 function setup() {
   root = mkdtempSync(join(tmpdir(), 'od-published-comment-backfill-state-'));
-  const db = openDatabase(root);
+  const db = openDatabase(root, { dataDir: join(root, '.od') });
   migratePublicFilePublications(db);
   const scope = { resourceTeamId: 'workspace-a', ownerMemberId: 'member-a', projectId: 'project-a', filePath: 'a.html' };
   const publications = createSqlitePublicFilePublicationStore(db, () => 1);
@@ -144,7 +144,7 @@ it('marks queue removal as a safe discard by default, but succeeds only with exp
   enqueue('b');
   for (const row of outbox.listDue(1)) expect(outbox.acknowledge(row, 'delivered')).toBe(true);
   closeDatabase();
-  const reopened = openDatabase(root!);
+  const reopened = openDatabase(root!, { dataDir: join(root!, '.od') });
   expect(readPublishedCommentBackfill(reopened, subject)).toEqual({ state: 'succeeded', filePath: 'a.html', publicationRevision: revision.token, retryable: false, total: 2, synced: 2 });
 });
 

@@ -15,7 +15,7 @@ import { workspaceContextFromDirectoryItem } from '../../src/collab/vela-workspa
 
 it.each([false, true])('folder deletion revokes descendants only; failure=%s preserves bytes and durable retry', async fail => {
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'od-folder-stop-')); const projects=path.join(root,'projects');
- const db=openDatabase(root); let server:http.Server|undefined;
+ const db=openDatabase(root, { dataDir: path.join(root, '.od') }); let server:http.Server|undefined;
  const scope={resourceTeamId:'workspace',ownerMemberId:'owner',projectId:'project'};
  const files=['folder/index.html','folder/deep/page.html','folder-other/index.html','sibling.html'];
  try {

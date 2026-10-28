@@ -106,7 +106,7 @@ function runCliWithStdin(args: string[], input: string) {
 
 async function startRouteServer() {
   tempRoot = mkdtempSync(join(tmpdir(), 'od-comment-cli-sqlite-'));
-  db = openDatabase(tempRoot);
+  db = openDatabase(tempRoot, { dataDir: join(tempRoot, '.od') });
   insertProject(db, { id: PROJECT, name: 'CLI SQLite', createdAt: 1, updatedAt: 1 });
   insertConversation(db, { id: CONVERSATION, projectId: PROJECT, title: 'CLI', createdAt: 1, updatedAt: 1 });
   ensureWorkspaceProject(db, { projectId: PROJECT, workspaceId: WORKSPACE, visibility: 'team', createdByWorkspaceMemberId: OWNER });
@@ -221,7 +221,7 @@ describe('od comment CLI HTTP/SQLite route integration', () => {
     expect(getProjectCommentReadState(db!, PROJECT, ownerScope)).toEqual(clampedState);
 
     closeDatabase();
-    db = openDatabase(tempRoot);
+    db = openDatabase(tempRoot, { dataDir: join(tempRoot, '.od') });
     expect(getProjectCommentReadState(db, PROJECT, ownerScope)).toEqual(clampedState);
     expect(getProjectCommentReadState(db, PROJECT, otherScope)).toEqual({ projectId: PROJECT, lastReadAt: suppliedReadAt });
   });

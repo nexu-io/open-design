@@ -242,7 +242,7 @@ interface RelayLog {
 
 async function startHarness() {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-comment-sync-eligibility-'));
-  const db = openDatabase(tempDir);
+  const db = openDatabase(tempDir, { dataDir: path.join(tempDir, '.od') });
   const now = Date.now();
 
   for (const cell of ALL_CELLS) {

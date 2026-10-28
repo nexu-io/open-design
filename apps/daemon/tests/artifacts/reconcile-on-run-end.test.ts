@@ -24,7 +24,7 @@ afterEach(() => {
 
 function setup() {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-reconcile-'));
-  const db = openDatabase(tempDir);
+  const db = openDatabase(tempDir, { dataDir: path.join(tempDir, '.od') });
   insertProject(db, { id: PROJECT_ID, name: 'Reconcile Test', createdAt: 1, updatedAt: 1 });
   projectsRoot = path.join(tempDir, 'projects');
   fs.mkdirSync(path.join(projectsRoot, PROJECT_ID), { recursive: true });

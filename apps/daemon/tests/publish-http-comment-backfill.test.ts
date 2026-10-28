@@ -75,7 +75,7 @@ it.each([false, true])(
 	"production publish HTTP uses real comment transaction; second enqueue fails=%s",
 	async (fail) => {
 		const root = await mkdtemp(join(tmpdir(), "od-publish-http-backfill-"));
-		const db = openDatabase(root);
+		const db = openDatabase(root, { dataDir: join(root, '.od') });
 		const context: WorkspaceCollabContext = {
 			workspaceId: "w",
 			workspaceMemberId: "owner",
@@ -642,7 +642,7 @@ it.each([false, true])(
 				);
 				runtime.dispose();
 				closeDatabase();
-				const reopened = openDatabase(root);
+				const reopened = openDatabase(root, { dataDir: join(root, '.od') });
 				const recoveredQueue = createCommentRelayOutboxStore(reopened);
 				const recoveredStore = createSqlitePublicFilePublicationStore(reopened);
 				expect(recoveredQueue.listDue(Date.now())).toEqual(rows);

@@ -36,7 +36,7 @@ describe('media task route recovery', () => {
   it('lists image tasks with persisted run ownership for ChatPanel progress', async () => {
     const dataDir = process.env.OD_DATA_DIR;
     if (!dataDir) throw new Error('OD_DATA_DIR is required by the daemon test harness');
-    const db = openDatabase(process.cwd(), dataDir === undefined ? {} : { dataDir });
+    const db = openDatabase(process.cwd(), { dataDir: dataDir! });
     const projectId = `project_${randomUUID()}`;
     const runId = `run_${randomUUID()}`;
     const now = Date.now();
@@ -87,7 +87,7 @@ describe('media task route recovery', () => {
   it('reconciles a completed media task to the uniquely renamed project file', async () => {
     const dataDir = process.env.OD_DATA_DIR;
     if (!dataDir) throw new Error('OD_DATA_DIR is required by the daemon test harness');
-    const db = openDatabase(process.cwd(), { dataDir });
+    const db = openDatabase(process.cwd(), { dataDir: dataDir! });
     const projectId = `project_${randomUUID()}`;
     const taskId = `task_${randomUUID()}`;
     const now = Date.now();
@@ -151,7 +151,7 @@ describe('media task route recovery', () => {
 
   it('accepts only a same-project token explicitly allowed to poll media tasks', async () => {
     const dataDir = process.env.OD_DATA_DIR;
-    const db = openDatabase(process.cwd(), dataDir === undefined ? {} : { dataDir });
+    const db = openDatabase(process.cwd(), { dataDir: dataDir! });
     const projectId = `project_${randomUUID()}`;
     const taskId = `task_${randomUUID()}`;
     const runId = `run_${randomUUID()}`;
@@ -259,7 +259,7 @@ describe('media task route recovery', () => {
 
   it('fails closed when a media wait request presents an invalid or expired bearer token', async () => {
     const dataDir = process.env.OD_DATA_DIR;
-    const db = openDatabase(process.cwd(), dataDir === undefined ? {} : { dataDir });
+    const db = openDatabase(process.cwd(), { dataDir: dataDir! });
     const projectId = `project_${randomUUID()}`;
     const taskId = `task_${randomUUID()}`;
     const now = Date.now();
@@ -322,7 +322,7 @@ describe('media task route recovery', () => {
 
   it('uses the tool grant and persisted project binding without querying Workspace authority', async () => {
     const dataDir = process.env.OD_DATA_DIR;
-    const db = openDatabase(process.cwd(), dataDir === undefined ? {} : { dataDir });
+    const db = openDatabase(process.cwd(), { dataDir: dataDir! });
     const projectId = `project_${randomUUID()}`;
     const workspaceId = `workspace_${randomUUID()}`;
     const now = Date.now();
@@ -422,7 +422,7 @@ describe('media task route recovery', () => {
   ] as const)('%s', async (_label, authorization, expected) => {
     // Given: a running task that a header-free browser request can already read.
     const dataDir = process.env.OD_DATA_DIR;
-    const db = openDatabase(process.cwd(), dataDir === undefined ? {} : { dataDir });
+    const db = openDatabase(process.cwd(), { dataDir: dataDir! });
     const projectId = `project_${randomUUID()}`;
     const taskId = `task_${randomUUID()}`;
     const now = Date.now() - 5_000;
@@ -473,7 +473,7 @@ describe('media task route recovery', () => {
 
   it('recovers a pre-restart running task so wait returns interrupted instead of 404', async () => {
     const dataDir = process.env.OD_DATA_DIR;
-    const db = openDatabase(process.cwd(), dataDir === undefined ? {} : { dataDir });
+    const db = openDatabase(process.cwd(), { dataDir: dataDir! });
     const projectId = `project_${randomUUID()}`;
     const taskId = `task_${randomUUID()}`;
     const now = Date.now() - 5_000;
@@ -526,7 +526,7 @@ describe('media task route recovery', () => {
     const originalHttpProxy = process.env.HTTP_PROXY;
     const originalHttpsProxy = process.env.HTTPS_PROXY;
     const originalAllProxy = process.env.ALL_PROXY;
-    const db = openDatabase(process.cwd(), dataDir === undefined ? {} : { dataDir });
+    const db = openDatabase(process.cwd(), { dataDir: dataDir! });
     const projectId = `project_${randomUUID()}`;
     const now = Date.now() - 5_000;
 

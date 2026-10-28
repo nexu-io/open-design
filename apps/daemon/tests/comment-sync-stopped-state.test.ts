@@ -17,7 +17,7 @@ const remote = (status: 'active' | 'stopped') => ({ projectId: 'p', bindingExist
 
 it('reads K3 from authenticated per-file cloud history after stop, never from missing local rows', async () => {
   const root = mkdtempSync(join(tmpdir(), 'od-k3-state-'));
-  const db = openDatabase(root);
+  const db = openDatabase(root, { dataDir: join(root, '.od') });
   const app = express();
   const server = createServer(app);
   let answer = remote('active');

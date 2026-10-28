@@ -31,7 +31,7 @@ function seedProject(input: {
   memberId?: string;
 }) {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-amr-persisted-scope-'));
-  const db = openDatabase(tempDir);
+  const db = openDatabase(tempDir, { dataDir: path.join(tempDir, '.od') });
   const now = Date.now();
   insertProject(db, {
     id: input.projectId,

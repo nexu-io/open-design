@@ -162,7 +162,7 @@ afterEach(() => {
 
 function seededDb(): Db {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-member-sync-'));
-  const db = openDatabase(tempDir);
+  const db = openDatabase(tempDir, { dataDir: path.join(tempDir, '.od') });
   insertProject(db, { id: 'p1', name: 'Project', createdAt: 1, updatedAt: 1 });
   insertConversation(db, { id: 'conv-local', projectId: 'p1', title: 'Chat', createdAt: 1, updatedAt: 1 });
   return db;
@@ -451,7 +451,7 @@ describe('C3-LITE member page drain', () => {
     expect(ids(db)).toContain('stale');
 
     closeDatabase();
-    const reopened = openDatabase(tempDir!);
+    const reopened = openDatabase(tempDir!, { dataDir: path.join(tempDir!, '.od') });
     crash = false;
     const restarted = harness(reopened, cloud);
     cloud.requests = [];
@@ -953,7 +953,7 @@ describe('comment-inbound-store page commit', () => {
     const store = createCommentInboundStore(db);
     expect(store.apply({ scope: SCOPE, query: { mode: 'snapshot' }, page: terminal(), merge: merge(db) })).toMatchObject({ status: 'committed' });
     closeDatabase();
-    const reopened = openDatabase(tempDir!);
+    const reopened = openDatabase(tempDir!, { dataDir: path.join(tempDir!, '.od') });
     expect(readMemberSyncCursor(reopened, SCOPE)).toMatchObject({ phase: 'incremental', resumeToken: 'c3l1.r1', pageToken: null });
   });
 

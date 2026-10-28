@@ -25,7 +25,7 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startServer } from '../src/server.js';
 import {
-  defaultRegistryRoots,
+  registryRootsForDataDir,
   resolvePluginFolder,
   upsertInstalledPlugin,
 } from '../src/plugins/registry.js';
@@ -60,7 +60,7 @@ beforeAll(async () => {
   // Seed the safe control through the same resolved registry record shape as
   // a legacy local install. Merely dropping a folder after startup does not
   // make it an installed plugin and correctly returns 404.
-  const pluginsRoot = defaultRegistryRoots().userPluginsRoot;
+  const pluginsRoot = registryRootsForDataDir(process.env.OD_DATA_DIR!).userPluginsRoot;
   orphanFolder = path.join(pluginsRoot, 'orphan-plugin');
   await mkdir(orphanFolder, { recursive: true });
   await writeFile(
@@ -86,7 +86,7 @@ afterAll(async () => {
 
 describe('POST /api/plugins/:id/uninstall — traversal in plugin id', () => {
   it('rejects a traversal id and never deletes outside the plugin registry root', async () => {
-    const pluginsRoot = defaultRegistryRoots().userPluginsRoot;
+    const pluginsRoot = registryRootsForDataDir(process.env.OD_DATA_DIR!).userPluginsRoot;
     const rel = path.relative(pluginsRoot, outsideDir);
     // One URL path segment that decodes to e.g. '../../outside-root'.
     const encodedId = rel.split(path.sep).map(encodeURIComponent).join('%2F');
@@ -106,7 +106,7 @@ describe('POST /api/plugins/:id/uninstall — traversal in plugin id', () => {
   });
 
   it('control: a safe id still removes only its own folder inside the registry root', async () => {
-    const pluginsRoot = defaultRegistryRoots().userPluginsRoot;
+    const pluginsRoot = registryRootsForDataDir(process.env.OD_DATA_DIR!).userPluginsRoot;
 
     const resp = await fetch(`${baseUrl}/api/plugins/orphan-plugin/uninstall`, { method: 'POST' });
 

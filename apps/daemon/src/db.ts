@@ -80,8 +80,29 @@ function rows(value: unknown[]): DbRow[] {
   return value.map((item) => row(item) ?? {});
 }
 
-export function openDatabase(projectRoot: string, { dataDir }: { dataDir?: string } = {}): SqliteDb {
-  const dir = dataDir ? path.resolve(dataDir) : path.join(projectRoot, '.od');
+/**
+ * Resolve the directory a daemon database may live in.
+ *
+ * The resolved daemon data root is the only authority for daemon-owned data
+ * paths (AGENTS.md -> "Daemon data directory contract"), so the root is an
+ * explicit argument. A caller that omits it is a bug rather than a
+ * configuration: the previous `<projectRoot>/.od` fallback silently opened a
+ * second SQLite store outside `RUNTIME_DATA_DIR`. `projectRoot` is carried
+ * only to make that failure legible.
+ */
+function resolveDatabaseDir(projectRoot: string, dataDir: string | undefined): string {
+  if (typeof dataDir !== 'string' || dataDir.trim().length === 0) {
+    throw new Error(
+      'openDatabase requires an explicit dataDir (the resolved daemon data root); ' +
+        `refusing to derive one from projectRoot=${projectRoot}. ` +
+        'See AGENTS.md -> "Daemon data directory contract".',
+    );
+  }
+  return path.resolve(dataDir);
+}
+
+export function openDatabase(projectRoot: string, { dataDir }: { dataDir: string }): SqliteDb {
+  const dir = resolveDatabaseDir(projectRoot, dataDir);
   const file = path.join(dir, 'app.sqlite');
   if (dbInstance && dbFile === file) return dbInstance;
   if (dbInstance) closeDatabase();

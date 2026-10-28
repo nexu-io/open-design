@@ -54,7 +54,7 @@ afterEach(() => {
 
 function setupResolverFixture(): { db: any; projectsRoot: string } {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-finalize-'));
-  const db = openDatabase(tempDir);
+  const db = openDatabase(tempDir, { dataDir: path.join(tempDir, '.od') });
   insertProject(db, {
     id: PROJECT_ID,
     name: 'Project',
@@ -500,7 +500,7 @@ describe('finalizeDesignPackage (pipeline integration)', () => {
       );
     }
 
-    const db = openDatabase(tempDir);
+    const db = openDatabase(tempDir, { dataDir: path.join(tempDir, '.od') });
     insertProject(db, {
       id: PROJECT_ID,
       name: 'Project',
@@ -801,7 +801,7 @@ describe('finalizeDesignPackage (pipeline integration)', () => {
     const userFolder = path.join(tempDir, 'user-imported-folder');
     fs.mkdirSync(userFolder, { recursive: true });
 
-    const db = openDatabase(tempDir);
+    const db = openDatabase(tempDir, { dataDir: path.join(tempDir, '.od') });
     insertProject(db, {
       id: PROJECT_ID,
       name: 'Imported',
