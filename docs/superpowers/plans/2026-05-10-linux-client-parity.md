@@ -61,9 +61,7 @@ Reusable e2e helpers belong in `e2e/lib/`.
 
 ## Out Of Scope
 
-- `.deb` and `.rpm` packages: require per-distro package metadata, maintainer
-  scripts, signing/repository decisions, install/remove hook validation, and a
-  release matrix that is larger than the first Linux lane needs.
+- `.rpm` package: **build target exists** (`tools-pack linux build --to rpm`) for handing a build to an end user without `libfuse2`. The `.deb` target is tracked in #6010. Publishing either through the release pipeline still requires per-distro metadata ownership, maintainer scripts, signing/repository decisions, install/remove hook validation, and a larger release matrix, so release lanes keep shipping the AppImage only.
 - Snap: requires store/review ownership, confinement decisions, and a separate
   update/distribution path.
 - Flatpak: requires manifest/runtime ownership, portal testing, sandbox file

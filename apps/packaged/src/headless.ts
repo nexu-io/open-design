@@ -11,6 +11,7 @@ import {
 import { bootstrapSidecarProcess, readCurrentSidecarStamp } from "@open-design/sidecar";
 import { releaseChannelFromNamespace } from "@open-design/release";
 
+import { inheritedAppImageLockFds } from "./appimage-lock.js";
 import {
   PACKAGED_NAMESPACE_ENV,
   resolvePackagedAmrProfile,
@@ -100,12 +101,16 @@ async function main(): Promise<void> {
     namespace: config.namespace,
     source: SIDECAR_SOURCES.PACKAGED,
   };
-  if (await bootstrapSidecarProcess(stamp, {
-    dataRoot: paths.dataRoot,
-    ownerPid: null,
-    port: 0,
-    runtimeRoot: paths.runtimeRoot,
-  })) return;
+  if (await bootstrapSidecarProcess(
+    stamp,
+    {
+      dataRoot: paths.dataRoot,
+      ownerPid: null,
+      port: 0,
+      runtimeRoot: paths.runtimeRoot,
+    },
+    { inheritFds: inheritedAppImageLockFds() },
+  )) return;
   await runPackagedHeadless(config, headlessRequest, {
     mcpBootstrapLaunch: {
       command: process.execPath,

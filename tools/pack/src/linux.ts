@@ -1,5 +1,6 @@
-import { execFile, spawn } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { access, chmod, cp, mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { basename, dirname, join, posix } from "node:path";
 import { promisify } from "node:util";
@@ -18,6 +19,7 @@ import {
   findSidecarProcesses,
   getSidecarStatus,
   invokeSidecar,
+  SidecarLaunchConvergenceError,
   stopSidecars,
   type SidecarStamp,
 } from "@open-design/sidecar";
@@ -39,6 +41,11 @@ const execFileAsync = promisify(execFile);
 
 const PRODUCT_NAME = "Open Design";
 const APP_IMAGE_PRODUCT_NAME = "Open-Design";
+// First launch after a build/install extracts the whole AppImage payload into
+// the user cache before Electron starts. The payload is large enough that the
+// extraction alone can take a couple of minutes on a slow disk, so the start
+// command waits longer than a warm launch would need.
+const LINUX_APPIMAGE_LAUNCH_TIMEOUT_MS = 600_000;
 const DESKTOP_LOG_ECHO_ENV = "OD_DESKTOP_LOG_ECHO";
 // The containerized build sets this to the standalone pnpm binary fetched by
 // buildDockerArgs; runProductionInstall reads it to avoid invoking `npm` inside
@@ -75,6 +82,72 @@ export function sanitizeNamespace(value: string): string {
 
 export type LinuxLifecycleAction = "cleanup" | "install" | "start" | "stop" | "uninstall";
 export type LinuxLifecycleMode = "appimage" | "headless";
+
+// electron-builder's Linux target names. `all` stays AppImage-only on purpose:
+// the release pipeline publishes exactly one Linux artifact, and adding
+// optional formats must not make a release build depend on distro tooling
+// (rpmbuild) that the release lane does not validate.
+export type LinuxElectronTarget = "AppImage" | "dir" | "rpm";
+
+export function resolveLinuxElectronTargets(to: ToolPackConfig["to"]): LinuxElectronTarget[] {
+  switch (to) {
+    case "dir":
+      return ["dir"];
+    case "rpm":
+      return ["rpm"];
+    case "appimage":
+    case "all":
+      return ["AppImage"];
+    default:
+      throw new Error(`unsupported linux build output: ${to}`);
+  }
+}
+
+/**
+ * RPM dependencies for the native package.
+ *
+ * The first block mirrors electron-builder's Fedora/RHEL defaults (the
+ * `depends` field replaces them rather than appending). The last two sonames
+ * are Electron 41 runtime links: `gtk3` does not pull them on Fedora, so
+ * `dnf install` succeeds but the binary then fails with
+ * `error while loading shared libraries: libgbm.so.1`. Sonames resolve on
+ * Fedora/RHEL/openSUSE, where the providing package names differ.
+ */
+export const LINUX_RPM_DEPENDS = [
+  "gtk3",
+  "libnotify",
+  "nss",
+  "libXScrnSaver",
+  "(libXtst or libXtst6)",
+  "xdg-utils",
+  "at-spi2-core",
+  "(libuuid or libuuid1)",
+  "libgbm.so.1()(64bit)",
+  "libasound.so.2()(64bit)",
+] as const;
+
+/**
+ * RPM packaging options that keep the payload encoder memory-bounded.
+ *
+ * electron-builder rewrites its `"xz"` default to fpm's `"xzmt"` (threaded
+ * xz). On a 2.5 GB payload that encoder peaks at several times the payload
+ * size and gets OOM-killed on ordinary 16 GB hosts. fpm accepts a later
+ * `--rpm-compression` and the last value wins, so pin the single-threaded
+ * encoder explicitly. The resulting RPM is the same size; it just takes longer
+ * to build and uses a fraction of the RAM.
+ */
+export function linuxRpmBuilderOptions(
+  targets: readonly LinuxElectronTarget[],
+): { depends: string[]; fpm: string[] } | null {
+  if (!targets.includes("rpm")) return null;
+  return { depends: [...LINUX_RPM_DEPENDS], fpm: ["--rpm-compression", "xz"] };
+}
+
+export type LinuxArtifacts = {
+  appImage: string | null;
+  deb: string | null;
+  rpm: string | null;
+};
 
 export function resolveLinuxLifecycleMode(
   options: { headless?: boolean },
@@ -263,11 +336,33 @@ export type DesktopTemplateValues = {
   iconName: string;
 };
 
+function desktopEntryQuote(value: string): string {
+  return `"${value
+    .replaceAll("\\", "\\\\")
+    .replaceAll('"', '\\"')
+    .replaceAll("`", "\\`")
+    .replaceAll("$", "\\$")
+    // Desktop-entry field codes are expanded even inside quotes; `%%` is the
+    // literal-percent escape.
+    .replaceAll("%", "%%")}"`;
+}
+
 export function renderDesktopTemplate(template: string, values: DesktopTemplateValues): string {
   return template
     .replace(/@@NAMESPACE@@/g, values.namespace)
-    .replace(/@@EXEC_PATH@@/g, values.execPath)
+    .replace(/@@EXEC_PATH@@/g, desktopEntryQuote(values.execPath))
     .replace(/@@ICON_PATH@@/g, values.iconName);
+}
+
+export type LinuxLauncherTemplateValues = {
+  appImagePath: string;
+  namespace: string;
+};
+
+export function renderLinuxLauncher(template: string, values: LinuxLauncherTemplateValues): string {
+  return template
+    .replace(/@@APPIMAGE_PATH@@/g, shellQuote(values.appImagePath))
+    .replace(/@@NAMESPACE@@/g, shellQuote(values.namespace));
 }
 
 export function renderLinuxPackagedMainEntry(): string {
@@ -280,7 +375,6 @@ set -e
 
 THIS="$0"
 args=("$@")
-NUMBER_OF_ARGS="$#"
 
 if [ -z "$APPDIR" ] ; then
   path="$(dirname "$(readlink -f "\${THIS}")")"
@@ -290,6 +384,98 @@ if [ -z "$APPDIR" ] ; then
   APPDIR="$path"
 fi
 
+# A FUSE-mounted AppImage reads every payload file through a userspace daemon,
+# which makes the packaged daemon's cold start several times slower than the
+# same payload read from a local directory. Extract once into a per-identity
+# cache and re-exec the cached AppRun on every later launch instead of paying
+# that cost again. The cache key tracks the AppImage path, size, and mtime, so
+# replacing the AppImage never reuses a stale payload.
+appimage_cache_root() {
+  if [ -n "\${XDG_CACHE_HOME:-}" ] ; then
+    printf '%s' "$XDG_CACHE_HOME"
+  elif [ -n "\${HOME:-}" ] ; then
+    printf '%s' "$HOME/.cache"
+  else
+    printf '%s' "\${TMPDIR:-/tmp}/open-design-cache-\${UID:-0}"
+  fi
+}
+
+appimage_cache_dir() {
+  cache_root="$(appimage_cache_root)"
+  key="$(printf '%s' "$APPIMAGE" | cksum | cut -d' ' -f1)-$(stat -c '%s-%Y' "$APPIMAGE" 2>/dev/null || printf 'unknown')"
+  printf '%s/open-design/appimage/%s' "$cache_root" "$key"
+}
+
+# The lock is keyed to the AppImage path only, not to the cache key. Replacing
+# the file at the same path (for example, tools-pack linux install while the
+# old build is running) must not create a second instance; the new file still
+# gets a new cache directory because that key includes size and mtime.
+appimage_lock_path() {
+  cache_root="$(appimage_cache_root)"
+  key="$(printf '%s' "$APPIMAGE" | cksum | cut -d' ' -f1)"
+  printf '%s/open-design/appimage/%s.lock' "$cache_root" "$key"
+}
+
+# The runtime's extract-and-run flag is still a valid manual fallback, but it
+# extracts before this script starts and therefore cannot populate this cache.
+# Only the runtime's FUSE mount (APPDIR under a */.mount_* directory) re-execs
+# here; an extracted run (APPDIR=/tmp/appimage_extracted_*) continues normally.
+# The launch lock below still applies to both modes. The lock file is keyed to
+# the AppImage path (stable across replacements) and the fd is inherited
+# through exec into the desktop. The detached sidecar supervisor takes
+# ownership of this fd during bootstrap (OD_APPIMAGE_LOCK_FD) and holds it for
+# the desktop generation, including payload handoffs. A cached AppRun sees the
+# env var and skips re-acquisition.
+lock_path=""
+if [ -z "\${OD_APPIMAGE_LOCK_FD:-}" ] && [ -n "\${APPIMAGE:-}" ] ; then
+  if lock_path="$(appimage_lock_path 2>/dev/null)" ; then
+    lock_parent="$(dirname "$lock_path")"
+    if mkdir -p "$lock_parent" 2>/dev/null ; then
+      if command -v flock >/dev/null 2>&1 && exec 8>"$lock_path" ; then
+        if ! flock -n 8 ; then
+          echo "open-design: Open Design is already running." >&2
+          exit 0
+        fi
+        export OD_APPIMAGE_LOCK_FD=8
+      fi
+    fi
+  fi
+fi
+
+case "\${APPDIR:-}" in
+  */.mount_*)
+    if [ -z "\${OD_APPIMAGE_EXTRACTED_RUN:-}" ] && [ -n "\${APPIMAGE:-}" ] ; then
+      export OD_APPIMAGE_EXTRACTED_RUN=1
+      if cache_dir="$(appimage_cache_dir 2>/dev/null)" ; then
+        cache_parent="$(dirname "$cache_dir")"
+        if mkdir -p "$cache_parent" 2>/dev/null ; then
+          if [ ! -x "$cache_dir/AppRun" ] ; then
+            extract_dir="$cache_parent/.extract.$$"
+            rm -rf "$extract_dir"
+            if mkdir -p "$extract_dir" && ( cd "$extract_dir" && "$APPIMAGE" --appimage-extract >extract.log 2>&1 ) && [ -x "$extract_dir/squashfs-root/AppRun" ] ; then
+              rm -rf "$cache_dir"
+              mv "$extract_dir/squashfs-root" "$cache_dir" 2>/dev/null || true
+            else
+              if [ -f "$extract_dir/extract.log" ] ; then
+                mv "$extract_dir/extract.log" "$cache_parent/extract.log" 2>/dev/null || true
+              fi
+              echo "open-design: could not prepare the AppImage cache; see $cache_parent/extract.log" >&2
+            fi
+            rm -rf "$extract_dir"
+          fi
+          if [ -x "$cache_dir/AppRun" ] ; then
+            APPDIR="$cache_dir"
+            export APPDIR
+            exec "$cache_dir/AppRun" "\${args[@]}"
+          fi
+        fi
+        # Cache setup failed (read-only cache root, full disk, ...). Continue
+        # from the FUSE mount so the app still starts, just with slower reads.
+      fi
+    fi
+    ;;
+esac
+
 export PATH="\${APPDIR}:\${APPDIR}/usr/sbin:\${PATH}"
 export XDG_DATA_DIRS="./share/:/usr/share/gnome:/usr/local/share/:/usr/share/:\${XDG_DATA_DIRS}"
 export LD_LIBRARY_PATH="\${APPDIR}/usr/lib:\${LD_LIBRARY_PATH}"
@@ -297,6 +483,40 @@ export XDG_DATA_DIRS="\${APPDIR}"/usr/share/:"\${XDG_DATA_DIRS}":/usr/share/gnom
 export GSETTINGS_SCHEMA_DIR="\${APPDIR}/usr/share/glib-2.0/schemas:\${GSETTINGS_SCHEMA_DIR}"
 
 BIN="$APPDIR/${PRODUCT_NAME}"
+
+# Chromium's namespace sandbox needs unprivileged user namespaces. Some hosts
+# disable them (hardened kernels, kernel.unprivileged_userns_clone=0) or gate
+# them behind AppArmor (Ubuntu 24.04+: kernel.apparmor_restrict_unprivileged_userns=1).
+# Probe the capability instead of shipping --no-sandbox to every user: a probe
+# that cannot run is treated as "unavailable" so the app still starts, and
+# OD_LINUX_SANDBOX=on|off lets a user override either direction.
+sandbox_unavailable() {
+  case "\${OD_LINUX_SANDBOX:-auto}" in
+    on) return 1 ;;
+    off) return 0 ;;
+  esac
+  command -v unshare >/dev/null 2>&1 || return 0
+  ! unshare -Ur true >/dev/null 2>&1
+}
+
+if sandbox_unavailable ; then
+  sandbox_flag_present=0
+  for arg in "\${args[@]}" ; do
+    [ "$arg" = "--no-sandbox" ] && sandbox_flag_present=1
+  done
+  if [ "$sandbox_flag_present" = 0 ] ; then
+    args+=("--no-sandbox")
+  fi
+else
+  # Desktop-integration tooling (including electron-builder's generated
+  # AppImage entry) passes --no-sandbox unconditionally. Drop it when the host
+  # can actually sandbox, so the fallback stays a fallback.
+  filtered=()
+  for arg in "\${args[@]}" ; do
+    [ "$arg" = "--no-sandbox" ] || filtered+=("$arg")
+  done
+  args=("\${filtered[@]}")
+fi
 
 if [ -z "$APPIMAGE_EXIT_AFTER_INSTALL" ] ; then
   trap atexit EXIT
@@ -308,11 +528,7 @@ atexit()
 {
   if [ $isEulaAccepted == 1 ] ; then
     unset ELECTRON_RUN_AS_NODE
-    if [ $NUMBER_OF_ARGS -eq 0 ] ; then
-      exec "$BIN"
-    else
-      exec "$BIN" "\${args[@]}"
-    fi
+    exec "$BIN" "\${args[@]}"
   fi
 }
 
@@ -336,13 +552,16 @@ export function matchesAppImageProcess(
   installPath: string,
 ): boolean {
   if (snapshot.executable === installPath) return true;
-  // Two AppImage launch modes leave different executable paths in /proc/<pid>/exe:
+  // Three AppImage launch modes leave different executable paths in /proc/<pid>/exe:
   //   FUSE-mounted: /tmp/.mount_<hex>/AppRun
   //   --appimage-extract-and-run: /tmp/appimage_extracted_<hex>/<binary>
-  // In both cases the AppImage runtime sets $APPIMAGE to the original install path.
+  //   AppRun cache: <cache-root>/open-design/appimage/<key>/<binary>
+  // In all three cases the AppImage runtime (or our AppRun) sets $APPIMAGE to
+  // the original install path.
   const isMountedRunner = /^\/tmp\/\.mount_[^/]+\/AppRun$/.test(snapshot.executable);
   const isExtractedRunner = /^\/tmp\/appimage_extracted_[^/]+\/[^/]+$/.test(snapshot.executable);
-  if ((isMountedRunner || isExtractedRunner) && snapshot.env.APPIMAGE === installPath) {
+  const isCachedRunner = /\/open-design\/appimage\/[^/]+\/[^/]+$/.test(snapshot.executable);
+  if ((isMountedRunner || isExtractedRunner || isCachedRunner) && snapshot.env.APPIMAGE === installPath) {
     return true;
   }
 
@@ -367,6 +586,7 @@ type LinuxPaths = {
   installAppImagePath: string;
   installDesktopFilePath: string;
   installIconPath: string;
+  installLauncherPath: string;
   packagedConfigPath: string;
   resourceRoot: string;
   tarballsRoot: string;
@@ -408,6 +628,14 @@ function resolveLinuxPaths(config: ToolPackConfig): LinuxPaths {
       "apps",
       iconFileName(config.namespace),
     ),
+    installLauncherPath: join(
+      home,
+      ".local",
+      "share",
+      "open-design",
+      sanitizeNamespace(config.namespace),
+      "launch.sh",
+    ),
     packagedConfigPath: join(namespaceRoot, "open-design-config.json"),
     resourceRoot: join(namespaceRoot, "resources", "open-design"),
     tarballsRoot: join(namespaceRoot, "tarballs"),
@@ -430,6 +658,59 @@ async function runPnpm(
 
 export type ProductionInstallCommand = { command: string; args: string[] };
 
+// npm 12 blocks dependency install scripts unless the project approves them in
+// its `allowScripts` field. The packaged daemon needs better-sqlite3 and
+// node-pty native bindings; the remaining packages keep the same native/runtime
+// behavior the Linux artifact had under npm 11. The same list is rendered into
+// the assembled app's `pnpm-workspace.yaml`, because the containerized build
+// puts the assembled app outside the repository workspace and pnpm 10 does not
+// read npm's `allowScripts`.
+export const LINUX_ASSEMBLED_ALLOW_SCRIPTS = [
+  "@ffmpeg-installer/linux-x64",
+  "@google/genai",
+  "better-sqlite3",
+  "core-js",
+  "esbuild",
+  "node-pty",
+  "onnxruntime-node",
+  "protobufjs",
+  "sharp",
+] as const;
+
+export function linuxAssembledAllowScripts(): Record<string, true> {
+  return Object.fromEntries(LINUX_ASSEMBLED_ALLOW_SCRIPTS.map((name) => [name, true]));
+}
+
+// pnpm 10 approves dependency build scripts only when the package is listed in
+// `onlyBuiltDependencies` in the nearest `pnpm-workspace.yaml`. The assembled
+// app is materialized under `/tools-pack` in the containerized build, so the
+// repository's pnpm-workspace.yaml is not an ancestor and cannot approve the
+// binding builds. Render the same approval list next to the generated
+// package.json instead.
+//
+// The internal workspace tarballs reference sibling packages by version
+// (`@open-design/contracts: 0.25.1`), not by `file:`. npm hoists the root's
+// tarball dependencies and resolves them; pnpm's strict resolver would ask the
+// public registry and get a 404. Override each internal package back to the
+// root tarball so the containerized install stays self-contained.
+export function renderLinuxPnpmWorkspace(
+  packages: readonly string[] = LINUX_ASSEMBLED_ALLOW_SCRIPTS,
+  overrides: Readonly<Record<string, string>> = {},
+): string {
+  const lines = [
+    "onlyBuiltDependencies:",
+    ...packages.map((name) => `  - ${JSON.stringify(name)}`),
+  ];
+  const entries = Object.entries(overrides);
+  if (entries.length > 0) {
+    lines.push(
+      "overrides:",
+      ...entries.map(([name, spec]) => `  ${JSON.stringify(name)}: ${JSON.stringify(spec)}`),
+    );
+  }
+  return `${lines.join("\n")}\n`;
+}
+
 // Picks the package manager used to materialize the assembled-app node_modules
 // during writeAssembledApp. The default (`npm`) preserves host behavior for
 // developer-machine builds. When the build runs inside
@@ -439,22 +720,47 @@ export type ProductionInstallCommand = { command: string; args: string[] };
 // `--config.node-linker=hoisted` keeps the resulting layout flat so
 // electron-builder packs node_modules the same way it does for npm-installed
 // trees.
+//
+// Native install scripts stay enabled because the packaged daemon runs the
+// assembled `better-sqlite3` binding under the bundled Node binary. Skipping
+// scripts (a common shortcut for avoiding the optional ONNX CUDA download)
+// produces an AppImage that exits with `Could not locate the bindings file`
+// before reporting sidecar status. The CUDA provider is optional; the CPU
+// provider is bundled, so the production install skips the CUDA download by
+// default and leaves `ONNXRUNTIME_NODE_INSTALL_CUDA` as the explicit opt-in.
 export function resolveProductionInstallCommand(env: NodeJS.ProcessEnv): ProductionInstallCommand {
   const pnpmBin = env[PRODUCTION_INSTALL_PNPM_BIN_ENV];
   if (pnpmBin != null && pnpmBin.length > 0) {
     return {
       command: pnpmBin,
-      args: ["install", "--prod", "--no-lockfile", "--config.node-linker=hoisted"],
+      args: [
+        "install",
+        "--prod",
+        "--no-lockfile",
+        "--config.node-linker=hoisted",
+        "--config.ignore-scripts=false",
+      ],
     };
   }
-  return { command: "npm", args: ["install", "--omit=dev", "--no-package-lock"] };
+  return {
+    command: "npm",
+    args: ["install", "--omit=dev", "--no-package-lock", "--ignore-scripts=false"],
+  };
+}
+
+export function resolveProductionInstallEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return {
+    ...env,
+    npm_config_ignore_scripts: "false",
+    ONNXRUNTIME_NODE_INSTALL_CUDA: env.ONNXRUNTIME_NODE_INSTALL_CUDA ?? "skip",
+  };
 }
 
 async function runProductionInstall(appRoot: string): Promise<void> {
   const { command, args } = resolveProductionInstallCommand(process.env);
   await execFileAsync(command, args, {
     cwd: appRoot,
-    env: process.env,
+    env: resolveProductionInstallEnv(process.env),
   });
 }
 
@@ -540,12 +846,24 @@ async function writeAssembledApp(
     dependencies,
     description: "Local-first design product: detects your installed code-agent CLI, runs design skills + design systems, streams artifacts into a sandboxed preview.",
     author: "Open Design Team",
+    license: "Apache-2.0",
     repository: {
       type: "git",
       url: "https://github.com/nexu-io/open-design.git"
-    }
+    },
+    allowScripts: linuxAssembledAllowScripts(),
   };
   await writeFile(paths.assembledPackageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
+
+  // The pnpm/container path runs outside the repository workspace, so the
+  // repo-level onlyBuiltDependencies and overrides do not apply. Keep both the
+  // native-build approval list and the internal-tarball overrides beside the
+  // generated package.json for that install.
+  await writeFile(
+    join(paths.assembledAppRoot, "pnpm-workspace.yaml"),
+    renderLinuxPnpmWorkspace(LINUX_ASSEMBLED_ALLOW_SCRIPTS, dependencies),
+    "utf8",
+  );
 
   await writeFile(paths.assembledMainEntryPath, renderLinuxPackagedMainEntry(), "utf8");
 
@@ -581,15 +899,42 @@ async function writeLinuxAppImageAppRun(paths: LinuxPaths): Promise<void> {
 
 // --- Step 5: writeLinuxBuilderConfig helper ---
 
+/**
+ * electron-builder's Linux target block.
+ *
+ * Native packages deliberately do not set `executableArgs`. electron-builder's
+ * FpmTarget uses `templates/linux/after-install.tpl`, which installs the
+ * AppArmor profile where supported and marks `chrome-sandbox` setuid (4755)
+ * when unprivileged user namespaces are unavailable. Adding
+ * `["--no-sandbox"]` here would disable Chromium's sandbox for every RPM user
+ * instead of only the hosts that cannot sandbox.
+ */
+export function createLinuxTargetConfig(
+  targets: readonly LinuxElectronTarget[],
+): Record<string, unknown> {
+  return {
+    target: [...targets],
+    icon: linuxResources.icon,
+    category: "Development",
+    synopsis: "Open Design",
+    maintainer: "Open Design Contributors",
+    vendor: "Open Design Team",
+  };
+}
+
 async function writeLinuxBuilderConfig(config: ToolPackConfig, paths: LinuxPaths): Promise<void> {
-  const target = config.to === "dir" ? ["dir"] : ["AppImage"];
+  const targets = resolveLinuxElectronTargets(config.to);
+  const buildsAppImage = targets.includes("AppImage");
+  const rpmOptions = linuxRpmBuilderOptions(targets);
   const namespaceToken = sanitizeNamespace(config.namespace);
   const packagedVersion = await readPackagedVersion(config);
   const packageVersion = electronBuilderVersionForAppVersion(packagedVersion);
 
   const builderConfig: Record<string, unknown> = {
     appId: "io.open-design.desktop",
-    artifactName: `${PRODUCT_NAME}-${namespaceToken}.\${ext}`,
+    artifactName: buildsAppImage
+      ? `${PRODUCT_NAME}-${namespaceToken}.\${ext}`
+      : `open-design-${namespaceToken}.\${ext}`,
     asar: false,
     buildDependenciesFromSource: false,
     compression: "maximum",
@@ -617,31 +962,28 @@ async function writeLinuxBuilderConfig(config: ToolPackConfig, paths: LinuxPaths
       // process.resourcesPath by the desktop main at runtime).
       domToPptxBundleResource(config),
     ],
-    ...(config.to === "dir"
-      ? {}
-      : {
+    ...(buildsAppImage
+      ? {
           extraFiles: [
             {
               from: paths.appImageAppRunPath,
               to: "AppRun",
             },
           ],
-        }),
+        }
+      : {}),
     files: ["**/*", "!**/node_modules/.bin", "!**/node_modules/electron{,/**/*}"],
     icon: linuxResources.icon,
-    linux: {
-      target,
-      icon: linuxResources.icon,
-      category: "Development",
-      synopsis: "Open Design",
-      maintainer: "Open Design Contributors",
-    },
+    linux: createLinuxTargetConfig(targets),
     // Keep the AppImage launch fallback explicit. Our top-level AppRun wrapper
     // clears ELECTRON_RUN_AS_NODE before these Chromium flags reach Electron,
-    // including for AppImageLauncher-generated desktop entries.
+    // including for AppImageLauncher-generated desktop entries, and strips the
+    // flag again when the sandbox probe succeeds. Native packages get their
+    // sandbox setup from electron-builder's after-install template instead.
     appImage: {
       executableArgs: [...LINUX_APPIMAGE_EXECUTABLE_ARGS],
     },
+    ...(rpmOptions != null ? { rpm: rpmOptions } : {}),
     nodeGypRebuild: false,
     npmRebuild: false,
     productName: PRODUCT_NAME,
@@ -652,6 +994,207 @@ async function writeLinuxBuilderConfig(config: ToolPackConfig, paths: LinuxPaths
 }
 
 // --- Step 6: runElectronBuilderLinux + findBuiltAppImage helpers ---
+
+/**
+ * Force electron-builder's manual traversal collector for the assembled app.
+ *
+ * electron-builder 26.8.1's pnpm collector predates pnpm 10.29.3's deduped
+ * dependency listing. pnpm prints a repeated subtree once and later references
+ * it as a childless `deduped` stub; the collector can therefore omit transitive
+ * packages such as jszip's `setimmediate` even though they are present in the
+ * installed tree. The resulting RPM/AppImage starts and then exits with
+ * `Cannot find module 'setimmediate'`.
+ *
+ * The manual traversal collector is electron-builder's supported fallback for
+ * package managers it cannot query. It walks the installed `node_modules` tree
+ * directly, so it does not depend on pnpm's JSON shape and does not need npm or
+ * pnpm on PATH (the official container intentionally ships pnpm only).
+ * electron-builder's package-manager detection checks these npm/pnpm environment
+ * markers before falling back to npm, so mark the child environment as
+ * `traversal`. The marker is build-environment-only and never reaches the app.
+ *
+ * Upstream fixed the pnpm collector in electron-builder 26.9.0; this branch
+ * keeps the pinned 26.8.1 and uses its supported traversal fallback instead of
+ * bumping the dependency in this PR.
+ */
+export function resolveLinuxElectronBuilderEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return {
+    ...env,
+    npm_config_user_agent: "traversal",
+    npm_execpath: "traversal",
+  };
+}
+
+export type LinuxPackagedDaemonPaths = {
+  appOutDir: string;
+  daemonCliPath: string;
+  nodePath: string;
+};
+
+export function resolveLinuxPackagedDaemonPaths(appBuilderOutputRoot: string): LinuxPackagedDaemonPaths {
+  const appOutDir = join(appBuilderOutputRoot, "linux-unpacked");
+  return {
+    appOutDir,
+    daemonCliPath: join(
+      appOutDir,
+      "resources",
+      "app",
+      "node_modules",
+      "@open-design",
+      "daemon",
+      "dist",
+      "cli.js",
+    ),
+    nodePath: join(appOutDir, "resources", "open-design", "bin", "node"),
+  };
+}
+
+async function reserveEphemeralPort(): Promise<number> {
+  const server = createServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  const port = address != null && typeof address === "object" ? address.port : 0;
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  return port;
+}
+
+function waitForChildExit(child: ChildProcess, timeoutMs: number): Promise<void> {
+  if (child.pid == null || child.exitCode != null || child.signalCode != null) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, timeoutMs);
+    child.once("exit", () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
+function terminateProbeChild(child: ChildProcess): void {
+  if (child.pid == null || child.exitCode != null || child.signalCode != null) {
+    return;
+  }
+  try {
+    // The probe is detached so the daemon and any short-lived children share a
+    // process group; kill the group so a failed probe cannot leave a daemon
+    // holding the probe port.
+    process.kill(-child.pid, "SIGTERM");
+  } catch {
+    child.kill("SIGTERM");
+  }
+}
+
+/**
+ * Start the packaged daemon from `linux-unpacked` and wait for /api/health.
+ *
+ * This is a packaging gate, not a unit test: it loads the exact dependency tree
+ * electron-builder placed in the artifact, including native bindings, and
+ * catches transitive modules that the collector may have omitted. A daemon that
+ * exits before listening (for example with `Cannot find module 'setimmediate'`)
+ * fails the build instead of producing a broken installer.
+ */
+export async function verifyLinuxPackagedDaemon(
+  paths: { appBuilderOutputRoot: string },
+): Promise<void> {
+  const probe = resolveLinuxPackagedDaemonPaths(paths.appBuilderOutputRoot);
+  if (!(await pathExists(probe.nodePath))) {
+    throw new Error(`packaged daemon probe: bundled Node not found at ${probe.nodePath}`);
+  }
+  if (!(await pathExists(probe.daemonCliPath))) {
+    throw new Error(`packaged daemon probe: daemon CLI not found at ${probe.daemonCliPath}`);
+  }
+
+  const probeRoot = join(paths.appBuilderOutputRoot, ".daemon-probe");
+  const dataDir = join(probeRoot, "data");
+  const homeDir = join(probeRoot, "home");
+  await rm(probeRoot, { force: true, recursive: true });
+  await mkdir(dataDir, { recursive: true });
+  await mkdir(homeDir, { recursive: true });
+
+  const port = await reserveEphemeralPort();
+  let stdout = "";
+  let stderr = "";
+  let spawnError: Error | null = null;
+  const child = spawn(
+    probe.nodePath,
+    [probe.daemonCliPath, "--port", String(port), "--host", "127.0.0.1", "--no-open"],
+    {
+      cwd: probe.appOutDir,
+      detached: process.platform !== "win32",
+      env: {
+        ...process.env,
+        HOME: homeDir,
+        OD_DATA_DIR: dataDir,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  child.stdout?.on("data", (chunk: Buffer) => {
+    stdout += chunk.toString();
+  });
+  child.stderr?.on("data", (chunk: Buffer) => {
+    stderr += chunk.toString();
+  });
+  child.once("error", (error) => {
+    spawnError = error;
+  });
+  const getSpawnError = (): Error | null => spawnError;
+
+  const tail = (value: string): string => (value.length > 4000 ? value.slice(-4000) : value);
+  const failure = (reason: string): Error =>
+    new Error(
+      `packaged daemon probe failed: ${reason}\n` +
+        `--- daemon stdout ---\n${tail(stdout)}\n` +
+        `--- daemon stderr ---\n${tail(stderr)}`,
+    );
+
+  try {
+    const deadline = Date.now() + 30_000;
+    while (Date.now() < deadline) {
+      const currentSpawnError = getSpawnError();
+      if (currentSpawnError != null) {
+        throw failure(`could not start ${probe.nodePath}: ${currentSpawnError.message}`);
+      }
+      if (child.exitCode != null || child.signalCode != null) {
+        throw failure(
+          `daemon exited before becoming healthy (code=${child.exitCode ?? "null"}, signal=${child.signalCode ?? "null"})`,
+        );
+      }
+      try {
+        const response = await fetch(`http://127.0.0.1:${port}/api/health`, {
+          signal: AbortSignal.timeout(1000),
+        });
+        if (response.ok) {
+          const body = (await response.json()) as { ok?: unknown };
+          if (body.ok === true) {
+            return;
+          }
+        }
+      } catch {
+        // The daemon is still starting (or the health endpoint is not bound
+        // yet); keep polling until the deadline.
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    throw failure(`daemon did not report healthy within 30s on port ${port}`);
+  } finally {
+    terminateProbeChild(child);
+    await waitForChildExit(child, 5000);
+    if (child.pid != null && child.exitCode == null && child.signalCode == null) {
+      try {
+        process.kill(-child.pid, "SIGKILL");
+      } catch {
+        child.kill("SIGKILL");
+      }
+      await waitForChildExit(child, 1000);
+    }
+    await rm(probeRoot, { force: true, recursive: true });
+  }
+}
 
 async function runElectronBuilderLinux(config: ToolPackConfig, paths: LinuxPaths): Promise<void> {
   await rm(paths.appBuilderOutputRoot, { force: true, recursive: true });
@@ -667,21 +1210,48 @@ async function runElectronBuilderLinux(config: ToolPackConfig, paths: LinuxPaths
   ];
   await execFileAsync(process.execPath, args, {
     cwd: config.workspaceRoot,
-    env: process.env,
+    env: resolveLinuxElectronBuilderEnv(process.env),
   });
+  try {
+    await verifyLinuxPackagedDaemon(paths);
+  } catch (error) {
+    // Do not leave a broken installer next to a failed probe; the next build
+    // would otherwise be able to hand off the same artifact by path.
+    await rm(paths.appBuilderOutputRoot, { force: true, recursive: true });
+    throw error;
+  }
 }
 
-async function findBuiltAppImage(paths: LinuxPaths): Promise<string | null> {
-  if (!(await pathExists(paths.appBuilderOutputRoot))) return null;
-  const entries = await readdir(paths.appBuilderOutputRoot);
-  const appImage = entries.find((entry) => entry.endsWith(".AppImage"));
-  return appImage ? join(paths.appBuilderOutputRoot, appImage) : null;
+export function classifyLinuxBuilderArtifacts(
+  entries: readonly string[],
+  outputRoot: string,
+): LinuxArtifacts {
+  const find = (suffix: string): string | null => {
+    const match = entries.find((entry) => entry.endsWith(suffix));
+    return match == null ? null : join(outputRoot, match);
+  };
+  return {
+    appImage: find(".AppImage"),
+    deb: find(".deb"),
+    rpm: find(".rpm"),
+  };
+}
+
+async function findBuiltLinuxArtifacts(paths: LinuxPaths): Promise<LinuxArtifacts> {
+  if (!(await pathExists(paths.appBuilderOutputRoot))) {
+    return { appImage: null, deb: null, rpm: null };
+  }
+  return classifyLinuxBuilderArtifacts(
+    await readdir(paths.appBuilderOutputRoot),
+    paths.appBuilderOutputRoot,
+  );
 }
 
 // --- Step 7: packLinux orchestrator + result type + stub for runBuildInContainer ---
 
 export type LinuxPackResult = {
   appImagePath: string | null;
+  artifacts: LinuxArtifacts;
   outputRoot: string;
   resourceRoot: string;
   runtimeNamespaceRoot: string;
@@ -693,9 +1263,12 @@ export async function packLinux(config: ToolPackConfig): Promise<LinuxPackResult
   if (config.containerized) {
     await runBuildInContainer(config);
     const paths = resolveLinuxPaths(config);
-    const appImagePath = config.to === "dir" ? null : await findBuiltAppImage(paths);
+    const artifacts = config.to === "dir"
+      ? { appImage: null, deb: null, rpm: null }
+      : await findBuiltLinuxArtifacts(paths);
     return {
-      appImagePath,
+      appImagePath: artifacts.appImage,
+      artifacts,
       outputRoot: paths.appBuilderOutputRoot,
       resourceRoot: paths.resourceRoot,
       runtimeNamespaceRoot: config.roots.runtime.namespaceRoot,
@@ -713,15 +1286,18 @@ export async function packLinux(config: ToolPackConfig): Promise<LinuxPackResult
   await copyResourceTree(config, paths);
   const tarballs = await collectWorkspaceTarballs(config, paths);
   await writeAssembledApp(config, paths, tarballs);
-  if (config.to !== "dir") {
+  if (resolveLinuxElectronTargets(config.to).includes("AppImage")) {
     await writeLinuxAppImageAppRun(paths);
   }
   await writeLinuxBuilderConfig(config, paths);
   await runElectronBuilderLinux(config, paths);
 
-  const appImagePath = config.to === "dir" ? null : await findBuiltAppImage(paths);
+  const artifacts = config.to === "dir"
+    ? { appImage: null, deb: null, rpm: null }
+    : await findBuiltLinuxArtifacts(paths);
   return {
-    appImagePath,
+    appImagePath: artifacts.appImage,
+    artifacts,
     outputRoot: paths.appBuilderOutputRoot,
     resourceRoot: paths.resourceRoot,
     runtimeNamespaceRoot: config.roots.runtime.namespaceRoot,
@@ -776,6 +1352,7 @@ export type LinuxInstallResult = {
   appImagePath: string;
   desktopFilePath: string;
   iconPath: string;
+  launcherPath: string;
   namespace: string;
   postInstall: {
     desktopDatabase: "ok" | "missing" | "failed";
@@ -793,16 +1370,29 @@ async function bestEffortRun(bin: string, args: string[]): Promise<"ok" | "missi
   }
 }
 
+async function requireBuiltAppImage(paths: LinuxPaths, action: string): Promise<string> {
+  const artifacts = await findBuiltLinuxArtifacts(paths);
+  if (artifacts.appImage != null) return artifacts.appImage;
+  const nativePackage = artifacts.deb ?? artifacts.rpm;
+  if (nativePackage != null) {
+    throw new Error(
+      `this build produced a native package, not an AppImage: ${nativePackage}. ` +
+        `Install it with your distro package manager (\`sudo apt install ./<file>.deb\` or ` +
+        `\`sudo dnf install ./<file>.rpm\`), or rebuild with \`--to appimage\` for the ` +
+        `AppImage lifecycle (${action}).`,
+    );
+  }
+  throw new Error(`no AppImage found in builder output; run \`tools-pack linux build\` first (${action})`);
+}
+
 export async function installPackedLinuxApp(config: ToolPackConfig): Promise<LinuxInstallResult> {
   const paths = resolveLinuxPaths(config);
-  const builtAppImage = await findBuiltAppImage(paths);
-  if (builtAppImage == null) {
-    throw new Error("no AppImage found in builder output; run `tools-pack linux build` first");
-  }
+  const builtAppImage = await requireBuiltAppImage(paths, "install");
 
   await mkdir(dirname(paths.installAppImagePath), { recursive: true });
   await mkdir(dirname(paths.installDesktopFilePath), { recursive: true });
   await mkdir(dirname(paths.installIconPath), { recursive: true });
+  await mkdir(dirname(paths.installLauncherPath), { recursive: true });
 
   // Copy AppImage with executable bit.
   await cp(builtAppImage, paths.installAppImagePath);
@@ -811,11 +1401,26 @@ export async function installPackedLinuxApp(config: ToolPackConfig): Promise<Lin
   // Copy icon.
   await cp(linuxResources.icon, paths.installIconPath);
 
+  // The desktop entry must not point at the AppImage directly: the AppImage
+  // runtime mounts its SquashFS before AppRun runs, so a host without
+  // libfuse.so.2 fails before the cache fallback can help. The external
+  // launcher chooses the cached/FUSE path when mounting works and falls back
+  // to --appimage-extract-and-run when it does not.
+  const launcherTemplate = await readFile(linuxResources.launcherTemplate, "utf8");
+  const renderedLauncher = renderLinuxLauncher(launcherTemplate, {
+    appImagePath: paths.installAppImagePath,
+    namespace: sanitizeNamespace(config.namespace),
+  });
+  const tmpLauncherPath = `${paths.installLauncherPath}.tmp`;
+  await writeFile(tmpLauncherPath, renderedLauncher, "utf8");
+  await chmod(tmpLauncherPath, 0o755);
+  await rename(tmpLauncherPath, paths.installLauncherPath);
+
   // Render and atomic-write the .desktop file.
   const template = await readFile(linuxResources.desktopTemplate, "utf8");
   const rendered = renderDesktopTemplate(template, {
     namespace: sanitizeNamespace(config.namespace),
-    execPath: paths.installAppImagePath,
+    execPath: paths.installLauncherPath,
     iconName: `open-design-${sanitizeNamespace(config.namespace)}`,
   });
   const tmpDesktopPath = `${paths.installDesktopFilePath}.tmp`;
@@ -834,6 +1439,7 @@ export async function installPackedLinuxApp(config: ToolPackConfig): Promise<Lin
     appImagePath: paths.installAppImagePath,
     desktopFilePath: paths.installDesktopFilePath,
     iconPath: paths.installIconPath,
+    launcherPath: paths.installLauncherPath,
     namespace: config.namespace,
     postInstall: { desktopDatabase, iconCache },
   };
@@ -931,7 +1537,7 @@ async function waitForLinuxStatus<T>(stamps: readonly SidecarStamp[], timeoutMs:
 export async function startPackedLinuxApp(config: ToolPackConfig): Promise<LinuxStartResult> {
   const paths = resolveLinuxPaths(config);
   const installed = await pathExists(paths.installAppImagePath);
-  const built = !installed ? await findBuiltAppImage(paths) : null;
+  const built = !installed ? (await findBuiltLinuxArtifacts(paths)).appImage : null;
   const appImagePath = installed ? paths.installAppImagePath : built;
   const source: LinuxStartSource = installed ? "installed" : "built";
 
@@ -949,14 +1555,11 @@ export async function startPackedLinuxApp(config: ToolPackConfig): Promise<Linux
     linuxStamp(config, { source: SIDECAR_SOURCES.PACKAGED }),
   ];
 
-  // --appimage-extract-and-run bypasses FUSE-mounted SquashFS, which is too slow
-  // for daemon startup on first launch (smoke testing showed startup exceeded the
-  // packaged sidecar's 35-second timeout when running from FUSE).
-  const convergence = await convergeSidecarLaunch({
-    args: ["--appimage-extract-and-run"],
+  const launch = (args: string[], extraEnv: NodeJS.ProcessEnv = {}) => convergeSidecarLaunch({
+    args,
     command: appImagePath,
     cwd: dirname(appImagePath),
-    env: createLinuxDesktopLaunchEnv(config, stamp),
+    env: { ...createLinuxDesktopLaunchEnv(config, stamp), ...extraEnv },
     logFd: null,
     resources: {
       dataRoot: join(config.roots.runtime.namespaceRoot, "data"),
@@ -965,16 +1568,33 @@ export async function startPackedLinuxApp(config: ToolPackConfig): Promise<Linux
       runtimeRoot: join(config.roots.runtime.namespaceRoot, "runtime"),
     },
     stamp,
-  }, { ownerStamps: launchStamps, timeoutMs: 60_000 });
+  }, { ownerStamps: launchStamps, timeoutMs: LINUX_APPIMAGE_LAUNCH_TIMEOUT_MS });
 
-  // 60s ceiling: AppImage --appimage-extract-and-run unpacks ~200MB to /tmp on
-  // first launch before exec'ing the inner electron, which adds substantial
-  // overhead vs mac's direct .app launch.
-  //
-  const active = await waitForLinuxStatus<DesktopStatusSnapshot>(launchStamps, 60_000);
+  // AppRun extracts the payload once into a user cache and re-execs the cached
+  // copy on later launches, so the first start after a build or install pays
+  // the extraction cost and the timeout below covers that first run.
+  let convergence: Awaited<ReturnType<typeof launch>>;
+  try {
+    convergence = await launch([]);
+  } catch (error) {
+    // The AppImage runtime needs libfuse.so.2 to mount its SquashFS. Minimal
+    // hosts and containers often lack it, so retry through the runtime's own
+    // extract path, which needs no FUSE (and cannot use the AppRun cache).
+    // NO_CLEANUP keeps that tree alive for the detached sidecars; otherwise the
+    // runtime deletes it as soon as the launcher exits.
+    if (!(error instanceof SidecarLaunchConvergenceError)) throw error;
+    convergence = await launch(["--appimage-extract-and-run"], { NO_CLEANUP: "1" });
+  }
+
+  const active = await waitForLinuxStatus<DesktopStatusSnapshot>(
+    launchStamps,
+    LINUX_APPIMAGE_LAUNCH_TIMEOUT_MS,
+  );
   if (active == null) {
     await stopSidecars(launchStamps.map((candidate) => ({ stamp: candidate }))).catch(() => undefined);
-    throw new Error(`desktop sidecar did not become ready within 60s for ${config.namespace}`);
+    throw new Error(
+      `desktop sidecar did not become ready within ${LINUX_APPIMAGE_LAUNCH_TIMEOUT_MS / 1000}s for ${config.namespace}`,
+    );
   }
 
   return {
@@ -1059,6 +1679,7 @@ export type LinuxUninstallResult = {
     appImage: "ok" | "already-removed";
     desktop: "ok" | "already-removed";
     icon: "ok" | "already-removed";
+    launcher: "ok" | "already-removed";
   };
   stop: LinuxStopResult;
   postUninstall: {
@@ -1093,8 +1714,10 @@ export async function uninstallPackedLinuxApp(config: ToolPackConfig): Promise<L
   const stop = await stopPackedLinuxApp(config);
   assertLinuxStopComplete(stop, "uninstall");
 
-  const removedAppImage = await tryRemove(paths.installAppImagePath);
+  // Remove the desktop entry before the launcher and AppImage it references.
   const removedDesktop = await tryRemove(paths.installDesktopFilePath);
+  const removedLauncher = await tryRemove(paths.installLauncherPath);
+  const removedAppImage = await tryRemove(paths.installAppImagePath);
   const removedIcon = await tryRemove(paths.installIconPath);
 
   const desktopDatabase = await bestEffortRun("update-desktop-database", [
@@ -1106,7 +1729,12 @@ export async function uninstallPackedLinuxApp(config: ToolPackConfig): Promise<L
 
   return {
     namespace: config.namespace,
-    removed: { appImage: removedAppImage, desktop: removedDesktop, icon: removedIcon },
+    removed: {
+      appImage: removedAppImage,
+      desktop: removedDesktop,
+      icon: removedIcon,
+      launcher: removedLauncher,
+    },
     stop,
     postUninstall: { desktopDatabase, iconCache },
   };

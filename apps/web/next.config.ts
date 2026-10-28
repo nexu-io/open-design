@@ -195,13 +195,33 @@ export function cmsHostReleaseFingerprint(
   ).digest('hex')}`;
 }
 
+/**
+ * Fingerprint the CMS host inputs only when the whole closure is present.
+ *
+ * Packaged builds ship `apps/web/src` but not the workspace `apps/` directory,
+ * so probing a single source file is not enough: the config must never fail to
+ * load because an input is absent. The value is inlined into the client at
+ * build time anyway, so a packaged runtime can safely leave it undefined.
+ */
+export function cmsHostReleaseFingerprintForWorkspace(
+  workspaceRoot: string,
+  options: {
+    exists?: (path: string) => boolean;
+    readFile?: (path: string) => string | Buffer;
+  } = {},
+): string | undefined {
+  const exists = options.exists ?? existsSync;
+  const readFile = options.readFile ?? ((path: string) => readFileSync(path));
+  const inputs = CMS_HOST_RELEASE_INPUTS.map((file) => resolve(workspaceRoot, file));
+  if (!inputs.every((path) => exists(path))) return undefined;
+  return cmsHostReleaseFingerprint((file) => readFile(resolve(workspaceRoot, file)));
+}
+
 const nextConfig: NextConfig = {
   env: {
     // Embedded in the client at build time. Packaged servers use the already
     // compiled client and need not retain source files to load this config.
-    NEXT_PUBLIC_CMS_HOST_RELEASE: existsSync(resolve(WEB_ROOT, 'src/components/touchpoint-component.ts'))
-      ? cmsHostReleaseFingerprint((file) => readFileSync(resolve(WORKSPACE_ROOT, file)))
-      : undefined,
+    NEXT_PUBLIC_CMS_HOST_RELEASE: cmsHostReleaseFingerprintForWorkspace(WORKSPACE_ROOT),
   },
   allowedDevOrigins: configuredAllowedDevHosts(),
   outputFileTracingRoot: WORKSPACE_ROOT,

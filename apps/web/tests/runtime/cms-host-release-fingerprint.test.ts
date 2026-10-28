@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
 	CMS_HOST_RELEASE_INPUTS,
 	cmsHostReleaseFingerprint,
+	cmsHostReleaseFingerprintForWorkspace,
 } from "../../next.config";
 
 const workspaceRoot = resolve(process.cwd(), "../..");
@@ -34,4 +35,26 @@ describe("CMS host release fingerprint", () => {
 			expect(changedHost).not.toBe(baseline);
 		},
 	);
+
+	it("fingerprints a workspace that carries the complete input closure", () => {
+		expect(cmsHostReleaseFingerprintForWorkspace(workspaceRoot)).toBe(
+			cmsHostReleaseFingerprint(readCmsHostReleaseInput),
+		);
+	});
+
+	it("returns undefined when a packaged workspace omits any input", () => {
+		const missing = CMS_HOST_RELEASE_INPUTS[0];
+		let reads = 0;
+
+		const fingerprint = cmsHostReleaseFingerprintForWorkspace(workspaceRoot, {
+			exists: (path) => !path.endsWith(missing),
+			readFile: () => {
+				reads += 1;
+				return "";
+			},
+		});
+
+		expect(fingerprint).toBeUndefined();
+		expect(reads).toBe(0);
+	});
 });

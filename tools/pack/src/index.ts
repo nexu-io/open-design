@@ -80,7 +80,7 @@ function addSharedOptions(command: CacCommand) {
 // config.ts. Keep these in sync: the resolver throws on any value not listed
 // here for the given platform.
 const TO_HELP_BY_PLATFORM: Record<ToolPackPlatform, string> = {
-  linux: "build target: all|appimage|dir (default: all)",
+  linux: "build target: all|appimage|rpm|dir (default: all). `appimage` is the one-file portable artifact; `rpm` is a native Fedora/RHEL/openSUSE package that installs without FUSE; `all` is the AppImage only.",
   mac: "build target: all|app|dmg|zip (default: all)",
   win: "build target: all|dir|nsis|zip (default: nsis). `zip` produces a portable zip from the unpacked build; `all` produces dir+nsis+zip.",
 };
