@@ -13486,6 +13486,39 @@ export async function startServer({
       if (typeof code === 'number') return code === 0 ? 'exit_0' : 'exit_nonzero';
       return 'unknown';
     };
+    // The protocol withholds any text that might still turn out to be a
+    // reserved `<open-design-…>` block, including a reply's last line until
+    // its newline arrives; `finish()` is what finally rules that out, so the
+    // tail it returns is the first moment those bytes are user-visible. Every
+    // way a Run ends must release it, not only success: a Run that fails or is
+    // stopped right after an unterminated line would otherwise drop text the
+    // agent already produced from the conversation.
+    let strategyProtocolFinished = null;
+    const finishStrategyProtocol = () => {
+      if (strategyProtocolFinished) return strategyProtocolFinished;
+      strategyProtocolFinished = strategyProtocol.finish();
+      const tail = strategyProtocolFinished.visibleTail;
+      if (tail) {
+        const tailEvent = def.streamFormat === 'plain' ? 'stdout' : 'agent';
+        const tailData = tailEvent === 'stdout'
+          ? { chunk: tail }
+          : { type: 'text_delta', delta: tail };
+        // It cannot go back through `send`, which would hold it again, so it
+        // applies the same visible output rule here. For a reply whose visible
+        // text was withheld in its entirety this is the ONLY thing the run ever
+        // puts on screen; without the mark the run reports no visible output at
+        // all and the analytics fallback collapses a real close-time wait back
+        // to `firstTokenAt`.
+        recordRunTelemetry('strategy close-time tail', () => {
+          applyVisibleOutputMarks(
+            runLifecycleMarkersForStreamEvent(tailEvent, tailData),
+          );
+        });
+        persistRunEventToAssistantMessage(db, run, tailEvent, tailData);
+        design.runs.emit(run, tailEvent, tailData);
+      }
+      return strategyProtocolFinished;
+    };
     const finishStrategyAwarePhysicalRun = (status, code = null, signal = null) => {
       const finished = finishRun(status, code, signal);
       return finished;
@@ -13497,6 +13530,13 @@ export async function startServer({
       { allowRetry = true } = {},
     ) => {
       lifecycle.mark('finalize_start');
+      // Success releases the held tail itself, before it reads the verdict.
+      if (
+        strategyProtocol && status !== 'succeeded'
+        && !design.runs.isTerminal(run.status)
+      ) {
+        finishStrategyProtocol();
+      }
       // The Run records how the process ended; the strategy task records its
       // own verdict. A task blocked at any stage keeps a cleanly exited Run
       // succeeded: the task projection on the terminal event carries the
@@ -17174,31 +17214,10 @@ export async function startServer({
       }
       if (status === 'succeeded') {
         if (strategyProtocol && !strategyProtocolResult) {
-          const finishedProtocol = strategyProtocol.finish();
+          const finishedProtocol = finishStrategyProtocol();
           strategyProtocolResult = finishedProtocol.parsed;
           const tail = finishedProtocol.visibleTail;
           if (tail) {
-            const tailEvent = def.streamFormat === 'plain' ? 'stdout' : 'agent';
-            const tailData = tailEvent === 'stdout'
-              ? { chunk: tail }
-              : { type: 'text_delta', delta: tail };
-            // The protocol withholds any text that might still turn out to be
-            // a reserved `<open-design-…>` block; `finish()` is what finally
-            // rules that out, so this tail is the first moment those bytes are
-            // user-visible. It cannot go back through `send` — `push` throws
-            // once the protocol is finished — so it applies the same visible
-            // output rule here. For a reply whose visible text was withheld in
-            // its entirety this is the ONLY thing the run ever puts on screen;
-            // without the mark the run reports no visible output at all and
-            // the analytics fallback collapses a real close-time wait back to
-            // `firstTokenAt`.
-            recordRunTelemetry('strategy close-time tail', () => {
-              applyVisibleOutputMarks(
-                runLifecycleMarkersForStreamEvent(tailEvent, tailData),
-              );
-            });
-            persistRunEventToAssistantMessage(db, run, tailEvent, tailData);
-            design.runs.emit(run, tailEvent, tailData);
             // The frozen Harness prompt currently does not receive the nonce,
             // so its authoritative completion signal remains the verified
             // strategy verdict. Still fold a marker if a future frozen bundle

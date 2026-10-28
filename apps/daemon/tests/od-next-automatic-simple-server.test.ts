@@ -1023,6 +1023,35 @@ process.exit(127);
     expect(task.continuedFromTaskExecutionId).toBe(first.strategyTask!.taskExecutionId);
   }, 45_000);
 
+  it.each([
+    ['off', 'failed'], ['active', 'failed'], ['active', 'canceled'],
+  ] as const)('keeps the unterminated reply already streamed when a %s rollout Run ends %s', async (mode, ending) => {
+    const fixture = await createPublicRolloutFixture('unterminated-tail', 'design');
+    started = fixture.started; binDir = fixture.binDir;
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    if (mode === 'off') process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
+    const message = ending === 'failed'
+      ? 'Fail after an unterminated plan.'
+      : 'Stop after an unterminated plan.';
+    const run = await postRun(started.url, publicRunRequest(fixture, message, `unterminated-${mode}-${ending}`));
+    const runId = run.runId as string;
+    if (mode === 'off') expect(run.strategyTask).toBeUndefined();
+    else expect(run.strategyTask).toBeDefined();
+    if (ending === 'canceled') {
+      await vi.waitFor(async () => {
+        const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
+        expect(invocations.some(call => call.stdin.includes(message))).toBe(true);
+      });
+      // Let the streamed reply reach the daemon before stopping.
+      await new Promise(resolve => setTimeout(resolve, 200));
+      await fetch(`${started.url}/api/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' });
+    }
+    expect((await waitForRunTerminal(started.url, runId)).status).toBe(ending);
+    const reply = listMessages(database(), fixture.conversationId)
+      .find(entry => entry.runId === runId);
+    expect(reply?.content).toContain('Plan before the run ended.');
+  }, 45_000);
+
   it('resumes current marker conversations with only the current request and host directives', async () => {
     const fixture = await createPublicRolloutFixture('marker-question', 'design');
     started = fixture.started; binDir = fixture.binDir;
@@ -3031,6 +3060,20 @@ process.stdin.on('end', () => {
     process.on('SIGTERM', () => setTimeout(() => process.exit(0), 2500));
     fs.appendFileSync(logPath, JSON.stringify({ drainReady: true }) + '\\n');
     setInterval(() => {}, 1 << 30);
+    return;
+  }
+  if (stdin.includes('Fail after an unterminated plan.') || stdin.includes('Stop after an unterminated plan.')) {
+    // The reply's last line has no trailing newline, so the OD Next protocol
+    // still holds it when the Run ends without succeeding.
+    console.log(JSON.stringify({
+      type: 'item.completed', item: { id: 'plan', type: 'agent_message', text: 'Plan before the run ended.' },
+    }));
+    if (stdin.includes('Stop after an unterminated plan.')) {
+      setInterval(() => {}, 1 << 30);
+      return;
+    }
+    process.stderr.write('controlled failure after the plan\\n');
+    setTimeout(() => process.exit(1), 5);
     return;
   }
   if (${JSON.stringify(label)} === 'marker-tool-split' && !stdin.includes('This is the production turn')) {
