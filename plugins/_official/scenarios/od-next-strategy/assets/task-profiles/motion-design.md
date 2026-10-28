@@ -148,10 +148,39 @@ Use actual screens where available, isolate what changes, and carry the brand
 motif into the closing frame. A slow camera move over a static page is supporting
 footage, not the entire demonstration.
 
+For a software/tool benefit, complete a concrete interface operation and show
+its result. For a physical product, open, connect or move a part into its real
+use state; keep its shape, screen content and proportions consistent. A detail
+view can follow assembly or opening. When the material supports it, show soft
+material compressing/recovering or liquid flowing/changing quantity. Actions
+must match the real use and material; preserve supplied claims and specifications.
+
 **Kinetic typography:** let words act out meaning through weight, tracking,
 direction and transformation. Keep a stable reading window; do not rotate,
 blur or scatter every line. Animate a phrase as a unit when word-by-word entry
 would obstruct comprehension. Reveal timing is not reading time.
+
+Local unfold, compression/recovery, gathering or weight changes can express a
+word's meaning or contrast. Choose actions for the content; quiet holds and
+existing chart/liquid/quantity changes remain useful. Particles, glow and camera
+motion support the lead action. These examples are options, not a fixed action
+density, film structure or visual style.
+
+For a fitting single-line glyph unfold, use the optional local module. Keep
+the full copy, font, brand palette and film specifications. Choose its scene
+position, start, duration and readable hold in the film's one master timeline.
+Glyph unfold resource hash: `3869c04f701eff7976142056a591df98a30d80bcfe945851d16fa0e3bb004ae1`
+On OD Next, `REFERENCE=.od-motion/glyph-unfold`; check with
+`"$OD_NODE_BIN" "$REFERENCE/prepare.ts" --check --resource-hash '<hash above>' --applied-snapshot '<current recipe_identity.applied_snapshot>'`.
+Without recipe identity, resolve `REFERENCE=references/glyph-unfold` under this
+skill's advertised staged/frozen skill root; run the same check without
+`--applied-snapshot`. After a successful check, read only its `guide.md`, then
+prepare executable assets as directed. The side files are
+`references/glyph-unfold/guide.md`, `references/glyph-unfold/runtime.html` and
+`references/glyph-unfold/prepare.ts`; the engine/helper need not enter context.
+Missing, changed or unsuitable resources keep ordinary Motion authoring, with
+no user template choice. A preparation receipt proves a call, not final adoption;
+check the final source and actual export separately.
 
 **Explainer / data:** choose spatial metaphors that preserve the causal model.
 Show the object before transforming it; maintain labels while relationships

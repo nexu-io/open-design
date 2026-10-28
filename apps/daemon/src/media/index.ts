@@ -56,6 +56,7 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { execFile as execFileCb, spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
+import { createInterface } from 'node:readline';
 import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { Agent as UndiciAgent } from 'undici';
@@ -96,6 +97,7 @@ import {
   resolveHyperFramesNodeBin,
 } from './hyperframes-runtime.js';
 import { prepareHyperFramesAudio, hyperFramesAudioEncodingArgs, type HyperFramesAudioTrack } from './hyperframes-audio.js';
+import { captureMotionRenderSource, motionRenderEvidence, type MotionRenderSourceEvidence } from './motion-render-evidence.js';
 import { renderVelaImage, renderVelaVideo } from './vela.js';
 import {
   ensureProject,
@@ -763,6 +765,7 @@ export async function generateMedia(args: {
         dir,
         args.desktopFrameRenderer ?? null,
         (safeOut.lastIndexOf('.') > 0 ? safeOut.slice(0, safeOut.lastIndexOf('.')) : safeOut) + '.mp4',
+        projectId,
         args.onProgress,
       );
       bytes = result.bytes;
@@ -3882,6 +3885,7 @@ async function renderHyperFrames(
   projectDir: string,
   desktopFrameRenderer: DesktopFrameRenderer | null,
   outputPath: string,
+  projectId: string,
   onProgress?: ProgressFn,
 ): Promise<RenderResult> {
   const compRel = ctx.compositionDir;
@@ -3947,11 +3951,29 @@ async function renderHyperFrames(
   const tmpOutput = path.join(tmpRoot, 'render.mp4');
   const usesHeadlessOverride = Boolean(process.env.HYPERFRAMES_BROWSER_PATH?.trim());
   const usesDesktopRenderer = !usesHeadlessOverride && desktopFrameRenderer != null;
+  let sourceBefore: MotionRenderSourceEvidence | null = null;
+  const captureSource = async (): Promise<void> => {
+    if (motionExport) sourceBefore = await captureMotionRenderSource(compAbs, path.resolve(projectDir, outputPath));
+  };
+  const reportSource = async (videoBytes: Buffer | null): Promise<void> => {
+    if (!motionExport) return;
+    try {
+      const after = await captureMotionRenderSource(compAbs, path.resolve(projectDir, outputPath));
+      // Persisted in daemon diagnostics, not model instructions or user progress.
+      // This evidence has a bounded directory scope and never gates delivery.
+      console.error('[motion-render-evidence]', JSON.stringify(motionRenderEvidence({
+        projectId, compositionDir: compRel, output: outputPath, before: sourceBefore, after, videoBytes,
+      })));
+    } catch (error) {
+      console.warn('[motion-render-evidence] unavailable', errorMessage(error));
+    }
+  };
   try {
     if (usesHeadlessOverride) {
       // Explicit daemon-only override. Never auto-discover or auto-download a
       // browser here: the packaged product path is the bundled Electron engine.
-      await runHyperFramesRender(compAbs, tmpOutput, onProgress);
+      await captureSource();
+      await runHyperFramesRender(compAbs, tmpOutput, Boolean(motionExport), onProgress);
     } else if (desktopFrameRenderer) {
       await renderHyperFramesWithDesktop(
         compAbs,
@@ -3959,6 +3981,7 @@ async function renderHyperFrames(
         tmpOutput,
         desktopFrameRenderer,
         onProgress,
+        captureSource,
       );
     } else {
       throw new Error(
@@ -3967,12 +3990,14 @@ async function renderHyperFrames(
     }
     if (motionExport) await assertMotionExport(tmpOutput, motionExport);
     const bytes = await readFile(tmpOutput);
+    await reportSource(bytes);
     return {
       bytes,
       providerNote: `hyperframes/${usesDesktopRenderer ? 'electron-html' : 'local-html'} · ${ctx.aspect} · ${bytes.length} bytes`,
       suggestedExt: '.mp4',
     };
   } catch (err) {
+    await reportSource(null);
     const stderr =
       errorStringProp(err, 'stderr').trim();
     const message = stderr || errorMessage(err);
@@ -3988,6 +4013,7 @@ async function renderHyperFramesWithDesktop(
   tmpOutput: string,
   desktopFrameRenderer: DesktopFrameRenderer,
   onProgress?: ProgressFn,
+  onSourceReady?: () => Promise<void>,
 ): Promise<void> {
   const sourcePath = path.join(compAbs, 'index.html');
   const original = await readFile(sourcePath, 'utf8');
@@ -4003,6 +4029,7 @@ async function renderHyperFramesWithDesktop(
   const html = injectHyperFramesFrameBridge(audio.html, browserRuntime);
   const framesDir = path.join(tmpRoot, 'frames');
 
+  await onSourceReady?.();
   onProgress?.('Rendering HyperFrames with the bundled Electron Chromium…');
   const rendered = await desktopFrameRenderer({
     baseHref: pathToFileURL(`${compAbs}${path.sep}`).href,
@@ -4218,8 +4245,9 @@ async function assertHyperFramesCompositionFile(
 
 /**
  * Run the pinned HyperFrames CLI and stream every line of stdout/stderr
- * through `onProgress`. Resolves on a clean exit, rejects on non-zero
- * exit (with the stderr tail attached so the dispatcher can surface it).
+ * through `onProgress`. Motion also rejects the pinned SDK's explicit
+ * timeline-readiness failures, even when best-effort rendering exits zero.
+ * Non-zero exits retain the stderr tail for the dispatcher.
  *
  * Streaming matters for UX: the render typically takes 60–120s and
  * HF prints "Capturing frame N/M" as it goes. Without piping these
@@ -4227,7 +4255,7 @@ async function assertHyperFramesCompositionFile(
  * agent's chat tool shows a long quiet spinner — users can't tell
  * whether anything is happening.
  */
-function runHyperFramesRender(compAbs: string, tmpOutput: string, onProgress?: ProgressFn): Promise<void> {
+function runHyperFramesRender(compAbs: string, tmpOutput: string, requiresMotionTimeline: boolean, onProgress?: ProgressFn): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     const hyperFramesCli = resolveHyperFramesCliPath();
     const child = spawn(
@@ -4260,31 +4288,44 @@ function runHyperFramesRender(compAbs: string, tmpOutput: string, onProgress?: P
     const stripAnsi = (s: string): string =>
       s.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/\x1b\[\?[0-9]+[hl]/g, '');
 
-    const emit = (chunk: Buffer): void => {
-      if (typeof onProgress !== 'function') return;
-      const text = stripAnsi(chunk.toString('utf8'));
-      // HF refreshes a single progress line many times per second; split
-      // on \r and \n so each "Capturing frame X/Y" update reaches the
-      // caller as its own line. Drop empty/duplicate lines so the
-      // SSE stream stays compact.
-      const lines = text.split(/[\r\n]+/);
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
+    let timelineReadinessError: string | undefined;
+    const warningPrefix = '[WARN] Render completed capture with correctness warnings ';
+    const emit = (line: string): void => {
+      const trimmed = stripAnsi(line).trim();
+      if (!trimmed) return;
+      // HyperFrames 0.8.1 logs typed warning codes even in best-effort mode.
+      // Only Motion's required timelines are a delivery condition here;
+      // ordinary browser warnings, media 404s and legacy HF remain compatible.
+      if (requiresMotionTimeline && trimmed.startsWith(warningPrefix)) {
         try {
-          onProgress(trimmed);
+          const diagnostic: unknown = JSON.parse(trimmed.slice(warningPrefix.length));
+          if (isRecord(diagnostic) && Array.isArray(diagnostic.warningCodes)) {
+            const codes = diagnostic.warningCodes.filter((code: unknown) =>
+              code === 'sub_timeline_readiness_timeout' || code === 'sub_timeline_script_failure');
+            if (codes.length) {
+              const job = typeof diagnostic.renderJobId === 'string' ? ` (renderJobId=${diagnostic.renderJobId})` : '';
+              timelineReadinessError ??= `Motion video export requires ready timelines [${codes.join(', ')}]${job}. Check render progress for missing timeline registration or failed scripts.`;
+            }
+          }
         } catch {
-          // best-effort: never let an emitter throw kill the render
+          // Unrecognized log output is diagnostic text, not proof of failure.
         }
+      }
+      try {
+        onProgress?.(trimmed);
+      } catch {
+        // best-effort: never let an emitter throw kill the render
       }
     };
 
     let stderrTail = '';
-    child.stdout.on('data', emit);
+    // Each stream needs its own decoder/line buffer: JSON, ANSI sequences and
+    // UTF-8 characters can span chunks, and progress callbacks are optional.
+    createInterface({ input: child.stdout, crlfDelay: Infinity }).on('line', emit);
+    createInterface({ input: child.stderr, crlfDelay: Infinity }).on('line', emit);
     child.stderr.on('data', (chunk) => {
       stderrTail += chunk.toString('utf8');
       if (stderrTail.length > 8000) stderrTail = stderrTail.slice(-8000);
-      emit(chunk);
     });
 
     const timer = setTimeout(() => {
@@ -4306,7 +4347,10 @@ function runHyperFramesRender(compAbs: string, tmpOutput: string, onProgress?: P
     });
     child.on('close', (code, signal) => {
       clearTimeout(timer);
-      if (code === 0) return resolve();
+      if (code === 0) {
+        if (timelineReadinessError) return reject(new Error(timelineReadinessError));
+        return resolve();
+      }
       const reason = signal ? `signal ${signal}` : `exit ${code}`;
       const tail = stderrTail.trim().split('\n').slice(-12).join('\n');
       const err = new Error(
