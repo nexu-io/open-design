@@ -10,6 +10,7 @@ import {
   suggestMemoryFromConnectors,
 } from '../src/memory-connectors.js';
 import { memoryDir, readMemoryEntry, writeMemoryConfig } from '../src/memory.js';
+import { agentCapabilities } from '../src/runtimes/capabilities.js';
 import {
   __resetExtractionsForTests,
   listExtractions,
@@ -1113,6 +1114,100 @@ process.stdout.write(JSON.stringify({
       expect(captured.stdin).toContain('You are a design-memory extractor');
       expect(captured.stdin).toContain('OpenDesign connector memory should collect design preferences');
     } finally {
+      if (previousPath == null) {
+        delete process.env.PATH;
+      } else {
+        process.env.PATH = previousPath;
+      }
+      if (previousCapture == null) {
+        delete process.env.OD_MEMORY_OPENCODE_ARGS_OUT;
+      } else {
+        process.env.OD_MEMORY_OPENCODE_ARGS_OUT = previousCapture;
+      }
+      await fsp.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('cold-start memory extraction probes capabilities before building argv and sets 2.x argv and env.PWD', async () => {
+    await writeMemoryConfig(dataDir, { extraction: null });
+    const tempDir = await fsp.mkdtemp(path.join(tmpdir(), 'od-opencode-mem-cold-'));
+    const binPath = path.join(tempDir, 'opencode-cli');
+    const capturePath = path.join(tempDir, 'capture.json');
+    const previousPath = process.env.PATH;
+    const previousCapture = process.env.OD_MEMORY_OPENCODE_ARGS_OUT;
+    const previousCaps = agentCapabilities.get('opencode');
+    agentCapabilities.delete('opencode');
+
+    await fsp.writeFile(
+      binPath,
+      `#!/usr/bin/env node
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+if (args[0] === 'run' && args.includes('--help')) {
+  console.log('Usage: opencode run [options]');
+  console.log('  --auto  Auto-approve permissions');
+  process.exit(0);
+}
+const stdin = fs.readFileSync(0, 'utf8');
+fs.writeFileSync(process.env.OD_MEMORY_OPENCODE_ARGS_OUT, JSON.stringify({ args, stdin, PWD: process.env.PWD, cwd: process.cwd() }));
+process.stdout.write(JSON.stringify({
+  type: 'text',
+  part: {
+    type: 'text',
+    text: JSON.stringify({
+      entries: [{
+        type: 'project',
+        name: 'OpenDesign design memory 2x',
+        description: 'OpenCode 2.x memory extraction',
+        body: 'Verified OpenDesign design preferences and PWD pinning.'
+      }]
+    })
+  }
+}) + '\\n');
+`,
+      'utf8',
+    );
+    await fsp.chmod(binPath, 0o755);
+
+    try {
+      process.env.PATH = `${tempDir}${path.delimiter}${previousPath ?? ''}`;
+      process.env.OD_MEMORY_OPENCODE_ARGS_OUT = capturePath;
+
+      const projectRoot = path.join(tempDir, 'sample-project');
+      await fsp.mkdir(projectRoot, { recursive: true });
+
+      const result = await suggestMemoryFromConnectors(dataDir, {
+        projectsRoot: tempDir,
+        projectRoot,
+        connectorIds: ['notion'],
+        chatAgentId: 'opencode',
+        chatModel: 'openai/gpt-5',
+        service: createNotionService(),
+      });
+
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+      expect(result.suggestions).toEqual([
+        expect.objectContaining({
+          type: 'project',
+          name: 'OpenDesign design memory 2x',
+        }),
+      ]);
+
+      const captured = JSON.parse(await fsp.readFile(capturePath, 'utf8'));
+      expect(captured.args).toEqual([
+        'run',
+        '--format',
+        'json',
+        '--auto',
+        '-m',
+        'openai/gpt-5',
+      ]);
+      expect(captured.args).not.toContain('--dir');
+      expect(captured.args).not.toContain('--pure');
+      expect(path.resolve(captured.PWD)).toBe(path.resolve(projectRoot));
+    } finally {
+      if (previousCaps === undefined) agentCapabilities.delete('opencode');
+      else agentCapabilities.set('opencode', previousCaps);
       if (previousPath == null) {
         delete process.env.PATH;
       } else {
