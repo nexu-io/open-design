@@ -1,6 +1,10 @@
 import type { Dict } from '../types';
 
 export const pl: Dict = {
+  "fileViewer.publishFileContentUnavailable": "Brakuje niektórych przesłanych plików lub nie przeszły one kontroli integralności. Spróbuj ponownie.",
+  "fileViewer.publishFileConflict": "Stan publikacji lub przesyłania uległ zmianie. Odśwież panel udostępniania i spróbuj ponownie.",
+  "fileViewer.publishFileWorkspaceLocked": "Ten obszar roboczy jest zablokowany. Przywróć dostęp przed opublikowaniem.",
+
   "collab.contentUpdate.available": "Nowa wersja w chmurze",
   "collab.contentUpdate.updating": "Aktualizowanie…",
   "collab.contentUpdate.askAgain": "Przywróć powiadomienia o aktualizacjach",
@@ -3341,11 +3345,12 @@ export const pl: Dict = {
 
   'fileViewer.publishFileRequiresTeam': 'Opublikowanie linku publicznego wymaga zespołowej przestrzeni roboczej. Przełącz się na przestrzeń zespołu lub użyj Wdróż, aby opublikować ten plik.',
   'fileViewer.publishFileRequiresWorkspace': 'Link do udostępniania wymaga zalogowanego obszaru roboczego. Zaloguj się do OpenDesign Cloud lub udostępnij ten plik przez wdrożenie.',
-  'fileViewer.publishFileTooLarge': "Projekt przekracza limit udostępniania 20 MiB. Zmniejsz rozmiar HTML i powiązanych zasobów, a następnie spróbuj ponownie.",
+  "fileViewer.publishFileTooLarge": "Treść przekracza limit udostępniania na serwerze. Zmniejsz rozmiar plików i spróbuj ponownie.",
   'fileViewer.publishFileEntryIndexConflict': "„{from}” odwołuje się do pliku index.html w katalogu głównym projektu, który koliduje z miejscem publikacji udostępnianej strony. Zmień nazwę tego pliku index.html (na przykład na {name}) i zaktualizuj odwołanie albo udostępnij sam plik index.html.",
   'fileViewer.copyFixForAgent': "Skopiuj poprawkę dla agenta",
   'fileViewer.copyFixForAgentFailed': "Nie udało się skopiować. Zaznacz poniższą instrukcję i skopiuj ją ręcznie.",
   "fileViewer.shareUpdateHint": "Plik ma nowe zmiany. Odwiedzający nadal widzą poprzednią wersję.",
+  "fileViewer.shareUpdatingLink": "Aktualizowanie linku…",
   "fileViewer.shareUpdateLink": "Zaktualizuj link",
   "fileViewer.signInToUpdate": "Zaloguj się, aby zaktualizować",
   "fileViewer.signInToShare": "Zaloguj się, aby udostępnić",

@@ -1,6 +1,10 @@
 import type { Dict } from '../types';
 
 export const th: Dict = {
+  "fileViewer.publishFileContentUnavailable": "ไฟล์ที่อัปโหลดบางไฟล์หายไปหรือไม่ผ่านการตรวจสอบความสมบูรณ์ โปรดลองอีกครั้ง",
+  "fileViewer.publishFileConflict": "สถานะการเผยแพร่หรือการอัปโหลดเปลี่ยนไป โปรดรีเฟรชแผงการแชร์แล้วลองอีกครั้ง",
+  "fileViewer.publishFileWorkspaceLocked": "พื้นที่ทำงานนี้ถูกล็อก โปรดกู้คืนสิทธิ์เข้าถึงก่อนเผยแพร่",
+
   "collab.contentUpdate.available": "มีเวอร์ชันใหม่บนคลาวด์",
   "collab.contentUpdate.updating": "กำลังอัปเดต…",
   "collab.contentUpdate.askAgain": "เปิดการแจ้งเตือนอัปเดตอีกครั้ง",
@@ -3341,11 +3345,12 @@ export const th: Dict = {
 
   'fileViewer.publishFileRequiresTeam': 'การเผยแพร่ลิงก์สาธารณะต้องใช้พื้นที่ทำงานแบบทีม สลับไปยังพื้นที่ทำงานแบบทีม หรือใช้ Deploy เพื่อเผยแพร่ไฟล์นี้',
   'fileViewer.publishFileRequiresWorkspace': 'การสร้างลิงก์แชร์ต้องเข้าสู่ระบบเวิร์กสเปซ เข้าสู่ระบบ OpenDesign Cloud หรือแชร์ไฟล์นี้ผ่านการดีพลอย',
-  'fileViewer.publishFileTooLarge': "โปรเจกต์นี้เกินขีดจำกัดการแชร์ 20 MiB โปรดลดขนาด HTML และทรัพยากรที่อ้างอิง แล้วลองอีกครั้ง",
+  "fileViewer.publishFileTooLarge": "เนื้อหาเกินขีดจำกัดการแชร์ของเซิร์ฟเวอร์ โปรดลดขนาดไฟล์แล้วลองอีกครั้ง",
   'fileViewer.publishFileEntryIndexConflict': "“{from}” อ้างอิงไฟล์ index.html ที่รูทของโปรเจกต์ ซึ่งชนกับตำแหน่งที่หน้าแชร์ถูกเผยแพร่ โปรดเปลี่ยนชื่อ index.html นั้น (เช่น เป็น {name}) แล้วอัปเดตการอ้างอิง หรือแชร์ index.html โดยตรง",
   'fileViewer.copyFixForAgent': "คัดลอกวิธีแก้ให้เอเจนต์",
   'fileViewer.copyFixForAgentFailed': "คัดลอกไม่สำเร็จ โปรดเลือกคำสั่งด้านล่างแล้วคัดลอกด้วยตนเอง",
   "fileViewer.shareUpdateHint": "ไฟล์มีการเปลี่ยนแปลงใหม่ ผู้เข้าชมยังเห็นเวอร์ชันก่อนหน้า",
+  "fileViewer.shareUpdatingLink": "กำลังอัปเดตลิงก์…",
   "fileViewer.shareUpdateLink": "อัปเดตลิงก์",
   "fileViewer.signInToUpdate": "เข้าสู่ระบบเพื่ออัปเดต",
   "fileViewer.signInToShare": "เข้าสู่ระบบเพื่อแชร์",

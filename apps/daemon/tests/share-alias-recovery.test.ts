@@ -97,6 +97,7 @@ it.each([
   const generateId = vi.fn(() => '33333333-3333-4333-8333-333333333333');
   let reservations = fixture.sharePublishing.reservations;
   const app = express(); app.use(express.json());
+  app.use((req,_res,next)=>{req.headers['x-od-workspace-id'] ??= context.workspaceId;req.headers['x-od-workspace-member-id'] ??= context.workspaceMemberId;next();});
   registerCollabSyncRoutes(app, {
     collab: runtime, publicFilePublicationStore: store, ...fixture,
     sharePublishing: { ...fixture.sharePublishing, sourceFileId: () => scope.sourceFileId,

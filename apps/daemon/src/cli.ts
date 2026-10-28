@@ -7382,7 +7382,7 @@ function printProjectShareHelp() {
                     "link temporarily unavailable" plus its slug, and no URL.
                     When AMR cannot be reached, the last known link is shown
                     with a stale notice on stderr ("stale": true in --json).
-  od project share status <id> [--path <file>] [--json]
+  od project share status <id> [--path <file>] [--local-only] [--json]
                     Project binding history, or file lifecycle with --path.
   od project share stop <id> --path <file> --slug <slug> [--json]
                     Stop the stable public alias; its identity is retained for resume.
@@ -7443,7 +7443,7 @@ async function runProjectShare(args) {
     ...(['stop', 'retry-stop'].includes(action) ? ['slug'] : [])]);
   let flags;
   try {
-    flags = parseFlags(rest, { string: stringFlags, boolean: new Set(['json']) });
+    flags = parseFlags(rest, { string: stringFlags, boolean: new Set(['json', 'local-only']) });
   } catch {
     console.error('Usage: od project share <preflight|publish|resume|get|status|stop|retry-stop> <id> --path <file> [--json] (stop requires --slug <slug>). See --help for accepted flags.');
     process.exit(2);
@@ -7459,13 +7459,16 @@ async function runProjectShare(args) {
     console.error('Usage: od project share <preflight|publish|resume|get|status|stop|retry-stop> <id> --path <file> [--json] (stop requires --slug <slug>)');
     process.exit(2);
   }
+  if (flags['local-only'] && (action !== 'get' || !filePath)) {
+    console.error('--local-only requires share get/status with --path'); process.exit(2);
+  }
   // Validate before discovery; malformed invocations must not contact a daemon.
   const headers = workspaceHeadersFromExplicitFlags(flags) ?? {};
   const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
   let resp;
   try {
     resp = await fetch(
-      projectStatus ? `${base}/api/projects/${encodeURIComponent(id)}/share-state` : action === 'retry-stop' ? `${base}/api/public-file-stops/retry` : `${base}/api/projects/${encodeURIComponent(id)}/files/${encodeURIComponent(filePath)}/${action === 'preflight' ? 'share-plan' : 'publish-public'}`,
+      projectStatus ? `${base}/api/projects/${encodeURIComponent(id)}/share-state` : action === 'retry-stop' ? `${base}/api/public-file-stops/retry` : `${base}/api/projects/${encodeURIComponent(id)}/files/${encodeURIComponent(filePath)}/${action === 'preflight' ? 'share-plan' : 'publish-public'}${flags['local-only'] ? '?localOnly=true' : ''}`,
       action === 'retry-stop'
         ? { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify({ projectId: id, filePath, slug }) }
         : action === 'stop'
@@ -7500,6 +7503,7 @@ async function runProjectShare(args) {
   const blockers = action === 'preflight' && Array.isArray(data?.blockers) ? data.blockers : [];
   if (blockers.length) process.exitCode = 1;
   if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+  if (flags['local-only']) return console.log(`Local share content: ${data.freshness ?? 'unknown'}`);
   if (projectStatus) return console.log(JSON.stringify(data, null, 2));
   if (action === 'preflight') {
     console.log(`Share plan: ${data.fileCount} files, ${data.totalBytes} bytes.`);
@@ -7564,7 +7568,7 @@ async function runProject(args) {
                     Resume sharing through the same stable-alias lifecycle as the UI.
   od project share get <id> --path <file> [--json]
                     Read the current publication.
-  od project share status <id> [--path <file>] [--json]
+  od project share status <id> [--path <file>] [--local-only] [--json]
                     Project binding history, or file lifecycle with --path.
   od project share stop <id> --path <file> --slug <slug> [--json]
                     Stop the stable public alias; its identity is retained for resume.

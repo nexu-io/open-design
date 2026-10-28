@@ -4295,6 +4295,7 @@ export interface Dict {
   'fileViewer.shareCheckLoading': string;
   'fileViewer.shareCheckFailed': string;
   'fileViewer.shareUpdateHint': string;
+  'fileViewer.shareUpdatingLink': string;
   'fileViewer.shareUpdateLink': string;
   'fileViewer.signInToUpdate': string;
   'fileViewer.signInToShare': string;
@@ -4306,6 +4307,9 @@ export interface Dict {
   'fileViewer.shareUpdateRetry': string;
   'fileViewer.unpublishFileFailed': string;
   'fileViewer.publishFileTooLarge': string;
+  'fileViewer.publishFileContentUnavailable': string;
+  'fileViewer.publishFileConflict': string;
+  'fileViewer.publishFileWorkspaceLocked': string;
   'fileViewer.publishFileEntryIndexConflict': string;
   'fileViewer.copyFixForAgent': string;
   'fileViewer.copyFixForAgentFailed': string;

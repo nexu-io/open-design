@@ -1,6 +1,10 @@
 import type { Dict } from '../types';
 
 export const ptBR: Dict = {
+  "fileViewer.publishFileContentUnavailable": "Alguns arquivos enviados estão ausentes ou falharam nas verificações de integridade. Tente novamente.",
+  "fileViewer.publishFileConflict": "O estado de publicação ou envio mudou. Atualize o painel de compartilhamento e tente novamente.",
+  "fileViewer.publishFileWorkspaceLocked": "Este espaço de trabalho está bloqueado. Restaure o acesso antes de publicar.",
+
   "collab.contentUpdate.available": "Nova versão na nuvem",
   "collab.contentUpdate.updating": "Atualizando…",
   "collab.contentUpdate.askAgain": "Restaurar avisos de atualização",
@@ -3341,11 +3345,12 @@ export const ptBR: Dict = {
 
   'fileViewer.publishFileRequiresTeam': 'Publicar um link público exige um espaço de trabalho de equipe. Mude para um espaço de equipe ou use Implantar para publicar este arquivo.',
   'fileViewer.publishFileRequiresWorkspace': 'Um link de compartilhamento exige um workspace conectado. Entre no OpenDesign Cloud ou compartilhe este arquivo por deploy.',
-  'fileViewer.publishFileTooLarge': "Este projeto excede o limite de compartilhamento de 20 MiB. Reduza o HTML e os recursos referenciados e tente novamente.",
+  "fileViewer.publishFileTooLarge": "O conteúdo excede o limite de compartilhamento do servidor. Reduza o tamanho dos arquivos e tente novamente.",
   'fileViewer.publishFileEntryIndexConflict': "“{from}” faz referência ao index.html na raiz do projeto, que entra em conflito com o local onde a página compartilhada é publicada. Renomeie esse index.html (por exemplo, para {name}) e atualize a referência, ou compartilhe o próprio index.html.",
   'fileViewer.copyFixForAgent': "Copiar correção para o agente",
   'fileViewer.copyFixForAgentFailed': "Não foi possível copiar. Selecione a instrução abaixo e copie-a manualmente.",
   "fileViewer.shareUpdateHint": "O arquivo tem novas alterações. Os visitantes ainda veem a versão anterior.",
+  "fileViewer.shareUpdatingLink": "Atualizando link…",
   "fileViewer.shareUpdateLink": "Atualizar link",
   "fileViewer.signInToUpdate": "Entre para atualizar",
   "fileViewer.signInToShare": "Entre para compartilhar",

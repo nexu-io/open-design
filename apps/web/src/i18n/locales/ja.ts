@@ -1,6 +1,10 @@
 import type { Dict } from '../types';
 
 export const ja: Dict = {
+  "fileViewer.publishFileContentUnavailable": "アップロードした一部のファイルが見つからないか、整合性チェックに失敗しました。再試行してください。",
+  "fileViewer.publishFileConflict": "公開またはアップロードの状態が変わりました。共有パネルを更新して再試行してください。",
+  "fileViewer.publishFileWorkspaceLocked": "このワークスペースはロックされています。アクセスを復旧してから公開してください。",
+
   "collab.contentUpdate.available": "クラウドに新しいバージョンがあります",
   "collab.contentUpdate.updating": "更新中…",
   "collab.contentUpdate.askAgain": "更新通知を再開",
@@ -3341,11 +3345,12 @@ export const ja: Dict = {
 
   'fileViewer.publishFileRequiresTeam': '公開リンクの発行にはチームワークスペースが必要です。チームワークスペースに切り替えるか、デプロイでこのファイルを公開してください。',
   'fileViewer.publishFileRequiresWorkspace': '共有リンクの作成にはサインイン済みのワークスペースが必要です。OpenDesign Cloud にサインインするか、デプロイでこのファイルを共有してください。',
-  'fileViewer.publishFileTooLarge': "プロジェクトが共有上限の 20 MiB を超えています。HTML と参照リソースの合計サイズを減らしてから再試行してください。",
+  "fileViewer.publishFileTooLarge": "コンテンツがサーバーの共有容量の上限を超えています。ファイルサイズを減らして再試行してください。",
   'fileViewer.publishFileEntryIndexConflict': "「{from}」がプロジェクト直下の index.html を参照しており、共有ページの公開先と衝突しています。その index.html の名前を変更し（例: {name}）参照を更新するか、index.html 自体を共有してください。",
   'fileViewer.copyFixForAgent': "エージェント用に修正内容をコピー",
   'fileViewer.copyFixForAgentFailed': "コピーできませんでした。下の指示を選択して手動でコピーしてください。",
   "fileViewer.shareUpdateHint": "ファイルに新しい変更があります。閲覧者にはまだ前のバージョンが表示されています。",
+  "fileViewer.shareUpdatingLink": "リンクを更新中…",
   "fileViewer.shareUpdateLink": "リンクを更新",
   "fileViewer.signInToUpdate": "ログインして更新",
   "fileViewer.signInToShare": "ログインして共有",

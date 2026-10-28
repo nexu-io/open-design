@@ -82,8 +82,6 @@ it('cloud history for comment sync is read-only even for a personal project with
   const session = { profile: 'test' as const, apiUrl: 'https://example.test', controlKey: 'synthetic', user: null, configMtimeMs: null };
   const runCommand = vi.fn(async () => JSON.stringify({ projectId: 'p', bindingExists: false, publications: [] }));
   const read = createVelaProjectShareState({ dataRoot: tmpdir(), configuredEnv: {}, readSession: () => session,
-    resolveLocalProjectOwner: () => 'owner', registerLocallyOwnedProject: false,
-    fetchDirectory: async () => ({ ok: true, items: [{ workspaceId: 'w', workspaceName: 'W', workspaceType: 'personal', workspaceMemberId: 'owner', role: 'owner', memberStatus: 'active', lifecycleState: 'active' }] }),
     runCommand });
   expect((await read({ projectId: 'p', resourceTeamId: 'w', ownerMemberId: 'owner' })).bindingExists).toBe(false);
   expect(runCommand).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ args: ['share', 'project-status', 'p', '--json'] }));

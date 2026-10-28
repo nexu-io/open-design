@@ -2029,12 +2029,6 @@ export async function publishProjectFilePublic(
   return publicFileShareLinkFromPublish(await resp.json());
 }
 
-export async function fetchProjectFileSharePlan(projectId: string, fileName: string, workspaceContext?: WorkspaceCollabContext | null) {
-  const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(fileName)}/share-plan`, { method: 'POST', headers: workspaceContext ? workspaceProjectHeaders(workspaceContext) : undefined });
-  if (!resp.ok) throw new Error(`Share preflight failed (${resp.status})`);
-  return resp.json() as Promise<import('@open-design/contracts').SharePlanSummary>;
-}
-
 // Only this endpoint's known codes may reach diagnostic logs; arbitrary token-shaped
 // upstream text can still contain sensitive data. No response messages are logged.
 const PUBLIC_SHARE_STATE_ERROR_CODES = new Set([
@@ -2053,6 +2047,22 @@ export class PublicFileShareStateReadError extends Error {
     super(`Share state read failed: ${reason}${status ? ` (${status})` : ''}`);
     this.name = 'PublicFileShareStateReadError';
   }
+}
+
+/** Pure local comparison; never performs cloud authorization or publication. */
+export async function fetchProjectFilePublicShareFreshness(
+  projectId: string,
+  fileName: string,
+  workspaceContext: WorkspaceCollabContext | null,
+): Promise<import('@open-design/contracts').ShareContentFreshness> {
+  const response = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(fileName)}/publish-public?localOnly=true`,
+    { headers: workspaceContext ? workspaceProjectHeaders(workspaceContext) : {} },
+  );
+  if (!response.ok) return 'unknown';
+  const body: unknown = await response.json();
+  if (!body || typeof body !== 'object' || !('freshness' in body)) return 'unknown';
+  return body.freshness === 'current' || body.freshness === 'outdated' ? body.freshness : 'unknown';
 }
 
 export async function fetchProjectFilePublicShareState(
@@ -2133,9 +2143,12 @@ export async function unpublishProjectFilePublic(
         : typeof payload?.error === 'string'
           ? payload.error
           : payload?.message;
-    throw withDaemonFailure(new Error(errorMessage || `Unpublish failed (${resp.status})`), {
+    const rawCode = typeof payload?.error === 'object' ? payload.error.code : payload?.error;
+    const code = typeof rawCode === 'string' ? rawCode : undefined;
+    // An HTTP refusal is distinct from fetch rejecting without any response.
+    throw withDaemonFailure(new PublicFilePublishError(errorMessage || `Unpublish failed (${resp.status})`, resp.status, code), {
       failure: payload?.failure,
-      daemonErrorCode: typeof payload?.error === 'object' ? payload.error.code : payload?.error,
+      daemonErrorCode: rawCode,
     });
   }
   return (await resp.json()) as ShareUnpublishResponse;

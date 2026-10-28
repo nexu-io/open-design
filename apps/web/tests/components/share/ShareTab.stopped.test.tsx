@@ -189,7 +189,7 @@ it('S9-R clears a last-known URL after authoritative remote stop and offers resu
   expect(publicationRequests('DELETE')).toHaveLength(0);
 });
 
-it('S10: rejected stop restores the checked switch, keeps the old link, and allows deliberate retry only', async () => {
+it.each([500, 503])('S10: explicit HTTP %s stop rejection keeps the old link and permits only deliberate retry', async status => {
   publications = [{ sourceFilePath: 'page.html', slug: 'stable', status: 'active' }];
   const pending = deferredResponse();
   fetchMock.mockImplementation(async (input, options) => {
@@ -207,7 +207,7 @@ it('S10: rejected stop restores the checked switch, keeps the old link, and allo
   fireEvent.click(toggle);
   expect(toggle).toBeDisabled();
   expect(toggle).toHaveAttribute('aria-checked', 'true');
-  await act(async () => pending.resolve(Response.json({ error: { message: 'no access' } }, { status: 503 })));
+  await act(async () => pending.resolve(Response.json({ error: { message: 'stop unavailable' } }, { status })));
   expect(await screen.findByText(/could not turn off the link/i)).toBeTruthy();
   expect(toggle).toBeEnabled();
   expect(toggle).toHaveAttribute('aria-checked', 'true');

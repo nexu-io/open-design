@@ -1,6 +1,10 @@
 import type { Dict } from '../types';
 
 export const uk: Dict = {
+  "fileViewer.publishFileContentUnavailable": "Деякі завантажені файли відсутні або не пройшли перевірку цілісності. Спробуйте ще раз.",
+  "fileViewer.publishFileConflict": "Стан публікації або завантаження змінився. Оновіть панель поширення та спробуйте ще раз.",
+  "fileViewer.publishFileWorkspaceLocked": "Цей робочий простір заблоковано. Відновіть доступ перед публікацією.",
+
   "collab.contentUpdate.available": "Нова версія в хмарі",
   "collab.contentUpdate.updating": "Оновлення…",
   "collab.contentUpdate.askAgain": "Відновити сповіщення про оновлення",
@@ -3341,11 +3345,12 @@ export const uk: Dict = {
 
   'fileViewer.publishFileRequiresTeam': 'Щоб опублікувати загальнодоступне посилання, потрібен командний робочий простір. Перейдіть до командного простору або скористайтеся «Розгорнути».',
   'fileViewer.publishFileRequiresWorkspace': 'Для посилання потрібен вхід у робочий простір. Увійдіть в OpenDesign Cloud або поділіться файлом через деплой.',
-  'fileViewer.publishFileTooLarge': "Проєкт перевищує ліміт поширення 20 MiB. Зменште розмір HTML і пов’язаних ресурсів та спробуйте ще раз.",
+  "fileViewer.publishFileTooLarge": "Вміст перевищує ліміт поширення на сервері. Зменште розмір файлів і спробуйте ще раз.",
   'fileViewer.publishFileEntryIndexConflict': "«{from}» посилається на index.html у корені проєкту, який конфліктує з адресою публікації спільної сторінки. Перейменуйте цей index.html (наприклад, на {name}) і оновіть посилання або поширте сам index.html.",
   'fileViewer.copyFixForAgent': "Скопіювати виправлення для агента",
   'fileViewer.copyFixForAgentFailed': "Не вдалося скопіювати. Виділіть інструкцію нижче та скопіюйте її вручну.",
   "fileViewer.shareUpdateHint": "У файлі є нові зміни. Відвідувачі досі бачать попередню версію.",
+  "fileViewer.shareUpdatingLink": "Оновлення посилання…",
   "fileViewer.shareUpdateLink": "Оновити посилання",
   "fileViewer.signInToUpdate": "Увійти для оновлення",
   "fileViewer.signInToShare": "Увійти й поділитися",

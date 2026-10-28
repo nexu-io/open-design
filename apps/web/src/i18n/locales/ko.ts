@@ -1,6 +1,10 @@
 import type { Dict } from '../types';
 
 export const ko: Dict = {
+  "fileViewer.publishFileContentUnavailable": "업로드한 일부 파일이 없거나 무결성 검사에 실패했습니다. 다시 시도하세요.",
+  "fileViewer.publishFileConflict": "게시 또는 업로드 상태가 변경되었습니다. 공유 패널을 새로 고친 후 다시 시도하세요.",
+  "fileViewer.publishFileWorkspaceLocked": "이 워크스페이스는 잠겨 있습니다. 액세스를 복구한 후 게시하세요.",
+
   "collab.contentUpdate.available": "클라우드에 새 버전이 있습니다",
   "collab.contentUpdate.updating": "업데이트 중…",
   "collab.contentUpdate.askAgain": "업데이트 알림 복원",
@@ -3341,11 +3345,12 @@ export const ko: Dict = {
 
   'fileViewer.publishFileRequiresTeam': '공개 링크를 게시하려면 팀 워크스페이스가 필요합니다. 팀 워크스페이스로 전환하거나 배포를 사용해 이 파일을 게시하세요.',
   'fileViewer.publishFileRequiresWorkspace': '공유 링크를 만들려면 로그인된 워크스페이스가 필요합니다. OpenDesign Cloud에 로그인하거나 배포로 이 파일을 공유하세요.',
-  'fileViewer.publishFileTooLarge': "프로젝트가 공유 한도인 20 MiB를 초과합니다. HTML 및 참조 리소스의 크기를 줄인 후 다시 시도하세요.",
+  "fileViewer.publishFileTooLarge": "콘텐츠가 서버의 공유 용량 제한을 초과했습니다. 파일 크기를 줄인 후 다시 시도하세요.",
   'fileViewer.publishFileEntryIndexConflict': "“{from}”이(가) 프로젝트 루트의 index.html을 참조하고 있어 공유 페이지가 게시되는 위치와 충돌합니다. 해당 index.html의 이름을 바꾸고(예: {name}) 참조를 업데이트하거나, index.html 자체를 공유하세요.",
   'fileViewer.copyFixForAgent': "에이전트용 수정 지침 복사",
   'fileViewer.copyFixForAgentFailed': "복사하지 못했습니다. 아래 지침을 선택해 직접 복사하세요.",
   "fileViewer.shareUpdateHint": "파일에 새 변경 사항이 있습니다. 방문자에게는 아직 이전 버전이 보입니다.",
+  "fileViewer.shareUpdatingLink": "링크 업데이트 중…",
   "fileViewer.shareUpdateLink": "링크 업데이트",
   "fileViewer.signInToUpdate": "로그인 후 업데이트",
   "fileViewer.signInToShare": "로그인 후 공유",

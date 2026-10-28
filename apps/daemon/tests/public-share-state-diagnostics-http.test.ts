@@ -33,7 +33,7 @@ it.each([
     await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
     const address = server.address(); if (!address || typeof address === 'string') throw new Error('no listener');
     const response = await fetch(`http://127.0.0.1:${address.port}/api/projects/p/files/index.html/publish-public`,
-      { headers: { 'x-od-request-id': 'state-read-test' } });
+      { headers: { 'x-od-request-id': 'state-read-test', 'x-od-workspace-id':'w', 'x-od-workspace-member-id':'owner' } });
     expect(response.status).toBe(scenario.local ? 200 : 503);
     expect(await response.json()).toMatchObject(scenario.local
       ? { status: 'active', stale: true } : { error: 'SHARE_STATE_UNAVAILABLE' });

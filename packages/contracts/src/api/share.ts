@@ -1135,6 +1135,11 @@ export function shareEntryPresentation(input: {
  * read the SAME entry — two independent polls of the same fact would let the
  * two surfaces disagree on screen.
  */
+/** Local content comparison only; makes no claim about cloud link lifecycle. */
+export interface ProjectFilePublicShareFreshnessResponse {
+  freshness: ShareContentFreshness;
+}
+
 export interface ProjectFilePublicShareResponse {
   /** Local record of the published link; `null` when we hold none. */
   publication: PublicProjectFilePublication | null;
