@@ -3591,7 +3591,6 @@ export const ptBR: Dict = {
   'assistant.doneLabel': 'Concluído',
   'assistant.awaitingReplyLabel': 'Aguardando resposta',
   'assistant.canceledLabel': 'Tarefa interrompida',
-  'assistant.canceledDetail': 'Esta execução foi interrompida conforme sua ação.',
   'assistant.copyMarkdown': 'Copiar',
   'assistant.forkConversation': 'Nova conversa',
   'assistant.forkingConversation': 'Iniciando nova conversa…',

@@ -3602,7 +3602,6 @@ export const fa: Dict = {
   'assistant.doneLabel': 'انجام شد',
   'assistant.awaitingReplyLabel': 'در انتظار پاسخ',
   'assistant.canceledLabel': 'کار متوقف شد',
-  'assistant.canceledDetail': 'این اجرا طبق اقدام شما متوقف شد.',
   'assistant.copyMarkdown': 'کپی',
   'assistant.forkConversation': 'مکالمه جدید',
   'assistant.forkingConversation': 'در حال شروع مکالمه جدید…',

@@ -3783,7 +3783,6 @@ export const zhCN: Dict = {
   "assistant.doneLabel": "已完成",
   "assistant.awaitingReplyLabel": "等待回复",
   "assistant.canceledLabel": "任务已停止",
-  "assistant.canceledDetail": "本次运行已按你的操作停止。",
   "assistant.copyMarkdown": "复制",
   "assistant.forkConversation": "新会话",
   "assistant.forkingConversation": "正在开始新会话…",

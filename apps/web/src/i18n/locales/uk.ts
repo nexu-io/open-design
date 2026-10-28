@@ -3591,7 +3591,6 @@ export const uk: Dict = {
   'assistant.doneLabel': 'Готово',
   'assistant.awaitingReplyLabel': 'Очікує відповіді',
   'assistant.canceledLabel': 'Завдання зупинено',
-  'assistant.canceledDetail': 'Цей запуск зупинено за вашою дією.',
   'assistant.copyMarkdown': 'Копіювати',
   'assistant.forkConversation': 'Нова розмова',
   'assistant.forkingConversation': 'Починається нова розмова…',

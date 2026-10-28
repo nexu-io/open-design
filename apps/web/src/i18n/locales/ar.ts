@@ -3602,7 +3602,6 @@ export const ar: Dict = {
   'assistant.doneLabel': 'تم',
   'assistant.awaitingReplyLabel': 'في انتظار ردك',
   'assistant.canceledLabel': 'تم إيقاف المهمة',
-  'assistant.canceledDetail': 'تم إيقاف هذا التشغيل بناءً على إجرائك.',
   'assistant.copyMarkdown': 'نسخ',
   'assistant.forkConversation': 'محادثة جديدة',
   'assistant.forkingConversation': 'جارٍ بدء محادثة جديدة…',

@@ -246,9 +246,13 @@ describe('中断的一轮 · 状态词', () => {
   });
 
   it('文案落在 `assistant.canceledLabel` 上,逐字与稿子相同', () => {
-    // 产品《报错文案｜精简版》S24c「用户主动停止」:标题「任务已停止」(正文另见 `assistant.canceledDetail`)。
+    // 产品《报错文案｜精简版》S24c「用户主动停止」:标题「任务已停止」。
     expect(zhCN['assistant.canceledLabel']).toBe('任务已停止');
-    expect(zhCN['assistant.canceledDetail']).toBe('本次运行已按你的操作停止。');
+  });
+
+  it('状态词后面不跟灰色正文(OPEND-3912)', () => {
+    const { container } = renderTurn(turn({ runStatus: 'canceled' }));
+    expect(container.querySelector('[data-testid="assistant-label-detail"]')).toBeNull();
   });
 
   it('旧会话同时带 no_result 时仍按手动停止处理,不回退成红色运行失败', () => {

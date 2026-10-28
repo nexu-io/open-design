@@ -35,11 +35,10 @@ const PRODUCT_ZH: Record<string, string> = {
   'chat.upgrade.pausedMessage': '当前额度不足，请充值或升级套餐后再试。',
   'chat.upgrade.pausedTeamTitle': '团队额度不足，任务已暂停',
   'chat.upgrade.pausedTeamMessage': '当前团队额度不足，请联系团队管理员充值或升级订阅。',
-  // S24a / S24c
+  // S24a / S24c (S24c detail line dropped by design review, OPEND-3912)
   'assistant.unfinishedLabel': '任务尚未完成',
   'assistant.unfinishedDetail': '本次任务仍有 {n} 项内容未完成。',
   'assistant.canceledLabel': '任务已停止',
-  'assistant.canceledDetail': '本次运行已按你的操作停止。',
   // S03(首页建项目被拒:未登录)· S28a 本地服务断开 —— 首页错误块是一个文本块,标题\n正文
   'entry.authExpiredBody': 'Open Design 尚未登录\n请先登录，以便查看项目和继续对话。',
   'home.daemonRecovering': '本地连接已断开\n暂时无法连接这台电脑上的 Open Design 服务，请重启客户端。',
@@ -55,7 +54,7 @@ const PRODUCT_ZH: Record<string, string> = {
     '当前使用该模型服务的请求较多，已达到供应商的请求频率上限，请稍后再试，或者切换其他模型。',
 };
 
-const REMOVED_KEYS = ['settings.amrActivationBrowserFailed'];
+const REMOVED_KEYS = ['settings.amrActivationBrowserFailed', 'assistant.canceledDetail'];
 
 describe('OPEND-2849 第四轮 zh-CN 逐字', () => {
   it.each(Object.entries(PRODUCT_ZH))('%s', async (key, expected) => {

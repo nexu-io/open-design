@@ -3591,7 +3591,6 @@ export const th: Dict = {
   'assistant.doneLabel': 'บรรลุสู่ระดับพร้อมแล้ว',
   'assistant.awaitingReplyLabel': 'รอการตอบกลับ',
   'assistant.canceledLabel': 'หยุดงานแล้ว',
-  'assistant.canceledDetail': 'การทำงานครั้งนี้หยุดลงตามการดำเนินการของคุณ',
   'assistant.copyMarkdown': 'คัดลอก',
   'assistant.forkConversation': 'สนทนาใหม่',
   'assistant.forkingConversation': 'กำลังเริ่มสนทนาใหม่…',

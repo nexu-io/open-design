@@ -3591,7 +3591,6 @@ export const ru: Dict = {
   'assistant.doneLabel': 'Готово',
   'assistant.awaitingReplyLabel': 'Ожидает ответа',
   'assistant.canceledLabel': 'Задача остановлена',
-  'assistant.canceledDetail': 'Этот запуск остановлен по вашему действию.',
   'assistant.copyMarkdown': 'Копировать',
   'assistant.forkConversation': 'Новый разговор',
   'assistant.forkingConversation': 'Начинается новый разговор…',

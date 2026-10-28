@@ -3591,7 +3591,6 @@ export const ja: Dict = {
   'assistant.doneLabel': '完了',
   'assistant.awaitingReplyLabel': '返信待ち',
   'assistant.canceledLabel': 'タスクを停止しました',
-  'assistant.canceledDetail': '今回の実行はあなたの操作により停止しました。',
   'assistant.copyMarkdown': 'コピー',
   'assistant.forkConversation': '新しい会話',
   'assistant.forkingConversation': '新しい会話を開始中…',

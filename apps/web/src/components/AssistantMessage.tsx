@@ -2260,13 +2260,12 @@ export function AssistantFooter({
               ? t("assistant.unfinishedLabel")
               : t("assistant.doneLabel")}
           </span>
-          {/* 产品《报错文案》S24c / S24a(OPEND-2849):这两档的状态词是「标题」,
-              紧跟一句正文。其余各档只有状态词。 */}
-          {!streaming && !hasEmptyResponse && (canceled || (hasUnfinishedTodos && unfinishedTodoCount > 0)) ? (
+          {/* 产品《报错文案》S24a(OPEND-2849):「仍有待办未完成」这一档的状态词是「标题」,
+              紧跟一句正文。其余各档只有状态词 —— 手动停止(S24c)原来也带一句正文,
+              设计评审(OPEND-3912)去掉了:「任务已停止」自己就说清了。 */}
+          {!streaming && !hasEmptyResponse && !canceled && hasUnfinishedTodos && unfinishedTodoCount > 0 ? (
             <span className="assistant-label-detail" data-testid="assistant-label-detail">
-              {canceled
-                ? t("assistant.canceledDetail")
-                : t("assistant.unfinishedDetail", { n: unfinishedTodoCount })}
+              {t("assistant.unfinishedDetail", { n: unfinishedTodoCount })}
             </span>
           ) : null}
         </>

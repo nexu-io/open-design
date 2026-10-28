@@ -177,7 +177,9 @@ describe('S24 回合状态行', () => {
     expect(screen.getByTestId('assistant-label-detail').textContent).toBe('本次任务仍有 2 项内容未完成。');
   });
 
-  it('S24c 用户主动停止:标题「任务已停止」+ 正文', () => {
+  // OPEND-3912: design review dropped the faint detail line after the stopped
+  // label; the label alone carries the manual-stop state.
+  it('S24c 用户主动停止:只有标题「任务已停止」,不带正文', () => {
     zh(
       <AssistantMessage
         projectKind="prototype"
@@ -197,7 +199,7 @@ describe('S24 回合状态行', () => {
       />,
     );
     expect(screen.getByTestId('assistant-label').textContent).toBe('任务已停止');
-    expect(screen.getByTestId('assistant-label-detail').textContent).toBe('本次运行已按你的操作停止。');
+    expect(screen.queryByTestId('assistant-label-detail')).toBeNull();
   });
 });
 
