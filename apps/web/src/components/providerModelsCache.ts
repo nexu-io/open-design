@@ -25,6 +25,14 @@ export function providerModelsCacheKey(
   ].join('\n');
 }
 
+// Filter ordinary picker choices only. Saved/custom model IDs remain valid and
+// must not be migrated or filtered when constructing requests.
+export function isSuggestedTextModel(id: string): boolean {
+  const model = id.trim().split('/').pop() ?? '';
+  if (!/^minimax-(?:m\d|text)/i.test(model)) return true;
+  return /^minimax-m3(?:\.1-flash)?(?::free|-cloud)?$/i.test(model);
+}
+
 export function mergeProviderModelOptions(
   fetchedModels: readonly ProviderModelOption[],
   suggestedModelIds: readonly string[],
@@ -33,11 +41,18 @@ export function mergeProviderModelOptions(
   const out: ProviderModelOption[] = [];
   const add = (model: ProviderModelOption) => {
     const id = model.id.trim();
-    if (!id || seen.has(id)) return;
+    if (!id || seen.has(id) || !isSuggestedTextModel(id)) return;
     seen.add(id);
     out.push({ ...model, id, label: model.label.trim() || id });
   };
   for (const model of fetchedModels) add(model);
   for (const id of suggestedModelIds) add({ id, label: id });
-  return out;
+  // Keep other providers in their original order, but put Flash before M3
+  // even when discovery returns M3 first. Preserve fetched labels/metadata.
+  const isMiniMax = (model: ProviderModelOption) => /(?:^|\/)minimax-m3/i.test(model.id);
+  const minimax = out.filter(isMiniMax).sort((a, b) =>
+    Number(/m3\.1-flash/i.test(b.id)) - Number(/m3\.1-flash/i.test(a.id)),
+  );
+  let index = 0;
+  return out.map((model) => isMiniMax(model) ? minimax[index++]! : model);
 }

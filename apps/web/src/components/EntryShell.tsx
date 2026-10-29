@@ -244,6 +244,7 @@ import { summarizeProjectNameFromPrompt } from '../utils/projectName';
 import { deepSeekHarnessNeedsSetup } from '../utils/visibleAgents';
 import { LIBRARY_UI_VISIBLE } from '../features/libraryUi';
 import {
+  mergeProviderModelOptions,
   providerModelsCacheKey,
   type ProviderModelsCache,
 } from './providerModelsCache';
@@ -4670,17 +4671,11 @@ function mergeOnboardingProviderModelOptions(
   suggestedModelIds: readonly string[],
   currentModel: string,
 ): ProviderModelOption[] {
-  const seen = new Set<string>();
-  const out: ProviderModelOption[] = [];
-  const add = (model: ProviderModelOption) => {
-    const id = model.id.trim();
-    if (!id || seen.has(id)) return;
-    seen.add(id);
-    out.push({ id, label: model.label.trim() || id });
-  };
-  for (const model of fetchedModels) add(model);
-  for (const id of suggestedModelIds) add({ id, label: id });
-  if (currentModel.trim()) add({ id: currentModel.trim(), label: currentModel.trim() });
+  const out = mergeProviderModelOptions(fetchedModels, suggestedModelIds);
+  const id = currentModel.trim();
+  // Keep a saved or explicitly entered ID visible even when it is no longer
+  // an ordinary suggestion.
+  if (id && !out.some((model) => model.id === id)) out.push({ id, label: id });
   return out;
 }
 

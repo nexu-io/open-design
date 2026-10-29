@@ -42,6 +42,37 @@ describe('KNOWN_PROVIDERS', () => {
     ]);
   });
 
+  it('keeps MiniMax model presets available across global and CN gateways', () => {
+    expect(
+      KNOWN_PROVIDERS.filter((provider) => provider.label.startsWith('MiniMax')),
+    ).toEqual([
+      expect.objectContaining({
+        label: 'MiniMax — Anthropic',
+        protocol: 'anthropic',
+        baseUrl: 'https://api.minimax.io/anthropic',
+        preferredModels: ['MiniMax-M3.1-Flash', 'MiniMax-M3'],
+      }),
+      expect.objectContaining({
+        label: 'MiniMax — Anthropic (CN)',
+        protocol: 'anthropic',
+        baseUrl: 'https://api.minimaxi.com/anthropic',
+        preferredModels: ['MiniMax-M3.1-Flash', 'MiniMax-M3'],
+      }),
+      expect.objectContaining({
+        label: 'MiniMax — OpenAI',
+        protocol: 'openai',
+        baseUrl: 'https://api.minimax.io/v1',
+        preferredModels: ['MiniMax-M3.1-Flash', 'MiniMax-M3'],
+      }),
+      expect.objectContaining({
+        label: 'MiniMax — OpenAI (CN)',
+        protocol: 'openai',
+        baseUrl: 'https://api.minimaxi.com/v1',
+        preferredModels: ['MiniMax-M3.1-Flash', 'MiniMax-M3'],
+      }),
+    ]);
+  });
+
   it('keeps BYOK presets derived from the canonical provider registry', () => {
     const moonshot = KNOWN_PROVIDERS.find((provider) => provider.label === 'Moonshot');
     const moonshotPreset = BYOK_PROVIDER_PRESETS.find((preset) => preset.id === 'moonshot');
