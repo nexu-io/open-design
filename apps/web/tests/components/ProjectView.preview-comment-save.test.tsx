@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 
 import { cloneElement, type ComponentProps } from 'react';
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ProjectView } from '../../src/components/ProjectView';
 import type { PreviewComment, PreviewCommentTarget } from '../../src/types';
 
-// This comment HTTP/Toast scenario owns its mocks independently of the
+// This comment HTTP scenario owns its mocks independently of the
 // run-cleanup suite's persisted run fixtures and unresolved retry callbacks.
 const listConversations = vi.fn();
 const listMessages = vi.fn();
@@ -91,8 +91,8 @@ afterEach(() => {
 });
 
 describe('ProjectView preview comment save feedback', () => {
-  it('shows the S26 title and explanation when a comment POST fails, preserving its save result and retry path', async () => {
-    // Keep the owning ProjectView + Toast real. Only the preview child is a
+  it('returns a failed save to the inline composer without a toast, preserving its retry path', async () => {
+    // Keep the owning ProjectView real. Only the preview child is a
     // prop seam; this does not claim to exercise the iframe comment editor.
     const { zhCN } = await import('../../src/i18n/locales/zh-CN');
     translation.t = (key: string) => key in zhCN ? zhCN[key as keyof typeof zhCN] : key;
@@ -173,17 +173,10 @@ describe('ProjectView preview comment save feedback', () => {
       });
       expect(commentPosts).toHaveLength(1);
       expect(JSON.parse(String(commentPosts[0]?.body))).toEqual({ target, note });
-      const toast = screen.getByRole('status');
-      // S26 uses ProjectView's global branch. This assertion guards the real
-      // caller opt-in as well as Toast's separately tested portal capability.
-      expect.soft(toast.parentElement).toBe(document.body);
-      // Exact approved S26 copy, not implementation key names or CSS classes.
-      expect(within(toast).getByText('评论保存失败', { exact: true })).toBeTruthy();
-      expect(within(toast).getByText('本次评论未保存成功，请重新尝试。', { exact: true })).toBeTruthy();
-      expect(toast.textContent).not.toContain('storage unavailable');
+      // FileViewer owns the inline error; ProjectView returns null without a global toast.
+      expect(screen.queryByRole('status')).toBeNull();
       expect(preview().previewComments).toEqual([]);
 
-      fireEvent.click(within(toast).getByRole('button', { name: zhCN['common.dismiss'] }));
       await act(async () => {
         expect(await preview().onSavePreviewComment(target, note, false)).toEqual(saved);
       });

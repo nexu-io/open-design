@@ -31,12 +31,26 @@ test('[P1] OPEND-3887 saved srcdoc anchors resolve in the original file bytes', 
   }
   await page.goto(`/projects/${id}/files/index.html?forceInline=1`);
   await expect(page.getByTestId('board-mode-toggle')).toBeEnabled({ timeout: T.long });
-  await page.getByTestId('board-mode-toggle').click();
+  // Keyboard events originating inside the preview must reach the existing entry.
+  await page.frameLocator('[data-testid="artifact-preview-frame"]').locator('body').click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press('c');
+  await expect(page.getByTestId('board-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
   const preview = page.getByTestId('artifact-preview-frame');
   await expect(preview).toHaveAttribute('data-od-render-mode', 'srcdoc');
-  await page.frameLocator('[data-testid="artifact-preview-frame"]').locator('h1').click();
+  await page.frameLocator('[data-testid="artifact-preview-frame"]').locator('h1').click({ position: { x: 30.5, y: 12.25 } });
   const input = page.getByTestId('comment-popover-input');
   await input.fill('Keep this heading portable');
+  const saveUrl = `**/api/projects/${id}/conversations/${conversationId}/comments`;
+  await page.route(saveUrl, route => route.request().method() === 'POST'
+    ? route.fulfill({ status: 503, json: { error: 'controlled save outage' } })
+    : route.fallback());
+  const failedSave = page.waitForResponse(response => response.request().method() === 'POST'
+    && response.url().endsWith(`/conversations/${conversationId}/comments`));
+  await input.press('Enter');
+  expect((await failedSave).status()).toBe(503);
+  await expect(input).toHaveValue('Keep this heading portable');
+  await page.unroute(saveUrl);
+  await expect(page.getByTestId('comment-popover-save')).toBeEnabled();
   const savedResponse = page.waitForResponse(response => response.request().method() === 'POST'
     && response.url().endsWith(`/conversations/${conversationId}/comments`));
   await input.press('Enter');
@@ -47,6 +61,20 @@ test('[P1] OPEND-3887 saved srcdoc anchors resolve in the original file bytes', 
   expect(comment.selector).toMatch(/^body > /);
   const persisted = await page.request.get(`/api/projects/${id}/conversations/${conversationId}/comments`);
   expect((await persisted.json()).comments).toContainEqual(expect.objectContaining({ id: comment.id, selector: comment.selector }));
+  expect(comment.position.anchor.u).toBeGreaterThan(0);
+  expect(comment.position.anchor.u).toBeLessThan(1);
+  await expect(input).toHaveCount(0);
+  await expect(page.getByTestId('board-mode-toggle')).toHaveAttribute('aria-pressed', 'false');
+  await page.reload();
+  await page.getByTestId('comment-panel-toggle').click();
+  const row = page.getByTestId('comment-side-item').filter({ hasText: 'Keep this heading portable' });
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(page.getByTestId('comment-popover-detail')).toHaveText('Keep this heading portable');
+  await expect(page.getByTestId('comment-popover-input')).toHaveCount(0);
+  await expect(page.getByTestId('comment-popover-save')).toHaveCount(0);
+  const pin = page.locator('.comment-saved-pin').first();
+  await expect(pin).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('3887-client-saved.png') });
   const original = await page.request.get(`/api/projects/${id}/raw/index.html`);
   const bytes = await original.text();

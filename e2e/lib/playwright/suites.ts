@@ -57,6 +57,7 @@ export const uiP0Groups = {
       "ui/fork-note-ellipsis.test.ts",
       "ui/project-management-flows.test.ts",
       "ui/workspace-keyboard-flows.test.ts",
+      "ui/comment-interaction-rules.test.ts",
     ],
   },
   // Keep editor-heavy files on a separate single-worker runtime. Running the
@@ -121,6 +122,7 @@ const uiP0CoverageFiles = [
   "ui/app-manual-edit.test.ts",
   "ui/app-restoration.test.ts",
   "ui/app.test.ts",
+  "ui/comment-interaction-rules.test.ts",
   "ui/critical-smoke.test.ts",
   "ui/entry-chrome-flows.test.ts",
   "ui/entry-configuration-flows.test.ts",

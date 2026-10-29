@@ -1804,6 +1804,8 @@ function injectSelectionBridge(
   const runtimeStateGeneration = JSON.stringify(options.runtimeStateGeneration ?? '');
   const script = `<script data-od-selection-bridge>(function(){
   var commentEnabled = ${initialComment};
+  var commentObserved = false;
+  var commentShortcutEnabled = false;
   var inspectEnabled = ${initialInspect};
   var runtimeStateGeneration = ${runtimeStateGeneration};
   // Comment mode has two sub-tools (kept on the host side as boardTool):
@@ -1843,7 +1845,7 @@ function injectSelectionBridge(
   // semicolons (extra declarations), braces (close the rule), angle
   // brackets (close the <style> tag), and newlines (defense in depth).
   var UNSAFE_VALUE = /[;{}<>\\n\\r]/;
-  function active(){ return commentEnabled || inspectEnabled; }
+  function active(){ return commentEnabled || commentObserved || inspectEnabled; }
   function deckSlideIndexForPayload(){
     try {
       var state = window.__odDeckSlideState && window.__odDeckSlideState();
@@ -2099,7 +2101,7 @@ function meaningfulDomFallbackTarget(el) {
     var cls = typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\\s+/).slice(0,2).join('.') : '';
     var html = '';
     try { html = (el.outerHTML || '').replace(/\\s+/g, ' ').match(/^<[^>]+>/)?.[0] || ''; } catch (_) {}
-    var position = { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) };
+    var position = { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
     if (!elementVisibleForComment(el, position)) return null;
     var payload = {
       type: 'od:comment-target',
@@ -2115,7 +2117,7 @@ function meaningfulDomFallbackTarget(el) {
     var slideIndex = deckSlideIndexForPayload();
     if (typeof slideIndex === 'number') payload.slideIndex = slideIndex;
     if (clickPoint) {
-      payload.hoverPoint = { x: Math.round(clickPoint.x), y: Math.round(clickPoint.y) };
+      payload.hoverPoint = { x: clickPoint.x, y: clickPoint.y };
     }
     if (clickedEl && clickedEl !== el) {
       var clickedTag = clickedEl.tagName ? clickedEl.tagName.toLowerCase() : 'element';
@@ -2624,6 +2626,14 @@ function meaningfulDomFallbackTarget(el) {
       }, '*');
     } catch (_) {}
   }
+  document.addEventListener('keydown', function(event){
+    if (event.defaultPrevented || !commentShortcutEnabled || event.key.toLowerCase() !== 'c' || event.ctrlKey || event.metaKey || event.altKey || event.repeat || event.isComposing || event.keyCode === 229) return;
+    var target = event.target;
+    if (target && target.closest && (target.isContentEditable || target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="menu"], [role="dialog"], dialog, [popover]'))) return;
+    event.preventDefault();
+    event.stopPropagation();
+    try { window.parent.postMessage({ type: 'od:comment-shortcut' }, '*'); } catch (_) {}
+  });
   window.addEventListener('message', function(ev){
     var data = ev && ev.data;
     if (!data || !data.type) return;
@@ -2653,6 +2663,10 @@ function meaningfulDomFallbackTarget(el) {
     }
     if (data.type === 'od:comment-mode') {
       commentEnabled = !!data.enabled;
+      commentObserved = !!data.observe;
+      commentShortcutEnabled = !!data.shortcutEnabled;
+      if (typeof data.cursor === 'string') document.documentElement.style.setProperty('--od-comment-cursor', data.cursor);
+      else document.documentElement.style.removeProperty('--od-comment-cursor');
       mode = data.mode === 'pod' ? 'pod' : 'picker';
       document.documentElement.toggleAttribute('data-od-comment-mode', commentEnabled);
       document.documentElement.setAttribute('data-od-comment-mode-kind', mode);
@@ -2929,7 +2943,7 @@ function meaningfulDomFallbackTarget(el) {
   else setTimeout(postPreviewScroll, 0);
 })();</script>`;
   const style = `<style data-od-selection-bridge-style>
-html[data-od-comment-mode] body * { cursor: crosshair !important; }
+html[data-od-comment-mode] body * { cursor: var(--od-comment-cursor, crosshair) !important; }
 html[data-od-inspect-mode] body * { cursor: crosshair !important; }
 html[data-od-comment-mode][data-od-comment-mode-kind="pod"] body * { cursor: cell !important; }
 /* Nested iframes (e.g. shared device frames) consume clicks in their own browsing context.

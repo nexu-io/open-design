@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import type { ComponentProps } from 'react';
+import { buildWorkspacePermissions, buildWorkspaceSeatSummary } from '@open-design/contracts';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ShareTab } from '../../../src/components/share/ShareTab';
@@ -19,7 +20,7 @@ const props = (overrides: Partial<Props> = {}): Props => ({
 describe('canonical Viewer link consumption', () => {
   it('does not expose stale console URL copy controls for a durable publication with unavailable link', () => {
     // Stopping needs a signed-in workspace (a retained link alone is read-only).
-    const input = props({ workspaceContext: { workspaceId: 'w', workspaceType: 'personal' } as Props['workspaceContext'] });
+    const input = props({ workspaceContext: { workspaceId: 'w', workspaceType: 'personal', workspaceMemberId: 'owner', role: 'owner', memberStatus: 'active', lifecycleState: 'active', billingState: 'active', planId: null, providerMode: 'platform_credits', seatSummary: buildWorkspaceSeatSummary({ seatLimit: 1, usedSeats: 1 }), permissions: buildWorkspacePermissions({ role: 'owner', lifecycleState: 'active' }) } });
     render(<ShareTab {...input} />);
     expect(screen.getByRole('status')).toHaveTextContent('fileViewer.publicLinkUnavailable');
     expect(screen.queryByText(input.publishedFileUrl)).toBeNull();

@@ -57,7 +57,7 @@ describe('preview comment attachment helpers', () => {
 
     expect(target.text.length).toBeLessThanOrEqual(160);
     expect(target.htmlHint.length).toBeLessThanOrEqual(180);
-    expect(target.position).toEqual({ x: 10, y: 21, width: 300, height: 89 });
+    expect(target.position).toEqual({ x: 10.4, y: 20.5, width: 300.2, height: 88.8 });
     expect(target.style).toMatchObject({
       color: 'rgb(26, 25, 22)',
       fontSize: '13.5px',

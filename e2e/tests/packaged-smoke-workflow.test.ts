@@ -1900,6 +1900,7 @@ process.stdin.on("end", () => {
       "ui/fork-note-ellipsis.test.ts",
       "ui/project-management-flows.test.ts",
       "ui/workspace-keyboard-flows.test.ts",
+      "ui/comment-interaction-rules.test.ts",
     ]);
     expect(uiP0Groups["project-workspace"].workers).toBe(1);
     expect(uiP0Groups["project-workspace-editor"]).toEqual({

@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProjectView } from '../../src/components/ProjectView';
 import type { AppConfig, PreviewComment, PreviewCommentTarget, Project } from '../../src/types';
 
-// Keep ProjectView, Toast and registry HTTP interpretation real. FileWorkspace
+// Keep ProjectView and registry HTTP interpretation real. FileWorkspace
 // exposes the owning callback boundary; this is not an iframe-editor or native
 // browser test. Inputs remain available for retry, while visible draft/image
 // retention is separately verified through the actual FileViewer in Chrome.
@@ -148,14 +148,9 @@ function renderOwner(routeConversationId: string | null) {
     />,
   );
 }
-function expectApprovedSaveFailure() {
-  const toast = screen.getByRole('status');
-  expect(within(toast).getByText('评论保存失败', { exact: true })).toBeTruthy();
-  expect(within(toast).getByText('本次评论未保存成功，请重新尝试。', { exact: true })).toBeTruthy();
-  expect(toast.textContent).not.toMatch(/storage unavailable|could not be stored/);
-}
-function dismissToast() {
-  fireEvent.click(within(screen.getByRole('status')).getByRole('button'));
+function expectInlineSaveFailureBoundary() {
+  // The null result keeps the draft in FileViewer, which owns the inline retry error.
+  expect(screen.queryByRole('status')).toBeNull();
 }
 function uploadedFiles(init: RequestInit): File[] {
   if (!(init.body instanceof FormData)) throw new Error('Expected the real upload provider to send FormData');
@@ -217,8 +212,7 @@ describe('S26 additional ProjectView save boundaries', () => {
       expect(requests).toEqual([]);
       expect(preview().previewComments).toEqual([]);
       expect(inputTarget).toEqual(target);
-      expectApprovedSaveFailure();
-      dismissToast();
+      expectInlineSaveFailureBoundary();
       await act(async () => { finishCreation(conversation); await creating; });
       await waitFor(() => expect(listMessages).toHaveBeenCalled());
       await act(async () => {
@@ -267,8 +261,7 @@ describe('S26 additional ProjectView save boundaries', () => {
     expect(commentPosts).toHaveLength(0);
     expect(preview().previewComments).toEqual([]);
     expect(images).toEqual(originalImages);
-    expectApprovedSaveFailure();
-    dismissToast();
+    expectInlineSaveFailureBoundary();
     await act(async () => {
       expect(await preview().onSavePreviewComment(target, note, false, images)).toEqual(saved);
     });
@@ -329,7 +322,7 @@ describe('S26 additional ProjectView save boundaries', () => {
     // The delete failure has no newly approved save description. Do not pin its
     // legacy wording as a new product requirement or silently recategorize it.
     expect(screen.queryByText('本次评论未保存成功，请重新尝试。', { exact: true })).toBeNull();
-    dismissToast();
+    fireEvent.click(within(screen.getByRole('status')).getByRole('button'));
     await act(async () => { expect(await preview().onRemovePreviewComment(savedComment.id)).toBe(true); });
     expect(deletes).toHaveLength(2);
     expect(preview().previewComments).toEqual([]);

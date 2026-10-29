@@ -1416,6 +1416,48 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(html).not.toContain('data-od-url-scroll-bridge');
   });
 
+  it('URL selection forwards enabled comment shortcuts, protects editing, and applies the supplied comment cursor', async () => {
+    const response = await fetch(`${rawUrl('body.html')}?odPreviewBridge=selection`);
+    expect(response.status).toBe(200);
+    const bridge = load(await response.text())('script[data-od-url-selection-bridge]').text();
+    const dom = new JSDOM('<body><input><textarea></textarea><select></select><div contenteditable="true"><span>Editing</span></div><div role="menu"><button>Menu</button></div><div role="dialog"><button>Dialog</button></div><dialog open><button>Native dialog</button></dialog><div popover><button>Popover</button></div><button id="handled">Handled</button></body>', {
+      url: rawUrl('body.html'), runScripts: 'outside-only', pretendToBeVisual: true,
+    });
+    try {
+      dom.window.eval('window.posted = []; window.postMessage = data => window.posted.push(data);');
+      dom.window.eval(bridge);
+      const result = dom.window.eval(`(() => {
+        const mode = data => window.dispatchEvent(new MessageEvent('message', { data: { type: 'od:comment-mode', ...data } }));
+        const key = (init = {}, target = document.body) => {
+          const event = new KeyboardEvent('keydown', { key: 'c', bubbles: true, cancelable: true, ...init });
+          target.dispatchEvent(event);
+          return event.defaultPrevented;
+        };
+        const disabledInitially = key();
+        mode({ enabled: false, observe: true, shortcutEnabled: true, cursor: 'url("comment.svg") 8 8, crosshair' });
+        window.posted = [];
+        const enabled = [key(), key({ key: 'C', shiftKey: true })];
+        const guarded = [{ ctrlKey: true }, { metaKey: true }, { altKey: true }, { repeat: true }, { isComposing: true }, { keyCode: 229 }, { key: 'x' }].map(init => key(init));
+        const editing = ['input', 'textarea', 'select', '[contenteditable] span'].map(selector => key({}, document.querySelector(selector)));
+        const overlays = ['[role=menu] button', '[role=dialog] button', 'dialog button', '[popover] button'].map(selector => key({}, document.querySelector(selector)));
+        const handled = document.getElementById('handled');
+        handled.addEventListener('keydown', event => event.preventDefault());
+        const handledPrevented = key({}, handled);
+        const shortcuts = window.posted.filter(data => data.type === 'od:comment-shortcut');
+        const cursor = document.documentElement.style.getPropertyValue('--od-comment-cursor');
+        const css = document.querySelector('style[data-od-url-selection-style]').textContent;
+        mode({ enabled: true, shortcutEnabled: false });
+        return { disabledInitially, enabled, guarded, editing, overlays, handledPrevented, shortcuts, cursor, css, disabledAfter: key(), clearedCursor: document.documentElement.style.getPropertyValue('--od-comment-cursor') };
+      })()`);
+      expect(result).toMatchObject({
+        disabledInitially: false, enabled: [true, true], guarded: Array(7).fill(false), editing: Array(4).fill(false), overlays: Array(4).fill(false), handledPrevented: true,
+        shortcuts: [{ type: 'od:comment-shortcut' }, { type: 'od:comment-shortcut' }],
+        cursor: 'url("comment.svg") 8 8, crosshair', disabledAfter: false, clearedCursor: '',
+        css: expect.stringContaining('cursor: var(--od-comment-cursor, crosshair) !important'),
+      });
+    } finally { dom.window.close(); }
+  });
+
   it('URL selection falls back from an empty od-id to a matching screen-label selector', async () => {
     const response = await fetch(`${rawUrl('body.html')}?odPreviewBridge=selection`);
     expect(response.status).toBe(200);

@@ -72,6 +72,14 @@ const stored = (db: Db) => getProjectPreviewComment(db, 'p1', 'share-comment');
 function clockAt(ms: number) { vi.spyOn(Date, 'now').mockReturnValue(ms); }
 
 describe('synced comment merge is ordered by cloud seq', () => {
+  it('stores canonical newlines on relay insert and subsequent edit', () => {
+    const db = seededDb();
+    expect(merge(db, sharePageEvent(1, { note: ' first\r\nsecond\rthird ' }))).toBe('changed');
+    expect(stored(db)?.note).toBe('first\nsecond\nthird');
+    expect(merge(db, sharePageEvent(2, { note: '\rupdated\r\ntext\r' }))).toBe('changed');
+    expect(stored(db)?.note).toBe('updated\ntext');
+  });
+
   it('keeps a resolve when the create (no updatedAt) is replayed from seq 0', () => {
     const db = seededDb();
     const create = sharePageEvent(3);

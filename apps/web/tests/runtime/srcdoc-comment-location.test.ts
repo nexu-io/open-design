@@ -86,3 +86,26 @@ describe('OPEND-3887 published-source comment identities', () => {
     } finally { dom.window.close(); parser.window.close(); vi.unstubAllGlobals(); }
   });
 });
+
+it('tracks saved comment geometry in browse mode without intercepting page clicks', async () => {
+  const dom = new JSDOM('<body><button data-od-id="target">Action</button></body>', { runScripts: 'outside-only', pretendToBeVisual: true });
+  try {
+    const win = dom.window;
+    const postMessage = vi.fn();
+    Object.defineProperty(win, 'parent', { value: { postMessage }, configurable: true });
+    const target = win.document.querySelector('button')!;
+    Object.defineProperty(target, 'getBoundingClientRect', { value: () => ({ x: 10.25, y: 20.5, top: 20.5, left: 10.25, right: 110.25, bottom: 60.5, width: 100, height: 40 }) });
+    const script = buildSrcdoc('<body></body>', { commentBridge: true }).match(/<script data-od-selection-bridge>([\s\S]*?)<\/script>/)?.[1];
+    if (!script) throw new Error('Missing selection bridge');
+    new win.Function(script).call(win);
+    win.dispatchEvent(new win.MessageEvent('message', { data: { type: 'od:comment-mode', enabled: false, observe: true } }));
+    await new Promise(resolve => win.setTimeout(resolve, 25));
+    expect(postMessage.mock.calls.map(call => call[0])).toContainEqual(expect.objectContaining({ type: 'od:comment-targets', targets: expect.arrayContaining([expect.objectContaining({ position: { x: 10.25, y: 20.5, width: 100, height: 40 } })]) }));
+    const clicked = vi.fn(); target.addEventListener('click', clicked);
+    const event = new win.MouseEvent('click', { bubbles: true, cancelable: true });
+    target.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+    expect(clicked).toHaveBeenCalledOnce();
+    expect(win.document.documentElement.hasAttribute('data-od-comment-mode')).toBe(false);
+  } finally { dom.window.close(); }
+});

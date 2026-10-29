@@ -26,6 +26,8 @@ import {
   stripDoneMarkers,
   stripNextStepMarkers,
   asPreviewCommentAnchorState,
+  isPreviewCommentPoint,
+  normalizeCommentContent,
 } from '@open-design/contracts';
 import { parseCommentFileState } from './collab/comment-file-facts.js';
 import { migrateCollabSyncSnapshots } from './collab/sync-snapshot-store.js';
@@ -3880,7 +3882,7 @@ export function upsertPreviewComment(
   options: UpsertPreviewCommentOptions = {},
 ) {
   const target = input?.target ?? {};
-  const note = typeof input?.note === 'string' ? input.note.trim() : '';
+  const note = typeof input?.note === 'string' ? normalizeCommentContent(input.note) : '';
   const attachmentsProvided = Object.prototype.hasOwnProperty.call(input ?? {}, 'attachments');
   const incomingAttachments = normalizePreviewCommentAttachments(input?.attachments);
   const filePath = cleanRequiredString(target.filePath, 'filePath');
@@ -4681,7 +4683,7 @@ export function mergeSyncedPreviewComment(
       attachments ? JSON.stringify(attachments) : null,
       slideIndex,
       slideKey,
-      typeof comment.note === 'string' ? comment.note : '',
+      typeof comment.note === 'string' ? normalizeCommentContent(comment.note) : '',
       status,
       anchorState,
       anchoredVersion,
@@ -4755,7 +4757,7 @@ export function mergeSyncedPreviewComment(
       attachments ? JSON.stringify(attachments) : null,
       slideIndex,
       slideKey,
-      typeof comment.note === 'string' ? comment.note : '',
+      typeof comment.note === 'string' ? normalizeCommentContent(comment.note) : '',
       status,
       createdAt,
       incomingUpdatedAt ?? createdAt,
@@ -5022,11 +5024,13 @@ function compactWhitespace(value: string): string {
 
 function normalizePosition(input: unknown) {
   const value: DbRow = input && typeof input === 'object' ? input as DbRow : {};
+  if (value.anchor !== undefined && !isPreviewCommentPoint(value.anchor)) throw new Error('invalid comment anchor');
   return {
-    x: finiteNumber(value.x),
-    y: finiteNumber(value.y),
-    width: finiteNumber(value.width),
-    height: finiteNumber(value.height),
+    ...(value.anchor ? { anchor: { u: value.anchor.u, v: value.anchor.v } } : {}),
+    x: typeof value.x === 'number' && Number.isFinite(value.x) ? value.x : 0,
+    y: typeof value.y === 'number' && Number.isFinite(value.y) ? value.y : 0,
+    width: typeof value.width === 'number' && Number.isFinite(value.width) ? value.width : 0,
+    height: typeof value.height === 'number' && Number.isFinite(value.height) ? value.height : 0,
   };
 }
 

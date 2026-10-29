@@ -1,6 +1,9 @@
 import type { Dict } from '../types';
 
 export const fa: Dict = {
+  'chat.comments.deselectAll': 'Deselect all',
+  'fileViewer.commentSync.alignRetrying': 'Retrying…',
+  'fileViewer.commentSync.alignRetryPending': 'Syncing comments…',
   'fileViewer.publishFileContentUnavailable': 'Some uploaded files are missing or failed integrity checks. Please retry.',
   'fileViewer.publishFileConflict': 'The publication or upload state has changed. Refresh the share panel and try again.',
   'fileViewer.publishFileWorkspaceLocked': 'This workspace is locked. Restore workspace access before publishing.',
@@ -5521,4 +5524,16 @@ export const fa: Dict = {
   'chat.record.canceled': "لغوشده",
   'chat.record.pending': "شروع‌نشده",
   'chat.record.unfinished': "ناتمام",
+  "comment.unknownAuthor": "Unknown author",
+  "comment.moreCount": "Show comments ({n})",
+  "comment.resizePanel": "Resize comments panel",
+  "comment.overLimit": "{count} characters over the limit. Shorten before sending.",
+  "comment.saveFailed": "Could not save comment. Try again.",
+  "comment.locationUnavailable": "این عنصر پیدا نشد. ممکن است صفحه تغییر کرده باشد.",
+  "comment.agentSubmitFailed": "ارسال ناموفق بود. لطفاً دوباره تلاش کنید.",
+  "comment.agentSubmitUnavailable": "در حال حاضر امکان ارسال وجود ندارد. لطفاً بعداً دوباره تلاش کنید.",
+  "comment.imageFailed": "Image unavailable",
+  "comment.moreActions": "More comment actions",
+  'fileViewer.commentSync.alignRetryFailed': 'Sync failed. Try again.',
+  'fileViewer.commentSync.alignRetrySucceeded': 'Comments synced',
 };

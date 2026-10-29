@@ -1,0 +1,4 @@
+.clip { position: absolute; overflow: hidden; border-radius: 8px; pointer-events: none; }
+.outline { position: absolute; box-sizing: border-box; border: 1.5px solid var(--comment-target-color, #75aaff); border-radius: 2px; background: transparent; }
+.selected { background: transparent; }
+.label { position: absolute; box-sizing: border-box; width: max-content; padding: 2px 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 3px; background: var(--comment-target-color, #75aaff); color: var(--comment-target-text, #213138); font-size: 11px; line-height: 16px; }

@@ -29,7 +29,7 @@ describe('restored comment appearance', () => {
     expect(declarations('.comment-side-panel')).toMatchObject({
       background: '#FAFAFA', 'border-radius': '10px', 'box-shadow': 'none',
     });
-    expect(declarations('.comment-side-header')).toMatchObject({ height: '56px', padding: '0 16px' });
+    expect(declarations('.comment-side-header')).toMatchObject({ height: '56px', padding: '0 10.5px 0 14.5px' });
     expect(declarations('.comment-side-item.selected')).toMatchObject({ background: '#EDEDED' });
     expect(declarations('.comment-side-item.active')).toMatchObject({ background: '#EDEDED', 'box-shadow': 'none' });
     expect(declarations('.comment-side-check.checked')).toMatchObject({ background: '#202020' });
@@ -50,11 +50,11 @@ describe('restored comment appearance', () => {
       if (!rule.selector.includes('comment-float-host')) return;
       const declarations: Record<string, string> = {};
       rule.walkDecls(decl => { declarations[decl.prop] = decl.value; });
-      values[rule.selector] = declarations;
+      for (const selector of rule.selectors) values[selector] = declarations;
     });
-    expect(values['.comment-float-host']).toMatchObject({ width: 'min(320px, calc(100vw - 32px))' });
+    expect(values['.comment-float-host']).toMatchObject({ width: 'min(var(--comment-panel-width, 320px), calc(100vw - 32px))' });
     expect(values['.split:has(> .comment-float-host:not(:empty)) .viewer-body']).toMatchObject({
-      'padding-right': 'max(0px, min(348px, calc(100% - 160px)))',
+      'padding-right': 'max(0px, min(calc(var(--comment-panel-width, 320px) + 16px), calc(100% - 160px)))',
     });
   });
 });

@@ -10,14 +10,14 @@ import type { PreviewComment } from '../../src/types';
 vi.mock('../../src/components/BoardComposerPopover', async importOriginal => {
   const original = await importOriginal<typeof import('../../src/components/BoardComposerPopover')>();
   return { ...original, BoardComposerPopover: (props: { draft: string; onDraft: (value: string) => void; onSaveComment: () => void; onSendBatch: () => void;
-    onAddDraft: () => void; onAttachImages: (files: File[]) => void; onRemoveImage: (index: number) => void }) => <div>
+    canEditComment: boolean; existing?: PreviewComment | null; onAddDraft: () => void; onAttachImages: (files: File[]) => void; onRemoveImage: (index: number) => void }) => props.canEditComment ? <div>
     <button data-testid="probe-queue" onClick={props.onAddDraft}>Queue</button>
     <button data-testid="probe-attach" onClick={() => props.onAttachImages([new File(['image'], 'new.png', { type: 'image/png' })])}>Attach</button>
     <button data-testid="probe-remove-image" onClick={() => props.onRemoveImage(0)}>Remove image</button>
     <input data-testid="probe-draft" value={props.draft} onChange={event => props.onDraft(event.target.value)} />
     <button data-testid="probe-send" onClick={props.onSendBatch}>Send</button>
     <button data-testid="probe-save" onClick={props.onSaveComment}>Save</button>
-  </div> };
+  </div> : <div data-testid="probe-saved-detail">{props.existing?.note}</div> };
 });
 const uuid = '12345678-1234-4234-8234-123456789abc';
 const original = '<html><body><h2 data-od-id="tool">Target</h2></body></html>';
@@ -91,7 +91,7 @@ afterEach(() => { cleanup(); invalidateHtmlSourceSnapshotProject(currentProjectI
 it.each(['comment-draft', 'manual-edit'] as const)('first publication ignores comment drafts but refuses existing manual editing (%s)', async change => {
   const { writes } = setup({ currentPrepared: true });
   await acknowledge();
-  fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+  fireEvent.click(screen.getByTestId('board-mode-toggle'));
   fireEvent.click(await screen.findByRole('button', { name: /^share$/i }));
   const generate = await screen.findByRole('menuitem', { name: 'Generate and copy link' });
   await waitFor(() => expect(generate).toBeEnabled());
@@ -111,7 +111,7 @@ it.each(['pending', 'comment-draft', 'manual-edit', 'ready'] as const)('static U
   await waitFor(() => expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).src).toContain('index.html'));
   if (state !== 'pending') {
     await acknowledge();
-    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
   }
   if (state === 'comment-draft') {
     await selectLegacy();
@@ -130,44 +130,51 @@ it.each(['pending', 'comment-draft', 'manual-edit', 'ready'] as const)('static U
   if (state === 'comment-draft') expect(screen.getByTestId('probe-draft')).toHaveValue('Already unsettled before Update');
   if (state === 'manual-edit') expect(screen.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
 });
-it.each(['initially-lost', 'saved', 'typed', 'cleared', 'whitespace-edit', 'fresh-image', 'removed-image', 'queued'] as const)(
+it.each(['initially-lost', 'saved', 'typed', 'cleared', 'whitespace-only', 'fresh-image', 'removed-image', 'queued'] as const)(
   'Update is independent of comment composer state (%s)', async state => {
   const lost: PreviewComment = { ...target, id: 'lost', projectId: 'p', conversationId: 'c', filePath: 'index.html',
     elementId: `cmt:${uuid}`, selector: `[data-od-comment-id="${uuid}"]`, note: 'Saved feedback', status: 'open', createdAt: 1, updatedAt: 1 };
   const route = setup({ activePublication: true, history: [lost] });
   const frame = await acknowledge();
-  fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+  fireEvent.click(screen.getByTestId('board-mode-toggle'));
   const dispatch = async (data: object) => { await act(async () => window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, data }))); };
   const liveTarget = { ...target, elementId: lost.elementId, selector: lost.selector };
   if (state !== 'initially-lost') await dispatch({ type: 'od:comment-targets', targets: [liveTarget] });
   fireEvent.click(screen.getByTestId('comment-side-item'));
   if (state !== 'initially-lost') {
     await dispatch({ ...liveTarget, type: 'od:comment-active-target-update' });
-    expect(screen.getByTestId('comment-active-pin')).toBeInTheDocument();
+    expect(screen.getByTestId('probe-saved-detail')).toHaveTextContent(lost.note);
   }
-  if (state === 'typed' || state === 'cleared' || state === 'whitespace-edit') {
-    fireEvent.change(screen.getByTestId('probe-draft'), { target: { value: state === 'typed' ? 'Actual unsaved edit' : state === 'cleared' ? '' : `${lost.note} ` } });
+  // Saved details are read-only; composer-state cases start a separate draft.
+  if (!['initially-lost', 'saved'].includes(state)) {
+    await selectLegacy({ elementId: 'draft-target', selector: '[data-od-id="draft-target"]' });
+  }
+  if (state === 'cleared') fireEvent.change(screen.getByTestId('probe-draft'), { target: { value: 'Temporary draft' } });
+  if (state === 'typed' || state === 'cleared' || state === 'whitespace-only') {
+    fireEvent.change(screen.getByTestId('probe-draft'), { target: { value: state === 'typed' ? 'Actual unsaved edit' : state === 'cleared' ? '' : '   ' } });
   }
   if (state === 'fresh-image' || state === 'removed-image') {
     fireEvent.click(screen.getByTestId('probe-attach'));
     if (state === 'removed-image') fireEvent.click(screen.getByTestId('probe-remove-image'));
   }
-  if (state === 'queued') fireEvent.click(screen.getByTestId('probe-queue'));
+  if (state === 'queued') {
+    fireEvent.change(screen.getByTestId('probe-draft'), { target: { value: 'Queued draft' } });
+    fireEvent.click(screen.getByTestId('probe-queue'));
+  }
   await dispatch({ type: 'od:comment-targets', targets: [] });
-  expect(screen.getByTestId('comment-location-unavailable')).toHaveTextContent('anchor lost');
-  if (!['typed', 'cleared', 'fresh-image', 'queued'].includes(state)) expect(screen.queryByTestId('comment-active-pin')).toBeNull();
+  if (['initially-lost', 'saved'].includes(state)) expect(screen.getByTestId('comment-location-unavailable')).toHaveTextContent('Unable to locate this element. The page may have changed.');
+  if (!['typed', 'fresh-image', 'queued'].includes(state)) expect(screen.queryByTestId('comment-active-pin')).toBeNull();
   fireEvent.click(await screen.findByRole('button', { name: /^share$/i }));
   const update = await screen.findByRole('button', { name: /update link/i });
   await waitFor(() => expect(update).toBeEnabled());
   await act(async () => fireEvent.click(update));
-  const settled = true;
-  expect(route.writes.mock.calls.filter(call => String(call[0]).endsWith('/publish-public'))).toHaveLength(settled ? 1 : 0);
+  expect(route.writes.mock.calls.filter(call => String(call[0]).endsWith('/publish-public'))).toHaveLength(1);
   expect(screen.queryByTestId('comment-identity-preparation')).toBeNull();
   expect(screen.queryByTestId('comment-identity-revalidate')).toBeNull();
-  if (['typed', 'cleared', 'fresh-image', 'queued'].includes(state)) expect(screen.getByTestId('probe-draft')).toBeInTheDocument();
+  if (['typed', 'fresh-image', 'queued'].includes(state)) expect(screen.getByTestId('probe-draft')).toBeInTheDocument();
   else expect(screen.queryByTestId('probe-draft')).toBeNull();
-  expect(screen.getByTestId('comment-location-unavailable')).toHaveTextContent('anchor lost');
-  if (!['typed', 'cleared', 'fresh-image', 'queued'].includes(state)) expect(screen.queryByTestId('comment-active-pin')).toBeNull();
+  if (['initially-lost', 'saved'].includes(state)) expect(screen.getByTestId('comment-location-unavailable')).toHaveTextContent('Unable to locate this element. The page may have changed.');
+  if (!['typed', 'fresh-image', 'queued'].includes(state)) expect(screen.queryByTestId('comment-active-pin')).toBeNull();
   expect(route.writes.mock.calls.some(call => String(call[0]).endsWith('/comment-identities/prepare'))).toBe(false);
 });
 
@@ -187,7 +194,7 @@ it('updates a published file after a settled file-watch change while the comment
 it('refreshes the preview with an unsaved comment and allows Update without submitting the draft', async () => {
   const route = setup({ activePublication: true, currentPrepared: true });
   await acknowledge();
-  fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+  fireEvent.click(screen.getByTestId('board-mode-toggle'));
   const frame = await selectLegacy();
   fireEvent.change(screen.getByTestId('probe-draft'), { target: { value: 'Keep my draft' } });
   const before = frame.src;
@@ -205,7 +212,7 @@ it('refreshes the preview with an unsaved comment and allows Update without subm
 it.each(['present', 'missing'] as const)('validates the current selector at save, retaining the draft when %s', async state => {
   const route = setup({ activePublication: true, currentPrepared: true });
   await acknowledge();
-  fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+  fireEvent.click(screen.getByTestId('board-mode-toggle'));
   const frame = await selectLegacy();
   fireEvent.change(screen.getByTestId('probe-draft'), { target: { value: 'Keep my draft' } });
   const post = vi.spyOn(frame.contentWindow!, 'postMessage').mockImplementation((data: unknown) => {
@@ -232,7 +239,7 @@ it('refreshes srcdoc while the comment panel is open and retains typed feedback'
   const route = setup({ currentPrepared: true, srcdoc: true });
   const frame = await screen.findByTestId('artifact-preview-frame') as HTMLIFrameElement;
   expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
-  fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+  fireEvent.click(screen.getByTestId('board-mode-toggle'));
   await selectLegacy();
   fireEvent.change(screen.getByTestId('probe-draft'), { target: { value: 'Draft during source refresh' } });
   await act(async () => route.refreshFiles());
@@ -242,7 +249,7 @@ it('refreshes srcdoc while the comment panel is open and retains typed feedback'
 
 it('allows Update while a comment save is waiting for the frame', async () => {
   const route = setup({ activePublication: true, currentPrepared: true });
-  await acknowledge(); fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+  await acknowledge(); fireEvent.click(screen.getByTestId('board-mode-toggle'));
   const frame = await selectLegacy();
   fireEvent.change(screen.getByTestId('probe-draft'), { target: { value: 'Keep my draft' } });
   let requestId = '';
@@ -263,7 +270,7 @@ it('allows Update while a comment save is waiting for the frame', async () => {
 it('retains the comment draft across an active URL-frame reload with unchanged content', async () => {
   setup({ activePublication: true, currentPrepared: true });
   await acknowledge();
-  fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+  fireEvent.click(screen.getByTestId('board-mode-toggle'));
   const frame = await selectLegacy();
   fireEvent.change(screen.getByTestId('probe-draft'), { target: { value: 'Draft survives reload' } });
   await act(async () => window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow,
@@ -276,7 +283,7 @@ it('retains the comment draft across an active URL-frame reload with unchanged c
 it.each(['present', 'missing'] as const)('validates the live target before sending a draft to chat (%s)', async state => {
   const route = setup({ currentPrepared: true });
   await acknowledge();
-  fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+  fireEvent.click(screen.getByTestId('board-mode-toggle'));
   const frame = await selectLegacy();
   fireEvent.change(screen.getByTestId('probe-draft'), { target: { value: 'Keep draft' } });
   vi.spyOn(frame.contentWindow!, 'postMessage').mockImplementation((data: unknown) => {
@@ -302,7 +309,7 @@ it.each(['present', 'missing'] as const)('validates the live target before sendi
 it.each(['save', 'send'] as const)('keeps file-level comment %s independent of DOM validation', async action => {
   const route = setup({ currentPrepared: true });
   await acknowledge();
-  fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+  fireEvent.click(screen.getByTestId('board-mode-toggle'));
   const frame = await selectLegacy({ elementId: 'file-comment-existing', selector: 'html' });
   const post = vi.spyOn(frame.contentWindow!, 'postMessage');
   fireEvent.change(screen.getByTestId('probe-draft'), { target: { value: 'File feedback' } });

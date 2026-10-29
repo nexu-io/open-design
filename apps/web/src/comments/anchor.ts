@@ -16,7 +16,7 @@ export interface PreviewCommentSnapshot {
   domSelector?: string;
   label: string;
   text: string;
-  position: { x: number; y: number; width: number; height: number };
+  position: PreviewComment['position'];
   hoverPoint?: { x: number; y: number };
   htmlHint: string;
   style?: PreviewAnnotationStyle;
@@ -126,9 +126,22 @@ function isValidCommentOverlayPosition(position: PreviewComment['position'] | un
   return Number.isFinite(normalized.x) && Number.isFinite(normalized.y) && Number.isFinite(normalized.width) && Number.isFinite(normalized.height) && normalized.width > 0 && normalized.height > 0;
 }
 function normalizePosition(input: PreviewComment['position']): PreviewComment['position'] { return { x: finite(input?.x), y: finite(input?.y), width: finite(input?.width), height: finite(input?.height) }; }
-function finite(value: number | undefined): number { return Number.isFinite(value) ? Math.round(value as number) : 0; }
+function finite(value: number | undefined): number { return Number.isFinite(value) ? (value as number) : 0; }
 function trimContextText(value: string): string { return String(value || '').replace(/\s+/g, ' ').trim().slice(0, 160); }
 function trimHtmlHint(value: string): string { return String(value || '').replace(/\s+/g, ' ').trim().slice(0, 180); }
 function normalizeMembers(input: PreviewCommentMember[] | undefined): PreviewCommentMember[] { return Array.isArray(input) ? input.map((member) => ({ elementId: String(member.elementId || '').trim(), selector: String(member.selector || '').trim(), label: String(member.label || '').trim(), text: trimContextText(String(member.text || '')), position: normalizePosition(member.position), htmlHint: trimHtmlHint(String(member.htmlHint || '')), style: normalizeStyle(member.style) })).filter((member) => member.elementId && member.selector) : []; }
 const ANNOTATION_STYLE_KEYS = ['color','backgroundColor','fontSize','fontWeight','lineHeight','textAlign','fontFamily','paddingTop','paddingRight','paddingBottom','paddingLeft','borderRadius'] as const;
 function normalizeStyle(input: unknown): PreviewAnnotationStyle | undefined { if (!input || typeof input !== 'object') return undefined; const raw=input as Record<string,unknown>; const style: PreviewAnnotationStyle={}; for(const key of ANNOTATION_STYLE_KEYS) { const value=raw[key]; if(typeof value === 'string') { const trimmed=value.replace(/\s+/g,' ').trim(); if(trimmed) style[key]=trimmed.slice(0,120); } } return Object.keys(style).length ? style : undefined; }
+
+/** Carry the original element-local point across a fresh DOM measurement. */
+export function preserveCommentPoint(previous: Pick<PreviewCommentSnapshot, 'position' | 'hoverPoint'>, current: PreviewCommentSnapshot): PreviewCommentSnapshot {
+  const old = previous.position;
+  const anchor = old.anchor ?? (previous.hoverPoint && old.width > 0 && old.height > 0
+    ? { u: Math.max(0, Math.min(1, (previous.hoverPoint.x - old.x) / old.width)),
+        v: Math.max(0, Math.min(1, (previous.hoverPoint.y - old.y) / old.height)) } : undefined);
+  if (!anchor) return current;
+  return { ...current, position: { ...current.position, anchor }, hoverPoint: {
+    x: current.position.x + anchor.u * current.position.width,
+    y: current.position.y + anchor.v * current.position.height,
+  } };
+}

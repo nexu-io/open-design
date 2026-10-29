@@ -2444,16 +2444,17 @@ a.avatar-item:visited {
   position: fixed;
   z-index: 60;
   top: 96px;
-  right: 16px;
-  bottom: 16px;
+  right: 8px;
+  bottom: 8px;
   display: flex;
-  width: min(320px, calc(100vw - 32px));
+  width: min(var(--comment-panel-width, 320px), calc(100vw - 32px));
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
-  border: 1px solid #E6E6E6;
-  border-radius: 10px;
-  background: #FAFAFA;
+  overflow: visible;
+  border: 0;
+  border-left: 1px solid #E6E6E6;
+  border-radius: 0;
+  background: #fff;
   box-shadow: none;
 }
 /* The floating comments card lives outside the workspace grid, so it does not
@@ -2461,12 +2462,13 @@ a.avatar-item:visited {
    its 16px viewport inset, and the same 12px breathing room as the local dock
    while the portal is populated. Keeping the reservation on `.viewer-body`
    makes the iframe, annotation overlays, and composer popover share one
-   unobstructed coordinate space; the toolbar may continue beneath the float.
+   unobstructed coordinate space; the toolbar shares that same unobstructed width.
    Preserve a small usable canvas on narrow split layouts instead of allowing
    padding to consume the whole viewer. */
-.split:has(> .comment-float-host:not(:empty)) .viewer-body {
+.split:has(> .comment-float-host:not(:empty)) .viewer-body,
+.split:has(> .comment-float-host:not(:empty)) .viewer-toolbar {
   box-sizing: border-box;
-  padding-right: max(0px, min(348px, calc(100% - 160px)));
+  padding-right: max(0px, min(calc(var(--comment-panel-width, 320px) + 16px), calc(100% - 160px)));
 }
 /* The portal target is pre-mounted so opening comments never waits a frame
    for parent state. An empty host must be visually and interactively absent. */
@@ -2512,12 +2514,17 @@ a.avatar-item:visited {
 .comment-float-host .comment-side-header {
   height: 56px;
   min-height: 56px;
-  padding: 0 16px;
+  padding: 0 14.5px 0 10.5px;
 }
 .comment-float-host .comment-side-list {
   flex: 1 1 auto;
   min-height: 0;
   padding: 8px 12px;
+}
+
+.split:has(> .comment-float-host .comment-side-rail) .viewer-body,
+.split:has(> .comment-float-host .comment-side-rail) .viewer-toolbar {
+  padding-right: 64px;
 }
 
 .comment-side-composer {

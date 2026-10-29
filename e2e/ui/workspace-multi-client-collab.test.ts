@@ -505,29 +505,29 @@ test('[P0] two isolated clients converge live content, presence, and owner unsha
       ).toContain(COLLAB_COMMENT_NOTE);
       expect(Date.now() - commentStartedAt).toBeLessThan(T.medium);
 
-      // Observe from before navigation, and bind the waiter immediately so a
-      // failed UI assertion is not masked by an unhandled page-close rejection.
+      await ownerPage.goto(`/projects/${projectId}/files/index.html`, {
+        waitUntil: 'domcontentloaded',
+      });
+      await expect(ownerPage.getByTestId('file-workspace')).toBeVisible({ timeout: T.long });
+      // The list entry reads existing feedback without activating creation or
+      // requiring a source-version save for legacy anchors.
+      await clickPreviewToolbarAction(ownerPage, 'comment-panel-toggle', /^Comments \(\d+\)$/);
+      await expect(ownerPage.getByTestId('comment-side-panel').getByTestId('comment-side-item')
+        .filter({ hasText: COLLAB_COMMENT_NOTE })).toBeVisible({ timeout: T.medium });
+      await expect(ownerPage.getByTestId('board-mode-toggle')).toHaveAttribute('aria-pressed', 'false');
+      await expect(ownerPage.getByRole('alertdialog', { name: 'Prepare static comments · save source version' })).toHaveCount(0);
+      await expect(ownerPage.getByTestId('comment-identity-preparation')).toHaveCount(0);
+      await ownerPage.bringToFront();
+      await expect.poll(() => ownerPage.evaluate(() => document.visibilityState)).toBe('visible');
       const [initialRead] = await Promise.all([
-        ownerPage.waitForResponse((response) =>
-          isProjectCommentReadResponse(response, projectId), { timeout: T.long }),
-        (async () => {
-          await ownerPage.goto(`/projects/${projectId}/files/index.html`, {
-            waitUntil: 'domcontentloaded',
-          });
-          await expect(ownerPage.getByTestId('file-workspace')).toBeVisible({ timeout: T.long });
-          await clickPreviewToolbarAction(ownerPage, 'board-mode-toggle', /^Comment$/);
-          await clickPreviewToolbarAction(ownerPage, 'comment-panel-toggle', /^Comments \(\d+\)$/);
-          // The first toggle opens existing comments directly, even for legacy
-          // targets: reading feedback must not require a source-version save.
-          await expect(ownerPage.getByTestId('comment-side-panel').getByTestId('comment-side-item')
-            .filter({ hasText: COLLAB_COMMENT_NOTE })).toBeVisible({ timeout: T.medium });
-          await expect(ownerPage.getByRole('alertdialog', { name: 'Prepare static comments · save source version' })).toHaveCount(0);
-          await expect(ownerPage.getByTestId('comment-identity-preparation')).toHaveCount(0);
-        })(),
+        ownerPage.waitForResponse(response => isProjectCommentReadResponse(response, projectId), { timeout: T.medium }),
+        ownerPage.getByTestId('comment-side-item').filter({ hasText: COLLAB_COMMENT_NOTE }).click(),
       ]);
       expect(initialRead.ok()).toBeTruthy();
+      await expect(ownerPage.getByTestId('comment-popover-detail')).toHaveText(COLLAB_COMMENT_NOTE);
+      await ownerPage.getByTestId('comment-popover').getByRole('button', { name: 'Close', exact: true }).click();
 
-      await test.step('keep the collapsed rail unread until it is expanded', async () => {
+      await test.step('keep a received comment unread until its detail is opened', async () => {
         const collapsedReadRequests: string[] = [];
         const recordCollapsedRead = (request: Request) => {
           if (isProjectCommentReadRequest(request, projectId)) {
@@ -576,17 +576,36 @@ test('[P0] two isolated clients converge live content, presence, and owner unsha
             },
             { timeout: T.medium },
           ).toContain('Member comment received while the owner rail is collapsed.');
-          await expect(collapsedRail).toContainText('2', { timeout: T.medium });
+          await expect(collapsedRail.locator('button')).toHaveCount(3, { timeout: T.medium });
+          await expect(collapsedRail.locator('i')).toHaveCount(1);
           expect(collapsedReadRequests).toEqual([]);
 
-          const expandedRead = ownerPage.waitForResponse((response) =>
-            isProjectCommentReadResponse(response, projectId),
-          );
-          await collapsedRail.click();
+          await collapsedRail.getByRole('button', { name: 'Show Comments', exact: true }).click();
           await expect(ownerPage.getByTestId('comment-side-panel')).toBeVisible();
-          expect((await expandedRead).ok()).toBeTruthy();
+          expect(collapsedReadRequests).toEqual([]);
+          // Read acknowledgement is local: listing preserves the unread dot,
+          // and opening this comment's detail acknowledges only that comment.
+          await ownerPage.getByRole('button', { name: /hide comments/i }).click();
+          await expect(collapsedRail.locator('i')).toHaveCount(1);
+          await collapsedRail.getByRole('button', { name: 'Show Comments', exact: true }).click();
+          const receivedItem = ownerPage.getByTestId('comment-side-item').filter({ hasText: 'Member comment received while the owner rail is collapsed.' });
+          const receivedCommentId = await receivedItem.getAttribute('data-comment-id');
+          await ownerPage.bringToFront();
+          await expect.poll(() => ownerPage.evaluate(() => document.visibilityState)).toBe('visible');
+          const [detailReadResponse] = await Promise.all([
+            ownerPage.waitForResponse(response => isProjectCommentReadResponse(response, projectId), { timeout: T.medium }),
+            receivedItem.click(),
+          ]);
+          expect(detailReadResponse.ok()).toBeTruthy();
+          expect(detailReadResponse.request().postDataJSON()).toMatchObject({ commentIds: [receivedCommentId] });
+          await expect(ownerPage.getByTestId('comment-popover-detail')).toHaveText('Member comment received while the owner rail is collapsed.');
+          expect(collapsedReadRequests).toHaveLength(1);
+          await ownerPage.getByTestId('comment-popover').getByRole('button', { name: 'Close', exact: true }).click();
+          await ownerPage.getByRole('button', { name: /hide comments/i }).click();
+          await expect(collapsedRail.locator('i')).toHaveCount(0);
 
-          await ownerPage.keyboard.press('Escape');
+          // The dock remains available as a rail until its list entry is closed.
+          await clickPreviewToolbarAction(ownerPage, 'comment-panel-toggle', /^Comments \(\d+\)$/);
           await expect(ownerPage.getByTestId('comment-side-panel')).toHaveCount(0);
           await expect(ownerPage.getByTestId('comment-side-collapsed-rail')).toHaveCount(0);
         } finally {

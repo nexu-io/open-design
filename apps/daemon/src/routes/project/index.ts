@@ -835,6 +835,8 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
   if (window.__odUrlSelectionBridge) return;
   window.__odUrlSelectionBridge = true;
   var commentEnabled = false;
+  var commentObserved = false;
+  var commentShortcutEnabled = false;
   var mode = 'picker';
   var hoveredId = null;
   var drawing = false;
@@ -900,12 +902,12 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     var style = document.createElement('style');
     style.setAttribute('data-od-url-selection-style', '');
     style.textContent =
-      'html[data-od-comment-mode] body * { cursor: crosshair !important; }' +
+      'html[data-od-comment-mode] body * { cursor: var(--od-comment-cursor, crosshair) !important; }' +
       'html[data-od-comment-mode][data-od-comment-mode-kind="pod"] body * { cursor: cell !important; }' +
       'html[data-od-comment-mode] body iframe,html[data-od-comment-mode] body object,html[data-od-comment-mode] body embed { pointer-events: none !important; }';
     (document.head || document.documentElement).appendChild(style);
   }
-  function active(){ return commentEnabled; }
+  function active(){ return commentEnabled || commentObserved; }
 ${ANNOTATED_SELECTOR_HELPERS}
 ${COMMENT_IDENTITY_HELPERS}
   function domSelectorFor(el){
@@ -1021,11 +1023,11 @@ ${COMMENT_IDENTITY_HELPERS}
       domSelector: domSelectorFor(el),
       label: tag + cls,
       text: (el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160),
-      position: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) },
+      position: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
       htmlHint: html.slice(0, 180),
       style: styleSnapshot(el)
     };
-    if (clickPoint) payload.hoverPoint = { x: Math.round(clickPoint.x), y: Math.round(clickPoint.y) };
+    if (clickPoint) payload.hoverPoint = { x: clickPoint.x, y: clickPoint.y };
     if (clickedEl && clickedEl !== el) {
       var clickedTag = clickedEl.tagName ? clickedEl.tagName.toLowerCase() : 'element';
       var clickedCls = typeof clickedEl.className === 'string' && clickedEl.className.trim() ? '.' + clickedEl.className.trim().split(/\\s+/).slice(0, 2).join('.') : '';
@@ -1330,6 +1332,14 @@ ${COMMENT_IDENTITY_HELPERS}
       entries: entries
     };
   }
+  document.addEventListener('keydown', function(event){
+    if (event.defaultPrevented || !commentShortcutEnabled || event.key.toLowerCase() !== 'c' || event.ctrlKey || event.metaKey || event.altKey || event.repeat || event.isComposing || event.keyCode === 229) return;
+    var target = event.target;
+    if (target && target.closest && (target.isContentEditable || target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="menu"], [role="dialog"], dialog, [popover]'))) return;
+    event.preventDefault();
+    event.stopPropagation();
+    try { window.parent.postMessage({ type: 'od:comment-shortcut' }, '*'); } catch (_) {}
+  });
   window.addEventListener('message', function(ev){
     var data = ev && ev.data;
     if (!data || !data.type) return;
@@ -1347,10 +1357,14 @@ ${COMMENT_IDENTITY_HELPERS}
     }
     if (data.type === 'od:comment-mode') {
       commentEnabled = !!data.enabled;
+      commentObserved = !!data.observe;
+      commentShortcutEnabled = !!data.shortcutEnabled;
+      if (typeof data.cursor === 'string') document.documentElement.style.setProperty('--od-comment-cursor', data.cursor);
+      else document.documentElement.style.removeProperty('--od-comment-cursor');
       mode = data.mode === 'pod' ? 'pod' : 'picker';
       document.documentElement.toggleAttribute('data-od-comment-mode', commentEnabled);
       document.documentElement.setAttribute('data-od-comment-mode-kind', mode);
-      if (commentEnabled) setTimeout(postTargets, 0);
+      if (active()) setTimeout(postTargets, 0);
       else {
         hoveredId = null;
         activeCommentElementId = null;

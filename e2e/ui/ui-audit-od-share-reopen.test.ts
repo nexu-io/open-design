@@ -27,6 +27,10 @@ test('capture Owner-S9-R while resume-only request is pending', async ({ page })
   await page.request.put(`/api/projects/${projectId}/conversations/${conversationId}/messages/s9r-fixture`, { data: { id: 's9r-fixture', role: 'assistant', content: '已生成产物。', runStatus: 'succeeded', startedAt: now - 2000, endedAt: now - 1000, createdAt: now - 1500, events: [{ kind: 'tool_use', id: 'write-index', name: 'Write', input: { file_path: `/project/${projectId}/index.html`, content } }, { kind: 'tool_result', toolUseId: 'write-index', content: 'ok', isError: false }, { kind: 'text', text: '已生成产物。' }, { kind: 'artifact_focus', show: ['index.html'] }], producedFiles: [{ name: 'index.html', path: 'index.html', localPath: `/project/${projectId}/index.html`, type: 'file', size: content.length, mtime: now - 1000, kind: 'html', mime: 'text/html' }] } });
   await page.route(`**/api/projects/${projectId}/share-state`, route => route.fulfill({ json: { projectId, bindingExists: true, hasEverShared: true, publications: [{ sourceFilePath: 'index.html', slug: 's9r-original', status: 'stopped' }] } }));
   await page.route(`**/api/projects/${projectId}/files/index.html/public-share-state`, route => route.fulfill({ json: { status: 'stopped', slug: 's9r-original' } }));
+  // The publication query, not the legacy share-state projection, gates mutation.
+  await page.route(`**/api/projects/${projectId}/files/index.html/publish-public`, route => route.request().method() === 'GET'
+    ? route.fulfill({ json: { status: 'stopped', publication: { slug: 's9r-original', url: 'https://viewer.example.test/cloud/artifact/project/s9r-original', fileName: 'index.html' } } })
+    : route.fallback());
   await page.goto(`/projects/${projectId}/files/index.html`);
   const share = page.getByTestId('file-workspace').getByRole('button', { name: '分享', exact: true });
   await share.click();
@@ -37,7 +41,7 @@ test('capture Owner-S9-R while resume-only request is pending', async ({ page })
   const gate = new Promise<void>(resolve => { release = resolve; });
   const requestStarted = new Promise<void>(resolve => { started = resolve; });
   await page.route(`**/api/projects/${projectId}/files/index.html/publish-public`, async route => {
-    if (route.request().method() !== 'POST') return route.continue();
+    if (route.request().method() !== 'POST') return route.fallback();
     expect(route.request().postDataJSON()).toEqual({ mode: 'resume' });
     started();
     await gate;

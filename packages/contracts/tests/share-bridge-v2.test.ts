@@ -99,7 +99,7 @@ describe('share bridge v2 wire boundaries', () => {
       nonceLength: 36, idMaxLength: 200, elementIdMaxLength: 4100,
       selectorMaxLength: 4096, htmlHintMaxLength: 2000,
       coordinateAbsMax: 1_000_000, viewportMax: 32_768,
-      pinLabelMaxLength: 3, paletteSize: 30, pinsMaxItems: 200,
+      pinLabelMaxLength: 64, paletteSize: 30, pinsMaxItems: 200,
       messageMaxBytes: 64 * 1024, messagesPerSecond: 20,
     });
     expect(bridge.SHARE_BRIDGE_ORDERING_AND_REVOCATION_REQUIRED).toBe(true);
@@ -137,10 +137,10 @@ describe('share bridge v2 wire boundaries', () => {
     }
   });
   it('allows only short text and palette indexes, never identity or styling', () => {
-    for (const label of ['1', '200', 'A', '?', 'AB', '林', 'É']) {
+    for (const label of ['1', '200', 'A', '?', 'AB', '林', 'É', '😀', 'é\u0301']) {
       for (const colorIndex of [0, 29]) expect(bridge.isShareBridgePinDisplay({ label, colorIndex })).toBe(true);
     }
-    for (const label of ['', '1234', '<b>', 'a b', '\n', 'A\n', '😀', '林冉', 'A林', '林\n', 'é\u0301', '#ff']) {
+    for (const label of ['', '1234', '<b>', 'a b', '\n', 'A\n', '林冉', 'A林', '林\n', '#ff']) {
       expect(bridge.isShareBridgePinDisplay({ label, colorIndex: 0 })).toBe(false);
     }
     for (const colorIndex of [-1, 30, 0.5, NaN, Infinity, '0']) {
@@ -152,4 +152,20 @@ describe('share bridge v2 wire boundaries', () => {
     expect(bridge.isShareBridgePinDisplay(null)).toBe(false);
     expect(bridge.isShareBridgePinDisplay({ label: '1' })).toBe(false);
   });
+});
+
+describe('relative comment anchor', () => {
+  it('preserves fractional points and rejects coordinates outside the element', () => {
+    expect(bridge.isShareBridgeAnchorPoint({ u: 0.125, v: 0.875 })).toBe(true);
+    expect(bridge.isShareBridgeAnchorPoint({ u: 0, v: 1 })).toBe(true);
+    for (const point of [{ u: -0.01, v: 0 }, { u: 0, v: 1.01 }, { u: NaN, v: 0 }, { u: 0 }, { u: 0, v: 0, extra: true }]) {
+      expect(bridge.isShareBridgeAnchorPoint(point)).toBe(false);
+    }
+  });
+});
+
+it('preserves complete author initials already supported by Viewer', () => {
+  for (const label of ['👨‍👩‍👧‍👦', 'e\u0301', '林']) {
+    expect(bridge.isShareBridgePinDisplay({ label, colorIndex: 0 })).toBe(true);
+  }
 });
