@@ -392,6 +392,78 @@ describe('buildAcpMcpServers', () => {
 });
 
 describe('buildOpenCodeMcpConfigContent', () => {
+  it.each(['allow', { '*': 'ask', '/private/locked/**': 'deny' }])(
+    'admits read-only resources without relaxing existing edit permissions: %j',
+    (edit) => {
+      const project = path.resolve(tmpdir(), 'od-project-permission');
+      const profiles = path.resolve(tmpdir(), 'od-strategy-permission/task-profiles');
+      const raw = buildOpenCodeMcpConfigContent([], {}, {
+        allowedDirectories: [project],
+        readOnlyDirectories: [profiles, profiles, '', 'relative/path'],
+        extraConfig: { permission: { edit, bash: 'ask', read: { '*.env': 'deny' } } },
+      });
+      const parsed = JSON.parse(raw!);
+      expect(parsed.permission.external_directory[project]).toBe('allow');
+      for (const suffix of ['', '*', '**']) {
+        const entry = suffix ? path.join(profiles, suffix) : profiles;
+        expect(parsed.permission.external_directory[entry]).toBe('allow');
+        expect(parsed.permission.edit[entry]).toBe('deny');
+      }
+      expect(parsed.permission.edit['*']).toBe(typeof edit === 'string' ? edit : edit['*']);
+      if (typeof edit === 'object') expect(parsed.permission.edit['/private/locked/**']).toBe('deny');
+      expect(parsed.permission.edit[project]).toBeUndefined();
+      expect(parsed.permission.bash).toBe('ask');
+      expect(parsed.permission.read).toEqual({ '*.env': 'deny' });
+      expect(Object.keys(parsed.permission.external_directory)).toHaveLength(6);
+    },
+  );
+
+  it('emits permission-only config for read-only directories', () => {
+    const profiles = path.resolve(tmpdir(), 'od-strategy-permission/task-profiles');
+    const parsed = JSON.parse(buildOpenCodeMcpConfigContent([], {}, { readOnlyDirectories: [profiles] })!);
+    expect(parsed.permission.external_directory[profiles]).toBe('allow');
+    expect(parsed.permission.edit[profiles]).toBe('deny');
+    expect(parsed.permission.edit['*']).toBeUndefined();
+    expect(parsed.mcp).toBeUndefined();
+  });
+
+  it('keeps resource edit denials after prior matching rules, including duplicate patterns', () => {
+    const profiles = path.resolve(tmpdir(), 'od-strategy-permission/task-profiles');
+    const entries = [profiles, path.join(profiles, '*'), path.join(profiles, '**')];
+    const edit = { ...Object.fromEntries(entries.map((entry) => [entry, 'allow'])), '*': 'allow' };
+    const parsed = JSON.parse(buildOpenCodeMcpConfigContent([], {}, {
+      readOnlyDirectories: [profiles], extraConfig: { permission: { edit } },
+    })!);
+    // OpenCode uses the last matching rule. Replacing an existing object's
+    // value does not move that key after a later broad allow rule.
+    expect(Object.keys(parsed.permission.edit).slice(-3)).toEqual(entries);
+    expect(entries.map((entry) => parsed.permission.edit[entry])).toEqual(['deny', 'deny', 'deny']);
+    expect(parsed.permission.edit['*']).toBe('allow');
+  });
+
+  it.each(['git', 'global'])('denies worktree-relative resource edits in a %s project', (kind) => {
+    const profiles = path.resolve(tmpdir(), 'od-strategy-permission/task-profiles');
+    const base = kind === 'git' ? path.resolve(tmpdir(), 'od-project-permission') : path.parse(profiles).root;
+    const parsed = JSON.parse(buildOpenCodeMcpConfigContent([], {}, {
+      readOnlyDirectories: [profiles], readOnlyEditBaseDirs: [base],
+    })!);
+    expect(parsed.permission.edit[path.join(path.relative(base, profiles), '**')]).toBe('deny');
+    expect(parsed.permission.edit[path.join(profiles, '**')]).toBe('deny');
+    expect(parsed.permission.external_directory[path.relative(base, profiles)]).toBeUndefined();
+  });
+
+  it('denies resource edits relative to every candidate worktree', () => {
+    const profiles = path.resolve(tmpdir(), 'od-strategy-permission/task-profiles');
+    const bases = [path.resolve(tmpdir(), 'od-project-permission'), path.parse(profiles).root];
+    const parsed = JSON.parse(buildOpenCodeMcpConfigContent([], {}, {
+      readOnlyDirectories: [profiles], readOnlyEditBaseDirs: bases,
+    })!);
+    for (const base of bases) {
+      expect(parsed.permission.edit[path.join(path.relative(base, profiles), '**')]).toBe('deny');
+    }
+    expect(Object.values(parsed.permission.edit)).not.toContain('allow');
+  });
+
   it('returns null when no enabled servers (avoids polluting OPENCODE_CONFIG_CONTENT)', () => {
     expect(buildOpenCodeMcpConfigContent([])).toBeNull();
     expect(

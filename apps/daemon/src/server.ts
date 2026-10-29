@@ -51,6 +51,7 @@ import type {
 
 import {
   loadOdNextTaskResourcesForSnapshot,
+  loadOdNextTaskAssetsForSnapshot,
   materializeOdNextDeviceFrames,
   observeOdNextDeviceShell,
   observeOdNextLayoutPrimitives,
@@ -514,6 +515,7 @@ import {
 } from './runtimes/auth.js';
 import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
 import { applyOpenCodeEventPlugin } from './runtimes/opencode-event-plugin.js';
+import { resolveOpenCodeEditBaseDirs } from './runtimes/opencode-permissions.js';
 import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
 import { createQoderStreamHandler } from './runtimes/qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
@@ -12273,6 +12275,25 @@ export async function startServer({
         cwd,
       });
     }
+    // Frozen tasks bypass ordinary prompt composition. Resolve access from the
+    // verified applied package here, alongside the resources every run consumes.
+    let strategyTaskAssets: Awaited<ReturnType<typeof loadOdNextTaskAssetsForSnapshot>> = {
+      taskProfileRoot: null,
+      resources: [],
+    };
+    try {
+      strategyTaskAssets = await loadOdNextTaskAssetsForSnapshot({
+        bundledPluginsDir: BUNDLED_PLUGINS_DIR,
+        snapshot: typeof run.appliedPluginSnapshotId === 'string'
+          ? getSnapshot(db, run.appliedPluginSnapshotId)
+          : null,
+      });
+    } catch (err) {
+      // Unverified assets grant no access, but must not block a frozen run.
+      console.warn(
+        `[od-next-task-assets] loading skipped: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
     // OD Next task-profile resources (the handheld shells for prototype
     // tasks) are staged beside the frozen Skills on every strategy run, so the
     // rule card's `.od-frames/<shell>.html` paths resolve even when no platform
@@ -12282,10 +12303,7 @@ export async function startServer({
       try {
         const staging = await materializeOdNextDeviceFrames({
           cwd,
-          resources: await loadOdNextTaskResourcesForSnapshot({
-            bundledPluginsDir: BUNDLED_PLUGINS_DIR,
-            snapshot: getSnapshot(db, run.appliedPluginSnapshotId),
-          }),
+          resources: strategyTaskAssets.resources,
         });
         if (staging.staged.length > 0) run.odNextStagedDeviceFrames = staging.staged;
         if (staging.skipped.length > 0) {
@@ -12608,6 +12626,7 @@ export async function startServer({
         resolveRunArtifactOutcomeBeforeFinish();
       }
     };
+    const isOpenCodeContent = def.externalMcpInjection === 'opencode-env-content';
     const extraAllowedDirs = [
       ...resolveChatExtraAllowedDirs({
         agentId,
@@ -12615,6 +12634,11 @@ export async function startServer({
         designSystemsDir: DESIGN_SYSTEMS_DIR,
         linkedDirs,
         activeSkillDirs,
+        // OpenCode grants this root only after its read-only edit boundary is
+        // resolved below. A generic grant would bypass that failure boundary.
+        strategyResourceDirs: !isOpenCodeContent && strategyTaskAssets.taskProfileRoot
+          ? [strategyTaskAssets.taskProfileRoot]
+          : [],
       }),
       ...(odNextTaskInputSnapshot
         ? [odNextTaskInputSnapshot.projectionAccessRoot]
@@ -14177,15 +14201,37 @@ export async function startServer({
     // mcp section for this single invocation, which is exactly the kind
     // of surprise the previous silent-failure UX taught us to avoid.
     let opencodeConfigContent: string | null = null;
-    const isOpenCodeContent = def.externalMcpInjection === 'opencode-env-content';
     const isMiMoContent = def.externalMcpInjection === 'mimo-env-content';
     if (isOpenCodeContent || isMiMoContent) {
       try {
+        let readOnlyDirectories: string[] = [];
+        let readOnlyEditBaseDirs: string[] = [];
+        if (isOpenCodeContent && strategyTaskAssets.taskProfileRoot) {
+          try {
+            const editBase = await resolveOpenCodeEditBaseDirs(effectiveCwd);
+            readOnlyEditBaseDirs = editBase.dirs;
+            readOnlyDirectories = [strategyTaskAssets.taskProfileRoot];
+            if (editBase.gitProbe === 'failed') {
+              console.warn(`[opencode-resource-permissions] git probe failed; denying resource edits against every candidate worktree ${JSON.stringify({
+                reason: editBase.gitProbeError, candidates: editBase.dirs,
+              })}`);
+            }
+          } catch (err) {
+            // Withhold only this resource grant; MCP, provider and ordinary
+            // project permissions must still reach the child process.
+            console.warn(`[opencode-resource-permissions] grant skipped: edit base unconfirmed ${JSON.stringify({
+              reason: err instanceof Error ? err.message : String(err),
+            })}`);
+          }
+        }
         opencodeConfigContent = buildOpenCodeMcpConfigContent(
           enabledExternalMcp,
           oauthTokensForSpawn,
           {
             allowedDirectories: [effectiveCwd, ...extraAllowedDirs],
+            // Only the verified loader result may authorize rule cards.
+            readOnlyDirectories,
+            readOnlyEditBaseDirs,
             ...(byokOpenCodeProvider
               ? { extraConfig: byokOpenCodeProvider.config }
               : {}),

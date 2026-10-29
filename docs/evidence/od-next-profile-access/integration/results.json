@@ -1,0 +1,45 @@
+{
+  "date": "2026-10-26",
+  "implementationCommit": "4c9b4a1fe978686dd90e61112e3057f5b6ebdc09",
+  "original9060": "a1bb27e64e4e949a9dedde6250f28af31b941643",
+  "imported9073": "5d305aaea72d2f14097e9977a5e4892b8afa04fa",
+  "mechanicalMergeTree": "95d040779024efd3d6f47a3ac483df3e42f22283",
+  "environment": {
+    "os": "macOS 27.0.1 arm64",
+    "node": "24.19.0",
+    "pnpm": "10.33.2",
+    "vitest": "4.1.6"
+  },
+  "before": {
+    "description": "Mechanical merge source with new fault-injection regressions",
+    "testFile": "apps/daemon/tests/od-next-automatic-simple-server.test.ts",
+    "failed": 4,
+    "skipped": 65,
+    "errors": [
+      "resource rule allow when verification failed",
+      "configured MCP entry absent when edit-base resolution failed"
+    ]
+  },
+  "after": {
+    "files": 8,
+    "passed": 250,
+    "failed": 0,
+    "durationSeconds": 219.0,
+    "publicRunFileCases": 69,
+    "launchPermissionScenarios": 7
+  },
+  "additionalRedRegression": {
+    "scenario": "missing Git executable",
+    "before": "resolved volume root /",
+    "after": "throws; the launch boundary omits only the resource grant"
+  },
+  "checks": {
+    "guard": "passed",
+    "rootTypecheck": "passed",
+    "diffWhitespace": "passed",
+    "retry": 0,
+    "testTimeoutIncreased": false
+  },
+  "runtimeControls": 6,
+  "boundary": "Architecture diagram plus rendered recorded evidence; not product UI or native-terminal captures. Real CLI uses controlled loopback responses and copied resources; HTTP tests separately establish server wiring. Native Windows and paid/live-provider design runs are not claimed."
+}

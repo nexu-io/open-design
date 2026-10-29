@@ -1,0 +1,101 @@
+{
+  "version": "0.0.0--202610200818",
+  "node": "v24.19.0",
+  "platform": "darwin",
+  "arch": "arm64",
+  "boundary": "Real bundled OpenCode CLI; isolated copied resources and HOME/XDG directories; controlled loopback provider; production verified loader and config builder. HTTP regressions separately prove server wiring.",
+  "results": [
+    {
+      "mode": "before",
+      "exitCode": 0,
+      "timedOut": false,
+      "requests": 2,
+      "tools": [
+        {
+          "tool": "read",
+          "status": "error",
+          "error": "The user rejected permission to use this specific tool call."
+        }
+      ],
+      "fileUnchanged": true,
+      "isolatedFilesCleaned": true
+    },
+    {
+      "mode": "read",
+      "exitCode": 0,
+      "timedOut": false,
+      "requests": 3,
+      "tools": [
+        {
+          "tool": "read",
+          "status": "completed",
+          "output": "<path><fixture>/bundled/scenarios/od-next-strategy/assets/task-profiles/prototype.md</path>\n<type>file</type>\n<content>\n1: # OD Next Prototype Task Profile v3.1.9\n2: \n3: > Rollout: active\n4: \n5: Task routing, clarification, Build, and the ship-on-write boundary follow the\n\n(Showing lines 1-5 of 447. Use offset=6 to continue.)\n</content>"
+        }
+      ],
+      "fileUnchanged": true,
+      "isolatedFilesCleaned": true
+    },
+    {
+      "mode": "sibling",
+      "exitCode": 0,
+      "timedOut": false,
+      "requests": 2,
+      "tools": [
+        {
+          "tool": "read",
+          "status": "error",
+          "error": "The user rejected permission to use this specific tool call."
+        }
+      ],
+      "fileUnchanged": true,
+      "isolatedFilesCleaned": true
+    },
+    {
+      "mode": "write",
+      "exitCode": 0,
+      "timedOut": false,
+      "requests": 3,
+      "tools": [
+        {
+          "tool": "write",
+          "status": "error",
+          "error": "The user has specified a rule which prevents you from using this specific tool call. Here are some of the relevant rules [{\"permission\":\"*\",\"action\":\"allow\",\"pattern\":\"*\"},{\"permission\":\"edit\",\"pattern\":\"*\",\"action\":\"allow\"},{\"permission\":\"edit\",\"pattern\":\"<fixture>/bundled/scenarios/od-next-strategy/assets/task-profiles\",\"action\":\"deny\"},{\"permission\":\"edit\",\"pattern\":\"var/folders/n_/s9gmrn7d51n7m5zfsdy5wjbm0000gn/T/od-integrated-cli-KwUJ5R/bundled/scenarios/od-next-strategy/assets/task-profiles\",\"action\":\"deny\"},{\"permission\":\"edit\",\"pattern\":\"<fixture>/bundled/scenarios/od-next-strategy/assets/task-profiles/*\",\"action\":\"deny\"},{\"permission\":\"edit\",\"pattern\":\"var/folders/n_/s9gmrn7d51n7m5zfsdy5wjbm0000gn/T/od-integrated-cli-KwUJ5R/bundled/scenarios/od-next-strategy/assets/task-profiles/*\",\"action\":\"deny\"},{\"permission\":\"edit\",\"pattern\":\"<fixture>/bundled/scenarios/od-next-strategy/assets/task-profiles/**\",\"action\":\"deny\"},{\"permission\":\"edit\",\"pattern\":\"var/folders/n_/s9gmrn7d51n7m5zfsdy5wjbm0000gn/T/od-integrated-cli-KwUJ5R/bundled/scenarios/od-next-strategy/assets/task-profiles/**\",\"action\":\"deny\"},{\"permission\":\"edit\",\"pattern\":\"<fixture>/bundled/scenarios/od-next-strategy/assets/task-profiles\",\"action\":\"deny\"},{\"permission\":\"edit\",\"pattern\":\"private<fixture>/bundled/scenarios/od-next-strategy/assets/task-profiles\",\"action\":\"deny\"},{\"permission\":\"edit\",\"pattern\":\"<fixture>/bundled/scenarios/od-next-strategy/assets/task-profiles/*\",\"action\":\"deny\"},{\"permission\":\"edit\",\"pattern\":\"private<fixture>/bundled/scenarios/od-next-strategy/assets/task-profiles/*\",\"action\":\"deny\"},{\"permission\":\"edit\",\"pattern\":\"<fixture>/bundled/scenarios/od-next-strategy/assets/task-profiles/**\",\"action\":\"deny\"},{\"permission\":\"edit\",\"pattern\":\"private<fixture>/bundled/scenarios/od-next-strategy/assets/task-profiles/**\",\"action\":\"deny\"}]"
+        }
+      ],
+      "fileUnchanged": true,
+      "isolatedFilesCleaned": true
+    },
+    {
+      "mode": "git-write",
+      "exitCode": 0,
+      "timedOut": false,
+      "requests": 3,
+      "tools": [
+        {
+          "tool": "write",
+          "status": "error",
+          "error": "The user has specified a rule which prevents you from using this specific tool call. Here are some of the relevant rules [{\"permission\":\"*\",\"action\":\"allow\",\"pattern\":\"*\"},{\"permission\":\"edit\",\"pattern\":\"*\",\"action\":\"allow\"},{\"permission\":\"edit\",\"pattern\":\"<fixture>/bundled/scenarios/od-next-strategy/assets/task-profiles\",\"action\":\"deny\"},{\"permission\":\"edit\",\"pattern\":\"../../../../../../../..<fixture>/bundled/scenarios/od-next-strategy/assets/task-profiles\",\"action\":\"deny\"},{\"permission\":\"edit\",\"pattern\":\"<fixture>/bundled/scenarios/od-next-strategy/assets/task-profiles/*\",\"action\":\"deny\"},{\"permission\":\"edit\",\"pattern\":\"../../../../../../../..<fixture>/bundled/scenarios/od-next-strategy/assets/task-profiles/*\",\"action\":\"deny\"},{\"permission\":\"edit\",\"pattern\":\"<fixture>/bundled/scenarios/od-next-strategy/assets/task-profiles/**\",\"action\":\"deny\"},{\"permission\":\"edit\",\"pattern\":\"../../../../../../../..<fixture>/bundled/scenarios/od-next-strategy/assets/task-profiles/**\",\"action\":\"deny\"},{\"permission\":\"edit\",\"pattern\":\"<fixture>/bundled/scenarios/od-next-strategy/assets/task-profiles\",\"action\":\"deny\"},{\"permission\":\"edit\",\"pattern\":\"../bundled/scenarios/od-next-strategy/assets/task-profiles\",\"action\":\"deny\"},{\"permission\":\"edit\",\"pattern\":\"<fixture>/bundled/scenarios/od-next-strategy/assets/task-profiles/*\",\"action\":\"deny\"},{\"permission\":\"edit\",\"pattern\":\"../bundled/scenarios/od-next-strategy/assets/task-profiles/*\",\"action\":\"deny\"},{\"permission\":\"edit\",\"pattern\":\"<fixture>/bundled/scenarios/od-next-strategy/assets/task-profiles/**\",\"action\":\"deny\"},{\"permission\":\"edit\",\"pattern\":\"../bundled/scenarios/od-next-strategy/assets/task-profiles/**\",\"action\":\"deny\"}]"
+        }
+      ],
+      "fileUnchanged": true,
+      "isolatedFilesCleaned": true
+    },
+    {
+      "mode": "project-write",
+      "exitCode": 0,
+      "timedOut": false,
+      "requests": 3,
+      "tools": [
+        {
+          "tool": "write",
+          "status": "completed",
+          "output": "Wrote file successfully."
+        }
+      ],
+      "fileUnchanged": false,
+      "contentAfter": "controlled output\n",
+      "isolatedFilesCleaned": true
+    }
+  ],
+  "implementationCommit": "4c9b4a1fe978686dd90e61112e3057f5b6ebdc09"
+}

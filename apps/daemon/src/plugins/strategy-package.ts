@@ -45,6 +45,8 @@ export interface BundledStrategyPromptAssetsV2 {
   coreStrategy: string;
   generalOrchestration: string;
   taskSkill: string;
+  /** Absolute root advertised by the loaded task-profile catalog. */
+  taskProfileRoot: string;
   /**
    * The selected profile's declared non-prompt resources (device shells and
    * the like), decoded from the same verified roster as the prompt text.
@@ -98,13 +100,15 @@ export function loadBundledStrategyPromptAssetsV2(input: {
       );
     }
   };
+  const taskProfileRoot = path.join(input.plugin.fsPath, 'assets/task-profiles');
   return {
     binding: loaded.binding,
     coreStrategy: decode(loaded.corePath),
     generalOrchestration: decode(loaded.orchestrationPath),
     taskSkill: decode(loaded.selectedProfilePath)
-      .replaceAll('{{SKILL_CATALOG}}', renderDeliverableSkillCatalog(path.join(input.plugin.fsPath, 'assets/task-profiles')))
-      .replaceAll('{{SKILL_ROOT}}', path.join(input.plugin.fsPath, 'assets/task-profiles')),
+      .replaceAll('{{SKILL_CATALOG}}', renderDeliverableSkillCatalog(taskProfileRoot))
+      .replaceAll('{{SKILL_ROOT}}', taskProfileRoot),
+    taskProfileRoot,
     taskResources: loaded.selectedResourcePaths.map((resourcePath) => ({
       path: resourcePath,
       text: decode(resourcePath),
