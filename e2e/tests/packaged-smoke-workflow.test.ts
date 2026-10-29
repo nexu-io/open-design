@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -3526,6 +3527,126 @@ process.stdin.on("end", () => {
     expect(publishStep).toContain(artifactMode);
   });
 
+  it("refuses to replace a versioned release asset with different bytes", async () => {
+    const fixture = await startReleaseMetadataObjectStore({});
+    const runnerTemp = await mkdtemp(join(tmpdir(), "od-release-immutable-assets-"));
+    const assetsDir = join(runnerTemp, "assets");
+    const manifestDir = join(runnerTemp, "manifests");
+    const outputsPath = join(runnerTemp, "outputs.json");
+    const version = "1.2.3-prerelease.4";
+    const assetName = `open-design-${version}-mac-arm64.dmg`;
+    const objectKey = `prerelease/versions/${version}/${assetName}`;
+    const firstBytes = Buffer.from("first signed dmg");
+    const secondBytes = Buffer.from("different signed dmg");
+    const writeAssets = async (bytes: Buffer) => {
+      await writeFile(join(assetsDir, assetName), bytes);
+      await writeFile(
+        join(assetsDir, `${assetName}.sha256`),
+        `${createHash("sha256").update(bytes).digest("hex")}  ${assetName}\n`,
+      );
+    };
+    const publish = () => execFileAsync(
+      process.execPath,
+      ["--experimental-strip-types", releaseBetaPlatformPublishScriptPath],
+      {
+        cwd: workspaceRoot,
+        env: {
+          ...process.env,
+          RELEASE_ARTIFACT_MODE: "dmg-only",
+          RELEASE_ASSETS_DIR: assetsDir,
+          RELEASE_CHANNEL: "prerelease",
+          RELEASE_MANIFEST_DIR: manifestDir,
+          RELEASE_OUTPUTS_PATH: outputsPath,
+          RELEASE_PUBLIC_ORIGIN: "https://releases.example.test",
+          RELEASE_SIGNED: "true",
+          RELEASE_STORAGE_ACCESS_KEY_ID: "test-access-key",
+          RELEASE_STORAGE_BUCKET: fixture.bucket,
+          RELEASE_STORAGE_ENDPOINT: fixture.endpointUrl,
+          RELEASE_STORAGE_REGION: "auto",
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: "test-secret-key",
+          RELEASE_TARGET: "mac_arm64",
+          RELEASE_VERSION: version,
+        },
+      },
+    );
+
+    try {
+      await mkdir(assetsDir, { recursive: true });
+      await writeAssets(firstBytes);
+      await publish();
+      await writeAssets(secondBytes);
+
+      await expect(publish()).rejects.toThrow(/immutable release asset already exists with different content/);
+      expect(fixture.object(objectKey)).toEqual(firstBytes);
+    } finally {
+      await fixture.close();
+      await rm(runnerTemp, { force: true, recursive: true });
+    }
+  });
+
+  it("publishes both macOS architectures while keeping their shared feed replaceable", async () => {
+    const fixture = await startReleaseMetadataObjectStore({});
+    const runnerTemp = await mkdtemp(join(tmpdir(), "od-release-shared-mac-feed-"));
+    const assetsDir = join(runnerTemp, "assets");
+    const manifestDir = join(runnerTemp, "manifests");
+    const outputsPath = join(runnerTemp, "outputs.json");
+    const version = "1.2.3-prerelease.4";
+    const versionPrefix = `prerelease/versions/${version}`;
+    const writeAsset = async (name: string, bytes: Buffer) => {
+      await writeFile(join(assetsDir, name), bytes);
+      await writeFile(
+        join(assetsDir, `${name}.sha256`),
+        `${createHash("sha256").update(bytes).digest("hex")}  ${name}\n`,
+      );
+    };
+    const writeMacAssets = async (arch: "arm64" | "x64") => {
+      await rm(assetsDir, { force: true, recursive: true });
+      await mkdir(assetsDir, { recursive: true });
+      await writeAsset(`open-design-${version}-mac-${arch}.dmg`, Buffer.from(`${arch} dmg`));
+      await writeAsset(`open-design-${version}-mac-${arch}-payload.zip`, Buffer.from(`${arch} payload`));
+      await writeAsset(`open-design-${version}-mac-${arch}.zip`, Buffer.from(`${arch} zip`));
+      await writeFile(join(assetsDir, "latest-mac.yml"), `arch: ${arch}\n`);
+    };
+    const publish = (target: "mac_arm64" | "mac_x64") => execFileAsync(
+      process.execPath,
+      ["--experimental-strip-types", releaseBetaPlatformPublishScriptPath],
+      {
+        cwd: workspaceRoot,
+        env: {
+          ...process.env,
+          RELEASE_ARTIFACT_MODE: "all",
+          RELEASE_ASSETS_DIR: assetsDir,
+          RELEASE_CHANNEL: "prerelease",
+          RELEASE_MANIFEST_DIR: manifestDir,
+          RELEASE_OUTPUTS_PATH: outputsPath,
+          RELEASE_PUBLIC_ORIGIN: "https://releases.example.test",
+          RELEASE_SIGNED: "true",
+          RELEASE_STORAGE_ACCESS_KEY_ID: "test-access-key",
+          RELEASE_STORAGE_BUCKET: fixture.bucket,
+          RELEASE_STORAGE_ENDPOINT: fixture.endpointUrl,
+          RELEASE_STORAGE_REGION: "auto",
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: "test-secret-key",
+          RELEASE_TARGET: target,
+          RELEASE_VERSION: version,
+        },
+      },
+    );
+
+    try {
+      await writeMacAssets("arm64");
+      await publish("mac_arm64");
+      await writeMacAssets("x64");
+      await publish("mac_x64");
+
+      expect(fixture.object(`${versionPrefix}/latest-mac.yml`)).toEqual(Buffer.from("arch: x64\n"));
+      expect(fixture.object(`${versionPrefix}/platforms/mac_arm64.json`)).not.toBeNull();
+      expect(fixture.object(`${versionPrefix}/platforms/mac_x64.json`)).not.toBeNull();
+    } finally {
+      await fixture.close();
+      await rm(runnerTemp, { force: true, recursive: true });
+    }
+  });
+
   it("rejects stale latest platform manifests from a previous beta version", async () => {
     const fixture = await startReleaseMetadataObjectStore({});
     const runnerTemp = await mkdtemp(join(tmpdir(), "od-release-betas-metadata-"));
@@ -4221,6 +4342,7 @@ async function startReleaseMetadataObjectStore(objects: Record<string, unknown>)
   bucket: string;
   close: () => Promise<void>;
   endpointUrl: string;
+  object: (key: string) => Buffer | null;
   uploadedObjectKeys: () => string[];
 }> {
   const bucket = "release-bucket";
@@ -4249,6 +4371,11 @@ async function startReleaseMetadataObjectStore(objects: Record<string, unknown>)
         server.close((error) => (error == null ? resolve() : reject(error)));
       }),
     endpointUrl: `http://127.0.0.1:${address.port}`,
+    object: (key) => {
+      const value = objects[key];
+      if (Buffer.isBuffer(value)) return value;
+      return value == null ? null : Buffer.from(JSON.stringify(value));
+    },
     uploadedObjectKeys: () => [...uploadedObjectKeys],
   };
 }
@@ -4275,17 +4402,23 @@ async function handleReleaseMetadataObjectStoreRequest(
       response.end("not found");
       return;
     }
-    const body = JSON.stringify(objects[objectKey]);
+    const value = objects[objectKey];
+    const body = Buffer.isBuffer(value) ? value : Buffer.from(JSON.stringify(value));
     response.setHeader("content-type", "application/json; charset=utf-8");
     response.end(body);
     return;
   }
 
   if (request.method === "PUT") {
-    uploadedObjectKeys.push(objectKey);
-    for await (const _chunk of request) {
-      // Drain the request body so the client can complete cleanly.
+    if (request.headers["if-none-match"] === "*" && objectKey in objects) {
+      response.statusCode = 412;
+      response.end("precondition failed");
+      return;
     }
+    uploadedObjectKeys.push(objectKey);
+    const chunks: Buffer[] = [];
+    for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    objects[objectKey] = Buffer.concat(chunks);
     response.statusCode = 200;
     response.end("ok");
     return;
