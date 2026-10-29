@@ -37,6 +37,7 @@ import {
   type WorkspaceProjectsResponse,
 } from '@open-design/contracts';
 import { randomUUID } from 'node:crypto';
+import { isMcpUserQuitError } from './mcp-user-quit.js';
 
 import { postCreateArtifactRequest } from './artifacts/create.js';
 import { resolveMcpWorkspaceContext } from './mcp-workspace-context.js';
@@ -77,7 +78,7 @@ export const MCP_SERVER_INSTRUCTIONS = [
 
 type JsonObject = Record<string, unknown>;
 interface RunMcpOptions {
-  daemonUrl: string | URL;
+  daemonUrl?: string | URL;
   resolveDaemonUrl?: () => Promise<string | URL>;
 }
 interface CatalogItem { id: string; name?: string; title?: string; description?: string; summary?: string }
@@ -146,20 +147,26 @@ export function createMcpDaemonTarget(options: RunMcpOptions): {
     args: McpArgs,
     handler: (baseUrl: string) => Promise<McpToolCallResult>,
   ): Promise<McpToolCallResult>;
-  currentUrl(): string;
+  currentUrl(): string | null;
   refresh(): Promise<string>;
 } {
-  let current = normalizeDaemonUrl(options.daemonUrl);
+  let current = options.daemonUrl == null ? null : normalizeDaemonUrl(options.daemonUrl);
   let refreshTask: Promise<string> | null = null;
 
   const refresh = async (): Promise<string> => {
-    if (!options.resolveDaemonUrl) return current;
+    if (!options.resolveDaemonUrl) {
+      if (current == null) throw new Error('The OpenDesign runtime is unavailable. Open the app manually, then retry this request.');
+      return current;
+    }
     refreshTask ??= options.resolveDaemonUrl()
       .then((url) => {
         current = normalizeDaemonUrl(url);
         return current;
       })
-      .catch(() => current)
+      .catch((error: unknown) => {
+        if (isMcpUserQuitError(error) || current == null) throw error;
+        return current;
+      })
       .finally(() => {
         refreshTask = null;
       });
@@ -177,13 +184,25 @@ export function createMcpDaemonTarget(options: RunMcpOptions): {
           return errorResult(formatError(error, baseUrl));
         }
       };
-      const firstUrl = await refresh();
+      let firstUrl: string;
+      try {
+        firstUrl = await refresh();
+      } catch (error) {
+        return errorResult(errorMessage(error));
+      }
       const first = await invoke(firstUrl);
       if (!isDaemonUnreachableResult(first) || !options.resolveDaemonUrl) {
         return first;
       }
 
-      const recoveredUrl = await refresh();
+      let recoveredUrl: string;
+      try {
+        recoveredUrl = await refresh();
+      } catch (error) {
+        const ambiguity = SAFE_MCP_DAEMON_RETRY_CALLS.has(name) ? ''
+          : `The change requested by "${name}" may or may not have been applied. Check the current state before retrying.`;
+        return errorResult([errorMessage(error), ambiguity].filter(Boolean).join('\n\n'));
+      }
       if (!SAFE_MCP_DAEMON_RETRY_CALLS.has(name)) {
         // A failed write is ambiguous: the daemon may have committed it before
         // the transport broke. Refresh the target for the next request, but do
@@ -2040,7 +2059,12 @@ async function runMcpStdioImplementation(options: RunMcpOptions): Promise<void> 
       );
       if (locale) args.locale = locale;
     }
-    const baseUrl = await daemonTarget.refresh();
+    let baseUrl: string;
+    try {
+      baseUrl = await daemonTarget.refresh();
+    } catch (error) {
+      return errorResult(errorMessage(error));
+    }
     observabilityPromise ??= McpObservabilitySession.create(
       baseUrl,
       server.getClientVersion(),

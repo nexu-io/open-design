@@ -59,12 +59,14 @@ function shutdownHarness(options: {
   const exit = vi.fn();
   const endSession = vi.fn();
   const recordHostEvent = vi.fn();
+  const onUserQuit = vi.fn();
+  const onShutdownStarted = vi.fn();
   const recordLifecycle = vi.fn(async (_event: unknown) => undefined);
   const sandbox = {
     memorySampler: { stop: vi.fn() },
     startupTiming: { finish: vi.fn() }, removeStartupIpc: vi.fn(),
     updater: { recordLifecycle },
-    options: { beforeShutdown, quiesceRendererTransport }, desktop: { close }, app: { quit, on }, process: { exit },
+    options: { beforeShutdown, quiesceRendererTransport, onUserQuit, onShutdownStarted }, desktop: { close }, app: { quit, on }, process: { exit },
     updateScheduler: { stop: vi.fn() }, disposeMenu: vi.fn(), removeDiagnosticsIpc: vi.fn(),
     endDesktopSessionCleanly: endSession, recordDesktopHostEvent: recordHostEvent,
     sessionStatePath: "test-session", console: { info: vi.fn(), error: vi.fn() },
@@ -73,7 +75,7 @@ function shutdownHarness(options: {
   const api = runInNewContext(`${code}\n({ shutdown, shutdownAndExit })`, sandbox) as {
     shutdown(): Promise<void>; shutdownAndExit(): void;
   };
-  return { ...api, memorySampler: sandbox.memorySampler, beforeShutdown, close, quiesceRendererTransport, quit, exit, endSession, finishCleanup, beforeQuit, recordLifecycle, recordHostEvent };
+  return { ...api, memorySampler: sandbox.memorySampler, beforeShutdown, close, quiesceRendererTransport, quit, exit, endSession, finishCleanup, beforeQuit, recordLifecycle, recordHostEvent, onUserQuit, onShutdownStarted };
 }
 
 async function flushPromises() {
@@ -81,6 +83,27 @@ async function flushPromises() {
 }
 
 describe("desktop shutdown", () => {
+  it("records an explicit native quit before shutting down the daemon", async () => {
+    const h = shutdownHarness();
+    h.beforeQuit({ preventDefault: vi.fn() });
+    expect(h.onUserQuit).toHaveBeenCalledTimes(1);
+    expect(h.onUserQuit.mock.invocationCallOrder[0]).toBeLessThan(h.onShutdownStarted.mock.invocationCallOrder[0]!);
+    await flushPromises();
+    expect(h.onUserQuit.mock.invocationCallOrder[0]).toBeLessThan(h.beforeShutdown.mock.invocationCallOrder[0]!);
+    h.beforeQuit({ preventDefault: vi.fn() });
+    expect(h.onUserQuit).toHaveBeenCalledTimes(1);
+    h.finishCleanup();
+  });
+
+  it("does not classify updater or sidecar teardown as a user quit", async () => {
+    const h = shutdownHarness();
+    const pending = h.shutdown();
+    h.beforeQuit({ preventDefault: vi.fn() });
+    expect(h.onUserQuit).not.toHaveBeenCalled();
+    expect(h.onShutdownStarted).toHaveBeenCalled();
+    h.finishCleanup();
+    await pending;
+  });
   it("records one quit request before cleanup, however often quit is asked for", async () => {
     const h = shutdownHarness();
     void h.shutdown();

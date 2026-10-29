@@ -2839,9 +2839,14 @@ async function runMcp(args) {
   }
 
   const { ensureMcpDaemonUrl } = await import('./mcp-bootstrap.js');
-  const daemonUrl = await ensureMcpDaemonUrl({
-    flagUrl: flags['daemon-url'],
-  });
+  const { isMcpUserQuitError } = await import('./mcp-user-quit.js');
+  let daemonUrl: string | undefined;
+  try {
+    daemonUrl = await ensureMcpDaemonUrl({ flagUrl: flags['daemon-url'] });
+  } catch (error) {
+    // Keep stdio available so the MCP host can list tools and retry after a manual launch.
+    if (!isMcpUserQuitError(error)) throw error;
+  }
 
   const { runMcpStdio } = await import('./mcp.js');
   await runMcpStdio({

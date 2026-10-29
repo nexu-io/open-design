@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,6 +10,7 @@ import * as launcherProto from "@open-design/launcher-proto";
 import * as release from "@open-design/release";
 import type { SidecarStamp } from "@open-design/sidecar";
 import * as sidecarProto from "@open-design/sidecar-proto";
+import * as mcpAutoLaunch from "../src/mcp-auto-launch.js";
 
 const require = createRequire(import.meta.url);
 function compile(name: string, entry = false): string {
@@ -46,7 +47,8 @@ function evaluate(code: string, modules: Record<string, unknown>, globals: Recor
 }
 
 type Kind = "visible" | "hidden" | "gone" | "duplicate" | "timeout";
-async function scenario(platform: "darwin" | "win32", channel: "stable" | "prerelease", kind: Kind) {
+async function scenario(platform: "darwin" | "win32", channel: "stable" | "prerelease", kind: Kind,
+  options: { headless?: boolean; userQuit?: boolean; stampedLauncher?: boolean } = {}) {
   const root = await mkdtemp(join(tmpdir(), "od-entry-handoff-"));
   const trace: string[] = [];
   let alive = kind !== "gone";
@@ -60,11 +62,17 @@ async function scenario(platform: "darwin" | "win32", channel: "stable" | "prere
   const namespace = "entry-handoff-test";
   const version = channel === "stable" ? "0.22.2" : "0.22.2-prerelease.1";
   const paths = { logsRoot: join(root, "logs"), dataRoot: join(root, "data"), runtimeRoot: join(root, "runtime") };
+  const markerPath = join(paths.dataRoot, sidecarProto.MCP_BOOTSTRAP_CONTRACT.USER_QUIT_FILE);
+  if (options.userQuit) {
+    await mkdir(paths.dataRoot, { recursive: true });
+    await writeFile(markerPath, JSON.stringify({ schemaVersion: 1, quitAtMs: Date.now() }));
+  }
   const selected = new Error("selection boundary");
   const modules: Record<string, unknown> = {
     "@open-design/launcher-proto": launcherProto,
     "@open-design/release": release,
     "@open-design/sidecar-proto": sidecarProto,
+    "./mcp-auto-launch.js": mcpAutoLaunch,
     "@open-design/platform": {
       waitForProcessExit: async (pid: number) => {
         expect(pid).toBe(4242);
@@ -77,8 +85,9 @@ async function scenario(platform: "darwin" | "win32", channel: "stable" | "prere
       },
     },
     "@open-design/sidecar": {
-      readCurrentSidecarStamp: () => null,
-      isCurrentSidecarLauncher: () => false,
+      readCurrentSidecarStamp: () => options.stampedLauncher
+        ? { app: "desktop", channel, namespace, mode: "runtime", source: "tools-pack" } : null,
+      isCurrentSidecarLauncher: () => options.stampedLauncher ?? false,
       getSidecarStatus: async (stamp: SidecarStamp) => {
         trace.push(`inspect:${stamp.app}:${alive}`);
         if (!alive || stamp.mode !== "runtime") return { state: "stopped" };
@@ -92,7 +101,7 @@ async function scenario(platform: "darwin" | "win32", channel: "stable" | "prere
     "electron": { app: { commandLine: { appendSwitch() {} }, exit: (code: number) => trace.push(`exit:${code}`) } },
     "@open-design/desktop/main": { async recordIncomingUpdateLifecycle() {}, applyOsLocaleSwitch() {}, applyLoopbackConnectionLimitSwitch() {} },
     "./config.js": { readPackagedConfig: async () => ({ namespace, appVersion: version }) },
-    "./headless-runtime.js": { parsePackagedHeadlessRequest: () => ({ headless: false }), runPackagedMcpActionAgainstExistingDaemon: async () => false },
+    "./headless-runtime.js": { parsePackagedHeadlessRequest: () => ({ headless: options.headless ?? false, mcpInstallAgent: null }), runPackagedMcpActionAgainstExistingDaemon: async () => false },
     "./paths.js": { resolvePackagedNamespacePaths: () => paths },
     "./launch.js": { createPackagedSecondInstanceHandoff: () => ({}) },
     "./payload-desktop-launch.js": { findPackagedDeeplinkArg: () => null },
@@ -117,8 +126,9 @@ async function scenario(platform: "darwin" | "win32", channel: "stable" | "prere
     await Promise.race([armed.promise, running]);
     if (kind !== "timeout") quit();
     await running;
-    const log = await readFile(join(paths.logsRoot, "launcher", "after-quit.log"), "utf8");
-    return { trace, log };
+    const log = await readFile(join(paths.logsRoot, "launcher", "after-quit.log"), "utf8").catch(() => "");
+    const userQuitRecorded = await readFile(markerPath, "utf8").then(() => true, () => false);
+    return { trace, log, userQuitRecorded };
   } finally {
     quit();
     await rm(root, { recursive: true, force: true });
@@ -126,6 +136,23 @@ async function scenario(platform: "darwin" | "win32", channel: "stable" | "prere
 }
 
 describe.each(["darwin", "win32"] as const)("%s packaged update entry", platform => {
+  it("rejects a queued MCP launch after an explicit quit before instance discovery", async () => {
+    const { trace, userQuitRecorded } = await scenario(platform, "stable", "duplicate", { headless: true, userQuit: true });
+    expect(trace).toContain("exit:0");
+    expect(trace.some(event => /^(inspect|bootstrap|select|show)/.test(event))).toBe(false);
+    expect(userQuitRecorded).toBe(true);
+  });
+  it("clears quit intent on a manual foreground open", async () => {
+    const { trace, userQuitRecorded } = await scenario(platform, "stable", "duplicate", { userQuit: true });
+    expect(trace).toContain("show");
+    expect(userQuitRecorded).toBe(false);
+  });
+  it("clears quit intent when an operator explicitly starts a stamped launcher", async () => {
+    expect((await scenario(platform, "stable", "duplicate", { userQuit: true, stampedLauncher: true })).userQuitRecorded).toBe(false);
+  });
+  it("does not let an updater successor erase a later user quit", async () => {
+    expect((await scenario(platform, "stable", "visible", { userQuit: true })).userQuitRecorded).toBe(true);
+  });
   it.each(["stable", "prerelease"] as const)("waits for the %s old desktop before instance discovery and bootstrap", async channel => {
     const { trace, log } = await scenario(platform, channel, "visible");
     expect(trace).toContain("select");

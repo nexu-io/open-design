@@ -44,6 +44,8 @@ export const SIDECAR_ENV = Object.freeze({
  * shape and today's behavior.
  */
 export const MCP_BOOTSTRAP_CONTRACT = Object.freeze({
+  /** User intent under the resolved daemon data root, independent of process stamps. */
+  USER_QUIT_FILE: "mcp-user-quit.json",
   /** Appended to OD_MCP_BOOTSTRAP_ARGS by a managed outer. */
   MANAGED_ARG: "--od-mcp-managed",
   /**
@@ -53,6 +55,21 @@ export const MCP_BOOTSTRAP_CONTRACT = Object.freeze({
    */
   DISCOVERY_ENV: "OD_MCP_DISCOVERY",
 } as const);
+
+/** An explicit quit suppresses MCP auto-launch only until the next OS boot. */
+export function isMcpUserQuitRecordActive(
+  record: unknown,
+  nowMs: number,
+  osUptimeSeconds: number,
+): boolean {
+  if (record == null || typeof record !== "object" || Array.isArray(record)) return false;
+  const value = record as { schemaVersion?: unknown; quitAtMs?: unknown };
+  return value.schemaVersion === 1
+    && typeof value.quitAtMs === "number" && Number.isFinite(value.quitAtMs)
+    && Number.isFinite(nowMs) && Number.isFinite(osUptimeSeconds) && osUptimeSeconds >= 0
+    && value.quitAtMs > 0 && value.quitAtMs <= nowMs
+    && value.quitAtMs >= nowMs - osUptimeSeconds * 1000;
+}
 
 export const SIDECAR_RUNTIME_ENV = Object.freeze({
   base: SIDECAR_ENV.BASE,
