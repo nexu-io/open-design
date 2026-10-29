@@ -2,13 +2,14 @@ import { access } from 'node:fs/promises';
 import { homedir, userInfo } from 'node:os';
 import { dirname, join } from 'node:path';
 
-import type { RequestHandler } from 'express';
+import type { Express, RequestHandler } from 'express';
 
 import {
   buildAgentCliLogSources,
   buildDiagnosticsZip,
   buildRunEventLogSources,
   DIAGNOSTICS_CONTENT_TYPE,
+  DIAGNOSTICS_EXPORT_PATH,
   DIAGNOSTICS_FILENAME_PREFIX,
   diagnosticsFileName,
   type AutomaticDiagnosticSource,
@@ -334,6 +335,23 @@ export async function buildAutomaticDiagnosticSources(
     }
   }
   return sources;
+}
+
+/**
+ * Mounts the diagnostics bundle on GET and POST, both behind the same guard
+ * and handler. The CLI, the desktop path and existing callers keep GET. The
+ * browser uses POST, because browsers attach `Origin` to same-origin POSTs but
+ * not to GETs, and the local-request guard needs that Origin to admit an
+ * operator-allowlisted published-port deployment (#8382). Neither method may
+ * skip the guard: the bundle carries logs, host metadata and crash reports.
+ */
+export function registerDiagnosticsExportRoutes(
+  app: Pick<Express, 'get' | 'post'>,
+  guard: RequestHandler,
+  handler: RequestHandler,
+): void {
+  app.get(DIAGNOSTICS_EXPORT_PATH, guard, handler);
+  app.post(DIAGNOSTICS_EXPORT_PATH, guard, handler);
 }
 
 export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOptions): RequestHandler {
