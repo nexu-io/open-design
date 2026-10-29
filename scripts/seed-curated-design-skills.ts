@@ -1053,6 +1053,72 @@ const CATALOGUE: CuratedSkill[] = [
     upstream: 'https://github.com/MiniMax-AI/skills',
     attribution: 'Curated from the MiniMax AI team.',
   },
+
+
+
+  // -------------------------------------------------------------------------
+  // Accessibility (AccessLint WCAG 2.2 workflow)
+  // -------------------------------------------------------------------------
+  {
+    id: 'accessibility-scan',
+    description:
+      'Run the accessibility rule engine against one live page and locate every mechanically detectable WCAG 2.2 violation, each grounded to a DOM selector and source file:line. Locates only; does not edit. Use for page-level checks and verifying a UI change.',
+    triggers: ['accessibility scan', 'is this page accessible', 'check a11y', 'wcag scan', 'contrast issues'],
+    mode: 'design-system',
+    category: 'accessibility',
+    upstream: 'https://github.com/AccessLint/skills/tree/main/plugins/accesslint/skills/accessibility-scan',
+    attribution: 'Curated from AccessLint.',
+    catalogueOnlyNote:
+      'OpenDesign ships this entry as discovery metadata only. Running it shells out to npx @accesslint/cli against a live page over CDP (auto-launches Chrome); the CLI and browser session are user-side requirements — disclose them before running in sandboxed environments.',
+  },
+  {
+    id: 'accessibility-inspect',
+    description:
+      'Hands-on accessibility checks for one live page that the rule engine cannot decide: keyboard and focus order, names/roles/states, reflow and zoom, reduced motion, form errors, target size. Assesses only; does not edit.',
+    triggers: ['accessibility inspect', 'keyboard navigation check', 'focus order', 'screen reader check', 'target size'],
+    mode: 'design-system',
+    category: 'accessibility',
+    upstream: 'https://github.com/AccessLint/skills/tree/main/plugins/accesslint/skills/accessibility-inspect',
+    attribution: 'Curated from AccessLint.',
+    catalogueOnlyNote:
+      'OpenDesign ships this entry as discovery metadata only. The hands-on checks need a browser MCP (chrome-devtools, Playwright, or Puppeteer); without one it runs the static checks and hands off the rest.',
+  },
+  {
+    id: 'accessibility-audit',
+    description:
+      'Whole-site WCAG conformance audit: defines scope, samples representative pages and flows, runs scan plus inspect per page, reports per-criterion conformance as pass, fail, or undetermined.',
+    triggers: ['accessibility audit', 'wcag audit', 'wcag-em audit', 'site accessibility', 'section 508'],
+    mode: 'design-system',
+    category: 'accessibility',
+    upstream: 'https://github.com/AccessLint/skills/tree/main/plugins/accesslint/skills/accessibility-audit',
+    attribution: 'Curated from AccessLint.',
+    catalogueOnlyNote:
+      'OpenDesign ships this entry as discovery metadata only. Running it needs npx @accesslint/cli plus Chrome over CDP, and uses the AccessLint MCP server for rule metadata when available.',
+  },
+  {
+    id: 'accessibility-fix',
+    description:
+      'Apply mechanical accessibility fixes to a target or worklist with baseline and verify runs. Only fixes; leaves TODOs for visual or contextual judgment calls.',
+    triggers: ['fix a11y issues', 'fix accessibility violations', 'accessibility fix', 'a11y remediation'],
+    mode: 'design-system',
+    category: 'accessibility',
+    upstream: 'https://github.com/AccessLint/skills/tree/main/plugins/accesslint/skills/accessibility-fix',
+    attribution: 'Curated from AccessLint.',
+    catalogueOnlyNote:
+      'OpenDesign ships this entry as discovery metadata only. It needs the AccessLint MCP server for baseline and verify runs, and applies mechanical fixes only — visual or contextual judgment stays with a human.',
+  },
+  {
+    id: 'accessibility-diff',
+    description:
+      'Diff one page against a baseline (uncommitted changes by default, or a branch) and report only the accessibility issues the change introduced or fixed. Use as the regression gate.',
+    triggers: ['accessibility diff', 'a11y regression check', 'a11y diff', 'accessibility regression'],
+    mode: 'design-system',
+    category: 'accessibility',
+    upstream: 'https://github.com/AccessLint/skills/tree/main/plugins/accesslint/skills/accessibility-diff',
+    attribution: 'Curated from AccessLint.',
+    catalogueOnlyNote:
+      'OpenDesign ships this entry as discovery metadata only. Running it shells out to npx @accesslint/cli against a live page over CDP (auto-launches Chrome); the CLI and browser session are user-side requirements.',
+  },
 ];
 
 function buildBody(s: CuratedSkill): string {
