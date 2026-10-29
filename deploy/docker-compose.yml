@@ -27,7 +27,7 @@ services:
       - /tmp
     security_opt:
       - no-new-privileges:true
-    mem_limit: ${OPEN_DESIGN_MEM_LIMIT:-384m}
+    mem_limit: ${OPEN_DESIGN_MEM_LIMIT:-768m}
     pids_limit: 256
     healthcheck:
       test:

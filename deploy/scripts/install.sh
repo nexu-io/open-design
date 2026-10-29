@@ -12,7 +12,7 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 DEFAULT_PORT=7456
 DEFAULT_IMAGE="ghcr.io/nexu-io/od:latest"
-DEFAULT_MEM_LIMIT="384m"
+DEFAULT_MEM_LIMIT="768m"
 HEALTH_TIMEOUT=60
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

@@ -55,7 +55,7 @@ Defaults:
   storage, you MUST read root [`AGENTS.md`](../AGENTS.md) → **Daemon data
   directory contract**. This README MUST NOT restate it.
 - Node heap cap: `--max-old-space-size=192`
-- Compose memory cap: `384m` (`OPEN_DESIGN_MEM_LIMIT=256m` to override)
+- Compose memory cap: `768m` (`OPEN_DESIGN_MEM_LIMIT=1g` to override)
 
 Do not publish the daemon directly on a public or shared LAN interface. The shared
 API token is single-tenant authentication, not user-level access control, and both
