@@ -16545,10 +16545,12 @@ export async function startServer({
               clearAgentSession(db, run.conversationId, def.id);
             }
             clearInactivityWatchdog();
+            const authFailure = classifyAgentAuthFailure(def.id, agentStreamError);
+            const authRequired = authFailure?.status === 'missing';
             send('error', createSseErrorPayload(
-              'AGENT_EXECUTION_FAILED',
-              agentStreamError,
-              { retryable: false },
+              authRequired ? 'AGENT_AUTH_REQUIRED' : 'AGENT_EXECUTION_FAILED',
+              authRequired ? authFailure.message ?? agentStreamError : agentStreamError,
+              { retryable: authRequired },
             ));
           } else {
             noteAgentActivity();

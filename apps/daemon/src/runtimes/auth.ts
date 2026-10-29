@@ -60,6 +60,9 @@ const REASONIX_AUTH_GUIDANCE =
 const CLAUDE_AUTH_GUIDANCE =
   'Claude Code is installed but is not authenticated. Run `claude auth login` or open `claude` and complete login in a terminal, then rescan. If OpenDesign was launched outside an interactive shell, your shell rc files (e.g. ~/.zshrc) may not be loaded into its environment.';
 
+const PI_AUTH_GUIDANCE =
+  'Pi has no API key for the selected model provider. Open a terminal, run `pi`, then enter `/login` to authenticate that provider, then retry in Open Design. You can also select a Pi model whose provider is already configured. See Pi’s provider and model documentation for supported login methods.';
+
 export function cursorAuthGuidance(): string {
   return CURSOR_AUTH_GUIDANCE;
 }
@@ -86,6 +89,17 @@ export function reasonixAuthGuidance(): string {
 
 export function claudeAuthGuidance(): string {
   return CLAUDE_AUTH_GUIDANCE;
+}
+
+export function piAuthGuidance(): string {
+  return PI_AUTH_GUIDANCE;
+}
+
+export function isPiAuthFailureText(text: string): boolean {
+  const value = String(text || '');
+  if (!value.trim()) return false;
+  return /no api key found for the selected model/i.test(value) ||
+    /use\s+\/login\s+to log into a provider/i.test(value);
 }
 
 export function isCursorAuthFailureText(text: string): boolean {
@@ -235,6 +249,10 @@ export function classifyAgentAuthFailure(
       status: 'missing',
       message: claudeAuthGuidance(),
     };
+  }
+  if (agentId === 'pi') {
+    if (!isPiAuthFailureText(text)) return null;
+    return { status: 'missing', message: piAuthGuidance() };
   }
   if (agentId === 'cursor-agent') {
     if (!isCursorAuthFailureText(text)) return null;
