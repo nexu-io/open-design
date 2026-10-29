@@ -7881,9 +7881,22 @@ Common options:
       const conversationMode = normalizeChatSessionModeFlag(flags.mode);
       if (conversationMode) body.conversationMode = conversationMode;
       if (flags['pending-prompt']) body.pendingPrompt = flags['pending-prompt'];
-      if (flags['metadata-json']) {
-        const mj = safeReadJsonFile(flags['metadata-json']);
-        if (mj && typeof mj === 'object') body.metadata = mj;
+      if (flags['metadata-json'] !== undefined) {
+        const input = flags['metadata-json'];
+        if (typeof input !== 'string' || input.trim() === '') {
+          console.error(`--metadata-json requires a path, '-' or inline JSON value.`);
+          process.exit(2);
+        }
+        const mj = safeReadJsonFile(input);
+        if (Array.isArray(mj)) {
+          console.error(`--metadata-json must be an object, not an array.`);
+          process.exit(2);
+        }
+        if (mj === undefined || mj === null || typeof mj !== 'object') {
+          console.error(`--metadata-json must contain a valid JSON object.`);
+          process.exit(2);
+        }
+        body.metadata = mj;
       }
       const prompt = await readPromptFromFlags(flags);
       if (prompt) body.pendingPrompt = prompt;

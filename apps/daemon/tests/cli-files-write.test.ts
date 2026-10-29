@@ -200,6 +200,46 @@ describe('od files write / upload (ESM require regression)', () => {
     });
   });
 
+  // QA finding #1: array JSON must be rejected before a create request is sent.
+  it('`project create --metadata-json` rejects an array payload with exit 2', async () => {
+    const metadataPath = join(scratchDir, 'metadata-array.json');
+    writeFileSync(metadataPath, JSON.stringify([{ kind: 'template' }]));
+
+    const result = await runCli([
+      'project',
+      'create',
+      '--name',
+      'Array metadata',
+      '--metadata-json',
+      metadataPath,
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain('--metadata-json');
+    expect(stub.requests).toHaveLength(0);
+  });
+
+  // QA finding #2: an explicitly empty `--metadata-json` value must be rejected
+  // before a create request is sent.
+  it('`project create --metadata-json` rejects an empty value with exit 2', async () => {
+    const result = await runCli([
+      'project',
+      'create',
+      '--name',
+      'Empty metadata',
+      '--metadata-json',
+      '',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain('--metadata-json');
+    expect(stub.requests).toHaveLength(0);
+  });
+
   it('`files upload --as` overrides the destination name', async () => {
     const localPath = join(scratchDir, 'local-name.txt');
     writeFileSync(localPath, 'asset body');
