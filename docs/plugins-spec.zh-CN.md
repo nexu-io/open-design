@@ -1304,7 +1304,7 @@ od project open   <id>                                 # opens browser at /proje
 ```
 od conversation list <projectId> [--json]
 od conversation new  <projectId> [--title "<title>"] [--json]
-od conversation info <conversationId> [--json]
+od conversation info <conversationId> --project <projectId> [--json]
 ```
 
 #### Run / task lifecycle（新增）
