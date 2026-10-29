@@ -237,6 +237,21 @@ function isRateLimitText(text: string): boolean {
     .test(text);
 }
 
+const EXPLICIT_BALANCE_TEXT =
+  /insufficient[ _](?:wallet[ _])?balance|insufficient[ _](?:quota|credits?|funds)|not enough (?:balance|credits)|balance is empty|balance too low|billing balance|余额不足|额度不足|预扣费额度失败/i;
+
+// A provider quota that resets within the minute. Gemini's free tier words it
+// as "exceeded your current quota" (which `isHardQuotaText` matches) followed
+// by "...per minute limit exceeded..." and "Please retry in 32.4s". Per-day
+// windows and a zero limit stay exhausted quotas.
+function isProviderShortWindowQuotaText(text: string): boolean {
+  return /\bper minute\b|Please retry in \d/i.test(text) && !/\bper day\b|\blimit: 0\b/i.test(text);
+}
+
+function isContentFilterText(text: string): boolean {
+  return /\bContentFilterError\b|blocked by the provider'?s content filter/i.test(text);
+}
+
 function isWorkspaceCreditsText(text: string): boolean {
   return /\b(?:your )?workspace is out of credits\b|\badd credits to continue\b|\bask your workspace owner to refill\b|\bno payment method\b|\brequires more credits\b/i
     .test(text);
@@ -558,6 +573,19 @@ const PROCESS_CRASH_SIGNALS = new Set([
  * either the normalized error code or the raw status, because a run can carry
  * the signal without ever getting an `AGENT_SIGNAL_*` code stamped on it.
  */
+// Structured failures an agent reports itself before the daemon closes the
+// session as fatal and tears the child down.
+const AGENT_REPORTED_FAILURE_CODES = new Set([
+  'UPSTREAM_UNAVAILABLE',
+  'RATE_LIMITED',
+  'AMR_MODEL_UNAVAILABLE',
+  'AMR_AUTH_REQUIRED',
+]);
+
+function agentReportedFailureBeforeTeardown(errorCode: string, closeReason: string | null | undefined): boolean {
+  return closeReason === 'fatal_rpc_error' && AGENT_REPORTED_FAILURE_CODES.has(errorCode);
+}
+
 function forcedSignalName(errorCode: string, signal: unknown): string | null {
   const named = errorCode.startsWith('AGENT_SIGNAL_')
     ? errorCode.slice('AGENT_SIGNAL_'.length)
@@ -912,6 +940,7 @@ function classification(
     'workspace_credits_exhausted',
     'amr_insufficient_balance',
     'amr_tier_upgrade_required',
+    'content_filtered',
   ].includes(failure_detail) || failure_category === 'entitlement_required';
   const localModel = [
     'cli_version_incompatible',
@@ -1078,7 +1107,17 @@ function classifyRunFailureBase(
     return classification('process_exit', 'continuation_incomplete',
       inferFailureStageFromEvents(events, 'post_tool_resume'), false, 'none');
   }
-  const amrFailure = classifyAmrAccountFailure(text);
+  // A structured RATE_LIMITED report is a quota, not a wallet balance, unless
+  // the text says so outright. The account detector's generic quota + billing
+  // fallback otherwise claims Gemini's free-tier limit ("exceeded your current
+  // quota, please check your plan and billing details") as insufficient balance.
+  const accountFailure = classifyAmrAccountFailure(text);
+  const amrFailure =
+    accountFailure?.code === 'AMR_INSUFFICIENT_BALANCE' &&
+    errorCode === 'RATE_LIMITED' &&
+    !EXPLICIT_BALANCE_TEXT.test(text)
+      ? null
+      : accountFailure;
   const byokOpenCodeProviderNotFound = isByokOpenCodeProviderNotFoundText(
     input.agentId,
     text,
@@ -1108,6 +1147,18 @@ function classifyRunFailureBase(
       'auth',
       'account_suspended',
       inferFailureStageFromEvents(events, 'session_init'),
+      false,
+      'none',
+    );
+  }
+
+  // The provider refused to return the response because of its content policy.
+  // Retrying the same request is refused again.
+  if (isContentFilterText(text)) {
+    return classification(
+      'upstream_unavailable',
+      'content_filtered',
+      inferFailureStageFromEvents(events, 'first_token_wait'),
       false,
       'none',
     );
@@ -1204,13 +1255,17 @@ function classifyRunFailureBase(
    *    graceful shutdown and interrupts, where the text does carry more meaning;
    *  · timeout still wins, because the daemon's watchdog writes its own reason
    *    before escalating to a kill, and WHY it was killed beats the bare signal.
+   *  · so does a structured failure the agent reported before a fatal RPC close:
+   *    the kill is the daemon tearing the child down after that report (0.26.x
+   *    AMR catalog failures were counted as `signal_killed`).
    */
   const forcedSignal = forcedSignalName(errorCode, input.status.signal);
   if (
     forcedSignal &&
     !isTimeoutText(text) &&
     errorCode !== 'TIMEOUT' &&
-    !daemonTimeoutVerdict
+    !daemonTimeoutVerdict &&
+    !agentReportedFailureBeforeTeardown(errorCode, runtimeCloseReason)
   ) {
     const forced = signalInterruptClassification(errorCode, text, retryableHint, forcedSignal);
     if (forced) return forced;
@@ -1470,7 +1525,7 @@ function classifyRunFailureBase(
         'retry',
       );
     }
-    const hardQuota = isHardQuotaText(text);
+    const hardQuota = isHardQuotaText(text) && !isProviderShortWindowQuotaText(text);
     const workspaceCredits = isWorkspaceCreditsText(text);
     const retryable = hardQuota ? false : (retryableHint ?? true);
     return classification(
