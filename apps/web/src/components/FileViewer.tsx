@@ -8422,8 +8422,13 @@ function HtmlViewer({
     if (!shareSourceGuard.isCurrent()) return;
     if (!canPublishPublic || streaming || viewerOnly || !publishedFileSlug || publishingPublicFile
       || updateInFlightRef.current || (fileShareFreshness !== 'outdated' && !publishFailureKey) || fileShareStatus !== 'active') return;
+<<<<<<< HEAD
     if (guardShareSource && (!shareSourceGuard.canPublish() || manualEditTextSessionIdRef.current || manualEditTextCommitInFlightRef.current || manualEditPendingStyleRef.current || manualEditSavingRef.current)) {
       setPublishFailureKey('fileViewer.shareFinishEditing');
+=======
+    if (guardShareSource && !shareSourceGuard.canPublish()) {
+      setPublishFailureKey('fileViewer.publishFileFailed');
+>>>>>>> c6bb5a8b81 ([OPEND-4264] refactor(share): 拆分分享流程并将校验收口到服务端 (#9025))
       return;
     }
     publicFileStateReadRef.current = null;

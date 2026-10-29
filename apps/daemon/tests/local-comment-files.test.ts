@@ -306,6 +306,7 @@ it('refreshes selected-backed UUID to explicit Team root without relinking its i
   expect(publications.get(scope)?.slug).toBe('selected-alias');
 });
 
+<<<<<<< HEAD
 it.each(['before', 'during'] as const)('OPEND-4083 comment created %s admission must be included', async timing => {
   const db = setup();
   const files = createLocalCommentFiles(db);
@@ -398,6 +399,8 @@ it.each(['owner', 'workspace', 'replacement'] as const)('OPEND-4083 rejects conc
   expect(getProjectPreviewComment(db, 'p', 'pending-change')?.sourceFileId).toBe(localId);
   expect(getProject(db, 'p')?.metadata?._commentFiles).toBeUndefined();
 });
+=======
+>>>>>>> c6bb5a8b81 ([OPEND-4264] refactor(share): 拆分分享流程并将校验收口到服务端 (#9025))
 
 it('requests catalog identity recovery only when no local lifetime exists, including retired lifetimes', () => {
   const db = setup();

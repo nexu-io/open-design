@@ -1,6 +1,7 @@
 import type { Dict } from '../types';
 
 export const hu: Dict = {
+<<<<<<< HEAD
   "workspaceInvite.deliveryPending": "Invitation delivery is pending. Check again shortly.",
   "workspaceInvite.deliveryFailed": "Invitation delivery failed. Please retry.",
   "workspaceInvite.invalidResponse": "Unable to confirm invitation delivery. Please retry later.",
@@ -27,6 +28,8 @@ export const hu: Dict = {
   "homeInvite.invite": "Invite",
   "homeInvite.dismiss": "Dismiss invitation banner",
   "homeInvite.sent": "Invitations sent to {n} colleagues",
+=======
+>>>>>>> c6bb5a8b81 ([OPEND-4264] refactor(share): 拆分分享流程并将校验收口到服务端 (#9025))
   "fileViewer.publishFileContentUnavailable": "Néhány feltöltött fájl hiányzik, vagy nem felelt meg az integritásellenőrzésen. Próbáld újra.",
   "fileViewer.publishFileConflict": "A közzététel vagy feltöltés állapota megváltozott. Frissítsd a megosztási panelt, majd próbáld újra.",
   "fileViewer.publishFileWorkspaceLocked": "Ez a munkaterület zárolva van. Közzététel előtt állítsd helyre a hozzáférést.",

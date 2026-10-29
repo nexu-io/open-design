@@ -1,6 +1,7 @@
 import type { Dict } from '../types';
 
 export const ko: Dict = {
+<<<<<<< HEAD
   "workspaceInvite.deliveryPending": "Invitation delivery is pending. Check again shortly.",
   "workspaceInvite.deliveryFailed": "Invitation delivery failed. Please retry.",
   "workspaceInvite.invalidResponse": "Unable to confirm invitation delivery. Please retry later.",
@@ -27,6 +28,8 @@ export const ko: Dict = {
   "homeInvite.invite": "Invite",
   "homeInvite.dismiss": "Dismiss invitation banner",
   "homeInvite.sent": "Invitations sent to {n} colleagues",
+=======
+>>>>>>> c6bb5a8b81 ([OPEND-4264] refactor(share): 拆分分享流程并将校验收口到服务端 (#9025))
   "fileViewer.publishFileContentUnavailable": "업로드한 일부 파일이 없거나 무결성 검사에 실패했습니다. 다시 시도하세요.",
   "fileViewer.publishFileConflict": "게시 또는 업로드 상태가 변경되었습니다. 공유 패널을 새로 고친 후 다시 시도하세요.",
   "fileViewer.publishFileWorkspaceLocked": "이 워크스페이스는 잠겨 있습니다. 액세스를 복구한 후 게시하세요.",

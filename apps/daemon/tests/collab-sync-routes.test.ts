@@ -2356,11 +2356,15 @@ describe('collab sync routes', () => {
     expect(unpublish.status).toBe(200);
     expect(resolveSharedProject).not.toHaveBeenCalled();
     expect(ownershipScopes).toHaveLength(0);
+<<<<<<< HEAD
     // Public publication delegates permission to its pinned cloud session,
     // so no local ownership pre-read runs. Assert the actual history/session
     // boundaries are nonempty and stay in A rather than vacuously checking it.
     expect(publication.readProjectShareState).toHaveBeenCalled();
     for (const [scope] of publication.readProjectShareState.mock.calls) {
+=======
+    for (const scope of ownershipScopes) {
+>>>>>>> c6bb5a8b81 ([OPEND-4264] refactor(share): 拆分分享流程并将校验收口到服务端 (#9025))
       expect(scope).toMatchObject({
         projectId: 'p1', resourceTeamId: 'workspace-a', ownerMemberId: 'member-a',
       });

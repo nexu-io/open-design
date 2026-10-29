@@ -1,6 +1,7 @@
 import type { Dict } from "../types";
 
 export const zhTW: Dict = {
+<<<<<<< HEAD
   "workspaceInvite.deliveryPending": "Invitation delivery is pending. Check again shortly.",
   "workspaceInvite.deliveryFailed": "Invitation delivery failed. Please retry.",
   "workspaceInvite.invalidResponse": "Unable to confirm invitation delivery. Please retry later.",
@@ -27,6 +28,8 @@ export const zhTW: Dict = {
   "homeInvite.invite": "邀請",
   "homeInvite.dismiss": "關閉邀請橫條",
   "homeInvite.sent": "已向 {n} 位同事傳送邀請",
+=======
+>>>>>>> c6bb5a8b81 ([OPEND-4264] refactor(share): 拆分分享流程并将校验收口到服务端 (#9025))
   "fileViewer.publishFileContentUnavailable": "部分已上傳檔案缺失或未通過完整性檢查，請重試。",
   "fileViewer.publishFileConflict": "發佈或上傳狀態已變更，請重新整理分享面板後重試。",
   "fileViewer.publishFileWorkspaceLocked": "此工作區已鎖定，請恢復存取權限後再發佈。",

@@ -1,6 +1,7 @@
 import type { Dict } from '../types';
 
 export const ru: Dict = {
+<<<<<<< HEAD
   "workspaceInvite.deliveryPending": "Invitation delivery is pending. Check again shortly.",
   "workspaceInvite.deliveryFailed": "Invitation delivery failed. Please retry.",
   "workspaceInvite.invalidResponse": "Unable to confirm invitation delivery. Please retry later.",
@@ -27,6 +28,8 @@ export const ru: Dict = {
   "homeInvite.invite": "Invite",
   "homeInvite.dismiss": "Dismiss invitation banner",
   "homeInvite.sent": "Invitations sent to {n} colleagues",
+=======
+>>>>>>> c6bb5a8b81 ([OPEND-4264] refactor(share): 拆分分享流程并将校验收口到服务端 (#9025))
   "fileViewer.publishFileContentUnavailable": "Некоторые загруженные файлы отсутствуют или не прошли проверку целостности. Повторите попытку.",
   "fileViewer.publishFileConflict": "Состояние публикации или загрузки изменилось. Обновите панель общего доступа и повторите попытку.",
   "fileViewer.publishFileWorkspaceLocked": "Это рабочее пространство заблокировано. Восстановите доступ перед публикацией.",
