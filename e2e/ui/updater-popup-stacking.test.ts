@@ -85,12 +85,12 @@ test.beforeEach(async ({ page }) => {
 });
 
 for (const direction of ['ltr', 'rtl'] as const) {
-  test(`[P1] signed-in ${direction.toUpperCase()} compact window keeps the rocket top-right and opens the prompt below it within the viewport`, async ({
+  test(`[P1] signed-in ${direction.toUpperCase()} compact window opens the update prompt below its inline-end anchor within the viewport`, async ({
     page,
-  }) => {
+  }, testInfo) => {
     // Below 1080px the entry layout auto-collapses the rail, and the account
     // row that normally carries the rocket goes off screen with it — so the
-    // rocket falls back to its top-right home here.
+    // rocket falls back to the chrome's inline-end edge here.
     await mockAmrPersonalWorkspace(page);
     await page.setViewportSize({ width: 700, height: 600 });
     await page.goto('/', { waitUntil: 'domcontentloaded' });
@@ -112,12 +112,24 @@ for (const direction of ['ltr', 'rtl'] as const) {
       const promptRect = prompt.getBoundingClientRect();
       return {
         rocketBottom: rocketRect.bottom,
+        rocketLeft: rocketRect.left,
         rocketRight: rocketRect.right,
         promptTop: promptRect.top,
+        promptBottom: promptRect.bottom,
         promptLeft: promptRect.left,
         promptRight: promptRect.right,
         viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
       };
+    });
+
+    await testInfo.attach('update-prompt-geometry', {
+      body: JSON.stringify({ direction, geometry }, null, 2),
+      contentType: 'application/json',
+    });
+    await testInfo.attach('update-prompt', {
+      body: await page.screenshot({ animations: 'disabled' }),
+      contentType: 'image/png',
     });
 
     expect(geometry, 'standalone updater rocket and prompt must both be measurable').not.toBeNull();
@@ -125,12 +137,17 @@ for (const direction of ['ltr', 'rtl'] as const) {
       geometry!.rocketBottom,
     );
     expect(
-      Math.abs(geometry!.promptRight - geometry!.rocketRight),
-      'prompt must stay right-aligned to the physically right-pinned rocket',
+      Math.abs(direction === 'rtl'
+        ? geometry!.promptLeft - geometry!.rocketLeft
+        : geometry!.promptRight - geometry!.rocketRight),
+      'prompt must align with the rocket at the inline-end edge',
     ).toBeLessThanOrEqual(1);
     expect(geometry!.promptLeft, 'prompt must stay inside the viewport left edge').toBeGreaterThanOrEqual(0);
     expect(geometry!.promptRight, 'prompt must stay inside the viewport right edge').toBeLessThanOrEqual(
       geometry!.viewportWidth,
+    );
+    expect(geometry!.promptBottom, 'prompt must stay inside the viewport bottom edge').toBeLessThanOrEqual(
+      geometry!.viewportHeight,
     );
   });
 
