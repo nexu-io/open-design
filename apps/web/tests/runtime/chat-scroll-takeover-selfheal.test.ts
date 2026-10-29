@@ -443,6 +443,44 @@ describe('self-heal — the observation notch', () => {
     expect(chatScrollTakeoverEngaged()).toBe(true);
   });
 
+  it.each([0, 4])('takes over when a downward notch snaps back from %ipx above the bottom', (gap) => {
+    const { log, geometry } = mountProbing();
+    const before = LAYOUT_MAX - gap;
+    geometry.setTop(before);
+    scrolled(log);
+    wheelEvent(log, 120);
+    // A native notch clamps to the compositor's stale ceiling even though
+    // follow-mode had successfully put the log at the real layout bottom.
+    geometry.setTop(0);
+    scrolled(log);
+    vi.advanceTimersByTime(OBSERVATION_SETTLE_MS);
+
+    expect(chatScrollTakeoverEngaged()).toBe(true);
+    expect(eventsNamed('client_chat_scroll_heal')[0]).toMatchObject({
+      outcome: 'takeover',
+      notch_scroll_top_before: before,
+      notch_scroll_top_after: 0,
+    });
+    expect(wheelEvent(log, 120).defaultPrevented).toBe(true);
+    runFrames();
+    expect(geometry.top()).toBe(120);
+  });
+
+  it('keeps waiting when content collapse clamps a bottom observation upward', () => {
+    const { log, geometry } = mountProbing();
+    geometry.setTop(LAYOUT_MAX);
+    scrolled(log);
+    wheelEvent(log, 120);
+    // Closing a thinking drawer can shorten the log during the observation.
+    geometry.setContent(FROZEN.clientHeight + 200);
+    geometry.setTop(150);
+    scrolled(log);
+    vi.advanceTimersByTime(OBSERVATION_SETTLE_MS);
+
+    expect(chatScrollTakeoverPhase()).toBe('probing');
+    expect(eventsNamed('client_chat_scroll_heal')).toHaveLength(0);
+  });
+
   it('ignores an upward notch as the observation and starts over', () => {
     const { log, geometry } = mountProbing();
     geometry.setTop(800);
