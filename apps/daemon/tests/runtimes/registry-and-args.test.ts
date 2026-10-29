@@ -2,7 +2,11 @@ import { test } from 'vitest';
 import {
   AGENT_DEFS, amp, assert, chmodSync, claude, codex, cursorAgent, detectAgents, grokBuild, join, mkdtempSync, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
-import { codexNeedsDangerFullAccessSandbox } from '../../src/runtimes/defs/codex.js';
+import {
+  codexNeedsDangerFullAccessSandbox,
+  codexResolvedSandboxMode,
+  withCodexTransport,
+} from '../../src/runtimes/defs/codex.js';
 import { isKnownServiceTier } from '../../src/runtimes/models.js';
 import { readLocalAgentProfileDefs } from '../../src/runtimes/registry.js';
 
@@ -243,6 +247,43 @@ test('codex args allow OD_CODEX_SANDBOX danger-full-access override on Linux', (
       ]);
       assert.equal(
         args.includes('sandbox_workspace_write.network_access=true'),
+        false,
+      );
+    });
+  });
+});
+
+// #8811: the packaged macOS app now forwards OD_CODEX_SANDBOX, so both codex
+// transports must pick it up on darwin, and keep workspace-write without it.
+test('codex honors OD_CODEX_SANDBOX on macOS for both transports', () => {
+  withPlatform('darwin', () => {
+    withEnvSnapshot(['OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX', 'WSL_DISTRO_NAME'], () => {
+      delete process.env.OD_CODEX_DISABLE_PLUGINS;
+      delete process.env.WSL_DISTRO_NAME;
+      const appServer = withCodexTransport(codex, 'app-server');
+
+      delete process.env.OD_CODEX_SANDBOX;
+      assert.equal(codexResolvedSandboxMode(), 'workspace-write');
+      assert.deepEqual(codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' }).slice(3, 5), [
+        '--sandbox',
+        'workspace-write',
+      ]);
+      assert.equal(
+        appServer.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' })
+          .includes('sandbox_workspace_write.network_access=true'),
+        true,
+      );
+
+      process.env.OD_CODEX_SANDBOX = 'danger-full-access';
+      // The app-server transport passes this mode as its thread sandbox.
+      assert.equal(codexResolvedSandboxMode(), 'danger-full-access');
+      assert.deepEqual(codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' }).slice(3, 5), [
+        '--sandbox',
+        'danger-full-access',
+      ]);
+      assert.equal(
+        appServer.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' })
+          .includes('sandbox_workspace_write.network_access=true'),
         false,
       );
     });

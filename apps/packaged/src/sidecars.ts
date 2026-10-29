@@ -65,6 +65,10 @@ const PACKAGED_CHILD_ENV_ALLOWLIST = [
   "https_proxy",
   "no_proxy",
   "OD_ALLOWED_INTERNAL_HOSTS",
+  // Operator opt-in for Codex's danger-full-access sandbox (#8811). The daemon
+  // accepts only that exact value, so forwarding it changes nothing unless the
+  // user set it on purpose.
+  "OD_CODEX_SANDBOX",
   "OD_JSON_IPC_TRACE",
 ] as const;
 
