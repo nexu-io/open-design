@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
 import { bootstrapSidecarRuntime, createSidecarLaunchEnv } from "../src/bootstrap.js";
-import { createJsonIpcServer, requestJsonIpc } from "../src/json-ipc.js";
+import { createJsonIpcServer, isJsonIpcTimeoutError, JsonIpcTimeoutError, requestJsonIpc } from "../src/json-ipc.js";
 import { resolveAppIpcPath } from "../src/paths.js";
 import {
   resolveAppRuntimePath,
@@ -317,5 +317,33 @@ describe("resolveRuntimeNamespaceRoot", () => {
     expect(
       resolveNamespaceRoot({ base: runtime.base, contract: fakeContract, namespace: runtime.namespace }),
     ).toBe(join(resolve("/data/ns/alpha/runtime"), "alpha"));
+  });
+});
+
+describe("generic sidecar JSON IPC timeouts", () => {
+  it("rejects a request the server never answers with a typed timeout error", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-sidecar-ipc-timeout-"));
+    const socketPath = testIpcPath(root);
+    let release!: () => void;
+    const hold = new Promise<void>((resolve) => { release = resolve; });
+    const server = await createJsonIpcServer({
+      socketPath,
+      handler: async () => {
+        await hold;
+        return { answered: true };
+      },
+    });
+    try {
+      const request = requestJsonIpc(socketPath, { type: "status" }, { timeoutMs: 50 });
+      await expect(request).rejects.toBeInstanceOf(JsonIpcTimeoutError);
+      await expect(request).rejects.toMatchObject({ code: "IPC_REQUEST_TIMEOUT", socketPath, timeoutMs: 50 });
+      await expect(request).rejects.toSatisfy((error: unknown) => isJsonIpcTimeoutError(error));
+      expect(isJsonIpcTimeoutError(new Error("IPC request timed out: elsewhere"))).toBe(false);
+      expect(isJsonIpcTimeoutError(Object.assign(new Error("copy"), { code: "IPC_REQUEST_TIMEOUT" }))).toBe(true);
+    } finally {
+      release();
+      await server.close();
+      await rm(root, { force: true, recursive: true });
+    }
   });
 });
