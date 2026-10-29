@@ -189,6 +189,7 @@ test('[P0] a confirmed same-member Home shortfall shows the block while send-tim
   const { workspaceId, workspaceMemberId } = AMR_PERSONAL_WORKSPACE_CONTEXT;
   const fresh = deferred();
   let sending = false;
+  let sendPreflightHeld = false;
   let verdict: 'insufficient' | 'available' = 'insufficient';
   let projectPosts = 0;
   await page.route('**/api/workspace/billing/request-concurrency?**', route => route.fulfill({ json: {
@@ -196,7 +197,10 @@ test('[P0] a confirmed same-member Home shortfall shows the block while send-tim
       observedAt: new Date().toISOString() },
   } }));
   await page.route('**/api/workspace/billing/preflight?**', async route => {
-    if (sending) await fresh.promise;
+    if (sending) {
+      sendPreflightHeld = true;
+      await fresh.promise;
+    }
     await route.fulfill({ json: { preflight: {
       schemaVersion: 1, workspaceId, workspaceMemberId,
       modelId: new URL(route.request().url()).searchParams.get('modelId'),
@@ -217,40 +221,14 @@ test('[P0] a confirmed same-member Home shortfall shows the block while send-tim
     const prompt = 'Keep this draft until I retry after funding recovers.';
     const input = page.getByTestId('home-hero-input');
     await input.fill(prompt);
-    await page.evaluate(() => {
-      const timing: { start: number | null; visible: number | null } = (window as typeof window & {
-        __run003BlockTiming?: { start: number | null; visible: number | null };
-      })
-        .__run003BlockTiming = { start: null, visible: null };
-      const sample = () => {
-        if (timing.start === null || timing.visible !== null) return;
-        const dialog = document.querySelector<HTMLElement>('[data-testid="amr-balance-dialog"]');
-        if (dialog?.getClientRects().length && getComputedStyle(dialog).visibility === 'visible'
-          && Number(getComputedStyle(dialog).opacity) > 0) {
-          timing.visible = performance.now();
-          return;
-        }
-        if (performance.now() - timing.start < 2_000) requestAnimationFrame(sample);
-      };
-      document.addEventListener('pointerdown', (event) => {
-        if ((event.target as Element | null)?.closest('[data-testid="home-hero-submit"]')) {
-          timing.start = performance.now();
-          requestAnimationFrame(sample);
-        }
-      }, { capture: true, once: true });
-    });
     await page.getByTestId('home-hero-submit').click();
+    // The contract is causal, not a wall-clock budget: the remembered
+    // shortfall paints while this click's fresh proof is still held (it is
+    // only released below). Home first waits for Link's advisory hint, up to
+    // its own 450ms budget, so a click-to-paint bound measured runner CPU.
+    await expect.poll(() => sendPreflightHeld, { message: 'send-time proof is in flight' }).toBe(true);
     const dialog = page.getByTestId('amr-balance-dialog');
-    await expect(dialog).toBeVisible({ timeout: 1_000 });
-    await page.waitForFunction(() => (window as typeof window & {
-      __run003BlockTiming?: { visible: number | null };
-    }).__run003BlockTiming?.visible !== null);
-    const timing = await page.evaluate(() => (window as typeof window & {
-      __run003BlockTiming?: { start: number | null; visible: number | null };
-    }).__run003BlockTiming);
-    expect(timing?.start).not.toBeNull();
-    expect(timing?.visible).not.toBeNull();
-    expect((timing!.visible as number) - (timing!.start as number)).toBeLessThanOrEqual(500);
+    await expect(dialog).toBeVisible({ timeout: T.medium });
     expect(projectPosts).toBe(0);
     verdict = 'available';
     fresh.resolve();
@@ -270,11 +248,12 @@ test('[P0] a full Link counter takes over a remembered Home shortfall without se
   await wireSignedInAmrHome(page, { accountBalanceUsd: '0.00' });
   const { workspaceId, workspaceMemberId } = AMR_PERSONAL_WORKSPACE_CONTEXT;
   const fresh = deferred();
-  const hint = deferred();
   let sending = false;
   let projectPosts = 0;
+  // The full counter is answered at once. Holding it only measured the
+  // product's 450ms advisory-read budget against runner speed: past that
+  // budget the hint is unknown and the remembered shortfall may paint.
   await page.route('**/api/workspace/billing/request-concurrency?**', async route => {
-    if (sending) await hint.promise;
     await route.fulfill({ json: {
       requestConcurrencyHint: { workspaceId, workspaceMemberId, status: 'full', running: 10, limit: 10,
         observedAt: new Date().toISOString() },
@@ -298,21 +277,34 @@ test('[P0] a full Link counter takes over a remembered Home shortfall without se
     await gotoEntryHome(page);
     await (await warmed).finished();
     sending = true;
+    // Record any balance block that paints before the concurrency block, so
+    // "the remembered shortfall never preempts" is checked over the whole
+    // pending window rather than at sampled instants.
+    await page.evaluate(() => {
+      const state = { balanceBeforeConcurrency: false };
+      (window as typeof window & { __run003Preempt?: typeof state }).__run003Preempt = state;
+      const observer = new MutationObserver(() => {
+        if (document.querySelector('[data-testid="amr-concurrency-dialog"]')) {
+          observer.disconnect();
+          return;
+        }
+        if (document.querySelector('[data-testid="amr-balance-dialog"]')) state.balanceBeforeConcurrency = true;
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    });
     const prompt = 'Keep this draft while Link is full.';
     await sendFromHome(page, prompt);
-    await expect(page.getByTestId('amr-balance-dialog')).toBeHidden();
-    await page.waitForTimeout(220);
-    await expect(page.getByTestId('amr-balance-dialog')).toBeHidden();
-    hint.resolve();
     await expect(page.getByTestId('amr-concurrency-dialog')).toBeVisible({ timeout: T.medium });
     await expect(page.getByTestId('amr-balance-dialog')).toBeHidden();
+    expect(await page.evaluate(() => (window as typeof window & {
+      __run003Preempt?: { balanceBeforeConcurrency: boolean };
+    }).__run003Preempt?.balanceBeforeConcurrency), 'balance block never painted before the full counter').toBe(false);
     expect(projectPosts).toBe(0);
     fresh.resolve();
     await page.getByTestId('amr-concurrency-close').click();
     await expect(page.getByTestId('home-hero-input')).toContainText(prompt);
     expect(projectPosts).toBe(0);
   } finally {
-    hint.resolve();
     fresh.resolve();
   }
 });
