@@ -30,8 +30,8 @@
  * 摘要恒是 `{动词} {文件名}` + 「失败」+ 耗时(逐字照抄稿子 `:917` 那一行),
  * 原文进正文。**两支的差别从此只剩「有没有原文可给」**——有就能展开,没有就是单行。
  *
- * 「收起时看不到原因」不是代价:失败行**默认就是展开的**(和命令类同一个
- * `lifecycleOpen`,稿子 `:1018` 的 `open`),原文一上屏就在,只是落在第二行。
+ * Installation feedback on 2026-10-17 requires command and file failures to stay
+ * collapsed by default, with error details available through the manual toggle.
  *
  * ── 防假绿 ────────────────────────────────────────────────────────────────
  *
@@ -96,15 +96,25 @@ const fold = (): HTMLDetailsElement => {
   return el;
 };
 
-describe('有报错原文:折叠块、默认展开、原文每一行都在 DOM 里', () => {
-  it('是折叠块,而且默认展开(与失败命令行同一个 lifecycleOpen)', () => {
+const clickSummary = (): void => {
+  const summary = fold().querySelector<HTMLElement>('summary');
+  if (!summary) throw new Error('summary 没渲染出来');
+  fireEvent.click(summary);
+  fireEvent(fold(), new Event('toggle', { bubbles: false }));
+};
+
+describe('有报错原文:默认收起,手动展开后可以读取完整原因', () => {
+  it('是折叠块,默认收起并保留展开箭头', () => {
     render(<ToolRow row={failedFile()} />);
-    expect(fold().open, '失败照旧默认摊开,报错原文是这时候唯一要读的东西').toBe(true);
+    expect(fold().open).toBe(false);
+    expect(screen.getByTestId('chat-foldable-toggle')).toBeTruthy();
   });
 
   it('原文的每一行都真的在 DOM 里 —— 这条才是 bug 的判据', () => {
-    // 生产默认 deferBody=true;失败行默认展开,所以正文首帧就该挂上
     const { container } = render(<ToolRow row={failedFile()} deferBody />);
+    expect(container.textContent).not.toContain('EACCES');
+    clickSummary();
+    expect(fold().open).toBe(true);
     for (const line of LONG_ERR.split('\n')) {
       expect(container.textContent, `报错原文缺了这一行:${line}`).toContain(line);
     }
@@ -112,6 +122,7 @@ describe('有报错原文:折叠块、默认展开、原文每一行都在 DOM �
 
   it('原文走那个限高滚动框 —— 几百字符不许把整屏顶开', () => {
     const { container } = render(<ToolRow row={failedFile()} />);
+    clickSummary();
     const box = container.querySelector('div[class*="term"]');
     expect(box, '复用 .term(max-height 104px + overflow-y auto),不另写一套').not.toBeNull();
     expect(box!.textContent).toContain('EACCES');
@@ -138,6 +149,8 @@ describe('有报错原文:折叠块、默认展开、原文每一行都在 DOM �
 
   it('读取失败也一样(不是只有写入)', () => {
     render(<ToolRow row={failedFile({ tool: 'read', name: 'Read', failReason: 'File not found' })} />);
+    expect(fold().open).toBe(false);
+    clickSummary();
     expect(fold().open).toBe(true);
     expect(screen.getByText('File not found')).toBeTruthy();
     expect(fold().querySelector('summary')?.textContent).toContain('读取');
@@ -151,7 +164,10 @@ describe('用户自己动过的,不许拨回去', () => {
 
   it('用户收起了这一条失败行,重渲染不许替他打开', () => {
     const { rerender } = render(<ToolRow row={failedFile()} />);
-    echoToggle(fold()); // 摊开那一帧的回声,不算用户点过
+    expect(fold().open).toBe(false);
+    clickSummary();
+    expect(fold().open).toBe(true);
+    echoToggle(fold());
 
     const summary = fold().querySelector<HTMLElement>('summary')!;
     fireEvent.click(summary);
@@ -236,6 +252,9 @@ describe('从真事件流验起(不手搓 failReason)', () => {
     expect(row.file?.label).toBe('index.html');
 
     const { container } = render(<ToolRow row={row} deferBody />);
+    expect(fold().open).toBe(false);
+    expect(container.textContent).not.toContain('errno: -13');
+    clickSummary();
     expect(fold().open).toBe(true);
     expect(container.textContent).toContain('errno: -13');
   });

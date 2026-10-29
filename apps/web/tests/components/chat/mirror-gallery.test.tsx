@@ -367,7 +367,7 @@ const EXECUTION: Cell[] = [
     notes: ['输出行的绿 / 红按行首 `✓` `✗` 判;设计稿只给了成品截图,没给判定规则 —— 待确认'],
   },
   {
-    gid: 8, sub: '11-3', cmp: '工具调用-代码执行', state: '失败 · 默认展开 —— 报错原文是这时候唯一要读的东西',
+    gid: 8, sub: '11-3', cmp: '工具调用-代码执行', state: '失败 · 默认收起 —— 按需手动展开查看错误原文',
     crop: 'details details:last-of-type',
     expand: 'deep',
     events: [
