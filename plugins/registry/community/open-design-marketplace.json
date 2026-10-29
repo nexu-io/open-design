@@ -2,14 +2,14 @@
   "$schema": "https://open-design.ai/schemas/marketplace.v1.json",
   "specVersion": "1.0.0",
   "name": "open-design-community",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "owner": {
     "name": "OpenDesign Community",
     "url": "https://open-design.ai/marketplace/community"
   },
   "metadata": {
     "description": "Default community plugin registry seed. Entries here are discoverable by default but remain restricted until the user installs and trusts them.",
-    "version": "0.2.10"
+    "version": "0.2.11"
   },
   "plugins": [
     {
@@ -139,6 +139,36 @@
         "design-to-code"
       ],
       "description": "Hand an Open Design project off to OpenCode as an offline-complete bundle: a verbatim project mirror, the design system materialized with real font binaries, and a machine-enforced adherence config."
+    },
+    {
+      "name": "community/8b-website-template",
+      "title": "8B Website Templates",
+      "version": "0.1.1",
+      "source": "github:8bsite/8b-ai-website-builder@templates-v0.1.1/templates/skills/8b-website-template",
+      "publisher": {
+        "id": "8b",
+        "github": "8bsite",
+        "url": "https://github.com/8bsite"
+      },
+      "homepage": "https://8b.com/templates/",
+      "license": "MIT",
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:write",
+        "network",
+        "bash"
+      ],
+      "tags": [
+        "community",
+        "create",
+        "prototype",
+        "website",
+        "landing-page",
+        "html-template",
+        "single-file",
+        "gsap"
+      ],
+      "description": "Picks one of 20 free MIT one-file HTML website templates for the user's business, downloads it into the project with curl and fills it with real facts, following the template's AGENTS.md."
     }
   ]
 }
