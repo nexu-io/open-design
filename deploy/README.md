@@ -39,7 +39,10 @@ non-loopback peer, the browser displays its native sign-in dialog. Enter
 `open-design` as the username and the `OD_API_TOKEN` value from `.env` as the
 password. The browser reuses those credentials for same-origin API requests;
 CLI clients and reverse proxies can continue to send
-`Authorization: Bearer <OD_API_TOKEN>`.
+`Authorization: Bearer <OD_API_TOKEN>`. To drive this daemon from an MCP
+client on another machine, run `od mcp --daemon-url http://<server>:7456
+--api-token-file <path-to-token>` there (or set `OD_API_TOKEN` in its
+environment); the token is sent only to that daemon URL.
 
 The published `ghcr.io/nexu-io/od` package must be public for anonymous
 `docker pull`, Docker Compose, and Dokploy installs to work. If GHCR returns an

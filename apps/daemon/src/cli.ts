@@ -106,6 +106,7 @@ const MEDIA_STOCK_SEARCH_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 
 const MCP_STRING_FLAGS = new Set([
   'daemon-url',
+  'api-token-file',
 ]);
 const MCP_BOOLEAN_FLAGS = new Set([
   'help',
@@ -1279,7 +1280,7 @@ function printRootHelp() {
       Download licensed Pexels / Pixabay photos for several image slots in one
       call (company service uses your existing Vela login).
 
-  od mcp [--daemon-url <url>]
+  od mcp [--daemon-url <url>] [--api-token-file <path>]
       Run a stdio MCP server that proxies project tool calls to a
       running OpenDesign daemon. Wire it into a coding agent
       (Claude Code, Cursor, VS Code, Zed, Windsurf) in another repo
@@ -2838,6 +2839,17 @@ async function runMcp(args) {
     return;
   }
 
+  // Resolve the remote daemon's API token before anything else so a bad
+  // --api-token-file fails fast with a usage error instead of a 401 mid-call.
+  const { resolveMcpApiToken } = await import('./mcp-daemon-auth.js');
+  let apiToken;
+  try {
+    apiToken = resolveMcpApiToken({ tokenFile: flags['api-token-file'], env: process.env });
+  } catch (err) {
+    console.error(err.message);
+    process.exit(2);
+  }
+
   const { ensureMcpDaemonUrl } = await import('./mcp-bootstrap.js');
   const daemonUrl = await ensureMcpDaemonUrl({
     flagUrl: flags['daemon-url'],
@@ -2846,6 +2858,7 @@ async function runMcp(args) {
   const { runMcpStdio } = await import('./mcp.js');
   await runMcpStdio({
     daemonUrl,
+    apiToken,
     ...(flags['daemon-url']
       ? {}
       : {
@@ -2855,7 +2868,7 @@ async function runMcp(args) {
 }
 
 function printMcpHelp() {
-  console.log(`Usage: od mcp [--daemon-url <url>]
+  console.log(`Usage: od mcp [--daemon-url <url>] [--api-token-file <path>]
 
 Run a stdio MCP (Model Context Protocol) server that proxies project
 tool calls to a running OpenDesign daemon. Wire it into a coding agent
@@ -2877,8 +2890,17 @@ Options:
                        before calls and safely retries reads when the
                        daemon changes ports, so an existing task can
                        survive an OpenDesign restart.
+  --api-token-file <path>
+                       File holding the OD_API_TOKEN of a daemon on
+                       another host. Sent as Authorization: Bearer only
+                       to the --daemon-url origin, never printed. Wins
+                       over OD_API_TOKEN, and keeps the token out of the
+                       MCP client config and the process list.
 
 Environment:
+  OD_API_TOKEN         Same token as --api-token-file, read when that
+                       flag is absent. A local desktop daemon does not
+                       need it: loopback requests skip the token check.
   OD_MCP_STDIO_IDLE_EXIT_MS
                        Milliseconds without MCP activity before this
                        stdio process exits. Defaults to 1800000 (30
