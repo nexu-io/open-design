@@ -156,6 +156,7 @@ import {
 // Shared with `POST /api/runs/:id/steer` so the opening prompt and a B11
 // mid-turn steering frame are encoded by the same writer.
 import { encodeStreamJsonUserMessage } from './runtimes/run-steering.js';
+import { openCodeSystemTempDirectories } from './runtimes/opencode-permissions.js';
 import { assertOdNextSemanticRequestFactProducerCoverage } from './runtimes/od-next-exact-input.js';
 import {
   normalizeRunContextSelection,
@@ -14200,50 +14201,7 @@ export async function startServer({
     // are enabled — overwriting with `{}` would wipe the user's saved
     // mcp section for this single invocation, which is exactly the kind
     // of surprise the previous silent-failure UX taught us to avoid.
-    let opencodeConfigContent: string | null = null;
     const isMiMoContent = def.externalMcpInjection === 'mimo-env-content';
-    if (isOpenCodeContent || isMiMoContent) {
-      try {
-        let readOnlyDirectories: string[] = [];
-        let readOnlyEditBaseDirs: string[] = [];
-        if (isOpenCodeContent && strategyTaskAssets.taskProfileRoot) {
-          try {
-            const editBase = await resolveOpenCodeEditBaseDirs(effectiveCwd);
-            readOnlyEditBaseDirs = editBase.dirs;
-            readOnlyDirectories = [strategyTaskAssets.taskProfileRoot];
-            if (editBase.gitProbe === 'failed') {
-              console.warn(`[opencode-resource-permissions] git probe failed; denying resource edits against every candidate worktree ${JSON.stringify({
-                reason: editBase.gitProbeError, candidates: editBase.dirs,
-              })}`);
-            }
-          } catch (err) {
-            // Withhold only this resource grant; MCP, provider and ordinary
-            // project permissions must still reach the child process.
-            console.warn(`[opencode-resource-permissions] grant skipped: edit base unconfirmed ${JSON.stringify({
-              reason: err instanceof Error ? err.message : String(err),
-            })}`);
-          }
-        }
-        opencodeConfigContent = buildOpenCodeMcpConfigContent(
-          enabledExternalMcp,
-          oauthTokensForSpawn,
-          {
-            allowedDirectories: [effectiveCwd, ...extraAllowedDirs],
-            // Only the verified loader result may authorize rule cards.
-            readOnlyDirectories,
-            readOnlyEditBaseDirs,
-            ...(byokOpenCodeProvider
-              ? { extraConfig: byokOpenCodeProvider.config }
-              : {}),
-          },
-        );
-      } catch (err) {
-        console.warn(
-          '[mcp-config] failed to build OPENCODE_CONFIG_CONTENT:',
-          err && err.message ? err.message : err,
-        );
-      }
-    }
 
     // Pre-flight the composed prompt against any argv-byte budget the
     // adapter declared (only DeepSeek TUI today — its CLI doesn't accept
@@ -15333,19 +15291,6 @@ export async function startServer({
             });
           },
         }),
-        // OpenCode external-MCP injection (issue #2142). Layered AFTER
-        // spawnEnvForAgent / odMediaEnv / configuredAgentEnv so the
-        // daemon-built MCP config wins over a stale value the user
-        // might have exported in their shell — that would let an
-        // outdated content string suppress the user's freshly-saved
-        // MCP servers, which is exactly the bug we are fixing.
-        // `opencodeConfigContent === null` means "no enabled servers";
-        // we deliberately leave the env unset in that case so the
-        // user's saved `~/.config/opencode/opencode.json` continues
-        // to apply as-is.
-        ...(opencodeConfigContent
-          ? { [isMiMoContent ? 'MIMOCODE_CONFIG_CONTENT' : 'OPENCODE_CONFIG_CONTENT']: opencodeConfigContent }
-          : {}),
         // Daemon-owned resolver for task-input: references. Keep this last so
         // configured/BYOK/runtime env cannot redirect the Agent from the
         // verified Run projection back to mutable or canonical bytes.
@@ -15353,6 +15298,54 @@ export async function startServer({
           ? { OD_TASK_INPUT_DIR: odNextTaskInputSnapshot.projectionDir }
           : {}),
       }, agentLaunch);
+      // Build permissions after configured env expansion and launch overrides,
+      // so the granted temp root matches the environment the child receives.
+      if (isOpenCodeContent || isMiMoContent) {
+        try {
+          let readOnlyDirectories: string[] = [];
+          let readOnlyEditBaseDirs: string[] = [];
+          if (isOpenCodeContent && strategyTaskAssets.taskProfileRoot) {
+            try {
+              const editBase = await resolveOpenCodeEditBaseDirs(effectiveCwd);
+              readOnlyEditBaseDirs = editBase.dirs;
+              readOnlyDirectories = [strategyTaskAssets.taskProfileRoot];
+              if (editBase.gitProbe === 'failed') {
+                console.warn(`[opencode-resource-permissions] git probe failed; denying resource edits against every candidate worktree ${JSON.stringify({
+                  reason: editBase.gitProbeError, candidates: editBase.dirs,
+                })}`);
+              }
+            } catch (err) {
+              // Withhold only this resource grant; MCP, provider and ordinary
+              // project permissions must still reach the child process.
+              console.warn(`[opencode-resource-permissions] grant skipped: edit base unconfirmed ${JSON.stringify({
+                reason: err instanceof Error ? err.message : String(err),
+              })}`);
+            }
+          }
+          const opencodeConfigContent = buildOpenCodeMcpConfigContent(
+            enabledExternalMcp,
+            oauthTokensForSpawn,
+            {
+              allowedDirectories: [effectiveCwd, ...extraAllowedDirs, ...openCodeSystemTempDirectories(env)],
+              // Only the verified loader result may authorize rule cards.
+              readOnlyDirectories,
+              readOnlyEditBaseDirs,
+              ...(byokOpenCodeProvider
+                ? { extraConfig: byokOpenCodeProvider.config }
+                : {}),
+            },
+          );
+          if (opencodeConfigContent) {
+            env[isMiMoContent ? 'MIMOCODE_CONFIG_CONTENT' : 'OPENCODE_CONFIG_CONTENT'] = opencodeConfigContent;
+          }
+        } catch (err) {
+          console.warn(
+            '[mcp-config] failed to build OPENCODE_CONFIG_CONTENT:',
+            err && err.message ? err.message : err,
+          );
+        }
+      }
+
       if (def.id === 'opencode' || def.id === 'byok-opencode') {
         try {
           const versions = await ensureDetectedRuntimeVersions('opencode', configuredAgentEnv);

@@ -117,3 +117,31 @@ export function appendOpenCodeWorkspaceDir(
   if (typeof cwd !== 'string' || cwd.length === 0) return;
   args.push(OPENCODE_WORKSPACE_DIR_FLAG, cwd);
 }
+
+/**
+ * System temporary directories a headless OpenCode run may use.
+ *
+ * Agents write scratch files to temp paths on their own: thumbnails, ffmpeg
+ * frames, browser probe scripts, usually as literal `/tmp/...` paths rather
+ * than through `$TMPDIR`. Without an `external_directory` grant a headless
+ * OpenCode run auto-rejects the follow-up read with "The user rejected
+ * permission", and the model then ends the turn with no output.
+ *
+ * Codex's workspace-write sandbox makes `/tmp` and `$TMPDIR` writable by
+ * default for the same reason. The caller's allowlist builder adds realpath
+ * variants, so macOS `/private/tmp` and `/private/var/folders/...` follow.
+ */
+export function openCodeSystemTempDirectories(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): string[] {
+  if (platform === 'win32') {
+    const value = (key: string) => env[
+      Object.keys(env).find((name) => name.toLowerCase() === key.toLowerCase()) ?? key
+    ];
+    const root = value('TEMP') || value('TMP') || `${value('SystemRoot') || value('windir')}\\temp`;
+    return [root.length > 1 && root.endsWith('\\') && root.at(-2) !== ':' ? root.slice(0, -1) : root];
+  }
+  const root = env.TMPDIR || env.TMP || env.TEMP || '/tmp';
+  return Array.from(new Set([root.length > 1 && root.endsWith('/') ? root.slice(0, -1) : root, '/tmp']));
+}
