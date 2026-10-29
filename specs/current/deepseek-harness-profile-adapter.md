@@ -103,7 +103,7 @@ control contract OD needs.
 The profile bundle is installed into the user's official Harness installation:
 
 ```text
-dsh plugin --profile open-design add <pinned OD bundle package>
+dsh plugin --profile open-design add --workspace-root <pinned OD bundle package>
 ```
 
 The source lives in the OpenDesign repository so the host types, fake runtime,
@@ -121,7 +121,7 @@ setup-required label. Selecting it opens a confirmation dialog. Only after the
 user confirms does OD invoke:
 
 ```text
-dsh plugin --profile open-design add <embedded pinned tarball>
+dsh plugin --profile open-design add --workspace-root <embedded pinned tarball>
 ```
 
 OD verifies the tarball hash before invocation, rescans the profile, selects

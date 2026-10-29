@@ -39,6 +39,7 @@ async function fixture(options: { existingProfile?: boolean; validHash?: boolean
   const bundleRoot = path.join(resourceRoot, 'agent-runtimes', 'deepseek-harness');
   const tarball = path.join(bundleRoot, 'open-design-dsh-runtime-0.1.0.tgz');
   const stateFile = path.join(root, 'plugin-add-count.txt');
+  const argvFile = path.join(root, 'plugin-add-argv.json');
   await mkdir(bundleRoot, { recursive: true });
   await mkdir(runtimeDataDir, { recursive: true });
   await mkdir(dshHome, { recursive: true });
@@ -75,13 +76,23 @@ if (args[0] === '--version') {
     process.exitCode = 1;
   }
 } else if (args[0] === 'plugin' && args[1] === '--profile' && args[2] === 'open-design' && args[3] === 'add') {
+  await writeFile(${JSON.stringify(argvFile)}, JSON.stringify(args), 'utf8');
   if (process.env.OD_DSH_SETUP_FAKE_MODE === 'install-fail') process.exit(7);
+  // Everything after "add" is forwarded to "pnpm add" inside the profile,
+  // which dsh initialises as a pnpm workspace root. Model pnpm 9's guard:
+  // a bare add at a workspace root is refused until the flag is explicit (#8919).
+  const forwarded = args.slice(4);
+  const spec = forwarded.find((arg) => !arg.startsWith('-'));
+  if (!forwarded.includes('--workspace-root') && !forwarded.includes('-w')) {
+    process.stderr.write('ERR_PNPM_ADDING_TO_ROOT  Running this command will add the dependency to the workspace root\\n');
+    process.exit(10);
+  }
   if (process.env.OD_DSH_SETUP_FAKE_MODE === 'require-profile-bundle') {
-    const [directory, filename, extra] = args[4].split('/');
+    const [directory, filename, extra] = (spec ?? '').split('/');
     const digest = filename?.endsWith('.tgz') ? filename.slice(0, -4) : '';
     const digestIsHex = digest.length === 64 && digest.replace(/[a-f0-9]/g, '') === '';
     if (directory !== '.open-design' || extra !== undefined || !digestIsHex) process.exit(8);
-    const bundle = await readFile(path.join(profileRoot, args[4]), 'utf8');
+    const bundle = await readFile(path.join(profileRoot, spec), 'utf8');
     if (bundle !== 'fixture runtime package') process.exit(9);
   }
   await mkdir(profileRoot, { recursive: true });
@@ -107,6 +118,7 @@ if (args[0] === '--version') {
   process.env.DSH_HOME = dshHome;
   delete process.env.OD_DSH_SETUP_FAKE_MODE;
   return {
+    argvFile,
     options: { projectRoot: root, resourceRoot, runtimeDataDir },
     profileRoot: path.join(dshHome, 'profiles', 'open-design'),
     stateFile,
@@ -172,6 +184,24 @@ describe('DeepSeek Harness companion setup', () => {
       installDeepSeekHarnessCompanion(probeFailure.options),
       'COMPANION_STILL_INCOMPATIBLE',
     );
+  });
+
+  it('forwards --workspace-root between add and the staged bundle for pnpm 9 profiles (#8919)', async () => {
+    const test = await fixture();
+
+    await expect(installDeepSeekHarnessCompanion(test.options)).resolves.toMatchObject({
+      action: 'installed',
+      ok: true,
+    });
+    const argv = JSON.parse(await readFile(test.argvFile, 'utf8')) as string[];
+    expect(argv).toEqual([
+      'plugin',
+      '--profile',
+      'open-design',
+      'add',
+      '--workspace-root',
+      expect.stringMatching(/^\.open-design\/[a-f0-9]{64}\.tgz$/u),
+    ]);
   });
 
   it('keeps the bundled package path out of the dsh Windows shell boundary', async () => {
