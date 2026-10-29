@@ -682,6 +682,7 @@ for (const planAvailable of [false, true]) {
     await wireSignedInAmrHome(page, { accountBalanceUsd: '0.00' });
     const create = await holdProjectCreate(page);
     const confirmation = deferred();
+    const sendPreflightHeld = deferred();
     let sending = false;
     const { workspaceId, workspaceMemberId } = AMR_PERSONAL_WORKSPACE_CONTEXT;
     const displayed = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/workspace/billing'
@@ -702,35 +703,47 @@ for (const planAvailable of [false, true]) {
         },
       } });
     });
+    const warmed = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/workspace/billing/preflight'
+      && new URL(response.url()).searchParams.get('modelId') === 'glm-5');
     await page.route('**/api/workspace/billing/preflight?**', async (route) => {
-      if (sending) await confirmation.promise;
+      // Warm-up must not seed a confirmed shortfall: that independent fast-block
+      // behavior is covered above. This case isolates stale display billing.
+      const sendTime = sending;
+      if (sendTime) {
+        sendPreflightHeld.resolve();
+        await confirmation.promise;
+      }
       const url = new URL(route.request().url());
       await route.fulfill({ json: { preflight: { schemaVersion: 1, workspaceId, workspaceMemberId,
         modelId: url.searchParams.get('modelId'), generatedAt: new Date().toISOString(),
-        balanceUsd: planAvailable ? '10' : '0', fundingCheck: planAvailable ? 'available' : 'insufficient' } } });
+        balanceUsd: sendTime && planAvailable ? '10' : '0',
+        fundingCheck: sendTime ? (planAvailable ? 'available' : 'insufficient') : 'unknown' } } });
     });
     try {
       await gotoEntryHome(page);
-      await displayed;
-      const prompt = 'Use the displayed wallet and plan before entering a project.';
+      await (await displayed).finished();
+      await (await warmed).finished();
+      await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())));
+      const prompt = 'Wait for fresh funding before entering a project.';
       sending = true;
       await sendFromHome(page, prompt);
+      await sendPreflightHeld.promise;
       const submit = page.getByTestId('home-hero-submit');
-      // Preserve the original immediate pre-release checks. A known shortfall
-      // may then open its existing fast-block dialog, independently of loading.
+      // Neither stale display projection can decide this send while its
+      // authoritative preflight is held, including the insufficient outcome.
       await expect(page.locator('[data-creation-phase="pending"]')).toHaveCount(0);
       await expect(page.getByTestId('amr-balance-dialog')).toHaveCount(0);
       expect(create.requested()).toBe(false);
-      if (planAvailable) {
-        await expect(submit).toHaveAttribute('aria-busy', 'true');
-        await expect(submit).toHaveAccessibleName('Sending…');
-        await expect(submit).toBeDisabled();
-        await expect(submit.locator('.icon-spin')).toBeVisible();
-        await page.getByTestId('home-hero-input').press('Enter');
-        await testInfo.attach('home-sending-while-funding-pending', {
-          body: await page.screenshot({ animations: 'disabled' }), contentType: 'image/png',
-        });
-      }
+      await expect(submit).toHaveAttribute('aria-busy', 'true');
+      await expect(submit).toHaveAccessibleName('Sending…');
+      await expect(submit).toBeDisabled();
+      await expect(submit.locator('.icon-spin')).toBeVisible();
+      await page.getByTestId('home-hero-input').press('Enter');
+      await testInfo.attach('home-sending-while-funding-pending', {
+        body: await page.screenshot({ animations: 'disabled' }), contentType: 'image/png',
+      });
+      await expect(page.getByTestId('amr-balance-dialog')).toHaveCount(0);
+      expect(create.requestCount()).toBe(0);
       const confirmed = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/workspace/billing/preflight');
       confirmation.resolve();
       await (await confirmed).finished();
