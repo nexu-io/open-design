@@ -87,6 +87,21 @@ describe('velaMediaErrorFromFailure', () => {
 		expect(decoded?.message).not.toContain('Command failed');
 	});
 
+	it('classifies a signed-out Vela CLI profile failure as AMR_AUTH_REQUIRED', () => {
+		const decoded = velaMediaErrorFromFailure(
+			Object.assign(
+				new Error('Command failed: vela media models --json\nError: profile "prod" is not logged in; run `vela login`'),
+				{ code: 1, stderr: 'Error: profile "prod" is not logged in; run `vela login`\n' },
+			),
+			'media models',
+		);
+
+		expect(decoded).toBeInstanceOf(VelaMediaError);
+		expect(decoded?.code).toBe('AMR_AUTH_REQUIRED');
+		expect(decoded?.retryable).toBe(false);
+		expect(decoded?.message).toContain('AMR sign-in is required');
+	});
+
 	it.each([
 		['sensitive_words_detected', 'sensitive_words_detected'],
 		['content_policy_violation', 'Content policy rejected the prompt'],

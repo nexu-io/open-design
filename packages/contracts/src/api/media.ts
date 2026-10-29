@@ -192,6 +192,20 @@ const MISSING_CREDENTIAL_RE = /\bno\s+(?:[\w.-]+\s+){0,3}(?:api key|credential)\
 /** Every long-poll adapter gives up with this exact phrase. */
 const RENDER_TIMED_OUT_RE = /\bdid not finish in time\b/i;
 
+/**
+ * Vela CLI refuses when its profile is signed out:
+ * `Error: profile "prod" is not logged in; run `vela login``.
+ */
+const VELA_SIGN_IN_REQUIRED_RE =
+  /\bprofile\s+["'][^"']+["']\s+is\s+not\s+logged\s+in\b|\brun\s+`?vela\s+login`?\b/i;
+
+function isVelaSignInMissing(message: string): boolean {
+  if (VELA_SIGN_IN_REQUIRED_RE.test(message)) return true;
+  return message
+    .split('\n')
+    .some((line) => /\bnot logged[ -]?in\b/i.test(line) && /\b(?:vela|amr)\b/i.test(line));
+}
+
 function nextStepForStatus(
   status: number,
   odOwnedModel: boolean,
@@ -241,6 +255,9 @@ export function mediaFailureNextStep(signal: MediaFailureSignal): MediaFailureNe
     if (embedded !== undefined) {
       const byEmbedded = nextStepForStatus(embedded, odOwnedModel);
       if (byEmbedded) return byEmbedded;
+    }
+    if (isVelaSignInMissing(message) || (odOwnedModel && /\bnot logged[ -]?in\b/i.test(message))) {
+      return 'sign-in';
     }
     if (MISSING_CREDENTIAL_RE.test(message)) return 'open-settings';
     if (RENDER_TIMED_OUT_RE.test(message)) return 'retry-later';
