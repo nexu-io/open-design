@@ -90,13 +90,19 @@ export class DiagnosticConsentFence {
     const before = Object.keys(known).sort().join(); const after = Object.keys(admitted).sort().join();
     if (before !== after) { generation.admitted = admitted; this.persist(); }
   }
-  async apply(sources: LogSource[]): Promise<AutomaticDiagnosticSource[]> {
+  async apply(sources: AutomaticDiagnosticSource[]): Promise<AutomaticDiagnosticSource[]> {
     const result: AutomaticDiagnosticSource[] = [];
     const generation = this.state;
     const baselined = Object.values(generation.offsets);
     const admitted = Object.values(generation.admitted ?? {});
     const updates: Record<string, Offset> = {};
     for (const source of sources) {
+      // Rendered sources (rows read from a database) are fenced by record time:
+      // the renderer receives the consent boundary and drops older records.
+      if (source.render) {
+        result.push(this.state.enabled ? { ...source, notBeforeMs: this.state.since } : { ...source, omitReason: 'consent_disabled' });
+        continue;
+      }
       const info = await stat(source.absolutePath).catch(() => null);
       if (this.state !== generation) {
         return sources.map((entry) => ({ ...entry, omitReason: this.state.enabled ? 'pre_consent_source' : 'consent_disabled' }));
