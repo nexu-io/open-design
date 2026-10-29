@@ -99,7 +99,7 @@ describe('share bridge v2 wire boundaries', () => {
       nonceLength: 36, idMaxLength: 200, elementIdMaxLength: 4100,
       selectorMaxLength: 4096, htmlHintMaxLength: 2000,
       coordinateAbsMax: 1_000_000, viewportMax: 32_768,
-      pinLabelMaxLength: 3, paletteSize: 30, pinsMaxItems: 200,
+      pinLabelMaxLength: 64, paletteSize: 30, pinsMaxItems: 200,
       messageMaxBytes: 64 * 1024, messagesPerSecond: 20,
     });
     expect(bridge.SHARE_BRIDGE_ORDERING_AND_REVOCATION_REQUIRED).toBe(true);
@@ -137,10 +137,10 @@ describe('share bridge v2 wire boundaries', () => {
     }
   });
   it('allows only short text and palette indexes, never identity or styling', () => {
-    for (const label of ['1', '200', 'A', '?', 'AB', '林', 'É']) {
+    for (const label of ['1', '200', 'A', '?', 'AB', '林', 'É', '😀', '👍🏽', '👨‍👩‍👧‍👦', '🇨🇳', 'e\u0301']) {
       for (const colorIndex of [0, 29]) expect(bridge.isShareBridgePinDisplay({ label, colorIndex })).toBe(true);
     }
-    for (const label of ['', '1234', '<b>', 'a b', '\n', 'A\n', '😀', '林冉', 'A林', '林\n', 'é\u0301', '#ff']) {
+    for (const label of ['', '1234', '<b>', 'a b', '\n', 'A\n', '😀😀', 'a' + '\u0301'.repeat(64), '林冉', 'A林', '林\n', '\u200d', '\u202e', '<', '#ff']) {
       expect(bridge.isShareBridgePinDisplay({ label, colorIndex: 0 })).toBe(false);
     }
     for (const colorIndex of [-1, 30, 0.5, NaN, Infinity, '0']) {

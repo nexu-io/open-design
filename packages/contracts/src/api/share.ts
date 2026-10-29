@@ -1385,7 +1385,7 @@ export const SHARE_BRIDGE_LIMITS = {
   coordinateAbsMax: 1_000_000,
   /** Positive iframe viewport dimensions, in CSS pixels. */
   viewportMax: 32_768,
-  pinLabelMaxLength: 3,
+  pinLabelMaxLength: 64,
   paletteSize: 30,
   /** Items in one `share:pins` AND in a complete staged pin snapshot. */
   pinsMaxItems: 200,
@@ -1443,13 +1443,26 @@ export function isShareBridgeFallbackRect(value: unknown): value is ShareBridgeV
     && value.top + value.height <= value.viewportHeight;
 }
 
+/** One bounded visible grapheme, or the legacy short ASCII pin token.
+ * Labels are rendered as textContent, never HTML. Keep controls, whitespace,
+ * markup and unbounded combining sequences out of the bridge. */
+function isShareBridgePinLabel(label: string): boolean {
+  if (/^[A-Za-z0-9?]{1,3}$/.test(label)) return true;
+  if (/[<>&]/u.test(label) || !/^[\p{L}\p{N}\p{P}\p{S}][\p{L}\p{N}\p{P}\p{S}\p{M}\u200d\u{E0020}-\u{E007F}]*$/u.test(label)) return false;
+  type Segmenter = new (locale: undefined, options: { granularity: 'grapheme' }) => {
+    segment(value: string): Iterable<{ segment: string }>;
+  };
+  const Segmenter = (Intl as typeof Intl & { Segmenter?: Segmenter }).Segmenter;
+  if (!Segmenter) return /^\p{L}$/u.test(label);
+  const parts = new Segmenter(undefined, { granularity: 'grapheme' }).segment(label)[Symbol.iterator]();
+  return parts.next().value?.segment === label && parts.next().done === true;
+}
+
 export function isShareBridgePinDisplay(value: unknown): value is ShareBridgePinDisplay {
   return shareBridgeExactRecord(value, ['label', 'colorIndex'])
     && typeof value.label === 'string' && value.label.length >= 1
     && value.label.length <= SHARE_BRIDGE_LIMITS.pinLabelMaxLength
-    // Short ASCII tokens, or exactly one letter so a CJK author's initial (林)
-    // can label their pin. Rendered with textContent; no markup, space or emoji.
-    && /^(?:[A-Za-z0-9?]{1,3}|\p{L})$/u.test(value.label)
+    && isShareBridgePinLabel(value.label)
     && typeof value.colorIndex === 'number' && Number.isInteger(value.colorIndex)
     && value.colorIndex >= 0 && value.colorIndex < SHARE_BRIDGE_LIMITS.paletteSize;
 }
