@@ -951,6 +951,28 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     );
   });
 
+  it('offers LLMTR as an OpenAI-compatible gateway preset', () => {
+    renderSettingsDialog({
+      apiProtocol: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
+    selectGatewayPreset('LLMTR');
+
+    expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain(
+      'qwen/qwen3.8-27b-free',
+    );
+    expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe(
+      'https://llmtr.com/v1',
+    );
+    expect(screen.getByRole('link', { name: 'Get key ↗' }).getAttribute('href')).toBe(
+      'https://llmtr.com/dashboard/keys?utm_source=open_design&utm_medium=provider_preset&utm_campaign=llmtr_byok',
+    );
+  });
+
   it('keeps Anthropic-compatible gateway presets selectable', () => {
     renderSettingsDialog();
 
