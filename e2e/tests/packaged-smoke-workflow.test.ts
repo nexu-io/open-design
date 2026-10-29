@@ -1919,7 +1919,7 @@ process.stdin.on("end", () => {
     expect(uiP0Groups["critical-extras"]).toEqual({
       grep: "@merge-extra",
       workers: 1,
-      files: ["ui/app.test.ts"],
+      files: ["ui/app.test.ts", "ui/settings-amr-models.test.ts"],
     });
     expect(uiP0Groups["workspace-restoration"]).toEqual({
       fullyParallel: true,

@@ -19,7 +19,7 @@ export const uiP0Groups = {
   "critical-extras": {
     grep: "@merge-extra",
     workers: 1,
-    files: ["ui/app.test.ts"],
+    files: ["ui/app.test.ts", "ui/settings-amr-models.test.ts"],
   },
   "workspace-restoration": {
     fullyParallel: true,
