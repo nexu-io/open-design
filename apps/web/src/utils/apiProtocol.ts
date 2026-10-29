@@ -10,6 +10,7 @@ const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
   ollama: 'Ollama Cloud API',
   senseaudio: 'SenseAudio API',
   aihubmix: 'AIHubMix API',
+  aimlapi: 'aimlapi.com',
   bedrock: 'AWS Bedrock',
 };
 
@@ -37,6 +38,7 @@ export function usesAnthropicProxy(cfg: AppConfig): boolean {
     cfg.apiProtocol === 'google' ||
     cfg.apiProtocol === 'senseaudio' ||
     cfg.apiProtocol === 'aihubmix' ||
+    cfg.apiProtocol === 'aimlapi' ||
     cfg.apiProtocol === 'bedrock' ||
     cfg.apiProtocol === 'openai'
   ) {

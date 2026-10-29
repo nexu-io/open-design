@@ -139,14 +139,22 @@ export interface MemoryListResponse {
  *  same options as the chat picker above it. The daemon routes both
  *  ollama and senseaudio through the same callOpenAI path since the
  *  wire protocol is identical. */
-export type MemoryExtractionProvider =
-  | 'anthropic'
-  | 'openai'
-  | 'azure'
-  | 'google'
-  | 'ollama'
-  | 'senseaudio'
-  | 'aihubmix';
+/** Single source of truth for the union below — a route validating an
+ *  untyped request body should check membership against this array
+ *  instead of hand-listing the literals a second time (that second list
+ *  silently drifts behind new providers added here). */
+export const MEMORY_EXTRACTION_PROVIDERS = [
+  'anthropic',
+  'openai',
+  'azure',
+  'google',
+  'ollama',
+  'senseaudio',
+  'aihubmix',
+  'aimlapi',
+] as const;
+
+export type MemoryExtractionProvider = (typeof MEMORY_EXTRACTION_PROVIDERS)[number];
 
 /** Masked version of MemoryExtractionConfig returned by GET endpoints —
  *  the api key field is replaced with a 4-char tail so the settings UI
