@@ -22,7 +22,7 @@
     "@open-design/sidecar": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*",
     "cac": "6.7.14",
-    "electron-builder": "26.8.1",
+    "electron-builder": "26.15.0",
     "resedit": "1.7.2"
   },
   "optionalDependencies": {
@@ -31,9 +31,9 @@
   "devDependencies": {
     "@typescript/native": "npm:typescript@7.0.2",
     "@types/node": "24.12.2",
-    "esbuild": "0.28.0",
+    "esbuild": "0.28.1",
     "tsx": "4.22.3",
-    "vitest": "4.1.6"
+    "vitest": "4.1.12"
   },
   "engines": {
     "node": "~24"

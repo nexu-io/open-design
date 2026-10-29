@@ -31,12 +31,12 @@
     "@testing-library/react": "16.3.2",
     "@types/react": "18.3.28",
     "@types/react-dom": "18.3.7",
-    "esbuild": "0.28.0",
+    "esbuild": "0.28.1",
     "jsdom": "29.1.1",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "tsx": "4.22.3",
-    "vitest": "4.1.6"
+    "vitest": "4.1.12"
   },
   "engines": {
     "node": "~24"

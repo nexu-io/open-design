@@ -6,9 +6,14 @@
   "description": "Independently distributable OpenDesign Closure content.",
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "exports": {
-    ".": {"types": "./dist/index.d.ts", "default": "./dist/index.mjs"}
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    }
   },
   "scripts": {
     "build": "tsx ./esbuild.config.ts && tsc -p tsconfig.json --emitDeclarationOnly",
@@ -17,13 +22,17 @@
     "pretypecheck": "pnpm --filter @open-design/standalone build",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
-  "dependencies": {"@open-design/standalone": "workspace:*"},
+  "dependencies": {
+    "@open-design/standalone": "workspace:*"
+  },
   "devDependencies": {
     "@typescript/native": "npm:typescript@7.0.2",
     "@types/node": "24.12.2",
-    "esbuild": "0.28.0",
+    "esbuild": "0.28.1",
     "tsx": "4.22.3",
-    "vitest": "4.1.6"
+    "vitest": "4.1.12"
   },
-  "engines": {"node": "~24"}
+  "engines": {
+    "node": "~24"
+  }
 }

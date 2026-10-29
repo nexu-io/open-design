@@ -32,8 +32,8 @@
   "devDependencies": {
     "@typescript/native": "npm:typescript@7.0.2",
     "@types/node": "24.12.2",
-    "electron": "41.3.0",
-    "vitest": "4.1.6"
+    "electron": "42.11.18",
+    "vitest": "4.1.12"
   },
   "engines": {
     "node": "~24"
