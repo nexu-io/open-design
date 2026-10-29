@@ -11,6 +11,7 @@ const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
   senseaudio: 'SenseAudio API',
   aihubmix: 'AIHubMix API',
   bedrock: 'AWS Bedrock',
+  'opencode-go': 'OpenCode Go',
 };
 
 export function apiProtocolLabel(protocol: ApiProtocol | undefined): string {
@@ -38,6 +39,7 @@ export function usesAnthropicProxy(cfg: AppConfig): boolean {
     cfg.apiProtocol === 'senseaudio' ||
     cfg.apiProtocol === 'aihubmix' ||
     cfg.apiProtocol === 'bedrock' ||
+    cfg.apiProtocol === 'opencode-go' ||
     cfg.apiProtocol === 'openai'
   ) {
     return false;

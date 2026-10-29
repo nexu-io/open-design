@@ -110,6 +110,14 @@ export const SUGGESTED_MODELS_BY_PROTOCOL: Record<ApiProtocol, readonly string[]
     'amazon.nova-lite-v1:0',
     'amazon.nova-micro-v1:0',
   ],
+  'opencode-go': [
+    'deepseek-v4-flash',
+    'deepseek-v4-pro',
+    'kimi-k2.7-code',
+    'qwen3.8-flash',
+    'mimo-v2.5',
+    'glm-5.3-flash',
+  ],
   ollama: [
     'cogito-2.1:671b',
     'deepseek-v3.1:671b',
@@ -175,6 +183,7 @@ export const FAST_MODEL_BY_PROTOCOL: Record<ApiProtocol, string> = {
   senseaudio: 'senseaudio-s2-flash',
   aihubmix: 'gpt-4o-mini',
   bedrock: 'amazon.nova-lite-v1:0',
+  'opencode-go': 'deepseek-v4-flash',
 };
 
 export const API_PROTOCOL_TABS: ReadonlyArray<{
@@ -188,6 +197,7 @@ export const API_PROTOCOL_TABS: ReadonlyArray<{
   { id: 'ollama', title: 'Ollama Cloud' },
   { id: 'senseaudio', title: 'SenseAudio' },
   { id: 'aihubmix', title: 'AIHubMix' },
+  { id: 'opencode-go', title: 'OpenCode Go' },
 ];
 
 export const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
@@ -199,6 +209,7 @@ export const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
   senseaudio: 'SenseAudio API',
   aihubmix: 'AIHubMix API',
   bedrock: 'AWS Bedrock',
+  'opencode-go': 'OpenCode Go',
 };
 
 export const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
@@ -210,6 +221,7 @@ export const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
   senseaudio: 'SenseAudio API key',
   aihubmix: 'sk-...',
   bedrock: 'AWS credentials',
+  'opencode-go': 'oc-go-...',
 };
 
 // Default base URL the daemon assumes when the user leaves the field
@@ -224,6 +236,7 @@ export const DEFAULT_BASE_URL_BY_PROTOCOL: Record<ApiProtocol, string> = {
   senseaudio: 'https://api.senseaudio.cn',
   aihubmix: 'https://aihubmix.com/v1',
   bedrock: 'https://bedrock-runtime.us-east-1.amazonaws.com',
+  'opencode-go': 'https://opencode.ai/zen/go/v1',
 };
 
 // Fixed-origin gateways: managed single-endpoint providers where the user only
