@@ -837,6 +837,7 @@ import {
   updateRoutine,
   updateRoutineRun,
   clearAgentSession,
+  onProjectCatalogMutation,
   upsertAgentSession,
   upsertDeployment,
   upsertMessage,
@@ -926,6 +927,7 @@ import { registerSocialShareRoutes } from './routes/social-share.js';
 import { registerOpenDesignPublicMetadataRoutes } from './routes/open-design-public-metadata.js';
 import { registerWhatsNewRoutes } from './routes/whats-new.js';
 import { registerMemoryRoutes } from './routes/memory.js';
+import { createProjectCatalogEvents, registerProjectCatalogEventsRoute } from './routes/project-catalog-events.js';
 import {
   createCollabPresenceCloudClient,
   registerCollabPresenceRoutes,
@@ -8415,6 +8417,8 @@ export async function startServer({
   const stopEvidenceDelivery = startEvidenceDelivery(RUNTIME_DATA_DIR);
   const strategyWriteEvidence = createStrategyRunWriteEvidenceRecorder(db);
   const codexThreadCleanupOwner = createCodexThreadCleanupOwner();
+  const projectCatalogEvents = createProjectCatalogEvents();
+  onProjectCatalogMutation(db, () => projectCatalogEvents.notify());
   const design = {
     runs: createChatRunService({
       createSseResponse,
@@ -8430,6 +8434,11 @@ export async function startServer({
         if (incidentId) run.diagnosticIncidentIds = [...new Set([...(run.diagnosticIncidentIds ?? []), incidentId])].slice(-100);
       },
       onEventEmitted: (run, record) => {
+        // The list badges a project as running/idle from run state, which does
+        // not write a project row, so the run's own lifecycle has to announce it.
+        if (run.projectId && (record.event === 'start' || record.event === 'end')) {
+          projectCatalogEvents.notify();
+        }
         if (record.event === 'start' || record.event === 'end' || record.event === 'run_resume_attempted') {
           try {
           recordStrategyTaskRunLifecycle(db, { runId: run.id, phase: record.event === 'run_resume_attempted' ? 'prepare' : record.event,
@@ -9362,6 +9371,10 @@ export async function startServer({
         throw error;
       }
     },
+  });
+  registerProjectCatalogEventsRoute(app, {
+    catalogEvents: projectCatalogEvents,
+    createSseResponse,
   });
   registerProjectRoutes(app, {
     db,
