@@ -1,6 +1,28 @@
 const SENSITIVE_KEY_RE = /token|password|secret|key|dsn|authorization|cookie/i;
 
-const URL_QUERY_SECRET_RE = /([?&#])(token|password|secret|key|dsn|api[_-]?key|auth|access_token|refresh_token|id_token)(=)([^&\s#"']*)/gi;
+// Any parameter whose name contains a secret word, so vendor-prefixed names
+// (`tavilyApiKey`, `x-api-key`, `client_secret`) are caught, not just an
+// exact list. Over-redacting a harmless `monkey=` is the acceptable cost.
+const URL_QUERY_SECRET_RE = /([?&#])([A-Za-z0-9_.-]*(?:token|password|passwd|secret|key|dsn|auth|signature|credential)[A-Za-z0-9_.-]*)(=)([^&\s#"']*)/gi;
+
+// Credentials with a recognizable shape leak whatever surrounds them (a
+// config dump, an error echoing a URL), so match them on their own. Mirrors
+// the vendor shapes in apps/daemon/src/redact.ts.
+const KNOWN_SECRET_RE = new RegExp([
+  /\b(?:pk|sk)-lf-[A-Za-z0-9-]{16,}/.source,
+  /\bsk-(?:proj-|live-|test-|ant-)?[A-Za-z0-9_-]{20,}/.source,
+  /\bgh[opsur]_[A-Za-z0-9]{36,251}/.source,
+  /\bgithub_pat_[A-Za-z0-9_]{22,}/.source,
+  /\bAKIA[0-9A-Z]{16}/.source,
+  /\bAQ\.[A-Za-z0-9_-]{20,}/.source,
+  /\bAIza[0-9A-Za-z_-]{35}/.source,
+  /\bnvapi-[A-Za-z0-9_-]{20,}/.source,
+  /\bxox[abprs]-[0-9A-Za-z-]{10,}/.source,
+  /\b(?:sk|pk|rk)_(?:live|test)_[0-9a-zA-Z]{16,}/.source,
+  /\btvly-[A-Za-z0-9_-]{16,}/.source,
+  /\bglpat-[A-Za-z0-9_-]{20,}/.source,
+  /\beyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/.source,
+].join("|"), "g");
 
 // Catch loose key=value pairs in log lines that aren't inside a URL — e.g. env
 // dumps, command-line args, or json-line meta. The leading boundary stops it
@@ -23,6 +45,12 @@ const REDACTED = "[REDACTED]";
 
 export interface RedactionOptions {
   username?: string | undefined;
+  /**
+   * The current user's home directory. Its last segment is redacted like the
+   * username because a Windows profile folder often differs from the account
+   * name (e.g. `alexb_000` for `alexb`).
+   */
+  homeDir?: string | undefined;
 }
 
 export function redactJsonValue(value: unknown, opts: RedactionOptions = {}): unknown {
@@ -48,15 +76,18 @@ export function redactText(text: string, opts: RedactionOptions = {}): string {
   // the `Authorization: Bearer` prefix and stops at the space.
   let out = text.replace(HTTP_AUTH_SCHEME_RE, (_match, scheme) => `${scheme} ${REDACTED}`);
   out = out.replace(URL_QUERY_SECRET_RE, (_match, sep, name, eq) => `${sep}${name}${eq}${REDACTED}`);
+  out = out.replace(KNOWN_SECRET_RE, REDACTED);
   out = out.replace(BARE_SECRET_RE, (_match, lead, name, sep) => `${lead}${name}${sep}${REDACTED}`);
   // Structured fragments often follow a timestamp/prefix and cannot be parsed as whole JSON.
   out = out.replace(/("[^"\n]*(?:token|password|secret|api[_-]?key|authorization|cookie|dsn)[^"\n]*"\s*:\s*)"(?:\\.|[^"\\])*"/gi,
     (_match, prefix) => `${prefix}"${REDACTED}"`);
-  const username = opts.username;
-  if (username && username.length > 1) {
-    const escaped = username.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const homeName = opts.homeDir?.replace(/[\\/]+$/, "").split(/[\\/]/).pop();
+  for (const name of new Set([opts.username, homeName])) {
+    if (!name || name.length <= 1) continue;
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     out = out.replace(new RegExp(`/Users/${escaped}(?=[/"\\s])`, "g"), "/Users/<USER>");
-    out = out.replace(new RegExp(`\\\\Users\\\\${escaped}(?=[\\\\"\\s])`, "g"), "\\Users\\<USER>");
+    // One or two backslashes: raw JSON log lines keep Windows paths escaped.
+    out = out.replace(new RegExp(`(\\\\{1,2})Users(\\\\{1,2})${escaped}(?=[\\\\"\\s])`, "g"), "$1Users$2<USER>");
     out = out.replace(new RegExp(`/home/${escaped}(?=[/"\\s])`, "g"), "/home/<USER>");
   }
   return out;

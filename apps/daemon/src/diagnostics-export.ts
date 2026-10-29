@@ -114,6 +114,14 @@ export interface DiagnosticsHandlerOptions {
 
 const TAIL_BYTES_PER_LOG = 4 * 1024 * 1024;
 
+function safeHomeDir(): string | undefined {
+  try {
+    return homedir() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function safeUsername(): string | undefined {
   try {
     const info = userInfo();
@@ -466,7 +474,7 @@ export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOption
             },
           },
         },
-        redaction: { username },
+        redaction: { username, homeDir: safeHomeDir() },
         crashReports: {
           // Restrict to OpenDesign's own process names. A generic "Electron"
           // substring would sweep up crash reports from any other Electron

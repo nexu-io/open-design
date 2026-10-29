@@ -1,6 +1,6 @@
 import { readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { userInfo } from 'node:os';
+import { homedir, userInfo } from 'node:os';
 import { buildAutomaticDiagnostics, DIAGNOSTIC_MAX_BYTES, redactJsonValue,
   type AutomaticDiagnosticManifest, type AutomaticDiagnosticSource, type LogSource } from '@open-design/diagnostics';
 import { DiagnosticOutbox, type DiagnosticIncident } from '../storage/diagnostic-outbox.js';
@@ -177,8 +177,9 @@ export class AutomaticDiagnostics {
           await rm(directory, { recursive: true, force: true });
           const evidence = JSON.parse(item.summary) as FaultEvidence;
           let username: string | undefined; try { username = userInfo().username; } catch { /* optional */ }
+          let homeDir: string | undefined; try { homeDir = homedir(); } catch { /* optional */ }
           const { manifest } = await buildAutomaticDiagnostics({ directory: staging, incidentId: item.id,
-            summary: evidence, sources: await this.fencedSources(evidence), redaction: { username }, signal });
+            summary: evidence, sources: await this.fencedSources(evidence), redaction: { username, homeDir }, signal });
           signal.throwIfAborted();
           if (!this.allowed()) throw new DiagnosticRelayError('consent_disabled', 0, true);
           await rm(directory, { recursive: true, force: true });
