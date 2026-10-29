@@ -67,6 +67,51 @@ describe('inlineRelativeAssets (FS-backed)', () => {
     expect(out).not.toContain('<link rel="stylesheet" href="a.css">');
   });
 
+  it('decodes named and numeric references before reading asset filenames', async () => {
+    write('theme&dark.css', '.entity{color:red}');
+    write('boot&main.js', 'window.OD_ENTITY = true;');
+    const html = '<link rel="stylesheet" href="theme&amp;dark.css">' +
+      '<script src="boot&#x26;main.js" type="module" defer></script>';
+    const out = await inlineRelativeAssets(html, 'index.html', fsReader());
+
+    expect(out).toContain('.entity{color:red}');
+    expect(out).toContain('window.OD_ENTITY = true;');
+    expect(out).not.toContain('<link');
+    expect(out).not.toContain('src=');
+    expect(out).toContain('type="module" defer');
+  });
+
+  it('still excludes entity-encoded external and root-relative asset URLs', async () => {
+    const html = '<link rel="stylesheet" href="https&#58;//example.com/theme.css">' +
+      '<script src="&#47;app.js"></script>';
+    const out = await inlineRelativeAssets(html, 'index.html', fsReader());
+
+    expect(out).toBe(html);
+  });
+
+  it.each([
+    ['decimal', '&#92;'],
+    ['hexadecimal', '&#x5c;'],
+    ['literal', '\\'],
+    ['mixed separators', '&#92;/'],
+    ['leading URL whitespace', '&#32;&#9;&#92;'],
+  ])('preserves %s backslash-rooted URLs instead of reading project-root files', async (_name, prefix) => {
+    write('theme.css', '.wrong-project-root{color:red}');
+    write('app.js', 'window.OD_WRONG_PROJECT_ROOT = true;');
+    write('pages/sibling.js', 'window.OD_RELATIVE_SIBLING = true;');
+    const external = `<link rel="stylesheet" href="${prefix}theme.css">` +
+      `<script src="${prefix}app.js"></script>`;
+    const html = external + '<script src="sibling.js"></script>';
+
+    const out = await inlineRelativeAssets(html, 'pages/index.html', fsReader());
+
+    expect(out).toContain(external);
+    expect(out).not.toContain('.wrong-project-root');
+    expect(out).not.toContain('OD_WRONG_PROJECT_ROOT');
+    expect(out).toContain('window.OD_RELATIVE_SIBLING = true;');
+    expect(out).not.toContain('src="sibling.js"');
+  });
+
   it('inlines a top-level <script src> as an inline <script> with the file body', async () => {
     write('app.js', 'window.OD_OK = 1;');
     const html = '<html><head><script src="app.js"></script></head></html>';
