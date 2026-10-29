@@ -993,6 +993,7 @@ ${COMMENT_IDENTITY_HELPERS}
       type: 'od:comment-target',
       elementId: id,
       selector: selector,
+      domSelector: domSelectorFor(el),
       label: tag + cls,
       text: (el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160),
       position: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) },

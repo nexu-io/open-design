@@ -2265,6 +2265,8 @@ export const th: Dict = {
   'chat.comments.attached': 'แนบในแชทแล้ว',
   'chat.comments.emptyAttached': 'ไม่มีความคิดเห็น',
   'chat.comments.saved': 'บันทึกความคิดเห็นแล้ว',
+  'fileViewer.shareFinishEditing': "บันทึกหรือยกเลิกการแก้ไขที่ยังไม่บันทึก และรอให้บันทึกเสร็จก่อนแชร์",
+  'chat.comments.loadFailed': "โหลดความคิดเห็นไม่สำเร็จ ความคิดเห็นเดิมยังคงอยู่",
   'chat.comments.emptySaved': 'ไม่มีการบันทึกความคิดเห็น',
   'chat.comments.add': 'เพิ่ม',
   'chat.comments.addAll': 'เพิ่มทั้งหมด',

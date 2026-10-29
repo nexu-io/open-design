@@ -2265,6 +2265,8 @@ export const ja: Dict = {
   'chat.comments.attached': 'チャットに添付済み',
   'chat.comments.emptyAttached': '添付されたコメントはありません。',
   'chat.comments.saved': '保存済みコメント',
+  'fileViewer.shareFinishEditing': "未保存の編集を保存または取り消し、保存完了後に共有してください。",
+  'chat.comments.loadFailed': "コメントを読み込めませんでした。表示済みのコメントは保持されます。",
   'chat.comments.emptySaved': '保存されたコメントはありません。',
   'chat.comments.add': '追加',
   'chat.comments.addAll': 'すべて追加',

@@ -339,7 +339,7 @@ const SHARE_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json',
 ]);
 const COMMENT_STRING_FLAGS = new Set([
-  'daemon-url', 'workspace', 'workspace-member', 'prompt', 'prompt-file', 'target', 'status', 'read-at', 'file',
+  'daemon-url', 'workspace', 'workspace-member', 'prompt', 'prompt-file', 'target', 'status', 'read-at', 'file', 'comment-ids',
 ]);
 const COMMENT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 // Defined near the top because `runFigma` is reachable through the
@@ -476,7 +476,8 @@ Options:
   --prompt-file <path|->      Read the comment body from a file or stdin; mutually exclusive with --prompt.
   --workspace <id>            Exact Workspace for bound project requests.
   --workspace-member <id>     Exact caller membership for bound project requests.
-  --read-at <epoch-ms>        Mark comments read at this time (defaults to now; server clamps).
+  --read-at <epoch-ms>        Legacy project read timestamp (defaults to now; server clamps).
+  --comment-ids <ids>         With --file, acknowledge only these displayed IDs (comma-separated).
   --daemon-url <url>          Override daemon URL.
   --json                      Emit the daemon response as JSON.`);
 }
@@ -578,12 +579,14 @@ async function runComment(args) {
   if (sub === 'read') {
     const readAt = flags['read-at'] === undefined ? Date.now() : Number(flags['read-at']);
     if (!Number.isFinite(readAt)) commentUsageError('--read-at must be a finite epoch milliseconds value');
+    const commentIds = typeof flags['comment-ids'] === 'string' ? flags['comment-ids'].split(',').filter(Boolean) : undefined;
+    if (commentIds && !flags.file) commentUsageError('--comment-ids requires --file');
     let response;
     try {
       response = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/comments/read`, {
         method: 'PUT',
         headers: { 'content-type': 'application/json', ...workspaceHeaders },
-        body: JSON.stringify({ readAt }),
+        body: JSON.stringify({ readAt, ...(commentIds ? { filePath: flags.file, commentIds } : {}) }),
       });
     } catch (error) {
       surfaceFetchError(error, base);

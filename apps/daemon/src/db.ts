@@ -627,6 +627,13 @@ function migrate(db: SqliteDb): void {
     );
   `);
 
+  db.exec(`CREATE TABLE IF NOT EXISTS project_comment_seen (
+    project_id TEXT NOT NULL, viewer_scope TEXT NOT NULL, comment_id TEXT NOT NULL,
+    PRIMARY KEY(project_id, viewer_scope, comment_id),
+    FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    FOREIGN KEY(comment_id) REFERENCES preview_comments(id) ON DELETE CASCADE
+  )`);
+
   const deploymentCols = db.prepare(`PRAGMA table_info(deployments)`).all() as DbRow[];
   if (!deploymentCols.some((c: DbRow) => c.name === 'status')) {
     db.exec(`ALTER TABLE deployments ADD COLUMN status TEXT NOT NULL DEFAULT 'ready'`);
@@ -4774,6 +4781,23 @@ export function mergeSyncedPreviewComment(
     );
   if (result.changes !== 1) throw new Error('Synced comment insert was not persisted');
   return 'changed';
+}
+
+/** File-scoped acknowledgements never infer unseen rows from a wall clock. */
+export function getFileCommentReadState(db: SqliteDb, projectId: string, viewerScope: string, filePath: string) {
+  const rows = db.prepare(`SELECT s.comment_id AS id FROM project_comment_seen s
+    JOIN preview_comments c ON c.id = s.comment_id AND c.project_id = s.project_id
+    WHERE s.project_id = ? AND s.viewer_scope = ? AND c.file_path = ?`).all(projectId, viewerScope, filePath) as Array<{id: string}>;
+  return { projectId, filePath, seenCommentIds: rows.map(row => row.id) };
+}
+
+export function markFileCommentsSeen(db: SqliteDb, projectId: string, viewerScope: string, filePath: string, ids: string[]) {
+  db.transaction(() => {
+    const insert = db.prepare(`INSERT OR IGNORE INTO project_comment_seen (project_id, viewer_scope, comment_id)
+      SELECT project_id, ?, id FROM preview_comments WHERE project_id = ? AND file_path = ? AND id = ?`);
+    for (const id of new Set(ids)) insert.run(viewerScope, projectId, filePath, id);
+  })();
+  return getFileCommentReadState(db, projectId, viewerScope, filePath);
 }
 
 export function getProjectCommentReadState(

@@ -1441,7 +1441,7 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
         return { target, matches: !!target && document.querySelector(target.selector) === element };
       })()`);
       expect(result).toMatchObject({
-        target: { elementId: 'Home', selector: '[data-screen-label="Home"]' }, matches: true,
+        target: { elementId: 'Home', selector: '[data-screen-label="Home"]', domSelector: 'body > section:nth-of-type(1)' }, matches: true,
       });
     } finally {
       dom.window.close();

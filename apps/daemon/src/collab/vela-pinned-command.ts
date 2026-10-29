@@ -38,6 +38,8 @@ export interface PinnedVelaCommandInput {
   dataRoot: string;
   workspaceId: string;
   configuredEnv?: Record<string, string>;
+  /** Optional caller snapshot fence, checked immediately before starting the child. */
+  isCurrent?: () => boolean;
 }
 
 /** Isolate Go CLI profile loading from concurrent login/account changes.
@@ -67,6 +69,7 @@ export async function runPinnedVelaCommand(
       await writeFile(path.join(home, 'config.json'), JSON.stringify({
         profiles: { [profile]: { controlKey, apiUrl, linkUrl: readAmrEndpointBinding()?.linkUrl } },
       }), { mode: 0o600, flag: 'wx' });
+      if (input.isCurrent && !input.isCurrent()) throw new Error('VELA_REQUEST_SNAPSHOT_CHANGED');
       preparing = false;
       return await run(args, {
         configuredEnv: {

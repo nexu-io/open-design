@@ -2265,6 +2265,8 @@ export const hu: Dict = {
   'chat.comments.attached': 'Csevegéshez csatolva',
   'chat.comments.emptyAttached': 'Nincs csatolt megjegyzés.',
   'chat.comments.saved': 'Mentett megjegyzések',
+  'fileViewer.shareFinishEditing': "Mentsd vagy vond vissza a módosításokat, és megosztás előtt várd meg a mentés befejezését.",
+  'chat.comments.loadFailed': "A megjegyzések nem tölthetők be. A meglévők megmaradnak.",
   'chat.comments.emptySaved': 'Nincsenek mentett megjegyzések.',
   'chat.comments.add': 'Hozzáadás',
   'chat.comments.addAll': 'Összes hozzáadása',

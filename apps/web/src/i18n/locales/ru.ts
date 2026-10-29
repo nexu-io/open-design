@@ -2265,6 +2265,8 @@ export const ru: Dict = {
   'chat.comments.attached': 'Прикреплены к чату',
   'chat.comments.emptyAttached': 'Нет прикреплённых комментариев.',
   'chat.comments.saved': 'Сохранённые комментарии',
+  'fileViewer.shareFinishEditing': "Сохраните или отмените изменения и дождитесь завершения сохранения перед публикацией.",
+  'chat.comments.loadFailed': "Не удалось загрузить комментарии. Уже показанные комментарии сохранены.",
   'chat.comments.emptySaved': 'Сохранённых комментариев нет.',
   'chat.comments.add': 'Добавить',
   'chat.comments.addAll': 'Добавить все',

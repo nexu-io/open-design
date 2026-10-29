@@ -3115,6 +3115,8 @@ export interface Dict {
   'chat.comments.attached': string;
   'chat.comments.emptyAttached': string;
   'chat.comments.saved': string;
+  'fileViewer.shareFinishEditing': string;
+  'chat.comments.loadFailed': string;
   'chat.comments.emptySaved': string;
   'chat.comments.add': string;
   'chat.comments.addAll': string;

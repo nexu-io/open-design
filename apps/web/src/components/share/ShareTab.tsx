@@ -18,6 +18,7 @@ import { ShareConflictRow } from './ShareConflictRow';
 import styles from './ShareTab.module.css';
 export type SharePublishFailureKey =
   | PublicFilePublishFailureKey
+  | 'fileViewer.shareFinishEditing'
   | 'fileViewer.publishFileTooLarge'
   | 'fileViewer.publishFileEntryIndexConflict'
   | 'fileViewer.unpublishFileFailed';

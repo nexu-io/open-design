@@ -2265,6 +2265,8 @@ export const ko: Dict = {
   'chat.comments.attached': '채팅에 첨부됨',
   'chat.comments.emptyAttached': '첨부된 댓글이 없습니다.',
   'chat.comments.saved': '저장된 댓글',
+  'fileViewer.shareFinishEditing': "저장되지 않은 편집을 저장하거나 취소하고 저장이 완료된 후 공유하세요.",
+  'chat.comments.loadFailed': "댓글을 불러오지 못했습니다. 기존 댓글은 유지됩니다.",
   'chat.comments.emptySaved': '저장된 댓글이 없습니다.',
   'chat.comments.add': '추가',
   'chat.comments.addAll': '모두 추가',

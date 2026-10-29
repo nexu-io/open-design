@@ -2273,6 +2273,8 @@ export const en: Dict = {
   'chat.comments.attached': 'Attached to chat',
   'chat.comments.emptyAttached': 'No comments attached.',
   'chat.comments.saved': 'Saved comments',
+  'fileViewer.shareFinishEditing': "Finish or cancel unsaved edits and wait for saving to complete before sharing.",
+  'chat.comments.loadFailed': "Could not load comments. Existing comments are kept.",
   'chat.comments.emptySaved': 'No saved comments.',
   'chat.comments.add': 'Add',
   'chat.comments.addAll': 'Add all',

@@ -31,7 +31,7 @@ export function resolveOwnerCommentAnchor(comment: PreviewComment, targets: Map<
   // Attribute anchors keep the portable resolver's identity/drift semantics.
   if (!selector || !/^body\s*>/.test(selector)) return resolveCommentAnchor(comment, targets, version);
   const matching = selector && [...targets.values()].find(target =>
-    target.filePath === comment.filePath && commentSelectorsMatch(target.selector, selector)
+    target.filePath === comment.filePath && (commentSelectorsMatch(target.selector, selector) || commentSelectorsMatch(target.domSelector ?? '', selector))
     && (target.slideIndex ?? -1) === (comment.slideIndex ?? -1));
   if (matching) return resolveCommentAnchor({ ...comment, elementId: matching.elementId }, targets, version);
   const exact = targets.get(comment.elementId);

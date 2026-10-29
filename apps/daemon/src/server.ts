@@ -5371,11 +5371,11 @@ export async function startServer({
   const commentAlignment = createCommentAlignmentService({
     db,
     readCursor: (projectId, context) => collabCloud?.readMergedCommentCursor(projectId, context) ?? null,
-    compare: async (projectId, context, request) => {
+    compare: async (projectId, context, request, isCurrent) => {
       const session = readVelaControlApiContext(process.env, configuredAmrEnv());
       if (!session?.controlKey || !session.apiUrl) return { state: 'unknown', reason: 'unavailable' };
       const result = await runVelaCommentAlignment({
-        projectId, workspaceId: context.workspaceId, request, session, dataRoot: RUNTIME_DATA_DIR,
+        projectId, workspaceId: context.workspaceId, request, session, dataRoot: RUNTIME_DATA_DIR, isCurrent,
       });
       const current = readVelaControlApiContext(process.env, configuredAmrEnv());
       if (current?.controlKey !== session.controlKey || current?.apiUrl !== session.apiUrl) {

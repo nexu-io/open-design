@@ -2265,6 +2265,8 @@ export const id: Dict = {
   'chat.comments.attached': 'Dilampirkan ke chat',
   'chat.comments.emptyAttached': 'Tidak ada komentar terlampir.',
   'chat.comments.saved': 'Komentar tersimpan',
+  'fileViewer.shareFinishEditing': "Simpan atau batalkan perubahan dan tunggu penyimpanan selesai sebelum berbagi.",
+  'chat.comments.loadFailed': "Komentar gagal dimuat. Komentar yang ada tetap disimpan.",
   'chat.comments.emptySaved': 'Tidak ada komentar tersimpan.',
   'chat.comments.add': 'Tambah',
   'chat.comments.addAll': 'Tambah semua',

@@ -16,6 +16,27 @@ async function save(page:Page,id:string,observedState:string,detail:Record<strin
   await page.screenshot({path:resolve(out,`${captureId}.png`),animations:'disabled'});
   await writeFile(resolve(out,`${captureId}.json`),JSON.stringify({id:captureId,capturedAt:new Date().toISOString(),source:'current-playwright-mocked',mockBoundary:'Local Playwright route mocks and fixture-backed local daemon data; not a real Vela/share-service delivery or real-account state.',observedState,viewport:page.viewportSize(),text:await page.locator('body').innerText(),elements,...detail},null,2));
 }
+async function mockAuditReadState(page: Page, projectId: string) {
+  const auditSeenByFile = new Map<string, Set<string>>();
+  const control = { allowAcknowledgement: false };
+  await page.route(url => url.pathname === `/api/projects/${projectId}/comments/read`, async route => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const body = request.method() === 'PUT' ? request.postDataJSON() : null;
+    const filePath = body?.filePath ?? url.searchParams.get('filePath');
+    expect(typeof filePath).toBe('string');
+    expect(filePath).toBeTruthy();
+    const seen = auditSeenByFile.get(filePath) ?? new Set<string>();
+    if (request.method() === 'PUT') {
+      expect(Array.isArray(body.commentIds)).toBe(true);
+      if (!control.allowAcknowledgement) return route.fulfill({ status: 503, json: { error: 'ui_audit_read_failure' } });
+      for (const id of body.commentIds) seen.add(id);
+    }
+    auditSeenByFile.set(filePath, seen);
+    await route.fulfill({ json: { projectId, filePath, seenCommentIds: [...seen] } });
+  });
+  return { seenByFile: auditSeenByFile, control };
+}
 test('capture isolated OD share entry, progress and failure states',async({page})=>{
   test.setTimeout(120_000);
   await page.addInitScript(()=>{localStorage.setItem('open-design:locale','zh-CN');localStorage.setItem('open-design:locale-source','manual');});
@@ -190,13 +211,7 @@ test('capture isolated OD share entry, progress and failure states',async({page}
       note: 'Owner 的审计评论', status: 'open', createdAt: now - 900, updatedAt: now - 900,
     }] } });
   });
-  let auditLastReadAt: number | undefined;
-  let auditCanAcknowledge=false;
-  await page.route(`**/api/projects/${projectId}/comments/read`,async r=>{
-    if(r.request().method()==='PUT'&&!auditCanAcknowledge) return r.fulfill({status:503,json:{error:'ui_audit_read_failure'}});
-    if(r.request().method()==='PUT') auditLastReadAt=Date.now();
-    await r.fulfill({json:{projectId,...(auditLastReadAt===undefined?{}:{lastReadAt:auditLastReadAt})}});
-  });
+  const { seenByFile: auditSeenByFile, control: auditReadControl } = await mockAuditReadState(page, projectId);
   await page.reload();
   await expect(page.getByTestId('comment-unread-dot')).toBeVisible();
   await save(page,'C0','C0');
@@ -208,9 +223,10 @@ test('capture isolated OD share entry, progress and failure states',async({page}
   await expect(page.getByTestId('comment-side-collapsed-rail')).toBeVisible();
   await expect(page.getByTestId('comment-rail-unread-dot')).toBeVisible();
   await save(page,'R3','R3');
-  auditCanAcknowledge=true;
+  auditReadControl.allowAcknowledgement=true;
   await page.getByTestId('comment-side-collapsed-rail').click();
   await expect(page.getByTestId('comment-side-panel')).toBeVisible();
+  await expect.poll(() => auditSeenByFile.get('index.html')?.has('ui-audit-external-comment')).toBe(true);
   await page.getByTestId('comment-side-panel').locator('.comment-side-collapse').click();
   await expect(page.getByTestId('comment-side-collapsed-rail')).toBeVisible();
   await expect(page.getByTestId('comment-rail-unread-dot')).toHaveCount(0);
@@ -330,6 +346,7 @@ test('capture isolated OD share entry, progress and failure states',async({page}
   // K8 is not captured here: ShareTab mounts this banner with backfillOnly,
   // which intentionally suppresses sessionMissing; its owner-wide banner has
   // a different host surface and must not be represented by this fixture.
+  auditSeenByFile.get('index.html')?.add('audit-older-external');
   auditExcludeOnly=true;
   await page.reload();
   await expect(page.getByTestId('comment-panel-toggle')).toHaveAttribute('aria-label','评论 (2)');
@@ -667,4 +684,35 @@ test('capture D4 non-current slide label and investigate missing pin',async({pag
   await page.getByTestId('artifact-preview-frame').contentFrame().locator('body').press('ArrowRight');
   await expect(page.getByRole('region',{name:'演讲者备注'})).toContainText('第 2 / 2 页');
   await expect(page.getByTestId('comment-saved-marker-deck-second-title')).toHaveCount(0);
+});
+
+
+test('[P1] comment audit uses file-scoped seen IDs and preserves unread on failed acknowledgement', async ({ page }) => {
+  await mockAmrPersonalWorkspace(page);
+  const projectId = `read-audit-${Date.now()}`;
+  const created = await page.request.post('/api/projects', { data: { id: projectId, name: 'Read-state audit', skillId: null, designSystemId: null, metadata: { kind: 'prototype', nameSource: 'user' } } });
+  expect(created.ok(), await created.text()).toBeTruthy();
+  const { conversationId } = await created.json() as { conversationId: string };
+  const file = await page.request.post(`/api/projects/${projectId}/files`, { data: { name: 'index.html', content: '<!doctype html><main><h1>Read-state audit</h1></main>' } });
+  expect(file.ok(), await file.text()).toBeTruthy();
+  await page.route(`**/api/projects/${projectId}/workspace-scope`, route => route.fulfill({ json: { scope: { kind: 'personal', projectId, workspaceId: AMR_PERSONAL_WORKSPACE_CONTEXT.workspaceId, visibility: 'personal', context: AMR_PERSONAL_WORKSPACE_CONTEXT } } }));
+  const now = Date.now();
+  const comment = { id: 'audit-external', projectId, conversationId, filePath: 'index.html', elementId: 'title', selector: 'h1', label: 'Title', text: 'Read-state audit', htmlHint: '<h1>Read-state audit</h1>', position: { x: 0, y: 0, width: 100, height: 30 }, note: 'Visible external review', status: 'open', authorKind: 'user', authorAppUserId: 'audit-visitor', authorKey: 'audit-visitor', authorDisplayName: 'Visitor', createdAt: now, updatedAt: now };
+  await page.route(url => url.pathname === `/api/projects/${projectId}/conversations/${conversationId}/comments` || url.pathname === `/api/projects/${projectId}/conversations/${conversationId}/comments/pull`, route => route.fulfill({ json: { comments: [comment], pulled: true } }));
+  const { seenByFile, control } = await mockAuditReadState(page, projectId);
+  await page.goto(`/projects/${projectId}/files/index.html`);
+  await expect(page.getByTestId('comment-unread-dot')).toBeVisible();
+  await page.getByTestId('comment-panel-toggle').click();
+  await expect(page.getByTestId('comment-side-item').filter({ hasText: 'Visible external review' })).toBeVisible();
+  await page.getByTestId('comment-side-panel').locator('.comment-side-collapse').click();
+  await expect(page.getByTestId('comment-rail-unread-dot')).toBeVisible();
+  expect(seenByFile.get('index.html')?.size ?? 0).toBe(0);
+  control.allowAcknowledgement = true;
+  await page.getByTestId('comment-side-collapsed-rail').click();
+  await expect.poll(() => seenByFile.get('index.html')?.has('audit-external')).toBe(true);
+  await page.getByTestId('comment-side-panel').locator('.comment-side-collapse').click();
+  await expect(page.getByTestId('comment-rail-unread-dot')).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByTestId('comment-panel-toggle')).toBeVisible();
+  await expect(page.getByTestId('comment-unread-dot')).toHaveCount(0);
 });

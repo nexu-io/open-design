@@ -225,21 +225,24 @@ export function useAnchoredPopover(
     estimatedHeight: number;
     gap?: number;
     flipEnabled?: boolean;
+    /** Keep the chosen side across content changes until anchor/boundary geometry changes. */
+    stablePlacement?: boolean;
     /** Reactive identity for anchors that can change while the popover stays open. */
     anchorElement?: HTMLElement | null;
   } = { estimatedHeight: 0 },
 ): AnchoredPopover {
-  const { estimatedHeight, gap = 6, flipEnabled = true, anchorElement } = options;
+  const { estimatedHeight, gap = 6, flipEnabled = true, stablePlacement = false, anchorElement } = options;
   const [state, setState] = useState<AnchoredPopover>(INITIAL);
   // Keep sizing options current without recreating the measurement callback.
-  const optionsRef = useRef({ estimatedHeight, gap, flipEnabled });
-  optionsRef.current = { estimatedHeight, gap, flipEnabled };
+  const optionsRef = useRef({ estimatedHeight, gap, flipEnabled, stablePlacement });
+  optionsRef.current = { estimatedHeight, gap, flipEnabled, stablePlacement };
+  const placementSnapshot = useRef<{ anchor: HTMLElement; geometry: string; placement: AnchoredPlacement } | null>(null);
 
   const measure = useCallback(() => {
     const anchor = anchorRef.current;
     if (!anchor || typeof anchor.getBoundingClientRect !== 'function') return;
     const rect = anchor.getBoundingClientRect();
-    const { estimatedHeight: estH, gap: g, flipEnabled: canFlip } = optionsRef.current;
+    const { estimatedHeight: estH, gap: g, flipEnabled: canFlip, stablePlacement: keepSide } = optionsRef.current;
     const clip = clippingRect(anchor);
 
     /*
@@ -267,8 +270,17 @@ export function useAnchoredPopover(
      * (`top: calc(100% + 6px)`)钉死向下。给它算一个永远不会生效的 `above`,
      * 只会让下面的竖向预算按错误的方向去配,所以直接不翻。
      */
-    const placement: AnchoredPlacement =
+    let placement: AnchoredPlacement =
       canFlip && spaceBelow < height && spaceAbove > spaceBelow ? 'above' : 'below';
+    // Stop/resume replaces the panel body several times. Its content height
+    // must not move the switch to the other side of the pointer mid-action.
+    const geometry = JSON.stringify([rect.left, rect.top, rect.width, rect.height,
+      clip.left, clip.top, clip.right, clip.bottom, g, canFlip]);
+    const previous = placementSnapshot.current;
+    if (keepSide && canFlip && !anchorHidden && natural && natural.height > 0) {
+      if (previous?.anchor === anchor && previous.geometry === geometry) placement = previous.placement;
+      else placementSnapshot.current = { anchor, geometry, placement };
+    } else placementSnapshot.current = null;
 
     /*
      * 量不到面板时**保持现状**,不是归零 —— 归零会让浮层弹回锚点原位,而且
@@ -345,7 +357,10 @@ export function useAnchoredPopover(
   }, []);
 
   useLayoutEffect(() => {
-    if (!open) return;
+    if (!open) {
+      placementSnapshot.current = null;
+      return;
+    }
     measure();
     // 面板挂上之后真实高度才有 —— 再量一次,把第一帧的估值换掉。
     const raf = requestAnimationFrame(measure);

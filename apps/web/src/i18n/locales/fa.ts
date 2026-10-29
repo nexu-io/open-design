@@ -2276,6 +2276,8 @@ export const fa: Dict = {
   'chat.comments.attached': 'پیوست‌شده به گفتگو',
   'chat.comments.emptyAttached': 'هیچ نظری پیوست نشده است.',
   'chat.comments.saved': 'نظرات ذخیره‌شده',
+  'fileViewer.shareFinishEditing': "تغییرات ذخیره‌نشده را ذخیره یا لغو کنید و پیش از اشتراک‌گذاری منتظر پایان ذخیره‌سازی بمانید.",
+  'chat.comments.loadFailed': "بارگیری نظرات ممکن نشد. نظرات موجود حفظ شده‌اند.",
   'chat.comments.emptySaved': 'هیچ نظر ذخیره‌شده‌ای وجود ندارد.',
   'chat.comments.add': 'افزودن',
   'chat.comments.addAll': 'افزودن همه',

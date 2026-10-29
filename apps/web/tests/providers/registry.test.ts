@@ -2587,3 +2587,19 @@ describe('deploy provider registry helpers', () => {
     );
   });
 });
+
+describe('OPEND-3894 comment reads distinguish errors from empty success', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it.each(['http', 'network', 'invalid'] as const)('rejects final %s failure after a failed pull', async kind => {
+    vi.stubGlobal('fetch', vi.fn(async input => {
+      if (String(input).endsWith('/pull')) return new Response(null, {status: 503});
+      if (kind === 'network') throw new Error('offline');
+      return kind === 'http' ? new Response(null,{status:500}) : Response.json({});
+    }));
+    await expect(fetchPreviewComments('p','c',personalWorkspaceContext(),true)).rejects.toThrow();
+  });
+  it('accepts an explicitly empty successful response', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({comments:[]})));
+    await expect(fetchPreviewComments('p','c')).resolves.toEqual([]);
+  });
+});

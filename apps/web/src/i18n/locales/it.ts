@@ -2265,6 +2265,8 @@ export const it: Dict = {
   'chat.comments.attached': 'Allegato alla chat',
   'chat.comments.emptyAttached': 'Nessun commento allegato.',
   'chat.comments.saved': 'Commenti salvati',
+  'fileViewer.shareFinishEditing': "Salva o annulla le modifiche e attendi il completamento del salvataggio prima di condividere.",
+  'chat.comments.loadFailed': "Impossibile caricare i commenti. Quelli esistenti vengono conservati.",
   'chat.comments.emptySaved': 'Nessun commento salvato.',
   'chat.comments.add': 'Aggiungi',
   'chat.comments.addAll': 'Aggiungi tutto',

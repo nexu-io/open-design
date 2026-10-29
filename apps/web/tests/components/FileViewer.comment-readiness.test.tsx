@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { CollabProvider, type CollabContextValue } from '../../src/collab/collab-context';
 import { FileViewer } from '../../src/components/FileViewer';
@@ -44,4 +44,29 @@ it('does not persist lost anchors before this preview reports its targets (OPEND
     source: frame.contentWindow, data: { type: 'od:comment-targets', targets: [] },
   })); });
   expect(onLostAnchors).toHaveBeenCalledOnce();
+});
+
+it('OPEND-3604 only acknowledges displayed rows after a successful load, including older delayed arrivals', async () => {
+  const writes: Array<{filePath:string;commentIds:string[]}> = [];
+  const seen = new Set<string>();
+  vi.stubGlobal('fetch',vi.fn(async (input,init) => {
+    if (String(input).includes('/comments/read')) {
+      if (init?.method === 'PUT') {const body=JSON.parse(String(init.body));writes.push(body);for(const id of body.commentIds)seen.add(id);}
+      return Response.json({projectId:'p',filePath:'a.html',seenCommentIds:[...seen]});
+    }
+    return Response.json({});
+  }));
+  const file: ProjectFile = {name:'a.html',path:'a.html',type:'file',size:1,mtime:1,kind:'html',mime:'text/html'};
+  const a: PreviewComment = {id:'a',projectId:'p',conversationId:'c',filePath:'a.html',elementId:'h',selector:'h2',label:'h2',text:'',htmlHint:'',position:{x:1,y:1,width:10,height:10},note:'Visible review',status:'open',createdAt:200,updatedAt:200};
+  const other = {...a,id:'other',filePath:'b.html',createdAt:50};
+  const tree = (state:'loading'|'error'|'success', comments:PreviewComment[]) => <FileViewer projectId="p" projectKind="prototype" file={file} liveHtml="<h2>Fixture</h2>" previewComments={comments} previewCommentsState={state}/>;
+  const view=render(tree('loading',[a,other]));
+  fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+  await act(async()=>{await new Promise(resolve=>setTimeout(resolve,35));});expect(writes).toEqual([]);
+  view.rerender(tree('error',[a,other]));
+  await act(async()=>{await new Promise(resolve=>setTimeout(resolve,35));});expect(writes).toEqual([]);
+  view.rerender(tree('success',[a,other]));
+  await waitFor(()=>expect(writes).toHaveLength(1));expect(writes[0]).toMatchObject({filePath:'a.html',commentIds:['a']});
+  view.rerender(tree('success',[a,other,{...a,id:'late',createdAt:10}]));
+  await waitFor(()=>expect(writes).toHaveLength(2));expect(writes[1]?.commentIds).toEqual(['late']);
 });

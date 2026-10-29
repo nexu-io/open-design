@@ -11146,10 +11146,10 @@ describe('FileViewer tweaks toolbar', () => {
     });
     const comments = [comment('one', 101), comment('two', 102), comment('three', 103)];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input).endsWith('/comments/read')) {
+      if (String(input).includes('/comments/read')) {
         return new Response(JSON.stringify(init?.method === 'PUT'
-          ? { projectId: 'project-1', lastReadAt: 103 }
-          : { projectId: 'project-1', lastReadAt: 100 }), { headers: { 'Content-Type': 'application/json' } });
+          ? { projectId: 'project-1', filePath: 'preview.html', seenCommentIds: ['one','two','three'] }
+          : { projectId: 'project-1', filePath: 'preview.html', seenCommentIds: [] }), { headers: { 'Content-Type': 'application/json' } });
       }
       return new Response('{}', { headers: { 'Content-Type': 'application/json' } });
     });
@@ -11173,9 +11173,9 @@ describe('FileViewer tweaks toolbar', () => {
     });
     const readRequests = vi.fn();
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (!String(input).endsWith('/comments/read')) return new Response('{}');
+      if (!String(input).includes('/comments/read')) return new Response('{}');
       if (init?.method === 'PUT') readRequests();
-      return new Response(JSON.stringify({ projectId: 'project-1', lastReadAt: init?.method === 'PUT' ? 200 : 100 }), {
+      return new Response(JSON.stringify({ projectId: 'project-1', filePath: 'preview.html', seenCommentIds: init?.method === 'PUT' ? JSON.parse(String(init.body)).commentIds : [] }), {
         headers: { 'Content-Type': 'application/json' },
       });
     }));
@@ -11233,12 +11233,12 @@ describe('FileViewer tweaks toolbar', () => {
     const own: PreviewComment = {
       id: 'own', projectId: 'project-1', conversationId: 'conversation-1', filePath: 'preview.html', elementId: 'own', selector: '[data-od-id="own"]', label: 'own', text: '', htmlHint: '', position: { x: 0, y: 0, width: 1, height: 1 }, note: 'own', status: 'open', createdAt: 102, updatedAt: 102, authorMemberId: 'wm-1',
     };
-    const readFetch = vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('/comments/read')
-      ? new Response(JSON.stringify({ projectId: 'project-1', lastReadAt: 101 }), { headers: { 'Content-Type': 'application/json' } })
+    const readFetch = vi.fn(async (input: RequestInfo | URL) => String(input).includes('/comments/read')
+      ? new Response(JSON.stringify({ projectId: 'project-1', filePath: 'preview.html', seenCommentIds: ['boundary'] }), { headers: { 'Content-Type': 'application/json' } })
       : new Response('{}', { headers: { 'Content-Type': 'application/json' } }));
     vi.stubGlobal('fetch', readFetch);
     renderWithProjectWorkspace(<FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()} liveHtml="<html><body /></html>" previewComments={[own, { ...own, id: 'boundary', authorMemberId: 'wm-other', createdAt: 101, updatedAt: 101 }]} />, teamWorkspaceContext());
-    await waitFor(() => expect(readFetch.mock.calls.some(([input]) => String(input).endsWith('/comments/read'))).toBe(true));
+    await waitFor(() => expect(readFetch.mock.calls.some(([input]) => String(input).includes('/comments/read'))).toBe(true));
     await act(async () => { await Promise.resolve(); });
     expect(screen.queryByTestId('comment-unread-dot')).toBeNull();
   });
@@ -11247,12 +11247,12 @@ describe('FileViewer tweaks toolbar', () => {
     const firstRead = deferredResponse();
     let readWrites = 0;
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (!String(input).endsWith('/comments/read')) return new Response('{}');
+      if (!String(input).includes('/comments/read')) return new Response('{}');
       if (init?.method === 'PUT') {
         readWrites++;
-        return readWrites === 1 ? firstRead.promise : new Response(JSON.stringify({ projectId: 'project-1', lastReadAt: 103 }), { headers: { 'Content-Type': 'application/json' } });
+        return readWrites === 1 ? firstRead.promise : new Response(JSON.stringify({ projectId: 'project-1', filePath: 'preview.html', seenCommentIds: ['external'] }), { headers: { 'Content-Type': 'application/json' } });
       }
-      return new Response(JSON.stringify({ projectId: 'project-1', lastReadAt: 100 }), { headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ projectId: 'project-1', filePath: 'preview.html', seenCommentIds: [] }), { headers: { 'Content-Type': 'application/json' } });
     }));
     const external: PreviewComment = {
       id: 'external', projectId: 'project-1', conversationId: 'conversation-1', filePath: 'preview.html', elementId: 'external', selector: '[data-od-id="external"]', label: 'external', text: '', htmlHint: '', position: { x: 0, y: 0, width: 1, height: 1 }, note: 'external', status: 'open', createdAt: 103, updatedAt: 103,

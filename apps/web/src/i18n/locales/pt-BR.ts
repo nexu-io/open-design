@@ -2265,6 +2265,8 @@ export const ptBR: Dict = {
   'chat.comments.attached': 'Anexado ao chat',
   'chat.comments.emptyAttached': 'Nenhum comentário anexado.',
   'chat.comments.saved': 'Comentários salvos',
+  'fileViewer.shareFinishEditing': "Salve ou cancele as alterações e aguarde o fim do salvamento antes de compartilhar.",
+  'chat.comments.loadFailed': "Não foi possível carregar os comentários. Os existentes são mantidos.",
   'chat.comments.emptySaved': 'Nenhum comentário salvo.',
   'chat.comments.add': 'Adicionar',
   'chat.comments.addAll': 'Adicionar todos',

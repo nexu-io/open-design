@@ -2265,6 +2265,8 @@ export const fr: Dict = {
   'chat.comments.attached': 'Attaché au chat',
   'chat.comments.emptyAttached': 'Aucun commentaire attaché.',
   'chat.comments.saved': 'Commentaires enregistrés',
+  'fileViewer.shareFinishEditing': "Enregistrez ou annulez les modifications et attendez la fin de l’enregistrement avant de partager.",
+  'chat.comments.loadFailed': "Impossible de charger les commentaires. Les commentaires existants sont conservés.",
   'chat.comments.emptySaved': 'Aucun commentaire enregistré.',
   'chat.comments.add': 'Ajouter',
   'chat.comments.addAll': 'Tout ajouter',
