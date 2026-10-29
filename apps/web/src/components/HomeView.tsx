@@ -144,7 +144,7 @@ import { SkillDetailsModal } from './SkillDetailsModal';
 import type { PluginLoopSubmit } from './PluginLoopHome';
 import { localizeHomePresetTitle, localizePluginTitle } from './plugins-home/localization';
 import type { PluginUseAction } from './plugins-home/useActions';
-import { examplePresetSeedPrompt } from './plugins-home/presetSeedPrompt';
+import { examplePresetSeedPrompt, firstPromptParagraph } from './plugins-home/presetSeedPrompt';
 import { localizePluginDescription } from './plugins-home/localization';
 import type { Recommendation } from '../onboarding/recommendation';
 import type { OnboardingEntry } from '../onboarding/onboarding-entry';
@@ -162,6 +162,7 @@ export interface ActivePlugin {
   result: ApplyResult | null;
   inputs: Record<string, unknown>;
   inputFields: InputFieldSpec[];
+  confirmedInputNames: string[];
   inputsValid: boolean;
   queryTemplate: string | null;
   // True when `queryTemplate` covers only a suffix of the prompt (the plugin
@@ -1493,6 +1494,7 @@ export function HomeView({
       // rail rather than the Community grid / details modal. Stored on
       // `active.examplePick`; narrows `explicitPick` for routing only.
       examplePick?: boolean;
+      confirmedInputNames?: string[];
     },
     // Resolves true when the bound plugin left the composer submittable
     // (inputs valid, apply not failed/superseded) — callers use this to
@@ -1502,14 +1504,21 @@ export function HomeView({
     activePluginApplyRequestRef.current = applyRequestId;
     const shouldResolveImmediately = options?.deferApply !== true;
     const inputFields = options?.inputFields ?? record.manifest?.od?.inputs ?? [];
-    const optimisticInputs = hydratePluginInputs(
-      inputFields,
-      withHomePluginContextDefaults(
-        options?.inputs,
+    const projectKind = options?.projectKind ?? null;
+    const confirmedInputNames = options?.confirmedInputNames ?? [];
+    const optimisticInputs = normalizeHomeArtifactInputs(
+      projectKind,
+      hydratePluginInputs(
         inputFields,
-        selectedDesignSystemTitle,
-        workspaceContext?.workspaceName,
+        withHomePluginContextDefaults(
+          options?.inputs,
+          inputFields,
+          selectedDesignSystemTitle,
+          workspaceContext?.workspaceName,
+        ),
       ),
+      inputFields,
+      confirmedInputNames,
     );
     const inputsValid = pluginInputsAreValid(inputFields, optimisticInputs);
     const queryTemplate =
@@ -1540,6 +1549,7 @@ export function HomeView({
       result: null,
       inputs: optimisticInputs,
       inputFields,
+      confirmedInputNames,
       inputsValid,
       queryTemplate,
       queryTemplateAllowsPrefix: options?.queryTemplateAllowsPrefix === true,
@@ -1547,14 +1557,16 @@ export function HomeView({
       // null so the inline pattern-extraction in handlePromptChange
       // doesn't claim ownership of the user's typed text.
       lastRenderedPrompt: suppressPromptUpdate ? null : optimisticPrompt,
-      projectKind: options?.projectKind ?? null,
+      projectKind,
       chipId: options?.chipId ?? null,
       prototypeSubtypeId: options?.prototypeSubtypeId ?? null,
       mediaSurface: options?.mediaSurface ?? null,
       projectMetadata: homeCreateProjectMetadata(
-        options?.projectKind ?? null,
+        projectKind,
         optimisticInputs,
         options?.projectMetadata ?? null,
+        confirmedInputNames,
+        inputFields,
       ),
       editableInputNames: options?.editableInputNames ?? [],
       preserveInputFields: options?.preserveInputFields === true,
@@ -1620,11 +1632,14 @@ export function HomeView({
         result,
         inputs: mergedInputs,
         inputFields: mergedFields,
+        confirmedInputNames: prev.confirmedInputNames,
         inputsValid: pluginInputsAreValid(mergedFields, mergedInputs),
         projectMetadata: homeCreateProjectMetadata(
           prev.projectKind,
           mergedInputs,
           prev.projectMetadata,
+          prev.confirmedInputNames,
+          mergedFields,
         ),
       };
     });
@@ -2018,11 +2033,15 @@ export function HomeView({
     // injects the plugin's SKILL.md + example.html as generation context — the
     // output faithfully recreates the reference. `promptText` is the short,
     // editable seed; the full build spec rides along in the plugin context.
-    // deferApply mirrors the chip rail: bind now, resolve the snapshot on
-    // submit (submit() already re-resolves), so a preset click stays instant
-    // and doesn't fire an /apply roundtrip per card. The chip is already
-    // active when preset cards are visible, so reuse its project kind/metadata.
-    void usePlugin(record, promptText, {
+    const carried = active?.chipId === chipId
+      ? inputsToCarryIntoPreset(active)
+      : {};
+    const seed = examplePresetSeedPrompt(record, locale, () => promptText);
+    const nextPrompt = active?.projectKind === 'deck' && seed.fromRenderedQuery
+      ? promptTextWithCarriedDeckInputs(record, locale, promptText, carried)
+      : promptText;
+    void usePlugin(record, nextPrompt, {
+      ...carried,
       chipId,
       prototypeSubtypeId: active?.prototypeSubtypeId ?? null,
       projectKind: active?.projectKind ?? undefined,
@@ -2128,13 +2147,21 @@ export function HomeView({
       : nextInputs;
     const inputsValid = pluginInputsAreValid(active.inputFields, normalizedInputs);
     const inputsChanged = !inputsEqual(active.inputs, normalizedInputs);
+    const confirmedInputNames = confirmedInputNamesForUpdate(active, normalizedInputs);
     setActive({
       ...active,
       inputs: normalizedInputs,
+      confirmedInputNames,
       inputsValid,
       projectMetadata: active.mediaSurface
         ? metadataForHomeMediaComposer(active.mediaSurface, normalizedInputs, promptTemplates)
-        : homeCreateProjectMetadata(active.projectKind, normalizedInputs, active.projectMetadata),
+        : homeCreateProjectMetadata(
+            active.projectKind,
+            normalizedInputs,
+            active.projectMetadata,
+            confirmedInputNames,
+            active.inputFields,
+          ),
       result:
         inputsChanged && !inputsEqual(active.result?.appliedPlugin?.inputs, normalizedInputs)
           ? null
@@ -2240,9 +2267,16 @@ export function HomeView({
       : null;
     const inputFields = mediaComposer?.fields ?? active.inputFields;
     const queryTemplate = mediaComposer?.queryTemplate ?? active.queryTemplate;
+    const confirmedInputNames = confirmedInputNamesForUpdate(active, normalized);
     const projectMetadata = active.mediaSurface
       ? metadataForHomeMediaComposer(active.mediaSurface, normalized, promptTemplates)
-      : homeCreateProjectMetadata(active.projectKind, normalized, active.projectMetadata);
+      : homeCreateProjectMetadata(
+          active.projectKind,
+          normalized,
+          active.projectMetadata,
+          confirmedInputNames,
+          inputFields,
+        );
     const inputsValid = pluginInputsAreValid(inputFields, normalized);
     const nextRendered =
       queryTemplate !== null
@@ -2261,6 +2295,7 @@ export function HomeView({
       ...active,
       inputs: normalized,
       inputFields,
+      confirmedInputNames,
       queryTemplate,
       projectMetadata,
       editableInputNames: mediaComposer?.editableFieldNames ?? active.editableInputNames,
@@ -2857,20 +2892,7 @@ export function HomeView({
       // the user's selection — the plugin's `designSystem` input is only the
       // apply-template hint and is kept in sync via handleDesignSystemChange.
       const submittedDesignSystemId = designSystemId;
-      // Composer inputs are forwarded as-is; the deferred footer/media fields are
-      // stripped from this set just below to form the run-facing inputs.
       const submittedApplyInputs = submittedActive ? submittedActive.inputs : defaultInputs;
-      // Inputs forwarded to the run AND used to build the run-facing snapshot:
-      // drop every now-hidden footer/media setting so the first-turn
-      // question-form flow collects them instead of inheriting a baked-in
-      // default (`ratio: 16:9`, `duration: 5`, `audioType: speech`, …). The
-      // snapshot is resolved from these stripped inputs too — the daemon renders
-      // `## Plugin inputs` from `snapshot.inputs` and tells the agent not to
-      // re-ask about anything listed there, so leaving the deferred defaults in
-      // the snapshot would suppress the discovery flow even though
-      // `onSubmit.pluginInputs` was stripped. Stripping only removes non-required
-      // fields (`subject`/`style`/`aspect`/`mediaKind` stay), so the
-      // od-media-generation apply still validates.
       const submittedPluginInputs = submittedActive
         ? stripArtifactFooterInputs(submittedApplyInputs)
         : defaultInputs;
@@ -2959,6 +2981,8 @@ export function HomeView({
             submittedProjectKind,
             submittedActive?.inputs ?? null,
             submittedActive?.projectMetadata ?? fallbackProjectMetadata ?? null,
+            submittedActive?.confirmedInputNames ?? [],
+            submittedActive?.inputFields ?? [],
           );
       // A mentioned Skill travels with whatever the composer selected, rather
       // than replacing it: the pick decides the route, the Skill is material
@@ -3177,9 +3201,10 @@ export function HomeView({
         onAddMcp={onOpenMcp}
         onOpenPluginDetails={setDetailsRecord}
         onOpenSkillDetails={setDetailsSkill}
-        pluginInputFields={(active?.inputFields ?? []).filter(
-          (field) => !ARTIFACT_FOOTER_FIELD_NAMES.has(field.name),
-        )}
+        pluginInputFields={(active?.inputFields ?? []).filter((field) => (
+          !ARTIFACT_FOOTER_FIELD_NAMES.has(field.name)
+          || (active?.projectKind === 'deck' && (field.name === 'slideCount' || field.name === 'speakerNotes'))
+        ))}
         pluginInputValues={active?.inputs ?? {}}
         pluginInputTemplate={active?.queryTemplate ?? null}
         onPluginInputValuesChange={updateActiveInputs}
@@ -3565,13 +3590,6 @@ export function shouldShowActivePluginChip(active: ActivePlugin | null): boolean
   return active.record.id !== defaultPluginIdForChip(active.chipId);
 }
 
-// Prototype/deck-specific settings (fidelity, slide count, speaker notes) are
-// no longer promoted into the home composer footer, so the prototype/deck
-// footer keeps only the design-system picker. Media surfaces
-// (image/video/audio/hyperframes) defer the same way: image/video keep only
-// the design-system picker and audio/hyperframes keep nothing. The agent
-// infers omitted values and asks during the run only when a missing answer
-// materially changes the output.
 const ARTIFACT_FOOTER_FIELD_NAMES = new Set([
   'fidelity',
   'slideCount',
@@ -3591,10 +3609,6 @@ const ARTIFACT_FOOTER_FIELD_NAMES = new Set([
   'voice',
 ]);
 
-// The prototype/deck footer no longer exposes these settings, so plugin
-// defaults for them must NOT be seeded into the Home composer's inputs. The
-// runtime should infer or clarify from the actual brief instead of silently
-// treating a hidden footer default as a user choice.
 function stripArtifactFooterInputs(
   inputs: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -3609,31 +3623,124 @@ function stripArtifactFooterInputs(
   return next;
 }
 
-function footerInputNamesForChip(_chipId: string | null): string[] {
-  // The design-system picker moved out of the input-card footer to the
-  // persistent row below the composer (next to the working-directory picker),
-  // so it is selectable for every product kind — not just prototype/deck. No
-  // other setting is surfaced inline: the agent infers fidelity / ratio /
-  // duration / model / audio kind and asks only when the choice is material.
-  return [];
+function footerInputNamesForChip(chipId: string | null): string[] {
+  return chipId === 'deck' ? ['slideCount', 'speakerNotes'] : [];
+}
+
+function hasDeckSlideCount(value: unknown): boolean {
+  return typeof value === 'string' && value.trim().length > 0 && !/^\{\{\s*[a-zA-Z_][\w-]*\s*\}\}$/.test(value.trim());
+}
+
+function hasDeckSpeakerNotes(value: unknown): boolean {
+  return value === 'include speaker notes' || value === 'no speaker notes';
+}
+
+function confirmedInputNamesForUpdate(active: ActivePlugin, inputs: Record<string, unknown>): string[] {
+  if (active.projectKind !== 'deck') return active.confirmedInputNames;
+  const confirmed = new Set(active.confirmedInputNames);
+  for (const name of ['slideCount', 'speakerNotes']) {
+    if (Object.is(active.inputs[name], inputs[name])) continue;
+    const selected = name === 'slideCount'
+      ? hasDeckSlideCount(inputs[name])
+      : hasDeckSpeakerNotes(inputs[name]);
+    if (selected) confirmed.add(name);
+    else confirmed.delete(name);
+  }
+  return Array.from(confirmed);
+}
+
+function inputsToCarryIntoPreset(active: ActivePlugin): {
+  inputs?: Record<string, unknown>;
+  confirmedInputNames?: string[];
+} {
+  if (active.projectKind !== 'deck') return {};
+  const inputs: Record<string, unknown> = {};
+  const confirmedInputNames: string[] = [];
+  if (
+    active.confirmedInputNames.includes('slideCount')
+    && hasDeckSlideCount(active.inputs.slideCount)
+  ) {
+    inputs.slideCount = active.inputs.slideCount;
+    confirmedInputNames.push('slideCount');
+  }
+  if (active.inputFields.some((field) => field.name === 'speakerNotes')) {
+    inputs.speakerNotes = hasDeckSpeakerNotes(active.inputs.speakerNotes)
+      ? active.inputs.speakerNotes
+      : 'no speaker notes';
+    if (active.confirmedInputNames.includes('speakerNotes')) confirmedInputNames.push('speakerNotes');
+  }
+  return {
+    ...(Object.keys(inputs).length > 0 ? { inputs } : {}),
+    ...(confirmedInputNames.length > 0 ? { confirmedInputNames } : {}),
+  };
+}
+
+function promptTextWithCarriedDeckInputs(
+  record: InstalledPluginRecord,
+  locale: string,
+  promptText: string,
+  carried: { inputs?: Record<string, unknown>; confirmedInputNames?: string[] },
+): string {
+  const query = resolvePluginQueryFallback(record.manifest?.od?.useCase?.query, locale);
+  if (!query) return promptText;
+  const inputs = hydratePluginInputs(record.manifest?.od?.inputs ?? [], carried.inputs);
+  const confirmed = new Set(carried.confirmedInputNames ?? []);
+  if (!confirmed.has('slideCount')) delete inputs.slideCount;
+  if (
+    record.manifest?.od?.inputs?.some((field) => field.name === 'speakerNotes')
+    && !hasDeckSpeakerNotes(inputs.speakerNotes)
+  ) {
+    inputs.speakerNotes = 'no speaker notes';
+  }
+  return firstPromptParagraph(renderPluginBriefTemplate(query, inputs)) || promptText;
+}
+
+function normalizeHomeArtifactInputs(
+  projectKind: ProjectKind | null,
+  inputs: Record<string, unknown>,
+  inputFields: InputFieldSpec[],
+  confirmedInputNames: string[],
+): Record<string, unknown> {
+  if (projectKind !== 'deck') return inputs;
+  const next = { ...inputs };
+  if ('slideCount' in next && !confirmedInputNames.includes('slideCount')) next.slideCount = '';
+  if (
+    inputFields.some((field) => field.name === 'speakerNotes')
+    && !hasDeckSpeakerNotes(next.speakerNotes)
+  ) {
+    next.speakerNotes = 'no speaker notes';
+  }
+  return next;
 }
 
 function homeCreateProjectMetadata(
   projectKind: ProjectKind | null,
-  _inputs: Record<string, unknown> | null,
+  inputs: Record<string, unknown> | null,
   existing: ProjectMetadata | null,
+  confirmedInputNames: string[] = [],
+  inputFields: InputFieldSpec[] = [],
 ): ProjectMetadata | null {
   const kind = projectKind ?? existing?.kind ?? null;
   if (!kind) return existing;
 
-  // Artifact-specific settings (fidelity, speaker notes, slide count, …) are no
-  // longer collected in the home composer. We only seed `kind`; the prompt
-  // treats other fields as not provided, infers defaults, and asks only when
-  // a missing answer materially changes the result.
   const next: ProjectMetadata = {
     ...(existing ?? {}),
     kind,
   };
+  if (kind === 'deck') {
+    if (confirmedInputNames.includes('slideCount') && hasDeckSlideCount(inputs?.slideCount)) {
+      next.slideCount = String(inputs?.slideCount).trim();
+    } else {
+      delete next.slideCount;
+    }
+    if (hasDeckSpeakerNotes(inputs?.speakerNotes)) {
+      next.speakerNotes = inputs?.speakerNotes === 'include speaker notes';
+    } else if (inputFields.some((field) => field.name === 'speakerNotes')) {
+      next.speakerNotes = false;
+    } else {
+      delete next.speakerNotes;
+    }
+  }
   return next;
 }
 

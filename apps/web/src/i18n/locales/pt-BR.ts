@@ -1108,6 +1108,7 @@ export const ptBR: Dict = {
   'homeHero.footer.ratio': 'Proporção',
   'homeHero.footer.duration': 'Duração',
   'homeHero.footer.resolution': 'Resolução',
+  'homeHero.footer.pageQuantity': 'Quantidade de páginas',
   'homeHero.footer.speakerNotes': 'Notas',
   'homeHero.footer.noSpeakerNotes': 'Sem notas',
   'homeHero.footer.availableCount': '{n} disponíveis',
