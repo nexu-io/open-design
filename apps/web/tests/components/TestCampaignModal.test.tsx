@@ -1419,12 +1419,16 @@ describe("negotiated immutable Test context", () => {
 	it("rejects a re-acquired context that switches tester within one selection", async () => {
 		let posts = 0;
 		const member = (seed: string, tester: string) => ({ ...context(seed), testerMemberId: tester });
+		// The follow-up decision agrees with the foreign context, so only the
+		// selection's tester pin can reject it (a drift repair clears `context`).
 		const mock = server({
 			context: () => json(++posts === 1 ? member("one", "member-1") : member("two", "member-2")),
-			decision: () => json({ ...decision("two"), testContext: member("two", "member-1") }),
+			decision: url => new URL(url, "http://localhost").searchParams.get("contextToken") === context("two").contextToken
+				? json({ ...decision("two"), testContext: member("two", "member-2") })
+				: json({ ...decision("two"), testContext: member("two", "member-1") }),
 		});
 		vi.stubGlobal("fetch", mock); await start(); await failed();
-		expect(contextCalls(mock)).toBe(2);
+		expect(contextCalls(mock)).toBe(2); expect(runtimeCalls(mock)).toHaveLength(1);
 		expect(diagnostics.some(item => item.code === "touchpoint_decision_mismatch")).toBe(true);
 	});
 
