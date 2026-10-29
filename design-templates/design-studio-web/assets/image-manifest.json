@@ -1,0 +1,58 @@
+{
+  "$schema": "https://open-design.dev/schemas/image-manifest.v1.json",
+  "skill": "design-studio-web",
+  "design_system": "design-studio-web",
+  "default_quality": "high",
+  "slots": [
+    {
+      "id": "work-1",
+      "file": "work-1.svg",
+      "width": 1600,
+      "height": 1200,
+      "ratio": "4:3",
+      "prompt_section": "work-1 — Aether Objects",
+      "required": true,
+      "rekey_on_brand_change": true
+    },
+    {
+      "id": "work-2",
+      "file": "work-2.svg",
+      "width": 1600,
+      "height": 1200,
+      "ratio": "4:3",
+      "prompt_section": "work-2 — Field Notes 02",
+      "required": true,
+      "rekey_on_brand_change": true
+    },
+    {
+      "id": "work-3",
+      "file": "work-3.svg",
+      "width": 1600,
+      "height": 1200,
+      "ratio": "4:3",
+      "prompt_section": "work-3 — NOVA/AI",
+      "required": true,
+      "rekey_on_brand_change": true
+    },
+    {
+      "id": "work-4",
+      "file": "work-4.svg",
+      "width": 1600,
+      "height": 1200,
+      "ratio": "4:3",
+      "prompt_section": "work-4 — Still / Moving",
+      "required": true,
+      "rekey_on_brand_change": true
+    },
+    {
+      "id": "studio",
+      "file": "studio.svg",
+      "width": 1400,
+      "height": 1800,
+      "ratio": "7:9",
+      "prompt_section": "studio — Studio atmosphere",
+      "required": true,
+      "rekey_on_brand_change": true
+    }
+  ]
+}
