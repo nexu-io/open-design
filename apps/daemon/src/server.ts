@@ -151,6 +151,7 @@ import {
   resolveChatRunFirstOutputTimeoutMs,
   resolveChatRunInactivityTimeoutMs,
   runtimeEmissionCountsAsAgentProgress,
+  runtimeStdoutCountsAsAgentProgress,
   resolveChatRunShutdownGraceMs,
 } from './runtimes/chat-run-lifecycle.js';
 // Shared with `POST /api/runs/:id/steer` so the opening prompt and a B11
@@ -15519,13 +15520,12 @@ export async function startServer({
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
 
-    // Reset the inactivity watchdog on every raw stdout byte so that
-    // structured adapters that buffer partial lines (Codex item.completed,
-    // pi-rpc session/prompt, ACP agent messages) and models that spend a
-    // long time in non-streamed reasoning still keep the run alive.
+    // ACP accounts for activity after frame classification so private Write
+    // diagnostics cannot keep a stalled run alive. Other adapters retain
+    // raw-byte activity while buffering partial lines.
     child.stdout.on('data', (chunk) => {
       childStdoutSeen = true;
-      noteAgentActivity();
+      if (runtimeStdoutCountsAsAgentProgress(def.streamFormat)) noteAgentActivity();
       agentStdoutTail = `${agentStdoutTail}${chunk}`.slice(-2000);
     });
 
@@ -16569,6 +16569,7 @@ export async function startServer({
         knownPromptBudgetModel?.metadata?.contextWindowTokens ?? null;
       acpSession = attachAcpSession({
         child,
+        onAgentActivity: noteAgentActivity,
         prompt: composed,
         cwd: effectiveCwd,
         model: safeModel,
