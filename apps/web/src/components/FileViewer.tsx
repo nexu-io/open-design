@@ -226,6 +226,7 @@ import {
 import { fetchAppVersionInfo } from '../providers/registry';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
+import type { HighlightedCodeToken } from '../runtime/shiki';
 import { shouldConsumeSlideNav } from '../runtime/slide-nav';
 import { actionRequestKey, shouldConsumeActionRequest } from '../runtime/action-request';
 import { findHtmlEntriesReferencing } from '../runtime/jsx-module-refs';
@@ -945,6 +946,140 @@ async function highlightMarkdownCodeBlocks(html: string): Promise<string> {
     return highlightedPre;
   }));
   return changed ? root.innerHTML : html;
+}
+
+const MAX_HIGHLIGHT_SOURCE_CHARS = 100_000;
+const SYNTAX_LANGUAGE_BY_EXTENSION: Record<string, string> = {
+  cjs: 'javascript',
+  css: 'css',
+  cts: 'typescript',
+  htm: 'html',
+  html: 'html',
+  js: 'javascript',
+  jsx: 'jsx',
+  json: 'json',
+  mjs: 'javascript',
+  mts: 'typescript',
+  svg: 'xml',
+  ts: 'typescript',
+  tsx: 'tsx',
+  xhtml: 'html',
+};
+const SYNTAX_LANGUAGE_BY_MIME: Record<string, string> = {
+  'application/ecmascript': 'javascript',
+  'application/javascript': 'javascript',
+  'application/json': 'json',
+  'application/typescript': 'typescript',
+  'application/xhtml+xml': 'html',
+  'image/svg+xml': 'xml',
+  'text/css': 'css',
+  'text/html': 'html',
+  'text/javascript': 'javascript',
+  'text/jsx': 'jsx',
+  'text/json': 'json',
+  'text/tsx': 'tsx',
+  'text/typescript': 'typescript',
+};
+
+export function syntaxLanguageForFile(
+  file: Pick<ProjectFile, 'name' | 'mime'>,
+): string | null {
+  const extension = file.name.toLowerCase().match(/\.([^.]+)$/)?.[1] ?? '';
+  if (extension && SYNTAX_LANGUAGE_BY_EXTENSION[extension]) {
+    return SYNTAX_LANGUAGE_BY_EXTENSION[extension];
+  }
+  const mime = file.mime.toLowerCase().split(';', 1)[0]?.trim() ?? '';
+  return SYNTAX_LANGUAGE_BY_MIME[mime] ?? null;
+}
+
+function useHighlightThemeRevision(): number {
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    const bump = () => setRevision((current) => current + 1);
+    const observer = new MutationObserver(bump);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
+    const media = window.matchMedia?.('(prefers-color-scheme: dark)');
+    media?.addEventListener('change', bump);
+    return () => {
+      observer.disconnect();
+      media?.removeEventListener('change', bump);
+    };
+  }, []);
+  return revision;
+}
+
+function highlightedCodeText(lines: HighlightedCodeToken[][]): string {
+  return lines
+    .map((line) => line.map((token) => token.content).join(''))
+    .join('\n');
+}
+
+function HighlightedCode({
+  text,
+  language,
+}: {
+  text: string;
+  language: string | null;
+}) {
+  const themeRevision = useHighlightThemeRevision();
+  const [highlighted, setHighlighted] = useState<{
+    text: string;
+    language: string;
+    themeRevision: number;
+    lines: HighlightedCodeToken[][];
+  } | null>(null);
+
+  useEffect(() => {
+    if (!language || text.length > MAX_HIGHLIGHT_SOURCE_CHARS) {
+      setHighlighted(null);
+      return undefined;
+    }
+    let cancelled = false;
+    void import('../runtime/shiki')
+      .then(({ highlightCodeTokens }) => highlightCodeTokens(text, language))
+      .then((lines) => {
+        if (cancelled) return;
+        if (lines.length === 0 || highlightedCodeText(lines) !== text.replaceAll('\r\n', '\n')) {
+          setHighlighted(null);
+          return;
+        }
+        setHighlighted({ text, language, themeRevision, lines });
+      })
+      .catch(() => {
+        if (!cancelled) setHighlighted(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [language, text, themeRevision]);
+
+  const lines =
+    highlighted?.text === text &&
+    highlighted.language === language &&
+    highlighted.themeRevision === themeRevision
+      ? highlighted.lines
+      : null;
+  if (!lines) return text;
+
+  const nodes: ReactNode[] = [];
+  const lineBreaks = text.match(/\r\n|\n/g) ?? [];
+  lines.forEach((line, lineIndex) => {
+    line.forEach((token, tokenIndex) => {
+      nodes.push(
+        <span
+          key={`${lineIndex}:${tokenIndex}`}
+          style={token.color ? { color: token.color } : undefined}
+        >
+          {token.content}
+        </span>,
+      );
+    });
+    if (lineIndex < lines.length - 1) nodes.push(lineBreaks[lineIndex] ?? '\n');
+  });
+  return nodes;
 }
 
 function rewriteMarkdownImageSources(
@@ -7130,7 +7265,7 @@ function ReactComponentViewer({
             />
           </PreviewDrawOverlay>
         ) : (
-          <CodeWithLines text={source} />
+          <CodeWithLines text={source} language={syntaxLanguageForFile(file)} />
         )}
       </div>
     </div>
@@ -18622,7 +18757,9 @@ function HtmlViewer({
               sourceModeLoading ? (
                 <div className="viewer-empty">{t('fileViewer.loading')}</div>
               ) : (
-                <pre className="viewer-source">{source}</pre>
+                <pre className="viewer-source">
+                  <HighlightedCode text={source ?? ''} language={syntaxLanguageForFile(file)} />
+                </pre>
               )
             ) : null}
           </>
@@ -19871,7 +20008,7 @@ function TextViewer({
         {text === null ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
         ) : displayText !== null && lineCount > 0 ? (
-          <CodeWithLines text={displayText} />
+          <CodeWithLines text={displayText} language={syntaxLanguageForFile(file)} />
         ) : (
           <pre className="viewer-source">{displayText}</pre>
         )}
@@ -20036,7 +20173,7 @@ function MarkdownViewer({
   const [saveState, setSaveState] = useState<MarkdownSaveState>('idle');
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [highlightedHtml, setHighlightedHtml] = useState<{ source: string; html: string; themeRevision: number } | null>(null);
-  const [highlightThemeRevision, setHighlightThemeRevision] = useState(0);
+  const highlightThemeRevision = useHighlightThemeRevision();
   const [, bumpSavedRevision] = useState(0);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const markdownPreviewPaneRef = useRef<HTMLElement | null>(null);
@@ -20238,19 +20375,6 @@ function MarkdownViewer({
       }
     };
   }, [saveMarkdownText, text, viewerOnly]);
-
-  useEffect(() => {
-    const root = document.documentElement;
-    const bump = () => setHighlightThemeRevision((revision) => revision + 1);
-    const observer = new MutationObserver(bump);
-    observer.observe(root, { attributes: true, attributeFilter: ['data-theme'] });
-    const media = window.matchMedia?.('(prefers-color-scheme: dark)');
-    media?.addEventListener('change', bump);
-    return () => {
-      observer.disconnect();
-      media?.removeEventListener('change', bump);
-    };
-  }, []);
 
   async function copy() {
     if (text == null) return;
@@ -20730,7 +20854,13 @@ function markdownImageAlt(name: string): string {
     .trim() || 'image';
 }
 
-function CodeWithLines({ text }: { text: string }) {
+function CodeWithLines({
+  text,
+  language = null,
+}: {
+  text: string;
+  language?: string | null;
+}) {
   const lines = text.split('\n');
   // Trailing newline produces a phantom empty line — keep gutter aligned.
   const gutter = lines.map((_, i) => `${i + 1}`).join('\n');
@@ -20739,7 +20869,9 @@ function CodeWithLines({ text }: { text: string }) {
       <code className="gutter" aria-hidden>
         {gutter}
       </code>
-      <code className="lines">{text}</code>
+      <code className="lines">
+        <HighlightedCode text={text} language={language} />
+      </code>
     </pre>
   );
 }
