@@ -881,8 +881,8 @@ importers:
         version: 4.22.3
     optionalDependencies:
       '@powerformer/vela-cli':
-        specifier: 0.1.7
-        version: 0.1.7
+        specifier: 0.1.8
+        version: 0.1.8
 
   tools/pack:
     dependencies:
@@ -937,8 +937,8 @@ importers:
         version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.22.3)(yaml@2.9.0))
     optionalDependencies:
       '@powerformer/vela-cli':
-        specifier: 0.1.8-test.0
-        version: 0.1.8-test.0
+        specifier: 0.1.8
+        version: 0.1.8
 
   tools/release:
     dependencies:
@@ -2636,62 +2636,33 @@ packages:
   '@posthog/types@1.374.2':
     resolution: {integrity: sha512-ZghQSFMi+HFJNPvPjBoyY/jWQ+q6mSQVtWQxOHMSbBidUZjsyYbxYxBFbHy2qWLNe4mEpX+Wqir2Q4I/4AVvJQ==}
 
-  '@powerformer/vela-cli-darwin-arm64@0.1.7':
-    resolution: {integrity: sha512-d5KUhzf/eLaFVZk8RMeFh8OpMjInBCt9uuYaAOrruhcSeRaVi1JJtnguykq5S6VQCjXdLAoFmCHwWNWqu4cW7g==}
+  '@powerformer/vela-cli-darwin-arm64@0.1.8':
+    resolution: {integrity: sha512-g3aUzSD53L006CoVYcsa4Gzpqo5KhpEIrYICoGCgvJGKkeKUkSir318WaZkD3qamxxQoz2ymIro++sAv7ZRZ1g==}
     cpu: [arm64]
     os: [darwin]
 
-  '@powerformer/vela-cli-darwin-arm64@0.1.8-test.0':
-    resolution: {integrity: sha512-xFEy729yH45i6sPMFLoh/KPTe1PKMuL8N/2Fb7W7pVFjhiwB67s8ef6bAkNGIe459oAdGYCjrGTF58IUdfnoSQ==}
-    cpu: [arm64]
-    os: [darwin]
-
-  '@powerformer/vela-cli-darwin-x64@0.1.7':
-    resolution: {integrity: sha512-AlTa1wzzd/Uful8rr4+k63w2Xrsu0JEG/OAPc07baiFOqGLgDfN2UcqcLgTR+p3FxFscg9Gf5kY7xYClUpcvpw==}
+  '@powerformer/vela-cli-darwin-x64@0.1.8':
+    resolution: {integrity: sha512-RpJ9WO9+SgAoIySfOzlcZSCR+iikMmFmKEbOIO/ONCgF2uO/AesSkz6FOUmti+Szgm9S9cDRSXwnEm5SFYg8qQ==}
     cpu: [x64]
     os: [darwin]
 
-  '@powerformer/vela-cli-darwin-x64@0.1.8-test.0':
-    resolution: {integrity: sha512-l6Cr3NHHhwhB9BZsx58hCXQsLZNMgZw2xONrfdHrj5Iz98X+JzMB9REEZOeJSHg7tAEtq7xsFl8cpOhWVBecaQ==}
-    cpu: [x64]
-    os: [darwin]
-
-  '@powerformer/vela-cli-linux-arm64@0.1.7':
-    resolution: {integrity: sha512-HJR/KQTN/B3sREH6aQWTlOcWUM296aYVMGPoTC+a+dkoPtQDYa06PnYFruSVXMFTqxvud/jT6PCR/6YXvT29WQ==}
+  '@powerformer/vela-cli-linux-arm64@0.1.8':
+    resolution: {integrity: sha512-b1cG5lxA8aDARTceWotYLGGVOfwiL5RW4B0/JMCdNwYY/ZbWGOCtSqiTUwLel5pIR2+c538VfaYh822DPuwuNA==}
     cpu: [arm64]
     os: [linux]
 
-  '@powerformer/vela-cli-linux-arm64@0.1.8-test.0':
-    resolution: {integrity: sha512-Vk43HJXMqqLbEbmLlMxjGwvHjHcJPjzWcqd2o0Y0sG8hxy4YCQ5n43yDilYDGB2AHkoYgIFfWj83e2iG570aNQ==}
-    cpu: [arm64]
-    os: [linux]
-
-  '@powerformer/vela-cli-linux-x64@0.1.7':
-    resolution: {integrity: sha512-7hbz1FaEhDCBAnc5Z48rFs7mDr3haeiWEI7dFMJrxsQSpCV0ATzwQBbggLCeoIp5OFkScSQL6k+KJBk5HmBsDg==}
+  '@powerformer/vela-cli-linux-x64@0.1.8':
+    resolution: {integrity: sha512-Epyp40tWpxFgrwxfFvRhSJ8KxUsuD7wZQ24MmFyHjZjS+5oxdx4itsBhT19eoxQ+D5cV0MBJH/WLcIJEsgk/kQ==}
     cpu: [x64]
     os: [linux]
 
-  '@powerformer/vela-cli-linux-x64@0.1.8-test.0':
-    resolution: {integrity: sha512-pJ7SSTacF5co29LPSAW61Nkqsn3fQ7ULP+jCvOF6tzlF2pAoSkhItFwxw8F9ngr+xwHt6a6pHKTRh2tppoBdQA==}
-    cpu: [x64]
-    os: [linux]
-
-  '@powerformer/vela-cli-win32-x64@0.1.7':
-    resolution: {integrity: sha512-UnrKQFeb9FFxewkOaepYDrWAvPZ5Mk/+nUd3qJKSH3Ek7YfMbPaWp8aD6mXo6gB23ym8HwYVbrwNOSET2HTc/Q==}
+  '@powerformer/vela-cli-win32-x64@0.1.8':
+    resolution: {integrity: sha512-aP+2xe3xaFWZO0Gl0cCoPgiyjtO+7ozduLEuPzHASAMLpM9S0iDgnWKDgCA95udhyxW7h4uY26Gh+THNtds3Pg==}
     cpu: [x64]
     os: [win32]
 
-  '@powerformer/vela-cli-win32-x64@0.1.8-test.0':
-    resolution: {integrity: sha512-pyazH9j+E6NZWQOMs87sx30RJhfYcIFYBTIs9iuAILqrhiPsRIb+R9eqrlAFPH27SR24vWLhmAjC7pOwqgr7eQ==}
-    cpu: [x64]
-    os: [win32]
-
-  '@powerformer/vela-cli@0.1.7':
-    resolution: {integrity: sha512-MT6M/oIt9wUIDSewPYkH6bNKjwlp8wdkiBPa0VbTW9VEZGd+rT3pbTCDECIM4aTcnGz/x7h4vZQl67g8ZfiKoA==}
-    hasBin: true
-
-  '@powerformer/vela-cli@0.1.8-test.0':
-    resolution: {integrity: sha512-N0kDneFBBflZBTO7I7sdsw/7RvqgVZEqSGN3+H2rU4DBln+2iRNi/tblRJfXb3TbXDpB9/w7XeXCt+l9SLtHuA==}
+  '@powerformer/vela-cli@0.1.8':
+    resolution: {integrity: sha512-2iVHAl0CVXqwYMPEcsjWtkbg0xnjDgpXjD0lRGMuF8pnn8BdRzPr56rq1XUfj0VSng8xCuTK6gjnZqSnIcHRpg==}
     hasBin: true
 
   '@preact/signals-core@1.14.2':
@@ -8505,52 +8476,28 @@ snapshots:
 
   '@posthog/types@1.374.2': {}
 
-  '@powerformer/vela-cli-darwin-arm64@0.1.7':
+  '@powerformer/vela-cli-darwin-arm64@0.1.8':
     optional: true
 
-  '@powerformer/vela-cli-darwin-arm64@0.1.8-test.0':
+  '@powerformer/vela-cli-darwin-x64@0.1.8':
     optional: true
 
-  '@powerformer/vela-cli-darwin-x64@0.1.7':
+  '@powerformer/vela-cli-linux-arm64@0.1.8':
     optional: true
 
-  '@powerformer/vela-cli-darwin-x64@0.1.8-test.0':
+  '@powerformer/vela-cli-linux-x64@0.1.8':
     optional: true
 
-  '@powerformer/vela-cli-linux-arm64@0.1.7':
+  '@powerformer/vela-cli-win32-x64@0.1.8':
     optional: true
 
-  '@powerformer/vela-cli-linux-arm64@0.1.8-test.0':
-    optional: true
-
-  '@powerformer/vela-cli-linux-x64@0.1.7':
-    optional: true
-
-  '@powerformer/vela-cli-linux-x64@0.1.8-test.0':
-    optional: true
-
-  '@powerformer/vela-cli-win32-x64@0.1.7':
-    optional: true
-
-  '@powerformer/vela-cli-win32-x64@0.1.8-test.0':
-    optional: true
-
-  '@powerformer/vela-cli@0.1.7':
+  '@powerformer/vela-cli@0.1.8':
     optionalDependencies:
-      '@powerformer/vela-cli-darwin-arm64': 0.1.7
-      '@powerformer/vela-cli-darwin-x64': 0.1.7
-      '@powerformer/vela-cli-linux-arm64': 0.1.7
-      '@powerformer/vela-cli-linux-x64': 0.1.7
-      '@powerformer/vela-cli-win32-x64': 0.1.7
-    optional: true
-
-  '@powerformer/vela-cli@0.1.8-test.0':
-    optionalDependencies:
-      '@powerformer/vela-cli-darwin-arm64': 0.1.8-test.0
-      '@powerformer/vela-cli-darwin-x64': 0.1.8-test.0
-      '@powerformer/vela-cli-linux-arm64': 0.1.8-test.0
-      '@powerformer/vela-cli-linux-x64': 0.1.8-test.0
-      '@powerformer/vela-cli-win32-x64': 0.1.8-test.0
+      '@powerformer/vela-cli-darwin-arm64': 0.1.8
+      '@powerformer/vela-cli-darwin-x64': 0.1.8
+      '@powerformer/vela-cli-linux-arm64': 0.1.8
+      '@powerformer/vela-cli-linux-x64': 0.1.8
+      '@powerformer/vela-cli-win32-x64': 0.1.8
     optional: true
 
   '@preact/signals-core@1.14.2': {}
