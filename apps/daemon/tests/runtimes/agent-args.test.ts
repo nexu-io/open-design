@@ -733,6 +733,8 @@ test('antigravity runs headless stream-json with the prompt as one agy user mess
       'Gemini 3.5 Flash (High)',
       'Gemini 3.5 Flash (Medium)',
       'Gemini 3.5 Flash (Low)',
+      'Claude Sonnet 5.5 (Thinking)',
+      'Claude Opus 5.5 (Thinking)',
       'Claude Sonnet 4.6 (Thinking)',
       'Claude Opus 4.6 (Thinking)',
       'GPT-OSS 120B (Medium)',
