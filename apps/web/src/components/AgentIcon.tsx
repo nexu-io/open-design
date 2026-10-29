@@ -15,6 +15,7 @@ const ICON_EXT: Record<string, 'svg' | 'png'> = {
   amr: 'svg',
   claude: 'svg',
   codex: 'svg',
+  'command-code': 'svg',
   gemini: 'svg',
   opencode: 'svg',
   'cursor-agent': 'svg',
@@ -58,6 +59,7 @@ const MONO_ICONS = new Set([
   'mimo',
   'kilo',
   'grok-build',
+  'command-code',
 ]);
 
 export function AgentIcon({ id, size = 36, className }: Props) {

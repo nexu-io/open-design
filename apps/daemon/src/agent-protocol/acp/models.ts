@@ -228,6 +228,9 @@ export async function detectAcpModels({
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...env },
+      // ACP binaries are `.cmd` shims on Windows (vela, and the ACP-family
+      // CLIs); a probe must not flash a console window during detection.
+      windowsHide: true,
     });
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
