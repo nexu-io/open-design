@@ -363,14 +363,27 @@ export function mediaExecutionPolicyDenial(
   return null;
 }
 
+/**
+ * Optional starter sources for a visible Motion composition. `hand-painted`
+ * is the p5/p5.brush painting engine: a 5-second, 16:9, silent source that
+ * renders through `HAND_PAINTED_VIDEO_MODEL` instead of HyperFrames.
+ */
+export const MOTION_SCAFFOLD_TEMPLATES = ['hand-painted'] as const;
+export type MotionScaffoldTemplate = (typeof MOTION_SCAFFOLD_TEMPLATES)[number];
+
+/** Internal renderer id for `hand-painted` Motion sources (kept for compatibility). */
+export const HAND_PAINTED_VIDEO_MODEL = 'claude-animation-p5';
+
 /** Request for Open Design's deterministic local HyperFrames scaffold. */
 export interface HyperFramesScaffoldRequest {
   /** Project-relative path in the form `.hyperframes-cache/<id>` or visible `motion-source/<id>`. */
   compositionDir: string;
+  /** Starter source; only valid under `motion-source/<id>`. Omit for the blank GSAP composition. */
+  template?: MotionScaffoldTemplate;
 }
 
-/** Files created before the agent authors the composition HTML. */
+/** Project-relative files (inside `compositionDir`) created before the agent authors the composition. */
 export interface HyperFramesScaffoldResponse {
   compositionDir: string;
-  files: ['hyperframes.json', 'meta.json', 'index.html', ...string[]];
+  files: string[];
 }

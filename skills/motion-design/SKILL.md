@@ -182,6 +182,13 @@ SVG/Canvas. HTML/SVG suit typography, crisp diagrams and UI; Canvas suits dense
 marks, fields and procedural worlds. Combine them when useful. Preserve an
 existing supported renderer instead of rebuilding it just to fit this default.
 
+Hand-painted option: when the brief asks for a brush, ink, charcoal or
+hand-drawn cartoon look AND fits 5 seconds, 16:9 and silence, the host offers a
+painted p5 source instead of GSAP. Scaffold it with `--template hand-painted`
+and follow the Hand-painted Motion template guidance it is paired with; it
+renders through `--model claude-animation-p5`. Anything longer, portrait or
+with sound stays on the GSAP workflow below.
+
 Keep duration, frame size, palette, type scale, easing and scene timings in one
 small configuration. Group each scene's elements and motion together. Separate
 content/data from drawing. Reuse geometry and cached textures; cap offscreen

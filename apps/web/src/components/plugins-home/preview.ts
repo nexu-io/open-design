@@ -107,6 +107,22 @@ function readPreview(record: InstalledPluginRecord): PreviewBlock | null {
   return od.preview as PreviewBlock;
 }
 
+/** Relative media assets belong to the plugin folder, not the app's current URL. */
+function previewAssetUrl(
+  value: unknown,
+  record: InstalledPluginRecord,
+  workspaceContext?: WorkspaceCollabContext | null,
+): string | null {
+  if (typeof value !== 'string' || !value) return null;
+  if (/^(?:[a-z][a-z0-9+.-]*:|\/)/i.test(value)) return value;
+  const parts = value.replace(/^(\.\/)+/, '').split('/');
+  if (parts.some((part) => !part || part === '..')) return null;
+  return workspaceResourceUrl(
+    `/api/plugins/${encodeURIComponent(record.id)}/asset/${parts.map(encodeURIComponent).join('/')}`,
+    workspaceContext,
+  );
+}
+
 // Pre-baked hover-pan clip attached by the daemon (scripts/bake-plugin-previews.mjs),
 // kept separate from `od.preview` so only gallery tiles use it.
 function readBakedPreview(
@@ -216,10 +232,10 @@ export function inferPluginPreview(
 
   if (preview) {
     const t = typeof preview.type === 'string' ? preview.type.toLowerCase() : '';
-    const poster = typeof preview.poster === 'string' ? preview.poster : null;
-    const video = typeof preview.video === 'string' ? preview.video : null;
-    const gif = typeof preview.gif === 'string' ? preview.gif : null;
-    const audio = typeof preview.audio === 'string' ? preview.audio : null;
+    const poster = previewAssetUrl(preview.poster, record, opts?.workspaceContext);
+    const video = previewAssetUrl(preview.video, record, opts?.workspaceContext);
+    const gif = previewAssetUrl(preview.gif, record, opts?.workspaceContext);
+    const audio = previewAssetUrl(preview.audio, record, opts?.workspaceContext);
     const entry = typeof preview.entry === 'string' ? preview.entry : null;
 
     if (t === 'html' && entry) {

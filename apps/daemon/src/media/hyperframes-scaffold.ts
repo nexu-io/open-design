@@ -1,9 +1,10 @@
-import type { HyperFramesScaffoldResponse } from '@open-design/contracts';
+import { MOTION_SCAFFOLD_TEMPLATES, type HyperFramesScaffoldResponse, type MotionScaffoldTemplate } from '@open-design/contracts';
 import { createRequire } from 'node:module';
 import { injectMotionSourcePlayer } from '@open-design/contracts/runtime/motion-source-player';
 import { findRealTagEnd, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
 import { lstat, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { writeHandPaintedSource } from './hand-painted.js';
 
 const require = createRequire(import.meta.url);
 
@@ -61,7 +62,17 @@ export async function scaffoldHyperFramesComposition(input: {
   projectDir: string;
   compositionDir: string;
   now?: Date;
+  /** Optional starter; `hand-painted` requires `motion-source/<id>` and `handPaintedRuntimeDir`. */
+  template?: unknown;
+  /** Bundled `plugins/_official/examples/claude-animation/runtime` directory. */
+  handPaintedRuntimeDir?: string | null;
 }): Promise<HyperFramesScaffoldResult> {
+  const template = input.template;
+  if (template !== undefined && template !== null && template !== ''
+    && !(MOTION_SCAFFOLD_TEMPLATES as readonly unknown[]).includes(template)) {
+    throw new Error(`template must be one of: ${MOTION_SCAFFOLD_TEMPLATES.join(', ')}`);
+  }
+  const motionTemplate = (template || undefined) as MotionScaffoldTemplate | undefined;
   if (!path.isAbsolute(input.projectDir)) {
     throw new Error('projectDir must be absolute');
   }
@@ -77,6 +88,12 @@ export async function scaffoldHyperFramesComposition(input: {
     throw new Error('compositionDir must be inside .hyperframes-cache or motion-source as <root>/<id>');
   }
   const compositionRoot = parts[0]!;
+  if (motionTemplate && compositionRoot !== 'motion-source') {
+    throw new Error('template is only available for visible motion-source/<id> compositions');
+  }
+  if (motionTemplate === 'hand-painted' && !input.handPaintedRuntimeDir) {
+    throw new Error('hand-painted runtime is not bundled with this daemon');
+  }
   const cacheDir = path.join(input.projectDir, compositionRoot);
   await mkdir(cacheDir, { recursive: true });
   const cacheStat = await lstat(cacheDir);
@@ -93,6 +110,22 @@ export async function scaffoldHyperFramesComposition(input: {
   }
 
   await mkdir(targetDir);
+  if (motionTemplate === 'hand-painted') {
+    try {
+      const metadata = `${JSON.stringify({
+        id: compositionId,
+        name: compositionId,
+        template: motionTemplate,
+        createdAt: (input.now ?? new Date()).toISOString(),
+      }, null, 2)}\n`;
+      await writeFile(path.join(targetDir, 'meta.json'), metadata, { encoding: 'utf8', flag: 'wx' });
+      const written = await writeHandPaintedSource(targetDir, input.handPaintedRuntimeDir!);
+      return { compositionDir: `${compositionRoot}/${compositionId}`, files: ['meta.json', ...written] };
+    } catch (error) {
+      await rm(targetDir, { recursive: true, force: true });
+      throw error;
+    }
+  }
   const files: HyperFramesScaffoldResult['files'] = ['hyperframes.json', 'meta.json', 'index.html', ...(compositionRoot === 'motion-source' ? ['gsap.min.js'] : [])];
   try {
     const createdAt = (input.now ?? new Date()).toISOString();

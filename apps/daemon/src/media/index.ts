@@ -59,7 +59,6 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { Agent as UndiciAgent } from 'undici';
-import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import { load as loadHtml } from 'cheerio';
 import { SETTINGS_MEDIA_PROVIDERS_PATH } from '@open-design/contracts';
 import {
@@ -95,8 +94,10 @@ import {
   resolveHyperFramesCliPath,
   resolveHyperFramesNodeBin,
 } from './hyperframes-runtime.js';
-import { prepareHyperFramesAudio, hyperFramesAudioEncodingArgs, type HyperFramesAudioTrack } from './hyperframes-audio.js';
+import { prepareHyperFramesAudio } from './hyperframes-audio.js';
 import { renderVelaImage, renderVelaVideo } from './vela.js';
+import { encodeFramesMp4 } from './frame-encoding.js';
+import { renderHandPainted, assertHandPaintedOptions } from './hand-painted.js';
 import {
   ensureProject,
   kindFor,
@@ -479,6 +480,8 @@ export async function generateMedia(args: {
     }
   }
 
+  if (def.provider === 'claude-animation') assertHandPaintedOptions({ length, aspect });
+
   // Clamp registry-bound numeric inputs to their allowed buckets so a
   // hallucinated --length 9999999 doesn't reach a real provider as-is
   // when stubs are swapped for paid integrations.
@@ -746,6 +749,17 @@ export async function generateMedia(args: {
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'claude-animation' && surface === 'video') {
+      // Hand-painted Motion: an editable motion-source/<id> composition whose
+      // local p5 engine is captured frame by frame, then checked like any
+      // Motion export (linked MP4 path, silent audio policy, decodable frame).
+      const result = await renderHandPainted({
+        projectDir: dir, compositionDir: ctx.compositionDir, outputPath: safeOut,
+        desktopFrameRenderer: args.desktopFrameRenderer ?? null, onProgress: args.onProgress,
+      });
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = '.mp4';
     } else if (def.provider === 'hyperframes' && surface === 'video') {
       // HyperFrames is templated by the agent (it reads the vendored
       // skill at skills/hyperframes/SKILL.md and writes a composition
@@ -825,7 +839,7 @@ export async function generateMedia(args: {
     // HyperFrames is a local render, not a remote provider. Falling back
     // to a stub here hides actionable composition/preflight failures and
     // can make the agent retry or narrate a fake MP4 as success.
-    if (def.provider === 'hyperframes' || def.provider === 'vela') {
+    if (def.provider === 'hyperframes' || def.provider === 'claude-animation' || def.provider === 'vela') {
       throw err;
     }
     // A real provider failed (network blip, 4xx, missing key, …). We
@@ -4017,7 +4031,10 @@ async function renderHyperFramesWithDesktop(
   }
 
   onProgress?.(`Encoding ${rendered.frameCount} frame(s) at ${rendered.fps} fps…`);
-  await encodeHyperFramesMp4(rendered.framePattern, rendered.fps, tmpOutput, audio.tracks, rendered.frameCount / rendered.fps);
+  await encodeFramesMp4(rendered.framePattern, rendered.fps, tmpOutput, {
+    tracks: audio.tracks,
+    duration: rendered.frameCount / rendered.fps,
+  });
 }
 
 export function hyperFramesCompositionMetrics(html: string): {
@@ -4141,65 +4158,6 @@ ${MOTION_TIMELINE_CHECK_SCRIPT}
     return sourceHtml.slice(0, bodyClose) + bridge + sourceHtml.slice(bodyClose);
   }
   return `${sourceHtml}${bridge}`;
-}
-
-function encodeHyperFramesMp4(
-  framePattern: string,
-  fps: number,
-  outputPath: string,
-  audioTracks: HyperFramesAudioTrack[] = [],
-  duration = 0,
-): Promise<void> {
-  const ffmpegPath = process.env.HYPERFRAMES_FFMPEG_PATH?.trim() || ffmpegInstaller.path;
-  return new Promise<void>((resolve, reject) => {
-    const child = spawn(
-      ffmpegPath,
-      [
-        '-y',
-        '-hide_banner',
-        '-loglevel',
-        'error',
-        '-framerate',
-        String(fps),
-        '-start_number',
-        '0',
-        '-i',
-        framePattern,
-        ...audioTracks.flatMap((track) => ['-protocol_whitelist', 'file,pipe', '-f', track.format, '-i', track.file]),
-        ...hyperFramesAudioEncodingArgs(audioTracks, duration),
-        '-vf',
-        'pad=ceil(iw/2)*2:ceil(ih/2)*2',
-        '-c:v',
-        'libx264',
-        '-pix_fmt',
-        'yuv420p',
-        '-movflags',
-        '+faststart',
-        outputPath,
-      ],
-      { stdio: ['ignore', 'ignore', 'pipe'] },
-    );
-    let stderr = '';
-    child.stderr.on('data', (chunk) => {
-      stderr += chunk.toString('utf8');
-      if (stderr.length > 8000) stderr = stderr.slice(-8000);
-    });
-    const timer = setTimeout(() => {
-      child.kill('SIGKILL');
-      reject(new Error('HyperFrames FFmpeg encoding timed out after 5 minutes'));
-    }, HYPERFRAMES_RENDER_TIMEOUT_MS);
-    child.once('error', (error) => {
-      clearTimeout(timer);
-      reject(error);
-    });
-    child.once('close', (code, signal) => {
-      clearTimeout(timer);
-      if (code === 0) return resolve();
-      reject(new Error(
-        `FFmpeg encoding failed (${signal ? `signal ${signal}` : `exit ${String(code)}`}): ${stderr.trim()}`,
-      ));
-    });
-  });
 }
 
 async function assertHyperFramesCompositionFile(

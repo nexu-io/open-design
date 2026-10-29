@@ -8,7 +8,7 @@
 // surface.
 
 import { describe, expect, it } from 'vitest';
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type { InstalledPluginRecord, WorkspaceCollabContext } from '@open-design/contracts';
 import { inferPluginPreview } from '../../src/components/plugins-home/preview';
 
 interface MakeArgs {
@@ -56,6 +56,29 @@ function make(args: MakeArgs): InstalledPluginRecord {
 }
 
 describe('inferPluginPreview', () => {
+  it('serves plugin-relative media through the plugin asset route', () => {
+    const out = inferPluginPreview(make({
+      id: 'local animation',
+      preview: { type: 'video', poster: './assets/poster.jpg', video: './assets/demo.mp4' },
+    }));
+    expect(out).toMatchObject({
+      kind: 'media',
+      poster: '/api/plugins/local%20animation/asset/assets/poster.jpg',
+      videoUrl: '/api/plugins/local%20animation/asset/assets/demo.mp4',
+    });
+  });
+
+  it('preserves workspace authority on plugin-relative preview assets', () => {
+    const out = inferPluginPreview(make({
+      id: 'local-animation',
+      preview: { type: 'video', poster: './assets/poster.jpg', video: './assets/demo.mp4' },
+    }), { workspaceContext: { workspaceId: 'team', workspaceMemberId: 'member' } as WorkspaceCollabContext });
+    expect(out).toMatchObject({
+      poster: '/api/plugins/local-animation/asset/assets/poster.jpg?workspaceId=team&workspaceMemberId=member',
+      videoUrl: '/api/plugins/local-animation/asset/assets/demo.mp4?workspaceId=team&workspaceMemberId=member',
+    });
+  });
+
   it('classifies image-template plugins as media/image', () => {
     const out = inferPluginPreview(
       make({

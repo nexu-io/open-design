@@ -23,6 +23,7 @@ import {
   IMAGE_MODELS,
   VIDEO_MODELS,
 } from '../media/models.js';
+import { HAND_PAINTED_VIDEO_MODEL } from '@open-design/contracts';
 import type { ByokMediaDefaults, MediaExecutionPolicy, MediaSurface } from '@open-design/contracts';
 
 function fmtList(ids: string[]): string {
@@ -30,7 +31,9 @@ function fmtList(ids: string[]): string {
 }
 
 const IMAGE_IDS = fmtList(IMAGE_MODELS.map((m) => m.id));
-const VIDEO_IDS = fmtList(VIDEO_MODELS.map((m) => m.id));
+// The hand-painted renderer only accepts a scaffolded Motion source, so it is
+// taught by that template's guidance rather than offered as a general model.
+const VIDEO_IDS = fmtList(VIDEO_MODELS.filter((m) => m.id !== HAND_PAINTED_VIDEO_MODEL).map((m) => m.id));
 const AUDIO_MUSIC_IDS = fmtList(AUDIO_MODELS_BY_KIND.music.map((m) => m.id));
 const AUDIO_SPEECH_IDS = fmtList(AUDIO_MODELS_BY_KIND.speech.map((m) => m.id));
 const AUDIO_SFX_IDS = fmtList(AUDIO_MODELS_BY_KIND.sfx.map((m) => m.id));

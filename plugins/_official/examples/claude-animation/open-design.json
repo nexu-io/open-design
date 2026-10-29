@@ -1,0 +1,77 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-claude-animation",
+  "title": "Hand-painted Motion",
+  "version": "0.1.0",
+  "publishedAt": "2026-10-12T11:22:13Z",
+  "description": "A 5-second, 16:9, silent hand-painted character film: an editable Motion source painted with p5.brush and John Heibel's MIT painting/timeline toolkit, plus the rendered MP4.",
+  "description_i18n": {
+    "en": "A 5-second, 16:9, silent hand-painted character film: an editable Motion source painted with p5.brush and John Heibel's MIT painting/timeline toolkit, plus the rendered MP4.",
+    "zh-CN": "5 秒、16:9、无声的手绘角色动效：交付可编辑、可回放的 Motion 源码（p5.brush 与 John Heibel 的开源绘画/时间轴引擎）和导出的 MP4。",
+    "zh-TW": "5 秒、16:9、無聲的手繪角色動效：交付可編輯、可回放的 Motion 原始碼（p5.brush 與 John Heibel 的開源繪畫/時間軸引擎）和匯出的 MP4。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "OpenDesign"
+  },
+  "tags": [
+    "example",
+    "first-party",
+    "video",
+    "motion-design",
+    "hand-painted",
+    "character-animation"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "surface": "video",
+    "scenario": "video",
+    "preview": {
+      "type": "video",
+      "entry": "./example.html",
+      "poster": "./assets/cover.jpg",
+      "video": "./assets/example.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "Make a 5-second silent hand-painted cartoon of an original rounded teal bird meeting a butterfly in a sunny garden. Landscape 16:9, with an iris opening and closing, a surprised reaction and a happy bounce.",
+        "zh-CN": "制作一个 5 秒、16:9、无声的手绘动画：一只原创的圆润青色小鸟在花园里遇到蝴蝶，从惊讶到开心地跳起来，开头和结尾使用圆形转场。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "A little bird meets a butterfly"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        },
+        {
+          "ref": "motion-design"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  },
+  "title_i18n": {
+    "en": "Hand-painted Motion",
+    "zh-CN": "手绘动效",
+    "zh-TW": "手繪動效",
+    "de": "Handgemalte Motion"
+  }
+}

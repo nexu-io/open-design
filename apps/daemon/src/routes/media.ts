@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import { parseStockSearchRequest, type StockSearchRequest } from '@open-design/contracts';
 import { resolveProjectWritePath, validateProjectPath } from '../projects.js';
 import { stockSearch, StockSearchServiceError, StockSearchInputError } from '../media/stock-search.js';
@@ -233,7 +234,11 @@ export { mediaTaskErrorFromFailure };
 export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) {
   const { db, design } = ctx;
   const { sendApiError, requireLocalDaemonRequest, isLocalSameOrigin, resolvedPortRef } = ctx.http;
-  const { PROJECT_ROOT, PROJECTS_DIR, RUNTIME_DATA_DIR } = ctx.paths;
+  const { PROJECT_ROOT, PROJECTS_DIR, RUNTIME_DATA_DIR, BUNDLED_PLUGINS_DIR } = ctx.paths;
+  // Hand-painted Motion starter + engine ship inside the bundled example plugin.
+  const handPaintedRuntimeDir = BUNDLED_PLUGINS_DIR
+    ? path.join(BUNDLED_PLUGINS_DIR, 'examples', 'claude-animation', 'runtime')
+    : null;
   // Derived from the one resolved daemon data root; the store rejects anything
   // else, so there is no second data root to drift.
   const chatArtifactBlobs = createChatArtifactBlobStore({ dataDir: RUNTIME_DATA_DIR });
@@ -623,6 +628,8 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     const result: HyperFramesScaffoldResponse = await scaffoldHyperFramesComposition({
       projectDir,
       compositionDir: body.compositionDir,
+      template: body.template,
+      handPaintedRuntimeDir,
     });
     return res.status(201).json(result);
   };

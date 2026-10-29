@@ -167,6 +167,9 @@ const residualAllowedPathPrefixes = [
   "e2e/ui/test-results/",
   // Vendored upstream HyperFrames helper scripts (design template).
   "design-templates/hyperframes/scripts/",
+  // Pinned MIT browser engine from JohnHeibel/ClaudeAnimationBase; retained
+  // byte-for-byte and copied into hand-painted Motion sources by the scaffold.
+  "plugins/_official/examples/claude-animation/runtime/",
   // Vendored upstream Web Clone skill helper scripts. These are portable
   // Node-run skill utilities executed from user workspaces via explicit script
   // paths, and stay as `.mjs` to preserve the upstream skill packaging.

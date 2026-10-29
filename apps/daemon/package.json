@@ -61,6 +61,8 @@
     "kiwi-schema": "0.5.0",
     "multer": "2.2.0",
     "node-pty": "1.1.0",
+    "p5": "2.3.3",
+    "p5.brush": "2.2.3",
     "pdf-lib": "1.17.1",
     "postcss": "8.5.15",
     "posthog-node": "5.34.6",

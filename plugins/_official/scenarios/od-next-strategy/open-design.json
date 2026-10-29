@@ -165,14 +165,14 @@
               },
               {
                 "path": "./assets/task-profiles/motion-design.md",
-                "version": "1.3.2"
+                "version": "1.3.3"
               }
             ]
           },
           {
             "taskType": "motion-design",
             "path": "./assets/task-profiles/motion-design.md",
-            "version": "1.3.2",
+            "version": "1.3.3",
             "rollout": "active",
             "projectKinds": [
               "video"

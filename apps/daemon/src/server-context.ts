@@ -22,6 +22,9 @@ export interface HttpDeps {
 
 export interface PathDeps {
   ARTIFACTS_DIR: string;
+  // Bundled first-party plugins (`plugins/_official`). Optional so narrow
+  // route harnesses need not stage it.
+  BUNDLED_PLUGINS_DIR?: string;
   BRANDS_DIR: string;
   BUNDLED_PETS_DIR: string;
   CRAFT_DIR: string;

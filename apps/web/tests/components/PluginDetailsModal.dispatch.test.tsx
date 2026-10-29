@@ -10,7 +10,7 @@
 
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type { InstalledPluginRecord, WorkspaceCollabContext } from '@open-design/contracts';
 
 import { PluginDetailsModal } from '../../src/components/PluginDetailsModal';
 import { PluginMetaSections } from '../../src/components/plugin-details/PluginMetaSections';
@@ -79,6 +79,7 @@ function render(
   options: {
     hideUseAction?: boolean;
     onDuplicate?: (record: InstalledPluginRecord) => void;
+    workspaceContext?: WorkspaceCollabContext;
   } = {},
 ): string {
   return renderToStaticMarkup(
@@ -89,12 +90,26 @@ function render(
         onUse={() => {}}
         onDuplicate={options.onDuplicate}
         hideUseAction={options.hideUseAction}
+        workspaceContext={options.workspaceContext}
       />
     </I18nProvider>,
   );
 }
 
 describe('PluginDetailsModal dispatch', () => {
+  it.each([false, true])('uses resolved plugin media URLs in the detail modal (workspace=%s)', (scoped) => {
+    const record = make({
+      id: 'local-animation',
+      preview: { type: 'video', poster: './assets/poster.jpg', video: './assets/example.mp4' },
+    });
+    const context = { workspaceId: 'team', workspaceMemberId: 'member' } as WorkspaceCollabContext;
+    const html = render(record, scoped ? { workspaceContext: context } : {});
+    const scope = scoped ? '?workspaceId=team&amp;workspaceMemberId=member' : '';
+    expect(html).toContain(`src="/api/plugins/local-animation/asset/assets/example.mp4${scope}"`);
+    expect(html).toContain(`poster="/api/plugins/local-animation/asset/assets/poster.jpg${scope}"`);
+    expect(html).not.toContain('src="./assets/example.mp4"');
+  });
+
   it('routes image-template plugins to the unified PreviewModal chrome with image stage', () => {
     const html = render(
       make({

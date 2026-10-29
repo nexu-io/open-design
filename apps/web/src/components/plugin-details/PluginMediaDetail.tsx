@@ -9,7 +9,7 @@
 // body + PluginMetaSections so users can read the prompt and inspect
 // the manifest from the same column.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type {
   InstalledPluginRecord,
   PluginManifest,
@@ -28,9 +28,11 @@ import { PluginMetaSections } from './PluginMetaSections';
 import { buildPluginShareUrl, PluginShareMenu } from './PluginShareMenu';
 import { buildPluginUseMenu, pluginUsePrimaryAction } from './pluginUseMenu';
 import type { PluginUseAction } from '../plugins-home/useActions';
+import type { MediaPreviewSpec } from '../plugins-home/preview';
 
 interface Props {
   record: InstalledPluginRecord;
+  preview: MediaPreviewSpec;
   onClose: () => void;
   onUse: (record: InstalledPluginRecord, action: PluginUseAction) => void;
   onDuplicate?: (record: InstalledPluginRecord) => void;
@@ -42,51 +44,9 @@ interface Props {
   onSharePopoverItemClick?: (item: PreviewSharePopoverItem) => void;
 }
 
-interface MediaPreview {
-  poster: string | null;
-  videoUrl: string | null;
-  audioUrl: string | null;
-  isVideo: boolean;
-  isAudio: boolean;
-}
-
-function readMedia(record: InstalledPluginRecord): MediaPreview {
-  const preview = record.manifest?.od?.preview as
-    | {
-        type?: unknown;
-        poster?: unknown;
-        video?: unknown;
-        gif?: unknown;
-        audio?: unknown;
-      }
-    | undefined;
-  if (!preview) {
-    return {
-      poster: null,
-      videoUrl: null,
-      audioUrl: null,
-      isVideo: false,
-      isAudio: false,
-    };
-  }
-  const poster = typeof preview.poster === 'string' ? preview.poster : null;
-  const video = typeof preview.video === 'string' ? preview.video : null;
-  const gif = typeof preview.gif === 'string' ? preview.gif : null;
-  const audio = typeof preview.audio === 'string' ? preview.audio : null;
-  const t = typeof preview.type === 'string' ? preview.type.toLowerCase() : '';
-  const isVideo = t === 'video' || Boolean(video);
-  const isAudio = t === 'audio' || Boolean(audio);
-  return {
-    poster: poster ?? gif,
-    videoUrl: video,
-    audioUrl: audio,
-    isVideo,
-    isAudio,
-  };
-}
-
 export function PluginMediaDetail({
   record,
+  preview: media,
   onClose,
   onUse,
   onDuplicate,
@@ -103,7 +63,6 @@ export function PluginMediaDetail({
   const description = localizePluginDescription(locale, record);
   const pluginInfoLabel = localizePluginChrome(locale, 'pluginInfo');
   const query = resolvePluginQueryFallback(od.useCase?.query);
-  const media = useMemo(() => readMedia(record), [record]);
   const hasAsset = Boolean(media.poster || media.videoUrl || media.audioUrl);
 
   // Reset transient state when the active record swaps so the next
@@ -134,7 +93,7 @@ export function PluginMediaDetail({
         <div className="plugin-media-stage__empty">
           {t('fileViewer.previewUnavailable')}
         </div>
-      ) : media.isVideo && media.videoUrl ? (
+      ) : media.mediaType === 'video' && media.videoUrl ? (
         <video
           className="plugin-media-stage__video"
           src={media.videoUrl}
@@ -143,7 +102,7 @@ export function PluginMediaDetail({
           preload="none"
           playsInline
         />
-      ) : media.isAudio && media.audioUrl ? (
+      ) : media.mediaType === 'audio' && media.audioUrl ? (
         <div className="plugin-media-stage__audio">
           {media.poster ? (
             <img
@@ -183,9 +142,9 @@ export function PluginMediaDetail({
   const views: PreviewView[] = [
     {
       id: 'media',
-      label: media.isVideo
+      label: media.mediaType === 'video'
         ? localizePluginChrome(locale, 'video')
-        : media.isAudio
+        : media.mediaType === 'audio'
           ? localizePluginChrome(locale, 'audio')
           : localizePluginChrome(locale, 'image'),
       custom: stage,

@@ -100,6 +100,7 @@ beforeAll(async () => {
   );
   await writeFile(path.join(installedRoot, 'notes.markdown'), '# notes\n');
   await writeFile(path.join(installedRoot, 'payload.bin'), 'not a text asset');
+  await writeFile(path.join(installedRoot, 'sample.mp4'), 'mp4 fixture');
   await writeFile(path.join(installedRoot, 'soundtrack.mp3'), '0123456789');
   await writeFile(path.join(installedRoot, 'display.ttf'), 'font bytes');
   void migratePlugins;
@@ -116,6 +117,13 @@ afterAll(async () => {
 });
 
 describe('GET /api/plugins/:id/asset/*', () => {
+  it('serves a bundled MP4 preview as video/mp4', async () => {
+    const resp = await fetch(`${baseUrl}/api/plugins/asset-plugin/asset/sample.mp4`);
+    expect(resp.status).toBe(200);
+    expect(resp.headers.get('content-type')).toBe('video/mp4');
+    expect(resp.headers.get('x-content-type-options')).toBe('nosniff');
+  });
+
   it('serves seekable media ranges with the media MIME type', async () => {
     const response = await fetch(`${baseUrl}/api/plugins/asset-plugin/asset/soundtrack.mp3`, {
       headers: { range: 'bytes=2-5' },

@@ -63,6 +63,7 @@ export function PluginDetailsModal({
     detail = (
       <PluginMediaDetail
         record={record}
+        preview={preview}
         onClose={onClose}
         onUse={onUse}
         onDuplicate={onDuplicate}
