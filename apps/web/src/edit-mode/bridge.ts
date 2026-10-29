@@ -174,7 +174,7 @@ export function buildManualEditBridge(enabled: boolean): string {
   var discoverySelector = ${JSON.stringify(MANUAL_EDIT_DISCOVERY_SELECTOR)};
   var hostNodeSelector = ${JSON.stringify(MANUAL_EDIT_HOST_NODE_SELECTOR)};
   var sourcePathAttr = ${JSON.stringify(MANUAL_EDIT_SOURCE_PATH_ATTR)};
-  var styleProps = ['fontFamily','fontSize','fontWeight','color','textAlign','lineHeight','letterSpacing','width','height','minHeight','gap','flexDirection','justifyContent','alignItems','backgroundColor','opacity','padding','paddingTop','paddingRight','paddingBottom','paddingLeft','margin','marginTop','marginRight','marginBottom','marginLeft','border','borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth','borderStyle','borderColor','borderRadius','transform','display'];
+  var styleProps = ['fontFamily','fontSize','fontWeight','color','textAlign','lineHeight','textTransform','letterSpacing','wordSpacing','width','height','minHeight','gap','flexDirection','justifyContent','alignItems','backgroundColor','opacity','padding','paddingTop','paddingRight','paddingBottom','paddingLeft','margin','marginTop','marginRight','marginBottom','marginLeft','border','borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth','borderStyle','borderColor','borderRadius','transform','display'];
   function isHostNode(el){
     return !!(el && el.matches && el.matches(hostNodeSelector));
   }
@@ -306,6 +306,10 @@ export function buildManualEditBridge(enabled: boolean): string {
     var computed = window.getComputedStyle(el);
     var styles = {};
     styleProps.forEach(function(prop){ styles[prop] = el.style[prop] || computed[prop] || ''; });
+    if (!el.style.textTransform && styles.textTransform === 'none') {
+      var parentTextTransform = el.parentElement ? window.getComputedStyle(el.parentElement).textTransform : 'none';
+      if (parentTextTransform === 'none') styles.textTransform = '';
+    }
     return styles;
   }
   function rectFor(el){

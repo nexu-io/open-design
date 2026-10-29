@@ -51,7 +51,9 @@ export interface ManualEditStyles {
   color: string;
   textAlign: string;
   lineHeight: string;
+  textTransform: string;
   letterSpacing: string;
+  wordSpacing: string;
   width: string;
   height: string;
   minHeight: string;
@@ -202,7 +204,7 @@ export type ManualEditBridgeMessage =
   | ManualEditDragCommitMessage;
 
 export const MANUAL_EDIT_STYLE_PROPS: readonly (keyof ManualEditStyles)[] = [
-  'fontFamily', 'fontSize', 'fontWeight', 'color', 'textAlign', 'lineHeight', 'letterSpacing',
+  'fontFamily', 'fontSize', 'fontWeight', 'color', 'textAlign', 'lineHeight', 'textTransform', 'letterSpacing', 'wordSpacing',
   'width', 'height', 'minHeight',
   'gap', 'flexDirection', 'justifyContent', 'alignItems',
   'backgroundColor', 'opacity',
