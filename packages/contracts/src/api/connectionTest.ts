@@ -265,6 +265,14 @@ export interface ProviderTestRequest extends ReasoningExecutionRequestFields {
   model: string;
   // Azure only. When omitted, the daemon falls back to its default api-version.
   apiVersion?: string;
+  // Bedrock only. Named AWS profile for the credential-chain auth mode; when
+  // set the test runs through the AWS CLI instead of a bearer-token HTTP call
+  // and `apiKey` may be empty.
+  awsProfile?: string;
+  // Bedrock profile mode only. The user explicitly asked to sign in: the
+  // daemon may run `aws sso login` (which opens the browser) before testing.
+  // Without it an expired or missing SSO session is reported, never repaired.
+  awsSsoLogin?: boolean;
 }
 
 export interface AgentTestRequest {

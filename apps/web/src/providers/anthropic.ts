@@ -68,8 +68,11 @@ export async function streamMessage(
     return streamMessageAIHubMix(cfg, system, history, signal, handlers, context);
   }
   if (cfg.apiProtocol === 'bedrock') {
+    // Bedrock BYOK runs through the daemon's OpenCode route (which signs with
+    // the AWS credential chain or the Bedrock bearer token); the in-browser
+    // streaming path has no way to authenticate against Bedrock.
     handlers.onError(
-      new Error('AWS Bedrock BYOK chat requires AWS credential signing and is not supported by the current API-key proxy.'),
+      new Error('Amazon Bedrock BYOK chat runs through OpenCode and is not available on the direct API path.'),
     );
     return;
   }

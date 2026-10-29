@@ -1,8 +1,25 @@
 import type { ByokChatProviderConfig } from '@open-design/contracts';
+import { resolveBedrockRegion } from '@open-design/contracts';
 
 export const BYOK_OPENCODE_AGENT_ID = 'byok-opencode';
 export const BYOK_OPENCODE_PROVIDER_ID = 'open-design-byok';
 export const BYOK_OPENCODE_API_KEY_ENV = 'OPEN_DESIGN_BYOK_API_KEY';
+// Bedrock runs under OpenCode's own `amazon-bedrock` provider id rather than
+// the generic `open-design-byok` entry: OpenCode keys its Bedrock loader
+// (AWS credential chain, named profile, bearer token, region-aware
+// cross-region model prefixing) on that exact id, and a custom id would only
+// get the bare `@ai-sdk/amazon-bedrock` factory, which reads static access
+// keys from the environment and knows nothing about SSO profiles.
+export const BYOK_OPENCODE_BEDROCK_PROVIDER_ID = 'amazon-bedrock';
+// Bearer routes onto Bedrock's Anthropic Messages and OpenAI Responses
+// endpoints. Distinct ids on purpose: OpenCode's `amazon-bedrock` loader keys
+// its Converse/credential-chain behaviour on that exact id.
+export const BYOK_OPENCODE_BEDROCK_ANTHROPIC_PROVIDER_ID = 'open-design-bedrock-anthropic';
+export const BYOK_OPENCODE_BEDROCK_OPENAI_PROVIDER_ID = 'open-design-bedrock-openai';
+// Read by OpenCode's Bedrock loader; takes precedence over the credential
+// chain, so it is only set when a bearer (API key or profile-minted token) is
+// in play.
+export const BYOK_OPENCODE_BEDROCK_BEARER_TOKEN_ENV = 'AWS_BEARER_TOKEN_BEDROCK';
 export const BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE =
   'BYOK OpenCode requires a complete provider configuration for this run.';
 const DEFAULT_CONTEXT_TOKEN_LIMIT = 128_000;
@@ -16,6 +33,7 @@ const DEFAULT_BASE_URL_BY_PROTOCOL: Record<ByokChatProviderConfig['protocol'], s
   ollama: 'https://ollama.com',
   senseaudio: 'https://api.senseaudio.cn',
   aihubmix: 'https://aihubmix.com/v1',
+  bedrock: 'https://bedrock-runtime.us-east-1.amazonaws.com',
 };
 
 type ProviderPackage =
@@ -23,7 +41,8 @@ type ProviderPackage =
   | '@ai-sdk/openai'
   | '@ai-sdk/openai-compatible'
   | '@ai-sdk/azure'
-  | '@ai-sdk/google';
+  | '@ai-sdk/google'
+  | '@ai-sdk/amazon-bedrock';
 
 export interface OpenCodeByokProviderConfig {
   providerId: string;
@@ -32,16 +51,48 @@ export interface OpenCodeByokProviderConfig {
   config: Record<string, unknown>;
 }
 
-export function opencodeByokModelId(model: string | null | undefined): string | null {
+const OPENCODE_BYOK_PROVIDER_IDS = [
+  BYOK_OPENCODE_PROVIDER_ID,
+  BYOK_OPENCODE_BEDROCK_PROVIDER_ID,
+  BYOK_OPENCODE_BEDROCK_ANTHROPIC_PROVIDER_ID,
+  BYOK_OPENCODE_BEDROCK_OPENAI_PROVIDER_ID,
+];
+
+export function opencodeByokProviderId(
+  protocol: ByokChatProviderConfig['protocol'] | null | undefined,
+): string {
+  return protocol === 'bedrock'
+    ? BYOK_OPENCODE_BEDROCK_PROVIDER_ID
+    : BYOK_OPENCODE_PROVIDER_ID;
+}
+
+export function opencodeByokModelId(
+  model: string | null | undefined,
+  protocol: ByokChatProviderConfig['protocol'] | null | undefined = null,
+): string | null {
   const trimmed = typeof model === 'string' ? model.trim() : '';
   if (!trimmed || trimmed.toLowerCase() === 'default') return null;
-  if (trimmed.startsWith(`${BYOK_OPENCODE_PROVIDER_ID}/`)) return trimmed;
-  return `${BYOK_OPENCODE_PROVIDER_ID}/${trimmed}`;
+  if (OPENCODE_BYOK_PROVIDER_IDS.some((id) => trimmed.startsWith(`${id}/`))) return trimmed;
+  return `${opencodeByokProviderId(protocol)}/${trimmed}`;
+}
+
+export interface OpenCodeByokProviderConfigOptions {
+  // `file://` URL of the Bedrock OpenAI file adapter plugin (see
+  // bedrock-openai-file-adapter.ts). Only the run spawn passes it; config
+  // completeness checks and connection tests leave it out.
+  bedrockOpenAiFileAdapterPluginUrl?: string;
+  // Short-term Bedrock bearer minted from the AWS profile (see
+  // integrations/bedrock-bearer.ts). With it, the profile mode runs through
+  // the very same provider config as the API-key mode. The run spawn resolves
+  // it; callers that only check completeness leave it out and get the
+  // profile-based Converse config instead.
+  bedrockProfileBearerToken?: string;
 }
 
 export function buildOpenCodeByokProviderConfig(
   provider: ByokChatProviderConfig | null | undefined,
   model: string | null | undefined,
+  options: OpenCodeByokProviderConfigOptions = {},
 ): OpenCodeByokProviderConfig | null {
   if (!provider || typeof provider !== 'object') return null;
   const protocol = provider.protocol;
@@ -62,7 +113,11 @@ export function buildOpenCodeByokProviderConfig(
   if (!rawModel || rawModel.toLowerCase() === 'default') return null;
   if (!baseUrl) return null;
 
-  const modelId = opencodeByokModelId(rawModel);
+  if (protocol === 'bedrock') {
+    return buildBedrockProviderConfig(provider, rawModel, baseUrl, apiKey, options);
+  }
+
+  const modelId = opencodeByokModelId(rawModel, protocol);
   if (!modelId) return null;
 
   const providerEntry = buildProviderEntry(
@@ -125,12 +180,258 @@ function normalizeProviderBaseUrl(
   return trimmed;
 }
 
+function bedrockProfile(provider: ByokChatProviderConfig): string {
+  return typeof provider.awsProfile === 'string' ? provider.awsProfile.trim() : '';
+}
+
+/** Bedrock provider in AWS-profile mode (no API key, a named profile). */
+export function isBedrockProfileProvider(
+  provider: ByokChatProviderConfig | null | undefined,
+): provider is ByokChatProviderConfig & { awsProfile: string; baseUrl: string } {
+  if (!provider || provider.protocol !== 'bedrock') return false;
+  const apiKey = typeof provider.apiKey === 'string' ? provider.apiKey.trim() : '';
+  return !apiKey && bedrockProfile(provider) !== '' && typeof provider.baseUrl === 'string';
+}
+
+// Vendor segment of a Bedrock model id or inference-profile id, e.g.
+// `anthropic.claude-sonnet-5`, `global.anthropic.claude-sonnet-5`,
+// `us.openai.gpt-6-astra`, `arn:aws:bedrock:...:inference-profile/eu.anthropic.…`.
+type BedrockModelFamily = 'anthropic' | 'openai' | 'other';
+
+export function bedrockModelFamily(modelId: string): BedrockModelFamily {
+  const match = /(?:^|[./])(anthropic|openai)\./i.exec(modelId.trim());
+  if (!match) return 'other';
+  return match[1]!.toLowerCase() as BedrockModelFamily;
+}
+
+// OpenCode compacts the session once the prompt reaches `context - output`.
+// The generic 128k/16k default leaves a 111.6k window, and the OpenCode system
+// prompt plus tool schemas already measure ~112k tokens on Claude (measured
+// 2026-09-11 against Bedrock), so every Claude turn would compact and loop.
+// Claude models on Bedrock take 200k of context, the GPT family 400k+; both
+// families accept 32k of output.
+const BEDROCK_MODEL_LIMITS: Record<BedrockModelFamily, { context: number; output: number }> = {
+  anthropic: { context: 200_000, output: 32_000 },
+  openai: { context: 400_000, output: 32_000 },
+  // The Converse route serves every non-Anthropic, non-OpenAI model; its
+  // output limit is resolved per model by `bedrockConverseOutputLimit()`.
+  other: { context: DEFAULT_CONTEXT_TOKEN_LIMIT, output: DEFAULT_OUTPUT_TOKEN_LIMIT },
+};
+
+// OpenCode sends `limit.output` as the Converse request's maxTokens and
+// Bedrock rejects a value above the model's own ceiling before the model runs
+// ("The maximum tokens you requested exceeds the model limit of N"). The
+// ceilings below were measured on bedrock-runtime us-east-1 (2026-09-15) by
+// sending an oversized maxTokens to every active on-demand text model and
+// reading N from that validation error. Keys are base model ids; an
+// inference-profile prefix (`us.`, `eu.`, `apac.`, `jp.`, `global.`) is
+// stripped before lookup, since the profile shares the base model's ceiling.
+const BEDROCK_CONVERSE_OUTPUT_CEILINGS: Record<string, number> = {
+  'amazon.nova-micro-v1:0': 10_000,
+  'amazon.nova-lite-v1:0': 10_000,
+  'amazon.nova-pro-v1:0': 10_000,
+  'amazon.nova-2-lite-v1:0': 65_535,
+  'meta.llama3-8b-instruct-v1:0': 2_048,
+  'meta.llama3-70b-instruct-v1:0': 2_048,
+  'meta.llama3-1-8b-instruct-v1:0': 8_192,
+  'meta.llama3-1-70b-instruct-v1:0': 8_192,
+  'meta.llama3-3-70b-instruct-v1:0': 8_192,
+  'mistral.mistral-7b-instruct-v0:2': 8_192,
+  'mistral.mixtral-8x7b-instruct-v0:1': 4_096,
+  'mistral.mistral-small-2402-v1:0': 8_192,
+  'mistral.mistral-large-2402-v1:0': 8_192,
+  'mistral.pixtral-large-2502-v1:0': 131_072,
+  'mistral.magistral-small-2509': 131_072,
+  'mistral.voxtral-mini-3b-2507': 32_768,
+  'mistral.voxtral-small-24b-2507': 32_768,
+  'mistral.ministral-3-3b-instruct': 262_144,
+  'mistral.ministral-3-8b-instruct': 262_144,
+  'mistral.ministral-3-14b-instruct': 262_144,
+  'mistral.devstral-2-123b': 262_144,
+  'mistral.mistral-large-3-675b-instruct': 262_144,
+  'deepseek.r1-v1:0': 32_768,
+  'deepseek.v3.2': 163_840,
+  'qwen.qwen3-32b-v1:0': 32_768,
+  'qwen.qwen3-coder-30b-a3b-v1:0': 262_144,
+  'qwen.qwen3-coder-next': 262_144,
+  'qwen.qwen3-next-80b-a3b': 262_144,
+  'qwen.qwen3-vl-235b-a22b': 262_144,
+  'writer.palmyra-vision-7b': 4_096,
+  'writer.palmyra-x4-v1:0': 8_192,
+  'writer.palmyra-x5-v1:0': 8_192,
+  'google.gemma-3-4b-it': 131_072,
+  'google.gemma-3-12b-it': 131_072,
+  'google.gemma-3-27b-it': 131_072,
+  'minimax.minimax-m2.1': 196_608,
+  'minimax.minimax-m2.5': 196_608,
+  'moonshot.kimi-k2-thinking': 262_144,
+  'moonshotai.kimi-k2.5': 262_144,
+  'nvidia.nemotron-nano-9b-v2': 131_072,
+  'nvidia.nemotron-nano-12b-v2': 131_072,
+  'nvidia.nemotron-nano-3-30b': 262_144,
+  'nvidia.nemotron-super-3-120b': 262_144,
+  'zai.glm-4.7': 202_752,
+  'zai.glm-4.7-flash': 202_752,
+  'zai.glm-5': 202_752,
+};
+
+// Unknown-model policy: a model missing from the table (a new release, a
+// vendor not probed) gets the smallest ceiling seen among Converse chat
+// models that take tools, 4096. A request never fails validation for it, at
+// the cost of shorter answers until the table is extended; the model card
+// probe that produced the table (`aws bedrock list-foundation-models` plus
+// one oversized Converse call per id) is the way to extend it.
+const BEDROCK_CONVERSE_UNKNOWN_OUTPUT_LIMIT = 4_096;
+
+const BEDROCK_INFERENCE_PROFILE_PREFIX = /^(?:us|eu|apac|jp|au|ca|sa|us-gov|global)\./i;
+
+export function bedrockConverseOutputLimit(modelId: string): number {
+  const base = modelId.trim().replace(BEDROCK_INFERENCE_PROFILE_PREFIX, '');
+  const ceiling = BEDROCK_CONVERSE_OUTPUT_CEILINGS[base] ?? BEDROCK_CONVERSE_UNKNOWN_OUTPUT_LIMIT;
+  // Never ask for more than the route default even when the model allows it:
+  // maxTokens is a budget, not a target, and a 262k budget buys nothing here.
+  return Math.min(ceiling, DEFAULT_OUTPUT_TOKEN_LIMIT);
+}
+
+// OpenCode gates file parts on the model's declared input modalities and
+// replaces an unsupported one with an "ERROR: Cannot read ... (this model does
+// not support pdf input)" text. A config-declared model defaults to text and
+// image, so PDFs never reach Claude or GPT unless the modalities are spelled
+// out. Both families take text, images and PDFs on Bedrock.
+const BEDROCK_MODEL_MODALITIES: Partial<
+  Record<BedrockModelFamily, { input: string[]; output: string[] }>
+> = {
+  anthropic: { input: ['text', 'image', 'pdf'], output: ['text'] },
+  openai: { input: ['text', 'image', 'pdf'], output: ['text'] },
+};
+
+function bedrockModelEntry(family: BedrockModelFamily, rawModel: string): Record<string, unknown> {
+  const modalities = BEDROCK_MODEL_MODALITIES[family];
+  const limit =
+    family === 'other'
+      ? { ...BEDROCK_MODEL_LIMITS.other, output: bedrockConverseOutputLimit(rawModel) }
+      : BEDROCK_MODEL_LIMITS[family];
+  return {
+    name: rawModel,
+    limit,
+    ...(modalities ? { modalities } : {}),
+  };
+}
+
+// One assembly for every Bedrock route: what varies is the OpenCode provider id,
+// the SDK package, its options, where the bearer travels and which plugins load.
+interface BedrockRoute {
+  providerId: string;
+  npm: ProviderPackage;
+  options: Record<string, string>;
+  env: Record<string, string>;
+  plugin?: string[];
+}
+
+function assembleBedrockConfig(route: BedrockRoute, family: BedrockModelFamily, rawModel: string): OpenCodeByokProviderConfig {
+  return {
+    providerId: route.providerId,
+    modelId: `${route.providerId}/${rawModel}`,
+    env: route.env,
+    config: {
+      ...(route.plugin ? { plugin: route.plugin } : {}),
+      provider: {
+        [route.providerId]: {
+          name: 'Amazon Bedrock',
+          npm: route.npm,
+          options: route.options,
+          models: { [rawModel]: bedrockModelEntry(family, rawModel) },
+        },
+      },
+    },
+  };
+}
+
+// Both credential modes run through the same provider config. The bearer is
+// either the user's long-term Bedrock API key or the short-term token the run
+// spawn minted from the AWS profile (integrations/bedrock-bearer.ts); from
+// here on nothing depends on where it came from.
+//
+// Routes:
+// - Anthropic models: `@ai-sdk/anthropic` on `<endpoint>/anthropic/v1`
+//   (Anthropic Messages), bearer as the SDK api key.
+// - OpenAI models: `@ai-sdk/openai` on `<endpoint>/openai/v1` (Responses API,
+//   the only OpenAI path Bedrock serves with tools), bearer as the SDK api
+//   key, plus the file adapter plugin (bedrock-openai-file-adapter.ts).
+// - Every other family, and any caller that has no bearer: OpenCode's own
+//   `amazon-bedrock` provider (Converse). With a bearer it reads
+//   `AWS_BEARER_TOKEN_BEDROCK` ahead of the credential chain; without one
+//   (profile mode seen by the config completeness check or the connection
+//   test, which do not mint) it resolves the chain for `options.profile`
+//   itself. The regional endpoint is only forwarded when it differs from the
+//   region default (VPC endpoint, custom host).
+//
+// The bearer never enters the JSON config: the SDK routes reference it as
+// `{env:...}` and Converse reads its own env variable.
+function buildBedrockProviderConfig(
+  provider: ByokChatProviderConfig,
+  rawModel: string,
+  baseUrl: string,
+  apiKey: string,
+  options: OpenCodeByokProviderConfigOptions,
+): OpenCodeByokProviderConfig | null {
+  const profile = bedrockProfile(provider);
+  const bearer = apiKey || (profile ? options.bedrockProfileBearerToken ?? '' : '');
+  if (!profile && !bearer) return null;
+  if (!opencodeByokModelId(rawModel, 'bedrock')) return null;
+  const region = resolveBedrockRegion(baseUrl);
+  const family = bedrockModelFamily(rawModel);
+
+  if (bearer && family === 'anthropic') {
+    return assembleBedrockConfig(
+      {
+        providerId: BYOK_OPENCODE_BEDROCK_ANTHROPIC_PROVIDER_ID,
+        npm: '@ai-sdk/anthropic',
+        options: { baseURL: `${baseUrl}/anthropic/v1`, apiKey: `{env:${BYOK_OPENCODE_API_KEY_ENV}}` },
+        env: { AWS_REGION: region, [BYOK_OPENCODE_API_KEY_ENV]: bearer },
+      },
+      family,
+      rawModel,
+    );
+  }
+  if (bearer && family === 'openai') {
+    const pluginUrl = options.bedrockOpenAiFileAdapterPluginUrl;
+    return assembleBedrockConfig(
+      {
+        providerId: BYOK_OPENCODE_BEDROCK_OPENAI_PROVIDER_ID,
+        npm: '@ai-sdk/openai',
+        options: { baseURL: `${baseUrl}/openai/v1`, apiKey: `{env:${BYOK_OPENCODE_API_KEY_ENV}}` },
+        env: { AWS_REGION: region, [BYOK_OPENCODE_API_KEY_ENV]: bearer },
+        ...(pluginUrl ? { plugin: [pluginUrl] } : {}),
+      },
+      family,
+      rawModel,
+    );
+  }
+  const defaultEndpoint = `https://bedrock-runtime.${region}.amazonaws.com`;
+  return assembleBedrockConfig(
+    {
+      providerId: BYOK_OPENCODE_BEDROCK_PROVIDER_ID,
+      npm: '@ai-sdk/amazon-bedrock',
+      options: {
+        region,
+        ...(bearer ? {} : { profile }),
+        ...(baseUrl !== defaultEndpoint ? { endpoint: baseUrl } : {}),
+      },
+      env: { AWS_REGION: region, ...(bearer ? { [BYOK_OPENCODE_BEDROCK_BEARER_TOKEN_ENV]: bearer } : {}) },
+    },
+    family,
+    rawModel,
+  );
+}
+
 function requiresApiKey(
   provider: ByokChatProviderConfig,
   baseUrl: string,
 ): boolean {
   const protocol = provider.protocol;
   if (provider.requiresApiKey === false) return false;
+  if (protocol === 'bedrock') return !bedrockProfile(provider);
   return protocol !== 'ollama' || !isLocalOllamaBaseUrl(baseUrl);
 }
 
@@ -251,6 +552,10 @@ function buildProviderEntry(
           ...apiKeyOption,
         },
       };
+    case 'bedrock':
+      // Bedrock never reaches the generic entry: it is built by
+      // `buildBedrockProviderConfig` under OpenCode's own provider id.
+      throw new Error('bedrock provider entries are built by buildBedrockProviderConfig');
   }
 }
 

@@ -98,6 +98,7 @@ import {
   providerModelsCacheKey,
   type ProviderModelsCache,
 } from './providerModelsCache';
+import { bedrockActiveProfile } from '../utils/byokProvider';
 import { isDeepSeekV4FlashCampaignModel } from '../campaigns/deepseek-v4-flash';
 import { useDeepSeekV4FlashCampaignVisibility } from '../campaigns/use-deepseek-v4-flash-campaign';
 
@@ -1010,6 +1011,11 @@ export function InlineModelSwitcher({
       ) ?? KNOWN_PROVIDERS.find((p) => p.protocol === apiProtocol),
     [apiProtocol, config.apiProviderBaseUrl],
   );
+  const byokAwsProfile = bedrockActiveProfile({
+    apiProtocol,
+    awsAuthMode: config.awsAuthMode,
+    awsProfile: config.awsProfile,
+  });
   const providerModelsKey = useMemo(
     () =>
       providerModelsCacheKey(
@@ -1017,8 +1023,9 @@ export function InlineModelSwitcher({
         config.baseUrl,
         config.apiKey,
         config.apiVersion ?? '',
+        byokAwsProfile,
       ),
-    [apiProtocol, config.apiKey, config.apiVersion, config.baseUrl],
+    [apiProtocol, config.apiKey, config.apiVersion, config.baseUrl, byokAwsProfile],
   );
   const fetchedApiModelOptions = providerModelsCache?.[providerModelsKey] ?? [];
 
@@ -1027,13 +1034,14 @@ export function InlineModelSwitcher({
   // a fresh load the BYOK list shows only the small static seed list instead of
   // the live catalogue. We fetch when the panel is open in BYOK mode and the
   // preconditions for the active protocol are met (AIHubMix's catalogue is
-  // public, so it needs no key; every other protocol needs one). Results are
-  // keyed identically to Settings (`providerModelsKey`), so a single fetch
-  // serves both surfaces and replaces any stale slot.
+  // public, so it needs no key; Bedrock in profile mode lists through the AWS
+  // profile; every other protocol needs a key). Results are keyed identically
+  // to Settings (`providerModelsKey`), so a single fetch serves both surfaces
+  // and replaces any stale slot.
   useEffect(() => {
     if (!open || config.mode !== 'api' || !onProviderModelsCacheChange) return;
     if (apiProtocol === 'azure' || apiProtocol === 'ollama') return;
-    if (apiProtocol !== 'aihubmix' && !config.apiKey.trim()) return;
+    if (apiProtocol !== 'aihubmix' && !byokAwsProfile && !config.apiKey.trim()) return;
     const baseUrl = config.baseUrl.trim();
     if (!/^https?:\/\//i.test(baseUrl)) return;
     const key = providerModelsKey;
@@ -1044,7 +1052,8 @@ export function InlineModelSwitcher({
     void fetchProviderModels({
       protocol: apiProtocol,
       baseUrl,
-      apiKey: config.apiKey,
+      apiKey: byokAwsProfile ? '' : config.apiKey,
+      ...(byokAwsProfile ? { awsProfile: byokAwsProfile } : {}),
     })
       .then((result) => {
         if (active && result.ok && result.models?.length) {
@@ -1069,6 +1078,7 @@ export function InlineModelSwitcher({
     config.apiKey,
     config.baseUrl,
     apiProtocol,
+    byokAwsProfile,
     providerModelsKey,
     fetchedApiModelOptions.length,
     onProviderModelsCacheChange,

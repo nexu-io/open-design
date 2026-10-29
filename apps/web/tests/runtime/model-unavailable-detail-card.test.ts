@@ -131,6 +131,11 @@ describe('模型不可用:daemon 已经命名的病因,不该在界面上退回�
       'chat.runError.title.modelCapabilityUnsupported',
       'chat.runError.modelCapabilityUnsupportedMessage',
     ],
+    [
+      'model_document_unsupported',
+      'chat.runError.title.modelDocumentUnsupported',
+      'chat.runError.modelDocumentUnsupportedMessage',
+    ],
   ];
 
   it.each(CARD_BY_DETAIL)(

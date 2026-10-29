@@ -282,7 +282,7 @@ export function MemoryModelInline({
       if (mode === 'api') {
         const provider = memoryProviderFromApiProtocol(apiProtocol);
         if (!provider) {
-          throw new Error('Memory extraction is not available for AWS Bedrock BYOK yet.');
+          throw new Error('Memory extraction is not available for Amazon Bedrock BYOK.');
         }
         return {
           provider,
