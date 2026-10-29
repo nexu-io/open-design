@@ -45,7 +45,9 @@ export function planPackagedPayloadDesktopDelegation(
       // from a previous failed launch. A rollback (last-successful)
       // delegation deliberately carries no marker: the attempt on disk is the
       // rollback evidence and the child must re-derive the rollback from it.
-      ...(runtime.selection.selected && runtime.selection.reason === "active"
+      ...(runtime.selection.selected && (
+        runtime.selection.reason === "active" || runtime.selection.reason === "active-delegated" || runtime.selection.reason === "active-resume"
+      )
         ? buildLauncherDelegatedArgs(runtime.selection.pointer)
         : []),
       // The stable outer owns the OS protocol registration. On a cold start

@@ -6,6 +6,7 @@ import {
   type SidecarSource,
 } from "@open-design/sidecar-proto";
 import {
+  buildLauncherHandoffResumeArgs,
   parseLauncherAfterQuitArgs,
   parseLauncherDelegatedArgs,
   parseLauncherHandoffResumeArgs,
@@ -52,7 +53,7 @@ import {
   inspectExistingDesktopForLauncher,
   waitForLauncherAfterQuit,
 } from "./launcher-after-quit.js";
-import { confirmPackagedLauncherRuntime, resolvePackagedLauncherRuntime } from "./launcher-runtime.js";
+import { confirmPackagedLauncherRuntime, preparePackagedMacLaunchEntry, resolvePackagedLauncherRuntime } from "./launcher-runtime.js";
 import {
   applyPackagedElectronPathOverrides,
   claimPackagedSingleInstanceLock,
@@ -256,8 +257,12 @@ async function main(): Promise<void> {
     delegated,
     resume: handoffResume,
   });
+  await preparePackagedMacLaunchEntry(launcherRuntime, console);
   if (isPackagedPayloadDelegation(launcherRuntime)) markPackagedManagedOuter();
-  if (await launchPackagedPayloadDesktop(launcherRuntime, deferredHeadless ? { extraArgs: ["--headless"] } : {})) {
+  if (await launchPackagedPayloadDesktop(launcherRuntime, { extraArgs: [
+    ...(deferredHeadless ? ["--headless"] : []),
+    ...(handoffResume == null ? [] : buildLauncherHandoffResumeArgs(handoffResume)),
+  ] })) {
     app.exit(0);
     return;
   }
@@ -480,7 +485,7 @@ async function main(): Promise<void> {
       await retireObsoleteInstalledOuter();
     },
     onDesktopReady(controls) {
-      void confirmPackagedLauncherRuntime(launcherRuntime).catch((error: unknown) => {
+      void confirmPackagedLauncherRuntime(launcherRuntime, packagedLogger ?? undefined).catch((error: unknown) => {
         packagedLogger?.warn("failed to confirm packaged launcher runtime", { error });
       });
       void syncWindowsUninstallDisplayVersion({
@@ -559,7 +564,7 @@ async function main(): Promise<void> {
   await client.start();
   if (deferredDesktop != null) {
     // A deferred headless runtime is a successful launch of this generation.
-    void confirmPackagedLauncherRuntime(launcherRuntime).catch((error: unknown) => {
+    void confirmPackagedLauncherRuntime(launcherRuntime, packagedLogger ?? undefined).catch((error: unknown) => {
       packagedLogger?.warn("failed to confirm packaged launcher runtime", { error });
     });
     watchUserDesktopIntent(app, () => {

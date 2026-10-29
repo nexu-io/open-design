@@ -7,7 +7,7 @@ import {
   resolveLauncherVersionPaths,
   type LauncherDesktopHandoffDescriptor,
 } from "@open-design/launcher-proto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { PackagedConfig } from "../src/config.js";
 import {
@@ -17,6 +17,10 @@ import {
   resolvePackagedLauncherRuntime,
 } from "../src/launcher-runtime.js";
 import { resolvePackagedNamespacePaths } from "../src/paths.js";
+
+vi.mock("../src/mac-launch-services.js", () => ({
+  refreshMacApplicationRegistration: vi.fn(async () => ({ status: "skipped" })),
+}));
 
 function fakeConfig(root: string, appVersion = "1.2.3-beta.4"): PackagedConfig {
   return {
