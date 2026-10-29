@@ -101,6 +101,12 @@
   --glass-refract-ring-top: rgba(255, 255, 255, 0.3);
   --glass-refract-ring-edge: rgba(255, 255, 255, 0.09);
   --glass-refract-ring-bottom: rgba(255, 255, 255, 0.12);
+  /* Scrim behind modals / dialogs / drawers / previews: a dark tint in dark
+     mode (mirrors the light `rgba(255,255,255,0.6)` but on --bg at the same
+     60% alpha) so the preview/modal backdrop reads as a dimmed dark ground
+     instead of a white wash. Token-driven — no hardcoded hex. The blurred
+     `var(--scrim-backdrop)` itself is colour-agnostic and stays. */
+  --scrim-tint: color-mix(in srgb, var(--bg) 60%, transparent);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -122,6 +128,10 @@
     --glass-refract-ring-top: rgba(255, 255, 255, 0.3);
     --glass-refract-ring-edge: rgba(255, 255, 255, 0.09);
     --glass-refract-ring-bottom: rgba(255, 255, 255, 0.12);
+  /* Scrim behind modals / dialogs / drawers / previews: dark tint in dark mode
+     (mirrors the light `rgba(255,255,255,0.6)` on --bg at 60% alpha). Token-
+     driven — no hardcoded hex. */
+  --scrim-tint: color-mix(in srgb, var(--bg) 60%, transparent);
   }
 }
 

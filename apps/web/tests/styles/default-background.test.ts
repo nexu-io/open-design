@@ -18,11 +18,11 @@ describe('default app background colors', () => {
     expect(root).toContain('--bg-app: #fff;');
   });
 
-  it('keeps the dark theme background unchanged', () => {
+  it('aligns the dark theme background to the N0 neutral', () => {
     const dark = cssBlock('[data-theme="dark"]');
 
-    expect(dark).toContain('--bg: #202020;');
-    expect(dark).toContain('--bg-app: #202020;');
+    expect(dark).toContain('--bg: #121212;');
+    expect(dark).toContain('--bg-app: #121212;');
   });
 
   it('prefers platform UI fonts over optional local app fonts', () => {

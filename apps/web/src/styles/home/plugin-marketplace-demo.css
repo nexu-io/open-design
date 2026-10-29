@@ -154,17 +154,21 @@
 
 .plugin-marketplace__switch button.is-active {
   border-color: transparent;
-  background: #fff;
+  /* The raised thumb must be the ELEVATED neutral, not a literal white: in
+     light it stays the near-white a pastel wash can hold contrast against,
+     and in dark it becomes N1 (#353535) — a literal white here left the
+     active label (--text-strong, #fafafa in dark) invisible on white
+     (Leon 10-16 token review). */
+  background: var(--bg-elevated);
   color: var(--text-strong);
   box-shadow: 0 1px 2px color-mix(in srgb, #000 7%, transparent);
 }
-/* Selected scope tab / category chip: white fill matching the segmented
-   switch's active thumb — the pastel app wash behind the page gives the
-   white enough contrast to read as a fill, with a whisper shadow to lift it. */
+/* Selected scope tab / category chip: the same elevated fill as the
+   segmented switch's active thumb, with a whisper shadow to lift it. */
 .plugin-marketplace__filters button.is-active,
 .plugin-marketplace__category-tags button.is-active {
   border-color: transparent;
-  background: #fff;
+  background: var(--bg-elevated);
   color: var(--text-strong);
   box-shadow: 0 1px 2px color-mix(in srgb, #000 7%, transparent);
 }
@@ -735,7 +739,7 @@
 
 .plugin-marketplace__create-tabs button.is-active {
   border-color: transparent;
-  background: #fff;
+  background: var(--bg-elevated);
   color: var(--text-strong);
   box-shadow: 0 1px 2px color-mix(in srgb, #000 7%, transparent);
 }
