@@ -5,7 +5,8 @@
 //
 //   1. Listen on stdin for newline-delimited JSON-RPC messages from OD.
 //   2. Respond to `initialize` (id=1) with the protocol version.
-//   3. Respond to `session/new` (id=2) with a synthetic sessionId.
+//   3. Respond to `session/new` (id=2) with a synthetic sessionId, or restore a
+//      caller-provided id through `session/load` for durable ACP adapters.
 //   4. Optionally respond to `session/set_model` (id=3) with {}.
 //   5. When `session/prompt` (id=N) arrives, push a series of
 //      `session/update` NOTIFICATIONS carrying agent_message_chunk
@@ -16,10 +17,8 @@
 // Verified against the spec implementation at
 //   apps/daemon/src/acp.ts (attachAcpSession + ACP_PROTOCOL_VERSION).
 //
-// Tool events from the recording are dropped — OD's ACP parser only
-// recognizes thought_chunk + message_chunk. Tool-use surfaces in the
-// real ACP agents (Hermes/Kimi/Kilo/Kiro/Vibe/Devin) come through
-// MCP or other side channels, not the stdio protocol.
+// Prompt replay emits the recording's final text. Kilo session/load also
+// replays historical text and tools before returning, matching its ACP flow.
 
 import { writeFile } from 'node:fs/promises';
 
@@ -63,7 +62,7 @@ export async function runAcpServer(events, opts = {}) {
   const writeLine = obj => writeFn(JSON.stringify(obj) + '\n');
 
   const meta = events.find(e => e.type === 'meta');
-  const sessionId = opts.sessionId ?? `mock-acp-${Date.now()}`;
+  let sessionId = opts.sessionId ?? `mock-acp-${Date.now()}`;
   const reportEvent = events.find(e => e.type === 'report');
   const reportText = reportEvent?.content ?? '';
 
@@ -123,12 +122,45 @@ export async function runAcpServer(events, opts = {}) {
       writeRpcResult(out, id, {
         protocolVersion: PROTOCOL_VERSION,
         capabilities: {
-          loadSession: false,
+          loadSession: true,
           // Tool calls aren't supported via stdio in this mock —
           // matches the actual ACP agents on OD's side.
           tools: false,
         },
       });
+      return;
+    }
+    if (method === 'session/load') {
+      if (typeof obj.params?.sessionId === 'string' && obj.params.sessionId) {
+        sessionId = obj.params.sessionId;
+      }
+      if (opts.replayHistoryOnLoad) {
+        // Kilo publishes persisted messages/tools before the load response;
+        // the daemon must not attribute them to the prompt it has yet to send.
+        for (const [index, event] of events.entries()) {
+          const publish = update => writeLine({
+            jsonrpc: '2.0', method: 'session/update', params: { sessionId, update },
+          });
+          if (event.type === 'tool_call') {
+            const toolCallId = event.obs_id ?? `mock-history-tool-${index}`;
+            publish({
+              sessionUpdate: 'tool_call', toolCallId, title: event.name,
+              status: 'pending', rawInput: event.input,
+            });
+            const result = events.find(candidate => candidate.type === 'tool_result' && candidate.obs_id === event.obs_id);
+            if (result) publish({
+              sessionUpdate: 'tool_call_update', toolCallId,
+              status: result.status === 'error' ? 'failed' : 'completed', rawOutput: result.output,
+            });
+          } else if (event.type === 'report') {
+            for (const text of chunkText(event.content ?? '', 400)) publish({
+              sessionUpdate: 'agent_message_chunk', content: { type: 'text', text },
+            });
+          }
+        }
+      }
+      // Match Kilo: a successful load does not repeat the already-known id.
+      writeRpcResult(out, id, { configOptions: [] });
       return;
     }
     if (method === 'session/new') {

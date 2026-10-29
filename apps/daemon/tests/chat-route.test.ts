@@ -14,7 +14,7 @@ import {
 } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { delimiter, join, resolve } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
@@ -1307,6 +1307,149 @@ process.exit(1);
         expect(body).toContain('"status":"failed"');
       },
     );
+  });
+
+  it('keeps a live Kilo session after an ambiguous session-load error', async () => {
+    const projectId = `kilo-session-error-${randomUUID()}`;
+    const created = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'Kilo session error fixture' }),
+    });
+    expect(created.ok).toBe(true);
+    const conversations = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`);
+    const { conversations: rows } = await conversations.json() as { conversations: Array<{ id: string }> };
+    const conversationId = rows[0]?.id;
+    expect(conversationId).toBeTruthy();
+    const dir = await fsp.mkdtemp(join(tmpdir(), 'od-kilo-session-error-'));
+    tempDirs.push(dir);
+    const logPath = join(dir, 'calls.jsonl');
+    await withFakeAgent('kilo', `
+const fs = require('node:fs');
+const readline = require('node:readline');
+const logPath = ${JSON.stringify(logPath)};
+const write = (frame) => console.log(JSON.stringify({ jsonrpc: '2.0', ...frame }));
+if (process.argv.includes('--version')) { console.log('7.4.23'); process.exit(0); }
+readline.createInterface({ input: process.stdin }).on('line', (line) => {
+  const request = JSON.parse(line);
+  if (request.method === 'initialize') write({ id: request.id, result: { protocolVersion: 1 } });
+  if (request.method === 'session/new' || request.method === 'session/load') {
+    const previous = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8').trim().split('\\n').filter(Boolean).map(JSON.parse) : [];
+    fs.appendFileSync(logPath, JSON.stringify({ method: request.method, sessionId: request.params.sessionId }) + '\\n');
+    if (request.method === 'session/load' && !previous.some((entry) => entry.method === 'session/load')) {
+      // A live session whose messages cannot be read has the same generic
+      // payload as a missing session in Kilo 7.4.23.
+      write({ id: request.id, error: { code: -32603, message: 'OpenCode service failure', data: { service: 'session' } } });
+    } else write({ id: request.id, result: { sessionId: 'ses_kilo_live', configOptions: [] } });
+  }
+  if (request.method === 'session/prompt') {
+    write({ method: 'session/update', params: { sessionId: 'ses_kilo_live', update: {
+      sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Kilo current reply' },
+    } } });
+    write({ id: request.id, result: { stopReason: 'end_turn' } });
+  }
+});
+`, async () => {
+      const sendTurn = async (message: string) => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentId: 'kilo', projectId, conversationId, message }),
+        });
+        expect(response.ok).toBe(true);
+        return response.text();
+      };
+      expect(await sendTurn('first request')).toContain('Kilo current reply');
+      const failed = await sendTurn('second request');
+      expect(failed).toContain('OpenCode service failure');
+      expect(failed).toContain('event: error');
+      expect(failed).not.toContain('Kilo current reply');
+      expect(await sendTurn('retry second request')).toContain('Kilo current reply');
+      const calls = (await fsp.readFile(logPath, 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
+      expect(calls).toEqual([
+        { method: 'session/new' },
+        { method: 'session/load', sessionId: 'ses_kilo_live' },
+        { method: 'session/load', sessionId: 'ses_kilo_live' },
+      ]);
+    });
+  });
+
+  it('forwards regular Kilo PDFs while keeping directory PDFs as text hints', async () => {
+    if (!process.env.OD_DATA_DIR) throw new Error('OD_DATA_DIR is required for PDF attachment tests');
+    const projectId = `kilo-pdf-files-${randomUUID()}`;
+    const created = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'Kilo PDF file fixture' }),
+    });
+    expect(created.ok).toBe(true);
+    const projectDir = resolve(process.env.OD_DATA_DIR, 'projects', projectId);
+    await fsp.mkdir(join(projectDir, 'folder.pdf'), { recursive: true });
+    const pdfPath = join(projectDir, 'brief.pdf');
+    await fsp.writeFile(pdfPath, Buffer.alloc(1024 * 1024 + 1));
+    const logDir = await fsp.mkdtemp(join(tmpdir(), 'od-kilo-pdf-prompt-'));
+    tempDirs.push(logDir);
+    const promptLog = join(logDir, 'prompt.json');
+    await withFakeAgent('kilo', `
+const fs = require('node:fs');
+const readline = require('node:readline');
+const { fileURLToPath } = require('node:url');
+const write = (frame) => console.log(JSON.stringify({ jsonrpc: '2.0', ...frame }));
+if (process.argv.includes('--version')) { console.log('7.4.23'); process.exit(0); }
+readline.createInterface({ input: process.stdin }).on('line', (line) => {
+  const request = JSON.parse(line);
+  if (request.method === 'initialize') write({ id: request.id, result: { protocolVersion: 1 } });
+  if (request.method === 'session/new') write({ id: request.id, result: { sessionId: 'ses_pdf_files' } });
+  if (request.method === 'session/prompt') {
+    fs.writeFileSync(${JSON.stringify(promptLog)}, JSON.stringify(request.params.prompt));
+    const invalid = request.params.prompt.some((part) => part.type === 'resource_link' && !fs.statSync(fileURLToPath(part.uri)).isFile());
+    if (invalid) { write({ id: request.id, error: { code: -32602, message: 'Invalid PDF resource' } }); return; }
+    write({ method: 'session/update', params: { sessionId: 'ses_pdf_files', update: {
+      sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Kilo PDF resources accepted' },
+    } } });
+    write({ id: request.id, result: { stopReason: 'end_turn' } });
+  }
+});
+`, async () => {
+      const response = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: 'kilo', projectId, message: 'Inspect these files', attachments: ['folder.pdf', 'brief.pdf'] }),
+      });
+      expect(response.ok).toBe(true);
+      const body = await response.text();
+      expect(body).toContain('Kilo PDF resources accepted');
+      expect(body).not.toContain('event: error');
+      const prompt = JSON.parse(await fsp.readFile(promptLog, 'utf8')) as Array<{ type: string; text?: string; uri?: string; mimeType?: string }>;
+      expect(prompt.filter((part) => part.type === 'resource_link')).toEqual([
+        { type: 'resource_link', uri: pathToFileURL(pdfPath).href, mimeType: 'application/pdf' },
+      ]);
+      expect(prompt[0]?.text).toContain('folder.pdf');
+      expect(prompt[0]?.text).toContain('brief.pdf');
+    });
+  });
+
+  it('rejects oversized converted Kilo web-chat images before ACP launch', async () => {
+    if (!process.env.OD_DATA_DIR) throw new Error('OD_DATA_DIR is required for image attachment tests');
+    const projectId = `kilo-image-cap-${randomUUID()}`;
+    const created = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'Kilo image cap fixture' }),
+    });
+    expect(created.ok).toBe(true);
+    const projectDir = resolve(process.env.OD_DATA_DIR, 'projects', projectId);
+    await fsp.mkdir(projectDir, { recursive: true });
+    await fsp.writeFile(join(projectDir, 'large.png'), Buffer.alloc(1024 * 1024 + 1));
+    await withFakeAgent('kilo', `
+if (process.argv.includes('--version')) { console.log('7.4.23'); process.exit(0); }
+console.error('UNEXPECTED_KILO_LAUNCH'); process.exit(1);
+`, async () => {
+      const response = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: 'kilo', projectId, message: 'Inspect the image', attachments: ['large.png'] }),
+      });
+      const body = await response.text();
+      expect(response.ok).toBe(true);
+      expect(body).toContain('BAD_REQUEST');
+      expect(body).toContain('Image attachments must be 1 MB or smaller.');
+      expect(body).not.toContain('UNEXPECTED_KILO_LAUNCH');
+    });
   });
 
   it('rejects a requested media-only model before AMR ACP launch', async () => {

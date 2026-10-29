@@ -202,6 +202,13 @@ export type RuntimeAgentDef = {
   ) => Promise<RuntimeModelOption[] | null>;
   reasoningOptions?: RuntimeReasoningOption[];
   supportsImagePaths?: boolean;
+  // ACP represents local attachments as resource-link URIs. Most legacy ACP
+  // adapters accept the existing raw-path form, while Kilo follows the
+  // protocol strictly and requires an absolute file:// URL.
+  acpImagePathFormat?: 'path' | 'file-url';
+  // MIME matrix applied to ACP file-url resource links. `kilo` is the
+  // measured @kilocode/cli 7.4.23 decoder (PNG/GIF/JPEG/WebP + PDF).
+  acpResourceMimePolicy?: 'generic-image' | 'kilo';
   maxPromptArgBytes?: number;
   mcpDiscovery?: string;
   // How the daemon forwards the user's `.od/mcp-config.json` external MCP
@@ -268,7 +275,7 @@ export type RuntimeAgentDef = {
   // capture the id from a validated protocol status frame.
   capturesSessionIdFromStream?: boolean;
   // ACP-runtime analogue of capture-style resume: the agent talks `acp-json-rpc`
-  // (today only AMR/vela) and supports resuming via `session/load`. The daemon
+  // and supports resuming via `session/load`. The daemon
   // captures the durable upstream session handle from the ACP session
   // (`getDurableSessionId()`) and persists THAT, drives `session/load` on a
   // resume turn, and maps the agent's structured `resume_failed` error onto the
@@ -276,6 +283,14 @@ export type RuntimeAgentDef = {
   // `capturesSessionIdFromStream` because the capture + resume transport is the
   // ACP result, not a `--session-id` flag or a stream `status` event.
   resumesSessionViaAcpLoad?: boolean;
+  // Derived profiles keep their own id for persistence and UI while using the
+  // base adapter's protocol-specific stale-session classifier.
+  resumeFailureAgentId?: string;
+  // Standard ACP agents such as Kilo expose their persisted backing-session id
+  // directly as `session/new.result.sessionId`. Bridges such as AMR instead
+  // return a transient wrapper id plus a separate `openCodeSessionId`, so this
+  // must remain an explicit per-adapter declaration.
+  acpSessionIdIsDurable?: boolean;
   // Optional name of a daemon-process environment variable that overrides
   // the default model id when the chat run reaches the spawn layer with
   // null or the synthetic 'default'. Used by adapters whose CLI rejects
@@ -352,6 +367,10 @@ export type DetectedAgent = Omit<
   | 'maxPromptArgBytes'
   | 'encodeStdinPrompt'
   | 'env'
+  | 'acpImagePathFormat'
+  | 'acpResourceMimePolicy'
+  | 'acpSessionIdIsDurable'
+  | 'resumeFailureAgentId'
   // Runtime timeout fields are spawn-time-only hints consumed by chat-run
   // watchdogs. They are not part of the public `/api/agents`
   // contract (`packages/contracts/src/api/registry.ts#AgentInfo`), so
