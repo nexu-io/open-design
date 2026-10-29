@@ -549,7 +549,7 @@ describe('S12 · HTML share menu', () => {
     expect(fetchMock.mock.calls.some(([url, init]) => String(url).includes('publish-public') && init?.method === 'POST')).toBe(false);
   });
 
-  it('S1-T2: team scope requires confirmation, commits exact move once, and rolls back a failed return', async () => {
+  it.each(['team', 'personal'] as const)('S1-T2: %s workspace scope requires confirmation, commits exact move once, and rolls back a failed return', async (workspaceType) => {
     window.localStorage.removeItem('od.projects.moveConfirmSkip');
     const fetchMock = stubFetch();
     const fallback = fetchMock.getMockImplementation();
@@ -568,7 +568,7 @@ describe('S12 · HTML share menu', () => {
       }
       return fallback!(input, init);
     });
-    renderViewer(teamContext());
+    renderViewer({ ...teamContext(), workspaceType, teamId: workspaceType === 'team' ? 'team-workspace-a' : undefined });
     fireEvent.click(toolbarAction('Share'));
     const privateTrigger = await screen.findByRole('button', { name: 'Only me' });
     const chooseTeam = () => {

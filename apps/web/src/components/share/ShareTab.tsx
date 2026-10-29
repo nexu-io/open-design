@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 
 import type { EntryIndexConflictDetails } from '@open-design/contracts';
 import { useShareScopeKeyboard } from './useShareScopeKeyboard';
 import { ShareButton } from './ShareButton';
-import { shareEntryPresentation, workspaceContextHasTeamIdentity, type ShareContentFreshness, type WorkspaceCollabContext } from '@open-design/contracts';
+import { shareEntryPresentation, workspaceContextHasWorkspaceIdentity, type ShareContentFreshness, type WorkspaceCollabContext } from '@open-design/contracts';
 import type { PublicFilePublishFailureKey } from '../../collab/public-file-publish';
 import type { useT } from '../../i18n';
 import { RemixIcon } from '../RemixIcon';
@@ -435,9 +435,8 @@ export function ShareTab({
                             onLoginSuccess={canResumeUpdateAfterLogin ? onUpdateLoginSuccess : onSignInSuccess} />
                         </div>
                       )}
-                      {/* Team-only, same as ReactComponentViewer's copy of this card above —
-                          see the comment there (recvq5bM78HWCE). */}
-                      {workspaceContextHasTeamIdentity(workspaceContext) ? (
+                      {/* Project visibility uses the same workspace identity as the project menus. */}
+                      {workspaceContextHasWorkspaceIdentity(workspaceContext) ? (
                       <>
                       <div className={styles.scopeHeading}>
                         <div className={styles.scopeRow}>

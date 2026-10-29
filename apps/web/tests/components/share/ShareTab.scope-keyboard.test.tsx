@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { buildWorkspacePermissions, buildWorkspaceSeatSummary } from '@open-design/contracts';
 import { ShareTab } from '../../../src/components/share/ShareTab';
+import { workspaceContextFixture } from '../../helpers/workspace-context';
 
 afterEach(cleanup);
 type Props = ComponentProps<typeof ShareTab>;
@@ -36,7 +37,9 @@ function setup(overrides: Partial<Props> = {}) {
     /></div>;
   }
   render(<Harness />);
-  const trigger = screen.getByRole('button', { name: 'fileViewer.workspaceAccessPrivate' });
+  const trigger = screen.getByRole('button', {
+    name: overrides.shareAccess === 'workspace' ? 'fileViewer.workspaceAccessMembers' : 'fileViewer.workspaceAccessPrivate',
+  });
   return { trigger, change, publish, outerKey };
 }
 
@@ -80,6 +83,25 @@ it('Escape dismisses only the scope list and returns focus to its trigger', () =
   expect(trigger).toHaveFocus();
   expect(outerKey).not.toHaveBeenCalled();
   expect(change).not.toHaveBeenCalled();
+});
+
+it.each(['private', 'workspace'] as const)('allows a default personal workspace to switch from %s', (shareAccess) => {
+  const { trigger, change, publish } = setup({
+    workspaceContext: workspaceContextFixture({
+      workspaceId: 'ws', workspaceMemberId: 'member', workspaceType: 'personal',
+      role: 'owner', planId: null,
+      seatSummary: buildWorkspaceSeatSummary({ seatLimit: 1, usedSeats: 1 }),
+    }),
+    shareAccess,
+  });
+  expect(trigger).toBeEnabled();
+  fireEvent.click(trigger);
+  const nextAccess = shareAccess === 'private' ? 'workspace' : 'private';
+  fireEvent.click(screen.getByRole('option', {
+    name: nextAccess === 'workspace' ? 'fileViewer.workspaceAccessMembers' : 'fileViewer.workspaceAccessPrivate',
+  }));
+  expect(change).toHaveBeenCalledExactlyOnceWith(nextAccess);
+  expect(publish).not.toHaveBeenCalled();
 });
 
 it.each([{ shareAccessBusy: true }, { viewerOnly: true }])('does not open a gated scope selector: %j', (gate) => {
