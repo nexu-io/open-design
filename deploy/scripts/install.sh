@@ -20,17 +20,28 @@ DEPLOY_DIR="$(dirname "$SCRIPT_DIR")"
 COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.yml"
 OVERRIDE_FILE="${DEPLOY_DIR}/docker-compose.override.yml"
 LINUX_OVERRIDE_FILE="${DEPLOY_DIR}/docker-compose.linux.yml"
+SNAP_OVERRIDE_FILE="${DEPLOY_DIR}/docker-compose.snap.yml"
+# Set to 1 after snap Docker is detected so rebuild_compose_files includes
+# the tini / AppArmor escape hatch (see docker-compose.snap.yml, issue #6488).
+APPLY_SNAP_COMPOSE_OVERRIDE=0
 
-# Build the -f argument list: always include the base file,
-# add the Linux host-network override, and add docker-compose.override.yml if present
-# (used by tests for isolation).
-COMPOSE_FILES=(-f "$COMPOSE_FILE")
-if [ "$(uname -s)" = "Linux" ] && [ -f "$LINUX_OVERRIDE_FILE" ]; then
-  COMPOSE_FILES+=(-f "$LINUX_OVERRIDE_FILE")
-fi
-if [ -f "$OVERRIDE_FILE" ]; then
-  COMPOSE_FILES+=(-f "$OVERRIDE_FILE")
-fi
+# Build the -f argument list: always include the base file, then optional
+# Linux host-network override, snap escape hatch, and docker-compose.override.yml
+# (used by tests for isolation). Call again after snap detection flips
+# APPLY_SNAP_COMPOSE_OVERRIDE.
+rebuild_compose_files() {
+  COMPOSE_FILES=(-f "$COMPOSE_FILE")
+  if [ "$(uname -s)" = "Linux" ] && [ -f "$LINUX_OVERRIDE_FILE" ]; then
+    COMPOSE_FILES+=(-f "$LINUX_OVERRIDE_FILE")
+  fi
+  if [ "$APPLY_SNAP_COMPOSE_OVERRIDE" = "1" ] && [ -f "$SNAP_OVERRIDE_FILE" ]; then
+    COMPOSE_FILES+=(-f "$SNAP_OVERRIDE_FILE")
+  fi
+  if [ -f "$OVERRIDE_FILE" ]; then
+    COMPOSE_FILES+=(-f "$OVERRIDE_FILE")
+  fi
+}
+rebuild_compose_files
 
 if [ ! -f "$COMPOSE_FILE" ]; then
   echo "WARN: docker-compose.yml not found at ${COMPOSE_FILE}" >&2
@@ -264,12 +275,54 @@ if ! detect_compose; then
   exit 1
 fi
 
-# The Linux host-network override uses the !reset YAML tag (Docker Compose
-# v2.17+). Reject legacy docker-compose v1 and podman-compose early so users
-# get a clear message instead of a YAML parse error mid-install.
+# Snap-packaged Docker + base compose hardening (read_only + no-new-privileges)
+# blocks the image ENTRYPOINT: exec /sbin/tini: operation not permitted (#6488).
+is_snap_confined_docker() {
+  [ "${CONTAINER_RUNTIME:-}" = "docker" ] || return 1
+  command -v docker >/dev/null 2>&1 || return 1
+  _docker_bin="$(command -v docker)"
+  case "$_docker_bin" in
+    /snap/*) return 0 ;;
+  esac
+  if command -v readlink >/dev/null 2>&1; then
+    _docker_resolved="$(readlink -f "$_docker_bin" 2>/dev/null || true)"
+    case "$_docker_resolved" in
+      /snap/*) return 0 ;;
+    esac
+  fi
+  # Fallback when the binary path is a non-snap wrapper but the daemon still
+  # stores state under the snap data directory.
+  if docker info 2>/dev/null | grep -q '/var/snap/docker'; then
+    return 0
+  fi
+  return 1
+}
+
+if is_snap_confined_docker && [ -f "$SNAP_OVERRIDE_FILE" ]; then
+  APPLY_SNAP_COMPOSE_OVERRIDE=1
+  rebuild_compose_files
+  warn "Snap-packaged Docker detected."
+  warn "Base compose hardening conflicts with snap AppArmor and causes:"
+  warn "  exec /sbin/tini: operation not permitted"
+  warn "Applying docker-compose.snap.yml (relaxes read_only + no-new-privileges)."
+  step "Prefer Docker Engine from Docker's apt repo when you can:"
+  step "  https://docs.docker.com/engine/install/"
+  step "Details: deploy/README.md → Snap Docker (Linux)"
+fi
+
+# Linux host-network and snap overrides use the !reset YAML tag (Docker
+# Compose v2.17+). Reject legacy docker-compose v1 and podman-compose early so
+# users get a clear message instead of a YAML parse error mid-install.
+_needs_compose_reset_tag=0
 if [ "$OS" = "Linux" ] && [ -f "$LINUX_OVERRIDE_FILE" ]; then
+  _needs_compose_reset_tag=1
+fi
+if [ "$APPLY_SNAP_COMPOSE_OVERRIDE" = "1" ]; then
+  _needs_compose_reset_tag=1
+fi
+if [ "$_needs_compose_reset_tag" = "1" ]; then
   if [ "$COMPOSE_CMD" != "docker compose" ]; then
-    error "The Linux host-network override requires 'docker compose' v2."
+    error "The Linux / snap compose overrides require 'docker compose' v2."
     error "Found: ${COMPOSE_CMD}"
     step "Install the Docker Compose plugin: https://docs.docker.com/compose/install/"
     exit 1
@@ -278,7 +331,7 @@ if [ "$OS" = "Linux" ] && [ -f "$LINUX_OVERRIDE_FILE" ]; then
   _compose_major="$(echo "$_compose_ver" | cut -d. -f1)"
   _compose_minor="$(echo "$_compose_ver" | cut -d. -f2)"
   if [ "$_compose_major" -lt 2 ] || { [ "$_compose_major" -eq 2 ] && [ "$_compose_minor" -lt 17 ]; }; then
-    error "Docker Compose v2.17 or later required for the Linux override (found v${_compose_ver})."
+    error "Docker Compose v2.17 or later required for the Linux / snap overrides (found v${_compose_ver})."
     step "Upgrade: https://docs.docker.com/compose/install/"
     exit 1
   fi
@@ -491,10 +544,13 @@ if [ "$OS" = "Linux" ] && [ "$OPT_NO_SYSTEMD" = "0" ]; then
       echo "WorkingDirectory=${DEPLOY_DIR}"
       # Build the compose -f list to match what the installer used at install
       # time, so systemd restarts use the same file set (including the Linux
-      # host-network override when present).
+      # host-network override and snap escape hatch when present).
       _COMPOSE_ARGS="-f ${COMPOSE_FILE}"
       if [ -f "$LINUX_OVERRIDE_FILE" ]; then
         _COMPOSE_ARGS="${_COMPOSE_ARGS} -f ${LINUX_OVERRIDE_FILE}"
+      fi
+      if [ "$APPLY_SNAP_COMPOSE_OVERRIDE" = "1" ] && [ -f "$SNAP_OVERRIDE_FILE" ]; then
+        _COMPOSE_ARGS="${_COMPOSE_ARGS} -f ${SNAP_OVERRIDE_FILE}"
       fi
       if [ -f "$OVERRIDE_FILE" ]; then
         _COMPOSE_ARGS="${_COMPOSE_ARGS} -f ${OVERRIDE_FILE}"
