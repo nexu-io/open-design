@@ -533,6 +533,65 @@ export async function importSkill(
   }
 }
 
+// Per-skill outcome from POST /api/skills/import-batch. Mirrors the
+// contracts type but is repeated here so the registry module is
+// self-describing for callers.
+export interface SkillBatchImportItemResult {
+  name: string;
+  status: 'imported' | 'skipped' | 'failed';
+  id?: string;
+  slug?: string;
+  code?: string;
+  error?: string;
+}
+
+// One companion file inside a batch-imported skill folder. Mirrors the
+// contracts type but is repeated here so the registry module is
+// self-describing for callers.
+export interface SkillBatchImportFile {
+  path: string;
+  contentBase64: string;
+}
+
+// One item of POST /api/skills/import-batch. Carries the ORIGINAL SKILL.md
+// plus companion files so the daemon materializes the folder verbatim
+// instead of rebuilding it from parsed fields.
+export interface SkillBatchImportSkill {
+  skillMd: string;
+  fallbackName?: string;
+  files?: SkillBatchImportFile[];
+}
+
+// Batch variant of `importSkill` (issue #8753): the daemon imports each
+// item independently and reports per-skill outcomes; one malformed or
+// conflicting item never blocks the rest (partial success).
+export async function importSkillsBatch(
+  skills: SkillBatchImportSkill[],
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<{ results: SkillBatchImportItemResult[] } | { error: SkillImportError }> {
+  try {
+    const resp = await fetch('/api/skills/import-batch', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+      },
+      body: JSON.stringify({ skills }),
+    });
+    if (!resp.ok) {
+      return { error: await readSkillOperationError(resp) };
+    }
+    return (await resp.json()) as { results: SkillBatchImportItemResult[] };
+  } catch (err) {
+    return {
+      error: {
+        code: 'network_error',
+        message: err instanceof Error ? err.message : 'Import request failed.',
+      },
+    };
+  }
+}
+
 // Update an existing skill's body. For built-in skills the daemon writes
 // a "shadow" copy under the user-skills root; the next listSkills() pass
 // surfaces it in place of the bundled copy. The id passed here must

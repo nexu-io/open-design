@@ -1519,6 +1519,11 @@ export const zhCN: Dict = {
   "pluginsView.skillReadFailed": "无法读取 SKILL.md，请重试。",
   "pluginsView.skillMissingName": "SKILL.md 缺少 name 字段。",
   "pluginsView.skillEmptyBody": "SKILL.md 内容为空。",
+  "pluginsView.importBatchResultsTitle": "导入结果",
+  "pluginsView.importBatchImported": "已导入",
+  "pluginsView.importBatchSkipped": "已跳过",
+  "pluginsView.importBatchFailed": "导入失败",
+  "pluginsView.importBatchUnnamed": "未命名",
   "pluginsView.teamTitle": "私有团队插件市场",
   "pluginsView.teamBody":
     "此区域预留给企业和团队目录、私有信任策略，以及共享插件生命周期控制。",

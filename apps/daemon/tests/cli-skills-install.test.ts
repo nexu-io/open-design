@@ -1,7 +1,9 @@
 import http from 'node:http';
 import { execFile } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve as pathResolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { dirname, join as joinPath, resolve as pathResolve } from 'node:path';
 import { promisify } from 'node:util';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -52,6 +54,16 @@ describe('od skill CLI', () => {
             res.statusCode = 404;
             res.end(JSON.stringify({ error: 'skill not found' }));
           }
+          return;
+        }
+        if (req.url === '/api/skills/import-batch') {
+          const skills = JSON.parse(body)?.skills ?? [];
+          res.end(JSON.stringify({
+            results: skills.map((skill: { fallbackName: string }) => ({
+              name: skill.fallbackName,
+              status: 'imported',
+            })),
+          }));
           return;
         }
         res.end(JSON.stringify({
@@ -230,5 +242,60 @@ describe('od skill CLI', () => {
     expect(result.code).not.toBe(0);
     expect(result.stderr).toContain('--workspace-member');
     expect(requests).toHaveLength(0);
+  });
+
+  it('skill import batch-posts every skill folder with its original SKILL.md and side files', async () => {
+    const parent = mkdtempSync(joinPath(tmpdir(), 'od-skill-import-'));
+    try {
+      mkdirSync(joinPath(parent, 'alpha', 'references'), { recursive: true });
+      writeFileSync(
+        joinPath(parent, 'alpha', 'SKILL.md'),
+        '---\nname: alpha-skill\ndescription: |\n  Block scalar kept verbatim.\n---\n\n# Alpha\n',
+      );
+      writeFileSync(joinPath(parent, 'alpha', 'references', 'api.md'), '# API\n');
+      writeFileSync(joinPath(parent, 'alpha', '.DS_Store'), 'junk');
+      mkdirSync(joinPath(parent, 'beta'));
+      writeFileSync(joinPath(parent, 'beta', 'SKILL.md'), '# Beta has no frontmatter\n');
+      mkdirSync(joinPath(parent, 'not-a-skill'));
+
+      const result = await runCli([
+        'skill',
+        'import',
+        parent,
+        '--daemon-url',
+        baseUrl,
+        '--json',
+      ]);
+
+      expect(result.code).toBe(0);
+      expect(requests).toHaveLength(1);
+      expect(requests[0]).toMatchObject({ method: 'POST', url: '/api/skills/import-batch' });
+      const sent = JSON.parse(requests[0]!.body);
+      expect(sent.skills).toHaveLength(2);
+      // The original SKILL.md travels verbatim — the daemon materializes it
+      // instead of rebuilding it from parsed fields (mrcfps PR #8754 review).
+      expect(sent.skills[0]).toMatchObject({ fallbackName: 'alpha' });
+      expect(sent.skills[0].skillMd).toBe(
+        '---\nname: alpha-skill\ndescription: |\n  Block scalar kept verbatim.\n---\n\n# Alpha\n',
+      );
+      expect(sent.skills[0].files).toEqual([
+        {
+          path: 'references/api.md',
+          contentBase64: Buffer.from('# API\n').toString('base64'),
+        },
+      ]);
+      expect(sent.skills[1]).toMatchObject({
+        fallbackName: 'beta',
+        skillMd: '# Beta has no frontmatter\n',
+        files: [],
+      });
+      const printed = JSON.parse(result.stdout);
+      expect(printed.results).toEqual([
+        { name: 'alpha', status: 'imported' },
+        { name: 'beta', status: 'imported' },
+      ]);
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
   });
 });
