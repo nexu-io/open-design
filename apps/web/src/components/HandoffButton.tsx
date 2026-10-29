@@ -79,6 +79,7 @@ const CLI_ORDER = [
   'trae-cli',
   'pi',
   'reasonix',
+  'minimax-code',
 ];
 
 const FALLBACK_CLI_TARGETS: CliTarget[] = [
@@ -103,6 +104,7 @@ const FALLBACK_CLI_TARGETS: CliTarget[] = [
   { id: 'trae-cli', name: 'Trae CLI', bin: 'traecli', available: false },
   { id: 'pi', name: 'Pi', bin: 'pi', available: false },
   { id: 'reasonix', name: 'DeepSeek Reasonix', bin: 'reasonix', available: false },
+  { id: 'minimax-code', name: 'MiniMax Code', bin: 'mcode', available: false },
 ];
 
 interface Props {

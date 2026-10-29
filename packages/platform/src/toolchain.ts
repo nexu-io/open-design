@@ -114,10 +114,21 @@ export function wellKnownUserToolchainBins(
   if (process.platform === "win32") {
     dirs.push(join(home, "AppData", "Roaming", "npm"));
   }
+  // MiniMax Code's official installer writes launchers under
+  // ~/.minimax-code/bin (POSIX) or %USERPROFILE%\.minimax-code (Windows).
+  // MCODE_INSTALL_DIR relocates that tree; search it first when set.
+  const mcodeInstallDir = resolveUserScopedHome(env.MCODE_INSTALL_DIR, home);
+  if (mcodeInstallDir) {
+    dirs.push(join(mcodeInstallDir, "bin"));
+    if (process.platform === "win32") {
+      dirs.push(mcodeInstallDir);
+    }
+  }
   dirs.push(
     join(home, ".local", "bin"),
     join(home, ".vite-plus", "bin"),
     join(home, ".kimi-code", "bin"),
+    join(home, ".minimax-code", "bin"),
     join(home, ".opencode", "bin"),
     join(home, ".grok", "bin"),
     join(home, ".bun", "bin"),
@@ -148,6 +159,7 @@ export function wellKnownUserToolchainBins(
   // to %APPDATA%\npm rather than a `bin` subdir.
   if (process.platform === "win32") {
     dirs.push(join(home, "scoop", "shims"));
+    dirs.push(join(home, ".minimax-code"));
     const appData = typeof env.APPDATA === "string" ? env.APPDATA.trim() : "";
     if (appData.length > 0) {
       dirs.push(join(appData, "npm"));

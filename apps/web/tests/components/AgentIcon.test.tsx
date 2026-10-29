@@ -54,6 +54,13 @@ describe('AgentIcon', () => {
     expect(markup).not.toContain('agent-icon-fallback');
   });
 
+  it('renders MiniMax Code as the bundled MiniMax SVG', () => {
+    const markup = renderToStaticMarkup(<AgentIcon id="minimax-code" size={24} />);
+
+    expect(markup).toContain('src="/agent-icons/minimax-code.svg"');
+    expect(markup).not.toContain('agent-icon-fallback');
+  });
+
   it('renders Trae CLI as a PNG keyed on the trae-cli runtime id', () => {
     // The daemon runtime def id is `trae-cli`, so the icon file and the
     // ICON_EXT key must match that id exactly (not a bare `trae`).

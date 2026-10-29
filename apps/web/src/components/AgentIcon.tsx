@@ -34,6 +34,7 @@ const ICON_EXT: Record<string, 'svg' | 'png'> = {
   antigravity: 'svg',
   aider: 'png',
   'trae-cli': 'png',
+  'minimax-code': 'svg',
   devin: 'png',
 };
 

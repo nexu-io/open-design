@@ -529,6 +529,9 @@ describe('app-config', () => {
           'trae-cli': {
             TRAE_CLI_BIN: '  ~/bin/traecli-public  ',
           },
+          'minimax-code': {
+            MCODE_BIN: '  ~/bin/mcode-custom  ',
+          },
           pi: {
             PI_BIN: '  ~/bin/pi  ',
             PI_CODING_AGENT_DIR: '  ~/.pi-isolated/agent  ',
@@ -553,6 +556,7 @@ describe('app-config', () => {
         },
         opencode: { OPENCODE_BIN: '~/bin/opencode' },
         'trae-cli': { TRAE_CLI_BIN: '~/bin/traecli-public' },
+        'minimax-code': { MCODE_BIN: '~/bin/mcode-custom' },
         // pi's config-directory override survives the save (#8093); the
         // neighbouring session-dir key is not in the contract and still does not.
         pi: { PI_BIN: '~/bin/pi', PI_CODING_AGENT_DIR: '~/.pi-isolated/agent' },

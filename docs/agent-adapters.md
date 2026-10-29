@@ -142,7 +142,7 @@ definitions currently group by transport as follows:
 | `json-event-stream` | `codex`, `cursor-agent`, `opencode`, `mimo`, `byok-opencode` |
 | `copilot-stream-json` | `copilot` |
 | `qoder-stream-json` | `qoder` |
-| `acp-json-rpc` | `amr` (Vela), `devin`, `hermes`, `kimi`, `kiro`, `kilo`, `reasonix`, `trae-cli`, `vibe` |
+| `acp-json-rpc` | `amr` (Vela), `devin`, `hermes`, `kimi`, `kiro`, `kilo`, `reasonix`, `trae-cli`, `vibe`, `minimax-code` |
 | `pi-rpc` | `pi` |
 | `dsh-profile-jsonl` | `deepseek-harness` |
 | `plain` | `aider`, `antigravity`, `atomcode`, `deepseek`, `grok-build`, `qwen` |
@@ -336,6 +336,16 @@ authentication, and the boundary between REST and MCP.
 - Skills use the shared §4 path. External MCP servers can be forwarded through the ACP launch descriptor with the existing `acp-merge` path.
 - Permission: `--yolo` avoids headless approval prompts in the web UI. This follows the adapter catalog's existing non-interactive permission posture for CLIs such as Devin, Copilot, Qoder, and DeepSeek: the daemon runs agent CLIs without a TTY, so it must not rely on an interactive tool-approval prompt to make progress.
 - **Gotcha:** Detection only proves `traecli --version` and model discovery can run in the current environment. Trae CLI owns login, account scope, and model entitlement; the daemon does not run login flows or edit Trae CLI configuration.
+
+### 5.9.1 MiniMax Code
+
+- Invocation: `mcode acp`, using the daemon's shared ACP JSON-RPC transport. The public MiniMax Code README documents this as the editor/client entrypoint alongside the interactive TUI (`mcode`) and headless `mcode exec`.
+- Streaming: `acp-json-rpc`; the daemon uses the same ACP event path as the other ACP-backed adapters.
+- Models: dynamic via the ACP handshake. If model discovery fails, the picker falls back to the CLI's default configuration. Custom free-text model ids are hidden because MiniMax Code advertises models through ACP config options rather than accepting an unverified argv string.
+- Skills use the shared §4 path. External MCP servers can be forwarded through the ACP launch descriptor with the existing `acp-merge` path. MiniMax Code's ACP mapper accepts stdio (`command`), HTTP, and SSE client MCP servers.
+- Auth and install stay with the CLI: `mcode login` / `mcode login --region global`, or BYOK via `MCODE_PROVIDER_API_KEY` and `mcode provider add`. The official installer writes launchers under `~/.minimax-code` (`MCODE_INSTALL_DIR` relocates that tree); `npm install -g @minimax-ai/code` is the Node path. Detection also honors `MCODE_BIN`.
+- Session: MiniMax Code advertises `loadSession: true` and implements `session/load`. This adapter still recomposes the OpenDesign transcript each turn, matching the other shipped ACP CLIs, until a live multi-turn session confirms the daemon's `resumesSessionViaAcpLoad` reseed path.
+- **Gotcha:** Detection only proves `mcode --version` and model discovery can run in the current environment. MiniMax Code owns login, account region, and model entitlement; the daemon does not run `mcode login` or edit `~/.minimax` configuration.
 
 ### 5.10 Pi
 
@@ -574,7 +584,7 @@ apps/daemon/src/
 │   │   ├── devin.ts
 │   │   ├── …               # ~two dozen defs (opencode, hermes, qoder, copilot,
 │   │   │                   #   amp, pi, kiro, kilo, vibe, deepseek, aider, antigravity, qwen,
-│   │   │                   #   grok-build, kimi, reasonix, codebuddy, trae-cli, …)
+│   │   │                   #   grok-build, kimi, reasonix, codebuddy, trae-cli, minimax-code, …)
 │   │   └── shared.ts       # helpers reused across defs (not a registered agent)
 │   ├── detection.ts        # resolved-launch/version/help/model/auth probes (detectAgents / …Stream)
 │   ├── capabilities.ts     # in-process help-probe flag map consumed by arg builders
@@ -591,7 +601,7 @@ apps/daemon/src/
 ├── copilot-stream.ts       # streamFormat="copilot-stream-json" — the one stream parser that sits flat at src/
 ├── agent-protocol/         # JSON-RPC transports, dispatched via agent-protocol/index.ts (attachAcpSession / attachPiRpcSession)
 │   ├── index.ts            # barrel: attachAcpSession / attachPiRpcSession / mapPiRpcEvent
-│   ├── acp/                # streamFormat="acp-json-rpc": shared transport for AMR, Devin, Hermes, Kimi, Kiro, Kilo, Reasonix, Trae CLI, and Vibe
+│   ├── acp/                # streamFormat="acp-json-rpc": shared transport for AMR, Devin, Hermes, Kimi, Kiro, Kilo, Reasonix, Trae CLI, Vibe, and MiniMax Code
 │   ├── pi-rpc/             # streamFormat="pi-rpc": pi's JSON-RPC-over-stdio transport
 │   └── core/               # shared JSON-line stream helpers
 └── server.ts               # spawn pipeline + stream dispatch: routes def.streamFormat/eventParser to a parser

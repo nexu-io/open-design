@@ -645,6 +645,7 @@ const CANONICAL_AGENT_ORDER = [
   'aider',
   'antigravity',
   'reasonix',
+  'minimax-code',
 ] as const;
 
 const CANONICAL_AGENT_ORDER_INDEX = new Map<string, number>(

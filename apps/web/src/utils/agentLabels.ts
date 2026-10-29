@@ -25,6 +25,7 @@ const AGENT_LABELS: Record<string, string> = {
   'senseaudio-api': 'SenseAudio API via OpenCode',
   'aihubmix-api': 'AIHubMix API via OpenCode',
   'bedrock-api': 'AWS Bedrock via OpenCode',
+  'minimax-code': 'MiniMax Code',
 };
 
 const AGENT_ALIASES: Record<string, string> = {
@@ -46,6 +47,10 @@ const AGENT_ALIASES: Record<string, string> = {
   'aider cli': 'aider',
   'aider chat': 'aider',
   agy: 'antigravity',
+  mcode: 'minimax-code',
+  'mcode cli': 'minimax-code',
+  'minimax code': 'minimax-code',
+  'minimax-code cli': 'minimax-code',
 };
 
 export function agentDisplayName(

@@ -95,6 +95,10 @@ const AGENT_INSTALL_LINKS: Record<
     installUrl: 'https://atomcode.atomgit.com/docs/en/quickstart.html',
     docsUrl: 'https://atomcode.atomgit.com/docs/en/index.html',
   },
+  'minimax-code': {
+    installUrl: 'https://github.com/MiniMax-AI/minimax-code',
+    docsUrl: 'https://agent.minimax.io/docs/cli/quick-start',
+  },
 };
 
 function sanitizeHttpsUrl(value: string | undefined): string | undefined {

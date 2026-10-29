@@ -793,6 +793,7 @@ describe("wellKnownUserToolchainBins", () => {
       const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: false });
       expect(dirs).toContain(join(home, ".local", "bin"));
       expect(dirs).toContain(join(home, ".kimi-code", "bin"));
+      expect(dirs).toContain(join(home, ".minimax-code", "bin"));
       expect(dirs).toContain(join(home, ".opencode", "bin"));
       expect(dirs).toContain(join(home, ".bun", "bin"));
       expect(dirs).toContain(join(home, ".volta", "bin"));
@@ -801,6 +802,30 @@ describe("wellKnownUserToolchainBins", () => {
       expect(dirs).toContain(join(home, ".cargo", "bin"));
     } finally {
       rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("includes ~/.minimax-code/bin and honors MCODE_INSTALL_DIR", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-mcode-"));
+    const customInstall = mkdtempSync(join(tmpdir(), "wkutb-mcode-custom-"));
+    try {
+      const defaultDirs = wellKnownUserToolchainBins({
+        home,
+        env: {},
+        includeSystemBins: false,
+      });
+      expect(defaultDirs).toContain(join(home, ".minimax-code", "bin"));
+
+      const overrideDirs = wellKnownUserToolchainBins({
+        home,
+        env: { MCODE_INSTALL_DIR: customInstall },
+        includeSystemBins: false,
+      });
+      expect(overrideDirs).toContain(join(customInstall, "bin"));
+      expect(overrideDirs).toContain(join(home, ".minimax-code", "bin"));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(customInstall, { recursive: true, force: true });
     }
   });
 

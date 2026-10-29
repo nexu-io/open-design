@@ -113,13 +113,14 @@ OpenDesign 是**首个协作式 AI 设计 Agent 工作台**。从需求描述出
 | [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ 支持 | `od mcp install pi` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ 支持 | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ 支持 | `od mcp install hermes` |
+| [MiniMax Code](https://github.com/MiniMax-AI/minimax-code) | ✅ 原生运行时 | 安装 `mcode`，然后在 OpenDesign 中选择 MiniMax Code |
 
-使用 DeepSeek Harness 时，请先安装官方 `dsh` CLI，再在 OpenDesign 中选择它，或运行 `od agent setup deepseek-harness` 安装/修复 OD 连接组件。MCP 集成可用 `od mcp install <agent> --print` 干跑预览 · `--uninstall` 卸载 · 完整清单 `od mcp install --help`。
+使用 DeepSeek Harness 时，请先安装官方 `dsh` CLI，再在 OpenDesign 中选择它，或运行 `od agent setup deepseek-harness` 安装/修复 OD 连接组件。使用 MiniMax Code 时，请先安装官方 `mcode` CLI（见 [MiniMax Code](https://github.com/MiniMax-AI/minimax-code)），再在 OpenDesign 中选择它。MCP 集成可用 `od mcp install <agent> --print` 干跑预览 · `--uninstall` 卸载 · 完整清单 `od mcp install --help`。
 
 ¹ Claude Desktop 的自动 MCP 配置目前仅在 macOS 和 Windows 上支持。
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="OpenDesign 支持的 26 个编码 Agent CLI — DeepSeek Harness · Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="OpenDesign 支持的 27 个编码 Agent CLI — DeepSeek Harness · Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae · MiniMax Code" width="100%" />
 </p>
 
 **未安装任何 CLI？** `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` 的 BYOK 代理提供同样的循环（无需 spawn 进程）——粘贴 `baseUrl` + `apiKey` + `model`，支持 OpenAI、Anthropic、Azure OpenAI、Google Gemini、Ollama、LM Studio、vLLM 或任何 OpenAI 兼容端点。每个目标的 SSRF 防护在守护进程边缘拦截内网 IP / link-local / CGNAT。
@@ -507,8 +508,8 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
              ▼
    ┌──────────────────────────────────────────────────────────────────────┐
    │  Local runtime definitions come from runtimes/registry.ts;                 │
-   │  the base registry has 27 definitions (including byok-opencode),           │
-   │  backed by 26 distinct local CLI executables because byok-opencode shares │
+   │  the base registry has 28 definitions (including byok-opencode),           │
+   │  backed by 27 distinct local CLI executables because byok-opencode shares │
    │  the OpenCode executable. See docs/agent-adapters.md.                     │
    │  组合功能技能或设计模板 + DESIGN.md，并将规范文件写入磁盘                   │
    └──────────────────────────────────────────────────────────────────────┘

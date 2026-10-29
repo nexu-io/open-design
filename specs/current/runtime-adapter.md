@@ -41,7 +41,7 @@ entries than the built-in list.
 |---|---|---|
 | `claude-stream-json` | `claude`, `amp`, `codebuddy` | `claude`, `amp`, `codebuddy` |
 | `json-event-stream` | `codex`, `opencode`, `byok-opencode`, `cursor-agent`, `mimo` | `codex`, `opencode-cli`, `opencode-cli`, `cursor-agent`, `mimo` |
-| `acp-json-rpc` | `amr`, `devin`, `hermes`, `trae-cli`, `kimi`, `kiro`, `kilo`, `vibe`, `reasonix` | `vela`, `devin`, `hermes`, `traecli`, `kimi`, `kiro-cli`, `kilo`, `vibe-acp`, `reasonix` |
+| `acp-json-rpc` | `amr`, `devin`, `hermes`, `trae-cli`, `kimi`, `kiro`, `kilo`, `vibe`, `reasonix`, `minimax-code` | `vela`, `devin`, `hermes`, `traecli`, `kimi`, `kiro-cli`, `kilo`, `vibe-acp`, `reasonix`, `mcode` |
 | `pi-rpc` | `pi` | `pi` |
 | `qoder-stream-json` | `qoder` | `qodercli` |
 | `copilot-stream-json` | `copilot` | `copilot` |

@@ -13,12 +13,15 @@ describe('agentDisplayName', () => {
     expect(agentDisplayName('cursor-agent')).toBe('Cursor');
     expect(agentDisplayName('deepseek-harness')).toBe('DeepSeek Harness');
     expect(agentDisplayName('kimi')).toBe('Kimi CLI');
+    expect(agentDisplayName('minimax-code')).toBe('MiniMax Code');
   });
 
   it('resolves common aliases like "claude code" and "qodercli"', () => {
     expect(agentDisplayName('Claude Code')).toBe('Claude');
     expect(agentDisplayName('qodercli')).toBe('Qoder');
     expect(agentDisplayName('DeepSeek Harness')).toBe('DeepSeek Harness');
+    expect(agentDisplayName('mcode')).toBe('MiniMax Code');
+    expect(agentDisplayName('MiniMax Code')).toBe('MiniMax Code');
   });
 
   it('matches embedded substrings such as cursor-agent in a longer path', () => {
