@@ -18,12 +18,29 @@ const languageMatchRule =
 const localizationBullet =
   '- Localize every user-facing string in the form (\\`title\\`, the per-question \\`label\\`, \\`placeholder\\`, and option \\`label\\`s) to the user\'s chat language — write what a native speaker would naturally say, never a word-for-word translation (the Chinese title is 快速确认 · 30秒, not the literal 快速简报). Set the top-level \\`"lang"\\` field to the BCP-47 tag of that language (e.g. \\`"zh-CN"\\`, \\`"ja"\\`) so the host renders its built-in controls (the "Other" chip, the custom-answer field) in the same language. \\`id\\`, \\`type\\`, option \\`value\\`, and the stable branch values (\\`pick_direction\\`, \\`brand_spec\\`, \\`reference_match\\`) MUST stay in English because later branch rules match against them.';
 
+const odDefaultSkillPath = 'plugins/_official/scenarios/od-default/SKILL.md';
+
+// The example body deliberately keeps `"lang": "en"` (it is the English
+// reference form); these rules are what tell the model to replace it.
+const odDefaultLangTagRule =
+  'Set the top-level `"lang"`\nfield to the BCP-47 tag of that language (e.g. `"zh-CN"`, `"ja"`) so the host\nrenders its built-in controls in the same language.';
+
+const odDefaultExampleLocalizationRule =
+  'The example form below\nuses English text for reference; replace each user-facing string with its\nlocalized equivalent before emitting.';
+
 describe('discovery prompt localization rules', () => {
   it.each(promptPaths)('%s includes the localized form wording', (promptPath) => {
     const source = readFileSync(resolve(repoRoot, promptPath), 'utf8');
 
     expect(source).toContain(languageMatchRule);
     expect(source).toContain(localizationBullet);
+  });
+
+  it('od-default states the same lang-tag and localize-the-example rules', () => {
+    const source = readFileSync(resolve(repoRoot, odDefaultSkillPath), 'utf8');
+
+    expect(source).toContain(odDefaultLangTagRule);
+    expect(source).toContain(odDefaultExampleLocalizationRule);
   });
 });
 
