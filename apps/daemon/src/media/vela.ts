@@ -75,6 +75,8 @@ export const VELA_MEDIA_CLI_INCOMPATIBLE_CODE = 'MEDIA_CLI_INCOMPATIBLE';
 
 const VELA_MEDIA_COMMAND_MISSING_RE =
   /unknown command\s+["'](?:media|image|video)["']\s+for\s+["']vela["']/i;
+const VELA_SIGNED_OUT_PROFILE_RE =
+  /\bprofile\s+(?:"[^"]+"|'[^']+'|\S+)\s+is\s+not\s+logged\s+in;\s*run\s+`?vela\s+login`?/i;
 
 function isRecord(value: unknown): value is JsonRecord {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -384,6 +386,7 @@ export async function renderVelaImage(
   try {
     const stagedImageRefs = await stageInputImages(input.imageRefs, tempDir);
     const command = edits ? 'edit' : 'gen';
+    
     const args = [
       'image',
       command,
@@ -546,6 +549,16 @@ export function velaMediaErrorFromFailure(
       'the local media runtime is too old; update it and try again',
       {
         code: VELA_MEDIA_CLI_INCOMPATIBLE_CODE,
+        retryable: false,
+      },
+    );
+  }
+  const stderr = velaCommandStderr(error);
+  if (VELA_SIGNED_OUT_PROFILE_RE.test(`${commandMessage}\n${stderr}`)) {
+    return new VelaMediaError(
+      'your Open Design session is signed out; run `vela login` and try again',
+      {
+        code: 'AMR_AUTH_REQUIRED',
         retryable: false,
       },
     );
