@@ -860,6 +860,45 @@ describe('App project list across a workspace switch', () => {
     expect(projectResourceRequests).toHaveLength(1);
   });
 
+  it('waits for the scoped project list on refresh instead of probing a bound project headerless', async () => {
+    const boundProject = { ...WORKSPACE_A_PROJECT, workspaceId: 'ws-a' };
+    const projectList = deferred<Project[]>();
+    const scopeRequests: Headers[] = [];
+    vi.mocked(listProjects).mockImplementation(async (options) =>
+      options?.workspaceContext ? projectList.promise : []);
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const pathname = new URL(String(input), 'http://d.local').pathname;
+      if (pathname === `/api/projects/${boundProject.id}/workspace-scope`) {
+        const headers = new Headers(init?.headers);
+        scopeRequests.push(headers);
+        return Response.json({ error: { code: 'WORKSPACE_CONTEXT_REQUIRED' } }, { status: 400 });
+      }
+      return Response.json(pathname.endsWith('/workspace/directory')
+        ? workspaceDirectoryFixture([workspaceContext('ws-a')])
+        : pathname.endsWith('/workspace/context')
+          ? workspaceContextPayload('ws-a')
+          : {});
+    }));
+    window.history.replaceState(null, '', `/projects/${boundProject.id}`);
+
+    render(<App />);
+    await waitFor(() => expect(vi.mocked(listProjects).mock.calls.some(
+      ([options]) => options?.workspaceContext?.workspaceId === 'ws-a',
+    )).toBe(true));
+    expect(scopeRequests).toEqual([]);
+    expect(screen.queryByTestId('project-view')).toBeNull();
+
+    await act(async () => {
+      projectList.resolve([boundProject]);
+      await projectList.promise;
+    });
+    await waitFor(() => expect(screen.getByTestId('project-view')).toBeTruthy());
+    expect(scopeRequests).toEqual([]);
+    expect(projectViewLifecycle.renders.mock.lastCall?.[0]).toMatchObject({
+      workspaceContextOverride: { workspaceId: 'ws-a', workspaceMemberId: 'member-ws-a' },
+    });
+  });
+
   it('bootstraps a fresh A deep link under ambient B without any headerless project-data read', async () => {
     const boundProjectA: Project = {
       ...WORKSPACE_A_PROJECT,
@@ -996,16 +1035,14 @@ describe('App project list across a workspace switch', () => {
     expect(screen.getByTestId(`entry-project-${boundProjectB.id}`)).toBeTruthy();
   });
 
-  it('waits for directory authority before mounting a deep link while health and project list stay pending', async () => {
+  it('waits for directory authority before mounting a deep link after the startup catalog settles', async () => {
     const boundProjectA: Project = {
       ...WORKSPACE_A_PROJECT,
       workspaceId: 'ws-a',
     };
-    const health = deferred<boolean>();
     const directory = deferred<Response>();
     let scopeReads = 0;
     let detailReads = 0;
-    vi.mocked(daemonIsLive).mockReturnValue(health.promise);
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const pathname = new URL(String(input), 'http://d.local').pathname;
       if (pathname === '/api/workspace/directory') return directory.promise.then((response) => response.clone());
@@ -1042,12 +1079,13 @@ describe('App project list across a workspace switch', () => {
         headers: { 'content-type': 'application/json' },
       });
     }));
-    vi.mocked(listProjects).mockImplementation(() => new Promise<Project[]>(() => {}));
+    vi.mocked(listProjects).mockResolvedValue([]);
     window.history.replaceState(null, '', `/projects/${boundProjectA.id}`);
 
     render(<App />);
 
-    await waitFor(() => expect(scopeReads).toBe(1));
+    await waitFor(() => expect(vi.mocked(listProjects)).toHaveBeenCalled());
+    expect(scopeReads).toBe(0);
     expect(detailReads).toBe(0);
     expect(screen.queryByTestId('project-view')).toBeNull();
     await act(async () => {
@@ -1059,7 +1097,7 @@ describe('App project list across a workspace switch', () => {
       expect(detailReads).toBe(1);
       expect(screen.getByTestId('project-view')).toBeTruthy();
     });
-    expect(vi.mocked(listProjects)).not.toHaveBeenCalled();
+    expect(vi.mocked(listProjects)).toHaveBeenCalled();
     expect(projectViewLifecycle.renders.mock.lastCall?.[0]).toMatchObject({
       project: boundProjectA,
       workspaceContextOverride: {
@@ -1094,17 +1132,15 @@ describe('App project list across a workspace switch', () => {
     ).toBe(false);
   });
 
-  it('adopts a completed bootstrap after workspace refresh and directory authority settle', async () => {
+  it('adopts an in-flight bootstrap after a workspace selection change', async () => {
     const boundProjectA: Project = {
       ...WORKSPACE_A_PROJECT,
       workspaceId: 'ws-a',
     };
-    const health = deferred<boolean>();
     const directory = deferred<Response>();
     const scopeResponse = deferred<Response>();
     let scopeReads = 0;
     let detailReads = 0;
-    vi.mocked(daemonIsLive).mockReturnValue(health.promise);
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const pathname = new URL(String(input), 'http://d.local').pathname;
       if (pathname === '/api/workspace/directory') return directory.promise.then((response) => response.clone());
@@ -1145,11 +1181,14 @@ describe('App project list across a workspace switch', () => {
         headers: { 'content-type': 'application/json' },
       });
     }));
-    vi.mocked(listProjects).mockImplementation(() => new Promise<Project[]>(() => {}));
+    vi.mocked(listProjects).mockResolvedValue([]);
     window.history.replaceState(null, '', `/projects/${boundProjectA.id}`);
 
     render(<App />);
 
+    await act(async () => {
+      directory.resolve(new Response(JSON.stringify(workspaceDirectoryFixture([workspaceContext('ws-a')]))));
+    });
     await waitFor(() => expect(scopeReads).toBe(1));
     await act(async () => {
       notifyWorkspaceContextRefresh({ context: workspaceContext('ws-b') });
@@ -1169,13 +1208,6 @@ describe('App project list across a workspace switch', () => {
         headers: { 'content-type': 'application/json' },
       }));
       await scopeResponse.promise;
-    });
-
-    await waitFor(() => expect(scopeReads).toBe(1));
-    expect(detailReads).toBe(0);
-    expect(screen.queryByTestId('project-view')).toBeNull();
-    await act(async () => {
-      directory.resolve(new Response(JSON.stringify(workspaceDirectoryFixture([workspaceContext('ws-a')]))));
     });
 
     await waitFor(() => {

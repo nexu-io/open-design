@@ -5204,6 +5204,9 @@ function AppInner() {
         && openingWitness.accountGeneration === accountGeneration
           ? openingWitness.context
           : null;
+      // A refresh has no card witness. Let its scoped catalog supply the
+      // binding before probing a Team project without request authority.
+      if (!exactOpenContext && (projectsLoading || workspaceContextLoading)) return;
       const bootstrap = await bootstrapProjectRoute(projectId, {
         accountGeneration,
         exactContext: exactOpenContext,
@@ -5366,6 +5369,7 @@ function AppInner() {
     currentProjectListScope,
     activeAccountGeneration,
     projectsLoading,
+    workspaceContextLoading,
     daemonLive,
     deepLinkRetryRevision,
     beginProjectListRequest,

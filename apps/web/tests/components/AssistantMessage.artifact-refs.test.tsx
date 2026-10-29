@@ -166,7 +166,7 @@ describe('AssistantMessage 把消息上的 artifactRefs 交给产物卡', () => 
     });
 
     await waitFor(() => expect(mediaOf('landing.html')).not.toBeNull());
-    expect(mediaOf('landing.html')!.getAttribute('src')).toBe(HTML_SHOT);
+    expect(mediaOf('landing.html')!.getAttribute('src')).toBe(`${HTML_SHOT}?workspaceId=workspace-a&workspaceMemberId=member-a`);
     expect(
       screen.getByTestId('artifact-card-landing.html').querySelector('iframe'),
       'refs 没走到卡上:卡面还挂着活 iframe,历史卡会跟着最新版本漂',
@@ -187,7 +187,7 @@ describe('AssistantMessage 把消息上的 artifactRefs 交给产物卡', () => 
       onRequestOpenFile,
     });
 
-    expect(mediaOf('hero.png')!.getAttribute('src')).toBe(IMAGE_SHOT);
+    expect(mediaOf('hero.png')!.getAttribute('src')).toBe(`${IMAGE_SHOT}?workspaceId=workspace-a&workspaceMemberId=member-a`);
 
     fireEvent.click(screen.getByTestId('artifact-card-open-hero.png'));
     // 用户 2026-09-02:「html 和图片都是,产物缩略是快照,但跳过去产物永远指向最新的」。
