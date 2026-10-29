@@ -1,3 +1,4 @@
+import { lockWebModalScroll } from './modal-scroll-lock';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Dialog } from '@open-design/components';
@@ -63,6 +64,11 @@ export function GoPlanSunsetDialog({
       locale,
     });
   }, [active, analytics.track, currentPlanId, locale]);
+
+  useEffect(() => {
+    if (!active) return;
+    return lockWebModalScroll();
+  }, [active]);
 
   const trackClick = useCallback((element: DismissElement | 'view_other_subscriptions') => {
     trackGoPlanSunsetModalClick(analytics.track, {

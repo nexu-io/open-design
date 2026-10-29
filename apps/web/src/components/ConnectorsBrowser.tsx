@@ -1,3 +1,4 @@
+import { lockWebModalScroll } from './modal-scroll-lock';
 import {
   useCallback,
   useEffect,
@@ -1353,11 +1354,10 @@ function ConnectorDetailDrawer({
     }
     document.addEventListener('keydown', onKey);
     closeBtnRef.current?.focus();
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const releaseScrollLock = lockWebModalScroll();
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = previousOverflow;
+      releaseScrollLock();
     };
   }, [onClose]);
 

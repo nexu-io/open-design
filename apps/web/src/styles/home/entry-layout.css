@@ -1746,6 +1746,16 @@
   scrollbar-gutter: stable;
 }
 
+/* Host modals own the root lock; home owns its independent scrolling pane.
+   Keep the stable gutter and scroll position while removing the background bar. */
+body[data-web-modal-scroll-lock] {
+  overflow: hidden !important;
+}
+
+body[data-web-modal-scroll-lock] .entry-main--scroll {
+  overflow-y: hidden;
+}
+
 /* Top-right cluster inside the tabs chrome's dedicated no-drag actions host:
    campaign badge on the left, account module on the right, one flex row. */
 .entry-top-right-cluster {
