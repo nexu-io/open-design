@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import { createLiveArtifactsMcpTools, handleLiveArtifactsMcpRequest } from '../../src/mcp-live-artifacts-server.js';
-import { AGENT_DEFS, assert, buildLiveArtifactsMcpServersForAgent, hermes, kimi } from './helpers/test-helpers.js';
+import { AGENT_DEFS, assert, buildLiveArtifactsMcpServersForAgent, hermes, kimi, requireAgent } from './helpers/test-helpers.js';
 
 test('live artifact MCP discovery is limited to mature ACP agents', () => {
   for (const agent of AGENT_DEFS) {
@@ -60,6 +60,20 @@ test('live artifact MCP discovery can use daemon-resolved CLI command', () => {
       },
     ],
   );
+});
+
+test('live artifact MCP descriptor carries run-scoped daemon env for agents that run MCP out of process', () => {
+  const env = { OD_DAEMON_URL: 'http://127.0.0.1:17456', OD_TOOL_TOKEN: 'run-token' };
+  assert.deepEqual(buildLiveArtifactsMcpServersForAgent(hermes, { env })[0]?.env, [
+    { name: 'OD_DAEMON_URL', value: 'http://127.0.0.1:17456' },
+    { name: 'OD_TOOL_TOKEN', value: 'run-token' },
+    { name: 'ELECTRON_RUN_AS_NODE', value: '1' },
+  ]);
+  assert.deepEqual(buildLiveArtifactsMcpServersForAgent(requireAgent('reasonix'), { env })[0]?.env, {
+    OD_DAEMON_URL: 'http://127.0.0.1:17456',
+    OD_TOOL_TOKEN: 'run-token',
+    ELECTRON_RUN_AS_NODE: '1',
+  });
 });
 
 test('MCP-capable agents can discover equivalent live artifact and connector tools', async () => {

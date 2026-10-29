@@ -14105,6 +14105,7 @@ export async function startServer({
       enabled: Boolean(toolTokenGrant?.token),
       command: process.execPath,
       argsPrefix: [OD_BIN],
+      env: { OD_DAEMON_URL: daemonUrl, OD_TOOL_TOKEN: toolTokenGrant?.token ?? '' },
     });
 
     // External MCP servers configured by the user in Settings → External MCP.
