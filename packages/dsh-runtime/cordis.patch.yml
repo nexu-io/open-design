@@ -17,4 +17,4 @@
 
     - id: open-design-runtime
       name: '@open-design/dsh-runtime'
-      inject: [openDesignStartup]
+      inject: [openDesignStartup, shellEnv]
