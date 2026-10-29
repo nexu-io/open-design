@@ -94,3 +94,38 @@ describe('effectiveMaxTokens override validation', () => {
     expect(effectiveMaxTokens({ maxTokens: MAX_MAX_TOKENS, model: 'claude-sonnet-4-5' })).toBe(MAX_MAX_TOKENS);
   });
 });
+
+describe('effectiveMaxTokens for defaults above MAX_MAX_TOKENS', () => {
+  // Three shipped defaults exceed MAX_MAX_TOKENS, so the fixed upper bound made
+  // them usable but not re-enterable: once a user edited the field they could
+  // not type the value back. See issue #8048.
+  //
+  // `probe` sits above MAX_MAX_TOKENS but below the model's own default, which
+  // is the only range where accepting and rejecting an override give different
+  // answers — at the default itself the rejection path returns the same number.
+  const ABOVE_CAP: ReadonlyArray<[string, number, number]> = [
+    ['deepseek-v4-pro', 384000, 300000],
+    ['deepseek-v4-flash', 384000, 300000],
+    ['qwen3-coder:480b', 262144, 250000],
+  ];
+
+  it.each(ABOVE_CAP)('accepts an override above the cap but within %s\'s default', (model, _shipped, probe) => {
+    expect(effectiveMaxTokens({ maxTokens: probe, model })).toBe(probe);
+  });
+
+  it.each(ABOVE_CAP)('accepts %s re-entering its shipped default of %i', (model, shipped) => {
+    expect(effectiveMaxTokens({ maxTokens: shipped, model })).toBe(shipped);
+  });
+
+  it.each(ABOVE_CAP)('still rejects an override above %s\'s own default', (model, shipped) => {
+    expect(effectiveMaxTokens({ maxTokens: shipped + 1, model })).toBe(shipped);
+  });
+
+  it.each(ABOVE_CAP)('restores the default for %s when the override is cleared', (model, shipped) => {
+    expect(effectiveMaxTokens({ model })).toBe(shipped);
+  });
+
+  it.each(ABOVE_CAP)('accepts an in-range edit for %s', (model) => {
+    expect(effectiveMaxTokens({ maxTokens: 50_000, model })).toBe(50_000);
+  });
+});
