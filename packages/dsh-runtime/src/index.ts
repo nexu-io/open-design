@@ -36,7 +36,7 @@ export const inject = [
   'sessionPersistence',
 ];
 
-const PLUGIN_VERSION = '0.1.0';
+const PLUGIN_VERSION = '0.1.1';
 
 type Output = { write(chunk: string): unknown };
 type ExitFallbackTimer = { unref(): unknown };
@@ -50,6 +50,32 @@ const PROCESS_EXIT_FALLBACK_MS = 1_000;
 
 function writeFrame(output: Output, frame: unknown): void {
   output.write(`${JSON.stringify(frame)}\n`);
+}
+
+/**
+ * Claim stdout for the protocol and demote every other writer to stderr.
+ *
+ * A profile process has exactly one machine channel: stdout carries
+ * newline-delimited JSON frames and nothing else. The host treats the first
+ * non-JSON line as a fatal `malformed frame`, so a single `console.log` from any
+ * other plugin on the booted tree (model catalogs log their listing, HTTP
+ * clients log their retries) would kill a run that is otherwise healthy.
+ *
+ * The profile owns the process, so it enforces the invariant instead of hoping
+ * every neighbour behaves: the framed writer keeps the real stdout, and
+ * `process.stdout.write` — which backs `console.log` too — is repointed at
+ * stderr, where the host already collects human output separately.
+ */
+function claimStdoutForProtocol(): Output {
+  const stdout = process.stdout;
+  // Bind the real writer first: reassigning `stdout.write` below must not be
+  // visible to the protocol's own writes.
+  const writeToStdout = stdout.write.bind(stdout) as (chunk: string) => boolean;
+  const protocol: Output = { write: (chunk: string) => writeToStdout(chunk) };
+  const toStderr = (chunk: unknown, ...rest: unknown[]) =>
+    (process.stderr.write as unknown as (c: unknown, ...r: unknown[]) => boolean)(chunk, ...rest);
+  stdout.write = toStderr as typeof stdout.write;
+  return protocol;
 }
 
 function errorFacts(error: unknown, fallbackCode: string): { code: string; message: string } {
@@ -77,6 +103,36 @@ function contentText(content: readonly ContentBlock[]): string {
   };
   visit(content);
   return text.join('');
+}
+
+/** Assistant prose only: reasoning blocks stay out of the visible answer. */
+function messageText(message: { readonly content: readonly ContentBlock[] }): string {
+  const text: string[] = [];
+  for (const block of message.content) {
+    if (block.type === 'text') text.push(block.text);
+  }
+  return text.join('');
+}
+
+function stepKey(data: { turn: number; step: number }): string {
+  return `${data.turn}:${data.step}`;
+}
+
+/**
+ * Per-request bookkeeping for text delivery.
+ *
+ * Text can reach the host by two different routes depending on the installed
+ * Harness build: streamed `assistant/chunk` deltas, or — when the adapter does
+ * not stream — only the assembled `assistant/message` for the step. Recording
+ * what was already streamed lets the assembled message fill the gap without
+ * emitting the same prose twice.
+ */
+type FrameState = {
+  readonly streamedText: Map<string, string>;
+};
+
+function createFrameState(): FrameState {
+  return { streamedText: new Map() };
 }
 
 function resultStatus(reason: TurnEndReason | undefined): 'completed' | 'cancelled' | 'failed' {
@@ -205,22 +261,33 @@ async function listModelCatalog(ctx: Context): Promise<ModelCatalogEntry[]> {
   return catalog;
 }
 
+/**
+ * Translate one session event into host frames.
+ *
+ * @returns the assistant text this event delivered, which the caller appends to
+ * the run's terminal output. Empty for every event that carries no new prose.
+ */
 function emitSessionEvent(
   output: Output,
   request: ExecuteCommand,
   provider: string,
   model: string,
   event: SessionEvent,
-): void {
+  state: FrameState = createFrameState(),
+): string {
   switch (event.type) {
     case 'assistant/chunk': {
       const chunk = event.data.chunk;
       if (chunk.type === 'text-delta' && chunk.text !== '') {
         writeFrame(output, { v: 1, type: 'text', request_id: request.request_id, content: chunk.text });
-      } else if (chunk.type === 'reasoning-delta' && chunk.text !== '') {
+        const key = stepKey(event.data);
+        state.streamedText.set(key, (state.streamedText.get(key) ?? '') + chunk.text);
+        return chunk.text;
+      }
+      if (chunk.type === 'reasoning-delta' && chunk.text !== '') {
         writeFrame(output, { v: 1, type: 'thinking', request_id: request.request_id, content: chunk.text });
       }
-      return;
+      return '';
     }
     case 'tool/call':
       writeFrame(output, {
@@ -231,7 +298,7 @@ function emitSessionEvent(
         name: event.data.name,
         arguments: event.data.arguments,
       });
-      return;
+      return '';
     case 'tool/result':
       writeFrame(output, {
         v: 1,
@@ -242,12 +309,19 @@ function emitSessionEvent(
         output: contentText(event.data.message.content[0].content),
         is_error: event.data.message.content[0].isError === true,
       });
-      return;
-    case 'assistant/message':
+      return '';
+    case 'assistant/message': {
       if (event.data.usage) writeFrame(output, usageFrame(request.request_id, provider, model, event.data.usage));
-      return;
+      // Builds that do not stream deltas deliver the step's prose only here.
+      // A step that did stream already produced its `text` frames.
+      if ((state.streamedText.get(stepKey(event.data)) ?? '') !== '') return '';
+      const assembled = messageText(event.data.message);
+      if (assembled === '') return '';
+      writeFrame(output, { v: 1, type: 'text', request_id: request.request_id, content: assembled });
+      return assembled;
+    }
     default:
-      return;
+      return '';
   }
 }
 
@@ -275,12 +349,10 @@ async function execute(
     installModelSelection(agentCtx, selected);
   };
   let disposeEvent = () => {};
+  const frameState = createFrameState();
   const onSessionEvent = (session: { id: unknown }, event: SessionEvent) => {
     if (String(session.id) !== String(sessionId) || event.seq < firstSeq) return;
-    emitSessionEvent(output, request, selection.provider, selection.model, event);
-    if (event.type === 'assistant/chunk' && event.data.chunk.type === 'text-delta') {
-      assistantOutput += event.data.chunk.text;
-    }
+    assistantOutput += emitSessionEvent(output, request, selection.provider, selection.model, event, frameState);
     if (event.type === 'turn/end') turnEnd = event;
   };
 
@@ -452,18 +524,21 @@ export function apply(ctx: Context): void {
   const startup = ctx.openDesignStartup;
   const exit = ctx.get('appExit');
   if (!startup || !exit) throw new Error('open-design-runtime requires startup and appExit services');
+  // Every mode speaks the framed protocol on stdout, so the channel is claimed
+  // before anything else on the tree can log into it.
+  const output = claimStdoutForProtocol();
   if (startup.mode === 'probe') {
-    writeFrame(process.stdout, identityFrame('probe', PLUGIN_VERSION));
+    writeFrame(output, identityFrame('probe', PLUGIN_VERSION));
     exit(0);
     return;
   }
   void ctx.get('loader')?.await().then(async () => {
     if (startup.mode === 'models') {
-      writeFrame(process.stdout, modelsFrame(await listModelCatalog(ctx)));
+      writeFrame(output, modelsFrame(await listModelCatalog(ctx)));
       exit(0);
       return;
     }
-    await serve(ctx, process.stdout, exit);
+    await serve(ctx, output, exit);
   }).catch((error: unknown) => {
     process.stderr.write(`open-design-runtime: ${error instanceof Error ? error.message : String(error)}\n`);
     exit(1);
@@ -471,12 +546,15 @@ export function apply(ctx: Context): void {
 }
 
 export const internals = {
+  claimStdoutForProtocol,
   contentText,
   createCancellationLatch,
+  createFrameState,
   errorFacts,
   emitSessionEvent,
   execute,
   listModelCatalog,
+  messageText,
   requestProfileExit,
   resultStatus,
   resultError,

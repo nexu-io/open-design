@@ -15,6 +15,16 @@ describe('@open-design/dsh-runtime protocol', () => {
     assert.match(readFileSync(resolve('cordis.patch.yml'), 'utf8'), /@open-design\/dsh-runtime/);
   });
 
+  test('documents a version-independent manual install', () => {
+    // The documented install command must survive a version bump: the package
+    // version changes, the snippet does not. A pinned archive name turns into a
+    // command that installs a file `pnpm pack` no longer produces.
+    const pinned = /open-design-dsh-runtime-\d+\.\d+\.\d+\.tgz/u;
+    for (const file of ['README.md', resolve('../../docs/agent-adapters.md')]) {
+      assert.doesNotMatch(readFileSync(resolve(file), 'utf8'), pinned, `${file} pins a packed version`);
+    }
+  });
+
   test('emits the strict probe identity', () => {
     assert.deepEqual(identityFrame('probe', 'test'), {
       v: 1,
