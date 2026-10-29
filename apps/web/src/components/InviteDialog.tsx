@@ -44,7 +44,6 @@ function onboardingSentences(text: string, locale: Locale) {
     <span className={styles.sentence} dir="auto" key={index}>{segment}</span>
   ));
 }
-
 /** The local form retains authoritative per-row results and never retries sent recipients. */
 export function InviteDialog({ open, onClose, workspaceContext, onSubmit, canAssignRoles = true, entryFrom: requestedEntry = 'workspace_switcher', variant = 'dialog', onFinish }: Props) {
   const onboarding = variant === 'onboarding';

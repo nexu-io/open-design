@@ -1,6 +1,16 @@
 import type { Dict } from '../types';
 
 export const fr: Dict = {
+  "referral.notice.label": "Notification de carte de réinitialisation",
+  "referral.notice.registered": "Recevez une carte de réinitialisation avec votre premier abonnement sous 48 heures",
+  "referral.notice.pending": "Votre premier abonnement est terminé. La carte est en attente de remise.",
+  "referral.notice.pendingAt": "Votre premier abonnement est terminé. La carte devrait arriver le {time}.",
+  "referral.notice.exhausted": "Votre quota Design Plan est épuisé. Invitez des amis pour obtenir des cartes et reprendre vos créations à leur arrivée.",
+  "referral.notice.remaining": "Il reste {time}",
+  "referral.notice.invite": "Inviter des amis",
+  "referral.notice.subscribe": "S’abonner",
+  "referral.notice.dismiss": "Fermer la notification",
+  "referral.notice.openFailed": "Impossible d’ouvrir la page. Réessayez.",
   "workspaceInvite.deliveryPending": "L’envoi de l’invitation est en attente. Vérifiez à nouveau plus tard.",
   "workspaceInvite.deliveryFailed": "L’envoi de l’invitation a échoué. Réessayez.",
   "workspaceInvite.invalidResponse": "Impossible de confirmer l’envoi de l’invitation. Réessayez plus tard.",

@@ -1,0 +1,29 @@
+.slot{display:flex;flex-direction:column;align-items:center;gap:8px;align-self:center;width:100%;max-width:100%;margin-bottom:64px}
+.notice{display:flex;align-items:center;gap:8px;max-width:100%;min-height:36px;box-sizing:border-box;padding:7px 14px;border-radius:8px;background:var(--bg-fill-tertiary,rgba(0,0,0,.03));color:var(--text,#494949);font-size:14px;font-weight:500;line-height:20px}
+.copy{min-width:0;overflow-wrap:anywhere}
+.countdown{display:inline-block;margin-inline-start:14px;color:#007c02;font-variant-numeric:tabular-nums;white-space:nowrap}
+.notice .action{height:20px;flex:none;min-height:20px;padding:0;padding-inline-start:12px;border:0;border-inline-start:1px solid var(--material-separator,#dbdbdb);border-radius:0;background:transparent;color:rgb(2,113,6);font:inherit;font-weight:500;line-height:18px;white-space:nowrap;cursor:pointer}
+.notice .action:hover:not(:disabled){text-decoration:underline;text-underline-offset:3px}
+.notice .action:disabled{opacity:.5;cursor:wait}
+.notice .close{min-height:0;display:grid;place-items:center;flex:none;width:16px;height:16px;padding:0;border:0;border-radius:50%;background:transparent;color:var(--text-soft,#848484);opacity:.7;cursor:pointer}
+.notice .close:hover{background:var(--bg-fill-tertiary,#00000008);opacity:1}
+.notice .action:focus-visible,.notice .close:focus-visible{outline:2px solid #4c7466;outline-offset:3px}
+.error{margin:0;color:var(--text-error,#b13a32);font-size:12px}
+@media(max-width:760px){.slot{margin-bottom:32px}.notice{font-size:13px;padding-inline:12px}.notice .action{padding-inline-start:10px}}
+
+/* The reference starts this content at 128px. Keep notice, title and input
+   in normal flow so wrapping and input growth remain safe. */
+:global(.home-view):has(.slot){justify-content:flex-start}
+:global(.home-view) > :global(.home-hero):has(.slot){padding-top:60px}
+.dismissed{visibility:hidden;pointer-events:none}
+@media(max-width:760px){:global(.home-view) > :global(.home-hero):has(.slot){padding-top:64px}}
+
+/* The design uses one home reminder slot; the top invitation trigger remains. */
+.inviteSurface{display:contents}
+:global(.home-hero):has(.slot) > .inviteSurface{display:none}
+
+/* Match the supplied 700px client state while keeping all content in flow. */
+@media(min-width:601px) and (max-width:760px){
+  :global(.home-view) > :global(.home-hero):has(.slot){padding-top:132px}
+  .slot{margin-bottom:16px}
+}

@@ -1,6 +1,16 @@
 import type { Dict } from '../types';
 
 export const tr: Dict = {
+  "referral.notice.label": "Sıfırlama kartı bildirimi",
+  "referral.notice.registered": "48 saat içinde ilk aboneliğinizle bir sıfırlama kartı kazanın",
+  "referral.notice.pending": "İlk aboneliğiniz tamamlandı. Kartın verilmesi bekleniyor.",
+  "referral.notice.pendingAt": "İlk aboneliğiniz tamamlandı. Kartın {time} tarihinde gelmesi bekleniyor.",
+  "referral.notice.exhausted": "Design Plan kotanız doldu. Sıfırlama kartları kazanmak için arkadaşlarınızı davet edin ve kartlar gelince üretmeye devam edin.",
+  "referral.notice.remaining": "Kalan süre: {time}",
+  "referral.notice.invite": "Arkadaşlarını davet et",
+  "referral.notice.subscribe": "Abone ol",
+  "referral.notice.dismiss": "Bildirimi kapat",
+  "referral.notice.openFailed": "Sayfa açılamadı. Lütfen tekrar deneyin.",
   "workspaceInvite.deliveryPending": "Davetin iletimi bekleniyor. Daha sonra tekrar kontrol edin.",
   "workspaceInvite.deliveryFailed": "Davet iletilemedi. Tekrar deneyin.",
   "workspaceInvite.invalidResponse": "Davetin iletimi doğrulanamadı. Daha sonra tekrar deneyin.",

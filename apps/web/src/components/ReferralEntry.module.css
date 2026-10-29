@@ -1,0 +1,10 @@
+.slot { width: 100%; flex-shrink: 0; margin: 0 0 8px; order: 98; }
+.card { position: relative; display: flex; align-items: center; justify-content: flex-start; box-sizing: border-box; width: 100%; height: 80px; padding: 12px 10px; border: 0; border-radius: 8px; background: #fbfcf9; color: #2c302d; text-align: start; cursor: pointer; overflow: hidden; font: inherit; }
+.card:focus-visible { outline: 2px solid #55704c; outline-offset: -2px; }
+.art { position: absolute; inset: 0; background: url('/images/referral-entry.webp') left center / auto 100% no-repeat, url('/images/referral-entry-still.png') left center / auto 100% no-repeat; pointer-events: none; }
+.copy { position: relative; min-width: 0; margin-left: 68px; flex: 1 1 120px; }
+.copy strong { display: block; font-size: 13px; line-height: 20px; font-weight: 600; white-space: nowrap; }
+.copy span { display: block; margin-top: 4px; font-size: 11px; line-height: 17px; font-weight: 500; color: #6a716b; white-space: nowrap; }
+:global(.entry-nav-rail__group) > .slot { margin-top: auto; margin-bottom: 8px; translate: 0 -4px; }
+:global(.entry-nav-rail__group):has(> .slot) :global(.entry-nav-rail__account-dock) { margin-top: 0; }
+@media (prefers-reduced-motion: reduce) { .art { background-image: url('/images/referral-entry-still.png'); } }

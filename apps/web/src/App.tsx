@@ -1,3 +1,4 @@
+import { ReferralEntryProvider } from './components/ReferralEntry';
 import { WorkspaceRemovalBoundary } from './components/WorkspaceRemovalBoundary';
 import { homeAutoSendIdentity, type HomeRequestConcurrencyRejection } from './runtime/home-auto-send-identity';
 import { AmrConcurrencyDialog } from './components/AmrConcurrencyDialog';
@@ -6169,7 +6170,7 @@ function AppInner() {
     );
   }
   return (
-    <>
+    <ReferralEntryProvider accountId={isAmrSessionAuthenticated(amrLoginStatus) ? amrLoginStatus?.user?.id ?? amrLoginStatus?.credentialRevision ?? null : null} profile={amrLoginStatus?.profile ?? null}>
       <div
         className={`workspace-shell workspace-shell--${clientType}`}
         data-client-type={clientType}
@@ -6390,7 +6391,7 @@ function AppInner() {
       </motion.div>
       ) : null}
       </AnimatePresence>
-    </>
+    </ReferralEntryProvider>
   );
 }
 

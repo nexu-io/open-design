@@ -1,6 +1,16 @@
 import type { Dict } from '../types';
 
 export const id: Dict = {
+  "referral.notice.label": "Pemberitahuan kartu reset",
+  "referral.notice.registered": "Dapatkan kartu reset dengan langganan pertama dalam 48 jam",
+  "referral.notice.pending": "Langganan pertama selesai. Kartu sedang menunggu penerbitan.",
+  "referral.notice.pendingAt": "Langganan pertama selesai. Kartu diperkirakan tiba pada {time}.",
+  "referral.notice.exhausted": "Kuota Design Plan habis. Undang teman untuk mendapatkan kartu reset dan lanjutkan berkarya setelah kartu tiba.",
+  "referral.notice.remaining": "Tersisa {time}",
+  "referral.notice.invite": "Undang teman",
+  "referral.notice.subscribe": "Berlangganan",
+  "referral.notice.dismiss": "Tutup pemberitahuan",
+  "referral.notice.openFailed": "Halaman tidak dapat dibuka. Coba lagi.",
   "workspaceInvite.deliveryPending": "Pengiriman undangan sedang berlangsung. Periksa lagi nanti.",
   "workspaceInvite.deliveryFailed": "Pengiriman undangan gagal. Coba lagi.",
   "workspaceInvite.invalidResponse": "Tidak dapat memastikan pengiriman undangan. Coba lagi nanti.",

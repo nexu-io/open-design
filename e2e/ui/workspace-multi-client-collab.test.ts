@@ -985,6 +985,7 @@ test('[P0] removing a team member transfers their team project and leaves their 
   }
 });
 
+
 // FIXME: Restore this P0 case after workspace-context refreshes use semantic
 // invalidation tokens instead of the 250ms force-coalescing window. A role
 // change immediately after SSE activation can otherwise retain the old role.

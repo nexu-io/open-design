@@ -1,6 +1,16 @@
 import type { Dict } from '../types';
 
 export const en: Dict = {
+  "referral.notice.label": "Reset card invitation notice",
+  "referral.notice.registered": "Get a reset card with your first subscription within 48 hours",
+  "referral.notice.pending": "Your first subscription is complete. Your reset card is awaiting issuance.",
+  "referral.notice.pendingAt": "Your first subscription is complete. Your reset card is expected at {time}.",
+  "referral.notice.exhausted": "Your Design Plan quota is used up. Invite friends to earn reset cards and keep creating once they arrive.",
+  "referral.notice.remaining": "{time} remaining",
+  "referral.notice.invite": "Invite friends",
+  "referral.notice.subscribe": "Subscribe",
+  "referral.notice.dismiss": "Dismiss reset card notice",
+  "referral.notice.openFailed": "Unable to open the page. Please try again.",
   "workspaceInvite.deliveryPending": "Invitation delivery is pending. Check again shortly.",
   "workspaceInvite.deliveryFailed": "Invitation delivery failed. Please retry.",
   "workspaceInvite.invalidResponse": "Unable to confirm invitation delivery. Please retry later.",

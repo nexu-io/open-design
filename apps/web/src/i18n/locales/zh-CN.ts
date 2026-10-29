@@ -1,6 +1,16 @@
 import type { Dict } from "../types";
 
 export const zhCN: Dict = {
+  "referral.notice.label": "邀请重置卡提示",
+  "referral.notice.registered": "送你一张重置卡，48 小时内首次订阅即可领取",
+  "referral.notice.pending": "首次订阅已完成，重置卡正在等待到账。",
+  "referral.notice.pendingAt": "首次订阅已完成，重置卡预计于 {time} 到账。",
+  "referral.notice.exhausted": "Design Plan 额度已用完。邀请好友得重置卡，到账后即可重置额度，继续创作。",
+  "referral.notice.remaining": "还剩 {time}",
+  "referral.notice.invite": "邀请好友",
+  "referral.notice.subscribe": "去订阅",
+  "referral.notice.dismiss": "关闭重置卡提示",
+  "referral.notice.openFailed": "无法打开页面，请重试。",
   "workspaceInvite.deliveryPending": "邀请邮件正在发送，请稍后确认结果",
   "workspaceInvite.deliveryFailed": "邀请邮件发送失败，请重试",
   "workspaceInvite.invalidResponse": "暂时无法确认发送结果，请稍后重试",

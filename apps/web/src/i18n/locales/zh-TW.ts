@@ -1,6 +1,16 @@
 import type { Dict } from "../types";
 
 export const zhTW: Dict = {
+  "referral.notice.label": "重設卡邀請提示",
+  "referral.notice.registered": "48 小時內首次訂閱，即可獲得一張重設卡",
+  "referral.notice.pending": "首次訂閱已完成，重設卡等待發放。",
+  "referral.notice.pendingAt": "首次訂閱已完成，重設卡預計於 {time} 到帳。",
+  "referral.notice.exhausted": "Design Plan 額度已用完。邀請好友獲得重設卡，到帳後即可重設額度，繼續創作。",
+  "referral.notice.remaining": "剩餘 {time}",
+  "referral.notice.invite": "邀請好友",
+  "referral.notice.subscribe": "前往訂閱",
+  "referral.notice.dismiss": "關閉重設卡提示",
+  "referral.notice.openFailed": "無法開啟頁面，請重試。",
   "workspaceInvite.deliveryPending": "邀請郵件正在傳送，請稍後確認結果",
   "workspaceInvite.deliveryFailed": "邀請郵件傳送失敗，請重試",
   "workspaceInvite.invalidResponse": "暫時無法確認傳送結果，請稍後重試",
