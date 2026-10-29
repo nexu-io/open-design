@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import type { ProjectDesignTokenSuggestion, ProjectDesignTokenSuggestionProp } from '../providers/registry';
 import { useT } from '../i18n';
 import { emptyManualEditStyles, type ManualEditHistoryEntry, type ManualEditPatch, type ManualEditStyles, type ManualEditTarget } from '../edit-mode/types';
@@ -42,6 +42,9 @@ export function ManualEditPanel({
   onRedo,
   onExit,
   onApplyPatch,
+  deleteConfirmationTargetId,
+  onDeleteConfirmationChange,
+  onConfirmDelete,
   onPickImage,
   tokenSuggestions = [],
   tokenSuggestionsLoading = false,
@@ -69,6 +72,9 @@ export function ManualEditPanel({
   onStyleChange?: (id: string, styles: Partial<ManualEditStyles>, label: string) => void;
   onInvalidStyle?: (id: string, keys: Array<keyof ManualEditStyles>) => void;
   onApplyPatch: (patch: ManualEditPatch, label: string) => void;
+  deleteConfirmationTargetId?: string | null;
+  onDeleteConfirmationChange?: (targetId: string | null) => void;
+  onConfirmDelete?: (targetId: string) => void;
   onPickImage?: (file: File) => Promise<string | null>;
   tokenSuggestions?: ProjectDesignTokenSuggestion[];
   tokenSuggestionsLoading?: boolean;
@@ -92,17 +98,37 @@ export function ManualEditPanel({
 }) {
   const t = useT();
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [localDeleteConfirmationTargetId, setLocalDeleteConfirmationTargetId] = useState<string | null>(null);
   // Pin toggle: draggable (pin pulled out) vs locked/fixed (pin pushed in).
   // The lock lives in the parent so it can ALSO freeze the panel's position —
   // a locked panel never follows the selected element.
   const dragEnabled = !locked;
   const selectedTargetRef = useRef<ManualEditTarget | null>(selectedTarget);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const deleteButtonRef = useRef<HTMLButtonElement | null>(null);
+  const restoreDeleteFocusRef = useRef(false);
+  const deleteConfirmationMessageId = useId();
+  const deleteConfirmationControlled = deleteConfirmationTargetId !== undefined;
+  const confirmDeleteTargetId = deleteConfirmationControlled
+    ? deleteConfirmationTargetId
+    : localDeleteConfirmationTargetId;
+  const updateDeleteConfirmation = useCallback((targetId: string | null) => {
+    if (!deleteConfirmationControlled) setLocalDeleteConfirmationTargetId(targetId);
+    onDeleteConfirmationChange?.(targetId);
+  }, [deleteConfirmationControlled, onDeleteConfirmationChange]);
   const targetForInspector = selectedTarget;
   const panelTitle = targetForInspector ? readableManualEditTargetName(targetForInspector) : t('manualEdit.fallbackTitle');
   useEffect(() => {
     selectedTargetRef.current = selectedTarget;
   }, [selectedTarget]);
+  useEffect(() => {
+    if (!deleteConfirmationControlled) updateDeleteConfirmation(null);
+  }, [selectedTarget?.id, deleteConfirmationControlled, updateDeleteConfirmation]);
+  useEffect(() => {
+    if (confirmDeleteTargetId !== null || !restoreDeleteFocusRef.current) return;
+    restoreDeleteFocusRef.current = false;
+    deleteButtonRef.current?.focus();
+  }, [confirmDeleteTargetId]);
 
   const changeTargetStyle = (key: keyof ManualEditStyles, value: string) => {
     const nextStyles = { ...draft.styles, [key]: value };
@@ -327,55 +353,89 @@ export function ManualEditPanel({
               >
                 <Icon name="redo" size={15} />
               </button>
-              {targetForInspector ? (
+              {targetForInspector && confirmDeleteTargetId === targetForInspector.id ? (
+                <div className="manual-edit-delete-confirm">
+                  <span id={deleteConfirmationMessageId}>{t('manualEdit.deleteElementConfirm')}</span>
+                  <button
+                    type="button"
+                    className="manual-edit-footer-btn danger manual-edit-delete-confirm-action"
+                    aria-describedby={deleteConfirmationMessageId}
+                    autoFocus
+                    disabled={busy}
+                    onClick={() => {
+                      restoreDeleteFocusRef.current = true;
+                      if (onConfirmDelete) {
+                        onConfirmDelete(confirmDeleteTargetId);
+                      } else {
+                        updateDeleteConfirmation(null);
+                        onApplyPatch(
+                          { id: confirmDeleteTargetId, kind: 'remove-element' },
+                          t('manualEdit.deleteElement'),
+                        );
+                      }
+                    }}
+                  >
+                    {t('manualEdit.deleteElement')}
+                  </button>
+                  <button
+                    type="button"
+                    className="manual-edit-footer-btn subtle"
+                    disabled={busy}
+                    onClick={() => {
+                      restoreDeleteFocusRef.current = true;
+                      updateDeleteConfirmation(null);
+                    }}
+                  >
+                    {t('common.cancel')}
+                  </button>
+                </div>
+              ) : targetForInspector ? (
                 <button
+                  ref={deleteButtonRef}
                   type="button"
                   className="manual-edit-delete-btn"
                   aria-label={t('manualEdit.deleteElement')}
                   title={t('manualEdit.deleteElement')}
                   disabled={busy}
-                  onClick={() => {
-                    onApplyPatch(
-                      { id: targetForInspector.id, kind: 'remove-element' },
-                      t('manualEdit.deleteElement'),
-                    );
-                  }}
+                  onClick={() => updateDeleteConfirmation(targetForInspector.id)}
                 >
                   <Icon name="trash" size={15} />
                 </button>
               ) : null}
             </div>
-            <div className="manual-edit-footer-right">
-              {resetAvailable ? (
+            {targetForInspector && confirmDeleteTargetId === targetForInspector.id ? null : (
+              <div className="manual-edit-footer-right">
+                {resetAvailable ? (
+                  <button
+                    type="button"
+                    className="manual-edit-footer-btn subtle"
+                    disabled={busy}
+                    onClick={onResetDraft}
+                  >
+                    {t('ds.reset')}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="manual-edit-footer-btn subtle"
                   disabled={busy}
-                  onClick={onResetDraft}
+                  onClick={onCancelDraft}
                 >
-                  {t('ds.reset')}
+                  {t('common.cancel')}
                 </button>
-              ) : null}
-              <button
-                type="button"
-                className="manual-edit-footer-btn subtle"
-                disabled={busy}
-                onClick={onCancelDraft}
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                type="button"
-                className="manual-edit-footer-btn primary"
-                disabled={busy}
-                onClick={onSaveDraft}
-              >
-                {t('common.save')}
-              </button>
-            </div>
+                <button
+                  type="button"
+                  className="manual-edit-footer-btn primary"
+                  disabled={busy}
+                  onClick={onSaveDraft}
+                >
+                  {t('common.save')}
+                </button>
+              </div>
+            )}
           </div>
 
-          {error ? <div className="manual-edit-error">{error}</div> : null}
+          {error ? <div className="manual-edit-error" role="alert">{error}</div> : null}
         </div>
       </section>
     </aside>
