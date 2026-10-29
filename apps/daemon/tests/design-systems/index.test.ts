@@ -627,4 +627,66 @@ describe('design systems registry', () => {
       await expect(isTeamSyncedUserDesignSystem(root, 'not-a-user-id')).resolves.toBe(false);
     });
   });
+
+  it('preserves leading YAML frontmatter without prepending a duplicate H1 on metadata-only updates', async () => {
+    const dir = path.join(root, 'cubbit');
+    await mkdir(dir, { recursive: true });
+    const frontmatterDoc = [
+      '---',
+      'name: "Cubbit"',
+      'category: "Custom"',
+      '---',
+      '',
+      '# Cubbit',
+      '',
+      '> Category: Custom',
+      '> Surface: web',
+      '',
+      'Cubbit design language.',
+      '',
+    ].join('\n');
+    await writeFile(path.join(dir, 'DESIGN.md'), frontmatterDoc, 'utf8');
+    await writeFile(
+      path.join(dir, 'metadata.json'),
+      JSON.stringify(
+        {
+          title: 'Cubbit',
+          category: 'Custom',
+          surface: 'web',
+          status: 'draft',
+          artifactMode: 'agent-managed',
+        },
+        null,
+        2,
+      ),
+      'utf8',
+    );
+
+    const toggled = await updateUserDesignSystem(root, 'user:cubbit', { status: 'published' });
+    expect(toggled?.status).toBe('published');
+    await expect(readFile(path.join(dir, 'DESIGN.md'), 'utf8')).resolves.toBe(frontmatterDoc);
+
+    const renamed = await updateUserDesignSystem(root, 'user:cubbit', { title: 'Cubbit Pro' });
+    expect(renamed?.title).toBe('Cubbit Pro');
+    const renamedDoc = await readFile(path.join(dir, 'DESIGN.md'), 'utf8');
+    expect(renamedDoc.startsWith('---\nname: "Cubbit"\n')).toBe(true);
+    expect(renamedDoc).toContain('\n# Cubbit Pro\n');
+    expect(renamedDoc).not.toContain('\n# Cubbit\n');
+
+    const noHeadingDoc = [
+      '---',
+      '# frontmatter comment',
+      'name: "NoHeading"',
+      '---',
+      '',
+      'Body without heading.',
+      '',
+    ].join('\n');
+    await writeFile(path.join(dir, 'DESIGN.md'), noHeadingDoc, 'utf8');
+    await updateUserDesignSystem(root, 'user:cubbit', { title: 'Inserted After Frontmatter' });
+    const insertedDoc = await readFile(path.join(dir, 'DESIGN.md'), 'utf8');
+    expect(insertedDoc.startsWith('---\n# frontmatter comment\nname: "NoHeading"\n---\n')).toBe(true);
+    expect(insertedDoc).toContain('\n# Inserted After Frontmatter\n');
+  });
 });
+
