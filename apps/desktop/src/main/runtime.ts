@@ -1785,20 +1785,82 @@ export type WindowFullscreenSurface = {
 };
 
 export type MainWindowCloseSurface = {
-  on: (event: 'closed', listener: () => void) => unknown;
+  on: {
+    (event: 'closed', listener: () => void): unknown;
+    (event: 'close', listener: (event: { preventDefault: () => void }) => void): unknown;
+  };
+  close: () => void;
+  isDestroyed: () => boolean;
 };
 
+/**
+ * On Windows and Linux closing the main window quits the app, which used to
+ * interrupt running tasks without a word (OPEND-4390: 101 of 121 interrupted
+ * runs with a diagnostic bundle on 10/23-10/26 were Windows, typically ~20
+ * minutes into the task). `confirmCloseWithActiveRuns` resolves true to let
+ * the close go ahead: when nothing is running, when the count is unknown, or
+ * when the user chooses to quit anyway.
+ */
 export function attachNonDarwinMainWindowCloseShutdown(
   window: MainWindowCloseSurface,
   options: {
     isStopped: () => boolean;
     requestQuit?: () => void;
+    confirmCloseWithActiveRuns?: () => Promise<boolean>;
   },
 ): void {
+  let closeConfirmed = false;
+  let confirming = false;
+  const confirm = options.confirmCloseWithActiveRuns;
+  if (confirm) {
+    window.on("close", (event) => {
+      if (options.isStopped()) return;
+      if (closeConfirmed) {
+        // Only bypass the check for this retry; beforeunload may veto it.
+        closeConfirmed = false;
+        return;
+      }
+      event.preventDefault();
+      if (confirming) return;
+      confirming = true;
+      void confirm()
+        .catch(() => true)
+        .then((proceed) => {
+          confirming = false;
+          if (!proceed || options.isStopped() || window.isDestroyed()) return;
+          closeConfirmed = true;
+          window.close();
+        });
+    });
+  }
   window.on("closed", () => {
     if (options.isStopped()) return;
     options.requestQuit?.();
   });
+}
+
+export interface CloseWithActiveRunsPrompt {
+  message: string;
+  detail: string;
+  /** [keep running, quit anyway]; index 0 is the default and the cancel action. */
+  buttons: [string, string];
+}
+
+// The main process has no i18n layer; like the mailto notice, the OS locale
+// picks Chinese or English.
+export function closeWithActiveRunsPrompt(activeRunCount: number, locale: string): CloseWithActiveRunsPrompt {
+  if (locale.trim().toLowerCase().startsWith("zh")) {
+    return {
+      message: `还有 ${activeRunCount} 个任务正在运行`,
+      detail: "关闭 Open Design 会中断这些任务，已生成的进度可能丢失。",
+      buttons: ["继续运行", "仍然退出"],
+    };
+  }
+  return {
+    message: `${activeRunCount} task${activeRunCount === 1 ? " is" : "s are"} still running`,
+    detail: "Closing Open Design will interrupt them, and work in progress may be lost.",
+    buttons: ["Keep running", "Quit anyway"],
+  };
 }
 
 /**
@@ -2744,6 +2806,23 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     attachNonDarwinMainWindowCloseShutdown(window, {
       isStopped: () => stopped,
       requestQuit: options.requestQuit,
+      confirmCloseWithActiveRuns: async () => {
+        const safety = await checkUpdateRestartSafety({ discoverDaemonBaseUrl: discoverUpdateDaemonBaseUrl });
+        if (stopped || window.isDestroyed()) return false;
+        if (safety.state !== "blocked") return true;
+        const prompt = closeWithActiveRunsPrompt(safety.activeRunCount, app.getLocale());
+        const { response } = await dialog.showMessageBox(window, {
+          type: "warning",
+          title: "Open Design",
+          message: prompt.message,
+          detail: prompt.detail,
+          buttons: prompt.buttons,
+          defaultId: 0,
+          cancelId: 0,
+          noLink: true,
+        });
+        return response === 1;
+      },
     });
   }
 
