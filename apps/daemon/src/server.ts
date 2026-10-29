@@ -514,6 +514,7 @@ import {
 } from './runtimes/auth.js';
 import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
 import { applyOpenCodeEventPlugin } from './runtimes/opencode-event-plugin.js';
+import { applyOpenCodeWorkspaceEnv } from './runtimes/opencode-permissions.js';
 import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
 import { createQoderStreamHandler } from './runtimes/qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
@@ -15356,6 +15357,9 @@ export async function startServer({
       }
       lifecycle.mark('launch_preflight_end');
       lifecycle.mark('process_spawn_start');
+      if (def.id === 'opencode' || def.id === 'byok-opencode') {
+        applyOpenCodeWorkspaceEnv(env, effectiveCwd, def.id);
+      }
       // A whole-prompt stdin prompt (plain text, or the runtime's own
       // one-shot framing) is handed over as a complete file at spawn; live
       // stdin protocols (Claude stream-json, JSON-RPC) keep the pipe. The

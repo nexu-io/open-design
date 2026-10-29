@@ -45,6 +45,7 @@ import { listProviderModels } from '../src/integrations/provider-models.js';
 import { readVelaCredentialRevision } from '../src/integrations/vela.js';
 import { startServer } from '../src/server.js';
 import { getRememberedLiveModels, rememberLiveModels } from '../src/runtimes/models.js';
+import { agentCapabilities } from '../src/runtimes/capabilities.js';
 import { amrModelLoadingCache } from '../src/runtimes/amr-model-cache.js';
 import { buildAmrModelCacheKey } from '../src/runtimes/amr-model-probe.js';
 
@@ -3903,6 +3904,12 @@ process.exit(1);
     const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-opencode-argv-'));
     const argvFile = path.join(markerDir, 'argv.json');
     const stdinFile = path.join(markerDir, 'stdin.txt');
+    const previousCaps = agentCapabilities.get('opencode');
+    agentCapabilities.set('opencode', {
+      workspaceDir: true,
+      pureMode: true,
+      variantFlag: true,
+    });
     try {
       await withFakeOpenCode(
         `
@@ -3965,6 +3972,141 @@ process.stdin.on('end', () => {
         },
       );
     } finally {
+      if (previousCaps === undefined) agentCapabilities.delete('opencode');
+      else agentCapabilities.set('opencode', previousCaps);
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
+  it('omits --dir/--pure on OpenCode 2.x connection tests and sets env.PWD to probe cwd', async () => {
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-opencode-argv-2x-'));
+    const argvFile = path.join(markerDir, 'argv.json');
+    const envFile = path.join(markerDir, 'env.json');
+    const previousCaps = agentCapabilities.get('opencode');
+    agentCapabilities.set('opencode', { workspaceDir: false, pureMode: false, autoApprove: true });
+    try {
+      await withFakeOpenCode(
+        `
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+if (args[0] === 'run' && args.includes('--help')) {
+  console.error('Usage: opencode run [options]');
+  console.error('  --auto  Auto-approve permissions');
+  process.exit(0);
+}
+if (args[0] === 'models') {
+  console.log('github-copilot/gpt-4o');
+  process.exit(0);
+}
+fs.writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(args));
+fs.writeFileSync(${JSON.stringify(envFile)}, JSON.stringify({ PWD: process.env.PWD, cwd: process.cwd() }));
+let stdin = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { stdin += chunk; });
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'text', part: { text: 'ok' } }));
+});
+`,
+        async () => {
+          const res = await realFetch(`${baseUrl}/api/test/connection`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              mode: 'agent',
+              agentId: 'opencode',
+              model: 'github-copilot/gpt-4o',
+            }),
+          });
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'OpenCode',
+          });
+          const argv = JSON.parse(await fsp.readFile(argvFile, 'utf8')) as string[];
+          expect(argv).toEqual([
+            'run',
+            '--format',
+            'json',
+            '--auto',
+            '-m',
+            'github-copilot/gpt-4o',
+            '--title',
+            'Connection test',
+          ]);
+          const envData = JSON.parse(await fsp.readFile(envFile, 'utf8')) as { PWD?: string; cwd?: string };
+          expect(envData.PWD).toBeDefined();
+          expect(path.resolve(envData.PWD!)).toBe(path.resolve(envData.cwd!));
+        },
+      );
+    } finally {
+      if (previousCaps === undefined) agentCapabilities.delete('opencode');
+      else agentCapabilities.set('opencode', previousCaps);
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
+  it('cold-start connection test probes capabilities before building argv and selects 2.x flags when run --help advertises only --auto', async () => {
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-opencode-cold-2x-'));
+    const argvFile = path.join(markerDir, 'argv.json');
+    const previousCaps = agentCapabilities.get('opencode');
+    agentCapabilities.delete('opencode');
+    try {
+      await withFakeOpenCode(
+        `
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+if (args[0] === 'run' && args.includes('--help')) {
+  console.log('Usage: opencode run [options]');
+  console.log('  --auto  Auto-approve permissions');
+  process.exit(0);
+}
+if (args[0] === 'models') {
+  console.log('github-copilot/gpt-4o');
+  process.exit(0);
+}
+fs.writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(args));
+let stdin = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { stdin += chunk; });
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'text', part: { text: 'ok' } }));
+});
+`,
+        async () => {
+          const res = await realFetch(`${baseUrl}/api/test/connection`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              mode: 'agent',
+              agentId: 'opencode',
+              model: 'github-copilot/gpt-4o',
+            }),
+          });
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'OpenCode',
+          });
+          const argv = JSON.parse(await fsp.readFile(argvFile, 'utf8')) as string[];
+          expect(argv).toEqual([
+            'run',
+            '--format',
+            'json',
+            '--auto',
+            '-m',
+            'github-copilot/gpt-4o',
+            '--title',
+            'Connection test',
+          ]);
+          expect(argv).not.toContain('--dir');
+          expect(argv).not.toContain('--pure');
+        },
+      );
+    } finally {
+      if (previousCaps === undefined) agentCapabilities.delete('opencode');
+      else agentCapabilities.set('opencode', previousCaps);
       await fsp.rm(markerDir, { recursive: true, force: true });
     }
   });

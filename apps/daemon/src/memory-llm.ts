@@ -77,6 +77,8 @@ import {
 } from './agents.js';
 import { agentCliEnvForAgent, readAppConfig } from './app-config.js';
 import { createJsonEventStreamHandler } from './runtimes/json-event-stream.js';
+import { applyOpenCodeWorkspaceEnv } from './runtimes/opencode-permissions.js';
+import { ensureDetectedRuntimeCapabilities } from './runtimes/detection.js';
 
 const SYSTEM_PROMPT = `You are a memory extractor for a personal AI design assistant.
 
@@ -1020,6 +1022,7 @@ async function callLocalCli(provider, system, user, options) {
     // `--file <prompt-file> "<message>"` made OpenCode treat the message
     // text as a second attachment and exit with "File not found". Bare
     // `opencode run --format json` reads the message from stdin instead.
+    await ensureDetectedRuntimeCapabilities(provider.agentId, configuredAgentEnv);
     args = def.buildArgs(
       '',
       [],
@@ -1042,6 +1045,9 @@ async function callLocalCli(provider, system, user, options) {
     ),
     launch,
   );
+  if (provider.agentId === 'opencode' || provider.agentId === 'byok-opencode') {
+    applyOpenCodeWorkspaceEnv(env, cwd, provider.agentId);
+  }
   const invocation = createCommandInvocation({
     command: launch.launchPath,
     args,

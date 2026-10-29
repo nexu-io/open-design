@@ -199,6 +199,7 @@ export type RuntimeAgentDef = {
   fetchModels?: (
     resolvedBin: string,
     env: RuntimeEnv,
+    capabilities?: Promise<RuntimeCapabilityMap | null>,
   ) => Promise<RuntimeModelOption[] | null>;
   reasoningOptions?: RuntimeReasoningOption[];
   supportsImagePaths?: boolean;
