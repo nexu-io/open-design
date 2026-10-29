@@ -386,7 +386,6 @@ export async function renderVelaImage(
   try {
     const stagedImageRefs = await stageInputImages(input.imageRefs, tempDir);
     const command = edits ? 'edit' : 'gen';
-    
     const args = [
       'image',
       command,
