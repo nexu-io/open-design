@@ -128,14 +128,16 @@ export function applyManualEditPatch(source: string, patch: ManualEditPatch): Ma
   }
 
   if (patch.kind === 'set-text') {
-    if (hasElementChildren(el)) {
+    if (hasOnlyTextAndLineBreaks(el)) {
+      replaceTextWithLineBreaks(el, patch.value);
+    } else if (hasElementChildren(el)) {
       const soleText = findSoleMeaningfulTextNode(el);
       if (!soleText) {
         return { ok: false, source, error: 'This element contains nested markup. Use the HTML tab instead.' };
       }
       soleText.nodeValue = patch.value;
     } else {
-      el.textContent = patch.value;
+      replaceTextWithLineBreaks(el, patch.value);
     }
   } else if (patch.kind === 'set-link') {
     if (hasElementChildren(el)) {
@@ -191,7 +193,7 @@ export function readManualEditFields(source: string, id: string): ManualEditFiel
   const kind = inferKind(el);
   if (kind === 'link') {
     return {
-      text: el.textContent?.trim() ?? '',
+      text: readTextWithLineBreaks(el).trim(),
       href: el.getAttribute('href') ?? '',
     };
   }
@@ -201,7 +203,30 @@ export function readManualEditFields(source: string, id: string): ManualEditFiel
       alt: el.getAttribute('alt') ?? '',
     };
   }
-  return { text: el.textContent?.trim() ?? '' };
+  return { text: readTextWithLineBreaks(el).trim() };
+}
+
+function hasOnlyTextAndLineBreaks(el: Element): boolean {
+  return Array.from(el.childNodes).every((node) =>
+    node.nodeType === node.TEXT_NODE
+    || (node.nodeType === node.ELEMENT_NODE && (node as Element).tagName.toLowerCase() === 'br'));
+}
+
+function readTextWithLineBreaks(el: Element): string {
+  return Array.from(el.childNodes).map((node) => {
+    if (node.nodeType === node.TEXT_NODE) return node.nodeValue ?? '';
+    if (node.nodeType === node.ELEMENT_NODE && (node as Element).tagName.toLowerCase() === 'br') return '\n';
+    return node.textContent ?? '';
+  }).join('');
+}
+
+function replaceTextWithLineBreaks(el: Element, value: string): void {
+  const parts = value.split('\n');
+  el.replaceChildren();
+  parts.forEach((part, index) => {
+    if (index > 0) el.appendChild(el.ownerDocument.createElement('br'));
+    if (part) el.appendChild(el.ownerDocument.createTextNode(part));
+  });
 }
 
 export function readManualEditStyles(source: string, id: string): ManualEditStyles {
