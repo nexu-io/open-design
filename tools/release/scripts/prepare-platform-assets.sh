@@ -103,6 +103,20 @@ EOF
     fi
     cp "$source_appimage" "$RELEASE_ASSETS_DIR/$versioned_appimage"
     sha256_file "$RELEASE_ASSETS_DIR/$versioned_appimage"
+
+    # Debian package. Built in a sibling namespace ("<ns>-deb") so its
+    # electron-builder run does not wipe the AppImage output, and with a
+    # deb-scoped productName ("OpenDesign") so it cannot share a build with the
+    # AppImage. The .deb filename carries the version, so glob for it.
+    deb_ns="${RELEASE_NAMESPACE}-deb"
+    source_deb="$(ls "$TOOLS_PACK_DIR/out/linux/namespaces/$deb_ns/builder/"open-design_*.deb 2>/dev/null | head -n1 || true)"
+    versioned_deb="open-design-$RELEASE_VERSION$RELEASE_ASSET_SUFFIX-linux-x64.deb"
+    if [ -z "$source_deb" ] || [ ! -f "$source_deb" ]; then
+      echo "expected .deb not found under namespace $deb_ns" >&2
+      exit 1
+    fi
+    cp "$source_deb" "$RELEASE_ASSETS_DIR/$versioned_deb"
+    sha256_file "$RELEASE_ASSETS_DIR/$versioned_deb"
     ;;
   *)
     echo "unsupported RELEASE_TARGET for POSIX assets: $RELEASE_TARGET" >&2
