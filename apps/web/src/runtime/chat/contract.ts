@@ -304,6 +304,8 @@ export type TurnBlock = ExecutionShell | ProseBlock;
 
 export interface BuildTurnInput {
   events: PersistedAgentEvent[];
+  /** An outer task record owns grouping; keep physical Run blocks in event order. */
+  preserveRunBoundaries?: boolean;
   /** Media tasks already scoped to this message's run, oldest first. */
   mediaTasks?: ProjectMediaTask[];
   /** run 终止态;终止即收起,不依赖 agent 发 done(D18) */

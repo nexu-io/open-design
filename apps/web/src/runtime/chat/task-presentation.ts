@@ -102,6 +102,7 @@ export function automaticTaskProse(blocks: readonly TurnBlock[], index: number, 
   const prefixCount = message.strategyTaskPrefixEventCount ?? 0;
   if (!prefixCount || !message.events?.slice(prefixCount).some(event => event.kind === 'done_key')) return false;
   const prefix = buildTurnBlocks({
+    preserveRunBoundaries: true,
     events: dedupeToolUsesById(dropSupersededInFlightToolUses(message.events.slice(0, prefixCount))), runStatus: 'succeeded',
   });
   // Empty shells disappear when a Run finishes; compare prose positions so
@@ -116,6 +117,9 @@ export function taskRecordParts(messages: ChatMessage[], nowMs?: number, context
   for (const message of messages) {
     const events = message.events?.length ? message.events : message.content.trim() ? [{ kind: 'text' as const, text: message.content }] : [];
     const blocks = buildTurnBlocks({ events: dedupeToolUsesById(dropSupersededInFlightToolUses(events)),
+      // The outer task record already supplies one header and clock. Merging
+      // these shells again would place successor tools before planning prose.
+      preserveRunBoundaries: true,
       mediaTasks: message.runId ? context?.mediaTasksByRunId?.get(message.runId) : undefined,
       previousTodos: context?.previousTodosByMessageId?.get(message.id),
       runStatus: effectiveTurnRunStatus(message,

@@ -50,6 +50,11 @@ it('uses the existing clickable status and elapsed header for the combined autom
   expect(screen.getAllByText('Plan thinking')).toHaveLength(1);
   expect(screen.getAllByText('The plan is ready.')).toHaveLength(1);
   expect(screen.getAllByText('Wrote')).toHaveLength(1);
+  const planning = screen.getByText('Plan thinking');
+  const planAnswer = screen.getByText('The plan is ready.');
+  const production = screen.getByText('Wrote');
+  expect(planning.compareDocumentPosition(planAnswer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(planAnswer.compareDocumentPosition(production) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
 it('does not expose a planning completion footer before the production boundary arrives', () => {
@@ -106,6 +111,29 @@ it('collapses on the final production conclusion without waiting for the stream 
   view.rerender(chat(productionTurn('running', 'Final design.')));
   expect(record(view.container)).not.toHaveAttribute('open');
   expect(screen.getByText('Final design.').closest('details')).toBeNull();
+});
+
+it.each(['running', 'completed'] as const)('keeps the final reply after the ordered process on %s and reopen', state => {
+  const message = productionTurn(state, 'Final design.');
+  const verify = (container: HTMLElement) => {
+    const outer = record(container);
+    expect(outer).not.toHaveAttribute('open');
+    expect(screen.getAllByText('Final design.')).toHaveLength(1);
+    const finalReply = screen.getByText('Final design.');
+    expect(finalReply.closest('details')).toBeNull();
+    fireEvent.click(outer.querySelector('summary')!);
+    fireEvent(outer, new Event('toggle'));
+    const plan = screen.getByText('The plan is ready.');
+    const production = screen.getByText('Wrote');
+    expect(plan.compareDocumentPosition(production) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(production.compareDocumentPosition(finalReply) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getAllByText('The plan is ready.')).toHaveLength(1);
+  };
+  const view = render(chat(message));
+  verify(view.container);
+  view.unmount();
+  const reopened = render(chat(message));
+  verify(reopened.container);
 });
 
 it.each(['failed', 'canceled'] as const)('keeps the existing %s header and folding behavior', state => {
