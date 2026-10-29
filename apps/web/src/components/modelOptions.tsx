@@ -561,9 +561,11 @@ export const SearchableModelSelect = forwardRef<
           aria-labelledby={optionLabelId}
           aria-describedby={optionDescriptionIds}
           /* The row label is ellipsised, and a long catalog can share a prefix
-             across many rows, so the full name must survive on hover. */
-          title={option.label}
-          className={`model-select-searchable__option${active ? ' is-active' : ''} is-disabled`}
+             across many rows, so the full model id must survive on hover.
+             Uses the app tooltip layer; native title is suppressed by
+             TooltipLayer. */
+          data-tooltip={option.id}
+          className={`model-select-searchable__option od-tooltip${active ? ' is-active' : ''} is-disabled`}
           data-selected={active ? 'true' : undefined}
         >
           {optionContent}
@@ -579,8 +581,8 @@ export const SearchableModelSelect = forwardRef<
         aria-disabled={disabled}
         aria-labelledby={optionLabelId}
         aria-describedby={optionDescriptionIds}
-        title={option.label}
-        className={`model-select-searchable__option${active ? ' is-active' : ''}${disabled ? ' is-disabled' : ''}`}
+        data-tooltip={option.id}
+        className={`model-select-searchable__option od-tooltip${active ? ' is-active' : ''}${disabled ? ' is-disabled' : ''}`}
         data-selected={active ? 'true' : undefined}
         disabled={disabled}
         onClick={() => {
@@ -610,9 +612,11 @@ export const SearchableModelSelect = forwardRef<
         aria-haspopup="listbox"
         aria-describedby={buttonDescriptionIds}
         /* The trigger readout truncates the same way its option rows do; the
-           full name stays reachable on hover. A caller-supplied title wins. */
-        title={buttonProps.title ?? selectedOption?.label ?? undefined}
-        className={className}
+           full model id stays reachable on hover. Uses the app tooltip layer;
+           native title is suppressed by TooltipLayer. A caller-supplied
+           tooltip wins. */
+        data-tooltip={buttonProps['data-tooltip'] ?? selectedOption?.id ?? undefined}
+        className={`${className ?? ''} od-tooltip`.trim()}
         onClick={(event) => {
           buttonProps.onClick?.(event);
           if (!event.defaultPrevented) setOpen((prev) => !prev);

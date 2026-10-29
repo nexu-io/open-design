@@ -1184,17 +1184,20 @@ export function InlineModelSwitcher({
         ref={chipRef}
         type="button"
         className={
-          'inline-switcher__chip' +
+          'inline-switcher__chip od-tooltip' +
           (compact ? ' inline-switcher__chip--icon' : '')
         }
         data-testid="inline-model-switcher-chip"
         onClick={handleChipClick}
         aria-haspopup="menu"
         aria-expanded={open}
-        // No hover bubble: the chip already prints the model it would name,
-        // and the popover it opens spells out the agent — a tooltip repeating
-        // both only covered the composer text under it. The accessible name
-        // stays, so the icon-only treatment is still announced.
+        // The chip text is ellipsised and drops the company token, so the
+        // full model id must stay readable on hover. Uses the app tooltip
+        // layer (od-tooltip + data-tooltip); native title is suppressed by
+        // TooltipLayer and would show nothing. When currentModelId is
+        // undefined the tooltip is omitted (isTooltipTarget requires a
+        // non-empty data-tooltip).
+        data-tooltip={currentModelId ?? undefined}
         aria-label={
           compact
             ? `${chipAgentLabel} · ${chipModel}`
@@ -1468,11 +1471,14 @@ export function InlineModelSwitcher({
                           aria-checked={active}
                           aria-disabled={selectable ? undefined : 'true'}
                           /* A long catalog ellipsises these rows and many
-                             share a prefix, so the full model name must stay
-                             readable on hover. A locked row keeps its reason. */
-                          title={lockedHint ?? m.label}
+                             share a prefix, so the full model id must stay
+                             readable on hover. A locked row keeps its reason.
+                             Uses the app tooltip layer (od-tooltip +
+                             data-tooltip); native title is suppressed by
+                             TooltipLayer and would show nothing. */
+                          data-tooltip={lockedHint ?? m.id}
                           className={
-                            'inline-switcher__agent' +
+                            'inline-switcher__agent od-tooltip' +
                             (active ? ' is-active' : '') +
                             (selectable ? '' : ' is-locked')
                           }
