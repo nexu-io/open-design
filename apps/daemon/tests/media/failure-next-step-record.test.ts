@@ -106,7 +106,7 @@ describe('recorded media failures carry a next step', () => {
     ).toBe('open-settings');
   });
 
-it('maps a signed-out Vela profile to a sign-in action', () => {
+  it('maps a signed-out Vela profile to a sign-in action', () => {
     const failure = Object.assign(new Error('Command failed: vela media models --json'), {
       stderr: 'Error: profile "prod" is not logged in; run vela login',
     });
@@ -118,7 +118,7 @@ it('maps a signed-out Vela profile to a sign-in action', () => {
     ).toBe('sign-in');
   });
 
-it('survives the SQLite round-trip the way code and retryable do', () => {
+  it('survives the SQLite round-trip the way code and retryable do', () => {
     const restored = roundTrip(
       new VelaMediaError('the reference image was refused', {
         code: 'safety_rejection',
