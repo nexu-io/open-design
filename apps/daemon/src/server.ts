@@ -4472,6 +4472,22 @@ export async function startServer({
     resolveRoot: projectId => resolveProjectShareDir(PROJECTS_DIR, projectId, getProject(db, projectId), resolveProjectDir),
     listFiles: contentFiles,
   });
+  // The exact team-project root for a principal: the same identity publish,
+  // pull and head use, so other resources of the project never stand in.
+  const resolveProjectRootResourceId = async (projectId: string, principal?: ResourceHubPrincipal | null): Promise<string> => {
+    if (!velaCliTeamProjectCatalog || !principal) throw new Error('TEAM_PROJECT_ROOT_UNAVAILABLE');
+    const row = getWorkspaceProjectByProjectId(db, projectId);
+    if (row && (row.workspaceId !== principal.teamId || row.resourceState !== 'active'
+      || row.cloudTombstonedAt != null)) throw new Error('TEAM_PROJECT_ROOT_UNAVAILABLE');
+    if (row?.resourceHubResourceId?.trim()) return row.resourceHubResourceId;
+    // Rootless old local data is resolved from the existing catalog identity,
+    // not migrated to a generated alias. Native Vela enforces viewer access.
+    const registration = await velaCliTeamProjectCatalog.getRegistration(projectId, principal);
+    if (!registration || registration.visibility !== 'team' || !registration.resourceId?.trim()) {
+      throw new Error('TEAM_PROJECT_ROOT_UNAVAILABLE');
+    }
+    return registration.resourceId;
+  };
   const collab = createCollabRuntime({
     coordinatePublication: (projectId, principal, publish) => {
       const operation = () => velaCliTeamProjectCatalog
@@ -4482,20 +4498,7 @@ export async function startServer({
     },
     workspaceContext: workspaceContextProvider,
     ...(velaCliTeamProjectCatalog ? {
-      resolveResourceId: async (projectId: string, principal?: ResourceHubPrincipal | null) => {
-        if (!principal) throw new Error('TEAM_PROJECT_ROOT_UNAVAILABLE');
-        const row = getWorkspaceProjectByProjectId(db, projectId);
-        if (row && (row.workspaceId !== principal.teamId || row.resourceState !== 'active'
-          || row.cloudTombstonedAt != null)) throw new Error('TEAM_PROJECT_ROOT_UNAVAILABLE');
-        if (row?.resourceHubResourceId?.trim()) return row.resourceHubResourceId;
-        // Rootless old local data is resolved from the existing catalog identity,
-        // not migrated to a generated alias. Native Vela enforces viewer access.
-        const registration = await velaCliTeamProjectCatalog.getRegistration(projectId, principal);
-        if (!registration || registration.visibility !== 'team' || !registration.resourceId?.trim()) {
-          throw new Error('TEAM_PROJECT_ROOT_UNAVAILABLE');
-        }
-        return registration.resourceId;
-      },
+      resolveResourceId: resolveProjectRootResourceId,
       retainRegistration: (registration: import('@open-design/contracts').PublicShareProjectRegistration, principal: ResourceHubPrincipal) => {
         const row = getWorkspaceProjectByProjectId(db, registration.projectId);
         if (row?.workspaceId !== principal.teamId || row.resourceState !== 'active'
@@ -5480,6 +5483,7 @@ export async function startServer({
   const ownedProjectDirectory = (scope: OwnedContentScope): string => resolveProjectDir(PROJECTS_DIR, scope.projectId);
   ownedContentSync = createOwnedContentSync({
     store: ownedContentStore,
+    onDiagnostic: (event) => console.warn('[od] owned content sync', JSON.stringify(event)),
     head: (scope) => collab.publishedHead(scope.projectId, {
       teamId: scope.resourceTeamId, memberId: scope.ownerMemberId,
       role: 'member', lifecycleState: 'active', workspaceType: 'team',
@@ -5912,6 +5916,17 @@ export async function startServer({
     observeOwnedContent: async (scope, version) => {
       await ownedContentSync!.request(scope, { action: 'check' }, version);
     },
+    ...(velaCliTeamProjectCatalog ? {
+      // Same principal as `publishedHead` below.
+      resolveProjectRootResourceId: (target: ProactiveContentPullTarget) =>
+        resolveProjectRootResourceId(target.projectId, {
+          teamId: target.resourceTeamId,
+          memberId: target.ownerMemberId,
+          role: 'member',
+          lifecycleState: 'active',
+          workspaceType: 'team',
+        }),
+    } : {}),
     assessBackgroundContentPull: (target, version) =>
       backgroundPullSizeGuard.assess(target, version),
     getLocalBinding: (projectId) => {
