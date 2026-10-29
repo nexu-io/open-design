@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * email — a single-column, 600px, bulletproof-table promotional/announcement
  * email built to its content-structure playbook (docs/content-structures/
@@ -92,12 +91,12 @@ function subjectLine(brand: Brand): string {
 function preheader(brand: Brand): string {
   const fromDesc = trimmed(brand.description);
   const fromTone = trimmed(brand.voice.tone);
-  const adj = brand.voice.adjectives.map(trimmed).filter(Boolean);
+  const [adjA, adjB] = brand.voice.adjectives.map(trimmed).filter(Boolean);
   return pick(
     fromDesc,
     fromTone,
-    adj.length >= 2
-      ? `${cap(adj[0])} and ${adj[1]} — the short version is inside.`
+    adjA && adjB
+      ? `${cap(adjA)} and ${adjB} — the short version is inside.`
       : "",
     `A two-minute read on what ${brand.name} changes for your team.`,
   );
@@ -129,20 +128,15 @@ function ctaLabel(brand: Brand): string {
 /** Three scannable benefit points: real pillars first, quality fallbacks fill. */
 function benefits(brand: Brand): Array<{ title: string; body: string }> {
   const pillars = pillarList(brand);
-  const out: Array<{ title: string; body: string }> = [];
-  for (let i = 0; i < 3; i++) {
+  return FEATURE_FALLBACKS.slice(0, 3).map((fallback, i) => {
     const p = pillars[i];
-    if (p) {
-      const { title, body } = splitPillar(p);
-      out.push({
-        title,
-        body: body ?? `${cap(noDot(title))} is built into ${brand.name} from day one — not bolted on later.`,
-      });
-    } else {
-      out.push(FEATURE_FALLBACKS[i]);
-    }
-  }
-  return out;
+    if (!p) return fallback;
+    const { title, body } = splitPillar(p);
+    return {
+      title,
+      body: body ?? `${cap(noDot(title))} is built into ${brand.name} from day one — not bolted on later.`,
+    };
+  });
 }
 
 /** One named proof point — a number beats a pile of adjectives. */
