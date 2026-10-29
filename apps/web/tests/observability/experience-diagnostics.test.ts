@@ -22,14 +22,38 @@ it('captures an error card without PostHog and deduplicates repeated displays of
   expect(JSON.stringify(body())).not.toContain('SECRET');
   expect(fetcher.mock.calls[0]![0]).toBe('/api/observability/event');
 });
-it.each(['client_white_screen', 'client_preview_runtime_error', 'client_preview_resource_error', 'client_resource_error', 'client_run_stuck'])('bridges existing %s independently of safety ingestion setup', (name) => {
-  reportSafetyEvent(name, { run_id: 'r', error_message: 'SECRET', resource_url: 'https://secret.test' });
+it.each([
+  ['client_white_screen', {}], ['client_run_stuck', {}],
+  ['client_resource_error', { category: 'next_chunk' }], ['client_resource_error', { category: 'product_asset' }],
+])('bridges existing %s independently of safety ingestion setup', (name, extra) => {
+  reportSafetyEvent(name, { run_id: 'r', error_message: 'SECRET', resource_url: 'https://secret.test', ...extra });
   expect(body().properties.category).toBe('runtime_failure');
   expect(JSON.stringify(body())).not.toContain('secret');
   expect(JSON.stringify(body())).not.toContain('SECRET');
 });
+it('does not bundle content the app does not own: preview pages, external or user media', () => {
+  // Agent-authored preview pages throw and 404 on their own; external images
+  // vanish. None of these are app faults, yet each spent a device's daily quota.
+  reportSafetyEvent('client_preview_runtime_error', { run_id: 'r' });
+  reportSafetyEvent('client_preview_resource_error', { run_id: 'r' });
+  reportSafetyEvent('client_resource_error', { category: 'external_media' });
+  reportSafetyEvent('client_resource_error', { category: 'user_artifact' });
+  expect(fetcher).not.toHaveBeenCalled();
+});
+it('does not bundle settings input the user is still correcting', () => {
+  for (const error_code of ['invalid_base_url', 'auth_failed', 'api_key_wrong_protocol', 'not_found_model', 'rate_limited', 'login_stopped']) {
+    reportExperienceEvent('agent_connection_test_result', { result: 'failed', error_code, area: error_code });
+  }
+  expect(fetcher).not.toHaveBeenCalled();
+  reportExperienceEvent('agent_connection_test_result', { result: 'failed', error_code: 'agent_spawn_failed' });
+  expect(body().properties).toMatchObject({ category: 'operation_failure', errorCode: 'agent_spawn_failed' });
+});
+it('does not bundle a project whose last run succeeded with unfinished todos', () => {
+  reportProjectFailure({ id: 'p', status: { value: 'incomplete', runId: 'r' } }, 'recent_rail');
+  expect(fetcher).not.toHaveBeenCalled();
+});
 it('deduplicates project failures across surfaces and reports a newer run separately', () => {
-  const project = { id: 'p', status: { value: 'incomplete', runId: 'r' } };
+  const project = { id: 'p', status: { value: 'failed', runId: 'r' } };
   reportProjectFailure(project, 'workspace_tabs'); reportProjectFailure(project, 'recent_projects');
   reportProjectFailure({ ...project, status: { value: 'failed', runId: 'r2' } }, 'workspace_tabs');
   expect(fetcher).toHaveBeenCalledTimes(2);

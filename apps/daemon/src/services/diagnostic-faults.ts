@@ -33,7 +33,6 @@ export function diagnosticFaultFromRun(run: Run, event: Event): FaultEvidence | 
   else if (event.event === 'run_retry_attempted') kind = 'retry';
   else if (event.event === 'agent' && data.type === 'diagnostic' && data.name === 'model_retry') kind = 'model_retry';
   else if (event.event === 'end' && data.status === 'canceled' && run.cancelOrigin === 'user_stop') kind = 'user_cancel';
-  else if (event.event === 'end' && data.status === 'succeeded' && run.deliverableValid === false) kind = 'delivery_validation_failure';
   else if (event.event === 'end' && run.strategyTask?.outcome === 'blocked') kind = 'logical_blocked';
   else if (event.event === 'end' && data.status === 'failed') kind = 'terminal_failure';
   else return null;
