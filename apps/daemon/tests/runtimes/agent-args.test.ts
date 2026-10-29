@@ -3,7 +3,7 @@ import { test } from 'vitest';
 import {
   AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, grokBuild, join, kilo, kimi, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
 } from './helpers/test-helpers.js';
-import { writeAntigravityModelSelection } from '../../src/runtimes/defs/antigravity.js';
+import { parseAntigravityModels, writeAntigravityModelSelection } from '../../src/runtimes/defs/antigravity.js';
 import { parseOpenCodeModels } from '../../src/runtimes/defs/opencode.js';
 import { agentCapabilities } from '../../src/runtimes/capabilities.js';
 import {
@@ -702,6 +702,34 @@ test('antigravity runs headless stream-json with the prompt as one agy user mess
     rmSync(settingsDir, { recursive: true, force: true });
   }
 
+  agentCapabilities.set('antigravity', {
+    modelFlag: true,
+    effortFlag: true,
+    skipPermissions: true,
+    disableSlashCommands: true,
+  });
+  try {
+    const withNativeModel = antigravity.buildArgs('hi', [], [], {
+      model: 'gemini-3.8-flash-low',
+      reasoning: 'low',
+    }, {
+      agentLogFilePath: '/tmp/od-agy-test.log',
+    });
+    assert.deepEqual(withNativeModel, [
+      '--log-file',
+      '/tmp/od-agy-test.log',
+      '--dangerously-skip-permissions',
+      '--model',
+      'gemini-3.8-flash-low',
+      '--effort',
+      'low',
+      '--disable-slash-commands',
+      ...AGY_STREAM_JSON_ARGS,
+    ]);
+  } finally {
+    agentCapabilities.delete('antigravity');
+  }
+
   // Argv must NOT carry `-c` even on follow-up turns. We tested resume
   // mode and found agy's `-c` activates an internal agentic loop (tool
   // calls, retries, fallback-to-cached-response) that overrides OD's
@@ -728,6 +756,15 @@ test('antigravity runs headless stream-json with the prompt as one agy user mess
     antigravity.fallbackModels.map((m) => m.id),
     [
       'default',
+      'Gemini 3.8 Flash (High)',
+      'Gemini 3.8 Flash (Medium)',
+      'Gemini 3.8 Flash (Low)',
+      'Gemini 3.7 Flash (High)',
+      'Gemini 3.7 Flash (Medium)',
+      'Gemini 3.7 Flash (Low)',
+      'Gemini 3.6 Flash (High)',
+      'Gemini 3.6 Flash (Medium)',
+      'Gemini 3.6 Flash (Low)',
       'Gemini 3.1 Pro (High)',
       'Gemini 3.1 Pro (Low)',
       'Gemini 3.5 Flash (High)',
@@ -782,6 +819,9 @@ test('antigravity gates non-interactive permission bypass on the detected CLI ca
   assert.deepEqual(antigravity.helpArgs, ['--help']);
   assert.deepEqual(antigravity.capabilityFlags, {
     '--dangerously-skip-permissions': 'skipPermissions',
+    '--model': 'modelFlag',
+    '--effort': 'effortFlag',
+    '--disable-slash-commands': 'disableSlashCommands',
   });
   assert.deepEqual(antigravity.buildArgs('', [], [], {}), AGY_STREAM_JSON_ARGS);
 
@@ -888,6 +928,29 @@ test('antigravity persists model selection to agy settings.json', () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+test('antigravity parseAntigravityModels parses agy models stdout with default option', () => {
+  const sampleStdout = [
+    'Fetching available models...',
+    'gemini-3.8-flash-high\tGemini 3.8 Flash (High)',
+    'gemini-3.8-flash-medium\tGemini 3.8 Flash (Medium)',
+    'gemini-3.7-flash-high\tGemini 3.7 Flash (High)',
+    'claude-sonnet-4-6\tClaude Sonnet 4.6 (Thinking)',
+  ].join('\n');
+
+  const models = parseAntigravityModels(sampleStdout);
+  assert.ok(models);
+  assert.deepEqual(models, [
+    { id: 'default', label: 'Default (CLI config)' },
+    { id: 'Gemini 3.8 Flash (High)', label: 'Gemini 3.8 Flash (High)' },
+    { id: 'Gemini 3.8 Flash (Medium)', label: 'Gemini 3.8 Flash (Medium)' },
+    { id: 'Gemini 3.7 Flash (High)', label: 'Gemini 3.7 Flash (High)' },
+    { id: 'Claude Sonnet 4.6 (Thinking)', label: 'Claude Sonnet 4.6 (Thinking)' },
+  ]);
+
+  assert.equal(parseAntigravityModels(''), null);
+  assert.equal(parseAntigravityModels('Fetching available models...'), null);
+});
+
 
 // AMR routes model selection through ACP `session/set_model` and only
 // accepts ids that survive the live `vela models` preflight, so a free
