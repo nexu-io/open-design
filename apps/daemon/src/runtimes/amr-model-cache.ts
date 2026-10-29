@@ -4,7 +4,9 @@ import {
   getRememberedRemoteLiveModels,
   rememberLiveModels,
   rememberRemoteLiveModels,
+  resolveDefaultModelFromOptions,
 } from './models.js';
+import { AMR_UNIVERSAL_CHAT_MODEL } from './defs/amr.js';
 import type { RuntimeModelOption } from './types.js';
 
 type RemoteCacheEntry = {
@@ -187,4 +189,26 @@ export function amrRunModels(
     return models;
   }
   return getRememberedLiveModels(agentId, scope);
+}
+
+/**
+ * The model an AMR turn switches to when vela rejects the selected one.
+ *
+ * Only a remote catalog says what this caller can use today. Before one has
+ * been fetched the run resolves against vela's bundled preset seed, which lags
+ * the live catalog: vela-cli 0.1.7 still lists the delisted `deepseek-v4-flash`
+ * ahead of any live model, so its "default" was the rejected model itself and
+ * no fallback was offered. Without a remote catalog, fall back to the chat
+ * model every plan is entitled to; vela's `session/set_model` stays the gate.
+ */
+export function amrRunFallbackModel(
+  agentId: string,
+  scope: string | null | undefined,
+  rejectedModel: string | null | undefined,
+): string | null {
+  const remote = getRememberedRemoteLiveModels(agentId, scope);
+  const candidate = remote.length > 0
+    ? resolveDefaultModelFromOptions(remote)
+    : AMR_UNIVERSAL_CHAT_MODEL;
+  return candidate && candidate !== rejectedModel ? candidate : null;
 }

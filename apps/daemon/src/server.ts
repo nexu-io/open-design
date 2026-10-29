@@ -299,7 +299,12 @@ import {
   amrAccountFailureDetails,
   classifyAmrAccountFailureSignal,
 } from './integrations/vela-errors.js';
-import { AMR_DEFAULT_MODEL_CATALOG_WAIT_MS, amrModelLoadingCache, amrRunModels } from './runtimes/amr-model-cache.js';
+import {
+  AMR_DEFAULT_MODEL_CATALOG_WAIT_MS,
+  amrModelLoadingCache,
+  amrRunFallbackModel,
+  amrRunModels,
+} from './runtimes/amr-model-cache.js';
 import {
   fetchVelaPresetModels,
   fetchVelaRemoteModelsWithRetry,
@@ -14382,7 +14387,7 @@ export async function startServer({
         ));
         return finishStrategyAwarePhysicalRun('failed', 1, null);
       }
-      amrFallbackModel = defaultRunModel && defaultRunModel !== safeModel ? defaultRunModel : null;
+      amrFallbackModel = amrRunFallbackModel(def.id, amrModelScope, safeModel);
       // NOTE: when the selected model is absent from the (possibly preset-only
       // or stale) catalog we intentionally do NOT fail-close. The cached/preset
       // catalog can lag the live one, and a logged-in user picked a concrete

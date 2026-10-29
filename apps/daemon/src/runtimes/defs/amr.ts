@@ -18,6 +18,9 @@ const PREFERRED_AMR_CHAT_MODEL_ORDER = [
   'deepseek-v4-pro',
 ] as const;
 
+/** The one AMR chat model every plan can use; see the order above. */
+export const AMR_UNIVERSAL_CHAT_MODEL = PREFERRED_AMR_CHAT_MODEL_ORDER[0];
+
 const PREFERRED_AMR_CHAT_MODEL_RANK: ReadonlyMap<string, number> = new Map(
   PREFERRED_AMR_CHAT_MODEL_ORDER.map((id, index) => [id, index]),
 );
