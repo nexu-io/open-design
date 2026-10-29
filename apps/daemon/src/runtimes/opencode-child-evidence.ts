@@ -12,6 +12,7 @@ import {
   type SafeChildPromptInput,
 } from '../prompt-telemetry.js';
 import { execAgentFile } from './invocation.js';
+import type { OpenCodeCliGeneration } from './opencode-permissions.js';
 
 export const OPENCODE_CHILD_EVIDENCE_ADAPTER_VERSION =
   'od-opencode-child-evidence/v1' as const;
@@ -369,21 +370,43 @@ export async function collectOpenCodeChildRuntimeFacts(input: {
 }
 
 /**
- * Read one child session through `opencode export <id> --sanitize`, the only
+ * Sanitized export argv per OpenCode generation.
+ *
+ * 1.x: `opencode export <id> --sanitize --pure`. `--pure` keeps a
+ * user-installed OpenCode plugin from executing inside the evidence path. An
+ * unprobed build takes this shape too, so the evidence path never runs a
+ * plugin-enabled export by accident.
+ *
+ * 2.x: `opencode session export <id> --sanitize --standalone`. The command
+ * moved under `session`, `--pure` no longer exists, and `--standalone` keeps
+ * the read in the spawned process (with the Run's env) instead of a background
+ * service started from another shell.
+ */
+export function openCodeSanitizedExportArgs(
+  childSessionId: string,
+  cliGeneration: OpenCodeCliGeneration,
+): string[] {
+  return cliGeneration === 'v2'
+    ? ['session', 'export', childSessionId, '--sanitize', '--standalone']
+    : ['export', childSessionId, '--sanitize', '--pure'];
+}
+
+/**
+ * Read one child session through OpenCode's sanitized export, the only
  * OpenCode surface that emits a child transcript together with the `parentID`
  * the two-sided verification needs, and with transcript and file bytes already
  * redacted by the CLI itself.
  *
- * `--pure` keeps a user-installed OpenCode plugin from executing inside the
- * evidence path, and `execAgentFile` supplies a neutral working directory so
- * the bun-based CLI cannot drop a lockfile into the user's project (see
- * `invocation.ts`). The env must be the one the Run was spawned with: it
- * carries the `XDG_DATA_HOME` / `HOME` that decide which session store the
- * spawned CLI actually wrote to.
+ * `execAgentFile` supplies a neutral working directory so the bun-based CLI
+ * cannot drop a lockfile into the user's project (see `invocation.ts`). The
+ * env must be the one the Run was spawned with: it carries the
+ * `XDG_DATA_HOME` / `HOME` that decide which session store the spawned CLI
+ * actually wrote to.
  */
 export function createOpenCodeSanitizedExportLoader(input: {
   launchPath: string;
   env: NodeJS.ProcessEnv;
+  cliGeneration: OpenCodeCliGeneration;
   timeoutMs?: number;
   maxBytes?: number;
 }): (childSessionId: string) => Promise<unknown> {
@@ -393,7 +416,7 @@ export function createOpenCodeSanitizedExportLoader(input: {
     }
     const { stdout } = await execAgentFile(
       input.launchPath,
-      ['export', childSessionId, '--sanitize', '--pure'],
+      openCodeSanitizedExportArgs(childSessionId, input.cliGeneration),
       {
         env: input.env,
         timeout: input.timeoutMs ?? OPENCODE_CHILD_EXPORT_TIMEOUT_MS,

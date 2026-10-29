@@ -2,10 +2,70 @@ import { DEFAULT_MODEL_OPTION } from './shared.js';
 import {
   OPENCODE_PERMISSION_CAPABILITY,
   appendOpenCodePermissionBypass,
+  appendOpenCodeStandalone,
   appendOpenCodeWorkspaceDir,
+  openCodeModelArgs,
 } from '../opencode-permissions.js';
+import { execAgentFile } from '../invocation.js';
 import { getRememberedLiveModels } from '../models.js';
-import type { RuntimeAgentDef, RuntimeModelOption } from '../types.js';
+import type { RuntimeAgentDef, RuntimeEnv, RuntimeModelOption } from '../types.js';
+
+const OPENCODE_LIST_MODELS_TIMEOUT_MS = 15_000;
+// Models lists easily exceed the default 1MB buffer once every OpenRouter
+// model is included.
+const OPENCODE_LIST_MODELS_MAX_BUFFER = 8 * 1024 * 1024;
+
+// The OpenCode 2.x rejection of a flag the 1.x CLI accepted (and the 1.x
+// wording, in case an older build ever rejects one).
+const OPENCODE_UNRECOGNIZED_FLAG = /unrecognized flag|unknown option/iu;
+
+function isUnrecognizedFlagError(error: unknown): boolean {
+  const parts = [
+    error instanceof Error ? error.message : String(error),
+    String((error as { stderr?: unknown })?.stderr ?? ''),
+    String((error as { stdout?: unknown })?.stdout ?? ''),
+  ];
+  return OPENCODE_UNRECOGNIZED_FLAG.test(parts.join('\n'));
+}
+
+async function readOpenCodeModels(
+  resolvedBin: string,
+  env: RuntimeEnv,
+  args: string[],
+): Promise<RuntimeModelOption[] | null> {
+  const { stdout } = await execAgentFile(resolvedBin, args, {
+    env,
+    timeout: OPENCODE_LIST_MODELS_TIMEOUT_MS,
+    maxBuffer: OPENCODE_LIST_MODELS_MAX_BUFFER,
+  });
+  return parseOpenCodeModels(String(stdout));
+}
+
+/**
+ * Discover models across both OpenCode generations. 1.x exposes per-model
+ * variant metadata through `models --verbose`; 2.x removed the flag (the
+ * command exits 1 with "Unrecognized flag") and only prints `provider/model`
+ * per line, which `parseOpenCodeModels` already accepts. Only that rejection
+ * earns a second spawn: a timeout or crash of the verbose listing says
+ * nothing about the plain one and must not double the detection budget.
+ * Real-world listings can take >8s (network round-trip to the provider
+ * registry), hence the 15s budget shared with the other agent defs.
+ */
+async function fetchOpenCodeModels(
+  resolvedBin: string,
+  env: RuntimeEnv,
+): Promise<RuntimeModelOption[] | null> {
+  try {
+    return await readOpenCodeModels(resolvedBin, env, ['models', '--verbose']);
+  } catch (error) {
+    if (!isUnrecognizedFlagError(error)) return null;
+  }
+  try {
+    return await readOpenCodeModels(resolvedBin, env, ['models']);
+  } catch {
+    return null;
+  }
+}
 
 const OPENCODE_VARIANT_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u;
 const OPENCODE_MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._/:@-]*$/u;
@@ -112,29 +172,23 @@ export const opencodeAgentDef = {
     fallbackBins: ['opencode'],
     versionArgs: ['--version'],
     ...OPENCODE_PERMISSION_CAPABILITY,
-    // `opencode models` prints `provider/model` per line. Real-world
-    // `opencode models` calls can take >8s (network round-trip to the
-    // provider registry), so the previous 8s budget timed out and fell back
-    // to the hardcoded `fallbackModels`, hiding the user's actual catalog.
-    // 15s matches the listModels budget the rest of the agent defs use
-    // (devin, hermes, kiro, kilo, kimi, trae-cli, vibe, reasonix).
-    listModels: {
-      args: ['models', '--verbose'],
-      parse: parseOpenCodeModels,
-      timeoutMs: 15_000,
-    },
+    fetchModels: fetchOpenCodeModels,
     fallbackModels: OPENCODE_FALLBACK_MODELS,
     // OpenCode 1.18.x exposes provider/model-specific variants. Detection
-    // reads the exact live variant keys from `models --verbose`. The fallback
+    // reads the exact live variant keys from `models --verbose`; 2.x has no
+    // CLI listing of variants, so none are advertised there. The fallback
     // keeps Sol/Terra/Luna model ids usable during a catalog outage but does
-    // not guess their variants. Unknown model/variant pairs omit `--variant`
+    // not guess their variants. Unknown model/variant pairs omit the variant
     // rather than inventing a provider capability or preventing the base
     // model from running.
     //
-    // Prompt delivered via stdin (`opencode run` with no message argv) to
-    // avoid Windows `spawn ENAMETOOLONG` while preserving OpenCode's
-    // structured stream. A literal `-` is parsed as a positional message by
-    // OpenCode 1.14.x and can surface as "Session not found".
+    // The argv is generation-aware (see `opencode-permissions.ts`): 1.x gets
+    // `--dangerously-skip-permissions --dir <cwd> [-m model --variant v]`,
+    // 2.x gets `--auto --standalone [-m model#v]`. Both generations read the
+    // prompt from stdin (`opencode run` with no message argv), which avoids
+    // Windows `spawn ENAMETOOLONG` while preserving OpenCode's structured
+    // stream. A literal `-` is parsed as a positional message by OpenCode
+    // 1.14.x and can surface as "Session not found".
     buildArgs: (_prompt, _imagePaths, _extra, options = {}, runtimeContext = {}) => {
       const args = [
         'run',
@@ -142,7 +196,8 @@ export const opencodeAgentDef = {
         'json',
       ];
       appendOpenCodePermissionBypass(args, 'opencode');
-      appendOpenCodeWorkspaceDir(args, runtimeContext.cwd);
+      appendOpenCodeWorkspaceDir(args, runtimeContext.cwd, 'opencode');
+      appendOpenCodeStandalone(args, 'opencode');
       // Capture-style resume: OpenCode mints its own session id (reported on
       // the stream as `sessionID`, e.g. `ses_...`). On a follow-up turn the
       // daemon continues that session with `-s <id>` instead of re-sending the
@@ -158,10 +213,10 @@ export const opencodeAgentDef = {
         args.push('-s', resumeSessionId);
       }
       if (options.model && options.model !== 'default') {
-        args.push('-m', options.model);
-      }
-      if (supportsOpenCodeVariant(options.model, options.reasoning)) {
-        args.push('--variant', options.reasoning);
+        const variant = supportsOpenCodeVariant(options.model, options.reasoning)
+          ? options.reasoning
+          : null;
+        args.push(...openCodeModelArgs(options.model, variant, 'opencode'));
       }
       return args;
     },
