@@ -10,7 +10,7 @@ import {
 import { applyAgentLaunchEnv, resolveAgentLaunch } from './launch.js';
 import { spawnEnvForAgent } from './env.js';
 import { probeAgentAuthStatus } from './auth.js';
-import { agentCapabilities } from './capabilities.js';
+import { agentCapabilities, agentCapabilityProbePaths } from './capabilities.js';
 import { installMetaForAgent } from './metadata.js';
 import {
   forgetUnusableExecutables,
@@ -167,6 +167,10 @@ export async function ensureDetectedRuntimeCapabilities(
     .then((caps) => {
       if (caps) {
         agentCapabilities.set(def.id, caps);
+        agentCapabilityProbePaths.set(def.id, {
+          selectedPath: context.selectedPath,
+          launchPath: context.launchPath,
+        });
         detectedRuntimeCapabilityScopes.set(def.id, context.scope);
       }
       return caps ? { ...caps } : null;
@@ -396,6 +400,7 @@ async function probeAmrOpenCodeVersion(
 }
 
 type RuntimeVersionProbeContext = {
+  selectedPath: string;
   launchPath: string;
   probeEnv: NodeJS.ProcessEnv;
   scope: string;
@@ -424,6 +429,7 @@ function runtimeVersionProbeContext(
     ? resolveAmrOpenCodeExecutable(probeEnv)
     : null;
   return {
+    selectedPath: launch.selectedPath,
     launchPath: launch.launchPath,
     probeEnv,
     scope: createHash('sha256').update(JSON.stringify({
@@ -737,6 +743,10 @@ async function probe(
   const surfacedModelResult = withRememberedAmrModels(def, probeEnv, modelResult);
   if (caps) {
     agentCapabilities.set(def.id, caps);
+    agentCapabilityProbePaths.set(def.id, {
+      selectedPath: launch.selectedPath,
+      launchPath: launch.launchPath,
+    });
   }
   const authDiagnostic = auth ? buildAuthDiagnostic(def, auth) : null;
   const runtimeVersions: DetectedRuntimeVersions = {

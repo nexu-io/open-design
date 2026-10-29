@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { agentCapabilities } from '../../src/runtimes/capabilities.js';
+import {
+  agentCapabilities,
+  agentCapabilityProbePaths,
+} from '../../src/runtimes/capabilities.js';
 import {
   BYOK_OPENCODE_API_KEY_ENV,
   BYOK_OPENCODE_PROVIDER_ID,
@@ -10,6 +13,78 @@ import {
 import { byokOpenCodeAgentDef } from '../../src/runtimes/defs/byok-opencode.js';
 
 describe('byok-opencode runtime config', () => {
+  it('reuses the verified local OpenCode permission capability when the BYOK probe is unavailable', () => {
+    agentCapabilities.set('byok-opencode', {});
+    agentCapabilities.set('opencode', { skipPermissions: true });
+    agentCapabilityProbePaths.set('byok-opencode', {
+      selectedPath: '/tools/opencode',
+      launchPath: '/tools/opencode',
+    });
+    agentCapabilityProbePaths.set('opencode', {
+      selectedPath: '/tools/opencode',
+      launchPath: '/tools/opencode',
+    });
+    try {
+      expect(byokOpenCodeAgentDef.buildArgs('', [], [], { model: 'gpt-5.5' })).toEqual([
+        'run',
+        '--format',
+        'json',
+        '--dangerously-skip-permissions',
+        '-m',
+        'open-design-byok/gpt-5.5',
+      ]);
+    } finally {
+      agentCapabilities.delete('opencode');
+      agentCapabilities.delete('byok-opencode');
+      agentCapabilityProbePaths.delete('opencode');
+      agentCapabilityProbePaths.delete('byok-opencode');
+    }
+  });
+
+  it('does not borrow the local capability when BYOK resolves a different executable', () => {
+    agentCapabilities.set('byok-opencode', {});
+    agentCapabilities.set('opencode', { skipPermissions: true });
+    agentCapabilityProbePaths.set('byok-opencode', {
+      selectedPath: '/bundled/opencode',
+      launchPath: '/bundled/opencode',
+    });
+    agentCapabilityProbePaths.set('opencode', {
+      selectedPath: '/path/opencode',
+      launchPath: '/path/opencode',
+    });
+    try {
+      expect(byokOpenCodeAgentDef.buildArgs('', [], [], { model: 'gpt-5.5' })).toEqual([
+        'run',
+        '--format',
+        'json',
+        '-m',
+        'open-design-byok/gpt-5.5',
+      ]);
+    } finally {
+      agentCapabilities.delete('opencode');
+      agentCapabilities.delete('byok-opencode');
+      agentCapabilityProbePaths.delete('opencode');
+      agentCapabilityProbePaths.delete('byok-opencode');
+    }
+  });
+
+  it('does not borrow the local capability when the BYOK probe explicitly rejects it', () => {
+    agentCapabilities.set('opencode', { skipPermissions: true });
+    agentCapabilities.set('byok-opencode', { skipPermissions: false });
+    try {
+      expect(byokOpenCodeAgentDef.buildArgs('', [], [], { model: 'gpt-5.5' })).toEqual([
+        'run',
+        '--format',
+        'json',
+        '-m',
+        'open-design-byok/gpt-5.5',
+      ]);
+    } finally {
+      agentCapabilities.delete('opencode');
+      agentCapabilities.delete('byok-opencode');
+    }
+  });
+
   it('gates non-interactive permission bypass on the installed OpenCode capability', () => {
     agentCapabilities.delete('byok-opencode');
     expect(byokOpenCodeAgentDef.helpArgs).toEqual(['run', '--help']);
