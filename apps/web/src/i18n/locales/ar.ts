@@ -154,6 +154,8 @@ export const ar: Dict = {
   "chat.amrConcurrencyGate.message": "السعة المتزامنة ممتلئة. قم بترقية خطتك ثم حاول مجددًا.",
   "chat.amrConcurrencyGate.teamTitle": "تم بلوغ حد الطلبات المتزامنة للفريق",
   "chat.amrConcurrencyGate.teamMessage": "بلغ الفريق حد الطلبات المتزامنة. اطلب من مالك مساحة عمل الفريق ترقية الاشتراك.",
+  "chat.amrConcurrencyGate.maxTitle": "تم بلوغ الحد الأقصى للمهام المتزامنة",
+  "chat.amrConcurrencyGate.maxMessage": "بلغت مساحة العمل هذه الحد الأقصى لعدد المهام التي تعمل في الوقت نفسه. يُرجى الانتظار حتى تنتهي مهام أخرى، ثم المحاولة مرة أخرى.",
   "chat.amrConcurrencyGate.benefit1": "اختر من أحدث النماذج دون إعدادات معقدة",
   "chat.amrConcurrencyGate.benefit2": "ادعُ الأعضاء مجانًا وشارك الرصيد",
   "chat.amrConcurrencyGate.benefit3": "أنشئ الصور والنصوص متعددة الوسائط في مكان واحد",

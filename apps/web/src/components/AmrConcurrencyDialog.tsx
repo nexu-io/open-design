@@ -27,6 +27,7 @@ export function AmrConcurrencyDialog({ branch, workspaceContext, profile, consol
   const close = () => { journey.click('close'); onClose(); };
   const upgradeUrl = upgradeAllowed && branch.audience === 'owner' && branch.tier !== 'max' && workspaceContext
     ? workspaceUpgradeUrl(workspaceContext, null, { fallbackProfile: profile, consoleOrigin }) : null;
+  const isMax = branch.tier === 'max';
   const memberNotice = branch.audience === 'member';
   const benefits = [
     t('chat.amrConcurrencyGate.benefit1'),
@@ -45,11 +46,13 @@ export function AmrConcurrencyDialog({ branch, workspaceContext, profile, consol
         <Icon name="close" size={14} />
       </Button>
       <h2 id="amr-concurrency-title" className={frame.title}>
-        {t(memberNotice ? 'chat.amrConcurrencyGate.teamTitle'
+        {t(isMax ? 'chat.amrConcurrencyGate.maxTitle'
+          : memberNotice ? 'chat.amrConcurrencyGate.teamTitle'
           : upgradeUrl ? 'chat.amrConcurrencyGate.title' : 'chat.runError.title.membershipConcurrencyLimit')}
       </h2>
-      <p className={`${frame.message}${upgradeUrl ? '' : ` ${frame.memberMessage}`}`}>{t(upgradeUrl
-        ? 'chat.amrConcurrencyGate.message'
+      <p className={`${frame.message}${upgradeUrl ? '' : ` ${frame.memberMessage}`}`}>{t(isMax
+        ? 'chat.amrConcurrencyGate.maxMessage'
+        : upgradeUrl ? 'chat.amrConcurrencyGate.message'
         : branch.audience === 'member'
           ? 'chat.amrConcurrencyGate.teamMessage'
           : 'chat.runError.membershipConcurrencyLimitMessageNoTime')}</p>
@@ -68,7 +71,7 @@ export function AmrConcurrencyDialog({ branch, workspaceContext, profile, consol
             : `${frame.cta} ${styles.noticeButton}`}
           onClick={close} data-testid="amr-concurrency-close">
           {t(upgradeUrl ? 'chat.amrBalanceGate.laterCta'
-            : memberNotice ? 'chat.amrBalanceOwner.dismissCta' : 'common.close')}
+            : isMax || memberNotice ? 'chat.amrBalanceOwner.dismissCta' : 'common.close')}
         </Button>
         {upgradeUrl ? <Button className={`${frame.cta} ${styles.upgradeButton}`}
           onClick={() => { journey.click('upgrade'); window.open(upgradeUrl, '_blank', 'noopener,noreferrer'); }}

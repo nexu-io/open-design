@@ -154,6 +154,8 @@ export const th: Dict = {
   "chat.amrConcurrencyGate.message": "ความจุพร้อมกันเต็มแล้ว โปรดอัปเกรดแผนแล้วลองอีกครั้ง",
   "chat.amrConcurrencyGate.teamTitle": "ทีมถึงขีดจำกัดการทำงานพร้อมกันแล้ว",
   "chat.amrConcurrencyGate.teamMessage": "ทีมถึงขีดจำกัดการทำงานพร้อมกันแล้ว โปรดติดต่อเจ้าของพื้นที่ทำงานของทีมเพื่ออัปเกรดการสมัครสมาชิก",
+  "chat.amrConcurrencyGate.maxTitle": "ถึงขีดจำกัดงานที่ทำงานพร้อมกันแล้ว",
+  "chat.amrConcurrencyGate.maxMessage": "พื้นที่ทำงานนี้มีจำนวนงานที่ทำงานพร้อมกันถึงขีดจำกัดแล้ว โปรดรอให้งานอื่นเสร็จสิ้นแล้วลองอีกครั้ง",
   "chat.amrConcurrencyGate.benefit1": "เลือกรุ่นล้ำสมัยได้โดยไม่ต้องตั้งค่าซับซ้อน",
   "chat.amrConcurrencyGate.benefit2": "เชิญสมาชิกฟรีและใช้โควตาร่วมกัน",
   "chat.amrConcurrencyGate.benefit3": "สร้างภาพและข้อความหลายรูปแบบในที่เดียว",

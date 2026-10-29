@@ -154,6 +154,8 @@ export const fa: Dict = {
   "chat.amrConcurrencyGate.message": "ظرفیت هم‌زمان پر است. طرح خود را ارتقا دهید و دوباره تلاش کنید.",
   "chat.amrConcurrencyGate.teamTitle": "محدودیت هم‌زمانی تیم پر شده است",
   "chat.amrConcurrencyGate.teamMessage": "تیم به محدودیت هم‌زمانی رسیده است. از مالک فضای کاری تیم بخواهید اشتراک را ارتقا دهد.",
+  "chat.amrConcurrencyGate.maxTitle": "به سقف تعداد کارهای هم‌زمان رسیده‌اید",
+  "chat.amrConcurrencyGate.maxMessage": "تعداد کارهای در حال اجرای هم‌زمان در این فضای کاری به سقف مجاز رسیده است. لطفاً صبر کنید تا کارهای دیگر تمام شوند، سپس دوباره تلاش کنید.",
   "chat.amrConcurrencyGate.benefit1": "انتخاب مدل‌های پیشرفته بدون تنظیمات پیچیده",
   "chat.amrConcurrencyGate.benefit2": "دعوت رایگان اعضا و اشتراک اعتبار",
   "chat.amrConcurrencyGate.benefit3": "ساخت تصویر و متن چندرسانه‌ای در یک جا",

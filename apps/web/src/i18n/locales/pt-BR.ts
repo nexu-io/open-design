@@ -154,6 +154,8 @@ export const ptBR: Dict = {
   "chat.amrConcurrencyGate.message": "A capacidade simultânea está cheia. Faça upgrade do plano e tente novamente.",
   "chat.amrConcurrencyGate.teamTitle": "Limite de simultaneidade da equipe atingido",
   "chat.amrConcurrencyGate.teamMessage": "A equipe atingiu seu limite de simultaneidade. Peça ao proprietário do espaço de trabalho da equipe para atualizar a assinatura.",
+  "chat.amrConcurrencyGate.maxTitle": "Limite de tarefas simultâneas atingido",
+  "chat.amrConcurrencyGate.maxMessage": "Este espaço de trabalho atingiu o limite de tarefas em execução simultânea. Aguarde outras tarefas terminarem e tente novamente.",
   "chat.amrConcurrencyGate.benefit1": "Escolha modelos de ponta sem configurações complexas",
   "chat.amrConcurrencyGate.benefit2": "Convide membros gratuitamente e compartilhe a franquia",
   "chat.amrConcurrencyGate.benefit3": "Crie imagens e textos multimodais em um só lugar",

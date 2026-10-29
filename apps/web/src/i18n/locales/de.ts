@@ -154,6 +154,8 @@ export const de: Dict = {
   "chat.amrConcurrencyGate.message": "Alle Plätze sind belegt. Upgrade deinen Tarif und versuche es erneut.",
   "chat.amrConcurrencyGate.teamTitle": "Parallelitätslimit des Teams erreicht",
   "chat.amrConcurrencyGate.teamMessage": "Das Team hat sein Parallelitätslimit erreicht. Bitte den Eigentümer des Team-Arbeitsbereichs, das Abonnement zu aktualisieren.",
+  "chat.amrConcurrencyGate.maxTitle": "Limit für gleichzeitige Aufgaben erreicht",
+  "chat.amrConcurrencyGate.maxMessage": "In diesem Arbeitsbereich ist die maximale Anzahl gleichzeitig laufender Aufgaben erreicht. Bitte warte, bis andere Aufgaben abgeschlossen sind, und versuche es dann erneut.",
   "chat.amrConcurrencyGate.benefit1": "Modernste Modelle ohne aufwendige Einrichtung wählen",
   "chat.amrConcurrencyGate.benefit2": "Mitglieder kostenlos einladen und Kontingent teilen",
   "chat.amrConcurrencyGate.benefit3": "Multimodale Bilder und Texte an einem Ort erstellen",

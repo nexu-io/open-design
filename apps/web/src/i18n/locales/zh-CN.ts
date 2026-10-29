@@ -154,6 +154,8 @@ export const zhCN: Dict = {
   "chat.amrConcurrencyGate.message": "当前并发不足，请升级套餐后再试。",
   "chat.amrConcurrencyGate.teamTitle": "团队并发不足",
   "chat.amrConcurrencyGate.teamMessage": "当前团队并发不足，请联系团队空间所有者升级订阅。",
+  "chat.amrConcurrencyGate.maxTitle": "同时运行的任务已达上限",
+  "chat.amrConcurrencyGate.maxMessage": "当前工作空间同时运行的任务数已达上限，请等待其他任务结束后重试。",
   "chat.amrConcurrencyGate.benefit1": "无需复杂配置，海量 SOTA 模型任选",
   "chat.amrConcurrencyGate.benefit2": "邀请成员免费加入，共享额度",
   "chat.amrConcurrencyGate.benefit3": "支持多模态图像创作，图文一站生成",

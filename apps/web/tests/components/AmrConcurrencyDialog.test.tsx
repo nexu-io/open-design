@@ -29,11 +29,11 @@ it.each(['free', 'go', 'plus', 'pro', 'max'].flatMap((tier) =>
     render(<AmrConcurrencyDialog branch={resolveAmrBalanceBranch({ context })}
       workspaceContext={context} profile="local" onClose={onClose} />);
     const dialog = screen.getByRole('dialog');
-    expect(dialog).toHaveTextContent(role === 'owner' && tier !== 'max'
-      ? 'Concurrency limit reached' : role !== 'owner' ? 'Team concurrency limit reached' : 'Concurrent request limit reached');
-    if (role === 'owner' && tier === 'max') expect(dialog).toHaveTextContent('manually');
+    expect(dialog).toHaveTextContent(tier === 'max' ? 'Concurrent task limit reached'
+      : role === 'owner' ? 'Concurrency limit reached' : 'Team concurrency limit reached');
+    if (tier === 'max') expect(dialog).toHaveTextContent('Please wait for other tasks to finish, then try again.');
     expect(dialog.textContent).not.toMatch(/recharge|auto.?recharge/i);
-    if (role !== 'owner') expect(dialog).toHaveTextContent('Ask the team workspace Owner to upgrade the subscription.');
+    if (role !== 'owner' && tier !== 'max') expect(dialog).toHaveTextContent('Ask the team workspace Owner to upgrade the subscription.');
     const upgrade = screen.queryByTestId('amr-concurrency-upgrade');
     if (role === 'owner' && tier !== 'max') {
       expect(upgrade).toBeTruthy(); fireEvent.click(upgrade!);
@@ -279,7 +279,7 @@ it.each(['max', 'team_max'])('Max Owner %s keeps the unified illustration with m
   const dialog = screen.getByRole('dialog');
   expect(dialog.querySelector('img')).toHaveAttribute('src', '/upgrade/cloud-signin-aurora.jpg');
   expect(dialog.className).toContain('frozenPanel');
-  expect(dialog).toHaveTextContent('manually');
+  expect(dialog).toHaveTextContent('Please wait for other tasks to finish, then try again.');
   expect(screen.queryByTestId('amr-concurrency-upgrade')).toBeNull();
   expect(screen.queryAllByRole('listitem')).toHaveLength(0);
   expect(screen.getAllByRole('button')).toHaveLength(2);
@@ -309,5 +309,26 @@ it.each(['workspace', 'profile', 'upgrade-permission'] as const)(
     fireEvent.click(screen.getByTestId('amr-concurrency-close'));
     expect(onClose).toHaveBeenCalledOnce();
     expect(open).not.toHaveBeenCalled();
+  },
+);
+
+// OPEND-4462: Max has no higher plan, regardless of workspace role or type.
+it.each((['personal', 'team'] as const).flatMap((workspaceType) =>
+  (['owner', 'admin', 'member'] as const).map((role) => ({ workspaceType, role }))))(
+  'Max $workspaceType / $role uses the approved task-limit notice', ({ workspaceType, role }) => {
+    translation.language = 'zh-CN';
+    const context = workspaceContextFixture({ workspaceId: `max-${workspaceType}`, workspaceMemberId: `max-${role}`,
+      workspaceType, memberCount: 3, role,
+      planId: workspaceType === 'team' ? 'team_max' : 'max',
+      permissions: buildWorkspacePermissions({ role, lifecycleState: 'active' }) });
+    const onClose = vi.fn(); const open = vi.fn(); vi.stubGlobal('open', open);
+    render(<AmrConcurrencyDialog {...resolveAmrConcurrencyPresentation({ context })}
+      workspaceContext={context} profile="local" onClose={onClose} />);
+    expect(screen.getByRole('heading', { name: '同时运行的任务已达上限' })).toBeTruthy();
+    expect(screen.getByRole('dialog')).toHaveTextContent('当前工作空间同时运行的任务数已达上限，请等待其他任务结束后重试。');
+    expect(screen.getByRole('dialog').textContent).not.toMatch(/升级|所有者/);
+    expect(screen.queryByTestId('amr-concurrency-upgrade')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '知道了' }));
+    expect(onClose).toHaveBeenCalledOnce(); expect(open).not.toHaveBeenCalled();
   },
 );

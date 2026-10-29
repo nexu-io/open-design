@@ -151,6 +151,8 @@ export const en: Dict = {
   "chat.amrConcurrencyGate.message": "Your concurrent capacity is full. Upgrade your plan and try again.",
   "chat.amrConcurrencyGate.teamTitle": "Team concurrency limit reached",
   "chat.amrConcurrencyGate.teamMessage": "The team is at its concurrency limit. Ask the team workspace Owner to upgrade the subscription.",
+  "chat.amrConcurrencyGate.maxTitle": "Concurrent task limit reached",
+  "chat.amrConcurrencyGate.maxMessage": "This workspace has reached its limit for tasks running at the same time. Please wait for other tasks to finish, then try again.",
   "chat.amrConcurrencyGate.benefit1": "No complex setup, choose from leading SOTA models",
   "chat.amrConcurrencyGate.benefit2": "Invite members for free and share allowance",
   "chat.amrConcurrencyGate.benefit3": "Create multimodal images and text in one place",

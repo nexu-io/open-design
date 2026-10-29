@@ -154,6 +154,8 @@ export const pl: Dict = {
   "chat.amrConcurrencyGate.message": "Brak wolnych miejsc. Zmień plan na wyższy i spróbuj ponownie.",
   "chat.amrConcurrencyGate.teamTitle": "Osiągnięto limit równoczesnych żądań zespołu",
   "chat.amrConcurrencyGate.teamMessage": "Zespół osiągnął limit równoczesnych żądań. Poproś właściciela przestrzeni roboczej zespołu o podwyższenie planu subskrypcji.",
+  "chat.amrConcurrencyGate.maxTitle": "Osiągnięto limit jednoczesnych zadań",
+  "chat.amrConcurrencyGate.maxMessage": "Ten obszar roboczy osiągnął limit zadań wykonywanych jednocześnie. Poczekaj, aż inne zadania się zakończą, a następnie spróbuj ponownie.",
   "chat.amrConcurrencyGate.benefit1": "Wybieraj najnowsze modele bez złożonej konfiguracji",
   "chat.amrConcurrencyGate.benefit2": "Zapraszaj członków bezpłatnie i dziel wspólny limit",
   "chat.amrConcurrencyGate.benefit3": "Twórz obrazy i tekst multimodalny w jednym miejscu",

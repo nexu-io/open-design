@@ -154,6 +154,8 @@ export const ru: Dict = {
   "chat.amrConcurrencyGate.message": "Свободных мест нет. Перейдите на более высокий тариф и повторите попытку.",
   "chat.amrConcurrencyGate.teamTitle": "Достигнут лимит одновременных запросов команды",
   "chat.amrConcurrencyGate.teamMessage": "Команда достигла лимита одновременных запросов. Попросите владельца рабочего пространства команды повысить тариф подписки.",
+  "chat.amrConcurrencyGate.maxTitle": "Достигнут лимит одновременных задач",
+  "chat.amrConcurrencyGate.maxMessage": "В этом рабочем пространстве достигнут лимит одновременно выполняемых задач. Дождитесь завершения других задач и повторите попытку.",
   "chat.amrConcurrencyGate.benefit1": "Передовые модели без сложной настройки",
   "chat.amrConcurrencyGate.benefit2": "Бесплатно приглашайте участников и делитесь квотой",
   "chat.amrConcurrencyGate.benefit3": "Создавайте мультимодальные изображения и текст в одном месте",

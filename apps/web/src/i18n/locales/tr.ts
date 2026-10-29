@@ -154,6 +154,8 @@ export const tr: Dict = {
   "chat.amrConcurrencyGate.message": "Eşzamanlı kapasite dolu. Planınızı yükseltip tekrar deneyin.",
   "chat.amrConcurrencyGate.teamTitle": "Takımın eşzamanlılık sınırına ulaşıldı",
   "chat.amrConcurrencyGate.teamMessage": "Takım eşzamanlılık sınırına ulaştı. Takım çalışma alanı sahibinden aboneliği yükseltmesini isteyin.",
+  "chat.amrConcurrencyGate.maxTitle": "Eş zamanlı görev sınırına ulaşıldı",
+  "chat.amrConcurrencyGate.maxMessage": "Bu çalışma alanında aynı anda çalışan görev sayısı sınırına ulaşıldı. Lütfen diğer görevlerin tamamlanmasını bekleyip tekrar deneyin.",
   "chat.amrConcurrencyGate.benefit1": "Karmaşık kurulum olmadan gelişmiş modelleri seçin",
   "chat.amrConcurrencyGate.benefit2": "Üyeleri ücretsiz davet edin ve kullanım hakkını paylaşın",
   "chat.amrConcurrencyGate.benefit3": "Çok modlu görselleri ve metinleri tek yerde oluşturun",

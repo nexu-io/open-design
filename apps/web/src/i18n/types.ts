@@ -2962,6 +2962,8 @@ export interface Dict {
   'chat.amrConcurrencyGate.message': string;
   'chat.amrConcurrencyGate.teamTitle': string;
   'chat.amrConcurrencyGate.teamMessage': string;
+  'chat.amrConcurrencyGate.maxTitle': string;
+  'chat.amrConcurrencyGate.maxMessage': string;
   'chat.amrConcurrencyCard.available': string;
   'chat.amrConcurrencyCard.full': string;
   'chat.amrConcurrencyGate.benefit1': string;

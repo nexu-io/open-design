@@ -154,6 +154,8 @@ export const it: Dict = {
   "chat.amrConcurrencyGate.message": "La capacità simultanea è piena. Passa a un piano superiore e riprova.",
   "chat.amrConcurrencyGate.teamTitle": "Limite di concorrenza del team raggiunto",
   "chat.amrConcurrencyGate.teamMessage": "Il team ha raggiunto il limite di concorrenza. Chiedi al proprietario dello spazio di lavoro del team di aggiornare l’abbonamento.",
+  "chat.amrConcurrencyGate.maxTitle": "Limite di attività simultanee raggiunto",
+  "chat.amrConcurrencyGate.maxMessage": "Questo spazio di lavoro ha raggiunto il limite di attività in esecuzione contemporaneamente. Attendi che altre attività terminino, poi riprova.",
   "chat.amrConcurrencyGate.benefit1": "Scegli modelli avanzati senza configurazioni complesse",
   "chat.amrConcurrencyGate.benefit2": "Invita membri gratis e condividi il credito",
   "chat.amrConcurrencyGate.benefit3": "Crea immagini e testi multimodali in un unico posto",

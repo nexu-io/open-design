@@ -154,6 +154,8 @@ export const hu: Dict = {
   "chat.amrConcurrencyGate.message": "Az egyidejű kapacitás megtelt. Válts magasabb csomagra, majd próbáld újra.",
   "chat.amrConcurrencyGate.teamTitle": "A csapat elérte a párhuzamossági korlátot",
   "chat.amrConcurrencyGate.teamMessage": "A csapat elérte a párhuzamossági korlátot. Kérd meg a csapat munkaterületének tulajdonosát az előfizetés bővítésére.",
+  "chat.amrConcurrencyGate.maxTitle": "Elérted az egyidejű feladatok korlátját",
+  "chat.amrConcurrencyGate.maxMessage": "Ez a munkaterület elérte az egyidejűleg futó feladatok korlátját. Várd meg, amíg más feladatok befejeződnek, majd próbáld újra.",
   "chat.amrConcurrencyGate.benefit1": "Élvonalbeli modellek összetett beállítások nélkül",
   "chat.amrConcurrencyGate.benefit2": "Tagok ingyenes meghívása és közös kreditkeret",
   "chat.amrConcurrencyGate.benefit3": "Multimodális kép- és szövegalkotás egy helyen",

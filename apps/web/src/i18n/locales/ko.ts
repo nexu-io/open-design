@@ -154,6 +154,8 @@ export const ko: Dict = {
   "chat.amrConcurrencyGate.message": "동시 실행 용량이 가득 찼습니다. 요금제를 업그레이드한 후 다시 시도하세요.",
   "chat.amrConcurrencyGate.teamTitle": "팀 동시 실행 한도에 도달했습니다",
   "chat.amrConcurrencyGate.teamMessage": "팀 동시 실행 한도에 도달했습니다. 팀 워크스페이스 소유자에게 구독 업그레이드를 요청하세요.",
+  "chat.amrConcurrencyGate.maxTitle": "동시 실행 작업 수가 한도에 도달했습니다",
+  "chat.amrConcurrencyGate.maxMessage": "현재 워크스페이스에서 동시에 실행할 수 있는 작업 수가 한도에 도달했습니다. 다른 작업이 끝난 후 다시 시도해 주세요.",
   "chat.amrConcurrencyGate.benefit1": "복잡한 설정 없이 최첨단 모델 선택",
   "chat.amrConcurrencyGate.benefit2": "멤버를 무료로 초대하고 사용량 공유",
   "chat.amrConcurrencyGate.benefit3": "이미지와 텍스트를 한곳에서 멀티모달로 제작",
