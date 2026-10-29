@@ -63,7 +63,12 @@ function setCanonicalProxyEnvValue(
     env.NODE_USE_ENV_PROXY = value;
     return;
   }
-  addProxyEnvValue(env, canonicalKey, value, platform);
+  addProxyEnvValue(
+    env,
+    canonicalKey,
+    canonicalKey === "NO_PROXY" ? normalizeNoProxyIpv6Loopback(value) : value,
+    platform,
+  );
 }
 
 /**
@@ -140,12 +145,20 @@ function addProxyEnvValue(
   if (platform !== "win32") env[key.toLowerCase()] = trimmed;
 }
 
+/** @internal Keep IPv6 loopback bypass entries in host-pattern form instead of URL-authority form. */
+function normalizeNoProxyIpv6Loopback(value: string): string {
+  return value
+    .split(",")
+    .map((token) => (token.trim() === "[::1]" ? token.replace("[::1]", "::1") : token))
+    .join(",");
+}
+
 /** @internal Expand a single NO_PROXY bypass token into its normalized forms (e.g. `<local>`, `*.foo`, `::1`). */
 function normalizeBypassToken(token: string): string[] {
   const trimmed = token.trim();
   if (!trimmed) return [];
-  if (trimmed === "<local>") return ["<local>", "localhost", "127.0.0.1", "[::1]", ".local"];
-  if (trimmed === "::1") return ["[::1]"];
+  if (trimmed === "<local>") return ["<local>", "localhost", "127.0.0.1", "::1", ".local"];
+  if (trimmed === "::1" || trimmed === "[::1]") return ["::1"];
   if (trimmed.startsWith("*.")) return [`.${trimmed.slice(2)}`];
   return [trimmed];
 }
@@ -229,7 +242,7 @@ function finalizeSystemProxyEnv(
         ...(values.noProxy ? values.noProxy.split(",") : []),
         "localhost",
         "127.0.0.1",
-        "[::1]",
+        "::1",
       ])
     : null;
   const env: NodeJS.ProcessEnv = {};
