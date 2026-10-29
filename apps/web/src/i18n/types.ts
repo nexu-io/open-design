@@ -697,6 +697,39 @@ export interface Dict {
   'settings.mediaProviderSaveHint': string;
   'settings.mediaProviderNoKeyRequired': string;
   'settings.mediaProviderNoKeyHint': string;
+  // xAI / SuperGrok OAuth control (Grok provider row, Settings → Media
+  // Providers). Component: apps/web/src/components/XaiOAuthControl.tsx.
+  // Values are plain text — `t()` escapes, so no locale value may embed
+  // `<em>`/`<strong>` markup. Emphasis lives in the JSX around the call.
+  // Daemon-supplied strings (`error`, HTTP bodies) stay dynamic and are not
+  // localized.
+  'settings.xaiOAuth.connected': string;
+  'settings.xaiOAuth.tokenExpires': string;
+  'settings.xaiOAuth.connectedNoExpire': string;
+  'settings.xaiOAuth.waiting': string;
+  'settings.xaiOAuth.waitingHint': string;
+  'settings.xaiOAuth.notConnected': string;
+  'settings.xaiOAuth.notConnectedHint': string;
+  'settings.xaiOAuth.warningLabel': string;
+  'settings.xaiOAuth.warningQuote': string;
+  'settings.xaiOAuth.warningBug': string;
+  'settings.xaiOAuth.connecting': string;
+  'settings.xaiOAuth.reconnect': string;
+  'settings.xaiOAuth.reconnectTitle': string;
+  'settings.xaiOAuth.disconnecting': string;
+  'settings.xaiOAuth.disconnect': string;
+  'settings.xaiOAuth.openingBrowser': string;
+  'settings.xaiOAuth.signInWithX': string;
+  'settings.xaiOAuth.checking': string;
+  'settings.xaiOAuth.refreshStatus': string;
+  'settings.xaiOAuth.browserDidntOpen': string;
+  'settings.xaiOAuth.clickHereManual': string;
+  'settings.xaiOAuth.pasteCodeHint': string;
+  'settings.xaiOAuth.pasteCodePlaceholder': string;
+  'settings.xaiOAuth.submitting': string;
+  'settings.xaiOAuth.submitCode': string;
+  'settings.xaiOAuth.grantedScopes': string;
+  'settings.xaiOAuth.disconnectFailed': string;
   'settings.privacy': string;
   'settings.privacyHint': string;
   'settings.privacyConsentKicker': string;
