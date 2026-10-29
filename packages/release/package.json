@@ -1,6 +1,6 @@
 {
   "name": "@open-design/release",
-  "version": "0.25.1",
+  "version": "0.26.2",
   "private": true,
   "type": "module",
   "description": "Open Design release domain primitives.",
@@ -23,8 +23,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "devDependencies": {
-    "@typescript/native": "npm:typescript@7.0.2",
     "@types/node": "24.12.2",
+    "@typescript/native": "npm:typescript@7.0.2",
     "esbuild": "0.28.0",
     "tsx": "4.22.3",
     "vitest": "4.1.6"

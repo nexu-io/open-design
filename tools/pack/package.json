@@ -1,6 +1,6 @@
 {
   "name": "@open-design/tools-pack",
-  "version": "0.25.1",
+  "version": "0.26.2",
   "private": true,
   "type": "module",
   "bin": {
@@ -29,8 +29,8 @@
     "@powerformer/vela-cli": "0.1.8-test.0"
   },
   "devDependencies": {
-    "@typescript/native": "npm:typescript@7.0.2",
     "@types/node": "24.12.2",
+    "@typescript/native": "npm:typescript@7.0.2",
     "esbuild": "0.28.0",
     "tsx": "4.22.3",
     "vitest": "4.1.6"

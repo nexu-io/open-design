@@ -1,6 +1,6 @@
 {
   "name": "@open-design/web",
-  "version": "0.25.1",
+  "version": "0.26.2",
   "private": true,
   "type": "module",
   "exports": {
@@ -60,7 +60,6 @@
     "three": "0.185.1"
   },
   "devDependencies": {
-    "@typescript/native": "npm:typescript@7.0.2",
     "@tailwindcss/postcss": "4.3.0",
     "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "16.3.2",
@@ -69,6 +68,7 @@
     "@types/react": "18.3.28",
     "@types/react-dom": "18.3.7",
     "@types/three": "0.185.1",
+    "@typescript/native": "npm:typescript@7.0.2",
     "jsdom": "29.1.1",
     "postcss": "8.5.15",
     "tailwindcss": "4.3.0",
