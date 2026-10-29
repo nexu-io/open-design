@@ -12,6 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { compareLogoFileNames, isLogoFileName } from './logo-priority.js';
 import { fetchExternalBrandAsset } from './safe-fetch.js';
 
 const UA =
@@ -274,23 +275,14 @@ export async function ensureLogoFallback(
   return { changed: true };
 }
 
-/** Extension priority for ranking on-disk logo files: vector/transparent marks
- *  before raster, raster before icons. Mirrors `resolveBrandLogoPath`. */
-const LOGO_EXT_PRIORITY = ['.svg', '.png', '.webp', '.jpg', '.jpeg', '.gif', '.ico'];
-const LOGO_FILE_RE = /\.(svg|png|webp|jpe?g|gif|ico)$/i;
-
-function logoExtRank(name: string): number {
-  const i = LOGO_EXT_PRIORITY.indexOf(path.extname(name).toLowerCase());
-  return i === -1 ? LOGO_EXT_PRIORITY.length : i;
-}
-
 /**
  * Wire the image files already present in `logosDir` into an empty `logo` slot:
  * the best mark (by extension priority, then name) becomes `logo.primary` and
  * the rest become `logo.alternates`, each as a `logos/<file>` path relative to
  * the dir owner. No-op when `logo.primary` is set or the dir holds no image
- * files. Mutates and returns the slot. Pure filesystem — never touches the
- * network.
+ * files. Name rank is intentionally only consulted here, when the slot is
+ * empty, not when resolving an explicit logo path. Mutates and returns the
+ * slot. Pure filesystem — never touches the network.
  */
 export function adoptExistingLogos(logosDir: string, logo: LogoSlot): { changed: boolean } {
   if (logo.primary) return { changed: false };
@@ -301,8 +293,8 @@ export function adoptExistingLogos(logosDir: string, logo: LogoSlot): { changed:
     return { changed: false };
   }
   const ranked = names
-    .filter((n) => LOGO_FILE_RE.test(n) && isFileIn(logosDir, n))
-    .sort((a, b) => logoExtRank(a) - logoExtRank(b) || a.localeCompare(b));
+    .filter((n) => isLogoFileName(n) && isFileIn(logosDir, n))
+    .sort(compareLogoFileNames);
   if (ranked.length === 0) return { changed: false };
   const rels = ranked.map((n) => `logos/${n}`);
   logo.primary = rels[0] ?? null;
