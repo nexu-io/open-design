@@ -1910,7 +1910,7 @@ function extractInlineCodeFileRefs(content: string): string[] {
   return refs;
 }
 
-function extractKnownProjectFileRefs(
+export function extractKnownProjectFileRefs(
   content: string,
   projectFileNames: ReadonlySet<string>,
 ): string[] {
@@ -1919,8 +1919,17 @@ function extractKnownProjectFileRefs(
     .filter((name) => name.length > 0)
     .sort((a, b) => b.length - a.length);
   if (names.length === 0) return refs;
+  // Perf: the exact-boundary regex below is expensive (it is built per
+  // line x per file). A plain substring test is a strict necessary
+  // condition for it, so run it first. Without this, long assistant
+  // messages in projects with hundreds of files froze the renderer for
+  // tens of seconds.
+  const normalizedNames = names.map((name) => ({ name, normalized: normalizeTouchedPath(name) }));
   for (const line of content.split(/\r?\n/)) {
-    for (const name of names) {
+    if (!line) continue;
+    const normalizedLine = normalizeTouchedPath(line);
+    for (const { name, normalized } of normalizedNames) {
+      if (!normalized || !normalizedLine.includes(normalized)) continue;
       if (lineContainsFileReference(line, name)) refs.push(name);
     }
   }
