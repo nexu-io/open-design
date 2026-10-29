@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { test } from 'vitest';
 import {
-  AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, grokBuild, join, kilo, kimi, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
+  AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, grokBuild, join, kilo, kimi, kiro, mkdtempSync, muse, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
 } from './helpers/test-helpers.js';
 import { writeAntigravityModelSelection } from '../../src/runtimes/defs/antigravity.js';
 import { parseOpenCodeModels } from '../../src/runtimes/defs/opencode.js';
@@ -1129,6 +1129,67 @@ test('grok-build omits effort for default/build models but keeps it for reasonin
 test('grok-build requires a daemon-provided prompt file path', () => {
   assert.throws(
     () => grokBuild.buildArgs('hi', [], [], {}, { cwd: '/tmp/od-project' }),
+    /promptFilePath/,
+  );
+});
+
+test('muse uses exec --prompt-file and never embeds the prompt in argv or stdin', () => {
+  const prompt = 'generate a landing page hero section';
+  const promptFilePath = '/tmp/od-muse-prompt/prompt.md';
+  const args = muse.buildArgs(
+    prompt,
+    [],
+    [],
+    { model: 'spark', reasoning: 'high' },
+    { cwd: '/tmp/od-project', promptFilePath },
+  );
+
+  assert.equal(muse.bin, 'muse');
+  assert.equal(muse.promptViaFile, true);
+  assert.equal(muse.promptViaStdin, false);
+  assert.equal(muse.streamFormat, 'plain');
+  assert.deepEqual(args, [
+    'exec',
+    '--prompt-file',
+    promptFilePath,
+    '--disable-approval',
+    '--user-input-auto-resolve',
+    '--model',
+    'spark',
+    '--reasoning-effort',
+    'high',
+  ]);
+  assert.equal(args.includes(prompt), false);
+  // Unattended runs must keep Muse's sandbox on: --yolo (and its
+  // --disable-sandbox half) would give every prompt unrestricted host
+  // filesystem/network execution instead of workspace containment.
+  assert.equal(args.includes('--yolo'), false);
+  assert.equal(args.includes('--disable-sandbox'), false);
+  // Trusting a folder loads its committed .muse hooks/rules, so the
+  // daemon must never grant it implicitly; exec runs with whatever
+  // trust state the user already granted interactively.
+  assert.equal(args.includes('--trust-workspace'), false);
+});
+
+test('muse omits model and reasoning flags for default options', () => {
+  const promptFilePath = '/tmp/od-muse-prompt/prompt.md';
+  const args = muse.buildArgs('', [], [], { model: 'default', reasoning: 'default' }, { promptFilePath });
+
+  assert.deepEqual(args, [
+    'exec',
+    '--prompt-file',
+    promptFilePath,
+    '--disable-approval',
+    '--user-input-auto-resolve',
+  ]);
+  assert.equal(args.includes('--yolo'), false);
+  assert.equal(args.includes('--disable-sandbox'), false);
+  assert.equal(args.includes('--trust-workspace'), false);
+});
+
+test('muse requires a daemon-provided prompt file path', () => {
+  assert.throws(
+    () => muse.buildArgs('hi', [], [], {}, { cwd: '/tmp/od-project' }),
     /promptFilePath/,
   );
 });
