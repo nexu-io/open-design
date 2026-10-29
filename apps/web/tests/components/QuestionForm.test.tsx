@@ -6,6 +6,10 @@ import { QuestionFormView, parseSubmittedAnswers } from '../../src/components/Qu
 import type { QuestionForm } from '../../src/artifacts/question-form';
 import { visualStyleCardsForContext } from '../../src/runtime/visual-style-catalog';
 import { VISUAL_STYLE_BATCH_SIZE } from '../../src/runtime/visual-style-deck';
+import {
+  captureElementScrollAnchor,
+  scrollTopForElementScrollAnchor,
+} from '../../src/runtime/chat/element-scroll-anchor';
 
 const form: QuestionForm = {
   id: 'discovery',
@@ -400,6 +404,60 @@ describe('QuestionFormView', () => {
     const input = screen.getByTestId('qf-input') as HTMLTextAreaElement;
     expect(input.disabled).toBe(false);
     expect(container.querySelector('.qf-chip-other')?.contains(input)).toBe(true);
+  });
+
+  it('collapses an expanded custom choice from either the row or its checkbox', () => {
+    const { container } = render(
+      <QuestionFormView form={richForm} interactive onSubmit={vi.fn()} />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Write your own' }));
+    const expandedRow = container.querySelector('.qf-chip-other.qf-chip-open');
+    if (!expandedRow) throw new Error('expected expanded custom choice');
+    fireEvent.click(screen.getByTestId('qf-input'));
+    expect(screen.queryByTestId('qf-input')).not.toBeNull();
+    fireEvent.click(expandedRow);
+    expect(screen.queryByTestId('qf-input')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Write your own' }));
+    fireEvent.click(screen.getByLabelText('Write your own'));
+    expect(screen.queryByTestId('qf-input')).toBeNull();
+  });
+
+  it.each([
+    ['row', '.qf-chip-open', true],
+    ['label', '.qf-own-label', true],
+    ['checkbox', '.qf-chip-own-box', true],
+    ['textarea', '.qf-own-input', false],
+  ])('captures the custom-choice scroll anchor for %s clicks only when collapsing', (_name, selector, collapses) => {
+    const capture = vi.fn(captureElementScrollAnchor);
+    const { container } = render(
+      <div onClickCapture={(event) => {
+        if (event.target instanceof HTMLElement) capture(event.currentTarget, event.target);
+      }}>
+        <QuestionFormView form={richForm} interactive onSubmit={vi.fn()} />
+      </div>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Write your own' }));
+    const target = container.querySelector(selector);
+    if (!target) throw new Error('expected custom-choice click target');
+    capture.mockClear();
+    fireEvent.click(target);
+
+    expect(capture).toHaveBeenCalledTimes(1);
+    const snapshot = capture.mock.results[0]?.value;
+    if (collapses) {
+      expect(snapshot?.anchorId).toBe('question-own:platform');
+      expect(screen.queryByTestId('qf-input')).toBeNull();
+      if (!snapshot) throw new Error('expected captured custom-choice anchor');
+      const log = capture.mock.calls[0]?.[0];
+      if (!log) throw new Error('expected chat container');
+      // The collapsed replacement remains addressable after the row unmounts.
+      expect(scrollTopForElementScrollAnchor(log, snapshot)).toBe(0);
+    } else {
+      expect(snapshot).toBeNull();
+      expect(screen.getByTestId('qf-input')).toBeTruthy();
+    }
   });
 
   it('deselects fixed options when Other opens and collapses when one is picked', () => {
