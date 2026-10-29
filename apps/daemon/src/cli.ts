@@ -7393,13 +7393,8 @@ function normalizeChatSessionModeFlag(value) {
   process.exit(2);
 }
 
-function safeReadJsonFile(p) {
-  try {
-    if (p === '-') return JSON.parse(readFileSync(0, 'utf8'));
-    return JSON.parse(readFileSync(p, 'utf8'));
-  } catch {
-    return null;
-  }
+function readJsonFile(p) {
+  return JSON.parse(readFileSync(p === '-' ? 0 : p, 'utf8'));
 }
 
 function collectCliPositionals(argv, stringFlags = new Set()) {
@@ -7881,9 +7876,14 @@ Common options:
       const conversationMode = normalizeChatSessionModeFlag(flags.mode);
       if (conversationMode) body.conversationMode = conversationMode;
       if (flags['pending-prompt']) body.pendingPrompt = flags['pending-prompt'];
-      if (flags['metadata-json']) {
-        const mj = safeReadJsonFile(flags['metadata-json']);
-        if (mj && typeof mj === 'object') body.metadata = mj;
+      if (flags['metadata-json'] !== undefined) {
+        try {
+          const mj = readJsonFile(flags['metadata-json']);
+          if (mj && typeof mj === 'object') body.metadata = mj;
+        } catch (err) {
+          console.error(`--metadata-json could not be read as JSON: ${err.message}`);
+          process.exit(2);
+        }
       }
       const prompt = await readPromptFromFlags(flags);
       if (prompt) body.pendingPrompt = prompt;

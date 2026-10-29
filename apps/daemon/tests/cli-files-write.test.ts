@@ -200,6 +200,48 @@ describe('od files write / upload (ESM require regression)', () => {
     });
   });
 
+  it('rejects malformed project metadata before creating a project', async () => {
+    const metadataPath = join(scratchDir, 'invalid-metadata.json');
+    writeFileSync(metadataPath, '{"kind":');
+
+    const result = await runCli([
+      'project', 'create', '--metadata-json', metadataPath,
+      '--daemon-url', stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain('--metadata-json');
+    expect(stub.requests).toHaveLength(0);
+  });
+
+  it.each(['missing file', 'directory', 'malformed stdin', 'empty path'])(
+    'rejects metadata from %s before creating a project',
+    async (input) => {
+      const metadataPath = input === 'malformed stdin' ? '-'
+        : input === 'directory' ? scratchDir
+          : input === 'empty path' ? '' : join(scratchDir, 'missing-metadata.json');
+      const result = await runCli([
+        'project', 'create', '--metadata-json', metadataPath,
+        '--daemon-url', stub.baseUrl,
+      ], input === 'malformed stdin' ? { stdin: '{"kind":' } : {});
+
+      expect(result.code).toBe(2);
+      expect(result.stderr).toContain('--metadata-json');
+      expect(stub.requests).toHaveLength(0);
+    },
+  );
+
+  it('preserves valid project metadata read from stdin', async () => {
+    const metadata = { kind: 'prototype', title: '研究 & design' };
+    const result = await runCli([
+      'project', 'create', '--metadata-json', '-', '--daemon-url', stub.baseUrl,
+    ], { stdin: JSON.stringify(metadata) });
+
+    expect(result.code).toBe(0);
+    expect(stub.requests).toHaveLength(1);
+    expect(JSON.parse(stub.requests[0]!.body).metadata).toEqual(metadata);
+  });
+
   it('`files upload --as` overrides the destination name', async () => {
     const localPath = join(scratchDir, 'local-name.txt');
     writeFileSync(localPath, 'asset body');
