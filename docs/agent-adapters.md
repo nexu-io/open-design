@@ -149,8 +149,10 @@ definitions currently group by transport as follows:
 
 `byok-opencode` is the API-backed OpenCode-compatible profile rather than an
 additional local executable. User-defined local profiles may extend the base
-registry at runtime. Gemini remains available as a BYOK provider and MCP client
-target, but its local generation runtime was retired and is not an adapter id.
+registry at runtime — see the [ZCode CLI community recipe](zcode-agent.md) for
+a worked example (bridge shim + profile + icon deployment). Gemini remains
+available as a BYOK provider and MCP client target, but its local generation
+runtime was retired and is not an adapter id.
 
 ## 4. Skill composition and staging
 
