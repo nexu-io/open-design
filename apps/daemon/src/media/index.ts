@@ -62,6 +62,7 @@ import { Agent as UndiciAgent } from 'undici';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import { load as loadHtml } from 'cheerio';
 import { SETTINGS_MEDIA_PROVIDERS_PATH } from '@open-design/contracts';
+import type { ProjectMetadata } from '@open-design/contracts';
 import {
   findRealTagOffset,
   HTML_TAG_PATTERNS,
@@ -336,6 +337,9 @@ function clampWithWarning(value: unknown, allowed: number[], flagName: string): 
  * @param {string} args.projectRoot   - Repo root (.od/ lives directly under).
  * @param {string} args.projectsRoot  - Absolute path to <repo>/.od/projects.
  * @param {string} args.projectId
+ * @param {Object} [args.projectMetadata] - The project's metadata. A project with
+ *   `baseDir` (a project location or an imported folder) keeps its files there,
+ *   so the output and any reference images resolve inside that folder.
  * @param {'image'|'video'|'audio'} args.surface
  * @param {string} args.model
  * @param {string} [args.prompt]
@@ -350,6 +354,7 @@ function clampWithWarning(value: unknown, allowed: number[], flagName: string): 
  */
 export async function generateMedia(args: {
   projectRoot: string; projectsRoot: string; projectId: string; surface: MediaSurface; model: string;
+  projectMetadata?: ProjectMetadata | null;
   prompt?: string; output?: string; aspect?: string; quality?: string; resolution?: string;
   length?: number; duration?: number; voice?: string;
   audioKind?: AudioKind; language?: string; loop?: boolean; promptInfluence?: number;
@@ -382,6 +387,7 @@ export async function generateMedia(args: {
     projectRoot,
     projectsRoot,
     projectId,
+    projectMetadata,
     surface,
     model,
     prompt,
@@ -508,7 +514,7 @@ export async function generateMedia(args: {
     : durationClamp.value;
   const warnings = [lengthClamp.warning, durationClamp.warning].filter(Boolean);
 
-  const dir = await ensureProject(projectsRoot, projectId);
+  const dir = await ensureProject(projectsRoot, projectId, projectMetadata);
   const safeOut = sanitizeName(
     output || autoOutputName(surface, model, resolvedAudioKind),
   );
