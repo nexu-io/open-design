@@ -293,6 +293,27 @@ describe('InlineModelSwitcher AMR row', () => {
     expect(chip.getAttribute('aria-label')).toMatch(/·/u);
   });
 
+  it('exposes full hierarchy as title on chip hover and full name on compact dropdown rows', () => {
+    const lockedModelAgent: AgentInfo = {
+      ...amrAgent,
+      models: [
+        { id: 'free-model', label: 'Free Model', enabled: true },
+        { id: 'pro-model', label: 'Pro Model Long Name', enabled: false },
+      ],
+    };
+    renderSwitcher({}, [lockedModelAgent], {}, { compact: true });
+    const chip = screen.getByTestId('inline-model-switcher-chip');
+    expect(chip.getAttribute('title')).toBe(chip.getAttribute('aria-label'));
+
+    fireEvent.click(chip);
+    const freeRow = screen.getByTestId('inline-model-switcher-compact-model-free-model');
+    expect(freeRow.getAttribute('title')).toBe('Free Model');
+
+    const proRow = screen.getByTestId('inline-model-switcher-compact-model-pro-model');
+    expect(proRow.getAttribute('title')).toContain('Pro Model Long Name');
+    expect(proRow.getAttribute('title')).toContain('—');
+  });
+
   it('shows an explicit AMR default choice instead of the concrete catalog fallback', () => {
     renderSwitcher(
       {

@@ -99,4 +99,25 @@ describe('CustomSelect', () => {
       screen.getByRole('option', { name: /Second/ }).id,
     );
   });
+
+  it('exposes full label as title attribute on trigger and options for hover reveal', () => {
+    render(
+      <CustomSelect
+        ariaLabel="Model"
+        value="claude-3-5-sonnet-20241022"
+        options={[
+          { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet (20241022)' },
+          { value: 'gpt-4o-extra-long', label: 'GPT-4o (Extra Long Identifier)' },
+        ]}
+        onChange={vi.fn()}
+      />,
+    );
+
+    const trigger = screen.getByRole('combobox', { name: /Model/ });
+    expect(trigger.getAttribute('title')).toBe('Claude 3.5 Sonnet (20241022)');
+
+    fireEvent.click(trigger);
+    const option = screen.getByRole('option', { name: /GPT-4o/ });
+    expect(option.getAttribute('title')).toBe('GPT-4o (Extra Long Identifier)');
+  });
 });

@@ -556,7 +556,11 @@ export function AvatarMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         data-tooltip={t('avatar.title')}
-        title={t('avatar.title')}
+        title={
+          triggerModelLabel
+            ? `${t('avatar.title')} · ${triggerModelLabel}`
+            : t('avatar.title')
+        }
         aria-label={t('avatar.title')}
       >
         {config.mode === 'daemon' && currentAgent ? (
@@ -636,7 +640,7 @@ export function AvatarMenu({
                                  row keeps its upgrade reason. */
                               title={
                                 locked
-                                  ? t('settings.amrModelUpgradeHint')
+                                  ? `${model.label} — ${t('settings.amrModelUpgradeHint')}`
                                   : model.label
                               }
                               className={`avatar-model-option${active ? ' is-active' : ''}${
@@ -859,7 +863,7 @@ export function AvatarMenu({
                   <span className="avatar-select-label">
                     {t('avatar.modelLabel')}
                   </span>
-                  <div className="avatar-static-value">{apiModelLabel}</div>
+                  <div className="avatar-static-value" title={apiModelLabel}>{apiModelLabel}</div>
                 </div>
               </div>
             ) : null

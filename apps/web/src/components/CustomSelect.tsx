@@ -274,7 +274,7 @@ export function CustomSelect({
         aria-describedby={labelledBy}
         aria-label={`${ariaLabel}: ${selectedLabel}`}
         disabled={disabled}
-        title={title}
+        title={title ?? selectedLabel}
         onClick={() => setOpen((current) => !current)}
         onKeyDown={onButtonKeyDown}
         onFocus={onFocus}
@@ -317,6 +317,7 @@ function SelectOptionButton({
       aria-selected={selected}
       tabIndex={-1}
       disabled={option.disabled}
+      title={option.label}
       onMouseEnter={() => onActive(option.value)}
       onClick={() => onChoose(option.value)}
     >

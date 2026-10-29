@@ -277,6 +277,39 @@ describe('AvatarMenu', () => {
   // active agent. Execution mode, which CLI agent runs, PATH rescan, reasoning
   // effort and the BYOK model are configuration, and live in
   // Settings → Execution. Keeping them out is what makes the popover compact.
+  it('exposes full model name on hover in the trigger and locked option rows', () => {
+    const amrAgent: AgentInfo = {
+      id: 'amr',
+      name: 'AMR (vela)',
+      bin: 'amr',
+      available: true,
+      version: '1.0.0',
+      models: [
+        { id: 'free-model', label: 'Free Model', enabled: true },
+        { id: 'locked-model', label: 'Locked Pro Model', enabled: false },
+      ],
+    };
+    renderMenu({
+      config: {
+        ...baseConfig,
+        agentId: 'amr',
+        agentModels: { amr: { model: 'free-model', reasoning: 'default' } },
+      },
+      agents: [amrAgent],
+    });
+
+    const trigger = screen.getByRole('button', { name: 'avatar.title' });
+    expect(trigger.getAttribute('title')).toBe('avatar.title · Free Model');
+
+    openMenu();
+
+    const freeOption = screen.getByTestId('avatar-model-option-free-model');
+    expect(freeOption.getAttribute('title')).toBe('Free Model');
+
+    const lockedOption = screen.getByTestId('avatar-model-option-locked-model');
+    expect(lockedOption.getAttribute('title')).toContain('Locked Pro Model — settings.amrModelUpgradeHint');
+  });
+
   it('keeps execution configuration out of the composer popover', () => {
     const onOpenSettings = vi.fn<OpenSettingsHandler>();
     const onRefreshAgents = vi.fn<VoidHandler>();

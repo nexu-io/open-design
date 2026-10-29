@@ -3305,6 +3305,7 @@ function FooterSelectOption({
         aria-label={label}
         aria-haspopup="listbox"
         aria-expanded={open}
+        title={selected?.description ? `${selected.label} — ${selected.description}` : (selected?.label ?? (value ? String(value) : undefined))}
         data-testid={`home-hero-footer-option-${fieldName}`}
         onClick={() => setOpen((prev) => !prev)}
       >
@@ -3353,6 +3354,7 @@ function FooterSelectOption({
                     type="button"
                     role="option"
                     aria-selected={option.value === value}
+                    title={option.description ? `${option.label} — ${option.description}` : option.label}
                     className={`home-hero__footer-select-item${option.value === value ? ' is-selected' : ''}`}
                     onClick={() => {
                       onChange(option.submitValue ?? option.value);
