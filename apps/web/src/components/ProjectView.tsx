@@ -285,6 +285,7 @@ import type {
   WorkspaceBillingPreflight,
   WorkspaceContextItem,
 } from '@open-design/contracts';
+import { isCustomByokBaseUrl } from '@open-design/contracts';
 import type {
   AgentEvent,
   AgentInfo,
@@ -2027,7 +2028,8 @@ function byokOpenCodeProviderFromConfig(
     (byokProviderRequiresApiKey(config.apiProtocol, selectedProvider, config.baseUrl)
       && !config.apiKey.trim())
     || !model
-    || model.toLowerCase() === 'default'
+    || (model.toLowerCase() === 'default'
+      && !isCustomByokBaseUrl(config.apiProtocol, config.baseUrl))
     || (config.apiProtocol === 'azure' && !config.baseUrl.trim())
   ) {
     return undefined;
