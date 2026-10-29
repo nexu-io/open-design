@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "music": {
+    "role": "lead",
+    "description": "driving glitch-electronic pulse with compressed drums, bright synth ticks and a rising digital finish",
+    "bpm": 120,
+    "beatConfidence": "steady",
+    "cutOnBeat": true,
+    "sections": [
+      {
+        "scene": "spacing",
+        "energy": "mid"
+      },
+      {
+        "scene": "typography",
+        "energy": "high"
+      },
+      {
+        "scene": "motion-blur",
+        "energy": "high"
+      },
+      {
+        "scene": "easing",
+        "energy": "mid"
+      },
+      {
+        "scene": "follow-through",
+        "energy": "high"
+      },
+      {
+        "scene": "anticipation",
+        "energy": "high"
+      },
+      {
+        "scene": "final-delivery",
+        "energy": "high"
+      }
+    ]
+  },
+  "effects": [
+    {
+      "cue": "ball-release",
+      "kind": "pop",
+      "sync": "motion-peak"
+    },
+    {
+      "cue": "words-stack",
+      "kind": "impact",
+      "sync": "contact"
+    },
+    {
+      "cue": "stretch-hit",
+      "kind": "whoosh",
+      "sync": "motion-peak"
+    },
+    {
+      "cue": "linear-mark",
+      "kind": "click",
+      "sync": "contact"
+    },
+    {
+      "cue": "gauge-fill",
+      "kind": "riser",
+      "sync": "riser-into-impact"
+    },
+    {
+      "cue": "name-build",
+      "kind": "impact",
+      "sync": "contact"
+    }
+  ],
+  "effectsPer10s": 4,
+  "voice": {
+    "present": false
+  },
+  "demoTrack": {
+    "file": "assets/soundtrack.mp3",
+    "origin": "reference"
+  }
+}

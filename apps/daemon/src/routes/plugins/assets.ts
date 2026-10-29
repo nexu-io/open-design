@@ -1,6 +1,8 @@
 import type { Express, Request, Response } from 'express';
 import type * as BetterSqlite3 from 'better-sqlite3';
 import path from 'node:path';
+import { inlinePluginPreviewFonts } from './preview-fonts.js';
+import { findRealTagEnd, HTML_TAG_PATTERNS, prependAfterDoctype } from '@open-design/contracts/runtime/html-injection-points';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import {
   resolveOptionalLocalWorkspaceRequestAuthority,
@@ -198,11 +200,13 @@ export function registerPluginAssetRoutes(app: Express, deps: RegisterPluginAsse
       const ct = ext === '.html' ? 'text/html; charset=utf-8' : ext === '.js' ? 'application/javascript; charset=utf-8' : ext === '.css' ? 'text/css; charset=utf-8' : ext === '.json' ? 'application/json; charset=utf-8' : ext === '.md' || ext === '.markdown' ? 'text/markdown; charset=utf-8' : ext === '.svg' ? 'image/svg+xml' : ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'application/octet-stream';
       res.setHeader('Content-Type', ct);
       if (ext === '.html' && typeof contentRel === 'string') {
+        const documentDir = path.posix.dirname(contentRel.replace(/\\/g, '/'));
+        const htmlWithFonts = await inlinePluginPreviewFonts(buf.toString('utf8'), plugin.fsPath, documentDir);
         buf = Buffer.from(
           rewritePluginAssetUrls(
-            buf.toString('utf8'),
+            htmlWithFonts,
             routeParam(req.params.id),
-            path.posix.dirname(contentRel.replace(/\\/g, '/')),
+            documentDir,
             navigationScopeQuery(authority),
           ),
           'utf8',
@@ -277,10 +281,18 @@ export function registerPluginAssetRoutes(app: Express, deps: RegisterPluginAsse
       const value = String(rawValue).trim();
       return isCacheableExternalUrl(value) ? `${quote}${assetCacheRewriteUrl(value)}${quote}` : match;
     });
-    return withQuoted.replace(/url\(\s*(https?:\/\/[^)'"\s]+)\s*\)/gi, (match, rawValue) => {
+    const rewritten = withQuoted.replace(/url\(\s*(https?:\/\/[^)'"\s]+)\s*\)/gi, (match, rawValue) => {
       const value = String(rawValue).trim();
       return isCacheableExternalUrl(value) ? `url(${assetCacheRewriteUrl(value)})` : match;
     });
+    // Script-created Image/src URLs resolve against the document, not against
+    // the inline script or the rewritten static attributes. Keep CFG strings
+    // untouched (templates also use them to identify image fields).
+    const directory = safeBase ? `${safeBase.split('/').map(encodeURIComponent).join('/')}/` : '';
+    const base = `<base href="/api/plugins/${encodeURIComponent(pluginId)}/asset/${directory}">`;
+    const headEnd = findRealTagEnd(rewritten, HTML_TAG_PATTERNS.headOpen);
+    if (headEnd >= 0) return rewritten.slice(0, headEnd) + base + rewritten.slice(headEnd);
+    return prependAfterDoctype(rewritten, base);
   }
 
   function collectPluginPreviewCandidates(plugin: InstalledPluginLike): string[] {

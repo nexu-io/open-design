@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "music": {
+    "role": "bed",
+    "description": "简约氛围铺底、柔和音色、低强度节奏",
+    "bpm": null,
+    "beatConfidence": "none",
+    "cutOnBeat": false,
+    "sections": [
+      {
+        "scene": "clarity",
+        "energy": "low"
+      },
+      {
+        "scene": "growth",
+        "energy": "low"
+      },
+      {
+        "scene": "focus",
+        "energy": "low"
+      },
+      {
+        "scene": "ideas",
+        "energy": "low"
+      },
+      {
+        "scene": "doorway",
+        "energy": "mid"
+      }
+    ]
+  },
+  "effects": [],
+  "effectsPer10s": 0,
+  "voice": {
+    "present": false
+  },
+  "demoTrack": {
+    "file": "assets/soundtrack.mp3",
+    "origin": "reference"
+  }
+}

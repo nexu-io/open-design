@@ -65,6 +65,7 @@ import {
   type InlineMentionEntity,
 } from '../utils/inlineMentions';
 import { useI18n, useT } from '../i18n';
+import { localizePluginInputLabel } from '../i18n/plugin-content';
 import { localizeHomePresetTitle, localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 import {
   examplePresetSeedPrompt,
@@ -3147,7 +3148,10 @@ function FooterInputOption({
   onChange: (value: unknown) => void;
   t: ReturnType<typeof useT>;
 }) {
-  const label = footerInputLabel(field, t);
+  const { locale } = useI18n();
+  const label = field.label_i18n
+    ? localizePluginInputLabel(locale, field)
+    : footerInputLabel(field, t);
   if (field.name === 'speakerNotes') {
     const checked = footerSpeakerNotesEnabled(value);
     return (

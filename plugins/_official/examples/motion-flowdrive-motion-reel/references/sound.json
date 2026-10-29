@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "music": {
+    "role": "bed",
+    "description": "节奏型配乐；具体风格与乐器尚未完成听觉核验",
+    "bpm": null,
+    "beatConfidence": "none",
+    "cutOnBeat": false,
+    "sections": [
+      {
+        "scene": "hook",
+        "energy": "mid"
+      },
+      {
+        "scene": "upload",
+        "energy": "mid"
+      },
+      {
+        "scene": "flare",
+        "energy": "mid"
+      },
+      {
+        "scene": "stream",
+        "energy": "mid"
+      },
+      {
+        "scene": "global",
+        "energy": "mid"
+      },
+      {
+        "scene": "secure",
+        "energy": "mid"
+      },
+      {
+        "scene": "bandwidth",
+        "energy": "mid"
+      },
+      {
+        "scene": "webflow",
+        "energy": "mid"
+      },
+      {
+        "scene": "close",
+        "energy": "mid"
+      }
+    ]
+  },
+  "effects": [],
+  "effectsPer10s": 0,
+  "voice": {
+    "present": false
+  },
+  "demoTrack": {
+    "file": "assets/soundtrack.mp3",
+    "origin": "reference"
+  }
+}

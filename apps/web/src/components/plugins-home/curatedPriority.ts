@@ -125,14 +125,16 @@ const CURATED_HYPERFRAMES_PLUGIN_IDS = [
   'video-template-hyperframes-flight-map-route',
 ] as const;
 
-// Motion design: the featured paper story leads the five templates in Home
-// and Community; the other four retain their editorial order.
+// Motion design: preserve the first five picks, followed by SuperX and TixFox
+// in positions six and seven across Home and Community.
 export const CURATED_MOTION_DESIGN_PLUGIN_IDS = [
   'example-motion-visual-lesson',
   'example-motion-future',
   'example-motion-showreel',
   'example-motion-ui-morph',
   'example-motion-product-promo',
+  'example-motion-superx-audience-growth',
+  'example-motion-tixfox-ticket-promo',
 ] as const;
 
 export const CURATED_PLUGIN_IDS_BY_CHIP = {

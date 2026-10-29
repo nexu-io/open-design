@@ -54,7 +54,7 @@ function createMotionAudioSync(audio) {
 // Shared by URL previews, srcdoc previews and the persisted editable source.
 // The renderer installs its flag before author scripts; it never sees chrome,
 // layout scaling, poster seeking, or wall-clock playback from this runtime.
-const PLAYER = `<script data-od-motion-source-player="8">
+const PLAYER = `<script data-od-motion-source-player="11">
 ${MOTION_TIMELINE_CHECK_SCRIPT}
 (function () {
 ${MOTION_AUDIO_SYNC_RUNTIME}
@@ -119,20 +119,32 @@ ${MOTION_AUDIO_SYNC_RUNTIME}
     var fitStyle = document.createElement('style');
     fitStyle.textContent = 'html,body{width:100% !important;height:100% !important;margin:0 !important;overflow:hidden !important}';
     document.head.appendChild(fitStyle);
+    // Only opt-in compositions delegate their root layout to the stage. Legacy
+    // sources keep their own centering contract and deferred fit() callbacks.
+    var rootLayout = {position:'absolute', left:'0', top:'0', width:width+'px', height:height+'px', maxWidth:'none', maxHeight:'none', margin:'0', transform:'none'};
     var stage = document.createElement('div');
     root.parentNode.insertBefore(stage, root); stage.appendChild(root);
     function fit() {
+      if (root.dataset.odMotionLayout === 'stage') Object.keys(rootLayout).forEach(function (key) {
+        var property = key.replace(/[A-Z]/g, function (letter) { return '-' + letter.toLowerCase(); });
+        root.style.setProperty(property, rootLayout[key], 'important');
+      });
       var scale = Math.min(innerWidth / width, Math.max(1, innerHeight) / height);
       stage.style.cssText = 'position:fixed;width:' + width + 'px;height:' + height + 'px;left:' + ((innerWidth-width*scale)/2) + 'px;top:' + ((innerHeight-height*scale)/2) + 'px;transform-origin:0 0;transform:scale(' + scale + ')';
     }
     fit(); window.addEventListener('resize', fit);
     var started = Date.now();
     function connect() {
+      if (!stage.isConnected) return;
       var tl = window.__timelines && window.__timelines[root.dataset.compositionId];
       if (!tl || typeof tl.seek !== 'function' || typeof tl.play !== 'function' || !(tl.duration() > 0)) {
         if (Date.now()-started < 15000) { setTimeout(connect, 100); return; }
-        notice('动效未就绪，请检查时间轴或依赖文件'); return;
+        notice('动效未就绪，请检查时间轴或依赖文件');
+        // Late fonts/images may still register the timeline after the notice.
+        // Keep watching while mounted, so a slow load can recover by itself.
+        setTimeout(connect, 1000); return;
       }
+      notice('');
       var timingError = window.__odValidateMotionTimeline(root, tl);
       if (timingError) { tl.pause(); notice(timingError); return; }
       var duration = tl.duration(), applied = false;
@@ -198,7 +210,7 @@ export function injectMotionSourcePlayer(html: string): string {
   const existing = findRealTagOffset(html, /<script\b[^>]*\bdata-od-motion-source-player\b/i);
   if (existing >= 0) {
     const script = /^<script\b[^>]*>[\s\S]*?<\/script\s*>/i.exec(html.slice(existing));
-    if (!script || /data-od-motion-source-player="8"/.test(script[0])) return html;
+    if (!script || /data-od-motion-source-player="11"/.test(script[0])) return html;
     return html.slice(0, existing) + PLAYER + html.slice(existing + script[0].length);
   }
   const end = findRealTagOffset(html, HTML_TAG_PATTERNS.bodyClose);
