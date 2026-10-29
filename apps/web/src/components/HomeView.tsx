@@ -2194,15 +2194,25 @@ export function HomeView({
       return null;
     }
     // Pure web path: no desktop host, so there is no token gate — the raw
-    // browser folder path is the expected, working input.
-    const picked = await openFolderDialog();
-    if (picked) {
-      setWorkingDir(picked);
-      setWorkingDirToken(null);
-      void rememberRecentDir(picked);
-      return picked;
+    // browser folder path is the expected, working input. A daemon without a
+    // display (e.g. a systemd unit lacking WAYLAND_DISPLAY/DISPLAY) fails the
+    // native picker before any dialog appears; surface that instead of
+    // silently treating it as a user cancel.
+    try {
+      const picked = await openFolderDialog({ throwOnError: true });
+      if (picked) {
+        setWorkingDir(picked);
+        setWorkingDirToken(null);
+        void rememberRecentDir(picked);
+        return picked;
+      }
+      return null;
+    } catch (err) {
+      setError(
+        `Couldn't open the folder picker (${err instanceof Error ? err.message : String(err)}). Please check the OpenDesign daemon logs and try again.`,
+      );
+      return null;
     }
-    return null;
   }
 
   async function handlePickLocalCodeDir() {
@@ -2218,12 +2228,21 @@ export function HomeView({
       );
       return null;
     }
-    const picked = await openFolderDialog();
-    if (picked) {
-      void rememberRecentDir(picked);
-      return picked;
+    // Same silent-failure guard as handlePickWorkingDir: a headless daemon
+    // resolves null like a user cancel, so rethrow and surface the reason.
+    try {
+      const picked = await openFolderDialog({ throwOnError: true });
+      if (picked) {
+        void rememberRecentDir(picked);
+        return picked;
+      }
+      return null;
+    } catch (err) {
+      setError(
+        `Couldn't open the folder picker (${err instanceof Error ? err.message : String(err)}). Please check the OpenDesign daemon logs and try again.`,
+      );
+      return null;
     }
-    return null;
   }
 
   function updateActiveInputs(next: Record<string, unknown>) {
