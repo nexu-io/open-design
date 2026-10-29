@@ -74,8 +74,8 @@ describe('publicFilePublishFailureKey', () => {
   });
 
   it.each([
-    ['network', undefined, 'fileViewer.publishFileConnectionFailed'],
-    ['timeout', undefined, 'fileViewer.publishFileConnectionFailed'],
+    ['network', undefined, 'fileViewer.publishFileUnconfirmed'],
+    ['timeout', undefined, 'fileViewer.publishFileUnconfirmed'],
     ['not_signed_in', undefined, 'fileViewer.publishFileSignInRequired'],
     ['upstream_http', 401, 'fileViewer.publishFileSignInRequired'],
     ['upstream_http', 403, 'fileViewer.publishFileAccessDenied'],
@@ -91,6 +91,15 @@ describe('publicFilePublishFailureKey', () => {
       failure: { stage: 'snapshot', reason, upstreamStatus },
     });
     expect(publicFilePublishFailureKey(error)).toBe(key);
+  });
+
+  it.each([
+    ['public_share_too_large', 413, 'fileViewer.publishFileTooLarge'],
+    ['manifest_blobs_missing', 409, 'fileViewer.publishFileContentUnavailable'],
+    ['public_upload_expired', 409, 'fileViewer.publishFileConflict'],
+    ['workspace_subscription_locked', 403, 'fileViewer.publishFileWorkspaceLocked'],
+  ])('maps server detail %s before generic status', (upstreamCode, upstreamStatus, expected) => {
+    expect(publicFilePublishFailureKey({failure: {stage: 'push',reason:'upstream_http',upstreamCode,upstreamStatus}})).toBe(expected);
   });
 
   it('does not infer a network error from unknown or malformed detail', () => {

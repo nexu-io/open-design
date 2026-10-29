@@ -1,3 +1,5 @@
+import { readCachedVisiblePlugins } from '../state/projects';
+import { usePageNavigationReady } from '../observability/navigation-timing';
 import { Icon, type IconName } from './Icon';
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { InstalledPluginRecord, ProjectKind } from '@open-design/contracts';
@@ -136,6 +138,8 @@ export function CommunityView({ onRemixTemplate, onUsePrompt, onUsePlugin }: Com
   // empty, and painting "no templates yet" for the length of the fetch would
   // flash on every visit.
   const [catalogueLoaded, setCatalogueLoaded] = useState(false);
+  const [catalogueVerified, setCatalogueVerified] = useState(false);
+  usePageNavigationReady({ page: 'community', visible: catalogueLoaded, ready: catalogueLoaded && catalogueVerified, failure: catalogueLoaded && !catalogueVerified });
   const [moreOpen, setMoreOpen] = useState(false);
   const typeTabsRef = useRef<HTMLDivElement | null>(null);
   // Remix hands off to a fire-and-forget parent callback
@@ -177,6 +181,7 @@ export function CommunityView({ onRemixTemplate, onUsePrompt, onUsePlugin }: Com
     void listPlugins().then((rows) => {
       if (cancelled) return;
       setPlugins(rows);
+      setCatalogueVerified(readCachedVisiblePlugins() === rows);
       setCatalogueLoaded(true);
     });
     return () => { cancelled = true; };

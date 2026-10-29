@@ -1,3 +1,4 @@
+import { buildPreviewStorageBridge } from './preview-storage';
 import { injectMotionSourcePlayer, markMotionHostedPreview } from '@open-design/contracts/runtime/motion-source-player';
 /**
  * Wrap an artifact's HTML for a sandboxed iframe. Corresponds to
@@ -37,6 +38,8 @@ import {
   PREVIEW_RUNTIME_STATE_VERSION,
 } from '@open-design/contracts/runtime/preview-runtime-state';
 import {
+  buildPreviewVisibilityGuard,
+  buildPreviewSandboxShim,
   PREVIEW_REDIRECT_GUARD_MAX_HOPS,
   PREVIEW_REDIRECT_GUARD_SELF_REFRESH_MIN_DELAY_MS,
   PREVIEW_REDIRECT_GUARD_WINDOW_MS,
@@ -49,6 +52,7 @@ import {
   findRealTagEnd,
   findRealTagOffset,
   HTML_TAG_PATTERNS,
+  prependAfterDoctype,
 } from '@open-design/contracts/runtime/html-injection-points';
 
 export {
@@ -70,6 +74,9 @@ import { ANNOTATED_SELECTOR_HELPERS } from './annotated-selector';
 import { COMMENT_IDENTITY_HELPERS } from '@open-design/contracts';
 
 export type SrcdocOptions = {
+  /** Host-scoped local progress, seeded before authored scripts by the lazy shell. */
+  previewStorage?: boolean;
+  previewStorageSeed?: { generation: string; values: Record<string, string> };
   /** Live embedded motion preview only; do not enable for exports/captures. */
   motionPreview?: boolean;
   deck?: boolean;
@@ -362,7 +369,8 @@ export function buildSrcdoc(
   // accept. Only the title text changes; visible page content is untouched.
   const motionSource = options.motionPreview && !options.freezeMotion ? markMotionHostedPreview(wrapped) : wrapped;
   const withSafeTitle = sanitizeTitleInDoc(options.freezeMotion ? motionSource : injectMotionSourcePlayer(motionSource));
-  const withOdIds = annotateMissingOdIds(withSafeTitle);
+  const withVisibilityGuard = injectAfterHeadOpen(withSafeTitle, buildPreviewVisibilityGuard());
+  const withOdIds = annotateMissingOdIds(withVisibilityGuard);
   const withSourcePaths = options.editBridge ? annotateManualEditSourcePaths(withOdIds) : withOdIds;
   const withBase = options.baseHref ? injectBaseHref(withSourcePaths, options.baseHref) : withSourcePaths;
   const withPreviewBaseBridge = options.baseHref
@@ -371,7 +379,7 @@ export function buildSrcdoc(
   const withDeferredFonts = options.deferFontStylesheets
     ? deferTrustedFontStylesheets(withPreviewBaseBridge)
     : withPreviewBaseBridge;
-  const withShim = injectSandboxShim(withDeferredFonts);
+  const withShim = injectSandboxShim(withDeferredFonts, options.previewStorage, options.previewStorageSeed);
   const blockLoadTimeScriptRedirect = htmlHasLoadTimeLocationNavigation(withPreviewBaseBridge);
   // Always on: a redirect loop can freeze ANY previewed artifact, and the guard
   // is inert on documents that never self-redirect. Injected right after the
@@ -502,6 +510,7 @@ export function buildLazySrcdocTransport(options: { quirksMode?: boolean } = {})
         } catch (_) { /* sandboxed parent — host falls back to onLoad */ }
       }
       function handleTransportMessage(ev){
+        if (ev.source !== window.parent) return;
         var data = ev && ev.data;
         if (data && data.type === 'od:srcdoc-transport-shell-probe') {
           announceReady();
@@ -513,6 +522,9 @@ export function buildLazySrcdocTransport(options: { quirksMode?: boolean } = {})
           window.removeEventListener('message', handleTransportMessage);
         }
         document.open();
+        window.__odPreviewStorageSeed = data.previewStorage
+          ? { generation: data.generation, values: data.previewStorage }
+          : null;
         document.write(data.html);
         document.close();
       }
@@ -1454,7 +1466,9 @@ function injectAtDocumentStart(doc: string, payload: string): string {
 function injectAfterHeadOpen(doc: string, payload: string): string {
   const headEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.headOpen);
   if (headEnd >= 0) return doc.slice(0, headEnd) + payload + doc.slice(headEnd);
-  return payload + doc;
+  const htmlEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.htmlOpen);
+  if (htmlEnd >= 0) return `${doc.slice(0, htmlEnd)}<head>${payload}</head>${doc.slice(htmlEnd)}`;
+  return prependAfterDoctype(doc, payload);
 }
 
 function injectBeforeHeadEnd(doc: string, payload: string): string {
@@ -1529,103 +1543,17 @@ function escapeAttr(value: string): string {
 // try/catch — when it throws, the whole script aborts and the deck
 // becomes a static, unnavigable preview. We install a same-origin
 // in-memory shim BEFORE any user script runs so those decks degrade
-// gracefully (position just doesn't persist across reloads).
+// gracefully. Live host previews may additionally seed isolated local progress;
+// exports and unhosted documents retain the in-memory fallback.
 // allow-popups and allow-popups-to-escape-sandbox are needed for 
 // links with target="_blank" to work in the sandboxed preview.
-// Empty hrefs and hash only hrefs will be intercepted and ignored.
-// hrefs leading to an id on the page will be scrolled into view.
-function injectSandboxShim(doc: string): string {
-  const shim = `<script data-od-sandbox-shim>(function(){
-  function makeStore(){
-    var data = {};
-    var api = {
-      getItem: function(k){ return Object.prototype.hasOwnProperty.call(data, k) ? data[k] : null; },
-      setItem: function(k, v){ data[k] = String(v); },
-      removeItem: function(k){ delete data[k]; },
-      clear: function(){ data = {}; },
-      key: function(i){ return Object.keys(data)[i] || null; }
-    };
-    Object.defineProperty(api, 'length', { get: function(){ return Object.keys(data).length; } });
-    return api;
-  }
-  function tryShim(name){
-    var works = false;
-    try { works = !!window[name] && typeof window[name].getItem === 'function'; void window[name].length; }
-    catch (_) { works = false; }
-    if (works) return;
-    try { Object.defineProperty(window, name, { configurable: true, value: makeStore() }); }
-    catch (_) { try { window[name] = makeStore(); } catch (__) {} }
-  }
-  tryShim('localStorage');
-  tryShim('sessionStorage');
-  // A <base href> pointing at the artifact's real /raw/ URL (injectBaseHref,
-  // below) is what lets relative asset paths resolve inside this opaque
-  // srcDoc document. That same base is what breaks history.pushState /
-  // replaceState: a bare-hash call like replaceState(null, '', '#/3') — the
-  // exact pattern generated decks use for their own slide routing — resolves
-  // against the <base> into a real http(s) URL, and the browser throws
-  // SecurityError because the DOCUMENT's own origin is the opaque "null" of
-  // about:srcdoc, which can never match a concrete origin. A deck whose own
-  // navigation function calls replaceState before it finishes updating the
-  // slide DOM (ordering varies by generated template) aborts mid-navigation
-  // on that throw, leaving the main canvas blank until a manual reload —
-  // the thumbnail rail is unaffected because it does not run the deck's
-  // script per-thumbnail. Wrap both methods so that failure degrades to a
-  // no-op instead of interrupting the caller: the iframe's address bar was
-  // never visible to the user anyway, so losing the hash update here is
-  // invisible.
-  function shimHistoryMethod(name){
-    try {
-      var h = window.history;
-      var original = h && h[name];
-      if (typeof original !== 'function') return;
-      h[name] = function(state, title, url){
-        try {
-          return original.call(h, state, title, url);
-        } catch (_) {
-          return undefined;
-        }
-      };
-    } catch (_) {}
-  }
-  shimHistoryMethod('pushState');
-  shimHistoryMethod('replaceState');
-  document.addEventListener('click', (e) => {
-    if (!e.target || !(e.target instanceof Element)) return;
-    var link = e.target.closest('a[href]');
-    if (!link) return;
-    var href = link.getAttribute('href');
-    if (href === null) return;
-    var isAnchor = href.startsWith('#') || href === '';
-    if (isAnchor) {
-      e.preventDefault();
-      if (href === '' || href === '#') {
-        window.scrollTo({ top: 0 });
-        history.replaceState(null, '', ' ');
-      } else {
-        var targetId = href.slice(1);
-        var target = targetId ? document.getElementById(targetId) : null;
-        if (target) {
-          target.scrollIntoView();
-          location.hash === href && history.replaceState(null, '', ' ');
-          location.hash = href;
-        }
-      }
-    } else if (link.getAttribute('target') === '_blank') {
-      e.preventDefault();
-      let safe = false;
-      try {
-        var url = new URL(href, location.href);
-        safe =
-          url.protocol === 'http:' ||
-          url.protocol === 'https:' ||
-          url.protocol === 'mailto:';
-      } catch (_) {}
-      safe && window.open(href, '_blank', 'noopener,noreferrer');
-    }
-  });
-})();</script>`;
-  return injectAtDocumentStart(doc, shim);
+// Empty hrefs return to the top; element anchors scroll into view.
+// Hash routers keep their same-document route and browser history.
+function injectSandboxShim(doc: string, persistStorage = false, seed?: SrcdocOptions['previewStorageSeed']): string {
+  const seedScript = persistStorage && seed
+    ? `<script>window.__odPreviewStorageSeed=${JSON.stringify(seed).replace(/</g, '\\u003c')};</script>`
+    : '';
+  return injectAtDocumentStart(doc, buildPreviewSandboxShim() + seedScript + (persistStorage ? buildPreviewStorageBridge() : ''));
 }
 
 function injectPreviewFocusGuard(doc: string): string {
@@ -2142,17 +2070,17 @@ function meaningfulDomFallbackTarget(el) {
   function generatedRootAnnotation(el, id){
     return id === 'path-0' && el && el.parentElement === document.body && el.id === 'root';
   }
-  function targetFrom(el, allowDomFallback, clickedEl, clickPoint, forceCommentIdentity){
+  function targetFrom(el, allowDomFallback, clickedEl, clickPoint, validateForSave){
     var id = annotatedElementIdFor(el);
     var selector = annotatedSelectorFor(el, esc);
-    if ((forceCommentIdentity || (commentEnabled && !inspectEnabled)) && (!clickedEl || clickedEl === el) && el && el.hasAttribute('data-od-comment-id')) {
+    if ((validateForSave || (commentEnabled && !inspectEnabled)) && (!clickedEl || clickedEl === el) && el && el.hasAttribute('data-od-comment-id')) {
       var identity = ownCommentIdentity(el);
       if (!identity) return null;
       id = identity.elementId;
       selector = identity.selector;
     }
-    if (allowDomFallback && id && generatedRootAnnotation(el, id)) return null;
-    if (!id && allowDomFallback && meaningfulDomFallbackTarget(el)) {
+    if (!validateForSave && allowDomFallback && id && generatedRootAnnotation(el, id)) return null;
+    if (!id && allowDomFallback && (validateForSave || meaningfulDomFallbackTarget(el))) {
       selector = domSelectorFor(el);
       if (selector) id = 'dom:' + selector;
     }
@@ -2736,6 +2664,15 @@ function meaningfulDomFallbackTarget(el) {
       if (frame) frame.scrollTo(Number(data.frameLeft || 0), Number(data.frameTop || 0));
       if (el) el.scrollTo(Number(data.canvasLeft || 0), Number(data.canvasTop || 0));
       setTimeout(postPreviewScroll, 0);
+      return;
+    }
+    if (data.type === 'od:comment-active-target' && data.validateForSave && typeof data.requestId === 'string') {
+      var saveNode = null;
+      try { saveNode = document.querySelector(String(data.selector)); } catch (_) {}
+      var saveTarget = saveNode && targetFrom(saveNode, true, null, null, true);
+      window.parent.postMessage(saveTarget
+        ? Object.assign({}, saveTarget, { type: 'od:comment-active-target-update', documentVersion: 'srcdoc:' + runtimeStateGeneration, requestId: data.requestId, requestedSelector: data.selector })
+        : { type: 'od:comment-location-missing', documentVersion: 'srcdoc:' + runtimeStateGeneration, requestId: data.requestId }, '*');
       return;
     }
     if (data.type === 'od:comment-active-target') {

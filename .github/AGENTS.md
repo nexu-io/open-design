@@ -102,6 +102,14 @@ Use `.github/scripts/handoff.py` for all CI follow-on artifact names and paths. 
 - `handoff/autofix/<id>/metadata.json` plus `patch.diff`
 - `handoff/report/<id>/metadata.json`
 - `handoff/convergence/<id>/metadata.json` plus `candidate.json`
+- `handoff/pack-cache/windows/metadata.json` plus `cache.tar.gz` for optional
+  Windows release cache persistence. `cache-maintenance.yml` consumes only
+  same-repository, same-ref dispatches whose source commit is the current commit
+  or an ancestor. Artifact metadata must match the source run's exact SHA;
+  verify provenance and checksum before restoring. Prefix pruning keeps the
+  newest source commit, not the newest cache write: an ancestor save must not
+  delete a later commit's cache. It is independent of release concurrency and
+  publication; do not add a cache-save job to the prerelease workflow.
 
 Artifact names must come from `handoff.py artifact-name <kind> <id>`, and download patterns must come from `handoff.py artifact-pattern <kind>`.
 

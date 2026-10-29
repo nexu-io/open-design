@@ -94,6 +94,11 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          # Prefer Google's public Docker Hub cache, with upstream fallback.
+          buildkitd-config-inline: |
+            [registry."docker.io"]
+              mirrors = ["mirror.gcr.io"]
 
       - name: Log in to GitHub Container Registry
         if: ${{ steps.mode.outputs.publish == 'true' }}
@@ -168,9 +173,6 @@ jobs:
           # from local builds. Spec §15.1 nominates bookworm-slim as
           # the canonical base; switching is a follow-up that needs
           # the Dockerfile's apk lines re-cast for apt.
-          build-args: |
-            NODE_IMAGE=public.ecr.aws/docker/library/node:24-alpine
-            RUNTIME_IMAGE=public.ecr.aws/docker/library/node:24-alpine
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

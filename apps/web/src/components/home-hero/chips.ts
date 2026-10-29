@@ -410,10 +410,10 @@ export { CREATION_TYPE_ORDER as CREATE_RAIL_ORDER } from '../creation-type-order
 // other create type in this exact order, so no artifact kind loses its
 // discoverable entry to the fold. The two lists together cover
 // `CREATE_RAIL_ORDER`; `TypePillRow.more-order.test.tsx` pins both.
-export const HOME_TYPE_ROW_IDS: readonly string[] = ['prototype', 'deck', 'document'];
+export const HOME_TYPE_ROW_IDS: readonly string[] = ['prototype', 'motion-design', 'deck'];
 export const HOME_TYPE_ROW_MORE_IDS: readonly string[] = [
   'image',
-  'motion-design',
+  'document',
   'hyperframes',
   'web-clone',
   'video',

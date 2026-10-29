@@ -4,7 +4,7 @@
  */
 import { HYPERFRAMES_VIDEO_MODEL } from '../../api/projects.js';
 import type { AnalyticsConfigureGlobals, TrackingConfigureAvailability, TrackingConfigureType, TrackingRuntimeType } from '../public-params.js';
-import type { TrackingArtifactKind, TrackingByokProviderId, TrackingCliProviderId, TrackingExecutionMode, TrackingFeedbackProviderId, TrackingFidelity, TrackingFileSizeBucket, TrackingFileType, TrackingHarness, TrackingNewProjectTab, TrackingProjectKind } from './shared-enums.js';
+import type { TrackingArtifactKind, TrackingByokProviderId, TrackingCliProviderId, TrackingExecutionMode, TrackingFeedbackProviderId, TrackingFidelity, TrackingFileSizeBucket, TrackingFileType, TrackingHarness, TrackingNewProjectTab, TrackingProjectKind, TrackingProjectIntent } from './shared-enums.js';
 import type { TrackingSessionMode, TrackingSettingsArea } from './ui-click.js';
 // ---- Enum mapping helpers (code ↔ CSV wire format) -----------------------
 
@@ -38,6 +38,25 @@ export interface ProjectKindTrackingHints {
   intent?: string | null | undefined;
   platform?: string | null | undefined;
   platformTargets?: readonly string[] | null | undefined;
+}
+
+/** Preserve the saved scene across routing changes, revisits and continuations. */
+export function projectIntentFromMetadataToTracking(
+  metadata: { intent?: string | null } | null | undefined,
+): TrackingProjectIntent {
+  switch (metadata?.intent) {
+    case 'live-artifact':
+    case 'web-clone':
+    case 'document':
+    case 'webgl-experience':
+    case 'worker-visualizer':
+    case 'marketing':
+    case 'hyperframes':
+    case 'motion-design':
+      return metadata.intent;
+    default:
+      return 'unknown';
+  }
 }
 
 function isMobileSurface(hints: ProjectKindTrackingHints | undefined): boolean {

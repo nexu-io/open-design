@@ -83,7 +83,7 @@ let context: WorkspaceCollabContext;
 let contexts: Map<string, WorkspaceCollabContext>;
 let histories: Map<string, ChatMessage[]>;
 let proofs: Map<string, ChatRunStatusResponse>;
-let proofHttpStatus: number;
+let proofHttpStatus: number | 'network';
 let proofGate: Promise<void> | null;
 let releaseProof: () => void = () => {};
 let reads: string[];
@@ -183,7 +183,7 @@ function errorCodesOnAssistant(id = assistantId()) {
 }
 
 async function expectDoneWithoutCard(id = assistantId()) {
-  await expectDisplayedStatus(en['chat.record.done'], id);
+  await expectDisplayedStatus(en['chat.record.turnElapsed'], id);
   expect(errorCodesOnAssistant(id)).toEqual([]);
   expect(screen.queryByTestId('chat-run-error-card')).toBeNull();
   expect(screen.queryByTestId('chat-error-retry')).toBeNull();
@@ -259,6 +259,7 @@ beforeEach(() => {
         pendingProofReads.push(`${principal}/${proof?.id ?? 'missing-run'}`);
         await gate;
       }
+      if (status === 'network') throw new TypeError('Network unavailable');
       return Response.json(status === 200 && proof ? proof : { error: 'Run unavailable' },
         { status: status === 200 && !proof ? 404 : status });
     }
@@ -313,7 +314,7 @@ describe('blocked task history hydration through real ProjectView and ChatPane (
     await waitFor(() => expect(observedChat.messages.find(message => message.id === assistantId()))
       .toMatchObject({ runStatus: 'succeeded', strategyTaskBlocked: false, strategyTaskDelivered: false }));
     expect(errorCodesOnAssistant()).toEqual([]);
-    await expectDisplayedStatus(en['chat.record.done']);
+    await expectDisplayedStatus(en['chat.record.turnElapsed']);
   });
 
   it('does not turn the successful request predecessor into the later active run failure', async () => {
@@ -349,7 +350,7 @@ describe('blocked task history hydration through real ProjectView and ChatPane (
     holdProof();
     render(view());
     await settleExistingTaskProbe();
-    await expectDisplayedStatus(en['chat.record.done']);
+    await expectDisplayedStatus(en['chat.record.turnElapsed']);
     expect(screen.queryByTestId('chat-error-retry')).toBeNull();
     expect(screen.queryByTestId('chat-error-switch-to-cloud')).toBeNull();
   });
@@ -362,7 +363,7 @@ describe('blocked task history hydration through real ProjectView and ChatPane (
     holdProof();
     render(view());
     await settleExistingTaskProbe();
-    await expectDisplayedStatus(en['chat.record.done']);
+    await expectDisplayedStatus(en['chat.record.turnElapsed']);
     expect(screen.queryByTestId('chat-error-retry')).toBeNull();
     expect(screen.queryByTestId('chat-error-switch-to-cloud')).toBeNull();
   });
@@ -404,7 +405,7 @@ describe('blocked task history hydration through real ProjectView and ChatPane (
     holdProof();
     render(view());
     await settleExistingTaskProbe();
-    await expectDisplayedStatus(en['chat.record.done']);
+    await expectDisplayedStatus(en['chat.record.turnElapsed']);
     expect(errorCodesOnAssistant()).toEqual([]);
     expect(screen.queryByTestId('chat-error-retry')).toBeNull();
     expect(screen.queryByTestId('chat-error-switch-to-cloud')).toBeNull();
@@ -431,7 +432,7 @@ describe('blocked task history hydration through real ProjectView and ChatPane (
   });
 
   it.each([
-    ['succeeded', 'chat.record.done'], ['canceled', 'chat.record.canceled'], ['failed', 'chat.record.failedTurn'],
+    ['succeeded', 'chat.record.turnElapsed'], ['canceled', 'chat.record.turnStopped'], ['failed', 'chat.record.failedTurn'],
   ] as const)('preserves ordinary physical %s history without a strategy task', async (status, label) => {
     setHistory(persistedAssistant({ runStatus: status, strategyTaskBlocked: undefined,
       strategyTaskExecutionId: undefined, strategyTaskRunIndex: undefined, strategyTaskBlockedText: undefined }));
@@ -441,14 +442,30 @@ describe('blocked task history hydration through real ProjectView and ChatPane (
     expect(errorCodesOnAssistant()).toEqual([]);
   });
 
-  it.each([403, 404, 503])('keeps the existing unavailable-proof fallback without inventing a specific blocked reason (%s)', async (status) => {
+  it.each([403, 404, 503, 'network'] as const)('preserves persisted success when the status probe is unavailable (OPEND-4117: %s)', async (status) => {
+    const persisted = persistedAssistant({ strategyTaskBlocked: false, strategyTaskBlockedText: undefined,
+      strategyTaskDelivered: true });
+    setHistory(persisted);
+    const original = structuredClone(histories.get(historyKey()));
     proofHttpStatus = status;
+    holdProof();
+    const mounted = render(view());
+    await settleExistingTaskProbe();
+    await expectDoneWithoutCard();
+    expect(observedChat.messages.find((message) => message.id === persisted.id)).toMatchObject({
+      runStatus: 'succeeded', endedAt: persisted.endedAt, content: persisted.content,
+      producedFiles: persisted.producedFiles,
+    });
+    expect(unexpectedWrites).toEqual([]);
+    mounted.unmount();
+    pendingProofReads = [];
+    observedChat.proofCompletions = [];
+    holdProof();
     render(view());
-    // Existing task-probe fallback marks a missing physical status failed.
-    // Changing that policy is outside the authoritative-DTO repair. The first
-    // draft wrongly assumed it retained succeeded; preserve the actual policy.
-    await expectDisplayedStatus(en['chat.record.failedTurn']);
-    expect(errorCodesOnAssistant()).toEqual([]);
+    await settleExistingTaskProbe();
+    await expectDoneWithoutCard();
+    expect(histories.get(historyKey())).toEqual(original);
+    expect(unexpectedWrites).toEqual([]);
   });
 
   it.each(['conversation', 'principal'] as const)('ignores late old %s proof after switching to another visible history', async (boundary) => {
@@ -478,7 +495,7 @@ describe('blocked task history hydration through real ProjectView and ChatPane (
     mounted.rerender(view({ workspaceContextOverride: nextContext, routeConversationId: nextConversation }));
     await waitFor(() => expect(reads).toContain(historyKey(nextConversation, nextContext.workspaceMemberId)));
     await act(async () => { releaseProof(); });
-    await expectDisplayedStatus(en['chat.record.done'], nextMessage.id);
+    await expectDisplayedStatus(en['chat.record.turnElapsed'], nextMessage.id);
     expect(screen.getByText(nextMessage.content)).toBeTruthy();
     expect(document.querySelector(`[data-assistant-message-id="${assistantId()}"]`)).toBeNull();
     expect(screen.queryByTestId('chat-error-retry')).toBeNull();

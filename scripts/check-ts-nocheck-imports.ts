@@ -1,7 +1,8 @@
 import { readdir, readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import ts from "typescript";
+import * as ts from "@typescript/native/unstable/ast";
+import { parseSource } from "./lib/typescript/source.ts";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 
@@ -64,25 +65,13 @@ export type TsNocheckImportViolation = {
   specifier: string;
 };
 
-function scriptKindForPath(filePath: string): ts.ScriptKind {
-  switch (path.extname(filePath)) {
-    case ".tsx":
-      return ts.ScriptKind.TSX;
-    case ".mts":
-    case ".cts":
-      return ts.ScriptKind.TS;
-    default:
-      return ts.ScriptKind.TS;
-  }
-}
-
 /**
  * True when the file opts out of type checking via a leading `@ts-nocheck`
  * pragma. Mirrors tsc: the pragma is only honored in the comment block that
  * precedes the first statement, so only leading trivia is inspected.
  */
 export function hasLeadingTsNocheck(source: string): boolean {
-  const sourceFile = ts.createSourceFile("probe.ts", source, ts.ScriptTarget.Latest, true);
+  const sourceFile = parseSource("probe.ts", source);
   const firstStatement = sourceFile.statements[0];
   const leadingEnd = firstStatement ? firstStatement.getFullStart() + firstStatement.getLeadingTriviaWidth(sourceFile) : source.length;
   return /@ts-nocheck\b/.test(source.slice(0, leadingEnd));
@@ -134,11 +123,11 @@ export type RelativeSpecifierReference = {
  * extraction is unit-testable without the filesystem.
  */
 export function collectRelativeSpecifiers(filePath: string, source: string): RelativeSpecifierReference[] {
-  const sourceFile = ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true, scriptKindForPath(filePath));
+  const sourceFile = parseSource(filePath, source);
   const found: RelativeSpecifierReference[] = [];
 
   const push = (node: ts.Node | undefined): void => {
-    if (node != null && ts.isStringLiteralLike(node) && node.text.startsWith(".")) {
+    if (node != null && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && node.text.startsWith(".")) {
       found.push({
         specifier: node.text,
         lineNumber: sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1,
@@ -156,7 +145,7 @@ export function collectRelativeSpecifiers(filePath: string, source: string): Rel
     } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
       push(node.arguments[0]);
     }
-    ts.forEachChild(node, visit);
+    node.forEachChild(visit);
   };
 
   visit(sourceFile);

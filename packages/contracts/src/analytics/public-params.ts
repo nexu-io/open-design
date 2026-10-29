@@ -63,6 +63,17 @@ export interface AnalyticsPublicParams {
   attribution_quality?: AnalyticsAttributionQuality;
   app_version: string;
   locale: string;
+  // Additive stability/performance dimensions. Legacy schema 2/4 producers
+  // may omit these; new client metrics require the clientTelemetryCommonSchema.
+  app_session_id?: string | null;
+  capture_source?: string;
+  channel?: string;
+  client_version?: string | null;
+  platform?: string | null;
+  os_version?: string | null;
+  arch?: string | null;
+  occurred_at?: string;
+  reported_at?: string;
 }
 
 // Configure-state triplet — registered globally on the PostHog client and

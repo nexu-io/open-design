@@ -1,15 +1,17 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EntrySettingsMenu } from '../../src/components/EntrySettingsMenu';
-import { I18nProvider } from '../../src/i18n';
+import { I18nProvider, type Locale } from '../../src/i18n';
 import type { AppConfig } from '../../src/types';
+
+const { track } = vi.hoisted(() => ({ track: vi.fn() }));
 
 vi.mock('../../src/analytics/provider', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/analytics/provider')>();
-  return { ...actual, useAnalytics: () => ({ track: vi.fn() }) };
+  return { ...actual, useAnalytics: () => ({ track }) };
 });
 
 const originalFetch = globalThis.fetch;
@@ -36,9 +38,9 @@ function baseConfig(overrides: Partial<AppConfig> = {}): AppConfig {
   } as AppConfig;
 }
 
-function renderMenu() {
+function renderMenu(locale: Locale = 'en') {
   return render(
-    <I18nProvider initial="en">
+    <I18nProvider initial={locale}>
       <EntrySettingsMenu
         config={baseConfig()}
         onOpenSettings={vi.fn()}
@@ -48,6 +50,7 @@ function renderMenu() {
 }
 
 beforeEach(() => {
+  track.mockClear();
   globalThis.fetch = vi.fn(async () => jsonResponse({})) as typeof fetch;
 });
 
@@ -58,6 +61,38 @@ afterEach(() => {
 });
 
 describe('EntrySettingsMenu language picker a11y', () => {
+  it.each(['zh-CN', 'zh-TW'] as const)('%s offers Feishu without Discord counts or presence requests', (locale) => {
+    renderMenu(locale);
+    fireEvent.click(screen.getByTestId('entry-settings-menu-trigger'));
+    const link = screen.getByRole('menuitem', { name: locale === 'zh-CN' ? '加入飞书群' : '加入飛書群' });
+    expect(link.getAttribute('href')).toBe('https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=a38j32fc-756c-4d02-846b-53356fee12a7');
+    expect(link.textContent).toBe(locale === 'zh-CN' ? '加入飞书群' : '加入飛書群');
+    expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/api/community/discord'))).toHaveLength(0);
+    fireEvent.click(link);
+    expect(track).toHaveBeenCalledWith('ui_click', expect.objectContaining({ element: 'join_feishu', area: 'settings_popover' }), undefined);
+    expect(track.mock.calls.filter(([, props]) => props?.element === 'join_feishu')).toHaveLength(1);
+  });
+
+  it('updates the destination immediately when changing English to Chinese and back', async () => {
+    globalThis.fetch = vi.fn(async () => jsonResponse({ onlineCount: 123, memberCount: 456 })) as typeof fetch;
+    renderMenu();
+    fireEvent.click(screen.getByTestId('entry-settings-menu-trigger'));
+    await screen.findByText('123 online');
+    expect(screen.getByRole('menuitem', { name: /Join Discord/ }).getAttribute('href')).toBe('https://discord.gg/mHAjSMV6gz');
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'English' }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: '简体中文' }));
+    fireEvent.click(screen.getByTestId('entry-settings-menu-trigger'));
+    expect(screen.getByRole('menuitem', { name: '加入飞书群' }).getAttribute('data-community-platform')).toBe('feishu');
+    expect(screen.queryByText('123 online')).toBeNull();
+
+    fireEvent.click(screen.getByRole('menuitem', { name: '简体中文' }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'English' }));
+    fireEvent.click(screen.getByTestId('entry-settings-menu-trigger'));
+    await waitFor(() => expect(screen.getByRole('menuitem', { name: /Join Discord/ }).getAttribute('data-community-platform')).toBe('discord'));
+    expect(screen.getByText('123 online')).not.toBeNull();
+  });
+
   it('keeps one consistent menu model and hides the collapsed locale list from a11y/focus', () => {
     const { container } = renderMenu();
     fireEvent.click(screen.getByTestId('entry-settings-menu-trigger'));

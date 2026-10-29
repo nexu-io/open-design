@@ -127,7 +127,8 @@
 
 import type { ChatScrollFreezeProps } from '@open-design/contracts/analytics';
 
-import { reportSafetyEvent } from '../analytics/error-tracking';
+import { reportResponsiveness } from './responsiveness';
+import { installChatScrollJankObserver } from './chat-scroll-jank';
 import { chatCorrelation } from './chat-context';
 import {
   ACTIVITY_NEAR_WINDOW_MS,
@@ -384,6 +385,7 @@ interface Surface {
 
 let surface: Surface | null = null;
 let installed = false;
+let stopJank: (() => void) | null = null;
 /**
  * Whether the global wheel listener is currently registered. It is armed
  * ONLY while no chat log is attached; see the cost-discipline note above.
@@ -407,6 +409,7 @@ export function installChatScrollFreezeObserver(): () => void {
     return () => undefined;
   }
   installed = true;
+  stopJank = installChatScrollJankObserver();
 
   document.addEventListener('scroll', onScrollCapture, { capture: true, passive: true });
   armWheelDiscovery();
@@ -421,6 +424,7 @@ export function installChatScrollFreezeObserver(): () => void {
   if (scrollWriteTraceFlagSet()) armScrollWriteTrace(CHAT_LOG_SELECTOR);
 
   return () => {
+    stopJank?.(); stopJank = null;
     document.removeEventListener('scroll', onScrollCapture, { capture: true });
     // `installed` goes false BEFORE `detach()`, because detaching re-arms
     // wheel discovery and we are trying to take everything down.
@@ -1852,7 +1856,7 @@ function report(
     ...runtime,
   };
 
-  reportSafetyEvent('client_chat_scroll_frozen', { ...props });
+  reportResponsiveness('client_chat_scroll_frozen', { ...props });
 
   // After the report, deliberately. Whatever a consumer does about this — the
   // self-heal's kick and takeover, the forensics capture — must not be able to
@@ -2409,6 +2413,7 @@ function cancelAttachCensus(active: Surface): void {
 
 /** Test-only — flush module state between cases. */
 export function __resetChatScrollFreezeForTest(): void {
+  stopJank?.(); stopJank = null;
   if (typeof document !== 'undefined') {
     document.removeEventListener('scroll', onScrollCapture, { capture: true });
   }

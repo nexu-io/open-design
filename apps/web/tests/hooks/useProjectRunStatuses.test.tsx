@@ -11,6 +11,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   acknowledgeProjectCompletion,
+  holdProjectRunStatusReads,
+  releaseProjectRunStatusReads,
   resetProjectRunStatusStore,
   useProjectRunStatuses,
   useProjectRunSummaries,
@@ -85,6 +87,26 @@ beforeEach(() => {
 afterEach(() => {
   globalThis.fetch = originalFetch;
   vi.useRealTimers();
+});
+
+describe('useProjectRunStatuses — a project whose create has not answered (OPEND-3334)', () => {
+  it('is not asked about until its create answers, then joins the feed', async () => {
+    holdProjectRunStatusReads('p-new');
+    renderHook(() => useProjectRunStatuses(['p1', 'p-new']));
+    await flush();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(runRequests('p-new')).toEqual([]);
+    expect(runRequests('p1').length).toBeGreaterThan(0);
+
+    releaseProjectRunStatusReads('p-new');
+    await act(async () => {
+      window.dispatchEvent(new Event(RUNS_CHANGED_EVENT));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(runRequests('p-new')).toHaveLength(1);
+  });
 });
 
 describe('useProjectRunStatuses — one feed for every surface', () => {

@@ -451,7 +451,7 @@ describe('composeSystemPrompt', () => {
         metadata: { kind: 'image', imageModel: 'vela/gpt-image-2' } as any,
       });
       expect(amrPrompt).toContain('Image model: `vela/gpt-image-2`');
-      expect(amrPrompt).toContain(
+      expect(amrPrompt).not.toContain(
         'Video model: `vela/doubao-seedance-2-0-260128`',
       );
       expect(amrPrompt).toContain('### OpenDesign Cloud media defaults');

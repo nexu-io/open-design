@@ -68,6 +68,7 @@ export interface AccountMenuClickProps extends TrackingWorkspaceDimensions {
     | 'feature_request'
     | 'github'
     | 'discord'
+    | 'feishu'
     | 'twitter'
     | 'email'
     | 'logout';

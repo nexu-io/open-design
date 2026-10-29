@@ -1,4 +1,9 @@
+import { newerTaskDisplay } from '../runtime/chat/task-presentation';
+import { useStartupReady } from '../observability/startup-ready';
+import { navigationTiming, useProjectNavigationReady, observeNavigation } from '../observability/navigation-timing';
+import { withLiveArtifactDeliveries } from '../runtime/live-artifact-delivery';
 import { readRetriedErrorSurface, retriedErrorSurfaceKey, writeRetriedErrorSurface } from '../runtime/chat/retried-error-surface';
+import { runOutcomeAwaitsRunRecord, settleTurnFromRunRecord } from '../runtime/chat/pending-disconnect';
 import type { ObservedPublicShareLink, ObservedShareUpdateRequest } from './share/observed-public-share-link';
 import type { ShareLoginReturn } from './share/share-login-return';
 import {
@@ -81,9 +86,12 @@ import {
   strategyTaskParkedOnSucceededRun,
   strategyTaskRunIndex,
 } from '../runtime/strategy-question-continuation';
+import { acknowledgeProjectCompletion, useProjectRunSummaries } from '../hooks/useProjectRunStatuses';
 import {
+  eventsEndedByAskingUser,
   isTodoWriteToolName,
   isWorkspaceLifecycleReadable,
+  turnEndedByAskingUser,
   workspaceBillingAuthorityContext,
   workspacePrincipalKey,
   type AmrWalletSnapshot,
@@ -373,7 +381,7 @@ import {
 } from './design-files/pluginFolderActions';
 import { SHARE_TO_COMMUNITY_PROMPT } from './share-to-community/shareToCommunityPrompt';
 import { CenteredLoader } from './Loading';
-import { ProjectCreationPendingChat } from './ProjectCreationPendingView';
+import { useCreationHandoffMessages } from './useCreationHandoffMessages';
 import {
   FALLBACK_MAX_CHAT_PANEL_WIDTH,
   MIN_CHAT_PANEL_WIDTH,
@@ -420,7 +428,11 @@ import {
   homeAttachmentUploadsFor,
   subscribeHomeAttachmentUploads,
 } from '../state/home-attachment-handoff';
-import { effectiveAgentModelChoice, effectiveAgentModelId } from './agentModelSelection';
+import {
+  effectiveAgentModelChoice,
+  effectiveAgentModelId,
+  selectedAssistantIdentity as resolveSelectedAssistantIdentity,
+} from './agentModelSelection';
 import { mediaExecutionPolicyForProjectMetadata } from '../media/execution-policy';
 import { mediaModelProviderId } from '../media/models';
 import { byokProviderRequiresApiKey } from '../utils/byokProvider';
@@ -697,17 +709,14 @@ function mergeServerMessageWithLocal(
 ): ChatMessage {
   if (!local) return server;
   const merged: ChatMessage = { ...server };
+  merged.taskDisplay = newerTaskDisplay(local.taskDisplay, server.taskDisplay);
   if (local.role === 'assistant' && server.role === 'assistant' && !absorbedASuccessorRun) {
     if ((local.content?.length ?? 0) > (server.content?.length ?? 0)) {
       merged.content = local.content;
     }
-    if (
-      !(server.strategyTaskBlocked === false && local.strategyTaskBlocked === true)
-      && (
-        (local.events?.length ?? 0) > (server.events?.length ?? 0)
-        || localThinkingExtendsServerSnapshot(server, local)
-      )
-    ) {
+    if (!(server.strategyTaskBlocked === false && local.strategyTaskBlocked === true)
+      && ((local.events?.length ?? 0) > (server.events?.length ?? 0)
+        || localThinkingExtendsServerSnapshot(server, local))) {
       merged.events = local.events;
     }
   }
@@ -984,15 +993,27 @@ interface Props {
    * this project can produce a post-run extraction. */
   onRunActivityChange?: (projectId: string, active: boolean) => void;
   /**
-   * The Home send this project was just created from, while its first
-   * transcript is still settling (OPEND-2170). Non-null keeps the hand-off's
-   * chat card on top of the chat column — the same prompt bubble and
-   * preparing row the pending frame already drew — so the column never shows
-   * the whole-pane spinner, the transcript skeleton, or an empty log between
-   * the create answering and the auto-sent turn painting. App clears it on
-   * `onCreationHandoffSettled`.
+   * The Home send this project was just created from (OPEND-3334). App mounts
+   * this view on the click, before `POST /api/projects` answers, and keeps
+   * the record until the first transcript settles (OPEND-2170):
+   *
+   * - `persisted: false` — the project row does not exist on the daemon yet.
+   *   Every project read is held ({@link projectReadsHeldForCreation}); the
+   *   view draws only what this tab already knows.
+   * - `conversationId` — the seed conversation's id, minted with the project
+   *   id, so the chat pane is keyed by its final conversation from the first
+   *   frame and never re-keys when the conversation list answers.
+   * - `prompt` / `files` — the optimistic first turn, drawn under the ids the
+   *   auto-send will use, so the real turn takes over the same rows.
+   *
+   * App clears it on `onCreationHandoffSettled`.
    */
-  creationHandoff?: { prompt: string; files?: readonly File[] } | null;
+  creationHandoff?: {
+    prompt: string;
+    files?: readonly File[];
+    conversationId?: string | null;
+    persisted: boolean;
+  } | null;
   /** The first transcript is on screen (or failed to load): drop the card. */
   onCreationHandoffSettled?: (projectId: string) => void;
 }
@@ -1434,6 +1455,16 @@ function stableIdentityDigest(value: string): string {
     hash = BigInt.asUintN(64, hash * 0x100000001b3n);
   }
   return hash.toString(36).padStart(13, '0');
+}
+
+/**
+ * Whether this view's project resources are off limits: a Home send's project
+ * whose create has not answered yet. Every project read waits on this.
+ */
+export function projectReadsHeldForCreation(
+  creationHandoff: { persisted: boolean } | null | undefined,
+): boolean {
+  return Boolean(creationHandoff && !creationHandoff.persisted);
 }
 
 function homeAutoSendIdentity(projectId: string): Pick<
@@ -2197,6 +2228,11 @@ export function ProjectView({
   onCreationHandoffSettled,
 }: Props) {
   const { locale, t } = useI18n();
+  // A Home send mounts this view before the project row exists on the daemon
+  // (OPEND-3334). Until it does, no project resource is read: every read
+  // would 404, and an unpersisted project must not fan out conversation,
+  // file, or presence requests. The view draws only what this tab knows.
+  const projectReadsHeld = projectReadsHeldForCreation(creationHandoff);
   const amrAuthRetryMountIdRef = useRef<string | null>(null);
   if (amrAuthRetryMountIdRef.current === null) {
     amrAuthRetryMountIdRef.current = randomUUID();
@@ -2268,6 +2304,7 @@ export function ProjectView({
     workspaceContext,
     project.workspaceId,
     initialWorkspaceScope,
+    !projectReadsHeld,
   );
   // The project's resolved scope when there is one. While that first read is
   // pending, the persisted project binding may witness the matching caller;
@@ -2453,7 +2490,7 @@ export function ProjectView({
   // Team collaboration: presence for a shared project. Dormant (no heartbeat,
   // renders nothing) unless the workspace context marks the viewer an active
   // team member — safe to mount unconditionally.
-  const projectCollab = useProjectCollab(project?.id ?? null, {
+  const projectCollab = useProjectCollab(projectReadsHeld ? null : project?.id ?? null, {
     workspaceContext: projectRunWorkspaceContext,
     workspaceContextLoading: projectWorkspaceScopeState.loading,
     initialMaterializationPending,
@@ -2526,6 +2563,7 @@ export function ProjectView({
     projectRunWorkspaceContext,
     project.workspaceId,
     initialProjectDetail,
+    !projectReadsHeld,
   );
   const detailedProject = projectDetail.project?.id === project.id ? projectDetail.project : null;
   const currentProject = reconcileProjectDetail(
@@ -2872,6 +2910,7 @@ export function ProjectView({
     project.id,
     designMdRefreshKey,
     projectRunWorkspaceContext,
+    !projectReadsHeld,
   );
   const finalize = useFinalizeProject(project.id, projectRunWorkspaceContext);
   const terminalLauncher = useTerminalLaunch();
@@ -3387,6 +3426,27 @@ export function ProjectView({
   const streamingConversationIdRef = useRef<string | null>(null);
   const [queuedChatSends, setQueuedChatSends] = useState<QueuedChatSend[]>([]);
   const queuedChatSendsRef = useRef<QueuedChatSend[]>([]);
+  /**
+   * Queued sends whose drain has been handed to `handleSend` but not yet
+   * settled. Invariant: a queue card is visible only while its send is still
+   * waiting — once the drain starts, the turn is already painted in the
+   * transcript (OPEND-2614), so the card leaves with it instead of lingering
+   * through the AMR balance preflight (OPEND-3221). The item itself stays in
+   * the durable queue until `handleSend` settles: a refused drain relies on it
+   * being there (`queueDrain` never re-queues), and clearing the id then shows
+   * the card again.
+   */
+  const [startingQueuedChatSendIds, setStartingQueuedChatSendIds] =
+    useState<ReadonlySet<string>>(() => new Set());
+  const setQueuedChatSendStarting = useCallback((id: string, starting: boolean) => {
+    setStartingQueuedChatSendIds((current) => {
+      if (current.has(id) === starting) return current;
+      const next = new Set(current);
+      if (starting) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
   // A BYOK preflight can reject a send before any Run exists. Keep that
   // submission's task identity in memory so fixing Settings and resubmitting
   // the same draft completes the original task funnel instead of fabricating a
@@ -3772,7 +3832,9 @@ export function ProjectView({
 
   const currentConversationQueuedItems = activeConversationId
     ? queuedChatSends
-        .filter((item) => item.conversationId === activeConversationId)
+        .filter((item) =>
+          item.conversationId === activeConversationId
+          && !startingQueuedChatSendIds.has(item.id))
         .map((item) => {
           const queuedItem = {
             id: item.id,
@@ -3785,6 +3847,32 @@ export function ProjectView({
         })
     : [];
   const newConversationDisabled = creatingConversation || projectMutationReadOnly;
+  // CS03: actionable business Ready, independent of the chat first-paint
+  // metric. Never accept a stale transcript or a merely mounted placeholder.
+  const projectInteractiveReady = Boolean(
+      detailedProject
+      && !projectDetail.loading
+      && !projectWorkspaceScopeState.loading
+      && !projectWorkspaceScopeState.failure
+      && activeConversationId
+      && messagesConversationId === activeConversationId
+      && messagesInitialized
+      && messagesAuthorityKeyRef.current === projectRunAuthorityKey
+      && !currentConversationSendDisabled
+      && !newConversationDisabled
+    );
+  useStartupReady({ visible: Boolean(detailedProject && !projectDetail.loading), interactive: projectInteractiveReady });
+  useProjectNavigationReady({
+    projectId: project.id,
+    conversationId: activeConversationId,
+    visible: Boolean(detailedProject && !projectDetail.loading),
+    ready: projectInteractiveReady,
+    failure: projectWorkspaceScopeState.failure ? 'scope_unavailable'
+      : projectDetail.error ? 'project_unavailable'
+      : conversationLoadFailure ? 'conversations_unavailable'
+      : activeConversationId && failedMessagesConversationId === activeConversationId
+        ? 'messages_unavailable' : null,
+  });
   const activeCompletionNotificationRunsRef = useRef<Set<string>>(new Set());
   const completedNotificationRunsRef = useRef<Set<string>>(new Set());
 
@@ -3792,6 +3880,7 @@ export function ProjectView({
   // pre-conversations, or a freshly created one whose default seed got
   // dropped), create one on the fly.
   useEffect(() => {
+    if (projectReadsHeld) return;
     let cancelled = false;
     const revalidatingCurrentProject =
       conversationsLoadedProjectIdRef.current === project.id;
@@ -3896,6 +3985,7 @@ export function ProjectView({
     commitPreviewComments,
     conversationMaterializationGenerationController,
     project.id,
+    projectReadsHeld,
     projectRunAuthorityKey,
   ]);
 
@@ -4341,6 +4431,34 @@ export function ProjectView({
     reattachTextBuffersRef.current.clear();
   }, []);
 
+  /*
+   * P0-24 "已查看": the user has seen this project's latest result whenever this
+   * view is showing it with the window in front — including a run that ends
+   * while they are here in another conversation (product answer P2). Keep the
+   * project's run status live while it is open, and spend its new-result
+   * notice (the sidebar's blue dot) as soon as one appears or the window comes
+   * back to the front. Opening the project from anywhere — the rail, search,
+   * the project list, a notification or a link — goes through here.
+   */
+  const viewedProjectRunSummaries = useProjectRunSummaries([project.id], {
+    workspaceContext: projectRunWorkspaceContext,
+  });
+  const viewedProjectRunSummary = viewedProjectRunSummaries.get(project.id);
+  useEffect(() => {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return undefined;
+    const spendViewedNotice = () => {
+      if (document.hidden || !document.hasFocus()) return;
+      acknowledgeProjectCompletion(project.id);
+    };
+    spendViewedNotice();
+    window.addEventListener('focus', spendViewedNotice);
+    document.addEventListener('visibilitychange', spendViewedNotice);
+    return () => {
+      window.removeEventListener('focus', spendViewedNotice);
+      document.removeEventListener('visibilitychange', spendViewedNotice);
+    };
+  }, [project.id, viewedProjectRunSummary]);
+
   const notifyCompletedRun = useCallback((last: ChatMessage) => {
     // Round 7 (mrcfps @ useDesignMdState.ts:131): a chat turn just
     // settled — conversation updatedAt almost certainly moved, so
@@ -4348,43 +4466,54 @@ export function ProjectView({
     // file mutations or live artifacts.
     setDesignMdRefreshKey((n) => n + 1);
 
-    const status =
-      last.resultDeliveryState === 'no_result' ||
-      last.resultDeliveryState === 'delivery_failed'
-        ? 'failed'
-        : last.runStatus;
+    // P0-24: the run record alone names the outcome. A delivery outcome
+    // (`no_result` / `delivery_failed`) no longer turns a finished run into a
+    // failure notification; a stopped run sends nothing.
+    const status = last.runStatus;
     if (status !== 'succeeded' && status !== 'failed') return;
 
-    const cfg = config.notifications ?? DEFAULT_NOTIFICATIONS;
-    if (cfg.soundEnabled) {
-      playSound(status === 'succeeded' ? cfg.successSoundId : cfg.failureSoundId);
-    }
+    // P0-24 N10: on the desktop every turn is announced by the app-root feed
+    // (`useGlobalRunNotices`), wherever the user is; announcing here too would
+    // notify twice. The web has no global feed and keeps this one.
+    if (isOpenDesignHostAvailable()) return;
 
-    if (cfg.desktopEnabled) {
-      // System notifications are useful only when the task is not already in
-      // front of the user. Sounds remain independent feedback for both states.
-      const isHidden = typeof document !== 'undefined' && document.hidden;
-      const isFocused = typeof document === 'undefined' ? true : document.hasFocus();
-      if (isHidden || !isFocused) {
-        const title = status === 'succeeded'
-          ? t('notify.successTitle')
-          : t('notify.failureTitle');
-        const fallbackBody = status === 'succeeded'
-          ? t('notify.successBody')
-          : t('notify.failureBody');
-        const trimmed = (last.content ?? '').trim();
-        const body = trimmed ? trimmed.slice(0, 80) : fallbackBody;
-        void showCompletionNotification({
-          status,
-          title,
-          body,
-          onClick: () => {
-            if (typeof window !== 'undefined') window.focus();
-          },
-        });
+    // Feedback is only for a turn the user is not watching: this view shows the
+    // active conversation, so "not viewing" is the window being hidden or
+    // unfocused.
+    const isHidden = typeof document !== 'undefined' && document.hidden;
+    const isFocused = typeof document === 'undefined' ? true : document.hasFocus();
+    if (!isHidden && isFocused) return;
+
+    // The sound belongs to the notification (P0-24 rule ④, product answer Q2):
+    // "桌面通知" decides whether one is shown, "提示音" whether it makes a sound.
+    // Desktop notifications off, permission denied or the show failing all
+    // mean no notification, and so no sound either.
+    const cfg = config.notifications ?? DEFAULT_NOTIFICATIONS;
+    if (!cfg.desktopEnabled) return;
+
+    // Fixed copy, never the reply text: a reply can open with markup such as
+    // `<question-form …>` or `<od-done …/>`, which must not reach the body.
+    const asksUser =
+      status === 'succeeded'
+      && (turnEndedByAskingUser(last.content) || eventsEndedByAskingUser(last.events));
+    const body = status === 'failed'
+      ? t('notify.runFailedBody')
+      : asksUser
+        ? t('notify.needsReplyBody')
+        : t('notify.newReplyBody');
+    void showCompletionNotification({
+      status,
+      title: project.name,
+      body,
+      onClick: () => {
+        if (typeof window !== 'undefined') window.focus();
+      },
+    }).then((result) => {
+      if (result === 'shown' && cfg.soundEnabled) {
+        playSound(status === 'succeeded' ? cfg.successSoundId : cfg.failureSoundId);
       }
-    }
-  }, [config.notifications, t]);
+    });
+  }, [config.notifications, project.name, t]);
 
   // Fire completion feedback from assistant run-status transitions rather than
   // from the local SSE listener state. A run can finish while its conversation
@@ -4401,6 +4530,9 @@ export function ProjectView({
       }
       if (message.runStatus !== 'succeeded' && message.runStatus !== 'failed') continue;
       if (message.runStatus === 'succeeded' && designDeliveryVerificationPending(message)) continue;
+      // P0-24 N15: the browser losing the stream is not the run's outcome. Do
+      // not notify, and do not mark it notified: the real result still will.
+      if (runOutcomeAwaitsRunRecord(message)) continue;
       if (!keys.some((key) => activeCompletionNotificationRunsRef.current.has(key))) continue;
       if (keys.some((key) => completedNotificationRunsRef.current.has(key))) continue;
       for (const key of keys) completedNotificationRunsRef.current.add(key);
@@ -4414,6 +4546,7 @@ export function ProjectView({
   // load, every mutation flows through saveTabsState() which keeps DB +
   // local state coherent.
   useEffect(() => {
+    if (projectReadsHeld) return;
     let cancelled = false;
     const requestWorkspaceContext = projectRunWorkspaceContextRef.current;
     tabsLoadedRef.current = false;
@@ -4464,7 +4597,7 @@ export function ProjectView({
     return () => {
       cancelled = true;
     };
-  }, [project.id, projectRunAuthorityKey]);
+  }, [project.id, projectReadsHeld, projectRunAuthorityKey]);
 
   // Debounce the canonical (daemon + SQLite) tab-state write. The embedded
   // browser fans out url/title/favicon updates in bursts on a single page load
@@ -4668,12 +4801,13 @@ export function ProjectView({
     options?: { freshProjectFiles?: boolean },
     onAcceptedFilesGeneration?: (generation: number) => void,
   ): Promise<ProjectFile[]> => {
+    if (projectReadsHeld) return [];
     const [nextFiles] = await Promise.all([
       refreshProjectFiles({ fresh: options?.freshProjectFiles }, onAcceptedFilesGeneration),
       refreshLiveArtifacts(),
     ]);
     return nextFiles;
-  }, [refreshLiveArtifacts, refreshProjectFiles]);
+  }, [projectReadsHeld, refreshLiveArtifacts, refreshProjectFiles]);
 
   const recordManualFileWrite = useCallback((file: ProjectFile) => {
     for (const [controller, run] of manualFileWritesByRunRef.current) {
@@ -5598,8 +5732,10 @@ export function ProjectView({
         const next = curr.map((m) => {
           if (m.id !== messageId) return m;
           const updated = updater(m);
-          saved = updated;
-          return updated;
+          const taskDisplay = newerTaskDisplay(m.taskDisplay, updated.taskDisplay);
+          const merged = taskDisplay === updated.taskDisplay ? updated : {...updated, taskDisplay};
+          saved = merged;
+          return merged;
         });
         // Same phantom guard as persistMessage: skip writes for a daemon
         // assistant row that is still in-flight (active runStatus, no runId).
@@ -5849,30 +5985,10 @@ export function ProjectView({
   // monogram; stamping the user's currently-selected design agent makes its
   // avatar and role name follow that selection (Claude by default), matching how
   // handleSend identifies a real turn.
-  const selectedAssistantIdentity = useMemo<{
-    agentId: string | undefined;
-    agentName: string | undefined;
-  }>(() => {
-    if (config.mode === 'daemon') {
-      const selectedAgent = config.agentId ? agentsById.get(config.agentId) : null;
-      const selectedAgentChoice = config.agentId
-        ? config.agentModels?.[config.agentId]
-        : undefined;
-      const effectiveChoice = effectiveAgentModelChoice(selectedAgent, selectedAgentChoice);
-      return {
-        agentId: config.agentId ?? undefined,
-        agentName: agentModelDisplayName(
-          config.agentId,
-          selectedAgent?.name,
-          effectiveChoice?.model,
-        ),
-      };
-    }
-    return {
-      agentId: apiProtocolAgentId(config.apiProtocol),
-      agentName: apiProtocolModelLabel(config.apiProtocol, config.model),
-    };
-  }, [config, agentsById]);
+  const selectedAssistantIdentity = useMemo(
+    () => resolveSelectedAssistantIdentity(config, agents),
+    [config, agents],
+  );
 
   // One-shot: when extraction is blocked by an anti-bot wall (or has stalled past
   // the timeout), drop the assist card into the conversation so the user can
@@ -6823,6 +6939,8 @@ export function ProjectView({
           ?? await fetchChatRunStatus(runId, projectRunWorkspaceContext);
         if (cancelled) return;
         if (!physicalStatus) {
+          // A missing status response cannot invalidate persisted success.
+          if (message.runStatus === 'succeeded') continue;
           // A local retry seal is not a daemon terminal verdict. Keep this
           // run's receipts for the existing manual reconnect action.
           // `fetchChatRunStatus` returns null on ANY non-OK response or fetch
@@ -6996,13 +7114,16 @@ export function ProjectView({
         // survive, but still apply the daemon's authoritative `resumable` flag so
         // ChatPane's Continue affordance reflects the daemon's view after a reload.
         if (spuriouslyFailedPending && status.status === 'failed') {
-          if (typeof status.resumable !== 'undefined') {
-            updateMessageById(
-              message.id,
-              (prev) => ({ ...prev, resumable: status.resumable }),
-              true,
-            );
-          }
+          // The record confirms the failure, so the disconnect marker (if any)
+          // no longer stands for "outcome unknown" (N15 / Q7).
+          updateMessageById(
+            message.id,
+            (prev) => ({
+              ...settleTurnFromRunRecord(prev),
+              ...(typeof status.resumable !== 'undefined' ? { resumable: status.resumable } : {}),
+            }),
+            true,
+          );
           // Clear stale retry count — this run is authoritatively done.
           transientFailedRetriesRef.current.delete(runId);
           genericDisconnectRetriesRef.current.delete(runId);
@@ -7178,7 +7299,7 @@ export function ProjectView({
             // OPEND-2588 (2026-09-04): a turn that finishes while we are
             // replaying it opens ALL of its primary artifacts, same as a live
             // completion — the user cannot tell the two apart.
-            const turnArtifacts = selectAutoOpenTurnArtifacts(produced, nextFiles, {
+            const turnArtifacts = withLiveArtifactDeliveries(selectAutoOpenTurnArtifacts(produced, nextFiles, {
               ...autoOpenArtifactOptions,
               preTurnFileNames: beforeFileNames,
               turnStartedAt: status.createdAt || message.startedAt || message.createdAt || null,
@@ -7189,7 +7310,7 @@ export function ProjectView({
                 project.id,
                 projectDetail.resolvedDir,
               ),
-            });
+            }), message.events);
             if (turnArtifacts.focused && !userTookOverPreviewRef.current) {
               requestOpenTurnArtifacts(turnArtifacts.open, turnArtifacts.focused);
             }
@@ -7220,9 +7341,8 @@ export function ProjectView({
               true,
               { telemetryFinalized: true },
             );
-            if (deliveryOutcome === 'no_result' || deliveryOutcome === 'delivery_failed') {
-              setError(artifactPersistenceError ?? DESIGN_RESULT_MISSING_DETAIL);
-            }
+            // P0-24 (PRD C7/C8, Q3): no pane-level failure card for a run that
+            // ended normally without a deliverable; the message keeps the outcome.
             await auditDesignSystemWorkspaceAfterRun(message.id);
             // Clear stale retry count for successfully recovered run.
             transientFailedRetriesRef.current.delete(runId);
@@ -7502,6 +7622,7 @@ export function ProjectView({
                   ? {
                     strategyTaskExecutionId: strategyTask.taskExecutionId,
                     strategyTaskRunIndex: strategyTaskRunIndex(strategyTask, nextRunId),
+                    ...(strategySettledMessageFields(strategyTask) ?? {}),
                   }
                   : {}),
               }),
@@ -7715,7 +7836,7 @@ export function ProjectView({
                 );
                 // OPEND-2588 (2026-09-04): see the replay path above — a run
                 // that lands while reattached is still a turn finishing.
-                const turnArtifacts = selectAutoOpenTurnArtifacts(produced, nextFiles, {
+                const turnArtifacts = withLiveArtifactDeliveries(selectAutoOpenTurnArtifacts(produced, nextFiles, {
                   ...autoOpenArtifactOptions,
                   preTurnFileNames: beforeFileNames,
                   turnStartedAt: status.createdAt || message.startedAt || message.createdAt || null,
@@ -7729,7 +7850,7 @@ export function ProjectView({
                     project.id,
                     projectDetail.resolvedDir,
                   ),
-                });
+                }), needsFullReplay ? replayedEvents : message.events);
                 if (turnArtifacts.focused && !userTookOverPreviewRef.current) {
                   requestOpenTurnArtifacts(turnArtifacts.open, turnArtifacts.focused);
                 }
@@ -7763,9 +7884,8 @@ export function ProjectView({
                   true,
                   { telemetryFinalized: true },
                 );
-                if (deliveryOutcome === 'no_result' || deliveryOutcome === 'delivery_failed') {
-                  setError(artifactPersistenceError ?? DESIGN_RESULT_MISSING_DETAIL);
-                }
+                // P0-24 (PRD C7/C8, Q3): no pane-level failure card for a run that
+                // ended normally without a deliverable; the message keeps the outcome.
                 await auditDesignSystemWorkspaceAfterRun(message.id);
               })();
               onProjectsRefresh();
@@ -8046,7 +8166,7 @@ export function ProjectView({
                     updateMessageById(
                       message.id,
                       (prev) => ({
-                        ...prev,
+                        ...settleTurnFromRunRecord(prev),
                         runStatus: latestRunStatus.status,
                         endedAt: latestRunStatus.updatedAt,
                         ...(latestRunStatus.resumable !== undefined
@@ -9599,7 +9719,10 @@ export function ProjectView({
         if (ev.kind === 'live_artifact') {
           setLiveArtifactEvents((prev) => appendLiveArtifactEventItem(prev, ev));
           void refreshLiveArtifacts().then(() => {
-            if (ev.action !== 'deleted') requestOpenFile(liveArtifactTabId(ev.artifactId));
+            if (ev.action !== 'deleted' && !userTookOverPreviewRef.current) {
+              completionSelectedAutoOpen = true;
+              requestOpenFile(liveArtifactTabId(ev.artifactId));
+            }
           });
           onProjectsRefresh();
           return;
@@ -9886,17 +10009,18 @@ export function ProjectView({
             !liveHtml.trim();
           if (emptyApiResponse) {
             const endedAt = Date.now();
-            const diagnostic = t('assistant.emptyResponseMessage');
+            // P0-24 Q6 (same as P7): a model stream that ends with no reply is a
+            // normal end, not a failure. The turn keeps the `empty_response`
+            // marker other logic reads, without a 运行失败 body text.
             updateMessageById(
               assistantId,
               (prev) => ({
                 ...prev,
                 endedAt,
-                runStatus: 'failed',
+                runStatus: 'succeeded',
                 events: [
                   ...(prev.events ?? []),
                   { kind: 'status', label: 'empty_response', detail: config.model },
-                  { kind: 'text', text: diagnostic },
                 ],
               }),
               true,
@@ -9908,7 +10032,7 @@ export function ProjectView({
               controller,
               cancelController,
             );
-            if (ownsCurrentRun) updateConversationLatestRun('failed', endedAt);
+            if (ownsCurrentRun) updateConversationLatestRun('succeeded', endedAt);
             void refreshProjectFiles().catch(() => {
               // Retain the last accepted file list while the daemon recovers.
             });
@@ -10061,7 +10185,7 @@ export function ProjectView({
               // `turnArtifacts.focused` is byte-for-byte the old
               // `selectAutoOpenTurnArtifact` answer, so the focused tab below
               // is decided exactly as it was before; only `.open` is new.
-              const turnArtifacts = selectAutoOpenTurnArtifacts(produced, nextFiles, {
+              const turnArtifacts = withLiveArtifactDeliveries(selectAutoOpenTurnArtifacts(produced, nextFiles, {
                 ...autoOpenArtifactOptions,
                 preTurnFileNames: beforeFileNames,
                 turnStartedAt: startedAt,
@@ -10075,9 +10199,11 @@ export function ProjectView({
                   project.id,
                   projectDetail.resolvedDir,
                 ),
-              });
+              }), latestAssistantMsg.events);
               const turnArtifactToOpen = turnArtifacts.focused;
-              const producedArtifactToOpen = selectAutoOpenProducedArtifact(
+              const producedArtifactToOpen = turnArtifactToOpen && isLiveArtifactTabId(turnArtifactToOpen)
+                ? turnArtifactToOpen
+                : selectAutoOpenProducedArtifact(
                 [
                   ...provenTraceTouchedFiles(),
                   ...(turnArtifactToOpen
@@ -10137,7 +10263,9 @@ export function ProjectView({
                 return updated;
               });
               if (deliveryOutcome === 'no_result' || deliveryOutcome === 'delivery_failed') {
-                setError(artifactPersistenceError ?? DESIGN_RESULT_MISSING_DETAIL);
+                // P0-24 (PRD C7/C8, Q3): a run that ended normally but delivered no
+                // file is not a failure, so no pane-level failure card. The outcome stays
+                // recorded on the message (resultDeliveryState), as Q3 accepted.
                 releaseCommentsAfterUnsuccessfulRun(runSavedComments);
               }
               await auditDesignSystemWorkspaceAfterRun(assistantId);
@@ -10383,7 +10511,7 @@ export function ProjectView({
                   if (runMayFinalize) {
                     if (latestRunStatus.status === 'canceled') setError(null);
                     updateAssistant((prev) => ({
-                      ...prev,
+                      ...settleTurnFromRunRecord(prev),
                       endedAt: latestRunStatus.updatedAt,
                       runStatus: latestRunStatus.status,
                       ...(latestRunStatus.resumable !== undefined
@@ -10645,6 +10773,7 @@ export function ProjectView({
               ...(strategyTaskExecutionId ? {
                 strategyTaskExecutionId,
                 strategyTaskRunIndex: strategyTaskRunIndex(strategyTask, runId),
+                ...(strategySettledMessageFields(strategyTask) ?? {}),
               } : {}),
               ...(isTaskSuccessor
                 ? {
@@ -10670,6 +10799,7 @@ export function ProjectView({
               ...(strategyTaskExecutionId ? {
                 strategyTaskExecutionId,
                 strategyTaskRunIndex: strategyTaskRunIndex(strategyTask, runId),
+                ...(strategySettledMessageFields(strategyTask) ?? {}),
               } : {}),
               ...(isTaskSuccessor
                 ? {
@@ -10867,6 +10997,13 @@ export function ProjectView({
             recoveryActionType: taskAnalytics.recoveryActionType,
             recoveryActionInstanceId: taskAnalytics.recoveryActionInstanceId,
           },
+          onStrategyTaskSettled: (strategyTask) => {
+            const settledFields = strategySettledMessageFields(strategyTask);
+            if (!settledFields) return;
+            latestAssistantMsg = {...latestAssistantMsg, ...settledFields,
+              taskDisplay:newerTaskDisplay(latestAssistantMsg.taskDisplay,strategyTask.display)};
+            updateMessageById(assistantId, prev => ({...prev,...settledFields}), true);
+          },
           onRunCreated: (runId, strategyTask) => {
             observeMemoryRun(project.id, runConversationId, assistantId, runId);
             manualFileWriteRegistration.bindRun(runId);
@@ -10890,6 +11027,7 @@ export function ProjectView({
               ...(strategyTaskExecutionId ? {
                 strategyTaskExecutionId,
                 strategyTaskRunIndex: strategyTaskRunIndex(strategyTask, runId),
+                ...(strategySettledMessageFields(strategyTask) ?? {}),
               } : {}),
               ...(isTaskSuccessor
                 ? {
@@ -10911,6 +11049,7 @@ export function ProjectView({
               ...(strategyTaskExecutionId ? {
                 strategyTaskExecutionId,
                 strategyTaskRunIndex: strategyTaskRunIndex(strategyTask, runId),
+                ...(strategySettledMessageFields(strategyTask) ?? {}),
               } : {}),
               ...(isTaskSuccessor
                 ? {
@@ -11252,12 +11391,17 @@ export function ProjectView({
       handleStop();
       return;
     }
+    setQueuedChatSendStarting(id, true);
     void (async () => {
-      armSlideNavForQueuedSend(item);
-      const started = await startQueuedChatSend(item);
-      if (started) removeQueuedChatSend(id);
+      try {
+        armSlideNavForQueuedSend(item);
+        const started = await startQueuedChatSend(item);
+        if (started) removeQueuedChatSend(id);
+      } finally {
+        setQueuedChatSendStarting(id, false);
+      }
     })();
-  }, [armSlideNavForQueuedSend, currentConversationBusy, handleStop, prioritizeQueuedChatSend, removeQueuedChatSend, startQueuedChatSend]);
+  }, [armSlideNavForQueuedSend, currentConversationBusy, handleStop, prioritizeQueuedChatSend, removeQueuedChatSend, setQueuedChatSendStarting, startQueuedChatSend]);
 
   /*
    * B11 「引导对话」 —— 队列行领头那颗按钮走的就是上面的
@@ -11310,9 +11454,11 @@ export function ProjectView({
     );
     if (!next) return;
     startingQueuedChatSendIdRef.current = next.id;
+    setQueuedChatSendStarting(next.id, true);
     armSlideNavForQueuedSend(next);
     void (async () => {
       const started = await startQueuedChatSend(next);
+      if (!started) setQueuedChatSendStarting(next.id, false);
       if (!started) {
         if (startingQueuedChatSendIdRef.current === next.id) {
           startingQueuedChatSendIdRef.current = null;
@@ -11320,6 +11466,7 @@ export function ProjectView({
         return;
       }
       removeQueuedChatSend(next.id);
+      setQueuedChatSendStarting(next.id, false);
       scheduleProjectTimeout(() => {
         if (startingQueuedChatSendIdRef.current !== next.id) return;
         startingQueuedChatSendIdRef.current = null;
@@ -11337,6 +11484,7 @@ export function ProjectView({
     startQueuedChatSend,
     removeQueuedChatSend,
     scheduleProjectTimeout,
+    setQueuedChatSendStarting,
   ]);
 
   /*
@@ -12125,8 +12273,12 @@ export function ProjectView({
     projectMutationReadOnly,
   ]);
 
-  const handleSelectConversation = useCallback((id: string) => {
+  const handleSelectConversation = useCallback((id: string, measureNavigation = true) => {
     if (id === activeConversationId && failedMessagesConversationId !== id) return;
+    const navigationId = measureNavigation ? observeNavigation(() => navigationTiming.begin(
+      { kind: 'project', projectId: project.id, conversationId: activeConversationId },
+      { projectId: project.id, conversationId: id },
+    )) : null;
     setMessages([]);
     commitPreviewComments([]);
     setAttachedComments([]);
@@ -12153,7 +12305,11 @@ export function ProjectView({
         conversationId: id,
         fileName: openTabsState.active ?? null,
       },
-      { replace: true },
+      {
+        replace: true,
+        onCommit: () => { if (navigationId) observeNavigation(() => navigationTiming.commit(navigationId)); },
+        onCancel: reason => { if (navigationId) observeNavigation(() => navigationTiming.finish(navigationId, 'cancelled', reason)); },
+      },
     );
     setMessageLoadRetryNonce((nonce) => nonce + 1);
   }, [activeConversationId, commitPreviewComments, failedMessagesConversationId, project.id, openTabsState.active]);
@@ -13082,7 +13238,11 @@ export function ProjectView({
     let isAutoSend = false;
     let amrGateWitness: AmrBalanceGateScope | undefined;
     try {
-      isAutoSend = Boolean(
+      // A Home send mounts this view before App has written the auto-send
+      // keys (they follow the create and the uploads, OPEND-3334). Its prompt
+      // is the first message, never a composer draft; the dispatch below
+      // still waits for the flag and re-reads the session values live.
+      isAutoSend = creationHandoff !== null || Boolean(
         window.sessionStorage.getItem(autoSendFirstMessageKey(project.id)),
       );
       amrGateWitness = readAutoSendAmrGateWitness(project.id);
@@ -13094,7 +13254,7 @@ export function ProjectView({
       ? amrGateWitness
       : undefined;
     autoSendSeedRef.current = isAutoSend
-      ? (readAutoSendPrompt(project.id) ?? project.pendingPrompt ?? '')
+      ? (readAutoSendPrompt(project.id) ?? creationHandoff?.prompt ?? project.pendingPrompt ?? '')
       : '';
     autoSendAttachmentsRef.current = isAutoSend ? readAutoSendAttachments(project.id) : [];
     autoSendContextRef.current = isAutoSend ? readAutoSendContext(project.id) : null;
@@ -13128,6 +13288,8 @@ export function ProjectView({
       : { projectId: project.id, value: project.pendingPrompt },
   );
   useEffect(() => {
+    // Clearing it is a write to the project row, which does not exist yet.
+    if (projectReadsHeld) return;
     const pendingPrompt = project.pendingPrompt;
     if (!pendingPrompt) return;
     if (autoSendFirstMessageRef.current) {
@@ -13141,7 +13303,7 @@ export function ProjectView({
         : { projectId: project.id, value: pendingPrompt },
     );
     onClearPendingPrompt();
-  }, [project.id, project.pendingPrompt, onClearPendingPrompt]);
+  }, [project.id, project.pendingPrompt, projectReadsHeld, onClearPendingPrompt]);
   const chatInitialDraft =
     chatSeed?.value ??
     (
@@ -13223,7 +13385,7 @@ export function ProjectView({
           returnedConversationId !== activeConversationId
           || failedMessagesConversationId === returnedConversationId
         ) {
-          handleSelectConversation(returnedConversationId);
+          handleSelectConversation(returnedConversationId, false);
         } else {
           scheduleConversationMessageRefresh(returnedConversationId);
         }
@@ -13713,16 +13875,59 @@ export function ProjectView({
     return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
   }, [designMdState.exists, handleContinueInCli]);
 
-  // OPEND-2170: the hand-off card App keeps over this column comes down only
-  // once the column has something real to show — the auto-sent turn painted,
-  // or a transcript that is loaded and has nothing to send, or a load that
-  // failed (the error surface is the real thing then). Fired once per mount;
-  // App owns the fallback deadline, so a send parked behind a gate dialog
-  // cannot pin the card forever.
-  const creationHandoffActive = creationHandoff !== null;
+  // The optimistic first turn of a Home send belongs to this view, not to
+  // App's creation record (OPEND-3334). It is captured at mount and retired
+  // only when the column no longer needs it: the real turn owns the rows, the
+  // auto-send was turned down, or nothing is going to be sent. App's record
+  // has its own cleanup deadline; tying the turn to it made the turn vanish
+  // whenever the Home uploads outlived that deadline, and come back when
+  // they finished.
+  const [optimisticFirstTurn, setOptimisticFirstTurn] = useState<{
+    prompt: string;
+    files?: readonly File[];
+  } | null>(() => (creationHandoff
+    ? { prompt: creationHandoff.prompt, files: creationHandoff.files }
+    : null));
+  // The seed conversation's id, minted with the project. Kept for the life of
+  // the view: the pane is keyed by it from the first frame, so the
+  // conversation list answering (or the record being released) never re-keys
+  // it.
+  const [seedConversationId] = useState(() => creationHandoff?.conversationId ?? null);
+  // Until the auto-sent turn is on screen the transcript is empty, but the
+  // turn's first frame is already known: ChatPane draws it from these two
+  // optimistic messages with its own components, so the real turn takes over
+  // the same rows (OPEND-3334). Any real message wins at once.
+  const creationHandoffMessageIds = useMemo(() => {
+    const identity = homeAutoSendIdentity(project.id);
+    return { user: identity.userMessageId!, assistant: identity.assistantMessageId! };
+  }, [project.id]);
+  const creationHandoffMessages = useCreationHandoffMessages(
+    optimisticFirstTurn,
+    selectedAssistantIdentity,
+    creationHandoffMessageIds,
+  );
+  const creationHandoffTurnShown = optimisticFirstTurn !== null && messages.length === 0;
+  const chatPaneConversationKey =
+    activeConversationId
+    ?? seedConversationId
+    ?? 'conversation-unavailable';
+  // A project born from the Home send starts with no files, and the pending
+  // frame already drew the empty state. Keep drawing it (inert) until the
+  // first listing is accepted instead of flipping to "Loading…" in between;
+  // the authority gate itself is untouched, so no CTA acts before that read
+  // (Home attachments are still uploading then). An imported working folder
+  // may hold files, so it keeps the honest loading state.
+  const [emptyLookBeforeFirstListing] = useState(
+    () => creationHandoff !== null && !project.metadata?.baseDir,
+  );
+  const ignoreStopBeforeFirstRun = useCallback(() => undefined, []);
+  // OPEND-2170: the first turn is settled once the column has something real
+  // to show — the auto-sent turn painted, a loaded transcript with nothing to
+  // send, or a load that failed (the error surface is the real thing then).
+  // Then the optimistic turn retires and App may release its record.
   const creationHandoffSettledRef = useRef(false);
   useEffect(() => {
-    if (!creationHandoffActive || creationHandoffSettledRef.current) return;
+    if (optimisticFirstTurn === null || creationHandoffSettledRef.current) return;
     const transcriptLoaded =
       Boolean(activeConversationId)
       && messagesConversationId === activeConversationId
@@ -13741,20 +13946,38 @@ export function ProjectView({
       );
     if (!(transcriptFailed || (transcriptLoaded && (firstTurnPainted || nothingToSend)))) return;
     creationHandoffSettledRef.current = true;
+    setOptimisticFirstTurn(null);
     onCreationHandoffSettled?.(project.id);
   }, [
     activeConversationId,
     conversationLoadError,
-    creationHandoffActive,
     failedMessagesConversationId,
     homeAttachmentUploads.length,
     messages.length,
     messagesConversationId,
     messagesInitialized,
     onCreationHandoffSettled,
+    optimisticFirstTurn,
     project.id,
     projectIsProgrammaticBrandExtraction,
   ]);
+  // App released its record without the first turn settling here. The turn
+  // still stands while the Home uploads are going up (the send follows them)
+  // or while the auto-send keys are written (the send is coming). With
+  // neither, nothing will be sent — e.g. the working-directory hand-off
+  // failed after the create — and the turn must not stand as "Working".
+  useEffect(() => {
+    if (optimisticFirstTurn === null || creationHandoff !== null) return;
+    if (homeAttachmentUploads.length > 0) return;
+    let sendPending = false;
+    try {
+      sendPending = Boolean(window.sessionStorage.getItem(autoSendFirstMessageKey(project.id)));
+    } catch {
+      sendPending = false;
+    }
+    if (sendPending) return;
+    setOptimisticFirstTurn(null);
+  }, [creationHandoff, homeAttachmentUploads.length, optimisticFirstTurn, project.id]);
 
   // PluginLoopHome auto-send: when the user submits on Home, app.tsx
   // sets `sessionStorage['od:auto-send-first:<projectId>']` and routes
@@ -13829,6 +14052,15 @@ export function ProjectView({
     if (!seed && attachments.length === 0) {
       return;
     }
+    // A view mounted from the click read no witness (App writes it after the
+    // create); read it now so Home's gate decision is still reused.
+    if (autoSendAmrGateWitnessRef.current === undefined) {
+      try {
+        autoSendAmrGateWitnessRef.current = readAutoSendAmrGateWitness(project.id);
+      } catch {
+        /* sessionStorage may be unavailable; handleSend runs its own gate. */
+      }
+    }
     const autoSendGateStillMatches =
       autoSendAmrGateWitnessRef.current !== undefined &&
       amrBalanceGateScopesMatch(
@@ -13846,6 +14078,10 @@ export function ProjectView({
       })
       .then((accepted) => {
         if (!accepted) {
+          // The turn was turned down (a preflight block, a scope transition):
+          // the optimistic turn must not keep claiming it is running. A later
+          // retry paints the real turn itself.
+          setOptimisticFirstTurn(null);
           // The handoff was not accepted (for example a transient project
           // scope/conversation transition or a recoverable preflight block).
           // Keep every session value intact; a later dependency change can
@@ -13862,6 +14098,7 @@ export function ProjectView({
         autoSendInFlightRef.current = false;
       })
       .catch(() => {
+        setOptimisticFirstTurn(null);
         // `handleSend` normally reports a rejected preflight as `false`, but
         // transport/provider setup may still throw. Preserve the handoff for a
         // later retry instead of silently consuming the user's first prompt.
@@ -13962,12 +14199,9 @@ export function ProjectView({
     </>
   );
 
-  // The `.app` shell belongs to the caller, not to this component. App.tsx
-  // renders the same `div.app` around both this view and
-  // ProjectCreationPendingView so React reconciles one element across the
-  // hand-off. Owning the shell here would make each view mount its own
-  // element and replay the `.app` entrance animation, which reads as the
-  // project frame flashing twice on the way in from Home.
+  // The `.app` shell belongs to the caller, not to this component: App.tsx
+  // owns the `div.app` around every project-route surface, so switching
+  // between them never replays the `.app` entrance animation.
   return (
     <CollabProvider value={collabValue}>
       <CritiqueTheaterMount
@@ -13985,12 +14219,17 @@ export function ProjectView({
           resizingChatPanel && !workspaceFocused ? 'is-resizing-chat' : '',
         ].filter(Boolean).join(' ')}
         style={projectSplitStyle(workspaceFocused, splitLeftPanelWidth, workspacePanelTrack)}
+        // A Home send's creation phase, for tests and diagnostics: `pending`
+        // while the project row does not exist yet (reads held), `persisted`
+        // until the first transcript settles, absent otherwise.
+        data-creation-phase={
+          creationHandoff ? (creationHandoff.persisted ? 'persisted' : 'pending') : undefined
+        }
       >
         <div
           className={[
             'split-chat-slot',
             chatSlotHidden ? 'split-chat-slot-hidden' : '',
-            creationHandoffActive ? 'split-chat-slot--creation-handoff' : '',
           ].filter(Boolean).join(' ')}
           aria-hidden={chatSlotHidden || undefined}
         >
@@ -14025,16 +14264,23 @@ export function ProjectView({
               </button>
             </div>
           ) : null}
-          {activeConversationId || conversationLoadError || emptyConversationReadOnlySettled ? (
+          {activeConversationId || conversationLoadError || emptyConversationReadOnlySettled || seedConversationId !== null ? (
             <ChatPane
               historyPortalTarget={historyPortalTarget}
-              composerLayerHidden={creationHandoffActive}
               // The conversation id is part of the key so switching conversations
               // resets internal scroll/draft state inside ChatPane and ChatComposer.
-              key={`${project.id}:${activeConversationId ?? 'conversation-unavailable'}:${chatSeed?.id ?? 'ready'}`}
-              messages={messages}
-              streaming={currentConversationControlStreaming}
-              loading={currentConversationLoading}
+              key={`${project.id}:${chatPaneConversationKey}:${chatSeed?.id ?? 'ready'}`}
+              // The optimistic first turn carries the auto-send's ids, so the
+              // real rows take over these rows in place (OPEND-3334).
+              messages={creationHandoffTurnShown ? creationHandoffMessages : messages}
+              // The optimistic turn is a running turn: the composer shows the
+              // same stop control the auto-sent turn will, so it does not swap
+              // at the hand-off. There is no run to stop yet.
+              streaming={currentConversationControlStreaming || creationHandoffTurnShown}
+              // The optimistic turn is the column's content while the first
+              // transcript loads; a skeleton under it would be a second
+              // loading form (OPEND-2170).
+              loading={currentConversationLoading && !creationHandoffTurnShown}
               // A read-only viewer of a team-shared project cannot drive artifact
               // changes through chat (comments go through the separate overlay).
               // Home's own prompt has not gone out yet — it is waiting for this
@@ -14111,7 +14357,7 @@ export function ProjectView({
               onConsumeAmrAuthRetryContinuation={onConsumeAmrAuthRetryContinuation}
               onDiscardAmrAuthRetryContinuation={onDiscardAmrAuthRetryContinuation}
               onResumeRun={handleResumeRun}
-              onStop={handleStop}
+              onStop={creationHandoffTurnShown ? ignoreStopBeforeFirstRun : handleStop}
               // 组件 22 · 重连 · S29:掉线时流水的最后一行。按当前会话过一道 ——
               // 后台重挂可能发生在别的会话上,那一行不该串进这一屏。
               reconnect={reconnectViewForConversation(reconnectView, activeConversationId)}
@@ -14258,7 +14504,9 @@ export function ProjectView({
               // The Home batch, drawn from the local bytes while it uploads.
               // Same tray, same cards, same "uploading" treatment the composer
               // already gives files picked from inside the project.
-              homeAttachmentUploads={homeAttachmentUploads}
+              // The optimistic turn already shows the staged files as the
+              // message's attachments; the tray would show them twice.
+              homeAttachmentUploads={creationHandoffTurnShown ? undefined : homeAttachmentUploads}
               onDismissHomeAttachmentUpload={(cardId) =>
                 dismissHomeAttachmentUpload(project.id, cardId)}
               chatLogTray={
@@ -14316,22 +14564,11 @@ export function ProjectView({
                 />
               )}
             />
-          ) : creationHandoffActive ? null : (
+          ) : (
             <div className="pane" data-testid="chat-pane-loading">
               <CenteredLoader />
             </div>
           )}
-          {creationHandoff ? (
-            /* The hand-off card stays the column's visible pane until the
-               first transcript settles; ChatPane above keeps its layout
-               hidden underneath (see `.split-chat-slot--creation-handoff`). */
-            <ProjectCreationPendingChat
-              projectName={project.name}
-              prompt={creationHandoff.prompt}
-              files={creationHandoff.files}
-              agentId={config.agentId}
-            />
-          ) : null}
         </div>
         {/* The comment panel is a floating card over the workspace in EVERY
             state (per product: 任何状态下评论卡片都在这个位置). It used to dock
@@ -14372,6 +14609,8 @@ export function ProjectView({
           viewerOnly={projectMutationReadOnly}
           materializationPending={projectCollab.materializationPending}
           filesAuthoritative={committedFilesGeneration > 0}
+          emptyLookBeforeFirstListing={emptyLookBeforeFirstListing}
+          projectReadsHeld={projectReadsHeld}
           readonlyNotice={
             projectCollab.materializationPending
               ? t('designFiles.syncing')

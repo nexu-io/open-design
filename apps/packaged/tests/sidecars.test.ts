@@ -15,6 +15,8 @@
  * @see apps/daemon/src/legacy-data-migrator.ts
  * @see https://github.com/nexu-io/open-design/issues/710
  */
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { EventEmitter } from 'node:events';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -25,6 +27,7 @@ import type { SidecarStamp } from '@open-design/sidecar';
 import { APP_KEYS } from '@open-design/sidecar-proto';
 
 import {
+  observeDaemonExit,
   buildPackagedDaemonSpawnEnv,
   closeManagedChild,
   createPackagedSidecarSpawnOptions,
@@ -548,6 +551,15 @@ describe('buildPackagedDaemonSpawnEnv', () => {
       updateRoot: '/tmp/od-pkg/updates',
     };
   }
+
+
+it('passes the original desktop attempt/session to the daemon before it starts', () => {
+  const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+    appVersion: '1.0.0-beta.1', daemonCliEntry: null, requireDesktopAuth: true,
+    launchContext: { app_session_id: 'session-1', launch_attempt_id: 'attempt-1' },
+  });
+  expect(env).toMatchObject({ OD_APP_SESSION_ID: 'session-1', OD_LAUNCH_ATTEMPT_ID: 'attempt-1', OD_APP_VERSION: '1.0.0-beta.1' });
+});
 
   it('uses the namespace runtime root for child processes without reading cwd', () => {
     const cwd = vi.spyOn(process, 'cwd').mockImplementation(() => {
@@ -1256,4 +1268,78 @@ describe('packaged sidecar log rotation', () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+});
+
+
+describe('ready daemon exit supervision', () => {
+  it.each([[null, 'SIGKILL', 'killed'], [null, 'SIGTERM', 'killed'], [7, null, 'crash'], [0, null, 'clean-exit']] as const)('observes runtime code=%s signal=%s once', async (code, signal, reason) => {
+    const child = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null });
+    const report = vi.fn(async () => {});
+    const observer = observeDaemonExit(child, report);
+    expect(observer.markReady()).toBe(true);
+    child.emit('exit', code, signal);
+    child.emit('exit', code, signal);
+    await observer.flush();
+    expect(report).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ exit_code: code, signal, reason, intentional: false,
+      occurred_at: expect.any(String) }));
+  });
+  it.each([137, 134, 143])('keeps a numeric supervisor exit %s a crash, not a signal (OPEND-4256)', async (code) => {
+    const child = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null });
+    const report = vi.fn(async () => {});
+    const observer = observeDaemonExit(child, report);
+    observer.markReady();
+    child.emit('exit', code, null);
+    await observer.flush();
+    expect(report).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ exit_code: code, signal: null,
+      reason: 'crash', intentional: false }));
+  });
+  it('marks intentional teardown before the signal arrives', async () => {
+    const child = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null });
+    const report = vi.fn(async () => {});
+    const observer = observeDaemonExit(child, report);
+    observer.markReady(); observer.beginShutdown(); child.emit('exit', null, 'SIGKILL');
+    await observer.flush();
+    expect(report).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ intentional: true, reason: 'clean-exit' }));
+  });
+  it('leaves startup deaths to startup reporting and refuses stale ready status', async () => {
+    const child = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null });
+    const report = vi.fn(async () => {});
+    const observer = observeDaemonExit(child, report);
+    child.emit('exit', null, 'SIGKILL');
+    expect(observer.markReady()).toBe(false);
+    await observer.flush(); expect(report).not.toHaveBeenCalled();
+  });
+});
+
+
+it.skipIf(process.platform === 'win32')('observes a real running child killed with SIGKILL exactly once', async () => {
+  const child = spawn(process.execPath, ['-e', "process.stdout.write('ready'); setInterval(() => {}, 1000)"]);
+  const report = vi.fn(async () => {});
+  const observer = observeDaemonExit(child, report);
+  try {
+    await once(child.stdout!, 'data');
+    observer.markReady();
+    const exited = once(child, 'exit');
+    child.kill('SIGKILL');
+    await exited; await observer.flush();
+    expect(report).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ reason: 'killed', signal: 'SIGKILL', exit_code: null }));
+  } finally { child.kill('SIGKILL'); }
+});
+
+
+it('marks forced shutdown and closes without waiting for an unresolved observation', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'od-intentional-close-'));
+  const child = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null });
+  const report = vi.fn(() => new Promise<void>(() => {}));
+  const observer = observeDaemonExit(child, report); observer.markReady();
+  try {
+    await closeManagedChild({ app: APP_KEYS.DAEMON, child, daemonExitObserver: observer,
+      logHandle: { close: async () => {} }, logPath: join(root, 'latest.log'), stamp: testStamp(),
+      generation: { stop: async () => {
+        child.emit('exit', null, 'SIGKILL');
+        return { forcedPids: [42], remainingPids: [] };
+      } },
+    } as unknown as Parameters<typeof closeManagedChild>[0]);
+    expect(report).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ reason: 'clean-exit', intentional: true }));
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });

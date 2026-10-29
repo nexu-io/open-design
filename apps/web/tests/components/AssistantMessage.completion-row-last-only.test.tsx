@@ -57,7 +57,7 @@ describe('settled assistant action row visibility markers', () => {
     expect(footerOf(container)?.getAttribute('data-last')).toBe('true');
   });
 
-  it('keeps a historical turn rendered for hover and keyboard focus reveal', () => {
+  it('keeps a historical turn rendered for hover and keyboard focus reveal, without the settled status word (P0-24)', () => {
     const { container } = render(
       <AssistantMessage
         message={finishedTurn('m-old')}
@@ -69,7 +69,7 @@ describe('settled assistant action row visibility markers', () => {
       />,
     );
     expect(footerOf(container)?.getAttribute('data-last')).toBe('false');
-    expect(screen.getByTestId('assistant-label')).toBeTruthy();
+    expect(screen.queryByTestId('assistant-label')).toBeNull();
     expect(screen.getByTestId('assistant-fork-button')).toBeTruthy();
   });
 

@@ -1,3 +1,5 @@
+import { createHash, randomUUID } from "node:crypto";
+import { classifyProcessExit } from "@open-design/contracts/analytics";
 import {
   clearReportedCrash,
   type DesktopCrashSummary,
@@ -30,13 +32,20 @@ export async function reportDesktopObservabilityEvent(
   discoverBaseUrl: () => Promise<string>,
   event: string,
   properties: Record<string, unknown>,
+  signal?: AbortSignal,
 ): Promise<boolean> {
   try {
     const baseUrl = await discoverBaseUrl();
     const res = await fetch(new URL("/api/observability/event", baseUrl).toString(), {
       method: "POST",
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(5000)]) : AbortSignal.timeout(5000),
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ event, properties }),
+      body: JSON.stringify({ event, properties: {
+        client_type: "desktop", capture_source: "desktop/observability",
+        platform: process.platform, arch: process.arch,
+        os_version: typeof process.getSystemVersion === "function" ? process.getSystemVersion() : null,
+        ...properties,
+      } }),
     });
     return res.ok;
   } catch {
@@ -54,13 +63,25 @@ export async function reportPriorDesktopUncleanExits(input: {
 }): Promise<void> {
   const clearReported = input.clearReported ?? clearReportedCrash;
   await Promise.all(
-    input.previousUncleanSessions.map(async (crash) => {
+    [...new Map(input.previousUncleanSessions.map(crash => [crash.sessionId, crash])).values()].map(async (crash) => {
+      const hints = describeHostEvents(crash.hostEvents ?? []);
+      // OS shutdown/logoff is an expected termination, never a proven crash.
+      const systemExit = ["system_shutdown", "user_logoff", "closed_by_system"].includes(String(hints.exit_hint));
       const reported = await input.report("desktop_unclean_exit", {
+        event_id: `desktop-exit-${createHash("sha256").update(crash.sessionId).digest("hex")}`,
+        app_session_id: crash.sessionId,
+        launch_attempt_id: crash.launchAttemptId ?? null,
+        app_version: crash.version,
+        previous_app_version: crash.version,
+        occurred_at: crash.lastObservedAt ?? crash.startedAt,
+        occurrence_time_source: crash.exitCode != null ? "observed" : crash.lastObservedAt ? "last_checkpoint" : "unknown",
+        exit_reason: crash.exitCode != null ? crash.exitCode === 0 ? "clean-exit" : "crash" : systemExit ? "clean-exit" : "unknown",
+        exit_code: crash.exitCode ?? null,
         previous_version: crash.version,
         previous_session_id: crash.sessionId,
         previous_started_at: crash.startedAt,
         current_version: input.currentVersion,
-        ...describeHostEvents(crash.hostEvents ?? []),
+        ...hints,
       });
       if (reported) clearReported({ stateFilePath: input.stateFilePath }, crash.sessionId);
     }),
@@ -80,6 +101,9 @@ export function attachDesktopChildProcessCrashReporter(
       exitCode: details.exitCode,
     });
     void report("desktop_child_process_crash", {
+      event_id: randomUUID(),
+      occurred_at: new Date().toISOString(),
+      exit_reason: classifyProcessExit(details.reason),
       process_type: details.type,
       reason: details.reason,
       exit_code: typeof details.exitCode === "number" ? details.exitCode : null,

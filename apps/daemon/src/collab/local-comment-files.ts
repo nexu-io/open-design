@@ -56,6 +56,12 @@ export function createLocalCommentFiles(db: Database.Database) {
     }
     return ensureWorkspaceArtifactForPath(db, { projectId, path: filePath, kind: 'html' }).id;
   }
+  function needsCatalogIdentity(projectId: string, filePath: string): boolean {
+    assertCommentFileNotPending(db, projectId, { filePath });
+    const state = parseCommentFileState(getProject(db, projectId)?.metadata?._commentFiles);
+    // An existing or retired local lifetime must never adopt another identity.
+    return !state?.files.some(fact => fact.sourceFilePath === filePath);
+  }
   async function admit(input: {
     projectId: string; workspaceId: string; creatorMemberId: string; resourceId: string; versionId: string;
     paths: Array<{ sourceFilePath: string; entryPath: string; sourceFileId?: string }>; run: typeof runVelaCommand;
@@ -131,5 +137,5 @@ export function createLocalCommentFiles(db: Database.Database) {
   }) {
     await retireMany({ ...input, facts: [input.fact] });
   }
-  return { identity, admit, retire, retireMany };
+  return { identity, needsCatalogIdentity, admit, retire, retireMany };
 }

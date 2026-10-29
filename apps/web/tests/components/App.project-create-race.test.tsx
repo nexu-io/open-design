@@ -2,6 +2,7 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useEffect } from 'react';
+import { installMockOpenDesignHost } from '@open-design/host/testing';
 
 import { navigate } from '../../src/router';
 import {
@@ -12,6 +13,8 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../../src/App';
+import { navigationTiming } from '../../src/observability/navigation-timing';
+import { reportSafetyEvent } from '../../src/analytics/error-tracking';
 import { notifyAmrLoginStatusChanged } from '../../src/components/amrLoginPolling';
 import type { ShareLoginReturn } from '../../src/components/share/share-login-return';
 import type {
@@ -127,6 +130,11 @@ vi.mock('../../src/components/IframeKeepAlivePool', async (importOriginal) => ({
     subscribe: vi.fn(() => () => {}),
     revision: vi.fn(() => 0),
   }),
+}));
+
+vi.mock('../../src/analytics/error-tracking', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../src/analytics/error-tracking')>(),
+  reportSafetyEvent: vi.fn(),
 }));
 
 vi.mock('../../src/components/EntryView', () => ({
@@ -408,6 +416,7 @@ vi.mock('../../src/components/ProjectView', () => ({
     onOpenAmrSettings,
     onOpenSettings,
     workspaceContextOverride,
+    creationHandoff,
     onCreationHandoffSettled,
     shareLoginReturn,
     onShareLoginReturnChange,
@@ -447,15 +456,18 @@ vi.mock('../../src/components/ProjectView', () => ({
     onOpenAmrSettings?: () => void;
     onOpenSettings?: () => void;
     workspaceContextOverride?: WorkspaceCollabContext | null;
+    creationHandoff?: { conversationId?: string | null; persisted: boolean } | null;
     onCreationHandoffSettled?: (projectId: string) => void;
     shareLoginReturn?: ShareLoginReturn | null;
     onShareLoginReturnChange?: (request: ShareLoginReturn | null) => void;
   }) => {
-    // The real view releases the hand-off card once its first transcript
-    // settles; the stand-in has no transcript, so it settles on mount.
+    // The real view releases the creation record once its first transcript
+    // settles, which needs reads that wait for the create; the stand-in has
+    // no transcript, so it settles as soon as the project is persisted.
+    const creationPersisted = creationHandoff?.persisted ?? true;
     useEffect(() => {
-      onCreationHandoffSettled?.(project.id);
-    }, [onCreationHandoffSettled, project.id]);
+      if (creationPersisted) onCreationHandoffSettled?.(project.id);
+    }, [creationPersisted, onCreationHandoffSettled, project.id]);
     projectViewRetryScopeHarness.latest = {
       context: workspaceContextOverride ?? null,
       continuation: amrAuthRetryContinuation ?? null,
@@ -477,6 +489,9 @@ vi.mock('../../src/components/ProjectView', () => ({
           : 'none'}
       </span>
       <span data-testid="project-route-conversation">{routeConversationId ?? 'none'}</span>
+      <span data-testid="project-creation-phase">
+        {creationHandoff ? (creationHandoff.persisted ? 'persisted' : 'pending') : 'none'}
+      </span>
       <span data-testid="project-auth-continuation">
         {amrAuthRetryContinuation?.assistantId ?? 'none'}
       </span>
@@ -856,6 +871,7 @@ function stubWorkspaceContext(
 
 describe('App project creation routing', () => {
   beforeEach(() => {
+    navigationTiming.cancel('page_exit');
     resetCoalescedGet();
     resetWorkspaceContextCache();
     resetTeamProjectsCache();
@@ -933,6 +949,7 @@ describe('App project creation routing', () => {
 
   afterEach(() => {
     cleanup();
+    navigationTiming.cancel('page_exit');
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
@@ -942,6 +959,54 @@ describe('App project creation routing', () => {
     resetCoalescedGet();
     workspaceInvalidationHarness.handlers.length = 0;
     workspaceInvalidationHarness.onActive.length = 0;
+  });
+
+  it('declares Home business Ready after successful empty required catalogs', async () => {
+    mockedListProjects.mockResolvedValue([]);
+    const signal = vi.fn(async (_value: { readiness_point?: string }) => true);
+    const restore = installMockOpenDesignHost({ host: {
+      startup: { context: async () => ({ launch_attempt_id: 'launch', app_session_id: 'session' }), signal },
+    } });
+    try {
+      render(<App />);
+      await waitFor(() => expect(signal).toHaveBeenCalledWith(expect.objectContaining({ readiness_point: 'interactive_ready' })));
+    } finally { restore(); }
+  });
+
+  it.each(['projects', 'agents', 'config', 'skills', 'designTemplates', 'designSystems', 'promptTemplates'] as const)('does not declare Home business Ready when required %s fail', async (resource) => {
+    mockedListProjects.mockResolvedValue([]);
+    if (resource === 'projects') mockedListProjects.mockRejectedValue(new Error('catalog unavailable'));
+    else if (resource === 'agents') mockedFetchAgentsStream.mockRejectedValue(new Error('agents unavailable'));
+    else if (resource === 'config') mockedFetchDaemonConfig.mockResolvedValue(null);
+    else {
+      // Exercise the actual provider's failure semantics with the App readiness
+      // gates; a mocked rejected promise misses providers that swallow failures.
+      const actual = await vi.importActual<typeof import('../../src/providers/registry')>('../../src/providers/registry');
+      if (resource === 'skills') mockedFetchSkills.mockImplementation(actual.fetchSkills);
+      if (resource === 'designTemplates') mockedFetchDesignTemplates.mockImplementation(actual.fetchDesignTemplates);
+      if (resource === 'designSystems') mockedFetchDesignSystems.mockImplementation(actual.fetchDesignSystems);
+      if (resource === 'promptTemplates') mockedFetchPromptTemplates.mockImplementation(actual.fetchPromptTemplates);
+      const endpoint = { skills: '/api/skills', designTemplates: '/api/design-templates', designSystems: '/api/design-systems', promptTemplates: '/api/prompt-templates' }[resource];
+      vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => (
+        new URL(String(input), 'http://d.local').pathname === endpoint
+          ? new Response('', { status: 503 }) : Response.json({})
+      )));
+    }
+    const signal = vi.fn(async (_value: { readiness_point?: string }) => true);
+    const restore = installMockOpenDesignHost({ host: {
+      startup: { context: async () => ({ launch_attempt_id: 'launch', app_session_id: 'session' }), signal },
+    } });
+    try {
+      render(<App />);
+      if (resource !== 'config') {
+        await waitFor(() => expect(signal).toHaveBeenCalledWith(expect.objectContaining({ readiness_point: 'first_visible' })));
+      } else {
+        await waitFor(() => expect(mockedFetchDaemonConfig).toHaveBeenCalled());
+      }
+      await act(async () => { await new Promise<void>(resolve => requestAnimationFrame(() => resolve())); });
+      await act(async () => { await new Promise<void>(resolve => requestAnimationFrame(() => resolve())); });
+      expect(signal.mock.calls.some(([value]) => value.readiness_point === 'interactive_ready')).toBe(false);
+    } finally { restore(); }
   });
 
   it('routes mutations and limits global focus catch-up to Skills and Design Systems', async () => {
@@ -986,7 +1051,7 @@ describe('App project creation routing', () => {
         workspaceId: context.workspaceId,
         workspaceMemberId: context.workspaceMemberId,
       }),
-      { forceTeamMaterialization: true },
+      { forceTeamMaterialization: true, onReadResult: expect.any(Function) },
     );
     expect(mockedFetchSkills).toHaveBeenCalledTimes(1);
 
@@ -1313,28 +1378,35 @@ describe('App project creation routing', () => {
     );
   });
 
-  it('enters the project preparing surface before Home project creation settles', async () => {
+  it('mounts the one project view on the click and keeps it through the create (OPEND-3334)', async () => {
     mockedListProjects.mockResolvedValue([]);
     const creation = deferred<{
       project: Project;
       conversationId: string;
     }>();
     let requestedProjectId: string | undefined;
+    let requestedConversationId: string | undefined;
     mockedCreateProject.mockImplementation((input) => {
       requestedProjectId = (input as typeof input & { id?: string }).id;
+      requestedConversationId = (input as typeof input & { conversationId?: string }).conversationId;
       return creation.promise;
     });
 
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Create prompted project' }));
 
-    await screen.findByTestId('project-creation-pending-view');
+    const view = await screen.findByTestId('project-view');
     expect(requestedProjectId).toBeTruthy();
-    expect(window.location.pathname).toBe(`/projects/${requestedProjectId}`);
-    expect(screen.getByText('Build the retained artifact prompt')).toBeTruthy();
-    expect(screen.getByText('Preparing...')).toBeTruthy();
+    // The seed conversation is minted with the project and sent with the
+    // create, so the route names it from the first frame.
+    expect(requestedConversationId).toBeTruthy();
+    expect(window.location.pathname).toBe(
+      `/projects/${requestedProjectId}/conversations/${requestedConversationId}`,
+    );
+    expect(screen.getByTestId('project-route-conversation').textContent).toBe(requestedConversationId);
+    // Reads are held until the create answers.
+    expect(screen.getByTestId('project-creation-phase').textContent).toBe('pending');
     expect(screen.queryByTestId('entry-home-surface')).toBeNull();
-    expect(screen.queryByTestId('project-view')).toBeNull();
 
     creation.resolve({
       project: {
@@ -1343,21 +1415,23 @@ describe('App project creation routing', () => {
         name: 'Prompted project',
         pendingPrompt: 'Build the retained artifact prompt',
       },
-      conversationId: 'conv-new',
+      conversationId: requestedConversationId!,
     });
 
-    await screen.findByTestId('project-view');
-    expect(window.location.pathname).toBe(`/projects/${requestedProjectId}`);
+    await waitFor(() => {
+      expect(screen.getByTestId('project-creation-phase').textContent).not.toBe('pending');
+    });
+    // Same instance: the create answering does not replace the view.
+    expect(screen.getByTestId('project-view')).toBe(view);
+    expect(screen.getByTestId('project-title').textContent).toBe('Prompted project');
   });
 
-  it('draws the staged Home attachments on the preparing surface without reading the project', async () => {
-    // The bytes are already in the browser: the user picked those files on
-    // Home and they are still `File` objects in memory. Showing them costs no
-    // request, so the first project frame must not read as an empty project.
-    //
-    // The guard half of this spec is the reason the preparing surface exists:
-    // the optimistic project is not persisted or authorized yet, so NOTHING
-    // project-scoped may go out until POST /api/projects answers.
+  it('reads and uploads nothing project-scoped before the create answers', async () => {
+    // The optimistic project is not persisted or authorized yet, so NOTHING
+    // project-scoped may go out until POST /api/projects answers. The view is
+    // mounted from the click; it holds its reads on the creation phase. (The
+    // staged files are drawn from local bytes by the optimistic first turn;
+    // see w93-2585-pending-surface-attachments.)
     mockedListProjects.mockResolvedValue([]);
     const creation = deferred<{ project: Project; conversationId: string }>();
     let requestedProjectId: string | undefined;
@@ -1369,17 +1443,8 @@ describe('App project creation routing', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Create prompted project' }));
 
-    await screen.findByTestId('project-creation-pending-view');
-
-    const attachmentRow = screen.getByTestId('pending-attachment-row');
-    expect(attachmentRow.textContent).toContain('brief');
-    expect(attachmentRow.textContent).toContain('.txt');
-
-    // Same shell as the frame that replaces it: the workspace tab strip docks
-    // above the chat card, and the design-files column shows the centred empty
-    // pill instead of a top-left caption.
-    expect(screen.getByTestId('workspace-tabs-dock')).toBeTruthy();
-    expect(screen.getByTestId('pending-design-files-empty').className).toContain('df-empty');
+    await screen.findByTestId('project-view');
+    expect(screen.getByTestId('project-creation-phase').textContent).toBe('pending');
 
     // Exact call comparison, not `not.toHaveBeenCalledWith`: an added optional
     // argument would make a negative argument matcher vacuously true.
@@ -1500,42 +1565,17 @@ describe('App project creation routing', () => {
 
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Create prompted project' }));
-    await screen.findByTestId('project-creation-pending-view');
+    await screen.findByTestId('project-view');
     expect(workspaceTabsHarness.projectIds.has(requestedProjectId!)).toBe(true);
 
     creation.reject(new Error('Could not create project'));
 
     await screen.findByTestId('entry-home-surface');
     expect(window.location.pathname).toBe('/');
-    expect(screen.queryByTestId('project-creation-pending-view')).toBeNull();
+    expect(screen.queryByTestId('project-view')).toBeNull();
     expect(screen.queryByTestId(`entry-project-${requestedProjectId}`)).toBeNull();
     expect(workspaceTabsHarness.projectIds.has(requestedProjectId!)).toBe(false);
     expect(screen.getByRole('alert').textContent).toContain('Could not create project');
-  });
-
-  it('shows the staged attachment and an inert composer on the pending frame', async () => {
-    mockedListProjects.mockResolvedValue([]);
-    const creation = deferred<{
-      project: Project;
-      conversationId: string;
-    }>();
-    mockedCreateProject.mockImplementation(() => creation.promise);
-
-    render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Create prompted project' }));
-
-    // Synchronous on purpose: the optimistic hand-off is flushed inside the
-    // click, so the frame exists before the create request can even settle.
-    const pending = screen.getByTestId('project-creation-pending-view');
-    expect(pending.querySelector('[data-testid="pending-attachment-row"]')?.textContent)
-      .toContain('brief.txt');
-    const composerShell = screen.getByTestId('pending-chat-composer-shell');
-    expect(composerShell.hasAttribute('inert')).toBe(true);
-    expect(composerShell.querySelector('[data-testid="chat-composer"]')).toBeTruthy();
-    expect((screen.getByTestId('chat-send') as HTMLButtonElement).disabled).toBe(true);
-
-    creation.reject(new Error('Could not create project'));
-    await screen.findByTestId('entry-home-surface');
   });
 
   it('maps a create preparation timeout to a localized retry toast and hands attachments back', async () => {
@@ -1552,7 +1592,7 @@ describe('App project creation routing', () => {
 
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Create prompted project' }));
-    await screen.findByTestId('project-creation-pending-view');
+    await screen.findByTestId('project-view');
 
     creation.reject(new ProjectCreateError(
       'Project preparation timed out while validating the selected design system. Please try again.',
@@ -1564,7 +1604,7 @@ describe('App project creation routing', () => {
 
     await screen.findByTestId('entry-home-surface');
     expect(window.location.pathname).toBe('/');
-    expect(screen.queryByTestId('project-creation-pending-view')).toBeNull();
+    expect(screen.queryByTestId('project-view')).toBeNull();
     expect(screen.queryByTestId(`entry-project-${requestedProjectId}`)).toBeNull();
     expect(screen.getByRole('alert').textContent)
       .toContain('Project setup timed out before it could start. Try sending again.');
@@ -1618,7 +1658,7 @@ describe('App project creation routing', () => {
 
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Create prompted project' }));
-    await screen.findByTestId('project-creation-pending-view');
+    await screen.findByTestId('project-view');
 
     creation.reject(makeError());
 
@@ -1649,12 +1689,11 @@ describe('App project creation routing', () => {
     try {
       render(<App />);
       fireEvent.click(await screen.findByRole('button', { name: 'Create prompted project' }));
-      await screen.findByTestId('project-creation-pending-view');
+      await screen.findByTestId('project-view');
 
       // Back during the in-flight create: Home is on screen before the 504.
-      // The pending frame carries no back control of its own (it mirrors the
-      // project frame's chrome), so the user leaves through the entry rail —
-      // here, the same router navigation that rail click performs.
+      // The user leaves through the entry rail — here, the same router
+      // navigation that rail click performs.
       act(() => {
         navigate({ kind: 'home', view: 'home' });
       });
@@ -1695,7 +1734,7 @@ describe('App project creation routing', () => {
 
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Create prompted project' }));
-    await screen.findByTestId('project-creation-pending-view');
+    await screen.findByTestId('project-view');
 
     creation.resolve({
       project: {
@@ -1709,8 +1748,10 @@ describe('App project creation routing', () => {
 
     await screen.findByTestId('project-view');
     expect(screen.getByTestId('project-title').textContent).toBe('Persisted prompted project');
-    expect(window.location.pathname).toBe(`/projects/${requestedProjectId}`);
-    expect(screen.queryByTestId('project-creation-pending-view')).toBeNull();
+    expect(window.location.pathname).toMatch(new RegExp(`^/projects/${requestedProjectId}(/|$)`));
+    await waitFor(() => {
+      expect(screen.getByTestId('project-creation-phase').textContent).not.toBe('pending');
+    });
     expect(workspaceTabsHarness.projectIds.has(requestedProjectId!)).toBe(true);
     expect(screen.getByRole('alert').textContent).toContain('Attachment upload failed');
   });
@@ -2428,6 +2469,75 @@ describe('App project creation routing', () => {
     expect(mockedUploadProjectFiles).not.toHaveBeenCalled();
   });
 
+  it('reports a route authority failure even when ProjectView cannot mount', async () => {
+    const projectId = 'project-inaccessible';
+    mockedListProjects.mockResolvedValue([{ ...freshProject, id: projectId, workspaceId: 'ws-inaccessible' }]);
+    window.history.replaceState({}, '', `/projects/${projectId}`);
+    navigationTiming.begin({ kind: 'home' }, { projectId });
+    render(<App />);
+    await waitFor(() => {
+      const failed = vi.mocked(reportSafetyEvent).mock.calls.find(([name, props]) =>
+        name === 'client_navigation_result' && props?.status === 'failed');
+      expect(failed?.[1]?.reason).toBe('scope_unavailable');
+    });
+    expect(screen.queryByTestId('project-view')).toBeNull();
+  });
+
+  it('records leaving during project lookup without cancelling the original open operation', async () => {
+    const lookup = deferred<Awaited<ReturnType<typeof getProject>>>();
+    mockedListProjects.mockResolvedValue([]);
+    mockedGetProject.mockReturnValue(lookup.promise);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open missing project' }));
+    await waitFor(() => expect(mockedGetProject).toHaveBeenCalled());
+    const attempt = navigationTiming.getSnapshot();
+    expect(attempt?.projectId).toBe('project-missing');
+    expect(vi.mocked(reportSafetyEvent).mock.calls.some(([name, props]) =>
+      name === 'client_navigation_result' && props?.status === 'started')).toBe(true);
+    act(() => navigate({ kind: 'home', view: 'settings' }));
+    await waitFor(() => expect(navigationTiming.getSnapshot()).toBeNull());
+    await act(async () => { lookup.resolve(freshProject); });
+    expect(window.location.pathname).toBe('/projects/project-missing');
+    const events = vi.mocked(reportSafetyEvent).mock.calls
+      .filter(([name]) => name === 'client_navigation_result').map(([, props]) => props);
+    // The settings route is measured as its own page switch; assert only the project attempt.
+    const projectEvents = events.filter((event) => event?.navigation_id === events[0]?.navigation_id);
+    expect(projectEvents.map((event) => event?.status)).toEqual(['started', 'cancelled']);
+  });
+
+  it('still opens the project when only its telemetry attempt is cancelled', async () => {
+    const lookup = deferred<Awaited<ReturnType<typeof getProject>>>();
+    mockedListProjects.mockResolvedValue([]);
+    mockedGetProject.mockReturnValue(lookup.promise);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open missing project' }));
+    await waitFor(() => expect(mockedGetProject).toHaveBeenCalled());
+    act(() => navigationTiming.cancel('superseded'));
+    await act(async () => { lookup.resolve({ ...freshProject, id: 'project-missing' }); });
+    await waitFor(() => expect(window.location.pathname).toBe('/projects/project-missing'));
+  });
+
+  it('gives repeated project clicks new ids without suppressing an earlier lookup', async () => {
+    const firstLookup = deferred<Awaited<ReturnType<typeof getProject>>>();
+    mockedListProjects.mockResolvedValue([]);
+    mockedGetProject.mockReturnValueOnce(firstLookup.promise).mockResolvedValueOnce(null);
+    render(<App />);
+    const open = await screen.findByRole('button', { name: 'Open missing project' });
+    fireEvent.click(open);
+    await waitFor(() => expect(mockedGetProject).toHaveBeenCalledTimes(1));
+    const firstId = navigationTiming.getSnapshot()?.id;
+    fireEvent.click(open);
+    await waitFor(() => expect(mockedGetProject).toHaveBeenCalledTimes(2));
+    await screen.findByRole('alert');
+    await act(async () => { firstLookup.resolve({ ...freshProject, id: 'project-missing' }); });
+    expect(window.location.pathname).toBe('/projects/project-missing');
+    const events = vi.mocked(reportSafetyEvent).mock.calls
+      .filter(([name]) => name === 'client_navigation_result').map(([, props]) => props);
+    expect(events.map((event) => event?.status)).toEqual(['started', 'cancelled', 'started', 'failed']);
+    expect(events[1]?.navigation_id).toBe(firstId);
+    expect(events[2]?.navigation_id).not.toBe(firstId);
+  });
+
   it('surfaces a toast instead of silently bouncing when opening a missing project', async () => {
     mockedListProjects.mockResolvedValue([]);
     mockedGetProject.mockResolvedValue(null);
@@ -2443,6 +2553,10 @@ describe('App project creation routing', () => {
     });
     expect(window.location.pathname).toBe('/');
     expect(screen.queryByTestId('project-view')).toBeNull();
+    const events = vi.mocked(reportSafetyEvent).mock.calls
+      .filter(([name]) => name === 'client_navigation_result').map(([, props]) => props);
+    expect(events.map((event) => event?.status)).toEqual(['started', 'failed']);
+    expect(events[1]?.reason).toBe('open_unavailable');
   });
 
   it('OPEND-3691 keeps the exact panel continuation above the project authorization remount', async () => {

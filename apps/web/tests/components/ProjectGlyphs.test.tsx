@@ -45,14 +45,18 @@ function project(id: string, name: string, updatedAt: number): Project {
 const DONE = project('project-done', 'Project Done', 3);
 const RUNNING = project('project-running', 'Project Running', 2);
 const QUIET = project('project-quiet', 'Project Quiet', 1);
-const PROJECTS = [DONE, RUNNING, QUIET];
+const ASKING = project('project-asking', 'Project Asking', 0);
+const PROJECTS = [DONE, RUNNING, QUIET, ASKING];
 
 /** What the runs feed answers per project. */
 const RUNS: Record<string, { status: string; runId: string } | undefined> = {
   [DONE.id]: { status: 'succeeded', runId: 'run-done-1' },
   [RUNNING.id]: { status: 'running', runId: 'run-running-1' },
   [QUIET.id]: undefined,
+  [ASKING.id]: { status: 'succeeded', runId: 'run-asking-1' },
 };
+/** Projects whose latest conversation holds an unanswered question. */
+const AWAITING = new Set([ASKING.id]);
 
 const activeRoute: Route = {
   kind: 'project',
@@ -83,7 +87,7 @@ function stubRunsFeed() {
             updatedAt: 2,
           }]
         : [];
-      return new Response(JSON.stringify({ runs, awaitingInputProjectIds: [] }), {
+      return new Response(JSON.stringify({ runs, awaitingInputProjectIds: AWAITING.has(id) ? [id] : [] }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
@@ -186,27 +190,22 @@ describe('project glyphs in the rail and the switcher (OPEND-3129 / OPEND-3133)'
     expect(within(switcherRow(listbox, QUIET.name)).queryByTestId('workspace-tabs-dropdown-unread')).toBeNull();
   });
 
-  it('keeps the folder for a finished project and adds the unread dot at the row end, in both places', async () => {
+  // P0-24 设计答复(2026-10-26):有新结果「也改成蓝色球,无标签」—— 行首一颗静止的蓝球,
+  // 不再是文件夹 + 行尾蓝点。
+  it('leads a finished, unopened project with the still blue ball and no row-end dot, in both places', async () => {
     renderBoth();
     await waitFor(() => {
-      expect(within(railRow(DONE.name)).getByTestId('entry-nav-recent-unread')).toBeTruthy();
+      expect(within(railLead(DONE.name) as HTMLElement).getByRole('img', { name: 'Completed' })).toBeTruthy();
     });
-    const railDot = within(railRow(DONE.name)).getByTestId('entry-nav-recent-unread');
-    // The folder stays: the dot is a notice beside the name, not a replacement
-    // for the glyph — and it is the LAST thing in the row.
-    expect(glyphTestIdIn(railLead(DONE.name))).toBe('project-folder-glyph');
-    expect(railRow(DONE.name).lastElementChild).toBe(railDot);
-    // Still announced as the finished status it stands for.
-    expect(railDot.getAttribute('role')).toBe('img');
-    expect(railDot.getAttribute('aria-label')).toBe('Completed');
+    expect(glyphTestIdIn(railLead(DONE.name))).not.toBe('project-folder-glyph');
+    expect(within(railRow(DONE.name)).queryByTestId('entry-nav-recent-unread')).toBeNull();
+    expect(within(railRow(DONE.name)).queryByTestId('entry-nav-recent-reply-tag')).toBeNull();
 
     const listbox = await openSwitcher();
     await waitFor(() => {
-      expect(within(switcherRow(listbox, DONE.name)).getByTestId('workspace-tabs-dropdown-unread')).toBeTruthy();
+      expect(within(switcherLead(listbox, DONE.name) as HTMLElement).getByRole('img', { name: 'Completed' })).toBeTruthy();
     });
-    expect(glyphTestIdIn(switcherLead(listbox, DONE.name))).toBe('project-folder-glyph');
-    expect(within(switcherRow(listbox, DONE.name))
-      .getByTestId('workspace-tabs-dropdown-unread').getAttribute('aria-label')).toBe('Completed');
+    expect(within(switcherRow(listbox, DONE.name)).queryByTestId('workspace-tabs-dropdown-unread')).toBeNull();
   });
 
   it('keeps the live status glyph for a running project, with no unread dot', async () => {
@@ -224,27 +223,25 @@ describe('project glyphs in the rail and the switcher (OPEND-3129 / OPEND-3133)'
     expect(within(switcherRow(listbox, RUNNING.name)).queryByTestId('workspace-tabs-dropdown-unread')).toBeNull();
   });
 
-  it('spends the dot in both places when the project is opened from the rail', async () => {
+  it('spends the blue ball in both places when the project is opened from the rail', async () => {
     const { onOpen } = renderBoth();
     await waitFor(() => {
-      expect(within(railRow(DONE.name)).getByTestId('entry-nav-recent-unread')).toBeTruthy();
+      expect(within(railLead(DONE.name) as HTMLElement).getByRole('img', { name: 'Completed' })).toBeTruthy();
     });
 
     fireEvent.click(railRow(DONE.name));
     expect(onOpen).toHaveBeenCalledWith(DONE.id);
 
-    // Gone from the rail …
+    // Back to the folder in the rail …
     await waitFor(() => {
-      expect(within(railRow(DONE.name)).queryByTestId('entry-nav-recent-unread')).toBeNull();
+      expect(glyphTestIdIn(railLead(DONE.name))).toBe('project-folder-glyph');
     });
-    expect(glyphTestIdIn(railLead(DONE.name))).toBe('project-folder-glyph');
-    // … and from the switcher, which reads the same store rather than its own
+    // … and in the switcher, which reads the same store rather than its own
     // copy of the acknowledgement.
     const listbox = await openSwitcher();
     await waitFor(() => {
       expect(glyphTestIdIn(switcherLead(listbox, DONE.name))).toBe('project-folder-glyph');
     });
-    expect(within(switcherRow(listbox, DONE.name)).queryByTestId('workspace-tabs-dropdown-unread')).toBeNull();
     // The acknowledgement is keyed on THIS finished run, the record both
     // surfaces share.
     expect(JSON.parse(window.localStorage.getItem('od.entry.railRecentSeenDone') ?? '{}')).toEqual({
@@ -252,21 +249,21 @@ describe('project glyphs in the rail and the switcher (OPEND-3129 / OPEND-3133)'
     });
   });
 
-  it('spends the dot in both places when the project is opened from the switcher', async () => {
+  it('spends the blue ball in both places when the project is opened from the switcher', async () => {
     renderBoth();
     const listbox = await openSwitcher();
     await waitFor(() => {
-      expect(within(switcherRow(listbox, DONE.name)).getByTestId('workspace-tabs-dropdown-unread')).toBeTruthy();
+      expect(within(switcherLead(listbox, DONE.name) as HTMLElement).getByRole('img', { name: 'Completed' })).toBeTruthy();
     });
 
     fireEvent.click(switcherRow(listbox, DONE.name));
 
     await waitFor(() => {
-      expect(within(railRow(DONE.name)).queryByTestId('entry-nav-recent-unread')).toBeNull();
+      expect(glyphTestIdIn(railLead(DONE.name))).toBe('project-folder-glyph');
     });
     const reopened = await openSwitcher();
     await waitFor(() => {
-      expect(within(switcherRow(reopened, DONE.name)).queryByTestId('workspace-tabs-dropdown-unread')).toBeNull();
+      expect(glyphTestIdIn(switcherLead(reopened, DONE.name))).toBe('project-folder-glyph');
     });
   });
 });

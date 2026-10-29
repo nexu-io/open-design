@@ -144,7 +144,6 @@ function planContract(snapshot: AppliedPluginSnapshot): OpenDesignPlanContractV2
 const intakePassed = {
   inputRefs: [{ id: 'request', accessible: true }],
   selectedAgentAvailable: true,
-  nativeContinuation: 'verified' as const,
   taskProfileAvailable: true,
   dependencies: [],
 };
@@ -460,7 +459,7 @@ describe('OD Next planning coordinator', () => {
     }).then(result => { settled = true; return result; });
     try {
       await networkEntered;
-      expect(JSON.parse(fs.readFileSync(run.statePath!, 'utf8'))).toMatchObject({ status: 'failed', errorCode: 'DAEMON_RESTARTED' });
+      expect(JSON.parse(fs.readFileSync(run.statePath!, 'utf8'))).toMatchObject({ status: 'canceled', errorCode: 'DAEMON_RESTARTED' });
       expect(settled).toBe(false);
     } finally { release(); await pending; }
   });
@@ -483,6 +482,7 @@ describe('OD Next planning coordinator', () => {
     upsertMessage(db, 'conversation-1', { id: 'ordinary-answer', role: 'assistant', content: 'An unrelated answer.', createdAt: 102 });
     expect(resolveStrategyHandoff(db, input, [])).toBeNull();
   });
+
 
   it.each([
     ['a bundle written by the pre-reshape v2 composer', (target: Database.Database) => {

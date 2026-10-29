@@ -288,6 +288,9 @@ async function runTurn(plan: TurnPlan & { message?: string }): Promise<{
 
 describe('a media generation the host watched fail reaches its run terminal', () => {
   beforeAll(async () => {
+    // This suite exercises the legacy od-done protocol. OD Next's keyed
+    // planning/production stages have separate coordinator and browser cases.
+    vi.stubEnv('OD_NEXT_STRATEGY_ROLLOUT', 'off');
     // An OpenAI-compatible image endpoint that fails on demand. 400 is the
     // production status and is deliberately NOT in the retry set (429/503), so
     // the failure is one round-trip rather than a timing bet.

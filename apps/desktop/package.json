@@ -30,9 +30,9 @@
     "@open-design/sidecar-proto": "workspace:*"
   },
   "devDependencies": {
+    "@typescript/native": "npm:typescript@7.0.2",
     "@types/node": "24.12.2",
     "electron": "41.3.0",
-    "typescript": "6.0.3",
     "vitest": "4.1.6"
   },
   "engines": {

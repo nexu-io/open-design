@@ -1,5 +1,5 @@
 import { withCommentFileDeletion, type CommentFileDeletion } from '../../collab/comment-file-deletion.js';
-import { injectMotionSourcePlayer, isMotionVideoComposition, MOTION_PREVIEW_OUTPUT_HEADER } from '@open-design/contracts/runtime/motion-source-player';
+import { injectMotionSourcePlayer, isMotionVideoComposition, markMotionHostedPreview, MOTION_PREVIEW_OUTPUT_HEADER } from '@open-design/contracts/runtime/motion-source-player';
 import { createHash, randomUUID } from 'node:crypto';
 import { trackedCommentFilePaths } from '../../collab/local-comment-files.js';
 import { CommentPreparationError, prepareCommentIdentity } from '../../services/comment-preparation.js';
@@ -28,6 +28,7 @@ import {
 } from '@open-design/contracts/runtime/preview-build-focus';
 import {
   buildPreviewFocusGuard,
+  buildPreviewVisibilityGuard,
   buildPreviewRedirectGuard,
   buildPreviewSandboxShim,
   PREVIEW_URL_GUARD_MAX_HTML_BYTES,
@@ -844,6 +845,8 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
   var activeCommentElementId = null;
   var activeCommentSelector = null;
   var activeTargetPending = false;
+  // Hash/history navigation keeps this document; only a new load changes its identity.
+  var commentDocumentVersion = 'url:' + window.location.href;
   function postReady(){
     window.parent.postMessage({ type: 'od:url-selection-bridge-ready', href: window.location.href }, '*');
   }
@@ -986,7 +989,7 @@ ${COMMENT_IDENTITY_HELPERS}
       };
     } catch (_) { return null; }
   }
-  function targetFrom(el, allowDomFallback, clickedEl, clickPoint){
+  function targetFrom(el, allowDomFallback, clickedEl, clickPoint, validateForSave){
     var id = annotatedElementIdFor(el);
     var selector = annotatedSelectorFor(el, esc);
     if ((!clickedEl || clickedEl === el) && el && el.hasAttribute('data-od-comment-id')) {
@@ -995,8 +998,8 @@ ${COMMENT_IDENTITY_HELPERS}
       id = identity.elementId;
       selector = identity.selector;
     }
-    if (allowDomFallback && id && generatedRootAnnotation(el, id)) return null;
-    if (!id && allowDomFallback && meaningfulDomFallbackTarget(el)) {
+    if (!validateForSave && allowDomFallback && id && generatedRootAnnotation(el, id)) return null;
+    if (!id && allowDomFallback && (validateForSave || meaningfulDomFallbackTarget(el))) {
       selector = domSelectorFor(el);
       if (selector) id = 'dom:' + selector;
     }
@@ -1357,6 +1360,15 @@ ${COMMENT_IDENTITY_HELPERS}
         stroke = [];
         try { window.parent.postMessage({ type: 'od:pod-clear' }, '*'); } catch (_) {}
       }
+      return;
+    }
+    if (data.type === 'od:comment-active-target' && data.validateForSave && typeof data.requestId === 'string') {
+      var saveNode = null;
+      try { saveNode = document.querySelector(String(data.selector)); } catch (_) {}
+      var saveTarget = saveNode && targetFrom(saveNode, true, null, null, true);
+      window.parent.postMessage(saveTarget
+        ? Object.assign({}, saveTarget, { type: 'od:comment-active-target-update', documentVersion: commentDocumentVersion, requestId: data.requestId, requestedSelector: data.selector })
+        : { type: 'od:comment-location-missing', documentVersion: commentDocumentVersion, requestId: data.requestId }, '*');
       return;
     }
     if (data.type === 'od:comment-active-target') {
@@ -1862,6 +1874,7 @@ function applyUrlPreviewBridgesToHtml(
   }
 
   let html = Buffer.isBuffer(transformed) ? transformed.toString('utf8') : transformed;
+  html = injectAfterHeadOpen(html, 'data-od-preview-hidden-guard', buildPreviewVisibilityGuard());
   // Sanitize the <title> so Cmd+P -> "Save as PDF" produces a Teams-safe
   // filename. URL-load iframes cannot rely on the host rewriting the document
   // title after load, and powered previews are intentionally cross-origin.
@@ -1882,6 +1895,9 @@ function applyUrlPreviewBridgesToHtml(
     html = injectUrlPreviewBridge(html, 'sandbox');
   }
   if (wantsUrlPreviewBuildFocusBridge(requestedBridge)) {
+    // Only marked video motion waits for the building preview host. Legacy
+    // HyperFrames and ordinary documents retain their authored playback.
+    html = markMotionHostedPreview(html);
     html = injectUrlPreviewBridge(html, 'buildfocus');
   }
   if (wantsUrlPreviewScrollBridge(requestedBridge)) {
@@ -3949,6 +3965,13 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       if (typeof id !== 'string' || !isSafeId(id)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
       }
+      const requestedConversationId = req.body?.conversationId;
+      if (
+        requestedConversationId !== undefined
+        && (typeof requestedConversationId !== 'string' || !isSafeId(requestedConversationId))
+      ) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'invalid conversation id');
+      }
       if (typeof name !== 'string' || !name.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'name required');
       }
@@ -4198,7 +4221,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
                   }
                 : null;
       const now = Date.now();
-      const cid = randomId();
+      const cid = requestedConversationId ?? randomId();
       const initialSessionMode = normalizeChatSessionMode(
         req.body?.conversationMode ?? req.body?.sessionMode,
       );
@@ -6233,6 +6256,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
   }
 
   function htmlHasPoweredPreviewSignal(source: string): boolean {
+    if (/\b(?:local|session)Storage\b/.test(source)) return true;
     if (/\bSharedArrayBuffer\b/.test(source)) return true;
     if (/\bnew\s+(?:Worker|SharedWorker)\s*\(/.test(source)) return true;
     if (/\bimportScripts\s*\(/.test(source)) return true;

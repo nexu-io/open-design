@@ -417,13 +417,13 @@ describe("runElectronBuilder", () => {
     };
   }
 
-  it("does not explicitly disable electron-builder notarization for notarized mac builds", async () => {
+  it("notarizes signed mac builds only through the retrying afterSign hook", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
     try {
       const builderConfig = await prepareElectronBuilderConfig(root, { macNotarize: true });
 
       expect(builderConfig.afterSign).toContain("notarize.cjs");
-      expect(builderConfig.mac).not.toHaveProperty("notarize");
+      expect(builderConfig.mac?.notarize).toBe(false);
     } finally {
       await rm(root, { force: true, recursive: true });
     }
@@ -440,10 +440,14 @@ describe("runElectronBuilder", () => {
     }
   });
 
-  it("keeps signed-only mac builds from invoking electron-builder notarization", async () => {
+  it.each([
+    { mode: "signed-only", signed: true, macNotarize: false },
+    { mode: "unsigned", signed: false, macNotarize: false },
+    { mode: "unsigned with notarization requested", signed: false, macNotarize: true },
+  ])("does not invoke either notarization path for $mode mac builds", async ({ signed, macNotarize }) => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
     try {
-      const builderConfig = await prepareElectronBuilderConfig(root, { macNotarize: false });
+      const builderConfig = await prepareElectronBuilderConfig(root, { signed, macNotarize });
 
       expect(builderConfig.afterSign).toBeUndefined();
       expect(builderConfig.mac?.notarize).toBe(false);

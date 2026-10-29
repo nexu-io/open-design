@@ -710,7 +710,23 @@ export interface ChatRunExecutionDiagnostics {
   };
 }
 
+/** Exporter evidence; accepted means ingest accepted, not remote query verification. */
+export interface TaskTelemetryStatus {
+  version: 1;
+  taskExecutionId: string;
+  status: 'unknown' | 'pending' | 'in_flight' | 'failed' | 'accepted' | 'not_expected' | 'observed' | 'compatibility';
+  traceId: string | null;
+  protocol: 'legacy-v1' | 'otlp-v4' | null;
+  transport: 'langfuse' | 'relay' | 'vela' | null;
+  attemptCount: number | null;
+  reason: string | null;
+  environment: string | null;
+  sampledAt: number;
+  remoteVerification: 'not_checked';
+}
+
 export interface ChatRunStatusResponse {
+  taskTelemetry?: TaskTelemetryStatus;
   id: string;
   projectId: string | null;
   conversationId: string | null;
@@ -733,6 +749,14 @@ export interface ChatRunStatusResponse {
   status: ChatRunStatus;
   createdAt: number;
   updatedAt: number;
+  /**
+   * When the Run first began executing (its first `start` event), as opposed to
+   * `createdAt`, when it was created and possibly still waiting. A project's
+   * status follows the conversation whose Run most recently STARTED, and a
+   * queued Run has not started (P0-24). `null` while not started yet; absent
+   * on older daemons.
+   */
+  startedAt?: number | null;
   /** The immutable instant this Run entered its terminal status, when terminal. */
   terminalAt?: number | null;
   cancelRequested?: boolean;
@@ -888,6 +912,17 @@ export interface ChatRunListResponse {
    * Optional: older daemons omit it, and absent means "unknown", not "none".
    */
   awaitingInputProjectIds?: string[];
+  /**
+   * Conversations holding an unanswered question form — the per-conversation
+   * form of `awaitingInputProjectIds`. A project shows "needs your reply" only
+   * when the conversation that most recently started a Run is the one waiting
+   * (P0-24); a question pending in an older conversation does not surface.
+   *
+   * Same visibility rule: a subset of the conversations the accompanying
+   * `runs` already expose. Optional: older daemons omit it, and absent means
+   * "unknown" — callers then fall back to the project-level set.
+   */
+  awaitingInputConversationIds?: string[];
 }
 
 export interface ChatRunCancelResponse {
@@ -1092,6 +1127,17 @@ export type PersistedAgentEvent =
        */
       runStartedAt?: number;
       runEndedAt?: number;
+      /**
+       * View-only, stamped by the client fold like the span above: this Run
+       * started because the user replied (e.g. submitted a question form),
+       * not because the daemon auto-continued the task.
+       *
+       * The renderer gives auto-continued Runs one turn header with a summed
+       * duration (P0-24 N13 ①, assumption A-01) and keeps a Run that follows a
+       * user reply as a turn of its own (P0-24 Q8, option A). Absent = the
+       * boundary is an auto-continuation; it is never persisted.
+       */
+      afterUserReply?: boolean;
     }
   /**
    * This turn's follow-up suggestions — the three one-line actions the chat
@@ -1382,6 +1428,8 @@ export interface ChatMessage {
    * back explicitly and reload recovery follows its active physical Run.
    */
   strategyTaskExecutionId?: string;
+  /** Host-projected presentation fact; physical task handles remain unchanged. */
+  taskDisplay?: import('../plugins/strategy-v2.js').TaskDisplayProjection;
   /**
    * Position of this message's Run within its logical task chain. A Full Plan
    * turn spans several physical Runs (request -> production) that the user

@@ -1,6 +1,10 @@
 /* OD-LAYOUT-PRIMITIVES v1 — structure only: display, flex/grid, overflow, wrapping, ratio, geometry.
-   Put this @layer first; product CSS outside the layer always wins. */
+   Put this @layer first; product CSS outside the layer wins ordinary layout rules.
+   Native hidden and closed-dialog states take precedence over component display rules. */
 @layer od-layout {
+  [hidden]:not([hidden="until-found" i]) { display: none !important; }
+  dialog:not([open]) { display: none !important; }
+
   :where(.od-stack,.od-row,.od-row-top,.od-cluster,.od-grid,.od-field,.od-stat,.od-cell,.od-tile) > :where(*) { min-width: 0; }
 
   /* containers */
@@ -52,4 +56,5 @@
   .od-spacer { flex: none; visibility: hidden; pointer-events: none; }
   .od-touch  { min-width: 44px; min-height: 44px; }
 }
+:root [hidden]:where(:not([hidden="until-found" i])) { display: none; }
 /* /OD-LAYOUT-PRIMITIVES v1 */

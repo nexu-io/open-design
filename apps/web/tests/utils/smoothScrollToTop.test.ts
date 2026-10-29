@@ -9,7 +9,7 @@
 // under prefers-reduced-motion, and yield to user scroll input mid-flight.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { smoothScrollToTop } from '../../src/utils/smoothScrollToTop';
+import { smoothScrollTo, smoothScrollToTop } from '../../src/utils/smoothScrollToTop';
 
 type FrameCallback = (now: number) => void;
 
@@ -67,6 +67,19 @@ afterEach(() => {
 });
 
 describe('smoothScrollToTop', () => {
+  it('animates a menu row in 120ms without changing horizontal scroll', () => {
+    const el = makeContainer(21);
+    smoothScrollTo(el, 67, 120);
+    pumpFrame(16);
+    pumpFrame(30);
+    expect(el.scrollTop).toBeGreaterThan(21);
+    expect(el.scrollTop).toBeLessThan(67);
+    pumpFrame(90);
+    expect(el.scrollTop).toBe(67);
+    expect(el.scrollLeft).toBe(24);
+    expect(frames).toHaveLength(0);
+  });
+
   it('tweens through intermediate offsets and lands exactly at 0', () => {
     const el = makeContainer(900);
     smoothScrollToTop(el);

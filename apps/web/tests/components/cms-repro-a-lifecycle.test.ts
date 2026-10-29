@@ -4,7 +4,7 @@
 // fallback probes. Test failures stop automatic requests under OPEND-3436.
 import { createElement, StrictMode } from "react";
 import path from "node:path";
-import ts from "typescript";
+import { API } from "@typescript/native/unstable/sync";
 import { act, cleanup, fireEvent, render, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -90,14 +90,25 @@ describe("OPEND-3363/3374/3376/3377/3378 acceptance gaps", () => {
       retained.endsAt;
       retained.authorizationExpiresAt;
       retained.activityId;`;
-    const options: ts.CompilerOptions = { noEmit: true, strict: true, skipLibCheck: true, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, moduleResolution: ts.ModuleResolutionKind.Bundler, jsx: ts.JsxEmit.ReactJSX };
-    const compiler = ts.createCompilerHost(options);
-    const original = compiler.getSourceFile.bind(compiler);
-    compiler.getSourceFile = (name, language, onError, fresh) => name === file ? ts.createSourceFile(name, source, language, true) : original(name, language, onError, fresh);
-    const program = ts.createProgram([file], options, compiler);
-    const errors = program.getSemanticDiagnostics(program.getSourceFile(file));
-    expect(errors.map((error) => error.code)).toEqual([2339, 2339, 2339]);
-    expect(errors.map((error) => ts.flattenDiagnosticMessageText(error.messageText, " ")).join(" ")).toContain("authorizationExpiresAt");
+    const config = path.resolve("tests/components/tsconfig.native-probe.json");
+    const configText = JSON.stringify({
+      compilerOptions: { noEmit: true, strict: true, skipLibCheck: true, target: "ES2022", module: "ESNext", moduleResolution: "Bundler", jsx: "react-jsx" },
+      files: [file],
+    });
+    const compiler = new API({ fs: {
+      readFile: (name) => path.resolve(name) === file ? source : path.resolve(name) === config ? configText : undefined,
+      fileExists: (name) => name === file || path.resolve(name) === config ? true : undefined,
+    } });
+    try {
+      using snapshot = compiler.updateSnapshot({ openProjects: [config] });
+      const program = snapshot.getProject(config)?.program;
+      expect(program).toBeDefined();
+      const errors = program!.getSemanticDiagnostics(file);
+      expect(errors.map((error) => error.code)).toEqual([2339, 2339, 2339]);
+      expect(errors.map((error) => error.text).join(" ")).toContain("authorizationExpiresAt");
+    } finally {
+      compiler.close();
+    }
   });
   it.each(["online", "pageshow", "visibilitychange", "focus"])("expired %s recovery passes no old activeDecisionId", async (event) => {
     const load = vi.fn<Load>().mockResolvedValueOnce(grant(decision(), 1000)).mockResolvedValue({ kind: "retain" });

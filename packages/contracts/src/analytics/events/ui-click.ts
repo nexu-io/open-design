@@ -86,6 +86,7 @@ export interface SettingsPopoverClickProps {
     | 'share_channel'
     | 'workspace_teams'
     | 'join_discord'
+    | 'join_feishu'
     | 'follow_x'
     | 'follow_threads'
     | 'open_youtube'

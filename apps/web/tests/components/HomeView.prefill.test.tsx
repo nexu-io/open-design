@@ -22,6 +22,7 @@ vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => {
 });
 
 import { HomeView } from '../../src/components/HomeView';
+import { stashHomeComposerAttachments } from '../../src/state/home-composer-stash';
 import { requestHomeChip } from '../../src/runtime/home-intent';
 import { HOME_APPLY_TEMPLATE_EVENT } from '../../src/components/home-hero/chips';
 import {
@@ -574,7 +575,7 @@ describe('HomeView prompt handoff', () => {
     expect(screen.getByTestId('home-hero-submit').getAttribute('aria-busy')).toBe('false');
   });
 
-  it('defaults a fresh Home to Prototype without applying a plugin or changing the draft', async () => {
+  it('leaves a fresh Home unselected without applying a plugin or changing the draft', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (url === '/api/plugins') return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN, SIMPLE_DECK_PLUGIN] }));
       throw new Error(`unexpected fetch ${url}`);
@@ -584,17 +585,19 @@ describe('HomeView prompt handoff', () => {
     window.localStorage.setItem('open-design:home-composer:prompt', 'Keep my draft');
     const onSubmit = vi.fn();
     render(<HomeView projects={[]} onSubmit={onSubmit} onOpenProject={() => undefined} />);
-    await waitFor(() => expect(screen.getByTestId('home-hero-template-picker').getAttribute('data-type')).toBe('prototype'));
+    await waitFor(() => expect(screen.getByTestId('home-hero-type-pills-more')).not.toBeDisabled());
+    expect(screen.queryByTestId('home-hero-template-picker')).toBeNull();
     expect(homeHeroPromptValue()).toBe('Keep my draft');
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply'))).toBe(false);
     expect(onSubmit).not.toHaveBeenCalled();
     fireEvent.click(screen.getByTestId('home-hero-submit'));
     await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
-      prompt: 'Keep my draft', projectKind: 'prototype', automaticStrategyTaskProfile: 'prototype',
+      prompt: 'Keep my draft', projectKind: 'other', pluginSelectionProvenance: 'automatic-default',
     })));
+    expect(onSubmit.mock.calls[0]?.[0]).not.toHaveProperty('automaticStrategyTaskProfile');
   });
 
-  it('waits for the initial catalog before enabling a restored draft submission', async () => {
+  it('waits for the initial catalog before enabling type choices while preserving a restored draft', async () => {
     let resolveCatalog!: (response: Response) => void;
     const catalog = new Promise<Response>((resolve) => { resolveCatalog = resolve; });
     vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (url) => {
@@ -604,15 +607,17 @@ describe('HomeView prompt handoff', () => {
     window.localStorage.setItem('open-design:home-composer:prompt', 'My first prototype');
     const onSubmit = vi.fn();
     render(<HomeView projects={[]} onSubmit={onSubmit} onOpenProject={() => undefined} />);
-    expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(screen.getByTestId('home-hero-submit'));
+    expect(screen.getByTestId('home-hero-type-pills-more')).toBeDisabled();
+    expect(homeHeroPromptValue()).toBe('My first prototype');
     expect(onSubmit).not.toHaveBeenCalled();
     await act(async () => {
       resolveCatalog(new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] })));
       await catalog;
     });
     await waitFor(() => expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(false));
-    expect(screen.getByTestId('home-hero-template-picker').getAttribute('data-type')).toBe('prototype');
+    expect(screen.queryByTestId('home-hero-template-picker')).toBeNull();
+    expect(screen.getByTestId('home-hero-type-pills-more')).not.toBeDisabled();
+    expect(homeHeroPromptValue()).toBe('My first prototype');
   });
 
   it('restores a saved Deck selection instead of seeding Prototype', async () => {
@@ -673,7 +678,7 @@ describe('HomeView prompt handoff', () => {
         onOpenProject={() => undefined}
       />,
     );
-    const firstTrigger = homeTemplateTrigger();
+    const firstTrigger = screen.getByTestId('home-hero-type-pills-more');
     await waitFor(() => expect((firstTrigger as HTMLButtonElement).disabled).toBe(false));
     firstHome.unmount();
 
@@ -693,7 +698,7 @@ describe('HomeView prompt handoff', () => {
 
       expect(pluginListReads).toBe(2);
       expect(
-        (homeTemplateTrigger() as HTMLButtonElement).disabled,
+        (screen.getByTestId('home-hero-type-pills-more') as HTMLButtonElement).disabled,
       ).toBe(false);
 
       await act(async () => {
@@ -1996,10 +2001,10 @@ describe('HomeView prompt handoff', () => {
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply-local'))).toBe(false);
   });
 
-  it('switches output-type chips without replacing an existing prompt', async () => {
+  it('clears and reselects types while retaining the draft and attachments', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
-        return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
+        return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN, DEFAULT_PLUGIN] }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
@@ -2014,6 +2019,8 @@ describe('HomeView prompt handoff', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     stubAnimationFrame();
+
+    stashHomeComposerAttachments([new File(['brief'], 'brief.txt', { type: 'text/plain' })]);
 
     render(
       <HomeView
@@ -2033,6 +2040,17 @@ describe('HomeView prompt handoff', () => {
     expect(fetchMock.mock.calls.some(([url]) => (
       typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply-local')
     ))).toBe(false);
+    expect(homeHeroPromptText()).toBe('Keep my current brief');
+    await pickHomeTemplate('document');
+    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Document');
+    expect(homeHeroPromptText()).toBe('Keep my current brief');
+    expect(screen.getByTestId('home-hero-staged-files').textContent).toContain('brief.txt');
+    fireEvent.click(screen.getByTestId('home-hero-template-clear'));
+    expect(screen.queryByTestId('home-hero-template-picker')).toBeNull();
+    expect(screen.getByTestId('home-hero-type-pills')).toBeTruthy();
+    expect(screen.getByTestId('home-hero-staged-files').textContent).toContain('brief.txt');
+    expect(homeHeroPromptText()).toBe('Keep my current brief');
+    await pickHomeTemplate('prototype');
     expect(homeHeroPromptText()).toBe('Keep my current brief');
     expect(screen.queryByRole('dialog', { name: /replace current prompt/i })).toBeNull();
   });

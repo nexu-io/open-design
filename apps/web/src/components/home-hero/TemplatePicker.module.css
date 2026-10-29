@@ -36,3 +36,38 @@
   background: color-mix(in srgb, var(--bg-subtle) 78%, var(--bg-panel));
   color: var(--text);
 }
+
+.picker[data-type] { padding-inline: 12px; }
+.picker[data-type] :global(.home-hero__template-trigger) { cursor: default; gap: 8px; }
+.picker .switcher { gap: 7px; min-width: 0; }
+.picker .clear {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  /* Keep the 24px click target while giving its 18px glyph the same visual
+     slot and spacing as the type entry buttons. */
+  margin-inline: -3px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--brand-ink);
+  box-shadow: none;
+}
+.picker .clear:hover:not(:disabled) { background: color-mix(in srgb, var(--brand-ink) 8%, transparent); }
+.picker .clear:disabled { background: transparent; opacity: 0.5; }
+.typeGlyph, .clearGlyph {
+  transition: opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.clearGlyph { position: absolute; opacity: 0; }
+.picker:hover .clear:not(:disabled) .typeGlyph,
+.picker:focus-within .clear:not(:disabled) .typeGlyph { opacity: 0; }
+.picker:hover .clear:not(:disabled) .clearGlyph,
+.picker:focus-within .clear:not(:disabled) .clearGlyph { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .typeGlyph, .clearGlyph { transition: none; }
+}

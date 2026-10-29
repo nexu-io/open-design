@@ -2794,7 +2794,10 @@ describe('streamViaDaemon', () => {
     }
   });
 
-  it('marks a daemon run failed when the SSE stream closes silently and status is still active', async () => {
+  // P0-24 N15: running out of reconnects is not the run's outcome. With the
+  // daemon still reporting `running`, the run is not reported as failed; the
+  // generic disconnect error still tells the consumer the stream gave up.
+  it('does not mark a daemon run failed when the SSE stream closes silently and status is still active', async () => {
     // 走满 5 次预算的路径现在会**退避**(见 providers/daemon.ts 的
     // DAEMON_STREAM_RECONNECT_BACKOFF_*),整段要十几秒真实时间。用假时钟推,
     // 既保住确定性也不让这一条把套件拖慢。
@@ -2835,7 +2838,7 @@ describe('streamViaDaemon', () => {
       await streaming;
 
       expect(fetchMock.mock.calls.some(([input]) => String(input) === '/api/runs/run-1')).toBe(true);
-      expect(onRunStatus).toHaveBeenCalledWith('failed');
+      expect(onRunStatus).not.toHaveBeenCalledWith('failed');
       expect(handlers.onError).toHaveBeenCalledWith(
         expect.objectContaining({
           message: 'daemon stream disconnected before run completed',

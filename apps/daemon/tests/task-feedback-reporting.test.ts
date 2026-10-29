@@ -1,7 +1,8 @@
+import { taskTraceReceipts, taskUpdateSink } from '../src/observability/task-telemetry-receipt.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { evidenceStore } from '../src/services/evidence-delivery.js';
+import { evidenceStore, enqueueFeedbackEvidence, drainEvidence } from '../src/services/evidence-delivery.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildFeedbackPayload, readFeedbackTelemetrySinkConfig, type FeedbackReportContext } from '../src/langfuse-trace.js';
 import { reportRunFeedbackFromDaemon } from '../src/langfuse-bridge.js';
@@ -42,16 +43,34 @@ describe('Task-owned feedback', () => {
     expect(repeated).toEqual(bodies.map(body => body.id));
   });
 
-  it('uses the same Task relay even when Vela credentials are configured', async () => {
+  it.each(['relay', 'vela'] as const)('keeps feedback on its accepted %s Task transport', async (transport) => {
     expect(readFeedbackTelemetrySinkConfig()?.kind).toBe('vela');
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response('{}', { status: 202 }));
     const dataDir = await mkdtemp(path.join(os.tmpdir(), 'od-task-feedback-'));
     try {
+    taskTraceReceipts(dataDir).write({ taskExecutionId: 'synthetic-feedback-task', idempotencyKey: 'root-key', traceId: transport === 'vela' ? 'a'.repeat(64) : taskId, protocol: 'legacy-v1', transport });
     expect(await reportRunFeedbackFromDaemon({ dataDir, ...context(), fetchImpl })).toMatchObject({ deliveryStatus: 'queued' });
     await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(1));
-    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://relay.example/api/langfuse');
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(transport === 'vela' ? 'https://vela.example/api/v1/open-design/telemetry' : 'https://relay.example/api/langfuse');
     const payload = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body));
-    expect(payload.batch[0].body.traceId).toBe(taskId);
+    expect(transport === 'vela' ? payload.events[0].data.traceId : payload.batch[0].body.traceId).toBe(taskId);
+    } finally { (await evidenceStore(dataDir)).close(); await rm(dataDir, { recursive: true, force: true }); }
+  });
+
+
+  it('does not choose a new transport when the root receipt is missing', () => {
+    expect(taskUpdateSink('/synthetic-missing-receipt', taskId)).toBeNull();
+  });
+
+  it('does not anonymously publish feedback when Vela authentication expires', async () => {
+    const dataDir = await mkdtemp(path.join(os.tmpdir(), 'od-task-auth-'));
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response('{}', { status: 401 }));
+    try {
+      taskTraceReceipts(dataDir).write({ taskExecutionId: 'synthetic-feedback-task', idempotencyKey: 'root-key', traceId: 'a'.repeat(64), protocol: 'legacy-v1', transport: 'vela' });
+      await enqueueFeedbackEvidence(dataDir, context());
+      await drainEvidence(dataDir, fetchImpl);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://vela.example/api/v1/open-design/telemetry');
     } finally { (await evidenceStore(dataDir)).close(); await rm(dataDir, { recursive: true, force: true }); }
   });
 

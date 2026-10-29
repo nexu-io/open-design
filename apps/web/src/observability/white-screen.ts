@@ -46,6 +46,8 @@ export function installWhiteScreenDetector(): () => void {
     if (isAppMounted()) return;
     reportSafetyEvent('client_white_screen', {
       reason: 'app_not_mounted_after_timeout',
+      monitoring_kind: 'app_not_mounted',
+      metric_schema_version: 1,
       timeout_ms: APP_MOUNT_TIMEOUT_MS,
       ready_state: document.readyState,
       // Whether the user has navigated away from the tab — `hidden`

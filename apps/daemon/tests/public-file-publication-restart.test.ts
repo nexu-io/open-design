@@ -106,6 +106,7 @@ async function startDaemon(
     resolveProjectDir: () => projectDir,
     publicFilePublicationStore: publicationStore,
     ...createPublicSharePublishingFixture(openDatabase(projectDir, { dataDir: projectDir }), publicationStore, vela.runResourceCommand, undefined, { cloud, commands: cloudCommands, failStop }),
+    resolveLocalPublicShareOwner: () => context.workspaceMemberId,
     ...(shareContentFingerprints ? { shareContentFingerprints } : {}),
   });
   server = http.createServer(app);
@@ -173,7 +174,7 @@ describe('public file publication restart lifecycle', () => {
     db = openDatabase(projectDir, { dataDir: projectDir });
     publications = createSqlitePublicFilePublicationStore(db);
     fingerprints = createShareContentFingerprints(db, publications);
-    const scope = { resourceTeamId: 'team-1', ownerMemberId: 'member-1', projectId: 'project-1', filePath: 'index.html' };
+    const scope = { resourceTeamId: context.workspaceId, ownerMemberId: 'member-1', projectId: 'project-1', filePath: 'index.html' };
     expect(fingerprints.compare(scope, uploaded)).toBe('current');
     expect(fingerprints.compare(scope, (await plan()).files)).toBe('outdated');
     expect(fingerprints.compare({ ...scope, ownerMemberId: 'other' }, uploaded)).toBe('unknown');
@@ -234,7 +235,7 @@ describe('public file publication restart lifecycle', () => {
     // A creator identity/reservation is not a successful publication witness.
     // The transport fixture reads this UUID, rather than electing it from cloud history.
     createShareAliasReservations(openDatabase(projectDir, { dataDir: projectDir }), () => fixtureShareSlug).reserve({
-      resourceTeamId: 'team-1', ownerMemberId: 'member-1', projectId: 'project-1', filePath: 'index.html', sourceFileId,
+      resourceTeamId: context.workspaceId, ownerMemberId: 'member-1', projectId: 'project-1', filePath: 'index.html', sourceFileId,
     });
     cloud.set('project-1:index.html', { projectId: 'project-1', sourceFilePath: 'index.html',
       ...(identity === 'bound' ? { sourceFileId } : {}), slug: fixtureShareSlug, status: 'active' });
@@ -381,7 +382,7 @@ describe('public file publication restart lifecycle', () => {
     expect((await daemon.request('POST')).status).toBe(200);
     expect((await daemon.request('DELETE')).status).toBe(502);
     expect(publicationStore.get({
-      resourceTeamId: 'team-1', ownerMemberId: 'member-1',
+      resourceTeamId: context.workspaceId, ownerMemberId: 'member-1',
       projectId: 'project-1', filePath: 'index.html',
     })?.slug).toBe(fixtureShareSlug);
   });
@@ -424,7 +425,7 @@ describe('public file publication failure detail', () => {
       const publish = await daemon.request('POST', { 'x-od-request-id': 'req-publish-0001' });
 
       expect(publish).toEqual({
-        status: 502,
+        status: 503,
         body: {
           error: 'PUBLIC_FILE_PUBLISH_UNAVAILABLE',
           failure: {

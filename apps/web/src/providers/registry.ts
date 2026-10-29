@@ -329,18 +329,26 @@ export async function fetchAgentsStream(args: {
 // (skills.ts's `skillVisibleFromWorkspace`, mirroring `listInstalledPlugins`'s
 // one-way "unclaimed visible everywhere, claimed elsewhere hidden" rule).
 // Omit for callers that want the unfiltered, pre-workspace-isolation list.
+type CatalogReadObserver = { onReadResult?: (success: boolean) => void };
+function observeCatalogRead(options: CatalogReadObserver | undefined, success: boolean): void {
+  try { options?.onReadResult?.(success); } catch { /* Observation cannot affect catalog reads. */ }
+}
+
 export async function fetchSkills(
   workspaceContext?: WorkspaceCollabContext | null,
+  options?: CatalogReadObserver,
 ): Promise<SkillSummary[]> {
   try {
     const resp = await fetch(
       '/api/skills',
       workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : undefined,
     );
-    if (!resp.ok) return [];
+    if (!resp.ok) { observeCatalogRead(options, false); return []; }
     const json = (await resp.json()) as { skills: SkillSummary[] };
+    observeCatalogRead(options, Array.isArray(json.skills));
     return json.skills ?? [];
   } catch {
+    observeCatalogRead(options, false);
     return [];
   }
 }
@@ -365,13 +373,15 @@ export async function fetchProjectMediaTasks(
 // fetched from a separate registry root so the EntryView Templates tab
 // and Settings → Skills surface stay decoupled. See
 // specs/current/skills-and-design-templates.md.
-export async function fetchDesignTemplates(): Promise<SkillSummary[]> {
+export async function fetchDesignTemplates(options?: CatalogReadObserver): Promise<SkillSummary[]> {
   try {
     const resp = await fetch('/api/design-templates');
-    if (!resp.ok) return [];
+    if (!resp.ok) { observeCatalogRead(options, false); return []; }
     const json = (await resp.json()) as { designTemplates: SkillSummary[] };
+    observeCatalogRead(options, Array.isArray(json.designTemplates));
     return json.designTemplates ?? [];
   } catch {
+    observeCatalogRead(options, false);
     return [];
   }
 }
@@ -655,6 +665,7 @@ export async function fetchDesignSystems(
   options?: FetchDesignSystemsOptions,
 ): Promise<DesignSystemSummary[]> {
   const result = await fetchDesignSystemsResult(workspaceContext, options);
+  observeCatalogRead(options, result.ok);
   return result.ok ? result.designSystems : [];
 }
 
@@ -667,7 +678,7 @@ export type DesignSystemsResult =
   | { ok: true; designSystems: DesignSystemSummary[] }
   | { ok: false };
 
-export interface FetchDesignSystemsOptions {
+export interface FetchDesignSystemsOptions extends CatalogReadObserver {
   /**
    * A realtime mutation invalidated the Team index. Every forced call starts
    * its own authoritative read; distinct mutations must never join an older
@@ -1308,13 +1319,15 @@ async function readImportError(resp: Response): Promise<SkillImportError> {
   };
 }
 
-export async function fetchPromptTemplates(): Promise<PromptTemplateSummary[]> {
+export async function fetchPromptTemplates(options?: CatalogReadObserver): Promise<PromptTemplateSummary[]> {
   try {
     const resp = await fetch('/api/prompt-templates');
-    if (!resp.ok) return [];
+    if (!resp.ok) { observeCatalogRead(options, false); return []; }
     const json = (await resp.json()) as { promptTemplates: PromptTemplateSummary[] };
+    observeCatalogRead(options, Array.isArray(json.promptTemplates));
     return json.promptTemplates ?? [];
   } catch {
+    observeCatalogRead(options, false);
     return [];
   }
 }
@@ -2016,12 +2029,6 @@ export async function publishProjectFilePublic(
   return publicFileShareLinkFromPublish(await resp.json());
 }
 
-export async function fetchProjectFileSharePlan(projectId: string, fileName: string, workspaceContext?: WorkspaceCollabContext | null) {
-  const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(fileName)}/share-plan`, { method: 'POST', headers: workspaceContext ? workspaceProjectHeaders(workspaceContext) : undefined });
-  if (!resp.ok) throw new Error(`Share preflight failed (${resp.status})`);
-  return resp.json() as Promise<import('@open-design/contracts').SharePlanSummary>;
-}
-
 // Only this endpoint's known codes may reach diagnostic logs; arbitrary token-shaped
 // upstream text can still contain sensitive data. No response messages are logged.
 const PUBLIC_SHARE_STATE_ERROR_CODES = new Set([
@@ -2040,6 +2047,22 @@ export class PublicFileShareStateReadError extends Error {
     super(`Share state read failed: ${reason}${status ? ` (${status})` : ''}`);
     this.name = 'PublicFileShareStateReadError';
   }
+}
+
+/** Pure local comparison; never performs cloud authorization or publication. */
+export async function fetchProjectFilePublicShareFreshness(
+  projectId: string,
+  fileName: string,
+  workspaceContext: WorkspaceCollabContext | null,
+): Promise<import('@open-design/contracts').ShareContentFreshness> {
+  const response = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(fileName)}/publish-public?localOnly=true`,
+    { headers: workspaceContext ? workspaceProjectHeaders(workspaceContext) : {} },
+  );
+  if (!response.ok) return 'unknown';
+  const body: unknown = await response.json();
+  if (!body || typeof body !== 'object' || !('freshness' in body)) return 'unknown';
+  return body.freshness === 'current' || body.freshness === 'outdated' ? body.freshness : 'unknown';
 }
 
 export async function fetchProjectFilePublicShareState(
@@ -2120,9 +2143,12 @@ export async function unpublishProjectFilePublic(
         : typeof payload?.error === 'string'
           ? payload.error
           : payload?.message;
-    throw withDaemonFailure(new Error(errorMessage || `Unpublish failed (${resp.status})`), {
+    const rawCode = typeof payload?.error === 'object' ? payload.error.code : payload?.error;
+    const code = typeof rawCode === 'string' ? rawCode : undefined;
+    // An HTTP refusal is distinct from fetch rejecting without any response.
+    throw withDaemonFailure(new PublicFilePublishError(errorMessage || `Unpublish failed (${resp.status})`, resp.status, code), {
       failure: payload?.failure,
-      daemonErrorCode: typeof payload?.error === 'object' ? payload.error.code : payload?.error,
+      daemonErrorCode: rawCode,
     });
   }
   return (await resp.json()) as ShareUnpublishResponse;

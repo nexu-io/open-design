@@ -35,6 +35,7 @@ import {
   displayStatusForSummary,
   foldRunsToProjectRunSummaries,
   readStoredAcknowledgedRuns,
+  summaryIsNotice,
   writeStoredAcknowledgedRuns,
   type AcknowledgedRuns,
   type ProjectRunSummary,
@@ -107,7 +108,8 @@ function sameSummary(a: ProjectRunSummary | null | undefined, b: ProjectRunSumma
   if (!a || !b) return (a ?? null) === b;
   return a.status === b.status
     && a.latestTerminalRunId === b.latestTerminalRunId
-    && a.latestTerminalUpdatedAt === b.latestTerminalUpdatedAt;
+    && a.latestTerminalUpdatedAt === b.latestTerminalUpdatedAt
+    && a.stoppedWhileAway === b.stoppedWhileAway;
 }
 
 async function readProject(projectId: string, context: WorkspaceCollabContext | null): Promise<void> {
@@ -117,8 +119,11 @@ async function readProject(projectId: string, context: WorkspaceCollabContext | 
   // An unreadable project yields null; keeping whatever was known leaves the
   // row as it was rather than asserting a status nobody verified.
   if (!result) return;
-  const next = foldRunsToProjectRunSummaries(result.runs, result.awaitingInputProjectIds)
-    .get(projectId) ?? null;
+  const next = foldRunsToProjectRunSummaries(
+    result.runs,
+    result.awaitingInputProjectIds,
+    result.awaitingInputConversationIds,
+  ).get(projectId) ?? null;
   const previous = summaries.get(projectId);
   summaries.set(projectId, next);
   // Nothing drawn changes between "unknown" and "no runs", so no re-render.
@@ -126,9 +131,28 @@ async function readProject(projectId: string, context: WorkspaceCollabContext | 
   if (!sameSummary(previous, next)) emit();
 }
 
+/**
+ * Projects whose create has not answered yet (a Home send's optimistic row,
+ * OPEND-3334). The row is listed by the rail and the tab switcher from the
+ * click, but it does not exist on the daemon: asking about it is a read of a
+ * project nobody may read yet. Its status is "not started" either way.
+ */
+const unpersistedProjectIds = new Set<string>();
+
+/** Hold run-status reads for a project until its create answers. */
+export function holdProjectRunStatusReads(projectId: string): void {
+  unpersistedProjectIds.add(projectId);
+}
+
+/** The create answered (or was rolled back): the project may be asked about. */
+export function releaseProjectRunStatusReads(projectId: string): void {
+  unpersistedProjectIds.delete(projectId);
+}
+
 /** Ask about each id not already being asked about. Answers land as they come. */
 function refresh(ids: Iterable<string>, contextFor: (projectId: string) => WorkspaceCollabContext | null): void {
   for (const projectId of ids) {
+    if (unpersistedProjectIds.has(projectId)) continue;
     if (inFlight.has(projectId)) continue;
     inFlight.add(projectId);
     void readProject(projectId, contextFor(projectId)).finally(() => {
@@ -195,7 +219,7 @@ function removeSubscription(subscription: Subscription): void {
  */
 export function acknowledgeProjectCompletion(projectId: string): void {
   const summary = summaries.get(projectId);
-  if (!summary || summary.status !== 'succeeded' || !summary.latestTerminalRunId) return;
+  if (!summary || !summaryIsNotice(summary) || !summary.latestTerminalRunId) return;
   const runId = summary.latestTerminalRunId;
   const current = acknowledgedRuns();
   if (current[projectId] === runId) return;
@@ -214,6 +238,7 @@ export function resetProjectRunStatusStore(): void {
   summaries.clear();
   acknowledged = null;
   inFlight.clear();
+  unpersistedProjectIds.clear();
   subscriptions.clear();
   stopFeed();
   version += 1;

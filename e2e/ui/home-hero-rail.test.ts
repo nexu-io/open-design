@@ -593,7 +593,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('[P0] cold-start Home keeps the type capsule transparent and disabled while plugins settle', async ({ page }, testInfo) => {
+test('[P0] cold-start Home keeps creation pills styled and disabled while plugins settle', async ({ page }, testInfo) => {
   await page.addInitScript(() => {
     window.localStorage.removeItem('open-design:home-composer:chip');
   });
@@ -615,16 +615,20 @@ test('[P0] cold-start Home keeps the type capsule transparent and disabled while
     });
 
     await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await waitForLoadingToClear(page);
     const typeRow = homeTemplateTrigger(page);
     try {
       await expect(typeRow).toBeVisible();
       await expect(page.getByTestId('home-hero-examples-loading')).toHaveCount(0);
       await expect(page.getByTestId('home-hero-plugin-presets')).toHaveCount(0);
       await expect(typeRow).toBeDisabled();
-      await expect(typeRow).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-      await expect(typeRow).toHaveCSS('border-top-width', '0px');
+      const primaryPill = page.getByTestId('home-hero-type-pill-prototype');
+      await expect(primaryPill).toBeDisabled();
+      const pillBackground = await primaryPill.evaluate((element) => getComputedStyle(element).backgroundColor);
+      await expect(typeRow).toHaveCSS('background-color', pillBackground);
+      await expect(typeRow).toHaveCSS('border-top-width', '1px');
       await expect(typeRow).toHaveCSS('box-shadow', 'none');
-      await expect(page.getByTestId('home-hero-template-picker')).not.toHaveAttribute('data-type');
+      await expect(page.getByTestId('home-hero-template-picker')).toHaveCount(0);
       await expect(page.getByTestId('home-hero-submit')).toBeDisabled();
       await testInfo.attach(`home-type-loading-${viewport.width}`, {
         body: await page.screenshot(), contentType: 'image/png',
@@ -635,7 +639,8 @@ test('[P0] cold-start Home keeps the type capsule transparent and disabled while
 
     await waitForLoadingToClear(page);
     await expect(typeRow).toBeEnabled();
-    await expect(page.getByTestId('home-hero-template-picker')).toHaveAttribute('data-type', 'prototype');
+    await expect(page.getByTestId('home-hero-type-pills')).toBeVisible();
+    await expect(page.getByTestId('home-hero-template-picker')).toHaveCount(0);
 
     await pickHomeTemplate(page, 'prototype');
     await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
@@ -652,16 +657,19 @@ test('[P0] failed initial catalog releases the type picker without claiming a de
       : { json: { plugins: HOME_PLUGINS } });
   });
   await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
   await expect(homeTemplateTrigger(page)).toBeEnabled();
-  await expect(page.getByTestId('home-hero-template-picker')).not.toHaveAttribute('data-type');
+  await expect(page.getByTestId('home-hero-template-picker')).toHaveCount(0);
   const menu = await openHomeTemplates(page);
   await expect(menu.locator('[aria-selected="true"]')).toHaveCount(0);
   await page.keyboard.press('Escape');
 
   failCatalog = false;
   await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
   await expect(homeTemplateTrigger(page)).toBeEnabled();
-  await expect(page.getByTestId('home-hero-template-picker')).toHaveAttribute('data-type', 'prototype');
+  await expect(page.getByTestId('home-hero-type-pills')).toBeVisible();
+  await expect(page.getByTestId('home-hero-template-picker')).toHaveCount(0);
 });
 
 test('[P1] last project list row keeps its overflow menu inside the viewport', async ({ page }) => {

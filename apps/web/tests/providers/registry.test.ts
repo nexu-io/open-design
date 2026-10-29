@@ -20,6 +20,10 @@ import {
   deployProjectFile,
   createDesignSystemDraft,
   fetchAgentsStream,
+  fetchSkills,
+  fetchDesignTemplates,
+  fetchDesignSystems,
+  fetchPromptTemplates,
   fetchPreviewComments,
   fetchCloudflarePagesZones,
   fetchDeployConfig,
@@ -48,6 +52,37 @@ import {
   upsertPreviewComment,
   writeProjectTextFileDetailed,
 } from '../../src/providers/registry';
+
+describe('passive startup catalog observation', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+  const readers = [
+    (onReadResult: (success: boolean) => void) => fetchSkills(null, { onReadResult }),
+    (onReadResult: (success: boolean) => void) => fetchDesignTemplates({ onReadResult }),
+    (onReadResult: (success: boolean) => void) => fetchDesignSystems(null, { onReadResult }),
+    (onReadResult: (success: boolean) => void) => fetchPromptTemplates({ onReadResult }),
+  ];
+  it.each(readers.map((read, index) => ({ read, index })))(
+    'observes failures without changing the existing empty-list result $index', async ({ read }) => {
+      for (const fetcher of [
+        async () => new Response('', { status: 503 }),
+        async () => { throw new Error('offline'); },
+        async () => new Response('{'),
+      ]) {
+        const observer = vi.fn();
+        vi.stubGlobal('fetch', vi.fn(fetcher));
+        await expect(read(observer)).resolves.toEqual([]);
+        expect(observer).toHaveBeenLastCalledWith(false);
+      }
+      const observer = vi.fn();
+      vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+        skills: [], designTemplates: [], designSystems: [], promptTemplates: [],
+      })));
+      await expect(read(observer)).resolves.toEqual([]);
+      expect(observer).toHaveBeenLastCalledWith(true);
+      await expect(read(() => { throw new Error('observation failed'); })).resolves.toEqual([]);
+    },
+  );
+});
 
 describe('explicit comment pull in the UI provider', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -421,7 +456,7 @@ describe('design-system Workspace scope', () => {
     });
   });
 
-  it('keeps personal and official systems available when team materialization fails', async () => {
+  it.each([false, true])('keeps personal and official systems available when team materialization fails (observed=%s)', async (observed) => {
     const context = {
       ...teamWorkspaceContext(),
       workspaceId: 'ws-team-offline',
@@ -446,13 +481,16 @@ describe('design-system Workspace scope', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
+    await expect(fetchDesignSystems(context, observed ? { onReadResult: vi.fn() } : undefined)).resolves.toMatchObject([
+      expect.objectContaining({ id: 'user:local-brand' }),
+    ]);
     await expect(fetchDesignSystemsResult(context)).resolves.toMatchObject({
       ok: true,
       designSystems: [expect.objectContaining({
         id: 'user:local-brand',
       })],
     });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledWith('/api/design-systems', expect.anything());
   });
 
   it('partitions team materialization when the Workspace changes', async () => {

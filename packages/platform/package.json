@@ -20,9 +20,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "devDependencies": {
+    "@typescript/native": "npm:typescript@7.0.2",
     "@types/node": "24.12.2",
     "esbuild": "0.28.0",
-    "typescript": "6.0.3",
     "vitest": "4.1.6"
   },
   "engines": {

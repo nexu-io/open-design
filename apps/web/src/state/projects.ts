@@ -12,6 +12,7 @@ import { BackoffController, type BackoffOptions } from '../lib/backoff';
 import { markProjectCreatedByViewer } from '../collab/useProjectCollab';
 import {
   API_ERROR_CODES,
+  MESSAGES_STREAM_CONTENT_TYPE,
   isSameWorkspacePrincipal,
   type ApiErrorCode,
   type ProjectDeleteShareResidual,
@@ -44,6 +45,7 @@ import type {
   WorkspaceProjectsResponse,
 } from '@open-design/contracts';
 import { randomUUID } from '../utils/uuid';
+import { readMessageStream } from './read-message-stream';
 import { markProjectDisplaySnapshotsDirty } from './project-display-cache';
 import {
   workspaceIdentityCacheKey,
@@ -750,6 +752,8 @@ export async function createProject(
     pendingPrompt?: string;
     metadata?: ProjectMetadata;
     conversationMode?: ChatSessionMode;
+    /** Optional caller-minted id for the seeded conversation (same handoff). */
+    conversationId?: string;
     // Plan §3.A1 / spec §11.5 — POST /api/projects accepts a pluginId
     // (or pre-applied snapshot id) to resolve and pin a plugin to the new
     // project. Used by the PluginLoopHome flow on Home.
@@ -1468,16 +1472,18 @@ export async function listMessages(
   conversationId: string,
   workspaceContext?: WorkspaceCollabContext | null,
   signal?: AbortSignal,
+  onProgress?: () => void,
 ): Promise<ChatMessage[]> {
   try {
     const resp = await fetch(
       `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`,
-      workspaceContext || signal
-        ? {
-            ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
-            ...(signal ? { signal } : {}),
-          }
-        : undefined,
+      {
+        headers: {
+          Accept: MESSAGES_STREAM_CONTENT_TYPE,
+          ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+        },
+        ...(signal ? { signal } : {}),
+      },
     );
     if (!resp.ok) {
       const failure = await readProjectMessageListError(resp);
@@ -1487,6 +1493,9 @@ export async function listMessages(
         failure.code,
         failure.retryable,
       );
+    }
+    if (resp.headers.get('content-type')?.split(';')[0]?.trim() === MESSAGES_STREAM_CONTENT_TYPE) {
+      return await readMessageStream(resp, signal, onProgress);
     }
     const json = (await resp.json()) as { messages: ChatMessage[] };
     return json.messages ?? [];

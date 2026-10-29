@@ -1,4 +1,6 @@
 // @ts-nocheck
+import { recordStrategyTaskRunLifecycle } from './strategies/task-display.js';
+import { observeDiscoveryEvent } from './strategies/od-next/discovery-observation.js';
 import { assertCommentFileNotPending } from './collab/comment-file-retirements.js';
 import { captureJsonBodySize } from './http/json-body-size.js';
 
@@ -32,7 +34,6 @@ import {
   composeOdNextStrategyCorePromptV2,
   OD_NEXT_BUNDLE_ECHO_GUARD_V2,
   odNextStrategyRecipeIdentityV2,
-  renderOdNextRuntimeFactsV2,
   composeOdNextStrategyStableRequestContextV2,
   executionProfileFromStreamFormat,
   PLUGIN_SHARE_ACTION_PLUGIN_IDS,
@@ -909,6 +910,7 @@ import { registerHandoffRoutes } from './routes/handoff.js';
 import { TranscriptExportLockedError } from './transcript-export.js';
 import { registerChatRoutes } from './routes/chat.js';
 import { registerRunRoutes } from './routes/runs.js';
+import { composeRunTerminalHooks, createRunNoticeLog } from './runtimes/run-notices.js';
 import { registerStrategyRolloutRoutes } from './routes/strategy-rollout.js';
 import { registerTerminalRoutes } from './routes/terminal.js';
 import { registerBrowserSessionRoutes } from './routes/browser-sessions.js';
@@ -1195,6 +1197,7 @@ import {
   isZeroConfigClipperLibraryRequest,
   parseHostHeader,
 } from './origin-validation.js';
+import { projectPoweredPreviewOriginDecision } from './http/powered-preview-origin.js';
 import { registerLibraryRoutes } from './routes/library.js';
 import {
   libraryExtensionAllowedOrigins,
@@ -1945,12 +1948,18 @@ export function createOpenDesignToolEnv({
   projectDir,
   projectId,
   workspaceScope,
+  runId,
+  conversationId,
+  analyticsContext,
 }: {
   daemonUrl: string;
   hyperFramesBin?: string;
   projectDir?: string | null;
   projectId?: string | null;
   workspaceScope?: RunWorkspaceScope | null;
+  runId?: string | null;
+  conversationId?: string | null;
+  analyticsContext?: AnalyticsContext | null;
 }): NodeJS.ProcessEnv {
   const scope = workspaceScope?.projectId === projectId ? workspaceScope : null;
   return {
@@ -1959,6 +1968,12 @@ export function createOpenDesignToolEnv({
     OD_HYPERFRAMES_BIN: hyperFramesBin,
     OD_NODE_BIN,
     OD_DAEMON_URL: daemonUrl,
+    OD_STOCK_RUN_ID: runId ?? '',
+    OD_STOCK_SESSION_ID: conversationId ?? '',
+    OD_STOCK_ANALYTICS_DEVICE_ID: analyticsContext?.deviceId ?? '',
+    OD_STOCK_ANALYTICS_SESSION_ID: analyticsContext?.sessionId ?? '',
+    OD_STOCK_ANALYTICS_CLIENT_TYPE: analyticsContext?.clientType ?? '',
+    OD_STOCK_ANALYTICS_LOCALE: analyticsContext?.locale ?? '',
     // Always overwrite ambient/configured identities, including unbound runs.
     // An older bound Run without a member keeps its Workspace id so the CLI
     // rejects the incomplete pair rather than silently reading another library.
@@ -2581,8 +2596,8 @@ export function createFinalizedMessageTelemetryReporter({
   return reportFinalized;
 }
 
-export function shouldReportRunCompletionTelemetryFallbackStatus(status: unknown): boolean {
-  return status === 'failed' || status === 'canceled';
+export function shouldReportRunCompletionTelemetryFallbackStatus(status: unknown, taskOwned = false): boolean {
+  return status === 'failed' || status === 'canceled' || (status === 'succeeded' && taskOwned);
 }
 
 const PROJECT_PREVIEW_SCOPE_TTL_MS = 60 * 60 * 1000;
@@ -3447,10 +3462,23 @@ export async function startServer({
     /^\/projects\/[^/]+\/(?:raw|preview)\/|^\/codex-pets\/[^/]+\/spritesheet$|^\/asset-cache$/;
   const _POWERED_PREVIEW_SAFE_RE = /^\/projects\/[^/]+\/powered\/.+$/u;
 
-  // Reject cross-origin requests to API endpoints.
-  // Health/version remain open for monitoring probes.
-  // Non-browser clients (no Origin header) are always allowed.
+  // Reserve project preview hosts before API exceptions and static serving.
+  app.use((req, res, next) => {
+    const projectPreviewDecision = projectPoweredPreviewOriginDecision(req, resolvedPort);
+    if (projectPreviewDecision === 'reject') {
+      return res.status(403).json({
+        error: 'Powered preview origin cannot access this API route',
+      });
+    }
+    res.locals.projectPoweredPreview = projectPreviewDecision === 'allow';
+    next();
+  });
+
+  // Reject cross-origin requests to API endpoints. Normal non-browser
+  // clients (no Origin header) retain their existing access.
   app.use('/api', (req, res, next) => {
+    if (res.locals.projectPoweredPreview === true) return next();
+
     // Live artifact previews have stricter local-daemon validation and
     // loopback CORS handling on the route itself. Let that middleware produce
     // the structured error shape and preflight headers for preview embeds.
@@ -3538,6 +3566,10 @@ export async function startServer({
   const db = openDatabase(PROJECT_ROOT, { dataDir: RUNTIME_DATA_DIR });
   daemonHealth?.setStorageProbe(() => readSqlitePageStats({ db, file: db.name }));
   const amrTerminalReportOutbox = createAmrTerminalReportOutboxStore(db);
+  // P0-24 N10: notices for turns that end while this process runs (never replayed).
+  const runNotices = createRunNoticeLog({
+    projectName: (projectId) => getProject(db, projectId)?.name ?? null,
+  });
   const amrTerminalReportDelivery = createAmrTerminalReportDeliveryService({
     store: amrTerminalReportOutbox,
     env: { ...process.env, OD_DATA_DIR: RUNTIME_DATA_DIR },
@@ -5335,7 +5367,7 @@ export async function startServer({
         && item.lifecycleState !== 'deleted' && item.lifecycleState !== 'deleting');
     }, { readAlign: scope => commentAlignment.read(scope),
       readProjectShareState: createVelaProjectShareState({
-        dataRoot: RUNTIME_DATA_DIR, configuredEnv: configuredAmrEnv, registerLocallyOwnedProject: false,
+        dataRoot: RUNTIME_DATA_DIR, configuredEnv: configuredAmrEnv,
       }),
       readCredential: () => {
         const current = readVelaControlApiContext(process.env, configuredAmrEnv());
@@ -5552,6 +5584,7 @@ export async function startServer({
     resolvePublicShareLink: (projectId, slug, amr) => resolvePublicShareLink(projectId, slug, amr, process.env, configuredAmrEnv()),
     sharePublishing: {
       sourceFileId: (scope, project) => localCommentFiles.identity(scope.projectId, scope.filePath, project?.metadata?._commentFiles),
+      needsCatalogSourceIdentity: scope => localCommentFiles.needsCatalogIdentity(scope.projectId, scope.filePath),
       admitFileReceipt: (scope, resourceId, versionId, entryPath, run) => localCommentFiles.admit({
         projectId: scope.projectId, workspaceId: scope.resourceTeamId, creatorMemberId: scope.ownerMemberId,
         resourceId, versionId, paths: [{ sourceFilePath: scope.filePath, entryPath, sourceFileId: scope.sourceFileId }], run,
@@ -5579,12 +5612,6 @@ export async function startServer({
         const currentSession = readVelaControlApiContext(process.env, configuredEnv);
         if (!currentSession?.controlKey || !currentSession.apiUrl) throw new Error('PUBLIC_SHARE_SESSION_UNAVAILABLE');
         const session = Object.freeze({ ...currentSession });
-        const directory = await fetchVelaWorkspaceDirectory({ readSession: () => session });
-        if (!directory.ok || !directory.items.some(item => item.workspaceId === identity.resourceTeamId
-          && item.workspaceMemberId === identity.ownerMemberId && item.memberStatus === 'active'
-          && item.lifecycleState !== 'deleted' && item.lifecycleState !== 'deleting')) {
-          throw new Error('PUBLIC_SHARE_IDENTITY_UNAVAILABLE');
-        }
         return { run: args => runPinnedVelaCommand({ args, session,
           workspaceId: identity.resourceTeamId, dataRoot: RUNTIME_DATA_DIR, configuredEnv }) };
       },
@@ -5600,7 +5627,7 @@ export async function startServer({
         })().catch(() => { console.warn('[od] share binding retry unavailable'); });
       },
     },
-    readProjectShareState: createVelaProjectShareState({ dataRoot: RUNTIME_DATA_DIR, configuredEnv: configuredAmrEnv, resolveLocalProjectOwner }),
+    readProjectShareState: createVelaProjectShareState({ dataRoot: RUNTIME_DATA_DIR, configuredEnv: configuredAmrEnv }),
     shareContentFingerprints: createShareContentFingerprints(db, publicFilePublicationStore),
     publicFileMutations,
     ownedContentSync,
@@ -8323,6 +8350,18 @@ export async function startServer({
         if (incidentId) run.diagnosticIncidentIds = [...new Set([...(run.diagnosticIncidentIds ?? []), incidentId])].slice(-100);
       },
       onEventEmitted: (run, record) => {
+        if (record.event === 'start' || record.event === 'end' || record.event === 'run_resume_attempted') {
+          try {
+          recordStrategyTaskRunLifecycle(db, { runId: run.id, phase: record.event === 'run_resume_attempted' ? 'prepare' : record.event,
+            at: record.timestamp, status: run.status, attempt: run.manualResumeAttemptCount ?? 0,
+            authenticatedDoneConclusion: run.authenticatedDoneConclusion });
+          const displayTask = getStrategyTaskExecutionByRunId(db, run.id);
+          if (displayTask) {
+            run.strategyTask = projectStrategyTask(displayTask, run.id, db);
+            record.data.strategyTask = run.strategyTask;
+          }
+          } catch (error) { console.warn('[task-display] lifecycle projection unavailable', error instanceof Error ? error.message : 'unknown'); }
+        }
         if (record.event === 'start') automaticDiagnostics?.trackRun(run.id, {
           sourceId: `run:${run.id}:interrupted:${run.manualResumeAttemptCount ?? 0}:${record.timestamp}`,
           kind: 'active_run', at: record.timestamp, runId: run.id, agentId: run.agentId,
@@ -8364,7 +8403,10 @@ export async function startServer({
           : null;
         if (promptBudget) run.promptBudgetDiagnostics = promptBudget;
       },
-      onTerminal: createAmrTerminalReportFinalizer(amrTerminalReportOutbox),
+      onTerminal: composeRunTerminalHooks(
+        createAmrTerminalReportFinalizer(amrTerminalReportOutbox),
+        runNotices.record,
+      ),
       beforeFinish: (run, status, _code, _signal, terminalAt) => {
         if (run.deliverableSyntaxValidation?.metrics) {
           run.deliverableSyntaxValidation = {
@@ -8380,7 +8422,7 @@ export async function startServer({
         try {
           reconcileStrategyTaskRunTerminal(db, { runId: run.id, status });
           const latestTask = getStrategyTaskExecutionByRunId(db, run.id);
-          if (latestTask) run.strategyTask = projectStrategyTask(latestTask, run.id);
+          if (latestTask) run.strategyTask = projectStrategyTask(latestTask, run.id, db);
         } catch (error) {
           if (!(error instanceof InvalidFrozenSkillPackageError) && !(error instanceof InvalidStrategyTaskRecordError)) throw error;
           // The Run is already failing closed for the corrupt task state. Do
@@ -8451,7 +8493,10 @@ export async function startServer({
     run: any;
     status: string;
   }) => {
-    if (!shouldReportRunCompletionTelemetryFallbackStatus(status)) return;
+    // Headless Task consumers do not save a final assistant message. Keep the UI
+    // grace period and durable delivery gates, but also settle successful Tasks.
+    const taskOwned = status === 'succeeded' && Boolean(getStrategyTaskExecutionByRunId(db, run.id));
+    if (!shouldReportRunCompletionTelemetryFallbackStatus(status, taskOwned)) return;
     const timer = setTimeout(() => {
       terminalTelemetryFallbackTimers.delete(timer);
       if (reportedRuns.has(run.id)) return;
@@ -8681,9 +8726,9 @@ export async function startServer({
   // Powered-preview isolation info. Reports the daemon's own directly-reachable
   // http origin so the web host can render WebGL/Worker/WASM/SharedArrayBuffer
   // artifacts in a cross-origin-isolated iframe (see the /powered route and
-  // apps/web/src/runtime/powered-preview.ts). The web host always swaps this
-  // loopback hostname before loading powered files; the /api origin middleware
-  // then treats that swapped browser origin as preview-only.
+  // apps/web/src/runtime/powered-preview.ts). The web host derives a separate
+  // loopback hostname per project; the /api origin middleware reserves each
+  // hostname for that project's powered GETs.
   app.get('/api/preview/isolation', (_req, res) => {
     const reportHost = reportHostForPoweredPreview();
     const baseOrigin = resolvedPort ? `http://${reportHost}:${resolvedPort}` : null;
@@ -8691,6 +8736,7 @@ export async function startServer({
     /** @type {import('@open-design/contracts').ProjectPreviewIsolationResponse} */
     const body = {
       supported: Boolean(baseOrigin),
+      projectOrigins: true,
       baseOrigin,
       pathPrefix: 'powered',
     };
@@ -10318,9 +10364,6 @@ export async function startServer({
     platformHintSignal,
     devicePlatformSignal = null,
     frozenSkillPackage,
-    odNextSyntheticCanary = false,
-    odNextAutomaticAdmission = false,
-    runtimeCapabilitySnapshot,
   }) => {
     const project =
       typeof projectId === 'string' && projectId
@@ -10987,23 +11030,13 @@ export async function startServer({
     }
 
     // Strategy identity, package/profile drift checks, atom loading, runtime
-    // capability facts, and local-only synthetic policy are owned by the OD
-    // Next prompt service. This composition root only supplies detected runtime
-    // versions and process configuration.
+    // profile selection are owned by the OD Next prompt service.
     const odNextStrategyRecipe = await resolveOdNextPromptRecipeForRun({
       db,
       bundledPluginsDir: BUNDLED_PLUGINS_DIR,
       appliedPluginSnapshotId,
-      agentId,
       streamFormat,
       atomPromptsEnabled: bundledAtomPromptsEnabled,
-      syntheticCanary: odNextSyntheticCanary,
-      automaticAdmission: odNextAutomaticAdmission,
-      runtimeCapabilitySnapshot,
-      getRuntimeVersions: () => ensureDetectedRuntimeVersions(
-        agentId,
-        agentCliEnvForAgent(appConfigForPrompt?.agentCliEnv, agentId),
-      ),
     });
 
     // Hoisted verbatim out of the composeSystemPrompt() call so the exact same
@@ -11114,7 +11147,8 @@ export async function startServer({
       && freeformDeckSignal === true;
     const isOdNextDeckRequest = odNextStrategyRecipe?.taskType === 'ppt'
       || odNextDeckIntent;
-    const hasSelectedDeckSeed = odNextStrategyRecipe?.taskType === 'ppt' && Boolean(
+    const inspectDeckScaffold = isOdNextDeckRequest || odNextStrategyRecipe?.taskType === 'discovery';
+    const hasSelectedDeckSeed = inspectDeckScaffold && Boolean(
       template?.files?.some((file) => /\.html?$/i.test(file.name))
       || /(?:^|\/)assets\/template\.html\b/i.test(skillBody ?? '')
       || frozenSkillPackage?.selections?.some((selection) =>
@@ -11124,7 +11158,7 @@ export async function startServer({
     );
     let hasExistingDeckArtifact = false;
     if (
-      odNextStrategyRecipe?.taskType === 'ppt'
+      inspectDeckScaffold
       && typeof projectId === 'string'
       && projectId
     ) {
@@ -11157,7 +11191,9 @@ export async function startServer({
           // resolves to null and adds no bytes.
           planToolNote: planToolNoteForRuntime(agentId, streamFormat),
           executionProfile: executionProfileFromStreamFormat(streamFormat),
-          deckIntent: odNextDeckIntent,
+          // Discovery reads the staged framework through the selected PPT Skill.
+          // Suppress the stable-context renderer's eager deck-intent fallback too.
+          deckIntent: odNextStrategyRecipe.taskType !== 'discovery' && odNextDeckIntent,
           deckFrameworkMode: odNextDeckFrameworkMode,
           metadata,
           template,
@@ -11191,7 +11227,6 @@ export async function startServer({
       assertOdNextSemanticRequestFactProducerCoverage('daemon_system_prompt', {
         strategy_task_skill: odNextStrategyRecipe.taskSkill,
         strategy_task_type: odNextStrategyRecipe.taskType,
-        strategy_runtime_capability_facts: odNextStrategyRecipe.planningFacts,
         project_and_design_context: {
           metadata,
           template,
@@ -11213,18 +11248,14 @@ export async function startServer({
       ? composeOdNextStrategyCorePromptV2(odNextStrategyRecipe)
       : composeSystemPrompt(systemPromptInputs);
     // OD Next sends a canonical XML tree, not this Markdown string. The tree's
-    // cache-stable head, its per-task identity, and the runtime-owned planning
-    // facts are three separate products of the same verified recipe, so they are
-    // composed here together and placed in different bundle slots downstream.
+    // cache-stable head and per-task identity are composed here together and
+    // placed in their existing bundle slots downstream.
     const odNextBundleHead = odNextStrategyRecipe
       ? composeOdNextStrategyBundleHeadV2(odNextStrategyRecipe)
       : null;
     const odNextRecipeIdentity = odNextStrategyRecipe
       ? odNextStrategyRecipeIdentityV2(odNextStrategyRecipe)
       : null;
-    const odNextRuntimeFacts = odNextStrategyRecipe
-      ? renderOdNextRuntimeFactsV2(odNextStrategyRecipe, odNextStableRequestContext ?? {})
-      : '';
     // The chat handler also needs to know where the active skill lives
     // on disk so it can stage a per-project copy of its side files
     // before spawning the agent. Returning that here avoids a second
@@ -11235,7 +11266,7 @@ export async function startServer({
       prompt,
       odNextBundleHead,
       odNextRecipeIdentity,
-      odNextRuntimeFacts,
+      odNextRuntimeFacts: '',
       odNextStableContextPrompt: odNextStableRequestContext
         ? composeOdNextStrategyStableRequestContextV2(
             odNextStableRequestContext,
@@ -11441,6 +11472,17 @@ export async function startServer({
     }
     let persistedStrategyFinalText = strategyRunMapping?.finalText.text ?? null;
     const isOdNextInitialRun = Boolean(strategyTaskAtStart && isInitialStrategyTaskRun(strategyTaskAtStart, run.id));
+    let discoveryPromptRecorded = false;
+    const recordDiscoveryPromptDelivered = () => {
+      if (discoveryPromptRecorded || !strategyTaskAtStart?.promptBundle.text.includes('skill_name="discovery"')) return;
+      discoveryPromptRecorded = true;
+      const data = { type: 'skill_discovery_policy', skillId: 'deliverable-discovery',
+        injected: persistedStrategyFinalText?.includes('skill_name="discovery"') === true,
+        skillRoot: path.join(BUNDLED_PLUGINS_DIR, 'scenarios/od-next-strategy/assets/task-profiles'),
+        source: isOdNextInitialRun ? 'request' : 'production_continuation' };
+      observeDiscoveryEvent(run, { event: 'diagnostic', data });
+      design.runs.emit(run, 'diagnostic', data);
+    };
     const hasExplicitCurrentPrompt = Object.prototype.hasOwnProperty.call(
       chatBody,
       'currentPrompt',
@@ -12552,7 +12594,7 @@ export async function startServer({
       && !strategyRunMapping?.coldStartFinalText
     ) {
       const ended = endFailedAutomaticContinuation(db, { runId: run.id });
-      if (ended) run.strategyTask = projectStrategyTask(ended, run.id);
+      if (ended) run.strategyTask = projectStrategyTask(ended, run.id, db);
       throw new Error(
         'OD Next continuation requires the locked native session; cold re-seeding is forbidden.',
       );
@@ -13088,6 +13130,10 @@ export async function startServer({
       }
     };
     const send = (event, data) => {
+      recordRunTelemetry('skill discovery', () => {
+        if (event === 'agent') recordDiscoveryPromptDelivered();
+        observeDiscoveryEvent(run, { event, data });
+      });
       if (event === 'agent' && data?.type === 'usage') {
         physicalSessionUsage.observe(event, data);
       }
@@ -13456,6 +13502,39 @@ export async function startServer({
       if (typeof code === 'number') return code === 0 ? 'exit_0' : 'exit_nonzero';
       return 'unknown';
     };
+    // The protocol withholds any text that might still turn out to be a
+    // reserved `<open-design-…>` block, including a reply's last line until
+    // its newline arrives; `finish()` is what finally rules that out, so the
+    // tail it returns is the first moment those bytes are user-visible. Every
+    // way a Run ends must release it, not only success: a Run that fails or is
+    // stopped right after an unterminated line would otherwise drop text the
+    // agent already produced from the conversation.
+    let strategyProtocolFinished = null;
+    const finishStrategyProtocol = () => {
+      if (strategyProtocolFinished) return strategyProtocolFinished;
+      strategyProtocolFinished = strategyProtocol.finish();
+      const tail = strategyProtocolFinished.visibleTail;
+      if (tail) {
+        const tailEvent = def.streamFormat === 'plain' ? 'stdout' : 'agent';
+        const tailData = tailEvent === 'stdout'
+          ? { chunk: tail }
+          : { type: 'text_delta', delta: tail };
+        // It cannot go back through `send`, which would hold it again, so it
+        // applies the same visible output rule here. For a reply whose visible
+        // text was withheld in its entirety this is the ONLY thing the run ever
+        // puts on screen; without the mark the run reports no visible output at
+        // all and the analytics fallback collapses a real close-time wait back
+        // to `firstTokenAt`.
+        recordRunTelemetry('strategy close-time tail', () => {
+          applyVisibleOutputMarks(
+            runLifecycleMarkersForStreamEvent(tailEvent, tailData),
+          );
+        });
+        persistRunEventToAssistantMessage(db, run, tailEvent, tailData);
+        design.runs.emit(run, tailEvent, tailData);
+      }
+      return strategyProtocolFinished;
+    };
     const finishStrategyAwarePhysicalRun = (status, code = null, signal = null) => {
       const finished = finishRun(status, code, signal);
       return finished;
@@ -13464,9 +13543,33 @@ export async function startServer({
       status,
       code = null,
       signal = null,
-      { allowRetry = true } = {},
+      {
+        allowRetry = true,
+        // P0-24 Q6: an empty reply is a normal end, but a transient one may
+        // still be retried. The guard hands its error frame here instead of
+        // sending it: the frame goes out only if this attempt is retried, and
+        // an attempt that is not retried ends `succeeded` without it.
+        emptyReplyError = null,
+        skipCloseDiagnostic = false,
+      } = {},
     ) => {
-      lifecycle.mark('finalize_start');
+      if (!skipCloseDiagnostic) lifecycle.mark('finalize_start');
+      if (emptyReplyError) {
+        // Classify and decide retry from exactly the inputs the sent frame
+        // used to leave on the run, so retry behaviour does not change.
+        run.error = emptyReplyError.error?.message ?? run.error;
+        run.errorCode = emptyReplyError.error?.code ?? run.errorCode;
+      }
+      const sendEmptyReplyErrorBeforeRetry = () => {
+        if (emptyReplyError) send('error', emptyReplyError);
+      };
+      // Success releases the held tail itself, before it reads the verdict.
+      if (
+        strategyProtocol && status !== 'succeeded'
+        && !design.runs.isTerminal(run.status)
+      ) {
+        finishStrategyProtocol();
+      }
       // The Run records how the process ended; the strategy task records its
       // own verdict. A task blocked at any stage keeps a cleanly exited Run
       // succeeded: the task projection on the terminal event carries the
@@ -13479,13 +13582,15 @@ export async function startServer({
       // them from a generic process exit. Clear the pending value immediately
       // so a scheduled retry cannot inherit the previous attempt's reason.
       const rpcCloseReason = deriveRpcCloseReason(status, code, signal);
-      design.runs.emit(run, 'diagnostic', {
-        type: 'runtime_close',
-        rpc_close_reason: rpcCloseReason,
-        status,
-        ...(typeof code === 'number' ? { exit_code: code } : {}),
-        ...(signal ? { signal } : {}),
-      });
+      if (!skipCloseDiagnostic) {
+        design.runs.emit(run, 'diagnostic', {
+          type: 'runtime_close',
+          rpc_close_reason: rpcCloseReason,
+          status,
+          ...(typeof code === 'number' ? { exit_code: code } : {}),
+          ...(signal ? { signal } : {}),
+        });
+      }
       pendingRpcCloseReason = null;
       const result = runResultFromStatus(status);
       const errorCode = deriveRunErrorCode({
@@ -13585,6 +13690,7 @@ export async function startServer({
           resumed: agentResumeCtx.isResuming,
         });
         publishNativeSessionRecoveryMetadata();
+        sendEmptyReplyErrorBeforeRetry();
         design.runs.emit(run, 'run_retry_attempted', {
           ...retryAnalyticsBase(postToolResumeDecision, failure, errorCode),
           retry_reason: postToolResumeDecision.retryReason,
@@ -13622,6 +13728,7 @@ export async function startServer({
         run.retryStrategy = decision.retryStrategy;
         run.retryFinalResult = undefined;
         run.retrySuppressedReason = undefined;
+        sendEmptyReplyErrorBeforeRetry();
         design.runs.emit(run, 'run_retry_attempted', {
           ...retryAnalyticsBase(decision, failure, errorCode),
           retry_reason: decision.retryReason,
@@ -13629,6 +13736,24 @@ export async function startServer({
         });
         scheduleRetryRestart(decision.retryDelayMs);
         return true;
+      }
+      if (emptyReplyError) {
+        // Not retried: the agent exited cleanly with nothing to say, which is
+        // a normal end (P0-24 Q6, same as P7). Keep the evidence as a
+        // diagnostic, not as an error the turn would display.
+        run.error = null;
+        run.errorCode = null;
+        send('agent', {
+          type: 'diagnostic',
+          name: 'empty_reply_ended_normally',
+          source: 'daemon-run-finalize',
+          code: emptyReplyError.error?.code ?? null,
+          message: emptyReplyError.error?.message ?? null,
+        });
+        return finishWithRetryDecision('succeeded', code, signal, {
+          allowRetry: false,
+          skipCloseDiagnostic: true,
+        });
       }
       // Resume-on-failure: a terminal *resumable* failure (transient mid-stream
       // drop / inactivity) on a session-resuming runtime is not a dead end.
@@ -14760,6 +14885,9 @@ export async function startServer({
       projectDir: cwd,
       projectId: typeof projectId === 'string' ? projectId : null,
       workspaceScope: run.workspaceScope,
+      runId: run.id,
+      conversationId: run.conversationId,
+      analyticsContext: run.analyticsContext ?? null,
     });
     if (run.cancelRequested || design.runs.isTerminal(run.status)) {
       cleanupPromptFile();
@@ -16408,7 +16536,7 @@ export async function startServer({
           lifecycle.mark('model_call_start');
           lifecycle.mark('stdin_write_start');
         },
-        onPromptSendEnd: () => lifecycle.mark('stdin_write_end'),
+        onPromptSendEnd: () => { lifecycle.mark('stdin_write_end'); recordRunTelemetry('discovery prompt', recordDiscoveryPromptDelivered); },
         onTurnComplete: () => clearFirstOutputWatchdog(),
       });
       acpSession = codexSession;
@@ -16687,7 +16815,7 @@ export async function startServer({
           || resumeSideEffects.toolCallSeen || resumeSideEffects.artifactWriteSeen
           || resumeSideEffects.liveArtifactSeen || resumeSideEffects.userVisibleOutputSeen)) {
           const ended = endFailedAutomaticContinuation(db, { runId: run.id });
-          if (ended) run.strategyTask = projectStrategyTask(ended, run.id);
+          if (ended) run.strategyTask = projectStrategyTask(ended, run.id, db);
           send('error', createSseErrorPayload(
             'AGENT_SESSION_RESUME_FAILED',
             'The OD Next native session is unavailable and a safe cold restart cannot be proven.',
@@ -16782,13 +16910,17 @@ export async function startServer({
         !agentProducedOutput
       ) {
         markRpcCloseReason('empty_output');
-        send('error', createSseErrorPayload(
-          'AGENT_EXECUTION_FAILED',
-          'Agent completed without producing any output. The model or provider may have returned an empty response. Check the agent logs for upstream errors, then try re-authenticating the agent or switching models.',
-          { retryable: true },
-        ));
-        return finishWithRetryDecision('failed', code, signal);
+        return finishWithRetryDecision('failed', code, signal, {
+          emptyReplyError: createSseErrorPayload(
+            'AGENT_EXECUTION_FAILED',
+            'Agent completed without producing any output. The model or provider may have returned an empty response. Check the agent logs for upstream errors, then try re-authenticating the agent or switching models.',
+            { retryable: true },
+          ),
+        });
       }
+      // P0-24 N9: a plugin-authoring run that exited cleanly without the
+      // generated-plugin files still ended normally — what it produced never
+      // decides the run's status. Keep the evidence as a diagnostic only.
       if (
         code === 0 &&
         !run.cancelRequested &&
@@ -16796,12 +16928,12 @@ export async function startServer({
         !(await hasGeneratedPluginArtifacts(cwd)) &&
         !emittedRenderableQuestionForm(run.askUserScanText)
       ) {
-        send('error', createSseErrorPayload(
-          'AGENT_EXECUTION_FAILED',
-          'Plugin authoring ended before generating the required generated-plugin artifacts.',
-          { retryable: true },
-        ));
-        return finishWithRetryDecision('failed', code, signal);
+        send('agent', {
+          type: 'diagnostic',
+          name: 'plugin_authoring_artifacts_missing',
+          source: 'daemon-run-finalize',
+          message: 'Plugin authoring ended before generating the required generated-plugin artifacts.',
+        });
       }
       // Plain-stream auth-failure guard: plain adapters (e.g. deepseek's
       // TUI variants) may exit cleanly with visible stdout that's actually
@@ -16841,18 +16973,25 @@ export async function startServer({
         markRpcCloseReason('empty_output');
         const combinedDetail = `${agentStderrTail}\n${agentStdoutTail}`;
         const authFailure = classifyAgentAuthFailure(agentId, combinedDetail);
-        const msg = authFailure
-          ? authFailure.message ?? `${def.name} authentication expired. Please re-authenticate and retry.`
-          : `${def.name} returned an empty response. This may indicate an expired session — try re-authenticating the agent.`;
-        send('error', createSseErrorPayload(
-          authFailure ? 'AGENT_AUTH_REQUIRED' : 'AGENT_EXECUTION_FAILED',
-          msg,
-          { retryable: true },
-        ));
-        return finishWithRetryDecision('failed', 0, signal);
+        if (authFailure) {
+          // A login problem is a real failure, not an empty reply.
+          send('error', createSseErrorPayload(
+            'AGENT_AUTH_REQUIRED',
+            authFailure.message ?? `${def.name} authentication expired. Please re-authenticate and retry.`,
+            { retryable: true },
+          ));
+          return finishWithRetryDecision('failed', 0, signal);
+        }
+        return finishWithRetryDecision('failed', 0, signal, {
+          emptyReplyError: createSseErrorPayload(
+            'AGENT_EXECUTION_FAILED',
+            `${def.name} returned an empty response. This may indicate an expired session — try re-authenticating the agent.`,
+            { retryable: true },
+          ),
+        });
       }
-      // ACP agents that don't shut down on stdin.end() (e.g. Devin for
-      // Terminal) are forced to exit via SIGTERM from attachAcpSession after
+      // Native agents that don't shut down on stdin.end() (e.g. Devin or Pi)
+      // are forced to exit via SIGTERM after
       // a clean prompt completion. Without an override, the chat run would
       // be marked `failed` because `code === 0` fails (code is null on a
       // signal exit). `completedSuccessfully()` reports whether the ACP
@@ -16873,7 +17012,10 @@ export async function startServer({
         code,
         signal,
         acpCleanCompletion,
-        acpCompletionShutdownRequested,
+        acpCompletionShutdownRequested: acpCompletionShutdownRequested || (
+          typeof acpSession?.completionShutdownRequested === 'function' &&
+          acpSession.completionShutdownRequested()
+        ),
         artifactQuietShutdownRequested,
         turnCompletedCleanly: !!run.turnCompletedCleanly,
         artifactProducedThisRun:
@@ -17063,7 +17205,6 @@ export async function startServer({
             }
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            const failureMessage = `Failed to persist plain-stream artifact(s): ${message}`;
             console.warn(`[plain-stream] failed to persist stdout artifact(s): ${message}`);
             send('agent', {
               type: 'diagnostic',
@@ -17071,11 +17212,8 @@ export async function startServer({
               source: 'daemon-run-finalize',
               message,
             });
-            send('error', createSseErrorPayload(
-              'AGENT_EXECUTION_FAILED',
-              failureMessage,
-            ));
-            return finishWithRetryDecision('failed', 1, null);
+            // P0-24 N9: failing to save the page does not fail a run whose
+            // agent finished normally; the diagnostic above keeps the reason.
           }
         }
       }
@@ -17138,31 +17276,10 @@ export async function startServer({
       }
       if (status === 'succeeded') {
         if (strategyProtocol && !strategyProtocolResult) {
-          const finishedProtocol = strategyProtocol.finish();
+          const finishedProtocol = finishStrategyProtocol();
           strategyProtocolResult = finishedProtocol.parsed;
           const tail = finishedProtocol.visibleTail;
           if (tail) {
-            const tailEvent = def.streamFormat === 'plain' ? 'stdout' : 'agent';
-            const tailData = tailEvent === 'stdout'
-              ? { chunk: tail }
-              : { type: 'text_delta', delta: tail };
-            // The protocol withholds any text that might still turn out to be
-            // a reserved `<open-design-…>` block; `finish()` is what finally
-            // rules that out, so this tail is the first moment those bytes are
-            // user-visible. It cannot go back through `send` — `push` throws
-            // once the protocol is finished — so it applies the same visible
-            // output rule here. For a reply whose visible text was withheld in
-            // its entirety this is the ONLY thing the run ever puts on screen;
-            // without the mark the run reports no visible output at all and
-            // the analytics fallback collapses a real close-time wait back to
-            // `firstTokenAt`.
-            recordRunTelemetry('strategy close-time tail', () => {
-              applyVisibleOutputMarks(
-                runLifecycleMarkersForStreamEvent(tailEvent, tailData),
-              );
-            });
-            persistRunEventToAssistantMessage(db, run, tailEvent, tailData);
-            design.runs.emit(run, tailEvent, tailData);
             // The frozen Harness prompt currently does not receive the nonce,
             // so its authoritative completion signal remains the verified
             // strategy verdict. Still fold a marker if a future frozen bundle
@@ -17197,6 +17314,7 @@ export async function startServer({
         await resolveRunArtifactOutcomeBeforeFinishAsync();
         const deliverableFinalization = await finalizeSuccessfulRunDeliverable({
           allowIndependentOutput: Boolean(strategyTaskAtStart),
+          allowMultipleOutputCandidates: run.strategyRolloutDecision?.taskType === 'discovery',
           ...(run.artifactOutcome?.diff && baselineEntryFile ? { baselineEntryFile } : {}),
           projectsRoot: PROJECTS_DIR,
           projectId: run.projectId ?? null,
@@ -17358,16 +17476,17 @@ export async function startServer({
           const details = err instanceof AiHtmlVersionSnapshotError
             ? { failures: err.failures }
             : undefined;
-          send('error', createSseErrorPayload(
-            'HTML_VERSION_SNAPSHOT_FAILED',
+          // P0-24 N9: a failed version snapshot does not fail a run whose
+          // agent finished normally; keep the reason as a diagnostic.
+          console.warn(`[html-version-snapshot] ${message}`);
+          send('agent', {
+            type: 'diagnostic',
+            name: 'html_version_snapshot_failed',
+            source: 'daemon-run-finalize',
+            code: 'HTML_VERSION_SNAPSHOT_FAILED',
             message,
-            {
-              retryable: false,
-              ...(details ? { details } : {}),
-            },
-          ));
-          finishStrategyAwarePhysicalRun('failed', 1, signal);
-          return;
+            ...(details ? { details } : {}),
+          });
         }
         try {
           persistDeliveredAgentSessionState();
@@ -17447,10 +17566,10 @@ export async function startServer({
             finishStrategyAwarePhysicalRun('failed', 1, signal);
             return;
           }
-          run.strategyTask = projectStrategyTask(transition.result.task, run.id);
+          run.strategyTask = projectStrategyTask(transition.result.task, run.id, db);
           if (transition.start && transition.prepared?.kind === 'ready') {
             const nextRun = transition.prepared.run;
-            nextRun.strategyTask = projectStrategyTask(transition.result.task, nextRun.id);
+            nextRun.strategyTask = projectStrategyTask(transition.result.task, nextRun.id, db);
             pendingStrategyContinuation = {
               run: nextRun,
               chatBody: automaticContinuationChatBody,
@@ -17510,6 +17629,7 @@ export async function startServer({
                 continuation.run.strategyTask = projectStrategyTask(
                   latestTask,
                   continuation.run.id,
+                  db,
                 );
               }
               throw error;
@@ -17534,7 +17654,7 @@ export async function startServer({
       // The complete plain-text prompt became the child's stdin at spawn
       // (runtimes/agent-process.ts), so there is nothing left to write. A
       // spawn that failed (no PID) never received it.
-      if (typeof child.pid === 'number') recordPromptDeliveredAtSpawn(run, lifecycle);
+      if (typeof child.pid === 'number') { recordPromptDeliveredAtSpawn(run, lifecycle); recordRunTelemetry('discovery prompt', recordDiscoveryPromptDelivered); }
     } else if (writePromptToChildStdin && child.stdin) {
       const promptInputFormat = def.promptInputFormat ?? 'text';
       lifecycle.mark('model_call_start');
@@ -17542,6 +17662,7 @@ export async function startServer({
       const markStdinWriteEnd = (err?: Error | null) => {
         if (err) return;
         lifecycle.mark('stdin_write_end');
+        recordRunTelemetry('discovery prompt', recordDiscoveryPromptDelivered);
       };
       // Plain-text prompts never get here: they are delivered at spawn.
       // stream-json is the one prompt still pumped through a live pipe; a
@@ -17760,6 +17881,7 @@ export async function startServer({
   registerRunRoutes(app, {
     db,
     design,
+    runNotices,
     resources: { listAllSkillLikeEntries },
     http: httpDeps,
     paths: { BUNDLED_PLUGINS_DIR, PROJECTS_DIR, RUNTIME_DATA_DIR },
@@ -17798,6 +17920,7 @@ export async function startServer({
       },
     },
     telemetry: {
+      taskTelemetryForRun: (runId) => taskObservationRollout.telemetryForRun(runId),
       reportRunCompletionTelemetryFallback,
       resolveRunProjectKindForAnalytics,
       runArtifactBaselines,
@@ -18390,6 +18513,7 @@ export async function startServer({
         }
         await terminalService.shutdownActive();
         await browserSessionService.shutdownActive();
+        await telemetry.flushStockTelemetry();
         await design.analytics.shutdown();
       })();
       return daemonShutdownPromise;
@@ -18463,13 +18587,17 @@ export async function startServer({
         // the log tail that packaged startup telemetry samples.
         daemonHealth?.enableFatalReports();
         daemonHealth?.setAppVersion(currentAppVersion());
-        daemonHealth?.attachSink(({ eventName, properties, insertId }) =>
-          analyticsService.captureSafety({
-            eventName,
-            appVersion: currentAppVersion(),
-            properties,
-            insertId,
-          }));
+        daemonHealth?.attachSink(({ eventName, properties, insertId }) => {
+          const capture = { eventName, appVersion: currentAppVersion(), properties, insertId };
+          // Periodic health/metric events wait for the installation identity
+          // like every other stability metric (OPEND-4220 retest 2). Fault
+          // signals (unclean exit, memory pressure) stay immediate.
+          return eventName === 'client_process_memory_sample'
+            || eventName === 'daemon_storage_snapshot'
+            || eventName === 'daemon_health_summary'
+            ? telemetry.captureStabilityMetric(capture)
+            : analyticsService.captureSafety(capture);
+        });
         // When binding to all interfaces report localhost for local callers;
         // when binding to a specific address (e.g. a Tailscale IP) report that
         // address so remote callers and the sidecar use the correct URL.

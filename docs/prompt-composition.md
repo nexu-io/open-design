@@ -33,9 +33,10 @@ bug rather than a reproducible one:
   `odNextTaskTypeForProjectScenarioBinding`) requires
   `provenance === 'automatic_default'`. A project where the user explicitly
   picked a scenario resolves `taskType` to null and takes the legacy path.
-- `agentId` must be one of `codex` / `claude` / `opencode` / `amr`,
-  `sourceKind` must be `bundled`, and the runtime capability preflight must
-  have passed.
+- The default agent scope comes from the effective runtime registry, including
+  shipped definitions and local profiles. `OD_NEXT_STRATEGY_AGENTS` can explicitly
+  constrain it. `sourceKind` must be `bundled`; capability fixtures, native child
+  evidence and session resume are not admission requirements.
 
 Nothing outside one run's own inputs takes part. There used to be a stop latch —
 a row a failing run wrote that disabled OD Next for the whole daemon instance,
@@ -43,10 +44,9 @@ outranked the saved mode, and survived restart while the Labs switch still read
 "on". It is gone, so a divergence you are chasing cannot be a leftover from an
 earlier run on the same machine.
 
-User-facing switch: Settings → Labs → Design Harness
-(`apps/web/src/components/LabsSection.tsx`, reading
-`GET /api/strategies/od-next/rollout`). Process override:
-`OD_NEXT_STRATEGY_ROLLOUT`. Saved preference: app-config `odNextStrategyMode`.
+The Labs page remains, but its OD Next switch is retired. Historical personal
+`odNextStrategyMode` preferences do not disable the default active route.
+`OD_NEXT_STRATEGY_ROLLOUT` remains an engineering process override.
 
 ## The variant axes
 

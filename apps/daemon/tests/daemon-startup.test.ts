@@ -3,6 +3,21 @@ import { describe, expect, it } from 'vitest';
 import { parseDaemonCliStartupArgs } from '../src/daemon-startup.js';
 
 describe('daemon startup CLI parsing', () => {
+  it.each([
+    { OD_DAEMON_URL: 'http://127.0.0.1:7456', OPEN_DESIGN_RUN_ID: 'active-run' },
+    { OD_DAEMON_URL: 'http://127.0.0.1:7456', OD_TOOL_TOKEN: 'test-run-token' },
+  ])('shows help for a bare command inside an active agent environment', (env) => {
+    expect(parseDaemonCliStartupArgs([], env)).toEqual({ ok: false, kind: 'help' });
+  });
+
+  it('preserves an explicit startup and ordinary shell defaults', () => {
+    const env = { OD_DAEMON_URL: 'http://127.0.0.1:7456', OPEN_DESIGN_RUN_ID: 'active-run' };
+    expect(parseDaemonCliStartupArgs(['--port', '8123', '--no-open'], env)).toEqual({
+      ok: true, config: { host: '127.0.0.1', open: false, port: 8123 },
+    });
+    expect(parseDaemonCliStartupArgs([], { OD_DAEMON_URL: env.OD_DAEMON_URL }).ok).toBe(true);
+  });
+
   it('parses the documented daemon startup flags', () => {
     expect(parseDaemonCliStartupArgs(['--host', '0.0.0.0', '--port', '8123', '--no-open'], {})).toEqual({
       ok: true,

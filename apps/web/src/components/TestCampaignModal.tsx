@@ -1015,6 +1015,18 @@ export function TestCampaignModal({
 				startsAt: Date.parse(decision.startsAt), endsAt: Date.parse(decision.endsAt), serverTime: Date.parse(decision.serverTime),
 			} });
 		}
+		/**
+		 * The tester is a server-authenticated workspace member, not the app
+		 * account id (`sessionSubject`); the two are different identifiers and
+		 * must not be compared. The account boundary is the selection fence:
+		 * `owner` is part of the scope, so an account switch discards this
+		 * adapter and its late responses. Within one selection the first acquired
+		 * tester is pinned, and a context for any other tester is rejected.
+		 */
+		const keepsTester = (next: TestContext): boolean => {
+			const pinned = context?.testerMemberId ?? inherited?.context.testerMemberId;
+			return pinned === undefined || next.testerMemberId === pinned;
+		};
 		/** Acquires a validated context only while this request owns the selection. */
 		const fetchContext = async (signal: AbortSignal, ownsRequest: () => boolean): Promise<TestContext | null> => {
 			const response = await fetch("/api/touchpoints/test-runtime/context", {
@@ -1038,7 +1050,7 @@ export function TestCampaignModal({
 			if (!(next && next.deploymentId === selected.id && next.scenario === "realtime" &&
 				!("simulatedAt" in next) && validIso(next.updatedAt) && mode !== "invalid" &&
 				(negotiatedMode === null || mode === negotiatedMode) &&
-				(mode !== "immutable" || (!!owner && next.testerMemberId === owner))))
+				(mode !== "immutable" || (!!owner && keepsTester(next)))))
 				throw new TestDecisionMismatchError(decisionMismatchDetail(null,
 					context ?? inherited?.context ?? { deploymentId: selected.id, scenario: "realtime", updatedAt: "" },
 					selected, placements[0]!, { correlation, retry: 0, reason: "context_identity_invalid", receivedContext: next }));
@@ -1207,7 +1219,7 @@ export function TestCampaignModal({
 						if (!current() || requestSignal.aborted) return null;
 						const receivedContext = mismatch?.testContext;
 						const legitimate = mismatch?.error === "test_context_mismatch" && mismatch.reason === "context_token_mismatch" &&
-							testContextMode(selectedContext) === "immutable" && receivedContext?.testerMemberId === owner &&
+							testContextMode(selectedContext) === "immutable" && receivedContext?.testerMemberId === selectedContext.testerMemberId &&
 							isLegitimateContextDrift(receivedContext, selectedContext);
 						const detail = decisionMismatchDetail(null, selectedContext, selected, placementKey,
 							{ ...trace(), reason: legitimate ? "context_token_mismatch" : "context_mismatch_metadata_invalid", receivedContext });

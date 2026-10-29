@@ -690,9 +690,13 @@ describe('HomeHero plugin picker', () => {
     expect(screen.queryByTestId('home-hero-plugin-picker')).toBeNull();
   });
 
-  it('closes the @ picker when opening plugin details from the hover card', async () => {
+  // OPEND-3919: hovering a row must not change what the scrollable results
+  // list contains. A plugin-only detail card used to be appended to the list on
+  // plugin hover and removed on skill hover; near the bottom of an overflowing
+  // list that height change re-clamped scrollTop, slid a different row under a
+  // still pointer, and the list flickered between two positions.
+  it('keeps the @ results list unchanged while hovering between plugin and skill rows', async () => {
     const onOpenPluginDetails = vi.fn();
-    const plugin = makePlugin('sample-plugin', 'Sample Plugin');
     render(
       <HomeHero
         prompt=""
@@ -702,8 +706,10 @@ describe('HomeHero plugin picker', () => {
         activeChipId={null}
         onClearActivePlugin={() => undefined}
         onOpenPluginDetails={onOpenPluginDetails}
-        pluginOptions={[plugin]}
+        pluginOptions={[makePlugin('sample-plugin', 'Sample Plugin')]}
         pluginsLoading={false}
+        skillOptions={[makeSkill('sample-skill', 'Sample Skill')]}
+        skillsLoading={false}
         pendingPluginId={null}
         pendingChipId={null}
         onPickPlugin={() => undefined}
@@ -713,16 +719,26 @@ describe('HomeHero plugin picker', () => {
       />,
     );
 
-    setHomeHeroPrompt('@sam');
-    await settle();
-    fireEvent.mouseEnter(screen.getByRole('option', { name: /sample plugin/i }));
+    setHomeHeroPrompt('@sample');
     await settle();
 
-    expect(screen.getByTestId('home-hero-plugin-picker')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Details' }));
+    const picker = screen.getByTestId('home-hero-plugin-picker');
+    const results = picker.querySelector('.home-hero__plugin-picker-results')!;
+    const listShape = () =>
+      Array.from(results.children).map((child) => child.className).join('|');
+    const initialShape = listShape();
 
-    expect(onOpenPluginDetails).toHaveBeenCalledWith(plugin);
-    expect(screen.queryByTestId('home-hero-plugin-picker')).toBeNull();
+    const pluginRow = screen.getByRole('option', { name: /sample plugin/i });
+    const skillRow = screen.getByRole('option', { name: /sample skill/i });
+
+    for (const row of [pluginRow, skillRow, pluginRow, skillRow]) {
+      fireEvent.mouseEnter(row);
+      await settle();
+      expect(row.getAttribute('aria-selected')).toBe('true');
+      expect(listShape()).toBe(initialShape);
+      expect(within(picker).queryByRole('button', { name: 'Details' })).toBeNull();
+    }
+    expect(onOpenPluginDetails).not.toHaveBeenCalled();
   });
 
   it('opens active plugin details from the active plugin chip', () => {

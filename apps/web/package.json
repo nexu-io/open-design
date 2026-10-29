@@ -22,9 +22,9 @@
   ],
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build",
+    "build": "next build && tsc -b --noEmit",
     "build:sidecar": "tsc -p tsconfig.sidecar.json",
-    "typecheck": "tsc -b --noEmit",
+    "typecheck": "next typegen && tsc -b --noEmit",
     "test": "vitest run -c vitest.config.ts --maxWorkers=2"
   },
   "dependencies": {
@@ -60,6 +60,7 @@
     "three": "0.185.1"
   },
   "devDependencies": {
+    "@typescript/native": "npm:typescript@7.0.2",
     "@tailwindcss/postcss": "4.3.0",
     "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "16.3.2",
@@ -71,7 +72,7 @@
     "jsdom": "29.1.1",
     "postcss": "8.5.15",
     "tailwindcss": "4.3.0",
-    "typescript": "5.9.3",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
     "vitest": "4.1.6"
   },
   "engines": {

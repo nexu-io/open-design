@@ -89,12 +89,7 @@ export const claudeAgentDef = {
       if (caps.thinkingDisplay) {
         args.push('--thinking-display', 'summarized');
       }
-      if (runtimeContext.observeNativeChildBehavior === true) {
-        if (!caps.forwardSubagentText) {
-          throw new TypeError(
-            'Claude native Child behavior observation requires advertised --forward-subagent-text support.',
-          );
-        }
+      if (runtimeContext.observeNativeChildBehavior === true && caps.forwardSubagentText) {
         args.push('--forward-subagent-text');
       }
       if (options.model && options.model !== 'default') {

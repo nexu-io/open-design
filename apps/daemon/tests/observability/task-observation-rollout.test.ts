@@ -1,4 +1,5 @@
 import { persistStrategyResumeText } from '../../src/strategies/task-store.js';
+import { observeDiscoveryEvent } from '../../src/strategies/od-next/discovery-observation.js';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -284,6 +285,21 @@ describe('task observation rollout', () => {
     `).run();
   }
 
+  it('exports live Skill IDs even when the bounded Run event ring no longer contains the Read', async () => {
+    const run = syntheticRun();
+    const skillRoot = '/bundled/scenarios/od-next-strategy/assets/task-profiles';
+    observeDiscoveryEvent(run, { event: 'diagnostic', data: { type: 'skill_discovery_policy', injected: true, skillRoot } });
+    observeDiscoveryEvent(run, { event: 'agent', data: { type: 'tool_use', id: 'read-doc', name: 'Read', input: { file_path: `${skillRoot}/document.md` } } });
+    observeDiscoveryEvent(run, { event: 'agent', data: { type: 'tool_result', toolUseId: 'read-doc', content: 'Private body sentinel.' } });
+    const fetchImpl = vi.fn<typeof fetch>(async () => acceptedResponse());
+    await expect(service({ mode: 'send', dataDir: tempDir, fetchImpl, getRun: () => run }).finalizeForRun('run-1')).resolves.toMatchObject({ action: 'sent' });
+    const batch = JSON.parse(String(fetchImpl.mock.calls[0]![1]!.body)).batch as Array<{ type: string; body: Record<string, unknown> }>;
+    expect(batch.find(event => event.type === 'trace-create')?.body).toMatchObject({ metadata: {
+      skill_discovery_enabled: true, skill_discovery_policy_injected: true, skill_ids_loaded: ['document'],
+    } });
+    expect(JSON.stringify(batch)).not.toContain('Private body sentinel.');
+  });
+
   it('keeps the mapped run version when restart finalization replaces single-run telemetry', async () => {
     const fetchImpl = vi.fn<typeof fetch>(async () => acceptedResponse());
     const startedVersion = {
@@ -502,6 +518,26 @@ describe('task observation rollout', () => {
       action: 'observed',
     });
     expect(deliveryRow().aggregateDigest).toMatch(/^[a-f0-9]{64}$/u);
+  });
+
+  it.each(['legacy', 'otlp'] as const)('exposes actual %s payload trace ID after export and across restart', async (mode) => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => acceptedResponse());
+    const rollout = service({ mode: 'send', env: { LANGFUSE_EXPORTER_MODE: mode }, dataDir: tempDir, fetchImpl });
+    expect(rollout.telemetryForRun('run-1')?.traceId).toBeNull();
+    await rollout.finalizeForRun('run-1');
+    const payload = JSON.parse(String(fetchImpl.mock.calls[0]![1]!.body));
+    const traceId = mode === 'otlp' ? payload.resourceSpans[0].scopeSpans[0].spans[0].traceId : payload.batch[0].body.id;
+    expect(rollout.telemetryForRun('run-1')).toMatchObject({ status: 'accepted', traceId,
+      protocol: mode === 'otlp' ? 'otlp-v4' : 'legacy-v1', remoteVerification: 'not_checked' });
+    // Changing current exporter config cannot rewrite historical trace identity.
+    const restarted = service({ mode: 'send', env: { LANGFUSE_EXPORTER_MODE: mode === 'otlp' ? 'legacy' : 'otlp' }, dataDir: tempDir });
+    expect(restarted.telemetryForRun('run-1')?.traceId).toBe(traceId);
+  });
+
+  it('does not fabricate trace identity for observe-only or missing exporter receipts', async () => {
+    const rollout = service({ mode: 'observe', dataDir: tempDir });
+    await rollout.finalizeForRun('run-1');
+    expect(rollout.telemetryForRun('run-1')).toMatchObject({ status: 'observed', traceId: null, attemptCount: 0 });
   });
 
   it('sends one task root with environment tags and never resends a finalized task', async () => {
@@ -2040,19 +2076,25 @@ describe('task observation rollout', () => {
     }
   });
 
-  it('uses relay for Task hierarchy even when Vela is configured for single-Run', async () => {
-    const fetchImpl = vi.fn<typeof fetch>(async () => new Response('', { status: 202 }));
+  it('uses authenticated Vela for Task hierarchy and persists its actual remote receipt', async () => {
+    const remoteTraceId = 'b'.repeat(64);
+    const fetchImpl = vi.fn<typeof fetch>(async () => Response.json({
+      ok: true,
+      receipt: { clientTraceId: 'strategy-task:task-1', scopedTraceId: remoteTraceId },
+    }, { status: 202 }));
     const env = {
       ...BASE_ENV,
       OD_NEXT_TASK_OBSERVABILITY_MODE: 'send',
       OPEN_DESIGN_VELA_TELEMETRY: 'on',
       OPEN_DESIGN_TELEMETRY_RELAY_URL: 'https://relay.example.test/private?key=secret',
+      VELA_CONTROL_KEY: 'control-secret',
+      VELA_API_URL: 'https://vela.example.test',
     };
     const configuredEnv = {
       VELA_CONTROL_KEY: 'control-secret',
       VELA_API_URL: 'https://vela.example.test',
     };
-    expect(readTaskTelemetrySinkConfig(env)).toMatchObject({ kind: 'relay' });
+    expect(readTaskTelemetrySinkConfig(env)).toMatchObject({ kind: 'vela' });
     expect(readRunTelemetrySinkConfig(env, configuredEnv)).toMatchObject({
       kind: 'vela',
       apiUrl: 'https://vela.example.test',
@@ -2061,9 +2103,10 @@ describe('task observation rollout', () => {
       mode: 'send',
       fetchImpl,
       env,
+      dataDir: tempDir,
     });
     expect(rollout.diagnostic()).toMatchObject({
-      effectiveSink: { kind: 'relay', host: 'relay.example.test', protocol: 'https' },
+      effectiveSink: { kind: 'vela', host: 'vela.example.test', protocol: 'https' },
       taskProtocol: 'legacy-v1',
       readyToSend: true,
     });
@@ -2075,10 +2118,72 @@ describe('task observation rollout', () => {
     await expect(rollout.finalizeForRun('run-1')).resolves.toMatchObject({ action: 'sent' });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(String(fetchImpl.mock.calls[0]![0])).toBe(
-      'https://relay.example.test/private?key=secret',
+      'https://vela.example.test/api/v1/open-design/telemetry',
     );
     expect((fetchImpl.mock.calls[0]![1]!.headers as Record<string, string>).Authorization)
-      .toBeUndefined();
+      .toBe('Bearer control-secret');
+    const envelope = JSON.parse(String(fetchImpl.mock.calls[0]![1]!.body));
+    expect(envelope.events[0]).toMatchObject({
+      kind: 'trace',
+      data: { name: 'open-design-strategy-task', id: 'strategy-task:task-1' },
+    });
+    expect(rollout.telemetryForRun('run-1')).toMatchObject({
+      status: 'accepted', traceId: remoteTraceId, transport: 'vela',
+    });
+    const restarted = service({ mode: 'send', env, fetchImpl, dataDir: tempDir });
+    expect(restarted.telemetryForRun('run-1')).toMatchObject({
+      traceId: remoteTraceId, transport: 'vela',
+    });
+    await restarted.finalizeForRun('run-1');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([null, { clientTraceId: 'another-task', scopedTraceId: 'a'.repeat(64) }])(
+    'does not invent a remote identity or resend when the accepted receipt is invalid: %j', async (receipt) => {
+      const fetchImpl = vi.fn<typeof fetch>(async () => Response.json({ ok: true, receipt }, { status: 202 }));
+      const rollout = service({ mode: 'send', fetchImpl, dataDir: tempDir, env: {
+        OPEN_DESIGN_VELA_TELEMETRY: 'on', VELA_CONTROL_KEY: 'synthetic-key', VELA_API_URL: 'https://vela.example.test',
+      } });
+      await rollout.finalizeForRun('run-1');
+      expect(rollout.telemetryForRun('run-1')).toMatchObject({ status: 'accepted', traceId: null, transport: null });
+      await rollout.finalizeForRun('run-1');
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('does not hide an unrelated Vela validation error with anonymous fallback', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => Response.json({
+      error: 'invalid_open_design_telemetry_payload',
+      issues: [{ path: 'events.0.data.id', message: 'invalid id' }],
+    }, { status: 400 }));
+    const rollout = service({ mode: 'send', fetchImpl, env: {
+      OPEN_DESIGN_VELA_TELEMETRY: 'on', VELA_CONTROL_KEY: 'synthetic-key', VELA_API_URL: 'https://vela.example.test',
+      OPEN_DESIGN_TELEMETRY_RELAY_URL: 'https://relay.example.test/ingest',
+    } });
+    expect(await rollout.finalizeForRun('run-1')).toMatchObject({ action: 'failed', delivery: { dropReason: 'vela_400' } });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back once for an older Vela Task schema and records the actual relay identity', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (url) => String(url).includes('vela.example')
+      ? Response.json({
+        error: 'invalid_open_design_telemetry_payload',
+        issues: [{ path: 'events.0.data.name', message: 'trace name must be open-design-turn' }],
+      }, { status: 400 })
+      : new Response('', { status: 202 }));
+    const rollout = service({
+      mode: 'send', fetchImpl, dataDir: tempDir,
+      env: {
+        OPEN_DESIGN_VELA_TELEMETRY: 'on',
+        VELA_CONTROL_KEY: 'control-secret', VELA_API_URL: 'https://vela.example.test',
+        OPEN_DESIGN_TELEMETRY_RELAY_URL: 'https://relay.example.test/ingest',
+      },
+    });
+    await expect(rollout.finalizeForRun('run-1')).resolves.toMatchObject({ action: 'sent' });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(rollout.telemetryForRun('run-1')).toMatchObject({
+      traceId: 'strategy-task:task-1', transport: 'relay', attemptCount: 2,
+    });
   });
 
   it('never falls back through Vela when the selected Task relay rejects auth', async () => {
@@ -2092,7 +2197,7 @@ describe('task observation rollout', () => {
       mode: 'send',
       fetchImpl,
       env: {
-        OPEN_DESIGN_VELA_TELEMETRY: 'on',
+        OPEN_DESIGN_VELA_TELEMETRY: 'off',
         OPEN_DESIGN_TELEMETRY_RELAY_URL: 'https://relay.example.test/ingest',
         OPEN_DESIGN_TELEMETRY_RETRIES: '9',
       },
@@ -2116,7 +2221,7 @@ describe('task observation rollout', () => {
       mode: 'send',
       fetchImpl,
       env: {
-        OPEN_DESIGN_VELA_TELEMETRY: 'on',
+        OPEN_DESIGN_VELA_TELEMETRY: 'off',
         OPEN_DESIGN_TELEMETRY_RELAY_URL: 'https://relay.example.test/ingest',
       },
     });

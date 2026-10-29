@@ -73,3 +73,20 @@ it('pauses an inactive motion document without changing ordinary iframe prewarmi
   request('warm-hidden-document');
   expect(post).toHaveBeenLastCalledWith({ type: MOTION_PREVIEW_ACTIVITY, id: 'warm-hidden-document', active: true }, '*');
 });
+
+
+it('keeps generation mute across document reloads and updates it without changing activity', async () => {
+  const { element, post, request } = frame();
+  element.dataset.odMotionMuted = 'true';
+  await Promise.resolve();
+  expect(post).toHaveBeenLastCalledWith({ type: MOTION_PREVIEW_PROBE }, '*');
+  request('new-document');
+  expect(post).toHaveBeenLastCalledWith({ type: MOTION_PREVIEW_ACTIVITY, id: 'new-document', active: true, muted: true }, '*');
+  request('reloaded-document');
+  expect(post).toHaveBeenLastCalledWith({ type: MOTION_PREVIEW_ACTIVITY, id: 'reloaded-document', active: true, muted: true }, '*');
+  element.dataset.odMotionMuted = 'false';
+  await Promise.resolve();
+  expect(post).toHaveBeenLastCalledWith({ type: MOTION_PREVIEW_PROBE }, '*');
+  request('reloaded-document');
+  expect(post).toHaveBeenLastCalledWith({ type: MOTION_PREVIEW_ACTIVITY, id: 'reloaded-document', active: true }, '*');
+});

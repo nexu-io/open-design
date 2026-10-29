@@ -1372,10 +1372,59 @@ describe("negotiated immutable Test context", () => {
 		expect(diagnostics.filter(item => item.code.includes("mismatch") || item.code.includes("drift"))).toEqual([]);
 	});
 
-	it.each(["contextId", "generation", "contextToken", "testerMemberId", "wrong-tester", "invalid-token"])("fails closed for acquired %s identity", async field => {
+	// OPEND-4143: the server-authenticated tester is a workspace member id, a
+	// different identifier from the app account id passed as sessionSubject.
+	it("accepts a valid context whose tester member id differs from the account id", async () => {
+		const member = (seed = "one") => ({ ...context(seed), testerMemberId: "member-z0" });
+		const mock = server({ context: () => json(member()), decision: () => json({ ...decision(), testContext: member() }) });
+		vi.stubGlobal("fetch", mock); await start("account-a"); await screen.findByRole("dialog");
+		expect(contextCalls(mock)).toBe(1); expect(latest?.context.testerMemberId).toBe("member-z0");
+		expect(diagnostics.some(item => item.code === "touchpoint_decision_mismatch")).toBe(false);
+	});
+
+	it("recovers 409 drift for a tester member id that differs from the account id", async () => {
+		let posts = 0;
+		const member = (seed: string) => ({ ...context(seed), testerMemberId: "member-z0" });
+		const mock = server({ context: () => json(member(++posts === 1 ? "one" : "two")), decision: url => {
+			const token = new URL(url, "http://localhost").searchParams.get("contextToken");
+			return token === context("two").contextToken
+				? json({ ...decision("two"), testContext: member("two") })
+				: json({ error: "test_context_mismatch", reason: "context_token_mismatch", testContext: member("two") }, 409);
+		} });
+		vi.stubGlobal("fetch", mock); await start("account-a"); await screen.findByRole("dialog");
+		expect(contextCalls(mock)).toBe(2); expect(latest?.context).toMatchObject({ ...identity("two"), testerMemberId: "member-z0" });
+		expect(diagnostics.some(item => item.code === "touchpoint_decision_mismatch")).toBe(false);
+	});
+
+	it("discards a late context acquired for the previous account", async () => {
+		let posts = 0, finish!: (response: Response) => void;
+		const late = new Promise<Response>(resolve => { finish = resolve; });
+		const mock = server({ context: () => ++posts === 1 ? late : new Promise<Response>(() => {}) });
+		vi.stubGlobal("fetch", mock);
+		const view = await start("account-a");
+		await waitFor(() => expect(contextCalls(mock)).toBe(1));
+		view.rerender(<><Probe /><TestCampaignHarness authenticated sessionSubject="account-b" /></>);
+		await act(async () => { finish(json({ ...context(), testerMemberId: "member-a" })); });
+		expect(screen.queryByRole("dialog")).toBeNull();
+		expect(runtimeCalls(mock)).toHaveLength(0);
+		expect(latest?.decisions.size ?? 0).toBe(0);
+	});
+
+	it("rejects a re-acquired context that switches tester within one selection", async () => {
+		let posts = 0;
+		const member = (seed: string, tester: string) => ({ ...context(seed), testerMemberId: tester });
+		const mock = server({
+			context: () => json(++posts === 1 ? member("one", "member-1") : member("two", "member-2")),
+			decision: () => json({ ...decision("two"), testContext: member("two", "member-1") }),
+		});
+		vi.stubGlobal("fetch", mock); await start(); await failed();
+		expect(contextCalls(mock)).toBe(2);
+		expect(diagnostics.some(item => item.code === "touchpoint_decision_mismatch")).toBe(true);
+	});
+
+	it.each(["contextId", "generation", "contextToken", "testerMemberId", "invalid-token"])("fails closed for acquired %s identity", async field => {
 		const malformed: Record<string, unknown> = { ...context() };
-		if (field === "wrong-tester") malformed.testerMemberId = "account-b";
-		else if (field === "invalid-token") malformed.contextToken = "credential-like-value";
+		if (field === "invalid-token") malformed.contextToken = "credential-like-value";
 		else delete malformed[field];
 		const mock = server({ context: () => json(malformed) }); vi.stubGlobal("fetch", mock);
 		await start(); await failed(); expect(runtimeCalls(mock)).toHaveLength(0);

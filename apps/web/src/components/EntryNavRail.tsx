@@ -87,6 +87,8 @@ import { MessageCenter } from './MessageCenter';
 import type { EntrySettingsSection } from './EntrySettingsMenu';
 import type { Project } from '../types';
 import { isRtlLocale, useI18n } from '../i18n';
+import { communityForLocale } from '../lib/community-links';
+import { FeishuIcon } from './chat/support-brand-icons';
 import { useDismissOnOutsideInteraction } from '../hooks/useDismissOnOutsideInteraction';
 import {
   beginWorkspaceScopedRead,
@@ -143,7 +145,6 @@ const ACCOUNT_MENU_MIN_HEIGHT = 200;
 const REPO_URL = 'https://github.com/nexu-io/open-design';
 const GITHUB_HELP_URL = `${REPO_URL}/issues/new`;
 const GITHUB_FEATURE_URL = `${REPO_URL}/pulls`;
-const DISCORD_URL = 'https://discord.gg/mHAjSMV6gz';
 const X_URL = 'https://x.com/OpenDesignHQ';
 const CONTACT_EMAIL_URL = 'mailto:support@open-design.ai';
 const externalLinkProps = { target: '_blank', rel: 'noreferrer noopener' } as const;
@@ -2032,7 +2033,8 @@ function RailSocialRow({
   // tooltip: the bubble is the only place the icons say what they do, so
   // the copy leads with the payoff (Discord hands out credits) rather
   // than naming the destination.
-  const communityLabel = t('entry.discordAria');
+  const community = communityForLocale(locale);
+  const communityLabel = t('entry.communityAria');
   const xLabel = t('entry.xAria');
   const mailLabel = t('entry.mailAria');
   const btnClass = 'entry-nav-rail__menu-social-btn od-tooltip';
@@ -2055,14 +2057,17 @@ function RailSocialRow({
     <div className="entry-nav-rail__menu-social" data-testid="entry-nav-rail-social">
       <a
         className={btnClass}
-        href={DISCORD_URL}
+        href={community.href}
         {...externalLinkProps}
         aria-label={communityLabel}
         {...hint(communityLabel)}
         data-testid="entry-nav-rail-discord"
-        onClick={() => track('discord')}
+        data-community-platform={community.platform}
+        onClick={() => track(community.platform)}
       >
-        <Icon name="discord" size={glyph} />
+        {community.platform === 'feishu'
+          ? <FeishuIcon monochrome width={glyph} height={glyph} />
+          : <Icon name="discord" size={glyph} />}
       </a>
       <a
         className={btnClass}

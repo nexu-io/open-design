@@ -1,6 +1,9 @@
 import { Fragment, memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCharReveal } from "./chat/useCharReveal";
 import { ExecutionShell } from "./chat/ExecutionShell";
+import { TaskExecutionRecord } from "./chat/TaskExecutionRecord";
+import { automaticTaskProse, taskDisplayWithDeliveryState, type TaskPresentation, type TaskRecordContext } from "../runtime/chat/task-presentation";
+import { effectiveTurnRunStatus } from "../runtime/chat/turn-status";
 import { buildTurnBlocks } from "../runtime/chat/build-turn-blocks";
 import { copyableTurnText } from "../runtime/chat/copyable-turn";
 import type { ExecutionShell as ExecutionShellData } from "../runtime/chat/contract";
@@ -8,6 +11,7 @@ import { upstreamActivityAt } from "../runtime/chat/upstream-activity";
 import type { RecordFileScope } from "../runtime/chat/record-file-open";
 import { FileOpsSummary } from "./FileOpsSummary";
 import { messageArtifactRefs } from "../runtime/chat/artifact-refs";
+import { liveArtifactDeliveries } from "../runtime/live-artifact-delivery";
 import { assistantMessageNeverHadARun } from "../runtime/chat/host-authored-message";
 import {
   renderMarkdown,
@@ -162,6 +166,8 @@ function textNeedsBrandBrowserAssistFallback(content: string): boolean {
 
 interface Props {
   message: ChatMessage;
+  taskPresentation?: TaskPresentation;
+  taskRecordContext?: TaskRecordContext;
   streaming: boolean;
   projectId?: string | null;
   // Analytics context for the assistant_feedback_* events. Defaults
@@ -293,6 +299,7 @@ interface Props {
 // cheap.
 const ASSISTANT_MESSAGE_COMPARED_PROPS: Array<keyof Props> = [
   'message',
+  'taskPresentation',
   'streaming',
   'projectId',
   'projectKind',
@@ -336,6 +343,14 @@ const ASSISTANT_MESSAGE_COMPARED_PROPS: Array<keyof Props> = [
 function areAssistantMessagePropsEqual(prev: Props, next: Props): boolean {
   for (const key of ASSISTANT_MESSAGE_COMPARED_PROPS) {
     if (!Object.is(prev[key], next[key])) return false;
+  }
+  // Like previousTodos, the lookup map is rebuilt as other messages stream.
+  // Only media belonging to this task can invalidate its settled process body.
+  for (const message of next.taskPresentation?.owner ? next.taskPresentation.messages : []) {
+    if (!message.runId) continue;
+    const a = prev.taskRecordContext?.mediaTasksByRunId?.get(message.runId) ?? [];
+    const b = next.taskRecordContext?.mediaTasksByRunId?.get(message.runId) ?? [];
+    if (a.length !== b.length || a.some((task, i) => task !== b[i])) return false;
   }
   return true;
 }
@@ -401,6 +416,8 @@ function useTickingNow(active: boolean, runId?: string): StreamClock {
 
 function AssistantMessageImpl({
   message,
+  taskPresentation,
+  taskRecordContext,
   streaming,
   projectId = null,
   projectKind = null,
@@ -423,7 +440,6 @@ function AssistantMessageImpl({
   onSubmitQuestionForm,
   questionFormSubmitDisabled = false,
   previousTodos,
-  onContinueRemainingTasks,
   onForkFromMessage,
   forking = false,
   onFeedback,
@@ -531,25 +547,13 @@ function AssistantMessageImpl({
    *  · **不流了但没有 runStatus** → 历史/遗留消息。它已经结束了,只是没人给它盖过章。
    *    当成 running 的话壳永远转下去,而且 D43 的兜底(结论提到壳外)不会触发 ——
    *    整段回答会被关在壳里,`<od-card>` 这类交互块跟着一起消失。
-   *  · **产物没送达**(`no_result` / `delivery_failed`)→ 用户视角就是这一轮失败了,
-   *    与老链路的 `runFailed` 判据保持一致;失败原因交给下面的报错卡(B18)。
+   *
+   * 产物有没有送达(`no_result` / `delivery_failed`)**不参与**这一判断(P0-24):
+   * 本轮是否失败只看运行记录,文件有没有生成、保存成功、能否打开都不改变状态。
    *
    * 还有一条只对没有 runStatus 的历史消息生效,见 `legacyTurnFailed`。
    */
-  let turnRunStatus: NonNullable<ChatMessage['runStatus']>;
-  if (streaming) {
-    turnRunStatus = 'running';
-  } else if (message.runStatus === 'canceled') {
-    turnRunStatus = 'canceled';
-  } else if (
-    message.resultDeliveryState === 'no_result' ||
-    message.resultDeliveryState === 'delivery_failed' ||
-    (!message.runStatus && legacyTurnFailed(displayEvents, message.endedAt))
-  ) {
-    turnRunStatus = 'failed';
-  } else {
-    turnRunStatus = message.runStatus ?? 'succeeded';
-  }
+  const turnRunStatus = effectiveTurnRunStatus(message, streaming, displayEvents);
   /**
    * 这一轮的执行记录(规格 `chat-panel-next.md`)。
    *
@@ -557,7 +561,13 @@ function AssistantMessageImpl({
    * `buildTurnBlocks` 里,这里不做任何判断。
    */
   /** 壳头那颗秒表的「现在」+ S12 的静默起点,每秒同刻取一次(见 `useTickingNow`)。 */
-  const { nowMs, lastEventAtMs } = useTickingNow(streaming, message.runId);
+  const presentedTask = taskPresentation ?? (message.taskDisplay ? {
+    owner: true, display: taskDisplayWithDeliveryState(message.taskDisplay, [message]), messages: [message],
+  } : undefined);
+  const task = presentedTask && presentedTask.display.runIds.length > 1 ? presentedTask : undefined;
+  const automaticPredecessor = !!task && message.runId !== task.display.currentRunId;
+  const taskFoldPreference = useRef<boolean | undefined>(undefined);
+  const { nowMs, lastEventAtMs } = useTickingNow(streaming || !!task?.display.ticking, task?.display.currentRunId ?? message.runId);
   // A retried message keeps its creation date but carries the new run's start.
   const runStartedAt = message.startedAt ?? message.createdAt;
 
@@ -712,7 +722,7 @@ function AssistantMessageImpl({
         // key 认**第几段结论**,不认它在块序里的下标:空壳在轮次收尾那一刻会被丢掉
         // (`build-turn-blocks` 的 `kept`),下标会跟着挪,而挪一次就是把表单重挂一遍
         // —— 用户填了一半的草稿会当场清空。
-        : ({ kind: 'prose', key: `prose-${proseAt}`, at: proseAt++ } as const),
+        : ({ kind: 'prose', key: `prose-${proseAt}`, at: proseAt++, blockIndex: i } as const),
     );
   }, [nextTurn, turnDoneMarkerLanded]);
 
@@ -731,6 +741,7 @@ function AssistantMessageImpl({
     [displayEvents, fileOpScope],
   );
   const rawProduced = message.producedFiles ?? [];
+  const liveDeliveries = useMemo(() => liveArtifactDeliveries(message.events), [message.events]);
   /**
    * 这一轮 agent 自己声明的「显示什么」—— `<od-focus …/>` 的 `show`。
    *
@@ -864,7 +875,7 @@ function AssistantMessageImpl({
    * 用意,原样保留)。第 1 条不受这道闸约束 —— 工具行本身带 `pending` 态,
    * 边跑边出卡是设计要的(D37)。
    */
-  const turnArtifactPanelEntries = useMemo(() => {
+  const rawTurnArtifactPanelEntries = useMemo(() => {
     /*
      * 两条支各自已经在消费点做过同一套边界处理
      * (`summaryArtifactOps` / `declaredArtifactFiles`):有 `show` 就按声明收窄,
@@ -875,6 +886,9 @@ function AssistantMessageImpl({
     if (streaming) return [];
     return orderArtifactCards(producedFilesAsFileOps(declaredArtifactFiles), artifactFocus);
   }, [artifactFocus, declaredArtifactFiles, streaming, summaryArtifactOps]);
+  const turnArtifactPanelEntries = liveDeliveries.length
+    ? rawTurnArtifactPanelEntries.filter(entry => entry.path !== 'template.html')
+    : rawTurnArtifactPanelEntries;
   // The single artifact the "next step" affordance anchors to: prefer the HTML
   // produced by THIS turn; if the final turn emitted none (a summary / continue
   // message) fall back to the most recently modified HTML in the project so
@@ -945,6 +959,7 @@ function AssistantMessageImpl({
       ? unfinishedTodos
       : (previousTodos ?? []).filter((todo) => todoStatusIsUnfinished(todo.status));
   const runSucceeded =
+    !automaticPredecessor &&
     !streaming &&
     !hasResultDeliveryFailure &&
     (
@@ -960,6 +975,7 @@ function AssistantMessageImpl({
    */
   const copyMarkdown = copyableTurnText(message.content, nextTurn.shells);
   const showFeedback =
+    !automaticPredecessor &&
     !!onFeedback &&
     isFeedbackEligible({
       streaming,
@@ -977,6 +993,7 @@ function AssistantMessageImpl({
    * state and this footer would duplicate it (`chat-panel-feedback.md` B50).
    */
   const showCompletionRow =
+    !automaticPredecessor &&
     !streaming &&
     (showFeedback ||
     !!message.startedAt ||
@@ -1082,17 +1099,8 @@ function AssistantMessageImpl({
         hasPendingCompleteQuestionForm || hasUnterminatedQuestionForm(message.content),
     };
   }, [message.content, nextUserContent, suppressDirectionForms]);
-  // Host notifications cannot own a run recovery action. When one follows a
-  // stopped turn, keep the action on that turn instead of hiding it altogether.
-  // Direct callers without a conversation-level owner retain their isLast gate.
-  const ownsContinuableTurn = (isLastTurn ?? isLast) && !assistantMessageNeverHadARun(message);
-  // A complete pending form must be answered first; terminal truncated forms
-  // have no answer control and retain recovery. Streaming turns already contribute
-  // no continuableTodos, including when their Todo snapshot was inherited.
-  const continueRemaining =
-    ownsContinuableTurn && !hasPendingCompleteQuestionForm && onContinueRemainingTasks && continuableTodos.length > 0
-      ? () => onContinueRemainingTasks(continuableTodos)
-      : undefined;
+  // P0-24 PRD「③ 回合末尾」删除了〔继续剩余任务〕。`onContinueRemainingTasks` 仍随
+  // props 传进来(T33:它该挂在哪里是未决的产品项),这里不再渲染它的入口。
   /**
    * 整轮失败的那一轮,**「这一轮到此为止」由壳头那句「运行失败」宣布**,页脚不再重说。
    *
@@ -1138,11 +1146,22 @@ function AssistantMessageImpl({
    *
    * 复制、时间这些**照旧**:它们说的是这段内容本身,不是某一轮的结果。
    */
+  /*
+   * ── 运行中只有一句状态(OPEND-3334)──────────────────────────────────
+   *
+   * 这一轮有执行记录壳时,壳头已经是「这一轮唯一常驻的状态陈述」(见
+   * `ExecutionShell` 的停止档注释)。页脚在流式期间再画一遍
+   * 「Preparing… / Thinking / Working」就是同一件事说两遍,而且它是旧样式的
+   * 扫光行 —— 首页乐观帧就是照它手抄的,交接时两种样式并排就是那一次跳动。
+   * 所以壳在、还在跑,页脚的运行态不画;终态(勾 / 已取消 / 未完成 / 时间)照旧。
+   */
+  const turnHasExecutionShell = turnFlow.some((entry) => entry.kind === 'shell');
   const hideRunStatus =
     message.id === errorCardOwnerId
     || hasPendingQuestionForm
     || assistantMessageNeverHadARun(message)
-    || failedTurnIsAnnouncedByTheShell;
+    || failedTurnIsAnnouncedByTheShell
+    || (streaming && turnHasExecutionShell);
   // "Next step" is a delivery affordance, not a generic terminal-state card.
   // Keep it out of pure Q&A, failures/cancellations and incomplete Todo turns;
   // only a successful turn that actually produced something may surface it.
@@ -1302,6 +1321,7 @@ function AssistantMessageImpl({
   return (
     <div
       id={`assistant-message-${message.id}`}
+      data-testid="assistant-message"
       className={`msg assistant${showRole ? '' : ' assistant-continuation'}`}
       /* 「接上一条,不再重复报名字」是状态,不是样式的私事 —— 给它自己的出口 */
       data-continuation={showRole ? 'false' : 'true'}
@@ -1314,16 +1334,25 @@ function AssistantMessageImpl({
         </div>
       ) : null}
       <div className="assistant-flow" data-testid="assistant-flow">
+        {task?.owner ? <TaskExecutionRecord key={task.display.id} task={task} nowMs={nowMs}
+          foldPreference={taskFoldPreference}
+          concluded={message.runId === task.display.currentRunId && turnDoneMarkerLanded}
+          recordContext={taskRecordContext ?? {mediaTasksByRunId:new Map(message.runId ? [[message.runId,mediaTasks]] : []),
+            previousTodosByMessageId:new Map([[message.id,previousTodos]])}}
+          onOpenFile={onRequestOpenFile} fileScope={recordFileScope} onRetryImage={onRetryImage}
+          runTerminal={!['running','preparing'].includes(task.display.state)} imageSrc={imageSrc}
+          odCardScope={`${projectId}:${conversationId}:${task.display.id}`} onBrandBrowserAssistConfirm={onBrandBrowserAssistConfirm} /> : null}
         {/*
           壳与结论段**按发生顺序交替**,不再「先把壳全画完再画结论」(OPEND-2592)。
           跨轮折叠的会话里,中途那张表单的收口就夹在两张壳中间;把壳整体提到前面
           会让「已确认」掉到整条消息的最底下,和用户实际回答的时刻对不上。
         */}
         {turnFlow.map((entry) =>
-          entry.kind === 'shell' ? (
+          entry.kind === 'shell' ? (task ? null : (
             <ExecutionShell
               key={entry.key}
               shell={entry.shell}
+              foldPreference={presentedTask && entry.shell.id === nextTurn.shells[0]?.id ? taskFoldPreference : undefined}
               onOpenFile={onRequestOpenFile}
               /* 执行记录里的文件名要判「这个路径是不是当前项目的」才决定做不做链接。
                  这三样正是正文 markdown 链接判归属用的同一套(见 chatFileLinkClickHandler),
@@ -1345,16 +1374,21 @@ function AssistantMessageImpl({
               ].join(":")}
               onBrandBrowserAssistConfirm={onBrandBrowserAssistConfirm}
             />
-          ) : (
+          )) : (task && automaticTaskProse(nextTurn.blocks, entry.blockIndex, message, task.messages) ? null : (
             <Fragment key={entry.key}>
               {(proseGroups[entry.at] ?? []).map((b, i) =>
                 renderOuterBlock(b, `${entry.key}-${i}`),
               )}
             </Fragment>
-          ),
+          )),
         )}
         {/* 状态行 / 插件候选不属于执行记录,也没有流里的位置 —— 收在最后 */}
         {restBlocks.map((b, i) => renderOuterBlock(b, `rest-${i}`))}
+        {liveDeliveries.map(item => (
+          <Button key={item.id} onClick={() => onRequestOpenFile?.(item.tabId)}>
+            {item.title || t('tasks.liveArtifact')}
+          </Button>
+        ))}
         {/* #5517 shape: the collapsible tool-op summary lists only the ops the
             turn actually emitted, and the produced-files list stays its own
             flat block below it (name / size / Open / Download). Folding the
@@ -1437,7 +1471,6 @@ function AssistantMessageImpl({
                   createdAt: message.createdAt,
                   // 判据与三条理由都在上面 `hideRunStatus` 的定义处。
                   hideRunStatus,
-                  onContinueRemaining: continueRemaining,
                 }}
               />
             ) : (
@@ -1455,7 +1488,6 @@ function AssistantMessageImpl({
                 isLast={!!isLast}
                 createdAt={message.createdAt}
                 hideRunStatus={hideRunStatus}
-                onContinueRemaining={continueRemaining}
               />
             )}
           </div>
@@ -2046,17 +2078,30 @@ function isFeedbackEligible({
 
 // The agent name without the trailing model id — the role header shows the
 // brand logo + name only, so the `· model` suffix is dropped there.
-export function assistantRoleName(
-  message: ChatMessage,
-  t: TranslateFn
-): string {
-  const fromName = message.agentName?.trim();
+/**
+ * The role-row name for an agent that has no message yet — the optimistic
+ * creation frame (OPEND-3334). Same resolution as {@link assistantRoleName}
+ * minus the `starting` event fallback, so the frame and the first real turn
+ * print the same name for the same agent.
+ */
+export function assistantRoleNameForAgent(
+  agentName: string | null | undefined,
+  agentId: string | null | undefined,
+): string | null {
+  const fromName = agentName?.trim();
   if (fromName) {
     const base = fromName.split(" · ")[0]?.trim() || fromName;
     return exactAgentDisplayName(base) ?? base;
   }
-  const fromId = agentDisplayName(message.agentId);
-  if (fromId) return fromId;
+  return agentDisplayName(agentId) ?? null;
+}
+
+export function assistantRoleName(
+  message: ChatMessage,
+  t: TranslateFn
+): string {
+  const resolved = assistantRoleNameForAgent(message.agentName, message.agentId);
+  if (resolved) return resolved;
   const starting = message.events?.find(
     (e) => e.kind === "status" && e.label === "starting" && e.detail
   ) as Extract<AgentEvent, { kind: "status" }> | undefined;
@@ -2125,17 +2170,11 @@ interface AssistantFooterProps {
   forking?: boolean;
   feedbackControls?: ReactNode;
   forceVisible?: boolean;
-  // Marks the latest reply for footer visibility. The CSS data-last flag also
-  // keeps an actual continuation action visible without hover or focus.
+  // Marks the latest reply for footer visibility.
   isLast?: boolean;
   // When the turn has an execution disclosure, its run state lives at the top
   // of the answer. The footer keeps only actions so run state is not repeated.
   hideRunStatus?: boolean;
-  /**
-   * 〔继续剩余任务〕。**只有还欠着活的时候才传** —— 传了就画,没传就不画,
-   * 这一行不自己判断有没有未完成的活(镜像陈列页要能单独摆出两种形态)。
-   */
-  onContinueRemaining?: () => void;
   /** 这一轮的时间,靠右端(设计稿 15-1 的 `.tm`)。拿不到就不显示,不估算 */
   createdAt?: number;
 }
@@ -2157,7 +2196,6 @@ export function AssistantFooter({
   forceVisible = false,
   isLast = false,
   hideRunStatus = false,
-  onContinueRemaining,
   createdAt,
 }: AssistantFooterProps) {
   const t = useT();
@@ -2168,8 +2206,18 @@ export function AssistantFooter({
     !hasEmptyResponse &&
     !canceled &&
     !copyMarkdown &&
+    !onFork
+  )
+    return null;
+  // A streaming turn whose status the execution shell already states has
+  // nothing left for this row to say (OPEND-3334): no empty row either.
+  if (
+    streaming &&
+    hideRunStatus &&
+    !forceVisible &&
+    !copyMarkdown &&
     !onFork &&
-    !onContinueRemaining
+    !feedbackControls
   )
     return null;
   return (
@@ -2182,68 +2230,39 @@ export function AssistantFooter({
       data-canceled={canceled ? "true" : "false"}
       // A real current turn may precede a host card. Its recovery action must
       // stay visible without hover; ordinary historical controls keep isLast.
-      data-last={isLast || onContinueRemaining ? "true" : "false"}
+      data-last={isLast ? "true" : "false"}
     >
       {/* 稿子这一行的头是**一个**元素:`<span class="fin"><svg class="tick"/>已完成</span>` ——
           勾在字里面,不是它旁边的兄弟。原来 dot 和文字是平级的两个 span,
           逐元素比样式时从这里就错开一位。 */}
-      {!hideRunStatus ? (
-        <>
-          <span className={`assistant-label${streaming && preparing ? " shimmer-text shimmer-prepare" : ""}`} data-testid="assistant-label">
-            {/* 跑完那一档稿子用的是 `<svg class="tick">`(勾其实是 background 画的,
-                里面的 path 被 `.tick > * { display:none }` 关掉了),没跑完那几档用的是 `<i>`。
-                标记本身的样子全在 `.dot` 的 CSS 里,这里只决定用哪个标签 —— 标签不一样,
-                逐元素比样式时后面整列都要错位。 */}
-            {!streaming && !canceled && !hasUnfinishedTodos ? (
-              <svg className="dot" viewBox="0 0 24 24" aria-hidden />
-            ) : (
-              <i className="dot" data-active={streaming ? "true" : "false"} />
-            )}
-            {streaming
-              ? preparing
-                ? preparingStatus === "thinking"
-                  ? t("assistant.statusThinking")
-                  : t("assistant.statusPreparing")
-                : t("assistant.workingLabel")
-              : hasEmptyResponse
-              ? t("assistant.emptyResponseLabel")
-              : canceled
-              ? t("assistant.canceledLabel")
-              : hasUnfinishedTodos
-              ? t("assistant.unfinishedLabel")
-              : t("assistant.doneLabel")}
-          </span>
-          {/* 产品《报错文案》S24c / S24a(OPEND-2849):这两档的状态词是「标题」,
-              紧跟一句正文。其余各档只有状态词。 */}
-          {!streaming && !hasEmptyResponse && (canceled || (hasUnfinishedTodos && unfinishedTodoCount > 0)) ? (
-            <span className="assistant-label-detail" data-testid="assistant-label-detail">
-              {canceled
-                ? t("assistant.canceledDetail")
-                : t("assistant.unfinishedDetail", { n: unfinishedTodoCount })}
-            </span>
-          ) : null}
-        </>
+      {/*
+        P0-24 PRD「③ 回合末尾」:等待回答出问答卡,失败出失败卡,其他一律不显示 ——
+        「✓ 已完成」「任务已停止」「任务尚未完成」和它们的正文都删了(产品 Q6 答复),
+        这一轮怎么结束只由回合标题说,空回复的「任务未能完成」也一样删掉(Q6 点名)。
+        跑的过程中这一行照旧报「进行中 / 思考中」。
+      */}
+      {!hideRunStatus && streaming ? (
+        <span className={`assistant-label${preparing ? " shimmer-text shimmer-prepare" : ""}`} data-testid="assistant-label">
+          {/* P0-24 设计答复(2026-10-26,清单 3.7「全删」):这一行前面的小圆点去掉 */}
+          {preparing
+            ? preparingStatus === "thinking"
+              ? t("assistant.statusThinking")
+              : t("assistant.statusPreparing")
+            : t("assistant.workingLabel")}
+        </span>
       ) : null}
-      {copyMarkdown || onFork || feedbackControls || onContinueRemaining ? (
+      {/*
+        PRD Must todo 2「其余保持现状」:「本次任务仍有 N 项内容未完成。」这句留着 ——
+        删的只是它前面那个状态词。出现条件与改版前相同:正常结束、还欠着待办、N > 0
+        (被停止的一轮原来说的是「本次运行已按你的操作停止。」,那句删了,这句也不补)。
+      */}
+      {!hideRunStatus && !streaming && !hasEmptyResponse && !canceled && hasUnfinishedTodos && unfinishedTodoCount > 0 ? (
+        <span className="assistant-label-detail" data-testid="assistant-label-detail">
+          {t("assistant.unfinishedDetail", { n: unfinishedTodoCount })}
+        </span>
+      ) : null}
+      {copyMarkdown || onFork || feedbackControls ? (
         <span className="assistant-footer-controls">
-          {/*
-            〔继续剩余任务〕排在最前面。
-            ------------------------------------------------------------
-            它和后面几个不是一类:复制 / 赞踩 / Fork 是「对这段回答做点什么」,
-            这一颗是**把没干完的活接着往下推**,是这一行状态词(「已停止,仍有未完成任务」)
-            的直接下一步 —— 挨着那句话才读得通。
-            它也是 agent 判断「这一轮跟旧账无关」时用户唯一的出口,不能被折进更里面。
-          */}
-          {onContinueRemaining ? (
-            <button
-              type="button"
-              className="assistant-copy-button assistant-continue-remaining"
-              data-testid="assistant-continue-remaining"
-              onClick={onContinueRemaining}
-            >
-              {t("assistant.continueRemaining")}
-            </button>
-          ) : null}
           {/* 稿子的顺序是 赞 → 踩 → 复制 → Fork:先是「这答案好不好」,再是「拿它做点什么」 */}
           {feedbackControls}
           {copyMarkdown ? <AssistantMarkdownCopyButton markdown={copyMarkdown} /> : null}
@@ -3493,7 +3512,12 @@ function FormBlock({
         onSubmit={onSubmit ? (...args) => void handleSubmit(...args) : undefined}
         submitDisabled={submitDisabled || submitting}
         visualStyleContext={visualStyleContext}
-        autoContinueAfterTimeout
+        /*
+         * No `autoContinueAfterTimeout` (P0-24 N5): an unanswered card waits for
+         * the user indefinitely. Auto-submitting after ten minutes sent the
+         * card's pre-selected defaults as if the user had chosen them, turned
+         * "需要你回复" back into a running turn and raised a second notification.
+         */
       />
       {strategyBlockedNotice ? (
         <div
@@ -3919,27 +3943,6 @@ type Block =
  * single tool-group block so the chat surface stays compact during chains
  * of edits / reads.
  */
-/**
- * 没有 `runStatus` 的历史消息:这一轮到底成没成,只能从事件里看。
- *
- * 判据原样来自老的执行记录卡(`TaskActivityCard` 的 `hasError`),搬过来是为了不把
- * 已经在线上的行为弄丢 —— 少了它,那些消息会顶着「已完成」,壳里却摆着一行红的失败调用。
- * 两种情况算失败:**有调用报错**,或者**这一轮连结束时间都没有、还挂着没回来的调用**。
- *
- * 新规格没给这条派生规则编决策号(壳的三态是按 run 状态定的),先按现状保留。
- */
-function legacyTurnFailed(events: AgentEvent[], endedAt: number | undefined): boolean {
-  const settled = new Set<string>();
-  for (const event of events) {
-    if (event.kind === "tool_result") settled.add(event.toolUseId);
-  }
-  return events.some((event) => {
-    if (event.kind === "tool_result") return event.isError === true;
-    if (event.kind !== "tool_use") return false;
-    return endedAt === undefined && !settled.has(event.id);
-  });
-}
-
 function stripTodoToolGroups(blocks: Block[]): Block[] {
   return blocks.filter(
     (block) =>

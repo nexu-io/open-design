@@ -546,7 +546,7 @@ function renderMediaDispatchModelGuidance(defaults?: ByokMediaDefaults): string 
     : 'For the best fal image model use `--model flux-pro-ultra`.';
   const videoPart = videoModel
     ? `For video prefer your configured model: \`${videoModel}\`.`
-    : 'For video use `--model veo-3-fal` or `--model wan-2.1-t2v`.';
+    : 'For cloud video, read the current account/workspace catalogue with `od media models --cloud --json` before choosing a default. If it has no available video model, report the capability gap; never silently substitute an explicitly requested model or provider.';
   return `${imagePart} ${videoPart} Always pass \`--surface\` explicitly (\`image\`, \`video\`, or \`audio\`). Any \`fal-ai/*\` path (e.g. \`fal-ai/flux/schnell\`, \`fal-ai/wan-i2v\`) is also a valid \`--model\` value for image/video — pass it through as-is without substitution.`;
 }
 
@@ -573,9 +573,7 @@ function mediaDefaultsForRuntime(
   return {
     ...defaults,
     imageModel: defaults?.imageModel?.trim() || 'vela/gpt-image-2',
-    videoModel:
-      defaults?.videoModel?.trim()
-      || 'vela/doubao-seedance-2-0-260128',
+    ...(defaults?.videoModel?.trim() ? { videoModel: defaults.videoModel.trim() } : {}),
   };
 }
 

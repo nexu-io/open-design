@@ -41,6 +41,7 @@ import {
   type BoundWorkspaceResourceMutationGate,
   type WorkspaceResourceAccessInput,
 } from '../collab/workspace-resource-mutation.js';
+import type { RunNoticeLog } from '../runtimes/run-notices.js';
 import {
   codexSessionIdFromRunEvents,
   readCodexRolloutFirstCall,
@@ -51,6 +52,7 @@ import {
   getFirstProjectConversation,
   getConversation,
   getProject,
+  listConversationsAwaitingInput,
   listProjectsAwaitingInput,
   normalizeConversationSessionMode,
   updateProject,
@@ -58,14 +60,9 @@ import {
 } from '../db.js';
 import { readVelaLoginStatus } from '../integrations/vela.js';
 import {
-  ensureDetectedRuntimeCapabilities,
   ensureDetectedRuntimeVersions,
   getDetectedRuntimeVersions,
 } from '../runtimes/detection.js';
-import {
-  odNextAdvertisedCapabilityGap,
-  resolveBundledOdNextRuntimeCapability,
-} from '../runtimes/od-next-capability-gate.js';
 import { mintRunDoneKey } from '../runtimes/run-done-key.js';
 import {
   deriveLangfuseDeliveryState,
@@ -113,7 +110,6 @@ import {
 } from '../strategies/od-next/task-input-snapshot.js';
 import {
   evaluateOdNextRollout,
-  odNextTaskTypeForProjectScenarioBinding,
   readOdNextRolloutPolicy,
   type OdNextRolloutDecision,
 } from '../strategies/od-next/rollout.js';
@@ -656,6 +652,7 @@ export interface RegisterRunRoutesDeps {
     ) => Promise<boolean>;
   };
   telemetry: {
+    taskTelemetryForRun?: (runId: string) => ChatRunStatusResponse['taskTelemetry'];
     reportRunCompletionTelemetryFallback: (input: RunCreatedFallbackInput) => void;
     resolveRunProjectKindForAnalytics: (input: RunProjectKindInput) => string | null;
     runArtifactBaselines: RunArtifactBaselines;
@@ -739,7 +736,22 @@ export interface RegisterRunRoutesDeps {
   amrWorkspaceScope?: {
     isSignedIn: () => boolean | Promise<boolean>;
   };
+  /** Global run notices (P0-24 N10); omitted in fixtures that do not exercise them. */
+  runNotices?: RunNoticeLog;
 }
+
+/**
+ * A response that swallows the authorizer's error body. The notice feed asks
+ * the project gate a yes/no question per notice; a denial must hide that one
+ * notice, not answer the whole request with the denial.
+ */
+const SILENT_RESPONSE = {
+  status() { return this; },
+  json() { return this; },
+  setHeader() { return this; },
+  send() { return this; },
+  end() { return this; },
+} as unknown as ApiResponse;
 
 const AGUI_NATIVE_EVENT_KINDS: ReadonlySet<OdNativeEvent['kind']> = new Set([
   'message_chunk',
@@ -766,17 +778,21 @@ function toProjectFiles(value: unknown): ProjectFileEntry[] {
 // Intents the scenario-plugin fallback resolver is allowed to see. Mirrors the
 // `ProjectMetadata['intent']` contract union so an unknown/legacy string in a
 // stored project row never gets cast into the union.
-const SCENARIO_PROJECT_INTENTS: readonly NonNullable<ContractProjectMetadata['intent']>[] = [
-  'live-artifact',
-  'web-clone',
-  'document',
-  'marketing',
-  'hyperframes',
-  'motion-design',
-];
+const SCENARIO_PROJECT_INTENTS: Record<NonNullable<ContractProjectMetadata['intent']>, true> = {
+  'live-artifact': true,
+  'web-clone': true,
+  document: true,
+  'webgl-experience': true,
+  'worker-visualizer': true,
+  marketing: true,
+  hyperframes: true,
+  'motion-design': true,
+};
 
 function toScenarioProjectIntent(value: unknown): ContractProjectMetadata['intent'] | undefined {
-  return SCENARIO_PROJECT_INTENTS.find((intent) => intent === value);
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(SCENARIO_PROJECT_INTENTS, value)
+    ? value as NonNullable<ContractProjectMetadata['intent']>
+    : undefined;
 }
 
 function toScenarioProjectMetadata(
@@ -1023,7 +1039,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     let projectedSnapshotId: string | undefined;
     try {
       const strategyTask = strategyTaskForRun(run, true);
-      const projection = strategyTask ? projectStrategyTask(strategyTask, run.id) : null;
+      const projection = strategyTask ? projectStrategyTask(strategyTask, run.id, db) : null;
       if (projection) run.strategyTask = projection;
       if (strategyTask && isLegacyHydratedRunWithoutAppliedSnapshot(run)) {
         projectedSnapshotId = strategyTask.snapshotId;
@@ -1045,6 +1061,8 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       }
     }
     const status = design.runs.statusBody(run);
+    const taskTelemetry = status.strategyTask ? ctx.telemetry.taskTelemetryForRun?.(run.id) : undefined;
+    if (taskTelemetry) status.taskTelemetry = taskTelemetry;
     // A read can derive display identity from the validated task, but must not
     // stamp the source Run and bypass clarification's linked-snapshot witness.
     return projectedSnapshotId
@@ -1511,9 +1529,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     }
     let resolvedSnapshot: SuccessfulRunSnapshotResolution | null = null;
     let strategyRolloutDecision: OdNextRolloutDecision | null = null;
-    let rolloutCapabilitySnapshot: ReturnType<
-      typeof resolveBundledOdNextRuntimeCapability
-    >['snapshot'] = null;
     let resolveAutomaticOrdinaryFallback: (() => ResolveSnapshotResult) | null = null;
     let automaticOrdinaryFallbackPluginId: string | null = null;
     let automaticSnapshotPreparationError: Error | null = null;
@@ -1629,7 +1644,16 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         Array.isArray((rolloutProject?.metadata as ContractProjectMetadata | undefined)?.contextPlugins)
         && (rolloutProject?.metadata as ContractProjectMetadata).contextPlugins!.length > 0
       );
-      const explicitExecutablePlugin = Boolean(
+      const officialTypeEntry = Boolean(defaultPluginId
+        && getInstalledPlugin(db, defaultPluginId)?.sourceKind === 'bundled'
+        && verifiedScenarioBinding?.pluginId === defaultPluginId
+        && (!suppliedPluginWasNamed || requestBody.pluginId === defaultPluginId)
+        && (!suppliedSnapshotWasNamed || requestBody.appliedPluginSnapshotId === rolloutProject?.appliedPluginSnapshotId));
+      const officialTemplateEntry = Boolean(selectedExamplePlugin?.sourceKind === 'bundled'
+        && verifiedExampleBinding
+        && (!suppliedPluginWasNamed || requestBody.pluginId === selectedExamplePlugin.id)
+        && (!suppliedSnapshotWasNamed || requestBody.appliedPluginSnapshotId === rolloutProject?.appliedPluginSnapshotId));
+      const explicitExecutablePlugin = !officialTypeEntry && !officialTemplateEntry && Boolean(
         suppliedSnapshotWasNamed
         || suppliedPluginWasNamed
         || (projectHasExplicitPin && !projectPinIsAutomaticDefault)
@@ -1647,21 +1671,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         explicitExecutablePlugin
         || suppliedContextPluginWasNamed
       );
-      // Read per request, not at boot: `odNextStrategyMode` is how a user opts
-      // this installation out of OD Next, and "configure it and it takes
-      // effect" has to mean the next run, not the next daemon restart.
-      //
-      // Deliberately uncaught. `readAppConfig` already answers `{}` for the
-      // states that mean "nothing configured" — no file, unparseable file — and
-      // only throws when the daemon genuinely cannot read its own config. That
-      // is not the same as an opt-out, and swallowing it would silently run the
-      // ordinary route (with no `agentCliEnv` either) while telling the
-      // operator the installation was never opted in.
+      // Subsequent requests use the current policy, including older conversations.
+      // In-flight physical runs and idempotent retries keep their frozen bundle.
       const rolloutAppConfig = await readAppConfig(RUNTIME_DATA_DIR);
       const rolloutPolicy = readOdNextRolloutPolicy(process.env, rolloutAppConfig);
-      const rolloutTaskType = previousStrategyTask
-        ? getSnapshot(db, previousStrategyTask.snapshotId)?.strategy?.selectedTaskProfile.taskType ?? null
-        : odNextTaskTypeForProjectScenarioBinding(verifiedStrategyBinding ?? verifiedScenarioBinding);
+      const rolloutTaskType = !explicitUserPlugin ? 'discovery' as const : null;
       const routeApplicability = explicitUserPlugin
         ? 'explicit_user' as const
         : rolloutTaskType && snapshotConversationId
@@ -1692,8 +1706,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       }
       const rolloutPlugin = rolloutResolved?.ok ? rolloutResolved.record : null;
       let rolloutVersions: Awaited<ReturnType<typeof ensureDetectedRuntimeVersions>> | null = null;
-      let rolloutCapability: ReturnType<typeof resolveBundledOdNextRuntimeCapability> | null = null;
-      let advertisedCapabilityGap: string[] = [];
       if (routeApplicability === 'eligible' && rolloutPlugin) {
         try {
           if (effectiveAgentId) {
@@ -1701,54 +1713,13 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
               (rolloutAppConfig as { agentCliEnv?: AgentCliEnv }).agentCliEnv,
               effectiveAgentId,
             );
-            // Both probes read the same resolved launch path. The `--version`
-            // read establishes invocability; the `--help` read establishes
-            // which optional flags this installed build advertises. OD Next
-            // needs both, because the fixture registry below only proves what
-            // the runtime *path* can do, not what the user's build exposes.
-            const [versions, advertised] = await Promise.all([
-              ensureDetectedRuntimeVersions(effectiveAgentId, agentCliEnv),
-              ensureDetectedRuntimeCapabilities(effectiveAgentId, agentCliEnv),
-            ]);
-            rolloutVersions = versions;
-            advertisedCapabilityGap = odNextAdvertisedCapabilityGap({
-              agentId: effectiveAgentId,
-              advertised,
-            });
+            rolloutVersions = await ensureDetectedRuntimeVersions(effectiveAgentId, agentCliEnv);
           }
-          rolloutCapability = effectiveAgentId
-            ? resolveBundledOdNextRuntimeCapability({
-                agentId: effectiveAgentId,
-                ...(rolloutVersions?.agentCliVersion
-                  ? { agentCliVersion: rolloutVersions.agentCliVersion }
-                  : {}),
-                ...(rolloutVersions?.runtimeCompanionName
-                  ? { runtimeCompanionName: rolloutVersions.runtimeCompanionName }
-                  : {}),
-                ...(rolloutVersions?.runtimeCompanionVersion
-                  ? { runtimeCompanionVersion: rolloutVersions.runtimeCompanionVersion }
-                  : {}),
-              })
-            : null;
         } catch (error) {
           automaticAdmissionPreparationFailed = true;
-          console.warn('[od-next-rollout] automatic capability preparation failed; using ordinary default', error);
+          console.warn('[od-next-rollout] runtime detection failed; using ordinary default', error);
         }
       }
-      const nativeSubagents = rolloutCapability?.snapshot?.nativeSubagents;
-      const runtimeCapabilityVerified = Boolean(
-        (rolloutVersions as ({ invocable?: boolean } | null))?.invocable === true
-        && rolloutCapability?.reason === 'capability_resolved'
-        && rolloutCapability.snapshot?.nativeSessionContinuation.support === 'verified'
-        && nativeSubagents?.support === 'verified'
-        && (nativeSubagents.evidenceLevel === 'L2' || nativeSubagents.evidenceLevel === 'L3')
-        && advertisedCapabilityGap.length === 0
-      );
-      // An installed CLI that does not advertise what OD Next will demand at
-      // launch must lose admission here, not fail the user's Run at spawn.
-      const advertisedCapabilityReason = advertisedCapabilityGap.length > 0
-        ? 'advertised_capability_missing'
-        : null;
       strategyRolloutDecision = evaluateOdNextRollout({
         policy: rolloutPolicy,
         assignmentIdentity: `${requestBody.projectId}:${snapshotConversationId ?? ''}`,
@@ -1756,10 +1727,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         agentId: effectiveAgentId,
         agentVersion: rolloutVersions?.agentCliVersion ?? null,
         sourceKind: rolloutPlugin?.sourceKind ?? null,
-        runtimeCapabilityVerified,
-        runtimeCapabilityReason: advertisedCapabilityReason
-          ?? rolloutCapability?.reason
-          ?? 'runtime_out_of_scope',
         routeApplicability,
       });
       if (
@@ -1771,9 +1738,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           'od_next_rollout_prestart_preparation_failed',
         );
       }
-      if (strategyRolloutDecision.effectiveMode === 'active') {
-        rolloutCapabilitySnapshot = rolloutCapability?.snapshot ?? null;
-      }
       console.info('[od-next-rollout]', {
         decisionClass: strategyRolloutDecision.decisionClass,
         requestedMode: strategyRolloutDecision.requestedMode,
@@ -1784,9 +1748,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         sourceKind: rolloutPlugin?.sourceKind ?? null,
         assignmentClass: strategyRolloutDecision.eligible ? 'included' : 'not_included',
         primaryReasonCode: strategyRolloutDecision.primaryReasonCode,
-        ...(advertisedCapabilityGap.length > 0
-          ? { advertisedCapabilityGap }
-          : {}),
       });
       if (!explicitExecutablePlugin) {
         const projectRow = rolloutProject;
@@ -1952,9 +1913,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       // unbound project.
       workspaceScope: preparedWorkspaceScope,
       ...(strategyRolloutDecision ? { strategyRolloutDecision } : {}),
-      ...(strategyRolloutDecision?.effectiveMode === 'active' && rolloutCapabilitySnapshot
-        ? { runtimeCapabilitySnapshot: rolloutCapabilitySnapshot }
-        : {}),
     };
     if (resolvedSnapshot?.ok) {
       meta.appliedPluginSnapshotId = resolvedSnapshot.snapshotId;
@@ -2381,7 +2339,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         strategyRolloutDecision,
         'od_next_rollout_prestart_preparation_failed',
       );
-      rolloutCapabilitySnapshot = null;
       meta.strategyRolloutDecision = strategyRolloutDecision;
       delete meta.runtimeCapabilitySnapshot;
       delete meta.odNextTaskInputSnapshot;
@@ -2643,10 +2600,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
                       intake: {
                         inputRefs: [{ id: 'request', accessible: true }],
                         selectedAgentAvailable: true,
-                        nativeContinuation: strategyRolloutDecision.syntheticCanary
-                          ? 'verified'
-                          : rolloutCapabilitySnapshot?.nativeSessionContinuation.support
-                            ?? 'unknown',
                         taskProfileAvailable: true,
                         dependencies: [],
                       },
@@ -2776,7 +2729,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       let strategyTask;
       try {
         const task = strategyTaskForRun(run);
-        strategyTask = task ? projectStrategyTask(task, run.id) : null;
+        strategyTask = task ? projectStrategyTask(task, run.id, db) : null;
       } catch (error) {
         if (
           error instanceof InvalidFrozenSkillPackageError
@@ -2852,7 +2805,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     let strategyTask;
     try {
       const task = strategyTaskForRun(run);
-      strategyTask = task ? projectStrategyTask(task, run.id) : null;
+      strategyTask = task ? projectStrategyTask(task, run.id, db) : null;
     } catch (error) {
       if (
         !(error instanceof InvalidFrozenSkillPackageError)
@@ -2962,6 +2915,53 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     res.json({ activeRunCount });
   });
 
+  /*
+   * P0-24 推测项 A-06 (N10): the notices the desktop client turns into
+   * system notifications. Permission takes the most conservative reading:
+   *
+   *  · a project with no Workspace binding (pre-Workspace local) is visible;
+   *  · a bound project is visible only when the caller's asserted Workspace
+   *    identity passes the same read gate the project's own routes use — so a
+   *    Team project's notice reaches only a client currently in that Team,
+   *    and a member whose access was revoked locally sees nothing;
+   *  · a caller with no identity at all (headerless CLI) sees no bound
+   *    project; `od run notices --workspace … --workspace-member …` asserts one.
+   *
+   * Notices carry no reply text, so the worst a wrong grant could reveal is a
+   * project name and that a turn ended. The response is loopback-only.
+   */
+  app.get('/api/run-notices', async (req: ApiRequest, res: ApiResponse) => {
+    // Same loopback / DNS-rebinding guard as the active-count probe: the feed
+    // names projects, so a foreign page must not read it through the browser.
+    const local = validateLocalDaemonRequest(req);
+    if (!local.ok) {
+      return sendApiError(res, 403, 'FORBIDDEN', local.message, { details: local.details });
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    const afterRaw = typeof req.query?.after === 'string' ? Number(req.query.after) : 0;
+    const after = Number.isFinite(afterRaw) && afterRaw > 0 ? Math.floor(afterRaw) : 0;
+    if (!ctx.runNotices) {
+      return res.json({ epoch: 'unavailable', latestSeq: 0, notices: [] });
+    }
+    const requestContext = workspaceResourceContextFromRequest(req);
+    const body = await ctx.runNotices.read(after, async (notice) => {
+      const binding = ctx.projectStore?.getWorkspaceProjectByProjectId(db, notice.projectId);
+      if (!binding) return true;
+      if (requestContext === null || !ctx.authorizeProjectRequest) return false;
+      try {
+        return await ctx.authorizeProjectRequest(
+          req,
+          SILENT_RESPONSE,
+          notice.projectId,
+          { mode: 'read' },
+        );
+      } catch {
+        return false;
+      }
+    });
+    res.json(body);
+  });
+
   app.get('/api/runs', async (req: ApiRequest, res: ApiResponse) => {
     const { projectId, conversationId, status } = req.query;
     const runs = design.runs.list({ projectId, conversationId, status });
@@ -3027,9 +3027,21 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     const awaitingInputProjectIds = visibleProjectIds.size
       ? [...listProjectsAwaitingInput(db)].filter((id) => visibleProjectIds.has(id))
       : [];
+    // Per conversation too: a project shows "needs your reply" only when the
+    // conversation that most recently started a Run is the one waiting
+    // (P0-24). Same visibility rule — only conversations the runs expose.
+    const visibleConversationIds = new Set(
+      visibleRuns
+        .map((run) => run.conversationId)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0),
+    );
+    const awaitingInputConversationIds = visibleConversationIds.size
+      ? [...listConversationsAwaitingInput(db)].filter((id) => visibleConversationIds.has(id))
+      : [];
     const body = {
       runs: visibleRuns.map(statusWithStrategyTask),
       awaitingInputProjectIds,
+      awaitingInputConversationIds,
     };
     res.json(body);
   });
@@ -3361,7 +3373,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           'strategy task changed while cancellation was being applied',
         );
       }
-      cancelRun.strategyTask = projectStrategyTask(canceled, cancelRun.id);
+      cancelRun.strategyTask = projectStrategyTask(canceled, cancelRun.id, db);
     }
     // Logical CAS wins before physical finish: the emitted end frame therefore
     // carries the terminal task projection and can never advertise a running

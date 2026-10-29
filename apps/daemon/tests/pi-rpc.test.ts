@@ -1109,7 +1109,7 @@ test('attachPiRpcSession: no agent events emitted after abort()', () => {
 
 // ─── parentSession (conversational continuity) ─────────────────────────
 
-test('attachPiRpcSession sends new_session before prompt when parentSession is provided', () => {
+test('attachPiRpcSession loads history with switch_session before prompt when parentSession is provided', () => {
   const events: TestSentEvent[] = [];
   const send = (channel: string, payload: JsonRecord) => events.push({ channel, ...payload });
   const child = createMockChild();
@@ -1129,20 +1129,19 @@ test('attachPiRpcSession sends new_session before prompt when parentSession is p
     buffered = child.stdin.read();
   }
   const lines = chunks.join('').trim().split('\n').filter(Boolean);
-  // First line should be new_session with parentSession, and prompt should
+  // First line should load the existing session, and prompt should
   // wait until pi confirms it loaded the parent session.
-  assert.equal(lines.length, 1, 'should wait for new_session response before prompt');
+  assert.equal(lines.length, 1, 'should wait for switch_session response before prompt');
   const first = parseJsonRecord(lines[0] ?? '');
-  assert.equal(first.type, 'new_session', 'first cmd should be new_session');
-  assert.equal(first.parentSession, '/path/to/prior-session.jsonl', 'parentSession should match');
+  assert.equal(first.type, 'switch_session', 'new_session only tracks ancestry and starts empty');
+  assert.equal(first.sessionPath, '/path/to/prior-session.jsonl', 'sessionPath should match');
   feedStdoutLines(child, [{ type: 'response', id: first.id, success: true }]);
   const promptChunk = child.stdin.read();
   const promptLines = promptChunk ? promptChunk.toString().trim().split('\n').filter(Boolean) : [];
-  assert.equal(promptLines.length, 1, 'should send prompt after new_session succeeds');
+  assert.equal(promptLines.length, 1, 'should send prompt after switch_session succeeds');
   const second = parseJsonRecord(promptLines[0] ?? '');
   assert.equal(second.type, 'prompt', 'second cmd should be prompt');
-  // new_session should have a smaller id than prompt.
-  assert.ok((first.id as number) < (second.id as number), 'new_session id should be less than prompt id');
+  assert.ok((first.id as number) < (second.id as number), 'switch_session id should be less than prompt id');
   // getLastSessionPath should return null initially (no real session dir).
   assert.equal(session.getLastSessionPath(), null, 'no session path before agent_end');
 });
@@ -1159,9 +1158,9 @@ test('attachPiRpcSession fails and does not send prompt when parentSession is re
   });
   const firstChunk = child.stdin.read();
   const firstLines = firstChunk ? firstChunk.toString().trim().split('\n').filter(Boolean) : [];
-  assert.equal(firstLines.length, 1, 'should only send new_session initially');
+  assert.equal(firstLines.length, 1, 'should only send switch_session initially');
   const first = parseJsonRecord(firstLines[0] ?? '');
-  assert.equal(first.type, 'new_session');
+  assert.equal(first.type, 'switch_session');
 
   feedStdoutLines(child, [{ type: 'response', id: first.id, success: false, error: 'missing session' }]);
 
@@ -1177,7 +1176,7 @@ test('attachPiRpcSession fails and does not send prompt when parentSession is re
   );
 });
 
-test('attachPiRpcSession does NOT send new_session when parentSession is omitted', () => {
+test('attachPiRpcSession does not switch sessions when parentSession is omitted', () => {
   const events: TestSentEvent[] = [];
   const send = (channel: string, payload: JsonRecord) => events.push({ channel, ...payload });
   const child = createMockChild();
@@ -1196,8 +1195,80 @@ test('attachPiRpcSession does NOT send new_session when parentSession is omitted
   }
   const lines = chunks.join('').trim().split('\n').filter(Boolean);
   const types = lines.map((l) => parseJsonRecord(l).type);
-  assert.ok(!types.includes('new_session'), 'should NOT send new_session');
+  assert.ok(!types.includes('switch_session'), 'should NOT send switch_session');
   assert.ok(types.includes('prompt'), 'should send prompt');
+});
+
+test('attachPiRpcSession does not send a trimmed prompt when an extension cancels session loading', () => {
+  const events: TestSentEvent[] = [];
+  const child = createMockChild();
+  const session = attachPiRpcSession({
+    child: child as unknown as ChildProcess,
+    prompt: 'trimmed latest turn',
+    parentSession: '/path/to/prior-session.jsonl',
+    send: (channel, payload: JsonRecord) => events.push({ channel, ...payload }),
+  });
+  const first = parseJsonRecord(child.stdin.read().toString().trim());
+  feedStdoutLines(child, [{ type: 'response', id: first.id, success: true, data: { cancelled: true } }]);
+
+  assert.equal(child.stdin.read(), null, 'a canceled switch did not restore the conversation');
+  assert.equal(session.hasFatalError(), true);
+  assert.deepEqual(events.find(event => event.channel === 'error'), {
+    channel: 'error', message: 'Parent session loading was canceled by a Pi extension.', code: 'PI_PARENT_SESSION_FAILED',
+  });
+});
+
+test('attachPiRpcSession captures the native sessionFile reported by its own get_state response', () => {
+  const child = createMockChild();
+  const session = attachPiRpcSession({
+    child: child as unknown as ChildProcess,
+    prompt: 'test',
+    cwd: '/project-without-local-pi-sessions',
+    send: () => {},
+  });
+  const prompt = parseJsonRecord(child.stdin.read().toString().trim());
+  feedStdoutLines(child, [{ type: 'response', id: prompt.id, success: true }]);
+  const stateChunk = child.stdin.read();
+  assert.ok(stateChunk, 'query the running Pi process rather than guessing its storage home');
+  const state = parseJsonRecord(stateChunk.toString().trim());
+  assert.equal(state.type, 'get_state');
+  feedStdoutLines(child, [
+    { type: 'response', id: (state.id as number) + 1, success: true, data: { sessionFile: '/other/session.jsonl' } },
+    { type: 'response', id: state.id, success: true, data: { sessionFile: '/agent-home/sessions/current.jsonl' } },
+  ]);
+  assert.equal(session.getLastSessionPath(), null, 'do not publish a handle before the turn completes');
+  feedStdoutLines(child, [{ type: 'agent_end' }]);
+  assert.equal(session.getLastSessionPath(), '/agent-home/sessions/current.jsonl');
+  closeStdout(child);
+});
+
+test('attachPiRpcSession keeps generation non-blocking when get_state is unsupported or unanswered', () => {
+  for (const answer of [false, undefined]) {
+    const events: TestSentEvent[] = [];
+    const child = createMockChild();
+    const session = attachPiRpcSession({
+      child: child as unknown as ChildProcess,
+      prompt: 'test',
+      send: (channel, payload: JsonRecord) => events.push({ channel, ...payload }),
+    });
+    const prompt = parseJsonRecord(child.stdin.read().toString().trim());
+    feedStdoutLines(child, [{ type: 'response', id: prompt.id, success: true }]);
+    const stateChunk = child.stdin.read();
+    assert.ok(stateChunk, 'get_state should be a best-effort metadata query');
+    const state = parseJsonRecord(stateChunk.toString().trim());
+    if (answer !== undefined) {
+      feedStdoutLines(child, [{ type: 'response', id: state.id, success: answer, error: 'unsupported' }]);
+    }
+    feedStdoutLines(child, [
+      { type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: 'Generated output' } },
+      { type: 'agent_end' },
+    ]);
+    assert.equal(session.hasFatalError(), false);
+    assert.ok(events.some(event => event.delta === 'Generated output'));
+    assert.ok(!events.some(event => event.channel === 'error'));
+    assert.equal(session.getLastSessionPath(), null);
+    closeStdout(child);
+  }
 });
 
 test('attachPiRpcSession getLastSessionPath returns only the session changed during this run', async () => {

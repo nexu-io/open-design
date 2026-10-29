@@ -91,11 +91,11 @@ async function installHandoffProbe(page: Page): Promise<void> {
     new MutationObserver(() => {
       if (
         probe.pendingFrame == null
-        && document.querySelector('[data-testid="project-creation-pending-view"]')
+        && document.querySelector('[data-creation-phase="pending"]')
       ) {
         probe.pendingFrame = probe.frame;
       }
-    }).observe(document, { childList: true, subtree: true });
+    }).observe(document, { childList: true, subtree: true, attributes: true });
   });
 }
 
@@ -191,12 +191,13 @@ test('[P0] AMR Home send creates the project without waiting for workspace billi
   await gotoEntryHome(page);
   await sendFromHome(page, 'Draft a landing page for a coffee subscription.');
 
-  const pending = page.getByTestId('project-creation-pending-view');
+  const pending = page.locator('[data-creation-phase="pending"]');
   // The project frame is immediate; its create request can proceed even if
   // an authoritative billing read would never answer.
   await expect(pending).toBeVisible({ timeout: T.short });
   await expect.poll(() => create.requested(), { timeout: T.medium }).toBe(true);
-  await expect(page.getByTestId('project-creation-pending-chat')).toBeVisible();
+  // The project view is up with the user's turn already drawn.
+  await expect(pending.locator('[data-testid="chat-log"] .msg.user')).toBeVisible();
   expect(await readHandoffFrames(page)).toBeLessThanOrEqual(1);
 
   // Releasing project creation starts the run without releasing billing.
@@ -220,7 +221,7 @@ test('[P0] an empty wallet the shell already shows does not block Home: no dialo
   await expect(page.getByTestId('home-hero-input')).toBeVisible({ timeout: T.medium });
   await sendFromHome(page, prompt);
 
-  const pending = page.getByTestId('project-creation-pending-view');
+  const pending = page.locator('[data-creation-phase="pending"]');
   await expect(pending).toBeVisible({ timeout: T.medium });
   await expect(page.getByTestId('amr-balance-dialog')).toHaveCount(0);
   await expect.poll(() => create.requested(), { timeout: T.medium }).toBe(true);
@@ -280,7 +281,7 @@ test('[P0] a stale $0 projection does not force a recharge confirmation before s
   await expect(page.getByTestId('home-hero-input')).toBeVisible({ timeout: T.medium });
   await sendFromHome(page, 'Draft a landing page after a recharge.');
 
-  const pending = page.getByTestId('project-creation-pending-view');
+  const pending = page.locator('[data-creation-phase="pending"]');
   // A stale zero cannot open a funding dialog or prevent project creation.
   await expect(pending).toBeVisible({ timeout: T.medium });
   await expect(page.getByTestId('amr-balance-dialog')).toHaveCount(0);
@@ -297,7 +298,7 @@ test('[P1] local-agent send from Home still enters the pending frame within a fr
   await gotoEntryHome(page);
   await sendFromHome(page, 'Draft a landing page with the local agent.');
 
-  const pending = page.getByTestId('project-creation-pending-view');
+  const pending = page.locator('[data-creation-phase="pending"]');
   await expect(pending).toBeVisible({ timeout: T.short });
   expect(await readHandoffFrames(page)).toBeLessThanOrEqual(1);
   create.release();
@@ -365,7 +366,7 @@ test('[P0] funding confirmation only updates the cache and billing events expire
     const dialog = page.getByTestId('amr-balance-dialog');
     await expect(dialog).toBeVisible();
     await expect(page.getByTestId('home-hero-input')).toBeVisible();
-    await expect(page.getByTestId('project-creation-pending-view')).toHaveCount(0);
+    await expect(page.locator('[data-creation-phase="pending"]')).toHaveCount(0);
     expect(create.requested()).toBe(false);
     await expect.poll(() => hintReads).toBe(warmReads + 1);
     await testInfo.attach('home-cached-funding-block', { body: await page.screenshot({ animations: 'disabled' }), contentType: 'image/png' });
@@ -501,7 +502,7 @@ test('[P0] twenty Home sends stay blocked across expiry, billing events and fail
       await (await checked).finished();
       const dialog = page.getByTestId('amr-balance-dialog');
       await expect(dialog).toBeVisible();
-      await expect(page.getByTestId('project-creation-pending-view')).toHaveCount(0);
+      await expect(page.locator('[data-creation-phase="pending"]')).toHaveCount(0);
       expect(create.requested(), `attempt ${attempt} must not create a project`).toBe(false);
       await dialog.getByRole('button', { name: /not now|later|暂不|稍后/i }).click();
       await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
@@ -559,14 +560,14 @@ for (const planAvailable of [false, true]) {
       sending = true;
       await sendFromHome(page, prompt);
       if (planAvailable) {
-        await expect(page.getByTestId('project-creation-pending-view')).toBeVisible();
+        await expect(page.locator('[data-creation-phase="pending"]')).toBeVisible();
         await expect(page.getByTestId('amr-balance-dialog')).toHaveCount(0);
         await expect.poll(() => create.requested()).toBe(true);
       } else {
         const dialog = page.getByTestId('amr-balance-dialog');
         await expect(dialog).toBeVisible();
         await expect(page.getByTestId('home-hero-input')).toBeVisible();
-        await expect(page.getByTestId('project-creation-pending-view')).toHaveCount(0);
+        await expect(page.locator('[data-creation-phase="pending"]')).toHaveCount(0);
         expect(create.requested()).toBe(false);
         await testInfo.attach('restored-home-memory-gate', { body: await page.screenshot({ animations: 'disabled' }), contentType: 'image/png' });
         const checked = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/workspace/billing/preflight');
@@ -576,7 +577,7 @@ for (const planAvailable of [false, true]) {
         // that unknown funding did not turn into an automatic project handoff.
         await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
         await expect(dialog).toBeVisible();
-        await expect(page.getByTestId('project-creation-pending-view')).toHaveCount(0);
+        await expect(page.locator('[data-creation-phase="pending"]')).toHaveCount(0);
         expect(create.requested()).toBe(false);
         await testInfo.attach('home-unknown-funding-stays-blocked', { body: await page.screenshot({ animations: 'disabled' }), contentType: 'image/png' });
         await dialog.getByRole('button', { name: /not now|later|暂不|稍后/i }).click();

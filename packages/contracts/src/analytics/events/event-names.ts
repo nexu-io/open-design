@@ -4,7 +4,10 @@
  */
 // ---- Event names ---------------------------------------------------------
 
+import type { ClientMetricEventName } from '../client-metrics.js';
+
 export type AnalyticsEventName =
+  | ClientMetricEventName
   // Core triad
   | 'page_view'
   | 'ui_click'
@@ -25,6 +28,8 @@ export type AnalyticsEventName =
   | 'mcp_tool_finished'
   // Paid media provider request outcome and bounded response retry.
   | 'media_generation_result'
+  | 'media_stock_request_result'
+  | 'media_stock_slot_result'
   // Chat artifact snapshot capture outcome per finished run. Daemon-only;
   // `source_changed_count` is the correctness alarm inside it.
   | 'chat_artifact_capture_result'
@@ -33,6 +38,7 @@ export type AnalyticsEventName =
   | 'update_check_result'
   | 'update_apply_observed'
   | 'update_lifecycle_observed'
+  | 'client_update_stage_result'
   // Packaged startup failure — emitted by the packaged MAIN process (not the
   // daemon) when daemon/web sidecars die before reporting status, i.e. the
   // pre-daemon crash class that produces zero telemetry today (issue #4638).
