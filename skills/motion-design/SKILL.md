@@ -295,6 +295,68 @@ that downloaded MP4 contains an audible audio track, and that key sounds occur
 at the authored times. A file extension or an audio tag alone does not prove
 sound. Silent films remain valid; never require audio for other task types.
 
+## Replicate a reference video
+
+When the user attaches a video or gives a video link and asks to replicate it,
+make the same film, or make one "like this" (复刻, 同款, 照着这个做), the
+reference is the brief. Never rebuild a film you have not measured.
+
+**A reference video makes this a video brief.** The reference is itself a
+film, so the delivery is a film: MP4 is required, the production route is
+`hyperframes-html`, and the editable source is a HyperFrames composition —
+never a standalone interactive page. Do not deliver a clickable HTML page with
+a seek bar and call the replication done; a scrollable or pausable preview
+does not replace the MP4. Words like 同款, 照着做, 参考这个风格 or a bare
+"复刻这个视频" are video requests even when the user never says "秒" or "视频".
+The only exceptions are when the user asks for a webpage, a prototype or an
+interactive demo instead, or asks only to look at the reference.
+The composition has to be film-shaped either way: an HTML-only deliverable is
+not a completed replication.
+
+1. Measure it with the host:
+   `"$OD_NODE_BIN" "$OD_BIN" media reference --project "$OD_PROJECT_ID" --source "<attached file path or link>"`.
+   It writes `.motion-reference/<id>/`: `facts.json` (duration, size, fps,
+   audio, shot cuts), `frames/`, `contact.jpg`, `audio.wav` when the reference
+   has sound, and `REPLICATE.md` — the replication rules. Exit code 5 means the link could not be fetched; tell the
+   user the reason it printed and ask them to attach the file. Do not continue
+   from page text or a thumbnail.
+2. Read `REPLICATE.md` and follow it: it governs timing, fidelity, editable
+   structure, pictures, type, sound and the reference comparison for this film. It is
+   the same rule set Open Design's official templates are replicated with.
+3. Scaffold the film with the host, then render it — the replication is not
+   delivered until the MP4 exists:
+   `"$OD_NODE_BIN" "$OD_BIN" media scaffold --project "$OD_PROJECT_ID" --composition-dir "motion-source/film"`,
+   author the composition, then
+   `"$OD_NODE_BIN" "$OD_BIN" media generate --project "$OD_PROJECT_ID" --surface video --model hyperframes-html --composition-dir "motion-source/film" --output "<name>.mp4"`.
+4. Check it with the host:
+   `"$OD_NODE_BIN" "$OD_BIN" media compare --project "$OD_PROJECT_ID" --reference "<the video>" --candidate "<the film>"`.
+   It writes `.motion-compare/<id>/pair-NN.jpg` (reference left, your film
+   right), `sheet.jpg` and per-timestamp `ssim` scores. Read the pairs before
+   you claim the film matches — see `REPLICATE.md` for what to look at and the
+   one fix it allows.
+5. Everything else in this skill still applies: the composition contract,
+   sound policy ("Plan and produce sound for video"), production and the
+   bounded video check, where that comparison is the review.
+
+Link both the rendered MP4 and the composition source in the final reply. If
+the user then asks for a change, edit that composition and re-render the same
+MP4.
+
+References longer than 180 seconds or larger than 200 MB are refused; ask the
+user to trim the part they want.
+
+### Edit one element of an existing film
+
+When the user asks to change one thing in a film that already exists ("change
+this headline to …", "make the logo blue", "swap the product image for the one
+I attached"), find it by its `data-od-id`, its configuration key or its visible
+text, and change only that element and what is bound to it (a longer line may
+need its beat's hold or its exit cue moved; neighbours keep their timing).
+Leave every other element, beat and the sound as they are. If the description
+matches several elements, change the most prominent one and say which. Use an
+attached image by copying it into the composition's `assets/`. Re-render the
+same linked MP4 afterwards.
+
 ## Video production and dual delivery
 
 For video briefs, use Open Design's existing local HyperFrames renderer during
