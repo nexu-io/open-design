@@ -2,7 +2,8 @@ import type { Express } from 'express';
 import fs from 'node:fs';
 import { SIDECAR_ENV } from '@open-design/sidecar-proto';
 import { buildMcpInstallPayload, type McpInstallPayload } from './mcp-install-info.js';
-import { installCodexMcp, probeCodexInstall, refreshOwnedCodexMcp, uninstallCodexMcp } from './codex-cli.js';
+import { installCodexMcp, probeCodexInstall, readCodexMcpRegistration, refreshOwnedCodexMcp, uninstallCodexMcp } from './codex-cli.js';
+import { withPreservedDaemonUrl } from './mcp-agent-install.js';
 import { isManagedMcpBootstrapEnv } from './mcp-bootstrap.js';
 import { isCodexRegistrationOwnedBy, managedMcpRegistrationEnv } from './mcp-managed-registration.js';
 import { MCP_TEMPLATES, buildAcpMcpServers, buildClaudeMcpJson, isManagedProjectCwd, readMcpConfig, writeMcpConfig } from './mcp-config.js';
@@ -160,12 +161,14 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
       return sendApiError(res, 500, 'INSTALL_INFO_INCOMPLETE', payload.buildHint ?? 'install payload not ready');
     }
     try {
-      await installCodexMcp({
-        name: CODEX_MCP_NAME,
-        command: payload.command,
-        args: payload.args,
-        env: payload.env,
-      });
+      // Re-installing replaces the whole Codex entry; keep a daemon URL the
+      // user pinned on it (#8853).
+      const existing = await readCodexMcpRegistration(CODEX_MCP_NAME).catch(() => null);
+      const spec = withPreservedDaemonUrl(
+        { command: payload.command, args: payload.args, env: payload.env },
+        existing?.env ?? null,
+      );
+      await installCodexMcp({ name: CODEX_MCP_NAME, ...spec });
       res.json({ ok: true });
     } catch (err) {
       sendApiError(res, 500, 'CODEX_INSTALL_FAILED', err instanceof Error ? err.message : String(err));

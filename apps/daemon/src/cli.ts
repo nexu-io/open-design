@@ -31,6 +31,8 @@ import {
   planAgentInstall,
   applyJsonInstall,
   removeJsonInstall,
+  existingJsonInstallEnv,
+  withPreservedDaemonUrl,
 } from './mcp-agent-install.js';
 import { resolveMcpWorkspaceContext } from './mcp-workspace-context.js';
 import { parseStockSearchRequest, type StockSearchResponse } from '@open-design/contracts';
@@ -2849,7 +2851,10 @@ async function runMcp(args) {
     ...(flags['daemon-url']
       ? {}
       : {
-          resolveDaemonUrl: async () => await ensureMcpDaemonUrl({}),
+          // Runs before every tool call and falls back to the current URL on
+          // failure, so it keeps a single fast attempt instead of the
+          // startup retry budget.
+          resolveDaemonUrl: async () => await ensureMcpDaemonUrl({ discoveryRetryBudgetMs: 0 }),
         }),
   });
 }
@@ -2951,6 +2956,31 @@ async function resolveMcpLaunchSpec(flags) {
   };
 }
 
+// The env of the registration a re-install is about to replace, for agents
+// whose existing entry we can read without guessing: JSON config files and
+// Codex's own `mcp get --json`. Any read failure just means nothing is
+// preserved; it never blocks the install.
+async function readExistingMcpInstallEnv(plan, serverName) {
+  try {
+    if (plan.kind === 'json') {
+      const fs = await import('node:fs/promises');
+      const text = await fs.readFile(plan.configPath, 'utf8').catch((err) => {
+        if (err && err.code === 'ENOENT') return null;
+        throw err;
+      });
+      return existingJsonInstallEnv(text, plan);
+    }
+    if (plan.kind === 'cli' && plan.slug === 'codex') {
+      // Loaded lazily: codex-cli pulls in the agent runtime registry, which
+      // every other `od` command would otherwise pay for at startup.
+      const { readCodexMcpRegistration } = await import('./codex-cli.js');
+      return (await readCodexMcpRegistration(serverName))?.env ?? null;
+    }
+  } catch {
+    // Unreadable existing config: install from the fresh spec.
+  }
+  return null;
+}
 function emitInstallResult(useJson, result) {
   if (useJson) {
     console.log(JSON.stringify(result));
@@ -3002,12 +3032,22 @@ async function runMcpInstall(args) {
   const serverName = flags.name || 'open-design';
 
   const os = await import('node:os');
-  const spec = await resolveMcpLaunchSpec(flags);
-  const plan = planAgentInstall(slug, spec, {
+  const planContext = {
     home: os.homedir(),
     platform: process.platform,
     serverName,
-  });
+  };
+  let spec = await resolveMcpLaunchSpec(flags);
+  let plan = planAgentInstall(slug, spec, planContext);
+  if (!uninstall) {
+    // Re-installing replaces the whole entry; keep a daemon URL the user
+    // pinned on it rather than silently dropping it (#8853).
+    const preserved = withPreservedDaemonUrl(spec, await readExistingMcpInstallEnv(plan, serverName));
+    if (preserved !== spec) {
+      spec = preserved;
+      plan = planAgentInstall(slug, spec, planContext);
+    }
+  }
 
   if (plan.kind === 'manual') {
     const result = {

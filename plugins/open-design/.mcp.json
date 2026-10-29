@@ -3,7 +3,7 @@
     "open-design": {
       "type": "stdio",
       "command": "od",
-      "args": ["mcp", "--daemon-url", "http://127.0.0.1:7456"]
+      "args": ["mcp", "--daemon-url", "${OD_DAEMON_URL:-http://127.0.0.1:7456}"]
     }
   }
 }
