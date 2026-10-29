@@ -2278,7 +2278,6 @@ export const esES: Dict = {
   'chat.comments.attached': 'Adjunto al chat',
   'chat.comments.emptyAttached': 'No hay comentarios adjuntos.',
   'chat.comments.saved': 'Comentarios guardados',
-  'fileViewer.shareFinishEditing': "Guarda o cancela los cambios y espera a que termine el guardado antes de compartir.",
   'chat.comments.loadFailed': "No se pudieron cargar los comentarios. Se conservan los existentes.",
   'chat.comments.emptySaved': 'No hay comentarios guardados.',
   'chat.comments.add': 'Añadir',

@@ -2363,7 +2363,6 @@ export const zhTW: Dict = {
   "chat.comments.attached": "已附加到對話",
   "chat.comments.emptyAttached": "沒有已附加的評論。",
   "chat.comments.saved": "已儲存的評論",
-  'fileViewer.shareFinishEditing': "請先儲存或取消未儲存的修改，並等待儲存完成後再分享。",
   'chat.comments.loadFailed': "評論載入失敗，已顯示的評論仍保留。",
   "chat.comments.emptySaved": "沒有已儲存的評論。",
   "chat.comments.add": "新增",

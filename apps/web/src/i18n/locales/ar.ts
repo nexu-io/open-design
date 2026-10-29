@@ -2278,7 +2278,6 @@ export const ar: Dict = {
   'chat.comments.attached': 'مرفق بالدردشة',
   'chat.comments.emptyAttached': 'لا توجد تعليقات مرفقة.',
   'chat.comments.saved': 'تعليقات محفوظة',
-  'fileViewer.shareFinishEditing': "احفظ التعديلات غير المحفوظة أو ألغها وانتظر اكتمال الحفظ قبل المشاركة.",
   'chat.comments.loadFailed': "تعذر تحميل التعليقات. تم الاحتفاظ بالتعليقات الحالية.",
   'chat.comments.emptySaved': 'لا توجد تعليقات محفوظة.',
   'chat.comments.add': 'إضافة',

@@ -2267,7 +2267,6 @@ export const tr: Dict = {
   'chat.comments.attached': 'Sohbete eklendi',
   'chat.comments.emptyAttached': 'Eklenmiş yorum yok.',
   'chat.comments.saved': 'Kaydedilen yorumlar',
-  'fileViewer.shareFinishEditing': "Kaydedilmemiş değişiklikleri kaydedin veya iptal edin ve paylaşmadan önce kaydın tamamlanmasını bekleyin.",
   'chat.comments.loadFailed': "Yorumlar yüklenemedi. Mevcut yorumlar korunuyor.",
   'chat.comments.emptySaved': 'Kaydedilmiş yorum yok.',
   'chat.comments.add': 'Ekle',

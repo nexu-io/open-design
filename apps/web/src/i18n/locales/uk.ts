@@ -2267,7 +2267,6 @@ export const uk: Dict = {
   'chat.comments.attached': 'Прикріплено до чату',
   'chat.comments.emptyAttached': 'Коментарів не прикріплено.',
   'chat.comments.saved': 'Збережені коментарі',
-  'fileViewer.shareFinishEditing': "Збережіть або скасуйте зміни й дочекайтеся завершення збереження перед публікацією.",
   'chat.comments.loadFailed': "Не вдалося завантажити коментарі. Уже показані коментарі збережено.",
   'chat.comments.emptySaved': 'Немає збережених коментарів.',
   'chat.comments.add': 'Додати',

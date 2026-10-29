@@ -2278,7 +2278,6 @@ export const de: Dict = {
   'chat.comments.attached': 'An Chat angehängt',
   'chat.comments.emptyAttached': 'Keine Kommentare angehängt.',
   'chat.comments.saved': 'Gespeicherte Kommentare',
-  'fileViewer.shareFinishEditing': "Speichere oder verwerfe ungespeicherte Änderungen und warte vor dem Teilen, bis das Speichern abgeschlossen ist.",
   'chat.comments.loadFailed': "Kommentare konnten nicht geladen werden. Vorhandene Kommentare bleiben erhalten.",
   'chat.comments.emptySaved': 'Keine gespeicherten Kommentare.',
   'chat.comments.add': 'Hinzufügen',

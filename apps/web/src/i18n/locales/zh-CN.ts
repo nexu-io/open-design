@@ -2352,7 +2352,6 @@ export const zhCN: Dict = {
   "chat.comments.attached": "已附加到对话",
   "chat.comments.emptyAttached": "没有已附加的评论。",
   "chat.comments.saved": "已保存的评论",
-  'fileViewer.shareFinishEditing': "请先保存或取消未保存的修改，并等待保存完成后再分享。",
   'chat.comments.loadFailed': "评论加载失败，已显示的评论仍保留。",
   "chat.comments.emptySaved": "没有已保存的评论。",
   "chat.comments.add": "添加",
