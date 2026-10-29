@@ -3,8 +3,11 @@ import {
   OPENCODE_PERMISSION_CAPABILITY,
   appendOpenCodePermissionBypass,
   appendOpenCodeWorkspaceDir,
+  isOpenCode2xCapabilities,
+  shouldUseOpenCodeVariantFlag,
 } from '../opencode-permissions.js';
 import { getRememberedLiveModels } from '../models.js';
+import { execAgentFile } from '../invocation.js';
 import type { RuntimeAgentDef, RuntimeModelOption } from '../types.js';
 
 const OPENCODE_VARIANT_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u;
@@ -105,6 +108,82 @@ function supportsOpenCodeVariant(
   return Boolean(live?.reasoningOptions?.some((option) => option.id === variant));
 }
 
+/**
+ * Read the 2.x server model catalog, the only 2.x surface that advertises
+ * variants. `opencode api GET /api/model` returns the records the TUI picker
+ * uses: `providerID`, `modelID`, and `variants[].id` (verified on 2.0.24,
+ * where 5 of 9 local models exposed low/high/max-style variants). Plain
+ * `opencode models` prints ids only, so without this every 2.x user loses the
+ * reasoning picker and an existing variant choice would be dropped silently.
+ */
+function parseOpenCodeVariantCatalog(stdout: string): Map<string, string[]> {
+  const catalog = new Map<string, string[]>();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(String(stdout || ''));
+  } catch {
+    return catalog;
+  }
+  const records: unknown[] = Array.isArray(parsed)
+    ? parsed
+    : parsed && typeof parsed === 'object' && Array.isArray((parsed as { data?: unknown }).data)
+      ? (parsed as { data: unknown[] }).data
+      : [];
+  for (const record of records) {
+    if (!record || typeof record !== 'object' || Array.isArray(record)) continue;
+    const entry = record as Record<string, unknown>;
+    const providerId = typeof entry.providerID === 'string' ? entry.providerID.trim() : '';
+    const modelId = typeof entry.modelID === 'string' ? entry.modelID.trim() : '';
+    if (!providerId || !modelId) continue;
+    const ids: string[] = [];
+    for (const variant of Array.isArray(entry.variants) ? entry.variants : []) {
+      if (!variant || typeof variant !== 'object' || Array.isArray(variant)) continue;
+      const id = (variant as Record<string, unknown>).id;
+      if (typeof id !== 'string' || !OPENCODE_VARIANT_ID.test(id) || ids.includes(id)) continue;
+      ids.push(id);
+    }
+    if (ids.length > 0) catalog.set(`${providerId}/${modelId}`, ids);
+  }
+  return catalog;
+}
+
+function withCatalogVariants(
+  models: RuntimeModelOption[],
+  catalog: Map<string, string[]>,
+): RuntimeModelOption[] {
+  if (catalog.size === 0) return models;
+  return models.map((model) => {
+    if (model.reasoningOptions && model.reasoningOptions.length > 0) return model;
+    const ids = catalog.get(model.id);
+    return ids && ids.length > 0 ? { ...model, reasoningOptions: reasoningOptions(ids) } : model;
+  });
+}
+
+/**
+ * Carry forward variant metadata this process already knew for a model.
+ *
+ * A 2.x catalog read can come back without variants (server not up yet, api
+ * surface unavailable, model temporarily missing) while the user already has a
+ * variant selected. Dropping `reasoningOptions` there would make
+ * `supportsOpenCodeVariant` reject the pick, so `buildArgs` would launch the
+ * base model and the choice would disappear without a word. Retaining the last
+ * known options keeps the selection working; it never invents a variant, since
+ * only ids this build already surfaced are kept.
+ */
+function withRememberedVariants(models: RuntimeModelOption[]): RuntimeModelOption[] {
+  const remembered = new Map(
+    getRememberedLiveModels('opencode').map((model) => [model.id, model] as const),
+  );
+  if (remembered.size === 0) return models;
+  return models.map((model) => {
+    if (model.reasoningOptions && model.reasoningOptions.length > 0) return model;
+    const known = remembered.get(model.id)?.reasoningOptions;
+    return known && known.length > 0
+      ? { ...model, reasoningOptions: known.map((option) => ({ ...option })) }
+      : model;
+  });
+}
+
 export const opencodeAgentDef = {
     id: 'opencode',
     name: 'OpenCode',
@@ -122,6 +201,57 @@ export const opencodeAgentDef = {
       args: ['models', '--verbose'],
       parse: parseOpenCodeModels,
       timeoutMs: 15_000,
+    },
+    // OpenCode's model catalog changed shape between CLI lines, and the two
+    // shapes are chosen from the `run --help` capability probe — never from the
+    // text of a failed probe. OpenCode 2.0.24 answers `models --verbose` by
+    // printing `models --help` to stdout and exiting 1 with no recognizable
+    // wording, so any error-text gate either misfires (falling back to the
+    // static list and hiding the user's real catalog) or never fires at all.
+    //
+    //   1.x: `models --verbose` carries variant metadata inline.
+    //   2.x: `models` prints ids only, and `/api/model` carries the variants.
+    //
+    // When the probe could not identify the line, the tolerant path tries the
+    // verbose shape first and accepts a plain list, so an unreadable help does
+    // not cost the user their catalog.
+    fetchModels: async (resolvedBin, env, capabilities) => {
+      const caps = await capabilities;
+      const options = {
+        env: env as NodeJS.ProcessEnv,
+        timeout: 15_000,
+        maxBuffer: 8 * 1024 * 1024,
+      };
+      const readModels = async (args: string[]): Promise<RuntimeModelOption[] | null> => {
+        try {
+          const { stdout } = await execAgentFile(resolvedBin, args, options);
+          return parseOpenCodeModels(String(stdout));
+        } catch {
+          return null;
+        }
+      };
+      const models = await (async () => {
+        if (!isOpenCode2xCapabilities(caps)) {
+          const verbose = await readModels(['models', '--verbose']);
+          if (verbose) return verbose;
+          return readModels(['models']);
+        }
+        const plain = await readModels(['models']);
+        if (!plain) return null;
+        try {
+          const { stdout } = await execAgentFile(
+            resolvedBin,
+            ['api', 'GET', '/api/model'],
+            options,
+          );
+          return withCatalogVariants(plain, parseOpenCodeVariantCatalog(String(stdout)));
+        } catch {
+          // The catalog is an enrichment, not a requirement: a server that is
+          // not up yet must not cost the user their model list.
+          return plain;
+        }
+      })();
+      return models ? withRememberedVariants(models) : null;
     },
     fallbackModels: OPENCODE_FALLBACK_MODELS,
     // OpenCode 1.18.x exposes provider/model-specific variants. Detection
@@ -142,7 +272,7 @@ export const opencodeAgentDef = {
         'json',
       ];
       appendOpenCodePermissionBypass(args, 'opencode');
-      appendOpenCodeWorkspaceDir(args, runtimeContext.cwd);
+      appendOpenCodeWorkspaceDir(args, runtimeContext.cwd, 'opencode');
       // Capture-style resume: OpenCode mints its own session id (reported on
       // the stream as `sessionID`, e.g. `ses_...`). On a follow-up turn the
       // daemon continues that session with `-s <id>` instead of re-sending the
@@ -158,10 +288,17 @@ export const opencodeAgentDef = {
         args.push('-s', resumeSessionId);
       }
       if (options.model && options.model !== 'default') {
-        args.push('-m', options.model);
-      }
-      if (supportsOpenCodeVariant(options.model, options.reasoning)) {
-        args.push('--variant', options.reasoning);
+        if (supportsOpenCodeVariant(options.model, options.reasoning)) {
+          if (shouldUseOpenCodeVariantFlag('opencode')) {
+            args.push('-m', options.model);
+            args.push('--variant', options.reasoning);
+          } else {
+            // OpenCode 2.x: variant folds into `-m provider/model#variant`.
+            args.push('-m', `${options.model}#${options.reasoning}`);
+          }
+        } else {
+          args.push('-m', options.model);
+        }
       }
       return args;
     },

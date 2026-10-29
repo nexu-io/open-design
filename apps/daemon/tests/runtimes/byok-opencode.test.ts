@@ -13,8 +13,16 @@ describe('byok-opencode runtime config', () => {
   it('gates non-interactive permission bypass on the installed OpenCode capability', () => {
     agentCapabilities.delete('byok-opencode');
     expect(byokOpenCodeAgentDef.helpArgs).toEqual(['run', '--help']);
+    // BYOK shares the OpenCode capability contract, so every flag the shared
+    // entry declares is also probed for the BYOK adapter. `--dir`, `--variant`
+    // and `--pure` matter here too: the same `opencode run` surface serves
+    // both defs, and 2.x drops all three.
     expect(byokOpenCodeAgentDef.capabilityFlags).toEqual({
       '--dangerously-skip-permissions': 'skipPermissions',
+      '--auto': 'autoApprove',
+      '--dir': 'workspaceDir',
+      '--variant': 'variantFlag',
+      '--pure': 'pureMode',
     });
     expect(byokOpenCodeAgentDef.buildArgs('', [], [], {})).toEqual([
       'run',
@@ -29,6 +37,37 @@ describe('byok-opencode runtime config', () => {
         '--format',
         'json',
         '--dangerously-skip-permissions',
+        '-m',
+        'open-design-byok/gpt-5.5',
+      ]);
+    } finally {
+      agentCapabilities.delete('byok-opencode');
+    }
+  });
+
+  it('uses the 2.x argv shape for BYOK runs (no --dir, no --dangerously-skip-permissions)', () => {
+    // OpenCode 2.x dropped `--dir` and `--dangerously-skip-permissions` from
+    // `run --help` and documents `--auto` instead. The spawn cwd pins the
+    // workspace, so the BYOK adapter must send neither removed flag.
+    agentCapabilities.set('byok-opencode', {
+      autoApprove: true,
+      workspaceDir: false,
+      skipPermissions: false,
+      pureMode: false,
+      variantFlag: false,
+    });
+    try {
+      expect(byokOpenCodeAgentDef.buildArgs(
+        '',
+        [],
+        [],
+        { model: 'gpt-5.5' },
+        { cwd: '/projects/p1' },
+      )).toEqual([
+        'run',
+        '--format',
+        'json',
+        '--auto',
         '-m',
         'open-design-byok/gpt-5.5',
       ]);

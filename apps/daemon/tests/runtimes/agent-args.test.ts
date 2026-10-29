@@ -89,6 +89,10 @@ test('opencode args pass model-supported variants without changing the default a
   )?.reasoningOptions, undefined);
   assert.deepEqual(opencode.helpArgs, ['run', '--help']);
   assert.deepEqual(opencode.capabilityFlags?.['--dangerously-skip-permissions'], 'skipPermissions');
+  assert.deepEqual(opencode.capabilityFlags?.['--auto'], 'autoApprove');
+  assert.deepEqual(opencode.capabilityFlags?.['--dir'], 'workspaceDir');
+  assert.deepEqual(opencode.capabilityFlags?.['--variant'], 'variantFlag');
+  assert.deepEqual(opencode.capabilityFlags?.['--pure'], 'pureMode');
   assert.equal(baseArgs.includes('-'), false);
   assert.equal(baseArgs.includes(prompt), false);
   assert.deepEqual(baseArgs, [
@@ -252,6 +256,53 @@ test('opencode pins its workspace to the project cwd', () => {
 test('opencode omits --dir for a run with no project directory', () => {
   const args = opencode.buildArgs('design a dashboard', [], [], {}, {});
   assert.equal(args.includes('--dir'), false);
+});
+
+test('opencode 2.x omits --dir and relies on spawn cwd (issue: 2.0.24 Unrecognized flag --dir)', () => {
+  agentCapabilities.set('opencode', { workspaceDir: false, autoApprove: true });
+  try {
+    const args = opencode.buildArgs('design a dashboard', [], [], {}, { cwd: '/projects/p1' });
+    assert.equal(args.includes('--dir'), false);
+    assert.deepEqual(args, ['run', '--format', 'json', '--auto']);
+  } finally {
+    agentCapabilities.delete('opencode');
+  }
+});
+
+test('opencode 2.x folds variant into -m model#variant (issue: 2.0.24 Unrecognized flag --variant)', () => {
+  const previous = getRememberedLiveModels('opencode');
+  const parsed = parseOpenCodeModels([
+    'openai/gpt-5.6-sol',
+    '{ "variants": { "high": {} } }',
+  ].join('\n'));
+  rememberLiveModels('opencode', parsed ?? []);
+  agentCapabilities.set('opencode', { workspaceDir: false, autoApprove: true, variantFlag: false });
+  try {
+    assert.deepEqual(opencode.buildArgs('', [], [], {
+      model: 'openai/gpt-5.6-sol',
+      reasoning: 'high',
+    }), [
+      'run',
+      '--format',
+      'json',
+      '--auto',
+      '-m',
+      'openai/gpt-5.6-sol#high',
+    ]);
+  } finally {
+    agentCapabilities.delete('opencode');
+    rememberLiveModels('opencode', previous);
+  }
+});
+
+test('opencode 2.x uses --auto for non-interactive runs', () => {
+  agentCapabilities.set('opencode', { autoApprove: true });
+  try {
+    const args = opencode.buildArgs('design a dashboard', [], [], {});
+    assert.deepEqual(args, ['run', '--format', 'json', '--auto']);
+  } finally {
+    agentCapabilities.delete('opencode');
+  }
 });
 
 // Copilot reads the prompt from stdin when `-p` is omitted entirely

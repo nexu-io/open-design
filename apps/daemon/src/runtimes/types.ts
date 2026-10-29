@@ -199,6 +199,18 @@ export type RuntimeAgentDef = {
   fetchModels?: (
     resolvedBin: string,
     env: RuntimeEnv,
+    // The in-flight `--help` capability probe for this same launch. A def that
+    // has to choose between CLI shapes awaits this instead of pattern-matching
+    // the error text of a failed probe: the text varies between CLI builds,
+    // the advertised flags do not. It resolves to `null` when the probe could
+    // not identify the CLI, so the def keeps its tolerant path. It is a
+    // promise, not a resolved map, so the two probes still overlap in wall
+    // clock rather than running one after the other.
+    //
+    // Optional: a def that does not branch on capabilities ignores it, and an
+    // omitted argument means the same thing as `null` here — no capability
+    // signal, take the tolerant path.
+    capabilities?: Promise<RuntimeCapabilityMap | null>,
   ) => Promise<RuntimeModelOption[] | null>;
   reasoningOptions?: RuntimeReasoningOption[];
   supportsImagePaths?: boolean;
