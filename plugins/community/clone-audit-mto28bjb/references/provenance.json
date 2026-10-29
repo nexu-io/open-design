@@ -1,0 +1,19 @@
+{
+  "candidateId": "eee32cc3-f61f-42cf-868f-4772b335457d",
+  "projectId": "640fe0e2-c799-42e9-9ea7-6919b7e7861c",
+  "runId": "eb3c9ff1-38fe-4be6-91ec-3d5ff0731e5c",
+  "conversationId": "e8f634f4-7bab-4389-97a5-e8a8365142bd",
+  "provenance": {
+    "summary": "Detected from RECON/audit-raw.md after a successful run.",
+    "detectedAt": 1788590953582
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "RECON/audit-raw.md",
+      "label": "RECON/audit-raw.md",
+      "size": 6654,
+      "copied": true
+    }
+  ]
+}
