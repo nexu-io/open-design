@@ -219,6 +219,13 @@ function emitSessionEvent(
         writeFrame(output, { v: 1, type: 'text', request_id: request.request_id, content: chunk.text });
       } else if (chunk.type === 'reasoning-delta' && chunk.text !== '') {
         writeFrame(output, { v: 1, type: 'thinking', request_id: request.request_id, content: chunk.text });
+      } else if (chunk.type === 'tool-call-delta') {
+        writeFrame(output, {
+          v: 1,
+          type: 'tool_call_progress',
+          request_id: request.request_id,
+          call_id: String(chunk.id),
+        });
       }
       return;
     }

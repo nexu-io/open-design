@@ -18,6 +18,7 @@ export type AttachDshProfileSessionOptions = {
   reasoningEffort?: string | null;
   resumeSessionId?: string | null;
   send: (event: string, payload: unknown) => void;
+  onActivity?: () => void;
   onReady?: () => void;
   onSession?: () => void;
   onComplete?: () => void;
@@ -57,6 +58,7 @@ export function attachDshProfileSession({
   reasoningEffort,
   resumeSessionId,
   send,
+  onActivity,
   onReady,
   onSession,
   onComplete,
@@ -162,6 +164,10 @@ export function attachDshProfileSession({
       case 'text':
         if (!requireSession()) return;
         if (frame.content) send('agent', { type: 'text_delta', delta: frame.content });
+        return;
+      case 'tool_call_progress':
+        if (!requireSession()) return;
+        onActivity?.();
         return;
       case 'tool_call':
         if (!requireSession()) return;

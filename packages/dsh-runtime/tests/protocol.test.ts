@@ -105,6 +105,44 @@ describe('@open-design/dsh-runtime protocol', () => {
     assert.deepEqual(internals.terminalOutput('done'), { output: 'done' });
   });
 
+  test('reports live tool argument chunks without publishing an incomplete tool call', () => {
+    const frames: Array<Record<string, unknown>> = [];
+    const output = { write: (line: string) => frames.push(JSON.parse(line) as Record<string, unknown>) };
+    const request = { request_id: 'run-1' } as never;
+
+    internals.emitSessionEvent(output, request, 'local', 'slow-model', {
+      type: 'assistant/chunk',
+      data: {
+        chunk: { type: 'tool-call-delta', index: 0, id: 'call-1', name: 'write', argumentsDelta: '{"file' },
+      },
+    } as never);
+    internals.emitSessionEvent(output, request, 'local', 'slow-model', {
+      type: 'assistant/chunk',
+      data: {
+        chunk: { type: 'tool-call-delta', index: 0, id: 'call-1', argumentsDelta: '_path":"index.html"}' },
+      },
+    } as never);
+
+    assert.deepEqual(frames, [
+      { v: 1, type: 'tool_call_progress', request_id: 'run-1', call_id: 'call-1' },
+      { v: 1, type: 'tool_call_progress', request_id: 'run-1', call_id: 'call-1' },
+    ]);
+
+    internals.emitSessionEvent(output, request, 'local', 'slow-model', {
+      type: 'tool/call',
+      data: { callId: 'call-1', name: 'write', arguments: '{"file_path":"index.html"}' },
+    } as never);
+    assert.equal(frames.filter((frame) => frame.type === 'tool_call').length, 1);
+    assert.deepEqual(frames.at(-1), {
+      v: 1,
+      type: 'tool_call',
+      request_id: 'run-1',
+      call_id: 'call-1',
+      name: 'write',
+      arguments: '{"file_path":"index.html"}',
+    });
+  });
+
   test('normalizes every failed terminal reason to a wire error', () => {
     assert.deepEqual(internals.resultError({ kind: 'blocked' }), {
       code: 'DSH_PROFILE_TURN_BLOCKED',
