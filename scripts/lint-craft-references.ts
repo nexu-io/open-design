@@ -11,7 +11,6 @@ const skillManifestRoots = [
   "skills",
   "design-templates",
   "plugins/_official/examples",
-  "docs/examples",
 ];
 const pluginManifestRoot = "plugins/_official";
 const slugPattern = /^[a-z0-9][a-z0-9-]*$/;

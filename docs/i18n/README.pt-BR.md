@@ -232,7 +232,7 @@ O **[HyperFrames][hyperframes]** é o framework de vídeo open-source e agent-na
 
 - 🤖 **Agent-native, agnóstico de modelo.** Não entregamos um agente. O `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` que já está no seu `PATH` é o motor de design. Troque com um clique.
 - 🧠 **Nível profissional de marca por padrão.** Toda renderização lê o `DESIGN.md` do pacote ativo como contrato central da marca. O repositório traz 151 pacotes de design systems; pacotes legados podem conter só `DESIGN.md`, enquanto os novos podem acrescentar `manifest.json`, `tokens.css`, componentes, assets e procedência. Solte uma pasta e o seletor a encontra.
-- 🖥️ **Local-first, BYOK em todas as camadas.** Apps de desktop nativos continuam local-first. Análises de produto e replay de sessões exigem consentimento; a telemetria de segurança e confiabilidade com dados depurados permanece ativa. Antes de descrever caminhos de dados do daemon, você DEVE ler o `AGENTS.md` na raiz, seção **Daemon data directory contract**.
+- 🖥️ **Local-first, BYOK em todas as camadas.** Apps de desktop nativos continuam local-first. Análises de produto e replay de sessões exigem consentimento; a telemetria de segurança e confiabilidade com dados depurados permanece ativa.
 - 🌍 **Componível em quatro planos.** **Plugins** carregam workflows · **skills funcionais** carregam o comportamento do agente · **design templates** carregam os blueprints de renderização · **design systems** carregam a marca.
 - 🔁 **Renove uma base de código existente.** Entregue um repositório `git` + `DESIGN.md` ao agente e ele refatora seus componentes reais para a especificação de marca.
 - 🔒 **Privacidade por convicção.** Os projetos podem rodar localmente ou em uma implantação própria. Solicitações a modelos na nuvem e ao OpenDesign Cloud são enviadas aos respectivos serviços. O proxy BYOK inclui proteção contra SSRF.
@@ -513,13 +513,13 @@ Endpoint do registry de plugins: `GET /api/plugins`. Visão geral do diretório 
 |---|---|
 | Frontend | Next.js 16 App Router + React 18 + TypeScript |
 | Daemon | Node 24 · Express · streaming SSE · `better-sqlite3` |
-| Armazenamento | Antes de alterar ou documentar caminhos de armazenamento do daemon, você DEVE ler o `AGENTS.md` na raiz, seção **Daemon data directory contract**. Este README NÃO DEVE repeti-lo. |
+| Armazenamento | Os dados locais ficam no diretório do daemon. Configuração e backup: [Daemon storage](../../QUICKSTART.md#persistent-storage) |
 | Preview | Execuções filesystem renderizam arquivos canônicos; BYOK/API analisa um bloco `<artifact>` completo em iframe `srcdoc` isolado |
 | Exportação | HTML (embutido) · PDF (impressão do navegador) · PPTX (conduzido pelo agente) · ZIP · Markdown · MP4 (HyperFrames) |
 | Desktop | Electron shell + renderer em sandbox + IPC sidecar (STATUS · EVAL · SCREENSHOT · CONSOLE · CLICK · SHUTDOWN) |
 | Ciclo de vida | Um único ponto de entrada: `pnpm tools-dev` (start / stop / run / status / logs / inspect / check) |
 
-Arquitetura completa → [`docs/architecture.md`](../../docs/architecture.md). Protocolo de skills → [`docs/skills-protocol.md`](../../docs/skills-protocol.md). Contrato do adaptador de agentes → [`docs/agent-adapters.md`](../../docs/agent-adapters.md).
+Arquitetura completa → [`apps/AGENTS.md`](../../apps/AGENTS.md). Protocolo de skills → [`docs/skills-protocol.md`](../../docs/skills-protocol.md). Contrato do adaptador de agentes → [`docs/agent-adapters.md`](../../docs/agent-adapters.md).
 
 ---
 
@@ -543,7 +543,6 @@ Arquitetura completa → [`docs/architecture.md`](../../docs/architecture.md). P
 - [ ] Plugins de migração Figma / Pencil → React / Next / Vue (alpha)
 - [ ] Plugin de renovar base de código existente (apontar para um repositório git + `DESIGN.md`)
 
-Entrega faseada → [`docs/roadmap.md`](../../docs/roadmap.md).
 
 ---
 
@@ -682,7 +681,6 @@ Se isto te poupou trinta minutos, dê um ★. Estrelas não pagam o aluguel — 
 | [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | O framework de motion graphics HTML→MP4, integrado como o `hyperframes-html` de primeira classe no OpenDesign. |
 | [Claude Code skills][skill] | A convenção `SKILL.md` que adotamos na íntegra. |
 
-Proveniência detalhada → [`docs/references.md`](../../docs/references.md).
 
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills
 

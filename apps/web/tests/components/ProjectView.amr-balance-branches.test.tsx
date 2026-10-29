@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // 红测:**余额不足 · 身份 × 订阅的四种分支**(规格
-// `specs/current/run-error-catalog.md` §6.V,2026-08-26 用户逐条裁决)。
+// `5aa368514d:specs/current/run-error-catalog.md` §6.V,2026-08-26 用户逐条裁决)。
 //
 // 卡片永远保留,四组的差别只在「同时唤起什么弹窗、点了跳哪」:
 //

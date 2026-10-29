@@ -855,7 +855,7 @@ jobs:
     # for every other platform. It still builds on every run, because the stable
     # promotion gate reads platforms.macIntel out of the prerelease metadata and
     # an Intel-less prerelease simply cannot be promoted — see the
-    # enable_mac_x64 input description and AGENTS.md "Release channel model".
+    # enable_mac_x64 input description and tools/release/README.md "Channel policy and workflow contracts".
     if: ${{ inputs.enable_mac_x64 }}
     runs-on: macos-15-intel
     env:

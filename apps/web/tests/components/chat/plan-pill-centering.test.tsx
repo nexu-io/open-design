@@ -22,7 +22,7 @@
  *   · 左右内缩不对称 → 中线被推走;
  *   · 浮层贴着药丸左边缘开(`left: 0`)→ 浮层中线 ≠ 药丸中线;
  *   · 浮层的宽度上限不跟着那一行收 → `.pane { overflow: hidden }` 会把它切掉。
- * 真实几何由 `docs/design/chat-mirror/measure.mjs` 那套 CDP 量法复核。
+ * 真实几何由 `5aa368514d:docs/design/chat-mirror/measure.mjs` 那套 CDP 量法复核。
  */
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

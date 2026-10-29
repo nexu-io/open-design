@@ -138,7 +138,7 @@ describe("workflow scope planner", () => {
       scopes: { windows_tools_pack_payload_tests_required: true },
       enabled: { windows_tools_pack_payload_tests: true },
     });
-    expect(plan("pr", ["docs/spec.md"])).toMatchObject({
+    expect(plan("pr", ["docs/ci/workload-products.md"])).toMatchObject({
       scopes: { workspace_validation_required: false },
       enabled: { preflight: true, workspace_unit_tests: true, ui_p0_entry_settings: false },
     });
@@ -207,7 +207,7 @@ describe("workflow scope planner", () => {
   });
 
   test("directly owns promoted merge-queue routing", () => {
-    expect(plan("merge-queue", ["docs/spec.md"])).toMatchObject({
+    expect(plan("merge-queue", ["docs/ci/workload-products.md"])).toMatchObject({
       enabled: { preflight: true, workspace_unit_tests: false, e2e_vitest: false },
       trace: { escalations: [] },
     });

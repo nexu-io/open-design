@@ -7,7 +7,7 @@ invokes mid-task to do work on user input. Each skill is a folder with a
 
 If the entry primarily *renders* a design artifact (deck, prototype,
 image/video/audio template) it belongs under `../design-templates/`
-instead. See `specs/current/skills-and-design-templates.md` for the
+instead. See `design-templates/AGENTS.md` for the
 full split.
 
 ## Daemon plumbing

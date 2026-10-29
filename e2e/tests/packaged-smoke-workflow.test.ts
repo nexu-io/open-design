@@ -1724,7 +1724,7 @@ process.stdin.on("end", () => {
     }
 
     // Documentation-only changes stay exempt from both.
-    await expect(runScopesPrint("workflow_dispatch", hot, ["docs/spec.md"])).resolves.toMatchObject({
+    await expect(runScopesPrint("workflow_dispatch", hot, ["docs/ci/workload-products.md"])).resolves.toMatchObject({
       run_playwright_critical: false,
       ui_critical_validation_required: false,
       workspace_validation_required: false,

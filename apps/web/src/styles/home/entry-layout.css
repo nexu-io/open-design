@@ -627,7 +627,7 @@
   display: block;
   /* House skeleton sweep (matches DesignSystemsTab's `.skeletonBlock`): a
      soft highlight passing over a muted base, timed with the repo's default
-     UI ease-out (AGENTS.md "UI animation philosophy") rather than a linear
+     UI ease-out (apps/web/AGENTS.md "UI animation philosophy") rather than a linear
      or ease-in-out sweep. */
   background:
     linear-gradient(
@@ -1461,7 +1461,7 @@
 /* Open/collapsed glyphs are both mounted and stacked in the toggle; the
    current one is shown, the other waits at 90% behind it. The swap is a
    cross-fade + settle rather than a pop: enter ~200ms, exit ~140ms, both on the
-   ease-out curve (AGENTS.md "UI animation philosophy"), never from scale(0). */
+   ease-out curve (apps/web/AGENTS.md "UI animation philosophy"), never from scale(0). */
 .entry-nav-rail__collapse-glyph {
   position: absolute;
   inset: 0;

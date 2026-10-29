@@ -114,8 +114,8 @@
     ],
     "useCase": {
       "query": {
-        "en": "Create an OpenDesign plugin for {{pluginGoal}}. Produce a folder named generated-plugin with SKILL.md, open-design.json, and any useful examples or assets. Follow docs/plugins-spec.md and finish with a readiness summary plus next actions: Add to My plugins, Publish repo, or OpenDesign PR.",
-        "zh-CN": "为 {{pluginGoal}} 创建一个 OpenDesign 插件。请生成名为 generated-plugin 的文件夹，包含 SKILL.md、open-design.json，以及有用的 examples 或 assets。遵循 docs/plugins-spec.md，并在最后总结它是否可以添加到 My plugins，同时给出下一步操作：添加到 My plugins、发布仓库或创建 OpenDesign PR。"
+        "en": "Create an OpenDesign plugin for {{pluginGoal}}. Produce a folder named generated-plugin with SKILL.md, open-design.json, and any useful examples or assets. Follow plugins/spec/SPEC.md and finish with a readiness summary plus next actions: Add to My plugins, Publish repo, or OpenDesign PR.",
+        "zh-CN": "为 {{pluginGoal}} 创建一个 OpenDesign 插件。请生成名为 generated-plugin 的文件夹，包含 SKILL.md、open-design.json，以及有用的 examples 或 assets。遵循 plugins/spec/SPEC.md，并在最后总结它是否可以添加到 My plugins，同时给出下一步操作：添加到 My plugins、发布仓库或创建 OpenDesign PR。"
       },
       "exampleOutputs": [
         {

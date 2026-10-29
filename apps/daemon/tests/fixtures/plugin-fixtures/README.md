@@ -1,10 +1,10 @@
 # apps/daemon/tests/fixtures/plugin-fixtures
 
 Declarative plugin fixtures used by Phase 1 plugin-system tests
-(`docs/plans/plugins-implementation.md` Phase 1 e2e-1).
+(`5aa368514d:docs/plans/plugins-implementation.md` Phase 1 e2e-1).
 
 Each subfolder is a self-contained OpenDesign plugin (per
-`docs/plugins-spec.md` §5) ready to be passed to
+`plugins/spec/SPEC.md` §5) ready to be passed to
 `od plugin install --source <path>`.
 
 - `sample-plugin/` — minimal `open-design.json` + companion `SKILL.md`.

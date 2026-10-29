@@ -32,7 +32,7 @@ import type { ChatMessage } from '../../src/types';
 const base: ChatMessage = { id: 'm1', role: 'assistant', content: '' };
 
 /**
- * 普查(`specs/current/run-failure-action-mismatch-2026-09-02.md` A 类 47 格)里
+ * 普查(`5aa368514d:specs/current/run-failure-action-mismatch-2026-09-02.md` A 类 47 格)里
  * 的一格真实原因:前端三张表都没有它,所以一定落到兜底那条分支。
  * 后端对它的裁定是 `retryable:false`(「装不上 / 起不来」那 8 格之一)。
  */

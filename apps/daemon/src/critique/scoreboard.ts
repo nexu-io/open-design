@@ -2,13 +2,13 @@ import type { CritiqueConfig, PanelEvent, PanelistRole, RoundDecision } from '@o
 
 /**
  * Per-round scores indexed by panelist role. Absent roles are undefined.
- * @see specs/current/critique-theater.md § Composite score formula
+ * @see 5aa368514d:specs/current/critique-theater.md § Composite score formula
  */
 export type RoleScores = Partial<Record<PanelistRole, number>>;
 
 /**
  * Accumulated state for a single round's scoring pass.
- * @see specs/current/critique-theater.md § Composite score formula
+ * @see 5aa368514d:specs/current/critique-theater.md § Composite score formula
  */
 export interface RoundState {
   n: number;
@@ -22,7 +22,7 @@ export interface RoundState {
  * Absent roles are excluded; weights redistribute proportionally over
  * present roles only. Returns 0 when no role has a score.
  *
- * @see specs/current/critique-theater.md § Composite score formula
+ * @see 5aa368514d:specs/current/critique-theater.md § Composite score formula
  */
 export function computeComposite(
   scores: RoleScores,
@@ -46,7 +46,7 @@ export function computeComposite(
  * Applies the convergence rule: returns 'ship' when composite >= threshold
  * (with float epsilon 1e-9) AND mustFix === 0; otherwise 'continue'.
  *
- * @see specs/current/critique-theater.md § Convergence rule
+ * @see 5aa368514d:specs/current/critique-theater.md § Convergence rule
  */
 export function decideRound(
   composite: number,
@@ -64,7 +64,7 @@ export function decideRound(
  * Returns the elected RoundState or null when the list is empty or policy
  * is 'fail'.
  *
- * @see specs/current/critique-theater.md § Failure modes (recovery)
+ * @see 5aa368514d:specs/current/critique-theater.md § Failure modes (recovery)
  */
 export function selectFallbackRound(
   rounds: RoundState[],

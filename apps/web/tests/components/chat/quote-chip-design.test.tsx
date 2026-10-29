@@ -3,7 +3,7 @@
  * 引用芯片(设计稿组件 23 · 第 67 / 68 / 69 格)对稿子的三条判据。
  *
  * 稿子原文取自 PR #7170 head `1bbdce0b06` 的 `docs/design/chat-panel-next.html`
- * (md5 `28ea4c6558d6158e88976e11283e269e`,`specs/current/chat-panel-next.md` §1.1 指的就是它)。
+ * (md5 `28ea4c6558d6158e88976e11283e269e`,`5aa368514d:specs/current/chat-panel-next.md` §1.1 指的就是它)。
  * 那份文件不在本分支上,所以稿子那一侧的数值**写在这里当契约**,来源逐条注明。
  *
  * 真机量出来的差异(无头 Chrome / CDP,逐属性对 `getComputedStyle`):

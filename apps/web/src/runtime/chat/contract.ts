@@ -4,8 +4,8 @@
  * 这个文件是并行开发的分界线:业务组件只依赖这里的类型,不依赖彼此。
  * 改动它 = 打断并行,必须先同步全体(规格 §6)。
  *
- * 权威规格:`specs/current/chat-panel-next.md`(决策 D1–D43)
- * 架构视角:`specs/current/chat-panel-dev-design.md`
+ * 权威规格:`5aa368514d:specs/current/chat-panel-next.md`(决策 D1–D43)
+ * 架构视角:`5aa368514d:specs/current/chat-panel-dev-design.md`
  * 参考实现:`docs/design/chat-sim/sim.js`(评审载体,15 个场景在跑)
  */
 import type { MediaSurface, PersistedAgentEvent, ProjectMediaTask } from '@open-design/contracts';

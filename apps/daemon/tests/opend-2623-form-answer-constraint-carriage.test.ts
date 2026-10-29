@@ -19,7 +19,7 @@
  * These specs assert the BEHAVIOUR THE BUG REPORT EXPECTS. All six were run red
  * on this branch (2026-09-04) and are PARKED, not fixed, because the repository's
  * own written record defers the shape they imply to a separate product design —
- * `specs/current/chat-panel-issue-log-2026-08-28.md:58`:
+ * `5aa368514d:specs/current/chat-panel-issue-log-2026-08-28.md:58`:
  *
  *   "QA 探针要求「只回复一句」，但 Home 固定 `sessionMode=design` 并自动进入 OD Next
  *    full-plan […] 未来若要支持 Design 模式纯问答，需显式 structured intent，

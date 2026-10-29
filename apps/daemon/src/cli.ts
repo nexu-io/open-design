@@ -10428,9 +10428,9 @@ async function runLibraryList(name, args) {
 
 // `od skills` lists; `od skills uninstall <id>` removes a user-installed skill.
 // The uninstall arm exists because the Extensions page grew a 卸载 action, and a
-// capability that only one surface can reach is not shippable (AGENTS.md,
-// "Capability exposure (UI/CLI dual-track)"). Bundled skills are refused by the
-// route, not here — the daemon owns that judgement.
+// capability that only one surface can reach is not shippable (root AGENTS.md §2,
+// UI/CLI parity). Bundled skills are refused by the route, not here — the daemon
+// owns that judgement.
 async function runSkills(args) {
   if (!args[0] || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:

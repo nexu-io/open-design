@@ -2,7 +2,7 @@
 /**
  * 组件 22 · 重连 · S29 的**接线**验收(第 82–84 格)。
  *
- * 产品裁决(`specs/current/run-error-catalog.md` §6):S29 用设计稿现有的设计,
+ * 产品裁决(`5aa368514d:specs/current/run-error-catalog.md` §6):S29 用设计稿现有的设计,
  * 位置在**会话中最后一行**。所以这里验的不是组件长相(那在
  * `chat-reconnect.test.tsx`),是它到底有没有挂进流水尾部、以及三条边界:
  *

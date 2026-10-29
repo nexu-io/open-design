@@ -2,7 +2,7 @@
 
 Follow the root `AGENTS.md` first. This package owns user-level end-to-end smoke tests and Playwright UI automation only.
 
-For the current coverage posture, recent hardening work, grouped-run status, and known intentional gaps, see [`docs/testing/e2e-coverage/status.md`](../docs/testing/e2e-coverage/status.md). For the invariants new and repaired UI tests must hold under the sharded full pool, see [UI test stability rules](#ui-test-stability-rules) below.
+For shared testing methods, read [testing methods](#test-efficiency-and-determinism). UI tests also follow the [stability rules](#ui-test-stability-rules) below.
 
 ## Directory layout
 
@@ -37,8 +37,7 @@ For the current coverage posture, recent hardening work, grouped-run status, and
 
 ## UI test stability rules
 
-These invariants complement the coverage posture in
-[`docs/testing/e2e-coverage/status.md`](../docs/testing/e2e-coverage/status.md);
+Together with the [testing methods](#test-efficiency-and-determinism),
 this section is the source of truth for how a UI test must be written to stay
 green under the sharded full pool.
 
@@ -203,3 +202,17 @@ Use a specific file path when validating a single case. Do not add root e2e alia
 Case-level priority tags use test-name prefixes: `[P0]`, `[P1]`, `[P2]`.
 
 Playwright UI runs use one tools-dev daemon/web/data root per Playwright worker. The single-worker fallback is `--workers=1` (or `OD_PLAYWRIGHT_WORKERS=1`); do not reintroduce a shared daemon/web runtime mode.
+
+## Test efficiency and determinism
+
+These methods apply to app/package/tool tests as well as e2e. Use the owning
+package's guide for commands and fixture placement.
+
+- Validate behavior at the narrowest seam that observes it; reserve full browser-to-daemon chains for independently useful cross-boundary contracts.
+- Wait for the completion signal required by the next action: response success, persistence, terminal SSE/process event, or UI actionability. A toast or optimistic row does not establish durable completion before reload/navigation.
+- Use fake timers for polling, retry/backoff, debounce/throttle, TTL, and timed dismissal. Install them before creating timers, advance React work inside `act`, assert both sides of the boundary, and restore real timers after each case.
+- Preserve real-time event-loop/I/O interleavings when that is the behavior under test; document why fake time would erase it. Fixed sleeps are not completion signals. Do not enlarge timeouts to mask uncontrolled timing.
+- Isolate projects, config, mocks, browser contexts, and mutable runtime data. Do not share a mutable daemon or serialize tests to conceal races. For non-navigation tests, use production APIs to arrange state and navigate directly instead of repeatedly driving unrelated setup UI.
+- Release nested resources in reverse dependency order: pages/contexts before their runtime/server/temp directory. Prefer scoped disposal or `try/finally` over distant teardown.
+- Optimize measured bottlenecks: remove sleeps and redundant full chains, use precise completion signals, reduce repeated setup, tighten query/assertion scope, then consider sharding. File size alone does not establish scheduling value.
+- Retry-only passes remain diagnostic signals. When optimizing tests, report comparable body/file/job timings and validate the focused case, its file, affected package types, and repository checks. Do not trade assertions, isolation, or coverage for speed.

@@ -138,7 +138,7 @@ curl --fail-with-body --silent --show-error \
 Repeat the GET with a bounded polling interval until `status` is `succeeded`,
 `failed`, or `canceled`; `queued` and `running` are nonterminal states. For a
 file-generating request, also check `deliverableValid` and the returned
-`deliverableEntryFile`. The [run contract](../specs/current/run.md) describes
+`deliverableEntryFile`. The [Historical: run contract](https://github.com/nexu-io/open-design/blob/5aa368514d3d715792a4aca95b04157c771ca9a0/specs/current/run.md) describes
 the lifecycle and event stream.
 
 ## Why MCP and app-config are different

@@ -1,6 +1,6 @@
 // Contract test for `od run steer` — the CLI half of B11 「引导对话」.
 //
-// AGENTS.md "Capability exposure": every user-facing capability must be
+// root AGENTS.md §2 (UI/CLI parity): every user-facing capability must be
 // reachable from BOTH the web UI and `od`, and both must drive the same
 // `/api/*` endpoint. Steering is the queue row's third button in the chat
 // panel; this proves the CLI hits the identical `POST /api/runs/:id/steer`

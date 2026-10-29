@@ -22,7 +22,7 @@ Add `examples/`, `assets/`, or other supporting files only when they help the pl
 
 ## Authoring rules
 
-- Follow `docs/plugins-spec.md` and the schema at `docs/schemas/open-design.plugin.v1.json`.
+- Follow `plugins/spec/SPEC.md` and the schema at `plugins/spec/schemas/open-design.plugin.v1.json`.
 - Treat `SKILL.md` as the canonical behavior description. `open-design.json` should describe how OpenDesign installs, applies, and presents that behavior.
 - Keep the generated plugin local-user friendly: it should not require marketplace publishing, enterprise trust setup, or private team catalog configuration.
 - Choose a stable plugin id from the user's requested workflow. Use lowercase letters, numbers, dashes, underscores, or dots.

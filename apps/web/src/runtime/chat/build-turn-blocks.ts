@@ -333,7 +333,7 @@ function scanTurnMarkers(raw: string, runKey: string | null, searchText: string)
  *
  * ── 这个 8 秒是量出来的,不是挑的 ────────────────────────────────────
  *
- * 健康推理时这些帧密得很:`specs/current/chat-panel-next.md` 拿两份真实录制
+ * 健康推理时这些帧密得很:`5aa368514d:specs/current/chat-panel-next.md` 拿两份真实录制
  * (`claude-brief` / `claude-shop`)量到的 delta 间隔 **p50 = 1.4s**;那一轮
  * 40 帧里最大的一次间隔是 **4.88s**。门槛压到 5s 以下,健康推理会一路来回翻面 ——
  * 用户看到的是一个在 token 和秒数之间闪的槽,比两个数同时摆着还糟。

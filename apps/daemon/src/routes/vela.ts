@@ -1076,7 +1076,7 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
     deps.onCredentialStateObserved ?? (() => undefined);
   const { RUNTIME_DATA_DIR } = deps.paths;
   // Daemon-owned data, so it hangs off the resolved runtime data root like every
-  // other daemon path (AGENTS.md "Daemon data directory contract"). Two
+  // other daemon path (apps/daemon/AGENTS.md#data-ownership). Two
   // namespaces therefore get two roots and cannot see each other's content.
   const touchpointContentCache = createTouchpointContentCache(RUNTIME_DATA_DIR);
   const requests: TouchpointRequests = { closing: false, active: new Map() };

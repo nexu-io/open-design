@@ -150,7 +150,7 @@ export interface FormQuestion {
    * 和 `tests/components/QuestionForm.test.tsx` 编译不过 —— 前者正是「副标题不再
    * 渲染」这条不变量的唯一正面证据。同时,缓存的旧提示词 / 旧客户端 / 模型记住的
    * 旧格式仍可能发来带这个键的表单,解析器继续容忍它,这类输入的解析形状才不会变。
-   * 参照 `specs/current/chat-panel-decisions-sheet.md`「六个 qf.visual* 键一个不删」。
+   * 参照 `5aa368514d:specs/current/chat-panel-decisions-sheet.md`「六个 qf.visual* 键一个不删」。
    *
    * 怎么找回:渲染那一半的原文在 `4c5873c7cc`(#7863)的 parent 里 ——
    * `git show 4c5873c7cc^:apps/web/src/components/QuestionForm.tsx` 拿渲染分支,

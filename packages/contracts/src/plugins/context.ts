@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 // ContextItem union — typed chips that hydrate the ContextChipStrip above
-// the brief input. Pure shape, no runtime deps. See docs/plugins-spec.md §5.2.
+// the brief input. Pure shape, no runtime deps. See 5aa368514d:docs/plugins-spec.md §5.2.
 export const ContextItemSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('skill'),         id: z.string(), label: z.string() }),
   z.object({ kind: z.literal('design-system'), id: z.string(), label: z.string(), primary: z.boolean().optional() }),

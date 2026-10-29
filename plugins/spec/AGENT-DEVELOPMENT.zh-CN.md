@@ -18,8 +18,8 @@
 编辑前先阅读：
 
 - `plugins/spec/SPEC.zh-CN.md`
-- `docs/schemas/open-design.plugin.v1.json`
-- 需要更深入产品语义时阅读 `docs/plugins-spec.zh-CN.md`
+- `plugins/spec/schemas/open-design.plugin.v1.json`
+- 需要更深入产品语义时阅读 `plugins/spec/SPEC.zh-CN.md`
 - 当用户要求发布到 OpenDesign 以外的 registry 时，阅读 `plugins/spec/PUBLISHING-REGISTRIES.zh-CN.md`
 - `plugins/spec/examples/` 下最接近的示例
 

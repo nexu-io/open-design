@@ -46,7 +46,7 @@
  * ⚠️ 但正因为它不是「偶发」,文案**不许**照抄那四条的「重跑一次通常就好」。
  * 下面有一条反向断言专门钉这件事。
  *
- * ⚠️ 设计稿里**没有这一格**:`docs/design/run-errors/error-ux-design.md`
+ * ⚠️ 设计稿里**没有这一格**:`5aa368514d:docs/design/run-errors/error-ux-design.md`
  * 32 个场景 S01–S32 里没有任何一格讲澄清/追问(全文搜「澄清」「clarification」
  * 零命中)。下面的文案是 **W41 拟稿**,等产品改字。
  */

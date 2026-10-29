@@ -2,7 +2,7 @@
 
 Language: English | [简体中文](SPEC.zh-CN.md)
 
-This spec is the compact contract for portable OpenDesign plugins. The canonical product spec remains `docs/plugins-spec.md`; this document is optimized for contributors and external coding agents.
+This spec is the compact contract for portable OpenDesign plugins. The canonical product spec remains `plugins/spec/SPEC.md`; this document is optimized for contributors and external coding agents.
 
 ## 1. Minimum Plugin
 
@@ -216,3 +216,21 @@ Before opening a PR:
 7. Explain trust and capabilities in the PR body.
 
 For external registry distribution, follow [`PUBLISHING-REGISTRIES.md`](PUBLISHING-REGISTRIES.md). In short: keep GitHub or the OpenDesign PR as source of truth, make the folder installable as a generic `SKILL.md` skill, then publish or list it on skills.sh, ClawHub, or other registries only after local validation passes.
+
+## Schemas and runtime boundaries
+
+Use [plugin schema](schemas/open-design.plugin.v1.json) and
+[marketplace schema](schemas/open-design.marketplace.v1.json) alongside the pure
+parsers in `packages/contracts/src/plugins/` and `packages/plugin-runtime/`.
+The schema describes the v1 sidecar; runtime validation is implemented in those
+packages. Update schema and consumers together when changing a wire contract.
+
+### Atoms and connectors
+
+Atoms are daemon-owned capabilities referenced by id in pipeline stages and
+context. Discover current ids through `GET /api/atoms`, `od atoms list --json`,
+or `od atoms info <id>` rather than copying a catalogue into each plugin.
+Manifest `od.connectors` declares required/optional connector ids and tools;
+plugins never store provider OAuth credentials. Daemon connector adapters own
+credentials and connection state; doctor validates declarations against the
+available catalogue and declared `connector:<id>` capabilities.

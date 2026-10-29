@@ -1,5 +1,5 @@
 // Contract test for the `od lint` CLI surface. Keeps the UI / API / CLI
-// triple wired together (AGENTS.md "Capability exposure"): the CLI must
+// triple wired together (root AGENTS.md §2 (UI/CLI parity)): the CLI must
 // drive the same POST /api/artifacts/lint endpoint the web layer uses,
 // with --json support for headless agents.
 //

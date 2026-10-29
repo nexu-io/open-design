@@ -1,7 +1,7 @@
 // Chat artifact versioning — shared vocabulary.
 //
 // Two identities, deliberately kept apart (see
-// specs/current/chat-artifact-versioning-design.md §3):
+// 5aa368514d:specs/current/chat-artifact-versioning-design.md §3):
 //
 //   * `workspace_artifacts` is the MUTABLE latest pointer. It answers "what is
 //     in Design Files right now" and survives overwrite and rename.

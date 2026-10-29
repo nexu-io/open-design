@@ -300,7 +300,7 @@ type OnboardingRuntimeTestState =
 // lives in `@open-design/contracts` so the daemon's `/api/projects`
 // and `/api/runs` fallbacks resolve to the same plugin id when no
 // `pluginId` is on the request body — plan §3.3 of
-// `specs/current/plugin-driven-flow-plan.md`.
+// `5aa368514d:specs/current/plugin-driven-flow-plan.md`.
 const ONBOARDING_BYOK_AUTO_FETCH_DELAY_MS = 300;
 const ONBOARDING_BYOK_AUTO_TEST_DELAY_MS = 500;
 // Validating a local runtime spawns the agent CLI and waits for a real model

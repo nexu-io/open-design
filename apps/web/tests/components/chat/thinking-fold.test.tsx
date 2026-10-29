@@ -7,7 +7,7 @@
  *
  * ⚠️ 这条**覆盖设计稿**。设计稿组件 3 状态 3 写的是「跑完 · 收进 7·任务进度里,
  * 是几段纯文字,**不再自带折叠**」。冲突已当面对齐,用户选 B。
- * 详见 `specs/current/chat-panel-feedback.md` §F-11。
+ * 详见 `5aa368514d:specs/current/chat-panel-feedback.md` §F-11。
  *
  * 修的是哪个画面:`shell.thinking` 一旦置 false(第一段正文或第一个工具落下),
  * body 就从 `.stream`(限高 96px)换成 `.stack`(高度 auto),

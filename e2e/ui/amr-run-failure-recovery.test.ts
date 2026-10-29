@@ -121,7 +121,7 @@ test.beforeAll(async () => {
  * 跑到一半死在钱上的那一轮,**屏幕上只有升级卡**,没有第二张白色通用报错卡。
  *
  * 产品 2026-09-02 裁决:「额度不足和额度耗尽,升级卡各只有一张,**不存在第二张
- * 白色通用报错卡**」(规格 `specs/current/chat-panel-decisions-sheet.md` 的 T60
+ * 白色通用报错卡**」(规格 `5aa368514d:specs/current/chat-panel-decisions-sheet.md` 的 T60
  * 在 2026-09-07 再次复核确认继续有效)。落点是 `amr-guidance.ts` 里
  * `AMR_INSUFFICIENT_BALANCE` 那一格的 `suppressCard` —— 白卡连同它那颗〔充值〕
  * 一起让位,交给 `ProjectView` 补查钱包读数点亮的升级卡(T61:锚在那一轮下面)。

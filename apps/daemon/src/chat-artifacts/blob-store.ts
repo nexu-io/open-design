@@ -1,7 +1,7 @@
 // Content-addressed blob storage for immutable chat artifact snapshots.
 //
-// DATA ROOT CONTRACT (see the repository AGENTS.md "Daemon data directory
-// contract"): this module has NO default and NO cwd fallback. The caller must
+// DATA ROOT CONTRACT (see apps/daemon/AGENTS.md#data-ownership): this module has NO default
+// and NO cwd fallback. The caller must
 // hand it the already-resolved daemon data root — in production that is
 // `RUNTIME_DATA_DIR` from `server.ts`, and nothing else. Introducing a default
 // here would create a second data root, which the contract forbids.

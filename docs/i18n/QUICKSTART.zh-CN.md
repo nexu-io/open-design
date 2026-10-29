@@ -45,7 +45,7 @@ pnpm tools-dev run web # 在前台启动 daemon + web
 pnpm tools-dev # 在后台启动 daemon + web + desktop
 ```
 
-首次加载时，应用会检测可用的本地 runtime，并显示在 Settings 中配置的 BYOK runtime。选择 runtime、design template 与 design system，输入 prompt，然后点击 **Send**。结构化的本地 runtime 会写入规范项目文件并流式发送文件/工具事件；文件工作区和预览由这些写入更新。纯文本与 BYOK 运行则返回一个完整的 `<artifact>` 块供宿主解析。在记录或修改任何 artifact 存储路径之前，必须阅读仓库根目录 `AGENTS.md` 中的 **Daemon data directory contract**。
+首次加载时，应用会检测可用的本地 runtime，并显示在 Settings 中配置的 BYOK runtime。选择 runtime、design template 与 design system，输入 prompt，然后点击 **Send**。结构化的本地 runtime 会写入规范项目文件并流式发送文件/工具事件；文件工作区和预览由这些写入更新。纯文本与 BYOK 运行则返回一个完整的 `<artifact>` 块供宿主解析。
 
 **Design systems** 目录直接从 [`design-systems/`](../../design-systems/) 下的 `DESIGN.md` 包加载。选择任意一套，即可将该品牌的视觉语言应用到 artifact。
 
@@ -191,9 +191,7 @@ OD_API_TOKEN=
 
 ## 持久化存储
 
-在记录、修改或选择任何持久 daemon 存储路径之前，
-必须阅读仓库根目录 `AGENTS.md` 中的 **Daemon data directory contract**。
-本 Quickstart 不得重复该契约，也不得定义存储路径。
+Docker Compose 使用持久命名卷保存数据。升级时保留该卷；配置与备份见 [Daemon storage](../../QUICKSTART.md#persistent-storage)
 
 ---
 
@@ -334,9 +332,9 @@ open-design/
 
 ## 回到产品愿景
 
-本 Quickstart 对应 [`docs/`](../../docs/) 中 spec 的可运行起点；spec 描述了其演进方向（见 [`docs/roadmap.md`](../../docs/roadmap.md)）。要点如下：
+本 Quickstart 对应 [`docs/`](../../docs/) 中 spec 的可运行起点；spec 描述了其演进方向（见 [历史文档：`5aa368514d:docs/roadmap.md`](https://github.com/nexu-io/open-design/blob/5aa368514d3d715792a4aca95b04157c771ca9a0/docs/roadmap.md)）。要点如下：
 
-- `docs/architecture.md` 描述了当前已交付的 stack：前端为 Next.js 16 App Router，后端为本地 daemon；`apps/web/next.config.ts` 在 dev 模式下进行 rewrite，使浏览器始终通过同一套 `/api` 入口通信。
+- `apps/AGENTS.md` 描述了当前已交付的 stack：前端为 Next.js 16 App Router，后端为本地 daemon；`apps/web/next.config.ts` 在 dev 模式下进行 rewrite，使浏览器始终通过同一套 `/api` 入口通信。
 - `docs/skills-protocol.md` 描述当前 `SKILL.md`/`od:` frontmatter，以及功能性 skill 与渲染模板的分离。`apps/daemon/src/skills.ts` 中的解析与归一化逻辑是实现层事实来源。
 - `docs/agent-adapters.md` 描述 adapter contract。各 runtime 的启动、参数、模型与 stream 设置位于 `apps/daemon/src/runtimes/defs/`，并在 `apps/daemon/src/runtimes/registry.ts` 中注册；`apps/daemon/src/agents.ts` 是兼容性导出层。
-- `docs/modes.md` 区分六个 New Project 页签与七个归一化 registry mode（`prototype`、`deck`、`template`、`design-system`、`image`、`video`、`audio`）。
+- `design-templates/AGENTS.md` 区分六个 New Project 页签与七个归一化 registry mode（`prototype`、`deck`、`template`、`design-system`、`image`、`video`、`audio`）。

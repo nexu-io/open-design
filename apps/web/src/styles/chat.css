@@ -3950,7 +3950,7 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-att .msg-att-de
    (手写的裸 `.fork-sep`)不挂,一加载就是已经落好的样子 ——
    这正是稿子交代的「钉住展示的那一格不挂 .is-new」。
    ⚠️ 缓动取的是稿子写的 `var(--ease-out)`(在我们 tokens.css 里解出来是
-   `cubic-bezier(0, 0, 0, 1)`)。仓库 `AGENTS.md` 的「UI 动效」一节写的默认
+   `cubic-bezier(0, 0, 0, 1)`)。仓库 `apps/web/AGENTS.md` 的「UI 动效」一节写的默认
    缓动是 `cubic-bezier(0.23, 1, 0.32, 1)`,本文件里 `.msg` 的入场用的也正是
    后者 —— 两者对不上,按稿子照搬,取舍待拍板。
    时值 200ms 与「进入约 200ms」一致;起手是 translateY 不是 scale(0),

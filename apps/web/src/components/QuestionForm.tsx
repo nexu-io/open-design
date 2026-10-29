@@ -1445,7 +1445,7 @@ type VisualStyleView = 'fan' | 'grid';
  * **一并去掉的**:`visual_style_gallery_open` / `visual_style_category_tab` 两个埋点、
  * `interaction_source` 的 `'gallery'` 一档、`category_id` 参数、`.qf-visual-dialog*` 那族样式。
  *
- * **要产品拍的一条**(已写进 `specs/current/chat-panel-feedback.md` 的 B53 行):
+ * **要产品拍的一条**(已写进 `5aa368514d:specs/current/chat-panel-feedback.md` 的 B53 行):
  * 自定义答案的输入框原来只长在这个弹窗里,跟着一起没了。稿子的视觉方向卡本来就没有
  * 「自己填」(#20 那种文字多选才有),而 `direction-cards` 那条路一直就没有 ——
  * 所以这里按稿子实现,不自造一个稿子上没有的输入位。

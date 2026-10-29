@@ -9,7 +9,7 @@ import type { PanelEvent } from '@open-design/contracts/critique';
 /**
  * Default gzip threshold (256 KiB). Files whose cumulative UTF-8 byte size
  * exceeds this value are written as .ndjson.gz; smaller files stay plain.
- * @see specs/current/critique-theater.md § Persistence (transcript files)
+ * @see 5aa368514d:specs/current/critique-theater.md § Persistence (transcript files)
  */
 const DEFAULT_GZIP_THRESHOLD_BYTES = 256 * 1024;
 
@@ -26,7 +26,7 @@ const DEFAULT_GZIP_THRESHOLD_BYTES = 256 * 1024;
  * Returns the path written (relative to artifactDir). Caller persists the
  * relative path on the critique_runs row.
  *
- * @see specs/current/critique-theater.md § Persistence (transcript files)
+ * @see 5aa368514d:specs/current/critique-theater.md § Persistence (transcript files)
  */
 export async function writeTranscript(
   artifactDir: string,
@@ -144,7 +144,7 @@ export async function writeTranscript(
  * Inverse of writeTranscript. Streams a transcript file (.ndjson or .ndjson.gz)
  * back out as PanelEvents. Used by replay paths and by Phase 11 e2e.
  *
- * @see specs/current/critique-theater.md § Persistence (transcript files)
+ * @see 5aa368514d:specs/current/critique-theater.md § Persistence (transcript files)
  */
 export async function* readTranscript(
   artifactDir: string,

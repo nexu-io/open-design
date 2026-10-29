@@ -34,7 +34,7 @@ import {
   type InstallationFilePatch,
 } from './installation.js';
 
-// Plugin-system env knobs. See docs/plans/plugins-implementation.md F6 / F9.
+// Plugin-system env knobs. See 5aa368514d:docs/plans/plugins-implementation.md F6 / F9.
 // Phase 1 only reads them; the GC worker that enforces snapshot expiry lands
 // in Phase 5. Centralized here to keep daemon modules from sprinkling magic
 // numbers across the codebase.

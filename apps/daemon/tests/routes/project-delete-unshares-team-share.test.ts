@@ -412,7 +412,7 @@ describe('DELETE /api/projects/:id unshares a team-visible project from the hub 
 // empirical confirmation of whether "delete triggers unshare" alone is
 // enough to make a MEMBER's own regular project list converge. Each daemon
 // is a separate process with its OWN local SQLite `workspace_projects`
-// table (see AGENTS.md's daemon data directory contract and
+// table (see apps/daemon/AGENTS.md#data-ownership and
 // `getWorkspaceProjectByProjectId`'s doc comment: "a project has exactly one
 // workspace" — one row PER LOCAL DATABASE, not a shared cross-member table),
 // so this models the member side as a second, independent `openDatabase`

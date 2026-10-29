@@ -947,7 +947,7 @@ export function composeSystemPrompt({
   // where OD Next carries host runtime contracts. The two sides share no
   // composition floor, so a rule added below holds only for the runs that take
   // this branch, and eligibility is re-evaluated per run
-  // (`../strategies/od-next/rollout.ts`). Read `docs/prompt-composition.md`
+  // (`../strategies/od-next/rollout.ts`). Read `apps/daemon/src/prompts/AGENTS.md`
   // before changing prompt text on either side.
   if (odNextStrategyRecipe) {
     return composeOdNextStrategyRequestPromptV2(odNextStrategyRecipe, {

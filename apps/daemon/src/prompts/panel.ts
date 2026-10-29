@@ -6,8 +6,8 @@
  * scoreScale, protocolVersion) come from CritiqueConfig; inline literals are
  * forbidden so future protocol bumps need no template edits.
  *
- * @see specs/current/critique-theater.md § Wire protocol
- * @see specs/current/critique-theater.md § Convergence rule
+ * @see 5aa368514d:specs/current/critique-theater.md § Wire protocol
+ * @see 5aa368514d:specs/current/critique-theater.md § Convergence rule
  */
 import type { CritiqueConfig } from '@open-design/contracts/critique';
 
@@ -39,8 +39,8 @@ export interface PanelPromptInput {
  * Throws RangeError on invalid input: empty brand.name, empty skill.id, or
  * cfg fields outside their declared ranges.
  *
- * @see specs/current/critique-theater.md § Wire protocol
- * @see specs/current/critique-theater.md § Convergence rule
+ * @see 5aa368514d:specs/current/critique-theater.md § Wire protocol
+ * @see 5aa368514d:specs/current/critique-theater.md § Convergence rule
  */
 export function renderPanelPrompt({ cfg, brand, skill }: PanelPromptInput): string {
   if (brand.name.length === 0) {

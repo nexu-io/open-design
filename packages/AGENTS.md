@@ -62,3 +62,9 @@ pnpm --filter @open-design/sidecar test
 pnpm --filter @open-design/platform typecheck
 pnpm --filter @open-design/platform test
 ```
+
+## Sidecar identity
+
+Sidecar identity is argv-only. Do not create identity/state files derived from a
+stamp. Private IPC endpoint derivation belongs to `@open-design/sidecar`, including
+principal-scoped hashed POSIX temporary paths; callers treat those paths as opaque.

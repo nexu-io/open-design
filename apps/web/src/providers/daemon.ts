@@ -655,7 +655,7 @@ export function createGenericDaemonDisconnectError(): Error & { code: string } {
  * or the reply was at fault.
  *
  * ⚠️ THE CARD COPY IS STILL A DRAFT — W41's, not product's.
- * `docs/design/run-errors/error-ux-design.md` has no cell for "the agent
+ * `5aa368514d:docs/design/run-errors/error-ux-design.md` has no cell for "the agent
  * answered and Open Design could not record the answer". S21, the nearest,
  * covers an empty / malformed / looping model response, which this is not: the
  * reply is complete, readable, and already on screen. Product should rewrite
@@ -2099,7 +2099,7 @@ async function consumeDaemonPhysicalRun({
            * `tool_result → tool_use`;而真正的工具执行 43 次里最长 0.4 秒)。
            * 设计稿组件 9 / 10 逐字写死:「没有「执行中」这一档……"它在干活"由正在跑的
            * 那一步的转圈说,**一处就够**」—— 在途反馈就是壳头那颗球 + 扫光的「进行中」
-           * + 每秒在走的秒数。落进规格是 D3(`specs/current/chat-panel-next.md:413`)
+           * + 每秒在走的秒数。落进规格是 D3(`5aa368514d:specs/current/chat-panel-next.md:413`)
            * 与 B8(`:754`)。这条帧曾经被岔进一个专供流式代码卡(`LiveCodeBox`,按 N4 已下线)
            * 的回调槽位,卡片撤掉后全仓再没有调用方接过它 —— 那个死槽位已删。
            * 钉子见 `tests/components/chat/tool-input-delta-dead-wiring.test.tsx`。

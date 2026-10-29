@@ -11,7 +11,7 @@ import {
 } from '../src/live-artifacts/schema.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const examplesDir = join(here, '../../../specs/2026-04-29-live-artifacts/examples');
+const examplesDir = join(here, 'fixtures/live-artifacts-schema');
 
 const forbiddenJsonKeys = [
   'raw',

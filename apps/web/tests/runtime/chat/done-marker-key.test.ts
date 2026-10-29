@@ -209,7 +209,7 @@ describe('旧数据兼容 · 没有 key 的历史消息落块与改动前一致'
    *
    * **2026-09-02 又刷了一次,只动一个字段**:七行工具行各补一个 `"pending": false`。
    * 推翻旧基线的是 **D3 作废**(产品 2026-09-02,OPEND-2419;裁决见
-   * `specs/current/chat-panel-next.md` D3 行与 B8 行,实现见 `e8bd2a726d`):
+   * `5aa368514d:specs/current/chat-panel-next.md` D3 行与 B8 行,实现见 `e8bd2a726d`):
    * 「调用跑完才落行」改成「调用发出去就落行」,`ToolRow` 因此多了一个必填的 `pending`。
    *
    * 为什么这次是**基线过时**、不是实现跑偏 —— 三条都核过:

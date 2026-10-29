@@ -312,7 +312,7 @@ describe('AMR account failure classification', () => {
     }
   });
 
-  // R-053 (`specs/current/run-error-catalog.md:215`). vela's link gateway turns
+  // R-053 (`5aa368514d:specs/current/run-error-catalog.md:215`). vela's link gateway turns
   // an upstream 401/403 into its OWN code on an HTTP 500 —
   // `services/link/internal/handlers/openai.go:2074` `normalizeUpstreamAuthFailure`
   // returns `upstream_provider_unauthenticated` / `upstream_provider_forbidden`

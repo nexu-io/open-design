@@ -4,7 +4,7 @@
  * ⚠️ 这条是**用户裁决,覆盖设计稿**(2026-08-27)。
  * 设计稿组件 3 状态 3 写的是「跑完 · 收进 7·任务进度里,是几段纯文字,**不再自带折叠**」;
  * 用户要的是「thinking 完成后就变成普通工具调用的状态,可以下拉展开看思考细节」。
- * 冲突已当面对齐并留档:`specs/current/chat-panel-feedback.md` §F-11。
+ * 冲突已当面对齐并留档:`5aa368514d:specs/current/chat-panel-feedback.md` §F-11。
  *
  * 修的是哪个画面:`shell.thinking` 一旦置 false(第一段正文或第一个工具落下来),
  * 壳 body 就从 `.stream`(限高 96px 的推理窗)换成 `.stack`(高度 auto),

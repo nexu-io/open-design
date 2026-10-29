@@ -349,7 +349,7 @@
  * `.hasTodo` 这个类本身留着 —— 它还有别的用处,而且它是「空规则会被优化掉」那个坑的
  * 现成注脚(见上面 `.hasTodo` 的注释)。
  *
- * 详见 `specs/current/chat-panel-feedback.md` §F-11。
+ * 详见 `5aa368514d:specs/current/chat-panel-feedback.md` §F-11。
  */
 .fold.flat > .body.stack > .stepRow ~ .think:has(~ .stepRow) {
   padding-inline-start: 22px;
@@ -411,7 +411,7 @@
  *
  * 22 那一格是**步骤里面**的列(稿子:「缩进一格(状态点 15 + 间距 7 = 22)」),
  * 由下面那两条嵌套规则管,不归这里。两套列的完整口径见
- * `specs/current/chat-panel-feedback.md` §F-18。
+ * `5aa368514d:specs/current/chat-panel-feedback.md` §F-18。
  *
  * ⚠️ 【产品裁决 2026-09-02:这里的 7px 维持现状,不跟稿子的 8px】
  * 稿子 `729fa43ce7` 的 `.tool { gap: 8px }` 和我们差 1px。那 1px 是
@@ -453,7 +453,7 @@
  * 思考那一格有两种 body:想完了是 `.body.stack`(点开来读),还在想是 `.body.stream`
  * (96px 限高窗)。缩进只写给了 `.stack`,于是两态的正文左缘一个 22px、一个 4px,
  * 思考一结束整段字横跳 18px。它们是同一行的同一段文字,列必须是同一列。
- * 真 Chrome 逐档量过,记录见 `specs/current/chat-panel-feedback.md` §F-17。
+ * 真 Chrome 逐档量过,记录见 `5aa368514d:specs/current/chat-panel-feedback.md` §F-17。
  */
 .fold .body.stack :is(.body.stack, .body.stream) > *,
 .fold .body.stack .body.stack > .fold > summary { padding-inline-start: 33px; }

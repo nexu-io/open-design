@@ -1345,7 +1345,7 @@ function escapeHtmlAttribute(value: string): string {
 // Blob documents inherit the origin of the page that created them. For
 // generated preview HTML, opening the artifact itself as the top-level Blob
 // document would bypass the preview contract documented in
-// docs/architecture.md: the untrusted code must run in an iframe sandbox
+// 5aa368514d:docs/architecture.md: the untrusted code must run in an iframe sandbox
 // without `allow-same-origin`. This wrapper is same-origin, but it contains no
 // generated script; the generated document lives in an opaque-origin child.
 export function buildSandboxedPreviewDocument(

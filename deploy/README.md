@@ -52,8 +52,7 @@ Defaults:
 
 - Host port: `127.0.0.1:7456` (`OPEN_DESIGN_PORT=8080` to publish on `127.0.0.1:8080`)
 - Runtime data: before documenting, changing, or choosing persistent daemon
-  storage, you MUST read root [`AGENTS.md`](../AGENTS.md) → **Daemon data
-  directory contract**. This README MUST NOT restate it.
+  storage, you MUST read [daemon data contract](../apps/daemon/AGENTS.md#data-ownership).
 - Node heap cap: `--max-old-space-size=192`
 - Compose memory cap: `384m` (`OPEN_DESIGN_MEM_LIMIT=256m` to override)
 

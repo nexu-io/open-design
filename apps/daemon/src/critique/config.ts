@@ -7,7 +7,7 @@ import type { CritiqueConfig } from '@open-design/contracts/critique';
  * (non-numeric, negative, out-of-range) throw RangeError so misconfig
  * surfaces at boot, never silently.
  *
- * @see specs/current/critique-theater.md § Configuration (env vars)
+ * @see 5aa368514d:specs/current/critique-theater.md § Configuration (env vars)
  */
 export function loadCritiqueConfigFromEnv(env: NodeJS.ProcessEnv = process.env): CritiqueConfig {
   const defaults = defaultCritiqueConfig();

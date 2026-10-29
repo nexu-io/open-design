@@ -48,7 +48,7 @@ export interface ProjectMediaTaskFile {
  * (「原因未分类(错误代码:MEDIA_DISPATCH_FAILED)」 is a support ticket, not a
  * next step).
  *
- * The values are the run-error ladder (`docs/design/run-errors/error-ux-design.md`
+ * The values are the run-error ladder (`5aa368514d:docs/design/run-errors/error-ux-design.md`
  * §3, mirrored in `apps/web/src/runtime/amr-guidance.ts`) applied to media, so
  * media failures do not grow a second, differently-shaped taxonomy:
  *

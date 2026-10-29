@@ -13,11 +13,11 @@
  * `tool_use` 一落库就换成执行记录里那一行,刷新页面也不会再出现。
  *
  * 依据:
- *  · `specs/current/chat-panel-feedback.md:422`(N4,用户当场裁决)——
+ *  · `5aa368514d:specs/current/chat-panel-feedback.md:422`(N4,用户当场裁决)——
  *    「Write 类工具应该只落**一行**(「写入 <文件名>」),不该把文件内容摊成代码块」
- *  · `specs/current/chat-panel-next.md:413`(D3)——「工具调用**无「执行中」档**,跑完才落行」
- *  · `specs/current/chat-panel-next.md:754`(B8)——「渲染时 tool_use 没有配对 tool_result 的不出行」
- *  · 被推翻的是 `specs/current/chat-panel-next.md:674` 接入时的临时安排
+ *  · `5aa368514d:specs/current/chat-panel-next.md:413`(D3)——「工具调用**无「执行中」档**,跑完才落行」
+ *  · `5aa368514d:specs/current/chat-panel-next.md:754`(B8)——「渲染时 tool_use 没有配对 tool_result 的不出行」
+ *  · 被推翻的是 `5aa368514d:specs/current/chat-panel-next.md:674` 接入时的临时安排
  *    (「位置不对但能力不丢」)——「不丢」现在由 N4 明确否掉。
  *
  * 红测证据(改之前跑过):把 `liveToolInput` 喂进 `AssistantMessage`,DOM 里出现

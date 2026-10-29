@@ -110,7 +110,7 @@ OPEN_DESIGN_ALLOWED_ORIGINS=https://yourdomain.com
 OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od:latest
 ```
 
-Les projets et la base de données sont persistés dans des volumes Docker. Pour les règles de stockage du daemon, consultez la section **Daemon data directory contract** du fichier [`AGENTS.md`](../../AGENTS.md#daemon-data-directory-contract) à la racine.
+Les projets et la base de données sont persistés dans des volumes Docker. Pour les règles de stockage du daemon, consultez la section **Daemon data directory contract** du fichier [daemon data contract](../../QUICKSTART.md#persistent-storage) à la racine.
 
 Le guide Docker complet et la configuration avancée se trouvent dans [`QUICKSTART.fr.md`](QUICKSTART.fr.md).
 

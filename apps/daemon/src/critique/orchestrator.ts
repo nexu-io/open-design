@@ -117,7 +117,7 @@ export interface OrchestratorResult {
  * Drives one Critique Theater run end-to-end:
  *   parse stdout -> collect events -> score per round -> persist -> emit SSE.
  *
- * @see specs/current/critique-theater.md § Wire protocol parser invariants
+ * @see 5aa368514d:specs/current/critique-theater.md § Wire protocol parser invariants
  *      and § Failure modes (recovery)
  */
 export async function runOrchestrator(

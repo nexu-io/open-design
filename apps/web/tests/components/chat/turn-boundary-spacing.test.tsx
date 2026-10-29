@@ -131,7 +131,7 @@ section .app, section .app-less { flex: 1; display: flex; flex-direction: column
 
 /* ── 无头 Chrome(CDP)────────────────────────────────────────────
  * 本仓库不装 playwright(AGENTS.md / 本机磁盘约束),所以直接开系统 Chrome 的
- * remote debugging,用法照 `docs/design/chat-mirror/measure.mjs`。
+ * remote debugging,用法照 `5aa368514d:docs/design/chat-mirror/measure.mjs`。
  *
  * ⚠️ CDP 那一截**必须**跑在子进程的纯 node 里,不能留在这一份的 jsdom 里:
  * jsdom 给的 `WebSocket` 连不上 devtools 的 ws 端点,`open` 事件永远不来

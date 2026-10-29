@@ -1,6 +1,6 @@
 // @vitest-environment node
 /**
- * 落块规则(2026-08-26 用户裁决的**最终版**,原话见 `specs/current/chat-panel-feedback.md` D 节)。
+ * 落块规则(2026-08-26 用户裁决的**最终版**,原话见 `5aa368514d:specs/current/chat-panel-feedback.md` D 节)。
  *
  *   1. **done 之前:一切都在卡片里** —— 工具调用、普通正文、thinking 一律收进当前 sink
  *      (有 todo 就进当前那条 todo,没有就进壳)。

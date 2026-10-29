@@ -6,8 +6,8 @@
 The chart's `templates/` covers the canonical Kubernetes shape:
 Deployment, Service, Secret, ConfigMap, persistent storage, and an optional
 Ingress. Before documenting or changing daemon storage paths, you MUST read
-root [`AGENTS.md`](../../../../AGENTS.md) → **Daemon data directory contract**.
-This README MUST NOT restate it. Every parameter is exposed in `values.yaml` so
+[daemon data contract](../../../../apps/daemon/AGENTS.md#data-ownership).
+Every parameter is exposed in `values.yaml` so
 the per-cloud override files stay small (volume + secret backend differences
 only).
 

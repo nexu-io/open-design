@@ -11,7 +11,7 @@
  * aborting project p2's run that happens to share the same id (defense in
  * depth on top of the HTTP handler's own DB-row projectId check).
  *
- * @see specs/current/critique-theater.md § Failure modes (interrupt)
+ * @see 5aa368514d:specs/current/critique-theater.md § Failure modes (interrupt)
  */
 
 /** Handle for a single in-flight critique run. */
@@ -70,7 +70,7 @@ function compositeKey(projectId: string, runId: string): string {
  * Creates an in-memory RunRegistry backed by a Map.
  * Node is single-threaded; no locking is needed.
  *
- * @see specs/current/critique-theater.md § interrupt endpoint (Task 6.1)
+ * @see 5aa368514d:specs/current/critique-theater.md § interrupt endpoint (Task 6.1)
  */
 export function createRunRegistry(): RunRegistry {
   const store = new Map<string, RunHandle>();

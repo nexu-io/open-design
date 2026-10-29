@@ -104,8 +104,7 @@ same shape with provider-specific `endpoint` strings.
    `OD_MEDIA_CONFIG_DIR` override applies to `media-config.json` only;
    otherwise the daemon must derive the file from its already-resolved
    `RUNTIME_DATA_DIR`. Do not infer a path from the project cwd or restate one
-   here. Before changing this lookup, read root `AGENTS.md` → **Daemon data
-   directory contract** and
+   here. Before changing this lookup, read [daemon data contract](../../../../../apps/daemon/AGENTS.md#data-ownership) and
    [`apps/daemon/src/media/config.ts`](../../../../../apps/daemon/src/media/config.ts).
 
    The artifact never opens any of these paths itself — it always goes

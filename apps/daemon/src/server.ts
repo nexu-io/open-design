@@ -1456,7 +1456,7 @@ migrateLegacyDataDirSync({
   dataDir: RUNTIME_DATA_DIR,
 });
 // Immutable chat-artifact snapshot storage. Derived from the SINGLE resolved
-// data root per the repository "Daemon data directory contract" — the store
+// data root per the contract in apps/daemon/AGENTS.md#data-ownership — the store
 // itself has no default and would throw if handed anything else.
 const CHAT_ARTIFACT_BLOBS = createChatArtifactBlobStore({ dataDir: RUNTIME_DATA_DIR });
 const CHAT_ARTIFACT_QUOTA = resolveChatArtifactQuota(process.env);

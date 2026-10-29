@@ -7,7 +7,7 @@
 // —— 对 `agentId === 'amr'` 全部是死代码。
 //
 // 后果:8 条对别的 agent 都能出卡的失败,在**最常用的那个 agent 上**只能出
-// 「任务执行失败」。逐条(设计稿 `docs/design/run-errors/error-ux-design.md`):
+// 「任务执行失败」。逐条(设计稿 `5aa368514d:docs/design/run-errors/error-ux-design.md`):
 //
 //   S11  AGENT_CONNECTION_DROPPED      连接断了
 //   S02  AGENT_AUTH_REQUIRED           需要登录

@@ -65,4 +65,4 @@ References:
 
 - Agent Skills overview: https://agentskills.io/home
 - Agent Skills specification: https://agentskills.io/specification
-- OpenDesign plugin spec: ../../docs/plugins-spec.md
+- OpenDesign plugin spec: [SPEC.md](SPEC.md)

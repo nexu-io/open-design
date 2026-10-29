@@ -236,7 +236,7 @@ OpenDesign 是**首个协作式 AI 设计 Agent 工作台**。从需求描述出
 
 - 🤖 **Agent 原生，不绑定模型。** 我们不发布 Agent。你 `PATH` 上已有的 `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` 就是设计引擎。一键切换。
 - 🧠 **默认品牌级。** 每次渲染都把当前包的 `DESIGN.md` 作为核心品牌契约读取。仓库随附 151 个设计系统包；旧包可以仅含 `DESIGN.md`，新包还可加入 `manifest.json`、`tokens.css`、组件、资产和来源信息。放入文件夹，选择器自动识别。
-- 🖥️ **本地优先，每一层都可 BYOK。** 原生桌面应用保持本地优先。产品分析和会话回放需经用户同意；经清理的安全与可靠性遥测始终开启。在描述 daemon 数据路径之前，必须阅读仓库根目录 `AGENTS.md` 中的 **Daemon data directory contract**。
+- 🖥️ **本地优先，每一层都可 BYOK。** 原生桌面应用保持本地优先。产品分析和会话回放需经用户同意；经清理的安全与可靠性遥测始终开启。
 - 🌍 **四个平面上可组合。** **插件**承载可运行的工作流 · 功能**技能**承载 Agent 行为 · **设计模板**承载渲染蓝图 · **设计系统**承载品牌。四者都采用可移植、可版本控制的目录，任何人都可以编写和发布。
 - 🔁 **刷新现有代码库。** 将 `git` 仓库 + `DESIGN.md` 交给 Agent，它就能将你的真实组件重构到品牌规范。
 - 🔒 **隐私信条。** 项目可在本地或自行部署的环境中运行。使用云端模型或 OpenDesign Cloud 时，相关请求会发送至相应服务。BYOK 代理包含 SSRF 防护。
@@ -518,13 +518,13 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 |---|---|
 | 前端 | Next.js 16 App Router + React 18 + TypeScript |
 | 守护进程 | Node 24 · Express · SSE 流式传输 · `better-sqlite3` |
-| 存储 | 在修改或记录 daemon 存储路径之前，必须阅读仓库根目录 `AGENTS.md` 中的 **Daemon data directory contract**。本 README 不得复述该契约。 |
+| 存储 | 数据保存在 daemon 数据根目录中；配置、持久化与备份见 [Daemon storage](../../QUICKSTART.md#persistent-storage) |
 | 预览 | 文件系统运行渲染规范项目文件；BYOK/纯 API 运行将一个完整 `<artifact>` 块解析到沙箱 `srcdoc` iframe |
 | 导出 | HTML（内联）· PDF（浏览器打印）· PPTX（Agent 驱动）· ZIP · Markdown · MP4（HyperFrames） |
 | 桌面 | Electron 外壳 + 沙箱渲染进程 + sidecar IPC（STATUS · EVAL · SCREENSHOT · CONSOLE · CLICK · SHUTDOWN） |
 | 生命周期 | 统一入口：`pnpm tools-dev`（start / stop / run / status / logs / inspect / check） |
 
-完整架构说明 → [`docs/architecture.md`](../../docs/architecture.md)。技能协议 → [`docs/skills-protocol.md`](../../docs/skills-protocol.md)。Agent 适配器契约 → [`docs/agent-adapters.md`](../../docs/agent-adapters.md)。
+完整架构说明 → [`apps/AGENTS.md`](../../apps/AGENTS.md)。技能协议 → [`docs/skills-protocol.md`](../../docs/skills-protocol.md)。Agent 适配器契约 → [`docs/agent-adapters.md`](../../docs/agent-adapters.md)。
 
 ---
 
@@ -552,7 +552,6 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 - [ ] Figma / Pencil → React / Next / Vue 迁移插件（alpha）
 - [ ] 刷新现有代码库插件（指向 git 仓库 + `DESIGN.md`）
 
-分阶段交付 → [`docs/roadmap.md`](../../docs/roadmap.md)。
 
 ---
 
@@ -691,7 +690,6 @@ gh pr create --fill
 | [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | HTML→MP4 动态图形框架，在 OpenDesign 中作为 `hyperframes-html` 一等公民集成。 |
 | [Claude Code skills][skill] | 我们原样采用的 `SKILL.md` 约定。 |
 
-详细溯源 → [`docs/references.md`](../../docs/references.md)。
 
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills
 

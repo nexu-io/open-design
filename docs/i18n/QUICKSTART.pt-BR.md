@@ -45,7 +45,7 @@ Para a shell desktop e todos os sidecars gerenciados em background:
 pnpm tools-dev # starts daemon + web + desktop in the background
 ```
 
-No primeiro carregamento, o app detecta os runtimes locais disponíveis e também oferece runtimes BYOK configurados em Settings. Escolha um runtime, uma design template e um design system, digite um prompt e clique em **Send**. Runtimes locais estruturados escrevem os arquivos canônicos do projeto e transmitem eventos de arquivo/ferramenta; o workspace de arquivos e o preview se atualizam a partir dessas escritas. Execuções somente texto e BYOK retornam, em vez disso, um bloco `<artifact>` completo para o host parsear. Antes de documentar ou alterar qualquer caminho de armazenamento de artifact, você DEVE ler o `AGENTS.md` na raiz, seção **Daemon data directory contract**.
+No primeiro carregamento, o app detecta os runtimes locais disponíveis e também oferece runtimes BYOK configurados em Settings. Escolha um runtime, uma design template e um design system, digite um prompt e clique em **Send**. Runtimes locais estruturados escrevem os arquivos canônicos do projeto e transmitem eventos de arquivo/ferramenta; o workspace de arquivos e o preview se atualizam a partir dessas escritas. Execuções somente texto e BYOK retornam, em vez disso, um bloco `<artifact>` completo para o host parsear.
 
 O catálogo **Design systems** é carregado diretamente dos pacotes `DESIGN.md` em [`design-systems/`](../../design-systems/). Escolha um para aplicar a linguagem visual da marca ao artefato.
 
@@ -191,9 +191,7 @@ OD_API_TOKEN=
 
 ## Armazenamento persistente
 
-Antes de documentar, alterar ou escolher qualquer caminho persistente de armazenamento do daemon,
-você DEVE ler o `AGENTS.md` na raiz, seção **Daemon data directory contract**.
-Este Quickstart NÃO DEVE repetir esse contrato nem definir caminhos de armazenamento.
+O Docker Compose armazena os dados em um volume nomeado persistente. Preserve esse volume nas atualizações. Configuração e backup: [Daemon storage](../../QUICKSTART.md#persistent-storage)
 
 ---
 
@@ -334,9 +332,9 @@ open-design/
 
 ## Voltando à visão
 
-Este Início rápido é a semente executável da spec em [`docs/`](../../docs/). A spec descreve para onde isso evolui (veja [`docs/roadmap.md`](../../docs/roadmap.md)). Destaques:
+Este Início rápido é a semente executável da spec em [`docs/`](../../docs/). A spec descreve para onde isso evolui (veja [Arquivo histórico: `5aa368514d:docs/roadmap.md`](https://github.com/nexu-io/open-design/blob/5aa368514d3d715792a4aca95b04157c771ca9a0/docs/roadmap.md)). Destaques:
 
-- `docs/architecture.md` descreve a stack entregue: Next.js 16 App Router na frente, daemon local atrás, e os rewrites de `apps/web/next.config.ts` em dev mantendo o navegador conversando com a mesma superfície `/api`.
+- `apps/AGENTS.md` descreve a stack entregue: Next.js 16 App Router na frente, daemon local atrás, e os rewrites de `apps/web/next.config.ts` em dev mantendo o navegador conversando com a mesma superfície `/api`.
 - `docs/skills-protocol.md` descreve o frontmatter atual de `SKILL.md`/`od:` e a separação entre skills funcionais e templates de renderização. O parser e a normalização em `apps/daemon/src/skills.ts` são a fonte de verdade da implementação.
 - `docs/agent-adapters.md` descreve o contrato dos adapters. Configurações de launch, argumentos, modelos e stream específicas de cada runtime ficam em `apps/daemon/src/runtimes/defs/`, com registro em `apps/daemon/src/runtimes/registry.ts`; `apps/daemon/src/agents.ts` é uma superfície de exports de compatibilidade.
-- `docs/modes.md` distingue as seis abas de New Project dos sete modos normalizados do registro (`prototype`, `deck`, `template`, `design-system`, `image`, `video`, `audio`).
+- `design-templates/AGENTS.md` distingue as seis abas de New Project dos sete modos normalizados do registro (`prototype`, `deck`, `template`, `design-system`, `image`, `video`, `audio`).

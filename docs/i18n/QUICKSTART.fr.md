@@ -155,9 +155,7 @@ OD_API_TOKEN=
 
 ## Stockage persistant
 
-Avant de documenter, modifier ou choisir un chemin de stockage persistant du daemon,
-vous DEVEZ lire `AGENTS.md` à la racine, section **Daemon data directory contract**.
-Ce Quickstart NE DOIT PAS répéter ce contrat ni définir de chemins de stockage.
+Docker Compose conserve les données dans un volume nommé persistant. Préservez ce volume lors des mises à jour. Configuration et sauvegarde : [Daemon storage](../../QUICKSTART.md#persistent-storage)
 
 ---
 
@@ -184,7 +182,7 @@ Pour le shell desktop et tous les sidecars gérés en arrière-plan :
 pnpm tools-dev # démarre daemon + web + desktop en arrière-plan
 ```
 
-Au premier chargement, l’app détecte les runtimes locaux disponibles et propose aussi les runtimes BYOK configurés dans Settings. Choisissez un runtime, une design template et un Design System, puis tapez un prompt et cliquez sur **Send**. Les runtimes locaux structurés écrivent les fichiers canoniques du projet et diffusent les événements de fichiers/outils ; l’espace de fichiers et la preview se mettent à jour depuis ces écritures. Les exécutions texte uniquement et BYOK renvoient à la place un bloc `<artifact>` complet que l’hôte parse. Avant de documenter ou de modifier un chemin de stockage d’artifact, vous DEVEZ lire `AGENTS.md` à la racine, section **Daemon data directory contract**.
+Au premier chargement, l’app détecte les runtimes locaux disponibles et propose aussi les runtimes BYOK configurés dans Settings. Choisissez un runtime, une design template et un Design System, puis tapez un prompt et cliquez sur **Send**. Les runtimes locaux structurés écrivent les fichiers canoniques du projet et diffusent les événements de fichiers/outils ; l’espace de fichiers et la preview se mettent à jour depuis ces écritures. Les exécutions texte uniquement et BYOK renvoient à la place un bloc `<artifact>` complet que l’hôte parse.
 
 Le catalogue **Design Systems** est chargé directement depuis les paquets `DESIGN.md` de [`design-systems/`](../../design-systems/). Choisissez-en un pour appliquer le langage visuel de la marque à l’artifact.
 
@@ -285,7 +283,7 @@ BASE_SYSTEM_PROMPT   (remise fichier ou <artifact> selon le profil d’exécutio
    + active skill body          (SKILL.md — workflow and output rules)
 ```
 
-Changer le skill ou le système de design modifie la composition du prochain envoi. Le chemin **OD Next**, activable dans **Settings → Labs → Design Harness** et soumis à des conditions d'éligibilité par exécution, utilise une composition indépendante. Pour comprendre les deux chemins et leurs contrats, consultez [`docs/prompt-composition.md`](../prompt-composition.md).
+Changer le skill ou le système de design modifie la composition du prochain envoi. Le chemin **OD Next**, activable dans **Settings → Labs → Design Harness** et soumis à des conditions d'éligibilité par exécution, utilise une composition indépendante. Pour comprendre les deux chemins et leurs contrats, consultez [`apps/daemon/src/prompts/AGENTS.md`](../../apps/daemon/src/prompts/AGENTS.md).
 
 ## File map
 
@@ -352,9 +350,9 @@ open-design/
 
 ## Retour à la vision
 
-Ce guide accompagne la documentation dans [`docs/`](../../docs/). La [spécification](../spec.md) et la [feuille de route](../roadmap.md) historiques sont archivées ; les documents ci-dessous décrivent les contrats actuels. Points clés :
+Ce guide accompagne la documentation dans [`docs/`](../../docs/). La [spécification](https://github.com/nexu-io/open-design/blob/5aa368514d3d715792a4aca95b04157c771ca9a0/docs/spec.md) et la [feuille de route](https://github.com/nexu-io/open-design/blob/5aa368514d3d715792a4aca95b04157c771ca9a0/docs/roadmap.md) historiques sont archivées ; les documents ci-dessous décrivent les contrats actuels. Points clés :
 
-- `docs/architecture.md` décrit le stack livré : Next.js 16 App Router devant, daemon local derrière, et rewrites `apps/web/next.config.ts` en dev pour que le navigateur parle toujours à la même surface `/api`.
+- `apps/AGENTS.md` décrit le stack livré : Next.js 16 App Router devant, daemon local derrière, et rewrites `apps/web/next.config.ts` en dev pour que le navigateur parle toujours à la même surface `/api`.
 - `docs/skills-protocol.md` décrit le frontmatter actuel de `SKILL.md` / `od:` et la séparation entre skills fonctionnels et modèles de rendu. Le parseur et la normalisation de référence se trouvent dans `apps/daemon/src/skills.ts`.
 - `docs/agent-adapters.md` décrit le contrat d’adapter. Les paramètres de lancement, d’arguments, de modèles et de stream propres à chaque runtime se trouvent sous `apps/daemon/src/runtimes/defs/`, avec leur enregistrement dans `apps/daemon/src/runtimes/registry.ts` ; `apps/daemon/src/agents.ts` reste une surface d’export de compatibilité.
-- `docs/modes.md` distingue les six onglets New Project des sept modes normalisés du registre (`prototype`, `deck`, `template`, `design-system`, `image`, `video`, `audio`).
+- `design-templates/AGENTS.md` distingue les six onglets New Project des sept modes normalisés du registre (`prototype`, `deck`, `template`, `design-system`, `image`, `video`, `audio`).

@@ -33,7 +33,7 @@ const OPENCODE_MODEL_PRICE_PROVIDER_PRIORITY = [
 //   VELA_RUNTIME_KEY  — OpenRouter (or compatible) API key
 //   VELA_LINK_URL     — OpenAI-compatible endpoint, e.g. https://openrouter.ai/api/v1
 //   VELA_OPENCODE_BIN — optional; absolute path to opencode when not on PATH
-// See docs/new-agent-runtime-acp.md and the vela
+// See 5aa368514d:docs/new-agent-runtime-acp.md and the vela
 // `specs/current/runtime/manual-agent-run-openrouter.md`.
 //
 // Model wiring notes:

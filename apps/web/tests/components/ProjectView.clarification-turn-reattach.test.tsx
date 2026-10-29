@@ -492,7 +492,7 @@ describe('OPEND-3230 a finished OD Next turn whose task waits on the user', () =
 
   // Real clock on purpose: this case is about how React commits interleave
   // with pending I/O (status probe, post-run refresh, message PUTs), which
-  // fake timers would collapse into one act (docs/testing/test-efficiency.zh-CN.md).
+  // fake timers would collapse into one act (5aa368514d:docs/testing/test-efficiency.zh-CN.md).
   // The small sleeps inside the mocks stand in for network latency.
   it.each([3, 6, 12])(
     'keeps the rendered and persisted transcript clean when a post-run refresh overlaps recovery (replay pacing %sms)',

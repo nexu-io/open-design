@@ -44,7 +44,7 @@ import { useEffect, useRef, useState, type ReactElement } from 'react';
  * 数完一段的**预算**。
  *
  * 上界由上游帧率定,不由观感定:claude 的 `thinking_tokens` 帧间隔实测 p50 = 1.4s、
- * 整轮最大 4.88s(真实录制,`specs/current/chat-panel-next.md`);codex 那侧一轮
+ * 整轮最大 4.88s(真实录制,`5aa368514d:specs/current/chat-panel-next.md`);codex 那侧一轮
  * 19 条 usage,中位间隔约 14s。400ms ≈ claude p50 的 29%,典型情况下这一段早就数完了
  * 下一帧才到;真撞上最密的一段也只是**从当前值改道**,不会跳、不会排队。
  * 下界是「看得出在数」—— 低于 200ms 和直接换数没有区别。

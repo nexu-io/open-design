@@ -50,7 +50,7 @@ function unitBezier(
   };
 }
 
-// House ease-out (AGENTS.md → UI animation philosophy).
+// House ease-out (apps/web/AGENTS.md → UI animation philosophy).
 const EASE_OUT = unitBezier(0.23, 1, 0.32, 1);
 const MIN_DURATION_MS = 260;
 const MAX_DURATION_MS = 600;

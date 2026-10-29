@@ -84,7 +84,7 @@ export interface ChatCorrelation {
   /**
    * Build SHA. Not currently plumbed into the web client — see the
    * "what's missing" column of the root-cause table in
-   * `specs/current/chat-panel-observability.md`. Stamped the moment a
+   * `5aa368514d:specs/current/chat-panel-observability.md`. Stamped the moment a
    * source exists; absent until then rather than faked.
    */
   build_sha?: string;

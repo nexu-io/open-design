@@ -7,12 +7,14 @@ Maintenance notes belong here instead: this file is not part of the asset
 roster (`apps/daemon/src/plugins/strategy-package.ts:158`), so it is never read
 or hashed at runtime.
 
-This folder is one half of a two-sided prompt implementation, and not all of OD
-Next's content lives here — host runtime contracts such as the deck framework
-are carried in TypeScript, not in these task profiles. Before changing anything
-here, read [`docs/prompt-composition.md`](../../../../docs/prompt-composition.md):
-the fork point, the variant axes, the host contract table, the asset roster and
-package-hash rules, and the known gaps.
+This folder is one half of a two-sided prompt implementation. Before editing,
+read [prompt maintenance](../../../../apps/daemon/src/prompts/AGENTS.md).
+Host contracts also live in contracts TypeScript; inspect both paths.
+
+Only files declared by the manifest/selected profile roster are read and hashed.
+Maintenance AGENTS is outside that roster. A selected profile's resource change
+moves its identity; undeclared files do not. Bump the task-profile version when
+changing its body.
 
 The motion-design task asset is generated from `skills/motion-design/SKILL.md`.
 Edit the public skill and run `pnpm exec tsx scripts/sync-motion-design-skill.ts`

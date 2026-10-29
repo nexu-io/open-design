@@ -45,7 +45,7 @@ pnpm tools-dev run web # daemon と web をフォアグラウンドで起動し�
 pnpm tools-dev # daemon + web + desktop をバックグラウンドで起動します
 ```
 
-初回起動時、アプリは利用可能なローカルランタイムを検出し、Settings で設定された BYOK ランタイムも提示します。ランタイム、デザインテンプレート、デザインシステムを選び、プロンプトを入力して **Send** を押してください。構造化されたローカルランタイムは正規のプロジェクトファイルを書き込み、ファイル／ツールイベントをストリーミングします。ファイルワークスペースとプレビューはその書き込みから更新されます。テキスト専用および BYOK 実行は、代わりにホストが解析する完全な `<artifact>` ブロックを返します。アーティファクトの保存パスを文書化または変更する前に、ルートの `AGENTS.md` にある **Daemon data directory contract** を必ず読んでください。
+初回起動時、アプリは利用可能なローカルランタイムを検出し、Settings で設定された BYOK ランタイムも提示します。ランタイム、デザインテンプレート、デザインシステムを選び、プロンプトを入力して **Send** を押してください。構造化されたローカルランタイムは正規のプロジェクトファイルを書き込み、ファイル／ツールイベントをストリーミングします。ファイルワークスペースとプレビューはその書き込みから更新されます。テキスト専用および BYOK 実行は、代わりにホストが解析する完全な `<artifact>` ブロックを返します。
 
 **Design systems** カタログは、[`design-systems/`](../../design-systems/) 配下の `DESIGN.md` パッケージから直接読み込まれます。1 つ選ぶと、そのブランドの視覚言語がアーティファクトに適用されます。
 
@@ -191,9 +191,7 @@ OD_API_TOKEN=
 
 ## 永続ストレージ
 
-永続的なデーモン保存パスを文書化、変更、または選択する前に、
-ルートの `AGENTS.md` にある **Daemon data directory contract** を必ず読んでください。
-この Quickstart でその契約を繰り返したり、保存パスを定義したりしてはいけません。
+Docker Compose は永続名前付きボリュームにデータを保存します。更新時も保持してください。設定とバックアップ： [Daemon storage](../../QUICKSTART.md#persistent-storage)
 
 ---
 
@@ -334,9 +332,9 @@ open-design/
 
 ## ビジョンへのマッピング
 
-このクイックスタートは [`docs/`](../../docs/) にある仕様の実行可能なシードです。仕様は、これがどこへ成長するかを記述しています（[`docs/roadmap.md`](../../docs/roadmap.md) を参照）。ハイライト：
+このクイックスタートは [`docs/`](../../docs/) にある仕様の実行可能なシードです。仕様は、これがどこへ成長するかを記述しています（[アーカイブ: `5aa368514d:docs/roadmap.md`](https://github.com/nexu-io/open-design/blob/5aa368514d3d715792a4aca95b04157c771ca9a0/docs/roadmap.md) を参照）。ハイライト：
 
-- `docs/architecture.md` は、出荷されたスタックを説明しています：前面に Next.js 16 App Router、その背後にローカル daemon、そして `apps/web/next.config.ts` の dev 時 rewrites によってブラウザが同じ `/api` 表面と通信し続けるようにします。
+- `apps/AGENTS.md` は、出荷されたスタックを説明しています：前面に Next.js 16 App Router、その背後にローカル daemon、そして `apps/web/next.config.ts` の dev 時 rewrites によってブラウザが同じ `/api` 表面と通信し続けるようにします。
 - `docs/skills-protocol.md` は現在の `SKILL.md`／`od:` フロントマターと、機能スキルとレンダリングテンプレートの分離を説明します。パーサーと正規化の実装上の真実は `apps/daemon/src/skills.ts` です。
 - `docs/agent-adapters.md` はアダプター契約を説明しています。ランタイム固有の起動、引数、モデル、ストリーム設定は `apps/daemon/src/runtimes/defs/` にあり、`apps/daemon/src/runtimes/registry.ts` で登録されます。`apps/daemon/src/agents.ts` は互換エクスポート面です。
-- `docs/modes.md` は 6 つの New Project タブと 7 つの正規化レジストリモード（`prototype`、`deck`、`template`、`design-system`、`image`、`video`、`audio`）を区別します。
+- `design-templates/AGENTS.md` は 6 つの New Project タブと 7 つの正規化レジストリモード（`prototype`、`deck`、`template`、`design-system`、`image`、`video`、`audio`）を区別します。

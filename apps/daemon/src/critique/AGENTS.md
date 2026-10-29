@@ -74,7 +74,7 @@ without churning code paths.
 
 ## Related
 
-- Spec: `specs/current/critique-theater.md`
-- Plan: `specs/current/critique-theater-plan.md`
-- User docs: `docs/critique-theater.md`
+- Spec: `5aa368514d:specs/current/critique-theater.md`
+- Plan: `5aa368514d:specs/current/critique-theater-plan.md`
+- User docs: `apps/daemon/src/critique/AGENTS.md`
 - Web counterpart: `apps/web/src/components/Theater/AGENTS.md`

@@ -219,7 +219,7 @@ describe('没有清单:平铺', () => {
 /**
  * D46'(2026-08-27 用户裁决改写):限高滚动窗**落在壳内的思考正文区**,不是整只壳 body。
  * 规格原文本来就写的是「壳内的思考正文区」;实现读成了「壳 body」,于是壳里原有的
- * 工具行和清单被一起塞进 96px 里滚走。裁决与理由:`specs/current/chat-panel-feedback.md` §F-15。
+ * 工具行和清单被一起塞进 96px 里滚走。裁决与理由:`5aa368514d:specs/current/chat-panel-feedback.md` §F-15。
  */
 describe('思考流(D46)', () => {
   it('思考中:限高滚动窗挂在思考那一格上,壳 body 不动', () => {
@@ -258,7 +258,7 @@ describe('思考流(D46)', () => {
 describe('S12 · 静默再久,壳头也不换词', () => {
   /**
    * 这一节原来叫「等太久没动静时壳头换一句话」,断言的是
-   * `docs/design/run-errors/error-ux-design.md:33`「60 秒没新输出显示
+   * `5aa368514d:docs/design/run-errors/error-ux-design.md:33`「60 秒没新输出显示
    * 『上游响应慢，已等 N 秒』」——**那句文案 2026-08-27 被产品撤回了**
    * (裁决原文在 `components/chat/ExecutionShell.tsx` 的 `head` 注释里,
    * 只撤展现、探测全留)。所以断言跟着翻面:运行中的壳头回到「壳头四种样子」那条

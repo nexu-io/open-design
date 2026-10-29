@@ -15,7 +15,7 @@
  *   - `round` is small-integer (typical 1-3)
  *   - `status` and `version` are closed enums / small integers
  *
- * Histogram buckets follow `specs/current/critique-theater.md` §
+ * Histogram buckets follow `5aa368514d:specs/current/critique-theater.md` §
  * Observability and are intentionally explicit so an operator can tune
  * them after the first 1000 runs without code changes.
  *

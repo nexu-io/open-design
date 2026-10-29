@@ -17,6 +17,5 @@
 - 插件作者规范：[`spec/SPEC.zh-CN.md`](spec/SPEC.zh-CN.md)
 - Agent handoff 指南：[`spec/AGENT-DEVELOPMENT.zh-CN.md`](spec/AGENT-DEVELOPMENT.zh-CN.md)
 - Registry 发布策略：[`spec/PUBLISHING-REGISTRIES.zh-CN.md`](spec/PUBLISHING-REGISTRIES.zh-CN.md)
-- 完整产品 spec：[`../docs/plugins-spec.zh-CN.md`](../docs/plugins-spec.zh-CN.md)
-- Manifest schema：[`../docs/schemas/open-design.plugin.v1.json`](../docs/schemas/open-design.plugin.v1.json)
-- Marketplace schema：[`../docs/schemas/open-design.marketplace.v1.json`](../docs/schemas/open-design.marketplace.v1.json)
+- Manifest schema：[`spec/schemas/open-design.plugin.v1.json`](spec/schemas/open-design.plugin.v1.json)
+- Marketplace schema：[`spec/schemas/open-design.marketplace.v1.json`](spec/schemas/open-design.marketplace.v1.json)

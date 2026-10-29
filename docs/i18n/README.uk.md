@@ -232,7 +232,7 @@ OpenDesign — **перший спільний робочий простір і�
 
 - 🤖 **Agent-native, незалежна від моделі.** Ми не постачаємо агента. `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi`, які вже є у вашому `PATH`, і є рушієм дизайну. Замінюйте одним кліком.
 - 🧠 **Брендовий рівень за замовчуванням.** Кожен рендер читає `DESIGN.md` активного пакета як основний контракт бренду. Репозиторій містить 151 пакет дизайн-систем; старі пакети можуть складатися лише з `DESIGN.md`, а нові — додавати `manifest.json`, `tokens.css`, компоненти, ресурси та дані про походження. Покладіть теку всередину — селектор її знайде.
-- 🖥️ **Локально-орієнтована, BYOK на кожному шарі.** Нативні десктопні застосунки орієнтовані на локальну роботу. Аналітика продукту й відтворення сесій потребують згоди; очищена телеметрія безпеки та надійності завжди ввімкнена. Перш ніж описувати шляхи даних демона, необхідно прочитати кореневий `AGENTS.md`, розділ **Daemon data directory contract**.
+- 🖥️ **Локально-орієнтована, BYOK на кожному шарі.** Нативні десктопні застосунки орієнтовані на локальну роботу. Аналітика продукту й відтворення сесій потребують згоди; очищена телеметрія безпеки та надійності завжди ввімкнена.
 - 🌍 **Композиційна на чотирьох площинах.** **Плагіни** несуть workflow · **функціональні навички** — поведінку агента · **шаблони дизайну** — креслення рендерингу · **дизайн-системи** — бренд.
 - 🔁 **Оновлюйте наявну кодову базу.** Передайте агенту репозиторій `git` + `DESIGN.md`, і він рефакторить ваші реальні компоненти відповідно до специфікації бренду.
 - 🔒 **Приватність за переконанням.** Проєкти можуть працювати локально або у власному розгортанні. Запити до хмарних моделей та OpenDesign Cloud надсилаються відповідним сервісам. BYOK-проксі містить захист від SSRF.
@@ -513,13 +513,13 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 |---|---|
 | Фронтенд | Next.js 16 App Router + React 18 + TypeScript |
 | Демон | Node 24 · Express · потокова передача SSE · `better-sqlite3` |
-| Сховище | Перш ніж змінювати або документувати шляхи сховища демона, необхідно прочитати кореневий `AGENTS.md`, розділ **Daemon data directory contract**. Цей README НЕ ПОВИНЕН переказувати його. |
+| Сховище | Локальні дані зберігаються в каталозі демона. Налаштування та резервне копіювання: [Daemon storage](../../QUICKSTART.md#persistent-storage) |
 | Попередній перегляд | Filesystem-запуск рендерить канонічні файли; BYOK/API розбирає повний `<artifact>` в iframe `srcdoc` |
 | Експорт | HTML (вбудований) · PDF (друк із браузера) · PPTX (під керуванням агента) · ZIP · Markdown · MP4 (HyperFrames) |
 | Десктоп | Оболонка Electron + рендерер у пісочниці + sidecar IPC (STATUS · EVAL · SCREENSHOT · CONSOLE · CLICK · SHUTDOWN) |
 | Життєвий цикл | Одна точка входу: `pnpm tools-dev` (start / stop / run / status / logs / inspect / check) |
 
-Повна архітектура → [`docs/architecture.md`](../../docs/architecture.md). Протокол навичок → [`docs/skills-protocol.md`](../../docs/skills-protocol.md). Контракт адаптера агента → [`docs/agent-adapters.md`](../../docs/agent-adapters.md).
+Повна архітектура → [`apps/AGENTS.md`](../../apps/AGENTS.md). Протокол навичок → [`docs/skills-protocol.md`](../../docs/skills-protocol.md). Контракт адаптера агента → [`docs/agent-adapters.md`](../../docs/agent-adapters.md).
 
 ---
 
@@ -543,7 +543,6 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 - [ ] Плагіни міграції Figma / Pencil → React / Next / Vue (alpha)
 - [ ] Плагін оновлення наявної кодової бази (спрямувати на репозиторій git + `DESIGN.md`)
 
-Поетапна доставка → [`docs/roadmap.md`](../../docs/roadmap.md).
 
 ---
 
@@ -682,7 +681,6 @@ SVG вище щодня перегенеровується [`.github/workflows/m
 | [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | Платформа моушн-графіки HTML→MP4, інтегрована як повноправний `hyperframes-html` в OpenDesign. |
 | [Claude Code skills][skill] | Конвенція `SKILL.md`, яку ми приймаємо дослівно. |
 
-Детальне походження → [`docs/references.md`](../../docs/references.md).
 
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills
 

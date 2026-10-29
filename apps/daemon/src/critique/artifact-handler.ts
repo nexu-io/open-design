@@ -36,7 +36,7 @@ const DEFAULT_RESPONSE_SIZE_CAP_BYTES = 4 * 1024 * 1024;
  *   404 — run not found, cross-project leak, no artifact persisted, or
  *         the on-disk file disappeared (bytes never made it to the row).
  *
- * @see specs/current/critique-theater.md § rerun endpoint (Task 6.2)
+ * @see 5aa368514d:specs/current/critique-theater.md § rerun endpoint (Task 6.2)
  */
 export function handleCritiqueArtifact(
   db: Database.Database,

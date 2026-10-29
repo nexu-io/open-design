@@ -6,7 +6,7 @@
  * produced, so the mime → extension contract and the size cap matter for
  * production correctness, not just developer ergonomics.
  *
- * @see specs/current/critique-theater.md § rerun endpoint (Task 6.2)
+ * @see 5aa368514d:specs/current/critique-theater.md § rerun endpoint (Task 6.2)
  */
 import { mkdtempSync, readFileSync, statSync } from 'node:fs';
 import { rm, readdir } from 'node:fs/promises';

@@ -19,8 +19,7 @@ This is background behavior controlled by the existing metrics/content preferenc
 including their shared UI/CLI configuration path. No new interactive capability,
 Vela role, query service, or download endpoint is introduced. Manual diagnostics
 exports include `summary/automatic-log-upload.json` with queue states and loss reasons.
-All daemon-owned paths derive from the resolved data root; see the root `AGENTS.md`
-**Daemon data directory contract** for ownership and launch propagation.
+All daemon-owned paths derive from the resolved data root; see [daemon data contract](AGENTS.md#data-ownership) for ownership and launch propagation.
 
 ## Delivery and privacy
 

@@ -6,7 +6,7 @@
  * ## 根因
  *
  * 稿子(PR #7170 head `1bbdce0b06` 的 `docs/design/chat-panel-next.html`,
- * md5 `28ea4c6558d6158e88976e11283e269e`,`specs/current/chat-panel-next.md` §1.1
+ * md5 `28ea4c6558d6158e88976e11283e269e`,`5aa368514d:specs/current/chat-panel-next.md` §1.1
  * 指的就是它)第 476 行有一条**全局基线**:
  *
  *     svg { stroke-width: 1.75px; stroke-linecap: round; stroke-linejoin: round; }

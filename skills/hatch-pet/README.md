@@ -52,5 +52,5 @@ The skill packages each pet under
 `${CODEX_HOME:-$HOME/.codex}/pets/<pet-id>/` with `pet.json` and
 `spritesheet.{webp,png,gif}`. The daemon scans that directory in
 `apps/daemon/src/codex-pets.ts`; the web pet settings list and one-click
-adopt pets from there. See `docs/codex-pets.md` for the end-user setup
+adopt pets from there. See `apps/daemon/AGENTS.md` for the end-user setup
 flow (including how OpenDesign behaves when Codex is not installed).

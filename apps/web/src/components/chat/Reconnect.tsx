@@ -118,7 +118,7 @@ export function Reconnect({
    * 设计稿那句「正在重试 1/2」预设的是两次预算,可 daemon 今天给的是一次
    * (`apps/daemon/src/run-retry-policy.ts` 的
    * `DEFAULT_SAFE_RUN_RETRY_MAX_ATTEMPTS = 1`,自建仓以来没变过;放宽到 2 是
-   * `specs/current/run-error-catalog.md` 的 Q-11,**还没裁**)。
+   * `5aa368514d:specs/current/run-error-catalog.md` 的 Q-11,**还没裁**)。
    *
    * 写成条件而不是写死「自动重试不显示分数」:预算真的放宽到 2 之后,同一段代码
    * 自动开始显示「1/2」,不用等谁想起来再改一次。传输层的 5 不受影响。

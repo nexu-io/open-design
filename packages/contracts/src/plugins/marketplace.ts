@@ -28,7 +28,7 @@ const MarketplacePluginVersionSchema = z.object({
 export type MarketplacePluginVersion = z.infer<typeof MarketplacePluginVersionSchema>;
 
 // `open-design-marketplace.json` schema (v1). Mirrors
-// `docs/schemas/open-design.marketplace.v1.json`. The federated catalog
+// `plugins/spec/schemas/open-design.marketplace.v1.json`. The federated catalog
 // format is intentionally permissive — community catalogs can carry extra
 // fields (e.g. clawhub category tags) without breaking OD installs.
 export const MarketplacePluginEntrySchema = z.object({

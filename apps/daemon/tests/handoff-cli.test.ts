@@ -1,5 +1,5 @@
 // Contract test for the `od project handoff` CLI surface. Keeps the
-// UI / API / CLI triple wired together (AGENTS.md "Capability exposure"):
+// UI / API / CLI triple wired together (root AGENTS.md §2 (UI/CLI parity)):
 // the CLI must drive the same POST /api/projects/:id/handoff endpoint the
 // web UI uses, with --json support and the required conversationId.
 

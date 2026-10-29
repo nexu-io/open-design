@@ -340,7 +340,7 @@ describe('AssistantMessage feedback gate', () => {
    * 原来的意图见下面保留的注释:让人不必等整轮跑完就能复制已出的文字。
    * 现在回合状态行整行在运行中不出,复制按钮随之也不出 —— 想恢复这条能力,
    * 得把复制挪到别处(比如壳头或悬浮),不能靠这一行。记在
-   * `specs/current/chat-panel-feedback.md` 的 B50。
+   * `5aa368514d:specs/current/chat-panel-feedback.md` 的 B50。
    */
   it('recvqacy887jsF — 运行中整行不出,所以复制也不出(产品覆盖)', () => {
     // The copy affordance is gated on "is there any non-whitespace text yet"

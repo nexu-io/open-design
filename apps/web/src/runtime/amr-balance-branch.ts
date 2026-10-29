@@ -1,6 +1,6 @@
 /**
  * 余额不足时,**按身份 × 订阅**决定怎么呈现(规格
- * `specs/current/run-error-catalog.md` §6.V,2026-08-26 用户裁决)。
+ * `5aa368514d:specs/current/run-error-catalog.md` §6.V,2026-08-26 用户裁决)。
  *
  * 这一层是纯判据,不认识钱包,也**不决定拦不拦**。拦不拦在
  * `runtime/amr-balance-gate.ts`,「付费档余额 0 = 不限量,不拦」
@@ -18,7 +18,7 @@
  * | Max   · 非 owner | 保留 | 同「非 Max · 非 owner」| ——                             |
  *
  * 第三格 2026-09-06 由 **T58** 定终态(规格
- * `specs/current/chat-panel-decisions-sheet.md`),推翻了它原来的「不弹窗」。
+ * `5aa368514d:specs/current/chat-panel-decisions-sheet.md`),推翻了它原来的「不弹窗」。
  * 依据是产品文档第四节第 3 行:那一格画的就是**和第一格同一张**会员转化弹窗,
  * 文案一字不差。所以两格共用一个 `AmrBalanceBlockedDialogKind`,唯一的差别落在
  * 主按钮的落点上 —— 见 `amrBalanceDialogUpgradeIntent`。

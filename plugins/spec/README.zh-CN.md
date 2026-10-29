@@ -65,4 +65,4 @@ od plugin apply <plugin-id> --input key=value
 
 - Agent Skills overview: https://agentskills.io/home
 - Agent Skills specification: https://agentskills.io/specification
-- OpenDesign 插件完整 spec: ../../docs/plugins-spec.zh-CN.md
+- OpenDesign 插件完整 spec: [SPEC.zh-CN.md](SPEC.zh-CN.md)

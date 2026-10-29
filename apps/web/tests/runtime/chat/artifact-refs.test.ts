@@ -1,7 +1,7 @@
 /**
  * `artifactRefs` 的读取端收敛器 —— 会话产物的版本身份进入 Web 的唯一入口。
  *
- * 产品裁决(`specs/current/chat-artifact-versioning-design.md` §3.2 / §4 / §8,
+ * 产品裁决(`5aa368514d:specs/current/chat-artifact-versioning-design.md` §3.2 / §4 / §8,
  * 以及 2026-09-02 的两处口径更正):
  *
  * | 产物 | 卡面 | 点击 |

@@ -142,7 +142,7 @@ event-type distribution.
 
 This is human-driven and costs real LLM tokens — run on a real-CLI
 release or before a parser refactor, not on a cron. Full doc:
-[`docs/MOCKS-CONTRACT-CHECK.md`](../docs/MOCKS-CONTRACT-CHECK.md).
+[Historical: `5aa368514d:docs/MOCKS-CONTRACT-CHECK.md`](https://github.com/nexu-io/open-design/blob/5aa368514d3d715792a4aca95b04157c771ca9a0/docs/MOCKS-CONTRACT-CHECK.md).
 
 ---
 

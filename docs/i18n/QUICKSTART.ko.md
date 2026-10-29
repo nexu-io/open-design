@@ -153,9 +153,7 @@ OD_API_TOKEN=
 
 ## 영구 저장소
 
-영구 daemon 저장 경로를 문서화하거나, 변경하거나, 선택하기 전에
-반드시 루트 `AGENTS.md`의 **Daemon data directory contract**를 읽어야 합니다.
-이 Quickstart는 그 계약을 다시 서술하거나 저장 경로를 정의해서는 안 됩니다.
+Docker Compose는 영구 명명 볼륨에 데이터를 저장합니다. 업데이트 시 볼륨을 유지하세요. 설정과 백업: [Daemon storage](../../QUICKSTART.md#persistent-storage)
 
 ---
 
@@ -182,7 +180,7 @@ pnpm tools-dev run web # daemon + web을 포그라운드로 시작합니다
 pnpm tools-dev # daemon + web + desktop을 백그라운드로 시작합니다
 ```
 
-처음 로드할 때 앱은 사용 가능한 로컬 런타임을 감지하고 Settings에서 구성한 BYOK 런타임도 함께 표시합니다. 런타임, 디자인 템플릿, 디자인 시스템을 선택하고 프롬프트를 입력한 뒤 **Send**를 누르세요. 구조화된 로컬 런타임은 정식 프로젝트 파일을 쓰고 파일/도구 이벤트를 스트리밍하며, 파일 작업 공간과 미리보기는 그 쓰기에서 갱신됩니다. 텍스트 전용 및 BYOK 실행은 대신 호스트가 파싱할 완전한 `<artifact>` 블록을 반환합니다. artifact 저장 경로를 문서화하거나 변경하기 전에 반드시 루트 `AGENTS.md`의 **Daemon data directory contract**를 읽어야 합니다.
+처음 로드할 때 앱은 사용 가능한 로컬 런타임을 감지하고 Settings에서 구성한 BYOK 런타임도 함께 표시합니다. 런타임, 디자인 템플릿, 디자인 시스템을 선택하고 프롬프트를 입력한 뒤 **Send**를 누르세요. 구조화된 로컬 런타임은 정식 프로젝트 파일을 쓰고 파일/도구 이벤트를 스트리밍하며, 파일 작업 공간과 미리보기는 그 쓰기에서 갱신됩니다. 텍스트 전용 및 BYOK 실행은 대신 호스트가 파싱할 완전한 `<artifact>` 블록을 반환합니다.
 
 **Design systems** 카탈로그는 [`design-systems/`](../../design-systems/)의 `DESIGN.md` 패키지에서 직접 로드됩니다. 하나를 고르면 그 브랜드의 시각 언어가 artifact에 적용됩니다.
 
@@ -346,9 +344,9 @@ open-design/
 
 ## 비전과 다시 잇기
 
-이 빠른 시작은 [`docs/`](../../docs/)에 담긴 스펙을 실제로 돌릴 수 있게 만든 씨앗입니다. 스펙은 이것이 어디로 자라날지 설명합니다([`docs/roadmap.md`](../../docs/roadmap.md) 참고). 핵심만 짚으면 다음과 같습니다.
+이 빠른 시작은 [`docs/`](../../docs/)에 담긴 스펙을 실제로 돌릴 수 있게 만든 씨앗입니다. 스펙은 이것이 어디로 자라날지 설명합니다([보관 문서: `5aa368514d:docs/roadmap.md`](https://github.com/nexu-io/open-design/blob/5aa368514d3d715792a4aca95b04157c771ca9a0/docs/roadmap.md) 참고). 핵심만 짚으면 다음과 같습니다.
 
-- `docs/architecture.md`는 출시된 스택을 설명합니다. 앞단의 Next.js 16 App Router, 그 뒤의 로컬 daemon, 그리고 dev에서 `apps/web/next.config.ts`의 rewrite가 브라우저를 같은 `/api` 표면과 계속 통신하게 유지하는 구조입니다.
+- `apps/AGENTS.md`는 출시된 스택을 설명합니다. 앞단의 Next.js 16 App Router, 그 뒤의 로컬 daemon, 그리고 dev에서 `apps/web/next.config.ts`의 rewrite가 브라우저를 같은 `/api` 표면과 계속 통신하게 유지하는 구조입니다.
 - `docs/skills-protocol.md`는 현재 `SKILL.md`/`od:` frontmatter와 기능 skill·렌더링 템플릿의 분리를 설명합니다. 파서와 정규화의 구현 기준은 `apps/daemon/src/skills.ts`입니다.
 - `docs/agent-adapters.md`는 어댑터 계약을 설명합니다. 런타임별 실행, 인자, 모델, 스트림 설정은 `apps/daemon/src/runtimes/defs/`에 있고 `apps/daemon/src/runtimes/registry.ts`에서 등록됩니다. `apps/daemon/src/agents.ts`는 호환성 export 표면입니다.
-- `docs/modes.md`는 6개의 New Project 탭과 7개의 정규화된 레지스트리 모드(`prototype`, `deck`, `template`, `design-system`, `image`, `video`, `audio`)를 구분합니다.
+- `design-templates/AGENTS.md`는 6개의 New Project 탭과 7개의 정규화된 레지스트리 모드(`prototype`, `deck`, `template`, `design-system`, `image`, `video`, `audio`)를 구분합니다.

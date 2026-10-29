@@ -3,7 +3,7 @@
 // UI-component fields (no button/panel/React props), no runtime logic, and no
 // imports from apps/daemon/browser/React. The registry RUNTIME that stores and
 // looks these up will live in a future standalone `packages/agent-tools`
-// package (see docs/rfc-drafts/agent-ready.md); this file is only the
+// package (see 5aa368514d:docs/rfc-drafts/agent-ready.md); this file is only the
 // wire shape.
 
 import type { JsonValue } from '../common.js';

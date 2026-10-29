@@ -40,7 +40,7 @@ export const PLUGIN_AUTHORING_DEFAULT_GOAL = "a reusable workflow described by t
 export const PLUGIN_AUTHORING_PROMPT_TEMPLATE = [
   `Create an OpenDesign plugin for: {{${PLUGIN_AUTHORING_GOAL_INPUT}}}.`,
   '',
-  'Run the agent-assisted plugin authoring flow end to end. Follow docs/plugins-spec.md and produce a folder named generated-plugin with:',
+  'Run the agent-assisted plugin authoring flow end to end. Follow plugins/spec/SPEC.md and produce a folder named generated-plugin with:',
   '- SKILL.md describing the agent behavior and workflow',
   '- open-design.json with valid metadata: specVersion, name, version, description, mode, task kind, inputs, plus any pipeline / context references the workflow needs',
   '- plugin.repo is optional during scaffolding, but do not silently omit it: check `gh --version` and `gh auth status`, then prefer the local account login printed by auth status. Only use `gh api user --jq .login` as a fallback when auth status does not expose a login. If `gh` is missing, not logged in, rate-limited, or cannot resolve a real owner, omit plugin.repo instead of inventing an owner and explicitly report the auth problem with `gh auth refresh -h github.com -s repo,workflow`, `gh auth login -h github.com -s repo,workflow`, or `od plugin publish-repo generated-plugin --owner <github-login-or-org>` as recovery commands. Never write placeholder owners such as `open-design-user`, `<vendor>`, `example-user`, `your-org`, or `your-username` into the final manifest.',

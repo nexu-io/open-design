@@ -1,6 +1,6 @@
 // Gap-fill spec — `od media generate` must accept --prompt-file <path|->.
 //
-// AGENTS.md (Capability exposure / UI-CLI dual-track):
+// root AGENTS.md §2 (UI/CLI parity):
 //   "The CLI form must ... accept long-form prompts via --prompt-file <path|->,
 //    so jobs that pipe through xargs, jq, and <heredoc stay clean."
 //

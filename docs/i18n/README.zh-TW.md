@@ -232,7 +232,7 @@ Runtime 定義位於 [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/ru
 
 - 🤖 **agent 原生、模型無關。** 我們不附帶 agent。你 `PATH` 上既有的 `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` 就是設計引擎。一鍵即可切換。
 - 🧠 **預設即品牌級。** 每次渲染都把目前套件的 `DESIGN.md` 當作核心品牌契約讀取。儲存庫隨附 151 套設計系統套件；舊套件可以只含 `DESIGN.md`，新套件還可加入 `manifest.json`、`tokens.css`、元件、資產與來源資訊。放進資料夾，選擇器就會找到它。
-- 🖥️ **本地優先、每一層都可 BYOK。** 原生桌面應用程式保持本地優先。產品分析與工作階段重播需經使用者同意；經清理的安全與可靠性遙測始終開啟。在描述 daemon 資料路徑之前，必須閱讀儲存庫根目錄 `AGENTS.md` 中的 **Daemon data directory contract**。
+- 🖥️ **本地優先、每一層都可 BYOK。** 原生桌面應用程式保持本地優先。產品分析與工作階段重播需經使用者同意；經清理的安全與可靠性遙測始終開啟。
 - 🌍 **在四個平面上可組合。** **外掛**承載可執行的工作流程 · 功能 **skills** 承載 agent 行為 · **設計範本**承載渲染藍圖 · **設計系統**承載品牌。四者都採用可攜、可版控的目錄，任何人都能撰寫與發布。
 - 🔁 **翻新既有的程式碼庫。** 把一個 `git` 儲存庫 + `DESIGN.md` 交給 agent，它就會把你真實的元件重構至品牌規格。
 - 🔒 **出於信念的隱私。** 專案可在本機或自行部署的環境中執行。使用雲端模型或 OpenDesign Cloud 時，相關請求會傳送至對應服務。BYOK 代理包含 SSRF 防護。
@@ -525,13 +525,13 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 |---|---|
 | 前端 | Next.js 16 App Router + React 18 + TypeScript |
 | Daemon | Node 24 · Express · SSE 串流 · `better-sqlite3` |
-| 儲存 | 在變更或記錄 daemon 儲存路徑之前，必須閱讀儲存庫根目錄 `AGENTS.md` 中的 **Daemon data directory contract**。本 README 不得重述該契約。 |
+| 儲存 | 資料儲存在 daemon 資料根目錄中；設定、持久化與備份請見 [Daemon storage](../../QUICKSTART.md#persistent-storage) |
 | 預覽 | 檔案系統執行渲染標準專案檔案；BYOK／純 API 執行把一個完整 `<artifact>` 區塊解析到沙箱化 `srcdoc` iframe |
 | 匯出 | HTML（內嵌）· PDF（瀏覽器列印）· PPTX（agent 驅動）· ZIP · Markdown · MP4（HyperFrames） |
 | 桌面 | Electron shell + 沙箱化 renderer + sidecar IPC（STATUS · EVAL · SCREENSHOT · CONSOLE · CLICK · SHUTDOWN） |
 | 生命週期 | 單一進入點：`pnpm tools-dev`（start / stop / run / status / logs / inspect / check） |
 
-完整架構 → [`docs/architecture.md`](../../docs/architecture.md)。Skill 協定 → [`docs/skills-protocol.md`](../../docs/skills-protocol.md)。Agent adapter 契約 → [`docs/agent-adapters.md`](../../docs/agent-adapters.md)。
+完整架構 → [`apps/AGENTS.md`](../../apps/AGENTS.md)。Skill 協定 → [`docs/skills-protocol.md`](../../docs/skills-protocol.md)。Agent adapter 契約 → [`docs/agent-adapters.md`](../../docs/agent-adapters.md)。
 
 ---
 
@@ -555,7 +555,6 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 - [ ] Figma / Pencil → React / Next / Vue 遷移外掛（alpha）
 - [ ] 翻新既有程式碼庫的外掛（指向一個 git 儲存庫 + `DESIGN.md`）
 
-分階段交付 → [`docs/roadmap.md`](../../docs/roadmap.md)。
 
 ---
 
@@ -694,7 +693,6 @@ gh pr create --fill
 | [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | HTML→MP4 動態圖像框架，在 OpenDesign 中整合為一等公民的 `hyperframes-html`。 |
 | [Claude Code skills][skill] | 我們原封不動採用的 `SKILL.md` 慣例。 |
 
-詳細出處 → [`docs/references.md`](../../docs/references.md)。
 
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills
 

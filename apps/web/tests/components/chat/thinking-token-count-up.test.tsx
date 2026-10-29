@@ -291,7 +291,7 @@ describe('预算:比典型帧间隔短得多', () => {
     expect(Number.isFinite(ms), 'COUNT_UP_MS 还在,而且是个字面量').toBe(true);
     /*
      * 上界:claude 的 `thinking_tokens` 帧间隔 p50 = 1.4s(真实录制,
-     * `specs/current/chat-panel-next.md`)。数不完就追不上真值,屏幕上是个假数。
+     * `5aa368514d:specs/current/chat-panel-next.md`)。数不完就追不上真值,屏幕上是个假数。
      * 下界:低于 200ms 和直接换数没有区别,用户要的「过程」就没了。
      */
     expect(ms).toBeLessThanOrEqual(700);

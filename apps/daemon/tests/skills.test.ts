@@ -30,7 +30,7 @@ const repoRoot = path.resolve(__dirname, '../../..');
 const skillsRoot = path.join(repoRoot, 'skills');
 // `live-artifact`, `dcf-valuation`, `x-research`, and `last30days` were
 // reclassified as design templates under the Phase 0 split (see
-// specs/current/skills-and-design-templates.md). The body/preamble
+// 5aa368514d:specs/current/skills-and-design-templates.md). The body/preamble
 // expectations below still apply, but they now read from the design
 // templates root rather than skills/.
 const designTemplatesRoot = path.join(repoRoot, 'design-templates');

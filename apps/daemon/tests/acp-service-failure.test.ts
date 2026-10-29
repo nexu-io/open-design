@@ -18,7 +18,7 @@ import { classifyRunFailure } from '../src/run-failure-classification.js';
 // from one card to another: the row goes red and names which one.
 //
 // Every text is real — taken from `run-failure-classification.test.ts`,
-// `acp-handshake-failure.test.ts`, `specs/current/run-error-catalog.md`, or, for
+// `acp-handshake-failure.test.ts`, `5aa368514d:specs/current/run-error-catalog.md`, or, for
 // H1, verbatim from a user's packaged `0.21.2-beta.1` screenshot.
 //
 // The two axes this table pins are deliberately separate:

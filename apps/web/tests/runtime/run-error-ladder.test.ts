@@ -1,7 +1,7 @@
 // 红测(E1 / E4 / E6):报错卡的主按钮必须由「失败的性质」推导,而不是每一档手挑一颗。
 //
-// 权威:`specs/current/run-error-catalog.md` §6.Z(阶梯)、§6.T(阶梯 ↔ F0–F10)、
-// §6.X(逐条裁决);`docs/design/run-errors/error-ux-design.md`(32 个场景 + 频次表)。
+// 权威:`5aa368514d:specs/current/run-error-catalog.md` §6.Z(阶梯)、§6.T(阶梯 ↔ F0–F10)、
+// §6.X(逐条裁决);`5aa368514d:docs/design/run-errors/error-ux-design.md`(32 个场景 + 频次表)。
 //
 // 在补映射之前这一整份都是红的:
 //   - `primaryActionForFailure` / `RunFailureNature` 不存在(阶梯函数没写);

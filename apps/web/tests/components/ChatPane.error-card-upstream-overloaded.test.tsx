@@ -22,10 +22,10 @@
 //     and genuinely transient ones (`upstream_5xx`, `provider_high_demand`)」。
 //     于是整轮落到最后那张通用卡:`messageKey: null` → 标题「任务执行失败」。
 //
-// 目标文案不是新写的:`specs/current/run-error-catalog.md` R-051 把
+// 目标文案不是新写的:`5aa368514d:specs/current/run-error-catalog.md` R-051 把
 // 「上游 5xx / 过载 529 / 网关 502 upstream_error」明确挂在
 // `upstream_5xx` / `provider_high_demand`,目标场景是
-// `docs/design/run-errors/error-ux-design.md` 的 S10「模型服务商报错 / 过载」;
+// `5aa368514d:docs/design/run-errors/error-ux-design.md` 的 S10「模型服务商报错 / 过载」;
 // 而 S10 在本仓的落点已经存在 —— 同一张表里的 `fatal_rpc_error` 就指着
 // `chat.runError.title.upstreamUnavailable` /
 // `chat.runError.upstreamUnavailableMessage`。

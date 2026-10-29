@@ -232,7 +232,7 @@ Runtime 정의는 [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runti
 
 - 🤖 **에이전트 네이티브, 모델에 구애받지 않음.** 우리는 에이전트를 제공하지 않습니다. 이미 당신의 `PATH`에 있는 `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi`가 디자인 엔진입니다. 한 번의 클릭으로 교체하세요.
 - 🧠 **기본부터 브랜드급.** 모든 렌더는 활성 패키지의 `DESIGN.md`를 핵심 브랜드 계약으로 읽습니다. 151개 디자인 시스템 패키지가 제공되며, 레거시 패키지는 `DESIGN.md`만 포함할 수 있고 새 패키지는 `manifest.json`, `tokens.css`, 컴포넌트, 에셋, 출처 정보를 더할 수 있습니다. 폴더 하나만 넣으면 피커가 찾아냅니다.
-- 🖥️ **로컬 우선, 모든 계층에서 BYOK.** 네이티브 데스크톱 앱은 로컬 우선을 유지합니다. 제품 분석과 세션 리플레이에는 동의가 필요하며, 민감 정보를 정리한 안전성 및 신뢰성 텔레메트리는 항상 활성화됩니다. daemon 데이터 경로를 설명하기 전에 반드시 루트 `AGENTS.md`의 **Daemon data directory contract**를 읽어야 합니다.
+- 🖥️ **로컬 우선, 모든 계층에서 BYOK.** 네이티브 데스크톱 앱은 로컬 우선을 유지합니다. 제품 분석과 세션 리플레이에는 동의가 필요하며, 민감 정보를 정리한 안전성 및 신뢰성 텔레메트리는 항상 활성화됩니다.
 - 🌍 **네 가지 평면에서 조합 가능.** **플러그인**은 워크플로, **기능 스킬**은 에이전트 동작, **디자인 템플릿**은 렌더링 청사진, **디자인 시스템**은 브랜드를 담습니다.
 - 🔁 **기존 코드베이스를 새롭게.** `git` 저장소 + `DESIGN.md`를 에이전트에 넘기면 당신의 실제 컴포넌트를 브랜드 사양에 맞게 리팩터링합니다.
 - 🔒 **신념에 기반한 프라이버시.** 프로젝트는 로컬 또는 직접 관리하는 배포 환경에서 실행할 수 있습니다. 클라우드 모델과 OpenDesign Cloud 요청은 해당 서비스로 전송됩니다. BYOK 프록시에는 SSRF 보호 기능이 포함됩니다.
@@ -513,13 +513,13 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 |---|---|
 | 프론트엔드 | Next.js 16 App Router + React 18 + TypeScript |
 | 데몬 | Node 24 · Express · SSE 스트리밍 · `better-sqlite3` |
-| 스토리지 | daemon 저장 경로를 변경하거나 문서화하기 전에 반드시 루트 `AGENTS.md`의 **Daemon data directory contract**를 읽어야 합니다. 이 README는 그 내용을 다시 서술해서는 안 됩니다. |
+| 스토리지 | 로컬 데이터는 daemon 데이터 디렉터리에 저장됩니다. 설정과 백업: [Daemon storage](../../QUICKSTART.md#persistent-storage) |
 | 미리보기 | filesystem 실행은 정규 파일을 렌더링하고 BYOK/API는 완전한 `<artifact>` 블록을 샌드박스 `srcdoc` iframe으로 파싱합니다 |
 | 내보내기 | HTML(인라인) · PDF(브라우저 인쇄) · PPTX(에이전트 기반) · ZIP · Markdown · MP4(HyperFrames) |
 | 데스크톱 | Electron 셸 + 샌드박스 렌더러 + 사이드카 IPC(STATUS · EVAL · SCREENSHOT · CONSOLE · CLICK · SHUTDOWN) |
 | 라이프사이클 | 단일 진입점: `pnpm tools-dev` (start / stop / run / status / logs / inspect / check) |
 
-전체 아키텍처 → [`docs/architecture.md`](../../docs/architecture.md). 스킬 프로토콜 → [`docs/skills-protocol.md`](../../docs/skills-protocol.md). 에이전트 어댑터 계약 → [`docs/agent-adapters.md`](../../docs/agent-adapters.md).
+전체 아키텍처 → [`apps/AGENTS.md`](../../apps/AGENTS.md). 스킬 프로토콜 → [`docs/skills-protocol.md`](../../docs/skills-protocol.md). 에이전트 어댑터 계약 → [`docs/agent-adapters.md`](../../docs/agent-adapters.md).
 
 ---
 
@@ -543,7 +543,6 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 - [ ] Figma / Pencil → React / Next / Vue 마이그레이션 플러그인(알파)
 - [ ] 기존 코드베이스 새롭게 하기 플러그인(git 저장소 + `DESIGN.md`에 겨눔)
 
-단계별 제공 → [`docs/roadmap.md`](../../docs/roadmap.md).
 
 ---
 
@@ -682,7 +681,6 @@ gh pr create --fill
 | [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | HTML→MP4 모션 그래픽 프레임워크로, OpenDesign에 일급 `hyperframes-html`로 통합됨. |
 | [Claude Code skills][skill] | 우리가 그대로 채택한 `SKILL.md` 관례. |
 
-자세한 출처 → [`docs/references.md`](../../docs/references.md).
 
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills
 

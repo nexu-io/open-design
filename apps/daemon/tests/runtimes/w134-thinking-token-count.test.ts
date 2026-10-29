@@ -20,7 +20,7 @@
  *
  *   · **delta 那个字段一半是 null。** 每个 thinking 块的最后一帧必然是
  *     `{"thinking":"","estimated_tokens":null}` —— 仓库里那条「`estimated_tokens`
- *     走不通」的旧结论(`specs/current/chat-panel-feedback.md`)看的正是这个字段,
+ *     走不通」的旧结论(`5aa368514d:specs/current/chat-panel-feedback.md`)看的正是这个字段,
  *     它对**那个字段**是对的。
  *   · **delta 那个字段是增量,不是累计。** `partial-single-turn` 第二个块:
  *     系统帧累计 50 / 150 / 300 / 450,同批 delta 却是 50 / 100 / 150 / 150。

@@ -739,7 +739,7 @@ export interface RunFailureNature {
 }
 
 /**
- * The primary-button ladder (`specs/current/run-error-catalog.md` §6.Z),
+ * The primary-button ladder (`5aa368514d:specs/current/run-error-catalog.md` §6.Z),
  * top-down; the first rung that matches wins.
  *
  *   1. We have an action that directly solves it   → that action
@@ -1014,7 +1014,7 @@ function runsOnALocalAgent(agentId: string | null | undefined): boolean {
  * **已经整组离开卡面**,不是「退到次级」—— 后者是 OPEND-2772 当时的形态,已被推翻。
  * `primaryActionForFailure` 仍然在算,但结果只喂标题 / 正文 / 交接判据,
  * 不再决定任何一颗按钮。终局、三个例外与四条代价记在
- * `specs/current/chat-panel-decisions-sheet.md` 的「OPEND-2807 报错卡终局」。
+ * `5aa368514d:specs/current/chat-panel-decisions-sheet.md` 的「OPEND-2807 报错卡终局」。
  */
 function withCloudSwitchCta(ui: RunFailureUi): RunFailureUi {
   return ui.cloudSwitchCta ? ui : { ...ui, cloudSwitchCta: true };
@@ -1127,7 +1127,7 @@ const AGENT_AGNOSTIC_FAILURE_UI: Record<string, RunFailureUi> = {
   // usually emits the block — so Retry is the honest action, and
   // `retryWithGuidance` keeps exactly the button the fallback already gave.
   //
-  // ⚠️ `docs/design/run-errors/error-ux-design.md` HAS NO CELL FOR THIS. The
+  // ⚠️ `5aa368514d:docs/design/run-errors/error-ux-design.md` HAS NO CELL FOR THIS. The
   // nearest, S21, covers an empty / malformed / looping model response, which
   // this is not. The copy below is W41's draft for a cell product has yet to
   // write — replace the wording, not the routing, when they do.
@@ -1152,7 +1152,7 @@ const AGENT_AGNOSTIC_FAILURE_UI: Record<string, RunFailureUi> = {
   // keeps it `succeeded` on `projectDeliverableValid`.
   //
   // ⚠️ Copy is engineering's, like the rows below it:
-  // `docs/design/run-errors/error-ux-design.md` has no cell for it. S23 ("跑完
+  // `5aa368514d:docs/design/run-errors/error-ux-design.md` has no cell for it. S23 ("跑完
   // 没生成文件") is the nearest and is listed there as invisible in telemetry;
   // product should rewrite the wording, not the routing.
   od_next_canonical_deliverable_invalid: retryWithGuidance(
@@ -1191,7 +1191,7 @@ const AGENT_AGNOSTIC_FAILURE_UI: Record<string, RunFailureUi> = {
   // question is a legal outcome. The agent will likely ask again; that time it
   // renders as a normal round of questions instead of a failure card.
   //
-  // ⚠️ `docs/design/run-errors/error-ux-design.md` HAS NO CELL FOR THIS either
+  // ⚠️ `5aa368514d:docs/design/run-errors/error-ux-design.md` HAS NO CELL FOR THIS either
   // — S01–S32 contain nothing about clarification or follow-up questions. The
   // copy is W41's draft; product should rewrite the wording, not the routing.
   od_next_clarification_repeated: retryWithGuidance(

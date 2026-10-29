@@ -51,12 +51,12 @@ Fixes #
 
 <!-- Skip if this PR isn't a bug fix.
 
-     Per AGENTS.md → "Bug follow-up workflow", bugs should be encoded as a
-     falsifiable test that goes red before the source change. Confirm:
-       - Test path that reproduces the bug:
-       - Did the test go red on `main` and green on this branch? (yes / no)
-       - If a red spec wasn't cheap to write, explain why and what verification
-         you did instead. -->
+     Follow AGENTS.md → "Bug follow-up workflow". Report the original symptom
+     and the evidence that the fix resolves it:
+       - Regression test and before/after result, when practical:
+       - Otherwise, why automation was impractical or disproportionate and the
+         manual/replay/log/comparison evidence used instead:
+       - Remaining limits of the verification: -->
 
 -
 

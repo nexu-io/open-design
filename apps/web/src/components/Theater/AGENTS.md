@@ -86,7 +86,7 @@ without code churn.
 
 ## Related
 
-- Spec: `specs/current/critique-theater.md`
-- Plan: `specs/current/critique-theater-plan.md`
-- User docs: `docs/critique-theater.md`
+- Spec: `5aa368514d:specs/current/critique-theater.md`
+- Plan: `5aa368514d:specs/current/critique-theater-plan.md`
+- User docs: `apps/daemon/src/critique/AGENTS.md`
 - Daemon counterpart: `apps/daemon/src/critique/AGENTS.md`

@@ -11,7 +11,7 @@
    make.
 
    Declared once on `:root` (imported through apps/web/src/index.css, per
-   root AGENTS.md "Web CSS ownership" — no selectors added to index.css
+   apps/web/AGENTS.md "Web CSS ownership" — no selectors added to index.css
    itself) so every share surface inherits them through the normal CSS
    cascade, including content portaled to document.body (ShareFeedbackToast,
    the export/version-restored TopStackedToast, ShareMoreMenu's menu, the

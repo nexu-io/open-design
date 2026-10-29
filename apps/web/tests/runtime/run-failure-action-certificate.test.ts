@@ -3,7 +3,7 @@
  *
  * 这份规格原来是红的(`run-failure-action-certificate.red.test.ts`,7/7 失败),
  * 只钉住「不能是〔重试〕」而不指定该给哪颗 —— 那颗按钮当时还没拍板。现在拍了
- * (`docs/design/run-errors/error-ux-design.md` S30),所以断言补全:主按钮是
+ * (`5aa368514d:docs/design/run-errors/error-ux-design.md` S30),所以断言补全:主按钮是
  * 〔去设置〕、次按钮才是重试、文案是 S30 那一句。
  *
  * 事实链(每一步都在代码里可查):
@@ -20,7 +20,7 @@
  *  4. 而〔重试〕是整轮新 run(`ChatPane.tsx` onRetry 'manual_retry',
  *     catalogue 的 F3),企业代理拆包换证书这类确定性失败重跑多少次都一样。
  *
- * 产品侧的裁决:`specs/current/run-error-catalog.md` R-054 / R-097 / F8 行,
+ * 产品侧的裁决:`5aa368514d:specs/current/run-error-catalog.md` R-054 / R-097 / F8 行,
  * 用户动作是「打开设置(代理 / 证书)」;落点是设置 → 本地 CLI →
  * 「高级:代理与自定义路径」(`apps/daemon/src/runtimes/env.ts` 的 `configuredEnv`)。
  *

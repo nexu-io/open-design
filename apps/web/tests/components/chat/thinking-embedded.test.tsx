@@ -21,7 +21,7 @@
  *   N7-c 跑完的推理一律收成一格,**包括落在 todo 段里的那些**(问题二的真因)
  *   N7-d 那一格不画绿勾,用 brain 图标,长得像工具行
  *
- * 规格冲突与裁决理由见 `specs/current/chat-panel-feedback.md` §F-15。
+ * 规格冲突与裁决理由见 `5aa368514d:specs/current/chat-panel-feedback.md` §F-15。
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';

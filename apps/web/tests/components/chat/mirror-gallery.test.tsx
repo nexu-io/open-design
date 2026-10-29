@@ -5,7 +5,7 @@
  * 为什么需要它(规格 §11 记的坑):稿子那一侧的陈列页抽的是
  * **设计稿自己的实体**。设计师不读代码,所以「我们做出来的和稿子对上了没有」在此之前
  * 没有任何人能判断。这里用**我们的组件**把稿子的 90 格逐格渲染一遍,编号与
- * `docs/design/chat-mirror/build-matrix.mjs` 从交付稿抽出来的那一页**逐格同序**
+ * `5aa368514d:docs/design/chat-mirror/build-matrix.mjs` 从交付稿抽出来的那一页**逐格同序**
  * (那个脚本里的 `ORDER` 是两边编号的唯一出处),两页并排开着就能逐格对。
  *
  * **90 格里只有 1 格出不来**(第 85 格 · 设计系统工作区状态卡,卡在产品拍板)。
@@ -1390,7 +1390,7 @@ const INPUT: Cell[] = [
     notes: [
       '**已建**:`ChatMessage.sendFailed`(contracts)+ 气泡下方那一行(`.msg-fail`)。原来契约里没有「这条发失败了」,所以这一格根本画不出来',
       '「重试」**常驻**,不跟着 hover 出没 —— 第 50 格的状态名就写着这一条。它**长在动作行里**(稿子 `.msg-act .keep`),和时间 / 复制并排;原来我把它另起了一行,于是那条隐藏的动作行照样占 30px,气泡到「重试」之间空出一大截',
-      '⚠️ **这一态在产品里还没有人产生**:契约有 `sendFailed`、UI 也画得出来,但没有任何代码把它置上,`onResend` 也没有上游传进来 —— 这一格照的是一个还没接线的状态。接线要动 run 生命周期的错误分支,记在 `specs/current/chat-panel-feedback.md` 的 B13'
+      '⚠️ **这一态在产品里还没有人产生**:契约有 `sendFailed`、UI 也画得出来,但没有任何代码把它置上,`onResend` 也没有上游传进来 —— 这一格照的是一个还没接线的状态。接线要动 run 生命周期的错误分支,记在 `5aa368514d:specs/current/chat-panel-feedback.md` 的 B13'
     ],
   },
   {
@@ -1410,7 +1410,7 @@ const INPUT: Cell[] = [
       '这一格由陈列页**替设计师按住 hover**(`data-hover`),和 `data-expand` 替它点开抽屉是同一个手法;产线上仍旧是鼠标停上去才浮出',
       '时间排在复制**之后**(最右):稿子的说明文字与 CSS 注释都这么写,DOM 里 `.tm` 排第一是旧的(盘点 §5 第 4 条,**待设计确认**)',
       '气泡底色 hover 时从 `--text-strong`(#202020)换成 `--text`(#494949)。⚠️ 稿子状态标题写的是「背景**加深**」,而这两个值在白底上其实是变浅 —— 按值实现,矛盾已回报(盘点 §5 第 5 条)',
-      '**这一格没有常驻的「重试」,是夹具的取向不是缺口**:重试跟着 `sendFailed` 走(见第 49 / 50 格,契约字段与 `.msg-fail` 那一行都已经建好),这一格喂的是一条正常发出去的长消息,所以不该有它。**还没接线的是「谁来把 `sendFailed` 置上」**,记在 `specs/current/chat-panel-feedback.md` 的 B13',
+      '**这一格没有常驻的「重试」,是夹具的取向不是缺口**:重试跟着 `sendFailed` 走(见第 49 / 50 格,契约字段与 `.msg-fail` 那一行都已经建好),这一格喂的是一条正常发出去的长消息,所以不该有它。**还没接线的是「谁来把 `sendFailed` 置上」**,记在 `5aa368514d:specs/current/chat-panel-feedback.md` 的 B13',
     ],
   },
   {
@@ -1734,7 +1734,7 @@ const EDGE: Cell[] = [
  *
  * **它们排在前 84 格之后,不插回各自家族里**:`diff-cells.mjs` 按 `.cell` 的**下标**配
  * gid,插回中间会让后面每一格整体错位,连带上面所有注记里的「第 N 格」全部指错。
- * 稿子那一侧的编号由 `docs/design/chat-mirror/build-matrix.mjs` 的 `ORDER` 给,
+ * 稿子那一侧的编号由 `5aa368514d:docs/design/chat-mirror/build-matrix.mjs` 的 `ORDER` 给,
  * 两边同序 —— 那份 `ORDER` 的末六项正是这六格。
  */
 
@@ -2493,7 +2493,7 @@ describe('镜像陈列页', () => {
    *
    * 所以这里钉两件事:生成物**确实没有**字体字节(别哪天有人又把 423KB 塞回来),
    * 以及它**带着那条记号** —— 记号是人和 `check-fonts.mjs` 共同的抓手。
-   * 「字体真的被浏览器用上了」由 `docs/design/chat-mirror/check-fonts.mjs` 的差分守卫
+   * 「字体真的被浏览器用上了」由 `5aa368514d:docs/design/chat-mirror/check-fonts.mjs` 的差分守卫
    * 在真浏览器里判,不在这里判(jsdom 没有字体)。
    */
   it('生成物不带字体字节,并且明写着「还没上字体」', () => {
@@ -2514,7 +2514,7 @@ describe('镜像陈列页', () => {
 
     // ② 带着记号,而且记号说得出该跑哪条命令。
     expect(page).toContain(`id="${FONTS_MISSING_MARK}"`);
-    expect(page).toContain('docs/design/chat-mirror/inline-fonts.mjs');
+    expect(page).toContain('5aa368514d:docs/design/chat-mirror/inline-fonts.mjs');
 
     // ③ 记号必须能被注入块盖掉:走类选择器,不能是行内 style(行内会赢过注入块)。
     expect(page).not.toMatch(new RegExp(`id="${FONTS_MISSING_MARK}"[^>]*\\sstyle=`));
@@ -2535,8 +2535,8 @@ describe('镜像陈列页', () => {
     console.warn(
       `\n[mirror] 写出 ${out}\n`
       + '[mirror] 这份页面**还没上字体**,现在量出来的几何读数是回退面 PingFang SC 的。\n'
-      + '[mirror] 量之前先跑:node docs/design/chat-mirror/inline-fonts.mjs\n'
-      + '[mirror] 然后确认:node docs/design/chat-mirror/check-fonts.mjs(退出码 0)\n',
+      + '[mirror] 历史字体脚本已移出工作区；复现前需从 Git 提取 5aa368514d:docs/design/chat-mirror/inline-fonts.mjs\n'
+      + '[mirror] 历史校验脚本：5aa368514d:docs/design/chat-mirror/check-fonts.mjs\n',
     );
   });
 });
@@ -2821,8 +2821,8 @@ function baseVars(): string {
  * 注入工具和守卫都在仓库里,clone 下来跑一条命令就有:
  *
  * ```bash
- * node docs/design/chat-mirror/inline-fonts.mjs   # 从 base.css 现场解析描述符 + 内联 public/fonts 的字节
- * node docs/design/chat-mirror/check-fonts.mjs    # 前置闸:没上字体就红,退出码 0 才能开始量
+ * git show 5aa368514d:docs/design/chat-mirror/inline-fonts.mjs   # 从 base.css 现场解析描述符 + 内联 public/fonts 的字节
+ * git show 5aa368514d:docs/design/chat-mirror/check-fonts.mjs    # 前置闸:没上字体就红,退出码 0 才能开始量
  * ```
  *
  * ## 所以生成器留的是一个**记号**,不是字体
@@ -2849,8 +2849,8 @@ function fontsMissingBanner(): string {
     + ` 现在量出来的行高 / 文本宽度 / 折行位置 / 卡片高度都是回退面 <code>PingFang SC</code> 的,`
     + ` 不是产品真实的 <code>Albert Sans</code> / <code>JiduMono Pro</code>,`
     + ` 而稿子那一侧是自带内联字体的,比出来的差异会整批带偏。<br>`
-    + ` 先跑 <code>node docs/design/chat-mirror/inline-fonts.mjs</code>(再跑`
-    + ` <code>check-fonts.mjs</code> 确认退出码 0),然后再量、再截图、再下结论。</p>`;
+    + ` 历史字体脚本已归入 Git 历史：<code>5aa368514d:docs/design/chat-mirror/inline-fonts.mjs</code>。复现前先恢复脚本，使用`
+    + ` <code>check-fonts.mjs</code> 校验字体后再量、再截图、再下结论。</p>`;
 }
 
 const FONTS_MISSING_CSS = `.fontwarn{margin:0 0 16px;padding:10px 14px;border-radius:8px;`

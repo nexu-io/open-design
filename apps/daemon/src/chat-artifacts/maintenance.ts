@@ -70,7 +70,7 @@ export interface ChatArtifactMaintenanceOptions extends ChatArtifactMaintenanceD
    * Tick period. `0` or anything non-finite disables the loop entirely and the
    * daemon keeps today's boot-only behaviour.
    *
-   * OPEN DECISION: `specs/current/chat-artifact-versioning-design.md` §5.3 and
+   * OPEN DECISION: `5aa368514d:specs/current/chat-artifact-versioning-design.md` §5.3 and
    * §7.2 both ask for a periodic pass and neither names a period. Until that is
    * ruled on, the default is off and the only way to turn it on is explicit —
    * see `resolveChatArtifactMaintenanceIntervalMs`.

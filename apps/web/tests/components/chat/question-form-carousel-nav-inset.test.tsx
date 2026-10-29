@@ -20,7 +20,7 @@
  * 稿子里 `.vnav` 的定位祖先是 `.opts.mod-visual`(visual-fan.css:11,
  * `position: relative; padding: 0 11px 10px`)—— 那是**整张卡宽**的盒子,
  * 所以 `inset-inline: 11px` 落在内容边上,和「换一批 / 随机」那一行的左右
- * 内距同一条线。`specs/current/chat-panel-feedback.md` 234 行就是这句:
+ * 内距同一条线。`5aa368514d:specs/current/chat-panel-feedback.md` 234 行就是这句:
  * 「11px 和「换一批 / 随机」那一行的左右内距是同一个数,三者竖向边界因此对齐」。
  *
  * 我们的定位祖先是 `.qf-visual-stage`,而它**已经**用 `margin-inline: 11px`

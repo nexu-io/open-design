@@ -18,8 +18,8 @@ Create a portable OpenDesign plugin that can:
 Read these files before editing:
 
 - `plugins/spec/SPEC.md`
-- `docs/schemas/open-design.plugin.v1.json`
-- `docs/plugins-spec.md` when you need deeper product semantics
+- `plugins/spec/schemas/open-design.plugin.v1.json`
+- `plugins/spec/SPEC.md` when you need deeper product semantics
 - `plugins/spec/PUBLISHING-REGISTRIES.md` when the user asks to publish outside OpenDesign
 - A nearby example under `plugins/spec/examples/`
 

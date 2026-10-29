@@ -15,7 +15,7 @@ Before changing GitHub automation, read the current versions of:
 - `.github/scripts/runners.py`, `.github/scripts/scopes.py`, and `.github/scripts/convergence.py`
 - `.github/workflows/convergence.atom.yml` and `.github/scripts/lib/r2.py` when changing reusable workload results
 - `docs/ci/workload-products.md` when changing reusable workload product publication or restoration
-- `specs/current/ci.md` when changing scope rules, confidence tiers, or planner invariants
+- `.github/AGENTS.md#scope-routing-and-omission` when changing scope rules, confidence tiers, or planner invariants
 - `e2e/tests/packaged-smoke-workflow.test.ts`
 - `scripts/approve-fork-pr-workflows.ts` and `e2e/tests/scripts/approve-fork-pr-workflows.test.ts` when touching fork PR approval behavior
 
@@ -219,3 +219,12 @@ GitHub artifact behavior is easy to drift: artifact names must be unique per upl
 ### Where should tests live?
 
 Cross-workflow topology tests belong in `e2e/tests/` when they observe repository-level behavior. Root `scripts/` is test-free (enforced by `pnpm guard`); script behavior-contract coverage lives in `e2e/tests/scripts/`. Do not add one-off `*.test.ts` files just because a workflow helper exists; prefer existing topology coverage and helper self-checks when that is enough.
+
+## Scope routing and omission
+
+- `scopes.py` and `.github/config/scopes.json` own scheduling relevance. Matching effects union, confidence takes the minimum, and renames evaluate both previous and current paths. The Linux planner stays stdlib-only and does not import workspace code.
+- PR/manual-hot contexts trust `medium` and `certain`; merge queue trusts only `certain`. Forced-full bypasses omission. Unknown, unresolved, empty queue, mixed, or below-threshold inputs select conservative broad coverage; invalid arguments/configuration fail before dispatch.
+- `preflight` remains always selected and non-reusable. Broad declaration/type/unit validation skips only for a certain-tier zero-effect merge-queue result; other contexts keep broad validation.
+- Changing active omission needs direct `scopes.py plan` goldens for positive, negative, mixed, rename, and fallback cases, validated configuration, and operational evidence of retained coverage and scheduling value. Replay is not a semantic dependency proof. A broad parent must not hide future unmapped dependencies behind an enumerated closure.
+- Prefer stable source units → validation effects → test sets → workloads. Unknown enabled workload identifiers fail visibly. Tests/fixtures/manifests select their consumers; shared harnesses and lockfiles fan out to affected workloads. Coarse lanes do not impose cleanup on unrelated tasks.
+- Scope relevance and reusable-result identity are separate authorities. Do not weaken coverage because a result exists; keep route policy out of convergence configuration. Downstream guards cannot retroactively authorize omission.

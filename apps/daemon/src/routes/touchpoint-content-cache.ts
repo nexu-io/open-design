@@ -271,8 +271,8 @@ const MAX_REVOCATIONS = 256;
 const REQUEST_AUTHORITY_MS = 10_000;
 
 export function createTouchpointContentCache(runtimeDataDir: string): TouchpointContentCache {
-  // Derived from the daemon's resolved data root (AGENTS.md "Daemon data
-  // directory contract"), never from cwd, app name, port or namespace name.
+  // Derived from the daemon's resolved data root (apps/daemon/AGENTS.md#data-ownership),
+  // never from cwd, app name, port or namespace name.
   const root = path.join(runtimeDataDir, 'touchpoint-content-cache');
   /**
    * An anchor for measuring elapsed time inside this process, immune to the

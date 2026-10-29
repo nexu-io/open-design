@@ -153,9 +153,30 @@ OD_API_TOKEN=
 
 ## Persistent Storage
 
-Before documenting, changing, or choosing any persistent daemon storage path,
-you MUST read the root `AGENTS.md` section **Daemon data directory contract**.
-This Quickstart MUST NOT restate that contract or define storage paths.
+The daemon stores local database state, managed projects, artifacts, configuration,
+and credentials under one writable data root.
+
+| Launch mode | Configuration |
+| --- | --- |
+| Source daemon | `OD_DATA_DIR` selects the root. Without it, the default is `<project-root>/.od`. Relative values resolve against the project root; home expansion is supported. Sandbox mode requires an explicit value. |
+| `tools-dev` | Pass `OD_DATA_DIR` for isolated data. A namespace alone does not isolate daemon storage. |
+| Packaged app | The launcher supplies the namespace-scoped root. Do not infer it from a port or the app display name. |
+| Repository Docker Compose | The `open_design_data` named volume is mounted at `/app/.od`; Docker prefixes its actual name with the Compose project name. Container replacement preserves it. |
+
+For an isolated source run:
+
+```bash
+OD_DATA_DIR="$PWD/.tmp/local-design-data" pnpm tools-dev run web
+```
+
+Stop the daemon before backing up or moving its complete data root. Imported-folder
+projects also need backups of their external directories. Keep the data root or
+volume when upgrading; `docker compose down --volumes` removes named-volume data.
+Inspect the running Compose service's mounts with
+`docker inspect open-design --format '{{json .Mounts}}'`.
+
+Storage implementation ownership is documented in the
+[daemon guide](apps/daemon/AGENTS.md#data-ownership).
 
 ---
 
@@ -182,7 +203,7 @@ For the desktop shell and all managed sidecars in the background:
 pnpm tools-dev # starts daemon + web + desktop in the background
 ```
 
-On first load, the app detects the available local runtimes and also offers BYOK runtimes configured in Settings. Choose a runtime, a design template, and a design system, then type a prompt and hit **Send**. Structured local runtimes write canonical project files and stream file/tool events; the file workspace and preview update from those writes. Plain text-only and BYOK runs instead return a complete `<artifact>` block for the host to parse. Before documenting or changing any artifact storage path, you MUST read `AGENTS.md` → **Daemon data directory contract**.
+On first load, the app detects the available local runtimes and also offers BYOK runtimes configured in Settings. Choose a runtime, a design template, and a design system, then type a prompt and hit **Send**. Structured local runtimes write canonical project files and stream file/tool events; the file workspace and preview update from those writes. Plain text-only and BYOK runs instead return a complete `<artifact>` block for the host to parse.
 
 The **Design systems** catalog is loaded from the `DESIGN.md` packages in [`design-systems/`](design-systems/). Pick one to apply that brand's visual language to the artifact.
 
@@ -349,11 +370,9 @@ open-design/
 - **artifact never renders** — first identify the run's handoff profile. For a filesystem-capable local runtime, confirm the agent created a previewable project file and that file-write events reached the daemon; it should not emit source in `<artifact>`. For a plain/text-only or BYOK run, confirm the response contains one complete `<artifact>` block. Check daemon logs for the first failed boundary instead of asking a filesystem runtime to fall back to inline source.
 - **Browser authentication prompt on macOS** — keep Docker Desktop's default bridge networking. Sign in with username `open-design` and the `OD_API_TOKEN` value from `deploy/.env` as the password. Host networking is not required. See [`deploy/README.md` — Docker Desktop on macOS](deploy/README.md#docker-desktop-on-macos).
 
-## Mapping back to the vision
+## Related guides
 
-This Quickstart is the runnable seed of the spec in [`docs/`](docs/). The spec describes where this grows (see [`docs/roadmap.md`](docs/roadmap.md)). Highlights:
-
-- `docs/architecture.md` describes the shipped stack: Next.js 16 App Router in front, local daemon behind it, and `apps/web/next.config.ts` rewrites in dev to keep the browser talking to the same `/api` surface.
-- `docs/skills-protocol.md` describes the current `SKILL.md`/`od:` frontmatter and the split between functional skills and rendering templates. The parser and normalization source of truth is `apps/daemon/src/skills.ts`.
-- `docs/agent-adapters.md` describes the adapter contract. Runtime-specific launch, argument, model, and stream settings live in `apps/daemon/src/runtimes/defs/`, with registration in `apps/daemon/src/runtimes/registry.ts`; `apps/daemon/src/agents.ts` is a compatibility export surface.
-- `docs/modes.md` distinguishes the six New Project tabs from the seven normalized registry modes (`prototype`, `deck`, `template`, `design-system`, `image`, `video`, and `audio`).
+- [Contribution guide](CONTRIBUTING.md): development setup and PR requirements.
+- [Skills protocol](docs/skills-protocol.md): supported `SKILL.md` frontmatter and functional/rendering ownership.
+- [Agent adapters](docs/agent-adapters.md): adapter integration and runtime definitions.
+- [Template guide](design-templates/AGENTS.md): rendering modes and catalogue conventions.

@@ -1,6 +1,6 @@
 # Skills Protocol
 
-**Parent:** [`spec.md`](spec.md) · **Siblings:** [`skills-contributing.md`](skills-contributing.md) · [`architecture.md`](architecture.md) · [`agent-adapters.md`](agent-adapters.md) · [`modes.md`](modes.md)
+**Siblings:** [`skills-contributing.md`](skills-contributing.md) · [app boundaries](../apps/AGENTS.md) · [`agent-adapters.md`](agent-adapters.md) · [template modes](../design-templates/AGENTS.md)
 
 > Want to ship a skill upstream rather than read the protocol spec? See [`skills-contributing.md`](skills-contributing.md) — quick start, merge bar, PR template, common rejections. This file is the **what** (frontmatter grammar, discovery rules, mode semantics); that file is the **how** (clone to merged PR).
 
@@ -105,7 +105,7 @@ Older bundles may also carry fields such as `od.inputs`, `od.parameters`,
 portable `SKILL.md` body but does not use those fields to render forms, sliders,
 choose output files, or gate an agent. The Agent-Skill-to-plugin adapter can
 translate or retain some of that metadata; plugin behavior is specified in
-[`plugins-spec.md`](plugins-spec.md), not by this registry protocol.
+[`plugins-spec.md`](../plugins/spec/SPEC.md), not by this registry protocol.
 
 ### 2.2 If a skill omits `od:` entirely
 
@@ -150,7 +150,7 @@ link, but that storage detail is separate from per-run staging.
 
 ## 4. Registry modes
 
-The daemon normalizes `od.mode` to one of seven values. These values classify both functional skills and design-template bundles; they are not the same thing as the six New Project tabs described in [`modes.md`](modes.md).
+The daemon normalizes `od.mode` to one of seven values. These values classify both functional skills and design-template bundles; they are not the same thing as the six New Project tabs described in [template modes](../design-templates/AGENTS.md).
 
 ### 4.1 `prototype`
 
@@ -217,7 +217,7 @@ Design systems are not copied into the run CWD, section-pruned through
 `{{ design_system }}` variable. Missing rich files preserve compatibility with
 legacy `DESIGN.md`-only folders. The historical nine-heading upstream sample
 remains useful as an interoperability example at
-[`docs/examples/DESIGN.sample.md`](examples/DESIGN.sample.md), but it is not
+[Historical: `5aa368514d:docs/examples/DESIGN.sample.md`](https://github.com/nexu-io/open-design/blob/5aa368514d3d715792a4aca95b04157c771ca9a0/docs/examples/DESIGN.sample.md), but it is not
 the current repository package schema.
 
 ## 5.5 Craft references (`craft/`)
@@ -287,7 +287,7 @@ existing user skill first, then install the new bundle. `od skills` remains the
 compatibility alias for list/show/install/uninstall. Repository-owned
 functional skills and rendering templates still live under `skills/` and
 `design-templates/` respectively. Do not document a concrete daemon-managed
-install path here; the root `AGENTS.md` **Daemon data directory contract** is
+install path here; [daemon data contract](../apps/daemon/AGENTS.md#data-ownership) is
 the only path authority.
 
 ## 7. Worked example — running the bundled guizang deck template
@@ -310,7 +310,7 @@ license preserved and OpenDesign metadata applied:
    deck export surfaces consume the produced project files.
 
 The protocol intentionally does not define the workspace's concrete path; read
-the root `AGENTS.md` **Daemon data directory contract** before changing or
+[daemon data contract](../apps/daemon/AGENTS.md#data-ownership) before changing or
 documenting artifact storage.
 
 ## 8. Writing a rendering template — minimal example

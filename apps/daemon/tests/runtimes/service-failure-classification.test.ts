@@ -66,7 +66,7 @@ describe('classifyAgentServiceFailure', () => {
     ).toBe('AGENT_AUTH_REQUIRED');
   });
 
-  // R-053 (`specs/current/run-error-catalog.md:215`). vela's link gateway maps
+  // R-053 (`5aa368514d:specs/current/run-error-catalog.md:215`). vela's link gateway maps
   // an upstream 401/403 onto its own HTTP 500 with a code that names WHOSE
   // credentials failed: `upstream_provider_unauthenticated` /
   // `upstream_provider_forbidden`

@@ -8,7 +8,7 @@ functional skills) plus rendering side files (`example.html`,
 
 If the entry primarily *does work* on user input — utilities, briefs,
 asset packagers, fidelity audits — it belongs under `../skills/`
-instead. See `specs/current/skills-and-design-templates.md` for the
+instead. See `design-templates/AGENTS.md` for the
 full split.
 
 ## Daemon plumbing

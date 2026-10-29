@@ -232,7 +232,7 @@ Runtime 定義は [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runti
 
 - 🤖 **エージェントネイティブ、モデル非依存。** 私たちはエージェントを同梱しません。すでにあなたの `PATH` にある `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` がデザインエンジンです。ワンクリックで差し替えられます。
 - 🧠 **デフォルトでブランドグレード。** すべてのレンダリングは、アクティブなパッケージの `DESIGN.md` を中核のブランド契約として読み取ります。151 のデザインシステムパッケージが同梱され、従来のパッケージは `DESIGN.md` だけでも、新しいパッケージは `manifest.json`、`tokens.css`、コンポーネント、アセット、出典情報を追加できます。フォルダをドロップすればピッカーが見つけます。
-- 🖥️ **ローカルファースト、あらゆるレイヤーで BYOK。** ネイティブデスクトップアプリはローカルファーストです。製品分析とセッションリプレイには同意が必要です。データを処理・除去した安全性と信頼性のテレメトリは常時有効です。デーモンデータパスを説明する前に、ルートの `AGENTS.md` にある **Daemon data directory contract** を必ず読んでください。
+- 🖥️ **ローカルファースト、あらゆるレイヤーで BYOK。** ネイティブデスクトップアプリはローカルファーストです。製品分析とセッションリプレイには同意が必要です。データを処理・除去した安全性と信頼性のテレメトリは常時有効です。
 - 🌍 **4 つの平面で組み合わせ可能。** **プラグイン**はワークフロー、**機能スキル**はエージェント動作、**デザインテンプレート**はレンダリング設計図、**デザインシステム**はブランドを担います。
 - 🔁 **既存のコードベースをリフレッシュ。** `git` リポジトリ + `DESIGN.md` をエージェントに渡せば、あなたの実際のコンポーネントをブランド仕様にリファクタリングします。
 - 🔒 **信念としてのプライバシー。** プロジェクトはローカルまたは自分で管理する環境で実行できます。クラウドモデルや OpenDesign Cloud へのリクエストは、それぞれのサービスに送信されます。BYOK プロキシには SSRF 対策が含まれます。
@@ -513,13 +513,13 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 |---|---|
 | フロントエンド | Next.js 16 App Router + React 18 + TypeScript |
 | デーモン | Node 24 · Express · SSE ストリーミング · `better-sqlite3` |
-| ストレージ | デーモンのストレージパスを変更または文書化する前に、ルートの `AGENTS.md` にある **Daemon data directory contract** を必ず読んでください。この README でそれを繰り返してはいけません。 |
+| ストレージ | ローカルデータはデーモンのデータディレクトリに保存されます。設定とバックアップ： [Daemon storage](../../QUICKSTART.md#persistent-storage) |
 | プレビュー | filesystem 実行は正規ファイルを描画し、BYOK/API は完全な `<artifact>` ブロックを sandbox `srcdoc` iframe に解析します |
 | エクスポート | HTML（インライン化） · PDF（ブラウザ印刷） · PPTX（エージェント駆動） · ZIP · Markdown · MP4（HyperFrames） |
 | デスクトップ | Electron シェル + サンドボックス化されたレンダラー + サイドカー IPC（STATUS · EVAL · SCREENSHOT · CONSOLE · CLICK · SHUTDOWN） |
 | ライフサイクル | 単一のエントリーポイント: `pnpm tools-dev`（start / stop / run / status / logs / inspect / check） |
 
-完全なアーキテクチャ → [`docs/architecture.md`](../../docs/architecture.md)。スキルプロトコル → [`docs/skills-protocol.md`](../../docs/skills-protocol.md)。エージェントアダプターの契約 → [`docs/agent-adapters.md`](../../docs/agent-adapters.md)。
+完全なアーキテクチャ → [`apps/AGENTS.md`](../../apps/AGENTS.md)。スキルプロトコル → [`docs/skills-protocol.md`](../../docs/skills-protocol.md)。エージェントアダプターの契約 → [`docs/agent-adapters.md`](../../docs/agent-adapters.md)。
 
 ---
 
@@ -543,7 +543,6 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 - [ ] Figma / Pencil → React / Next / Vue の移行プラグイン（アルファ）
 - [ ] 既存コードベースのリフレッシュプラグイン（git リポジトリ + `DESIGN.md` に向ける）
 
-段階的なデリバリー → [`docs/roadmap.md`](../../docs/roadmap.md)。
 
 ---
 
@@ -682,7 +681,6 @@ gh pr create --fill
 | [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | HTML→MP4 のモーショングラフィックスフレームワークで、OpenDesign に第一級の `hyperframes-html` として統合されています。 |
 | [Claude Code skills][skill] | 私たちがそのまま採用している `SKILL.md` 規約。 |
 
-詳細な来歴 → [`docs/references.md`](../../docs/references.md)。
 
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills
 

@@ -152,7 +152,7 @@ describe('澄清卡每题副标题已从提示词整条链路下线', () => {
      *    这类表单的解析形状才不会因为本次下线而改变;
      *  · 产品对同类休眠件的口径是「后续可能要找回」。
      *
-     * 先例:`specs/current/chat-panel-decisions-sheet.md`「六个 qf.visual* 键
+     * 先例:`5aa368514d:specs/current/chat-panel-decisions-sheet.md`「六个 qf.visual* 键
      * **一个不删**」—— 唯一消费者不可达,但删键会让休眠件编译不过,
      * 等于把「留着随时能找回」变成谎话。同一条理由在这里逐字成立。
      */

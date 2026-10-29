@@ -5329,7 +5329,7 @@
       "sessionUpdate": "tool_call_update",
       "toolCallId": "call_01_9rXUjNHTSrNMkPXFTzXY8777",
       "status": "completed",
-      "title": "docs/design/chat-mirror/README.md",
+      "title": "5aa368514d:docs/design/chat-mirror/README.md",
       "kind": "read",
       "rawInput": {
        "filePath": "/Users/elian/Documents/od-wt-chat-panel/docs/design/chat-mirror/README.md"
@@ -10729,7 +10729,7 @@
       "sessionUpdate": "tool_call_update",
       "toolCallId": "call_00_93EQqbkJB5bRDUBwmjpl6325",
       "status": "completed",
-      "title": "specs/current/chat-panel-next.md",
+      "title": "5aa368514d:specs/current/chat-panel-next.md",
       "kind": "read",
       "rawInput": {
        "filePath": "/Users/elian/Documents/od-wt-chat-panel/specs/current/chat-panel-next.md",
@@ -11527,7 +11527,7 @@
       "sessionUpdate": "tool_call_update",
       "toolCallId": "call_02_2oYEbpIbJ36qCo78jF7S0926",
       "status": "completed",
-      "title": "specs/current/chat-panel-dev-design.md",
+      "title": "5aa368514d:specs/current/chat-panel-dev-design.md",
       "kind": "read",
       "rawInput": {
        "filePath": "/Users/elian/Documents/od-wt-chat-panel/specs/current/chat-panel-dev-design.md",
@@ -12539,7 +12539,7 @@
       "sessionUpdate": "tool_call_update",
       "toolCallId": "call_00_414ymdXr6AeLXKACoQg86232",
       "status": "completed",
-      "title": "specs/current/chat-panel-next.md",
+      "title": "5aa368514d:specs/current/chat-panel-next.md",
       "kind": "read",
       "rawInput": {
        "filePath": "/Users/elian/Documents/od-wt-chat-panel/specs/current/chat-panel-next.md",
@@ -12596,7 +12596,7 @@
       "sessionUpdate": "tool_call_update",
       "toolCallId": "call_00_nqeqMbMlnGaONKyqe9Hv3871",
       "status": "completed",
-      "title": "specs/current/chat-panel-next.md",
+      "title": "5aa368514d:specs/current/chat-panel-next.md",
       "kind": "read",
       "rawInput": {
        "filePath": "/Users/elian/Documents/od-wt-chat-panel/specs/current/chat-panel-next.md",
@@ -13267,7 +13267,7 @@
       "sessionUpdate": "tool_call_update",
       "toolCallId": "call_00_eaTQjrkPfmBka7OygIwp9024",
       "status": "completed",
-      "title": "specs/current/chat-panel-next.md",
+      "title": "5aa368514d:specs/current/chat-panel-next.md",
       "kind": "read",
       "rawInput": {
        "filePath": "/Users/elian/Documents/od-wt-chat-panel/specs/current/chat-panel-next.md",
@@ -13485,7 +13485,7 @@
       "sessionUpdate": "tool_call_update",
       "toolCallId": "call_00_2Wg6RWPUdEkxe8B8tdJO5244",
       "status": "completed",
-      "title": "specs/current/chat-panel-decisions-sheet.md",
+      "title": "5aa368514d:specs/current/chat-panel-decisions-sheet.md",
       "kind": "read",
       "rawInput": {
        "filePath": "/Users/elian/Documents/od-wt-chat-panel/specs/current/chat-panel-decisions-sheet.md"

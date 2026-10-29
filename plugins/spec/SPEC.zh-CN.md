@@ -2,7 +2,7 @@
 
 语言：[English](SPEC.md) | 简体中文
 
-这是可移植 OpenDesign 插件的精简契约。完整产品规范仍以 `docs/plugins-spec.zh-CN.md` 为准；本文档面向贡献者和外部编码 agent。
+这是可移植 OpenDesign 插件的精简契约。完整产品规范仍以 `plugins/spec/SPEC.zh-CN.md` 为准；本文档面向贡献者和外部编码 agent。
 
 ## 1. 最小插件
 
@@ -216,3 +216,18 @@ preview 应展示真实输出形态，而不是装饰性的 splash screen。
 7. 在 PR body 里说明 trust 和 capabilities。
 
 外部 registry 分发策略见 [`PUBLISHING-REGISTRIES.zh-CN.md`](PUBLISHING-REGISTRIES.zh-CN.md)。简言之：把 GitHub 或 OpenDesign PR 作为 source of truth，让文件夹能作为通用 `SKILL.md` skill 安装；本地验证通过后，再发布或登记到 skills.sh、ClawHub 或其他 registry。
+
+## Schema 与运行时边界
+
+使用 [plugin schema](schemas/open-design.plugin.v1.json) 与
+[marketplace schema](schemas/open-design.marketplace.v1.json)，并对照
+`packages/contracts/src/plugins/`、`packages/plugin-runtime/` 中的纯解析器。
+Schema 描述 v1 sidecar，运行时校验由这些包实现；修改协议时同步 schema 与消费者。
+
+### Atom 与 Connector
+
+Atom 由 daemon 实现，plugin 在 pipeline stage 和 context 中按 id 引用。
+通过 `GET /api/atoms`、`od atoms list --json`、`od atoms info <id>` 发现当前能力，
+不要在每个 plugin 中复制目录。`od.connectors` 声明必需或可选的 connector id 与工具；
+plugin 不持有 OAuth 凭据，凭据及连接状态由 daemon connector adapter 管理。
+Doctor 按可用目录和 `connector:<id>` capability 校验这些声明。

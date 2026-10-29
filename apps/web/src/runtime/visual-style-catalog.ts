@@ -20,7 +20,7 @@
  *
  * 这是**对交付稿的有意偏离**:交付稿 `729fa43ce7` 的 `cmp-clarify` 第 21 / 22 格
  * 画的就是这张卡,状态标签逐字写着「选中一张 · 图上落绿勾,「下一步」才亮起」。
- * 别当成漏做补回去。裁决全文见 `specs/current/chat-panel-decisions-sheet.md` 的 T69。
+ * 别当成漏做补回去。裁决全文见 `5aa368514d:specs/current/chat-panel-decisions-sheet.md` 的 T69。
  *
  * ── 安全网:它为什么必须继续能渲染 ───────────────────────────
  *

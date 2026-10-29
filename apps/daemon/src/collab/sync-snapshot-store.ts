@@ -8,7 +8,7 @@
 //
 // The row lives in the daemon's SQLite database, which the daemon opened from
 // the resolved runtime data root — this module never resolves a data path of
-// its own (see the Daemon data directory contract in AGENTS.md).
+// its own (see the daemon data contract in apps/daemon/AGENTS.md#data-ownership).
 
 import type Database from 'better-sqlite3';
 import type { CollabCloudMemberDirectoryEntry, TeamProject } from '@open-design/contracts';

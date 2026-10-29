@@ -15,12 +15,12 @@
  * 都没有,于是直落最后那个 `doneLabel`。
  *
  * ── 判据出处(逐条,不是「看起来重复」)────────────────────────────
- *  · `specs/current/chat-panel-next.md` B18:「整轮失败:执行记录头「运行失败」
+ *  · `5aa368514d:specs/current/chat-panel-next.md` B18:「整轮失败:执行记录头「运行失败」
  *    默认收起,下面出组件 19 报错卡…**不出回合状态行**」
- *  · `specs/current/chat-panel-dev-design.md` 状态机:「运行失败(默认收起,
+ *  · `5aa368514d:specs/current/chat-panel-dev-design.md` 状态机:「运行失败(默认收起,
  *    报错卡接手)」+ 场景表「失败 | … | 壳头「运行失败」收起 + 报错卡,
  *    **无回合状态行**」
- *  · `specs/current/chat-panel-next-review.md` B18 同条
+ *  · `5aa368514d:specs/current/chat-panel-next-review.md` B18 同条
  *
  * ⚠️ **空流那一档不在此列**。API 空回复把这一轮也写成 `runStatus: 'failed'`
  * (`ProjectView.tsx` 的 `emptyApiResponse` 分支),但它的状态词是「没有输出」,

@@ -1,6 +1,6 @@
 # Contributing a Design Template
 
-**Parent:** [`spec.md`](spec.md) · **Siblings:** [`skills-protocol.md`](skills-protocol.md) · [`architecture.md`](architecture.md) · [`modes.md`](modes.md)
+**Siblings:** [`skills-protocol.md`](skills-protocol.md) · [app boundaries](../apps/AGENTS.md) · [template modes](../design-templates/AGENTS.md)
 
 > Want to read the shared `SKILL.md` protocol instead? See [`skills-protocol.md`](skills-protocol.md). This file is the **how-to** for shipping a rendering template upstream — what to write, how to run it locally, and what we'll send back at review.
 
@@ -158,9 +158,7 @@ pnpm tools-dev run web
 #        <artifact> block is emitted.
 #      * text_artifact: with no filesystem tools, one complete standalone
 #        <artifact> block is the canonical result and must not claim file writes.
-#      This guide MUST NOT define daemon data paths; read the root AGENTS.md
-#      section "Daemon data directory contract" before changing or documenting
-#      artifact storage.
+#      Storage configuration and ownership: apps/daemon/AGENTS.md#data-ownership.
 #    - Verify preview iframe renders correctly
 #    - Verify export (PPTX / PDF) works if the mode supports it
 ```
@@ -284,8 +282,8 @@ Pick the closest one to your idea and read its `SKILL.md` body before writing yo
 ### Spec & supporting docs
 
 - [`skills-protocol.md`](skills-protocol.md) — full frontmatter grammar, discovery & precedence rules, mode semantics, craft references, testing primitives
-- [`architecture.md`](architecture.md) — daemon ↔ web ↔ skill registry data flow
-- [`modes.md`](modes.md) — what the Prototype / Deck / Template / Image / Video / Audio template modes mean to the runtime
+- [app boundaries](../apps/AGENTS.md) — daemon ↔ web ↔ skill registry data flow
+- [template modes](../design-templates/AGENTS.md) — what the Prototype / Deck / Template / Image / Video / Audio template modes mean to the runtime
 - [`../CONTRIBUTING.md`](../CONTRIBUTING.md) — code style, commit conventions, "what we don't accept" for the broader project
 
 ### Upstream

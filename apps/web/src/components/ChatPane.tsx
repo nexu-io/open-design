@@ -1604,7 +1604,7 @@ export function ChatPane({
          *
          * This reconciles a task's *path* only. Which version of a same-named
          * file a historical card shows is a separate design
-         * (specs/current/chat-artifact-versioning-design.md), so a task whose
+         * (5aa368514d:specs/current/chat-artifact-versioning-design.md), so a task whose
          * name is unchanged reconciles to itself and nothing re-renders.
          */
         const needsTerminalFileConfirmation = relevant.some((task) => (

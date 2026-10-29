@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 /*
- * 2026-08-26 产品裁决(B46,`specs/current/chat-panel-feedback.md`,落在 52131c2cf6):
+ * 2026-08-26 产品裁决(B46,`5aa368514d:specs/current/chat-panel-feedback.md`,落在 52131c2cf6):
  * 评审剧场(Critique Theater)**已下线**。`isCritiqueEnabled` 在总闸上恒返回 false
  * (`apps/daemon/src/critique/rollout.ts` 的 `CRITIQUE_THEATER_RETIRED`),skill /
  * project / env / phase 四层一起失效 —— 提示词不再注入,编排器不再启动。

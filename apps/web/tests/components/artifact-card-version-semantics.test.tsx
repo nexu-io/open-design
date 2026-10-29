@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 /**
- * 会话产物卡的**版本语义**(`specs/current/chat-artifact-versioning-design.md`
+ * 会话产物卡的**版本语义**(`5aa368514d:specs/current/chat-artifact-versioning-design.md`
  * §3.2 / §4 / §8,加 2026-09-02 产品的两处口径更正)。
  *
  * | 产物 | 卡面 | 点击 |

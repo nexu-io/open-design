@@ -41,7 +41,7 @@
  *
  * ── 「很久」定在 8 秒,量出来的 ────────────────────────────────────────
  *
- * 健康推理时这些帧的间隔 p50 是 1.4s(`specs/current/chat-panel-next.md` 那两份真实
+ * 健康推理时这些帧的间隔 p50 是 1.4s(`5aa368514d:specs/current/chat-panel-next.md` 那两份真实
  * 录制量的正是这个数),整轮里见过的最大间隔 4.88s。门槛压在 5s 以下,健康推理会
  * 一路来回翻面。8s ≈ 5.7 倍 p50、1.6 倍最大间隔,又远在壳那两个 60s 门槛
  * (`SLOW_UPSTREAM_AFTER_MS` / `WAITING_FIRST_OUTPUT_AFTER_MS`)之前。

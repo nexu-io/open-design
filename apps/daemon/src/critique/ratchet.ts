@@ -17,7 +17,7 @@
  * endpoint, and lets vitest pin every cell of the decision matrix
  * without standing up a daemon.
  *
- * Spec source: `specs/current/critique-theater.md` § Rollout, which
+ * Spec source: `5aa368514d:specs/current/critique-theater.md` § Rollout, which
  * states the M3 threshold as "14 consecutive days at >= 90% adapter
  * conformance across the fleet". The clean-parse threshold (>= 95%
  * runs free of parser_warning) is a sibling gate; both must hold.

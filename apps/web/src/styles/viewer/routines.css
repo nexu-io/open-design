@@ -1846,7 +1846,7 @@
  * 于是陈列页里是黑的、真实产品里是灰的,同一个组件两个样子。
  * 用户连着截了四次图问「这个消息怎么还是这个样式」。
  *
- * 教训记在 `specs/current/chat-panel-feedback.md` B37:陈列页照不出
+ * 教训记在 `5aa368514d:specs/current/chat-panel-feedback.md` B37:陈列页照不出
  * 「只在 app 壳里才生效」的规则。删掉这一整条,让稿子那条直接生效。
  */
 .app .msg.user .user-copy-btn,

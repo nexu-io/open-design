@@ -1105,12 +1105,12 @@ function AssistantMessageImpl({
    * 整轮失败的那一轮,**「这一轮到此为止」由壳头那句「运行失败」宣布**,页脚不再重说。
    *
    * 出处(逐条,不是「看起来重复」):
-   *  · `specs/current/chat-panel-next.md` B18 逐字:「整轮失败:执行记录头「运行失败」
+   *  · `5aa368514d:specs/current/chat-panel-next.md` B18 逐字:「整轮失败:执行记录头「运行失败」
    *    默认收起,下面出组件 19 报错卡…**不出回合状态行**」;
-   *  · `specs/current/chat-panel-dev-design.md` 状态机「运行失败(默认收起,报错卡接手)」
+   *  · `5aa368514d:specs/current/chat-panel-dev-design.md` 状态机「运行失败(默认收起,报错卡接手)」
    *    与场景表「失败 | … | 壳头「运行失败」收起 + 报错卡,**无回合状态行**」;
    *    同文件写死分工 —— 壳只有三态,「运行失败」是**壳的词**;
-   *  · `specs/current/chat-panel-next-review.md` B18 同条;
+   *  · `5aa368514d:specs/current/chat-panel-next-review.md` B18 同条;
    *  · 交付稿(`729fa43ce7:docs/design/chat-panel-next.html`):「任务挂了是 19 · 报错。
    *    两边不重复:这一行只负责宣布『这轮到此为止』」。
    *

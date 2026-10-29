@@ -61,7 +61,7 @@ describe('buildPublishLink', () => {
 
   it('builds an OpenDesign registry submission URL', () => {
     // The dedicated `open-design/plugin-registry` repo per
-    // docs/plans/plugin-registry.md §1.2 is the long-term target; until that
+    // 5aa368514d:docs/plans/plugin-registry.md §1.2 is the long-term target; until that
     // operational launch step happens, submissions land in `nexu-io/open-design`
     // (plugins/community/<plugin-name>/), keeping contribution where stars and
     // PR traffic already are.

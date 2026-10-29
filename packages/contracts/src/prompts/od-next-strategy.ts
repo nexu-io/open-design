@@ -187,7 +187,7 @@ export function resolveOdNextDeckFrameworkMode(input: {
  * `<question-form>` guidance in the legacy `discovery.ts`, and
  * `resolveOdNextDeckFrameworkMode` above reaches the shared deck scaffold. So
  * "does OD Next say X?" has two possible homes; check both. See
- * `docs/prompt-composition.md`.
+ * `apps/daemon/src/prompts/AGENTS.md`.
  */
 export const OD_NEXT_PROMPT_STAGE_CONTRACT_V2 = [
   { id: 'discovery', atoms: ['discovery-question-form'] },

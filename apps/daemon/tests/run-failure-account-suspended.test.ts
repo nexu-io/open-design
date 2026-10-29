@@ -1,7 +1,7 @@
 // 红测:风控封号必须被分类成 `account_suspended`,而不是继续落进
 // `fatal_rpc_error` / `execution_failed`。
 //
-// 依据:`specs/current/run-error-catalog.md` R-064「封号 account_suspended …
+// 依据:`5aa368514d:specs/current/run-error-catalog.md` R-064「封号 account_suspended …
 // 文案无正则 → 可重试「Task failed」… 卡(联系支持,不给 Retry)」,
 // 以及 §6.Z 原则四那一句(「额度用完、账号被封、CPU 不支持这三类拿不到重试」)。
 //

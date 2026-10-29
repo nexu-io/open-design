@@ -74,6 +74,6 @@ generated-plugin/
 
 ## Spec references
 
-- `docs/plugins-spec.md`
-- `docs/schemas/open-design.plugin.v1.json`
+- `plugins/spec/SPEC.md`
+- `plugins/spec/schemas/open-design.plugin.v1.json`
 - The sibling `plugins/_official/scenarios/od-plugin-authoring/SKILL.md` for the from-scratch authoring counterpart.

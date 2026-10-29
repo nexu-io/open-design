@@ -8,7 +8,7 @@
  * ## 稿子怎么规定的
  *
  * 权威是 `docs/design/chat-panel-next.html`(PR #7170 head `1bbdce0b06`,
- * md5 `28ea4c65…`,即 `specs/current/chat-panel-next.md` §1.1 点名的那一版)。
+ * md5 `28ea4c65…`,即 `5aa368514d:specs/current/chat-panel-next.md` §1.1 点名的那一版)。
  * 无头 Chrome 实测那一沓的四层:
  *
  * | 层 | opacity | background-color | filter | 压名字的兜底渐变 |

@@ -39,7 +39,7 @@
  * N8-d 选择器真的能命中:壳里确实是这个 DOM
  *
  * jsdom 不做布局,几何**不在这里量**;真机数字在 Chrome 里量,记在
- * `specs/current/chat-panel-feedback.md` §F-18(含 harness 与逐行表)。
+ * `5aa368514d:specs/current/chat-panel-feedback.md` §F-18(含 harness 与逐行表)。
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render } from '@testing-library/react';

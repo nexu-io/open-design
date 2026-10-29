@@ -12,7 +12,7 @@
  *   OD_WRITE_RAIL=/abs/path/probe.html pnpm --filter @open-design/web exec \
  *     vitest run -c vitest.config.ts tests/components/chat/record-columns-probe.test.tsx
  * 然后用无头 Chrome 的 CDP 打开那张页面读坐标 —— 做法照
- * `docs/design/chat-mirror/measure.mjs`(本仓库不装 playwright)。
+ * `5aa368514d:docs/design/chat-mirror/measure.mjs`(本仓库不装 playwright)。
  *
  * 落点**由命令给,不写在这里**:合并闸的 web 车道会跑这个文件,而 `docs/` 是
  * certain-exempt 面,源码里出现那条路径会让一次纯文档改动影响一条本该跳过的车道。

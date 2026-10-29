@@ -16,7 +16,7 @@
  * 随时可能被接回屏幕上 —— `QueuedSendStrip` 的 `steerBlockedReason` 也是**故意
  * 留着没删**的(见 `ChatPane.tsx` 那条 docblock:这句解释该摆在界面哪里还没
  * 裁决)。等它接回来的那天才发现中文写的是「插话」,就晚了。参照仓库先例:
- * 休眠件还在就不删键(`specs/current/chat-panel-decisions-sheet.md`「六个
+ * 休眠件还在就不删键(`5aa368514d:specs/current/chat-panel-decisions-sheet.md`「六个
  * `qf.visual*` 键一个不删」)。
  *
  * ⚠️ **这是一条对文案数据的 lint,不是行为测试。** 它读词典、断言词典,

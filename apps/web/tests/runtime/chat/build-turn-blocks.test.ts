@@ -198,7 +198,7 @@ describe('工具行(D3 / D23 / §2.2b)', () => {
 /* ── done 分界(D43,已被 2026-08-26 落块裁决收紧)──────────── */
 
 /*
- * 裁决原话见 `specs/current/chat-panel-feedback.md` D 节:
+ * 裁决原话见 `5aa368514d:specs/current/chat-panel-feedback.md` D 节:
  * **还没有 todo 时,普通正文落在壳外**;壳里只装工具调用和 thinking。
  *
  * 于是 D43 的「done 之前进壳、之后出壳」只在**有 todo 的阶段**还成立

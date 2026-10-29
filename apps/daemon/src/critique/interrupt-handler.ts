@@ -26,7 +26,7 @@ const HTTP_ACCEPTED = 202;
  * below_threshold, legacy) still return 409 because the run reached its real
  * terminal state on its own and an interrupt is no longer meaningful.
  *
- * @see specs/current/critique-theater.md § interrupt endpoint (Task 6.1)
+ * @see 5aa368514d:specs/current/critique-theater.md § interrupt endpoint (Task 6.1)
  */
 export function handleCritiqueInterrupt(
   db: Database.Database,

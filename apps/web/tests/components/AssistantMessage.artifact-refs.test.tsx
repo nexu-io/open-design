@@ -8,7 +8,7 @@
  * 出快照」一模一样 —— 卡面照样是 live iframe、图片照样读当前文件 —— 所以它**必须
  * 单独有一条**,不能靠组件层那几条代劳。
  *
- * 语义(`specs/current/chat-artifact-versioning-design.md` §4 + 2026-09-02 产品口径):
+ * 语义(`5aa368514d:specs/current/chat-artifact-versioning-design.md` §4 + 2026-09-02 产品口径):
  *  · HTML / 原型 / slide / 文档 → 卡面是当轮静态首屏截图,点击开工作区最新版本;
  *  · 图片 → 卡面是当轮不可变真图快照,点击开那张快照;
  *  · 两类都没快照时降级(live iframe / 当前文件),不出占位、不写失败文案。

@@ -5,7 +5,7 @@
 // from apps/daemon/browser/React, and (deliberately) NO project/app UI state — an
 // AgentTask is a bounded ownership record, not a `ProjectView`. The runtime that
 // creates, persists, and enforces these lands in slice 5 (see
-// docs/rfc-drafts/agent-ready-cross-project.md); this file is only the shape.
+// 5aa368514d:docs/rfc-drafts/agent-ready-cross-project.md); this file is only the shape.
 
 /**
  * Lifecycle states for an {@link AgentTask}. The `const` array mirrors the house

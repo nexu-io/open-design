@@ -1,10 +1,10 @@
 # Agent Adapters
 
-**Parent:** [`spec.md`](spec.md) · **Siblings:** [`architecture.md`](architecture.md) · [`skills-protocol.md`](skills-protocol.md) · [`new-agent-runtime-acp.md`](new-agent-runtime-acp.md) · [`modes.md`](modes.md)
+**Siblings:** [app boundaries](../apps/AGENTS.md) · [`skills-protocol.md`](skills-protocol.md) · [runtime maintenance](../apps/daemon/src/runtimes/AGENTS.md) · [template modes](../design-templates/AGENTS.md)
 
 The adapter layer is OD's most load-bearing design decision. We delegate the **entire agent loop** — model calls, tool use, context management, permission handling, resume, cancel — to the user's existing code agent CLI. OD's job is to detect it, feed it a skill + prompt + working directory, and stream its output back to the web UI.
 
-If you're adding a new ACP-backed runtime, start with [`new-agent-runtime-acp.md`](new-agent-runtime-acp.md) for the expected stdio transport, JSON-RPC message flow, and process lifecycle contract.
+If you're adding a new ACP-backed runtime, start with [runtime maintenance](../apps/daemon/src/runtimes/AGENTS.md) for the expected stdio transport, JSON-RPC message flow, and process lifecycle contract.
 
 > **Thesis:** The code agent space has already converged on strong implementations (Claude Code, Codex, Devin for Terminal, Cursor Agent, OpenCode, Qoder CLI, and others). Reimplementing another one is worse than talking to all of them.
 >
@@ -241,7 +241,7 @@ authentication, and the boundary between REST and MCP.
   events settle the same row with diff statistics and execution status.
   This covers `apply_patch`, not arbitrary shell command arguments. The
   upstream feature remains opt-in; absence of preview events does not block
-  completion. See [patch-stream validation](testing/codex-patch-streaming.md).
+  completion. See [patch-stream validation](../e2e/AGENTS.md).
 - `OD_CODEX_TRANSPORT=exec-json` selects the legacy transport:
   `codex exec --json --skip-git-repo-check` with the effective sandbox,
   create-only `-C`/`--add-dir`, and optional model/reasoning overrides.

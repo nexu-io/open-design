@@ -750,7 +750,7 @@ async function bakeOne(browser, id, hash, options) {
   // same source resolves to the same keys. The manifest stores these
   // PREFIX-RELATIVE keys; it must NOT repeat the `plugin-previews/` segment that
   // the base URL already carries, or `${base}/${key}` would double it and 404
-  // (see specs/change/20260618-plugin-preview-bake-pipeline/spec.md §0). The
+  // (see 5aa368514d:specs/change/20260618-plugin-preview-bake-pipeline/spec.md §0). The
   // daemon resolves both `${base}/${key}` and `path.join(dir, key)`, which handle
   // the nested path transparently — no consumer change needed. Existing flat
   // `<id>.<hash>.mp4` entries are left untouched on reuse (additive migration).

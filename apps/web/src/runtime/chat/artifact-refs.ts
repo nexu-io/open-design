@@ -1,7 +1,7 @@
 /**
  * 会话产物的**版本身份**:把 daemon 投影在消息上的 `artifactRefs` 收成产物卡能用的形状。
  *
- * 产品裁决(会话栏产物版本语义,`specs/current/chat-artifact-versioning-design.md`
+ * 产品裁决(会话栏产物版本语义,`5aa368514d:specs/current/chat-artifact-versioning-design.md`
  * §3.2 / §4 / §8):
  *
  * | 产物 | 卡面 | 点击 |

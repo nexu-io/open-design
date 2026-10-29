@@ -1,7 +1,7 @@
 /**
  * 红测(S12 · 等太久没动静):壳要知道「上一件事之后过了多久」。
  *
- * 权威:`docs/design/run-errors/error-ux-design.md:33`
+ * 权威:`5aa368514d:docs/design/run-errors/error-ux-design.md:33`
  * 「60 秒没新输出显示『上游响应慢，已等 N 秒』+〔停止〕;10 分钟(Cloud 30 分钟)
  * 没输出才报超时」;产品口述的落点是**现有那张「进行中」可展开卡片的文案**,
  * 不新起一块 UI(`chat-panel-feedback.md` §F)。

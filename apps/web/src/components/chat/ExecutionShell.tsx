@@ -247,7 +247,7 @@ export function ExecutionShell({
        *
        * 这里曾经在静默超过 `SLOW_UPSTREAM_AFTER_MS` 时把壳头换成
        * 「上游响应慢，已等 N 秒」(S12「等太久没动静」,P1,18,891 次/月、6,372 台,
-       * 门槛与文案逐字来自 `docs/design/run-errors/error-ux-design.md:33`)。
+       * 门槛与文案逐字来自 `5aa368514d:docs/design/run-errors/error-ux-design.md:33`)。
        * 产品裁决把它撤了,原话:「这个文案先让 subagent 改回 进行中 吧,跟产品讨论了下,
        * 但背后的探测逻辑先保留,后续可能会用到,只不过用别的展现形式」。
        * 触发裁决的画面是壳头那一行「上游响应慢，已等 411 秒  13m 7s」—— 一句话占满壳头,
@@ -308,7 +308,7 @@ export function ExecutionShell({
    * 而 daemon 这一刻正逐字发着
    * `{"type":"status","label":"waiting_for_first_output","elapsedMs":27217}`
    * (`apps/daemon/src/agent-protocol/acp/session.ts:849`)—— 它知道在等什么,屏幕不说。
-   * 稿子 `docs/design/run-errors/error-ux-design.md:21` 当初要的是这一句:
+   * 稿子 `5aa368514d:docs/design/run-errors/error-ux-design.md:21` 当初要的是这一句:
    * 「超过 60 秒没动静,**转圈旁边**要说『在等什么、等了多久』;**不到超时不报错**」。
    *
    * ⚠️ 补进去的最终**只有那一行的存在**,不是它的措辞 —— 稿子那句「在等什么」后来被

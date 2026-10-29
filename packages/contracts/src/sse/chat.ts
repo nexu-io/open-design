@@ -277,7 +277,7 @@ export type DaemonAgentPayload =
    * **Do not render it.** It marks the model *composing the next* tool call,
    * not a tool executing — by the time it flows the previous tool has already
    * returned. The chat design forbids an in-flight tool row outright (D3 / B8 in
-   * `specs/current/chat-panel-next.md`); in-flight feedback is the execution
+   * `5aa368514d:specs/current/chat-panel-next.md`); in-flight feedback is the execution
    * shell's orb plus its ticking elapsed timer, and the design is explicit that
    * one such affordance is enough. `id` (the content-block id, equal to the
    * eventual `tool_use.id`) and `name` are carried for correlation only.

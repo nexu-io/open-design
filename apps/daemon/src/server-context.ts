@@ -26,7 +26,7 @@ export interface PathDeps {
   BUNDLED_PETS_DIR: string;
   CRAFT_DIR: string;
   DESIGN_SYSTEMS_DIR: string;
-  // Bundled rendering catalogue (see specs/current/skills-and-design-templates.md).
+  // Bundled rendering catalogue (see 5aa368514d:specs/current/skills-and-design-templates.md).
   // Distinct from SKILLS_DIR so the EntryView Templates surface and the
   // Settings → Skills surface stay decoupled.
   DESIGN_TEMPLATES_DIR: string;

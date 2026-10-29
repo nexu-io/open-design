@@ -23,7 +23,7 @@
  * ── 这个值是量出来的,不是推出来的 ────────────────────────────────────
  * 量法:真实 Chrome(Google Chrome 0.1.41 profile)打开设计交付页
  * `chat-panel-next-pr7170-8015870.html`(md5 `495992a904b6674dd07db4e0cb8d6f19`,
- * = PR #7170 @ `8015870095`,`specs/current/chat-panel-dispatch-2026-09-02.md`
+ * = PR #7170 @ `8015870095`,`5aa368514d:specs/current/chat-panel-dispatch-2026-09-02.md`
  * 认定的唯一最新设计基准),对 `getComputedStyle(el).fontWeight` 逐颗读。
  *
  * 2026-09-02 实测(293 颗 `<button>`):**400 × 195 / 500 × 43 / 600 × 55**。

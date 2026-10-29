@@ -45,7 +45,7 @@ Für die Desktop-Shell und alle verwalteten Sidecars im Hintergrund:
 pnpm tools-dev # startet daemon + web + desktop im Hintergrund
 ```
 
-Beim ersten Laden erkennt die App die verfügbaren lokalen Runtimes und bietet zusätzlich die in den Einstellungen konfigurierten BYOK-Runtimes an. Wählen Sie eine Runtime, ein Design-Template und ein Design System, geben Sie einen Prompt ein und klicken Sie auf **Senden**. Strukturierte lokale Runtimes schreiben kanonische Projektdateien und streamen Datei-/Tool-Events; Dateiarbeitsbereich und Vorschau aktualisieren sich aus diesen Schreibvorgängen. Reine Text- und BYOK-Läufe liefern stattdessen einen vollständigen `<artifact>`-Block, den der Host parst. Bevor Sie einen Artifact-Speicherpfad dokumentieren oder ändern, MÜSSEN Sie `AGENTS.md` im Repository-Stamm lesen, Abschnitt **Daemon data directory contract**.
+Beim ersten Laden erkennt die App die verfügbaren lokalen Runtimes und bietet zusätzlich die in den Einstellungen konfigurierten BYOK-Runtimes an. Wählen Sie eine Runtime, ein Design-Template und ein Design System, geben Sie einen Prompt ein und klicken Sie auf **Senden**. Strukturierte lokale Runtimes schreiben kanonische Projektdateien und streamen Datei-/Tool-Events; Dateiarbeitsbereich und Vorschau aktualisieren sich aus diesen Schreibvorgängen. Reine Text- und BYOK-Läufe liefern stattdessen einen vollständigen `<artifact>`-Block, den der Host parst.
 
 Der Katalog **Design Systems** wird direkt aus den `DESIGN.md`-Paketen unter [`design-systems/`](../../design-systems/) geladen. Wählen Sie eines aus, um die visuelle Sprache der Marke auf das Artifact anzuwenden.
 
@@ -191,9 +191,7 @@ OD_API_TOKEN=
 
 ## Dauerhafter Speicher
 
-Bevor Sie einen persistenten Daemon-Speicherpfad dokumentieren, ändern oder auswählen,
-MÜSSEN Sie `AGENTS.md` im Repository-Stamm lesen, Abschnitt **Daemon data directory contract**.
-Dieser Quickstart DARF diesen Vertrag NICHT wiederholen oder Speicherpfade definieren.
+Docker Compose speichert Daten in einem persistenten benannten Volume. Behalten Sie es beim Upgrade. Konfiguration und Sicherung: [Daemon storage](../../QUICKSTART.md#persistent-storage)
 
 ---
 
@@ -334,9 +332,9 @@ open-design/
 
 ## Bezug zur Vision
 
-Dieser Schnellstart ist der lauffähige Einstieg zur Spec in [`docs/`](../../docs/). Die Spec beschreibt, wohin das Projekt wächst (siehe [`docs/roadmap.md`](../../docs/roadmap.md)). Highlights:
+Dieser Schnellstart ist der lauffähige Einstieg zur Spec in [`docs/`](../../docs/). Die Spec beschreibt, wohin das Projekt wächst (siehe [Archiviert: `5aa368514d:docs/roadmap.md`](https://github.com/nexu-io/open-design/blob/5aa368514d3d715792a4aca95b04157c771ca9a0/docs/roadmap.md)). Highlights:
 
-- `docs/architecture.md` beschreibt den ausgelieferten Stack: Next.js 16 App Router vorne, lokaler daemon dahinter und `apps/web/next.config.ts` Rewrites in dev, damit der Browser mit derselben `/api` Oberfläche spricht.
+- `apps/AGENTS.md` beschreibt den ausgelieferten Stack: Next.js 16 App Router vorne, lokaler daemon dahinter und `apps/web/next.config.ts` Rewrites in dev, damit der Browser mit derselben `/api` Oberfläche spricht.
 - `docs/skills-protocol.md` beschreibt das aktuelle `SKILL.md`-/`od:`-Frontmatter und die Trennung zwischen funktionalen Skills und Rendering-Templates. Parser und Normalisierung in [`apps/daemon/src/skills.ts`](../../apps/daemon/src/skills.ts) sind die Implementierungsquelle der Wahrheit.
 - `docs/agent-adapters.md` beschreibt den Adapter-Vertrag. Runtime-spezifische Launch-, Argument-, Modell- und Stream-Einstellungen liegen unter `apps/daemon/src/runtimes/defs/`; registriert werden sie in `apps/daemon/src/runtimes/registry.ts`. `apps/daemon/src/agents.ts` ist eine Kompatibilitäts-Exportfläche.
-- `docs/modes.md` unterscheidet die sechs New-Project-Tabs von den sieben normalisierten Registry-Modi (`prototype`, `deck`, `template`, `design-system`, `image`, `video`, `audio`).
+- `design-templates/AGENTS.md` unterscheidet die sechs New-Project-Tabs von den sieben normalisierten Registry-Modi (`prototype`, `deck`, `template`, `design-system`, `image`, `video`, `audio`).

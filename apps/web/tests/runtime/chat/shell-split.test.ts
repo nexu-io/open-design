@@ -14,7 +14,7 @@
  * (thinking 事件不带时刻,前一张只能退回轮次跨度)。
  *
  * 更早的两版(T34「清单之前说过话才分张」、以及「第一张壳里有东西就分张」)都已作废,
- * 取舍全记在 `specs/current/chat-panel-feedback.md` 的 D 节。
+ * 取舍全记在 `5aa368514d:specs/current/chat-panel-feedback.md` 的 D 节。
  */
 import { describe, expect, it } from 'vitest';
 import type { PersistedAgentEvent } from '@open-design/contracts';

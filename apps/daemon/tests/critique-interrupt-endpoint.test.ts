@@ -5,7 +5,7 @@
  * SQLite database and a real RunRegistry so the full handler logic is exercised
  * without starting the full daemon server.
  *
- * @see specs/current/critique-theater.md § interrupt endpoint (Task 6.1)
+ * @see 5aa368514d:specs/current/critique-theater.md § interrupt endpoint (Task 6.1)
  */
 import http from 'node:http';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';

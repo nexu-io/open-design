@@ -1,5 +1,5 @@
 // Contract test for the `od templates` CLI surface. Keeps the
-// UI / API / CLI triple wired together (AGENTS.md "Capability exposure"):
+// UI / API / CLI triple wired together (root AGENTS.md §2 (UI/CLI parity)):
 // the CLI must drive the same /api/templates endpoints the web UI uses
 // (NewProjectPanel / ExamplesTab), with --json support for headless
 // agents that pipe through jq / xargs.

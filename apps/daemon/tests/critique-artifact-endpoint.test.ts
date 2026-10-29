@@ -7,7 +7,7 @@
  * missing-file 404, mime/Content-Type response) is exercised without
  * starting the full daemon server.
  *
- * @see specs/current/critique-theater.md § rerun endpoint (Task 6.2)
+ * @see 5aa368514d:specs/current/critique-theater.md § rerun endpoint (Task 6.2)
  */
 import http from 'node:http';
 import { mkdirSync, mkdtempSync, writeFileSync, symlinkSync } from 'node:fs';

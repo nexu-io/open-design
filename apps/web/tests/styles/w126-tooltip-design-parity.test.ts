@@ -146,7 +146,7 @@ describe('淡入淡出 —— 稿 components.css:2707', () => {
    *   `:132 --curve-decelerate-mid: cubic-bezier(0, 0, 0, 1)`
    * 所以这里连写法一起照搬,不折算成字面值 —— 折算之后 token 一改这条就悄悄脱钩。
    *
-   * ⚠️ 和 `AGENTS.md`「UI animation philosophy」的默认值**不同**:那条默认是
+   * ⚠️ 和 `apps/web/AGENTS.md`「UI animation philosophy」的默认值**不同**:那条默认是
    * `cubic-bezier(0.23, 1, 0.32, 1)`、进场 ~200ms / 退场 ~140ms。这里按稿子走
    * (聊天面板的设计稿是这个面板的事实源),两条都仍然满足那节的硬约束 ——
    * `cubic-bezier(0,0,0,1)` 是减速曲线(不是被禁的 ease-in),也没有从 scale(0) 起。

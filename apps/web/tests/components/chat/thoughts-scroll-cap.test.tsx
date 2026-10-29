@@ -7,8 +7,8 @@
  *
  * ── 2026-09-02 产品裁决:**限高两态都要**,本文件据此更新 ──────────────
  *
- * 用户原话(记在 `specs/current/chat-stream-scroll-research.md:28`,源头是同日
- * `specs/current/chat-panel-dispatch-2026-09-02.md` §产品裁决 1 那条线):
+ * 用户原话(记在 `5aa368514d:specs/current/chat-stream-scroll-research.md:28`,源头是同日
+ * `5aa368514d:specs/current/chat-panel-dispatch-2026-09-02.md` §产品裁决 1 那条线):
  *   「但我记得 thinking 下面文本不是有最大高度吗?**就跟那个 thinking 完成后的
  *     展示那样,有最大高度**」
  * 被推翻的一直只有「**定高 + 慢速分步滚 + 上下渐隐遮罩**」那一套
@@ -34,7 +34,7 @@
  *
  * ⚠️ jsdom **没有布局**:`max-height` 到底截没截住、有没有滚动条,这一层量不出来。
  * 这个文件只钉「限高这件事接上了没有、接在哪一档上」;真实几何在无头 Chrome 里量,
- * 记录见 `specs/current/chat-panel-feedback.md` §F-17。
+ * 记录见 `5aa368514d:specs/current/chat-panel-feedback.md` §F-17。
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render } from '@testing-library/react';

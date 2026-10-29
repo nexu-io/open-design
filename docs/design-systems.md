@@ -1,6 +1,6 @@
 # Design system authoring guide
 
-**Parent:** [`spec.md`](spec.md) · **Siblings:** [`architecture.md`](architecture.md) · [`skills-protocol.md`](skills-protocol.md) · [`agent-adapters.md`](agent-adapters.md)
+**Siblings:** [app boundaries](../apps/AGENTS.md) · [`skills-protocol.md`](skills-protocol.md) · [`agent-adapters.md`](agent-adapters.md)
 
 This guide describes the current design-system package consumed by the daemon,
 picker, prompt composer, importers, and repository guards. Read it together with

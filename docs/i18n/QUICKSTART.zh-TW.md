@@ -45,7 +45,7 @@ pnpm tools-dev run web # 在前景啟動 daemon + web
 pnpm tools-dev # 在背景啟動 daemon + web + desktop
 ```
 
-首次載入時，應用程式會偵測可用的本地 runtime，並顯示在 Settings 中設定的 BYOK runtime。選擇 runtime、design template 與 design system，輸入 prompt，然後點擊 **Send**。結構化的本地 runtime 會寫入規範專案檔案並串流傳送檔案/工具事件；檔案工作區與預覽由這些寫入更新。純文字與 BYOK 執行則回傳一個完整的 `<artifact>` 區塊供宿主解析。在記錄或修改任何 artifact 儲存路徑之前，必須閱讀儲存庫根目錄 `AGENTS.md` 中的 **Daemon data directory contract**。
+首次載入時，應用程式會偵測可用的本地 runtime，並顯示在 Settings 中設定的 BYOK runtime。選擇 runtime、design template 與 design system，輸入 prompt，然後點擊 **Send**。結構化的本地 runtime 會寫入規範專案檔案並串流傳送檔案/工具事件；檔案工作區與預覽由這些寫入更新。純文字與 BYOK 執行則回傳一個完整的 `<artifact>` 區塊供宿主解析。
 
 **Design systems** 目錄直接從 [`design-systems/`](../../design-systems/) 下的 `DESIGN.md` 套件載入。選擇任意一套，即可將該品牌的視覺語言套用到 artifact。
 
@@ -191,9 +191,7 @@ OD_API_TOKEN=
 
 ## 持久化儲存
 
-在記錄、修改或選擇任何持久 daemon 儲存路徑之前，
-必須閱讀儲存庫根目錄 `AGENTS.md` 中的 **Daemon data directory contract**。
-本 Quickstart 不得重述該契約，也不得定義儲存路徑。
+Docker Compose 使用持久命名磁碟區儲存資料。升級時保留該磁碟區；設定與備份請見 [Daemon storage](../../QUICKSTART.md#persistent-storage)
 
 ---
 
@@ -334,9 +332,9 @@ open-design/
 
 ## 回到產品願景
 
-本 Quickstart 對應 [`docs/`](../../docs/) 中 spec 的可執行起點；spec 描述了其演進方向（見 [`docs/roadmap.md`](../../docs/roadmap.md)）。要點如下：
+本 Quickstart 對應 [`docs/`](../../docs/) 中 spec 的可執行起點；spec 描述了其演進方向（見 [歷史文件：`5aa368514d:docs/roadmap.md`](https://github.com/nexu-io/open-design/blob/5aa368514d3d715792a4aca95b04157c771ca9a0/docs/roadmap.md)）。要點如下：
 
-- `docs/architecture.md` 描述了目前這套已交付的 stack：前端為 Next.js 16 App Router，後端為本地 daemon；`apps/web/next.config.ts` 在 dev 模式下進行 rewrite，使瀏覽器始終透過同一套 `/api` 入口通訊。
+- `apps/AGENTS.md` 描述了目前這套已交付的 stack：前端為 Next.js 16 App Router，後端為本地 daemon；`apps/web/next.config.ts` 在 dev 模式下進行 rewrite，使瀏覽器始終透過同一套 `/api` 入口通訊。
 - `docs/skills-protocol.md` 描述目前的 `SKILL.md`/`od:` frontmatter，以及功能性 skill 與渲染範本的分離。`apps/daemon/src/skills.ts` 中的解析與正規化邏輯是實作層事實來源。
 - `docs/agent-adapters.md` 描述 adapter contract。各 runtime 的啟動、參數、模型與 stream 設定位於 `apps/daemon/src/runtimes/defs/`，並在 `apps/daemon/src/runtimes/registry.ts` 中註冊；`apps/daemon/src/agents.ts` 是相容性匯出層。
-- `docs/modes.md` 區分六個 New Project 頁籤與七個正規化 registry mode（`prototype`、`deck`、`template`、`design-system`、`image`、`video`、`audio`）。
+- `design-templates/AGENTS.md` 區分六個 New Project 頁籤與七個正規化 registry mode（`prototype`、`deck`、`template`、`design-system`、`image`、`video`、`audio`）。

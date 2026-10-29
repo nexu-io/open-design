@@ -198,7 +198,7 @@ pnpm tools-dev run web # starts daemon + web in the foreground
 pnpm tools-dev # starts daemon + web + desktop in the background
 ```
 
-เมื่อโหลดครั้งแรก แอปจะตรวจ local runtimes ที่พร้อมใช้และแสดง BYOK runtimes ที่ตั้งค่าไว้ใน Settings ด้วย. เลือก runtime, design template และ design system จากนั้นพิมพ์ prompt แล้วกด **Send**. Structured local runtime จะเขียน canonical project files และ stream file/tool events; file workspace กับ preview จะอัปเดตจากการเขียนเหล่านั้น. ส่วน text-only และ BYOK runs จะส่ง `<artifact>` block ที่สมบูรณ์ให้ host parse. ก่อน document หรือเปลี่ยน artifact storage path ต้องอ่าน `AGENTS.md` ที่ root ในส่วน **Daemon data directory contract**.
+เมื่อโหลดครั้งแรก แอปจะตรวจ local runtimes ที่พร้อมใช้และแสดง BYOK runtimes ที่ตั้งค่าไว้ใน Settings ด้วย. เลือก runtime, design template และ design system จากนั้นพิมพ์ prompt แล้วกด **Send**. Structured local runtime จะเขียน canonical project files และ stream file/tool events; file workspace กับ preview จะอัปเดตจากการเขียนเหล่านั้น. ส่วน text-only และ BYOK runs จะส่ง `<artifact>` block ที่สมบูรณ์ให้ host parse.
 
 Catalog **Design systems** โหลดโดยตรงจาก packages `DESIGN.md` ใน [`design-systems/`](../../design-systems/). เลือกหนึ่งชุดเพื่อใช้ visual language ของ brand นั้นกับ artifact.
 
@@ -363,9 +363,9 @@ open-design/
 
 ## Mapping back to the vision
 
-Quickstart นี้คือ runnable seed ของ spec ใน [`docs/`](../../docs/). Spec อธิบายว่าโปรเจกต์จะโตไปทางไหน (ดู [`docs/roadmap.md`](../../docs/roadmap.md)). Highlights:
+Quickstart นี้คือ runnable seed ของ spec ใน [`docs/`](../../docs/). Spec อธิบายว่าโปรเจกต์จะโตไปทางไหน (ดู [เอกสารย้อนหลัง: `5aa368514d:docs/roadmap.md`](https://github.com/nexu-io/open-design/blob/5aa368514d3d715792a4aca95b04157c771ca9a0/docs/roadmap.md)). Highlights:
 
-- `docs/architecture.md` อธิบาย shipped stack: Next.js 16 App Router อยู่หน้า local daemon และ `apps/web/next.config.ts` rewrite ใน dev เพื่อให้ browser คุยกับ `/api` surface เดียวกัน.
+- `apps/AGENTS.md` อธิบาย shipped stack: Next.js 16 App Router อยู่หน้า local daemon และ `apps/web/next.config.ts` rewrite ใน dev เพื่อให้ browser คุยกับ `/api` surface เดียวกัน.
 - `docs/skills-protocol.md` อธิบาย `SKILL.md`/`od:` frontmatter ปัจจุบันและการแยก functional skills ออกจาก rendering templates. Parser และ normalization ใน `apps/daemon/src/skills.ts` คือ implementation source of truth.
 - `docs/agent-adapters.md` อธิบาย adapter contract. Launch, argument, model และ stream settings ของแต่ละ runtime อยู่ใน `apps/daemon/src/runtimes/defs/` และ register ใน `apps/daemon/src/runtimes/registry.ts`; `apps/daemon/src/agents.ts` เป็น compatibility export surface.
-- `docs/modes.md` แยก New Project tabs หกแบบออกจาก normalized registry modes เจ็ดแบบ (`prototype`, `deck`, `template`, `design-system`, `image`, `video`, `audio`).
+- `design-templates/AGENTS.md` แยก New Project tabs หกแบบออกจาก normalized registry modes เจ็ดแบบ (`prototype`, `deck`, `template`, `design-system`, `image`, `video`, `audio`).
