@@ -3,6 +3,7 @@ import { recordStrategyTaskRunLifecycle } from './strategies/task-display.js';
 import { observeDiscoveryEvent } from './strategies/od-next/discovery-observation.js';
 import { assertCommentFileNotPending } from './collab/comment-file-retirements.js';
 import { captureJsonBodySize } from './http/json-body-size.js';
+import { createRemoteCompressionMiddleware } from './http/remote-compression.js';
 
 import { usesProductionMarker, composeResumedRequest } from './strategies/od-next/request-resume.js';
 import { todoSnapshotHasUnfinishedWork } from '@open-design/contracts';
@@ -3279,6 +3280,9 @@ export async function startServer({
 
   const app = express();
   installRouteRegistrationGuard(app);
+  // Ahead of every route so static assets and JSON bodies both qualify; see
+  // remote-compression.ts for why loopback peers and streams are skipped.
+  app.use(createRemoteCompressionMiddleware());
   // Clipper page captures are self-contained HTML with inlined images plus a
   // Figma IR, which for an image-heavy site (The Economist, news front pages)
   // runs to tens of MB — far past a normal JSON body. Give the ingest route a
