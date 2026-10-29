@@ -1362,6 +1362,10 @@ export function WorkspaceTabsBar({
   // never hears the event. The strip stays undocked here, so the row is the
   // docked layout minus the dock: same button, same x, nothing else.
   const settingsPageChrome = route.kind === 'home' && route.view === 'settings';
+  // First-run onboarding is the same story: EntryShell returns only the
+  // onboarding modal there, with no rail to toggle and no ⌘K palette to open,
+  // so the two rail actions would be dead clicks.
+  const onboardingPageChrome = route.kind === 'home' && route.view === 'onboarding';
 
   // Refresh the fallback cache from whatever this fetch actually returned,
   // before `displayTabFor` below reads it — same render pass, so a tab
@@ -2623,11 +2627,12 @@ export function WorkspaceTabsBar({
             Only the undocked (entry) chrome shows them, and only on routes
             that actually mount EntryShell — in chat the strip lives in the
             column dock and there is no entry rail to toggle, and full-page
-            settings replaces the rail outright (settingsPageChrome). Both
+            settings replaces the rail outright (settingsPageChrome), as does
+            first-run onboarding (onboardingPageChrome). Both
             targets live in EntryShell's tree, so the clicks travel as window
             events (see entryRailBridge). The classes are the rail's own, so
             the controls keep their look. */}
-        {!tabsDockEl && !settingsPageChrome ? (
+        {!tabsDockEl && !settingsPageChrome && !onboardingPageChrome ? (
           <div className="entry-nav-rail__search-row workspace-tabs-rail-actions">
             <button
               type="button"
