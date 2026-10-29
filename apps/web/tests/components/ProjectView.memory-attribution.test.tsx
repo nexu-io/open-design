@@ -410,7 +410,11 @@ describe('OPEND-2944 delayed memory summaries keep their originating conversatio
     if (scenario === 'BYOK sending draft') {
       expect(run.agentId).toBe('byok-opencode');
       expect(preflights).toHaveLength(1);
-      expect(preflights[0]).toMatchObject({ projectId: 'project-1', conversationId: 'conv-1', assistantMessageId: run.assistantMessageId });
+      expect(preflights[0]).toMatchObject({
+        projectId: 'project-1', conversationId: 'conv-1', assistantMessageId: run.assistantMessageId,
+        // The daemon route reads `chatProvider`; any other key silently drops the BYOK snapshot.
+        chatProvider: { provider: 'openai', baseUrl: 'https://api.deepseek.com', model: 'deepseek-chat' },
+      });
       return;
     }
     // Real provider loops call onRunCreated for each successor without an

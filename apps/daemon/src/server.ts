@@ -268,6 +268,7 @@ import { stampToolTiming } from './runtimes/tool-timing.js';
 import {
   buildOpenCodeByokProviderConfig,
   BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
+  opencodeByokProviderModelId,
 } from './runtimes/byok-opencode.js';
 import {
   extractPlainStreamArtifacts,
@@ -15561,7 +15562,11 @@ export async function startServer({
             apiKey: (byokProvider as { apiKey?: string }).apiKey,
             baseUrl: (byokProvider as { baseUrl?: string }).baseUrl,
             apiVersion: (byokProvider as { apiVersion?: string }).apiVersion,
-            model: typeof safeModel === 'string' ? safeModel : undefined,
+            // byok-opencode's safeModel is OpenCode-qualified (`open-design-byok/<id>`);
+            // the extractor calls the provider directly, so it needs the bare id.
+            model: byokOpenCodeProvider
+              ? opencodeByokProviderModelId(typeof model === 'string' ? model : null) ?? undefined
+              : typeof safeModel === 'string' ? safeModel : undefined,
             requiresApiKey: (byokProvider as { requiresApiKey?: boolean }).requiresApiKey,
           }
         : null;

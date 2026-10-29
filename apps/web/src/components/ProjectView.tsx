@@ -11289,7 +11289,7 @@ export function ProjectView({
                 projectId: project.id,
                 conversationId: runConversationId,
                 assistantMessageId: assistantId,
-                byokChatProvider,
+                chatProvider: byokChatProvider,
               }),
             });
           } catch {

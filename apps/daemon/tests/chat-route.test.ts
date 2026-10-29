@@ -1,4 +1,5 @@
 import type http from 'node:http';
+import { createServer } from 'node:http';
 import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import {
@@ -945,6 +946,82 @@ process.stdin.on('end', () => {
         expect(JSON.stringify(parsed)).not.toContain('sk-test-byok');
       },
     );
+  });
+
+  it.each([
+    ['bare', 'cohere/north-mini-code:free'],
+    ['pre-qualified', 'open-design-byok/cohere/north-mini-code:free'],
+  ])('runs BYOK OpenCode memory extraction with the bare provider model id (%s request)', async (_label, requestModel) => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for BYOK OpenCode memory tests');
+    }
+    const dataDir = process.env.OD_DATA_DIR;
+    const projectId = `proj-${randomUUID()}`;
+    let resolveModel: (model: unknown) => void = () => {};
+    const memoryModel = new Promise<unknown>((resolve) => { resolveModel = resolve; });
+    const provider = createServer((req, res) => {
+      let raw = '';
+      req.on('data', (chunk) => { raw += chunk; });
+      req.on('end', () => {
+        resolveModel((JSON.parse(raw) as { model?: unknown }).model);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ choices: [{ message: { content: '{"entries":[]}' } }] }));
+      });
+    });
+    await new Promise<void>((resolve) => provider.listen(0, '127.0.0.1', resolve));
+    const providerPort = (provider.address() as { port: number }).port;
+    const previousMemoryConfig = await readMemoryConfig(dataDir);
+    await writeMemoryConfig(dataDir, { enabled: true, chatExtractionEnabled: true, extraction: null });
+
+    try {
+      const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: 'BYOK OpenCode memory fixture' }),
+      });
+      expect(createProjectResponse.ok).toBe(true);
+
+      await withFakeAgent(
+        'opencode',
+        `
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'byok-opencode-memory-ok' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+        async () => {
+          const response = await fetch(`${baseUrl}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'byok-opencode',
+              projectId,
+              conversationId: `conv-${randomUUID()}`,
+              message: 'hello memory',
+              model: requestModel,
+              byokProvider: {
+                protocol: 'openai',
+                apiKey: 'sk-test-byok',
+                baseUrl: `http://127.0.0.1:${providerPort}/v1`,
+                model: 'cohere/north-mini-code:free',
+              },
+            }),
+          });
+          expect(await response.text()).toContain('byok-opencode-memory-ok');
+          expect(await memoryModel).toBe('cohere/north-mini-code:free');
+        },
+      );
+    } finally {
+      await writeMemoryConfig(dataDir, {
+        enabled: previousMemoryConfig.enabled,
+        chatExtractionEnabled: previousMemoryConfig.chatExtractionEnabled,
+        extraction: previousMemoryConfig.extraction,
+      });
+      await new Promise<void>((resolve) => provider.close(() => resolve()));
+    }
   });
 
   it('passes keyless BYOK provider config without auth fields to OpenCode', async () => {
