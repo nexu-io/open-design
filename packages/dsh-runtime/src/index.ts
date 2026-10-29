@@ -211,16 +211,19 @@ function emitSessionEvent(
   provider: string,
   model: string,
   event: SessionEvent,
-): void {
+  state: { sawText: boolean },
+): string {
   switch (event.type) {
     case 'assistant/chunk': {
       const chunk = event.data.chunk;
       if (chunk.type === 'text-delta' && chunk.text !== '') {
+        state.sawText = true;
         writeFrame(output, { v: 1, type: 'text', request_id: request.request_id, content: chunk.text });
+        return chunk.text;
       } else if (chunk.type === 'reasoning-delta' && chunk.text !== '') {
         writeFrame(output, { v: 1, type: 'thinking', request_id: request.request_id, content: chunk.text });
       }
-      return;
+      return '';
     }
     case 'tool/call':
       writeFrame(output, {
@@ -243,11 +246,22 @@ function emitSessionEvent(
         is_error: event.data.message.content[0].isError === true,
       });
       return;
-    case 'assistant/message':
+    case 'assistant/message': {
       if (event.data.usage) writeFrame(output, usageFrame(request.request_id, provider, model, event.data.usage));
-      return;
+      // Hosts that do not stream assistant/chunk deltas report the answer only as one
+      // complete message. Forward it so the caller still sees the assistant text.
+      if (state.sawText) return '';
+      const message = (event.data as { message?: { content?: readonly ContentBlock[] } }).message;
+      const text = (message?.content ?? [])
+        .map((block) => (block.type === 'text' ? block.text : ''))
+        .join('');
+      if (text === '') return '';
+      state.sawText = true;
+      writeFrame(output, { v: 1, type: 'text', request_id: request.request_id, content: text });
+      return text;
+    }
     default:
-      return;
+      return '';
   }
 }
 
@@ -275,12 +289,10 @@ async function execute(
     installModelSelection(agentCtx, selected);
   };
   let disposeEvent = () => {};
+  const textState = { sawText: false };
   const onSessionEvent = (session: { id: unknown }, event: SessionEvent) => {
     if (String(session.id) !== String(sessionId) || event.seq < firstSeq) return;
-    emitSessionEvent(output, request, selection.provider, selection.model, event);
-    if (event.type === 'assistant/chunk' && event.data.chunk.type === 'text-delta') {
-      assistantOutput += event.data.chunk.text;
-    }
+    assistantOutput += emitSessionEvent(output, request, selection.provider, selection.model, event, textState);
     if (event.type === 'turn/end') turnEnd = event;
   };
 
