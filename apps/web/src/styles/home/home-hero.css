@@ -4434,3 +4434,90 @@
 .home-hero--dock .home-hero__lexical .composer-input-editor {
   max-height: calc(var(--home-hero-line) * 4.5);
 }
+
+/* ─── Home design-system sheet (#2981) ──────────────────────────────────────
+   Owner: the Home composer's design-system picker (DesignSystemPicker,
+   variant="home"). The shared popover markup and base rules live in
+   styles/viewer/routines.css (`.project-ds-picker-*`); DesignSystemPicker
+   anchors that popover to the composer TRAY on Home instead of to the pill in
+   the tray's foot row, so it hangs below the card like a drawer (or above it
+   when the viewport is short) rather than covering the working-directory row
+   or the prompt. These rules are scoped by the popover's
+   `data-surface="home-tray"` hook, which the component sets only when that
+   tray actually resolved as the anchor, so the project chat composer, which
+   mounts the same variant without a tray, keeps the base styling. They give
+   the drawer the tray's own rhythm: concentric corners, a header
+   that reads as a header, two panes that read as two panes, rows with room
+   to scan, and a fade where the list keeps going. */
+.project-ds-picker-popover[data-surface="home-tray"] {
+  /* Concentric with the 20px tray it hangs from. */
+  border-radius: 20px;
+  box-shadow: var(--shadow-lg, var(--shadow-md, 0 18px 48px rgba(0, 0, 0, 0.16)));
+}
+.project-ds-picker-popover[data-surface="home-tray"] .project-ds-picker-search {
+  height: 56px;
+  gap: 10px;
+  padding: 0 16px 0 20px;
+  /* The hairline is what makes the search row read as the sheet's header
+     instead of a stray input floating above the list. */
+  border-bottom: 1px solid var(--border);
+}
+.project-ds-picker-popover[data-surface="home-tray"] .project-ds-picker-body {
+  /* The list used to get the smaller share; names are what the eye scans
+     first, so the two panes now split evenly with a floor the list can hold
+     a long name in. */
+  grid-template-columns: minmax(240px, 1fr) minmax(240px, 1fr);
+}
+.project-ds-picker-popover[data-surface="home-tray"] .project-ds-picker-list {
+  position: relative;
+  /* No top padding: the sticky group labels below sit at top: 0, so a row
+     scrolling under a label is masked by the label's own box instead of
+     peeking through a padding strip above it. The first row carries the
+     breathing room instead. */
+  padding: 0 10px 20px;
+  gap: 2px;
+  border-right: 1px solid var(--border);
+}
+.project-ds-picker-popover[data-surface="home-tray"] .project-ds-picker-list > :first-child {
+  margin-top: 10px;
+}
+/* A sticky fade at the foot of the list, so the last visible row reads as
+   "more below" instead of a clipped label. Sticky inside the scroller means
+   it rides the viewport edge, and the 20px bottom padding above keeps the
+   final row clear of it once the list is scrolled to the end. */
+.project-ds-picker-popover[data-surface="home-tray"] .project-ds-picker-list::after {
+  content: '';
+  position: sticky;
+  bottom: -20px;
+  display: block;
+  flex: 0 0 auto;
+  height: 28px;
+  margin: -28px 0 0;
+  background: linear-gradient(to bottom, transparent, var(--bg-panel));
+  pointer-events: none;
+}
+.project-ds-picker-popover[data-surface="home-tray"] .project-ds-picker-group-label {
+  top: 0;
+  padding: 14px 12px 6px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+.project-ds-picker-popover[data-surface="home-tray"] .project-ds-picker-group-label:first-child {
+  margin-top: 0;
+  padding-top: 12px;
+}
+.project-ds-picker-popover[data-surface="home-tray"] .project-ds-picker-option {
+  padding: 8px 12px;
+}
+.project-ds-picker-popover[data-surface="home-tray"] .project-ds-picker-option-title {
+  line-height: 1.3;
+}
+.project-ds-picker-popover[data-surface="home-tray"] .project-ds-picker-preview {
+  padding: 18px 20px 20px;
+}
+@media (max-width: 720px) {
+  /* Stacked panes (routines.css) separate with a bottom hairline instead. */
+  .project-ds-picker-popover[data-surface="home-tray"] .project-ds-picker-list {
+    border-right: 0;
+  }
+}
