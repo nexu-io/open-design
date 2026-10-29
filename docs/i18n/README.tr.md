@@ -287,6 +287,12 @@ docker compose up -d
 
 Sealos App Store şablonu, yayımlanmış OpenDesign Docker imajını kalıcı çalışma alanı depolaması ve herkese açık proxy üzerinde Basic Auth ile çalıştırır. Özel herkese açık veya paylaşılan Docker dağıtımları için [`deploy/README.md`](../../deploy/README.md#local-compose) içindeki ters proxy ve `OPEN_DESIGN_ALLOWED_ORIGINS` rehberini izleyin.
 
+### 🚀 Pethost üzerinde dağıtın
+
+[![Deploy on Pethost](https://pethost.dev/button.svg)](https://pethost.dev/templates/open-design/)
+
+Pethost şablonu, yayımlanmış `ghcr.io/nexu-io/od` imajını verileri bir birimde tutarak çalıştırır ve API belirtecini Basic Auth olarak kullanır: kullanıcı adı `open-design`, parola dağıtımda verdiğiniz paroladır.
+
 ### 🧑‍💻 Kaynaktan çalıştırın
 
 ```bash

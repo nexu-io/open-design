@@ -287,6 +287,12 @@ docker compose up -d
 
 Sealos App Store テンプレートは、公開済みの OpenDesign Docker イメージを永続的なワークスペースストレージと公開プロキシの Basic Auth 付きで実行します。独自の公開または共有 Docker デプロイでは、[`deploy/README.md`](../../deploy/README.md#local-compose) のリバースプロキシと `OPEN_DESIGN_ALLOWED_ORIGINS` の手順に従ってください。
 
+### 🚀 Pethost にデプロイ
+
+[![Deploy on Pethost](https://pethost.dev/button.svg)](https://pethost.dev/templates/open-design/)
+
+Pethost テンプレートは、公開済みの `ghcr.io/nexu-io/od` イメージをデータ用ボリューム付きで実行し、API トークンを Basic Auth として使います。ユーザー名は `open-design`、パスワードはデプロイ時に指定したものです。
+
 ### 🧑‍💻 ソースから実行
 
 ```bash
