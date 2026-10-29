@@ -1,9 +1,25 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { DesktopUpdateCacheLifecycleSummary } from "@open-design/sidecar-proto";
+import type {
+  DesktopUpdateCacheLifecycleSummary,
+  DesktopUpdateCacheLifecycleTrigger,
+} from "@open-design/sidecar-proto";
 
 import type { ToolPackConfig } from "../config/index.js";
+
+// Keyed by the whole trigger union so adding a member fails the build here
+// instead of silently dropping `lastTrigger` from the snapshot.
+const CACHE_LIFECYCLE_TRIGGERS: Record<DesktopUpdateCacheLifecycleTrigger, true> = {
+  "cold-start": true,
+  manual: true,
+  "next-version-ready": true,
+};
+
+function toCacheLifecycleTrigger(value: unknown): DesktopUpdateCacheLifecycleTrigger | null {
+  if (typeof value !== "string") return null;
+  return Object.hasOwn(CACHE_LIFECYCLE_TRIGGERS, value) ? (value as DesktopUpdateCacheLifecycleTrigger) : null;
+}
 
 const UPDATE_STATE_DIR = "state";
 const UPDATE_CLEANUP_FILE = "cleanup.json";
@@ -47,7 +63,8 @@ function summarizeDescriptor(raw: ReleaseLifecycleDescriptor): DesktopUpdateCach
   const platform = typeof raw.platform === "string" ? raw.platform : "unknown";
   const summary = emptySummary(platform);
   if (raw.updatedAt != null && typeof raw.updatedAt === "string") summary.lastRunAt = raw.updatedAt;
-  if (raw.trigger === "cold-start" || raw.trigger === "next-version-ready") summary.lastTrigger = raw.trigger;
+  const trigger = toCacheLifecycleTrigger(raw.trigger);
+  if (trigger != null) summary.lastTrigger = trigger;
   summary.releases.total = raw.releases.length;
   for (const entry of raw.releases) {
     if (entry == null || typeof entry !== "object") continue;
