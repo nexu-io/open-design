@@ -2036,7 +2036,7 @@ async function consumeDaemonPhysicalRun({
        */
       let sawRunEvent = false;
 
-      while (true) {
+      readStream: while (true) {
         let readResult: ReadableStreamReadResult<Uint8Array>;
         try {
           /*
@@ -2245,6 +2245,11 @@ async function consumeDaemonPhysicalRun({
             // hitting the exit-code/signal safety net later.
             serverDeclaredSuccess = event.data.status === 'succeeded';
             endStatus = isChatRunStatus(event.data.status) ? event.data.status : 'succeeded';
+            // The end frame settles this physical run. A proxy may keep its
+            // response open, so neither EOF nor transport cleanup may delay
+            // terminal callbacks or the next strategy-task run.
+            void reader.cancel().catch(() => {});
+            break readStream;
           }
         }
       }
