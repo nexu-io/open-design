@@ -1,0 +1,58 @@
+export component SettingsForm inherits Window {
+    title: "Settings";
+    preferred-width: 520px;
+    preferred-height: 420px;
+    background: #0f172a;
+
+    property <string> display-name: "Designer";
+    property <bool> dark-mode: true;
+
+    VerticalLayout {
+        padding: 28px;
+        spacing: 18px;
+
+        Text { text: "Settings"; color: #f8fafc; font-size: 24px; font-weight: 700; }
+
+        VerticalLayout {
+            spacing: 6px;
+            Text { text: "Display name"; color: #94a3b8; font-size: 12px; }
+            Rectangle {
+                height: 40px;
+                border-radius: 8px;
+                background: #1e293b;
+                Text {
+                    text: root.display-name;
+                    color: #e2e8f0;
+                    vertical-alignment: center;
+                    horizontal-alignment: left;
+                    width: 100%;
+                    height: 100%;
+                 }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 12px;
+            Text { text: "Dark mode"; color: #e2e8f0; vertical-alignment: center; }
+            Rectangle {
+                width: 48px;
+                height: 28px;
+                border-radius: 14px;
+                background: root.dark-mode ? #38bdf8 : #334155;
+            }
+        }
+
+        Rectangle {
+            height: 44px;
+            border-radius: 10px;
+            background: #22c55e;
+            Text {
+                text: "Save";
+                color: #052e16;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
