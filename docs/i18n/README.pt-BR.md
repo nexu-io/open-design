@@ -287,6 +287,12 @@ docker compose up -d
 
 O template da Sealos App Store executa a imagem Docker publicada do OpenDesign com armazenamento persistente para o workspace e Basic Auth no proxy público. Para implantações Docker públicas ou compartilhadas personalizadas, siga as orientações de proxy reverso e `OPEN_DESIGN_ALLOWED_ORIGINS` em [`deploy/README.md`](../../deploy/README.md#local-compose).
 
+### 🚂 Implante no Railway
+
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/opendesign)
+
+O template do Railway executa a imagem Docker publicada do OpenDesign com as CLIs do Claude Code, Codex e OpenCode adicionadas, armazenamento persistente para os projetos e os logins das CLIs, e o login com `OD_API_TOKEN` (usuário `open-design`) na frente. Para usar esses agentes, adicione ao serviço uma chave de modelo como `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` ou `OPENROUTER_API_KEY`.
+
 ### 🧑‍💻 Rode a partir do código-fonte
 
 ```bash

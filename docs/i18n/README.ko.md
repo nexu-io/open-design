@@ -287,6 +287,12 @@ docker compose up -d
 
 Sealos App Store 템플릿은 게시된 OpenDesign Docker 이미지를 영구 워크스페이스 스토리지 및 공개 프록시의 Basic Auth와 함께 실행합니다. 사용자 지정 공개 또는 공유 Docker 배포에서는 [`deploy/README.md`](../../deploy/README.md#local-compose)의 리버스 프록시와 `OPEN_DESIGN_ALLOWED_ORIGINS` 안내를 따르세요.
 
+### 🚂 Railway에 배포
+
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/opendesign)
+
+Railway 템플릿은 게시된 OpenDesign Docker 이미지에 Claude Code, Codex, OpenCode CLI를 추가해 실행하며, 프로젝트와 CLI 로그인 정보를 위한 영구 저장소와 `OD_API_TOKEN` 로그인(사용자 이름 `open-design`)을 제공합니다. 이 에이전트를 사용하려면 서비스에 `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY` 같은 모델 키를 추가하세요.
+
 ### 🧑‍💻 소스에서 실행
 
 ```bash

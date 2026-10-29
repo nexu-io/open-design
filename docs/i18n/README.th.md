@@ -283,6 +283,12 @@ docker compose up -d
 
 หากเบราว์เซอร์ขอข้อมูลเข้าสู่ระบบ ให้ใช้ `open-design` เป็นชื่อผู้ใช้ และใช้ค่า `OD_API_TOKEN` จาก `deploy/.env` เป็นรหัสผ่าน ทราฟฟิกผ่าน Docker bridge จะยังมีการยืนยันตัวตนโดยไม่ต้องเปิด host networking
 
+### 🚂 Deploy บน Railway
+
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/opendesign)
+
+เทมเพลต Railway จะรัน OpenDesign Docker image ที่เผยแพร่แล้ว พร้อมติดตั้ง Claude Code, Codex และ OpenCode CLI เพิ่ม มีพื้นที่จัดเก็บถาวรสำหรับโปรเจกต์และการล็อกอินของ CLI และป้องกันการเข้าถึงด้วยการล็อกอิน `OD_API_TOKEN` (ชื่อผู้ใช้ `open-design`) หากต้องการใช้ agent เหล่านี้ ให้เพิ่มคีย์โมเดล เช่น `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` หรือ `OPENROUTER_API_KEY` ให้กับ service
+
 ### 🧑‍💻 รันจาก source
 
 ```bash
