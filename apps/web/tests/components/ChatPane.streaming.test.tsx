@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import type { ChatAttachment, ChatCommentAttachment } from '@open-design/contracts';
 import { forwardRef, useImperativeHandle } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -1561,6 +1562,119 @@ Expected output:
     );
 
     expect(screen.getByText('Queued follow-up')).toBeTruthy();
+  });
+
+  // #3497: a turn sent as element comments while a run was busy carries its
+  // text in the comment attachments, not in `prompt`, so the row used to show
+  // only the generic placeholder and the user could not tell which queued
+  // instruction was which.
+  describe('queued rows for comment-only turns (#3497)', () => {
+    const commentAttachment = (
+      overrides: Partial<ChatCommentAttachment> & Pick<ChatCommentAttachment, 'id' | 'label' | 'comment'>,
+    ): ChatCommentAttachment => ({
+      order: 0,
+      filePath: 'screens/01-onwards.html',
+      elementId: 'el-1',
+      selector: 'div.card-title',
+      currentText: 'Onwards',
+      pagePosition: { x: 0, y: 0, width: 10, height: 10 },
+      htmlHint: '<div class="card-title">Onwards</div>',
+      ...overrides,
+    });
+
+    function renderQueued(queuedItems: Array<{
+      id: string;
+      prompt: string;
+      attachments?: ChatAttachment[];
+      commentAttachments?: ChatCommentAttachment[];
+    }>) {
+      return render(
+        <ChatPane
+          messages={[]}
+          streaming
+          error={null}
+          projectId="project-1"
+          projectFiles={[]}
+          queuedItems={queuedItems}
+          onEnsureProject={async () => 'project-1'}
+          onSend={vi.fn()}
+          onStop={vi.fn()}
+          conversations={conversations}
+          activeConversationId="conv-1"
+          onSelectConversation={vi.fn()}
+          onDeleteConversation={vi.fn()}
+          projectMetadata={projectMetadata}
+        />,
+      );
+    }
+
+    it('names a comment-only queued turn by its target and note instead of the placeholder', () => {
+      renderQueued([
+        {
+          id: 'queued-1',
+          prompt: '',
+          commentAttachments: [
+            commentAttachment({ id: 'c-1', label: 'div.card-title', comment: '字我要绿色' }),
+          ],
+        },
+      ]);
+
+      const row = screen.getByTestId('chat-queued-send-row');
+      expect(row.textContent).toContain('字我要绿色');
+      expect(row.textContent).toContain('div.card-title');
+      expect(screen.queryByText('Queued follow-up')).toBeNull();
+    });
+
+    it('lists every comment of a multi-comment queued turn', () => {
+      renderQueued([
+        {
+          id: 'queued-1',
+          prompt: '',
+          commentAttachments: [
+            commentAttachment({ id: 'c-1', order: 0, label: 'div.card-title', comment: '字我要绿色' }),
+            commentAttachment({ id: 'c-2', order: 1, label: 'p.lede', comment: '字我也要橙色' }),
+          ],
+        },
+      ]);
+
+      const row = screen.getByTestId('chat-queued-send-row');
+      expect(row.textContent).toContain('字我要绿色');
+      expect(row.textContent).toContain('字我也要橙色');
+      expect(screen.queryByText('Queued follow-up')).toBeNull();
+    });
+
+    it('keeps the typed prompt as the row text when the turn also carries comments', () => {
+      renderQueued([
+        {
+          id: 'queued-1',
+          prompt: 'Make the card title green',
+          commentAttachments: [
+            commentAttachment({ id: 'c-1', label: 'div.card-title', comment: '字我要绿色' }),
+          ],
+        },
+      ]);
+
+      const row = screen.getByTestId('chat-queued-send-row');
+      expect(row.textContent).toContain('Make the card title green');
+    });
+
+    it('names a file-only queued turn by its attachment names', () => {
+      renderQueued([
+        {
+          id: 'queued-1',
+          prompt: '',
+          attachments: [
+            { path: '/tmp/hero.png', name: 'hero.png', kind: 'image' },
+            { path: '/tmp/brief.pdf', name: 'brief.pdf', kind: 'file' },
+          ],
+        },
+      ]);
+
+      const row = screen.getByTestId('chat-queued-send-row');
+      expect(row.textContent).toContain('hero.png');
+      expect(row.textContent).toContain('brief.pdf');
+      expect(screen.queryByText('Queued follow-up')).toBeNull();
+    });
   });
 
   it('auto-follows when the queued strip resizes while pinned to bottom', () => {

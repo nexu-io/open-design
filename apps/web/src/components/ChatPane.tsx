@@ -6340,9 +6340,25 @@ function reorderQueuedSendIds(
   /**
    * 队列里每条显示的文字。**不在这里截断** —— 截成一行会把话切在半截,
    * 人就认不出要取消 / 调序的是哪一条(稿子给了两行,用 CSS 的 line-clamp 收)。
+   *
+   * A turn can carry no typed text at all: element comments sent while a run
+   * was busy keep their text in the comment attachments, and a file drop
+   * keeps its name in the attachment. Name those rows the way the transcript
+   * names the same turn (target label + note, or the file names) instead of
+   * the generic placeholder, so the user can tell which queued instruction
+   * is which (#3497). The placeholder is only for a turn that has nothing.
    */
   function summarizeQueuedPrompt(item: QueuedSendItem, t: TranslateFn): string {
-  return item.prompt.replace(/\s+/g, ' ').trim() || t('chat.queuedFollowUpFallback');
+    const collapse = (value: string | null | undefined) => String(value ?? '').replace(/\s+/g, ' ').trim();
+    const prompt = collapse(item.prompt);
+    if (prompt) return prompt;
+    const comments = (item.commentAttachments ?? [])
+      .map((attachment) => [commentTargetDisplayName(attachment), collapse(attachment.comment)].filter(Boolean).join(' '))
+      .filter(Boolean);
+    if (comments.length > 0) return comments.join(' · ');
+    const files = (item.attachments ?? []).map((attachment) => collapse(attachment.name)).filter(Boolean);
+    if (files.length > 0) return files.join(', ');
+    return t('chat.queuedFollowUpFallback');
   }
 
 function CommentsPanel({
