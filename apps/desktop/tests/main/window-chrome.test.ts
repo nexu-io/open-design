@@ -62,6 +62,21 @@ describe("desktop BrowserWindow chrome options", () => {
     expect(runtimeSource).not.toContain("<video");
   });
 
+  test("gives the macOS splash the main window's frosted glass and scrim", () => {
+    // One material object feeds both windows, so the splash-to-app reveal
+    // never changes material; the page scrim matches the web shell's 20% wash.
+    expect(runtimeSource).toContain('vibrancy: "under-window" as const');
+    expect(mainAppWindowOptions()).toContain("...MAC_WINDOW_CHROME");
+    expect(runtimeSource).toContain("...MAC_WINDOW_MATERIAL,");
+    expect(runtimeSource).toContain(
+      'process.platform === "darwin" ? MAC_WINDOW_MATERIAL : { backgroundColor: "#f2f4f5" }',
+    );
+    expect(runtimeSource).toContain('process.platform === "darwin" ? "rgba(255, 255, 255, 0.2)" : "#f2f4f5"');
+    const splashBlock = runtimeSource.slice(runtimeSource.indexOf("export function createSplashWindow"));
+    expect(splashBlock.slice(0, splashBlock.indexOf("});"))).toContain("...SPLASH_WINDOW_MATERIAL");
+    expect(runtimeSource).toContain("background: ${SPLASH_PAGE_BACKGROUND};");
+  });
+
   test("mirrors macOS fullscreen state onto the renderer for chrome CSS", () => {
     expect(runtimeSource).toContain('window.on("enter-full-screen", () => void syncWindowFullscreenClass(window));');
     expect(runtimeSource).toContain('window.on("leave-full-screen", () => void syncWindowFullscreenClass(window));');
