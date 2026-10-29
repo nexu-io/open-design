@@ -4293,6 +4293,12 @@ body[data-web-modal-scroll-lock] .entry-main--scroll {
   line-height: 1.45;
 }
 
+.onboarding-view__test-status:focus,
+.onboarding-view__test-status:focus-visible {
+  outline: 2px solid var(--accent, #3b82f6);
+  outline-offset: 2px;
+}
+
 .onboarding-view__test-status.is-running {
   color: var(--text-muted);
   background: var(--bg-panel);
@@ -4310,10 +4316,20 @@ body[data-web-modal-scroll-lock] .entry-main--scroll {
   background: color-mix(in srgb, var(--warning, #f59e0b) 10%, var(--bg-panel));
 }
 
+.onboarding-view__test-status.is-warn:focus,
+.onboarding-view__test-status.is-warn:focus-visible {
+  outline-color: var(--warning, #f59e0b);
+}
+
 .onboarding-view__test-status.is-error {
   color: var(--danger-text, #991b1b);
   border-color: color-mix(in srgb, var(--danger, #ef4444) 34%, var(--border));
   background: color-mix(in srgb, var(--danger, #ef4444) 9%, var(--bg-panel));
+}
+
+.onboarding-view__test-status.is-error:focus,
+.onboarding-view__test-status.is-error:focus-visible {
+  outline-color: var(--danger, #ef4444);
 }
 
 @keyframes onboarding-agent-pop {
