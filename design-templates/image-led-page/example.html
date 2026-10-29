@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Image-led page example</title>
+    <style>
+      :root {
+        --bg: #eef1f4;
+        --panel: #ffffff;
+        --panel-2: #f5f7f9;
+        --ink: #12161a;
+        --muted: #434b54;
+        --line: #d5dce3;
+        --sun: #b45309;
+        --sun-soft: #f3d9b6;
+        --screen: #1e5e8c;
+        --shadow: rgba(18, 22, 26, 0.11);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: var(--bg);
+        color: var(--ink);
+        font-family:
+          ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      main {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 40px 28px 56px;
+        display: flex;
+        flex-direction: column;
+        gap: 28px;
+      }
+
+      header {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 26px;
+        line-height: 1.2;
+        letter-spacing: -0.015em;
+        text-wrap: balance;
+      }
+
+      .lede {
+        margin: 0;
+        max-width: 62ch;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.6;
+      }
+
+      .split {
+        display: grid;
+        grid-template-columns: 260px minmax(0, 1fr);
+        gap: 24px;
+        align-items: start;
+      }
+
+      @media (max-width: 760px) {
+        .split {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+
+      .label {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      /* ---- manifest column ------------------------------------------ */
+
+      .manifest {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        box-shadow: 0 1px 2px var(--shadow);
+      }
+
+      .slots {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+
+      .slot {
+        display: grid;
+        grid-template-columns: 8px minmax(0, 1fr) auto;
+        gap: 9px;
+        align-items: baseline;
+        padding: 7px 0;
+        border-bottom: 1px solid var(--panel-2);
+        font-size: 12px;
+      }
+
+      .slot:last-child {
+        border-bottom: 0;
+      }
+
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--sun);
+        align-self: center;
+      }
+
+      .dot.cool {
+        background: var(--screen);
+      }
+
+      .slot-id {
+        font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+        font-size: 11.5px;
+        color: var(--ink);
+        overflow-wrap: anywhere;
+      }
+
+      .slot-aspect {
+        font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+        font-size: 10.5px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .style-block {
+        background: var(--panel-2);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px 11px;
+        font-size: 11.5px;
+        line-height: 1.55;
+        color: var(--muted);
+      }
+
+      .style-block strong {
+        display: block;
+        color: var(--ink);
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        margin-bottom: 5px;
+      }
+
+      /* ---- page mock ------------------------------------------------- */
+
+      .page {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 2px 10px var(--shadow);
+      }
+
+      .chrome {
+        display: flex;
+        gap: 5px;
+        padding: 9px 12px;
+        background: var(--panel-2);
+        border-bottom: 1px solid var(--line);
+      }
+
+      .chrome i {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--line);
+      }
+
+      .hero {
+        position: relative;
+        height: 190px;
+        /* stand-in for a generated photograph: warm directional light,
+           not a grey box — the failure this skill exists to prevent */
+        background:
+          radial-gradient(90% 120% at 78% 8%, #ffd9a1 0%, rgba(255, 217, 161, 0) 58%),
+          radial-gradient(70% 90% at 12% 92%, #2a4257 0%, rgba(42, 66, 87, 0) 62%),
+          linear-gradient(158deg, #7b4a1f 0%, #2f3a44 52%, #161d24 100%);
+      }
+
+      .hero-grain {
+        position: absolute;
+        inset: 0;
+        background-image:
+          repeating-linear-gradient(
+            103deg,
+            rgba(255, 255, 255, 0.05) 0px,
+            rgba(255, 255, 255, 0.05) 1px,
+            transparent 1px,
+            transparent 7px
+          );
+      }
+
+      /* the scrim the skill requires under any text placed over a photo */
+      .hero-scrim {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          180deg,
+          rgba(12, 16, 20, 0) 24%,
+          rgba(12, 16, 20, 0.72) 100%
+        );
+      }
+
+      .hero-copy {
+        position: absolute;
+        left: 22px;
+        right: 22px;
+        bottom: 18px;
+        color: #ffffff;
+      }
+
+      .hero-copy h2 {
+        margin: 0 0 5px;
+        font-size: 19px;
+        line-height: 1.2;
+        letter-spacing: -0.01em;
+      }
+
+      .hero-copy p {
+        margin: 0;
+        font-size: 12px;
+        line-height: 1.5;
+        color: #eef1f4;
+        max-width: 42ch;
+      }
+
+      .tag {
+        position: absolute;
+        top: 12px;
+        left: 14px;
+        font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+        font-size: 10px;
+        letter-spacing: 0.04em;
+        color: #12161a;
+        background: var(--sun-soft);
+        border-radius: 4px;
+        padding: 3px 6px;
+      }
+
+      .body {
+        padding: 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .shots {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .shot {
+        position: relative;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        overflow: hidden;
+        background: #0f2130;
+      }
+
+      .shot-screen {
+        height: 104px;
+        padding: 9px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        background: linear-gradient(168deg, #14384f 0%, #0d1c28 100%);
+      }
+
+      .bar {
+        height: 6px;
+        border-radius: 3px;
+        background: rgba(255, 255, 255, 0.16);
+      }
+
+      .bar.w-60 { width: 60%; }
+      .bar.w-40 { width: 40%; }
+      .bar.w-80 { width: 80%; }
+      .bar.accent {
+        background: var(--sun);
+        width: 34%;
+        height: 8px;
+      }
+
+      .grid-mini {
+        margin-top: auto;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 5px;
+      }
+
+      .grid-mini span {
+        height: 18px;
+        border-radius: 3px;
+        background: rgba(255, 255, 255, 0.09);
+      }
+
+      .faces {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .face-card {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 11px;
+        display: flex;
+        gap: 9px;
+        align-items: center;
+        background: var(--panel-2);
+      }
+
+      .face {
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        flex: 0 0 auto;
+      }
+
+      .face.a {
+        background: radial-gradient(65% 65% at 34% 28%, #f0c08a 0%, #a2643a 66%, #4d2f1c 100%);
+      }
+      .face.b {
+        background: radial-gradient(65% 65% at 34% 28%, #d9c6b4 0%, #7d6a5c 62%, #3a3129 100%);
+      }
+      .face.c {
+        background: radial-gradient(65% 65% at 34% 28%, #cbb59c 0%, #6b4d3a 64%, #2f221a 100%);
+      }
+
+      .face-meta b {
+        display: block;
+        font-size: 11.5px;
+        font-weight: 600;
+      }
+
+      .face-meta span {
+        font-size: 10.5px;
+        color: var(--muted);
+      }
+
+      .caption {
+        margin: 0;
+        font-size: 11.5px;
+        line-height: 1.55;
+        color: var(--muted);
+      }
+
+      .caption code {
+        font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+        font-size: 11px;
+        background: var(--panel-2);
+        border: 1px solid var(--line);
+        border-radius: 3px;
+        padding: 0 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <span class="label">Image-led page</span>
+        <h1>Every image on the page was generated for it</h1>
+        <p class="lede">
+          One manifest, one style block appended verbatim to every prompt, and
+          every asset produced through the media dispatcher. No placeholder
+          service, no stock URL, no hand-rolled SVG standing in for a screenshot.
+        </p>
+      </header>
+
+      <div class="split">
+        <aside class="manifest">
+          <span class="label">Manifest</span>
+          <div class="slots">
+            <div class="slot">
+              <span class="dot"></span>
+              <span class="slot-id">hero-workshop</span>
+              <span class="slot-aspect">16:9</span>
+            </div>
+            <div class="slot">
+              <span class="dot cool"></span>
+              <span class="slot-id">screen-dashboard</span>
+              <span class="slot-aspect">4:3</span>
+            </div>
+            <div class="slot">
+              <span class="dot cool"></span>
+              <span class="slot-id">screen-report</span>
+              <span class="slot-aspect">4:3</span>
+            </div>
+            <div class="slot">
+              <span class="dot"></span>
+              <span class="slot-id">portrait-lead</span>
+              <span class="slot-aspect">1:1</span>
+            </div>
+            <div class="slot">
+              <span class="dot"></span>
+              <span class="slot-id">portrait-ops</span>
+              <span class="slot-aspect">1:1</span>
+            </div>
+            <div class="slot">
+              <span class="dot"></span>
+              <span class="slot-id">portrait-field</span>
+              <span class="slot-aspect">1:1</span>
+            </div>
+          </div>
+          <div class="style-block">
+            <strong>Style block</strong>
+            Low winter sun through workshop glass, sodium warmth against cool
+            shadow, 35 mm, shallow depth of field, no text, no logos.
+          </div>
+        </aside>
+
+        <section class="page">
+          <div class="chrome"><i></i><i></i><i></i></div>
+
+          <div class="hero">
+            <div class="hero-grain"></div>
+            <div class="hero-scrim"></div>
+            <span class="tag">hero-workshop · 16:9</span>
+            <div class="hero-copy">
+              <h2>Built where the work happens</h2>
+              <p>
+                Text over a photograph gets full opacity and a scrim, because a
+                photograph has bright regions and dark ones.
+              </p>
+            </div>
+          </div>
+
+          <div class="body">
+            <div class="shots">
+              <div class="shot">
+                <div class="shot-screen">
+                  <span class="bar w-60"></span>
+                  <span class="bar accent"></span>
+                  <span class="bar w-80"></span>
+                  <div class="grid-mini"><span></span><span></span><span></span></div>
+                </div>
+              </div>
+              <div class="shot">
+                <div class="shot-screen">
+                  <span class="bar w-40"></span>
+                  <span class="bar w-80"></span>
+                  <span class="bar accent"></span>
+                  <div class="grid-mini"><span></span><span></span><span></span></div>
+                </div>
+              </div>
+            </div>
+
+            <p class="caption">
+              Interface shots name their own brand and label text in the prompt.
+              Left unspecified, the model invents a product name and ships it as
+              a rendered screenshot nobody proofreads.
+            </p>
+
+            <div class="faces">
+              <div class="face-card">
+                <span class="face a"></span>
+                <span class="face-meta"><b>Portrait</b><span>portrait-lead</span></span>
+              </div>
+              <div class="face-card">
+                <span class="face b"></span>
+                <span class="face-meta"><b>Portrait</b><span>portrait-ops</span></span>
+              </div>
+              <div class="face-card">
+                <span class="face c"></span>
+                <span class="face-meta"><b>Portrait</b><span>portrait-field</span></span>
+              </div>
+            </div>
+
+            <p class="caption">
+              Every asset is inspected before it is placed, then the page is
+              rendered at a realistic window height and checked with
+              <code>od lint "$page" --fail-on p0</code>.
+            </p>
+          </div>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>
