@@ -1,0 +1,127 @@
+<script data-od-glyph-unfold-runtime>
+(() => {
+  'use strict';
+  if (window.ODGlyphUnfold) return;
+  const SCALE = 2, MIN_SCALE = .045;
+  let ordinal = 0;
+  // Separable squared Euclidean distance transform (Felzenszwalb/Huttenlocher).
+  function edt(binary,width,height,inside) {
+    const grid=new Float64Array(width*height),limit=Math.max(width,height),f=new Float64Array(limit),d=new Float64Array(limit),v=new Int32Array(limit),z=new Float64Array(limit+1);
+    function line(n) {
+      let k=0;v[0]=0;z[0]=-Infinity;z[1]=Infinity;
+      for(let q=1;q<n;q++) { let s=((f[q]+q*q)-(f[v[k]]+v[k]*v[k]))/(2*q-2*v[k]); while(s<=z[k]) { k--;s=((f[q]+q*q)-(f[v[k]]+v[k]*v[k]))/(2*q-2*v[k]); } k++;v[k]=q;z[k]=s;z[k+1]=Infinity; }
+      k=0;for(let q=0;q<n;q++) { while(z[k+1]<q)k++;d[q]=(q-v[k])**2+f[v[k]]; }
+    }
+    for(let x=0;x<width;x++) { for(let y=0;y<height;y++)f[y]=(!!binary[y*width+x]===inside)?0:1e12;line(height);for(let y=0;y<height;y++)grid[y*width+x]=d[y]; }
+    for(let y=0;y<height;y++) { for(let x=0;x<width;x++)f[x]=grid[y*width+x];line(width);for(let x=0;x<width;x++)grid[y*width+x]=d[x]; }
+    return grid;
+  }
+  function color(value) {
+    if(typeof value!=='string'||!/^#[0-9a-f]{6}$/i.test(value))throw new Error('Use six-digit hex ink colors.');
+    return value.slice(1).match(/../g).map(n=>parseInt(n,16)/255);
+  }
+  async function create(options) {
+    const {mount,text,box,font={},palette={}}=options;
+    if(!(mount instanceof Element)||typeof text!=='string'||!text.trim()||/[\r\n]/.test(text))throw new Error('Use one actual single-line text block; otherwise continue ordinary Motion authoring.');
+    const W=Math.round(box?.width),H=Math.round(box?.height);
+    if(!(W>0&&H>0))throw new Error('Choose a positive local drawing box.');
+    const canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;
+    canvas.style.cssText='display:block;width:100%;height:100%;';canvas.setAttribute('role','img');canvas.setAttribute('aria-label',text);
+    const gl=canvas.getContext('webgl2',{alpha:true,antialias:false,premultipliedAlpha:false,preserveDrawingBuffer:true});
+    if(!gl)throw new Error('WebGL2 is unavailable; continue ordinary Motion authoring.');
+    const resources={textures:[],shaders:[],framebuffers:[]};let program,vao,fontFace,fontProbe,disposed=false,progress=0,error=null;
+    function dispose() { if(disposed)return;disposed=true;for(const item of resources.textures)gl.deleteTexture(item);for(const item of resources.shaders)gl.deleteShader(item);for(const item of resources.framebuffers)gl.deleteFramebuffer(item);if(program)gl.deleteProgram(program);if(vao)gl.deleteVertexArray(vao);if(fontFace)document.fonts.delete(fontFace);fontProbe?.parentNode?.remove();canvas.remove(); }
+    try {
+      const family=font.family||'serif',weight=font.weight??700;
+      if(typeof family!=='string'||!family||!Number.isFinite(weight))throw new Error('Choose a usable font family and weight.');
+      let actualFamily=family;
+      if(font.url||font.localName) {
+        actualFamily='ODGlyphUnfold'+(++ordinal);
+        const src=font.url?'url('+JSON.stringify(font.url)+')':'local('+JSON.stringify(font.localName)+')';
+        fontFace=new FontFace(actualFamily,src,{weight:String(weight),style:'normal'});await fontFace.load();document.fonts.add(fontFace);
+      } else if(font.required) throw new Error('An exact required font needs a loadable url or localName; use the existing missing-font path.');
+      const measure=document.createElement('canvas').getContext('2d',{willReadFrequently:true});
+      let size=font.size??H*.75;
+      const fontCss=()=>weight+' '+size+'px '+JSON.stringify(actualFamily);
+      await document.fonts.load(fontCss(),text);await document.fonts.ready;
+      const loaded=document.fonts.check(fontCss(),text);if(!loaded)throw new Error('The chosen font did not load.');
+      function metrics() { measure.font=fontCss();measure.fontKerning='normal';const m=measure.measureText(text);return {left:m.actualBoundingBoxLeft,right:m.actualBoundingBoxRight,ascent:m.actualBoundingBoxAscent,descent:m.actualBoundingBoxDescent,advance:m.width}; }
+      const nominal=metrics(),inkW=Math.max(nominal.advance,nominal.right)+Math.max(0,nominal.left),inkH=nominal.ascent+nominal.descent;
+      if(!(size>0&&inkW>0&&inkH>0))throw new Error('Text has no measurable ink; continue ordinary Motion authoring.');
+      const offset=palette.offset??[2,1];if(!Array.isArray(offset)||offset.length!==2||!offset.every(Number.isFinite))throw new Error('Ink offset must contain two finite local pixel values.');
+      const inset=8+Math.max(Math.abs(offset[0]),Math.abs(offset[1]))+size*.04;
+      const fit=Math.min(1,(W-2*inset)/inkW,(H-2*inset)/inkH);
+      if(!(fit>0))throw new Error('The full text does not fit this local box; continue ordinary Motion authoring.');
+      size*=fit;const m=metrics(),lineLeft=Math.min(0,-m.left),lineRight=Math.max(m.advance,m.right),baselineX=4-lineLeft;
+      const mw=Math.ceil(lineRight-lineLeft+8)*SCALE,mh=Math.ceil(m.ascent+m.descent+8)*SCALE;
+      const max=gl.getParameter(gl.MAX_TEXTURE_SIZE);
+      if(mw>max||mh>max||W>max||H>max)throw new Error('Local glyph exceeds this GPU texture budget; continue ordinary Motion authoring.');
+      const maskCanvas=document.createElement('canvas');maskCanvas.width=mw;maskCanvas.height=mh;
+      const ctx=maskCanvas.getContext('2d',{willReadFrequently:true});ctx.scale(SCALE,SCALE);ctx.font=fontCss();ctx.fontKerning='normal';ctx.fillStyle='#fff';ctx.fillText(text,baselineX,4+m.ascent);
+      const rgba=ctx.getImageData(0,0,mw,mh).data,binary=new Uint8Array(mw*mh);let minX=mw,minY=mh,maxX=-1,maxY=-1;
+      for(let y=0;y<mh;y++)for(let x=0;x<mw;x++)if(rgba[(y*mw+x)*4+3]>=128) { binary[y*mw+x]=1;minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y); }
+      if(maxX<0)throw new Error('The actual text raster has no ink.');
+      const outside=edt(binary,mw,mh,false);let deepest=-1,anchorIndex=-1;
+      for(let i=0;i<binary.length;i++)if(binary[i]&&outside[i]>deepest) { deepest=outside[i];anchorIndex=i; }
+      const ax=anchorIndex%mw,ay=Math.floor(anchorIndex/mw),radius=(Math.sqrt(deepest)-.5)/SCALE;
+      const bounds=[(minX-ax)/SCALE,(minY-ay)/SCALE,(maxX+1-ax)/SCALE,(maxY+1-ay)/SCALE];
+      // Center the complete advance box, retaining leading/trailing spaces.
+      const logicalBounds=[baselineX+lineLeft-ax/SCALE,baselineX+lineRight-ax/SCALE];
+      const anchor=[W/2-(logicalBounds[0]+logicalBounds[1])/2,H/2-(bounds[1]+bounds[3])/2];
+      const targetDelta=Math.max(0,Math.max(1.5,size*.035)-MIN_SCALE*radius),rMax=(targetDelta+2)/MIN_SCALE;
+      const D=[Math.floor(bounds[0]-rMax-4),Math.floor(bounds[1]-rMax-4),Math.ceil(bounds[2]+rMax+4),Math.ceil(bounds[3]+rMax+4)];
+      const fw=(D[2]-D[0])*SCALE+1,fh=(D[3]-D[1])*SCALE+1;
+      if(fw>max||fh>max)throw new Error('Actual local field exceeds this GPU texture budget; continue ordinary Motion authoring.');
+      const fieldMask=new Uint8Array(fw*fh);
+      for(let y=0;y<mh;y++)for(let x=0;x<mw;x++)if(binary[y*mw+x])fieldMask[(y-ay-D[1]*SCALE)*fw+x-ax-D[0]*SCALE]=1;
+      const inner=edt(fieldMask,fw,fh,true),outer=edt(fieldMask,fw,fh,false),field=new Float32Array(fw*fh);
+      for(let i=0;i<field.length;i++)field[i]=(fieldMask[i]?-1:1)*(Math.sqrt(fieldMask[i]?outer[i]:inner[i])-.5)/SCALE;
+      const vertex='#version 300 es\nprecision highp float;void main(){vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));gl_Position=vec4(p*2.0-1.0,0,1);}';
+      const fragment=`#version 300 es
+precision highp float;precision highp int;
+uniform sampler2D uField;uniform vec4 uD,uBounds;uniform vec2 uResolution,uAnchor,uOffset;uniform vec3 uInk,uAccent;uniform float uProgress,uDelta,uFrontHalf,uGrain,uDots;
+layout(location=0)out vec4 ink;layout(location=1)out vec4 diagnostic;
+bool invalid=false;bool nonfinite=false;
+float H(float x){x=clamp(x,0.0,1.0);return x*x*x*(x*(x*6.0-15.0)+10.0);}
+vec3 local(float x){float r=(uDelta+2.0)/.045;float front=uBounds.x-r-uFrontHalf+(uBounds.z-uBounds.x+2.0*r+2.0*uFrontHalf)*H(uProgress);float e=H((front-x+uFrontHalf)/(2.0*uFrontHalf));return vec3(.045+.955*e,uDelta*(1.0-e),e);}
+float field(vec2 p){vec2 z=(p-uD.xy)*2.0;ivec2 i=ivec2(floor(z));vec2 f=fract(z);ivec2 res=textureSize(uField,0);if(any(lessThan(i,ivec2(0)))||any(greaterThanEqual(i+ivec2(1),res))){invalid=true;return 1e6;}float a=texelFetch(uField,i,0).r,b=texelFetch(uField,i+ivec2(1,0),0).r,c=texelFetch(uField,i+ivec2(0,1),0).r,d=texelFetch(uField,i+ivec2(1,1),0).r;return mix(mix(a,b,f.x),mix(c,d,f.x),f.y);}
+float shape(vec2 q){vec3 l=local(q.x);vec2 p=vec2(q.x,q.y/l.x);float r=(l.y+2.0)/l.x;if(any(lessThan(p,uBounds.xy-vec2(r)))||any(greaterThan(p,uBounds.zw+vec2(r))))return 1e6;float d=l.x*field(p)-l.y;if(isnan(d)||isinf(d))nonfinite=true;return d;}
+float grain(vec2 p){vec2 q=floor(p);return fract(sin(dot(q,vec2(127.1,311.7)))*43758.5453);}
+float opacity(vec2 p){vec2 q=p-uAnchor;float d=shape(q);vec3 l=local(q.x);float parent=.045+.955*H(uProgress);vec2 material=uAnchor+vec2(q.x,parent*q.y/l.x);float a=.3839724;vec2 rotated=mat2(cos(a),-sin(a),sin(a),cos(a))*material;float dots=1.0-smoothstep(-.5,.5,length(mod(rotated,7.0)-3.5)-2.4);return (1.0-smoothstep(-.5,.5,d))*mix(1.0,dots,uDots)*mix(1.0,.65+.35*grain(material),uGrain);}
+void main(){vec2 p=vec2(gl_FragCoord.x,uResolution.y-gl_FragCoord.y);float a=opacity(p),b=opacity(p-uOffset);float alpha=a+b-a*b;vec3 c=mix(vec3(1),uInk,a)*mix(vec3(1),uAccent,b);ink=vec4(alpha>0.0?(c-vec3(1.0-alpha))/alpha:vec3(0),alpha);diagnostic=vec4(invalid?1.0:0.0,nonfinite?1.0:0.0,0,1);}`;
+      function compile(type,source) { const shader=gl.createShader(type);resources.shaders.push(shader);gl.shaderSource(shader,source);gl.compileShader(shader);if(!gl.getShaderParameter(shader,gl.COMPILE_STATUS))throw new Error('Glyph shader failed: '+gl.getShaderInfoLog(shader));return shader; }
+      program=gl.createProgram();gl.attachShader(program,compile(gl.VERTEX_SHADER,vertex));gl.attachShader(program,compile(gl.FRAGMENT_SHADER,fragment));gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw new Error('Glyph shader link failed: '+gl.getProgramInfoLog(program));
+      gl.useProgram(program);vao=gl.createVertexArray();gl.bindVertexArray(vao);
+      const uniform=name=>gl.getUniformLocation(program,'u'+name),uProgress=uniform('Progress');
+      function texture(internal,w,h,format,type,data) { const item=gl.createTexture();resources.textures.push(item);gl.bindTexture(gl.TEXTURE_2D,item);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);gl.texImage2D(gl.TEXTURE_2D,0,internal,w,h,0,format,type,data);return item; }
+      gl.activeTexture(gl.TEXTURE0);const fieldTexture=texture(gl.R32F,fw,fh,gl.RED,gl.FLOAT,field);gl.uniform1i(uniform('Field'),0);
+      gl.uniform4fv(uniform('D'),D);gl.uniform4fv(uniform('Bounds'),bounds);gl.uniform2f(uniform('Resolution'),W,H);gl.uniform2fv(uniform('Anchor'),anchor);gl.uniform2fv(uniform('Offset'),offset);gl.uniform3fv(uniform('Ink'),color(palette.ink??'#18252d'));gl.uniform3fv(uniform('Accent'),color(palette.accent??palette.ink??'#18252d'));
+      gl.uniform1f(uniform('Delta'),targetDelta);gl.uniform1f(uniform('FrontHalf'),Math.max(8,(bounds[2]-bounds[0])*.15));
+      const textureStyle=options.texture??{};for(const [key,value]of [['Grain',textureStyle.grain??.15],['Dots',textureStyle.dots??.2]]) { if(!Number.isFinite(value)||value<0||value>1)throw new Error('Texture amounts must be between zero and one.');gl.uniform1f(uniform(key),value); }
+      const framebuffer=gl.createFramebuffer();resources.framebuffers.push(framebuffer);gl.bindFramebuffer(gl.FRAMEBUFFER,framebuffer);
+      for(let i=0;i<2;i++) { gl.activeTexture(gl.TEXTURE1+i);const target=texture(gl.RGBA8,W,H,gl.RGBA,gl.UNSIGNED_BYTE,null);gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0+i,gl.TEXTURE_2D,target,0); }
+      const attachments=[gl.COLOR_ATTACHMENT0,gl.COLOR_ATTACHMENT1];gl.drawBuffers(attachments);if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE)throw new Error('Glyph framebuffer is incomplete.');
+      const lost=event=>{event.preventDefault();error='WebGL context lost';};canvas.addEventListener('webglcontextlost',lost);
+      function setProgress(value) {
+        if(disposed||error)throw new Error(error||'Glyph module has been disposed.');
+        if(!Number.isFinite(value)||value<0||value>1)throw new Error('Glyph progress must be between zero and one.');progress=value;
+        gl.useProgram(program);gl.bindVertexArray(vao);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,fieldTexture);gl.bindFramebuffer(gl.FRAMEBUFFER,framebuffer);gl.drawBuffers(attachments);gl.viewport(0,0,W,H);gl.disable(gl.BLEND);gl.uniform1f(uProgress,progress);gl.drawArrays(gl.TRIANGLES,0,3);
+        gl.bindFramebuffer(gl.READ_FRAMEBUFFER,framebuffer);gl.readBuffer(gl.COLOR_ATTACHMENT0);gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER,null);gl.blitFramebuffer(0,0,W,H,0,0,W,H,gl.COLOR_BUFFER_BIT,gl.NEAREST);gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+      }
+      function diagnostics(readPixels=false) {
+        const result={reference:'glyph-unfold',version:1,ready:!disposed&&!error,progress,error,text,font:{requestedFamily:family,loadedFamily:actualFamily,weight,size,loaded,coverage:'unverified',actualPlatformFonts:'unverified'},fitRatio:fit,advance:m.advance,logicalBounds,bounds,anchor,field:{width:fw,height:fh,domain:D,sampleScale:SCALE,phiNotTrueDistance:true},glError:gl.getError()};
+        if(readPixels&&!disposed) { const pixels=new Uint8Array(W*H*4);gl.bindFramebuffer(gl.READ_FRAMEBUFFER,framebuffer);gl.readBuffer(gl.COLOR_ATTACHMENT1);gl.readPixels(0,0,W,H,gl.RGBA,gl.UNSIGNED_BYTE,pixels);gl.bindFramebuffer(gl.FRAMEBUFFER,null);let invalid=0,nonfinite=0;for(let i=0;i<pixels.length;i+=4){if(pixels[i])invalid++;if(pixels[i+1])nonfinite++;}result.outOfDomainPixels=invalid;result.nonfinitePixels=nonfinite; }
+        return result;
+      }
+      const initialError=gl.getError();if(initialError!==gl.NO_ERROR)throw new Error('Glyph GPU initialization failed: '+initialError);
+      // An exact-copy SVG probe lets browser inspection report actual font
+      // fallbacks/coverage; canvas readiness alone cannot make that claim.
+      const probe=document.createElementNS('http://www.w3.org/2000/svg','svg');probe.setAttribute('aria-hidden','true');probe.style.cssText='position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden;';
+      fontProbe=document.createElementNS('http://www.w3.org/2000/svg','text');fontProbe.setAttribute('font-family',actualFamily);fontProbe.setAttribute('font-weight',String(weight));fontProbe.setAttribute('font-size',String(size));fontProbe.style.whiteSpace='pre';fontProbe.textContent=text;probe.appendChild(fontProbe);
+      mount.append(canvas,probe);setProgress(0);
+      return {canvas,fontProbe,bounds,anchor,setProgress,diagnostics,dispose};
+    } catch(cause) { dispose();throw cause; }
+  }
+  window.ODGlyphUnfold=Object.freeze({version:1,create});
+})();
+</script>

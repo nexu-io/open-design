@@ -55,6 +55,7 @@ import {
   observeOdNextDeviceShell,
   observeOdNextLayoutPrimitives,
 } from './strategies/od-next/device-frames.js';
+import { materializeOdNextMotionReference } from './strategies/od-next/motion-reference.js';
 import {
   composeSystemPrompt,
   detectDeckIntentSignal,
@@ -12273,20 +12274,24 @@ export async function startServer({
         cwd,
       });
     }
-    // OD Next task-profile resources (the handheld shells for prototype
-    // tasks) are staged beside the frozen Skills on every strategy run, so the
-    // rule card's `.od-frames/<shell>.html` paths resolve even when no platform
-    // was resolved up front. Fail-soft: a staging error costs the shells, not
-    // the run.
+    // Profile resources stay outside prompt text. Motion publishes complete
+    // binding-verified bundles; handheld shells keep their existing owner.
+    // Both paths are fail-soft, so missing references never block authoring.
     if (cwd && strategyTaskAtStart && typeof run.appliedPluginSnapshotId === 'string') {
       try {
-        const staging = await materializeOdNextDeviceFrames({
-          cwd,
-          resources: await loadOdNextTaskResourcesForSnapshot({
-            bundledPluginsDir: BUNDLED_PLUGINS_DIR,
-            snapshot: getSnapshot(db, run.appliedPluginSnapshotId),
-          }),
+        const snapshot = getSnapshot(db, run.appliedPluginSnapshotId);
+        const resources = await loadOdNextTaskResourcesForSnapshot({
+          bundledPluginsDir: BUNDLED_PLUGINS_DIR,
+          snapshot,
         });
+        try {
+          const motion = materializeOdNextMotionReference({ cwd, resources, binding: snapshot?.strategy, snapshotId: snapshot?.snapshotId ?? '' });
+          if (motion.packageHash) console.info(`[od-next-motion-reference] usable=${motion.usable} snapshot=${motion.appliedSnapshot} package=${motion.packageHash}`);
+          if (motion.skipped.length) console.warn(`[od-next-motion-reference] staging skipped (${motion.reason}): ${motion.skipped.join(', ')}`);
+        } catch (error) {
+          console.warn(`[od-next-motion-reference] staging skipped: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        const staging = await materializeOdNextDeviceFrames({ cwd, resources });
         if (staging.staged.length > 0) run.odNextStagedDeviceFrames = staging.staged;
         if (staging.skipped.length > 0) {
           console.warn(
