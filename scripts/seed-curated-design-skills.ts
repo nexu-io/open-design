@@ -23,7 +23,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
 const SKILLS_ROOT = path.join(REPO_ROOT, 'skills');
 
-type Mode = 'image' | 'video' | 'audio' | 'deck' | 'design-system' | 'template' | 'prototype';
+type Mode = 'image' | 'video' | 'audio' | 'deck' | 'design-system' | 'template' | 'prototype' | 'utility';
 
 interface CuratedSkill {
   // Folder + frontmatter `name`; must be a slug (a-z, 0-9, dash) so the
@@ -35,8 +35,10 @@ interface CuratedSkill {
   // Lowercase keywords / phrases the agent matches against. Aim for 3-6
   // distinct phrases per skill so triggers stay specific.
   triggers: string[];
-  // Maps to the existing `od.mode` filter. Pick the closest of the seven
-  // modes the daemon recognises; everything else falls back to "prototype".
+  // Maps to the `od.mode` filter. Pick the closest functional-skill mode
+  // (`utility` or `design-system`) or one of the seven modes the daemon
+  // recognises; anything else falls back to "prototype" at serve time
+  // (see normalizeMode in apps/daemon/src/skills.ts).
   mode: Mode;
   // Free-form category slug that powers the new category filter row in
   // Settings → Skills. Keep the vocabulary tight so a few pills cover the
@@ -1053,6 +1055,47 @@ const CATALOGUE: CuratedSkill[] = [
     upstream: 'https://github.com/MiniMax-AI/skills',
     attribution: 'Curated from the MiniMax AI team.',
   },
+
+  // -------------------------------------------------------------------------
+  // Design ops & forms (Owl-Listener designer-skills)
+  // -------------------------------------------------------------------------
+  {
+    id: 'form-design',
+    description:
+      'Design a form end to end — field order, grouping, validation, and completion. Use when the artifact is a form, from single-field inputs to multi-step flows.',
+    triggers: ['form design', 'design form', 'form validation', 'multi-step form', 'form layout'],
+    mode: 'utility',
+    category: 'web-artifacts',
+    upstream: 'https://github.com/Owl-Listener/designer-skills/tree/main/interaction-design/skills/form-design',
+    attribution: 'Curated from Owl-Listener designer-skills (MIT).',
+  },
+
+  // -------------------------------------------------------------------------
+  // Interface polish & anti-slop (single-purpose upstreams)
+  // -------------------------------------------------------------------------
+  {
+    id: 'make-interfaces-feel-better',
+    description:
+      'Design-engineering polish for interfaces: concentric border radius, optical alignment, shadows vs borders, interruptible animations, icon stroke weight and states, tabular numbers, hit areas. Use when building UI components, reviewing frontend code, or fixing a surface that feels off.',
+    triggers: ['make it feel better', 'feels off', 'concentric border radius', 'optical alignment', 'tabular numbers', 'icon stroke weight'],
+    mode: 'utility',
+    category: 'creative-direction',
+    upstream: 'https://github.com/jakubkrehel/make-interfaces-feel-better',
+    attribution: 'Curated from @jakubkrehel (MIT).',
+  },
+  {
+    id: 'hallmark',
+    description:
+      'Anti-AI-slop page design: picks a macrostructure from 21 page shapes, applies a theme, runs slop-test gates plus a pre-emit self-critique. Verbs: default build, hallmark audit (ranked punch list, no edits), hallmark redesign, hallmark study (extract design DNA from a screenshot or URL). Use for non-generic landing pages and redesigns.',
+    triggers: ['hallmark', 'hallmark audit', 'hallmark redesign', 'hallmark study', 'anti-ai-slop page'],
+    mode: 'utility',
+    category: 'creative-direction',
+    upstream: 'https://github.com/nutlope/hallmark',
+    attribution: 'Curated from @nutlope (MIT).',
+    catalogueOnlyNote:
+      'OpenDesign ships this entry as discovery metadata only. The upstream theme catalog, reference files, and study/redesign workflows are not bundled here; install the upstream skill to run the full workflow.',
+  },
+
 ];
 
 function buildBody(s: CuratedSkill): string {
