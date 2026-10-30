@@ -3527,6 +3527,33 @@ process.stdin.on("end", () => {
     expect(publishStep).toContain(artifactMode);
   });
 
+  it("[P1] pins prerelease checkout and reservation ownership to one resolved commit", async () => {
+    const workflow = parseYaml(await readFile(releasePrereleaseWorkflowPath, "utf8"));
+    const metadata = workflow.jobs.metadata;
+    const checkout = metadata.steps.find((step: { uses?: string }) => step.uses?.startsWith("actions/checkout@"));
+    expect(checkout.with.ref).toBe("${{ inputs.ref != '' && inputs.ref || github.sha }}");
+    expect(metadata.outputs.commit).toBe("${{ steps.source.outputs.commit }}");
+    const source = metadata.steps.find((step: { id?: string }) => step.id === "source");
+    const reservation = metadata.steps.find((step: { id?: string }) => step.id === "reservation");
+    expect(reservation.env.RELEASE_COMMIT).toBe(metadata.outputs.commit);
+
+    const root = await mkdtemp(join(tmpdir(), "od-prerelease-source-"));
+    const output = join(root, "outputs");
+    const env = join(root, "env");
+    const triggerSha = "b".repeat(40);
+    try {
+      const checkedOut = (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: workspaceRoot })).stdout.trim();
+      await execFileAsync("bash", ["-euo", "pipefail", "-c", source.run], {
+        cwd: workspaceRoot,
+        env: { ...process.env, GITHUB_SHA: triggerSha, GITHUB_ENV: env, GITHUB_OUTPUT: output },
+      });
+      expect(await readFile(output, "utf8")).toBe(`commit=${checkedOut}\n`);
+      expect(await readFile(env, "utf8")).toBe(`BUILT_SHA=${checkedOut}\n`);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("[P1] reserves prerelease versions before building and validates ownership before publishing", async () => {
     const workflow = parseYaml(await readFile(releasePrereleaseWorkflowPath, "utf8"));
     expect(workflow.env).toMatchObject({
@@ -4284,7 +4311,9 @@ function expectCountedReleaseWorkflowCallContract(workflow: string, channel: "pr
   expect(workflow).toContain("ref:");
   expect(workflow).toContain("release_version:");
   expect(workflow).toContain("description: \"Optional git ref to build.");
-  expect(workflow).toContain("ref: ${{ inputs.ref != '' && inputs.ref || github.ref }}");
+  expect(workflow).toContain(channel === "prerelease"
+    ? "ref: ${{ inputs.ref != '' && inputs.ref || github.sha }}"
+    : "ref: ${{ inputs.ref != '' && inputs.ref || github.ref }}");
   expect(workflow).toContain("Resolve built commit");
   expect(workflow).toContain("GITHUB_SHA: ${{ env.BUILT_SHA }}");
   expect(workflow).toContain("GITHUB_REF_NAME: ${{ inputs.ref != '' && inputs.ref || github.ref_name }}");
