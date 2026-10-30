@@ -858,6 +858,7 @@ export const tr: Dict = {
   'settings.mcpMethodOneClick': 'Tek tıkla kurulum',
   'settings.mcpInstructionCursor': 'Onay iletişim kutusuyla kurmak için "Cursor\'a Kur"a tıklayın veya bu JSON\'u {path} dosyasıyla birleştirin.',
   'settings.mcpDeeplinkInstallCursor': 'Cursor\'a Kur',
+  "settings.mcpInstructionOctop": "OCTOP_USER değerini Octop kullanıcı adınıza ayarlayıp od mcp install octop komutunu çalıştırın veya bu JSON’u Octop bağlayıcılarındaki bir OpenDesign örneğine aktarın. Veritabanını elle düzenlemeyin.",
   'settings.mcpMethodJson': 'JSON yapılandırması',
   'settings.mcpInstructionKiro': "{path} dosyasını açın ve bu JSON'u birleştirin. Workspace düzeyi yapılandırma için .kiro/settings/mcp.json kullanın.",
   'settings.mcpInstructionCopilot': 'Komut Paletini ({shortcut}) açın, "MCP: Open User Configuration" komutunu çalıştırın ve bu JSON\'u birleştirin. Araçların görünmesi için Copilot Chat\'in Agent modunda olması gerekir.',

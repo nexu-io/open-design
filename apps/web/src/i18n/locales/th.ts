@@ -858,6 +858,7 @@ export const th: Dict = {
   'settings.mcpMethodOneClick': 'ติดตั้งด้วยคลิกเดียว',
   'settings.mcpInstructionCursor': 'คลิก "Install in Cursor" เพื่อติดตั้งพร้อมกล่องโต้ตอบขออนุมัติ หรือผสาน JSON นี้เข้ากับ {path}',
   'settings.mcpDeeplinkInstallCursor': 'ติดตั้งใน Cursor',
+  "settings.mcpInstructionOctop": "ตั้ง OCTOP_USER เป็นชื่อผู้ใช้ Octop แล้วเรียก od mcp install octop หรือนำเข้า JSON นี้ในอินสแตนซ์ OpenDesign ที่ตัวเชื่อมต่อ Octop อย่าแก้ไขฐานข้อมูลด้วยตนเอง",
   'settings.mcpMethodJson': 'การตั้งค่า JSON',
   'settings.mcpInstructionKiro': 'เปิด {path} แล้วรวม JSON นี้ สำหรับการตั้งค่าระดับ workspace ให้ใช้ .kiro/settings/mcp.json',
   'settings.mcpInstructionCopilot': 'เปิด Command Palette ({shortcut}) รัน "MCP: Open User Configuration" แล้วผสาน JSON นี้ Copilot Chat ต้องอยู่ในโหมด Agent เพื่อให้เครื่องมือแสดงขึ้นมา',

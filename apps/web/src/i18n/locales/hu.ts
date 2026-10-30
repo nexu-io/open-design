@@ -858,6 +858,7 @@ export const hu: Dict = {
   'settings.mcpMethodOneClick': 'Egykattintásos telepítés',
   'settings.mcpInstructionCursor': 'Kattints az „Install in Cursor” gombra a jóváhagyási párbeszédpanellel történő telepítéshez, vagy egyesítsd ezt a JSON-t a következővel: {path}.',
   'settings.mcpDeeplinkInstallCursor': 'Telepítés a Cursorba',
+  "settings.mcpInstructionOctop": "Állítsa az OCTOP_USER értékét az Octop felhasználónevére, majd futtassa az od mcp install octop parancsot, vagy importálja ezt a JSON-t egy OpenDesign-példányba az Octop csatlakozói között. Ne szerkessze kézzel az adatbázist.",
   'settings.mcpMethodJson': 'JSON konfiguráció',
   'settings.mcpInstructionKiro': 'Nyisd meg ezt: {path}, és egyesítsd ezt a JSON-t. Workspace-szintű konfigurációhoz használd: .kiro/settings/mcp.json.',
   'settings.mcpInstructionCopilot': 'Nyisd meg a Command Palette-et ({shortcut}), futtasd az „MCP: Open User Configuration” parancsot, és egyesítsd ezt a JSON-t. A Copilot Chatnek Agent módban kell lennie, hogy az eszközök megjelenjenek.',
