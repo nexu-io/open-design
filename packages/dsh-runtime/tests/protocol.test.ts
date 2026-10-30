@@ -7,6 +7,11 @@ import { identityFrame, modelsFrame, parseHostCommand } from '../src/protocol.js
 import { internals } from '../src/index.js';
 
 describe('@open-design/dsh-runtime protocol', () => {
+  test('carries the same opaque compatibility generation in probe and ready', () => {
+    for (const type of ['probe', 'ready'] as const) {
+      assert.equal(identityFrame(type, 'test', 'generation-2').compatibility_generation, 'generation-2');
+    }
+  });
   test('declares a dsh profile bundle patch', () => {
     const manifest = JSON.parse(readFileSync(resolve('package.json'), 'utf8')) as {
       dsh?: { bundle?: { patch?: string } };
@@ -174,6 +179,7 @@ describe('@open-design/dsh-runtime protocol', () => {
       dispose: async () => { disposeCalls += 1; },
     };
     const ctx = {
+      get: () => undefined,
       agentDefaultModel: {
         currentSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
       },

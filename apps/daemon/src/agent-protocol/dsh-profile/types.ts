@@ -62,6 +62,7 @@ export type DshProfileProbeFrame = {
   runtime: 'open-design';
   protocol_version: 1;
   plugin_version: string;
+  compatibility_generation?: string;
   capabilities: DshProfileCapabilities;
 };
 
@@ -71,6 +72,7 @@ export type DshProfileReadyFrame = {
   runtime: 'open-design';
   protocol_version: 1;
   plugin_version: string;
+  compatibility_generation?: string;
   capabilities: DshProfileCapabilities;
 };
 

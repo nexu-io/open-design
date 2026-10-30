@@ -22,6 +22,8 @@ export type ResumeInvalidationReason = AgentSessionInvalidationReason;
 export interface AgentResumeContext {
   /** Stored CLI session id if one exists, even when a guard rejects resuming it. */
   storedSessionId: string | null;
+  /** Adapter-owned generation captured from the process that wrote this session. */
+  storedCompatibilityGeneration: string | null;
   /** Stored CLI session id to resume, or null when starting fresh. */
   resumeSessionId: string | null;
   /** Freshly minted UUID to open a new session with when not resuming. */
@@ -120,12 +122,25 @@ export interface AgentResumeFailurePolicy {
  */
 export function resolveAgentResumePromptPolicy(
   ctx: Pick<AgentResumeContext, 'isResuming' | 'resumeSessionId' | 'invalidationReason'>,
+  compatibility?: {
+    readonly storedGeneration: string | null;
+    readonly activeGeneration: string | null;
+  },
 ): AgentResumePromptPolicy {
+  const invalidationReason = ctx.invalidationReason ?? (
+    compatibility && ctx.resumeSessionId
+      ? !compatibility.storedGeneration || !compatibility.activeGeneration
+        ? 'compatibility_generation_missing'
+        : compatibility.storedGeneration !== compatibility.activeGeneration
+          ? 'compatibility_generation_changed'
+          : null
+      : null
+  );
   const canResume =
     ctx.isResuming === true
     && typeof ctx.resumeSessionId === 'string'
     && ctx.resumeSessionId.length > 0
-    && ctx.invalidationReason == null;
+    && invalidationReason == null;
   if (canResume) {
     return {
       mode: 'resume-session',
@@ -140,7 +155,7 @@ export function resolveAgentResumePromptPolicy(
     resumeSessionId: null,
     skipTranscript: false,
     requiresFullTranscript: true,
-    invalidationReason: ctx.invalidationReason ?? null,
+    invalidationReason,
   };
 }
 
@@ -248,6 +263,7 @@ export function resolveAgentResumeContext(
   const resumable = storedSessionId != null && invalidationReason == null;
   return {
     storedSessionId,
+    storedCompatibilityGeneration: record?.compatibilityGeneration ?? null,
     resumeSessionId: resumable ? storedSessionId : null,
     newSessionId: randomUUID(),
     isResuming: resumable,
@@ -318,6 +334,7 @@ export function persistCapturedAgentSession(
     conversationId: string | null | undefined;
     agentId: string;
     sessionId: string | null;
+    compatibilityGeneration?: string | null;
     stablePromptHash?: string | null;
     stablePromptSections?: string | null;
     // Resume identity (see resolveAgentResumeContext). Must be stored alongside
@@ -336,6 +353,7 @@ export function persistCapturedAgentSession(
       conversationId: input.conversationId,
       agentId: input.agentId,
       sessionId: input.sessionId,
+      compatibilityGeneration: input.compatibilityGeneration ?? null,
       stablePromptHash: input.stablePromptHash ?? null,
       stablePromptSections: input.stablePromptSections ?? null,
       model: input.model ?? null,
