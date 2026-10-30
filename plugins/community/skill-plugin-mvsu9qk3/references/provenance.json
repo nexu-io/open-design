@@ -1,0 +1,19 @@
+{
+  "candidateId": "2d062462-6715-40fa-b1f8-77e282a340b8",
+  "projectId": "e30502a3-7b84-4c69-bbcc-bf4cd5402d6a",
+  "runId": "5f7977a9-d7af-40ca-ad30-325b18a89e10",
+  "conversationId": "3c1e06d5-2288-4c86-9076-998079205850",
+  "provenance": {
+    "summary": "Detected from 2026-10-29-driver-delivery-system.md after a successful run.",
+    "detectedAt": 1793234417005
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "2026-10-29-driver-delivery-system.md",
+      "label": "2026-10-29-driver-delivery-system.md",
+      "size": 36905,
+      "copied": true
+    }
+  ]
+}
