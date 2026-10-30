@@ -38,6 +38,7 @@ import {
   tokensToThemeJson,
 } from '../src/brands/engine/index.js';
 import type { SeedToken } from '../src/brands/engine/types.js';
+import { avatar } from '../src/brands/engine/kit.js';
 import {
   adoptExistingImagery,
   findImageRefs,
@@ -293,6 +294,16 @@ describe('agent-driven brand extraction engine', () => {
     for (const color of [tokens.colorSuccess, tokens.colorWarning, tokens.colorError]) {
       expect(contrastRatio(color, '#ffffff')).toBeGreaterThanOrEqual(4.5);
     }
+  });
+
+  it('renders kit avatars on the AA-readable primary surface', () => {
+    const tokens = deriveTokens({ ...defaultSeed, colorPrimary: '#072c50' }, 'default');
+    const markup = avatar({ name: 'Open Design' });
+
+    expect(contrastRatio(tokens.colorPrimaryText, tokens.colorPrimary)).toBeGreaterThanOrEqual(4.5);
+    expect(markup).toContain('background:var(--brand-color-primary)');
+    expect(markup).toContain('color:var(--brand-color-primary-text)');
+    expect(markup).not.toContain('background:var(--brand-color-primary-bg)');
   });
 
   it('drops scraped CSS source junk from font families instead of corrupting the token block', () => {
