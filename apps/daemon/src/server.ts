@@ -267,8 +267,12 @@ import { TerminalControlSequenceStripper } from './runtimes/terminal-control.js'
 import { stampToolTiming } from './runtimes/tool-timing.js';
 import {
   buildOpenCodeByokProviderConfig,
+  BYOK_OPENCODE_CONTEXT_TOKEN_LIMIT,
+  BYOK_OPENCODE_OUTPUT_TOKEN_LIMIT,
   BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
 } from './runtimes/byok-opencode.js';
+import { checkStaticPromptContextBudget } from './runtimes/context-window-budget.js';
+import { measureOpenCodeMcpToolSchemaBytes } from './runtimes/mcp-tool-schema-budget.js';
 import {
   extractPlainStreamArtifacts,
   persistPlainStreamArtifactList,
@@ -15355,6 +15359,32 @@ export async function startServer({
           await applyOpenCodeEventPlugin(env, RUNTIME_DATA_DIR, versions?.agentCliVersion, agentSpawnEnv.OPENCODE_CONFIG_CONTENT);
         } catch (error) {
           console.warn('[opencode] optional tool previews unavailable:', error instanceof Error ? error.message : String(error));
+        }
+      }
+      if (byokOpenCodeProvider) {
+        // Resolve using the selected binary and the exact finalized spawn
+        // environment/cwd: sandbox homes, expanded paths, launch overrides,
+        // MCP overlay, and event plugin are all applied by this point.
+        const measurement = await measureOpenCodeMcpToolSchemaBytes({
+          command: agentLaunch.launchPath,
+          env,
+          cwd: effectiveCwd,
+        });
+        const budgetError = checkStaticPromptContextBudget({
+          agentName: def.name,
+          model: byokOpenCodeProvider.modelId,
+          promptBytes: typeof composed === 'string' ? Buffer.byteLength(composed, 'utf8') : 0,
+          toolSchemaBytes: measurement.bytes,
+          contextWindowTokens: BYOK_OPENCODE_CONTEXT_TOKEN_LIMIT,
+          outputTokenReserveTokens: BYOK_OPENCODE_OUTPUT_TOKEN_LIMIT,
+        });
+        if (budgetError) {
+          cleanupPromptFile();
+          revokeToolToken('child_exit');
+          unregisterChatAgentEventSink();
+          cleanupOdNextRunInputProjection();
+          send('error', createSseErrorPayload(budgetError.code, budgetError.message, { retryable: false }));
+          return finishStrategyAwarePhysicalRun('failed', 1, null);
         }
       }
       if (def.id === 'amr' && !amrModelIdentityMatches(env)) {

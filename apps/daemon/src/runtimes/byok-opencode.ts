@@ -5,8 +5,14 @@ export const BYOK_OPENCODE_PROVIDER_ID = 'open-design-byok';
 export const BYOK_OPENCODE_API_KEY_ENV = 'OPEN_DESIGN_BYOK_API_KEY';
 export const BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE =
   'BYOK OpenCode requires a complete provider configuration for this run.';
-const DEFAULT_CONTEXT_TOKEN_LIMIT = 128_000;
-const DEFAULT_OUTPUT_TOKEN_LIMIT = 16_384;
+// The context window every custom BYOK model is declared with. OpenCode
+// trusts this number to decide when to auto-compact, so it is also the
+// ceiling `checkStaticPromptContextBudget` holds a composed prompt to.
+// See #9118: the value is a conservative default for providers that do
+// not report a window, not a measurement of the configured model.
+export const BYOK_OPENCODE_CONTEXT_TOKEN_LIMIT = 128_000;
+// Room the run must leave for the model's own reply inside that window.
+export const BYOK_OPENCODE_OUTPUT_TOKEN_LIMIT = 16_384;
 
 const DEFAULT_BASE_URL_BY_PROTOCOL: Record<ByokChatProviderConfig['protocol'], string> = {
   anthropic: 'https://api.anthropic.com/v1',
@@ -85,8 +91,8 @@ export function buildOpenCodeByokProviderConfig(
             // policy is not a persisted claim about the model's capabilities.
             modalities: { input: ['text', 'image'], output: ['text'] },
             limit: {
-              context: DEFAULT_CONTEXT_TOKEN_LIMIT,
-              output: DEFAULT_OUTPUT_TOKEN_LIMIT,
+              context: BYOK_OPENCODE_CONTEXT_TOKEN_LIMIT,
+              output: BYOK_OPENCODE_OUTPUT_TOKEN_LIMIT,
             },
           },
         },

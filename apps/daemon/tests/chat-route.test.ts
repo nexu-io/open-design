@@ -27,6 +27,7 @@ import {
   startServer,
 } from '../src/server.js';
 import { skillCwdAliasSegment } from '../src/cwd-aliases.js';
+import { resolveSandboxRuntimeConfig } from '../src/sandbox-mode.js';
 import { amrModelLoadingCache } from '../src/runtimes/amr-model-cache.js';
 import { resetLiveModelsForTests } from '../src/runtimes/models.js';
 import { getAgentDef } from '../src/agents.js';
@@ -47,7 +48,19 @@ async function withFakeAgent<T>(
   binName: string,
   script: string,
   run: () => Promise<T>,
+  configProbe = "process.stdout.write(process.env.OPENCODE_CONFIG_CONTENT || '{}');",
 ): Promise<T> {
+  // `debug config` is a metadata operation, not the generation under test.
+  // Keep the fake CLI's resolved-config response separate from its run code
+  // so a preflight probe cannot accidentally count as a generation spawn.
+  if (binName === 'opencode') {
+    script = `if (process.argv[2] === '--version') { console.log('1.0.0'); process.exit(0); }
+    if (process.argv.includes('--help')) { process.exit(0); }
+    if (process.argv[2] === 'debug' && process.argv[3] === 'config') {
+      ${configProbe}
+      process.exit(0);
+    }\n${script}`;
+  }
   const dir = await fsp.mkdtemp(join(tmpdir(), 'od-chat-route-bin-'));
   const oldPath = process.env.PATH;
   try {
@@ -945,6 +958,309 @@ process.stdin.on('end', () => {
         expect(JSON.stringify(parsed)).not.toContain('sk-test-byok');
       },
     );
+  });
+
+  // Issue #9118: a prompt already over the BYOK context window used to start
+  // the run anyway, leaving OpenCode to auto-compact a static prompt it cannot
+  // shrink — a loop that bills the provider until something external stops it.
+  it('refuses a BYOK OpenCode run whose prompt exceeds the declared context window', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for BYOK OpenCode config tests');
+    }
+
+    const projectId = `proj-${randomUUID()}`;
+    const markerDir = await fsp.mkdtemp(join(tmpdir(), 'od-byok-opencode-context-budget-'));
+    tempDirs.push(markerDir);
+    const spawnMarker = join(markerDir, 'opencode-spawned.txt');
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'BYOK context budget fixture' }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    // 420 KB estimates at ~140k tokens, already past the 128k window the
+    // daemon declares for BYOK models before any reply room is reserved.
+    const oversizedMessage = 'x'.repeat(420_000);
+
+    await withFakeAgent(
+      'opencode',
+      `
+const fs = require('node:fs');
+if (process.argv[2] !== 'run') process.exit(0);
+fs.writeFileSync(${JSON.stringify(spawnMarker)}, 'spawned');
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'text', part: { text: 'oversized-prompt-ran' } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'byok-opencode',
+            projectId,
+            message: oversizedMessage,
+            model: 'deepseek-v4-flash',
+            byokProvider: {
+              protocol: 'senseaudio',
+              apiKey: 'sk-test-byok',
+              baseUrl: 'https://api.senseaudio.cn',
+              model: 'deepseek-v4-flash',
+              requiresApiKey: true,
+            },
+          }),
+        });
+        const body = await response.text();
+
+        expect(body).toContain('AGENT_PROMPT_TOO_LARGE');
+        expect(body).toContain('context window');
+        expect(body).toMatch(/compaction/i);
+        // The whole point of the guard: the runtime never gets to start the
+        // compaction/continuation cycle that burns the provider balance.
+        expect(body).not.toContain('oversized-prompt-ran');
+        await expect(fsp.access(spawnMarker)).rejects.toThrow();
+      },
+    );
+  });
+
+  // Review on #9136, P1: budgeting only `composed` misses the tool schemas
+  // OpenCode resolves for the MCP servers in OPENCODE_CONFIG_CONTENT. #9118's
+  // 462,317 bytes of tool definitions were the static payload that actually
+  // blew the window, so a small prompt plus an oversized schema must still be
+  // refused before the child is spawned.
+  it('refuses a BYOK OpenCode run whose small prompt carries an oversized MCP tool schema', async () => {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) {
+      throw new Error('OD_DATA_DIR is required for BYOK context budget tests');
+    }
+
+    const projectId = `proj-${randomUUID()}`;
+    const markerDir = await fsp.mkdtemp(join(tmpdir(), 'od-byok-mcp-schema-budget-'));
+    tempDirs.push(markerDir);
+    const spawnMarker = join(markerDir, 'opencode-spawned.txt');
+    const mcpServerPath = join(markerDir, 'oversized-schema-mcp.cjs');
+    const mcpConfigPath = join(dataDir, 'mcp-config.json');
+
+    // A minimal stdio MCP server: enough of the protocol for the preflight to
+    // list one tool whose schema alone is ~133k tokens.
+    await fsp.writeFile(
+      mcpServerPath,
+      `
+const readline = require('node:readline');
+const BIG = 'a'.repeat(400000);
+const send = (msg) => process.stdout.write(JSON.stringify(msg) + '\\n');
+readline.createInterface({ input: process.stdin }).on('line', (line) => {
+  if (!line.trim()) return;
+  let msg;
+  try { msg = JSON.parse(line); } catch { return; }
+  if (msg.id === undefined) return;
+  if (msg.method === 'initialize') {
+    send({ jsonrpc: '2.0', id: msg.id, result: { protocolVersion: '2024-11-05', capabilities: { tools: {} }, serverInfo: { name: 'oversized-schema', version: '1' } } });
+    return;
+  }
+  if (msg.method === 'tools/list') {
+    send({ jsonrpc: '2.0', id: msg.id, result: { tools: [{ name: 'oversized_tool', description: BIG, inputSchema: { type: 'object', properties: {} } }] } });
+    return;
+  }
+  send({ jsonrpc: '2.0', id: msg.id, error: { code: -32601, message: 'unsupported' } });
+});
+`,
+      'utf8',
+    );
+
+    const previousMcpConfig = await fsp
+      .readFile(mcpConfigPath, 'utf8')
+      .catch(() => null);
+    await fsp.writeFile(
+      mcpConfigPath,
+      JSON.stringify({
+        servers: [
+          {
+            id: 'oversized-schema',
+            transport: 'stdio',
+            enabled: true,
+            command: process.execPath,
+            args: [mcpServerPath],
+          },
+        ],
+      }),
+      'utf8',
+    );
+
+    try {
+      const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: 'BYOK oversized schema fixture' }),
+      });
+      expect(createProjectResponse.ok).toBe(true);
+
+      await withFakeAgent(
+        'opencode',
+        `
+const fs = require('node:fs');
+if (process.argv[2] !== 'run') process.exit(0);
+fs.writeFileSync(${JSON.stringify(spawnMarker)}, 'spawned');
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'text', part: { text: 'oversized-schema-ran' } }));
+  process.exit(0);
+});
+`,
+        async () => {
+          const response = await fetch(`${baseUrl}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'byok-opencode',
+              projectId,
+              // Deliberately small: the text payload is nowhere near the
+              // window, so only the resolved tool schema can trip the guard.
+              message: 'hello',
+              model: 'deepseek-v4-flash',
+              byokProvider: {
+                protocol: 'senseaudio',
+                apiKey: 'sk-test-byok',
+                baseUrl: 'https://api.senseaudio.cn',
+                model: 'deepseek-v4-flash',
+                requiresApiKey: true,
+              },
+            }),
+          });
+          const body = await response.text();
+
+          expect(body).toContain('AGENT_PROMPT_TOO_LARGE');
+          expect(body).toContain('tool schemas');
+          expect(body).toMatch(/disable the MCP servers/i);
+          expect(body).not.toContain('oversized-schema-ran');
+          await expect(fsp.access(spawnMarker)).rejects.toThrow();
+        },
+      );
+    } finally {
+      if (previousMcpConfig === null) await fsp.rm(mcpConfigPath, { force: true });
+      else await fsp.writeFile(mcpConfigPath, previousMcpConfig, 'utf8');
+    }
+  });
+
+  // Config policy belongs to the CLI. These fixtures return its resolved
+  // config response; HTTP assertions verify we consume it under the final env
+  // rather than reconstructing a global/managed source list in the daemon.
+  it.each(['global', 'managed', 'sandbox'] as const)('refuses an oversized %s MCP schema resolved by OpenCode before generation', async (source) => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for BYOK context budget tests');
+    }
+
+    const projectId = `proj-${randomUUID()}`;
+    const markerDir = await fsp.mkdtemp(join(tmpdir(), 'od-byok-global-schema-budget-'));
+    tempDirs.push(markerDir);
+    const spawnMarker = join(markerDir, 'opencode-spawned.txt');
+    const mcpServerPath = join(markerDir, 'global-schema-mcp.cjs');
+    const configHome = join(markerDir, 'xdg-config');
+    const childConfigHome = source === 'sandbox'
+      ? resolveSandboxRuntimeConfig(true, process.env.OD_DATA_DIR).roots.configDir
+      : configHome;
+    const globalConfigDir = join(childConfigHome, 'opencode');
+    const probeCapture = join(markerDir, 'probe-env.json');
+
+    await fsp.writeFile(
+      mcpServerPath,
+      `
+const readline = require('node:readline');
+const BIG = 'a'.repeat(400000);
+const send = (msg) => process.stdout.write(JSON.stringify(msg) + '\\n');
+readline.createInterface({ input: process.stdin }).on('line', (line) => {
+  if (!line.trim()) return;
+  let msg;
+  try { msg = JSON.parse(line); } catch { return; }
+  if (msg.id === undefined) return;
+  if (msg.method === 'initialize') {
+    send({ jsonrpc: '2.0', id: msg.id, result: { protocolVersion: '2024-11-05', capabilities: { tools: {} }, serverInfo: { name: 'global-schema', version: '1' } } });
+    return;
+  }
+  if (msg.method === 'tools/list') {
+    send({ jsonrpc: '2.0', id: msg.id, result: { tools: [{ name: 'global_oversized_tool', description: BIG, inputSchema: { type: 'object', properties: {} } }] } });
+    return;
+  }
+  send({ jsonrpc: '2.0', id: msg.id, error: { code: -32601, message: 'unsupported' } });
+});
+`,
+      'utf8',
+    );
+
+    await fsp.mkdir(globalConfigDir, { recursive: true });
+    const responseFile = join(globalConfigDir, `resolved-${source}.json`);
+    await fsp.writeFile(responseFile, JSON.stringify({
+      mcp: { [source]: {
+        type: 'local', command: [process.execPath, mcpServerPath], enabled: true,
+      } },
+    }));
+    const previousXdgConfigHome = process.env.XDG_CONFIG_HOME;
+    const previousSandboxMode = process.env.OD_SANDBOX_MODE;
+    process.env.XDG_CONFIG_HOME = configHome;
+    if (source === 'sandbox') process.env.OD_SANDBOX_MODE = '1';
+    try {
+      const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: 'BYOK global schema fixture' }),
+      });
+      expect(createProjectResponse.ok).toBe(true);
+
+      await withFakeAgent(
+        'opencode',
+        `
+const fs = require('node:fs');
+if (process.argv[2] !== 'run') process.exit(0);
+fs.writeFileSync(${JSON.stringify(spawnMarker)}, 'spawned');
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'text', part: { text: 'global-schema-ran' } }));
+  process.exit(0);
+});
+`,
+        async () => {
+          const response = await fetch(`${baseUrl}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'byok-opencode',
+              projectId,
+              message: 'hello',
+              model: 'deepseek-v4-flash',
+              byokProvider: {
+                protocol: 'senseaudio',
+                apiKey: 'sk-test-byok',
+                baseUrl: 'https://api.senseaudio.cn',
+                model: 'deepseek-v4-flash',
+                requiresApiKey: true,
+              },
+            }),
+          });
+          const body = await response.text();
+
+          expect(body).toContain('AGENT_PROMPT_TOO_LARGE');
+          expect(body).toContain('tool schemas');
+          expect(body).not.toContain('global-schema-ran');
+          await expect(fsp.access(spawnMarker)).rejects.toThrow();
+          const probeEnv = JSON.parse(await fsp.readFile(probeCapture, 'utf8'));
+          expect(probeEnv.configHome).toBe(childConfigHome);
+        },
+        `const fs = require('node:fs');
+         const path = require('node:path');
+         fs.writeFileSync(${JSON.stringify(probeCapture)}, JSON.stringify({configHome: process.env.XDG_CONFIG_HOME}));
+         process.stdout.write(fs.readFileSync(path.join(process.env.XDG_CONFIG_HOME, 'opencode', ${JSON.stringify(`resolved-${source}.json`)}), 'utf8'));`,
+      );
+    } finally {
+      await fsp.rm(responseFile, { force: true });
+      if (previousXdgConfigHome === undefined) delete process.env.XDG_CONFIG_HOME;
+      else process.env.XDG_CONFIG_HOME = previousXdgConfigHome;
+      if (previousSandboxMode === undefined) delete process.env.OD_SANDBOX_MODE;
+      else process.env.OD_SANDBOX_MODE = previousSandboxMode;
+    }
   });
 
   it('passes keyless BYOK provider config without auth fields to OpenCode', async () => {
