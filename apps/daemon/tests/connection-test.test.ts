@@ -23,8 +23,6 @@ vi.mock('@open-design/platform', async (importOriginal) => ({
 import {
   createAgentSink,
   isSmokeOkReply,
-  mergeNoProxyWithLoopbackDefaults,
-  proxyDispatcherRequestInit,
   redactSecrets,
   resolveOpenAIConnectionTestRunProviderPackage,
   resolveConnectionTestTimeoutMs,
@@ -34,6 +32,10 @@ import {
   validateUserProviderBaseUrl,
   type DnsLookupAddress,
 } from '../src/connectionTest.js';
+import {
+  mergeNoProxyWithLoopbackDefaults,
+  proxyDispatcherRequestInit,
+} from '../src/http/proxy-dispatcher.js';
 import {
   applyAgentLaunchEnv,
   getAgentDef,
