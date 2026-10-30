@@ -22,6 +22,7 @@ import {
 } from './providerModelsCache';
 import { KNOWN_PROVIDERS } from '../state/config';
 import { SUGGESTED_MODELS_BY_PROTOCOL } from '../state/apiProtocols';
+import { isLocalOllamaBaseUrl } from '../utils/byokProvider';
 import { fetchProviderModels } from '../providers/provider-models';
 import {
   canReachWorkspaceBillingEntrance,
@@ -473,11 +474,12 @@ export function AvatarMenu({
   useEffect(() => {
     if (!open || config.mode !== 'api') return;
     if (fetchedByokModels.length > 0) return;
-    if (apiProtocol === 'azure' || apiProtocol === 'ollama') return;
     const baseUrl = config.baseUrl?.trim() ?? '';
+    const isLocalOllama = apiProtocol === 'ollama' && isLocalOllamaBaseUrl(baseUrl);
+    if (apiProtocol === 'azure' || (apiProtocol === 'ollama' && !isLocalOllama)) return;
     if (!/^https?:\/\//i.test(baseUrl)) return;
-    // AIHubMix's catalogue is public; every other protocol needs a key.
-    if (apiProtocol !== 'aihubmix' && !(config.apiKey ?? '').trim()) return;
+    // AIHubMix is public and local Ollama needs no key; other protocols require one.
+    if (apiProtocol !== 'aihubmix' && !isLocalOllama && !(config.apiKey ?? '').trim()) return;
     const key = byokModelsKey;
     let cancelled = false;
     void fetchProviderModels({

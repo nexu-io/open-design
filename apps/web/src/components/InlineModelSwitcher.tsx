@@ -67,6 +67,7 @@ import {
 import type { AgentInfo, ApiProtocol, AppConfig, ExecMode } from '../types';
 import { apiProtocolLabel } from '../utils/apiProtocol';
 import { isVisibleLocalCliAgent } from '../utils/visibleAgents';
+import { isLocalOllamaBaseUrl } from '../utils/byokProvider';
 import { AgentIcon } from './AgentIcon';
 import { Icon } from './Icon';
 import { modelProviderIconSrc } from './modelProviderIcon';
@@ -1032,8 +1033,9 @@ export function InlineModelSwitcher({
   // serves both surfaces and replaces any stale slot.
   useEffect(() => {
     if (!open || config.mode !== 'api' || !onProviderModelsCacheChange) return;
-    if (apiProtocol === 'azure' || apiProtocol === 'ollama') return;
-    if (apiProtocol !== 'aihubmix' && !config.apiKey.trim()) return;
+    const isLocalOllama = apiProtocol === 'ollama' && isLocalOllamaBaseUrl(config.baseUrl);
+    if (apiProtocol === 'azure' || (apiProtocol === 'ollama' && !isLocalOllama)) return;
+    if (apiProtocol !== 'aihubmix' && !isLocalOllama && !config.apiKey.trim()) return;
     const baseUrl = config.baseUrl.trim();
     if (!/^https?:\/\//i.test(baseUrl)) return;
     const key = providerModelsKey;
