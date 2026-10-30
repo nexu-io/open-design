@@ -1,0 +1,79 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "camera-2-5d-remotion",
+  "title": "Camera 2.5D Remotion",
+  "title_i18n": {
+    "en": "Camera 2.5D Remotion",
+    "pt-BR": "Câmera 2.5D para Remotion"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-09-23T19:00:00Z",
+  "description": "After Effects-style 2.5D camera rig, spatial depth layers, and parallax keyframes with portable scene.json export for Remotion.",
+  "description_i18n": {
+    "en": "After Effects-style 2.5D camera rig, spatial depth layers, and parallax keyframes with portable scene.json export for Remotion.",
+    "pt-BR": "Fluxo de câmera 2.5D estilo After Effects com camadas de profundidade espacial, keyframes de paralaxe e exportação portável de scene.json para Remotion."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "OpenDesign Motion",
+    "url": "https://github.com/peakdigitalmkt-cloud"
+  },
+  "tags": [
+    "motion",
+    "camera-2.5d",
+    "remotion",
+    "parallax",
+    "after-effects",
+    "keyframes",
+    "depth",
+    "video"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "mode": "motion",
+    "scenario": "camera-2.5d",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "preview": {
+      "type": "html",
+      "entry": "examples/basic-parallax/index.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Add an After Effects-style 2.5D camera with parallax depth to this composition and export structured scene.json for Remotion.",
+        "pt-BR": "Adicione uma câmera 2.5D estilo After Effects com profundidade e paralaxe a esta composição e exporte o scene.json estruturado para Remotion."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./examples/basic-parallax/index.html",
+          "title": "Basic Parallax 2.5D Camera Prototype"
+        },
+        {
+          "path": "./examples/basic-parallax/scene.json",
+          "title": "Portable Remotion Scene Data"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  },
+  "plugin": {
+    "repo": "https://github.com/peakdigitalmkt-cloud/camera-2-5d-remotion"
+  },
+  "homepage": "https://github.com/peakdigitalmkt-cloud/camera-2-5d-remotion"
+}
