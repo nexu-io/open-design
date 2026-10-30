@@ -37,10 +37,7 @@ it.each([null, 'another-member', 'owner', 'catalog-owner', 'placeholder', 'catal
     expect(project).toBeNull();
     return fixture.sharePublishing!.sourceFileId!(scope);
   });
-  const admitFileReceipt = vi.fn<NonNullable<typeof fixture.sharePublishing.admitFileReceipt>>(async (scope) => {
-    expect(scope.sourceFileId).toBe(sourceFileId.mock.results[0]!.value);
-  });
-  const publisher = { ...fixture.sharePublishing, sourceFileId, admitFileReceipt, ensureProject: async () => {
+  const publisher = { ...fixture.sharePublishing, sourceFileId, ensureProject: async () => {
     events.push('root-and-catalog');
     if (localOwner === 'bootstrap-failed') throw new Error('private credential https://private.invalid/private-path');
     if (localOwner === 'bootstrap-root-failed') return ensurePublicShareProject({
@@ -80,7 +77,6 @@ it.each([null, 'another-member', 'owner', 'catalog-owner', 'placeholder', 'catal
       expect(response.status).toBe(200);
       expect(events).toEqual(['root-and-catalog', 'file-upload']);
       expect(sourceFileId).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ projectId: 'p', filePath: 'index.html' }), null);
-      expect(admitFileReceipt).toHaveBeenCalledOnce();
       expect(catalog).toMatchObject({ projectId: 'p', ownerMemberId: 'owner' });
       expect(body).toMatchObject({ status: 'published', receipt: { version: 1 } });
       if (localOwner === 'catalog-owner') {

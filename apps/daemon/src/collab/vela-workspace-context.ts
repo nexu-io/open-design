@@ -1,6 +1,7 @@
 import { getDiagnosticsEvidence, recordDiagnosticFailure } from '../services/diagnostics-evidence.js';
 import { createHash } from 'node:crypto';
 import {
+  isValidAuthorKey,
   buildWorkspacePermissions,
   buildWorkspaceSeatSummary,
 } from '@open-design/contracts';
@@ -295,7 +296,7 @@ export function createVelaWorkspaceContextProvider(
         );
         if (selected) {
           return withUserIdentity(
-            workspaceContextFromDirectoryItem(selected, selectedEnv),
+            workspaceContextFromDirectoryItem(selected, selectedEnv, directory.authorKey),
             session,
           );
         }
@@ -319,13 +320,13 @@ export function createVelaWorkspaceContextProvider(
         );
         return concurrent
           ? withUserIdentity(
-              workspaceContextFromDirectoryItem(concurrent, selectedEnv),
+              workspaceContextFromDirectoryItem(concurrent, selectedEnv, directory.authorKey),
               session,
             )
           : null;
       }
       return withUserIdentity(
-        workspaceContextFromDirectoryItem(fallback, selectedEnv),
+        workspaceContextFromDirectoryItem(fallback, selectedEnv, directory.authorKey),
         session,
       );
     } catch {
@@ -352,7 +353,7 @@ export function createVelaWorkspaceContextProvider(
           && entry.lifecycleState !== 'deleted',
       );
       return item
-        ? withUserIdentity(workspaceContextFromDirectoryItem(item, selectedEnv), session)
+        ? withUserIdentity(workspaceContextFromDirectoryItem(item, selectedEnv, directory.authorKey), session)
         : null;
     } catch {
       return null;
@@ -374,8 +375,10 @@ export function createVelaWorkspaceContextProvider(
 export function workspaceContextFromDirectoryItem(
   item: WorkspaceDirectoryItem,
   configuredEnv: Record<string, string> = {},
+  authorKey?: string,
 ): WorkspaceCollabContext {
   const context: WorkspaceCollabContext = {
+    ...(authorKey ? { authorKey } : {}),
     workspaceId: item.workspaceId,
     workspaceType: item.workspaceType,
     workspaceMemberId: item.workspaceMemberId,
@@ -440,6 +443,7 @@ function velaUserDisplayName(user: VelaUser | null): string {
 export interface WorkspaceDirectoryFetchResult {
   ok: boolean;
   items: WorkspaceDirectoryItem[];
+  authorKey?: string;
   reason?: 'unauthorized' | 'upstream' | 'network';
   status?: number;
 }
@@ -898,9 +902,12 @@ export async function fetchVelaWorkspaceDirectory(
         status: response.status,
       };
     }
-    const items = mapVelaWorkspaceDirectory(await response.json());
+    const payload = await response.json() as { authorKey?: unknown };
+    const items = mapVelaWorkspaceDirectory(payload);
+    const authorKey = typeof payload?.authorKey === 'string' && isValidAuthorKey(payload.authorKey)
+      ? payload.authorKey : undefined;
     getDiagnosticsEvidence()?.observeDirectory(items);
-    return { ok: true, items };
+    return { ok: true, items, ...(authorKey ? { authorKey } : {}) };
   } catch (error) {
     recordDiagnosticFailure({ source: 'workspace-directory', error, timedOut: controller.signal.aborted, env: process.env });
     return { ok: false, items: [], reason: 'network' };

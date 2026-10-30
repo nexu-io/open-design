@@ -1023,6 +1023,50 @@ test('[P1] real daemon run survives reload before the create response reaches th
   });
 });
 
+for (const ending of ['failed', 'canceled'] as const) {
+  test(`[P1] saved comment returns after Agent ${ending}`, async ({ page }, testInfo) => {
+    await createProject(page, `Comment mainline ${ending}`);
+    const { projectId, conversationId } = await currentProjectContext(page);
+    const note = ending === 'failed' ? 'Return an empty daemon smoke response' : 'Hold the daemon run open until canceled';
+    const written = await page.request.post(`/api/projects/${projectId}/files`, { data: {
+      name: 'index.html', content: '<html><body><h1 data-od-id="headline">Comment mainline</h1></body></html>',
+      artifactManifest: { version: 1, kind: 'html', title: 'Comment mainline', entry: 'index.html', renderer: 'html', exports: ['html'] },
+    } });
+    expect(written.ok(), await written.text()).toBeTruthy();
+    await page.goto(`/projects/${projectId}/files/index.html`);
+    await page.getByTestId('board-mode-toggle').click();
+    await page.frameLocator('[data-testid="artifact-preview-frame"]').locator('h1').click();
+    await page.getByTestId('comment-popover-input').fill(note);
+    const savedResponse = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith(`/conversations/${conversationId}/comments`));
+    await page.getByTestId('comment-popover-save').click();
+    const saved = await savedResponse;
+    expect(saved.ok(), await saved.text()).toBeTruthy();
+    const { comment } = await saved.json();
+    const row = page.getByTestId('comment-side-item').filter({ hasText: note });
+    await row.click();
+    const runResponse = page.waitForResponse(isCreateRunResponse);
+    await page.getByTestId('comment-popover').getByRole('button', { name: 'More comment actions' }).click();
+    await page.getByTestId('comment-add-send').click();
+    const run = await runResponse;
+    expect(run.ok(), await run.text()).toBeTruthy();
+    const { runId } = await run.json();
+    if (ending === 'canceled') {
+      await expect(row).toHaveCount(0);
+      await page.getByRole('button', { name: 'Stop', exact: true }).click();
+    }
+    await expect.poll(async () => {
+      const response = await page.request.get(`/api/runs/${runId}`);
+      return (await response.json()).status;
+    }, { timeout: T.long }).toBe(ending);
+    await expect.poll(async () => {
+      const response = await page.request.get(`/api/projects/${projectId}/conversations/${conversationId}/comments`);
+      return (await response.json()).comments.find((item: { id: string }) => item.id === comment.id)?.status;
+    }, { timeout: T.long }).toBe('open');
+    await expect(row).toBeVisible({ timeout: T.long });
+    await page.screenshot({ path: testInfo.outputPath(`comment-restored-${ending}.png`) });
+  });
+}
+
 test('[P0] empty daemon output fails cleanly, persists after reload, and does not leave ghost files', async ({ page }) => {
   await createProject(page, 'Empty daemon failure smoke');
   await expectWorkspaceReady(page);

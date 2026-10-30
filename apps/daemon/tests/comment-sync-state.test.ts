@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { createSqlitePublicFilePublicationStore } from '../src/collab/public-file-publication-store.js';
-import { recordPublishedCommentBackfill } from '../src/collab/published-comment-backfill-state.js';
+import { recordPublishedCommentBackfill, recordPublishedCommentBackfillEnqueueFailure } from '../src/collab/published-comment-backfill-state.js';
 import express from 'express';
 import { createServer } from 'node:http';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -102,3 +102,41 @@ it('supplies scoped K8 over HTTP with unknown, login recovery, isolated retry an
     closeDatabase(); rmSync(root, { recursive: true, force: true });
   }
 });
+
+
+it.each(['current', 'stale', 'stopped', 'other-member', 'other-workspace', 'other-project'] as const)(
+  'project status aggregates only its current publication enqueue failure: %s', async scenario => {
+    const root = mkdtempSync(join(tmpdir(), 'od-project-comment-failure-'));
+    const db = openDatabase(root);
+    try {
+      const service = createCommentSyncStateService(db, async () => true);
+      const subject = { projectId: 'p', workspaceId: 'w', workspaceMemberId: 'm' };
+      expect(await service.read(subject)).toMatchObject({ pending: 0, lastError: null });
+      const scope = {
+        resourceTeamId: scenario === 'other-workspace' ? 'foreign-workspace' : 'w',
+        ownerMemberId: scenario === 'other-member' ? 'foreign-member' : 'm',
+        projectId: scenario === 'other-project' ? 'foreign-project' : 'p', filePath: 'failed.html',
+      };
+      const publications = createSqlitePublicFilePublicationStore(db);
+      const publication = { slug: 'stable', url: 'https://example.test/stable', fileName: scope.filePath };
+      publications.set(scope, publication);
+      recordPublishedCommentBackfillEnqueueFailure(db, {
+        scope, publicationRevision: publications.getRevision(scope)!, commentIds: [], reopened: false,
+      });
+      if (scenario === 'stale') publications.set(scope, publication);
+      if (scenario === 'stopped') publications.delete(scope);
+      const state = await service.read(subject);
+      expect(state).toMatchObject({ pending: 0, lastError: scenario === 'current' ? 'COMMENT_SYNC_DELIVERY_FAILED' : null });
+      expect(state?.backfill).toBeUndefined();
+      // A project aggregate must not add a different file's failure to this GET.
+      expect(await service.read({ ...subject, filePath: 'healthy.html' })).toMatchObject({ lastError: null });
+      if (scenario === 'current') {
+        expect(await service.read({ ...subject, filePath: scope.filePath })).toMatchObject({
+          lastError: 'COMMENT_SYNC_DELIVERY_FAILED', backfill: { state: 'failed', code: 'BACKFILL_ENQUEUE_FAILED' },
+        });
+        db.prepare("UPDATE published_comment_backfill_batches SET state='succeeded', code=NULL").run();
+        expect(await service.read(subject)).toMatchObject({ pending: 0, lastError: null });
+      }
+    } finally { closeDatabase(); rmSync(root, { recursive: true, force: true }); }
+  },
+);

@@ -53,3 +53,71 @@
  .retrySpacing { margin-block-start: 4px; }
  /* .retry/.retryError moved into the shared `ShareButton`'s `soft`/
     `soft-error` variants (2026 refactor: item 1) — ShareButton.module.css. */
+
+/* Comment-panel sync feedback follows E06/E07. ShareTab backfill retains its
+   existing presentation and business conditions. */
+.alignment {
+  margin: 0 12px 8px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: #f5f5f5;
+  color: #848484;
+  font-weight: 500;
+}
+.alignmentMessage {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.alignmentMessage > svg,
+.alignmentSpinner {
+  flex: none;
+  margin-top: 2px;
+}
+.alignmentMessage p { font-weight: 500; }
+.alignmentMessage > svg { width: 15px; height: 15px; }
+.alignmentRetry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 60px;
+  height: auto;
+  min-height: 28px;
+  max-width: 100%;
+  margin: 8px 0 0 23px;
+  padding: 3px 10px;
+  border: 1px solid #dbdbdb;
+  border-radius: 4px;
+  background: var(--bg);
+  color: #494949;
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.alignmentRetry:disabled {
+  cursor: default;
+  opacity: 0.5;
+  background: #f0f0f0;
+  border-color: #dedede;
+  color: #999;
+}
+.alignmentRetry:focus-visible { outline: 2px solid var(--text-secondary); outline-offset: 3px; }
+.alignmentSpinner {
+  width: 12px;
+  height: 12px;
+  margin-right: 3px;
+  border: 1.5px solid #d4d4d4;
+  border-top-color: #848484;
+  border-radius: 50%;
+  animation: commentSyncSpin 0.8s linear infinite;
+}
+.neutral { color: var(--text-secondary, var(--share-text-secondary)); }
+@media (prefers-reduced-motion: reduce) {
+  .alignmentSpinner { animation: none; }
+}

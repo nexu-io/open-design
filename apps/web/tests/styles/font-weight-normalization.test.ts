@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { extname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { parse } from 'postcss';
 
 const repoRoot = fileURLToPath(new URL('../../../..', import.meta.url));
 const styleRoots = [
@@ -36,6 +37,22 @@ const pendingNormalization = new Set([
   'apps/web/src/styles/viewer/composio.css',
 ]);
 
+/** Exact 10/28 reference typography, verified in comment browser screenshots.
+ * These selectors intentionally use 400; unrelated rules in the same files
+ * must still follow the app ladder. Do not add these files to the pending list.
+ */
+const referenceCommentWeights: Record<string, readonly string[]> = {
+  'apps/web/src/components/CommentComposer.module.css': [
+    '.popover', '.locationNotice', '.popover textarea', '.menuItems button',
+    '.limitError', '.detail p', '.detail button',
+  ],
+  'apps/web/src/styles/viewer/core.css': [
+    '.comment-side-panel', '.comment-side-time', '.comment-side-body',
+    '.comment-side-expand', '.comment-side-item', '.comment-detail-time',
+    '.comment-side-location-notice', '.od-tooltip-layer[data-tooltip-context="comment-agent"]',
+  ],
+};
+
 function cssFiles(root: string): string[] {
   return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
     const path = `${root}/${entry.name}`;
@@ -65,12 +82,17 @@ function isForbiddenWeight(weight: number): boolean {
 function ladderViolations(file: string): string[] {
   const violations: string[] = [];
   const css = withoutFontFaces(readFileSync(file, 'utf8'));
-  for (const match of css.matchAll(/font-weight\s*:\s*(\d+)\b/g)) {
+  const path = relative(repoRoot, file);
+  parse(css).walkDecls('font-weight', declaration => {
+    const match = declaration.value.match(/^(\d+)\b/);
+    if (!match) return;
     const weight = Number(match[1]);
-    if (isForbiddenWeight(weight)) {
-      violations.push(`${relative(repoRoot, file)}: ${weight}`);
+    const selector = declaration.parent?.type === 'rule' ? declaration.parent.selector : '';
+    const matchesReference = weight === 400 && referenceCommentWeights[path]?.includes(selector);
+    if (isForbiddenWeight(weight) && !matchesReference) {
+      violations.push(`${path}: ${weight}`);
     }
-  }
+  });
   for (const match of css.matchAll(/(?:^|[;{])\s*font\s*:\s*([^;}]+)/g)) {
     const shorthand = match[1]!.trim();
     if (shorthand === 'inherit') continue;
@@ -130,6 +152,21 @@ describe('product UI font-weight normalization', () => {
   it('uses the consolidated weight ladder outside font metadata', () => {
     const violations = files.filter((file) => !isPending(file)).flatMap(ladderViolations);
     expect(violations).toEqual([]);
+  });
+
+  it('requires the exact reference weight on every declared comment selector', () => {
+    for (const [path, selectors] of Object.entries(referenceCommentWeights)) {
+      const observed: string[] = [];
+      const css = parse(withoutFontFaces(readFileSync(`${repoRoot}/${path}`, 'utf8')));
+      css.walkDecls('font-weight', declaration => {
+        if (declaration.parent?.type !== 'rule') return;
+        if (selectors.includes(declaration.parent.selector)) {
+          expect(declaration.value).toBe('400');
+          observed.push(declaration.parent.selector);
+        }
+      });
+      expect(observed.sort()).toEqual([...selectors].sort());
+    }
   });
 
   it('keeps the pending list limited to files that still need it', () => {

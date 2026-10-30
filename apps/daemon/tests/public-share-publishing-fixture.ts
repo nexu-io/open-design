@@ -22,7 +22,6 @@ export function createPublicSharePublishingFixture(
   db: Database.Database,
   store: PublicFilePublicationStore,
   resource: (args: string[], workspace: string) => Promise<string>,
-  enqueue: Parameters<typeof createPublicFilePublicationRecorder>[2] = () => ({ enqueued: 0, skippedInbound: 0 }),
   options: { denyAuthority?: boolean; teamProject?: (args: string[]) => Promise<string>; env?: NodeJS.ProcessEnv; configuredEnv?: Record<string, string>; amr?: FixtureAmrShareFields; failShareState?: () => boolean; pending?: boolean; failUpload?: boolean; failStop?: boolean; failResume?: boolean; failResumeAfterActivation?: boolean; failComplete?: boolean; beforeStop?: () => Promise<void>; commands?: string[][]; cloud?: FixtureShareCloud } = {},
 ): Pick<RegisterCollabSyncRoutesDeps, 'sharePublishing' | 'readProjectShareState' | 'resolvePublicShareLink' | 'resolveLocalPublicShareOwner'> {
   const outbox = createShareBindingOutbox(db);
@@ -56,7 +55,7 @@ export function createPublicSharePublishingFixture(
     outbox,
     complete: input => {
       if (options.failComplete) throw new Error('injected publication completion failure');
-      return createSharePublicationCompletion(db, createPublicFilePublicationRecorder(db, store, enqueue), outbox, true)(input);
+      return createSharePublicationCompletion(db, createPublicFilePublicationRecorder(db, store), outbox, true)(input);
     },
     prepare: async (scope, slug) => ({
       run: async args => {

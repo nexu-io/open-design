@@ -82,16 +82,17 @@ function positionTooltip(
   const maxLeft = Math.max(TOOLTIP_MARGIN, viewportWidth - tip.width - TOOLTIP_MARGIN);
   const maxTop = Math.max(TOOLTIP_MARGIN, viewportHeight - tip.height - TOOLTIP_MARGIN);
 
+  const gap = target.dataset.tooltipContext === 'comment-agent' ? 8 : TOOLTIP_GAP;
   let left = rect.left + rect.width / 2 - tip.width / 2;
-  let top = rect.top - tip.height - TOOLTIP_GAP;
+  let top = rect.top - tip.height - gap;
 
   if (placement === 'bottom') {
-    top = rect.bottom + TOOLTIP_GAP;
+    top = rect.bottom + gap;
   } else if (placement === 'left') {
-    left = rect.left - tip.width - TOOLTIP_GAP;
+    left = rect.left - tip.width - gap;
     top = rect.top + rect.height / 2 - tip.height / 2;
   } else if (placement === 'right') {
-    left = rect.right + TOOLTIP_GAP;
+    left = rect.right + gap;
     top = rect.top + rect.height / 2 - tip.height / 2;
   }
 
@@ -391,7 +392,7 @@ export function TooltipLayer() {
       /* 常驻挂载的代价在这里买单:不可见时整个从可访问性树里摘掉,
          否则读屏软件会一直念得到这枚气泡。 */
       aria-hidden={visible ? undefined : true}
-      data-tooltip-context={state?.target.closest('[role="menu"]') ? 'menu' : undefined}
+      data-tooltip-context={state?.target.dataset.tooltipContext === 'comment-agent' ? 'comment-agent' : state?.target.closest('[role="menu"]') ? 'menu' : undefined}
       style={{
         transform: `translate3d(${state?.style.x ?? 0}px, ${state?.style.y ?? 0}px, 0)`,
         visibility: painted ? 'visible' : 'hidden',

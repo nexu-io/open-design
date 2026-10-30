@@ -1,6 +1,9 @@
 import type { Dict } from "../types";
 
 export const zhTW: Dict = {
+  'chat.comments.deselectAll': '取消全选',
+  'fileViewer.commentSync.alignRetrying': '重试中…',
+  'fileViewer.commentSync.alignRetryPending': '正在同步评论…',
   'fileViewer.publishFileContentUnavailable': 'Some uploaded files are missing or failed integrity checks. Please retry.',
   'fileViewer.publishFileConflict': 'The publication or upload state has changed. Refresh the share panel and try again.',
   'fileViewer.publishFileWorkspaceLocked': 'This workspace is locked. Restore workspace access before publishing.',
@@ -5977,4 +5980,16 @@ export const zhTW: Dict = {
   'comment.saveTargetMissing': '評論目標已不存在，請重新選擇元素；草稿已保留。',
   'comment.savePreviewNotReady': '預覽正在重新整理，草稿已保留，請在完成後重試儲存。',
   'comment.anchorState.lost': '錨點已遺失',
+  "comment.unknownAuthor": "未知作者",
+  "comment.moreCount": "查看评论（{n}）",
+  "comment.resizePanel": "调整评论面板宽度",
+  "comment.overLimit": "已超出 {count} 字，請精簡後傳送",
+  "comment.saveFailed": "评论提交失败，请重试。",
+  "comment.locationUnavailable": "無法定位此元素，頁面可能已變更。",
+  "comment.agentSubmitFailed": "提交失敗，請重試。",
+  "comment.agentSubmitUnavailable": "目前無法提交，請稍後重試。",
+  "comment.imageFailed": "图片暂时无法显示",
+  "comment.moreActions": "更多评论操作",
+  'fileViewer.commentSync.alignRetryFailed': '同步失败，请重试。',
+  'fileViewer.commentSync.alignRetrySucceeded': '评论已同步',
 };

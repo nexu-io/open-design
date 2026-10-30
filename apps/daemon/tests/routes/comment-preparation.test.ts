@@ -64,7 +64,7 @@ it.each(['personal', 'team'] as const)('explicit HTTP/CLI preparation uses %s wr
       ...createPublicSharePublishingFixture(db, publicationStore, async (args) => {
         uploaded.push(await fs.readFile(path.join(args[3]!, 'index.html'), 'utf8'));
         return JSON.stringify({ id: 'v1', version: 1 });
-      }, undefined, uploadOptions),
+      }, uploadOptions),
       verifyWorkspaceRequest: async (req) => req.get('x-od-workspace-member-id') === 'owner' ? ownerContext : null,
       resolveSharedProject: async (projectId) => ({ projectId, ownerMemberId: 'owner', sharedAt: new Date(1).toISOString() }),
       resolveProjectDir: async (projectId) => path.join(projects, projectId),

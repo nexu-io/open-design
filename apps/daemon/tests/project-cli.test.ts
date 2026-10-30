@@ -317,8 +317,8 @@ describe('od project CLI', () => {
       expect(JSON.parse(result.stderr).error.code).toBe('daemon-not-running');
     });
 
-    it('preserves the existing oversized preflight success exit without blockers', async () => {
-      const plan = { fileCount: 1, totalBytes: 51_000_000, exceedsSizeLimit: true, exclusions: [] };
+    it('reports large preflight files without deciding the cloud capacity policy', async () => {
+      const plan = { fileCount: 1, totalBytes: 51_000_000, exclusions: [] };
       stub = await startProjectStubServer(undefined, undefined, 200, plan);
       const result = await runCli(['project', 'share', 'preflight', 'project-1', '--path', 'nested/index.html', '--daemon-url', stub.baseUrl, ...(json ? ['--json'] : [])]);
       expect(result.code).toBe(0);

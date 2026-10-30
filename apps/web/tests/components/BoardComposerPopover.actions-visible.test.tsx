@@ -13,6 +13,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { BoardComposerPopover } from '../../src/components/BoardComposerPopover';
+import styles from '../../src/components/CommentComposer.module.css';
 import type { PreviewCommentSnapshot } from '../../src/comments';
 
 afterEach(() => {
@@ -77,8 +78,8 @@ describe('BoardComposerPopover action row', () => {
   it('keeps the action row outside the scrolling body so a height clamp cannot hide it', () => {
     renderPopover();
     const popover = screen.getByTestId('comment-popover');
-    const body = popover.querySelector('.comment-popover-body');
-    const actions = popover.querySelector('.comment-popover-actions');
+    const body = popover.querySelector(`.${styles.body}`);
+    const actions = popover.querySelector(`.${styles.actions}`);
 
     expect(body).not.toBeNull();
     expect(actions).not.toBeNull();
@@ -94,7 +95,8 @@ describe('BoardComposerPopover action row', () => {
     // The host caps the card to the space left in the stage; the fix has to
     // survive that cap rather than depend on the card being tall enough.
     expect(popover.style.maxHeight).not.toBe('');
-    expect(popover.classList.contains('comment-popover-composer')).toBe(true);
+    expect(popover.className).toBe(styles.popover);
+    expect(popover.classList.contains('comment-popover')).toBe(false);
     expect(popover.className).not.toContain('surface');
   });
 });

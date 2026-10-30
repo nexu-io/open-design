@@ -15,6 +15,7 @@ import {
   velaWorkspaceDirectoryIdentityForSession,
   workspaceContextFromDirectoryItem,
 } from '../src/collab/vela-workspace-context.js';
+import { verifyWorkspaceRequestContext } from '../src/collab/request-workspace-context.js';
 import { createActiveWorkspaceSelectionStore } from '../src/collab/active-workspace-selection.js';
 import {
   clearVelaAuthorizationState,
@@ -161,6 +162,24 @@ describe('mapVelaWorkspaceContext', () => {
     expect(mapVelaWorkspaceContext({ ...B_TEAM_CONTEXT, workspaceMemberId: '' })).toBeNull();
     expect(mapVelaWorkspaceContext(null)).toBeNull();
   });
+});
+
+it.each(['team', 'personal'] as const)('preserves the server authorKey through the %s directory and exact context', async workspaceType => {
+  const authorKey = 'a'.repeat(64);
+  const item = { ...B_DIRECTORY_ITEM, workspaceType };
+  const fetch = vi.fn(async () => jsonResponse(200, { items: [item], authorKey }));
+  const directory = await fetchVelaWorkspaceDirectory({ readSession: () => SESSION, fetch });
+  expect(directory.authorKey).toBe(authorKey);
+  expect(await verifyWorkspaceRequestContext({
+    req: { get: (name: string) => name === 'x-od-workspace-id' ? item.workspaceId
+      : name === 'x-od-workspace-member-id' ? item.workspaceMemberId : undefined },
+    fetchWorkspaceDirectory: async () => directory,
+  })).toMatchObject({ ok: true, context: { authorKey, workspaceType } });
+  const provider = createVelaWorkspaceContextProvider({
+    readSession: () => SESSION, fetchWorkspaceDirectory: async () => directory,
+  });
+  expect(await provider.current({})).toMatchObject({ authorKey, workspaceType });
+  expect(await provider.resolveExact!({ workspaceId: item.workspaceId })).toMatchObject({ authorKey, workspaceType });
 });
 
 describe('createCachedWorkspaceDirectoryFetcher', () => {

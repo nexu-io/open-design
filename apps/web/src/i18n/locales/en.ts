@@ -1,6 +1,9 @@
 import type { Dict } from '../types';
 
 export const en: Dict = {
+  'chat.comments.deselectAll': 'Deselect all',
+  'fileViewer.commentSync.alignRetrying': 'Retrying…',
+  'fileViewer.commentSync.alignRetryPending': 'Syncing comments…',
   "collab.contentUpdate.available": "Updates on another device",
   "collab.contentUpdate.updating": "Syncing…",
   "collab.contentUpdate.askAgain": "Restore update prompts",
@@ -5540,4 +5543,16 @@ export const en: Dict = {
   'chat.record.canceled': "Canceled",
   'chat.record.pending': "Not started",
   'chat.record.unfinished': "Unfinished",
+  "comment.unknownAuthor": "Unknown author",
+  "comment.moreCount": "Show comments ({n})",
+  "comment.resizePanel": "Resize comments panel",
+  "comment.overLimit": "{count} characters over the limit. Shorten before sending.",
+  "comment.saveFailed": "Could not save comment. Try again.",
+  "comment.locationUnavailable": "Unable to locate this element. The page may have changed.",
+  "comment.agentSubmitFailed": "Submission failed. Please try again.",
+  "comment.agentSubmitUnavailable": "Cannot submit right now. Please try again later.",
+  "comment.imageFailed": "Image unavailable",
+  "comment.moreActions": "More comment actions",
+  'fileViewer.commentSync.alignRetryFailed': 'Sync failed. Try again.',
+  'fileViewer.commentSync.alignRetrySucceeded': 'Comments synced',
 };

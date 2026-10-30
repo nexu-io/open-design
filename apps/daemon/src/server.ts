@@ -901,7 +901,7 @@ import {
 import { associateRunProducedFiles } from './runtimes/run-produced-files.js';
 import { chatArtifactCaptureResultProps } from './chat-artifacts/telemetry.js';
 import { freezeAndRenderChatArtifactCovers } from './chat-artifacts/cover.js';
-import { setMessageArtifactHtmlVersionIds } from './chat-artifacts/store.js';
+import { ensureWorkspaceArtifactForPath, getLiveWorkspaceArtifactByPath, setMessageArtifactHtmlVersionIds } from './chat-artifacts/store.js';
 import { registerVelaRoutes } from './routes/vela.js';
 import { registerFinalizeRoutes, registerImportRoutes, registerProjectExportRoutes } from './import-export-routes.js';
 import { registerHandoffRoutes } from './routes/handoff.js';
@@ -938,7 +938,7 @@ import { createPublicFileStopStartup, createSqlitePublicFilePublicationStore } f
 import { sourcePathForCurrentPublication } from './collab/comment-relay-publication-mapping.js';
 import { recordPersonalPublishedCommentMutation } from './collab/published-comment-mutation.js';
 import { createPublicFilePublicationRecorder } from './collab/public-file-publication-recording.js';
-import { enqueuePublishedFileComments } from './collab/published-file-comment-backfill.js';
+import { createPublishedCommentBackfillReconciler } from './collab/published-comment-backfill-reconciler.js';
 import { createVelaPublicFileStop } from './collab/vela-public-file-stop.js';
 import { createShareContentFingerprints } from './collab/share-content-fingerprint.js';
 import { createShareBindingOutbox } from './collab/share-binding-outbox.js';
@@ -4515,6 +4515,29 @@ export async function startServer({
     console.warn('[od] design-system workspace-resource backfill failed:', error);
   });
   const publicFilePublicationStore = createSqlitePublicFilePublicationStore(db);
+  const publishedCommentBackfill = createPublishedCommentBackfillReconciler(db, {
+    listFacts: subject => publicFilePublicationStore.listFacts(subject),
+    admitFact: async fact => {
+      if (!fact.receipt || !fact.scope.sourceFileId) throw new Error('COMMENT_FILE_RECEIPT_UNAVAILABLE');
+      const configuredEnv = { ...configuredAmrEnv() };
+      const currentSession = readVelaControlApiContext(process.env, configuredEnv);
+      if (!currentSession?.controlKey || !currentSession.apiUrl) throw new Error('COMMENT_SESSION_UNAVAILABLE');
+      const session = Object.freeze({ ...currentSession });
+      await localCommentFiles.admit({
+        projectId: fact.scope.projectId, workspaceId: fact.scope.resourceTeamId,
+        creatorMemberId: fact.scope.ownerMemberId, ...fact.receipt,
+        paths: [{ sourceFilePath: fact.scope.filePath, entryPath: fact.publicFilePath, sourceFileId: fact.scope.sourceFileId }],
+        run: args => runPinnedVelaCommand({ args, session, workspaceId: fact.scope.resourceTeamId,
+          dataRoot: RUNTIME_DATA_DIR, configuredEnv }),
+      });
+    },
+  });
+  const preparePublishedComments = (scope: {
+    workspaceId: string; workspaceMemberId: string; projectId: string; filePath?: string;
+  }, options?: { retryFailed?: boolean }) => publishedCommentBackfill.prepare({
+    resourceTeamId: scope.workspaceId, ownerMemberId: scope.workspaceMemberId,
+    projectId: scope.projectId, ...(scope.filePath === undefined ? {} : { filePath: scope.filePath }),
+  }, options);
   const collabCloudClient = velaCliCollabClient ?? createCollabCloudClientFromEnv();
   const resolveBoundProjectWorkspaceContext = async (
     projectId: string,
@@ -4564,6 +4587,21 @@ export async function startServer({
     ? createCollabCloudService({
         client: collabCloudClient,
         commentOutbox: createCommentRelayOutboxStore(db),
+        // Consume committed facts on the comment clock. Publication never calls
+        // this drain or waits for its errors/timeouts.
+        preparePendingComments: async () => {
+          const context = await collab.workspaceContext.current();
+          if (!context || context.memberStatus !== 'active'
+            || context.lifecycleState === 'deleted' || context.lifecycleState === 'deleting') return;
+          for (const project of listProjects(db)) {
+            const binding = getWorkspaceProjectByProjectId(db, project.id);
+            if (!binding || binding.workspaceId !== context.workspaceId
+              || binding.createdByWorkspaceMemberId !== context.workspaceMemberId
+              || binding.resourceState !== 'active' || binding.cloudTombstonedAt != null) continue;
+            try { await preparePublishedComments({ ...context, projectId: project.id }); }
+            catch { console.warn('[od] published comment preparation unavailable for project', project.id); }
+          }
+        },
         // C3-LITE member comment pages (BO1), served by the AMR API through the
         // Vela CLI. The HTTP relay (OD_COLLAB_CLOUD_URL) has no paged route, so
         // it keeps the legacy pull. An unusable cursor is rebuilt from a fresh
@@ -5359,7 +5397,8 @@ export async function startServer({
         && item.workspaceMemberId === scope.workspaceMemberId
         && item.memberStatus === 'active'
         && item.lifecycleState !== 'deleted' && item.lifecycleState !== 'deleting');
-    }, { readAlign: scope => commentAlignment.read(scope),
+    }, { preparePendingComments: preparePublishedComments,
+      readAlign: scope => commentAlignment.read(scope),
       readProjectShareState: createVelaProjectShareState({
         dataRoot: RUNTIME_DATA_DIR, configuredEnv: configuredAmrEnv,
       }),
@@ -5552,7 +5591,7 @@ export async function startServer({
     publicFileMutations,
   );
   const recordPublicFilePublication = createPublicFilePublicationRecorder(
-    db, publicFilePublicationStore, enqueuePublishedFileComments,
+    db, publicFilePublicationStore,
   );
   const resolveLocalProjectOwner = (projectId: string, workspaceId: string): string | null => {
     const binding = getWorkspaceProjectByProjectId(db, projectId);
@@ -5564,24 +5603,16 @@ export async function startServer({
   const collabSyncRoutes = registerCollabSyncRoutes(app, {
     collab,
     publicFilePublicationStore,
-    // Recording a publication and queueing its existing comments for backfill
-    // is ONE transaction. Without this the route falls back to a bare
-    // `publicationStore.set`, which records the share and silently drops the
-    // backfill intent — the publish succeeds, and the comments the person
-    // already wrote never reach the share page.
-    //
-    // The recorder also refuses to proceed without a publication witness
-    // (slug + revision token read back after the write), so a half-written
-    // publication cannot enqueue work that later resolves against nothing.
+    // This callback commits publication facts only. The independent comment
+    // drain above consumes them without changing the publication result.
     recordPublicFilePublication,
     resolveLocalPublicShareOwner: resolveLocalProjectOwner,
     resolvePublicShareLink: (projectId, slug, amr) => resolvePublicShareLink(projectId, slug, amr, process.env, configuredAmrEnv()),
     sharePublishing: {
-      sourceFileId: (scope, project) => localCommentFiles.identity(scope.projectId, scope.filePath, project?.metadata?._commentFiles),
-      admitFileReceipt: (scope, resourceId, versionId, entryPath, run) => localCommentFiles.admit({
-        projectId: scope.projectId, workspaceId: scope.resourceTeamId, creatorMemberId: scope.ownerMemberId,
-        resourceId, versionId, paths: [{ sourceFilePath: scope.filePath, entryPath, sourceFileId: scope.sourceFileId }], run,
-      }),
+      sourceFileId: scope => (getLiveWorkspaceArtifactByPath(db, scope.projectId, scope.filePath)
+        ?? ensureWorkspaceArtifactForPath(db, {
+          projectId: scope.projectId, path: scope.filePath, kind: 'html',
+        })).id,
       ensureProject: (scope, principal, run) => ensurePublicShareProject({
         projectId: scope.projectId, principal, run, describeProject: describeCollabProject,
         retainRoot: registration => {

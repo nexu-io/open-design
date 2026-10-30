@@ -31,7 +31,6 @@ import {
   buildWorkspacePermissions,
   buildWorkspaceSeatSummary,
   type WorkspaceCollabContext,
-  SHARE_MAX_TOTAL_BYTES,
 } from '@open-design/contracts';
 import { runVelaResourceCommand } from '../src/collab/vela-cli-resource-adapter.js';
 import {
@@ -310,7 +309,6 @@ function confirmedShareOutput(args: string[], fault?: 'wrong-version' | 'missing
 /** Real reservation/receipt validation/completion, with only the CLI transport synthetic. */
 async function publicShareFixture(options: {
   db?: Database.Database;
-  enqueue?: Parameters<typeof createPublicFilePublicationRecorder>[2];
   run?: (args: string[]) => Promise<string>;
 } = {}) {
   const actual = await vi.importActual<typeof import('../src/collab/vela-share-publish.js')>('../src/collab/vela-share-publish.js');
@@ -321,7 +319,7 @@ async function publicShareFixture(options: {
   migrateCommentRelayOutbox(db);
   const store = createSqlitePublicFilePublicationStore(db);
   const outbox = createShareBindingOutbox(db);
-  const record = createPublicFilePublicationRecorder(db, store, options.enqueue ?? (() => ({ enqueued: 0, skippedInbound: 0 })));
+  const record = createPublicFilePublicationRecorder(db, store);
   let ids = 0;
   // Publish and read share one Viewer resolver, as server.ts wires them.
   const resolvePublicShareLink: NonNullable<RegisterCollabSyncRoutesDeps['resolvePublicShareLink']> = (projectId, slug, amr) => resolveShareLink(projectId, slug, amr, { OD_SHARE_VIEWER_URL: 'https://web.example.test' });
@@ -544,7 +542,7 @@ async function startSyncServer(
 }
 
 describe('collab sync routes', () => {
-  it.each([false, true])('admits the exact selected receipt before alias mutation without uploading root; unknown proof=%s', async unknown => {
+  it('publishes the selected receipt with version identity without running comment admission', async () => {
     const dir = await mkdtemp(path.join(tmpdir(), 'od-comment-receipt-order-'));
     tempDirs.push(dir);
     await writeFile(path.join(dir, 'selected.html'), '<h1>SELECTED</h1>');
@@ -555,27 +553,22 @@ describe('collab sync routes', () => {
         steps.push('selected-upload');
         expect(args[1]).toBe('push');
         expect(args[3]).toMatch(/^project-file-/);
+        expect(JSON.parse(args[args.indexOf('--source-identity-json') + 1]!)).toEqual({
+          projectId: 'p1', sourceFileId: '11111111-1111-4111-8111-111111111111', sourceFilePath: 'selected.html',
+        });
         expect(await readdir(args[4] ?? '')).not.toContain('private.html');
         return JSON.stringify({ id: 'selected-v1', version: 1 });
       }
       expect(args.slice(0, 2)).toEqual(['share', 'publish']);
-      expect(steps).toEqual(['selected-upload', 'admitted']);
+      expect(steps).toEqual(['selected-upload']);
       steps.push('alias');
       return confirmedShareOutput(args);
     } });
     share.sharePublishing.sourceFileId = () => '11111111-1111-4111-8111-111111111111';
-    share.sharePublishing.admitFileReceipt = async (scope, resourceId, versionId, entryPath) => {
-      expect(scope).toMatchObject({ sourceFileId: '11111111-1111-4111-8111-111111111111', filePath: 'selected.html' });
-      expect(resourceId).toBe(publicFileResourceIdFor(scope));
-      expect(versionId).toBe('selected-v1');
-      expect(entryPath).toBe('index.html');
-      if (unknown) throw new Error('COMMENT_FILE_AUTHORITY_UNAVAILABLE');
-      steps.push('admitted');
-    };
     const api = await startSyncServer(personalContextProvider(), { resolveProjectDir: () => dir, resolveSharedProject: async () => null, ...share });
     const response = await api.json('/api/projects/p1/files/selected.html/publish-public', { method: 'POST' });
-    expect(response.status).toBe(unknown ? 502 : 200);
-    expect(steps).toEqual(unknown ? ['selected-upload'] : ['selected-upload', 'admitted', 'alias']);
+    expect(response.status).toBe(200);
+    expect(steps).toEqual(['selected-upload', 'alias']);
   });
   it('keeps publish callbacks scoped to every workspace sharing the same project', async () => {
     const onPublished = vi.fn();
@@ -1938,11 +1931,37 @@ describe('collab sync routes', () => {
     } finally { db.close(); }
   });
 
-  it.each(['permission', 'nonowner', 'placeholder'] as const)('preflight does not plan or mutate for %s denial', async denial => {
+  it('plans owned local files without team-share eligibility and preserves Vela publication denial', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-share-authority-'));
+    tempDirs.push(dir);
+    await writeFile(path.join(dir, 'index.html'), '<main>Public file</main>');
     const db = new Database(':memory:');
     try {
       const share = await publicShareFixture({ db });
-      const context = denial === 'permission' ? fixedShareContextProvider(false) : personalContextProvider();
+      const api = await startSyncServer(fixedShareContextProvider(false), {
+        ...share, resolveProjectDir: () => dir,
+        resolveSharedProject: async () => ({ projectId: 'p1', ownerMemberId: 'wm-1', sharedAt: '2026-01-01', name: 'Project' }),
+      });
+      const plan = await api.json('/api/projects/p1/files/index.html/share-plan', { method: 'POST' });
+      expect(plan.status).toBe(200);
+      expect(plan.body.fileCount).toBe(1);
+      expect(vi.mocked(runVelaResourceCommand)).not.toHaveBeenCalled();
+      vi.mocked(runVelaResourceCommand).mockRejectedValueOnce(Object.assign(new Error('cloud denied'), {
+        stderr: '{"error":"denied","status":403,"errorCode":"resource_publish_forbidden"}',
+      }));
+      const publish = await api.json('/api/projects/p1/files/index.html/publish-public', { method: 'POST' });
+      expect(publish.status).toBe(403);
+      expect(publish.body.failure).toMatchObject({ upstreamStatus: 403, upstreamCode: 'resource_publish_forbidden' });
+      expect(vi.mocked(runVelaResourceCommand)).toHaveBeenCalledOnce();
+      expect(share.publicFilePublicationStore.get({ projectId: 'p1', filePath: 'index.html', resourceTeamId: 'ws-1', ownerMemberId: 'wm-1' })).toBeNull();
+    } finally { db.close(); }
+  });
+
+  it.each(['nonowner', 'placeholder'] as const)('preflight does not plan or mutate for %s denial', async denial => {
+    const db = new Database(':memory:');
+    try {
+      const share = await publicShareFixture({ db });
+      const context = personalContextProvider();
       const resolveProjectDir = vi.fn(() => '/must-not-be-read');
       const resolveSharedProject = vi.fn(async () => ({
         projectId: 'p1', ownerMemberId: denial === 'nonowner' ? 'another-member' : 'wm-personal-1',
@@ -1987,16 +2006,18 @@ describe('collab sync routes', () => {
       const baseline = await api.json(planUrl, { method: 'POST' });
       expect(baseline.status).toBe(200);
       expect(baseline.body.fileCount).toBe(2);
-      const atLimitAssetBytes = SHARE_MAX_TOTAL_BYTES - (baseline.body.totalBytes - 1);
+      const sampleBytes = 21 * 1024 * 1024;
+      const atLimitAssetBytes = sampleBytes - (baseline.body.totalBytes - 1);
       expect(atLimitAssetBytes).toBeGreaterThan(0);
       await writeFile(asset, Buffer.alloc(atLimitAssetBytes, 65));
       const atLimit = await api.json(planUrl, { method: 'POST' });
       expect(atLimit.status).toBe(200);
-      expect(atLimit.body).toMatchObject({ fileCount: 2, totalBytes: SHARE_MAX_TOTAL_BYTES, exceedsSizeLimit: false });
+      expect(atLimit.body).toMatchObject({ fileCount: 2, totalBytes: sampleBytes });
       await writeFile(asset, Buffer.alloc(atLimitAssetBytes + 1, 65));
       const over = await api.json(planUrl, { method: 'POST' });
       expect(over.status).toBe(200);
-      expect(over.body).toMatchObject({ fileCount: 2, totalBytes: SHARE_MAX_TOTAL_BYTES + 1, exceedsSizeLimit: true });
+      expect(over.body).toMatchObject({ fileCount: 2, totalBytes: sampleBytes + 1 });
+      expect(over.body).not.toHaveProperty('exceedsSizeLimit');
       vi.mocked(runVelaResourceCommand).mockRejectedValueOnce(Object.assign(new Error('cloud rejected'), {stderr:'{"error":"too large","status":413,"errorCode":"public_share_too_large"}'}));
       const rejected = await api.json(publishUrl, { method: 'POST' });
       expect(rejected.status).toBe(413);
@@ -2004,10 +2025,15 @@ describe('collab sync routes', () => {
       expect(vi.mocked(runVelaResourceCommand)).toHaveBeenCalledOnce();
       expect(share.publicFilePublicationStore.get({ projectId: 'p1', filePath: 'index.html', resourceTeamId: 'ws-personal-1', ownerMemberId: 'wm-personal-1' })).toBeNull();
       expect(share.readProjectShareState).toHaveBeenCalledOnce();
-      await writeFile(asset, Buffer.alloc(atLimitAssetBytes, 65));
-      const recovered = await api.json(planUrl, { method: 'POST' });
-      expect(recovered.body).toMatchObject({ totalBytes: SHARE_MAX_TOTAL_BYTES, exceedsSizeLimit: false });
-      expect(vi.mocked(runVelaResourceCommand)).toHaveBeenCalledOnce();
+      // The same bytes may be admitted after Vela's policy changes; no client
+      // threshold or new client build participates in that decision.
+      vi.mocked(runVelaResourceCommand).mockResolvedValueOnce(JSON.stringify({ id: 'accepted-version', version: 1 }));
+      const recovered = await api.json(publishUrl, { method: 'POST' });
+      expect(recovered.status).toBe(200);
+      expect(vi.mocked(runVelaResourceCommand)).toHaveBeenCalledTimes(2);
+      const unchangedPlan = await api.json(planUrl, { method: 'POST' });
+      expect(unchangedPlan.body).toMatchObject({ totalBytes: sampleBytes + 1 });
+      expect(unchangedPlan.body).not.toHaveProperty('exceedsSizeLimit');
     } finally { db.close(); }
   });
 
@@ -2141,12 +2167,12 @@ describe('collab sync routes', () => {
       const api = await startSyncServer(personalContextProvider(), {
         resolveProjectDir: () => dir, resolveSharedProject: async () => null,
         publicFilePublicationStore: store,
-        recordPublicFilePublication: createPublicFilePublicationRecorder(db, store, () => ({ enqueued: 0, skippedInbound: 0 })),
+        recordPublicFilePublication: createPublicFilePublicationRecorder(db, store),
         sharePublishing: {
           sourceFileId: () => '11111111-1111-4111-8111-111111111111',
           reservations: createShareAliasReservations(db, () => receipt.slug), outbox,
           ensureProject: async scope => ({ projectId: scope.projectId, ownerMemberId: scope.ownerMemberId, sharedAt: '2026-01-01T00:00:00.000Z' }),
-          complete: createSharePublicationCompletion(db, createPublicFilePublicationRecorder(db, store, () => ({ enqueued: 0, skippedInbound: 0 })), outbox, true),
+          complete: createSharePublicationCompletion(db, createPublicFilePublicationRecorder(db, store), outbox, true),
           prepare: async scope => ({
             run: async args => {
               if (args[0] === 'team-projects') {
@@ -2177,7 +2203,7 @@ describe('collab sync routes', () => {
     } finally { db.close(); }
   });
 
-  it.each([false, true])('records planner mapping and publication in the HTTP transaction; enqueue failure=%s', async fail => {
+  it.each([false, true])('commits publication before an independent comment transaction; enqueue failure=%s', async fail => {
     const dir = await mkdtemp(path.join(tmpdir(), 'od-publish-transaction-'));
     tempDirs.push(dir);
     await mkdir(path.join(dir, 'pages'));
@@ -2204,27 +2230,29 @@ describe('collab sync routes', () => {
         : { id: 'v1', version: 1 }));
       const api = await startSyncServer(personalContextProvider(), {
         resolveProjectDir: () => dir, resolveSharedProject: async () => null,
-        ...await publicShareFixture({ db, enqueue }),
+        ...await publicShareFixture({ db }),
       });
       const response = await api.json('/api/projects/p1/files/pages/local.html/publish-public', { method: 'POST' });
-      expect(enqueue).toHaveBeenCalledTimes(1); expect(db.inTransaction).toBe(false);
-      expect(response.status).toBe(fail ? 502 : 200);
+      expect(enqueue).not.toHaveBeenCalled();
+      expect(db.inTransaction).toBe(false);
+      expect(response.status).toBe(200);
+      const facts = store.listFacts(scope);
+      expect(facts).toHaveLength(1);
+      const prepareComments = db.transaction(() => enqueue(db, facts[0]!));
+      if (fail) expect(prepareComments).toThrow('intent storage unavailable');
+      else prepareComments();
+      expect(enqueue).toHaveBeenCalledTimes(1);
       const commands = vi.mocked(runVelaResourceCommand).mock.calls;
       expect(commands.map(call => call[0][0])).toEqual(['push']);
       for (const command of commands) expect(command[1]).toBe(scope.resourceTeamId);
       const current = await api.json('/api/projects/p1/files/pages/local.html/publish-public');
-      if (fail) {
-        expect(response.body.error).toMatchObject({ code: 'PUBLIC_FILE_MANUAL_REVOKE_REQUIRED', data: { projectId: 'p1', slug: fixtureSlug, fileName: scope.filePath } });
-        expect(response.body.error.data.url).toBe(`https://web.example.test/artifact/p1/${fixtureSlug}`);
-        expect(store.get(scope)).toBeNull(); expect(current.body.publication).toBeNull();
-        expect(db.prepare('SELECT * FROM test_publish_intents').all()).toEqual([]);
-        // Local storage failure must not revoke the already confirmed remote alias.
-      } else {
-        expect(response.body.receipt.slug).toBe(fixtureSlug); expect(current.body.publication.slug).toBe(fixtureSlug);
-        expect(db.prepare('SELECT * FROM test_publish_intents').all()).toEqual([
-          { local_path: scope.filePath, public_path: 'index.html', revision: store.getRevision(scope)!.token },
-        ]);
-      }
+      expect(response.body.receipt.slug).toBe(fixtureSlug);
+      expect(current.body.publication.slug).toBe(fixtureSlug);
+      expect(store.getRevision(scope)).toEqual(facts[0]!.publicationRevision);
+      expect(db.prepare('SELECT * FROM test_publish_intents').all()).toEqual(fail ? [] : [
+        { local_path: scope.filePath, public_path: 'index.html', revision: store.getRevision(scope)!.token },
+      ]);
+
     } finally { db.close(); }
   });
 

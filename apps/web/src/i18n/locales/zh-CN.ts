@@ -1,6 +1,9 @@
 import type { Dict } from "../types";
 
 export const zhCN: Dict = {
+  'chat.comments.deselectAll': '取消全选',
+  'fileViewer.commentSync.alignRetrying': '重试中…',
+  'fileViewer.commentSync.alignRetryPending': '正在同步评论…',
   "collab.contentUpdate.available": "其他设备有更新",
   "collab.contentUpdate.updating": "正在同步…",
   "collab.contentUpdate.askAgain": "恢复更新提示",
@@ -5969,4 +5972,16 @@ export const zhCN: Dict = {
   'comment.saveTargetMissing': '评论目标已不存在，请重新选择元素；草稿已保留。',
   'comment.savePreviewNotReady': '预览正在刷新，草稿已保留，请在刷新完成后重试保存。',
   'comment.anchorState.lost': '锚点已丢失',
+  "comment.unknownAuthor": "未知作者",
+  "comment.moreCount": "查看评论（{n}）",
+  "comment.resizePanel": "调整评论面板宽度",
+  "comment.overLimit": "已超出 {count} 字，请精简后发送",
+  "comment.saveFailed": "发送失败，请重试",
+  "comment.locationUnavailable": "无法定位此元素，页面可能已变化。",
+  "comment.agentSubmitFailed": "提交失败，请重试。",
+  "comment.agentSubmitUnavailable": "当前无法提交，请稍后重试。",
+  "comment.imageFailed": "图片暂时无法显示",
+  "comment.moreActions": "更多评论操作",
+  'fileViewer.commentSync.alignRetryFailed': '同步失败，请重试。',
+  'fileViewer.commentSync.alignRetrySucceeded': '评论已同步',
 };

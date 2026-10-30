@@ -4,14 +4,14 @@ import { readFileSync } from 'node:fs';
 import { webcrypto } from 'node:crypto';
 import { join } from 'node:path';
 import { useLayoutEffect, useRef, useState, type ReactElement } from 'react';
-import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { installMockOpenDesignHost } from '@open-design/host/testing';
 import type {
   OpenDesignHostPreviewNavigationFailure,
   OpenDesignHostPreviewNavigationFailureListener,
 } from '@open-design/host';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ANNOTATION_EVENT } from '../../src/components/PreviewDrawOverlay';
 
 const { saveTemplateMock } = vi.hoisted(() => ({
@@ -219,31 +219,6 @@ function baseFile(overrides: Partial<ProjectFile>): ProjectFile {
     mime: 'image/png',
     ...overrides,
   };
-}
-
-function createDragDataTransfer() {
-  const store = new Map<string, string>();
-  return {
-    effectAllowed: 'move',
-    dropEffect: 'move',
-    getData: vi.fn((type: string) => store.get(type) ?? ''),
-    setData: vi.fn((type: string, value: string) => {
-      store.set(type, value);
-    }),
-  };
-}
-
-// jsdom does not implement DragEvent, so fireEvent.dragOver/drop silently drop
-// the `clientY` from the event init. Construct the event and pin the coordinate
-// directly so handlers that read `event.clientY` (e.g. drop-edge math) see it.
-function fireDragEventWithClientY(
-  type: 'dragOver' | 'drop',
-  element: Element,
-  init: { dataTransfer: unknown; clientY: number },
-) {
-  const event = createEvent[type](element, { dataTransfer: init.dataTransfer } as never);
-  Object.defineProperty(event, 'clientY', { value: init.clientY, configurable: true });
-  fireEvent(element, event);
 }
 
 function deferredResponse() {
@@ -8846,6 +8821,18 @@ describe('FileViewer SVG artifacts', () => {
 });
 
 describe('FileViewer tweaks toolbar', () => {
+  beforeEach(() => {
+    // Avatar markers are clipped to the measured canvas. jsdom has no layout.
+    const original = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this.matches('.viewer-body, .comment-preview-canvas')) return testRect(0, 0, 900, 700);
+      if (this.matches('.comment-saved-marker, .comment-active-pin')) {
+        // The popover anchors to the displayed avatar's DOM rectangle, not its saved target box.
+        return testRect(Number.parseFloat(this.style.left), Number.parseFloat(this.style.top), 28, 28);
+      }
+      return original.call(this);
+    });
+  });
   const t = (key: keyof Dict) => {
     const labels: Partial<Record<keyof Dict, string>> = {
       'chat.tabComments': 'Comments',
@@ -10585,7 +10572,7 @@ describe('FileViewer tweaks toolbar', () => {
       }));
     });
 
-    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
 
     await waitFor(() => {
       expect(screen.getByTestId('artifact-preview-frame')).toBe(urlFrame);
@@ -10593,7 +10580,7 @@ describe('FileViewer tweaks toolbar', () => {
       expect(urlFrame.getAttribute('data-od-active')).toBe('true');
       expect(srcDocFrame.getAttribute('data-od-active')).toBe('false');
       expect(postSpy).toHaveBeenCalledWith(
-        { type: 'od:comment-mode', enabled: true, mode: 'inspect' },
+        expect.objectContaining({ type: 'od:comment-mode', enabled: true, mode: 'inspect' }),
         '*',
       );
     });
@@ -10609,7 +10596,7 @@ describe('FileViewer tweaks toolbar', () => {
     const urlFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
     expect(urlFrame.getAttribute('data-od-render-mode')).toBe('url-load');
 
-    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
 
     const srcDocFrame = await waitFor(() => {
       const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
@@ -10668,7 +10655,7 @@ describe('FileViewer tweaks toolbar', () => {
       }));
     });
 
-    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
 
     const srcDocFrame = await waitFor(() => {
       const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
@@ -10707,7 +10694,7 @@ describe('FileViewer tweaks toolbar', () => {
       }));
     });
 
-    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
 
     // A matching-href ready keeps Comment on the URL-load engine instead of
     // falling back to srcdoc. od:comment-mode delivery to the URL frame is
@@ -10736,7 +10723,7 @@ describe('FileViewer tweaks toolbar', () => {
       }));
     });
 
-    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
 
     const srcDocFrame = await waitFor(() => {
       const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
@@ -11029,11 +11016,11 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.getByTestId('comment-float-host')).toContainElement(rail);
     expect(screen.queryByTestId('comment-side-panel')).toBeNull();
 
-    fireEvent.click(rail);
+    fireEvent.click(within(rail).getByRole('button', { name: /show comments/i }));
     expect(await screen.findByTestId('comment-side-panel')).toBeTruthy();
   });
 
-  it('keeps the comment popover open and restores focus when View all comments closes', async () => {
+  it('renders a draft without legacy titlebar controls', async () => {
     const portalId = 'project-comments-view-all';
     render(
       <>
@@ -11064,26 +11051,14 @@ describe('FileViewer tweaks toolbar', () => {
       },
     }));
 
-    const viewAll = await screen.findByTestId('comment-popover-view-all');
-    fireEvent.click(viewAll);
-
-    const panel = await screen.findByTestId('comment-side-panel');
-    const dismiss = within(panel).getByRole('button', { name: /hide comments/i });
-    dismiss.focus();
-    fireEvent.click(dismiss);
-
-    const rail = await screen.findByTestId('comment-side-collapsed-rail');
-    expect(screen.getByTestId('comment-popover')).toBeTruthy();
-    await waitFor(() => expect(document.activeElement).toBe(rail));
-
-    fireEvent.click(rail);
-    const reopened = await screen.findByTestId('comment-side-panel');
-    fireEvent.keyDown(reopened, { key: 'Escape' });
-    await waitFor(() => {
-      expect(screen.queryByTestId('comment-side-panel')).toBeNull();
-      expect(screen.getByTestId('comment-popover')).toBeTruthy();
-      expect(document.activeElement).toBe(viewAll);
-    });
+    const input = await screen.findByTestId('comment-popover-input');
+    fireEvent.change(input, { target: { value: 'Keep this draft' } });
+    const popover = screen.getByTestId('comment-popover');
+    expect(popover.getAttribute('aria-label')).toContain('Hero');
+    expect(screen.queryByTestId('comment-popover-view-all')).toBeNull();
+    expect(within(popover).queryByRole('button', { name: /move comment box/i })).toBeNull();
+    expect(popover.querySelector('.comment-popover-titlebar')).toBeNull();
+    expect(input).toHaveValue('Keep this draft');
   });
 
   it('shows the open comment count beside the comments icon', () => {
@@ -11161,9 +11136,14 @@ describe('FileViewer tweaks toolbar', () => {
     fireEvent.click(screen.getByTestId('comment-panel-toggle'));
     await waitFor(() => expect(screen.queryByTestId('comment-unread-dot')).toBeNull());
     expect(screen.getByTestId('comment-panel-toggle').getAttribute('aria-label')).toBe('Comments (3)');
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'PUT')).toHaveLength(0);
+    fireEvent.click(screen.getAllByTestId('comment-side-item')[0]!);
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'PUT')).toHaveLength(1));
+    const write = fetchMock.mock.calls.find(([, init]) => init?.method === 'PUT')!;
+    expect(JSON.parse(String(write[1]?.body)).commentIds).toEqual(['three']);
   });
 
-  it('does not mark folded arrivals read until the floating rail is expanded', async () => {
+  it('does not acknowledge comments merely by expanding the list or avatar rail', async () => {
     const comment = (id: string, createdAt: number, overrides: Partial<PreviewComment> = {}): PreviewComment => ({
       id, projectId: 'project-1', conversationId: 'conversation-1', filePath: 'preview.html',
       elementId: id, selector: `[data-od-id="${id}"]`, label: id, text: '', htmlHint: '',
@@ -11191,7 +11171,7 @@ describe('FileViewer tweaks toolbar', () => {
     );
 
     fireEvent.click(screen.getByTestId('comment-panel-toggle'));
-    await waitFor(() => expect(readRequests).toHaveBeenCalledTimes(1));
+    expect(readRequests).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: /hide comments/i }));
     await screen.findByTestId('comment-side-collapsed-rail');
     expect(screen.queryByTestId('comment-rail-unread-dot')).toBeNull();
@@ -11218,13 +11198,13 @@ describe('FileViewer tweaks toolbar', () => {
       </CollabProvider>,
     );
 
-    await waitFor(() => expect(readRequests).toHaveBeenCalledTimes(1));
-    expect(await screen.findByTestId('comment-rail-unread-dot')).toBeVisible();
-    expect(screen.getByTestId('comment-rail-unread-dot')).toHaveStyle({ background: 'var(--red)' });
-    expect(screen.getByTestId('comment-side-collapsed-rail')).toContainElement(screen.getByTestId('comment-rail-unread-dot'));
-    fireEvent.click(screen.getByTestId('comment-side-collapsed-rail'));
+    expect(readRequests).not.toHaveBeenCalled();
+    expect(within(screen.getByTestId('comment-side-collapsed-rail')).getByRole('button', { name: /external-new/ }).querySelector('i')).toBeTruthy();
+    fireEvent.click(within(screen.getByTestId('comment-side-collapsed-rail')).getByRole('button', { name: /show comments/i }));
     expect(screen.queryByTestId('comment-rail-unread-dot')).toBeNull();
-    await waitFor(() => expect(readRequests).toHaveBeenCalledTimes(2));
+    expect(readRequests).not.toHaveBeenCalled();
+    fireEvent.click(screen.getAllByTestId('comment-side-item').find(item => item.getAttribute('data-comment-id') === 'external-new')!);
+    await waitFor(() => expect(readRequests).toHaveBeenCalledTimes(1));
   });
 
 
@@ -11254,24 +11234,67 @@ describe('FileViewer tweaks toolbar', () => {
       return new Response(JSON.stringify({ projectId: 'project-1', filePath: 'preview.html', seenCommentIds: [] }), { headers: { 'Content-Type': 'application/json' } });
     }));
     const external: PreviewComment = {
-      id: 'external', projectId: 'project-1', conversationId: 'conversation-1', filePath: 'preview.html', elementId: 'external', selector: '[data-od-id="external"]', label: 'external', text: '', htmlHint: '', position: { x: 0, y: 0, width: 1, height: 1 }, note: 'external', status: 'open', createdAt: 103, updatedAt: 103,
+      id: 'external', projectId: 'project-1', conversationId: 'conversation-1', filePath: 'preview.html', elementId: 'pin-external', selector: '[data-od-pin="pin-external"]', label: 'external', text: '', htmlHint: '', position: { x: 40, y: 52, width: 18, height: 18 }, note: 'external', status: 'open', createdAt: 103, updatedAt: 103,
     };
     render(<FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()} liveHtml="<html><body /></html>" previewComments={[external]} />);
     expect(await screen.findByTestId('comment-unread-dot')).toBeVisible();
     fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    expect(readWrites).toBe(0);
+    fireEvent.click(screen.getByTestId('comment-side-item'));
     await waitFor(() => expect(readWrites).toBe(1));
     fireEvent.click(screen.getByTestId('comment-panel-toggle'));
     expect(screen.getByTestId('comment-unread-dot')).toBeVisible();
     await act(async () => firstRead.resolve(new Response('{}', { status: 500 })));
     expect(screen.getByTestId('comment-unread-dot')).toBeVisible();
     fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    fireEvent.keyDown(screen.getByRole('dialog', { name: 'Comment: external' }), { key: 'Escape' });
+    fireEvent.click(screen.getByTestId('comment-side-item'));
     await waitFor(() => expect(readWrites).toBe(2));
     await act(async () => { await Promise.resolve(); });
     fireEvent.click(screen.getByTestId('comment-panel-toggle'));
     expect(screen.queryByTestId('comment-unread-dot')).toBeNull();
   });
 
-  it('keeps comments and annotation picker mutually exclusive', () => {
+  it('keeps one pending read acknowledgment across target updates and comment refreshes', async () => {
+    const pendingRead = deferredResponse();
+    const readWrites = vi.fn(() => pendingRead.promise);
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (!String(input).includes('/comments/read')) return Response.json({});
+      if (init?.method === 'PUT') return readWrites();
+      return Response.json({ projectId: 'project-read-rerender', filePath: 'preview.html', seenCommentIds: [] });
+    }));
+    const comment: PreviewComment = {
+      id: 'pending-read', projectId: 'project-read-rerender', conversationId: 'conversation-1',
+      filePath: 'preview.html', elementId: 'pin-pending-read', selector: '[data-od-pin="pin-pending-read"]',
+      label: 'Pending read', text: '', htmlHint: '', position: { x: 40, y: 52, width: 18, height: 18 },
+      note: 'Read this once', status: 'open', createdAt: 103, updatedAt: 103,
+    };
+    const viewer = (comments: PreviewComment[]) => <FileViewer projectId="project-read-rerender"
+      projectKind="prototype" file={htmlPreviewFile()} liveHtml="<html><body /></html>" previewComments={comments} />;
+    const view = render(viewer([comment]));
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    fireEvent.click(screen.getByTestId('comment-side-item'));
+    expect(await screen.findByRole('dialog', { name: 'Comment: Pending read' })).toBeVisible();
+    await waitFor(() => expect(readWrites).toHaveBeenCalledTimes(1));
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    act(() => window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, data: {
+      type: 'od:comment-targets', targets: [{ ...comment, position: { x: 60, y: 72, width: 18, height: 18 } }],
+    } })));
+    view.rerender(viewer([{ ...comment }]));
+    // Let the layout and the next read-effect animation frame settle while the PUT remains pending.
+    await act(async () => { await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))); });
+    expect(readWrites).toHaveBeenCalledTimes(1);
+
+    await act(async () => pendingRead.resolve(Response.json({
+      projectId: 'project-read-rerender', filePath: 'preview.html', seenCommentIds: [comment.id],
+    })));
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    await waitFor(() => expect(screen.queryByTestId('comment-unread-dot')).toBeNull());
+    expect(readWrites).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps browsing independent while creating an annotation', () => {
     const { container } = render(
       <FileViewer
         projectId="project-1"
@@ -11289,18 +11312,17 @@ describe('FileViewer tweaks toolbar', () => {
 
     clickAgentTool('board-mode-toggle');
 
-    expect(screen.queryByTestId('comment-side-panel')).toBeNull();
+    expect(screen.getByTestId('comment-side-panel')).toBeTruthy();
     expect(container.querySelector('.comment-preview-layer')?.className).not.toContain('comment-preview-layer-comments-open');
-    expect(screen.getByTestId('comment-panel-toggle').getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByTestId('comment-panel-toggle').getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByTestId('board-mode-toggle').getAttribute('aria-pressed')).toBe('true');
     expect(screen.queryByTestId('inspect-empty-hint-container')).toBeNull();
 
     fireEvent.click(screen.getByTestId('comment-panel-toggle'));
 
-    expect(screen.getByTestId('comment-side-panel')).toBeTruthy();
-    expect(screen.getByTestId('comment-panel-toggle').getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByTestId('board-mode-toggle').getAttribute('aria-pressed')).toBe('false');
-    expect(screen.queryByTestId('inspect-empty-hint-container')).toBeNull();
+    expect(screen.queryByTestId('comment-side-panel')).toBeNull();
+    expect(screen.getByTestId('comment-panel-toggle')).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByTestId('board-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('keeps the picker hint inside the canvas and clear of the open comment side panel', () => {
@@ -11330,7 +11352,7 @@ describe('FileViewer tweaks toolbar', () => {
     expect(dock.contains(screen.getByTestId('artifact-preview-frame'))).toBe(false);
   });
 
-  it('keeps non-docked tablet comment-tool previews fitted to the padded canvas', async () => {
+  it('fits tablet comment previews inside the canvas alongside the open dock', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
       .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
         if (this.classList.contains('viewer-body')) return testRect(0, 0, 900, 700);
@@ -11352,8 +11374,8 @@ describe('FileViewer tweaks toolbar', () => {
 
     const layout = screen.getByTestId('comment-preview-layout');
     await waitFor(() => {
-      expect(layout.className).not.toContain('comment-preview-layer-with-side-dock');
-      expect(Number(layout.style.getPropertyValue('--preview-scale'))).toBeCloseTo((700 - 48) / 1180);
+      expect(layout.className).toContain('comment-preview-layer-with-side-dock');
+      expect(Number(layout.style.getPropertyValue('--preview-scale'))).toBeCloseTo(Math.min((700 - 48) / 1180, (900 - 348 - 48) / 820));
     });
   });
 
@@ -11728,7 +11750,7 @@ describe('FileViewer tweaks toolbar', () => {
     );
     await Promise.resolve();
 
-    expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: _mode === 'Comment' ? '38%' : '63%' })).toBeTruthy();
     fireEvent.click(screen.getByTestId(toggleTestId));
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '100%' })).toBeTruthy();
@@ -11837,7 +11859,7 @@ describe('FileViewer tweaks toolbar', () => {
     fireEvent.change(input, { target: { value: 'Please tighten this heading.' } });
 
     expect(input).not.toHaveAttribute('readonly');
-    expect(screen.getByTestId('comment-popover-save')).toHaveTextContent('Comment');
+    expect(screen.getByTestId('comment-popover-save')).toHaveAccessibleName('Comment');
     expect(screen.queryByTestId('comment-add-send')).toBeNull();
   });
 
@@ -11947,7 +11969,7 @@ describe('FileViewer tweaks toolbar', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
 
     expect(screen.getByTestId('comment-side-panel')).toBeTruthy();
     expect(screen.getByTestId('comment-saved-marker-pin-older').getAttribute('data-pin-number')).toBe('1');
@@ -11963,7 +11985,7 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByTestId('comment-saved-marker-pin-newer')).toBeNull();
     expect(screen.queryByTestId('comment-saved-marker-pin-older')).toBeNull();
 
-    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
 
     const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
     window.dispatchEvent(new MessageEvent('message', {
@@ -11984,15 +12006,17 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.getByTestId('comment-saved-marker-pin-newer')).toBeTruthy();
     expect(screen.getByTestId('comment-saved-marker-pin-older')).toBeTruthy();
 
-    fireEvent.click(screen.getByTestId('comment-saved-marker-pin-newer'));
+    fireEvent.click(within(screen.getByTestId('comment-saved-marker-pin-newer')).getByRole('button'));
     await waitFor(() => {
-      const activeItem = document.querySelector('[data-comment-id="comment-newer"]');
+      const activeItem = document.querySelector('.comment-side-item[data-comment-id="comment-newer"]');
       expect(activeItem?.className).toContain('active');
       expect(activeItem?.getAttribute('aria-current')).toBe('true');
     });
-    expect(screen.getByTestId('comment-active-pin').getAttribute('data-pin-number')).toBe('2');
-    expect(screen.getByTestId('comment-active-pin')).toHaveStyle({ background: newerColor.bg, color: newerColor.fg });
-    expect(document.querySelector('[data-comment-id="comment-older"]')?.className).not.toContain('active');
+    expect(screen.getByTestId('comment-saved-marker-pin-newer')).toHaveAttribute('data-pin-number', '2');
+    expect(screen.getByTestId('comment-popover-detail')).toHaveTextContent('Newer comment');
+    expect(screen.queryByTestId('comment-active-pin')).toBeNull();
+    expect(screen.getByTestId('comment-saved-marker-pin-newer').querySelector('button')).toHaveStyle({ background: newerColor.bg, color: newerColor.fg });
+    expect(document.querySelector('.comment-side-item[data-comment-id="comment-older"]')?.className).not.toContain('active');
   });
 
   it('uses the next comment number when adding another comment on the same element', async () => {
@@ -12023,7 +12047,7 @@ describe('FileViewer tweaks toolbar', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
 
     const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
     window.dispatchEvent(new MessageEvent('message', {
@@ -12061,11 +12085,12 @@ describe('FileViewer tweaks toolbar', () => {
 
     expect((await screen.findByTestId('comment-active-pin')).getAttribute('data-pin-number')).toBe('2');
 
-    fireEvent.click(screen.getByTestId('comment-saved-marker-hero'));
+    fireEvent.click(within(screen.getByTestId('comment-saved-marker-hero')).getByRole('button'));
     await waitFor(() => {
-      expect(document.querySelector('[data-comment-id="comment-saved"]')?.className).toContain('active');
+      expect(document.querySelector('.comment-side-item[data-comment-id="comment-saved"]')?.className).toContain('active');
     });
-    expect(screen.getByTestId('comment-active-pin').getAttribute('data-pin-number')).toBe('1');
+    expect(screen.queryByTestId('comment-active-pin')).toBeNull();
+    expect(screen.getByTestId('comment-saved-marker-hero')).toHaveAttribute('data-pin-number', '1');
   });
 
   it('does not reuse a surviving pin number for a new comment after a deletion', async () => {
@@ -12101,7 +12126,7 @@ describe('FileViewer tweaks toolbar', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
 
     const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
     window.dispatchEvent(new MessageEvent('message', {
@@ -12175,7 +12200,7 @@ describe('FileViewer tweaks toolbar', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
 
     const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
     window.dispatchEvent(new MessageEvent('message', {
@@ -12266,7 +12291,7 @@ describe('FileViewer tweaks toolbar', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
     const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
     window.dispatchEvent(new MessageEvent('message', {
       source: frame.contentWindow,
@@ -12406,7 +12431,7 @@ describe('FileViewer tweaks toolbar', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
     const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
 
     window.dispatchEvent(new MessageEvent('message', {
@@ -12475,7 +12500,7 @@ describe('FileViewer tweaks toolbar', () => {
 
     const input = await screen.findByTestId('comment-popover-input') as HTMLTextAreaElement;
     expect(input.value).toBe('');
-    expect(screen.queryByText('Existing note should stay in the thread')).toBeNull();
+    expect(screen.getByTestId('comment-side-panel')).toHaveTextContent('Existing note should stay in the thread');
     expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
   });
 
@@ -12530,7 +12555,7 @@ describe('FileViewer tweaks toolbar', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
     const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
 
     window.dispatchEvent(new MessageEvent('message', {
@@ -12585,7 +12610,7 @@ describe('FileViewer tweaks toolbar', () => {
           previewComments={previewComments}
         />,
       );
-      fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+      fireEvent.click(screen.getByTestId('board-mode-toggle'));
       const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
       return frame;
     }
@@ -12627,13 +12652,13 @@ describe('FileViewer tweaks toolbar', () => {
       return (screen.getByTestId('comment-popover-input') as HTMLTextAreaElement).value;
     }
 
-    function composerTitle() {
-      return screen.getByTestId('comment-popover').querySelector('.comment-popover-title')?.textContent;
+    function composerAccessibleName() {
+      return screen.getByTestId('comment-popover').getAttribute('aria-label');
     }
 
     function expectDraftKeptOnHero(draft: string) {
       expect(composerDraft()).toBe(draft);
-      expect(composerTitle()).toBe('Hero heading');
+      expect(composerAccessibleName()).toContain('Hero heading');
       expect(screen.getByText(discardNotice)).toBeTruthy();
     }
 
@@ -12646,7 +12671,7 @@ describe('FileViewer tweaks toolbar', () => {
       expectDraftKeptOnHero('Unsent thought');
 
       pickElement(frame, ledeTarget);
-      expect(composerTitle()).toBe('Lede paragraph');
+      expect(composerAccessibleName()).toContain('Lede paragraph');
       expect(composerDraft()).toBe('');
       expect(screen.queryByText(discardNotice)).toBeNull();
     });
@@ -12657,7 +12682,7 @@ describe('FileViewer tweaks toolbar', () => {
       await screen.findByTestId('comment-popover-input');
 
       pickElement(frame, ledeTarget);
-      expect(composerTitle()).toBe('Lede paragraph');
+      expect(composerAccessibleName()).toContain('Lede paragraph');
       expect(screen.queryByText(discardNotice)).toBeNull();
     });
 
@@ -12689,7 +12714,7 @@ describe('FileViewer tweaks toolbar', () => {
       expectDraftKeptOnHero('Unsent thought');
 
       postFromPreview(frame, lasso);
-      expect(composerTitle()).not.toBe('Hero heading');
+      expect(composerAccessibleName()).not.toContain('Hero heading');
       expect(composerDraft()).toBe('');
     });
 
@@ -12702,7 +12727,8 @@ describe('FileViewer tweaks toolbar', () => {
       expectDraftKeptOnHero('Unsent thought');
 
       fireEvent.click(pin);
-      expect(composerDraft()).toBe('Saved note');
+      expect(screen.getByTestId('comment-popover-detail')).toHaveTextContent('Saved note');
+      expect(screen.queryByTestId('comment-popover-input')).toBeNull();
       expect(screen.queryByText(discardNotice)).toBeNull();
     });
 
@@ -12715,23 +12741,27 @@ describe('FileViewer tweaks toolbar', () => {
       expectDraftKeptOnHero('Unsent thought');
 
       fireEvent.click(card);
-      expect(composerDraft()).toBe('Saved note');
+      expect(screen.getByTestId('comment-popover-detail')).toHaveTextContent('Saved note');
+      expect(screen.queryByTestId('comment-popover-input')).toBeNull();
       expect(screen.queryByText(discardNotice)).toBeNull();
     });
 
     it('lets an opened saved comment go without a notice while its note is unchanged', async () => {
       const frame = renderViewer([savedComment]);
       fireEvent.click(screen.getByRole('button', { name: 'Open comment for pin-saved' }));
-      expect((await screen.findByTestId('comment-popover-input') as HTMLTextAreaElement).value)
-        .toBe('Saved note');
+      expect(await screen.findByTestId('comment-popover-detail')).toHaveTextContent('Saved note');
 
+      // Reading a saved comment does not enable canvas picking.
       pickElement(frame, heroTarget);
-      expect(composerTitle()).toBe('Hero heading');
+      expect(screen.getByTestId('comment-popover-detail')).toHaveTextContent('Saved note');
+      fireEvent.keyDown(document.body, { key: 'c' });
+      pickElement(frame, heroTarget);
+      expect(composerAccessibleName()).toContain('Hero heading');
       expect(screen.queryByText(discardNotice)).toBeNull();
     });
   });
 
-  it('keeps the comment panel closed after saving an annotation comment', async () => {
+  it('opens browsing and exits picking after saving an annotation comment', async () => {
     function Harness() {
       const [comments, setComments] = useState<PreviewComment[]>([]);
       return (
@@ -12799,13 +12829,14 @@ describe('FileViewer tweaks toolbar', () => {
     });
 
     const input = await screen.findByTestId('comment-popover-input');
-    expect(screen.queryByTestId('comment-side-panel')).toBeNull();
+    expect(screen.getByTestId('comment-side-panel')).toBeTruthy();
     fireEvent.change(input, { target: { value: '加大字号' } });
     fireEvent.click(screen.getByTestId('comment-popover-save'));
 
     await waitFor(() => expect(screen.queryByTestId('comment-popover')).toBeNull());
-    expect(screen.queryByTestId('comment-side-panel')).toBeNull();
-    expect(screen.getByText('Comment saved')).toBeTruthy();
+    expect(screen.getByTestId('comment-side-panel')).toBeTruthy();
+    expect(screen.getByTestId('board-mode-toggle')).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByTestId('comment-side-item')).toHaveTextContent('加大字号');
   });
 
   it('keeps saved marker numbers stable after saving another comment', async () => {
@@ -12884,7 +12915,7 @@ describe('FileViewer tweaks toolbar', () => {
 
     render(<Harness />);
 
-    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
 
     expect(screen.getByTestId('comment-saved-marker-pin-older').getAttribute('data-pin-number')).toBe('1');
     expect(screen.getByTestId('comment-saved-marker-pin-newer').getAttribute('data-pin-number')).toBe('2');
@@ -12919,6 +12950,12 @@ describe('FileViewer tweaks toolbar', () => {
     fireEvent.change(input, { target: { value: 'Third comment' } });
     fireEvent.click(screen.getByTestId('comment-popover-save'));
 
+    await waitFor(() => expect(screen.getAllByTestId('comment-side-item').some(item => item.textContent?.includes('Third comment'))).toBe(true));
+    const viewingFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    act(() => window.dispatchEvent(new MessageEvent('message', { source: viewingFrame.contentWindow, data: {
+      type: 'od:comment-targets', targets: [{ elementId: 'hero', selector: '[data-od-id="hero"]', label: 'Hero', text: 'Hero',
+        position: { x: 8, y: 12, width: 120, height: 48 }, htmlHint: '<main data-od-id="hero">Hero</main>' }],
+    } })));
     await waitFor(() => {
       expect(screen.getByTestId('comment-saved-marker-pin-older').getAttribute('data-pin-number')).toBe('1');
       expect(screen.getByTestId('comment-saved-marker-pin-newer').getAttribute('data-pin-number')).toBe('2');
@@ -13092,7 +13129,7 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByTestId('annotation-hover-style-summary')).toBeNull();
     expect(screen.queryByTestId('annotation-hover-popover')).toBeNull();
     expect(screen.queryByTestId('inspect-panel')).toBeNull();
-    expect(await screen.findByTestId('comment-target-overlay')).toBeTruthy();
+    expect(screen.queryByTestId('comment-popover-input')).toBeNull();
     expect(screen.queryByTestId('comment-popover-input')).toBeNull();
 
     window.dispatchEvent(new MessageEvent('message', {
@@ -13100,13 +13137,10 @@ describe('FileViewer tweaks toolbar', () => {
       data: { ...target, type: 'od:comment-target' },
     }));
 
-    const summary = await screen.findByTestId('comment-popover-style-summary');
-    expect(summary.textContent).toContain('Color');
-    expect(summary.textContent).toContain('#1A1916');
-    expect(summary.textContent).toContain('13.5px');
+    expect(screen.queryByTestId('comment-popover-style-summary')).toBeNull();
     expect(await screen.findByTestId('comment-popover-input')).toBeTruthy();
     expect(screen.getByTestId('comment-target-overlay')).toBeTruthy();
-    expect(screen.getByTestId('comment-panel-toggle').getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByTestId('comment-panel-toggle').getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByTestId('board-mode-toggle').getAttribute('aria-pressed')).toBe('true');
     expect(screen.queryByTestId('inspect-panel')).toBeNull();
     await waitFor(() => {
@@ -13114,7 +13148,7 @@ describe('FileViewer tweaks toolbar', () => {
     });
   });
 
-  it('keeps the hover card mounted when the pointer moves onto it (no flicker)', async () => {
+  it('keeps a new comment draft while the preview reports pointer leave', async () => {
     render(
       <FileViewer
         projectId="project-1"
@@ -13143,29 +13177,21 @@ describe('FileViewer tweaks toolbar', () => {
       data: { ...target, type: 'od:comment-hover' },
     }));
 
-    const card = await screen.findByTestId('annotation-hover-popover');
-
-    // Pointer crosses from the element onto the floating card. The iframe sees
-    // that as a mouseout and posts od:comment-leave; the card's own mouseenter
-    // fires first and pins it, so the leave must be ignored and the card stays.
-    fireEvent.mouseEnter(card);
-    window.dispatchEvent(new MessageEvent('message', {
-      source: frame.contentWindow,
-      data: { type: 'od:comment-leave' },
-    }));
-
-    // Give React a chance to (wrongly) unmount before asserting it did not.
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(screen.queryByTestId('annotation-hover-popover')).not.toBeNull();
-
-    // Leaving the card itself dismisses it.
-    fireEvent.mouseLeave(card);
-    await waitFor(() => {
-      expect(screen.queryByTestId('annotation-hover-popover')).toBeNull();
+    expect(screen.queryByTestId('annotation-hover-popover')).toBeNull();
+    act(() => window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow, data: { ...target, type: 'od:comment-target' },
+    })));
+    const input = await screen.findByTestId('comment-popover-input');
+    fireEvent.change(input, { target: { value: 'Keep this draft' } });
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, data: { type: 'od:comment-leave' } }));
     });
+    await new Promise(resolve => setTimeout(resolve, 140));
+    expect(screen.getByTestId('comment-popover-input')).toHaveValue('Keep this draft');
+    expect(screen.queryByTestId('annotation-hover-popover')).toBeNull();
   });
 
-  it('ignores an occlusion leave that arrives before the card pins (no entry flicker)', async () => {
+  it('ignores a preview leave followed immediately by another hover while drafting', async () => {
     render(
       <FileViewer
         projectId="project-1"
@@ -13194,23 +13220,22 @@ describe('FileViewer tweaks toolbar', () => {
       data: { ...target, type: 'od:comment-hover' },
     }));
 
-    const card = await screen.findByTestId('annotation-hover-popover');
-
-    // Real-world ordering the synchronous teardown got wrong: the iframe's async
-    // od:comment-leave lands BEFORE the card's mouseenter has had a chance to pin
-    // it. The dismiss must be deferred so the imminent mouseenter cancels it —
-    // otherwise the card tears down for a frame and flickers on the way in.
-    window.dispatchEvent(new MessageEvent('message', {
-      source: frame.contentWindow,
-      data: { type: 'od:comment-leave' },
-    }));
-    fireEvent.mouseEnter(card);
-
-    await new Promise((resolve) => setTimeout(resolve, 140));
-    expect(screen.queryByTestId('annotation-hover-popover')).not.toBeNull();
+    expect(screen.queryByTestId('annotation-hover-popover')).toBeNull();
+    act(() => window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow, data: { ...target, type: 'od:comment-target' },
+    })));
+    const input = await screen.findByTestId('comment-popover-input');
+    fireEvent.change(input, { target: { value: 'Keep this draft' } });
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, data: { type: 'od:comment-leave' } }));
+      window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, data: { ...target, type: 'od:comment-hover' } }));
+    });
+    await new Promise(resolve => setTimeout(resolve, 140));
+    expect(screen.getByTestId('comment-popover-input')).toHaveValue('Keep this draft');
+    expect(screen.queryByTestId('annotation-hover-popover')).toBeNull();
   });
 
-  it('keeps the card when the pointer moves from it back onto the element', async () => {
+  it('preserves draft content when hover returns to the picked element', async () => {
     render(
       <FileViewer
         projectId="project-1"
@@ -13239,25 +13264,19 @@ describe('FileViewer tweaks toolbar', () => {
       data: { ...target, type: 'od:comment-hover' },
     }));
 
-    const card = await screen.findByTestId('annotation-hover-popover');
-    fireEvent.mouseEnter(card);
-
-    // Pointer leaves the card heading back onto the element it overlaps. The
-    // card must NOT tear down synchronously on its own mouseleave — clearing
-    // here is what made the card vanish while the pointer was still over the
-    // element (the iframe does not always re-emit a hover to bring it back).
-    fireEvent.mouseLeave(card);
-    expect(screen.queryByTestId('annotation-hover-popover')).not.toBeNull();
-
-    // A re-hover (pointer landed back on the element) cancels the pending
-    // dismiss, so the card stays put rather than blinking out.
-    window.dispatchEvent(new MessageEvent('message', {
-      source: frame.contentWindow,
-      data: { ...target, type: 'od:comment-hover' },
-    }));
-
-    await new Promise((resolve) => setTimeout(resolve, 140));
-    expect(screen.queryByTestId('annotation-hover-popover')).not.toBeNull();
+    expect(screen.queryByTestId('annotation-hover-popover')).toBeNull();
+    act(() => window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow, data: { ...target, type: 'od:comment-target' },
+    })));
+    const input = await screen.findByTestId('comment-popover-input');
+    fireEvent.change(input, { target: { value: 'Keep this draft' } });
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, data: { type: 'od:comment-leave' } }));
+    });
+    await new Promise(resolve => setTimeout(resolve, 140));
+    act(() => window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, data: { ...target, type: 'od:comment-hover' } })));
+    expect(screen.getByTestId('comment-popover-input')).toHaveValue('Keep this draft');
+    expect(screen.queryByTestId('annotation-hover-popover')).toBeNull();
   });
 
   it('closes an open saved-comment composer when that comment leaves the open state', async () => {
@@ -13288,11 +13307,11 @@ describe('FileViewer tweaks toolbar', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
     fireEvent.click(screen.getByRole('button', { name: 'Open comment for pin-transition' }));
 
-    expect((await screen.findByTestId('comment-popover-input') as HTMLTextAreaElement).value)
-      .toBe('Do not recreate this stale comment');
+    expect(await screen.findByTestId('comment-popover-detail')).toHaveTextContent('Do not recreate this stale comment');
+    expect(screen.queryByTestId('comment-popover-input')).toBeNull();
 
     rerender(
       <FileViewer
@@ -13305,7 +13324,7 @@ describe('FileViewer tweaks toolbar', () => {
     );
 
     await waitFor(() => {
-      expect(screen.queryByTestId('comment-popover-input')).toBeNull();
+      expect(screen.queryByTestId('comment-popover-detail')).toBeNull();
     });
     expect(screen.queryByTestId('comment-saved-marker-pin-transition')).toBeNull();
     expect(screen.queryByText('Do not recreate this stale comment')).toBeNull();
@@ -13341,14 +13360,15 @@ describe('FileViewer tweaks toolbar', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
     fireEvent.click(screen.getByRole('button', {
       name: 'Open comment for pin-delete-rejected',
     }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+    fireEvent.click(within(screen.getByTestId('comment-popover')).getByText('Delete'));
 
     await waitFor(() => expect(onRemovePreviewComment).toHaveBeenCalledWith(comment.id));
-    expect(screen.getByTestId('comment-popover-input')).toBeTruthy();
+    expect(screen.getByTestId('comment-popover-detail')).toHaveTextContent('Retain me');
+    expect(screen.queryByTestId('comment-popover-input')).toBeNull();
     expect(screen.getByTestId('comment-saved-marker-pin-delete-rejected')).toBeTruthy();
   });
 
@@ -13386,7 +13406,7 @@ describe('FileViewer tweaks toolbar', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
     fireEvent.click(screen.getByRole('button', {
       name: 'Open comment for pin-send-result',
     }));
@@ -13394,7 +13414,8 @@ describe('FileViewer tweaks toolbar', () => {
 
     await waitFor(() => expect(onSendBoardCommentAttachments).toHaveBeenCalledTimes(1));
     expect(onRemovePreviewComment).not.toHaveBeenCalled();
-    expect(screen.getByTestId('comment-popover-input')).toBeTruthy();
+    expect(screen.getByTestId('comment-popover-detail')).toHaveTextContent(comment.note);
+    expect(screen.queryByTestId('comment-popover-input')).toBeNull();
 
     await waitFor(() => {
       expect((screen.getByTestId('comment-add-send') as HTMLButtonElement).disabled).toBe(false);
@@ -13439,7 +13460,7 @@ describe('FileViewer tweaks toolbar', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
     fireEvent.click(screen.getByRole('button', {
       name: 'Open comment for pin-send-without-removal',
     }));
@@ -13526,6 +13547,8 @@ describe('FileViewer tweaks toolbar', () => {
     expect(removed).toEqual([]);
     expect(screen.getByText('First queued comment')).toBeTruthy();
     expect(screen.getByText('Second rejected comment')).toBeTruthy();
+    expect(screen.getByTestId('comment-side-submit-error')).toHaveTextContent('Submission failed. Please try again.');
+    expect(screen.getByTestId('comment-side-send-claude')).not.toBeDisabled();
   });
 
   it('offers no second hand-off for a comment that is already applying', async () => {
@@ -13668,6 +13691,58 @@ describe('FileViewer tweaks toolbar', () => {
     ]));
   });
 
+  it('shows batch send errors inline and leaves the selected comments available to retry', () => {
+    const onSendSelected = vi.fn();
+    const comment: PreviewComment = {
+      id: 'batch-error', projectId: 'project-1', conversationId: 'conversation-1',
+      filePath: 'preview.html', elementId: 'hero', selector: '#hero', label: 'Hero',
+      text: '', htmlHint: '', position: { x: 0, y: 0, width: 100, height: 30 },
+      note: 'Keep selected for retry', status: 'open', createdAt: 1, updatedAt: 1,
+    };
+    const props = {
+      comments: [comment], selectedIds: new Set([comment.id]), activeCommentId: null,
+      collapsed: false, onCollapsedChange: () => {}, onToggleSelect: () => {},
+      onSelectAll: () => {}, onClearSelection: () => {}, onReply: () => {},
+      onSendSelected, sending: false, t,
+    };
+    const { rerender } = render(<CommentSidePanel {...props} sendError="Unable to queue these comments. Try again." />);
+    expect(screen.getByText('Unable to queue these comments. Try again.')).toBeVisible();
+    expect(screen.getByTestId('comment-side-item')).toHaveTextContent(comment.note);
+    expect(screen.getByRole('button', { name: 'chat.comments.deselect' })).toHaveAttribute('aria-pressed', 'true');
+    const send = screen.getByTestId('comment-side-send-claude');
+    expect(send).not.toBeDisabled();
+    fireEvent.click(send);
+    expect(onSendSelected).toHaveBeenCalledOnce();
+    rerender(<CommentSidePanel {...props} />);
+    expect(screen.queryByText('Unable to queue these comments. Try again.')).toBeNull();
+    expect(screen.getByTestId('comment-side-item')).toHaveTextContent(comment.note);
+  });
+
+  it('explains disabled batch sending inline and keeps send-to-chat permission authoritative', () => {
+    const onSendSelected = vi.fn();
+    const comment: PreviewComment = {
+      id: 'batch-disabled', projectId: 'project-1', conversationId: 'conversation-1',
+      filePath: 'preview.html', elementId: 'hero', selector: '#hero', label: 'Hero',
+      text: '', htmlHint: '', position: { x: 0, y: 0, width: 100, height: 30 },
+      note: 'Selected comment', status: 'open', createdAt: 1, updatedAt: 1,
+    };
+    const props = {
+      comments: [comment], selectedIds: new Set([comment.id]), activeCommentId: null,
+      collapsed: false, onCollapsedChange: () => {}, onToggleSelect: () => {},
+      onSelectAll: () => {}, onClearSelection: () => {}, onReply: () => {},
+      onSendSelected, sending: false, t,
+    };
+    const { rerender } = render(<CommentSidePanel {...props} sendDisabled sendDisabledReason="Wait for the current task to finish." />);
+    expect(screen.getByText('Wait for the current task to finish.')).toBeVisible();
+    const send = screen.getByTestId('comment-side-send-claude');
+    expect(send).toBeDisabled();
+    fireEvent.click(send);
+    expect(onSendSelected).not.toHaveBeenCalled();
+    rerender(<CommentSidePanel {...props} allowSendToChat={false} />);
+    expect(screen.queryByTestId('comment-side-send-claude')).toBeNull();
+    expect(onSendSelected).not.toHaveBeenCalled();
+  });
+
   it('moves focus between comment side panel toggles when collapsing and expanding without a pre-focused click target', async () => {
     const onCollapseChange = vi.fn();
     const onSelectAll = vi.fn();
@@ -13717,23 +13792,24 @@ describe('FileViewer tweaks toolbar', () => {
 
     expect(screen.getByTestId('comment-side-panel')).toBeTruthy();
     expect(screen.getByText('不要github，换成微信')).toBeTruthy();
-    expect(screen.getByText('1. GitHub')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Select all' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByTestId('comment-side-item')).toHaveTextContent('不要github，换成微信');
+    expect(screen.getByRole('button', { name: 'chat.comments.deselectAll' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
-    fireEvent.click(screen.getByText('不要github，换成微信').closest('[data-testid="comment-side-item"]')!);
-    expect(onReply).toHaveBeenCalledWith(expect.objectContaining({ id: 'comment-1' }));
+    const replyOrigin = screen.getByTestId('comment-side-item');
+    fireEvent.click(replyOrigin);
+    expect(onReply).toHaveBeenCalledWith(expect.objectContaining({ id: 'comment-1' }), replyOrigin);
 
     const hideComments = screen.getByRole('button', { name: /hide comments/i });
 
     fireEvent.click(hideComments);
 
     expect(onCollapseChange).toHaveBeenLastCalledWith(true);
-    expect(screen.queryByText('不要github，换成微信')).toBeNull();
+    expect(screen.queryByTestId('comment-side-item')).toBeNull();
     expect(screen.queryByTestId('comment-side-selectbar')).toBeNull();
     const showComments = screen.getByTestId('comment-side-collapsed-rail');
-    await waitFor(() => expect(document.activeElement).toBe(showComments));
+    await waitFor(() => expect(document.activeElement).toBe(within(showComments).getByRole('button', { name: /show comments/i })));
 
-    fireEvent.click(showComments);
+    fireEvent.click(within(showComments).getByRole('button', { name: /show comments/i }));
 
     expect(onCollapseChange).toHaveBeenLastCalledWith(false);
     await waitFor(() => {
@@ -13777,8 +13853,8 @@ describe('FileViewer tweaks toolbar', () => {
     const showComments = screen.getByTestId('comment-side-collapsed-rail');
     expect(screen.queryByTestId('comment-side-panel')).toBeNull();
     expect(document.getElementById(panelId)).toBeNull();
-    expect(showComments.getAttribute('aria-controls')).toBeNull();
-    expect(showComments.getAttribute('aria-expanded')).toBe('false');
+    expect(within(showComments).getByRole('button', { name: /show comments/i }).getAttribute('aria-controls')).toBeNull();
+    expect(within(showComments).getByRole('button', { name: /show comments/i }).getAttribute('aria-expanded')).toBe('false');
   });
 
   it('renders the signed-in user own avatar and name on their comment when the member roster is empty', async () => {
@@ -13839,7 +13915,7 @@ describe('FileViewer tweaks toolbar', () => {
       expect(item.querySelector('.comment-side-avatar')?.textContent).toBe('琼');
     });
     expect(within(item).getByText(/琼羽/)).toBeTruthy();
-    expect(within(item).getByText(/comment.authorRole.owner/)).toBeTruthy();
+    expect(item.querySelector('.comment-side-author-copy small')).toBeNull();
   });
 
   it.each(['personal', 'team'] as const)('matches saved, active and draft initials to the current user in a %s workspace with an empty roster', async workspaceType => {
@@ -13861,7 +13937,7 @@ describe('FileViewer tweaks toolbar', () => {
     renderWithProjectWorkspace(<FileViewer projectId="project-1" projectKind="prototype"
       file={htmlPreviewFile()} liveHtml='<html><body><p data-od-id="hero-copy">Hero</p></body></html>'
       previewComments={[comment]} />, context);
-    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
     const row = await screen.findByTestId('comment-side-item');
     await waitFor(() => expect(row.querySelector('.comment-side-avatar')).toHaveTextContent('琼'));
     const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
@@ -13871,8 +13947,10 @@ describe('FileViewer tweaks toolbar', () => {
     } })));
     const pin = await screen.findByTestId('comment-saved-marker-hero-copy');
     expect(pin.querySelector('.comment-saved-pin')).toHaveTextContent('琼');
-    fireEvent.click(pin);
-    expect(await screen.findByTestId('comment-active-pin')).toHaveTextContent('琼');
+    fireEvent.click(within(pin).getByRole('button'));
+    expect(await screen.findByTestId('comment-popover-detail')).toHaveTextContent('My comment');
+    expect(pin.querySelector('.comment-saved-pin')).toHaveTextContent('琼');
+    fireEvent.keyDown(document.body, { key: 'c' });
     act(() => window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, data: {
       type: 'od:comment-target', elementId: 'new-target', selector: 'h2', label: 'New target', text: '', htmlHint: '',
       position: { x: 16, y: 80, width: 100, height: 30 },
@@ -14055,7 +14133,7 @@ describe('FileViewer tweaks toolbar', () => {
     expect(avatar?.style.background).toBe(expected.style.background);
     expect(avatar?.style.color).toBe(expected.style.color);
     expect(within(item).getByText(/Avery Visitor/)).toBeTruthy();
-    expect(within(item).getByText(/comment.authorRole.sharePage/)).toBeTruthy();
+    expect(item.querySelector('.comment-side-author-copy small')).toBeNull();
     expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/api/workspace/members'))).toBe(false);
   });
 
@@ -14086,7 +14164,7 @@ describe('FileViewer tweaks toolbar', () => {
     expect(avatar?.style.background).toBe(expectedColor.style.background);
     expect(avatar?.style.color).toBe(expectedColor.style.color);
     expect(item.querySelector('.comment-side-author-copy small')).toBeNull();
-    expect(document.querySelector('.comment-side-title')?.textContent).toBe(t('chat.tabComments'));
+    expect(document.querySelector('.comment-side-title')?.textContent).toBe(`${t('chat.tabComments')} 1`);
   });
 
   it('renders an empty external author as a key-colored question-mark avatar without a name line', async () => {
@@ -14181,19 +14259,19 @@ describe('FileViewer tweaks toolbar', () => {
     const coreRule = (selector: string) => rule(coreCss, selector);
     const shellRule = (selector: string) => rule(shellCss, selector);
 
-    expect(coreRule('.comment-side-panel')).toContain('width: 320px;');
-    expect(coreRule('.comment-side-header')).toContain('padding: 0 16px;');
+    expect(coreRule('.comment-side-panel')).toContain('width: 100%;');
+    expect(coreRule('.comment-side-header')).toContain('padding: 0 10.5px 0 22.5px;');
     expect(coreRule('.comment-side-list')).toContain('padding: 8px 12px;');
     expect(coreRule('.comment-side-list')).toContain('gap: 6px;');
     expect(coreRule('.comment-side-item')).toContain('padding: 6px 10px 6px 8px;');
     expect(coreRule('.comment-side-item')).toContain('border-radius: 8px;');
     expect(coreRule('.comment-side-time')).toContain('font-size: 10.5px;');
-    expect(coreRule('.comment-side-check')).toContain('border: 1px solid #CFCFCF;');
+    expect(coreRule('.comment-side-check')).toContain('border: 1px solid #dcdedb;');
     expect(coreRule('.comment-side-selectbar .primary')).toContain('background: #202020;');
-    expect(shellRule('.comment-float-host')).toContain('width: min(320px, calc(100vw - 32px));');
-    expect(shellRule('.comment-float-host')).toContain('border: 1px solid #E6E6E6;');
+    expect(shellRule('.comment-float-host')).toContain('width: min(var(--comment-panel-width, 320px), calc(100vw - 32px));');
+    expect(shellRule('.comment-float-host')).toContain('border-left: 1px solid #E6E6E6;');
     expect(shellRule('.comment-float-host')).toContain('box-shadow: none;');
-    expect(shellCss).toContain('padding-right: max(0px, min(348px, calc(100% - 160px)));');
+    expect(shellCss).toContain('padding-right: max(0px, min(calc(var(--comment-panel-width, 320px) + 16px), calc(100% - 160px)));');
     expect(shellRule('.comment-float-host .comment-side-header')).toContain('min-height: 56px;');
   });
 
@@ -14241,8 +14319,9 @@ describe('FileViewer tweaks toolbar', () => {
     }
   });
 
-  it('reorders saved comments with the drag handle for send sequence', () => {
+  it('keeps list selection available without the retired reorder handle', () => {
     const onReorder = vi.fn();
+    const onToggleSelect = vi.fn();
     const comments: PreviewComment[] = [
       {
         id: 'comment-1',
@@ -14285,7 +14364,7 @@ describe('FileViewer tweaks toolbar', () => {
         activeCommentId={null}
         collapsed={false}
         onCollapsedChange={() => {}}
-        onToggleSelect={() => {}}
+        onToggleSelect={onToggleSelect}
         onSelectAll={() => {}}
         onClearSelection={() => {}}
         onReorder={onReorder}
@@ -14297,25 +14376,12 @@ describe('FileViewer tweaks toolbar', () => {
     );
 
     const items = screen.getAllByTestId('comment-side-item');
-    items[0]!.getBoundingClientRect = vi.fn(() => ({
-      x: 0,
-      y: 0,
-      top: 0,
-      left: 0,
-      right: 300,
-      bottom: 40,
-      width: 300,
-      height: 40,
-      toJSON: () => ({}),
-    }));
-    const dataTransfer = createDragDataTransfer();
-    fireEvent.dragStart(screen.getAllByLabelText('chat.queuedReorder')[1]!, { dataTransfer });
-    fireDragEventWithClientY('dragOver', items[0]!, { dataTransfer, clientY: 0 });
-    fireDragEventWithClientY('drop', items[0]!, { dataTransfer, clientY: 0 });
-
-    // recvq5BVsolIxi Phase 2: onReorder now also reports WHICH comment moved,
-    // so the caller can persist just that one row's sort_key.
-    expect(onReorder).toHaveBeenCalledWith(['comment-2', 'comment-1'], 'comment-2');
+    expect(items.map(item => item.getAttribute('data-comment-id'))).toEqual(['comment-1', 'comment-2']);
+    expect(screen.queryByLabelText('chat.queuedReorder')).toBeNull();
+    expect(items.every(item => !item.hasAttribute('draggable'))).toBe(true);
+    fireEvent.click(within(items[0]!).getByRole('button', { name: 'chat.comments.select' }));
+    expect(onToggleSelect).toHaveBeenCalledWith('comment-1');
+    expect(onReorder).not.toHaveBeenCalled();
   });
 
   it('computes a persisted sort_key for a drag-reorder as a midpoint between the new neighbors', () => {
@@ -14398,7 +14464,7 @@ describe('FileViewer tweaks toolbar', () => {
     expect(items[1]!.textContent).toContain('First comment ever');
   });
 
-  it('persists a drag reorder via sort_key and keeps it after the comment list refreshes (recvq5BVsolIxi)', async () => {
+  it('honors persisted sort keys when the comment list refreshes', async () => {
     const onReorderPreviewComment = vi.fn().mockResolvedValue(undefined);
     const commentA: PreviewComment = {
       id: 'comment-a',
@@ -14436,25 +14502,10 @@ describe('FileViewer tweaks toolbar', () => {
     expect(items[0]!.getAttribute('data-comment-id')).toBe('comment-b');
     expect(items[1]!.getAttribute('data-comment-id')).toBe('comment-a');
 
-    // Drag A (currently second, the drag handle at index 1) above B.
-    items[0]!.getBoundingClientRect = vi.fn(() => ({
-      x: 0, y: 0, top: 0, left: 0, right: 300, bottom: 40, width: 300, height: 40, toJSON: () => ({}),
-    }));
-    const dataTransfer = createDragDataTransfer();
-    // FileViewer renders through the real i18n default (English), unlike the
-    // CommentSidePanel-direct tests above that inject a key-echoing `t` stub —
-    // so the accessible label is the actual translated copy, not the raw key.
-    fireEvent.dragStart(screen.getAllByLabelText('Drag to reorder')[1]!, { dataTransfer });
-    fireDragEventWithClientY('dragOver', items[0]!, { dataTransfer, clientY: 0 });
-    fireDragEventWithClientY('drop', items[0]!, { dataTransfer, clientY: 0 });
+    expect(screen.queryByLabelText('Drag to reorder')).toBeNull();
+    expect(onReorderPreviewComment).not.toHaveBeenCalled();
 
-    // No neighbor above A's new (front) position, so its sort_key becomes
-    // one past B's — a PATCH request, not a whole-list renumber.
-    await waitFor(() => expect(onReorderPreviewComment).toHaveBeenCalledWith('comment-a', 21));
-
-    // Simulate the daemon having persisted it and the parent re-fetching:
-    // re-render with the updated sortKey already applied, standing in for a
-    // refresh/tab-switch. The dragged order must survive it.
+    // A refreshed server sort key remains authoritative even without a UI drag handle.
     rerender(
       <FileViewer
         projectId="project-1"
@@ -14505,7 +14556,8 @@ describe('FileViewer tweaks toolbar', () => {
       />,
     );
 
-    expect(screen.getByText('1. Turn a brand brief into an editorial collage system.')).toBeTruthy();
+    expect(screen.getByTestId('comment-side-item')).toHaveTextContent('Make this copy tighter.');
+    expect(screen.queryByText(comment.label)).toBeNull();
     expect(screen.queryByText('Link')).toBeNull();
   });
 
@@ -15715,15 +15767,20 @@ describe('LiveArtifactRefreshHistoryPanel', () => {
   it.each([
     ['reanchored', 'versioned', '基于旧版本', { anchoredVersion: 1 }, { elementId: 'versioned', selector: '[data-od-id="versioned"]' }],
     ['stale', 'moved', '锚点可能已移动', {}, { elementId: 'moved-now', selector: '[data-od-id="moved"]' }],
-    ['lost', 'lost', '锚点已丢失', {}, null],
-  ] as const)('localizes the %s anchor tooltip at the rendered marker', async (_state, elementId, expected, extra, target) => {
+    ['lost', 'lost', '无法定位此元素，页面可能已变化。', {}, null],
+  ] as const)('preserves %s anchor state in its available marker or list detail', async (_state, elementId, _expected, extra, target) => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this.matches('.viewer-body, .comment-preview-canvas')) return testRect(0, 0, 900, 700);
+      if (this.matches('[data-testid="comment-popover"]')) return testRect(0, 0, 320, 160);
+      return testRect(24, 32, 28, 28);
+    });
     const comment: PreviewComment = {
       id: `comment-${elementId}`,
       projectId: 'project-1',
       conversationId: 'conversation-1',
       filePath: 'preview.html',
-      elementId,
-      selector: '[data-od-id="moved"]',
+      elementId: _state === 'lost' ? 'cmt:lost' : elementId,
+      selector: _state === 'lost' ? '[data-od-comment-id="lost"]' : '[data-od-id="moved"]',
       label: 'Heading',
       text: 'Heading',
       htmlHint: '<h1>Heading</h1>',
@@ -15743,7 +15800,7 @@ describe('LiveArtifactRefreshHistoryPanel', () => {
         </CollabProvider>
       </I18nProvider>,
     );
-    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
     if (target) {
       const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
       window.dispatchEvent(new MessageEvent('message', {
@@ -15759,26 +15816,41 @@ describe('LiveArtifactRefreshHistoryPanel', () => {
       }));
     }
 
+    if (_state === 'lost') {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      act(() => window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, data: { type: 'od:comment-targets', targets: [] } })));
+      fireEvent.click(screen.getByTestId('comment-side-item'));
+      expect(screen.queryByTestId('comment-saved-marker-cmt:lost')).toBeNull();
+      expect(screen.queryByTestId('comment-lost-markers')).toBeNull();
+      expect(screen.queryByTestId('comment-active-pin')).toBeNull();
+      expect(screen.queryByTestId('comment-target-overlay')).toBeNull();
+      expect(screen.getByTestId('comment-side-item')).toHaveTextContent(comment.note);
+      expect(await screen.findByTestId('comment-popover-detail')).toHaveTextContent(comment.note);
+      expect(within(screen.getByTestId('comment-popover')).getByText(_expected).closest('[role="status"]')).not.toBeNull();
+      expect(screen.queryByTestId('comment-popover-input')).toBeNull();
+      return;
+    }
+
     const marker = await screen.findByTestId(`comment-saved-marker-${elementId}`);
     const pin = marker.querySelector('button');
-    expect(marker).toHaveClass(`comment-saved-marker--${_state}`);
+    expect(marker).toHaveAttribute('data-anchor-state', _state);
     expect(pin).toHaveClass('comment-saved-pin');
     expect(pin).not.toHaveClass('od-tooltip');
-    expect(pin).toHaveAttribute('title', expect.stringContaining(expected));
-    expect(pin).toHaveAccessibleDescription(expect.stringContaining(expected));
+    expect(pin).toHaveAttribute('title', expect.stringContaining(comment.note));
+    expect(pin).toHaveAccessibleName(`Open comment for ${comment.label}`);
 
     fireEvent.pointerOver(pin!);
-    expect(pin).toHaveAttribute('title', expect.stringContaining(expected));
+    expect(pin).toHaveAttribute('title', expect.stringContaining(comment.note));
     fireEvent.pointerOut(pin!);
     fireEvent.focusIn(pin!);
-    expect(pin).toHaveAttribute('title', expect.stringContaining(expected));
+    expect(pin).toHaveAttribute('title', expect.stringContaining(comment.note));
     fireEvent.focusOut(pin!);
   });
 
   it('keeps D1–D4 marker and deck-page presentation on the rendered selectors', () => {
     const css = readFileSync(join(process.cwd(), 'src/styles/viewer/core.css'), 'utf8');
     expect(css).toMatch(/\.comment-saved-pin,\s*\.comment-active-pin[\s\S]*?width: 28px;[\s\S]*?height: 28px;[\s\S]*?border: 0;[\s\S]*?background: #282828;[\s\S]*?font-size: 12px;/);
-    expect(css).not.toContain('.comment-saved-marker--lost .comment-saved-pin');
+    expect(css).toContain('.comment-lost-pin');
     expect(css).not.toContain('.comment-side-slide {');
   });
 });

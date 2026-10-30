@@ -83,7 +83,9 @@ test('[P1] comment avatars use authorKey colors in the restored panel', async ({
   const firstPin = page.getByTestId('comment-saved-marker-color-0').locator('.comment-saved-pin');
   const savedInitial = await firstPin.textContent();
   await firstPin.click();
-  const activePin = page.getByTestId('comment-active-pin');
+  const activePin = firstPin;
+  await expect(activePin).toHaveAttribute('aria-current', 'true');
+  await expect(page.getByTestId('comment-active-pin')).toHaveCount(0);
   await expect(activePin).toHaveText(savedInitial!);
   await expect(activePin).toHaveText(authors[0]!.name[0]!);
   await expect(activePin).toHaveCSS('background-color', authors[0]!.bg);

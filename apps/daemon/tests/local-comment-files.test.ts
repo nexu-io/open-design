@@ -17,6 +17,14 @@ import { previewCommentToCloud } from '../src/collab/collab-cloud-service.js';
 import { recordCommentRelayPublicationMapping, recordPublishedCommentMutation } from '../src/collab/comment-relay-publication-mapping.js';
 import type { CollabCloudComment } from '@open-design/contracts';
 
+function prepareComments(
+  db: ReturnType<typeof openDatabase>,
+  publications: ReturnType<typeof createSqlitePublicFilePublicationStore>,
+  subject: Parameters<typeof publications.listFacts>[0],
+) {
+  return publications.listFacts(subject).map(fact => db.transaction(() => enqueuePublishedFileComments(db, fact))());
+}
+
 let root: string | undefined;
 afterEach(() => { closeDatabase(); if (root) fs.rmSync(root, { recursive: true, force: true }); });
 function setup() {
@@ -57,9 +65,11 @@ it('private selected receipt admission needs no alias or root upload; managed F1
   if (!first) throw new Error('missing admitted fact');
   expect(first.sourceFileId).toBe(original.id);
   const publications = createSqlitePublicFilePublicationStore(db);
-  createPublicFilePublicationRecorder(db, publications, enqueuePublishedFileComments)(
-    { sourceFileId: original.id, resourceTeamId: 'w', ownerMemberId: 'creator', projectId: 'p', filePath: 'a.html' },
+  const firstScope = { sourceFileId: original.id, resourceTeamId: 'w', ownerMemberId: 'creator', projectId: 'p', filePath: 'a.html' };
+  createPublicFilePublicationRecorder(db, publications)(
+    firstScope,
     { slug: 'alias', url: null, fileName: 'a.html' }, [{ sourcePath: 'a.html', publishedPath: 'index.html' }]);
+  prepareComments(db, publications, firstScope);
   expect(createCommentRelayOutboxStore(db).listDue(Date.now())[0]?.comment).toMatchObject({ sourceFileId: original.id,
     sourceFilePath: 'a.html', memberId: 'creator', createdAt: offline?.createdAt, selector: '#hero', note: 'offline first' });
   expect(getProject(db, 'p')?.metadata?.unrelated).toBe('keep');
@@ -154,15 +164,17 @@ it('atomically rebinds pre-share comments and pending relay snapshots before pub
   expect(getProjectPreviewComment(db, 'p', 'inbound')?.sourceFileId).toBe(localId);
   expect(getProjectPreviewComment(db, 'p', 'already-synced')?.sourceFileId).toBe(localId);
   expect(getProjectPreviewComment(db, 'other', 'other-project')?.sourceFileId).toBe(localId);
-  const record = createPublicFilePublicationRecorder(db, publications, enqueuePublishedFileComments);
+  const record = createPublicFilePublicationRecorder(db, publications);
   const scope = { sourceFileId, resourceTeamId: 'w', ownerMemberId: 'creator', projectId: 'p', filePath: 'a.html' };
   record(scope, { slug: 'recovered', url: null, fileName: 'a.html' }, [{ sourcePath: 'a.html', publishedPath: 'index.html' }]);
+  prepareComments(db, publications, scope);
   const backfilled = outbox.listDue(Date.now());
   expect(backfilled).toHaveLength(1);
   expect(backfilled[0]!.comment).toMatchObject({ id: original.id, sourceFileId, note: 'latest stopped edit' });
   const eventKey = backfilled[0]!.eventKey;
   await files.admit(input);
   record(scope, { slug: 'recovered', url: null, fileName: 'a.html' }, [{ sourcePath: 'a.html', publishedPath: 'index.html' }]);
+  prepareComments(db, publications, scope);
   expect(outbox.listDue(Date.now())).toHaveLength(1);
   expect(outbox.listDue(Date.now())[0]!.eventKey).toBe(eventKey);
 });
@@ -333,18 +345,16 @@ it.each(['before', 'during'] as const)('OPEND-4083 comment created %s admission 
   const before = getProjectPreviewComment(db, 'p', 'race-comment');
   release(); await pending;
   const publications = createSqlitePublicFilePublicationStore(db);
-  let result: {enqueued: number; skippedInbound: number} | undefined;
-  const record = createPublicFilePublicationRecorder(db, publications, (db, input) => {
-    result = enqueuePublishedFileComments(db, input); return result;
-  });
+  const record = createPublicFilePublicationRecorder(db, publications);
   const scope = {sourceFileId, resourceTeamId:'w',ownerMemberId:'creator',projectId:'p',filePath:'a.html'};
   const publish = () => record(scope, {slug:'recovered',url:null,fileName:'a.html'}, [{sourcePath:'a.html',publishedPath:'index.html'}]);
   publish();
-  const first = {...result};
+  const first = prepareComments(db, publications, scope)[0]!;
   const after = getProjectPreviewComment(db, 'p', 'race-comment');
   const outbox = createCommentRelayOutboxStore(db);
   const queueCount = outbox.count();
   await files.admit(input); publish();
+  prepareComments(db, publications, scope);
   expect(outbox.count()).toBe(1);
   expect(after?.note).toBe(before?.note);
   expect(after?.authorMemberId).toBe(before?.authorMemberId);
@@ -366,9 +376,11 @@ it('OPEND-4083 repairs a previously adopted identity without migrating unrelated
   await files.admit({ projectId: 'p', workspaceId: 'w', creatorMemberId: 'creator', resourceId: 'selected', versionId: 'fresh',
     paths: [{ sourceFilePath: 'a.html', entryPath: 'index.html', sourceFileId }], run: catalog(remote).run });
   expect(getProjectPreviewComment(db, 'p', 'missed')?.sourceFileId).toBe(sourceFileId);
-  createPublicFilePublicationRecorder(db, createSqlitePublicFilePublicationStore(db), enqueuePublishedFileComments)(
+  const publications = createSqlitePublicFilePublicationStore(db);
+  createPublicFilePublicationRecorder(db, publications)(
     { sourceFileId, resourceTeamId: 'w', ownerMemberId: 'creator', projectId: 'p', filePath: 'a.html' },
     { slug: 'recovered', url: null, fileName: 'a.html' }, [{ sourcePath: 'a.html', publishedPath: 'index.html' }]);
+  prepareComments(db, publications, { resourceTeamId: 'w', ownerMemberId: 'creator', projectId: 'p', filePath: 'a.html' });
   expect(createCommentRelayOutboxStore(db).listDue(Date.now())[0]?.comment).toMatchObject({ id: 'missed', sourceFileId, note: 'missed earlier' });
 });
 

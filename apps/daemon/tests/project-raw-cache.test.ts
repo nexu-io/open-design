@@ -84,6 +84,19 @@ describe('GET /api/projects/:id/raw/* cache revalidation', () => {
     expect(await raw.text()).toBe(html);
   });
 
+  it('injects an explicitly requested comment bridge into large powered HTML', async () => {
+    const html = '<!doctype html><html><body><iframe srcdoc="&lt;h2&gt;Child&lt;/h2&gt;"></iframe>' + '<!--' + 'x'.repeat(2 * 1024 * 1024) + '--></body></html>';
+    await writeFile(path.join(projectsRoot, projectId, 'large-comments.html'), html);
+    const response = await fetch(`${baseUrl}/api/projects/${projectId}/powered/large-comments.html?odPreviewBridge=selection&odPreviewBridge=scroll&odPreviewBridge=snapshot`);
+    expect(response.status).toBe(200);
+    const result = await response.text();
+    expect(result).toContain('<script data-od-url-selection-bridge>');
+    expect(result).toContain('<script data-od-url-scroll-bridge>');
+    expect(result).toContain('<script data-od-url-snapshot-bridge>');
+    expect(result).toContain('od-frame-v1:');
+    expect(result).toContain('<iframe srcdoc="&lt;h2&gt;Child&lt;/h2&gt;"></iframe>');
+  });
+
   it('emits ETag, Last-Modified and Cache-Control: no-cache for a CSS asset', async () => {
     const res = await fetch(rawUrl('styles.css'));
     expect(res.status).toBe(200);

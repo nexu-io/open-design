@@ -273,16 +273,13 @@ describe('file mutation routes move workspace artifact identity', () => {
     const runtime = createCollabRuntime({ workspaceContext: { current: async () => context } });
     const publications = createSqlitePublicFilePublicationStore(db);
     const fixture = createPublicSharePublishingFixture(db, publications, async () => JSON.stringify({ id: 'v1', version: 1 }),
-      enqueuePublishedFileComments, { teamProject: catalog });
+      { teamProject: catalog });
     const app = express(); app.use(express.json());
     const shareServer = createServer(app);
     const localFiles = createLocalCommentFiles(db);
     registerCollabSyncRoutes(app, { collab: runtime, publicFilePublicationStore: publications, ...fixture,
-      sharePublishing: { ...fixture.sharePublishing!, sourceFileId: scope => localFiles.identity(scope.projectId, scope.filePath),
-        admitFileReceipt: (scope, resourceId, versionId, entryPath) => localFiles.admit({ projectId: scope.projectId,
-          workspaceId: 'offline-w', creatorMemberId: 'creator', resourceId, versionId,
-          paths: [{ sourceFilePath: scope.filePath, entryPath }], run: catalog }) },
-      recordPublicFilePublication: createPublicFilePublicationRecorder(db, publications, enqueuePublishedFileComments),
+      sharePublishing: { ...fixture.sharePublishing!, sourceFileId: scope => localFiles.identity(scope.projectId, scope.filePath) },
+      recordPublicFilePublication: createPublicFilePublicationRecorder(db, publications),
       verifyWorkspaceRequest: async () => context,
       resolveLocalPublicShareOwner: (id, workspaceId) => id === projectId && workspaceId === 'offline-w' ? 'creator' : null,
       resolveSharedProject: async () => ({ projectId, ownerMemberId: 'creator', sharedAt: new Date(1).toISOString() }),
@@ -295,10 +292,18 @@ describe('file mutation routes move workspace artifact identity', () => {
         method: 'POST', headers: { 'x-od-workspace-id': 'offline-w', 'x-od-workspace-member-id': 'creator' },
       });
       expect(shared.status).toBe(200);
-      expect(state.files).toEqual([expect.objectContaining({ sourceFileId: original, sourceFilePath: 'offline.html', entryPath: 'index.html' })]);
+      expect(state.files).toEqual([]);
+      expect(createCommentRelayOutboxStore(db).count()).toBe(0);
     } finally {
       await new Promise<void>(resolve => shareServer.close(() => resolve()));
       runtime.dispose();
+    }
+    for (const fact of publications.listFacts({ resourceTeamId: 'offline-w', ownerMemberId: 'creator', projectId, filePath: 'offline.html' })) {
+      expect(fact.receipt).toEqual({ resourceId: expect.any(String), versionId: 'v1' });
+      await localFiles.admit({ projectId, workspaceId: 'offline-w', creatorMemberId: 'creator',
+        ...fact.receipt!, paths: [{ sourceFileId: original, sourceFilePath: fact.scope.filePath, entryPath: fact.publicFilePath }], run: catalog });
+      db.transaction(() => enqueuePublishedFileComments(db, fact))();
+      expect(state.files).toEqual([expect.objectContaining({ sourceFileId: original, sourceFilePath: 'offline.html', entryPath: 'index.html' })]);
     }
     expect(getProjectPreviewComment(db, projectId, comment.id)).toMatchObject(comment);
     expect(createCommentRelayOutboxStore(db).listDue(Date.now()).find(row => row.commentId === comment.id)?.comment)

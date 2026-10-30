@@ -4,7 +4,7 @@ import { getProject } from '../db.js';
 import { getLiveWorkspaceArtifactByPath } from '../chat-artifacts/store.js';
 import { parseCommentFileState } from './comment-file-facts.js';
 import { migrateCommentRelayOutbox } from './comment-relay-outbox.js';
-import { readPublishedCommentBackfill } from './published-comment-backfill-state.js';
+import { migratePublishedCommentBackfillState, readPublishedCommentBackfill } from './published-comment-backfill-state.js';
 import { currentFileSharePublication, type ReadProjectShareState } from './vela-project-share-state.js';
 
 export interface CommentSyncScope { projectId: string; workspaceId: string; workspaceMemberId: string; filePath?: string }
@@ -19,6 +19,7 @@ export interface CommentSyncStateService {
 export function createCommentSyncStateService(db: Database.Database,
   sessionAvailable: (scope: CommentSyncScope) => Promise<boolean | null>,
   diagnostics?: {
+    preparePendingComments?: (scope: CommentSyncScope, options?: { retryFailed?: boolean }) => void | Promise<void>;
     readAlign?: (scope: CommentSyncScope) => CommentAlignResult | undefined;
     readProjectShareState?: ReadProjectShareState;
     /** Credential used for this GET; compare across availability and remote read. */
@@ -26,6 +27,7 @@ export function createCommentSyncStateService(db: Database.Database,
   },
 ): CommentSyncStateService {
   migrateCommentRelayOutbox(db);
+  migratePublishedCommentBackfillState(db);
   const args = (scope: CommentSyncScope) => {
     const values = [scope.projectId, scope.workspaceId, scope.workspaceMemberId];
     if (values.some(value => !value.trim())) throw new Error('Comment sync scope required');
@@ -42,11 +44,23 @@ export function createCommentSyncStateService(db: Database.Database,
     };
     const available = await sessionAvailable(scope);
     if (available === null) return null;
+    await diagnostics?.preparePendingComments?.(scope);
     // Query after the session await, not a stale count from before a send finished.
     const rows = db.prepare(`SELECT last_error, file_path FROM comment_relay_outbox
       WHERE project_id=? AND workspace_id=? AND workspace_member_id=? ORDER BY updated_at DESC`).all(...identity) as Array<{ last_error: string | null; file_path: string }>;
     const align = diagnostics?.readAlign?.(scope);
     const backfill = readPublishedCommentBackfill(db, scope);
+    // Project-level status has no single backfill DTO. Still expose preparation
+    // failures, but only while this principal's exact publication is current.
+    const projectEnqueueFailed = scope.filePath === undefined && Boolean(db.prepare(`SELECT 1
+      FROM published_comment_backfill_batches AS batch
+      JOIN public_file_publications AS publication
+        ON publication.resource_team_id=batch.workspace_id
+        AND publication.owner_member_id=batch.workspace_member_id
+        AND publication.project_id=batch.project_id AND publication.file_path=batch.file_path
+        AND publication.revision=batch.publication_revision
+      WHERE batch.project_id=? AND batch.workspace_id=? AND batch.workspace_member_id=?
+        AND batch.state='failed' AND batch.code='BACKFILL_ENQUEUE_FAILED' LIMIT 1`).get(...identity));
     // Stop removes the local publication row. Only the validated remote project
     // history can establish whether this exact file is stopped or still active.
     // A missing file, missing session or failed read is unknown, never 'active'.
@@ -69,11 +83,12 @@ export function createCommentSyncStateService(db: Database.Database,
       && rows.some(row => row.file_path === scope.filePath && row.last_error === 'PAYLOAD_TOO_LARGE');
     return { ...(payloadTooLarge ? { payloadTooLarge: true } : {}), ...(align ? { align } : {}), ...(backfill ? { backfill } : {}), pending: rows.length,
       // Arbitrary transport messages can contain credentials or other private data.
-      lastError: (rows.some(row => Boolean(row.last_error)) || db.prepare('SELECT 1 FROM comment_relay_sync_failures WHERE project_id=? AND workspace_id=? AND workspace_member_id=?').get(...identity)) ? 'COMMENT_SYNC_DELIVERY_FAILED' : null,
+      lastError: (projectEnqueueFailed || backfill?.state === 'failed' || rows.some(row => Boolean(row.last_error)) || db.prepare('SELECT 1 FROM comment_relay_sync_failures WHERE project_id=? AND workspace_id=? AND workspace_member_id=?').get(...identity)) ? 'COMMENT_SYNC_DELIVERY_FAILED' : null,
       sessionMissing: rows.length > 0 && !available, shareStopped };
   };
   return { read, retry: async scope => {
     const identity = args(scope);
+    await diagnostics?.preparePendingComments?.(scope, { retryFailed: true });
     if (scope.filePath !== undefined) {
       const backfill = readPublishedCommentBackfill(db, scope);
       if (backfill?.state === 'failed') {

@@ -7,7 +7,6 @@ import type { ComponentProps } from 'react';
 import {
   buildWorkspacePermissions,
   buildWorkspaceSeatSummary,
-  SHARE_MAX_TOTAL_BYTES,
   type WorkspaceCollabContext,
 } from '@open-design/contracts';
 
@@ -173,7 +172,7 @@ async function setup(options: Parameters<typeof stubFetch>[0] = { publishBody: p
   return { fetch, view };
 }
 
-it.each([3 * 1024 * 1024, SHARE_MAX_TOTAL_BYTES + 1])('submits original-file publication directly for a %s-byte file without preflight or preview upload', async size => {
+it.each([3 * 1024 * 1024, 21 * 1024 * 1024])('submits original-file publication directly for a %s-byte file without preflight or preview upload', async size => {
   const fallback = stubFetch();
   const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     if (String(input).includes('/text-preview/')) return Promise.resolve(Response.json({

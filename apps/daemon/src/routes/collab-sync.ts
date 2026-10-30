@@ -28,7 +28,6 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   SHARE_ENTRY_INDEX_CONFLICT,
-  SHARE_MAX_TOTAL_BYTES,
   type SharePlanSummary,
   type ShareUnpublishResponse,
   type SharePublishRequest,
@@ -268,7 +267,6 @@ export interface RegisterCollabSyncRoutesDeps {
   sharePublishing?: {
     ensureProject?(scope: PublicFilePublicationScope, principal: ResourceHubPrincipal, run: typeof runVelaCommand): Promise<TeamProject>;
     sourceFileId?(scope: PublicFilePublicationScope, project?: TeamProject | null): string;
-    admitFileReceipt?(scope: PublicFilePublicationScope, resourceId: string, versionId: string, entryPath: string, run: typeof runVelaCommand): Promise<void>;
     reservations: ReturnType<typeof createShareAliasReservations>;
     outbox: ShareBindingOutbox;
     complete: ReturnType<typeof createSharePublicationCompletion>;
@@ -479,7 +477,6 @@ async function buildSharePlan(
     summary: {
       fileCount: deployPlan.files.length,
       totalBytes,
-      exceedsSizeLimit: totalBytes > SHARE_MAX_TOTAL_BYTES,
       exclusions: [
         ...deployPlan.missing.map((path) => ({ path, reason: 'missing' as const })),
         ...deployPlan.invalid.map((path) => ({ path, reason: 'invalid' as const })),
@@ -958,18 +955,6 @@ export function registerCollabSyncRoutes(
     return { verification, principal, scope: boundScope };
   }
 
-  async function canShareProjectsForRequest(
-    req: Request,
-    verifiedContext?: WorkspaceCollabContext | null,
-  ): Promise<boolean> {
-    const verification =
-      verifiedContext === undefined
-        ? await verifiedWorkspaceContextForRequest(req)
-        : { ok: true as const, context: verifiedContext };
-    const context = verification.ok ? verification.context : null;
-    return context?.permissions.canShareProjects === true;
-  }
-
   async function verifiedPublishPrincipalForRequest(
     req: Request,
     projectId: string,
@@ -1315,7 +1300,8 @@ export function registerCollabSyncRoutes(
     const context = verification.context;
     const principal = publicFilePrincipal(context);
     if (!context || !principal) return res.status(409).json(workspaceIdentityRequiredBody());
-    if (!await canShareProjectsForRequest(req, context)) return res.status(403).json({ error: 'WORKSPACE_PROJECT_SHARE_DENIED' });
+    // This endpoint only inspects local files. Vela authorizes publication;
+    // team-project visibility permission is not public-file eligibility.
     const resolved = await resolveSharedProjectForPublicFile(resolveSharedProject, projectId, context, principal);
     if (!resolved.ok) return res.status(503).json({ error: 'WORKSPACE_PROJECT_OWNERSHIP_UNAVAILABLE' });
     const owner = resolved.project?.ownerMemberId
@@ -1442,7 +1428,7 @@ export function registerCollabSyncRoutes(
         let outcome: ReturnType<typeof publisher.complete>;
         try {
           // Entry path is Vela's saved generation, never a plan from current
-          // local bytes. This also queues existing local comments atomically.
+          // local bytes. Comment preparation consumes the committed facts separately.
           outcome = publisher.complete({ scope, resourceId: publicFileResourceIdFor(scope), publication,
             mapping: [{ sourcePath: filePath, publishedPath: receipt.entryPath }],
             result: { status: 'published', receipt }, reopened: true });
@@ -1484,9 +1470,8 @@ export function registerCollabSyncRoutes(
         return fail(502, 'PUBLIC_SHARE_RESUME_UNAVAILABLE', 'resume_prepare');
       }
     }
-    // The plan is built, and refused on size or blockers, before the alias is
-    // reserved or Vela is contacted: an unpublishable file must not cost a
-    // network round-trip or leave a reservation behind.
+    // Resolve local files and structural blockers before reserving an alias.
+    // Publication capacity and eligibility are decided by Vela.
     if (!resolveProjectDir) {
       return res.status(500).json({ error: 'PROJECT_DIR_UNAVAILABLE' });
     }
@@ -1586,10 +1571,12 @@ export function registerCollabSyncRoutes(
         createHash('sha256').update(JSON.stringify([scope, publicFilePublicationStore.getRevision(scope)?.token ?? null, fingerprintSharePayload(sharePlan.files)])).digest('hex'),
         '--metadata-json',
         JSON.stringify(metadata),
+        ...(scope.sourceFileId ? ['--source-identity-json', JSON.stringify({
+          projectId, sourceFileId: scope.sourceFileId, sourceFilePath: filePath,
+        })] : []),
         '--json',
       ]);
       const versionId = parseVelaPushVersionId(pushOutput);
-      await publisher.admitFileReceipt?.(scope, resourceId, versionId, sharePlan.entryPath, prepared.run);
       stage = 'snapshot';
       const result = await publishReservedVelaShareVersion({
         scope, resourceId, versionId, entryPath: sharePlan.entryPath,

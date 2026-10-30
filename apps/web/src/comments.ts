@@ -1,3 +1,4 @@
+import { preserveCommentPoint } from './comments/anchor';
 import type {
   ChatCommentAttachment,
   ChatCommentSelectionKind,
@@ -70,7 +71,7 @@ export function targetFromSnapshot(snapshot: PreviewCommentSnapshot): PreviewCom
     selector: snapshot.selector,
     label: snapshot.label,
     text: trimContextText(snapshot.text),
-    position: normalizePosition(snapshot.position),
+    position: normalizePosition(preserveCommentPoint(snapshot, snapshot).position),
     htmlHint: trimHtmlHint(snapshot.htmlHint),
     style: normalizeStyle(snapshot.style),
     selectionKind: snapshot.selectionKind === 'pod' ? 'pod' : 'element',
@@ -563,6 +564,7 @@ function visualAnnotationIntentWithoutScreenshot(): string {
 
 function normalizePosition(input: PreviewComment['position']): PreviewComment['position'] {
   return {
+    ...(input?.anchor ? { anchor: input.anchor } : {}),
     x: finite(input?.x),
     y: finite(input?.y),
     width: finite(input?.width),
@@ -571,7 +573,7 @@ function normalizePosition(input: PreviewComment['position']): PreviewComment['p
 }
 
 function finite(value: number | undefined): number {
-  return Number.isFinite(value) ? Math.round(value as number) : 0;
+  return Number.isFinite(value) ? (value as number) : 0;
 }
 
 function normalizeSelectionKind(

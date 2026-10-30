@@ -38,6 +38,8 @@ import type {
 /** The daemon-local seams the service needs; injected so this file stays free of
  *  SQLite and the poller is unit-testable with fakes. */
 export interface CollabCloudServiceDeps {
+	/** Prepare comment batches from committed publications before the existing drain. */
+	preparePendingComments?: () => void | Promise<void>;
 	client: CollabCloudClient;
 	/**
 	 * Legacy construction seam retained for compatibility with isolated callers.
@@ -1076,6 +1078,7 @@ export function createCollabCloudService(
 		try {
 			do {
 				outboxRerunRequested = false;
+				await deps.preparePendingComments?.();
 				const pending = deps.commentOutbox.listDue(now());
 				if (pending.length === 0) continue;
 				if (

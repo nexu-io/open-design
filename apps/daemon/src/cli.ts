@@ -7364,6 +7364,7 @@ function printProjectShareHelp() {
   console.log(`Usage:
   od project share preflight <id> --path <file> [--json]
                     Inspect included and missing references before publishing.
+                    Vela decides publication authorization and capacity.
                     Exits 1 when the plan has blockers (publish would be
                     refused); each blocker prints a fix to paste to an agent.
   od project share publish <id> --path <file> [--json]
@@ -7557,6 +7558,7 @@ async function runProject(args) {
   od project delete <id>                  Delete a project.
   od project share preflight <id> --path <file> [--json]
                     Inspect included and missing references before publishing.
+                    Vela decides publication authorization and capacity.
                     Exits 1 when the plan has blockers (publish would be
                     refused); each blocker prints a fix to paste to an agent.
   od project share publish <id> --path <file> [--json]

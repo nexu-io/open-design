@@ -1,19 +1,21 @@
 import { expect, test } from '@/playwright/suite';
 import { mockAmrPersonalWorkspace, AMR_PERSONAL_WORKSPACE_CONTEXT } from '../lib/playwright/amr.js';
 import { T } from '@/timeouts';
-for (const forceInline of [false, true])
-    test(`[P1] Owner locates an old H2 again after scrolling away (srcdoc=${forceInline})`, async ({ page }, testInfo) => {
+for (const nested of [false, true]) for (const forceInline of [false, true])
+    test(`[P0] Owner locates an old H2 again after scrolling away (srcdoc=${forceInline}, nested=${nested}, personal=${nested && forceInline})`, async ({ page }, testInfo) => {
         test.setTimeout(T.xlong * 2);
-        const team = { ...AMR_PERSONAL_WORKSPACE_CONTEXT, workspaceId: 'ws-ui-audit-team', workspaceName: 'UI audit team', workspaceType: 'team' as const, workspaceMemberId: 'mem-ui-audit-team', seatSummary: { seatLimit: 5, usedSeats: 1, availableSeats: 4, isSeatFull: false }, teamId: 'team-ui-audit', teamName: 'UI audit team', role: 'owner' as const };
+        const team = { ...AMR_PERSONAL_WORKSPACE_CONTEXT, workspaceId: 'ws-ui-audit-team', workspaceName: 'UI audit team', workspaceType: nested && forceInline ? 'personal' as const : 'team' as const, workspaceMemberId: 'mem-ui-audit-team', seatSummary: { seatLimit: 5, usedSeats: 1, availableSeats: 4, isSeatFull: false }, teamId: 'team-ui-audit', teamName: 'UI audit team', role: 'owner' as const };
         await page.addInitScript(() => {
             localStorage.setItem('open-design:locale', 'zh-CN');
             localStorage.setItem('open-design:locale-source', 'manual');
             // Observe the same real-document handshake that enables URL-mode
             // comments. Opening comments before it arrives selects srcDoc.
             if (window !== window.top) return;
+            Reflect.set(window, 'jointMessages', []);
             window.addEventListener('message', event => {
+                if (String(event.data?.type).startsWith('od:comment')) Reflect.get(window, 'jointMessages').push(event.data);
                 const iframe = document.querySelector<HTMLIFrameElement>('iframe[data-od-render-mode="url-load"][data-od-active="true"]');
-                if (!iframe || event.source !== iframe.contentWindow || event.origin !== 'null') return;
+                if (!iframe || event.source !== iframe.contentWindow || (event.origin !== 'null' && event.origin !== new URL(iframe.src).origin)) return;
                 const src = iframe.getAttribute('src');
                 if (src && event.data?.type === 'od:url-selection-bridge-ready'
                     && event.data.href === new URL(src, window.location.href).href) {
@@ -25,18 +27,32 @@ for (const forceInline of [false, true])
         await page.route('**/api/workspace/directory', r => r.fulfill({ json: { items: [team], activeWorkspaceId: team.workspaceId } }));
         await page.route('**/api/workspace/context', r => r.fulfill({ json: { context: team } }));
         const projectId = `ui-audit-team-${Date.now()}`;
-        await page.route('**/api/projects/*/workspace-scope', r => r.fulfill({ json: { scope: { kind: 'team', projectId, workspaceId: team.workspaceId, teamId: team.teamId, visibility: 'private', context: team } } }));
+        await page.route('**/api/projects/*/workspace-scope', r => r.fulfill({ json: { scope: { kind: team.workspaceType === 'personal' ? 'personal' : 'team', projectId, workspaceId: team.workspaceId, teamId: team.teamId, visibility: 'private', context: team } } }));
         const create = await page.request.post('/api/projects', { data: { id: projectId, name: 'Team UI audit local fixture', skillId: null, designSystemId: null, metadata: { kind: 'prototype', nameSource: 'user' } } });
         expect(create.ok(), await create.text()).toBeTruthy();
         const { conversationId } = await create.json() as {
             conversationId: string;
         };
-        const content = '<!doctype html><html lang="zh-CN"><body>' + (forceInline ? '<img src="/location-marker.svg" style="display:none">' : '') + '<main data-od-id="old-cloud-id"><h1>Location fixture</h1><section style="padding-top:1400px;padding-bottom:500px"><h2>评论定位目标</h2></section></main></body></html>';
+        let releaseImage: (() => void) | undefined;
+        const imageGate = new Promise<void>(resolve => { releaseImage = resolve; });
+        if (nested) await page.route('https://nested-comment.invalid/slow.svg', async route => {
+            await imageGate;
+            await route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg"/>' });
+        });
+        const childHtml = '<body><section style="padding-top:1400px;padding-bottom:500px"><h2>评论定位目标</h2></section></body>';
+        let fingerprint = 2166136261;
+        for (const character of childHtml + '\nabout:srcdoc') fingerprint = Math.imul(fingerprint ^ character.charCodeAt(0), 16777619);
+        const nestedAnchor = 'od-frame-v1:' + JSON.stringify([[[
+            'dom:body > iframe:nth-of-type(1)', 'body > iframe:nth-of-type(1)', `srcdoc:${childHtml.length}:${(fingerprint >>> 0).toString(16)}`,
+        ]], 'dom:body > section:nth-of-type(1) > h2:nth-of-type(1)', 'body > section:nth-of-type(1) > h2:nth-of-type(1)']);
+        const content = '<!doctype html><html lang="zh-CN"><body>' + (forceInline && !nested ? '<img src="/location-marker.svg" style="display:none">' : '') + (nested ? '<iframe style="width:600px;height:400px;border:3px solid;transform:scale(.8);transform-origin:0 0" srcdoc="' + childHtml.replaceAll('&', '&amp;').replaceAll('"', '&quot;') + '"></iframe>' : '<main data-od-id="old-cloud-id"><h1>Location fixture</h1><section style="padding-top:1400px;padding-bottom:500px"><h2>评论定位目标</h2></section></main>') + (nested ? '<img src="https://nested-comment.invalid/slow.svg" hidden>' : '') + (nested && forceInline ? '<!--' + 'x'.repeat(2 * 1024 * 1024) + '--><script>localStorage.getItem("fixture");</script>' : '') + '</body></html>';
         if (forceInline) {
             const asset = await page.request.post(`/api/projects/${projectId}/files`, { data: { name: 'location-marker.svg', content: '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>' } });
             expect(asset.ok()).toBeTruthy();
         }
-        const file = await page.request.post(`/api/projects/${projectId}/files`, { data: { name: 'index.html', content, artifactManifest: { version: 1, kind: 'html', title: 'index.html', entry: 'index.html', renderer: 'html', exports: ['html'] } } });
+        const file = nested && forceInline
+            ? await page.request.post(`/api/projects/${projectId}/upload`, { multipart: { files: { name: 'index.html', mimeType: 'text/html', buffer: Buffer.from(content) } } })
+            : await page.request.post(`/api/projects/${projectId}/files`, { data: { name: 'index.html', content, artifactManifest: { version: 1, kind: 'html', title: 'index.html', entry: 'index.html', renderer: 'html', exports: ['html'] } } });
         expect(file.ok(), await file.text()).toBeTruthy();
         await page.route(`**/api/projects/${projectId}/files/index.html/share-plan`, r => r.request().method() === 'POST' ? r.fulfill({ json: { fileCount: 1, totalBytes: content.length, exceedsSizeLimit: false, exclusions: [] } }) : r.fallback());
         const projectResponse = await page.request.get(`/api/projects/${projectId}`);
@@ -44,12 +60,12 @@ for (const forceInline of [false, true])
         const localProject = (await projectResponse.json() as {
             project: Record<string, unknown>;
         }).project;
-        const teamProject = { ...localProject, workspaceId: team.workspaceId, workspaceVisibility: 'private' };
+        const teamProject = { ...localProject, workspaceId: team.workspaceId, workspaceVisibility: team.workspaceType === 'personal' ? 'personal' : 'private' };
         await page.route(`**/api/workspaces/${team.workspaceId}/projects?*`, r => r.fulfill({ json: { projects: [{ project: teamProject, workspaceId: team.workspaceId, visibility: 'private', resourceState: 'active', createdByWorkspaceMemberId: team.workspaceMemberId, updatedByWorkspaceMemberId: team.workspaceMemberId, currentUserAccess: { canOpen: true, canRename: true, canDelete: true, canDuplicate: true, canMoveToTeam: false, canMoveToPersonal: true, canExport: true, canSendTo: true, canRestoreVersion: true } }] } }));
         await page.route(`**/api/projects/${projectId}`, r => r.request().method() === 'GET' ? r.fulfill({ json: { project: teamProject } }) : r.fallback());
         await page.route(`**/api/projects/${projectId}/collab/status`, r => r.fulfill({ json: { publishedVersion: 2, materializedVersion: 2, awaitingFirstMaterialization: false, syncState: 'synced', ownerMemberId: team.workspaceMemberId, ownerDisplayName: 'Fixture Owner', ownerRole: 'owner', contentTransferState: null } }));
         const now = Date.now();
-        const comment = { id: 'old-h2-comment', projectId, conversationId, filePath: 'index.html', elementId: 'old-cloud-id', selector: 'body > main > section > h2', label: 'h2', text: '评论定位目标', htmlHint: '<h2>', position: { x: 0, y: 0, width: 752, height: 38 }, note: '旧版本 H2 定位评论', status: 'open', anchorState: 'lost', anchoredVersion: 1, authorKind: 'user', authorKey: 'fixture-location-author', createdAt: now, updatedAt: now };
+        const comment = { id: 'old-h2-comment', projectId, conversationId, filePath: 'index.html', elementId: nested ? nestedAnchor : 'old-cloud-id', selector: nested ? nestedAnchor : 'body > main > section > h2', label: 'h2', text: '评论定位目标', htmlHint: '<h2>', position: { x: 0, y: 0, width: 752, height: 38, ...(nested ? { anchor: { u: 0.5, v: 0.5 } } : {}) }, note: '旧版本 H2 定位评论', status: 'open', anchorState: 'lost', anchoredVersion: 1, authorKind: 'user', authorKey: 'fixture-location-author', createdAt: now, updatedAt: now };
         const saved = await page.request.post(`/api/projects/${projectId}/conversations/${conversationId}/comments`, {
             data: { target: comment, note: comment.note },
         });
@@ -64,7 +80,7 @@ for (const forceInline of [false, true])
         await page.route(`**/api/projects/${projectId}/conversations/${conversationId}/comments/lost-anchors`, r => r.fulfill({ json: { updated: 0 } }));
         await page.goto(`/projects/${projectId}${forceInline ? '?forceInline=1' : ''}`);
         await page.getByTestId('file-workspace').getByText('index.html', { exact: true }).first().click();
-        if (!forceInline) {
+        if (!forceInline || nested) {
             const preview = page.getByTestId('artifact-preview-frame');
             await expect(preview).toHaveAttribute('data-od-render-mode', 'url-load');
             await expect.poll(async () => {
@@ -74,29 +90,42 @@ for (const forceInline of [false, true])
             }, { message: 'URL preview comment bridge must be ready before opening comments' }).toBe(true);
         }
         await page.getByTestId('comment-panel-toggle').click();
+        // Exercise a hash route while the document is still loading.
+        if (nested) {
+            const nestedDocument = await (await page.getByTestId('artifact-preview-frame').elementHandle())!.contentFrame();
+            await nestedDocument!.evaluate(() => { location.hash = 'nested'; });
+        }
+        releaseImage?.();
         const row = page.getByTestId('comment-side-item').filter({ hasText: comment.note });
         await expect(row).toBeVisible();
         await row.click();
         const active = page.getByTestId('artifact-preview-frame');
         await expect(active).toHaveAttribute('data-od-active', 'true');
-        await expect(active).toHaveAttribute('data-od-render-mode', forceInline ? 'srcdoc' : 'url-load');
+        await expect(active).toHaveAttribute('data-od-render-mode', forceInline && !nested ? 'srcdoc' : 'url-load');
         const frame = await (await active.elementHandle())!.contentFrame();
         if (!frame)
             throw new Error('Preview frame missing');
-        const target = frame.locator('h2');
+        const targetFrame = nested ? await (await frame.locator('iframe').elementHandle())!.contentFrame() : frame;
+        if (!targetFrame) throw new Error('Nested preview missing');
+        const target = targetFrame.locator('h2');
         // Both transports carry the comment bridge. Check the active iframe's
         // navigation, not bridge source text, to prove which path is exercised.
-        if (forceInline) {
+        if (forceInline && !nested) {
             await expect(active).toHaveAttribute('srcdoc', /[\s\S]+/);
             await expect.poll(() => frame.url()).toBe('about:srcdoc');
-            await expect(target).toHaveAttribute('data-od-id', /^path-/);
+            if (!nested) await expect(target).toHaveAttribute('data-od-id', /^path-/);
         } else {
             await expect(active).not.toHaveAttribute('srcdoc', /[\s\S]*/);
             await expect(active).toHaveAttribute('src', new RegExp(`/api/projects/${projectId}/`));
+            if (nested) {
+                await expect(active).toHaveAttribute('data-od-powered', 'true');
+                expect(new URL((await active.getAttribute('src'))!).origin).not.toBe(new URL(page.url()).origin);
+            }
             const src = await active.getAttribute('src');
             if (!src) throw new Error('URL preview source missing');
-            await expect.poll(() => frame.url()).toBe(new URL(src, page.url()).href);
+            await expect.poll(() => frame.url().split('#')[0]).toBe(new URL(src, page.url()).href.split('#')[0]);
         }
+        await expect(frame.locator('html')).not.toHaveAttribute('data-od-comment-mode', /.*/);
         await expect(target).toBeInViewport();
         const overlay = page.getByTestId('comment-target-overlay').last();
         await expect(overlay).toBeVisible();
@@ -105,8 +134,19 @@ for (const forceInline of [false, true])
             const expected = await target.boundingBox();
             return actual && expected ? Math.max(Math.abs(actual.y - expected.y), Math.abs(actual.height - expected.height)) : 999;
         }).toBeLessThan(3);
-        await frame.evaluate(() => window.scrollTo(0, 0));
+        if (nested) {
+            const fullHeight = (await target.boundingBox())!.height;
+            await target.evaluate(element => {
+                const view = element.ownerDocument.defaultView!;
+                const rect = element.getBoundingClientRect();
+                view.scrollTo(0, view.scrollY + rect.top + rect.height / 2);
+            });
+            await expect.poll(async () => (await overlay.boundingBox())?.height ?? 0).toBeGreaterThan(0);
+            await expect.poll(async () => Math.abs(((await overlay.boundingBox())?.height ?? 0) - fullHeight / 2)).toBeLessThan(2);
+        }
+        await targetFrame.evaluate(() => window.scrollTo(0, 0));
         await expect(target).not.toBeInViewport();
+        if (nested) await expect(page.getByTestId('comment-target-overlay')).toHaveCount(0);
         await row.click();
         await expect(target).toBeInViewport();
         await expect.poll(async () => {
@@ -114,16 +154,21 @@ for (const forceInline of [false, true])
             const expected = await target.boundingBox();
             return actual && expected ? Math.max(Math.abs(actual.y - expected.y), Math.abs(actual.height - expected.height)) : 999;
         }).toBeLessThan(3);
-        // A canonical report changes selector shape after the same target gains
-        // a new authored identity. Saved and selected pins must remain together.
-        await target.evaluate(element => element.setAttribute('data-od-id', 'replacement-h2'));
-        await row.click();
-        const pin = page.getByTestId('comment-active-pin');
+        // Selection reuses the saved pin in the new UI; it must not draw a
+        // second draft pin. Keep the original canonical-id alignment assertion
+        // for legacy top-level anchors. Nested paths intentionally fail closed
+        // when their authored identity changes.
+        const pin = page.getByTestId('comment-saved-marker-' + comment.elementId).locator('.comment-saved-pin');
+        await testInfo.attach('joint-marker-observation', { body: JSON.stringify(await page.evaluate(() => ({ messages: Reflect.get(window, 'jointMessages').slice(-15), markers: [...document.querySelectorAll('.comment-saved-marker')].map(n => ({id:n.getAttribute('data-testid'),box:n.getBoundingClientRect()})) }))), contentType: 'application/json' });
         await expect(pin).toBeVisible();
+        const beforeSelection = await pin.boundingBox();
+        if (!nested) await target.evaluate(element => element.setAttribute('data-od-id', 'replacement-h2'));
+        await row.click();
+        await expect(pin).toHaveClass(/is-selected/);
+        await expect(page.getByTestId('comment-active-pin')).toHaveCount(0);
         await expect.poll(async () => {
-            const activePin = await pin.boundingBox();
-            const savedPin = await page.getByTestId('comment-saved-marker-' + comment.elementId).locator('.comment-saved-pin').boundingBox();
-            return activePin && savedPin ? Math.max(Math.abs(activePin.x - savedPin.x), Math.abs(activePin.y - savedPin.y)) : 999;
+            const selectedPin = await pin.boundingBox();
+            return selectedPin && beforeSelection ? Math.max(Math.abs(selectedPin.x - beforeSelection.x), Math.abs(selectedPin.y - beforeSelection.y)) : 999;
         }).toBeLessThan(3);
         await page.screenshot({ path: testInfo.outputPath('3869-aligned-pins.png') });
         failList = true;

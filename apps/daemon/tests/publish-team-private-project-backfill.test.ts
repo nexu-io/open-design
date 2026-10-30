@@ -14,7 +14,7 @@ import { createCollabRuntime } from '../src/collab/runtime.js';
 import { registerCollabSyncRoutes } from '../src/routes/collab-sync.js';
 import { createPublicFilePublicationRecorder } from '../src/collab/public-file-publication-recording.js';
 import { createSqlitePublicFilePublicationStore, migratePublicFilePublications } from '../src/collab/public-file-publication-store.js';
-import { enqueuePublishedFileComments } from '../src/collab/published-file-comment-backfill.js';
+import { createPublishedCommentBackfillReconciler } from '../src/collab/published-comment-backfill-reconciler.js';
 import { readPublishedCommentBackfill } from '../src/collab/published-comment-backfill-state.js';
 import { createCommentRelayOutboxStore, commentRelayLocalBindingMatches } from '../src/collab/comment-relay-outbox.js';
 import { createCollabCloudService } from '../src/collab/collab-cloud-service.js';
@@ -63,7 +63,7 @@ it('publishing a private team-workspace project preserves personal visibility an
     vi.mocked(readVelaControlApiContext).mockReturnValue({ profile: 'test', apiUrl: 'https://hub.example.test', controlKey: 'synthetic', user: null, configMtimeMs: null });
     vi.mocked(runVelaResourceCommand).mockReset();
     vi.mocked(runVelaResourceCommand).mockImplementation(async () => JSON.stringify({ id: 'v1', version: 1 }));
-    const fixture = createPublicSharePublishingFixture(db, store, runVelaResourceCommand, enqueuePublishedFileComments);
+    const fixture = createPublicSharePublishingFixture(db, store, runVelaResourceCommand);
     registerCollabSyncRoutes(app, {
       collab: runtime, publicFilePublicationStore: store, ...fixture,
       sharePublishing: {
@@ -74,7 +74,7 @@ it('publishing a private team-workspace project preserves personal visibility an
           return { projectId: scope.projectId, ownerMemberId: principal.memberId, sharedAt: new Date(1).toISOString() };
         },
       },
-      recordPublicFilePublication: createPublicFilePublicationRecorder(db, store, enqueuePublishedFileComments),
+      recordPublicFilePublication: createPublicFilePublicationRecorder(db, store),
       verifyWorkspaceRequest: async req => req.get('x-od-workspace-id') === 'w' ? context : null,
       // Private project: only the local creator proof exists before ensure.
       resolveSharedProject: async () => null, resolveSharedProjectOwner: async () => null,
@@ -92,6 +92,8 @@ it('publishing a private team-workspace project preserves personal visibility an
     expect(body).toMatchObject({ status: 'published' });
     expect(body.madeTeamVisible).toBeUndefined();
     expect(getWorkspaceProjectByProjectId(db, 'p')).toMatchObject({ visibility: 'personal', createdByWorkspaceMemberId: 'owner' });
+    expect(queue.count()).toBe(0);
+    await createPublishedCommentBackfillReconciler(db, { listFacts: subject => store.listFacts(subject) }).prepare({ resourceTeamId: 'w', ownerMemberId: 'owner', projectId: 'p', filePath: FILE });
     expect(queue.listDue(Date.now()).map(row => [row.comment.id, row.relayScope])).toEqual([['first', 'personal'], ['second', 'personal']]);
 
     const delivered: Array<{ id: string; seq: number }> = [];
@@ -157,8 +159,10 @@ it('a personal backfill queued in a team workspace is delivered without changing
     const store = createSqlitePublicFilePublicationStore(db);
     const queue = createCommentRelayOutboxStore(db);
     const scope = { sourceFileId: ensureWorkspaceArtifactForPath(db, { projectId: 'p', path: FILE, kind: 'html' }).id, resourceTeamId: 'w', ownerMemberId: 'owner', projectId: 'p', filePath: FILE };
-    createPublicFilePublicationRecorder(db, store, enqueuePublishedFileComments)(
+    createPublicFilePublicationRecorder(db, store)(
       scope, { slug: 'stable', url: 'https://viewer.example.test/s', fileName: FILE }, [{ sourcePath: FILE, publishedPath: 'index.html' }]);
+    expect(queue.count()).toBe(0);
+    await createPublishedCommentBackfillReconciler(db, { listFacts: subject => store.listFacts(subject) }).prepare(scope);
     expect(queue.listDue(Date.now()).map(row => row.relayScope)).toEqual(['personal', 'personal']);
 
     const delivered: string[] = [];
@@ -210,9 +214,12 @@ it('a stopped private-in-team publication is cancelled without waiting for team 
     migratePublicFilePublications(db);
     const store = createSqlitePublicFilePublicationStore(db);
     const queue = createCommentRelayOutboxStore(db);
-    createPublicFilePublicationRecorder(db, store, enqueuePublishedFileComments)(
+    createPublicFilePublicationRecorder(db, store)(
       { sourceFileId: ensureWorkspaceArtifactForPath(db, { projectId: 'p', path: FILE, kind: 'html' }).id, resourceTeamId: 'w', ownerMemberId: 'owner', projectId: 'p', filePath: FILE },
       { slug: 'stable', url: 'https://viewer.example.test/s', fileName: FILE }, [{ sourcePath: FILE, publishedPath: 'index.html' }]);
+    expect(queue.count()).toBe(0);
+    await createPublishedCommentBackfillReconciler(db, { listFacts: subject => store.listFacts(subject) }).prepare({ resourceTeamId: 'w', ownerMemberId: 'owner', projectId: 'p', filePath: FILE });
+    expect(queue.count()).toBe(1);
     // The publication witness, not workspace type or catalog promotion, owns
     // cancellation. A stopped file must never regain eligibility from retries.
     store.delete({ resourceTeamId: 'w', ownerMemberId: 'owner', projectId: 'p', filePath: FILE });
@@ -278,7 +285,7 @@ async function publishWithCatalogRace(initialVisibility: 'personal' | 'team') {
     vi.mocked(readVelaControlApiContext).mockReturnValue({ profile: 'test', apiUrl: 'https://hub.example.test', controlKey: 'synthetic', user: null, configMtimeMs: null });
     vi.mocked(runVelaResourceCommand).mockReset();
     vi.mocked(runVelaResourceCommand).mockImplementation(async () => JSON.stringify({ id: 'v1', version: 1 }));
-    const fixture = createPublicSharePublishingFixture(db, store, runVelaResourceCommand, enqueuePublishedFileComments);
+    const fixture = createPublicSharePublishingFixture(db, store, runVelaResourceCommand);
     registerCollabSyncRoutes(app, {
       collab: runtime, publicFilePublicationStore: store, ...fixture,
       sharePublishing: {
@@ -289,7 +296,7 @@ async function publishWithCatalogRace(initialVisibility: 'personal' | 'team') {
           return { projectId: scope.projectId, ownerMemberId: principal.memberId, sharedAt: new Date(1).toISOString() };
         },
       },
-      recordPublicFilePublication: createPublicFilePublicationRecorder(db, store, enqueuePublishedFileComments),
+      recordPublicFilePublication: createPublicFilePublicationRecorder(db, store),
       verifyWorkspaceRequest: async req => req.get('x-od-workspace-id') === 'w' ? context : null,
       resolveSharedProject: async () => null, resolveSharedProjectOwner: async () => null,
       resolveLocalPublicShareOwner: () => 'owner',

@@ -10,7 +10,6 @@ import {
   SHARE_COMMENT_MAX_BYTES,
   SHARE_COMMENT_PAGE_LIMIT,
   SHARE_COMMENT_VALIDATION_ORDER,
-  SHARE_MAX_TOTAL_BYTES,
   SHARE_STATUSES,
   SHARE_COMMENT_TERMINAL_REJECTION,
   VELA_CLI_FAILURE_ENVELOPE_FIELDS,
@@ -203,9 +202,6 @@ describe('share contract · share state', () => {
     expect(hasActiveShare(undefined)).toBe(false);
   });
 
-  it('keeps the S15 ceiling at 20 MB', () => {
-    expect(SHARE_MAX_TOTAL_BYTES).toBe(20 * 1024 * 1024);
-  });
 });
 
 describe('share contract · comment API (I4)', () => {

@@ -105,7 +105,7 @@ async function startDaemon(
     resolveSharedProject: async projectId => ({ projectId, ownerMemberId: context.workspaceMemberId, sharedAt: new Date(1).toISOString() }),
     resolveProjectDir: () => projectDir,
     publicFilePublicationStore: publicationStore,
-    ...createPublicSharePublishingFixture(openDatabase(projectDir, { dataDir: projectDir }), publicationStore, vela.runResourceCommand, undefined, { cloud, commands: cloudCommands, failStop }),
+    ...createPublicSharePublishingFixture(openDatabase(projectDir, { dataDir: projectDir }), publicationStore, vela.runResourceCommand, { cloud, commands: cloudCommands, failStop }),
     resolveLocalPublicShareOwner: () => context.workspaceMemberId,
     ...(shareContentFingerprints ? { shareContentFingerprints } : {}),
   });

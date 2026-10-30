@@ -397,6 +397,8 @@ export interface WorkspaceBillingRecovery {
  * payload. `context` is null when signed out or B is unavailable.
  */
 export interface WorkspaceCollabContext {
+  /** Server-issued account display seed, identical to comment authorKey. */
+  authorKey?: string;
   workspaceId: string;
   workspaceType: WorkspaceType;
   workspaceMemberId: string;

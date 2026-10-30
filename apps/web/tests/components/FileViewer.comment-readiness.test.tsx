@@ -46,7 +46,7 @@ it('does not persist lost anchors before this preview reports its targets (OPEND
   expect(onLostAnchors).toHaveBeenCalledOnce();
 });
 
-it('OPEND-3604 only acknowledges displayed rows after a successful load, including older delayed arrivals', async () => {
+it('OPEND-3604 only acknowledges the opened detail; opening a list and delayed arrivals stay unread', async () => {
   const writes: Array<{filePath:string;commentIds:string[]}> = [];
   const seen = new Set<string>();
   vi.stubGlobal('fetch',vi.fn(async (input,init) => {
@@ -66,7 +66,13 @@ it('OPEND-3604 only acknowledges displayed rows after a successful load, includi
   view.rerender(tree('error',[a,other]));
   await act(async()=>{await new Promise(resolve=>setTimeout(resolve,35));});expect(writes).toEqual([]);
   view.rerender(tree('success',[a,other]));
+  await act(async()=>{await new Promise(resolve=>setTimeout(resolve,35));});expect(writes).toEqual([]);
+  fireEvent.click(screen.getByTestId('comment-side-item'));
   await waitFor(()=>expect(writes).toHaveLength(1));expect(writes[0]).toMatchObject({filePath:'a.html',commentIds:['a']});
   view.rerender(tree('success',[a,other,{...a,id:'late',createdAt:10}]));
-  await waitFor(()=>expect(writes).toHaveLength(2));expect(writes[1]?.commentIds).toEqual(['late']);
+  await act(async()=>{await new Promise(resolve=>setTimeout(resolve,35));});
+  expect(writes).toHaveLength(1);
+  fireEvent.click(screen.getAllByTestId('comment-side-item').find(node => node.textContent?.includes('Visible review'))!);
+  expect(screen.getByTestId('comment-popover-detail')).toHaveTextContent('Visible review');
+  expect(screen.queryByTestId('comment-popover-input')).toBeNull();
 });
