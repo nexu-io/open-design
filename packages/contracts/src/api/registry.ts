@@ -81,6 +81,10 @@ export type AgentDiagnosticReason =
   | 'shim-broken'
   /** A user-set `*_BIN` override points at a missing/invalid file. */
   | 'configured-bin-invalid'
+  /** A saved app bundle path points at a missing/invalid application bundle. */
+  | 'configured-app-path-invalid'
+  /** A saved local config file is missing, unreadable, or lacks required credentials. */
+  | 'saved-config-invalid'
   /** The binary ran, but its version could not be read under a strict policy. */
   | 'version-probe-failed'
   /** The installed CLI version is outside this OpenDesign build's tested set. */

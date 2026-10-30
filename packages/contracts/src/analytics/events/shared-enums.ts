@@ -233,6 +233,7 @@ export type TrackingCliProviderId =
   | 'deepseek'
   | 'deepseek_harness'
   | 'amr'
+  | 'zcode'
   | 'other';
 
 export type TrackingFeedbackProviderId =
