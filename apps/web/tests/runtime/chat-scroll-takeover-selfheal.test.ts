@@ -795,19 +795,25 @@ describe('self-heal — releaseChatScrollTakeover', () => {
     expect(geometry.writes).toEqual([]);
 
     // The next conversation on the same node gets its own probe, its own
-    // report budget and its own kick. The native notch above is the one that
-    // re-DISCOVERED the surface, and the probe ingests a discovery wheel twice
-    // (window listener, then the element listener it just attached — a
-    // pre-existing probe quirk, not this module's), so it already stands as
-    // two stalled notches and `FREEZE_WHEEL_COUNT − 2` more bring the verdict.
+    // report budget and its own kick. The discovery notch counts once, so
+    // stay below the freeze threshold until the final physical wheel arrives.
     runFrames();
     for (let i = 0; i < FREEZE_WHEEL_COUNT - 2; i += 1) {
       advanceClock(16);
       wheelEvent(log, 120);
       runFrames();
     }
+    expect(eventsNamed('client_chat_scroll_frozen')).toHaveLength(1);
+    expect(chatScrollTakeoverPhase()).toBe('idle');
+    advanceClock(16);
+    wheelEvent(log, 120);
+    runFrames();
     const frozen = eventsNamed('client_chat_scroll_frozen');
     expect(frozen).toHaveLength(2);
+    expect(frozen[1]).toMatchObject({
+      wheel_count: FREEZE_WHEEL_COUNT,
+      wheel_requested_px: FREEZE_WHEEL_COUNT * 120,
+    });
     expect(frozen[1]?.probe_id).not.toBe(firstProbeId);
     expect(chatScrollTakeoverPhase()).toBe('kicking');
     expect(log.style.willChange).toBe('transform');
