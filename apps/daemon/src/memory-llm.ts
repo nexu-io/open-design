@@ -1058,6 +1058,7 @@ async function callLocalCli(provider, system, user, options) {
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd,
       shell: false,
+      windowsHide: process.platform === 'win32',
       windowsVerbatimArguments: invocation.windowsVerbatimArguments,
     });
 

@@ -1110,6 +1110,7 @@ async function runProcessBuffered(
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, ...(options.env ?? {}) },
       shell: process.platform === 'win32' && /\.(?:bat|cmd)$/iu.test(resolvedCommand),
+      windowsHide: process.platform === 'win32',
     });
     timeout = setTimeout(() => {
       timedOut = true;
