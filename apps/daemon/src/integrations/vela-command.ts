@@ -27,6 +27,13 @@ const REDACTED_VELA_ARG_FLAGS = new Set([
   '--email',
   '--activity-json',
   '--metadata-json',
+  // Media generation hands the CLI the user's own prompt and their reference
+  // images' absolute paths, so a failed `vela media ...` command repeats them
+  // in the exec error that the media task persists (#9154).
+  '--prompt',
+  '--image',
+  '--ref',
+  '--first-frame',
 ]);
 const REDACTED_VELA_ARG = '[REDACTED]';
 
