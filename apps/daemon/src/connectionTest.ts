@@ -60,6 +60,7 @@ import {
   isAzureOpenAIHostname,
   isUnsupportedMaxTokensError,
 } from './integrations/openai-chat-token-params.js';
+import { normalizeOpenAICompletion } from './integrations/openaiCompletionShape.js';
 import { aihubmixHeaders } from './integrations/aihubmix.js';
 import type { AgentCliEnvPrefs } from './app-config.js';
 import type { RuntimeAgentDef } from './runtimes/types.js';
@@ -948,7 +949,10 @@ function inspectProviderCompletion(
   if (!obj) return { valid: false };
 
   if (protocol === 'openai' || protocol === 'azure' || protocol === 'senseaudio' || protocol === 'aihubmix') {
-    const responseModel = typeof obj.model === 'string' ? obj.model : '';
+    // Read the completion object, not the envelope it may arrive in. This is a
+    // shape choice only — every check below still runs on whatever comes back.
+    const shape = normalizeOpenAICompletion(obj) as Record<string, unknown>;
+    const responseModel = typeof shape.model === 'string' ? shape.model : '';
     if (
       // AIHubMix is omitted from the strict response-model check (like Azure):
       // its gateway routes by model name and may echo a normalized id.
@@ -964,7 +968,7 @@ function inspectProviderCompletion(
         detail: `Provider responded with model "${responseModel}" instead of requested "${requestedModel}".`,
       };
     }
-    const choices = obj.choices;
+    const choices = shape.choices;
     if (!Array.isArray(choices) || choices.length === 0) return { valid: false };
     const first = choices[0] as { finish_reason?: unknown } | undefined;
     const finishReason =
@@ -1093,7 +1097,107 @@ function extractOpenAiModelIds(data: unknown): string[] {
     .filter((id): id is string => typeof id === 'string' && id.length > 0);
 }
 
-function extractProviderErrorDetail(data: unknown, rawText: string): string {
+// Diagnostic vocabulary. Only these names are ever echoed; anything else the
+// provider sends is counted, never printed.
+//
+// The rule this encodes: a property NAME is a provider-controlled string just
+// like a value is. Calling the output a "whitelist" because it looks structural
+// is exactly the mistake that let a credential-shaped key name reach the
+// dialog and the daemon log.
+const KNOWN_TOP_LEVEL_KEYS = new Set([
+  'data',
+  'choices',
+  'success',
+  'error',
+  'message',
+  'object',
+  'model',
+  'usage',
+  'id',
+  'created',
+  'output',
+  'output_text',
+  'candidates',
+  'content',
+  'finish_reason',
+  'system_fingerprint',
+  'index',
+]);
+
+// Enumerated completion-object values. `data.object` is echoed only when it is
+// one of ours; anything else collapses to `other`.
+const KNOWN_COMPLETION_OBJECTS = new Set([
+  'chat.completion',
+  'chat.completion.chunk',
+  'text_completion',
+  'embedding',
+]);
+
+/**
+ * Describe why a 2xx response could not be read as a completion.
+ *
+ * Every fragment is either one of our own literals, a name from the allowlist
+ * above, an enumerated value, or a count. No provider-supplied string reaches
+ * this output, because this string becomes `detail` — which is shown in the
+ * dialog AND written by the provider-test warning — and daemon logs are
+ * collected into diagnostics. Earlier drafts echoed raw bodies, then property
+ * names and `data.object`; both were provider-controlled and both were wrong.
+ */
+function describeUnrecognizedCompletionShape(data: unknown): string {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return 'Provider returned a 2xx response whose body was not a JSON object.';
+  }
+  const obj = data as Record<string, unknown>;
+  const parts: string[] = [];
+
+  const keys = Object.keys(obj);
+  const knownKeys = keys.filter((key) => KNOWN_TOP_LEVEL_KEYS.has(key)).sort();
+  parts.push(`known keys: ${knownKeys.length ? knownKeys.join(', ') : 'none'}`);
+  const otherKeyCount = keys.length - knownKeys.length;
+  if (otherKeyCount > 0) parts.push(`other keys: ${otherKeyCount}`);
+
+  const countLabel = (n: number) => `${n} ${n === 1 ? 'entry' : 'entries'}`;
+  parts.push(
+    Array.isArray(obj.choices)
+      ? `top-level choices: ${countLabel(obj.choices.length)}`
+      : 'top-level choices: absent',
+  );
+
+  const nested = obj.data;
+  if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+    const inner = nested as Record<string, unknown>;
+    parts.push(
+      Array.isArray(inner.choices)
+        ? `data.choices: ${countLabel(inner.choices.length)}`
+        : 'data.choices: absent',
+    );
+    if (typeof inner.object === 'string') {
+      parts.push(
+        `data.object: ${
+          KNOWN_COMPLETION_OBJECTS.has(inner.object) ? inner.object : 'other'
+        }`,
+      );
+    }
+  } else {
+    parts.push('data: absent');
+  }
+
+  if (obj.success === false) parts.push('success: false');
+
+  return `Provider returned a 200 without a readable completion (${parts.join('; ')}).`;
+}
+
+/**
+ * Pull a human-readable message out of an upstream body, falling back to
+ * whatever the caller considers the best available evidence.
+ *
+ * The fallback is a parameter rather than a fixed slice of the raw text because
+ * the two callers need different things: a non-2xx body *is* the error payload,
+ * so its raw text is the right fallback; a 2xx body is a completion that failed
+ * shape validation, where echoing it verbatim would dump provider metadata into
+ * the dialog — that caller passes `describeUnrecognizedCompletionShape` instead.
+ */
+function extractProviderErrorDetail(data: unknown, fallback: string): string {
   const obj = data && typeof data === 'object' ? data : null;
   const error = obj ? (obj as { error?: unknown }).error : null;
   if (typeof error === 'string') return error;
@@ -1103,7 +1207,7 @@ function extractProviderErrorDetail(data: unknown, rawText: string): string {
   }
   const message = obj ? (obj as { message?: unknown }).message : null;
   if (typeof message === 'string' && message.trim()) return message;
-  return rawText.trim().slice(0, 240);
+  return fallback;
 }
 
 /**
@@ -1567,7 +1671,8 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
 // `delta.content`). We need the non-streaming `message.content` shape
 // here. Kept module-local so the chat path doesn't change.
 function extractOpenAIMessageText(data: unknown): string {
-  const choices = (data as { choices?: unknown }).choices;
+  const completion = normalizeOpenAICompletion(data) as { choices?: unknown };
+  const choices = completion.choices;
   if (!Array.isArray(choices) || choices.length === 0) return '';
   const first = choices[0] as
     | { message?: { content?: unknown }; text?: unknown }
@@ -1782,7 +1887,10 @@ export async function testProviderConnection(
         };
       }
       if (!rawSample && !completion.valid) {
-        const providerError = extractProviderErrorDetail(data, rawText);
+        const providerError = extractProviderErrorDetail(
+          data,
+          describeUnrecognizedCompletionShape(data),
+        );
         const detail = redactSecrets(
           providerError || smokeFailureDetail(rawSample),
           [input.apiKey],
