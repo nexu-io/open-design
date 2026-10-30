@@ -204,6 +204,7 @@ export function SideChatTab({
           // persisted `conversation.messageCount` keeps the list count stable.
           onSelectConversation={onSelectConversation}
           onDeleteConversation={onDeleteConversation}
+          onRenameConversation={onRenameConversation}
           onNewConversation={onNewConversation}
           researchAvailable={config.mode === 'daemon'}
           config={config}

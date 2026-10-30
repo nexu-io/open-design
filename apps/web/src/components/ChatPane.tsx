@@ -770,6 +770,9 @@ interface Props {
   messagesConversationId?: string | null;
   onSelectConversation: (id: string) => void;
   onDeleteConversation: (id: string) => void;
+  /** Renames ONE conversation (「修改会话名」) — never the project. Omitted
+   *  where the viewer cannot write, which hides the entry. */
+  onRenameConversation?: (id: string, title: string) => void;
   // Composer settings/CLI button forwards to here. The dialog lives in App
   // (it owns the AppConfig lifecycle) so we just pass the open trigger.
   onOpenSettings?: (section?: SettingsSection) => void;
@@ -1420,6 +1423,7 @@ export function ChatPane({
   messagesConversationId = null,
   onSelectConversation,
   onDeleteConversation,
+  onRenameConversation,
   onOpenSettings,
   amrBalanceCardUsd = null,
   amrBalanceCardAnchorMessageId = null,
@@ -4342,6 +4346,7 @@ export function ChatPane({
                     onSelectConversation(c.id);
                     setShowConvList(false);
                   }}
+                  onRename={onRenameConversation}
                   t={t}
                 />
               ))
@@ -6675,38 +6680,119 @@ function ConversationRow({
   conversation,
   active,
   onSelect,
+  onRename,
   t,
 }: {
   conversation: Conversation;
   active: boolean;
   onSelect: () => void;
+  onRename?: (id: string, title: string) => void;
   t: TranslateFn;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  // Enter commits, then the input unmounts and fires blur: the second commit
+  // must be a no-op, and Escape must not commit on that same blur either.
+  const editClosedRef = useRef(false);
   const displayTitle =
     conversation.title || t('chat.untitledConversation');
+  const renameLabel = t('chat.renameConversation');
+
+  function beginRename() {
+    editClosedRef.current = false;
+    setDraft(conversation.title ?? '');
+    setEditing(true);
+  }
+
+  function closeRename(commit: boolean) {
+    if (editClosedRef.current) return;
+    editClosedRef.current = true;
+    setEditing(false);
+    if (!commit || !onRename) return;
+    const nextTitle = normalizeConversationRename(conversation.title, draft);
+    if (nextTitle !== null) onRename(conversation.id, nextTitle);
+  }
 
   return (
     <div
       className={`chat-conv-item${active ? ' active' : ''}`}
       data-testid={`conversation-item-${conversation.id}`}
-      onClick={onSelect}
+      onClick={editing ? undefined : onSelect}
     >
-      <button
-        type="button"
-        className="chat-conv-item-name"
-        data-testid={`conversation-select-${conversation.id}`}
-        style={{ background: 'transparent', border: 'none', padding: 0, textAlign: 'left' }}
-      >
-        {displayTitle}
-      </button>
-      <span
-        className="chat-conv-item-meta"
-        data-testid={`conversation-meta-${conversation.id}`}
-      >
-        {conversationMetaLabel(conversation, t)}
-      </span>
+      {editing && onRename ? (
+        <input
+          autoFocus
+          className={historyStyles.renameInput}
+          data-testid={`conversation-rename-input-${conversation.id}`}
+          aria-label={t('chat.renameConversationLabel', { title: displayTitle })}
+          value={draft}
+          placeholder={t('chat.untitledConversation')}
+          onChange={(event) => setDraft(event.currentTarget.value)}
+          onClick={(event) => event.stopPropagation()}
+          onBlur={() => closeRename(true)}
+          onKeyDown={(event) => {
+            if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229 || event.key === 'Process') {
+              return;
+            }
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              closeRename(true);
+            } else if (event.key === 'Escape') {
+              // Cancel this edit only — the history menu's own Escape handler
+              // listens on document and would close the whole menu.
+              event.preventDefault();
+              event.stopPropagation();
+              closeRename(false);
+            }
+          }}
+        />
+      ) : (
+        <>
+          <button
+            type="button"
+            className="chat-conv-item-name"
+            data-testid={`conversation-select-${conversation.id}`}
+            style={{ background: 'transparent', border: 'none', padding: 0, textAlign: 'left' }}
+          >
+            {displayTitle}
+          </button>
+          <span
+            className="chat-conv-item-meta"
+            data-testid={`conversation-meta-${conversation.id}`}
+          >
+            {conversationMetaLabel(conversation, t)}
+          </span>
+          {onRename ? (
+            <button
+              type="button"
+              className={`${historyStyles.renameButton} od-tooltip`}
+              data-testid={`conversation-rename-${conversation.id}`}
+              data-tooltip={renameLabel}
+              data-tooltip-placement="bottom"
+              aria-label={t('chat.renameConversationLabel', { title: displayTitle })}
+              onClick={(event) => {
+                event.stopPropagation();
+                beginRename();
+              }}
+            >
+              <Icon name="pencil" size={12} />
+            </button>
+          ) : null}
+        </>
+      )}
     </div>
   );
+}
+
+/** Trimmed draft, or `null` when it would not change the stored title. An
+ *  emptied draft clears the title back to the untitled placeholder. */
+function normalizeConversationRename(
+  currentTitle: string | null | undefined,
+  draft: string,
+): string | null {
+  const current = (currentTitle ?? '').trim();
+  const next = draft.trim();
+  return next === current ? null : next;
 }
 
 // Memoized (hoisted impl referenced below): a static user message has stable

@@ -2329,6 +2329,7 @@ export const ko: Dict = {
   'chat.conversationsHeading': '대화 목록',
   'chat.emptyConversations': '아직 대화가 없습니다.',
   'chat.deleteConversation': '대화 삭제',
+  'chat.renameConversation': '대화 이름 변경',
   'chat.renameConversationLabel': '"{title}" 이름 변경',
   'chat.deleteConversationConfirm': '"{title}" 대화를 삭제하시겠습니까? 관련 메시지가 모두 삭제됩니다.',
   'chat.untitledConversation': '제목 없는 대화',

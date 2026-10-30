@@ -9757,6 +9757,9 @@ async function runConversation(args) {
                                            source message.
   od conversation list <projectId>           List conversations in a project.
   od conversation info <conversationId>      Print one conversation.
+  od conversation rename <projectId> <conversationId> --title "<title>"
+                                           Rename one conversation. An empty
+                                           --title clears it back to untitled.
 
 Common options:
   --daemon-url <url>         OpenDesign daemon HTTP base.
@@ -9767,19 +9770,18 @@ Common options:
   }
   const sub = args[0];
   const rest = args.slice(1);
-  const conversationStringFlags =
-    sub === 'new' || sub === 'list'
-      ? PROJECT_RESOURCE_STRING_FLAGS
-      : PROJECT_STRING_FLAGS;
+  const projectScoped = sub === 'new' || sub === 'list' || sub === 'rename';
+  const conversationStringFlags = projectScoped
+    ? PROJECT_RESOURCE_STRING_FLAGS
+    : PROJECT_STRING_FLAGS;
   const flags = parseFlags(rest, {
     string: conversationStringFlags,
     boolean: PROJECT_BOOLEAN_FLAGS,
   });
   const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
-  const workspaceHeaders =
-    sub === 'new' || sub === 'list'
-      ? workspaceHeadersFromExplicitFlags(flags) ?? {}
-      : {};
+  const workspaceHeaders = projectScoped
+    ? workspaceHeadersFromExplicitFlags(flags) ?? {}
+    : {};
   switch (sub) {
     case 'new': {
       const [id] = positionalArgs(rest, conversationStringFlags);
@@ -9837,6 +9839,29 @@ Common options:
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      return;
+    }
+    case 'rename': {
+      // Same PATCH the chat history menu's 「修改会话名」 sends: only the
+      // conversation's title changes, never the project's name.
+      const [projectId, conversationId] = positionalArgs(rest, conversationStringFlags);
+      if (!projectId || !conversationId || typeof flags.title !== 'string') {
+        console.error('Usage: od conversation rename <projectId> <conversationId> --title "<title>"');
+        process.exit(2);
+      }
+      const title = flags.title.trim() || null;
+      const resp = await fetch(
+        `${base}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}`,
+        {
+          method:  'PATCH',
+          headers: { 'content-type': 'application/json', ...workspaceHeaders },
+          body:    JSON.stringify({ title }),
+        },
+      );
+      if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      console.log(`[conversation] renamed ${data.conversation?.id ?? conversationId} to ${data.conversation?.title ?? '(untitled)'}`);
       return;
     }
     default:

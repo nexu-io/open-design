@@ -2329,6 +2329,7 @@ export const th: Dict = {
   'chat.conversationsHeading': 'บทสนทนาทั้งหมด',
   'chat.emptyConversations': 'ยังไม่มีบทสนทนา',
   'chat.deleteConversation': 'ลบบทสนทนา',
+  'chat.renameConversation': 'เปลี่ยนชื่อสนทนา',
   'chat.renameConversationLabel': 'เปลี่ยนชื่อ "{title}"',
   'chat.deleteConversationConfirm': 'ลบ "{title}" หรือไม่?',
   'chat.untitledConversation': 'บทสนทนาที่ไม่มีชื่อ',

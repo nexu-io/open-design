@@ -2329,6 +2329,7 @@ export const ptBR: Dict = {
   'chat.conversationsHeading': 'Conversas',
   'chat.emptyConversations': 'Ainda não há conversas.',
   'chat.deleteConversation': 'Excluir conversa',
+  'chat.renameConversation': 'Renomear conversa',
   'chat.renameConversationLabel': 'Renomear "{title}"',
   'chat.deleteConversationConfirm': 'Excluir "{title}"? Isso remove as mensagens.',
   'chat.untitledConversation': 'Conversa sem título',

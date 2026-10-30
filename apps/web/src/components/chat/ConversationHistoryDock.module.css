@@ -47,3 +47,51 @@
   cursor: default;
   opacity: 0.55;
 }
+
+/* 「修改会话名」 (OPEND-3128). The pencil sits at the row's end and stays out of
+   the way until the row is hovered or something in it has focus, so a
+   keyboard user tabbing through the list still reaches it. */
+.renameButton {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+:global(.chat-conv-item):hover .renameButton,
+:global(.chat-conv-item):focus-within .renameButton {
+  opacity: 1;
+}
+
+.renameButton:hover {
+  background: var(--chat-bg-subtle);
+  color: var(--text-strong);
+}
+
+.renameInput {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text-strong);
+  font: inherit;
+  line-height: 18px;
+  outline: none;
+}
