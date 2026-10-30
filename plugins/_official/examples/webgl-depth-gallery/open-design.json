@@ -67,7 +67,8 @@
     "surface": "web",
     "preview": {
       "type": "html",
-      "entry": "./example.html"
+      "entry": "./example.html",
+      "poster": "./example.webp"
     },
     "useCase": {
       "query": {
@@ -83,7 +84,12 @@
       ],
       "designSystem": {
         "primary": true
-      }
+      },
+      "assets": [
+        "./example.html",
+        "./assets/three.min.js",
+        "./example.webp"
+      ]
     },
     "pipeline": {
       "stages": [
