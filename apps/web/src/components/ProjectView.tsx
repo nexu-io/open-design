@@ -1155,14 +1155,34 @@ function isGenericDaemonDisconnect(err: unknown): boolean {
 // equals the canonical GENERIC_DAEMON_DISCONNECT_MESSAGE with no code set.
 // Mirrors isGenericDaemonDisconnect() above, which checks the equivalent
 // code-or-message pair on live Error objects for the same reason.
-function hasGenericDisconnectFailureEvent(message: ChatMessage): boolean {
-  return (message.events ?? []).some(
-    (event) =>
-      event.kind === 'status' &&
-      event.label === 'error' &&
-      (event.code === GENERIC_DAEMON_DISCONNECT_CODE ||
-        event.detail === GENERIC_DAEMON_DISCONNECT_MESSAGE),
+function isGenericDisconnectFailureEvent(event: AgentEvent): boolean {
+  return (
+    event.kind === 'status' &&
+    event.label === 'error' &&
+    (event.code === GENERIC_DAEMON_DISCONNECT_CODE ||
+      event.detail === GENERIC_DAEMON_DISCONNECT_MESSAGE)
   );
+}
+
+function hasGenericDisconnectFailureEvent(message: ChatMessage): boolean {
+  return (message.events ?? []).some(isGenericDisconnectFailureEvent);
+}
+
+function withoutGenericDisconnectFailureEvents(message: ChatMessage): ChatMessage {
+  if (!hasGenericDisconnectFailureEvent(message)) return message;
+  return {
+    ...message,
+    events: (message.events ?? []).filter((event) => !isGenericDisconnectFailureEvent(event)),
+  };
+}
+
+// Matches the daemon's restart reconciliation (`DAEMON_RESTARTED` /
+// `daemon_restart`), which stamps the restarted daemon's boot time as the
+// Run's terminal time rather than when the Run actually stopped.
+function isDaemonRestartVerdict(
+  status: { errorCode?: string | null; terminalTrigger?: string | null },
+): boolean {
+  return status.errorCode === 'DAEMON_RESTARTED' || status.terminalTrigger === 'daemon_restart';
 }
 
 /**
@@ -7627,7 +7647,33 @@ export function ProjectView({
         const preservedTaskPrefixEvents = preserveTaskPrefix
           ? [...(message.events ?? []).slice(0, taskPrefixEventCount)]
           : [];
-        if (needsFullReplay && daemonStatusIsRecoverable) {
+        // A full replay rebuilds the row from event 0 of this Run's log, so its
+        // content/events must start from the preserved task prefix — otherwise
+        // the replayed text is appended to what the row already shows. A
+        // generic-disconnect row's content came from this same log, so this
+        // holds even when the daemon's verdict is already 'failed'/'canceled'
+        // (e.g. the Run was interrupted by a daemon restart).
+        //
+        // That rebuild stays in memory and keeps the disconnect marker: until
+        // the replay's own terminal frame lands, the persisted row must remain
+        // the recoverable original, so a reload (or a subscribe that never
+        // re-delivers text) replays the log again instead of finding a failed
+        // row with no content. The reattach finalizers drop the marker.
+        const rebuildsSettledDisconnectRow =
+          needsFullReplay && recoverableGenericDisconnectFailed && !daemonStatusIsRecoverable;
+        const rebuildsFromRunLog =
+          (needsFullReplay && daemonStatusIsRecoverable) || rebuildsSettledDisconnectRow;
+        // The browser stamped a generic-disconnect row's endedAt when its
+        // reconnect loop gave up; that is not when the Run ended. Adopt the
+        // daemon record's terminal time when it is the Run's own, else leave it
+        // unset for the replay finalizers. A restart-interrupted Run is the
+        // exception: the restarted daemon stamps its boot time as the terminal
+        // time, which is later than the give-up stamp, so keep the latter.
+        const daemonRestartVerdict = isDaemonRestartVerdict(status);
+        const genericDisconnectEndedAt = isTerminalRunStatus(status.status)
+          ? status.updatedAt
+          : undefined;
+        if (rebuildsFromRunLog) {
           updateMessageById(
             message.id,
             // Clear endedAt only for spuriously-failed pending messages so the
@@ -7641,12 +7687,22 @@ export function ProjectView({
             (prev) => ({
               ...prev,
               content: preservedTaskPrefixContent,
-              events: preservedTaskPrefixEvents,
+              events: rebuildsSettledDisconnectRow
+                ? [
+                  ...preservedTaskPrefixEvents,
+                  ...(prev.events ?? []).filter(isGenericDisconnectFailureEvent),
+                ]
+                : preservedTaskPrefixEvents,
               producedFiles: undefined,
               ...(spuriouslyFailedPending ? { endedAt: undefined } : {}),
+              ...(recoverableGenericDisconnectFailed && !daemonRestartVerdict
+                ? { endedAt: genericDisconnectEndedAt }
+                : {}),
             }),
-            true,
+            !rebuildsSettledDisconnectRow,
           );
+        }
+        if (needsFullReplay && daemonStatusIsRecoverable) {
           // When the failed-message recovery moves back to running/succeeded,
           // clear any stale "daemon stream disconnected" error banner that the
           // original onError path may have set, so the chat does not show a
@@ -7924,6 +7980,8 @@ export function ProjectView({
                 (prev) => ({
                   ...prev,
                   content: needsFullReplay ? replayedContent : prev.content,
+                  // `replayedEvents` holds only what the log re-delivered, so a
+                  // settled disconnect row's in-memory marker is dropped here.
                   events: needsFullReplay ? replayedEvents : prev.events,
                   runStatus:
                     latestReattachRunStatus === 'canceled' ? 'canceled' : 'succeeded',
@@ -8104,7 +8162,9 @@ export function ProjectView({
                 updateMessageById(
                   message.id,
                   (prev) => ({
-                    ...prev,
+                    ...(rebuildsSettledDisconnectRow && !genericDisconnect
+                      ? withoutGenericDisconnectFailureEvents(prev)
+                      : prev),
                     runStatus: 'failed',
                     endedAt: prev.endedAt ?? Date.now(),
                     resumable,
