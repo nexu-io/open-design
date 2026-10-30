@@ -43,7 +43,8 @@
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  /* 16px (per product). */
+  border-radius: var(--radius-xl);
   background: var(--bg-elevated, var(--bg-panel));
   color: var(--text);
   box-shadow: var(--shadow-lg, 0 18px 52px rgba(15, 23, 42, 0.18));

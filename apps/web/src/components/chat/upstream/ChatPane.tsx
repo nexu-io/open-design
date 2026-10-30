@@ -1,5 +1,6 @@
 import { conversationMetaLabel } from '../../../runtime/chat/conversation-time';
 export { conversationMetaLabel } from '../../../runtime/chat/conversation-time';
+import { publishActiveConversationTitle } from '../../../state/active-conversation-title';
 import { toHostMessage } from './types';
 import { QuoteBar } from '../QuoteBar';
 import { QueuedSendStack } from '../QueuedSendStack';
@@ -191,6 +192,7 @@ import { Toast } from '../../Toast';
 import { supportChannels } from '../support-channels';
 import { ExportLogsAction } from '../ExportLogsAction';
 import { repoConnectCopy } from '../../design-system-github-evidence';
+import { ConversationStartHero } from '../ConversationStartHero';
 import { isRenderableSketchJson, SketchPreview } from '../../SketchPreview';
 import type { SettingsSection } from '../../SettingsDialog';
 
@@ -901,6 +903,8 @@ interface Props {
   byokSpeechVoice?: string;
   onChangeByokSpeechVoice?: (voice: string) => void;
   composerFooterAccessory?: ReactNode;
+  /** Home's model control (`InlineModelSwitcher compact`), worn with Home's input. */
+  composerHomeFooterAccessory?: ReactNode;
   // Slot rendered next to the composer's "+" menu (e.g. the working-dir pill).
   composerLeadingAccessory?: ReactNode;
   // Forwarded straight to the chat composer's mid-chat design-system
@@ -951,6 +955,8 @@ interface Props {
   workspaceComposerDocked?: boolean;
   workspaceConversationExpanded?: boolean;
   onWorkspaceConversationExpandedChange?: (expanded: boolean) => void;
+  /** Reports whether the composer is wearing Home's input (empty conversation). */
+  onHomeComposerChange?: (active: boolean) => void;
   onExpandConversation?: () => void;
   onConversationPlacementChange?: (placement: ConversationPlacement) => void;
   backLabel?: string;
@@ -1366,6 +1372,7 @@ export function ChatPane({
   onChangeByokSpeechVoice,
   composerLeadingAccessory,
   composerFooterAccessory,
+  composerHomeFooterAccessory,
   currentDesignSystemId,
   onActiveDesignSystemChange,
   onShowToast,
@@ -1380,6 +1387,7 @@ export function ChatPane({
   workspaceComposerDocked = false,
   workspaceConversationExpanded = false,
   onWorkspaceConversationExpandedChange,
+  onHomeComposerChange,
   onExpandConversation,
   onConversationPlacementChange,
   backLabel,
@@ -1536,6 +1544,10 @@ export function ChatPane({
   const logRef = useRef<HTMLDivElement | null>(null);
   const historyWrapRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<ChatComposerHandle | null>(null);
+  // The Home type picked on the empty conversation's intro (Home's mode
+  // switch). Belongs to the conversation it was picked in.
+  const [startChipId, setStartChipId] = useState<string | null>(null);
+  useEffect(() => { setStartChipId(null); }, [activeConversationId]);
   const composerSlotRef = useRef<HTMLDivElement | null>(null);
   const composerLayerRef = useRef<HTMLDivElement | null>(null);
   const composerContentRef = useRef<HTMLDivElement | null>(null);
@@ -1895,11 +1907,14 @@ export function ChatPane({
   const [floatingConversationHeight, setFloatingConversationHeight] = useState<number | null>(null);
   const conversationFocusOwner = useId();
   const [conversationMinimized, setConversationMinimized] = useState(false);
+  // How far the docked composer has been dragged from its resting corner.
+  const [dockOffset, setDockOffset] = useState({ x: 0, y: 0 });
   const minimized = workspaceComposerDocked && conversationMinimized;
   const markConversationInteraction = useWorkspaceConversationFocus(conversationFocusOwner,
     workspaceComposerDocked && workspaceConversationExpanded && !minimized,
     onWorkspaceConversationExpandedChange);
   useEffect(() => { setConversationMinimized(false); }, [workspaceComposerDocked, activeConversationId]);
+  useEffect(() => { if (!workspaceComposerDocked) setDockOffset({ x: 0, y: 0 }); }, [workspaceComposerDocked]);
   useLayoutEffect(() => {
     if (minimized || !restoreComposerFocusRef.current) return;
     restoreComposerFocusRef.current = false;
@@ -1982,7 +1997,9 @@ export function ChatPane({
    * 也不是他伸手要够的东西;人贴着底时他已经在最新上,回底按钮无事可做,
    * 位置该让给进度。两者因此天然不同时出现,不需要谁给谁让一档。
    */
-  const showJumpToLatest = scrolledFromBottom && !queuedSendExpanded;
+  // An empty conversation has no "latest" to return to: scrolling its Home
+  // intro (the picked type's gallery) is browsing, not falling behind a run.
+  const showJumpToLatest = scrolledFromBottom && !queuedSendExpanded && displayMessages.length > 0;
   const planPillVisible = planPillEligible && !scrolledFromBottom;
   const retryAssistant = retryableAssistantMessage(
     displayMessages,
@@ -2540,6 +2557,14 @@ export function ChatPane({
     [projectFiles, projectMetadata?.entryFile, projectMetadata?.importedFrom],
   );
   const showImportedFolderArtifacts = projectMetadata?.importedFrom === 'folder';
+  // While the empty conversation shows Home's opening, the composer wears
+  // Home's input too (per product: 这页面所有的状态都使用首页的).
+  const homeComposer = displayMessages.length === 0 && !loading
+    && !showImportedFolderArtifacts && !workspaceComposerDocked;
+  useEffect(() => {
+    onHomeComposerChange?.(homeComposer);
+  }, [homeComposer, onHomeComposerChange]);
+  useEffect(() => () => onHomeComposerChange?.(false), [onHomeComposerChange]);
   const composerDraftStorageKey = projectId && activeConversationId
     ? `od:chat-composer:draft:${projectId}:${activeConversationId}`
     : undefined;
@@ -3759,6 +3784,7 @@ export function ChatPane({
           hover to expand); they no longer sit as quick pills above the input. */}
     <ChatComposer
       ref={composerRef}
+      onPluginCleared={() => setStartChipId(null)}
       quotes={quotes}
       onClearQuotes={clearQuotes}
       onRestoreQuotes={setQuotes}
@@ -3832,7 +3858,9 @@ export function ChatPane({
       currentSkillId={currentSkillId}
       onProjectSkillChange={onProjectSkillChange}
       pinnedPluginId={activePluginSnapshot?.pluginId ?? null}
-      footerAccessory={composerFooterAccessory}
+      footerAccessory={homeComposer && composerHomeFooterAccessory ? composerHomeFooterAccessory : composerFooterAccessory}
+      homeInput={homeComposer}
+      homeTypeChipId={startChipId}
       leadingAccessory={composerLeadingAccessory}
       currentDesignSystemId={currentDesignSystemId}
       onActiveDesignSystemChange={onActiveDesignSystemChange}
@@ -3849,18 +3877,46 @@ export function ChatPane({
     ? { minHeight: composerSlotHeight > 0 ? composerSlotHeight : undefined }
     : undefined;
   const floatingConversation = workspaceComposerDocked && workspaceConversationExpanded && !minimized && shouldPortalComposer;
-  const floatingMaxHeight = composerPortalRect && typeof window !== 'undefined'
-    ? Math.max(0, window.innerHeight - composerPortalRect.top - composerPortalRect.bottom - 16) : 480;
+  const dockRect = composerPortalRect && workspaceComposerDocked ? {
+    ...composerPortalRect,
+    left: composerPortalRect.left + dockOffset.x,
+    bottom: composerPortalRect.bottom - dockOffset.y,
+  } : composerPortalRect;
+  const dragDock = (dx: number, dy: number) => {
+    const layer = composerLayerRef.current;
+    if (!composerPortalRect || !layer || typeof window === 'undefined') return;
+    // Keep the whole card on screen, and its top below the pane's top edge
+    // (the expanded conversation's max height is measured from there).
+    const { height } = layer.getBoundingClientRect();
+    const margin = 8;
+    setDockOffset((prev) => ({
+      x: Math.min(window.innerWidth - margin - composerPortalRect.width - composerPortalRect.left,
+        Math.max(margin - composerPortalRect.left, prev.x + dx)),
+      y: Math.min(composerPortalRect.bottom - margin,
+        Math.max(composerPortalRect.bottom + height + composerPortalRect.top + margin - window.innerHeight, prev.y + dy)),
+    }));
+  };
+  const floatingMaxHeight = dockRect && typeof window !== 'undefined'
+    ? Math.max(0, window.innerHeight - dockRect.top - dockRect.bottom - 16) : 480;
   const floatingMinHeight = Math.min(floatingMaxHeight, Math.max(280, composerSlotHeight + 108));
   const floatingHeight = Math.min(floatingMaxHeight, Math.max(floatingMinHeight,
     floatingConversationHeight ?? Math.min(480, typeof window !== 'undefined' ? window.innerHeight * 0.6 : 480)));
   const conversationTitle = conversations.find(item => item.id === activeConversationId)?.title || t('chat.untitledConversation');
-  const floatingPaneStyle: CSSProperties | undefined = floatingConversation && composerPortalRect ? {
-    left: composerPortalRect.left,
-    bottom: composerPortalRect.bottom,
-    width: composerPortalRect.width,
+  // The chat dock's header (WorkspaceTabsBar) names this conversation. A new,
+  // still-empty one names nothing: it is Home's page, and Home has no title
+  // above it (per product: 新建会话…上面也不加任何对话内容).
+  const headerConversationTitle = displayMessages.length > 0 ? conversationTitle : '';
+  useEffect(() => {
+    if (!projectId) return undefined;
+    publishActiveConversationTitle({ projectId, conversationId: activeConversationId, title: headerConversationTitle });
+    return () => publishActiveConversationTitle(null);
+  }, [projectId, activeConversationId, headerConversationTitle]);
+  const floatingPaneStyle: CSSProperties | undefined = floatingConversation && dockRect ? {
+    left: dockRect.left,
+    bottom: dockRect.bottom,
+    width: dockRect.width,
     height: floatingHeight,
-    maxHeight: `max(0px, calc(100dvh - ${composerPortalRect.top + composerPortalRect.bottom + 16}px))`,
+    maxHeight: `max(0px, calc(100dvh - ${dockRect.top + dockRect.bottom + 16}px))`,
   } : undefined;
 
   const historyControl = (
@@ -4126,9 +4182,27 @@ export function ChatPane({
                       />
                     ) : (
                       <>
-                        {/* #5517 leaves the empty conversation pane clean — no
-                            "start a conversation" title or starter template
-                            cards; only the connect-repo note below survives. */}
+                        {/* Home's opening (per product: 新会话的空白区显示首页内容).
+                            Picking a type fills this composer, not Home's. Left
+                            out while the composer is docked into the workspace
+                            (per product: 输入框缩小的时候这里边的内容都去掉) —
+                            the small floating card has no room for it. */}
+                        {workspaceComposerDocked ? null : <ConversationStartHero
+                          disabled={questionFormSubmitDisabled}
+                          activeChipId={startChipId}
+                          onUsePlugin={({ pluginId, chipId, draft, label }) => {
+                            const previous = startChipId;
+                            setStartChipId(chipId);
+                            // A pick swaps the cards for a long gallery: stop
+                            // following the bottom and open on the pinned
+                            // headline, the way Home's picked state does.
+                            releaseFollow();
+                            if (logRef.current) logRef.current.scrollTop = 0;
+                            void composerRef.current?.applyPlugin(pluginId, { draft, label }).then((applied) => {
+                              if (!applied) setStartChipId(previous);
+                            });
+                          }}
+                        />}
                         {connectRepoNeeded ? (
                           <div className="chat-connect-repo" role="note">
                             <span className="chat-connect-repo-icon" aria-hidden>
@@ -4722,6 +4796,7 @@ export function ChatPane({
             />
             <div
               className="chat-composer-slot"
+              data-home-composer={homeComposer || undefined}
               ref={composerSlotRef}
               style={composerSlotStyle}
               aria-hidden={shouldPortalComposer ? true : undefined}
@@ -4743,14 +4818,15 @@ export function ChatPane({
                   <div
                     {...chatSeam(`chat-composer-fixed-layer${workspaceComposerDocked ? ` ${dockStyles.dock}` : ''}`)}
                     data-testid="chat-composer-floating-layer"
+                    data-home-composer={homeComposer || undefined}
                     data-conversation-expanded={floatingConversation || undefined}
                     data-minimized={minimized || undefined}
                     data-workspace-conversation-owner={conversationFocusOwner}
                     ref={composerLayerRef}
                     data-chat-panel-top={composerPortalRect.top}
                     style={{
-                      left: composerPortalRect.left + (minimized ? composerPortalRect.width - 48 : 0),
-                      bottom: composerPortalRect.bottom,
+                      left: (dockRect ?? composerPortalRect).left + (minimized ? composerPortalRect.width - 48 : 0),
+                      bottom: (dockRect ?? composerPortalRect).bottom,
                       width: minimized ? 48 : composerPortalRect.width,
                       maxHeight: floatingPaneStyle?.maxHeight,
                       height: floatingPaneStyle?.height,
@@ -4773,6 +4849,7 @@ export function ChatPane({
                         owner={conversationFocusOwner}
                         expanded={floatingConversation}
                         onExpand={onExpandConversation}
+                        onDrag={dragDock}
                         onPlacementChange={onConversationPlacementChange}
                         onMinimize={() => {
                           setConversationMinimized(true);

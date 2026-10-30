@@ -156,6 +156,10 @@ vi.mock('../../src/components/EntryView', () => ({
       <div data-testid="entry-home-surface" />
       <div data-testid="amr-login-status">{String(amrLoggedIn)}</div>
       <div data-testid="entry-projects-loading">{String(Boolean(projectsLoading))}</div>
+      <button type="button" onClick={() => void onCreateProject({
+        name: 'Named blank project', skillId: null, designSystemId: null,
+        metadata: { kind: 'other', nameSource: 'user' }, startOnHome: true,
+      })}>Create named project at home</button>
       <button
         type="button"
         onClick={() => {
@@ -1182,6 +1186,30 @@ describe('App project creation routing', () => {
     ).toBe(false);
   });
 
+  it('opens named projects at Home and sends the first brief into that same project', async () => {
+    mockedListProjects.mockResolvedValue([]);
+    const named = { ...freshProject, name: 'Named blank project', metadata: { kind: 'other', nameSource: 'user' } } as Project;
+    mockedCreateProject.mockResolvedValue({ project: named, conversationId: 'conv-new' });
+    mockedPatchProject.mockResolvedValue({ ...named, pendingPrompt: 'Build the retained artifact prompt' });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Create named project at home' }));
+    await waitFor(() => expect(window.location.pathname).toBe('/projects/project-new'));
+    expect(screen.getByTestId('entry-home-surface')).toBeTruthy();
+    expect(screen.queryByTestId('project-view')).toBeNull();
+    expect(window.sessionStorage.getItem('od:auto-send-first:project-new')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create prompted project' }));
+    await screen.findByTestId('project-view');
+    expect(mockedCreateProject).toHaveBeenCalledTimes(1);
+    expect(mockedPatchProject).toHaveBeenCalledWith('project-new', expect.objectContaining({
+      name: 'Named blank project',
+      pendingPrompt: 'Build the retained artifact prompt',
+      metadata: expect.objectContaining({ nameSource: 'user', kind: 'prototype' }),
+    }), null);
+    expect(window.sessionStorage.getItem('od:auto-send-first:project-new')).toBe('1');
+    expect(window.sessionStorage.getItem('open-design:project-home-entry')).toBeNull();
+  });
+
   it('keeps a newly created project open when the initial project list resolves stale', async () => {
     const bootstrapProjects = deferred<Project[]>();
     mockedListProjects
@@ -1238,7 +1266,9 @@ describe('App project creation routing', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Create prompted project' }));
 
-    await screen.findByTestId('project-creation-pending-view');
+    const pendingView = await screen.findByTestId('project-creation-pending-view');
+    expect(pendingView.querySelector('.split')?.getAttribute('data-conversation-placement')).toBe('full');
+    expect(pendingView.querySelector('.workspace')).toBeNull();
     expect(requestedProjectId).toBeTruthy();
     expect(window.location.pathname).toBe(`/projects/${requestedProjectId}`);
     expect(screen.getByText('Build the retained artifact prompt')).toBeTruthy();

@@ -15,10 +15,12 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
+// A conversation with history: an empty one shows no jump button at all.
+const history = [{ id: 'u1', role: 'user' as const, content: '第一条消息', createdAt: 1 }];
 const queued = [{ id: 'q1', prompt: '第一条待发送消息' }, { id: 'q2', prompt: '第二条待发送消息' }];
 function chat(items = queued, conversationId = 'one') {
   return <I18nProvider initial="zh-CN"><ChatPane
-    messages={[]} streaming={false} error={null} queuedItems={items}
+    messages={history} streaming={false} error={null} queuedItems={items}
     projectId="p1" projectFiles={[]} activeConversationId={conversationId}
     onEnsureProject={async () => 'p1'} onSend={vi.fn()} onStop={vi.fn()}
     conversations={[]} onSelectConversation={vi.fn()} onDeleteConversation={vi.fn()}

@@ -2398,6 +2398,37 @@ a.avatar-item:visited {
 .split.is-resizing-chat iframe {
   pointer-events: none;
 }
+/* While dragging, the chat's log and composer keep the widths measured at the
+   drag's start (`--chat-resize-*-width` on the root, set in ProjectView): the
+   card resizes around them and clips, and nothing inside reflows until
+   release. The composer's slot and its fixed layer still follow the card —
+   the layer is positioned from the slot — so only the composer box inside
+   them is pinned, and both clip it. `contain: paint` because the composer's
+   surface is positioned and `overflow` alone would not clip it. */
+.split.is-resizing-chat .split-chat-slot {
+  contain: paint;
+}
+.split.is-resizing-chat .split-chat-slot .pane {
+  overflow: hidden;
+}
+.split.is-resizing-chat .split-chat-slot .pane > .chat-log-wrap {
+  flex-shrink: 0;
+  width: var(--chat-resize-log-width, 100%);
+  min-width: var(--chat-resize-log-width, 0);
+  max-width: none;
+}
+.od-resizing-chat .chat-composer-fixed-layer,
+.split.is-resizing-chat .split-chat-slot .chat-composer-slot {
+  overflow: hidden;
+  contain: paint;
+}
+.od-resizing-chat .chat-composer-fixed-layer .composer,
+.split.is-resizing-chat .split-chat-slot .composer {
+  flex-shrink: 0;
+  width: var(--chat-resize-composer-width, 100%);
+  min-width: var(--chat-resize-composer-width, 0);
+  max-width: none;
+}
 .split.is-resizing-chat .workspace,
 .split.is-resizing-chat .viewer,
 .split.split-focus .workspace,
@@ -2540,6 +2571,7 @@ a.avatar-item:visited {
   cursor: col-resize;
   background: transparent;
   touch-action: none;
+  -webkit-app-region: no-drag;
 }
 .split > .workspace {
   grid-column: 3;
@@ -2560,20 +2592,19 @@ a.avatar-item:visited {
 .split-resize-handle::after {
   content: "";
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: calc(50% - 0.5px);
-  width: 1px;
+  top: 50%;
+  left: 50%;
+  width: 1.5px;
+  height: min(30%, 240px);
+  transform: translate(-50%, -50%);
+  border-radius: 1px;
   pointer-events: none;
   /* No static divider line — the floating chat card's own border + inset gap
      already separate it from the workspace. The bar only appears on hover /
      while resizing (rules below, higher specificity via :hover). */
-  background: transparent;
-  opacity: 0.9;
-  transition:
-    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
-    box-shadow 140ms cubic-bezier(0.23, 1, 0.32, 1),
-    opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
+  background: linear-gradient(to bottom, transparent, var(--brand) 50%, transparent);
+  opacity: 0;
+  transition: opacity 120ms var(--ease-out);
 }
 .split-resize-handle:hover,
 .split-resize-handle:focus-visible,
@@ -2583,7 +2614,6 @@ a.avatar-item:visited {
 .split-resize-handle:hover::after,
 .split-resize-handle:focus-visible::after,
 .split.is-resizing-chat .split-resize-handle::after {
-  background: color-mix(in srgb, var(--accent) 70%, var(--border));
   box-shadow: none;
   opacity: 1;
 }

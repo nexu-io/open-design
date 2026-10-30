@@ -36,6 +36,9 @@ import type {
 } from '@open-design/contracts';
 import { DesignSystemPicker } from './DesignSystemPicker';
 import type { SkillSummary } from '../types';
+import { useInlineLeadChip } from './useInlineLeadChip';
+import { ComposerBeam, useComposerBeam } from './home-hero/ComposerBeam';
+import { HomeComposerCard, HomeComposerInputCard } from './home-hero/HomeComposerCard';
 import { Icon, type IconName } from './Icon';
 import {
   FileTypeIcon,
@@ -58,6 +61,7 @@ import {
   type HomeHeroChip,
 } from './home-hero/chips';
 import { homeHeroChipLabel } from './home-hero/chip-labels';
+import { HeroPostcard } from './home-hero/HeroPostcard';
 import { RotatingTitleWord } from './home-hero/RotatingTitleWord';
 import { ScenarioArt } from './home-hero/ScenarioArt';
 import { useEdgeAutoScroll, EdgeScrollZones } from './home-hero/EdgeAutoScroll';
@@ -88,7 +92,8 @@ import { ContextChipHoverCard } from './ContextChipHoverCard';
 import { workspaceContextDetailLine, workspaceContextKindLabel } from './workspace-context';
 import { FigmaHelpModal } from './FigmaHelpModal';
 import { TemplatePicker } from './home-hero/TemplatePicker';
-import { TypePillRow } from './home-hero/TypePillRow';
+import { TypeEntryCards } from './home-hero/TypeEntryCards';
+import type { TemplateDemo } from './CommunityTemplatePreview';
 import { LibraryPicker } from './LibraryPicker';
 import { assetTitle } from './LibraryAssetMeta';
 import { libraryAssetRawUrl } from '../providers/registry';
@@ -237,6 +242,10 @@ interface Props {
   // the composer card — before the template section — so a brand-new user sees
   // their recommended entry without scrolling.
   recommendationSlot?: ReactNode;
+  /** Community content replaces the starter rows for a selected creation type. */
+  templateGallery?: ReactNode;
+  /** Community poster per type id for the entry row's covers. */
+  entryTypeCovers?: Partial<Record<string, TemplateDemo>>;
   /**
    * `page` is Home's own full column — headline, composer, type row, examples.
    * `dock` is the composer ALONE, for surfaces that want Home's input without
@@ -272,10 +281,6 @@ const HOME_MENTION_ALL_TAB_PREVIEW = 6;
 // short lead, and let the chip's `title` carry the full one. Counted in code
 // points, so an emoji or a surrogate pair spends one slot, not two.
 const LEAD_CHIP_TITLE_MAX_CHARS = 8;
-// Full-width CJK punctuation whose glyph sits in the left half of a full-em
-// advance, leaving the rest blank. A headline ending in one of these needs the
-// optical nudge above; anything else centres honestly.
-const FULL_WIDTH_TRAILING_PUNCTUATION = /[？！。，、；：）】」』]$/u;
 
 /** The slot a headline translation writes to opt into the rotating noun. A
  *  locale whose `homeHero.title` has no `{word}` renders as a plain sentence,
@@ -288,10 +293,6 @@ const TITLE_WORD_SLOT = '{word}';
  *  ("Let’s create wireframes?" — "a Image" is what article-splicing gets
  *  you). Each locale therefore owns both halves of its own sentence. */
 const TITLE_WORD_SEPARATOR = ',';
-
-function endsWithFullWidthPunctuation(value: string): boolean {
-  return FULL_WIDTH_TRAILING_PUNCTUATION.test(value.trim());
-}
 
 function leadChipTitle(title: string): string {
   const chars = Array.from(title);
@@ -409,6 +410,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onStartBlankProject,
     executionSwitcher,
     recommendationSlot,
+    templateGallery,
+    entryTypeCovers,
     variant = 'page',
     collapseSignal,
   },
@@ -420,16 +423,16 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   // below to drop the furniture (headline, type row, example grid) rather than
   // to change how the composer itself behaves.
   const isDock = variant === 'dock';
+  // Frosts the band over Home's scroll column once content slides under it.
+  const [contentScrolled, setContentScrolled] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [mentionTab, setMentionTab] = useState<HomeMentionTab>('all');
   const [hoveredPlugin, setHoveredPlugin] = useState<InstalledPluginRecord | null>(null);
   const [dragActive, setDragActive] = useState(false);
-  // Border beam on the prompt card (styles/home/composer-beam.css). Mirrors
-  // border-beam's own active/fading contract so blur fades the light out over
-  // 0.5s instead of cutting it; `fading` clears when that keyframe ends.
-  const [beamPhase, setBeamPhase] = useState<'idle' | 'active' | 'fading'>('idle');
+  // Border beam on the prompt card (shared with the project composer).
+  const beam = useComposerBeam();
   /* Does the composer card hold focus? Drives the docked bar's unfold (below).
-     Its own state rather than a read of `beamPhase`: that one is an ANIMATION
+     Its own state rather than a read of `beam.phase`: that one is an ANIMATION
      lifecycle (active -> fading -> idle) and lingers through the fade-out, so
      the bar would stay open for half a second after the caret left. */
   const [composerFocused, setComposerFocused] = useState(false);
@@ -442,7 +445,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
      the composer card's `onPointerDownCapture`): the caret is often still in
      the field when the user clicks back, and then no focus event fires. */
   const [forcedCollapsed, setForcedCollapsed] = useState(false);
-  const beamRef = useRef<HTMLDivElement | null>(null);
   const [libraryPickerOpen, setLibraryPickerOpen] = useState(false);
   const [projectReferenceOpen, setProjectReferenceOpen] = useState(false);
   const [figmaHelpOpen, setFigmaHelpOpen] = useState(false);
@@ -465,29 +467,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   // The scenario the placeholder carousel is currently showing. A Send on an
   // empty composer submits THIS scenario's text + template (see handleSend).
   const [carouselScenario, setCarouselScenario] = useState<PlaceholderScenario | null>(null);
-  // The beam's light rides `offset-path`, and a `path()` cannot be written in
-  // terms of the element's own size — border-beam measures the box in JS for
-  // exactly this reason. A ResizeObserver (rather than the original's window
-  // resize listener) also catches the card growing as the prompt wraps.
-  useEffect(() => {
-    const node = beamRef.current;
-    if (!node) return;
-    const syncPath = () => {
-      node.style.setProperty(
-        '--beam-path',
-        `path("M 0 0 H ${node.offsetWidth} V ${node.offsetHeight} H 0 V 0")`,
-      );
-    };
-    syncPath();
-    // jsdom has no ResizeObserver; the one sync above is the whole answer in a
-    // test render, where nothing resizes. Guarded the same way the row-measure
-    // observer further down already is — unguarded, this throws out of a
-    // passive effect and takes the whole HomeHero render with it.
-    if (typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(syncPath);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [beamPhase]);
   const editorRef = useRef<LexicalComposerInputHandle | null>(null);
   const promptEditorRef = useRef<HTMLDivElement | null>(null);
   // A single-line chip row leads the prompt's FIRST line and every wrapped line
@@ -1425,56 +1404,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     contextOnlyPlugins.length > 0 ||
     contextOnlyMcpServers.length > 0 ||
     contextOnlyConnectors.length > 0;
-  useEffect(() => {
-    const flow = promptFlowRef.current;
-    if (!flow) return;
-    const clear = () => {
-      flow.classList.remove('is-chip-inline');
-      flow.style.removeProperty('--home-hero-chip-w');
-      flow.style.removeProperty('--home-hero-chip-text-left');
-      flow.style.removeProperty('--home-hero-chip-lead');
-    };
-    const row = chipRowRef.current;
-    if (!row) {
-      clear();
-      return;
-    }
-    if (typeof ResizeObserver === 'undefined') return;
-    const apply = () => {
-      const rect = row.getBoundingClientRect();
-      // Inline mode only fits a SINGLE line of chips: the row is taken out of
-      // flow there, so a wrapped (multi-line) row would overlap the prompt text
-      // instead of pushing it down. Anything taller falls back to the stacked
-      // row above the editor.
-      if (rect.width <= 0 || rect.height > 36) {
-        clear();
-        return;
-      }
-      // Wrapped lines align with the chip's own content edge (its icon), not
-      // its border box — measured so a padding/border change can't desync it.
-      const content = row.querySelector('.home-hero__active-icon, .home-hero__active-label');
-      const textLeft = content ? content.getBoundingClientRect().left - rect.left : 0;
-      // The chip is taller than one line of prompt text, so both starting at the
-      // flow's top would leave the first line riding high against it. Drop the
-      // text by half the difference instead of lifting the chip: a negative
-      // offset would be clipped by this flow's own `overflow`.
-      const editable = flow.querySelector('.composer-editable, [contenteditable="true"]');
-      const lineHeight = editable ? parseFloat(getComputedStyle(editable).lineHeight) : Number.NaN;
-      const lead = Number.isFinite(lineHeight) ? Math.max(0, (rect.height - lineHeight) / 2) : 0;
-      flow.style.setProperty('--home-hero-chip-w', `${rect.width}px`);
-      flow.style.setProperty('--home-hero-chip-text-left', `${Math.max(0, textLeft)}px`);
-      flow.style.setProperty('--home-hero-chip-lead', `${lead}px`);
-      flow.classList.add('is-chip-inline');
-    };
-    apply();
-    if (typeof ResizeObserver === 'undefined') return clear;
-    const observer = new ResizeObserver(apply);
-    observer.observe(row);
-    return () => {
-      observer.disconnect();
-      clear();
-    };
-  }, [showActivePluginRow]);
+  useInlineLeadChip(promptFlowRef, chipRowRef, showActivePluginRow, '--home-hero-chip');
   /* Headline: a locale opts into the rotating noun by writing `{word}` into
      its own `homeHero.title`. Splitting on the placeholder keeps the whole
      sentence — particles, punctuation, word order — inside the translation
@@ -1505,10 +1435,48 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     : undefined;
   let optionRenderIndex = 0;
 
+  const headline = (
+    <>
+      {/* The heading hangs on the left edge of the 820px column the entry
+          cards and the picked type's gallery share (per product), never on its
+          centre line. */}
+      <h1 className="home-hero__title home-hero__heading--start" aria-label={titleAriaLabel}>
+        {/* A locale opts into the rotating noun by putting `{word}` in its
+            own headline string — en / zh-CN / zh-TW do; the other 16 keep a
+            plain sentence and fall straight through to the `else`. Nothing
+            here knows which locale is which, so any translation can join
+            later by editing one string. */}
+        {titleParts ? (
+          <>
+            {titleParts.lead}
+            <RotatingTitleWord
+              words={titleRotatingWords}
+              pinned={titlePinnedWord}
+              colorByWord={{
+                [homeHeroChipLabel('prototype', t)]: '#028BFD',
+                [homeHeroChipLabel('deck', t)]: '#FB9942',
+                [homeHeroChipLabel('document', t)]: '#4AC26B',
+              }}
+            />
+            {titleParts.tail}
+          </>
+        ) : (
+          t('homeHero.title')
+        )}
+      </h1>
+      {/* One quiet line under the headline (per product). */}
+      <p className="home-hero__subtitle home-hero__heading--start">
+        {t('homeHero.subtitle')}
+      </p>
+    </>
+  );
+
+  const dockCollapsed = isDock && ((carouselActive && !composerFocused) || forcedCollapsed);
+
   return (
     <section
       ref={homeHeroRef}
-      className={`home-hero${isDock ? ' home-hero--dock' : ''}`}
+      className={`home-hero${isDock ? ' home-hero--dock' : ''}${contentScrolled && !isDock ? ' is-content-scrolled' : ''}`}
       data-testid="home-hero"
       data-variant={variant}
       /* Docked only: an untouched, unfocused composer shows its input line and
@@ -1525,142 +1493,115 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
          included, because the ask is that scrolling always puts the bar back
          down. Only the first branch still asks `carouselActive`; it is what
          keeps a field with content open once the caret leaves it. */
-      data-collapsed={
-        isDock && ((carouselActive && !composerFocused) || forcedCollapsed) ? 'true' : undefined
-      }
+      data-collapsed={dockCollapsed ? 'true' : undefined}
     >
+      <div
+        className={`home-hero__content${activeChipId || isDock ? '' : ' home-hero__content--centered'}`}
+        onScroll={(event) => setContentScrolled(event.currentTarget.scrollTop > 0)}
+      >
       {/* Hero header: one plain question. The animated pixel-scan wordmark that
           used to stand here is gone (per product) — the headline carries the
           moment instead, with no motion behind it. */}
-      {/* The headline is box-centred like everything else in this column, but a
-          line that ENDS in full-width CJK punctuation carries ~half an em of
-          blank inside that last glyph's advance — so the ink reads ~0.27em
-          left of the composer card below it. The modifier pulls the margin box
-          in by that blank (see home-hero.css); flex cross-axis centring then
-          lands the ink on the card's own centre line. Keyed off the string, not
-          the locale: any translation that ends in ？！。 gets it, and Latin
-          headlines (a narrow "?") are left alone. */}
       {isDock ? null : (
-        <>
-          <h1
-            className={
-              'home-hero__title' +
-              (endsWithFullWidthPunctuation(t('homeHero.title'))
-                ? ' home-hero__title--optical-trim'
-                : '')
-            }
-            aria-label={titleAriaLabel}
-          >
-            {/* A locale opts into the rotating noun by putting `{word}` in its
-                own headline string — en / zh-CN / zh-TW do; the other 16 keep a
-                plain sentence and fall straight through to the `else`. Nothing
-                here knows which locale is which, so any translation can join
-                later by editing one string. */}
-            {titleParts ? (
-              <>
-                {titleParts.lead}
-                <RotatingTitleWord
-                  words={titleRotatingWords}
-                  pinned={titlePinnedWord}
-                  colorByWord={{
-                    [homeHeroChipLabel('prototype', t)]: '#028BFD',
-                    [homeHeroChipLabel('deck', t)]: '#FB9942',
-                    [homeHeroChipLabel('document', t)]: '#4AC26B',
-                  }}
-                />
-                {titleParts.tail}
-              </>
-            ) : (
-              t('homeHero.title')
-            )}
-          </h1>
-          {/* One quiet line under the headline (per product). */}
-          <p className="home-hero__subtitle">{t('homeHero.subtitle')}</p>
-        </>
+        <div className="home-hero__heading-sticky">
+          {activeChipId ? (
+            headline
+          ) : (
+            /* While the entry cards show, the headline pair hangs on their left
+               edge and the postcard ornament sits on its right, sized to the
+               pair's height. */
+            <div className="home-hero__heading-row home-hero__heading--start">
+              <div className="home-hero__heading-text">{headline}</div>
+              <HeroPostcard />
+            </div>
+          )}
+        </div>
       )}
 
-      {/* #5517 wraps the input card + workdir row into one visible composer
-          card so they read as a single surface. */}
-      <div
-        className="home-hero__composer-card"
-        data-testid="home-hero-composer-card"
-        /* Docked: a pointer anywhere on the bar opens it (per product: 我的鼠标
-           只要点击这个模块包含输入框就展开). `onFocus` below cannot carry this on
-           its own — a scroll folds the bar WITHOUT blurring the editor (that is
-           deliberate: the caret has to survive a scroll), so the caret is
-           usually STILL in the field when the user clicks back, no focus event
-           fires, and the bar had no way to reopen. Capture phase, because the
-           editor handles its own pointerdown.
-           Anything focusable in the bar keeps its own click — only the inert
-           parts hand the caret to the field, which is also what makes the
-           reopen stick: `carouselActive && !composerFocused` would fold it
-           straight back if nothing took focus. */
-        onPointerDownCapture={
-          isDock
-            ? (event) => {
-                setForcedCollapsed(false);
-                const target = event.target;
-                if (
-                  target instanceof Element &&
-                  target.closest(
-                    'button, a, input, textarea, select, [role="button"], [contenteditable="true"]',
-                  )
-                ) {
-                  return;
-                }
-                editorRef.current?.focus();
-              }
-            : undefined
-        }
-        /* Focus anywhere in the BAR holds it open — not just in the input card
-           (per product: 没有输入时点工作目录，面板没弹出，直接收起来了). The
-           工作目录 trigger, the execution switcher and the pickers' panels are
-           SIBLINGS of the input card, so tracking focus on that card alone read
-           a click on any of them as a blur: on an empty field `carouselActive`
-           is still true, the bar folded, `display: none` took the row away
-           mid-click, and the panel never got to open.
-           focusin/focusout bubble, so this outer box hears every one of them,
-           and `contains()` stops a move BETWEEN the bar's own controls from
-           counting as leaving. The beam stays on the input card's own handlers
-           below — it traces THAT box, not this one. */
-        onFocus={() => {
-          setComposerFocused(true);
-          setForcedCollapsed(false);
-        }}
-        onBlur={(event) => {
-          const next = event.relatedTarget;
-          if (next instanceof Node && event.currentTarget.contains(next)) return;
-          setComposerFocused(false);
-        }}
+      {activeChipId || isDock ? null : (
+        <TypeEntryCards
+          chips={templateChips}
+          disabled={pluginsLoading || pendingChipId !== null || pendingPluginId !== null}
+          labelFor={(id) => homeHeroChipLabel(id, t)}
+          descriptionFor={(id) => homeHeroChipDescription(id, t)}
+          covers={entryTypeCovers}
+          onPick={handlePickTaskChip}
+        />
+      )}
+
+      {/* No second-level category row under a picked type (per product,
+          2026-08-25): picking a type already narrows the examples, and a
+          second filter strip between the composer and them re-asked a
+          question the pill had just answered. The examples below now show the
+          picked type's full set. */}
+
+      {isDock ? null : recommendationSlot}
+
+      {isDock ? null : templateGallery ?? (examplePluginPresets.length > 0 && activeChipId ? (
+        <PluginPromptPresets
+          chipId={activeChipId}
+          plugins={examplePluginPresets}
+          activePluginId={activePluginRecord?.id ?? null}
+          pendingPluginId={pendingPluginId}
+          locale={locale}
+          onPick={pickExamplePluginPreset}
+          onPreview={onOpenPluginDetails}
+          pulseFirstPreset={guidePulseFirstPreset}
+          workspaceContext={workspaceContext}
+        />
+      ) : activePromptExamples.length > 0 ? (
+        <div
+          className="home-hero__prompt-examples"
+          data-testid="home-hero-prompt-examples"
+        >
+          <div
+            className={`home-hero__prompt-examples-grid${activeChipId === 'web-clone' ? ' home-hero__prompt-examples-grid--sites' : ''}`}
+          >
+            {activePromptExamples.map((example, index) =>
+              webCloneExampleSite(example) ? (
+                <WebClonePromptExampleCard
+                  key={example}
+                  example={example}
+                  pulse={guidePulseFirstPreset && index === 0}
+                  onPick={usePromptExample}
+                />
+              ) : (
+                <button
+                  key={example}
+                  type="button"
+                  className={`home-hero__prompt-example${guidePulseFirstPreset && index === 0 ? ' home-hero__attention-sheen' : ''}`}
+                  data-testid="home-hero-prompt-example"
+                  onClick={() => usePromptExample(example)}
+                >
+                  <span>{example}</span>
+                </button>
+              ),
+            )}
+          </div>
+        </div>
+      ) : null)}
+
+      {error ? (
+        <div role="alert" className="home-hero__error">
+          {error}
+        </div>
+      ) : null}
+      </div>
+
+      <HomeComposerCard
+        docked={isDock}
+        collapsed={dockCollapsed}
+        focusEditor={() => editorRef.current?.focus()}
+        onExpanded={() => setForcedCollapsed(false)}
+        onFocusedChange={setComposerFocused}
       >
-      <div
-        className={`home-hero__input-card${
-          authoringLayoutActive ? ' home-hero__input-card--compact-authoring' : ''
-        }${dragActive ? ' is-drag-active' : ''}`}
+      <HomeComposerInputCard
+        compactAuthoring={authoringLayoutActive}
+        dragActive={dragActive}
         style={inputCardStyle}
-        onFocus={() => {
-          setBeamPhase('active');
-        }}
-        onBlur={(event) => {
-          // focusout bubbles; ignore focus moving BETWEEN the card's own
-          // controls (editor → plus menu → send button).
-          const next = event.relatedTarget;
-          if (next instanceof Node && event.currentTarget.contains(next)) return;
-          setBeamPhase((phase) => (phase === 'active' ? 'fading' : phase));
-        }}
-        onDragEnter={(event) => {
-          if (event.dataTransfer.types.includes('Files')) setDragActive(true);
-        }}
-        onDragOver={(event) => {
-          if (!event.dataTransfer.types.includes('Files')) return;
-          event.preventDefault();
-          setDragActive(true);
-        }}
-        onDragLeave={(event) => {
-          const nextTarget = event.relatedTarget;
-          if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
-          setDragActive(false);
-        }}
+        onFocus={beam.onFocus}
+        onBlur={beam.onBlur}
+        onDragActiveChange={setDragActive}
         onDrop={handleDrop}
       >
         <div className="home-hero__prompt-flow" ref={promptFlowRef}>
@@ -2415,24 +2356,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             </button>
           </div>
         </div>
-        {beamPhase === 'idle' ? null : (
-          <div
-            ref={beamRef}
-            className="home-hero__composer-beam"
-            data-beam="composer"
-            data-active={beamPhase === 'active' ? '' : undefined}
-            data-fading={beamPhase === 'fading' ? '' : undefined}
-            aria-hidden
-            onAnimationEnd={(event) => {
-              if (event.animationName.includes('beam-fade-out')) setBeamPhase('idle');
-            }}
-          >
-            {/* The travelling light — a real node, since it carries its own
-                offset-path animation. */}
-            <div data-beam-bloom />
-          </div>
-        )}
-      </div>
+        <ComposerBeam phase={beam.phase} onFaded={() => beam.setPhase('idle')} />
+      </HomeComposerInputCard>
 
       {/* Accessory row under the composer card: just the working directory now
           — the upload entry moved up into the card's send cluster (per product)
@@ -2540,84 +2465,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           </ContextChipHoverCard>
         ))}
       </div>
-      </div>
+      </HomeComposerCard>
 
-      {/* Creation types, horizontal, under the working-directory row (per
-          product, 2026-08-21). They spent a round as a dropdown pill inside the
-          composer's foot row; out here the whole catalog is one glance.
-
-          The row is the EMPTY state's whole job: an untouched Home shows this
-          and nothing else. Picking a type retires it — the composer's pill now
-          names the choice, the categories below narrow it, and the examples
-          answer it, so a second full catalog under all three was just repeating
-          the question. The pill's × brings the row back. */}
-      {activeChipId || isDock ? null : (
-        <TypePillRow
-          chips={templateChips}
-          activeChipId={activeChipId}
-          disabled={pluginsLoading || pendingChipId !== null || pendingPluginId !== null}
-          labelFor={(id) => homeHeroChipLabel(id, t)}
-          onPick={handlePickTaskChip}
-        />
-      )}
-
-      {/* No second-level category row under a picked type (per product,
-          2026-08-25): picking a type already narrows the examples, and a
-          second filter strip between the composer and them re-asked a
-          question the pill had just answered. The examples below now show the
-          picked type's full set. */}
-
-      {isDock ? null : recommendationSlot}
-
-      {isDock ? null : examplePluginPresets.length > 0 && activeChipId ? (
-        <PluginPromptPresets
-          chipId={activeChipId}
-          plugins={examplePluginPresets}
-          activePluginId={activePluginRecord?.id ?? null}
-          pendingPluginId={pendingPluginId}
-          locale={locale}
-          onPick={pickExamplePluginPreset}
-          onPreview={onOpenPluginDetails}
-          pulseFirstPreset={guidePulseFirstPreset}
-          workspaceContext={workspaceContext}
-        />
-      ) : activePromptExamples.length > 0 ? (
-        <div
-          className="home-hero__prompt-examples"
-          data-testid="home-hero-prompt-examples"
-        >
-          <div
-            className={`home-hero__prompt-examples-grid${activeChipId === 'web-clone' ? ' home-hero__prompt-examples-grid--sites' : ''}`}
-          >
-            {activePromptExamples.map((example, index) =>
-              webCloneExampleSite(example) ? (
-                <WebClonePromptExampleCard
-                  key={example}
-                  example={example}
-                  pulse={guidePulseFirstPreset && index === 0}
-                  onPick={usePromptExample}
-                />
-              ) : (
-                <button
-                  key={example}
-                  type="button"
-                  className={`home-hero__prompt-example${guidePulseFirstPreset && index === 0 ? ' home-hero__attention-sheen' : ''}`}
-                  data-testid="home-hero-prompt-example"
-                  onClick={() => usePromptExample(example)}
-                >
-                  <span>{example}</span>
-                </button>
-              ),
-            )}
-          </div>
-        </div>
-      ) : null}
-
-      {error ? (
-        <div role="alert" className="home-hero__error">
-          {error}
-        </div>
-      ) : null}
       {previewHomeFile && previewHomeFileUrl ? createPortal(
         <div
           className="staged-preview-modal"
@@ -4131,7 +3980,7 @@ function ShortcutsMenu({
 }
 
 // Scenario subtitle shown under the title on the illustrated card rail.
-function homeHeroChipDescription(chipId: string, t: ReturnType<typeof useT>): string {
+export function homeHeroChipDescription(chipId: string, t: ReturnType<typeof useT>): string {
   switch (chipId) {
     case 'prototype': return t('homeHero.chip.prototypeDesc');
     case 'web-clone': return t('homeHero.chip.webCloneDesc');

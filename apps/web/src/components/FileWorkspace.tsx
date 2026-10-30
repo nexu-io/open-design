@@ -355,6 +355,14 @@ interface Props {
   onRenameConversation?: (id: string, title: string) => void;
   onConversationSessionModeChange?: (id: string, mode: ChatSessionMode) => void;
   onNewConversation?: () => void;
+  /** Opens the "+" launcher under a control outside the tab strip (the
+   *  full-width chat's ⊕, while this workspace is hidden). */
+  externalLauncherAnchor?: HTMLElement | null;
+  /** The external launcher closed; `picked` when the user chose an item. */
+  onExternalLauncherClose?: (picked: boolean) => void;
+  /** The user closed the strip's last tab (per product, the preview then
+   *  collapses). Never fires for tabs that vanish on their own. */
+  onLastTabClosed?: () => void;
   activeConversationChat?: ActiveConversationChatState;
   onActiveContextChange?: (context: WorkspaceContextItem | null) => void;
   onWorkspaceContextsChange?: (contexts: WorkspaceContextItem[]) => void;
@@ -538,7 +546,7 @@ const BLANK_PAGE_PRESETS: ProjectPagePreset[] = [
     category: 'prototype',
     titleKey: 'homeHero.chip.prototype',
     descriptionKey: 'homeHero.chip.prototypeDesc',
-    icon: 'layout',
+    icon: 'pencil-ruler',
     fileBaseName: 'prototype',
     source: 'blank',
     featured: true,
@@ -1102,7 +1110,7 @@ const PROJECT_PAGE_CATEGORIES: Array<{
   labelKey: keyof Dict;
 }> = [
   { id: 'slides', icon: 'present', labelKey: 'homeHero.chip.deck' },
-  { id: 'prototype', icon: 'layout', labelKey: 'homeHero.chip.prototype' },
+  { id: 'prototype', icon: 'pencil-ruler', labelKey: 'homeHero.chip.prototype' },
   { id: 'wireframe', icon: 'grid', labelKey: 'homeHero.chip.wireframe' },
   { id: 'mobile', icon: 'smartphone', labelKey: 'homeHero.chip.mobile' },
   { id: 'document', icon: 'file-text', labelKey: 'homeHero.chip.document' },
@@ -1371,6 +1379,9 @@ export function FileWorkspace({
   onRenameConversation,
   onConversationSessionModeChange,
   onNewConversation,
+  externalLauncherAnchor = null,
+  onExternalLauncherClose,
+  onLastTabClosed,
   activeConversationChat,
   onActiveContextChange,
   onWorkspaceContextsChange,
@@ -1473,6 +1484,7 @@ export function FileWorkspace({
   // "+" launcher (file search + registry-driven create-new actions:
   // Side Chat, Terminal, Browser).
   const [launcherOpen, setLauncherOpen] = useState(false);
+  const launcherPickedRef = useRef(false);
   const [projectShareMenuOpen, setProjectShareMenuOpen] = useState(false);
   const [projectShareAccess, setProjectShareAccess] = useState<'private' | 'workspace'>('private');
   const [projectShareAccessMenuOpen, setProjectShareAccessMenuOpen] = useState(false);
@@ -1507,6 +1519,7 @@ export function FileWorkspace({
   const draggedTabNameRef = useRef<string | null>(null);
   const browserTabSequenceRef = useRef(0);
   const openFileRef = useRef<(name: string) => void>(() => {});
+  const newTabPickPendingRef = useRef(false);
   const designFilesNavProjectIdRef = useRef(projectId);
   const designFilesNavRef = useRef<DesignFilesNavState>(createDefaultDesignFilesNavState());
   if (designFilesNavProjectIdRef.current !== projectId) {
@@ -1945,7 +1958,19 @@ export function FileWorkspace({
     });
   }
 
+  // Only an explicit Close empties the strip into a collapse; files that
+  // disappear on their own leave the preview where it is. Called in the same
+  // update as the close so the URL sync never sees an open preview whose
+  // active tab fell back to a hidden file.
+  function collapseIfClosingLastTab(key: string) {
+    if (visibleOrderedWorkspaceTabs.every((entry) =>
+      (entry.kind === 'browser' ? entry.browserTab.id : entry.name) === key)) {
+      onLastTabClosed?.();
+    }
+  }
+
   function closeBrowserTab(tabId: string) {
+    collapseIfClosingLastTab(tabId);
     const closingIndex = browserTabs.findIndex((tab) => tab.id === tabId);
     const nextTabs = browserTabs.filter((tab) => tab.id !== tabId);
     setBrowserTabs(nextTabs);
@@ -2136,8 +2161,12 @@ export function FileWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slideNavRequest]);
 
-  function openFile(name: string, options?: { forcePersist?: boolean }) {
+  function openFile(name: string, options?: { forcePersist?: boolean; atFront?: boolean }) {
     if (name === activeTab) return;
+    // A create action picked on the 新标签页 page opens its tab later, through
+    // here; it takes the new tab's place at the front like a picked file does.
+    const atFront = options?.atFront === true || newTabPickPendingRef.current;
+    newTabPickPendingRef.current = false;
     afterActiveManualEditSettles(() => {
       setUploadError(null);
       // Read from the ref after the async edit flush so a concurrent tab update
@@ -2149,9 +2178,11 @@ export function FileWorkspace({
       const nextBrowserTabs = isNewTab
         ? reanchorBrowserTabsToCurrentOrder(orderedWorkspaceTabs, browserTabs)
         : browserTabs;
-      const nextTabs = shouldPersistTab && !currentTabs.includes(name)
-        ? [...currentTabs, name]
-        : currentTabs;
+      const nextTabs = !shouldPersistTab
+        ? currentTabs
+        : atFront
+          ? [name, ...currentTabs.filter((tab) => tab !== name)]
+          : currentTabs.includes(name) ? currentTabs : [...currentTabs, name];
       if (nextBrowserTabs !== browserTabs) setBrowserTabs(nextBrowserTabs);
       commitTabsState(workspaceTabsState(nextTabs, name, nextBrowserTabs));
       setActiveTab(name);
@@ -2305,6 +2336,7 @@ export function FileWorkspace({
     const isPending = sketchEntry && !sketchEntry.persisted;
     const hasUnsavedStrokes = sketchEntry && (sketchEntry.dirty || !sketchEntry.persisted);
     if (hasUnsavedStrokes && !confirm(t('sketch.closeConfirm'))) return;
+    collapseIfClosingLastTab(name);
     if (isPending) {
       setSketches((curr) => {
         const next = { ...curr };
@@ -3374,6 +3406,20 @@ export function FileWorkspace({
   }, [projectId, streaming, designSystemProject]);
 
   const previewTabActive = activeTab === PREVIEW_TAB;
+  // 新标签页 (per product): a conversation with nothing made yet opens on a
+  // new tab — the "+" launcher laid out as the page — instead of the idle
+  // particle field. Picking from it turns that first tab into what was picked;
+  // closing it, or the conversation producing a page, takes it away. A run in
+  // flight (or one that stopped on a question or failure) still gets the field,
+  // which is where its state is reported.
+  const newTabKey = `${projectId}:${activeConversationId ?? ''}`;
+  const [newTabDismissedKey, setNewTabDismissedKey] = useState<string | null>(null);
+  const newTabAvailable = !viewerOnly
+    && conversationPreviewFile === null
+    && !streaming
+    && !runFailure
+    && !runQuestion
+    && newTabDismissedKey !== newTabKey;
   // Agent writes auto-open a file route. That route must keep the build surface
   // while streaming rather than bypassing it through the retained FileViewer.
   const liveFilePreviewActive = Boolean(streaming
@@ -4022,6 +4068,19 @@ export function FileWorkspace({
             clearTabDragState();
           }}
         >
+          {newTabAvailable ? (
+            <Tab
+              key="__new_tab__"
+              label={t('workspace.newTab')}
+              iconNameOverride="plus"
+              active={previewTabActive}
+              onActivate={() => {
+                requestChromeViewMode('preview');
+                setPersistedActive(PREVIEW_TAB);
+              }}
+              onClose={() => setNewTabDismissedKey(newTabKey)}
+            />
+          ) : null}
           {visibleOrderedWorkspaceTabs.map((entry) => {
             if (entry.kind === 'browser') {
               const browserTab = entry.browserTab;
@@ -4124,7 +4183,7 @@ export function FileWorkspace({
           data-testid="workspace-add-tab"
           onClick={() => setLauncherOpen((open) => !open)}
         >
-          <Icon name="plus-circle" size={18} />
+          <Icon name="plus" size={18} />
         </button>
       ) : null}
     </div>
@@ -4194,6 +4253,16 @@ export function FileWorkspace({
               </HybridTabLabel>
             </button>
           ) : null}
+          {/* Pure portal host, directly before 预览 (per product): the open
+              viewer drops its Reload in here. It lives in the fixed view row
+              rather than in a file tab, so the id stays unique and the host
+              never remounts as the active tab changes. Empty (and
+              CSS-collapsed) whenever nothing is open to reload. */}
+          <span
+            id={APP_CHROME_TAB_ACTION_ID}
+            className="ws-tab-action-slot"
+            data-app-chrome-tab-action="true"
+          />
           {/* What the project LOOKS like, before what it is made of. */}
           <button
             type="button"
@@ -4320,17 +4389,22 @@ export function FileWorkspace({
           ) : null}
         </div>
       </div>
-      {launcherOpen ? (
+      {launcherOpen || externalLauncherAnchor ? (
         <TabLauncherMenu
           /* Anchor the original launcher to the button above the card. */
-          anchor={launcherBtnRef.current ?? tabsBarRef.current}
+          anchor={externalLauncherAnchor ?? launcherBtnRef.current ?? tabsBarRef.current}
           files={visibleFiles}
           workspaceContexts={workspaceContexts}
           openTabNames={tabNames}
-          actions={launcherActions}
+          actions={externalLauncherAnchor
+            ? launcherActions.map(action => ({ ...action, run: (ctx: LauncherContext) => {
+              launcherPickedRef.current = true;
+              action.run(ctx);
+            } }))
+            : launcherActions}
           launcherContext={launcherContext}
-          onOpenFile={openFile}
-          onOpenTab={focusWorkspaceTab}
+          onOpenFile={name => { launcherPickedRef.current = true; openFile(name); }}
+          onOpenTab={tabId => { launcherPickedRef.current = true; focusWorkspaceTab(tabId); }}
           onTrack={(input) =>
             trackTabLauncherClick(analytics.track, {
               page_name: 'file_manager',
@@ -4339,7 +4413,12 @@ export function FileWorkspace({
               ...input,
             })
           }
-          onClose={() => setLauncherOpen(false)}
+          onClose={() => {
+            setLauncherOpen(false);
+            const picked = launcherPickedRef.current;
+            launcherPickedRef.current = false;
+            if (externalLauncherAnchor) onExternalLauncherClose?.(picked);
+          }}
         />
       ) : null}
       {/* Workspace-owned toasts anchor to this pane's bottom-center instead of
@@ -4475,6 +4554,48 @@ export function FileWorkspace({
                 {renderFileViewer(previewViewerFile, true)}
               </div>
             )
+          ) : newTabAvailable && previewTabActive && !liveFilePreviewActive ? (
+            // Nothing made in this conversation yet: the 新标签页 page. A pick
+            // retires the tab and puts what was picked first in the strip.
+            <div className="ws-new-tab-page" data-testid="workspace-new-tab-page">
+              <TabLauncherMenu
+                inline
+                anchor={null}
+                files={visibleFiles}
+                workspaceContexts={workspaceContexts}
+                openTabNames={tabNames}
+                actions={launcherActions.map((action) => ({
+                  ...action,
+                  run: (ctx: LauncherContext) => {
+                    setNewTabDismissedKey(newTabKey);
+                    newTabPickPendingRef.current = true;
+                    // Only the tab this pick opens; a dialog the user backs out
+                    // of must not reorder a later, unrelated open.
+                    window.setTimeout(() => { newTabPickPendingRef.current = false; }, 4000);
+                    return action.run(ctx);
+                  },
+                }))}
+                launcherContext={launcherContext}
+                onOpenFile={(name) => {
+                  setNewTabDismissedKey(newTabKey);
+                  openFile(name, { atFront: true });
+                }}
+                onOpenTab={(tabId) => {
+                  setNewTabDismissedKey(newTabKey);
+                  if (persistedTabs.includes(tabId)) openFile(tabId, { atFront: true });
+                  else focusWorkspaceTab(tabId);
+                }}
+                onTrack={(input) =>
+                  trackTabLauncherClick(analytics.track, {
+                    page_name: 'file_manager',
+                    area: 'tab_launcher',
+                    ...(projectId ? { project_id: projectId } : {}),
+                    ...input,
+                  })
+                }
+                onClose={() => {}}
+              />
+            </div>
           ) : (
             // No page yet, or a run is writing one: the pane says so, or shows
             // it being written.
@@ -6917,7 +7038,7 @@ function iconForPageKind(kind: ProjectPageKind): IconName {
     case 'slides':
       return 'present';
     case 'prototype':
-      return 'layout';
+      return 'pencil-ruler';
     case 'wireframe':
       return 'grid';
     case 'mobile':
@@ -8631,25 +8752,31 @@ const Tab = memo(function Tab({
     >
       {syncBadge ? (
         <span className="tab-icon">
-          <FileSyncBadge state={syncBadge} size={13} />
+          <FileSyncBadge state={syncBadge} size={14} />
         </span>
       ) : iconName ? (
         <span className="tab-icon" aria-hidden>
-          <Icon name={iconName} size={13} />
+          <Icon name={iconName} size={14} />
         </span>
       ) : null}
-      {/* Pure portal host, in the glyph's place ahead of the name: the open
-          viewer drops its Reload in here (per product) so the control and the
-          page it reloads read as one chip. Only the ACTIVE tab renders it —
-          that is what keeps the id unique, and a background page is not one
-          you are reloading. Empty (and CSS-collapsed) for every tab whose
-          surface has nothing to portal. */}
-      {active ? (
-        <span
-          id={APP_CHROME_TAB_ACTION_ID}
-          className="ws-tab-action-slot"
-          data-app-chrome-tab-action="true"
-        />
+      {/* Close takes the leading glyph's place while ANY tab is hovered (per
+          product). CSS swaps it in and hides the glyph rather than unmounting
+          it. */}
+      {closable && onClose ? (
+        <button
+          type="button"
+          className="ws-tab-lead-close od-tooltip"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+          }}
+          title={t('workspace.closeTab')}
+          data-tooltip={t('workspace.closeTab')}
+          data-tooltip-placement="bottom"
+          aria-label={t('workspace.closeTab')}
+        >
+          <Icon name="close" size={14} />
+        </button>
       ) : null}
       {/* Keep every file and browser name visible in the horizontal strip. */}
       <span className="ws-tab-anim">
@@ -8667,22 +8794,6 @@ const Tab = memo(function Tab({
         ) : null}
       </span>
       {trailing}
-      {active && closable && onClose ? (
-        <button
-          type="button"
-          className="ws-tab-close od-tooltip"
-          onClick={(e) => {
-            e.stopPropagation();
-            onClose();
-          }}
-          title={t('workspace.closeTab')}
-          data-tooltip={t('workspace.closeTab')}
-          data-tooltip-placement="bottom"
-          aria-label={t('workspace.closeTab')}
-        >
-          <Icon name="close" size={11} />
-        </button>
-      ) : null}
     </div>
   );
 });
@@ -8748,13 +8859,12 @@ function kindIconName(
   | null {
   if (kind === 'browser') return 'globe';
   if (kind === 'live-artifact') return 'file-code';
-  // A page being SHOWN wears no glyph at all (per product): its NAME is what
-  // tells the pages apart, and a chain repeated down a strip of pages says
-  // nothing about which one you want — it only eats the width the name needs.
-  // `<>` still takes over the moment the 代码 view does, because there the
-  // markup IS what the tab is showing and that is worth a glyph. Source files
-  // (`code`) are never anything but their markup, so they keep `<>` always.
-  if (kind === 'html') return rendering ? null : 'file-code';
+  // Every tab leads with a glyph (per product) — it is the box Close swaps
+  // into on hover. A page being SHOWN wears the plain file glyph; `<>` takes
+  // over the moment the 代码 view does, because there the markup IS what the
+  // tab is showing. Source files (`code`) are never anything but their
+  // markup, so they keep `<>` always.
+  if (kind === 'html') return rendering ? 'file' : 'file-code';
   if (kind === 'image') return 'image';
   if (kind === 'sketch') return 'pencil';
   if (kind === 'code') return 'file-code';

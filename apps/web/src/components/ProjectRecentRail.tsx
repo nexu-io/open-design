@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type Ref, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { isRailFolderProject, useRailConversationCounts } from './entry-nav-rail/railConversationCounts';
 import type { Project } from '../types';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { useI18n } from '../i18n';
 import { RailRecentSection } from './EntryNavRail';
-import { RailNewConversation, type RailConversationModel } from './entry-nav-rail/RailConversationTree';
+import { RailConversationsSection } from './entry-nav-rail/RailConversationsSection';
+import { RailNewConversation, RailNewProject, type RailConversationModel } from './entry-nav-rail/RailConversationTree';
 import { navigate } from '../router';
 import { Icon } from './Icon';
 import styles from './ProjectRecentRail.module.css';
@@ -30,13 +32,15 @@ function readRailWidth(): number {
   } catch { return RAIL_WIDTH_DEFAULT; }
 }
 
-export function ProjectRecentRail({ projects, context, onOpen, onRename, onDelete, conversationModel, controlsHostRef }: {
+export function ProjectRecentRail({ projects, context, onOpen, onRename, onDuplicate, onDelete, conversationModel, controlsHostRef, onNewConversation }: {
   projects: Project[];
+  onNewConversation?: () => void;
   controlsHostRef?: Ref<HTMLDivElement>;
   conversationModel?: RailConversationModel | null;
   context: WorkspaceCollabContext | null;
   onOpen: (id: string) => Promise<boolean> | Promise<void> | boolean | void;
   onRename: (id: string, name: string) => void;
+  onDuplicate?: (id: string) => Promise<void> | void;
   onDelete: (id: string) => Promise<boolean | void> | boolean | void;
 }) {
   const { t } = useI18n();
@@ -128,8 +132,16 @@ export function ProjectRecentRail({ projects, context, onOpen, onRename, onDelet
     try { localStorage.setItem(RAIL_OPEN_STORAGE_KEY, String(open)); } catch { /* Storage may be unavailable. */ }
     window.dispatchEvent(new CustomEvent(ENTRY_RAIL_STATE_EVENT, { detail: { open } }));
   }, [open]);
+  // 新建会话 (per product): inside a project — a 项目 folder — it adds a
+  // conversation to that project; from a 对话 (a conversation's own project)
+  // it starts a new 对话 (`onNewConversation`: a blank one-conversation
+  // project, listed under 对话).
+  const conversationCounts = useRailConversationCounts();
+  const currentProject = conversationModel ? projects.find(project => project.id === conversationModel.projectId) : undefined;
+  const inProjectFolder = Boolean(conversationModel)
+    && isRailFolderProject(currentProject, conversationCounts, conversationModel?.projectId);
   return (<>
-    <aside ref={railRef} id="project-recent-rail" className="project-recent-rail" data-open={open} style={{ width: open ? width : 0 }} aria-label={t('recentProjects.collectionRecent')}>
+    <aside ref={railRef} id="project-recent-rail" className="project-recent-rail" data-open={open} style={{ width: open ? width : 0 }} aria-label={t('chat.conversationsHeading')}>
       <div ref={actionsRef} className="project-recent-rail__actions entry-nav-rail__search-row" style={{ width: open ? width - 8 : 72 }}>
         <button type="button" className="entry-nav-rail__search" aria-label={t('common.search')} title={t('common.search')} onClick={() => setSearchOpen(true)}>
           <Icon name="search" size={16} />
@@ -141,12 +153,21 @@ export function ProjectRecentRail({ projects, context, onOpen, onRename, onDelet
       {open ? <div className="entry-nav-rail__panel">
         <div className="entry-nav-rail__group">
           <div className={recentSectionStyles.fixedAction}>
-            <RailNewConversation disabled={!conversationModel || conversationModel.creating} onClick={() => { void conversationModel?.onCreate(); }} />
+            <RailNewConversation
+              disabled={Boolean(inProjectFolder && conversationModel?.creating)}
+              onClick={inProjectFolder && conversationModel
+                ? () => { void conversationModel.onCreate(); }
+                : onNewConversation ?? (() => navigate({ kind: 'home', view: 'home' }))}
+            />
+            <RailNewProject />
           </div>
           <RailRecentSection
             section="personal"
             scrollable
-            afterList={<RailRecentSection projects={projects} workspaceContext={context} onOpen={async (id) => { await onOpen(id); }} onRename={onRename} onDelete={onDelete} label={t('recentProjects.collectionRecent')} />}
+            afterList={<RailConversationsSection projects={projects} context={context} model={conversationModel}
+              onOpenConversation={async (projectId, conversationId) => {
+                if (await onOpen(projectId) !== false) navigate({ kind: 'project', projectId, conversationId, fileName: null });
+              }} />}
             conversationModel={conversationModel}
             onOpenConversation={async (projectId, conversationId) => {
               if (await onOpen(projectId) !== false) navigate({ kind: 'project', projectId, conversationId, fileName: null });
@@ -155,8 +176,9 @@ export function ProjectRecentRail({ projects, context, onOpen, onRename, onDelet
             workspaceContext={context}
             onOpen={async (id) => { await onOpen(id); }}
             onRename={onRename}
+            onDuplicate={onDuplicate}
             onDelete={onDelete}
-            label={t('workspaceSwitcher.draftsTooltip')}
+            label={t('entry.navProjects')}
           />
         </div>
         <div ref={controlsHostRef} className={styles.footer} data-testid="project-rail-footer" />
@@ -175,7 +197,7 @@ export function ProjectRecentRail({ projects, context, onOpen, onRename, onDelet
       className={`project-recent-rail__resizer${resizing ? ' is-resizing' : ''}`}
       role="separator"
       aria-orientation="vertical"
-      aria-label={t('recentProjects.collectionRecent')}
+      aria-label={t('chat.conversationsHeading')}
       aria-controls="project-recent-rail"
       aria-valuemin={RAIL_WIDTH_MIN}
       aria-valuemax={RAIL_WIDTH_MAX}

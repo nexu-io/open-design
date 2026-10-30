@@ -13,20 +13,60 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior-y: contain;
+  /* Inherited — reset so an ancestor's value can't switch the pseudos off. */
+  scrollbar-color: auto;
+}
+
+/* Thumb only — no grey track/gutter. WebKit pseudos rather than
+   `scrollbar-width`/`scrollbar-color`: Chromium ignores these once either
+   standard property is set, and only the pseudos get the bar this narrow.
+   Keep a 10px hit area with a 4px painted thumb. Symmetric transparent
+   borders preserve both rounded ends instead of clipping one side. */
+.scrollBody::-webkit-scrollbar {
+  width: 10px;
+  background: transparent;
+}
+
+.scrollBody::-webkit-scrollbar-track {
+  background: transparent;
+  margin-block: 4px;
+}
+
+/* The thumb only paints while the list is hovered (or holds keyboard focus);
+   at rest the rail shows no bar at all. The 10px hit area stays reserved so
+   rows don't shift when it appears. */
+.scrollBody::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: var(--radius-pill);
+  min-height: 28px;
+}
+
+.scrollBody:hover::-webkit-scrollbar-thumb,
+.scrollBody:focus-within::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--text-muted) 40%, transparent);
+}
+
+.scrollBody::-webkit-scrollbar-thumb:hover {
+  /* Avoid background shorthand: it resets background-clip and paints the
+     transparent hit area, making the thumb abruptly wider on hover. */
+  background-color: color-mix(in srgb, var(--text-muted) 60%, transparent);
 }
 
 .fixedAction {
   flex-shrink: 0;
 }
 
-.toggle {
+/* `button.` matches the global `button.ghost { color }` so this color wins. */
+button.toggle {
   justify-content: flex-start;
   width: 100%;
   min-height: 36px;
   margin-top: 4px;
   padding: 8px 12px;
   border-radius: var(--radius-large, 8px);
-  color: var(--rail-ink-quiet);
+  color: #a3a3a3;
   font: inherit;
   font-size: 13px;
   font-weight: 500;

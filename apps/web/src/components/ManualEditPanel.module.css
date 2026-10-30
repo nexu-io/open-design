@@ -60,15 +60,21 @@
 
 .footerActions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 8px;
 }
 
+/* Undo / redo keep their icon width; 取消 · 重置 · 保存 share one row. */
 .footerActions :global(.manual-edit-footer-left),
 .footerActions :global(.manual-edit-footer-right) {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
+}
+.footerActions :global(.manual-edit-footer-left) {
+  grid-template-columns: repeat(2, 36px);
+}
+.footerActions :global(.manual-edit-footer-right) {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .footerActions :global(.manual-edit-footer-left .manual-edit-footer-btn),
@@ -89,7 +95,7 @@
   min-height: 36px;
   padding: 8px 4px;
   font-size: 13px;
-  white-space: normal;
+  white-space: nowrap;
 }
 
 /* Content fields use the navigation's 5% hover / 10% selected surfaces. */

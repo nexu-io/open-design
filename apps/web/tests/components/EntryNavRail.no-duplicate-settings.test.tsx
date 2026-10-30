@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // Settings-entry invariant: exactly one settings entry per identity state.
-// Settings lives in the shared navigation footer in both identity states.
+// Settings lives in the shared navigation, directly under 插件, in both identity states.
 //
 // History: 飞书 recvq4hGF7BJkI ("Personal 用户，左侧栏有 2 个设置入口") removed
 // the rail's own signed-out settings item because EntryShell's footer carried
@@ -70,19 +70,20 @@ describe('EntryNavRail settings entry', () => {
 
     const settings = screen.getByTestId('entry-settings-button');
     expect(screen.getAllByTestId('entry-settings-button')).toHaveLength(1);
-    expect(screen.getByTestId('primary-navigation-footer').contains(settings)).toBe(true);
+    expect(settings.previousElementSibling).toBe(screen.getByTestId('entry-nav-plugins'));
     fireEvent.click(settings);
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });
 
-  it('renders settings directly above the account module when signed in', () => {
+  it('renders settings directly under plugins when signed in', () => {
     const onOpenSettings = renderRail(signedInContext);
 
     const settings = screen.getByTestId('entry-settings-button');
     const stack = screen.getByTestId('primary-navigation-footer');
     expect(screen.getAllByTestId('entry-settings-button')).toHaveLength(1);
-    expect(stack?.firstElementChild).toBe(settings);
-    expect(stack?.lastElementChild).toBe(screen.getByTestId('primary-navigation-account-host'));
+    expect(settings.previousElementSibling).toBe(screen.getByTestId('entry-nav-plugins'));
+    expect(stack.contains(settings)).toBe(false);
+    expect(stack.lastElementChild).toBe(screen.getByTestId('primary-navigation-account-host'));
     expect(document.querySelector('.entry-nav-rail__team-section')?.contains(settings)).toBe(false);
     fireEvent.click(settings);
     expect(onOpenSettings).toHaveBeenCalledTimes(1);

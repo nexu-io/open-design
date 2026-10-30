@@ -17,6 +17,21 @@ export const ENTRY_RAIL_TOGGLE_EVENT = 'od:entry-rail-toggle';
 // EntryShell owns the ⌘K project search palette.
 export const ENTRY_SEARCH_OPEN_EVENT = 'od:entry-search-open';
 
+export const ENTRY_NEW_PROJECT_OPEN_EVENT = 'od:entry-new-project-open';
+// Retain requests from a project route until EntryShell mounts on Home.
+let pendingNewProject = false;
+
+export function requestNewProjectFromRail(): void {
+  pendingNewProject = true;
+  window.dispatchEvent(new Event(ENTRY_NEW_PROJECT_OPEN_EVENT));
+}
+
+export function takeNewProjectRequest(): boolean {
+  const pending = pendingNewProject;
+  pendingNewProject = false;
+  return pending;
+}
+
 // EntryNavRail announces a stable toolbar mount point outside the collapsible
 // rail, so search/collapse controls stay mounted while its grid track animates.
 export const ENTRY_RAIL_ACTIONS_HOST_EVENT = 'od:entry-rail-actions-host';

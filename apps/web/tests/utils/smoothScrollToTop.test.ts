@@ -9,7 +9,7 @@
 // under prefers-reduced-motion, and yield to user scroll input mid-flight.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { smoothScrollToTop } from '../../src/utils/smoothScrollToTop';
+import { smoothScrollTo, smoothScrollToTop } from '../../src/utils/smoothScrollToTop';
 
 type FrameCallback = (now: number) => void;
 
@@ -135,5 +135,24 @@ describe('smoothScrollToTop', () => {
     smoothScrollToTop(el);
     expect(frames).toHaveLength(0);
     expect(el.scrollTop).toBe(0);
+  });
+});
+
+describe('smoothScrollTo', () => {
+  it('reveals a nonzero target and lets the caller cancel it', () => {
+    const el = makeContainer(20);
+    const cancel = smoothScrollTo(el, 220, 120);
+    pumpFrame(16);
+    pumpFrame(60);
+    expect(el.scrollTop).toBeGreaterThan(20);
+    expect(el.scrollTop).toBeLessThan(220);
+    cancel();
+    const stopped = el.scrollTop;
+    runAllFrames();
+    expect(el.scrollTop).toBe(stopped);
+
+    smoothScrollTo(el, 220, 120);
+    runAllFrames();
+    expect(el.scrollTop).toBe(220);
   });
 });

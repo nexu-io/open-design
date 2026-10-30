@@ -136,7 +136,7 @@ import {
 import { resolvePlanTier } from './collab/team-plan';
 import { deriveTabIdentityScope, UNSET_ACCOUNT_BUCKET } from './collab/tab-scope';
 import { CommunityView } from './components/CommunityView';
-import { seedHomeComposerPrompt } from './components/HomeView';
+import { seedHomeComposerPrompt, resetHomeCreationType } from './components/HomeView';
 import {
   createPluginUseHandoff,
   stashHomePromptHandoff,
@@ -198,6 +198,7 @@ import {
   patchProject,
   resolvedWorkspaceContextForWrite,
 } from './state/projects';
+import { prepareProjectHomeEntry, readProjectHomeEntry, rememberProjectHomeEntry } from './state/project-home-entry';
 import { useModalWindowDragGuard } from './hooks/useModalWindowDragGuard';
 import { resumeThumbnailLoads, suspendThumbnailLoads } from './lib/thumbnail-load-gate';
 import type {
@@ -246,6 +247,7 @@ type AppCreateProjectInput = Omit<CreateInput, 'metadata'> & {
   initialRunContext?: RunContextSelection | null;
   conversationMode?: ChatSessionMode;
   autoSendFirstMessage?: boolean;
+  startOnHome?: boolean;
   /** Exact workspace/member authority checked by the Home AMR preflight. */
   amrGatePrecheckWitness?: AmrBalanceGateScope;
   requestId?: string;
@@ -1035,6 +1037,7 @@ function AppInner() {
     Record<string, DesignSystemGenerationJob>
   >({});
   const [projects, setProjects] = useState<Project[]>([]);
+  const [projectHomeEntryId, setProjectHomeEntryId] = useState(readProjectHomeEntry);
   const [pendingProjectCreation, setPendingProjectCreation] =
     useState<PendingProjectCreation | null>(null);
   const [appliedProjectListWitness, setAppliedProjectListWitness] = useState<{
@@ -2905,7 +2908,13 @@ function AppInner() {
         kind === 'template' ? 'template' : 'blank';
       let createWorkspaceContext: WorkspaceCollabContext | null = null;
       let optimisticProjectId: string | null = null;
-      let result;
+      let result: { project: Project; appliedPluginSnapshotId?: string } | null;
+      const currentRoute = routeRef.current;
+      const homeEntryProject = input.autoSendFirstMessage
+        && currentRoute.kind === 'project'
+        && currentRoute.projectId === projectHomeEntryId
+        ? projectsRef.current.find((project) => project.id === projectHomeEntryId)
+        : undefined;
       try {
         // PRODUCT INVARIANT: ordinary project creation is local. Reuse a
         // current in-memory Workspace snapshot for `personal` + `local_only`
@@ -2913,9 +2922,11 @@ function AppInner() {
         // block creation on Workspace availability. Remote share/sync/move
         // operations retain their authoritative gates.
         const createWorkspaceState = workspaceContextStateRef.current;
-        createWorkspaceContext = createWorkspaceState.failure === 'unsupported'
-          ? null
-          : workspaceResourceReadContext(createWorkspaceState);
+        createWorkspaceContext = homeEntryProject
+          ? projectRouteWorkspaceContextRef.current
+          : createWorkspaceState.failure === 'unsupported'
+            ? null
+            : workspaceResourceReadContext(createWorkspaceState);
         if (
           input.amrGatePrecheckWitness &&
           !amrBalanceGateScopesMatch(
@@ -2931,7 +2942,7 @@ function AppInner() {
         // real ProjectView unmounted until the response settles; the pending
         // surface is deliberately read-free so an unpersisted project cannot
         // fan out unauthorized conversation/file/presence requests.
-        if (input.autoSendFirstMessage) {
+        if (input.autoSendFirstMessage && !homeEntryProject) {
           optimisticProjectId = randomUUID();
           const now = Date.now();
           const optimisticProject: Project = {
@@ -2991,7 +3002,11 @@ function AppInner() {
           ...(input.pluginInputs ? { pluginInputs: input.pluginInputs } : {}),
           workspaceContext: createWorkspaceContext,
         };
-        result = optimisticProjectId
+        if (homeEntryProject) {
+          result = { project: await prepareProjectHomeEntry(homeEntryProject, {
+            ...input, metadata, pendingPrompt: derivedPendingPrompt,
+          }, createWorkspaceContext) };
+        } else result = optimisticProjectId
           ? await createProject(projectCreateInput, {
               requestTimeoutMs: OPTIMISTIC_PROJECT_CREATE_REQUEST_TIMEOUT_MS,
             })
@@ -3250,6 +3265,14 @@ function AppInner() {
           current?.projectId === optimisticProjectId ? null : current,
         );
       }
+      if (input.startOnHome) {
+        resetHomeCreationType();
+        rememberProjectHomeEntry(project.id);
+        setProjectHomeEntryId(project.id);
+      } else if (homeEntryProject) {
+        rememberProjectHomeEntry(null);
+        setProjectHomeEntryId(null);
+      }
       const projectRoute = {
         kind: 'project',
         projectId: project.id,
@@ -3265,7 +3288,7 @@ function AppInner() {
       }
       return true;
     },
-    [analytics.track, clearLocalProject, rememberLocalProject],
+    [analytics.track, clearLocalProject, rememberLocalProject, projectHomeEntryId],
   );
 
   const handleCreateProjectFromDesignSystem = useCallback(
@@ -5011,7 +5034,7 @@ function AppInner() {
     );
   } else if (route.kind === 'home' && route.view === 'settings') {
     appMain = renderSettingsSurface('page');
-  } else if (route.kind === 'project') {
+  } else if (route.kind === 'project' && (route.projectId !== projectHomeEntryId || !activeProject)) {
     const pendingCreation =
       activeProject && pendingProjectCreation?.projectId === activeProject.id
         ? pendingProjectCreation
@@ -5139,6 +5162,7 @@ function AppInner() {
           onAgentChange={handleAgentChange}
           onAgentModelChange={handleAgentModelChange}
           onApiModelChange={handleApiModelChange}
+          onApiProtocolChange={handleApiProtocolChange}
           onRefreshAgents={refreshAgents}
           onOpenSettings={openSettings}
           onOpenAmrSettings={openAmrSettings}
@@ -5168,6 +5192,7 @@ function AppInner() {
   } else {
     appMain = (
       <EntryView
+        key={route.kind === 'project' ? route.projectId : 'home'}
         skills={enabledSkills}
         designTemplates={enabledDesignTemplates}
         designSystems={enabledDS}
@@ -5270,14 +5295,16 @@ function AppInner() {
       />
     );
   }
+  const projectChromeVisible = route.kind === 'project'
+    && (route.projectId !== projectHomeEntryId || !activeProject);
   return (
     <>
       <div
-        className={`workspace-shell workspace-shell--${clientType}${route.kind === 'project' ? ' workspace-shell--project' : ''}${isSettingsPage ? ' workspace-shell--settings' : ''}`}
+        className={`workspace-shell workspace-shell--${clientType}${projectChromeVisible ? ' workspace-shell--project' : ''}${isSettingsPage ? ' workspace-shell--settings' : ''}`}
         data-client-type={clientType}
         data-host-platform={hostPlatform}
       >
-        {clientType === 'desktop' && route.kind === 'project' ? (
+        {clientType === 'desktop' && projectChromeVisible ? (
           <div className="workspace-window-drag-region" aria-hidden="true" />
         ) : null}
         <WorkspaceTabsBar
@@ -5285,7 +5312,9 @@ function AppInner() {
           onDuplicateProject={handleDuplicateProject}
           onRenameProject={handleRenameProject}
           onDeleteProject={handleDeleteProject}
-          route={route}
+          route={route.kind === 'project' && !projectChromeVisible
+            ? { kind: 'home', view: 'home' }
+            : route}
           // The ambient list may still be loading (or belong to a different
           // selected Workspace) while a deep-linked project is already open.
           // Supply only that route-owned row to chrome; never insert it into
@@ -5307,7 +5336,7 @@ function AppInner() {
         {/* Project credits portal into the left chrome row. Home and the other
             entry views keep their fixed account cluster through EntryNavRail;
             the routes are mutually exclusive, so exactly one is on screen. */}
-        {route.kind === 'project' || isSettingsPage ? (
+        {projectChromeVisible || isSettingsPage ? (
           <WorkspaceTopRightAccountCluster
             page={isSettingsPage ? 'settings' : 'project'}
             accountHost={projectAccountHost}
@@ -5326,7 +5355,7 @@ function AppInner() {
             }
           />
         ) : null}
-        {route.kind === 'project' || isSettingsPage ? (
+        {projectChromeVisible || isSettingsPage ? (
           <PrimaryNavigationRail
             view={null}
             placement="overlay"
@@ -5342,14 +5371,25 @@ function AppInner() {
           />
         ) : null}
         <div className="workspace-shell__body">
-          {route.kind === 'project' ? (
+          {route.kind === 'project' && projectChromeVisible ? (
             <ProjectRecentRail
+              // Outside a project folder 新建会话 makes a new 对话: a blank
+              // one-conversation project, same as the Home rail's button.
+              onNewConversation={() => {
+                void handleCreateProject({
+                  name: t('common.untitled'),
+                  skillId: null,
+                  designSystemId: null,
+                  metadata: { kind: 'other', nameSource: 'generated' },
+                });
+              }}
               controlsHostRef={setProjectControlsHost}
               conversationModel={railConversations?.projectId === route.projectId ? railConversations : null}
               projects={projects}
               context={workspaceContext}
               onOpen={handleOpenProject}
               onRename={handleRenameProject}
+              onDuplicate={handleDuplicateProject}
               onDelete={handleDeleteProject}
             />
           ) : null}

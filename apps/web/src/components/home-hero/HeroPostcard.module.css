@@ -1,0 +1,137 @@
+/* Postcard ornament beside the home headline: a tilted photo print with a
+   slowly turning ring of text over its top-left corner and postal
+   cancellation waves off its right edge. Decorative only. The card is 64px
+   tall — the headline + subtitle pair's height — so the two read as one row. */
+.root {
+  flex: none;
+  /* Room for the ring (hangs 20px left) and the waves (22px right) so neither
+     spills past the column edge. */
+  padding: 0 22px 0 20px;
+}
+
+.stage {
+  /* Fixed to the default print's box (92px photo + 4px frame each side) so an
+     portrait of any aspect never changes the heading row's height; the
+     print is centred on this box and overflows it evenly. */
+  position: relative;
+  width: 100px;
+  height: 64px;
+}
+
+.ring {
+  position: absolute;
+  top: -22px;
+  left: -20px;
+  width: 56px;
+  height: 56px;
+  z-index: 2;
+  pointer-events: none;
+  animation: spin 20s linear infinite;
+}
+
+.ringText {
+  font-family: Georgia, "Songti SC", STSong, serif;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  fill: var(--text-strong);
+}
+
+.card {
+  /* Centred on the 64px box while the print fits it; once a taller portrait
+     overflows, its bottom stays on the box's bottom (the subtitle baseline)
+     and it grows upward, so it never covers the entry cards below. */
+  --postcard-shift: min(-50%, calc(32px - 100%));
+  z-index: 1;
+  position: absolute;
+  top: 50%;
+  left: 0;
+  /* Undo the global `button` primitive (36px height, inline-flex, hover fill)
+     so the white frame sizes to the photo and wraps it on every side. */
+  display: block;
+  width: auto;
+  height: auto;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 4px;
+  line-height: 0;
+  background: #fff;
+  box-shadow: 0 10px 20px -6px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  transform: translateY(var(--postcard-shift)) rotate(4deg);
+  transition: transform 300ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+button.card:hover:not(:disabled),
+button.card:focus-visible:not(:disabled),
+button.card:active:not(:disabled) {
+  background: #fff;
+  transform: translateY(var(--postcard-shift)) rotate(0deg);
+}
+.card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Refresh glyph matches the headline, shown on hover or keyboard focus. */
+.editBadge {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #000;
+  opacity: 0;
+  transition: opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
+  pointer-events: none;
+}
+:global([data-theme='dark']) .editBadge {
+  color: var(--text-strong);
+}
+.card:hover .editBadge,
+.card:focus-visible .editBadge {
+  opacity: 1;
+  transition-duration: 200ms;
+}
+
+/* 56px tall + 4px frame each side = 64px; width keeps the original 360:220. */
+.photo {
+  display: block;
+  width: 92px;
+  height: 56px;
+  object-fit: cover;
+}
+/* Fit the supplied portraits whole within the ornament's available space. */
+.photoCustom {
+  width: auto;
+  height: auto;
+  max-width: 92px;
+  max-height: 92px;
+}
+
+.marks {
+  position: absolute;
+  top: 50%;
+  right: -22px;
+  width: 40px;
+  height: 28px;
+  transform: translateY(-50%);
+  z-index: 2;
+  pointer-events: none;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ring {
+    animation: none;
+  }
+}

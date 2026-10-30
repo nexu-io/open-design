@@ -5,6 +5,7 @@ import { useI18n } from '../i18n';
 import { agentDisplayName, agentIconId } from '../utils/agentLabels';
 import type { Project } from '../types';
 import styles from './ProjectCreationPendingView.module.css';
+import placementStyles from './chat/ConversationPlacement.module.css';
 
 interface Props {
   project: Project;
@@ -41,7 +42,7 @@ export function ProjectCreationPendingView({
 
   return (
     <div className="app" data-testid="project-creation-pending-view">
-      <div className={`split ${styles.split}`}>
+      <div className={`split ${styles.split} ${placementStyles.full}`} data-conversation-placement="full">
         <div className="split-chat-slot">
           <div className={`pane ${styles.chatPane}`}>
             <div className="chat-project-header">
@@ -111,29 +112,6 @@ export function ProjectCreationPendingView({
             </div>
           </div>
         </div>
-        <div className="split-resize-handle" aria-hidden="true" />
-        <section className={`workspace ${styles.workspace}`} aria-label={t('designFiles.title')}>
-          <div className="ws-tabs-shell">
-            <div className="ws-tabs-bar" role="tablist" aria-label={t('designFiles.title')}>
-              <div
-                className="ws-tab design-files-tab active"
-                role="tab"
-                aria-selected="true"
-              >
-                <span className="tab-icon" aria-hidden="true">
-                  <Icon name="grid" size={14} />
-                </span>
-                <span className="ws-tab-label">{t('designFiles.title')}</span>
-              </div>
-            </div>
-            <span className={styles.addIcon} aria-hidden="true">
-              <Icon name="plus" size={16} />
-            </span>
-          </div>
-          <div className={styles.workspaceBody}>
-            <span className={styles.workspaceTitle}>{t('designFiles.crumbs')}</span>
-          </div>
-        </section>
       </div>
     </div>
   );

@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useT } from '../../i18n';
+import { Button } from '@open-design/components';
+import { Icon } from '../Icon';
 import styles from './WorkspaceEditLayout.module.css';
 
 const DEFAULT_WIDTH = 320;
@@ -35,8 +37,39 @@ export function useWorkspaceEditDock(owner: string, visible: boolean) {
   return dock;
 }
 
+/** Expanded: full screen — collapses the chat so the workspace takes the
+ *  window (per product); `chatHidden` flips it to the exit that brings the
+ *  chat back. Collapsed: the full-width chat's ⊕, which opens the
+ *  workspace's new-tab launcher. */
+export function WorkspacePreviewToggle({ expanded, onToggle, panelId, launcherOpen = false, chatHidden = false }: {
+  expanded: boolean;
+  onToggle: (button: HTMLButtonElement) => void;
+  panelId: string;
+  launcherOpen?: boolean;
+  chatHidden?: boolean;
+}) {
+  const t = useT();
+  const label = t(!expanded ? 'workspace.newTab' : chatHidden ? 'common.exitFullscreen' : 'common.fullscreen');
+  return <Button
+    className={styles.previewToggle}
+    data-expanded={expanded}
+    aria-label={label}
+    title={label}
+    aria-haspopup={expanded ? undefined : 'dialog'}
+    aria-expanded={expanded ? undefined : launcherOpen}
+    aria-controls={expanded ? undefined : panelId}
+    onClick={event => onToggle(event.currentTarget)}
+  ><Icon name={!expanded ? 'plus-circle' : chatHidden ? 'collapse-horizontal' : 'expand-horizontal'} size={16} /></Button>;
+}
+
 /** A sibling of the preview card, so its background belongs to the app shell. */
-export function WorkspaceEditLayout({ children }: { children: ReactNode }) {
+export function WorkspaceEditLayout({ children, onCollapse, onRestore, panelId }: {
+  children: ReactNode;
+  onCollapse?: () => void;
+  /** Set while the chat is collapsed; the toggle then brings it back. */
+  onRestore?: () => void;
+  panelId?: string;
+}) {
   const t = useT();
   const rootRef = useRef<HTMLDivElement>(null);
   const [target, setTarget] = useState<HTMLDivElement | null>(null);
@@ -84,12 +117,17 @@ export function WorkspaceEditLayout({ children }: { children: ReactNode }) {
     <EditDockContext.Provider value={context}>
       <div
         ref={rootRef}
+        id={panelId}
         className={styles.layout}
+        data-collapsible={Boolean(onCollapse || onRestore) || undefined}
         data-testid="workspace-edit-layout"
         data-resizing={dragging || undefined}
         style={{ gridTemplateColumns: `minmax(0, 1fr) ${active ? DIVIDER_WIDTH : 0}px ${active ? width : 0}px` }}
       >
         <div ref={setTabChrome} className={styles.tabChrome} data-testid="workspace-tab-chrome" />
+        {onRestore && panelId
+          ? <WorkspacePreviewToggle expanded chatHidden onToggle={onRestore} panelId={panelId} />
+          : onCollapse && panelId ? <WorkspacePreviewToggle expanded onToggle={onCollapse} panelId={panelId} /> : null}
         <TabChromeContext.Provider value={tabChrome}>{children}</TabChromeContext.Provider>
         <div
           className={styles.divider}

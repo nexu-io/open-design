@@ -780,6 +780,14 @@
   border-radius: 0;
   box-shadow: none;
   background: transparent;
+  /* `.modal`'s no-drag suits a floating dialog, but this full-page surface
+     starts at the window's top edge and spans its width — Electron subtracts
+     every no-drag box from the drag region, so it swallowed the whole title
+     strip. It must be `drag`, not `none`: Chromium computes an explicit
+     `none` as no-drag. The card (`.modal-body`) and everything in it stay
+     no-drag via the desktop shell's `.modal *` rule, so only the uncovered
+     band above the card drags the window. */
+  -webkit-app-region: drag;
   /* `.modal` enters with `pop-in` (translateY + scale). A full page has no
      corner to pop from, and — load-bearing — a transformed ancestor becomes
      the containing block for `position: fixed` descendants, which would trap
@@ -845,19 +853,23 @@
   min-height: 0;
   overflow: hidden;
   overflow-x: hidden;
-  /* Same ground as the home board: the page-level veil token from
-     app-wash.css (currently fully transparent, so the wash shows straight
-     through, exactly like the home scroll surface). The reduced-transparency
-     and no-backdrop-filter fallbacks restore it to solid --bg. */
-  background: var(--veil-page, var(--bg));
+  /* One white card holds both the nav rail and the content, with the same
+     inset as the Community/destination card (`.entry-main--scroll`): 40px
+     below the window top, flush against the icon column, 8px right/bottom. */
+  margin: 40px 8px 8px 0;
+  background: var(--bg);
+  /* Inset outline, not a border: no layout space, so the 8px gutters hold. */
+  outline: 0.5px solid #F7F7F7;
+  outline-offset: -0.5px;
+  border-radius: var(--radius-lg);
 }
-/* The drag target sits on the visible left edge of the white content card. */
+/* The drag target sits on the nav/content seam inside the white card. */
 .settings-page-resizer {
   position: absolute;
   z-index: 5;
-  top: 8px;
-  bottom: 8px;
-  left: calc(var(--settings-sidebar-width, 272px) + 8px);
+  top: 0;
+  bottom: 0;
+  left: var(--settings-sidebar-width, 272px);
   width: 12px;
   transform: translateX(-50%);
   cursor: col-resize;
@@ -1400,11 +1412,10 @@
   grid-column: 1;
   grid-row: 1;
   gap: 3px;
-  /* No right padding: nav items (and search) extend flush to the rail's right
-     edge, dropping the 10px gap on the content-facing side. Left keeps 10px so
-     the selected highlight doesn't touch the window edge. */
-  /* Align the first setting with PrimaryNavigationRail's Home button. */
-  padding: 48.5px 0 18px 10px;
+  /* 48px top/left/bottom inset, the destination cards' padding, so the first
+     nav item and the first content row share a top edge. No right padding:
+     the content column's own 48px left padding is the gutter between them. */
+  padding: 48px 0 48px 48px;
   /* Same treatment as the top tab strip: fully transparent, riding the
      shell's translucent ground so the wash/wallpaper shows identically —
      no extra white layer, no blur. */
@@ -1662,32 +1673,27 @@
 .settings-page-shell .settings-content {
   grid-column: 2;
   grid-row: 1;
-  /* Match the Home card's 8px window gutters at any desktop width. */
-  width: calc(100% - 16px);
+  /* The white card now lives on `.modal-body`; the content column just
+     scrolls inside it. 48px on every side matches the destination cards'
+     `.entry-main__inner` padding (Community / 插件 / 设计系统). */
+  width: 100%;
   max-width: none;
-  justify-self: center;
-  align-self: start;
-  /* The card spans behind the 44px chrome row. Keep its first content row
-     where it was while moving the visible card edge to 8px. */
-  margin: 8px 0 8px;
-  height: calc(100% - 16px);
-  padding: 80px 24px 24px;
+  height: 100%;
+  margin: 0;
+  padding: 48px;
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
-  /* Match the entry cards' subtle outer stroke. */
-  background: var(--bg);
-  border: 0.5px solid #F7F7F7;
-  border-radius: var(--radius-lg);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
 }
-/* Stretching the window widens only the card — the content column stays a
-   fixed, centered 992px (= the old 1040px card minus its 48px side padding,
-   so the default-width look is unchanged). Every section/tab row is a direct
-   flex child of the card, so one child rule aligns them all. */
+/* Like the destination cards, the content fills the card's full width at any
+   window size (no centered cap). Every section/tab row is a direct flex child
+   of the card, so one child rule sizes them all. */
 .settings-page-shell .settings-content > * {
   width: 100%;
-  max-width: 992px;
-  margin-inline: auto;
+  max-width: none;
 }
 /* Pinned mode switch (本机 CLI / API 提供商): sticky at its own resting spot,
    so the pill simply stops moving while the agent list scrolls beneath. The

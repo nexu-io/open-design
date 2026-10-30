@@ -2003,6 +2003,52 @@
   outline-offset: 1px;
 }
 .ws-tab-action-slot .ws-tab-reload svg { display: block; flex: none; }
+/* In the view row, ahead of 预览, Reload is sized like the row's icon-only
+   tabs (代码, 设计文件): same 30px pill, same 12px side padding. */
+.ws-tabs-views .ws-tab-action-slot .ws-tab-reload {
+  box-sizing: border-box;
+  width: auto;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+}
+.ws-tabs-views .ws-tab-action-slot .ws-tab-reload:hover {
+  background: var(--bg-subtle);
+  border-color: transparent;
+}
+
+/* Hovering any tab swaps its leading glyph (kind icon or sync badge) for
+   Close, in the same 18px box. */
+.ws-tab-lead-close {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-muted);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 120ms var(--ease-out), color 120ms var(--ease-out);
+}
+.ws-tab-lead-close:hover { background: var(--border); color: var(--text); }
+.ws-tab-lead-close svg { display: block; flex: none; }
+/* Every leading glyph in the file strip shares Reload's / Close's box, so
+   the hover swap changes the glyph and nothing else. */
+.ws-tabs-bar .ws-tab .tab-icon {
+  width: 18px;
+  height: 18px;
+}
+.ws-tab:hover > .ws-tab-lead-close {
+  display: inline-flex;
+}
+.ws-tab:hover:has(> .ws-tab-lead-close) > .tab-icon {
+  display: none;
+}
 
 /* The Design Files tab scrolls with the strip like any other tab. It was
    previously pinned with position: sticky (issue #775), but its transparent

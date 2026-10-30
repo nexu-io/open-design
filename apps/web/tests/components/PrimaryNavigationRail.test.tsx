@@ -15,9 +15,13 @@ describe('shared primary navigation', () => {
       placement={placement} onHome={vi.fn()} onViewChange={vi.fn()}
       onOpenSettings={onOpenSettings} settingsActive accountHostRef={accountHostRef} /></I18nProvider>);
     const footer = screen.getByTestId('primary-navigation-footer');
-    const settings = within(footer).getByTestId('entry-settings-button');
+    const settings = screen.getByTestId('entry-settings-button');
+    // Settings sits directly under 插件, not in the footer with the account.
+    expect(footer.contains(settings)).toBe(false);
+    expect(settings.previousElementSibling).toBe(screen.getByTestId('entry-nav-plugins'));
     expect(settings).toHaveAttribute('aria-current', 'page');
     expect(settings).toHaveAttribute('data-tooltip');
+    expect(settings).toHaveAttribute('data-tooltip-tone', 'inverse');
     fireEvent.click(settings);
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
     // A click event must not become the parent callback's settings section.

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import { Icon, type IconName } from './Icon';
 import styles from './WorkingDirPicker.module.css';
@@ -85,6 +85,31 @@ export function WorkingDirPicker({
   const [open, setOpen] = useState(false);
   const [recentOpen, setRecentOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const recentRowRef = useRef<HTMLDivElement | null>(null);
+  const flyoutRef = useRef<HTMLDivElement | null>(null);
+  const [flyoutTop, setFlyoutTop] = useState<number>();
+
+  // The host may move the parent menu upward via CSS. Use its actual row
+  // position so the submenu always stays within the viewport, independently
+  // of the preferred direction. The inner list scrolls when it is too tall.
+  useLayoutEffect(() => {
+    if (!open || !recentOpen) return;
+    function updatePosition() {
+      if (!recentRowRef.current || !flyoutRef.current) return;
+      const row = recentRowRef.current.getBoundingClientRect();
+      const height = flyoutRef.current.offsetHeight;
+      const preferredTop = placement === 'up' ? row.bottom + 5 - height : row.top - 5;
+      const top = Math.max(12, Math.min(preferredTop, window.innerHeight - 12 - height));
+      setFlyoutTop(top - row.top);
+    }
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [open, recentOpen, placement, recentDirs]);
 
   useEffect(() => {
     if (!open) {
@@ -196,6 +221,7 @@ export function WorkingDirPicker({
           </button>
 
           <div
+            ref={recentRowRef}
             className={styles.submenuRow}
             onMouseEnter={() => setRecentOpen(true)}
             onMouseLeave={() => setRecentOpen(false)}
@@ -215,31 +241,35 @@ export function WorkingDirPicker({
             </button>
             {recentOpen ? (
               <div
+                ref={flyoutRef}
                 className={`${styles.flyout}${placement === 'up' ? ` ${styles.flyoutUp}` : ''}`}
+                style={flyoutTop === undefined ? undefined : { top: flyoutTop, bottom: 'auto' }}
                 role="menu"
                 data-testid="working-dir-recent-list"
               >
-                {recentDirs.length === 0 ? (
-                  <div className={styles.empty}>{t('homeWorkingDir.recentEmpty')}</div>
-                ) : (
-                  recentDirs.map((dir) => (
-                    <button
-                      key={dir}
-                      type="button"
-                      role="menuitem"
-                      className={styles.recentItem}
-                      title={dir}
-                      onClick={() => {
-                        onSelectRecent(dir);
-                        setOpen(false);
-                      }}
-                    >
-                      <Icon name="folder-2" size={14} className={styles.itemIcon} />
-                      <span className={styles.recentName}>{basename(dir)}</span>
-                      <span className={styles.recentPath}>{dir}</span>
-                    </button>
-                  ))
-                )}
+                <div className={styles.recentList}>
+                  {recentDirs.length === 0 ? (
+                    <div className={styles.empty}>{t('homeWorkingDir.recentEmpty')}</div>
+                  ) : (
+                    recentDirs.map((dir) => (
+                      <button
+                        key={dir}
+                        type="button"
+                        role="menuitem"
+                        className={styles.recentItem}
+                        title={dir}
+                        onClick={() => {
+                          onSelectRecent(dir);
+                          setOpen(false);
+                        }}
+                      >
+                        <Icon name="folder-2" size={14} className={styles.itemIcon} />
+                        <span className={styles.recentName}>{basename(dir)}</span>
+                        <span className={styles.recentPath}>{dir}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
               </div>
             ) : null}
           </div>

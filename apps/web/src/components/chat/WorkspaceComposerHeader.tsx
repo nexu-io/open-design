@@ -8,11 +8,13 @@ import styles from './WorkspaceComposerDock.module.css';
 
 export type ConversationPlacement = 'full' | 'left' | 'right';
 
-export function WorkspaceComposerHeader({ title, expanded = false, owner, onExpand, onPlacementChange, onMinimize }: {
+export function WorkspaceComposerHeader({ title, expanded = false, owner, onExpand, onDrag, onPlacementChange, onMinimize }: {
   title: string;
   expanded?: boolean;
   owner?: string;
   onExpand?: () => void;
+  /** Pointer delta since the previous move while the grip is held. */
+  onDrag?: (dx: number, dy: number) => void;
   onPlacementChange?: (placement: ConversationPlacement) => void;
   onMinimize?: () => void;
 }) {
@@ -25,6 +27,7 @@ export function WorkspaceComposerHeader({ title, expanded = false, owner, onExpa
   const menuLayer = useRef<HTMLDivElement>(null);
   const [anchor, setAnchor] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
   const menuReady = Boolean(anchor);
+  const dragFrom = useRef<{ x: number; y: number } | null>(null);
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -61,10 +64,27 @@ export function WorkspaceComposerHeader({ title, expanded = false, owner, onExpa
   return <div ref={root} className={styles.headerReveal} data-expanded={expanded || undefined} data-menu-open={open || undefined}>
     <div className={styles.headerClip}>
       <div className={styles.header}>
+        <span className={styles.grip} data-testid="chat-composer-drag-handle" aria-hidden
+          onPointerDown={event => {
+            if (event.button !== 0) return;
+            event.preventDefault();
+            event.currentTarget.setPointerCapture(event.pointerId);
+            dragFrom.current = { x: event.clientX, y: event.clientY };
+          }}
+          onPointerMove={event => {
+            const from = dragFrom.current;
+            if (!from) return;
+            dragFrom.current = { x: event.clientX, y: event.clientY };
+            onDrag?.(event.clientX - from.x, event.clientY - from.y);
+          }}
+          onPointerUp={() => { dragFrom.current = null; }}
+          onPointerCancel={() => { dragFrom.current = null; }}>
+          <Icon name="draggable" size={16} />
+        </span>
         <Button className={styles.title} onClick={onExpand} title={title}
           data-testid="chat-composer-expand" aria-expanded={expanded}
           aria-label={t(expanded ? 'chat.collapsePane' : 'workspace.showChat')}>
-          <Icon name={expanded ? 'minus' : 'panel-left'} size={16} /><span>{title}</span>
+          <span>{title}</span>
         </Button>
         <Button ref={trigger} className={styles.options} aria-label={t('chat.dockOptions')}
           aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined}

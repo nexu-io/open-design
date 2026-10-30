@@ -18,6 +18,27 @@
   animation: launcher-in 180ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
+/* The same launcher laid out as a page: the 新标签页 tab's content. A card in
+   the middle of the pane rather than a popover, so no fixed position, shadow
+   or enter animation; it takes the room the pane gives it. */
+.inline {
+  width: 420px;
+  max-width: calc(100% - 32px);
+  max-height: calc(100% - 48px);
+  margin: 24px auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel, #fff);
+  border: 0;
+  border-radius: var(--radius-xxlarge);
+  overflow: hidden;
+}
+
+.inline .scrollBody {
+  max-height: none;
+  min-height: 0;
+}
+
 @keyframes launcher-in {
   from {
     opacity: 0;

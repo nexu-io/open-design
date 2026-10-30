@@ -198,6 +198,7 @@ import { ExtensionsMarketplace } from './PluginsView';
 import type { CreateInput, CreateTab, ImportClaudeDesignOutcome } from './NewProjectPanel';
 import type { PluginLoopSubmit } from './PluginLoopHome';
 import {
+  createConversation,
   createProject,
   duplicatePluginAsProject,
   patchProject,
@@ -207,6 +208,7 @@ import {
   type PluginShareProjectOutcome,
 } from '../state/projects';
 import { TasksView } from './TasksView';
+import { CONVERSATION_CREATED_EVENT, type ConversationCreatedDetail } from '../state/conversation-events';
 import {
   API_KEY_PLACEHOLDERS,
   API_PROTOCOL_TABS,
@@ -243,6 +245,8 @@ import {
   ENTRY_RAIL_STATE_EVENT,
   ENTRY_RAIL_TOGGLE_EVENT,
   ENTRY_SEARCH_OPEN_EVENT,
+  ENTRY_NEW_PROJECT_OPEN_EVENT,
+  takeNewProjectRequest,
   RAIL_OPEN_STORAGE_KEY,
   readStoredRailOpen,
 } from './entryRailBridge';
@@ -310,6 +314,7 @@ type EntryCreateProjectInput = Omit<CreateInput, 'metadata'> & {
   initialRunContext?: RunContextSelection | null;
   conversationMode?: ChatSessionMode;
   autoSendFirstMessage?: boolean;
+  startOnHome?: boolean;
   /** Exact workspace/member authority checked by the Home AMR preflight. */
   amrGatePrecheckWitness?: AmrBalanceGateScope;
   requestId?: string;
@@ -562,6 +567,8 @@ const RAIL_WIDTH_DEFAULT = 236;
  *  the content and starts competing with it. */
 const RAIL_WIDTH_MIN = 200;
 const RAIL_WIDTH_MAX = 420;
+// Require a deliberate pull past the rail's minimum before a drag closes it.
+const RAIL_COLLAPSE_OVERSHOOT = 96;
 const ENTRY_DESTINATIONS_WIDTH = 56;
 const ENTRY_MAIN_MIN_TRACK_WIDTH = 800;
 
@@ -1073,6 +1080,8 @@ export function EntryShell({
     }
   }, [workspaceLoading, isWorkspaceOnlyView, hasWorkspaceContext]);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [creatingBlankConversation, setCreatingBlankConversation] = useState(false);
+  const creatingBlankConversationRef = useRef(false);
   // Hard block from the pre-run balance gate on a home submit (empty wallet
   // or signed out); non-null renders the AmrBalanceDialog on the home page —
   // the project is never created, so the composer draft stays put. The dialog
@@ -1186,6 +1195,16 @@ export function EntryShell({
       : setLocalProviderModelsCache;
   const [newProjectInitialTab, setNewProjectInitialTab] =
     useState<CreateTab>('prototype');
+  useEffect(() => {
+    const openRequestedProject = () => {
+      if (!takeNewProjectRequest()) return;
+      setNewProjectInitialTab('prototype');
+      setNewProjectOpen(true);
+    };
+    window.addEventListener(ENTRY_NEW_PROJECT_OPEN_EVENT, openRequestedProject);
+    openRequestedProject();
+    return () => window.removeEventListener(ENTRY_NEW_PROJECT_OPEN_EVENT, openRequestedProject);
+  }, []);
   const [integrationTab, setIntegrationTab] = useState<IntegrationTab>(integrationInitialTab);
   // Lazy initializer, so a handoff published by a surface that then navigated
   // here — the `/marketplace/<id>` detail route, which `App` renders outside
@@ -1207,13 +1226,9 @@ export function EntryShell({
   const bindDockComposerType = useCallback((target: { chipId: string }) => {
     requestHomeChip(target.chipId, 'dock');
   }, []);
-  /* Rail width, dragged from the seam between the rail and the white content
-     panel (per product: hover 到白色的框的左侧边缘的时候可以左右拖拽调整白色的
-     面板的宽度). One number drives both columns — the grid's first track IS the
-     rail — so widening the panel is narrowing the rail and there is nothing to
-     keep in sync.
-     Clamped rather than free: under ~200 the labels ellipsize into nothing and
-     past ~420 the rail starts competing with the content it frames. */
+  /* Drag the rail from the seam beside the content card. Keep its width between
+     200 and 420px, and never wider than leaves the content its 800px track:
+     the content squeezes, the page never scrolls sideways (per product). */
   const [railWidth, setRailWidth] = useState(() => readStoredRailWidth());
   const [railResizing, setRailResizing] = useState(false);
   const railDragRef = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null);
@@ -1250,10 +1265,19 @@ export function EntryShell({
   function endRailResize(event: ReactPointerEvent<HTMLDivElement>) {
     const drag = railDragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
+    const rawWidth = drag.startWidth + (event.clientX - drag.startX);
+    const collapse = event.type === 'pointerup'
+      && rawWidth <= RAIL_WIDTH_MIN - RAIL_COLLAPSE_OVERSHOOT;
     railDragRef.current = null;
     setRailResizing(false);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (collapse) {
+      // Reopening should restore the width the user had before the close drag.
+      railWidthRef.current = clampRailWidth(drag.startWidth);
+      setRailWidth(railWidthRef.current);
+      setRailOpen(false);
     }
     try {
       window.localStorage.setItem(RAIL_WIDTH_STORAGE_KEY, String(railWidthRef.current));
@@ -1432,36 +1456,36 @@ export function EntryShell({
     setNewProjectOpen(true);
   }
 
-  function startBlankProjectFromRail() {
-    void Promise.resolve(
-      onCreateProject({
+  async function startBlankProjectFromRail() {
+    if (creatingBlankConversationRef.current) return;
+    creatingBlankConversationRef.current = true;
+    setCreatingBlankConversation(true);
+    try {
+      await onCreateProject({
         name: t('common.untitled'),
         skillId: null,
         designSystemId: null,
-        // No user-typed name exists yet — mark it `generated` (the same tag
-        // `handleCreateProjectFromDesignSystem` and the New Project panel's
-        // blank/no-name path use) so `canAutoRenameProjectFromPrompt` stays
-        // eligible once the user's first in-project prompt or the agent's
-        // own generated title arrives. Without this the project is stuck at
-        // "未命名" forever: this rail (the Drafts / All-projects empty-state
-        // "创建" button) is the only reachable way to open a truly metadata-
-        // less blank project, and every other create path already tags its
-        // fallback name with a `nameSource` the rename gate recognizes.
+        // Keep the fallback name eligible for automatic naming after the
+        // first message. A blank conversation never submits a prompt.
         metadata: { kind: 'other', nameSource: 'generated' },
-      }),
-    ).catch((err) => {
-      console.warn('Failed to create blank project from entry rail', err);
-    });
+      });
+    } catch (err) {
+      console.warn('Failed to create blank conversation from entry rail', err);
+    } finally {
+      creatingBlankConversationRef.current = false;
+      setCreatingBlankConversation(false);
+    }
   }
 
-  function handleCreate(input: CreateInput) {
-    // The NewProjectModal no longer asks the user to pick a plugin.
-    // Each project kind is silently bound to its default scenario
-    // pipeline at creation time so the user lands in a running flow
-    // without having to reason about pipeline internals. The mapping
-    // is intentionally explicit so future kind-specific scenarios
-    // (e.g. a deck- or image-specialized pipeline) can take over a
-    // single row without touching the form.
+  function handleCreate(rawInput: CreateInput) {
+    // 新建项目 makes a PROJECT: the rail keeps it a 项目 folder for good
+    // (see ProjectMetadata.railKind), unlike a Home send's conversation.
+    const input: CreateInput = { ...rawInput, metadata: { ...rawInput.metadata, railKind: 'project' } };
+    // A named blank project starts with Home's creation choices. Bind the
+    // selected scenario only when the user submits the first prompt.
+    if (input.metadata.kind === 'other') {
+      return onCreateProject({ ...input, startOnHome: true });
+    }
     const pluginId = defaultPluginIdForMetadata(input.metadata);
     const pluginInputs = defaultPluginInputsForCreate(input, pluginId);
     return onCreateProject({
@@ -1815,7 +1839,24 @@ export function EntryShell({
               area: 'nav',
               element: 'new_project_plus',
             });
-            openNewProject();
+            // Inside a project (its Home page, before the first brief), 新建会话
+            // adds a conversation to THAT project (per product: 在项目里点击新建
+            // 会话是在这个项目里新建一个对话). With no project selected it makes
+            // a new conversation in 对话 (per product: 没有选中的项目里的时候新建
+            // 会话是建立在对话的那个分区中) — a blank one-conversation project,
+            // which the rail lists as a 对话 row.
+            if (route.kind === 'project') {
+              const projectId = route.projectId;
+              void createConversation(projectId, undefined, { workspaceContext: railWorkspaceContext }).then((created) => {
+                if (!created) return;
+                window.dispatchEvent(new CustomEvent<ConversationCreatedDetail>(CONVERSATION_CREATED_EVENT, {
+                  detail: { projectId, conversationId: created.id },
+                }));
+                navigate({ kind: 'project', projectId, conversationId: created.id, fileName: null });
+              });
+              return;
+            }
+            void startBlankProjectFromRail();
           }}
           onOpenSearch={() => setProjectSearchOpen(true)}
           open={view !== 'home' || railOpen}
@@ -1861,6 +1902,7 @@ export function EntryShell({
           /* Same handlers the projects grid drives its own row menu with, so a
              rename or a delete from the rail lands in exactly one place. */
           onRenameRecentProject={onRenameProject}
+          onDuplicateRecentProject={onDuplicateProject}
           onDeleteRecentProject={onDeleteProject}
         />
         {projectSearchOpen ? (

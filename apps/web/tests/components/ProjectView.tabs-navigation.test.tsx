@@ -41,6 +41,7 @@ vi.mock('../../src/providers/anthropic', () => ({
 }));
 
 vi.mock('../../src/providers/daemon', () => ({
+  fetchVelaLoginStatus: vi.fn().mockResolvedValue(null),
   fetchChatRunStatus: vi.fn(),
   listActiveChatRuns: vi.fn().mockResolvedValue([]),
   listProjectRuns: vi.fn().mockResolvedValue([]),
@@ -103,11 +104,13 @@ vi.mock('../../src/components/AvatarMenu', () => ({
 
 vi.mock('../../src/components/FileWorkspace', () => ({
   DESIGN_SYSTEM_TAB: '__design_system__',
-  FileWorkspace: ({ tabsState, onTabsStateChange, designSystemProject, openRequest }: {
+  FileWorkspace: ({ tabsState, onTabsStateChange, designSystemProject, openRequest, externalLauncherAnchor, onExternalLauncherClose }: {
     tabsState: { tabs: string[]; active: string | null };
     onTabsStateChange: (state: { tabs: string[]; active: string | null }) => void;
     designSystemProject?: DesignSystemSummary | null;
     openRequest?: { name: string; nonce: number } | null;
+    externalLauncherAnchor?: HTMLElement | null;
+    onExternalLauncherClose?: (picked: boolean) => void;
   }) => {
     useEffect(() => {
       if (!openRequest?.name) return;
@@ -128,6 +131,9 @@ vi.mock('../../src/components/FileWorkspace', () => ({
         >
           close all tabs
         </button>
+        {externalLauncherAnchor ? (
+          <button type="button" onClick={() => onExternalLauncherClose?.(true)}>Pick launcher item</button>
+        ) : null}
       </div>
     );
   },
@@ -183,7 +189,7 @@ function renderProjectView(props?: {
   routeFileName?: string | null;
   routeConversationId?: string | null;
 }) {
-  return render(
+  const view = render(
     <ProjectView
       project={props?.project ?? project}
       routeFileName={props?.routeFileName ?? null}
@@ -206,6 +212,13 @@ function renderProjectView(props?: {
       onProjectsRefresh={vi.fn()}
     />,
   );
+  // Tab URL synchronization applies after the user reveals the workspace.
+  const launcher = screen.queryByRole('button', { name: 'workspace.newTab' });
+  if (launcher) {
+    fireEvent.click(launcher);
+    fireEvent.click(screen.getByRole('button', { name: 'Pick launcher item' }));
+  }
+  return view;
 }
 
 describe('ProjectView tab URL hydration', () => {

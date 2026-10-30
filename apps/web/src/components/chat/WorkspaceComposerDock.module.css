@@ -24,6 +24,21 @@
   flex-shrink: 0;
   width: calc(100% - 40px);
 }
+/* ONE line at rest, whatever the field holds (per product: 只展示一行) — the
+   44px shell alone let the top of the second line peek in under the first.
+   Same treatment as Home's folded dock (`.home-hero--dock[data-collapsed]`):
+   the editor's ceiling is its top padding plus one line box (13px type on 1.6
+   leading), and `clip` rather than `hidden` so caret-follow cannot scroll a
+   later line into view. Hover or focus restores the full field. */
+.dock:not(:hover):not(:focus-within):not([data-conversation-expanded]):not(:has([data-menu-open])) :global(.composer-input-editor) {
+  min-height: 0;
+  max-height: calc(8px + 13px * 1.6);
+  overflow: clip;
+}
+.dock:not(:hover):not(:focus-within):not([data-conversation-expanded]):not(:has([data-menu-open])) :global(.composer-input-editor .composer-editable),
+.dock:not(:hover):not(:focus-within):not([data-conversation-expanded]):not(:has([data-menu-open])) :global(.composer-input-editor [contenteditable='true']) {
+  min-height: 0;
+}
 .dock:not(:hover):not(:focus-within):not([data-conversation-expanded]):not(:has([data-menu-open])) :global(.composer-row) {
   position: absolute;
   top: 5px;
@@ -59,9 +74,23 @@
   align-items: center;
   gap: 8px;
   height: 44px;
-  padding: 4px 8px 4px 16px;
+  padding: 4px 8px 4px 8px;
   border-bottom: 1px solid var(--chat-border-soft);
 }
+.grip {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-md);
+  color: var(--chat-text-muted);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.grip:hover { background: var(--chat-bg-muted); }
+.grip:active { cursor: grabbing; }
 .title {
   flex: 1;
   min-width: 0;

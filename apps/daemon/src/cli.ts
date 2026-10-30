@@ -239,7 +239,7 @@ const PROJECT_STRING_FLAGS = new Set([
   'prompt-file', 'path', 'dir', 'as',
   'agent', 'model', 'service-tier', 'snapshot-id', 'inputs', 'grant-caps', 'editor',
   'title', 'label', 'against', 'seed-from', 'fork-after', 'mode',
-  'source',
+  'source', 'to',
 ]);
 const PROJECT_RESOURCE_STRING_FLAGS = new Set([
   ...PROJECT_STRING_FLAGS,
@@ -8265,6 +8265,10 @@ async function runConversation(args) {
                                            source message.
   od conversation list <projectId>           List conversations in a project.
   od conversation info <conversationId>      Print one conversation.
+  od conversation move <projectId> <conversationId> --to <targetProjectId>
+                                           Move a conversation into another
+                                           personal project. Files its messages
+                                           reference are copied over.
 
 Common options:
   --daemon-url <url>         Open Design daemon HTTP base.
@@ -8276,7 +8280,7 @@ Common options:
   const sub = args[0];
   const rest = args.slice(1);
   const conversationStringFlags =
-    sub === 'new' || sub === 'list'
+    sub === 'new' || sub === 'list' || sub === 'move'
       ? PROJECT_RESOURCE_STRING_FLAGS
       : PROJECT_STRING_FLAGS;
   const flags = parseFlags(rest, {
@@ -8285,7 +8289,7 @@ Common options:
   });
   const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
   const workspaceHeaders =
-    sub === 'new' || sub === 'list'
+    sub === 'new' || sub === 'list' || sub === 'move'
       ? workspaceHeadersFromExplicitFlags(flags) ?? {}
       : {};
   switch (sub) {
@@ -8345,6 +8349,30 @@ Common options:
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      return;
+    }
+    case 'move': {
+      const [projectId, conversationId] = positionalArgs(rest, conversationStringFlags);
+      const targetProjectId = typeof flags.to === 'string' ? flags.to : '';
+      if (!projectId || !conversationId || !targetProjectId) {
+        console.error('Usage: od conversation move <projectId> <conversationId> --to <targetProjectId>');
+        process.exit(2);
+      }
+      const resp = await fetch(
+        `${base}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/move`,
+        {
+          method:  'POST',
+          headers: { 'content-type': 'application/json', ...workspaceHeaders },
+          body:    JSON.stringify({ targetProjectId }),
+        },
+      );
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      console.log(
+        `[conversation] moved ${conversationId} to ${data.targetProjectId} `
+        + `(copied ${data.copiedFiles?.length ?? 0}, renamed ${data.renamedFiles?.length ?? 0}, skipped ${data.skippedFiles?.length ?? 0})`,
+      );
       return;
     }
     default:

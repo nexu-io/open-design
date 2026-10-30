@@ -42,7 +42,6 @@ import { NewProjectModal } from '../../src/components/NewProjectModal';
 import { I18nProvider } from '../../src/i18n';
 import type {
   DesignSystemSummary,
-  ProjectTemplate,
   SkillSummary,
 } from '../../src/types';
 
@@ -96,8 +95,8 @@ beforeEach(() => {
 });
 
 describe('NewProjectModal layout', () => {
-  it('keeps the project form inside a scrollable body region', () => {
-    const { container } = render(
+  it('only shows the name and project actions, with initial focus on the name', () => {
+    render(
       <NewProjectModal
         open
         skills={skills}
@@ -110,12 +109,14 @@ describe('NewProjectModal layout', () => {
       />,
     );
 
-    const modalBody = container.querySelector('.new-project-modal__body');
-    const panelBody = container.querySelector('.new-project-modal__body .newproj-body');
-    expect(modalBody).toBeTruthy();
-    expect(panelBody).toBeTruthy();
-    expect(screen.getByTestId('new-project-panel')).toBeTruthy();
-    expect(screen.getByTestId('create-project')).toBeTruthy();
+    expect(screen.getByRole('textbox', { name: 'Project name' })).toHaveFocus();
+    const createButton = screen.getByTestId('create-project');
+    expect(createButton).toBeDisabled();
+    expect(createButton.parentElement?.contains(screen.getByRole('textbox'))).toBe(true);
+    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(screen.queryByTestId('new-project-panel')).toBeNull();
+    expect(screen.queryByText('Design system')).toBeNull();
+
   });
 
   it('keeps the modal open with a waiting state until project creation finishes', async () => {
@@ -140,11 +141,12 @@ describe('NewProjectModal layout', () => {
       />,
     );
 
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'New project' } });
     fireEvent.click(screen.getByTestId('create-project'));
 
     expect(onCreate).toHaveBeenCalledTimes(1);
     expect(onClose).not.toHaveBeenCalled();
-    expect(screen.getByRole('status').textContent).toContain('Creating project…');
+    expect(screen.getByRole('status').textContent).toContain('Loading…');
     expect((screen.getByTestId('create-project') as HTMLButtonElement).disabled).toBe(true);
 
     resolveCreate(true);
@@ -183,11 +185,11 @@ describe('NewProjectModal layout', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open folder' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open a file' }));
 
     await waitFor(() => {
       expect(pickAndImportHostProject).toHaveBeenCalledWith({
-        skillId: 'prototype-skill',
+        skillId: null,
         workspaceContext: expect.objectContaining({
           workspaceId: 'workspace-modal',
           workspaceMemberId: 'member-modal',
@@ -222,44 +224,58 @@ describe('NewProjectModal layout', () => {
 
     expect(screen.getByRole('dialog', { name: '新建项目' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: '新建项目' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '打开文件夹' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '打开文件' })).toBeTruthy();
     expect(screen.queryByText('New project')).toBeNull();
     expect(screen.queryByText('Open folder')).toBeNull();
   });
 });
 
-describe('NewProjectModal template deletion plumbing', () => {
-  it('forwards onDeleteTemplate to the inner panel', async () => {
-    const templates: ProjectTemplate[] = [
-      {
-        id: 'tmpl-landing',
-        name: 'Landing Page',
-        description: 'A saved landing page starter.',
-        files: [{ name: 'prototype/App.jsx', content: '' }],
-        createdAt: 1714867200000,
-      },
-    ];
-    const onDelete = vi.fn().mockResolvedValue(true);
+describe('NewProjectModal creation', () => {
+  it('requires a name and rejects text beyond 24 characters with a warning', () => {
+    const onCreate = vi.fn();
+    render(<NewProjectModal open skills={skills} designSystems={[]} defaultDesignSystemId={null}
+      templates={[]} promptTemplates={[]} onCreate={onCreate} onClose={() => {}} />);
+    const input = screen.getByRole('textbox', { name: 'Project name' });
+    const createButton = screen.getByTestId('create-project');
 
-    render(
-      <NewProjectModal
-        open
-        skills={skills}
-        designSystems={designSystems}
-        defaultDesignSystemId="clay"
-        templates={templates}
-        promptTemplates={[]}
-        onDeleteTemplate={onDelete}
-        onCreate={() => {}}
-        onClose={() => {}}
-      />,
-    );
+    fireEvent.change(input, { target: { value: '   ' } });
+    expect(createButton).toBeDisabled();
+    fireEvent.submit(createButton.closest('form')!);
+    expect(onCreate).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole('tab', { name: 'From template' }));
-    fireEvent.click(screen.getByLabelText(/delete template/i));
-    await screen.findByRole('alertdialog');
-    fireEvent.click(screen.getByRole('button', { name: 'Delete template' }));
+    fireEvent.change(input, { target: { value: '字'.repeat(25) } });
+    expect(input).toHaveValue('字'.repeat(24));
+    expect(screen.getByRole('alert').textContent).toContain('24 characters');
+    expect(createButton).toBeEnabled();
 
-    expect(onDelete).toHaveBeenCalledWith('tmpl-landing');
+    fireEvent.change(input, { target: { value: '字'.repeat(23) } });
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('creates a named blank project without hidden type or design selections', async () => {
+    const onCreate = vi.fn().mockResolvedValue(true);
+    const onClose = vi.fn();
+    render(<NewProjectModal open skills={skills} designSystems={designSystems}
+      defaultDesignSystemId="clay" initialTab="deck" templates={[]} promptTemplates={[]}
+      onCreate={onCreate} onClose={onClose} />);
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '  Brand folder  ' } });
+    fireEvent.submit(screen.getByTestId('create-project').closest('form')!);
+    expect(onCreate).toHaveBeenCalledWith({
+      name: 'Brand folder', skillId: null, designSystemId: null,
+      metadata: { kind: 'other', nameSource: 'user' },
+    });
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+  });
+
+  it('keeps the entered name available when creation fails', async () => {
+    const onClose = vi.fn();
+    render(<NewProjectModal open skills={skills} designSystems={[]} defaultDesignSystemId={null}
+      templates={[]} promptTemplates={[]} onCreate={() => false} onClose={onClose} />);
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Draft' } });
+    fireEvent.click(screen.getByTestId('create-project'));
+    await screen.findByRole('alert');
+    expect(screen.getByRole('textbox')).toHaveValue('Draft');
+    expect(screen.getByTestId('create-project')).toBeEnabled();
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

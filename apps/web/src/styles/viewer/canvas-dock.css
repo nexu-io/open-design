@@ -20,6 +20,24 @@
      events so the canvas underneath stays fully usable. */
   pointer-events: none;
 }
+/* Centre the dock on the preview, not on the preview plus a panel docked
+   beside it: end the dock where the side column begins. Widths mirror the
+   comment layout (core.css) and the embedded editor (memory.css). */
+.viewer:has(> .viewer-body > .comment-preview-layer-with-side-dock:not(.comment-preview-layer-side-dock-stacked)) > .canvas-dock {
+  inset-inline: 8px calc(8px + 320px + 12px);
+}
+.viewer:has(> .viewer-body > .comment-preview-layer-with-side-dock.comment-preview-layer-dock-collapsed:not(.comment-preview-layer-side-dock-stacked)) > .canvas-dock {
+  inset-inline: 8px calc(8px + 42px + 12px);
+}
+.viewer:has(> .viewer-body > .preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-side-dock:not(.comment-preview-layer-side-dock-stacked)) > .canvas-dock {
+  inset-inline: 24px calc(24px + 320px + 12px);
+}
+.viewer:has(> .viewer-body > .preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-side-dock.comment-preview-layer-dock-collapsed:not(.comment-preview-layer-side-dock-stacked)) > .canvas-dock {
+  inset-inline: 24px calc(24px + 42px + 12px);
+}
+.viewer:has(> .viewer-body > .manual-edit-workspace.has-embedded-editor) > .canvas-dock {
+  right: calc(clamp(220px, calc(100% - 208px), 320px) + 16px);
+}
 .canvas-dock-inner {
   position: relative;
   isolation: isolate;

@@ -36,6 +36,16 @@
    at its centre. Same box the Design Files pane used to give it — a plain
    white surface that is the positioning context for the field's own
    absolutely-positioned canvas, and clips it to the pane. */
+/* 新标签页: the launcher as the pane's page (see FileWorkspace). */
+.ws-new-tab-page {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+}
+
 .project-live-preview-empty {
   flex: 1;
   min-height: 320px;

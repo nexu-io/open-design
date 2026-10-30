@@ -86,7 +86,7 @@ describe('EntryNavRail all-projects visibility', () => {
   it('still shows drafts for a personal workspace', () => {
     renderRail('personal', 'zh-CN');
     const allProjects = screen.getByTestId('entry-nav-drafts');
-    expect(allProjects.textContent).toBe('全部项目');
+    expect(allProjects.textContent).toBe('项目');
     expect(allProjects.getAttribute('aria-expanded')).toBe('false');
   });
 
@@ -112,8 +112,8 @@ describe('EntryNavRail all-projects visibility', () => {
 
 it('places personal projects above recently viewed inside the same sidebar card', () => {
   renderRail('personal');
-  const personal = screen.getByRole('button', { name: 'Personal projects' });
-  const recent = screen.getByRole('button', { name: 'Recently viewed' });
+  const personal = screen.getByRole('button', { name: 'Projects' });
+  const recent = screen.getByRole('button', { name: 'Conversations' });
   const card = personal.closest('.entry-nav-rail__panel');
   expect(card?.contains(recent)).toBe(true);
   expect(personal.compareDocumentPosition(recent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -128,8 +128,8 @@ it('expands personal projects in place independently of recently viewed', async 
     personalProjects={[{ id: 'personal-1', name: 'My personal project', updatedAt: 1 } as Project]}
     recentProjects={[{ id: 'recent-1', name: 'Recently opened project', updatedAt: 2 } as Project]}
     onOpenRecentProject={onOpenRecentProject} /></I18nProvider>);
-  const personal = screen.getByRole('button', { name: 'Personal projects' });
-  const recent = screen.getByRole('button', { name: 'Recently viewed' });
+  const personal = screen.getByRole('button', { name: 'Projects' });
+  const recent = screen.getByRole('button', { name: 'Conversations' });
   const recentExpanded = recent.getAttribute('aria-expanded');
   expect(personal.getAttribute('aria-expanded')).toBe('false');
   fireEvent.click(personal);

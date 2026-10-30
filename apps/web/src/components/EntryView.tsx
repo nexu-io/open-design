@@ -54,6 +54,7 @@ type EntryCreateProjectInput = Omit<CreateInput, 'metadata'> & {
   pluginInputs?: Record<string, unknown>;
   conversationMode?: ChatSessionMode;
   autoSendFirstMessage?: boolean;
+  startOnHome?: boolean;
   requestId?: string;
   pendingFiles?: File[];
   userWorkingDirToken?: string;

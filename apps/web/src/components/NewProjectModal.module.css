@@ -1,0 +1,68 @@
+.nameField {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  padding: var(--spacing-4, 4px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+}
+
+.nameField:focus-within {
+  border-color: var(--border-strong);
+}
+
+.name {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0 var(--spacing-12, 12px);
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+
+.name:focus-visible {
+  outline: 0;
+}
+
+button.create {
+  flex: 0 0 auto;
+  min-width: 88px;
+  height: 32px;
+  padding: 0 var(--spacing-12, 12px);
+}
+
+.nameLimit {
+  margin: var(--spacing-8, 8px) 0 0;
+  color: var(--danger, #d4543b);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+button.folder {
+  margin-top: 16px;
+  width: 100%;
+  height: auto;
+  min-height: 112px;
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+}
+
+.folder svg {
+  flex-shrink: 0;
+}
+
+button.folder:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}

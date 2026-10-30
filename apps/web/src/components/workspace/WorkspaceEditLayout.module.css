@@ -8,6 +8,42 @@
   background: transparent;
 }
 
+.layout[data-collapsible] .tabChrome {
+  right: 52px;
+}
+
+button.previewToggle {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  z-index: 121;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  -webkit-app-region: no-drag;
+}
+
+button.previewToggle:hover {
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
+
+button.previewToggle:active:not(:disabled) {
+  transform: none;
+}
+
+.previewToggle[data-expanded='false'] ~ :global(.split-chat-tabs-dock) {
+  margin-right: 48px;
+}
+
 /* The preview module owns its top row, including when chat or the inspector
    changes width. Keep it above the native window-drag region. */
 .tabChrome {

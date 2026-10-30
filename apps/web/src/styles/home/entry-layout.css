@@ -10,22 +10,13 @@
    brand and a floating top-right control replaces the chrome
    actions, so the entry view does not render `AppChromeHeader`. */
 .entry-shell--no-header {
-  grid-template-rows: 1fr;
+  grid-template-rows: minmax(0, 1fr);
   --entry-rail-width: 236px;
 }
 
-/* Keep the content card at its usable width even when the browser viewport
-   becomes narrower than the two docked columns. The shell can scroll
-   horizontally at that point instead of reflowing the hero and composer. */
-.entry-shell--no-header:has(> .entry) {
-  min-width: 856px; /* 56px destinations + 800px content track */
-}
-.entry-shell--no-header:has(> .entry.entry--rail-open) {
-  min-width: 1056px; /* plus the workspace rail's 200px floor */
-}
-.entry-shell--no-header:has(> .entry.entry--destination) {
-  min-width: 856px;
-}
+/* No minimum width: below the docked columns' comfortable width the content
+   card squeezes instead of the window scrolling sideways (per product:
+   不允许左右滑动). */
 
 /* `.entry-shell` is always mounted inside `.workspace-shell__body`, which
    reserves its own space above for the app's persistent tab-chrome header
@@ -58,11 +49,14 @@
    animates between 0 and its saved width. */
 .entry-shell--no-header .entry {
   --entry-destinations-width: 56px;
-  /* Reserve an 800px main track: 792px of visible card plus its 8px right inset.
-     The shell's minimum width keeps that track intact in narrow viewports. */
+  /* Reserve an 800px main track while there is room: the rail gives up width
+     first (down to 200px), then the content squeezes. */
   --entry-rail-track-width: clamp(200px, calc(100% - var(--entry-destinations-width) - 800px), var(--entry-rail-width, 236px));
   position: relative;
   grid-template-columns: var(--entry-destinations-width) 0 minmax(0, 1fr);
+  /* A long project list must scroll inside the sidebar, not enlarge the row
+     and push the home composer below the window. */
+  grid-template-rows: minmax(0, 1fr);
   /* Collapse: hold the horizontal squeeze until the rows have cascaded out
      top-to-bottom (see the staggered rail-row fade below), otherwise the
      0-width clip would swallow the lower rows before their turn. */
@@ -87,6 +81,7 @@
   margin: 8px 0;
   padding: 0 0 8px;
   border: 0;
+  outline: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
@@ -249,9 +244,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  /* The icon buttons end 8px before their grid track does. Shift this card
-     left so the visible icon-to-card and card-to-content gaps are both 4px. */
-  margin: 8px 4px 8px -4px;
+  /* Every card-to-card gap in the shell is a fixed 8px (per product: 所有卡片
+     的间距统一成 8px). The icon buttons already end 8px before their grid
+     track, so no left margin gives icon-to-card 8px; the 4px right margin plus
+     .entry-main's own 4px inset gives card-to-content 8px. */
+  margin: 8px 4px 8px 0;
   padding: 8px 4px;
   position: relative;
   --entry-content-surface: rgba(255, 255, 255, 0.85);
@@ -259,7 +256,12 @@
   -webkit-backdrop-filter: var(--material-thin-backdrop);
   backdrop-filter: var(--material-thin-backdrop);
   border-radius: 16px;
-  border: 0.5px solid #F7F7F7;
+  /* Hairline drawn as an inset outline, not a border, so it takes no layout
+     space: the 8px card-to-card gaps then measure 8px from the box AND from
+     the visible fill (per product: 所有卡片的间距统一成 8px). */
+  border: 0;
+  outline: 0.5px solid #F7F7F7;
+  outline-offset: -0.5px;
   box-shadow: var(--shadow-sm);
 }
 .entry-nav-rail__panel-actions {
@@ -1109,10 +1111,9 @@
   flex: 0 0 14px;
 }
 .entry-nav-rail__recent-title {
-  /* 13/500 (per product) — the destinations above read 13/600, so this sits on
-     the same size and one weight lighter: a heading for the rows under it, not
-     another place to go. */
-  font-size: 13px;
+  /* 14/500 (per product, 2026-10-25) — the 项目 / 对话 headings step up a
+     size from the 13px destinations above. */
+  font-size: 14px;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -1183,8 +1184,8 @@
    shift the list. */
 .entry-nav-rail__recent-rename {
   width: 100%;
-  height: 38px;
-  padding: 10px 10px 10px 16px;
+  height: 36px;
+  padding: 0 10px 0 16px;
   /* #DBDBDB (per product) — written as `--border`, the token that already holds
      exactly that value, rather than as a literal. */
   border: 1px solid var(--border);
@@ -1362,16 +1363,16 @@
   /* The destinations' icon→label gap, so a project name lands on the same
      column as 插件's label. */
   gap: 9px;
-  height: auto;
   /* Flush with the destinations' own leading inset (per product: 左边对齐和
      首页的选项), so the row's GLYPH starts on the same column as 插件's puzzle
      mark — and, since the glyph slot repeats the destinations' 18 + 9, the name
      behind it lands on the labels' column. One left edge either way. */
-  /* 38 tall, matching the destinations and the heading above (per product).
-     This row is `display: block` (see above), so the height comes from an
-     explicit line box plus symmetric padding — 10 + 18 + 10 — rather than from
-     a flex centre it cannot use. */
-  padding: 10px 10px 10px 16px;
+  /* A fixed 36, the same box as every other row that can highlight in this
+     panel — 新建会话, the conversation rows, 查看全部 (per product: 选中时这几个
+     卡片的高度都是一样的). Padding plus a line box came out at 37.5 here, so a
+     selected conversation under its project read 1.5px short of it. */
+  height: 36px;
+  padding: 0 10px 0 16px;
   line-height: 18px;
   border: 0;
   border-radius: 12px;
@@ -1387,6 +1388,13 @@
   text-align: left;
   overflow: hidden;
   transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out);
+}
+/* Both rails lead their project list with 新建会话, whose mark sits 12px in.
+   The folder glyph is centred in an 18px slot (1px of air), so 11 here puts
+   both marks on one column instead of 5px apart. */
+.project-recent-rail .entry-nav-rail__recent-item,
+.entry-nav-rail__team-section .entry-nav-rail__recent-item {
+  padding-left: 11px;
 }
 /* The leading glyph's slot: the chat mark, or this project's run status when it
    has one (RailRecentRow). Same 18px box the destinations' icons occupy
@@ -1408,25 +1416,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.entry-nav-rail__recent-row:hover .entry-nav-rail__recent-item:not(.is-active):not(:active) {
-  /* Match an unselected destination's hover, including while the pointer is
-     over the trailing more button. */
+/* Folder disclosure is not navigation: keep hover/press ink and geometry
+   stable instead of briefly applying the old opening-project highlight. */
+.entry-nav-rail__recent-row:hover .entry-nav-rail__recent-item,
+.entry-nav-rail__recent-item:is(:active, .is-active) {
   background: color-mix(in srgb, var(--text) 5%, transparent);
 }
-.entry-nav-rail__recent-item:is(:active, .is-active) {
-  /* Opening a project gets the same stronger fill and ink as a selected
-     destination. The rail unmounts once project navigation completes. */
-  background: color-mix(in srgb, var(--text-strong) 10%, transparent);
-  color: #121212;
-  font-weight: 600;
-}
-[data-theme="dark"] .entry-nav-rail__recent-item:is(:active, .is-active) {
-  color: var(--text-strong);
-}
-@media (prefers-color-scheme: dark) {
-  html:not([data-theme]) .entry-nav-rail__recent-item:is(:active, .is-active) {
-    color: var(--text-strong);
-  }
+.entry-nav-rail__recent-item:active:not(:disabled) {
+  transform: none;
 }
 /* Selected ink is #121212 (per product), darker than `--selected`'s #353535.
    A literal rather than a token change: `--selected` is the app-wide selected
@@ -1659,6 +1656,9 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  /* Shrink to the panel so the project list's scroll body gets a bound. */
+  flex: 1 1 auto;
+  min-height: 0;
   margin-top: 0;
   padding-top: 0;
   border-top: 0;
@@ -1923,7 +1923,8 @@
    32px of content above the scroll port, which only looked right while the
    entry topbar still sat above it. With the topbar gone (#5517) it clipped
    every section's title and toolbar row. */
-.entry-main--scroll::before {
+.entry-main--scroll::before,
+.entry-main--scroll::after {
   content: '';
   position: absolute;
   top: 0;
@@ -1931,10 +1932,7 @@
   right: 0;
   z-index: 20;
   display: block;
-  height: 32px;
   pointer-events: none;
-  -webkit-mask-image: linear-gradient(to bottom, #000 30%, transparent);
-  mask-image: linear-gradient(to bottom, #000 30%, transparent);
   /* Blur only while something is actually scrolled under the band. Resting
      content starts at 12px, so an unconditional backdrop-filter smudged every
      page's h2 into a dirty dark block (acceptance #28). `is-scrolled` comes
@@ -1943,9 +1941,26 @@
   backdrop-filter: none;
   transition: backdrop-filter 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
+/* Progressive blur, 24px tall (per product): ::before is the soft layer over
+   the whole band, ::after the strong layer over its top half. Each fades out
+   toward the bottom, so the stack ramps strong → soft → clear. */
+.entry-main--scroll::before {
+  height: 24px;
+  -webkit-mask-image: linear-gradient(to bottom, #000 40%, transparent);
+  mask-image: linear-gradient(to bottom, #000 40%, transparent);
+}
+.entry-main--scroll::after {
+  height: 12px;
+  -webkit-mask-image: linear-gradient(to bottom, #000, transparent);
+  mask-image: linear-gradient(to bottom, #000, transparent);
+}
 .entry-main--scroll.is-scrolled::before {
-  -webkit-backdrop-filter: var(--material-ultrathin-backdrop, none);
-  backdrop-filter: var(--material-ultrathin-backdrop, none);
+  -webkit-backdrop-filter: var(--material-edge-soft-backdrop, none);
+  backdrop-filter: var(--material-edge-soft-backdrop, none);
+}
+.entry-main--scroll.is-scrolled::after {
+  -webkit-backdrop-filter: var(--material-edge-strong-backdrop, none);
+  backdrop-filter: var(--material-edge-strong-backdrop, none);
 }
 .entry-main--scroll {
   /* The right content card and middle workspace card share their final
@@ -2004,7 +2019,8 @@
      card's top edge and 24 to its left/right. The titles sit flush at this
      container's top-left, so the number lives here rather than on each page.
      The bottom stays deeper — it is scroll runout, not a gutter. */
-  padding: 24px 24px 48px;
+  --entry-inner-pad-top: 24px;
+  padding: var(--entry-inner-pad-top) 24px 48px;
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -9654,7 +9670,12 @@ button.entry-nav-rail__menu-credits-row:active:not(:disabled) {
   margin-top: 40px;
   margin-right: 8px;
   margin-bottom: 8px;
-  border: 0.5px solid #F7F7F7;
+  /* Hairline drawn as an inset outline, not a border, so it takes no layout
+     space: the 8px card-to-card gaps then measure 8px from the box AND from
+     the visible fill (per product: 所有卡片的间距统一成 8px). */
+  border: 0;
+  outline: 0.5px solid #F7F7F7;
+  outline-offset: -0.5px;
   box-shadow: var(--shadow-sm);
 }
 .entry-shell--no-header .entry:not(.entry--rail-open) .entry-main--scroll {
@@ -9663,19 +9684,29 @@ button.entry-nav-rail__menu-credits-row:active:not(:disabled) {
 .entry-shell--no-header .entry.entry--destination .entry-main--scroll {
   margin-left: -4px;
 }
+/* With the sidebar open the card sits 8px off the rail panel's edge, the same
+   gutter the project workspace keeps beside its rail. */
+.entry-shell--no-header .entry.entry--rail-open .entry-main--scroll {
+  margin-left: 4px;
+}
+/* A destination page (插件 / 设计系统 …) folds the rail panel to a 0 track, so
+   the card sits straight against the icon column. The icons already end 8px
+   before that column does, so no margin keeps the icon-to-card gap at 8px. */
+.entry-shell--no-header .entry.entry--destination.entry--rail-open .entry-main--scroll {
+  margin-left: 0;
+}
 .entry-shell--no-header .entry-main__inner {
-  padding-top: 60px;
+  /* Read back by Home's scroll column (home-hero.css), which pulls itself up
+     over this padding so its content scrolls to the card's top edge. */
+  --entry-inner-pad-top: 60px;
+  padding-top: var(--entry-inner-pad-top);
 }
 /* Destination pages share a fixed card inset, independent of viewport width.
    Remove the centered width cap so it cannot add to the horizontal gutter. */
 .entry-shell--no-header .entry--destination .entry-main__inner {
   max-width: none;
+  --entry-inner-pad-top: var(--spacing-48);
   padding: var(--spacing-48);
-}
-@media (max-width: 1080px) {
-  .entry-shell--no-header .entry.entry--rail-open .entry-main--scroll {
-    margin-left: 0;
-  }
 }
 body:has(.entry-shell--no-header .entry-main--scroll) > .entry-top-right-cluster {
   top: 8px;

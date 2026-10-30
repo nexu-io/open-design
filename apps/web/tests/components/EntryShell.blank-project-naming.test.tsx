@@ -19,6 +19,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EntryShell } from '../../src/components/EntryShell';
+import { requestNewProjectFromRail, takeNewProjectRequest } from '../../src/components/entryRailBridge';
 import { I18nProvider } from '../../src/i18n';
 import type { AgentInfo, AppConfig } from '../../src/types';
 import {
@@ -194,6 +195,7 @@ function renderAt(path: string, overrides: Partial<React.ComponentProps<typeof E
 }
 
 beforeEach(() => {
+  takeNewProjectRequest();
   globalThis.ResizeObserver = ResizeObserverMock as typeof ResizeObserver;
   resetWorkspaceContextCache();
   resetTeamProjectsCache();
@@ -208,6 +210,24 @@ afterEach(() => {
   resetWorkspaceContextCache();
   resetTeamProjectsCache();
   vi.unstubAllGlobals();
+});
+
+describe('EntryShell new project requests', () => {
+  it('opens the existing creation dialog after navigating from a project', async () => {
+    requestNewProjectFromRail();
+    const props = renderAt('/');
+    expect(await screen.findByTestId('new-project-modal')).toBeTruthy();
+    expect(takeNewProjectRequest()).toBe(false);
+    expect(props.onCreateProject).not.toHaveBeenCalled();
+  });
+
+  it('opens the creation dialog for a request while Home is mounted', async () => {
+    const props = renderAt('/');
+    expect(screen.queryByTestId('new-project-modal')).toBeNull();
+    act(() => requestNewProjectFromRail());
+    expect(await screen.findByTestId('new-project-modal')).toBeTruthy();
+    expect(props.onCreateProject).not.toHaveBeenCalled();
+  });
 });
 
 describe('EntryShell team project content readiness', () => {
@@ -770,7 +790,7 @@ describe('EntryShell blank-project creation tags nameSource', () => {
   it('tags the Drafts empty-state "New project" CTA as generated', async () => {
     const props = renderAt('/drafts');
 
-    const cta = await screen.findByRole('button', { name: 'New project' });
+    const cta = await within(document.querySelector('main') as HTMLElement).findByRole('button', { name: 'New project' });
     fireEvent.click(cta);
 
     expect(props.onCreateProject).toHaveBeenCalledTimes(1);
@@ -785,7 +805,7 @@ describe('EntryShell blank-project creation tags nameSource', () => {
   it('tags the All-projects empty-state "New project" CTA as generated', async () => {
     const props = renderAt('/all-projects');
 
-    const cta = await screen.findByRole('button', { name: 'New project' });
+    const cta = await within(document.querySelector('main') as HTMLElement).findByRole('button', { name: 'New project' });
     fireEvent.click(cta);
 
     expect(props.onCreateProject).toHaveBeenCalledTimes(1);
@@ -796,4 +816,17 @@ describe('EntryShell blank-project creation tags nameSource', () => {
       }),
     );
   });
+});
+
+
+it('keeps New conversation separate from project creation and returns to Home', async () => {
+  localStorage.setItem('od.entry.railOpen', 'true');
+  const onCreateProject = vi.fn();
+  renderAt('/drafts', { onCreateProject });
+  const button = await screen.findByRole('button', { name: 'New conversation' });
+  fireEvent.click(button);
+  fireEvent.click(button);
+  expect(window.location.pathname).toBe('/');
+  expect(onCreateProject).not.toHaveBeenCalled();
+  expect(screen.queryByTestId('new-project-modal')).toBeNull();
 });

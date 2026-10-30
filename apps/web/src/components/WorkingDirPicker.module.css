@@ -315,6 +315,14 @@
   bottom: -5px;
 }
 
+/* Keep scrolling inside the list so the flyout's hover bridge stays outside
+   the scroll clip and the pointer can still cross from its parent menu. */
+.recentList {
+  max-height: min(320px, calc(100dvh - 36px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .recentItem {
   appearance: none;
   width: 100%;

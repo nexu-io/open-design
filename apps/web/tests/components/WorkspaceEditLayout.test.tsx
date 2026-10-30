@@ -12,6 +12,19 @@ function Inspector({ id = 'a', visible = true }: { id?: string; visible?: boolea
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('project edit sidebar layout', () => {
+  it('exposes a preview collapse button without interfering with its children', () => {
+    const onCollapse = vi.fn();
+    render(<WorkspaceEditLayout onCollapse={onCollapse} panelId="preview-panel">
+      <iframe title="Preview" />
+    </WorkspaceEditLayout>);
+    const button = screen.getByRole('button', { name: 'Collapse preview' });
+    expect(button).toHaveAttribute('aria-controls', 'preview-panel');
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(button);
+    expect(onCollapse).toHaveBeenCalledOnce();
+    expect(screen.getByTitle('Preview')).toBeInTheDocument();
+  });
+
   it('retains the requested width across closing and reopening without remounting the preview', () => {
     const content = (visible: boolean) => <WorkspaceEditLayout>
       <iframe title="Preview" /><Inspector visible={visible} />

@@ -2983,3 +2983,119 @@
   max-width: 106px;
   line-height: 12px;
 }
+
+/* Applied-template lead chip (ChatComposer). Same object as Home's
+   `.home-hero__lead-chip` — it reuses those classes for the chip itself — and
+   the same seating: `useInlineLeadChip` takes it out of flow, the editor's
+   first line is indented past it and wrapped lines return to its icon.
+   `--composer-text-top` / `--composer-text-left` are the editor's own inset
+   (8px / 9px here; Home's skin zeroes them, as Home's prompt has none). */
+.composer-input-wrap {
+  --composer-text-top: 8px;
+  --composer-text-left: 9px;
+}
+.composer-input-wrap > .composer-lead-chip {
+  margin: var(--composer-text-top) var(--composer-text-left) var(--spacing-8);
+  font-size: 13px;
+}
+.composer-input-wrap.is-chip-inline > .composer-lead-chip {
+  position: absolute;
+  top: var(--composer-text-top);
+  left: var(--composer-text-left);
+  margin: 0;
+  max-width: 50%;
+  /* Above the editor, which is `position: relative` and would swallow the ×. */
+  z-index: 3;
+}
+.composer-input-wrap.is-chip-inline > .composer-lead-chip .home-hero__active-chip {
+  max-width: 240px;
+}
+.composer-input-wrap.is-chip-inline .composer-input-editor .composer-editable,
+.composer-input-wrap.is-chip-inline .composer-input-editor [contenteditable='true'] {
+  padding-top: calc(var(--composer-text-top) + var(--composer-chip-lead, 0px));
+  padding-left: calc(var(--composer-text-left) + var(--composer-chip-text-left, 0px));
+}
+.composer-input-wrap.is-chip-inline .composer-editable > p:first-child,
+.composer-input-wrap.is-chip-inline .composer-editor-paragraph:first-child {
+  text-indent: calc(
+    var(--composer-chip-w, 0px) + var(--spacing-8) - var(--composer-chip-text-left, 0px)
+  );
+}
+.composer-input-wrap.is-chip-inline .composer-input-placeholder,
+.composer-input-wrap.is-chip-inline .home-hero__carousel {
+  padding-left: calc(var(--composer-chip-w, 0px) + var(--spacing-8));
+  padding-top: var(--composer-chip-lead, 0px);
+}
+
+/* Home's input, worn by the project composer while the empty conversation's
+   Home intro (ConversationStartHero) shows (per product: 这页面所有的状态都使用
+   首页的). ChatPane sets `data-home-composer` on
+   the composer's slot / portal layer; every value below is Home's own
+   (`.home-hero__composer-card`, `.home-hero__input-card`, `.home-hero__lexical`,
+   `.home-hero__input-foot` in styles/home/home-hero.css). The `:is()` + attribute
+   prefix out-ranks the chat skin's (0,3,0) card and focus rules. */
+:is(.chat-composer-slot, .chat-composer-fixed-layer)[data-home-composer] .composer {
+  /* 8px off both sides of the chat card. In the full-width chat this also
+     lands the tray on Home's 820px inside its `820px + 2 × 8px` slot. */
+  margin-inline: var(--spacing-8);
+  /* Home's grey tray: 4px frame around the white card, 20px corners. */
+  padding: var(--spacing-4);
+  border-radius: 20px;
+  background: var(--bg-subtle);
+}
+:is(.chat-composer-slot, .chat-composer-fixed-layer)[data-home-composer] .composer-shell,
+:is(.chat-composer-slot, .chat-composer-fixed-layer)[data-home-composer] .composer-shell:focus-within {
+  /* The white input card: concentric 16px corners, 16px to the text, stroke
+     only once engaged. Positioned and radius-published for Home's focus beam
+     (ComposerBeam), which traces this box. */
+  position: relative;
+  --composer-card-radius: 16px;
+  padding: calc(var(--spacing-16) - var(--stroke-thin));
+  gap: var(--spacing-8);
+  border: var(--stroke-thin) solid transparent;
+  border-radius: 16px;
+  background: var(--bg-app);
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+:is(.chat-composer-slot, .chat-composer-fixed-layer)[data-home-composer] .composer-shell:focus-within {
+  border-color: var(--border-soft);
+}
+:is(.chat-composer-slot, .chat-composer-fixed-layer)[data-home-composer] .composer-input-wrap,
+:is(.chat-composer-slot, .chat-composer-fixed-layer)[data-home-composer] .composer-input-wrap:focus-within {
+  --composer-text-top: 0px;
+  --composer-text-left: 0px;
+  border-color: transparent;
+  border-radius: 0;
+  background: transparent;
+}
+:is(.chat-composer-slot, .chat-composer-fixed-layer)[data-home-composer] .composer-input-editor {
+  min-height: 48px;
+  max-height: 180px;
+}
+:is(.chat-composer-slot, .chat-composer-fixed-layer)[data-home-composer] .composer-input-editor .composer-editable,
+:is(.chat-composer-slot, .chat-composer-fixed-layer)[data-home-composer] .composer-input-editor [contenteditable='true'] {
+  min-height: 48px;
+  padding: 0;
+  font-size: var(--font-size-14);
+  font-weight: 600;
+  line-height: 1.6;
+}
+:is(.chat-composer-slot, .chat-composer-fixed-layer)[data-home-composer] .composer-input-placeholder,
+:is(.chat-composer-slot, .chat-composer-fixed-layer)[data-home-composer] .composer-input-wrap .home-hero__carousel {
+  top: 0;
+  left: 0;
+  right: 8px;
+  font-size: var(--font-size-14);
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--text-soft);
+}
+:is(.chat-composer-slot, .chat-composer-fixed-layer)[data-home-composer] .composer-row {
+  /* Home's action row: no divider, 8px under the prompt, edge to edge. */
+  min-height: 0;
+  margin-top: 0;
+  padding: var(--spacing-8) 0 0;
+  border-top: 0;
+}

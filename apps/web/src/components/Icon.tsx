@@ -26,8 +26,10 @@ export type IconName =
   | 'dashboard'
   | 'discord'
   | 'download'
+  | 'draggable'
   | 'draw'
   | 'edit'
+  | 'edit-box'
   | 'external-link'
   | 'eye'
   | 'eye-off'
@@ -35,6 +37,9 @@ export type IconName =
   | 'file-code'
   | 'file-text'
   | 'folder'
+  | 'fullscreen'
+  | 'expand-horizontal'
+  | 'collapse-horizontal'
   | 'folder-2'
   | 'folder-3'
   | 'folder-5'
@@ -76,6 +81,8 @@ export type IconName =
   | 'more-horizontal'
   | 'more-vertical'
   | 'orbit'
+  | 'orbit-filled'
+  | 'pencil-ruler'
   | 'remix-loop'
   | 'make-same'
   | 'paint-bucket'
@@ -103,6 +110,7 @@ export type IconName =
   | 'search'
   | 'send'
   | 'settings'
+  | 'settings-filled'
   | 'share'
   | 'sliders'
   | 'smartphone'
@@ -211,6 +219,9 @@ const REMIX_ICON: Partial<Record<IconName, string>> = {
   'more-horizontal': 'more-line',
   'more-vertical': 'more-2-line',
   orbit: 'planet-line',
+  'orbit-filled': 'planet-fill',
+  'pencil-ruler': 'pencil-ruler-2-line',
+  'edit-box': 'edit-box-line',
   'paint-bucket': 'paint-line',
   palette: 'palette-line',
   'palette-filled': 'palette-fill',
@@ -232,6 +243,7 @@ const REMIX_ICON: Partial<Record<IconName, string>> = {
   search: 'search-line',
   send: 'send-plane-2-line',
   settings: 'settings-3-line',
+  'settings-filled': 'settings-5-fill',
   share: 'share-forward-line',
   sliders: 'equalizer-line',
   smartphone: 'smartphone-line',
@@ -710,6 +722,30 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
       return (
         <svg {...common} fill="currentColor" stroke="none">
           <path d="M21 3C21.5523 3 22 3.44772 22 4V20C22 20.5523 21.5523 21 21 21H3C2.44772 21 2 20.5523 2 20V4C2 3.44772 2.44772 3 3 3H21ZM20 5H4V19H20V5ZM18 7V17H16V7H18Z" />
+        </svg>
+      );
+    case 'fullscreen':
+      return (
+        <svg {...common} fill="currentColor" stroke="none">
+          <path d="M16 3H22V9H20V5H16V3ZM2 3H8V5H4V9H2V3ZM20 19V15H22V21H16V19H20ZM4 19H8V21H2V15H4V19Z" />
+        </svg>
+      );
+    case 'expand-horizontal':
+      return (
+        <svg {...common} fill="currentColor" stroke="none">
+          <path d="M0.5 12L5.44975 7.05029L5.44876 11H10V13H5.44826L5.44727 16.9473L0.5 12ZM14 13H18.5501L18.55 16.9493L23.5 11.9996L18.5503 7.0498L18.5502 11H14V13Z" />
+        </svg>
+      );
+    case 'collapse-horizontal':
+      return (
+        <svg {...common} fill="currentColor" stroke="none">
+          <path d="M13.5 12 18.4497 7.05029 18.4488 11H23V13H18.4483L18.4473 16.9473 13.5 12ZM1 13H5.55013L5.55005 16.9493 10.5 11.9996 5.55025 7.0498 5.55017 11H1V13Z" />
+        </svg>
+      );
+    case 'draggable':
+      return (
+        <svg {...common} fill="currentColor" stroke="none">
+          <path d="M8.5 7C9.32843 7 10 6.32843 10 5.5C10 4.67157 9.32843 4 8.5 4C7.67157 4 7 4.67157 7 5.5C7 6.32843 7.67157 7 8.5 7ZM8.5 13.5C9.32843 13.5 10 12.8284 10 12C10 11.1716 9.32843 10.5 8.5 10.5C7.67157 10.5 7 11.1716 7 12C7 12.8284 7.67157 13.5 8.5 13.5ZM10 18.5C10 19.3284 9.32843 20 8.5 20C7.67157 20 7 19.3284 7 18.5C7 17.6716 7.67157 17 8.5 17C9.32843 17 10 17.6716 10 18.5ZM15.5 7C16.3284 7 17 6.32843 17 5.5C17 4.67157 16.3284 4 15.5 4C14.6716 4 14 4.67157 14 5.5C14 6.32843 14.6716 7 15.5 7ZM17 12C17 12.8284 16.3284 13.5 15.5 13.5C14.6716 13.5 14 12.8284 14 12C14 11.1716 14.6716 10.5 15.5 10.5C16.3284 10.5 17 11.1716 17 12ZM15.5 20C16.3284 20 17 19.3284 17 18.5C17 17.6716 16.3284 17 15.5 17C14.6716 17 14 17.6716 14 18.5C14 19.3284 14.6716 20 15.5 20Z" />
         </svg>
       );
     case 'panel-right':

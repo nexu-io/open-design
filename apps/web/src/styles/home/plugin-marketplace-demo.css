@@ -1891,10 +1891,9 @@
      as the only thing under it. Cards stay row-aligned because the caption is
      always one nowrap line. */
   min-height: 0;
-  /* 8px side inset, the same one the projects grid's caption keeps: with no
-     card frame the row measures itself against the preview plate's edge, and
-     the old 16/14 read as an indent away from it. */
-  padding: 8px 8px 0;
+  /* No side inset: with no card frame the caption and byline share the
+     preview plate's left edge, so any inset read as an indent away from it. */
+  padding: 8px 0 0;
   /* No rule and no fill: the caption sits straight on the page ground. */
   background: transparent;
 }

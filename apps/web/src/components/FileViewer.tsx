@@ -8631,14 +8631,9 @@ function HtmlViewer({
   const [manualEditHoverTarget, setManualEditHoverTarget] = useState<ManualEditTarget | null>(null);
   const [manualEditPageStylesOpen, setManualEditPageStylesOpen] = useState(false);
   const workspaceDockOwner = useId();
-  // One owner claims the shared column across comment/edit switches, so a
-  // closing panel cannot release the slot now occupied by its replacement.
-  const workspaceDock = useWorkspaceEditDock(
-    workspaceDockOwner,
-    workspaceActive && mode === 'preview' && (manualEditMode
-      ? Boolean(selectedManualEditTarget || manualEditPageStylesOpen)
-      : commentPanelOpen),
-  );
+  // Comments and the edit inspector both live inside the preview card, in the
+  // same right-hand column, so neither reserves the workspace's external dock.
+  const workspaceDock = useWorkspaceEditDock(workspaceDockOwner, false);
   const manualEditDocked = workspaceDock !== null;
   useLayoutEffect(() => {
     if (workspaceDock || !workspaceActive || !commentPanelOpen || !commentPortalId) {
@@ -8919,9 +8914,9 @@ function HtmlViewer({
   const [commentSidePanelCollapsed, setCommentSidePanelCollapsed] = useState(false);
   const [strokePoints, setStrokePoints] = useState<StrokePoint[]>([]);
   const previewStateKey = `${projectId}:${file.name}`;
-  // External hosts already reserve (or overlay) their own space. Only a
-  // standalone local dock should subtract another column inside the preview.
-  const localCommentSideDockActive = commentPanelOpen && !workspaceDock && !commentPortalId;
+  // External hosts already reserve (or overlay) their own space. Workspaces
+  // and standalone viewers dock comments inside the preview card instead.
+  const localCommentSideDockActive = commentPanelOpen && (workspaceDock !== null || !commentPortalId);
   const boardPreviewCanvasSize = commentPreviewCanvasSize(previewBodySize, {
     boardMode: localCommentSideDockActive,
     sidePanelCollapsed: commentSidePanelCollapsed,
@@ -9147,10 +9142,8 @@ function HtmlViewer({
     }
     setTabLeadHost(resolveChromeTabLeadHost());
   }, [workspaceActive]);
-  // The active tab's own slot. It lives INSIDE that tab, so it is torn down
-  // and rebuilt whenever the active tab changes — but so is `workspaceActive`
-  // for every viewer involved, and effects run after the commit that mounted
-  // the new tab, so this resolves against the slot that is actually on screen.
+  // Reload's slot, ahead of 预览 in the workspace view row. Resolved when this
+  // viewer becomes the workspace's active surface.
   const [tabActionHost, setTabActionHost] = useState<HTMLElement | null>(null);
   useEffect(() => {
     if (!workspaceActive || typeof document === 'undefined') {
@@ -14510,7 +14503,7 @@ function HtmlViewer({
     boardSideDockStacked ? 'comment-preview-layer-side-dock-stacked' : '',
     showDeckThumbnailRail ? 'comment-preview-layer-with-deck-rail' : '',
   ].filter(Boolean).join(' ');
-  // Project workspaces open page settings immediately in the external dock;
+  // Project workspaces open page settings in the preview's embedded editor;
   // standalone viewers retain their compact, selection-driven floating card.
   const manualEditPageCardActive =
     manualEditMode && !selectedManualEditTarget && manualEditPageStylesOpen;
@@ -14811,7 +14804,7 @@ function HtmlViewer({
       projectId={projectId}
       selectedIds={selectedSideCommentIds}
       activeCommentId={activeSideCommentId}
-      docked={workspaceDock !== null}
+      docked={false}
       collapsed={workspaceDock ? false : commentSidePanelCollapsed}
       onCollapsedChange={setCommentSidePanelCollapsed}
       // Shared columns and external cards close completely; standalone local
@@ -15082,9 +15075,8 @@ function HtmlViewer({
               Up there it sits next to the page it applies to instead of one
               level down. The inline placement below stays as the fallback for
               every surface with no workspace row to portal into (the host
-              resolves to null there). Reload keeps its own slot INSIDE the
-              active tab (APP_CHROME_TAB_ACTION_ID) rather than riding along
-              here: it is not about the rendered view, so it must not vanish
+              resolves to null there). Reload keeps its own slot ahead of 预览
+              (APP_CHROME_TAB_ACTION_ID) rather than riding along here: it is not about the rendered view, so it must not vanish
               with the switcher when 代码 takes over. */}
           {showPreviewToolbarControls ? (
             leadPortalActive ? (
@@ -16059,13 +16051,13 @@ function HtmlViewer({
           )
         ) : mode === 'preview' ? (
           <div
-            className={`${manualEditMode ? 'manual-edit-workspace' : commentPreviewLayoutClass} preview-viewport preview-viewport-${previewViewport}${drawOverlayOpen ? ' preview-draw-active' : ''}`}
+            className={`${manualEditMode ? 'manual-edit-workspace' : commentPreviewLayoutClass} preview-viewport preview-viewport-${previewViewport}${manualEditMode && manualEditDocked && manualEditPanelActive ? ' has-embedded-editor' : ''}${drawOverlayOpen ? ' preview-draw-active' : ''}`}
             data-testid={manualEditMode ? undefined : 'comment-preview-layout'}
             ref={manualEditMode ? undefined : setCommentComposerHostRef}
             style={previewViewportStyle(previewViewport, previewScale, boardPreviewCanvasSize, boardPreviewScaleOptions)}
             onMouseLeave={manualEditMode ? clearManualEditHover : undefined}
           >
-            {workspaceDock
+            {workspaceDock && !manualEditMode
               ? workspaceDock.target && createPortal(manualEditPanel, workspaceDock.target)
               : manualEditPanel}
             {manualEditHoverAffordance}
@@ -16517,7 +16509,7 @@ function HtmlViewer({
             </div>
             {boardImagePreviewModal}
             {workspaceDock
-              ? workspaceDock.target && createPortal(commentSidePanel, workspaceDock.target)
+              ? commentSidePanel
               : commentPortalHost && commentSidePanel
                 ? createPortal(commentSidePanel, commentPortalHost)
                 : commentPortalId

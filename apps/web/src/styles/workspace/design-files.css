@@ -1284,7 +1284,7 @@ button.df-card-thumb:focus:not(:disabled) {
 }
 .df-card--page .df-card-meta {
   gap: 8px;
-  padding: 8px 8px 0;
+  padding: 8px 0 0;
 }
 .df-card--page .df-card-meta-text {
   padding: 0;

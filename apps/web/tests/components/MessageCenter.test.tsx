@@ -540,19 +540,20 @@ describe('MessageCenter', () => {
   });
 });
 
-it('opens rail messages at the sidebar top, stays inside the viewport, and returns focus to the bell', async () => {
+it('opens rail messages beside the sidebar, vertically centred, inside the viewport, and returns focus to the bell', async () => {
   const rail = document.createElement('div');
   rail.className = 'entry-nav-rail__panel';
   const bell = document.createElement('button');
   rail.append(bell);
   document.body.append(rail);
-  const rect = vi.spyOn(rail, 'getBoundingClientRect').mockReturnValue({ left: 56, top: 48, width: 236, height: 700 } as DOMRect);
+  const rect = vi.spyOn(rail, 'getBoundingClientRect').mockReturnValue({ left: 56, right: 292, top: 48, width: 236, height: 700 } as DOMRect);
   try {
     render(<I18nProvider initial="en"><MessageCenter placement="rail" hideTrigger returnFocusRef={{ current: bell }} open /></I18nProvider>);
     const dialog = screen.getByTestId('message-center-dialog');
-    expect(dialog.style.left).toBe('64px');
-    expect(dialog.style.top).toBe('56px');
-    rect.mockReturnValue({ left: 1000, top: 48, width: 236, height: 700 } as DOMRect);
+    expect(dialog.style.left).toBe('300px');
+    const height = Number.parseFloat(dialog.style.height);
+    expect(Number.parseFloat(dialog.style.top)).toBe(Math.round((window.innerHeight - height) / 2));
+    rect.mockReturnValue({ left: 1000, right: 1236, top: 48, width: 236, height: 700 } as DOMRect);
     fireEvent(window, new Event('resize'));
     expect(Number.parseFloat(dialog.style.left) + Number.parseFloat(dialog.style.width)).toBeLessThanOrEqual(window.innerWidth - 12);
     fireEvent.keyDown(document, { key: 'Escape' });

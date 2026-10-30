@@ -70,6 +70,7 @@ import { ChatCloseIcon, ChatFileIcon, ChatSendArrowIcon } from "../primitives/ic
 import { ComposerPlusMenu, PLUS_SUBMENU_RESOURCE_KIND } from '../../ComposerPlusMenu';
 import type { PlusMenuSubmenu } from './components/ComposerPlusMenu';
 import { LibraryPicker } from '../../LibraryPicker';
+import { WorkingDirPicker } from '../../WorkingDirPicker';
 import { FigmaImportModal } from '../../FigmaImportModal';
 import { FigmaHelpModal } from '../../FigmaHelpModal';
 import {
@@ -95,6 +96,11 @@ import { computeToolboxDetailPosition } from '../../composer-detail-position';
 import { PluginDetailsModal } from "../../PluginDetailsModal";
 import { SkillDetailsModal } from '../../SkillDetailsModal';
 import { PluginsSection, type PluginsSectionHandle } from "../../PluginsSection";
+import { useInlineLeadChip } from '../../useInlineLeadChip';
+import { ComposerBeam, useComposerBeam } from '../../home-hero/ComposerBeam';
+import { TemplatePicker } from '../../home-hero/TemplatePicker';
+import { orderedCreateChips } from '../../home-hero/chips';
+import { homeHeroChipLabel } from '../../home-hero/chip-labels';
 import { BUILT_IN_PETS, CUSTOM_PET_ID } from "../../pet/pets";
 import {
   inlineMentionToken,
@@ -291,6 +297,16 @@ type DesignToolboxResource =
 export type ChatSendOutcome = void | 'restore-draft';
 
 interface Props {
+  /** The user removed the composer's applied plugin (its chip ×). */
+  onPluginCleared?: () => void;
+  /**
+   * Wear Home's input (the empty conversation's Home intro is showing): the
+   * picked type rides the action row as Home's type pill instead of a chip
+   * leading the prompt, and the card carries Home's focus beam.
+   */
+  homeInput?: boolean;
+  /** The Home type picked on the intro, named by the type pill. */
+  homeTypeChipId?: string | null;
   /**
    * 正文取词(设计稿组件 23)攒下的引用。输入框上方那枚「N 条注释」芯片就是它,
    * 发送时作为引文前缀带给 agent。
@@ -496,6 +512,17 @@ export interface ChatComposerHandle {
    * flyout.
    */
   openPlusMenu: (submenu?: PlusMenuSubmenu) => void;
+  /**
+   * Bind a plugin as this composer's active driver from outside (the empty
+   * conversation's type cards and template gallery — Home's own pick flow).
+   * `draft` decides what happens to the textarea: omitted seeds the plugin's
+   * brief into an empty draft (the in-composer picker's behaviour), `null`
+   * leaves the draft alone (a type pick is a mode switch), and a string
+   * replaces it (a template's prompt). `label` names the plugin chip instead of
+   * the plugin's own title (a type pick reads as its type, as on Home).
+   * Resolves false when the apply failed.
+   */
+  applyPlugin: (pluginId: string, options?: { draft?: string | null; label?: string }) => Promise<boolean>;
 }
 
 export interface ChatSendMeta {
@@ -562,6 +589,9 @@ function dataTransferContainsDirectory(dataTransfer: DataTransfer): boolean {
 export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
   function ChatComposer(
     {
+      onPluginCleared,
+      homeInput = false,
+      homeTypeChipId = null,
       projectId,
       projectFiles,
       activeProjectFileName = null,
@@ -853,6 +883,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       useState<AppliedPluginSnapshot | null>(null);
     const pluginsSectionRef = useRef<PluginsSectionHandle | null>(null);
     const inlineBackedPluginRef = useRef<{ id: string; label: string } | null>(null);
+    // Set by `applyPlugin` for the duration of one external apply: what the
+    // section's `onApplied` does to the draft (see ChatComposerHandle).
+    const pluginApplyDraftRef = useRef<{ draft: string | null; label: string | null } | null>(null);
+    const [appliedPluginLabel, setAppliedPluginLabel] = useState<string | null>(null);
     async function duplicateDetailsPlugin(record: InstalledPluginRecord) {
       try {
         const result = await duplicatePluginAsProject(record.id, {
@@ -1520,8 +1554,20 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             ...(submenu ? { submenu } : {}),
           }));
         },
+        applyPlugin: async (pluginId, options) => {
+          const record = installedPlugins.find((plugin) => plugin.id === pluginId) ?? null;
+          pluginApplyDraftRef.current = options && 'draft' in options
+            ? { draft: options.draft ?? null, label: options.label ?? null }
+            : null;
+          try {
+            const result = await pluginsSectionRef.current?.applyById(pluginId, record);
+            return Boolean(result);
+          } finally {
+            pluginApplyDraftRef.current = null;
+          }
+        },
       }),
-      [connectors, mcpServers, pluginsForComposer, skills]
+      [connectors, installedPlugins, mcpServers, pluginsForComposer, skills]
     );
 
     function reset() {
@@ -3274,6 +3320,20 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       activeAppliedPlugin && activeAppliedPlugin.pluginId !== DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID
         ? activeAppliedPlugin
         : null;
+    const visiblePluginTitle = visibleAppliedPlugin
+      ? appliedPluginLabel ?? visibleAppliedPlugin.pluginTitle ?? visibleAppliedPlugin.pluginId
+      : null;
+    // The applied template leads the prompt's first line, as on Home.
+    const inputWrapRef = useRef<HTMLDivElement | null>(null);
+    const leadChipRef = useRef<HTMLDivElement | null>(null);
+    // Home's input names the type in its action row, not ahead of the prompt.
+    const showLeadChip = Boolean(visibleAppliedPlugin) && !homeInput;
+    useInlineLeadChip(inputWrapRef, leadChipRef, showLeadChip, '--composer-chip');
+    const homeBeam = useComposerBeam();
+    const homeTypeChips = useMemo(
+      () => orderedCreateChips().filter((chip) => chip.action.kind === 'apply-scenario'),
+      [],
+    );
     const showAdmissionPendingButton = composedSendPending && !streaming;
     const showStopButton = streaming && !hasComposerPayload;
     const showSendButton = (!streaming || hasComposerPayload) && !showAdmissionPendingButton;
@@ -3436,6 +3496,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               : undefined
           }
           onMouseDown={handleShellResizeMouseDown}
+          onFocus={homeInput ? homeBeam.onFocus : undefined}
+          onBlur={homeInput ? homeBeam.onBlur : undefined}
         >
           {/*
             Spec §8.4 — context bar above the composer input. The
@@ -3454,6 +3516,15 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               renderActiveChip={false}
               onApplied={(brief, applied) => {
                 setActiveAppliedPlugin(applied.appliedPlugin);
+                const external = pluginApplyDraftRef.current;
+                setAppliedPluginLabel(external?.label ?? null);
+                if (external) {
+                  if (external.draft !== null) {
+                    setDraft(external.draft);
+                    editorRef.current?.setText(external.draft);
+                  }
+                  return;
+                }
                 // Use functional setState so stale closures from the @-mention
                 // flow (which awaits applyById after setDraft) still see the
                 // latest draft value before deciding whether to seed.
@@ -3464,6 +3535,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               onCleared={() => {
                 inlineBackedPluginRef.current = null;
                 setActiveAppliedPlugin(null);
+                setAppliedPluginLabel(null);
+                onPluginCleared?.();
               }}
               onChipDetails={(item: ContextItem) => {
                 if (item.kind === 'plugin') {
@@ -3480,33 +3553,17 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               }}
             />
           ) : null}
-          {selectedWorkspaceContexts.length > 0 || stagedSkills.length > 0 || stagedMcpServers.length > 0 || stagedConnectors.length > 0 || visibleAppliedPlugin ? (
+          {selectedWorkspaceContexts.length > 0 || stagedSkills.length > 0 || stagedMcpServers.length > 0 || stagedConnectors.length > 0 ? (
             <StagedRunContexts
               workspaceItems={selectedWorkspaceContexts}
               currentWorkspaceContextId={visibleWorkspaceContext?.id ?? null}
               skills={stagedSkills}
               mcpServers={stagedMcpServers}
               connectors={stagedConnectors}
-              pluginChip={
-                visibleAppliedPlugin
-                  ? {
-                      id: visibleAppliedPlugin.pluginId,
-                      title: visibleAppliedPlugin.pluginTitle ?? visibleAppliedPlugin.pluginId,
-                    }
-                  : null
-              }
               onRemoveWorkspace={removeWorkspaceContext}
               onRemoveSkill={removeStagedSkill}
               onRemoveMcp={removeStagedMcpServer}
               onRemoveConnector={removeStagedConnector}
-              onRemovePlugin={() => {
-                pluginsSectionRef.current?.clear();
-                setActiveAppliedPlugin(null);
-              }}
-              onPluginDetails={(id) => {
-                const record = installedPlugins.find((plugin) => plugin.id === id);
-                if (record) setDetailsRecord(record);
-              }}
               onSkillDetails={(id) => {
                 setDetailsSkill({
                   id,
@@ -3559,6 +3616,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             <QuotedRefs quotes={quotes} onClear={() => onClearQuotes?.()} />
           ) : null}
           <div
+            ref={inputWrapRef}
             className="composer-input-wrap"
             onFocus={() => {
               setComposerEngaged(true);
@@ -3569,6 +3627,40 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               setComposerFocused(false);
             }}
           >
+            {/* Home's lead chip (same classes, same inline seating): the
+                applied template leads the prompt instead of riding the
+                attachment row above it. */}
+            {showLeadChip && visibleAppliedPlugin && visiblePluginTitle ? (
+              <div ref={leadChipRef} className="home-hero__lead-chip composer-lead-chip">
+                <span className="home-hero__active-chip" data-testid="composer-active-plugin">
+                  <button
+                    type="button"
+                    className="home-hero__active-chip-body"
+                    onClick={() => {
+                      const record = installedPlugins.find((plugin) => plugin.id === visibleAppliedPlugin.pluginId);
+                      if (record) setDetailsRecord(record);
+                    }}
+                    title={visiblePluginTitle}
+                  >
+                    <span className="home-hero__active-icon" aria-hidden>
+                      <Icon name="sparkles-filled" size={12} />
+                    </span>
+                    <span className="home-hero__active-label">{visiblePluginTitle}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="home-hero__active-clear"
+                    onClick={() => {
+                      pluginsSectionRef.current?.clear();
+                      setActiveAppliedPlugin(null);
+                    }}
+                    aria-label={t('chat.removeAria', { name: visiblePluginTitle })}
+                  >
+                    <Icon name="close" size={12} />
+                  </button>
+                </span>
+              </div>
+            ) : null}
             <LexicalComposerInput
               ref={editorRef}
               draft={draft}
@@ -3731,6 +3823,17 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             {/* #5517: the design-system picker sits inline in the composer's
                 icon row (palette icon) instead of the staged-context bar. */}
             {designSystemPicker}
+            {homeInput ? (
+              <TemplatePicker
+                templates={homeTypeChips}
+                activeChipId={homeTypeChipId}
+                onClearTemplate={() => {
+                  pluginsSectionRef.current?.clear();
+                  setActiveAppliedPlugin(null);
+                }}
+                labelFor={(id) => homeHeroChipLabel(id, t)}
+              />
+            ) : null}
             {leadingAccessory}
             <span className="composer-spacer" />
             {/* No mode picker in the composer (2026-08-19, product): the row
@@ -3819,11 +3922,33 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               </button>
             ) : null}
           </div>
+          {homeInput ? (
+            <ComposerBeam phase={homeBeam.phase} onFaded={() => homeBeam.setPhase('idle')} />
+          ) : null}
         </div>
         {/* #5517 renders no working-dir row inside a project — its ChatComposer
             imports WorkingDirPicker but never mounts it. Product chose full
             alignment (2026-07-21) over keeping this as the only mid-project
-            re-bind entry. Home still picks a working directory for NEW projects. */}
+            re-bind entry. The one exception is Home's own state: an empty
+            conversation wearing Home's input carries Home's 工作目录 row under
+            it too (per product: 和点击首页的状态一致). It binds THIS project's
+            working directory, the same as the "+" menu's folder rows. */}
+        {homeInput && projectId ? (
+          <div className="home-hero__workdir-row chat-composer__workdir-row" data-testid="chat-composer-workdir-row">
+            <WorkingDirPicker
+              className="home-hero__working-dir-picker"
+              // The composer sits at the foot of the pane: open up, over it.
+              placement="up"
+              emptyLabel={t('homeWorkingDir.triggerShort')}
+              workingDir={workingDir}
+              recentDirs={recentDirs}
+              invalid={workingDirMissing}
+              onPickDirectory={() => void handlePickWorkingDir()}
+              onSelectRecent={(dir) => void setWorkingDirFolder(dir)}
+              onClear={() => void clearWorkingDir()}
+            />
+          </div>
+        ) : null}
         {uploadError ? <span className="composer-hint">{uploadError}</span> : null}
         {detailsRecord ? (
           <PluginDetailsModal
@@ -4248,13 +4373,10 @@ function StagedRunContexts({
   skills,
   mcpServers,
   connectors,
-  pluginChip,
   onRemoveWorkspace,
   onRemoveSkill,
   onRemoveMcp,
   onRemoveConnector,
-  onRemovePlugin,
-  onPluginDetails,
   onSkillDetails,
   t,
 }: {
@@ -4264,13 +4386,10 @@ function StagedRunContexts({
   skills: SkillSummary[];
   mcpServers: McpServerConfig[];
   connectors: ConnectorDetail[];
-  pluginChip?: { id: string; title: string } | null;
   onRemoveWorkspace: (id: string) => void;
   onRemoveSkill: (id: string) => void;
   onRemoveMcp: (id: string) => void;
   onRemoveConnector: (id: string) => void;
-  onRemovePlugin?: () => void;
-  onPluginDetails?: (id: string) => void;
   onSkillDetails?: (id: string) => void;
   t: TranslateFn;
 }) {
@@ -4283,36 +4402,6 @@ function StagedRunContexts({
       {designSystemPicker ? (
         <div className="staged-context-picker staged-context-picker--design-system">
           {designSystemPicker}
-        </div>
-      ) : null}
-      {pluginChip ? (
-        <div className="staged-chip staged-context staged-context--plugin" data-staged-kind="plugin">
-          {/* Two sibling controls — a details button (icon + name) and the
-              remove button — rather than a role=button wrapper containing the
-              remove button. Nested interactive controls break focus order and
-              assistive-tech announcements. */}
-          <button
-            type="button"
-            className="staged-context-open"
-            onClick={() => onPluginDetails?.(pluginChip.id)}
-            title={pluginChip.title}
-            aria-label={pluginChip.title}
-          >
-            <span className="staged-icon" aria-hidden>
-              <Icon name="sparkles" size={12} />
-            </span>
-            <span className="staged-name">{pluginChip.title}</span>
-          </button>
-          <button
-            type="button"
-            className="staged-remove od-tooltip"
-            onClick={() => onRemovePlugin?.()}
-            title={t('common.delete')}
-            data-tooltip={t('common.delete')}
-            aria-label={t('chat.removeAria', { name: pluginChip.title })}
-          >
-            <Icon name="close" size={11} />
-          </button>
         </div>
       ) : null}
       {workspaceItems.map((workspaceItem) => {

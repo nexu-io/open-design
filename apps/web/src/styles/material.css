@@ -30,6 +30,12 @@
   --material-thin-backdrop: blur(var(--material-thin-blur)) saturate(1.6);
   --material-regular-backdrop: blur(var(--material-regular-blur)) saturate(1.6);
   --material-thick-backdrop: blur(var(--material-thick-blur)) saturate(1.6);
+
+  /* Progressive scroll edge (top of scroll columns): two stacked layers, the
+     soft one over the whole band and the strong one over its top half, so the
+     blur ramps from ultrathin at the edge down to nothing. */
+  --material-edge-soft-backdrop: blur(3px) saturate(1.6);
+  --material-edge-strong-backdrop: blur(var(--material-ultrathin-blur)) saturate(1.6);
   --glass-backdrop: blur(var(--glass-regular-blur, 28px)) saturate(1.8);
   /* The scrim behind modals / dialogs / drawers / previews — BOTH halves of
      it. The blur was standardized here before; the tint was deliberately left
@@ -203,6 +209,8 @@
     --material-thin-backdrop: none;
     --material-regular-backdrop: none;
     --material-thick-backdrop: none;
+    --material-edge-soft-backdrop: none;
+    --material-edge-strong-backdrop: none;
     --glass-backdrop: none;
     /* With the blur off, a 30% white scrim leaves a modal barely separated
        from the page behind it — so the scrim degrades to an opaque light

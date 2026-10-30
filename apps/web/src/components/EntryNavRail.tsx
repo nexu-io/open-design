@@ -25,6 +25,7 @@
 // The gate is `workspaceType` + permissions, never the billing/provider axis — a
 // personal_byok workspace still has full team features.
 
+import { isRailFolderProject, useRailConversationCounts } from './entry-nav-rail/railConversationCounts';
 import {
   useCallback,
   useEffect,
@@ -38,6 +39,7 @@ import {
 import { createPortal } from 'react-dom';
 import { Button } from '@open-design/components';
 import recentSectionStyles from './entry-nav-rail/RailRecentSection.module.css';
+import { RailDisclosure } from './entry-nav-rail/RailDisclosure';
 import { coalescedGet, evictCoalescedGet } from '../lib/coalesced-get';
 import type {
   WorkspaceActiveResponse,
@@ -64,7 +66,8 @@ import { MarqueeLabel } from './MarqueeLabel';
 import { PlanWordmark, planBadgeTierForWorkspace } from './PlanWordmark';
 import { RemixIcon } from './RemixIcon';
 import { InviteDialog } from './InviteDialog';
-import { RailNewConversation, RailProjectFolder, type RailConversationModel } from './entry-nav-rail/RailConversationTree';
+import { RailNewConversation, RailNewProject, RailProjectFolder, type RailConversationModel } from './entry-nav-rail/RailConversationTree';
+import { RailConversationsSection } from './entry-nav-rail/RailConversationsSection';
 import { RailRecentRow } from './entry-nav-rail/RailRecentRow';
 import { useProjectRunStatuses } from '../hooks/useProjectRunStatuses';
 import { MessageCenter } from './MessageCenter';
@@ -266,6 +269,7 @@ interface Props {
   onOpenConversation?: (projectId: string, conversationId: string) => void | Promise<unknown>;
   /** Row actions for the 最近浏览过 list's ⋮ menu. Omit either to drop its item. */
   onRenameRecentProject?: (id: string, name: string) => void;
+  onDuplicateRecentProject?: (id: string) => Promise<void> | void;
   onDeleteRecentProject?: (id: string) => Promise<boolean | void> | boolean | void;
   /** Opens one of those projects — the pull-first opener, so a shared project
    *  that is not local yet still lands. */
@@ -347,6 +351,7 @@ export function RailRecentSection({
   projects,
   onOpen,
   onRename,
+  onDuplicate,
   onDelete,
   workspaceContext,
   label,
@@ -364,6 +369,7 @@ export function RailRecentSection({
   projects: Project[];
   onOpen?: (id: string) => void | Promise<unknown>;
   onRename?: (id: string, name: string) => void;
+  onDuplicate?: (id: string) => Promise<void> | void;
   onDelete?: (id: string) => Promise<boolean | void> | boolean | void;
   workspaceContext?: WorkspaceCollabContext | null;
   label: string;
@@ -375,17 +381,22 @@ export function RailRecentSection({
   useEffect(() => setShowAll(false), [workspaceContext?.workspaceId]);
   const storageKey = section === 'personal' ? 'od.entry.railPersonalOpen' : RECENT_SECTION_STORAGE_KEY;
   const [open, setOpen] = useState(() => readStoredRecentOpen(storageKey, section === 'recent'));
-  useEffect(() => {
-    if (section === 'personal' && conversationModel?.activeConversationId) setOpen(true);
-  }, [section, conversationModel?.activeConversationId]);
+  // Selecting a conversation must not override the user's Projects disclosure.
+  // Its active item is also available in the separate Conversations section.
+  // A conversation's own single-conversation project is that conversation's
+  // row in 对话, not a folder here (see ./entry-nav-rail/railConversationCounts).
+  const conversationCounts = useRailConversationCounts();
   const items = useMemo(
     () => {
-      const sorted = [...projects].sort((a, b) => section === 'personal'
+      const folders = section === 'personal'
+        ? projects.filter(project => isRailFolderProject(project, conversationCounts))
+        : projects;
+      const sorted = [...folders].sort((a, b) => section === 'personal'
         ? b.createdAt - a.createdAt
         : b.updatedAt - a.updatedAt);
       return section === 'personal' ? sorted : sorted.slice(0, RAIL_RECENT_LIMIT);
     },
-    [projects, section],
+    [projects, section, conversationCounts],
   );
   // Keep the current conversation reachable even when its project is older.
   const compactItems = section === 'personal' ? items.slice(0, RAIL_PERSONAL_LIMIT) : items;
@@ -472,28 +483,15 @@ export function RailRecentSection({
   if (items.length === 0 && section === 'recent') return null;
 
   return (
-    <div className={`entry-nav-rail__recent${scrollable ? ` ${recentSectionStyles.scrollable}` : ''}`}>
-      <button
-        type="button"
-        className="entry-nav-rail__recent-head"
-        onClick={toggle}
-        aria-expanded={open}
-        data-testid={section === 'personal' ? 'entry-nav-drafts' : 'entry-nav-recent-toggle'}
-      >
-        {/* Title first, chevron trailing (per product: 展开和收起的按钮在最右侧).
-            DOM order follows the visual one rather than an `order` swap, so the
-            reading order matches too. */}
-        <span className="entry-nav-rail__recent-title">{label}</span>
-        <span className="entry-nav-rail__recent-chevron" aria-hidden>
-          <Icon name={open ? 'chevron-down' : 'chevron-right'} size={14} />
-        </span>
-      </button>
-      <div className={scrollable ? recentSectionStyles.scrollBody : undefined}>
-      {/* The canonical disclosure pair (index.css / composio.css): the outer
-          grid animates 0fr → 1fr, the inner box carries the clip. `hidden` on
-          the wrapper would skip the transition entirely. */}
-      <div className={`accordion-collapsible${open ? ' open' : ''}`} inert={!open} aria-hidden={!open || undefined}>
-        <div className="accordion-collapsible-inner">
+    <RailDisclosure
+      label={label}
+      open={open}
+      onToggle={toggle}
+      controlsId={listId}
+      testId={section === 'personal' ? 'entry-nav-drafts' : 'entry-nav-recent-toggle'}
+      scrollable={scrollable}
+      afterList={afterList}
+    >
           <ul id={listId} className="entry-nav-rail__recent-list">
             {items.map((project) => {
               const status = runStatusByProjectId.get(project.id);
@@ -513,6 +511,7 @@ export function RailRecentSection({
                     model={conversationModel}
                     onOpenConversation={onOpenConversation}
                     onRename={onRename}
+                    onDuplicate={onDuplicate}
                     onDelete={onDelete}
                   /> : <RailRecentRow
                     project={project}
@@ -521,6 +520,7 @@ export function RailRecentSection({
                     showLeadingIcon={false}
                     onOpen={openProject}
                     onRename={onRename}
+                    onDuplicate={onDuplicate}
                     onDelete={onDelete}
                   />}
                 </li>
@@ -534,13 +534,12 @@ export function RailRecentSection({
             aria-controls={listId}
             onClick={() => setShowAll(value => !value)}
           >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
+              <path d="M5 10C3.9 10 3 10.9 3 12C3 13.1 3.9 14 5 14C6.1 14 7 13.1 7 12C7 10.9 6.1 10 5 10ZM19 10C17.9 10 17 10.9 17 12C17 13.1 17.9 14 19 14C20.1 14 21 13.1 21 12C21 10.9 20.1 10 19 10ZM12 10C10.9 10 10 10.9 10 12C10 13.1 10.9 14 12 14C13.1 14 14 13.1 14 12C14 10.9 13.1 10 12 10Z" />
+            </svg>
             {showAll ? t('chat.input.collapse') : t('recentProjects.viewAll')}
           </Button>}
-        </div>
-      </div>
-      {afterList}
-      </div>
-    </div>
+    </RailDisclosure>
   );
 }
 
@@ -2075,6 +2074,7 @@ export function EntryNavRail({
   onOpenConversation,
   onOpenRecentProject,
   onRenameRecentProject,
+  onDuplicateRecentProject,
   onDeleteRecentProject,
 }: Props) {
   const { t } = useI18n();
@@ -2181,24 +2181,29 @@ export function EntryNavRail({
 
         {context ? (
           <div className="entry-nav-rail__team-section">
-            <RailNewConversation onClick={onNewProject} />
+            <RailNewConversation onClick={onNewProject} disabled={newProjectDisabled} />
+            <RailNewProject />
+            {/* Same shape as ProjectRecentRail: one scroll body carries both
+                lists, so an expanded 查看全部 scrolls instead of being clipped. */}
             <RailRecentSection
               section="personal"
+              scrollable
+              afterList={(
+                <RailConversationsSection
+                  projects={recentProjects ?? personalProjects ?? []}
+                  moveTargets={personalProjects ?? []}
+                  context={context}
+                  onOpenConversation={onOpenConversation}
+                />
+              )}
               onOpenConversation={onOpenConversation}
               projects={personalProjects ?? []}
               onOpen={onOpenRecentProject}
               onRename={onRenameRecentProject}
+              onDuplicate={onDuplicateRecentProject}
               onDelete={onDeleteRecentProject}
               workspaceContext={context}
-              label={t('workspaceSwitcher.draftsTooltip')}
-            />
-            <RailRecentSection
-              projects={recentProjects ?? []}
-              onOpen={onOpenRecentProject}
-              onRename={onRenameRecentProject}
-              onDelete={onDeleteRecentProject}
-              workspaceContext={context}
-              label={t('recentProjects.collectionRecent')}
+              label={t('entry.navProjects')}
             />
             {/* Product decision (2026-07-20): 成员 and 数据大盘 leave the rail
                 entirely — both surfaces live in B's console and the rail should

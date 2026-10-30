@@ -46,6 +46,10 @@ interface Props {
   /** Fire a tab-launcher ui_click (host fills page/area/project_id). */
   onTrack?: (input: TabLauncherTrackInput) => void;
   onClose: () => void;
+  /** Render in place as a page's content (the 新标签页 tab) instead of as the
+   *  "+" button's dropdown: no portal, no anchor, no outside-click dismissal,
+   *  and it does not take focus from whatever the user is typing in. */
+  inline?: boolean;
 }
 
 // Command-palette dropdown for the tab strip's "+" button. Rendered through a
@@ -64,6 +68,7 @@ export function TabLauncherMenu({
   onOpenTab,
   onTrack,
   onClose,
+  inline = false,
 }: Props) {
   const t = useT();
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -77,7 +82,7 @@ export function TabLauncherMenu({
   // Position from the anchor's rect; keep it pinned to the button's right edge
   // so the menu hangs under the "+" without spilling off-screen.
   useLayoutEffect(() => {
-    if (!anchor) return;
+    if (inline || !anchor) return;
     function update() {
       if (!anchor) return;
       const r = anchor.getBoundingClientRect();
@@ -92,10 +97,11 @@ export function TabLauncherMenu({
       window.removeEventListener('scroll', update, true);
       window.removeEventListener('resize', update);
     };
-  }, [anchor]);
+  }, [anchor, inline]);
 
   // Outside-click / Escape to dismiss.
   useEffect(() => {
+    if (inline) return;
     let iframeFocusFrame: number | null = null;
     function onDown(e: PointerEvent) {
       const target = e.target as Node;
@@ -124,7 +130,7 @@ export function TabLauncherMenu({
       window.removeEventListener('blur', onWindowBlur);
       if (iframeFocusFrame !== null) window.cancelAnimationFrame(iframeFocusFrame);
     };
-  }, [anchor, onClose]);
+  }, [anchor, inline, onClose]);
 
   // The set of kinds present, in a stable order, for the filter chips.
   const presentKinds = useMemo(() => {
@@ -217,16 +223,16 @@ export function TabLauncherMenu({
     }
   }
 
-  if (!pos) return null;
+  if (!inline && !pos) return null;
 
-  return createPortal(
+  const menu = (
     <div
       ref={menuRef}
-      className={styles.menu}
-      style={{ top: pos.top, left: pos.left }}
-      role="dialog"
+      className={inline ? styles.inline : styles.menu}
+      style={inline || !pos ? undefined : { top: pos.top, left: pos.left }}
+      role={inline ? 'region' : 'dialog'}
       aria-label={t('workspace.newTab')}
-      data-testid="tab-launcher-menu"
+      data-testid={inline ? 'tab-launcher-inline' : 'tab-launcher-menu'}
     >
       <div className={styles.searchRow}>
         <span className={styles.searchIcon} aria-hidden>
@@ -234,7 +240,7 @@ export function TabLauncherMenu({
         </span>
         <input
           ref={inputRef}
-          autoFocus
+          autoFocus={!inline}
           className={styles.searchInput}
           type="text"
           value={query}
@@ -375,9 +381,9 @@ export function TabLauncherMenu({
           </div>
         ) : null}
       </div>
-    </div>,
-    document.body,
+    </div>
   );
+  return inline ? menu : createPortal(menu, document.body);
 }
 
 // --- local helpers ---------------------------------------------------------

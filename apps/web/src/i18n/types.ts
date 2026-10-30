@@ -1348,6 +1348,8 @@ export interface Dict {
   'homeHero.contextItemsResolved': string;
   'homeHero.attachmentsScrollPrev': string;
   'homeHero.attachmentsScrollNext': string;
+  'homeHero.typeCoversScrollPrev': string;
+  'homeHero.typeCoversScrollNext': string;
   'homeHero.removeFile': string;
   'homeHero.contextSearchResults': string;
   'homeHero.contextSurfaces': string;
@@ -1375,6 +1377,8 @@ export interface Dict {
   'homeHero.railAria': string;
   'homeHero.subTypeAria': string;
   'homeHero.subTypeMore': string;
+  'homeHero.postcardChange': string;
+  'homeHero.localFolderTitle': string;
   'homeHero.confirmReplaceTitle': string;
   'homeHero.confirmReplaceBody': string;
   'homeHero.confirmReplace': string;
@@ -2380,6 +2384,7 @@ export interface Dict {
   'newproj.titleMedia': string;
   'newproj.titleOther': string;
   'newproj.namePlaceholder': string;
+  'newproj.nameTooLong': string;
   'newproj.fidelityLabel': string;
   'newproj.fidelityWireframe': string;
   'newproj.fidelityHigh': string;
@@ -2542,6 +2547,9 @@ export interface Dict {
   'designs.deleteAria': string;
   'designs.menuMore': string;
   'designs.menuRename': string;
+  'chat.moveConversationTo': string;
+  'chat.moveConversationNoTargets': string;
+  'chat.moveConversationFailed': string;
   'designs.menuDuplicate': string;
   'designs.menuDelete': string;
   'designs.renamePrompt': string;
@@ -3647,6 +3655,8 @@ export interface Dict {
   'workspace.designFiles': string;
   'workspace.focusMode': string;
   'workspace.resizePanel': string;
+  'workspace.collapsePreview': string;
+  'workspace.expandPreview': string;
   'workspace.showChat': string;
   'workspace.closeTab': string;
   'workspace.deleteFileConfirm': string;

@@ -1,14 +1,6 @@
-// Modal wrapper around NewProjectPanel.
-//
-// Reuses the existing NewProjectPanel surface so all of the per-kind
-// tabs (prototype / live-artifact / deck / template / image / video /
-// audio / other) and their connector / template / design-system
-// pickers carry over without duplication. The modal closes itself
-// when the panel calls onCreate and it completes (success path) or when the user
-// clicks the backdrop / Esc.
-
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
+import { Button } from '@open-design/components';
 import type { ConnectorDetail } from '@open-design/contracts';
 import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import { modalOverlay, modalContent } from '../motion';
@@ -21,8 +13,9 @@ import type {
   SkillSummary,
 } from '../types';
 import { Icon } from './Icon';
+import { useOpenFolderImport } from './useOpenFolderImport';
+import styles from './NewProjectModal.module.css';
 import {
-  NewProjectPanel,
   type CreateInput,
   type CreateTab,
   type ImportClaudeDesignOutcome,
@@ -58,7 +51,7 @@ interface Props {
 // `open`. When `open` flips to false the body unmounts through
 // `AnimatePresence`, which runs the `exit` variants on the overlay + content
 // first. The body lives in its own component so its mount effects (focus the
-// close button, lock body scroll, bind Esc) fire exactly when it appears.
+// name field, lock body scroll, bind Esc) fire exactly when it appears.
 export function NewProjectModal({ open, ...rest }: Props) {
   return (
     <AnimatePresence>
@@ -68,38 +61,39 @@ export function NewProjectModal({ open, ...rest }: Props) {
 }
 
 function NewProjectModalBody({
-  skills,
-  designTemplates,
-  designSystems,
-  defaultDesignSystemId,
-  templates,
-  onDeleteTemplate,
-  promptTemplates,
-  mediaProviders,
-  connectors,
-  connectorsLoading,
-  loading,
   onCreate,
-  onImportClaudeDesign,
   onImportFolder,
   onImportFolderResponse,
-  onOpenConnectorsTab,
   onClose,
-  initialTab,
 }: Omit<Props, 'open'>) {
-  const closeRef = useRef<HTMLButtonElement | null>(null);
+  const nameRef = useRef<HTMLInputElement | null>(null);
+  const composingRef = useRef(false);
+  const [name, setName] = useState('');
+  const [nameTooLong, setNameTooLong] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const t = useT();
   const title = t('newproj.titleOther');
+  const folderImport = useOpenFolderImport({
+    skillId: null,
+    ...(onImportFolder ? { onImportFolder: async (path: string) => {
+      await onImportFolder(path);
+      onClose();
+    } } : {}),
+    ...(onImportFolderResponse ? { onImportFolderResponse: async (response: OpenDesignHostProjectImportSuccess) => {
+      await onImportFolderResponse(response);
+      onClose();
+    } } : {}),
+  });
+  const busy = creating || folderImport.importing;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !creating) onClose();
+      if (e.key === 'Escape' && !busy) onClose();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [creating, onClose]);
+  }, [busy, onClose]);
 
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -110,15 +104,21 @@ function NewProjectModalBody({
   }, []);
 
   useEffect(() => {
-    closeRef.current?.focus();
+    nameRef.current?.focus();
   }, []);
 
-  async function handleCreate(input: CreateInput & { requestId?: string }) {
-    if (creating) return;
+  async function handleCreate() {
+    const projectName = name.trim();
+    if (busy || composingRef.current || !projectName || Array.from(projectName).length > 24) return;
     setCreating(true);
     setCreateError(null);
     try {
-      const result = await onCreate(input);
+      const result = await onCreate({
+        name: projectName,
+        skillId: null,
+        designSystemId: null,
+        metadata: { kind: 'other', nameSource: 'user' },
+      });
       if (result === false) {
         setCreateError('Could not create project. Please try again.');
         return;
@@ -131,6 +131,12 @@ function NewProjectModalBody({
     }
   }
 
+  function updateName(value: string) {
+    const characters = Array.from(value);
+    setName(characters.slice(0, 24).join(''));
+    setNameTooLong(characters.length > 24);
+  }
+
   return (
     <motion.div
       className="new-project-modal-backdrop"
@@ -139,7 +145,7 @@ function NewProjectModalBody({
       aria-label={title}
       data-testid="new-project-modal"
       onClick={(e) => {
-        if (e.target === e.currentTarget && !creating) onClose();
+        if (e.target === e.currentTarget && !busy) onClose();
       }}
       variants={modalOverlay}
       initial="hidden"
@@ -155,43 +161,69 @@ function NewProjectModalBody({
       >
         <header className="new-project-modal__head">
           <h2 className="new-project-modal__title">{title}</h2>
-          <button
-            ref={closeRef}
+          <Button
             type="button"
+            size="icon"
+            variant="ghost"
             className="new-project-modal__close"
             onClick={onClose}
-            disabled={creating}
-            aria-label="Close"
-            title="Close (Esc)"
+            disabled={busy}
+            aria-label={t('common.close')}
+            title={t('common.close')}
           >
             <Icon name="close" size={14} />
-          </button>
+          </Button>
         </header>
         <div className="new-project-modal__body">
-          <NewProjectPanel
-            skills={skills}
-            {...(designTemplates ? { designTemplates } : {})}
-            designSystems={designSystems}
-            defaultDesignSystemId={defaultDesignSystemId}
-            templates={templates}
-            {...(onDeleteTemplate ? { onDeleteTemplate } : {})}
-            promptTemplates={promptTemplates}
-            {...(mediaProviders ? { mediaProviders } : {})}
-            {...(connectors ? { connectors } : {})}
-            {...(typeof connectorsLoading === 'boolean' ? { connectorsLoading } : {})}
-            loading={Boolean(loading) || creating}
-            onCreate={(input) => {
-              void handleCreate(input);
-            }}
-            {...(onImportClaudeDesign ? { onImportClaudeDesign } : {})}
-            {...(onImportFolder ? { onImportFolder } : {})}
-            {...(onImportFolderResponse ? { onImportFolderResponse } : {})}
-            {...(onOpenConnectorsTab ? { onOpenConnectorsTab } : {})}
-            {...(initialTab ? { initialTab } : {})}
-          />
-          {creating ? (
-            <div className="new-project-modal__status" role="status">
-              Creating project…
+          <form className="new-project-modal__form" onSubmit={(event) => {
+            event.preventDefault();
+            void handleCreate();
+          }}>
+            <div className={styles.nameField}>
+              <input
+                ref={nameRef}
+                className={styles.name}
+                aria-label={t('newproj.namePlaceholder')}
+                aria-describedby={nameTooLong ? 'new-project-name-limit' : undefined}
+                placeholder={t('newproj.namePlaceholder')}
+                value={name}
+                onChange={(event) => {
+                  if (composingRef.current) {
+                    setName(event.target.value);
+                  } else {
+                    updateName(event.target.value);
+                  }
+                }}
+                onCompositionStart={() => { composingRef.current = true; }}
+                onCompositionEnd={(event) => {
+                  composingRef.current = false;
+                  updateName(event.currentTarget.value);
+                }}
+                disabled={busy}
+              />
+              <Button className={styles.create} type="submit" variant="primary"
+                disabled={busy || !name.trim() || Array.from(name.trim()).length > 24}
+                data-testid="create-project">
+                <Icon name="plus" size={14} />
+                {creating ? <span role="status">{t('common.loading')}</span> : t('newproj.create')}
+              </Button>
+            </div>
+            {nameTooLong ? (
+              <p id="new-project-name-limit" className={styles.nameLimit} role="alert">
+                {t('newproj.nameTooLong')}
+              </p>
+            ) : null}
+          </form>
+          {folderImport.available ? (
+            <Button className={styles.folder} variant="ghost" disabled={busy}
+              onClick={() => void folderImport.openFolder()}>
+              <Icon name="folder" size={28} />
+              <span>{t(folderImport.importing ? 'newproj.openingFolder' : 'workspace.openFile')}</span>
+            </Button>
+          ) : null}
+          {folderImport.error ? (
+            <div className="new-project-modal__status error" role="alert">
+              {folderImport.error.message}
             </div>
           ) : null}
           {createError ? (

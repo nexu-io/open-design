@@ -66,11 +66,14 @@ export type TemplateDemo = {
 export const TEMPLATE_TYPE_ORDER: TemplateType[] = ['Slides', 'Prototype', 'Live Artifact', 'Document', 'Image', 'Video', 'HyperFrames', 'Audio'];
 
 /** The tabs the Community gallery actually renders, mirroring the Home type
- *  row's taxonomy and order (`HOME_TYPE_ROW_IDS` + Image; web-clone stays a
- *  Home-only entry). Fixed rather than derived from the catalogue so the row
- *  reads the same set of artifact kinds as Home even while a kind (Document)
- *  has no published templates yet. */
-export const COMMUNITY_TAB_TYPES: readonly TemplateType[] = ['Prototype', 'Slides', 'Document', 'Image'];
+ *  row's taxonomy and order (`HOME_TYPE_ROW_IDS` + `HOME_TYPE_ROW_MORE_IDS`;
+ *  web-clone and webgl stay Home-only entries — no facet category carries
+ *  them). Fixed rather than derived from the catalogue so the row reads the
+ *  same set of artifact kinds as Home even while a kind has no published
+ *  templates yet. */
+export const COMMUNITY_TAB_TYPES: readonly TemplateType[] = [
+  'Prototype', 'Slides', 'Document', 'Image', 'HyperFrames', 'Live Artifact', 'Video', 'Audio',
+];
 
 /** The Community grid is the plugin catalogue seen through the artifact a user
  *  wants to make. Membership comes from the shared facet derivation in

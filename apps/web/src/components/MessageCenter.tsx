@@ -75,13 +75,14 @@ export function MessageCenter({
     const updatePosition = () => {
       const rect = rail?.getBoundingClientRect() ?? anchor?.getBoundingClientRect();
       if (!rect) return;
+      // Beside the rail rather than over it, vertically centred in the window.
       const width = Math.min(380, window.innerWidth - 24);
-      const top = Math.max(12, Math.min(rect.top + 8, window.innerHeight - 160));
+      const height = Math.min(720, Math.max(120, window.innerHeight - 24));
       setRailPosition({
         position: 'fixed', margin: 0,
-        left: Math.max(12, Math.min(rect.left + 8, window.innerWidth - width - 12)),
-        top, width,
-        height: Math.min(560, Math.max(120, window.innerHeight - top - 80)),
+        left: Math.max(12, Math.min(rect.right + 8, window.innerWidth - width - 12)),
+        top: Math.max(12, Math.round((window.innerHeight - height) / 2)),
+        width, height,
       });
     };
     updatePosition();

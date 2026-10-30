@@ -149,6 +149,15 @@ button:disabled {
   white-space: normal;
   will-change: transform;
 }
+/* Opt-in via `data-tooltip-tone="inverse"` on the trigger: the icon rail's
+   labels read as solid black chips with white text (per product). */
+.od-tooltip-layer[data-tone='inverse'] {
+  border-color: transparent;
+  background: #121212;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  color: #fff;
+}
 
 /* -------- Inputs ---------------------------------------------------- */
 input, textarea, select {

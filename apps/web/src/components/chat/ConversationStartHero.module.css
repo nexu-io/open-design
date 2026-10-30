@@ -1,0 +1,63 @@
+/* Home's opening, inside the empty conversation pane. Typography comes from
+   the shared `.home-hero__*` classes; this file only fits it to a column that
+   is usually far narrower than Home's 820px. */
+.root {
+  container-type: inline-size;
+  width: 100%;
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 24px 4px 8px;
+  text-align: left;
+}
+/* Sit in the middle of the empty log, the way Home's opening sits in its page
+   (per product: 太靠上). The shared empty wrap is a top-aligned, content-height
+   row in the chat skin; when it hosts this intro it fills the log's free
+   height and centres it. Doubled class out-ranks the skin's
+   `.app .chat-empty-wrap` (0,2,0) without depending on load order. */
+:global(.chat-empty-wrap.chat-empty-wrap):has(> .root) {
+  flex: 1 0 auto;
+  justify-content: center;
+}
+.heading {
+  margin-bottom: 20px;
+}
+.title,
+.subtitle {
+  text-align: left;
+}
+
+/* The picked type's gallery: Home's own column and grid (see
+   `.home-hero__content .community-template-grid` in styles/home/home-hero.css)
+   — three across, two once the column is narrower than 600px. Without these
+   the gallery falls back to Community's auto-fill, which is two across here. */
+.root > :global(.community-template-view[data-content-only]) {
+  width: 100%;
+  max-width: 820px;
+  padding: 0;
+}
+.root :global(.community-template-grid) {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.root :global(.community-template-grid[data-layout='masonry']) {
+  column-width: auto;
+  column-count: 3;
+}
+@container (max-width: 600px) {
+  .root :global(.community-template-grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .root :global(.community-template-grid[data-layout='masonry']) {
+    column-count: 2;
+  }
+}
+
+/* A chat column cannot hold the cards' two-up grid or the postcard beside the
+   headline: stack the cards in one column and drop the ornament. */
+@container (max-width: 560px) {
+  .heading > :last-child:not(:global(.home-hero__heading-text)) {
+    display: none;
+  }
+  .root [data-testid='home-hero-type-cards'] > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -1,4 +1,5 @@
 import { Button, Dialog, DialogTitle, DialogDescription, DialogFooter } from '@open-design/components';
+import { useActiveConversationTitle } from '../state/active-conversation-title';
 import {
   type DragEvent,
   type ReactNode,
@@ -20,11 +21,10 @@ import type { Project } from '../types';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { getOpenDesignHost } from '@open-design/host';
 import { Icon, type IconName } from './Icon';
-import { requestProjectShare } from '../state/projectShareRequest';
+import { shareProjectToTeam } from '../state/projectShareRequest';
 import { RemixIcon } from './RemixIcon';
 import { MarqueeLabel } from './MarqueeLabel';
 import projectMenuStyles from './WorkspaceProjectMenu.module.css';
-import { fetchProjectFiles } from '../providers/registry';
 import {
   HOME_APPLY_TEMPLATE_EVENT,
   orderedCreateChips,
@@ -1669,16 +1669,26 @@ export function WorkspaceTabsBar({
     tabsDockEl ? createPortal(node, tabsDockEl) : node;
 
   // Keep the title in the chat header and expose its project actions in one menu.
+  const activeConversation = useActiveConversationTitle();
   const dockDropdownNode = (() => {
     if (!tabsDockEl) return null;
     const activeTab = state.tabs.find((tab) => tab.id === state.activeTabId) ?? state.tabs[0];
     if (!activeTab) return null;
     const activeDisplay = displayTabById.get(activeTab.id)
       ?? displayTabFor(activeTab, projectById, t, knownProjectNamesRef.current);
+    // The header names the open CONVERSATION (per product), not its project
+    // folder; the project name stays the fallback until the chat publishes.
+    const headerTitle = activeTab.kind === 'project'
+      && activeConversation
+      && activeConversation.projectId === activeTab.projectId
+      && (!activeTab.conversationId || !activeConversation.conversationId
+        || activeTab.conversationId === activeConversation.conversationId)
+      ? activeConversation.title
+      : activeDisplay.title;
     return (
       <div className="workspace-tabs-dropdown" data-testid="workspace-tabs-dropdown">
         <div className={projectMenuStyles.header}>
-          <MarqueeLabel className="workspace-tabs-dropdown__label" text={activeDisplay.title} />
+          <MarqueeLabel className="workspace-tabs-dropdown__label" text={headerTitle} />
           {activeTab.kind === 'project' ? (
             <Button
               ref={dockTriggerRef}
@@ -2057,11 +2067,7 @@ export function WorkspaceTabsBar({
                 if (projectAction.kind === 'rename') await onRenameProject?.(projectAction.id, projectNameDraft.trim());
                 else if (projectAction.kind === 'delete') await onDeleteProject?.(projectAction.id);
                 else {
-                  const files = await fetchProjectFiles(projectAction.id, { workspaceContext });
-                  const file = files.find((entry) => /\.html?$/i.test(entry.name));
-                  if (!file) throw new Error(t('workspace.noFilesMatch'));
-                  requestProjectShare(projectAction.id, file.name);
-                  navigate({ kind: 'project', projectId: projectAction.id, conversationId: null, fileName: file.name });
+                  if (!(await shareProjectToTeam(projectAction.id, workspaceContext))) throw new Error(t('workspace.noFilesMatch'));
                 }
                 setProjectAction(null);
               } catch (error) { setDockActionError(String(error)); }

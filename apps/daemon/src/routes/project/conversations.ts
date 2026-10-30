@@ -12,8 +12,10 @@ import { cancelRunsOwnedBy } from './cancel-owned-runs.js';
 import {
   compactAdjacentMessageAgentEvents,
   deleteConversationAndRepairTeamCommentAnchor,
+  getWorkspaceProjectByProjectId,
   isProjectCommentAnchorConversationId,
 } from '../../db.js';
+import { moveConversationToProject } from '../../conversation-move.js';
 
 export interface RegisterProjectConversationRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'conversations' | 'ids' | 'telemetry' | 'appConfig' | 'agents'> {
   /**
@@ -254,6 +256,48 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     await cancelRunsOwnedBy(design.runs, { conversationId: req.params.cid });
     deleteConversationAndRepairTeamCommentAnchor(db, req.params.id, req.params.cid);
     res.json({ ok: true });
+  });
+
+  app.post('/api/projects/:id/conversations/:cid/move', async (req, res) => {
+    const targetProjectId = typeof req.body?.targetProjectId === 'string' ? req.body.targetProjectId : '';
+    if (!targetProjectId) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'targetProjectId is required');
+    }
+    if (targetProjectId === req.params.id) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'conversation is already in that project');
+    }
+    for (const projectId of [req.params.id, targetProjectId]) {
+      if (!await authorizeProjectRequest(
+        req,
+        res,
+        projectId,
+        { mode: 'write', capability: 'writeFiles' },
+      )) return;
+    }
+    const conv = getRoutableConversation(req.params.id, req.params.cid);
+    const source = getProject(db, req.params.id);
+    const target = getProject(db, targetProjectId);
+    if (!conv || !source) return res.status(404).json({ error: 'not found' });
+    if (!target) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'target project not found');
+    // Team conversations live behind workspace sync; moving them across
+    // projects is not supported yet.
+    if ([source.id, target.id].some(id => getWorkspaceProjectByProjectId(db, id)?.visibility === 'team')) {
+      return sendApiError(res, 400, 'TEAM_PROJECT_UNSUPPORTED', 'only personal projects support moving conversations');
+    }
+    if (design.runs.list({ conversationId: conv.id, status: 'active' }).length > 0) {
+      return sendApiError(res, 409, 'CONVERSATION_RUNNING', 'stop the running turn before moving this conversation');
+    }
+    try {
+      const result = await moveConversationToProject(db, PROJECTS_DIR, conv.id, source, target);
+      const now = Date.now();
+      updateProject(db, source.id, { updatedAt: now });
+      updateProject(db, target.id, { updatedAt: now });
+      /** @type {import('@open-design/contracts').MoveConversationResponse} */
+      const body = { conversation: getConversation(db, conv.id), ...result };
+      res.json(body);
+    } catch (err) {
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err));
+    }
   });
 
   // ---- Messages -------------------------------------------------------------

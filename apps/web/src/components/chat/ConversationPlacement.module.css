@@ -3,10 +3,32 @@
   grid-template-columns: var(--project-workspace-panel-track) var(--project-chat-handle-width) var(--project-chat-panel-width);
 }
 .right > :global(.split-chat-slot) { grid-column: 3; grid-row: 1; }
+/* Docked right, chat owns the trailing window gutter: the same 8px as its
+   bottom margin, so the card sits evenly off both window edges. Out-ranks the
+   chat skin's `.app .split-chat-slot { margin: 0 0 8px }` regardless of load
+   order. */
+.right:global(.split) > :global(.split-chat-slot) { margin-right: 8px; }
 .right > :global(.split-resize-handle) { grid-column: 2; grid-row: 1; }
 .right > [data-testid='workspace-edit-layout'] { grid-column: 1; grid-row: 1; }
 /* The resize handle supplies the same gap as when chat is on the left. */
 .right:global(.split) :global(.workspace) { margin-right: 0; }
 .full:global(.split) { grid-template-columns: minmax(0, 1fr) 0 0; }
-.full > :global(.split-chat-slot) { grid-column: 1; grid-row: 1; }
+.full:global(.split) > :global(.split-chat-slot) {
+  grid-column: 1;
+  grid-row: 1;
+  /* With the preview hidden, chat owns the trailing window gutter. */
+  margin-right: 8px;
+}
 .full > [data-testid='workspace-edit-layout'] { display: none; }
+
+/* Keep the outer card full width; only its contents match Home's 820px composer. */
+.full :global(.pane) > :global(.chat-log-wrap) {
+  width: 100%;
+  max-width: calc(820px + 2 * 16px);
+  margin-inline: auto;
+}
+.full :global(.pane) > :global(.chat-composer-slot) {
+  width: 100%;
+  max-width: calc(820px + 2 * var(--chat-composer-inline-inset, 8px));
+  margin-inline: auto;
+}

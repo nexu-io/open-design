@@ -1,4 +1,4 @@
-import type { ComponentProps } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { ChatPane as LegacyChatPane } from '../ChatPane';
 import { ChatPane as MainChatPane } from './upstream/ChatPane';
 import type { ConversationPlacement } from './WorkspaceComposerHeader';
@@ -10,8 +10,11 @@ type Props = ComponentProps<typeof LegacyChatPane> & {
   workspaceComposerDocked?: boolean;
   workspaceConversationExpanded?: boolean;
   onWorkspaceConversationExpandedChange?: (expanded: boolean) => void;
+  onHomeComposerChange?: (active: boolean) => void;
   onExpandConversation?: () => void;
   onConversationPlacementChange?: (placement: ConversationPlacement) => void;
+  /** The model control while the composer wears Home's input. */
+  composerHomeFooterAccessory?: ReactNode;
 };
 
 /** Latest-main chat UI, adapted to this checkout's existing project controller. */
