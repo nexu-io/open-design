@@ -2,14 +2,14 @@
   "$schema": "https://open-design.ai/schemas/marketplace.v1.json",
   "specVersion": "1.0.0",
   "name": "open-design-community",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "owner": {
     "name": "OpenDesign Community",
     "url": "https://open-design.ai/marketplace/community"
   },
   "metadata": {
     "description": "Default community plugin registry seed. Entries here are discoverable by default but remain restricted until the user installs and trusts them.",
-    "version": "0.2.10"
+    "version": "0.2.11"
   },
   "plugins": [
     {
@@ -139,6 +139,33 @@
         "design-to-code"
       ],
       "description": "Hand an Open Design project off to OpenCode as an offline-complete bundle: a verbatim project mirror, the design system materialized with real font binaries, and a machine-enforced adherence config."
+    },
+    {
+      "name": "community/vizney-blocks",
+      "title": "Vizney Blocks",
+      "version": "0.29.0",
+      "source": "github:yehwanhwang/vizney-blocks@main/skills/vizney-blocks",
+      "publisher": {
+        "id": "vizney",
+        "github": "yehwanhwang",
+        "url": "https://github.com/yehwanhwang"
+      },
+      "homepage": "https://blocks.vizney.com",
+      "license": "MIT",
+      "capabilitiesSummary": [
+        "prompt:inject"
+      ],
+      "tags": [
+        "community",
+        "dashboard",
+        "kpi",
+        "chart",
+        "data-visualization",
+        "html",
+        "cards",
+        "korean"
+      ],
+      "description": "Copy-paste HTML dashboard cards (37 cards, 14 chart types) built on the Vizney chart guide: pick a card by the question the screen answers, keep the card code, change only its JSON."
     }
   ]
 }
