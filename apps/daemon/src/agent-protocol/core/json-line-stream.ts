@@ -23,6 +23,21 @@
 export function createJsonLineStream(onMessage: (message: unknown, rawLine: string) => void) {
   let buffer = '';
   let pendingJsonLines: string[] = [];
+  // Some callers (e.g. `agent-protocol/pi-rpc/session.ts`, `agent-protocol/
+  // acp/session.ts`) feed raw stdout `Buffer` chunks without ever calling
+  // `stream.setEncoding('utf8')` on their side. Decoding each chunk
+  // independently (`chunk.toString('utf8')`, or the implicit coercion
+  // `buffer += chunk` performs on a Buffer) corrupts any multi-byte UTF-8
+  // character split across a chunk boundary into U+FFFD, since neither
+  // decode has any memory of the previous chunk's trailing bytes. `feed`
+  // must hold that invariant itself rather than depend on every current and
+  // future caller remembering to `setEncoding` first — one `TextDecoder` per
+  // stream instance, `{ stream: true }` so a split sequence's leading bytes
+  // are held back until the rest arrives on the next `feed` call. A caller
+  // that already hands over a decoded `string` (because it *did*
+  // `setEncoding`) skips this entirely — `TextDecoder.decode` is only for
+  // raw bytes.
+  const textDecoder = new TextDecoder('utf-8');
 
   const emit = (candidate: string): boolean => {
     try {
@@ -96,8 +111,9 @@ export function createJsonLineStream(onMessage: (message: unknown, rawLine: stri
   };
 
   return {
-    feed(chunk: string) {
-      buffer += chunk;
+    feed(chunk: Buffer | string) {
+      const piece = typeof chunk === 'string' ? chunk : textDecoder.decode(chunk, { stream: true });
+      buffer += piece;
       const lines = buffer.split('\n');
       buffer = lines.pop() || '';
       for (const line of lines) {
@@ -105,6 +121,13 @@ export function createJsonLineStream(onMessage: (message: unknown, rawLine: stri
       }
     },
     flush() {
+      // Flush any byte sequence the decoder was still holding back waiting
+      // for its continuation bytes -- at end-of-stream those bytes are truly
+      // incomplete (not merely split across a chunk boundary), so this is
+      // the one place `{ stream: true }` is intentionally NOT set: let the
+      // decoder emit its default U+FFFD for genuinely truncated input
+      // instead of silently discarding it.
+      buffer += textDecoder.decode();
       const trimmed = buffer.trim();
       buffer = '';
       if (trimmed) {
