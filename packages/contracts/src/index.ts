@@ -97,6 +97,7 @@ export * from './prompts/system.js';
 export * from './prompts/ui-locale.js';
 export * from './prompts/chat-turn-host-protocol.js';
 export * from './prompts/deck-framework.js';
+export * from './prompts/brand-kit-authoring.js';
 export * from './prompts/od-next-device-frame.js';
 export * from './prompts/od-next-strategy.js';
 export * from './prompts/od-next-production-marker.js';

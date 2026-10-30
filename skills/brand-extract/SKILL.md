@@ -225,6 +225,24 @@ email, newsletter, form) lit up as live previews that each link to their full
 palette, typography, voice, and the assets they can now preview — and confirm
 the brand was registered.
 
+### Refining the kit afterwards
+
+`brand.html`, `DESIGN.md`, and everything under `system/` are build output: the
+host re-runs finalize after every chat turn in the project and overwrites them.
+Never hand-edit them. Make every change through the inputs:
+
+- `brand.json` (and `brand.json.seed` for engine tokens such as control height),
+  `BRAND.md`, and the assets in `logos/`, `fonts/`, `imagery/`.
+- `overrides/brand.css` — styling the brand data cannot express (patterns, icon
+  treatments, contrast fixes). It is published as `system/overrides.css` and
+  linked into every generated page and `brand.html`, so resolve its `url()`
+  paths relative to `system/`.
+- `overrides/system/<path>` — a file that replaces or adds `system/<path>`, for
+  example a reworked `artifacts/newsletter.html` or a pattern SVG. A replaced
+  page stops following `brand.json`, so reach for it last. Token files
+  (`seed.json`, `tokens.*.json`, `variables*.css`, `theme.json`) cannot be
+  overridden.
+
 ## Safety
 
 - Do not bypass CAPTCHAs, paywalls, or security walls — ask the user to clear
