@@ -1,0 +1,32 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-skill-brand-character",
+  "title": "Streetwear Brand Character Sheet",
+  "version": "0.1.0",
+  "description": "A bright mascot system that locks one distinctive character across hero art, six poses, expressions, and palette chips.",
+  "license": "Apache-2.0",
+  "author": {"name": "OpenDesign", "url": "https://github.com/nexu-io/open-design"},
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/image-templates/image-brand-character",
+  "tags": ["image-skill", "first-party", "image", "character", "mascot", "brand", "streetwear", "identity"],
+  "compat": {"agentSkills": [{"path": "./SKILL.md"}]},
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {"type": "image", "poster": "./example.webp"},
+    "useCase": {
+      "query": "Create a bright landscape 3:2 brand character sheet using only these exact text strings: 'BYTE' and 'CHARACTER SYSTEM'. BYTE is a hand-drawn streetwear sticker character: a black cat-rabbit hybrid with an off-white face patch, asymmetric ears with the left ear upright and the right ear bent, acid-lime eyes, a cobalt puffer vest, charcoal cargo pants, white chunky sneakers, and exactly one silver carabiner attached at the hip. Lock this identity in every drawing. Layout: one large energetic hero pose on the left; six smaller full-body pose cards on the right in a precise 2-by-3 grid showing run, crouch, wave, carry, sit, and jump; four expression icons along the bottom; and five clean palette chips. Use a bright off-white paper board, huge tangerine BYTE typography, small cobalt CHARACTER SYSTEM type, pose cards in pale sky blue, butter yellow, and mint, one hot-pink rule, and cobalt registration marks. Illustration should feel authored with confident black ink, slight line wobble, dry marker overlap, subtle screen-print grain, and imperfect cut-sticker edges. Keep anatomy, ear asymmetry, face patch, outfit, shoes, and exactly one carabiner consistent in every panel. No extra text, logo, watermark, black or gray background, glossy 3D toy render, kawaii default, added accessories, changed clothing, duplicate limbs, inconsistent face, random symbols, or gibberish labels. Output only the finished character sheet.",
+      "exampleOutputs": [{"path": "./example.webp", "title": "Streetwear Brand Character Sheet"}]
+    },
+    "inputs": [
+      {"name": "model", "label": "Model", "type": "select", "options": ["vela/gpt-image-2"], "default": "vela/gpt-image-2"},
+      {"name": "aspect", "label": "Aspect ratio", "type": "select", "options": ["1:1", "16:9", "9:16", "4:5", "3:2"], "default": "3:2"}
+    ],
+    "context": {"skills": [{"path": "./SKILL.md"}], "assets": ["./template.json", "./example.webp"]},
+    "pipeline": {"stages": [{"id": "generate", "atoms": ["media-image"]}]},
+    "capabilities": ["prompt:inject", "fs:write"]
+  }
+}
