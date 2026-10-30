@@ -125,6 +125,49 @@ jobs:
             echo "pristine=$pristine"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Set up Node for Vela CLI check
+        if: >-
+          ${{ steps.pr.outputs.found == 'true'
+              && steps.pr.outputs.draft == 'false'
+              && steps.pr.outputs.pristine == 'true'
+              && steps.pr.outputs.author == 'app/open-design-release-bot'
+              && steps.pr.outputs.cross == 'false'
+              && steps.pr.outputs.head_oid == github.event.workflow_run.head_sha
+              && github.event.workflow_run.conclusion == 'success' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Check stable Vela CLI version before backport auto-merge
+        id: vela_guard
+        if: >-
+          ${{ steps.pr.outputs.found == 'true'
+              && steps.pr.outputs.draft == 'false'
+              && steps.pr.outputs.pristine == 'true'
+              && steps.pr.outputs.author == 'app/open-design-release-bot'
+              && steps.pr.outputs.cross == 'false'
+              && steps.pr.outputs.head_oid == github.event.workflow_run.head_sha
+              && github.event.workflow_run.conclusion == 'success' }}
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          # Read the candidate as data; execute only the checker from the trusted default branch.
+          log="$RUNNER_TEMP/vela-guard.log"
+          if {
+            git show "$HEAD_SHA:tools/pack/package.json" > "$RUNNER_TEMP/vela-pack.json" &&
+            git show "$HEAD_SHA:pnpm-lock.yaml" > "$RUNNER_TEMP/vela-lock.yaml" &&
+            node --experimental-strip-types .github/scripts/release/vela-version.ts "$RUNNER_TEMP/vela-pack.json" "$RUNNER_TEMP/vela-lock.yaml"
+          } > "$log" 2>&1; then
+            cat "$log"
+          else
+            cat "$log"
+            # Encode untrusted candidate values as one line before writing to GITHUB_OUTPUT.
+            reason="$(python3 -c 'import base64, pathlib, sys; lines = pathlib.Path(sys.argv[1]).read_text(errors="replace").splitlines(); text = next((s for s in lines if s.startswith("Error:")), "Vela CLI check failed; see workflow logs"); print(base64.b64encode(text[:1500].encode()).decode())' "$log")"
+            echo "reason_b64=$reason" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
       - name: Approve the clean backport (release bot, CI green)
         # release/v* requires 1 approving review. The diff was already reviewed + approved on
         # main; this is a mechanical, conflict-free cherry-pick by the release bot with green CI.
@@ -188,7 +231,7 @@ jobs:
         # failed run can finish after the PR head advanced, and should not page about a SHA that is
         # no longer the PR head. Page on failure and timed_out, but not cancelled: force-pushes can
         # cancel superseded PR runs as part of normal backport iteration.
-        if: ${{ steps.pr.outputs.found == 'true' && steps.pr.outputs.author == 'app/open-design-release-bot' && steps.pr.outputs.cross == 'false' && steps.pr.outputs.head_oid == github.event.workflow_run.head_sha && (github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'timed_out') }}
+        if: ${{ always() && steps.pr.outputs.found == 'true' && steps.pr.outputs.author == 'app/open-design-release-bot' && steps.pr.outputs.cross == 'false' && steps.pr.outputs.head_oid == github.event.workflow_run.head_sha && ((github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'timed_out') || steps.vela_guard.outcome == 'failure') }}
         env:
           FEISHU_WEBHOOK: ${{ secrets.FEISHU_RELEASE_WEBHOOK }}
           FEISHU_SIGN_SECRET: ${{ secrets.FEISHU_RELEASE_SIGN_SECRET }}
@@ -197,6 +240,10 @@ jobs:
           TITLE: ${{ steps.pr.outputs.title }}
           RUN_URL: ${{ github.event.workflow_run.html_url }}
           CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          VELA_GUARD_OUTCOME: ${{ steps.vela_guard.outcome }}
+          VELA_GUARD_REASON: ${{ steps.vela_guard.outputs.reason_b64 }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          FOLLOWUP_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           python3 - <<'PY'
           import os, time, hmac, hashlib, base64, json, urllib.request
@@ -204,8 +251,15 @@ jobs:
           if not wh:
               raise SystemExit(0)
           secret = os.environ.get("FEISHU_SIGN_SECRET", "")
-          text = (f"⚠️ backport PR #{os.environ['NUM']} CI {os.environ.get('CONCLUSION','failed')}（目标 {os.environ['BASE']}）\n"
-                  f"{os.environ.get('TITLE','')}\n需要人工跟进：{os.environ.get('RUN_URL','')}")
+          if os.environ.get("VELA_GUARD_OUTCOME") == "failure":
+              encoded = os.environ.get("VELA_GUARD_REASON", "")
+              reason = base64.b64decode(encoded).decode("utf-8", errors="replace") if encoded else "Vela CLI check failed; see workflow logs"
+              text = (f"⚠️ backport PR #{os.environ['NUM']} Vela CLI 检查失败（目标 {os.environ['BASE']}）\n"
+                      f"{os.environ.get('TITLE','')}\n候选提交：{os.environ.get('HEAD_SHA','')}\n"
+                      f"原因：{reason}\n需要人工跟进：{os.environ.get('FOLLOWUP_URL','')}")
+          else:
+              text = (f"⚠️ backport PR #{os.environ['NUM']} CI {os.environ.get('CONCLUSION','failed')}（目标 {os.environ['BASE']}）\n"
+                      f"{os.environ.get('TITLE','')}\n需要人工跟进：{os.environ.get('RUN_URL','')}")
           body = {"msg_type": "text", "content": {"text": text}}
           if secret:
               ts = str(int(time.time()))
