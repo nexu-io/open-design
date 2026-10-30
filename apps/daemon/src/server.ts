@@ -478,6 +478,10 @@ import { createArtifactFocusMarkerStripper } from './artifact-focus-marker.js';
 import { createNextStepMarkerStripper } from './next-step-marker.js';
 import { createRoleMarkerGuard } from './role-marker-guard.js';
 import { createToolLoopGuard, resolveToolLoopMode, type ToolLoopVerdict } from './tool-loop-guard.js';
+import {
+  createToolPermissionRejectionTracker,
+  toolPermissionRejectionMessage,
+} from './runtimes/tool-permission-rejection.js';
 import { diagnoseClaudeCliFailure } from './claude-diagnostics.js';
 import { loadCritiqueConfigFromEnv } from './critique/config.js';
 import { reconcileStaleRuns } from './critique/persistence.js';
@@ -16080,6 +16084,7 @@ export async function startServer({
     // … It emits a one-shot `tool_loop` warning, then (in halt mode) terminates
     // the run at a hard ceiling. Mode via OD_TOOL_LOOP_GUARD (halt|warn|off).
     const toolLoopGuard = createToolLoopGuard({ mode: resolveToolLoopMode() });
+    const toolPermissionRejections = createToolPermissionRejectionTracker();
     let toolLoopAbortFired = false;
 
     // Idempotent — both agent-event paths (sendAgentEvent, the Claude
@@ -16187,6 +16192,7 @@ export async function startServer({
       noteFirstOutputEvent(ev);
       send('agent', ev);
       observeToolEventForLoop(ev);
+      toolPermissionRejections.observe(ev);
       /*
        * The `<od-focus open="…">` release point.
        *
@@ -17224,6 +17230,16 @@ export async function startServer({
         !agentProducedOutput
       ) {
         markRpcCloseReason('empty_output');
+        const permissionRejection = toolPermissionRejections.latest();
+        if (permissionRejection) {
+          // Retrying reruns the same denied call, so this is not retryable.
+          send('error', createSseErrorPayload(
+            'AGENT_EXECUTION_FAILED',
+            toolPermissionRejectionMessage(permissionRejection),
+            { retryable: false },
+          ));
+          return finishWithRetryDecision('failed', code, signal);
+        }
         return finishWithRetryDecision('failed', code, signal, {
           emptyReplyError: createSseErrorPayload(
             'AGENT_EXECUTION_FAILED',

@@ -374,6 +374,10 @@ export type TrackingRunFailureDetail =
   | 'credential_refresh_contention'
   | 'fabricated_role_marker'
   | 'permission_request_not_found'
+  // A headless OpenCode run auto-denied a tool call outside its
+  // `external_directory` allowlist and the model then ended without output.
+  // Deterministic for the same run, so never retried.
+  | 'tool_permission_rejected'
   | 'qoder_stop_sequence'
   | 'signal_killed'
   | 'process_crashed'

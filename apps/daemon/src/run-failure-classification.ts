@@ -27,6 +27,7 @@ import {
   reportsPlatformProviderCredentialFault,
 } from './integrations/vela-errors.js';
 import { runFailureEvidence } from './services/run-failure-evidence.js';
+import { TOOL_PERMISSION_REJECTED_MARKER } from './runtimes/tool-permission-rejection.js';
 import { summarizeRunToolProgress } from './run-diagnostics.js';
 import { isAcpHandshakeRpcErrorText } from './runtimes/acp-handshake-id.js';
 import {
@@ -939,7 +940,7 @@ function classification(
   ].includes(failure_detail) || localModel;
   const product = [
     'agent_protocol_error', 'acp_frame_too_large', 'bundled_binary_missing', 'empty_output', 'fabricated_role_marker',
-    'permission_request_not_found', 'plugin_artifact_missing',
+    'permission_request_not_found', 'plugin_artifact_missing', 'tool_permission_rejected',
   ].includes(failure_detail) || clientRequest || failure_category === 'prompt_too_large';
   const failure_mechanism: TrackingRunFailureMechanism = policy
     ? 'policy_rejection'
@@ -1510,6 +1511,19 @@ function classifyRunFailureBase(
       retryable,
       retryable ? 'retry' : 'none',
       { structuredProviderEvidence },
+    );
+  }
+
+  // The empty-output guard names an auto-denied tool call instead of blaming
+  // the provider. Checked before the empty_output close reason, which the
+  // same guard still records.
+  if (text.includes(TOOL_PERMISSION_REJECTED_MARKER)) {
+    return classification(
+      'tool_error',
+      'tool_permission_rejected',
+      inferFailureStageFromEvents(events, 'post_tool_resume'),
+      false,
+      'none',
     );
   }
 
