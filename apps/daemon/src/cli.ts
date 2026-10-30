@@ -260,7 +260,7 @@ const PROJECT_STRING_FLAGS = new Set([
   'pending-prompt', 'project', 'conversation', 'message', 'prompt',
   'prompt-file', 'task-execution', 'path', 'dir', 'as', 'url',
   'client-request-id',
-  'agent', 'model', 'service-tier', 'snapshot-id', 'inputs', 'grant-caps', 'editor',
+  'agent', 'model', 'reasoning', 'service-tier', 'snapshot-id', 'inputs', 'grant-caps', 'editor',
   'title', 'label', 'against', 'seed-from', 'fork-after', 'mode',
   'source', 'out',
 ]);
@@ -8576,12 +8576,12 @@ async function runRun(args) {
                [--prompt-file <path|->] [--task-execution <id>]
                [--client-request-id <id>]
                [--skill <id>[,<id>]] [--plugin <id>] [--inputs <json>] [--grant-caps a,b]
-               [--agent <id>] [--model <id>] [--service-tier <id>]
+               [--agent <id>] [--model <id>] [--reasoning <id>] [--service-tier <id>]
                [--byok-protocol <protocol>] [--byok-base-url <url>]
                [--byok-api-version <version>] [--byok-key-env <env>] [--byok-keyless]
                [--workspace <id> --workspace-member <id>] [--follow] [--json]
   od run redesign [--path <folder>] [--message "<text>" | --prompt-file <path|->]
-               [--agent claude] [--model <id>] [--service-tier <id>] [--follow] [--json]
+               [--agent claude] [--model <id>] [--reasoning <id>] [--service-tier <id>] [--follow] [--json]
   od run watch  <runId>                     ND-JSON event stream on stdout.
   od run cancel <runId>                     Request cancellation.
   od run steer  <runId> [--message "<text>" | --prompt-file <path|->] [--json]
@@ -8850,6 +8850,7 @@ Common options:
         designSystemId,
         ...(flags.agent ? { agentId: flags.agent } : {}),
         ...(flags.model ? { model: flags.model } : {}),
+        ...(flags.reasoning ? { reasoning: flags.reasoning } : {}),
         ...(flags['service-tier'] ? { serviceTier: flags['service-tier'] } : {}),
       };
       const data = await postJsonToDaemon(base, '/api/runs', body, workspaceHeaders);
@@ -8900,6 +8901,7 @@ Common options:
       if (flags.agent) body.agentId = flags.agent;
       else if (byokProvider) body.agentId = BYOK_OPENCODE_AGENT_ID;
       if (flags.model) body.model = flags.model;
+      if (flags.reasoning) body.reasoning = flags.reasoning;
       if (flags['service-tier']) body.serviceTier = flags['service-tier'];
       if (flags.inputs) {
         try { body.pluginInputs = JSON.parse(flags.inputs); } catch (err) {
