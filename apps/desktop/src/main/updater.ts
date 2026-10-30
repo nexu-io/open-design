@@ -777,11 +777,11 @@ export function createDesktopUpdater(
 
   async function writeMetadataPatch(
     patch: (current: UpdateStoreMetadata) => UpdateStoreMetadata,
-  ): Promise<(OwnedRoot & { ok: true }) | null> {
+  ): Promise<{ ok: true; root: OwnedRoot & { ok: true } } | { ok: false; status: DesktopUpdateStatusSnapshot }> {
     const opened = await openStore();
-    if (!opened.ok) return null;
+    if (!opened.ok) return { ok: false, status: opened.status };
     await writeStoreMetadata(opened.root, patch(opened.metadata));
-    return opened.root;
+    return { ok: true, root: opened.root };
   }
 
   async function checkForCandidate(options: ActionOptions = {}): Promise<DesktopUpdateStatusSnapshot> {
@@ -817,11 +817,12 @@ export function createDesktopUpdater(
       const body = await fetchJson(fetchImpl, config.metadataUrl);
       lastCheckedAt = now().toISOString();
       metadata = body;
-      const root = await writeMetadataPatch((current) => ({
+      const metadataPatch = await writeMetadataPatch((current) => ({
         ...current,
         lastCheckedAt,
       }));
-      if (root != null) scheduleBackCleanup(root.realRoot, logger);
+      if (!metadataPatch.ok) return observeCheck(metadataPatch.status);
+      scheduleBackCleanup(metadataPatch.root.realRoot, logger);
       const launcherPayloadContextValid = await hasValidLauncherPayloadContext(config);
       const installedOuterVersion = launcherPayloadContextValid ? await resolveInstalledOuterVersion(config) : null;
       reinstallRequirement = launcherPayloadContextValid
@@ -860,12 +861,13 @@ export function createDesktopUpdater(
           return observeCheck(setState(DESKTOP_UPDATE_STATES.DOWNLOADED));
         }
         activeRelease = null;
-        await writeMetadataPatch((current) => ({
+        const clearedPatch = await writeMetadataPatch((current) => ({
           ...current,
           active: undefined,
           incoming: undefined,
           lastCheckedAt,
         }));
+        if (!clearedPatch.ok) return observeCheck(clearedPatch.status);
         return observeCheck(setState(DESKTOP_UPDATE_STATES.NOT_AVAILABLE));
       }
       if (activeRelease != null && releaseMatchesCandidate(activeRelease.ref, selected.candidate)) {
@@ -880,33 +882,32 @@ export function createDesktopUpdater(
         return observeCheck(setState(DESKTOP_UPDATE_STATES.DOWNLOADED));
       }
       const openedForAdoption = await openStore();
-      if (openedForAdoption.ok) {
-        const adoptedRelease = await loadVerifiedReleaseForCandidate(openedForAdoption.root, selected.candidate);
-        if (adoptedRelease != null) {
-          logUpdateEvent("check-adopt-release", {
-            key: adoptedRelease.ref.key,
-            version: adoptedRelease.ref.version,
-          });
-          const prepareError = await preparePayloadReleaseForReady(adoptedRelease);
-          if (prepareError != null) return observeCheck(prepareError);
-          candidate = selected.candidate;
-          activeRelease = adoptedRelease;
-          metadata = adoptedRelease.ref.metadata;
-          installFrozen = false;
-          installResult = undefined;
-          incomingRelease = null;
-          progress = undefined;
-          await writeStoreMetadata(openedForAdoption.root, {
-            ...openedForAdoption.metadata,
-            active: adoptedRelease.ref,
-            incoming: undefined,
-            installFrozen: false,
-            installResult: undefined,
-            lastCheckedAt,
-            version: STORE_METADATA_VERSION,
-          });
-          return observeCheck(setState(DESKTOP_UPDATE_STATES.DOWNLOADED));
-        }
+      if (!openedForAdoption.ok) return observeCheck(openedForAdoption.status);
+      const adoptedRelease = await loadVerifiedReleaseForCandidate(openedForAdoption.root, selected.candidate);
+      if (adoptedRelease != null) {
+        logUpdateEvent("check-adopt-release", {
+          key: adoptedRelease.ref.key,
+          version: adoptedRelease.ref.version,
+        });
+        const prepareError = await preparePayloadReleaseForReady(adoptedRelease);
+        if (prepareError != null) return observeCheck(prepareError);
+        candidate = selected.candidate;
+        activeRelease = adoptedRelease;
+        metadata = adoptedRelease.ref.metadata;
+        installFrozen = false;
+        installResult = undefined;
+        incomingRelease = null;
+        progress = undefined;
+        await writeStoreMetadata(openedForAdoption.root, {
+          ...openedForAdoption.metadata,
+          active: adoptedRelease.ref,
+          incoming: undefined,
+          installFrozen: false,
+          installResult: undefined,
+          lastCheckedAt,
+          version: STORE_METADATA_VERSION,
+        });
+        return observeCheck(setState(DESKTOP_UPDATE_STATES.DOWNLOADED));
       }
       candidate = selected.candidate;
       logUpdateEvent("check-available", {
@@ -1127,7 +1128,8 @@ export function createDesktopUpdater(
       if (stagingDir != null) await rm(stagingDir, { force: true, recursive: true }).catch(() => undefined);
       incomingRelease = null;
       progress = undefined;
-      await writeMetadataPatch((current) => ({ ...current, incoming: undefined }));
+      const clearedIncomingPatch = await writeMetadataPatch((current) => ({ ...current, incoming: undefined }));
+      if (!clearedIncomingPatch.ok) return clearedIncomingPatch.status;
       return setFailurePreservingActive(desktopDownloadError(downloadError));
     }
   }
