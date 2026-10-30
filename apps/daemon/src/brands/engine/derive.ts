@@ -80,6 +80,30 @@ function luminance(rgb: RGB): number {
   return (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255;
 }
 
+function relativeLuminance(rgb: RGB): number {
+  const linear = (channel: number) => {
+    const value = channel / 255;
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * linear(rgb.r) + 0.7152 * linear(rgb.g) + 0.0722 * linear(rgb.b);
+}
+
+function contrastRatio(a: RGB, b: RGB): number {
+  const [lighter, darker] = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+/** Keep text on a semantic color at WCAG AA contrast, even for dark brand seeds. */
+function readableTextOn(background: string, preferred: string): string {
+  const backgroundRgb = parseHex(background);
+  if (contrastRatio(parseHex(preferred), backgroundRgb) >= 4.5) return preferred;
+  const black = "#000000";
+  const white = "#ffffff";
+  return contrastRatio(parseHex(black), backgroundRgb) >= contrastRatio(parseHex(white), backgroundRgb)
+    ? black
+    : white;
+}
+
 function lightThemeBgBase(input: string | undefined): string {
   const hex = input || "#ffffff";
   return luminance(parseHex(hex)) >= 0.72 ? hex : "#ffffff";
@@ -225,8 +249,6 @@ interface NeutralAlphas {
   /** alpha used for the solid default border. */
   border: number;
   borderSecondary: number;
-  /** alpha used to tint colorBgLayout off the base bg. */
-  layout: number;
 }
 
 function neutralAlphas(algorithm: ThemeAlgorithm): NeutralAlphas {
@@ -236,7 +258,6 @@ function neutralAlphas(algorithm: ThemeAlgorithm): NeutralAlphas {
       fill: [0.18, 0.12, 0.08, 0.04],
       border: 0.18,
       borderSecondary: 0.12,
-      layout: 0.04,
     };
   }
   // default & compact share the light neutral ladder (color layer is orthogonal
@@ -246,7 +267,6 @@ function neutralAlphas(algorithm: ThemeAlgorithm): NeutralAlphas {
     fill: [0.15, 0.06, 0.04, 0.02],
     border: 0.15,
     borderSecondary: 0.06,
-    layout: 0.04,
   };
 }
 
@@ -320,11 +340,12 @@ export function deriveTokens(seed: SeedToken, algorithm: ThemeAlgorithm = "defau
   const colorBorder = text(na.border);
   const colorBorderSecondary = text(na.borderSecondary);
 
-  // Layout is the page canvas (slightly off the container); container & elevated
-  // sit on the pure base. In dark mode elevated is lifted one notch lighter.
-  const colorBgLayout = text(na.layout);
-  const colorBgContainer = bgBaseHex;
-  const colorBgElevated = canvasDark ? alphaOver(textBase, bgBase, 0.08) : bgBaseHex;
+  // The seed background is the page canvas; light containers use a white
+  // surface so cards remain distinct from tinted page backgrounds. Dark
+  // containers stay on the seeded canvas, with elevated surfaces lifted above it.
+  const colorBgLayout = bgBaseHex;
+  const colorBgContainer = canvasDark ? bgBaseHex : "#ffffff";
+  const colorBgElevated = canvasDark ? alphaOver(textBase, bgBase, 0.08) : "#ffffff";
 
   // --- typography -------------------------------------------------------------
   const fontSize = seed.fontSize;
@@ -380,7 +401,7 @@ export function deriveTokens(seed: SeedToken, algorithm: ThemeAlgorithm = "defau
     colorPrimaryBorderHover: primary.borderHover,
     colorPrimaryHover: primary.hover,
     colorPrimaryActive: primary.active,
-    colorPrimaryText: primary.text,
+    colorPrimaryText: readableTextOn(primary.base, primary.text),
 
     // functional — success / warning / error / info / link
     colorSuccess: successStates.base,
