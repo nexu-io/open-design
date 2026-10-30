@@ -26,7 +26,7 @@
     "resedit": "1.7.2"
   },
   "optionalDependencies": {
-    "@powerformer/vela-cli": "0.1.8-test.0"
+    "@powerformer/vela-cli": "0.1.8"
   },
   "devDependencies": {
     "@typescript/native": "npm:typescript@7.0.2",
