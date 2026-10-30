@@ -9,8 +9,8 @@ const context: WorkspaceCollabContext = { workspaceId: 'ws', workspaceType: 'per
 const project: Project = { id: 'project', name: 'Example', skillId: null, designSystemId: null, createdAt: 1, updatedAt: 1 };
 const request = vi.fn<typeof fetch>();
 const remove = vi.fn(async () => true);
-function Harness() {
-  const flow = useProjectDeleteFlow({ onDelete: remove, analyticsPage: 'home', workspaceContext: context });
+function Harness({ workspaceContext = context, workspaceSignedOut = false }: { workspaceContext?: WorkspaceCollabContext | null; workspaceSignedOut?: boolean } = {}) {
+  const flow = useProjectDeleteFlow({ onDelete: remove, analyticsPage: 'home', workspaceContext, workspaceSignedOut });
   return <><button onClick={() => flow.request(project)}>Request delete</button><button onClick={() => void flow.commit()}>Invoke commit directly</button>{flow.target ? <ProjectDeleteConfirmDialog projectName={flow.target.name} activeShareCount={flow.activeShareCount} shareReadStatus={flow.shareReadStatus} pending={flow.pending} failed={flow.failed} onCancel={flow.cancel} onConfirm={() => void flow.commit()} /> : null}</>;
 }
 beforeEach(() => { request.mockReset(); remove.mockClear(); vi.stubGlobal('fetch', request); });
@@ -18,6 +18,33 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 function history(statuses: ('active' | 'stopped')[]) {
   return Response.json({ projectId: 'project', bindingExists: statuses.length > 0, hasEverShared: statuses.length > 0, publications: statuses.map((status, index) => ({ sourceFilePath: `${index}.html`, slug: `stable-${index}`, status })) });
 }
+it('deletes from a settled signed-out session: no share surface in scope, no share-state read', async () => {
+  render(<Harness workspaceContext={null} workspaceSignedOut />);
+  fireEvent.click(screen.getByText('Request delete'));
+  expect(await screen.findByText('Delete "Example"?')).toBeVisible();
+  // No workspace identity means no share-state read to wait for: the confirm
+  // must settle immediately, not report the generic retry error.
+  expect(request).not.toHaveBeenCalled();
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(screen.getByTestId('project-delete-confirm-accept')).toBeEnabled();
+  fireEvent.click(screen.getByTestId('project-delete-confirm-accept'));
+  fireEvent.click(screen.getByText('Invoke commit directly'));
+  await waitFor(() => expect(remove).toHaveBeenCalledExactlyOnceWith('project'));
+  await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+});
+it('fails closed while the workspace identity is unresolved: no delete, no share-free shortcut, no read', () => {
+  render(<Harness workspaceContext={null} />);
+  fireEvent.click(screen.getByText('Request delete'));
+  // Loading / unavailable reads are also a null context; the confirm must keep
+  // waiting (loading copy, no alert) instead of claiming share-free.
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(screen.getByTestId('project-delete-confirm-accept')).toBeDisabled();
+  fireEvent.click(screen.getByTestId('project-delete-confirm-accept'));
+  fireEvent.click(screen.getByText('Invoke commit directly'));
+  expect(remove).not.toHaveBeenCalled();
+  expect(request).not.toHaveBeenCalled();
+});
+
 it('counts active shares only and does not delete while reading the confirmation', async () => {
   request.mockImplementation(async () => history(['active', 'stopped', 'active']));
   render(<Harness />);

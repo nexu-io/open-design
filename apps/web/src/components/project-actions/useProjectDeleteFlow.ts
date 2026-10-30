@@ -30,8 +30,14 @@ export function useProjectDeleteFlow(input: {
   onDelete?: ProjectDeleteHandler;
   analyticsPage: TrackingProjectCollectionPage;
   workspaceContext: WorkspaceCollabContext | null | undefined;
+  /**
+   * Whether a null `workspaceContext` is a SETTLED signed-out reading (from
+   * `workspaceIdentitySettledSignedOut`), never a bare null: loading and
+   * unavailable reads are also null and must fail closed. Defaults to false.
+   */
+  workspaceSignedOut?: boolean;
 }) {
-  const { onDelete, analyticsPage, workspaceContext } = input;
+  const { onDelete, analyticsPage, workspaceContext, workspaceSignedOut } = input;
   const analytics = useAnalytics();
   const [target, setTarget] = useState<Project | null>(null);
   const [pending, setPending] = useState(false);
@@ -40,8 +46,21 @@ export function useProjectDeleteFlow(input: {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const accountGeneration = currentWorkspaceAccountGeneration();
   const { history, status } = useProjectShareHistoryState(target && workspaceContext ? target.id : undefined, workspaceContext, 'delete-confirmation');
-  const shareReadStatus = target && !workspaceContext ? 'error' : status;
-  const activeShareCount = history ? history.publications.filter(publication => publication.status === 'active').length : null;
+  // A SETTLED signed-out session (verified by the caller via
+  // `workspaceIdentitySettledSignedOut`, never a bare null context, which
+  // also covers loading and unavailable reads) has no share surface in scope:
+  // publishing requires the collab identity it lacks, and the daemon's delete
+  // path owns stop-before-delete authorization server-side. Resolve that
+  // session to a settled, share-free reading — a forced 'error' here made
+  // every signed-out confirm dead-end on the generic retry copy with a
+  // permanently disabled accept button, so local-first deletes never issued.
+  // A null-but-unresolved context stays fail closed: an identity the read has
+  // not answered for must not be treated as anonymity.
+  const shareFreeSession = workspaceContext == null && workspaceSignedOut === true;
+  const shareReadStatus = shareFreeSession ? 'ready' : status;
+  const activeShareCount = shareFreeSession
+    ? 0
+    : history ? history.publications.filter(publication => publication.status === 'active').length : null;
 
   const request = useCallback((project: Project) => {
     setFailed(false);

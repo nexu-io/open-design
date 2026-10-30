@@ -159,6 +159,7 @@ import {
   workspaceIdentityCacheKey,
   workspaceResourceReadContext,
 } from './collab/useWorkspaceContext';
+import { workspaceIdentitySettledSignedOut } from './collab/workspace-identity-signed-out';
 import {
   projectResourceReadsCanStart,
   useProjectRouteWorkspaceContext,
@@ -1009,6 +1010,7 @@ function AppInner() {
       ? ['pending-account', workspaceAccountGeneration]
       : ['workspace-account', workspaceAccountGeneration, currentWorkspaceIdentity],
   );
+  const workspaceSettledSignedOut = workspaceIdentitySettledSignedOut(workspaceContextState);
   const workspaceContextRef = useRef<WorkspaceCollabContext | null>(null);
   const workspaceContextStateRef = useRef(workspaceContextState);
   const projectRouteWorkspaceContextRef = useRef<WorkspaceCollabContext | null>(null);
@@ -6206,6 +6208,7 @@ function AppInner() {
           onboardingCompleted={config.onboardingCompleted === true}
           identityScopeKey={workspaceTabsIdentityScopeKey}
           workspaceContext={workspaceContext}
+          workspaceSignedOut={workspaceSettledSignedOut}
           onRenameProject={handleRenameProject}
           onDuplicateProject={handleDuplicateProject}
           onDeleteProject={handleDeleteProject}
