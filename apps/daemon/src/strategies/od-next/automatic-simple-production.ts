@@ -18,6 +18,7 @@ import {
   getStrategyTaskExecutionByRunId,
   type StrategyTaskExecutionRecord,
 } from '../task-store.js';
+import type { ResumeInvalidationReason } from '../../agent-session-resume.js';
 
 import type { StrategyTaskProjectionV2 } from '@open-design/contracts';
 import type { OdNextCoordinatorResult } from './coordinator.js';
@@ -117,19 +118,46 @@ export function completeAutomaticSimpleProduction(db: SqliteDb, input: {
     ...(input.updatedAt === undefined ? {} : { updatedAt: input.updatedAt }),
   }).task;
 }
+/**
+ * Why a non-initial OD Next Run could not resume its task's native session:
+ * the resume guard's invalidation reason when a stored session was refused,
+ * otherwise whether there was no stored session at all or the runtime cannot
+ * resume one.
+ */
+export type OdNextNativeSessionGuardReason =
+  | ResumeInvalidationReason
+  | 'no_stored_session'
+  | 'unsupported';
+
+export function odNextNativeSessionGuardReason(input: {
+  supportsSessionResume: boolean;
+  storedSessionId: string | null;
+  invalidationReason: ResumeInvalidationReason | null;
+}): OdNextNativeSessionGuardReason {
+  if (!input.supportsSessionResume) return 'unsupported';
+  if (input.invalidationReason) return input.invalidationReason;
+  return input.storedSessionId == null ? 'no_stored_session' : 'unsupported';
+}
+
 /** Retain a stop for legacy mappings without recovery context or unsafe replay. */
 export function endFailedAutomaticContinuation(db: SqliteDb, input: {
   runId: string;
+  /** Logged beside the primary code so a refused continuation names its cause. */
+  guardReason?: OdNextNativeSessionGuardReason;
   updatedAt?: number;
 }): StrategyTaskExecutionRecord | null {
   const current = getStrategyTaskExecutionByRunId(db, input.runId);
   if (!current) return null;
   if (current.latestRunId !== input.runId || current.outcome !== 'running') return current;
+  const reasonCodes = [
+    'od_next_native_session_continuity_unproven',
+    ...(input.guardReason ? [`od_next_native_session_guard_${input.guardReason}`] : []),
+  ];
   console.warn('[od-next-task] continuation failed', {
     taskExecutionId: current.taskExecutionId,
     runId: input.runId,
     inputStage: current.inputStage,
-    reasonCodes: ['od_next_native_session_continuity_unproven'],
+    reasonCodes,
   });
   return compareAndTransitionStrategyTaskExecution(db, {
     taskExecutionId: current.taskExecutionId,
