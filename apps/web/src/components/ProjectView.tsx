@@ -471,6 +471,12 @@ type ProjectChatSendMeta = ChatSendMeta & {
   /** Stable persisted row ids for a replayable handoff such as Home auto-send. */
   userMessageId?: string;
   assistantMessageId?: string;
+  /**
+   * When the turn already on screen started — the optimistic Home turn this
+   * send takes over. The header clock counts from `startedAt`; re-stamping it
+   * here moves the start later and the clock jumps back to 0.
+   */
+  startedAt?: number;
   queueOnly?: boolean;
   retryOfAssistantId?: string;
   sessionMode?: ChatSessionMode;
@@ -9272,7 +9278,7 @@ export function ProjectView({
        * OPEND-2615 那个症状。两件事必须绑在一起。
        */
       setChatSeed(null);
-      const startedAt = Date.now();
+      const startedAt = meta?.startedAt ?? Date.now();
       const previousConversation = conversationsRef.current.find(
         (conversation) => conversation.id === runConversationId,
       );
@@ -14372,6 +14378,12 @@ export function ProjectView({
     creationHandoffMessageIds,
   );
   const creationHandoffTurnShown = optimisticFirstTurn !== null && messages.length === 0;
+  // The auto-send below carries this start so the real turn keeps counting
+  // from it instead of re-stamping the clock.
+  const creationHandoffStartedAtRef = useRef<number | undefined>(undefined);
+  creationHandoffStartedAtRef.current = creationHandoffTurnShown
+    ? creationHandoffMessages.find((message) => message.role === 'assistant')?.startedAt
+    : undefined;
   const chatPaneConversationKey =
     activeConversationId
     ?? seedConversationId
@@ -14536,6 +14548,9 @@ export function ProjectView({
     void handleSend(seed, attachments, [], {
         ...(context ? { context } : {}),
         ...homeAutoSendIdentity(project.id),
+        ...(creationHandoffStartedAtRef.current !== undefined
+          ? { startedAt: creationHandoffStartedAtRef.current }
+          : {}),
         initialHomeSend: true,
         acceptDurableQueue: true,
         // Only reuse Home's decision for the exact persisted project scope.
@@ -15847,6 +15862,9 @@ function stripQueueOnlyFromMeta(
     // 回放走,否则一条排过队的输入框消息在回放时被拦下,会去撤一个早就清空的
     // 草稿,而队列里那条反而被扔掉。见 `composerOwnedDraft` 的说明。
     composerOwnedDraft: _composerOwnedDraft,
+    // The on-screen turn this start belonged to is gone once the send queues;
+    // a replay paints a new turn and starts its own clock.
+    startedAt: _startedAt,
     initialHomeSend: _initialHomeSend,
     ...rest
   } = meta as ProjectChatSendMeta;
