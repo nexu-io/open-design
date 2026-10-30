@@ -23,6 +23,18 @@ on:
         required: false
         type: string
         default: ""
+      cloud_backend:
+        description: Build apps/cloud instead of the desktop daemon image
+        type: boolean
+        default: false
+      cloud_publish:
+        description: Push the cloud image to the configured registry
+        type: boolean
+        default: false
+      cloud_environment:
+        description: GitHub environment holding cloud registry configuration
+        type: string
+        default: cloud-staging
     outputs:
       reconciliation:
         description: "Version-tag reconciliation action: noop or published."
@@ -30,6 +42,9 @@ on:
       version_digest:
         description: "Verified multi-arch digest for the immutable version tag."
         value: ${{ jobs.build-and-push.outputs.version_digest }}
+      cloud_digest:
+        description: Built cloud backend image digest
+        value: ${{ jobs.cloud-backend.outputs.digest }}
   pull_request:
     paths:
       - "deploy/**"
@@ -44,6 +59,7 @@ on:
 
 jobs:
   build-and-push:
+    if: ${{ !inputs.cloud_backend }}
     runs-on: ubuntu-latest
     outputs:
       reconciliation: ${{ steps.verify.outputs.reconciliation }}
@@ -230,4 +246,82 @@ jobs:
             echo "- Image: \`$IMAGE\`"
             echo "- Action: \`$RECONCILIATION\`"
             echo "- Digest: \`$DIGEST\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  cloud-backend:
+    if: ${{ inputs.cloud_backend }}
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.cloud_environment }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v6.4.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Check cloud image contract
+        env:
+          CLOUD_PUBLISH: ${{ inputs.cloud_publish }}
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          SOURCE_REF: ${{ inputs.ref }}
+        run: |
+          if [ -n "$SOURCE_REF" ] && [ "$SOURCE_REF" != "$GITHUB_SHA" ]; then
+            echo '::error::Cloud images must build the triggering commit'
+            exit 1
+          fi
+          node .github/scripts/cloud/release.ts check backend
+      - name: Validate registry configuration
+        if: ${{ inputs.cloud_publish }}
+        env:
+          CLOUD_REGISTRY: ${{ vars.CLOUD_REGISTRY }}
+          CLOUD_BACKEND_IMAGE: ${{ vars.CLOUD_BACKEND_IMAGE }}
+          CLOUD_REGISTRY_USERNAME: ${{ secrets.CLOUD_REGISTRY_USERNAME }}
+          CLOUD_REGISTRY_PASSWORD: ${{ secrets.CLOUD_REGISTRY_PASSWORD }}
+        run: |
+          : "${CLOUD_REGISTRY:?Set CLOUD_REGISTRY}"
+          : "${CLOUD_BACKEND_IMAGE:?Set CLOUD_BACKEND_IMAGE}"
+          : "${CLOUD_REGISTRY_USERNAME:?Set CLOUD_REGISTRY_USERNAME}"
+          : "${CLOUD_REGISTRY_PASSWORD:?Set CLOUD_REGISTRY_PASSWORD}"
+          case "$CLOUD_BACKEND_IMAGE" in
+            "$CLOUD_REGISTRY"/*) ;;
+            *) echo '::error::CLOUD_BACKEND_IMAGE must belong to CLOUD_REGISTRY'; exit 1 ;;
+          esac
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        if: ${{ inputs.cloud_publish }}
+        with:
+          registry: ${{ vars.CLOUD_REGISTRY }}
+          username: ${{ secrets.CLOUD_REGISTRY_USERNAME }}
+          password: ${{ secrets.CLOUD_REGISTRY_PASSWORD }}
+      - name: Build cloud backend image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/cloud/Dockerfile
+          platforms: linux/amd64
+          push: ${{ inputs.cloud_publish }}
+          tags: ${{ vars.CLOUD_BACKEND_IMAGE || 'open-design-cloud' }}:sha-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=cloud-backend
+          cache-to: type=gha,mode=max,scope=cloud-backend
+      - name: Record image result
+        env:
+          IMAGE: ${{ vars.CLOUD_BACKEND_IMAGE || 'open-design-cloud' }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          PUBLISHED: ${{ inputs.cloud_publish }}
+        run: |
+          {
+            echo "Cloud backend image: $IMAGE@$DIGEST"
+            echo "Published: $PUBLISHED"
+            echo 'Cluster rollout and database migrations are managed separately.'
           } >> "$GITHUB_STEP_SUMMARY"

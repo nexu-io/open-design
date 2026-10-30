@@ -1,0 +1,18 @@
+# Explicit cloud build closure. Never send local env files or runtime data.
+**
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!apps/
+!apps/cloud/
+!apps/cloud/**
+!packages/
+!packages/**
+**/node_modules
+**/dist
+**/.tmp
+**/.git
+**/.env*
+**/*.log
+**/*.tsbuildinfo
+**/.DS_Store
