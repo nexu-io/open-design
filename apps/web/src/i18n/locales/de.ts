@@ -492,6 +492,7 @@ export const de: Dict = {
   'settings.onboardingLocalAi': 'Lokale KI',
   'settings.onboardingApiKey': 'API-Schlüssel',
   'settings.onboardingCloudContinue': 'Weiter (angemeldet)',
+  'settings.onboardingCloudIdentityRejected': 'OpenDesign Cloud konnte diese Anmeldung nicht bestätigen. Melde dich erneut an, um fortzufahren.',
   'settings.onboardingCloudAlternative': 'Lokale CLI oder eigenen API-Schlüssel verwenden',
   'settings.onboardingCloudRights': 'Alle Rechte vorbehalten.',
   'settings.onboardingCloudOr': 'oder',

@@ -369,6 +369,7 @@ export interface Dict {
   'settings.onboardingLocalAi': string;
   'settings.onboardingApiKey': string;
   'settings.onboardingCloudContinue': string;
+  'settings.onboardingCloudIdentityRejected': string;
   'settings.onboardingCloudAlternative': string;
   'settings.onboardingCloudOr': string;
   'settings.onboardingCloudRights': string;

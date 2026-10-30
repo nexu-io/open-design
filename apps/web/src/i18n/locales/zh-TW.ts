@@ -472,6 +472,7 @@ export const zhTW: Dict = {
   'settings.onboardingLocalAi': '本機 AI',
   'settings.onboardingApiKey': 'API 金鑰',
   "settings.onboardingCloudContinue": "繼續（已登入）",
+  "settings.onboardingCloudIdentityRejected": "OpenDesign Cloud 無法驗證目前的登入，請重新登入後繼續。",
   "settings.onboardingCloudAlternative": "使用本機 CLI 或自己的 API Key",
   "settings.onboardingCloudRights": "保留所有權利。",
   "settings.onboardingCloudOr": "或",

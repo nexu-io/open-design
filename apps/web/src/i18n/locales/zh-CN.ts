@@ -469,6 +469,7 @@ export const zhCN: Dict = {
   'settings.onboardingLocalAi': '本地 AI',
   'settings.onboardingApiKey': 'API 密钥',
   "settings.onboardingCloudContinue": "继续（已登录）",
+  "settings.onboardingCloudIdentityRejected": "OpenDesign Cloud 无法验证当前登录，请重新登录后继续。",
   "settings.onboardingCloudAlternative": "使用本地 CLI 或自己的 API Key",
   "settings.onboardingCloudRights": "保留所有权利。",
   "settings.onboardingCloudOr": "或",

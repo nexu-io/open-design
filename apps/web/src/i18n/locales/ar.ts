@@ -492,6 +492,7 @@ export const ar: Dict = {
   'settings.onboardingLocalAi': 'ذكاء اصطناعي محلي',
   'settings.onboardingApiKey': 'مفتاح API',
   'settings.onboardingCloudContinue': 'متابعة (تم تسجيل الدخول)',
+  'settings.onboardingCloudIdentityRejected': 'تعذّر على OpenDesign Cloud التحقق من تسجيل الدخول هذا. سجّل الدخول مرة أخرى للمتابعة.',
   'settings.onboardingCloudAlternative': 'استخدم واجهة سطر أوامر محلية أو مفتاح API الخاص بك',
   'settings.onboardingCloudRights': 'جميع الحقوق محفوظة.',
   'settings.onboardingCloudOr': 'أو',

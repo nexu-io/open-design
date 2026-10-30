@@ -492,6 +492,7 @@ export const uk: Dict = {
   'settings.onboardingLocalAi': 'Локальний ШІ',
   'settings.onboardingApiKey': 'API-ключ',
   'settings.onboardingCloudContinue': 'Продовжити (ви увійшли)',
+  'settings.onboardingCloudIdentityRejected': 'OpenDesign Cloud не вдалося підтвердити цей вхід. Увійдіть знову, щоб продовжити.',
   'settings.onboardingCloudAlternative': 'Використати локальний CLI або власний ключ API',
   'settings.onboardingCloudRights': 'Усі права захищено.',
   'settings.onboardingCloudOr': 'або',

@@ -492,6 +492,7 @@ export const ja: Dict = {
   'settings.onboardingLocalAi': 'ローカル AI',
   'settings.onboardingApiKey': 'API キー',
   'settings.onboardingCloudContinue': '続行（ログイン済み）',
+  'settings.onboardingCloudIdentityRejected': 'OpenDesign Cloud でこのサインインを確認できませんでした。続行するには再度サインインしてください。',
   'settings.onboardingCloudAlternative': 'ローカル CLI または自分の API キーを使う',
   'settings.onboardingCloudRights': "無断転載を禁じます。",
   'settings.onboardingCloudOr': 'または',

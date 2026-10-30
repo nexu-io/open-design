@@ -492,6 +492,7 @@ export const ptBR: Dict = {
   'settings.onboardingLocalAi': 'IA local',
   'settings.onboardingApiKey': 'Chave API',
   'settings.onboardingCloudContinue': 'Continuar (conectado)',
+  'settings.onboardingCloudIdentityRejected': 'O OpenDesign Cloud não conseguiu verificar este login. Entre novamente para continuar.',
   'settings.onboardingCloudAlternative': 'Usar uma CLI local ou sua própria chave de API',
   'settings.onboardingCloudRights': 'Todos os direitos reservados.',
   'settings.onboardingCloudOr': 'ou',

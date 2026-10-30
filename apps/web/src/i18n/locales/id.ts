@@ -492,6 +492,7 @@ export const id: Dict = {
   'settings.onboardingLocalAi': 'AI lokal',
   'settings.onboardingApiKey': 'Kunci API',
   'settings.onboardingCloudContinue': 'Lanjutkan (sudah masuk)',
+  'settings.onboardingCloudIdentityRejected': 'OpenDesign Cloud tidak dapat memverifikasi proses masuk ini. Masuk lagi untuk melanjutkan.',
   'settings.onboardingCloudAlternative': 'Gunakan CLI lokal atau kunci API Anda sendiri',
   'settings.onboardingCloudRights': 'Semua hak dilindungi.',
   'settings.onboardingCloudOr': 'atau',

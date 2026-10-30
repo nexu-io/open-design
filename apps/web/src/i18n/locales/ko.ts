@@ -492,6 +492,7 @@ export const ko: Dict = {
   'settings.onboardingLocalAi': '로컬 AI',
   'settings.onboardingApiKey': 'API 키',
   'settings.onboardingCloudContinue': '계속 (로그인됨)',
+  'settings.onboardingCloudIdentityRejected': 'OpenDesign Cloud에서 이 로그인을 확인할 수 없습니다. 계속하려면 다시 로그인하세요.',
   'settings.onboardingCloudAlternative': '로컬 CLI 또는 자체 API 키 사용',
   'settings.onboardingCloudRights': '모든 권리 보유.',
   'settings.onboardingCloudOr': '또는',

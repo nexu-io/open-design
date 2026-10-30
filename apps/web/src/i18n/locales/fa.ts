@@ -492,6 +492,7 @@ export const fa: Dict = {
   'settings.onboardingLocalAi': 'هوش مصنوعی محلی',
   'settings.onboardingApiKey': 'کلید API',
   'settings.onboardingCloudContinue': 'ادامه (وارد شده‌اید)',
+  'settings.onboardingCloudIdentityRejected': 'OpenDesign Cloud نتوانست این ورود را تأیید کند. برای ادامه دوباره وارد شوید.',
   'settings.onboardingCloudAlternative': 'از یک CLI محلی یا کلید API خودتان استفاده کنید',
   'settings.onboardingCloudRights': 'همهٔ حقوق محفوظ است.',
   'settings.onboardingCloudOr': 'یا',

@@ -492,6 +492,7 @@ export const hu: Dict = {
   'settings.onboardingLocalAi': 'Helyi MI',
   'settings.onboardingApiKey': 'API-kulcs',
   'settings.onboardingCloudContinue': 'Folytatás (bejelentkezve)',
+  'settings.onboardingCloudIdentityRejected': 'Az OpenDesign Cloud nem tudta ellenőrizni ezt a bejelentkezést. A folytatáshoz jelentkezz be újra.',
   'settings.onboardingCloudAlternative': 'Helyi CLI vagy saját API-kulcs használata',
   'settings.onboardingCloudRights': 'Minden jog fenntartva.',
   'settings.onboardingCloudOr': 'vagy',

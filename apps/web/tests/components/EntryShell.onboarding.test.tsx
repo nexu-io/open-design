@@ -15,6 +15,7 @@ import {
   AMR_LOGIN_STATUS_EVENT,
   AMR_LOGIN_TIMEOUT_MS,
 } from '../../src/components/amrLoginPolling';
+import { resetWorkspaceContextCache } from '../../src/collab/useWorkspaceContext';
 import { I18nProvider } from '../../src/i18n';
 import { fetchProjectFiles } from '../../src/providers/registry';
 import type { AgentInfo, AppConfig } from '../../src/types';
@@ -779,6 +780,178 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     expect(props.onConfigPersist).not.toHaveBeenCalled();
     expect(props.onModeChange).not.toHaveBeenCalled();
     expect(props.onAgentChange).not.toHaveBeenCalled();
+  });
+
+  describe('when Cloud rejects the workspace identity of a signed-in AMR session', () => {
+    const signedInStatus = {
+      loggedIn: true,
+      profile: 'prod',
+      configPath: '/x',
+      user: { id: 'u', email: 'user@example.com' },
+    };
+    const hostedConfig = () => baseConfig({
+      onboardingCompleted: true,
+      mode: 'daemon',
+      agentId: 'amr',
+      agentModels: { amr: { model: 'amr-model' } },
+    });
+
+    function recordOnboardingEntries(): () => number {
+      const entries: string[] = [];
+      const record = (url: string | URL | null | undefined) => {
+        if (url == null) return;
+        entries.push(new URL(String(url), window.location.href).pathname);
+      };
+      const push = window.history.pushState.bind(window.history);
+      const replace = window.history.replaceState.bind(window.history);
+      vi.spyOn(window.history, 'pushState').mockImplementation((data, unused, url) => {
+        record(url);
+        push(data, unused, url);
+      });
+      vi.spyOn(window.history, 'replaceState').mockImplementation((data, unused, url) => {
+        record(url);
+        replace(data, unused, url);
+      });
+      return () => entries.filter((path) => path === '/onboarding').length;
+    }
+
+    beforeEach(() => {
+      resetWorkspaceContextCache();
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      resetWorkspaceContextCache();
+    });
+
+    it('stays on onboarding instead of bouncing back to Home while the rejection lasts', async () => {
+      globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => (
+        String(input).includes('/api/workspace/directory')
+          ? jsonResponse({ error: { code: 'UNAUTHORIZED' } }, 401)
+          : jsonResponse(signedInStatus)
+      )) as typeof fetch;
+      const onboardingEntries = recordOnboardingEntries();
+
+      const props = renderHome({ config: hostedConfig(), agents: [amrAgent()], amrLoggedIn: true });
+
+      await waitFor(() => expect(window.location.pathname).toBe('/onboarding'));
+      await act(() => new Promise((resolve) => setTimeout(resolve, 500)));
+      expect(window.location.pathname).toBe('/onboarding');
+      expect(onboardingEntries()).toBe(1);
+      expect(props.onCompleteOnboarding).not.toHaveBeenCalled();
+    });
+
+    it('returns to Home once and stays there after the rejection clears', async () => {
+      let rejectedReads = 1;
+      globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+        if (!String(input).includes('/api/workspace/directory')) return jsonResponse(signedInStatus);
+        if (rejectedReads > 0) {
+          rejectedReads -= 1;
+          return jsonResponse({ error: { code: 'UNAUTHORIZED' } }, 401);
+        }
+        return jsonResponse({ items: [], activeWorkspaceId: null });
+      }) as typeof fetch;
+      const onboardingEntries = recordOnboardingEntries();
+
+      renderHome({ config: hostedConfig(), agents: [amrAgent()], amrLoggedIn: true });
+
+      await waitFor(() => expect(window.location.pathname).toBe('/onboarding'));
+      await waitFor(() => expect(window.location.pathname).toBe('/'), { timeout: 3000 });
+      await act(() => new Promise((resolve) => setTimeout(resolve, 500)));
+      expect(window.location.pathname).toBe('/');
+      expect(onboardingEntries()).toBe(1);
+    });
+
+    // Sign in while Cloud rejects runs a real device login, because the AMR
+    // status still carries the credential Cloud turned down.
+    function reauthenticationFetch(cloudAcceptsAfterLogin: boolean) {
+      let loginStarted = false;
+      let pollsAfterLogin = 0;
+      let reauthenticated = false;
+      const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+          loginStarted = true;
+          return jsonResponse({ pid: 123 }, 202);
+        }
+        if (url.endsWith('/api/integrations/vela/status')) {
+          if (!loginStarted) return jsonResponse(signedInStatus);
+          pollsAfterLogin += 1;
+          if (pollsAfterLogin < 2) return jsonResponse({ ...signedInStatus, loginInFlight: true });
+          reauthenticated = true;
+          return jsonResponse({ ...signedInStatus, loginInFlight: false });
+        }
+        if (url.includes('/api/workspace/directory')) {
+          return reauthenticated && cloudAcceptsAfterLogin
+            ? jsonResponse({ items: [], activeWorkspaceId: null })
+            : jsonResponse({ error: { code: 'UNAUTHORIZED' } }, 401);
+        }
+        return jsonResponse(signedInStatus);
+      });
+      globalThis.fetch = fetchMock as typeof fetch;
+      return {
+        loginRequests: () => fetchMock.mock.calls.filter(([input, init]) => (
+          String(input).endsWith('/api/integrations/vela/login') && init?.method === 'POST'
+        )).length,
+      };
+    }
+
+    it('keeps the user on onboarding when Cloud still rejects the session after signing in again', async () => {
+      const fetches = reauthenticationFetch(false);
+      const onboardingEntries = recordOnboardingEntries();
+      const props = renderHome({ config: hostedConfig(), agents: [amrAgent()], amrLoggedIn: true });
+
+      const signIn = await findCloudSignInButton();
+      vi.useFakeTimers();
+      fireEvent.click(signIn);
+      await act(async () => {});
+      await vi.advanceTimersByTimeAsync(4000);
+      await act(async () => {});
+
+      expect(fetches.loginRequests()).toBe(1);
+      expect(window.location.pathname).toBe('/onboarding');
+      expect(onboardingEntries()).toBe(1);
+      expect(props.onCompleteOnboarding).not.toHaveBeenCalled();
+      expect(screen.getByRole('alert').textContent).toMatch(/could not verify this sign-in/i);
+    });
+
+    it('returns to Home once after signing in again clears the rejection', async () => {
+      const fetches = reauthenticationFetch(true);
+      const onboardingEntries = recordOnboardingEntries();
+      const props = renderHome({ config: hostedConfig(), agents: [amrAgent()], amrLoggedIn: true });
+
+      const signIn = await findCloudSignInButton();
+      vi.useFakeTimers();
+      fireEvent.click(signIn);
+      await act(async () => {});
+      await vi.advanceTimersByTimeAsync(4000);
+      await vi.waitFor(() => expect(window.location.pathname).toBe('/'));
+
+      expect(fetches.loginRequests()).toBe(1);
+      expect(onboardingEntries()).toBe(1);
+      expect(props.onCompleteOnboarding).toHaveBeenCalledTimes(1);
+    });
+
+    // First run: there is no completed setup for the passive finish to resume,
+    // so the sign-in itself has to finish onboarding once Cloud accepts it.
+    it('finishes first-run onboarding once Cloud accepts the session after signing in again', async () => {
+      const fetches = reauthenticationFetch(true);
+      const props = renderHome({
+        config: baseConfig({ mode: 'daemon', agentId: null }),
+        agents: [amrAgent()],
+        amrLoggedIn: true,
+      });
+
+      const signIn = await findCloudSignInButton();
+      vi.useFakeTimers();
+      fireEvent.click(signIn);
+      await act(async () => {});
+      await vi.advanceTimersByTimeAsync(4000);
+      await vi.waitFor(() => expect(props.onCompleteOnboarding).toHaveBeenCalledTimes(1));
+
+      expect(fetches.loginRequests()).toBe(1);
+      expect(window.location.pathname).toBe('/');
+    });
   });
 
   it.each([

@@ -492,6 +492,7 @@ export const tr: Dict = {
   'settings.onboardingLocalAi': 'Yerel yapay zekâ',
   'settings.onboardingApiKey': 'API anahtarı',
   'settings.onboardingCloudContinue': 'Devam et (giriş yapıldı)',
+  'settings.onboardingCloudIdentityRejected': 'OpenDesign Cloud bu oturum açma işlemini doğrulayamadı. Devam etmek için yeniden oturum açın.',
   'settings.onboardingCloudAlternative': 'Yerel bir CLI ya da kendi API anahtarını kullan',
   'settings.onboardingCloudRights': 'Tüm hakları saklıdır.',
   'settings.onboardingCloudOr': 'veya',

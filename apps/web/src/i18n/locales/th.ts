@@ -492,6 +492,7 @@ export const th: Dict = {
   'settings.onboardingLocalAi': 'AI ในเครื่อง',
   'settings.onboardingApiKey': 'คีย์ API',
   'settings.onboardingCloudContinue': 'ดำเนินการต่อ (เข้าสู่ระบบแล้ว)',
+  'settings.onboardingCloudIdentityRejected': 'OpenDesign Cloud ไม่สามารถยืนยันการลงชื่อเข้าใช้นี้ได้ โปรดลงชื่อเข้าใช้อีกครั้งเพื่อดำเนินการต่อ',
   'settings.onboardingCloudAlternative': 'ใช้ CLI ในเครื่องหรือคีย์ API ของคุณเอง',
   'settings.onboardingCloudRights': 'สงวนลิขสิทธิ์ทั้งหมด',
   'settings.onboardingCloudOr': 'หรือ',
