@@ -6,6 +6,34 @@ import {
 } from '../../src/runtime/design-delivery';
 
 describe('resolveDesignDeliveryOutcome', () => {
+  it('accepts an existing-project verification report after editing only a temporary probe', () => {
+    expect(resolveDesignDeliveryOutcome({
+      sessionMode: 'design',
+      runStatus: 'succeeded',
+      content: 'Verified the portrait and landscape layouts. No project files changed.',
+      events: [{
+        kind: 'tool_use', id: 'probe-edit', name: 'Edit',
+        input: { filePath: '/tmp/od-probe/cdp.mjs', oldString: '800', newString: '1080' },
+      }],
+      projectRoot: '/Users/test/projects/prototype',
+      producedFileCount: 0,
+      traceObjectFileCount: 0,
+      artifactCount: 0,
+    })).toBe('report_only');
+  });
+
+  it('still rejects missing delivery when the verification turn also edited the project', () => {
+    expect(resolveDesignDeliveryOutcome({
+      sessionMode: 'design', runStatus: 'succeeded', content: 'Finished verification.',
+      projectRoot: '/Users/test/projects/prototype',
+      events: [
+        { kind: 'tool_use', id: 'probe', name: 'Edit', input: { filePath: '/tmp/od-probe/cdp.mjs' } },
+        { kind: 'tool_use', id: 'project', name: 'Edit', input: { filePath: '/Users/test/projects/prototype/index.html' } },
+      ],
+      producedFileCount: 0, traceObjectFileCount: 0, artifactCount: 0,
+    })).toBe('no_result');
+  });
+
   it('treats a text answer without any file-write attempt as a report-only result', () => {
     // Image analysis / report-only audits legitimately end with prose and no
     // new project file (#5714, #5718). Only fail delivery when the agent
