@@ -290,6 +290,23 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     },
   },
   {
+    label: 'Runcrate',
+    protocol: 'openai',
+    baseUrl: 'https://api.runcrate.ai/v1',
+    preferredModels: [
+      'deepseek-ai/DeepSeek-V4-Flash',
+      'deepseek-ai/DeepSeek-V4-Pro',
+      'zai-org/GLM-5.3',
+      'moonshotai/Kimi-K2.6',
+      'Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo',
+      'openai/gpt-oss-120b',
+    ],
+    apiKeyConsoleLink: {
+      host: 'runcrate.ai',
+      url: 'https://runcrate.ai/dashboard/api-keys',
+    },
+  },
+  {
     label: 'NVIDIA',
     protocol: 'openai',
     baseUrl: 'https://integrate.api.nvidia.com/v1',
@@ -538,6 +555,7 @@ const BYOK_PROVIDER_PRESET_SPECS = [
   },
   { id: 'ppio', title: 'PPIO', providerLabel: 'PPIO' },
   { id: 'novita', title: 'Novita AI', providerLabel: 'Novita AI' },
+  { id: 'runcrate', title: 'Runcrate', providerLabel: 'Runcrate' },
   { id: 'nvidia', title: 'NVIDIA', providerLabel: 'NVIDIA' },
   { id: 'stepfun', title: 'StepFun', providerLabel: 'StepFun' },
   { id: 'deepseek', title: 'DeepSeek', providerLabel: 'DeepSeek — OpenAI' },
