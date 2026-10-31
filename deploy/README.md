@@ -92,6 +92,30 @@ The image intentionally does not bundle Claude/Codex/Gemini CLI binaries. Keep
 those outside the image, or build a separate private runtime layer if a server
 deployment needs local code-agent CLIs installed in the container.
 
+## MCP clients outside the container
+
+**Settings → MCP server** produces a local stdio launch specification, not a
+remote connection profile. The MCP client starts the returned `command` with
+its `args` and `env` on the client's machine. In Docker, the Node executable,
+OpenDesign CLI entrypoint and `OD_DATA_DIR` in that snippet belong to the
+container; they are not portable to the host or another workstation. The
+`cliExists` and `nodeExists` checks only verify the daemon's filesystem.
+
+Changing `--daemon-url` to the reverse-proxy address does not fix missing
+executables or container-local paths. Likewise, `127.0.0.1` refers to the
+machine running the MCP helper, not the machine serving the Settings page.
+Exposing the web UI through a reverse proxy does not add an HTTP MCP transport.
+
+To use the container's instance from a remote MCP client, the helper must run
+in an environment with access to that instance's runtime and configuration.
+An operator-managed SSH/container-exec bridge can keep the helper inside the
+container and forward its stdin/stdout without a pseudo-terminal. This needs
+a deployment-specific client launch command; Settings does not generate one.
+Keep the authentication and network isolation described above. For daemon
+storage rules, use the root [data directory contract](../AGENTS.md#daemon-data-directory-contract).
+
+The Settings limitation is tracked in [#7734](https://github.com/nexu-io/open-design/issues/7734).
+
 ## Linux: mounting host agent CLIs
 
 On Linux you can mount host-installed agent CLIs (Claude Code, opencode, Codex,
