@@ -147,8 +147,8 @@ export function latestUserPromptFromHistory(history: ChatMessage[]): string {
   return '';
 }
 
-function truncateForTranscript(content: string): string {
-  if (content.length <= MAX_TRANSCRIPT_MESSAGE_CHARS) return content;
+function truncateForTranscript(content: string, role: ChatMessage['role']): string {
+  if (role === 'user' || content.length <= MAX_TRANSCRIPT_MESSAGE_CHARS) return content;
   const omitted = content.length - MAX_TRANSCRIPT_MESSAGE_CHARS;
   return `${content.slice(0, MAX_TRANSCRIPT_MESSAGE_CHARS)}\n\n[OpenDesign truncated ${omitted} chars from this prior message before sending it to the agent. Full content remains in persisted history.]`;
 }
@@ -254,7 +254,7 @@ export function buildDaemonTranscript(history: ChatMessage[], targetAgentId?: st
         m.role === 'assistant'
           ? sanitizePriorAssistantTurnForTranscript(trimmed, persistedArtifactFilesOf(m))
           : trimmed;
-      return `## ${m.role}\n${escapeTranscriptRoleDelimiters(truncateForTranscript(sanitized))}`;
+      return `## ${m.role}\n${escapeTranscriptRoleDelimiters(truncateForTranscript(sanitized, m.role))}`;
     })
     .join('\n\n');
   const warning = buildPriorRunContextWarning(scopedHistory);
