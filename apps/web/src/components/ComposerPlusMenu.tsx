@@ -227,6 +227,8 @@ export interface ComposerPlusMenuProps {
 
   /** Opens the "Select from library" picker; omit to hide the row. */
   onSelectFromLibrary?: () => void;
+  /** Keeps the library action visible but unavailable while attachment admission is locked. */
+  selectFromLibraryDisabled?: boolean;
 
   /** Opens the "Import from Figma" dialog (offline .fig decode or a Figma
    *  URL → webpage); omit to hide the row. */
@@ -341,6 +343,7 @@ export function ComposerPlusMenu({
   onSelectRecentWorkingDir,
   onClearWorkingDir,
   onSelectFromLibrary,
+  selectFromLibraryDisabled,
   onImportFigma,
   triggerTestId,
   triggerLabel,
@@ -757,6 +760,7 @@ export function ComposerPlusMenu({
               role="menuitem"
               className="plus-menu__item"
               data-testid="composer-plus-library"
+              disabled={selectFromLibraryDisabled}
               onClick={() => {
                 close();
                 onSelectFromLibrary();

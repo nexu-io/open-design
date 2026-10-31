@@ -286,6 +286,7 @@ type DesignToolboxResource =
   | (DesignToolboxResourceBase & { kind: 'file'; file: ProjectFile });
 
 export type ChatSendOutcome = void | 'restore-draft';
+type ComposedSendSettlement = 'accepted' | 'restore-draft' | 'rejected';
 
 /** Committed composer content other than the editor text, mirrored for stale send closures. */
 interface ComposerContent {
@@ -684,10 +685,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // by handleEditorChange (the editor is the single source for typing) and by
     // the programmatic-set paths below.
     const draftRef = useRef(draft);
-    // Submission admission can cross asynchronous gates after the composer
-    // has already cleared (OPEND-3392). Keep a synchronous latch so a second
-    // Enter/click in that window cannot start another send before the host
-    // decides whether the first one is kept or handed back.
+    draftRef.current = draft;
+    const quotesRef = useRef(quotes ?? []);
+    quotesRef.current = quotes ?? [];
+    // Admission may settle after reset; hold duplicate sends until the host
+    // accepts this snapshot or hands it back under the current draft ownership.
     const composedSendPendingRef = useRef(false);
     // The latch above prevents duplicates, but a ref alone leaves the UI
     // completely unchanged while an async admission gate (notably AMR's
@@ -713,6 +715,18 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const [staged, setStaged] = useState<ChatAttachment[]>(
       () => normalizeChatAttachmentOrders(restoredExtrasRef.current.attachments),
     );
+    const stagedRef = useRef(staged);
+    function replaceStaged(next: ChatAttachment[]) {
+      stagedRef.current = next;
+      setStaged(next);
+    }
+    function updateStaged(update: (current: ChatAttachment[]) => ChatAttachment[]) {
+      setStaged((current) => {
+        const next = update(current);
+        stagedRef.current = next;
+        return next;
+      });
+    }
     // Manual editor height set by dragging the shell's gray backdrop up/down.
     // null = the default auto-grow min/max behavior.
     const [manualEditorHeight, setManualEditorHeight] = useState<number | null>(null);
@@ -847,7 +861,43 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // so the user can type-to-filter.
     const [slash, setSlash] = useState<{ q: string } | null>(null);
     const [slashIndex, setSlashIndex] = useState(0);
-    const [uploading, setUploading] = useState(false);
+    type AttachmentPreparationKind = 'attachment' | 'annotation' | 'terminal-annotation';
+    const activeAttachmentPreparationsRef = useRef<Map<string, AttachmentPreparationKind>>(new Map());
+    const attachmentPreparationSeqRef = useRef(0);
+    const [activeAttachmentPreparationCount, setActiveAttachmentPreparationCount] = useState(0);
+    function beginAttachmentPreparation(
+      id?: string,
+      kind: AttachmentPreparationKind = 'attachment',
+    ): string {
+      const preparationId = id ?? `attachment-preparation-${++attachmentPreparationSeqRef.current}`;
+      const active = activeAttachmentPreparationsRef.current;
+      if (!active.has(preparationId)) {
+        active.set(preparationId, kind);
+        setActiveAttachmentPreparationCount(active.size);
+      }
+      return preparationId;
+    }
+    function finishAttachmentPreparation(preparationId: string) {
+      const active = activeAttachmentPreparationsRef.current;
+      if (!active.delete(preparationId)) return;
+      setActiveAttachmentPreparationCount(active.size);
+    }
+    function pendingUploadPreparationId(pendingId: string): string {
+      return `pending-upload:${pendingId}`;
+    }
+    function hasPendingAttachmentPreparation(): boolean {
+      return activeAttachmentPreparationsRef.current.size > 0
+        || Boolean(externalPendingUploads?.some((item) => item.state === 'uploading'));
+    }
+    function hasPendingOrdinaryAttachmentPreparation(): boolean {
+      return Array.from(activeAttachmentPreparationsRef.current.values())
+        .some((kind) => kind === 'attachment')
+        || Boolean(externalPendingUploads?.some((item) => item.state === 'uploading'));
+    }
+    function hasPendingTerminalAnnotationPreparation(): boolean {
+      return Array.from(activeAttachmentPreparationsRef.current.values())
+        .some((kind) => kind === 'terminal-annotation');
+    }
     const [uploadError, setUploadError] = useState<string | null>(null);
     /* 待发送托盘里【还没传完 / 传失败】的那几张卡(设计稿 #61 / #63)。
        它们不进 `staged` —— `staged` 是「能跟着这条消息发出去的附件」,而这几张
@@ -859,6 +909,28 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const pendingFilesRef = useRef<Map<string, { file: File; previewUrl: string | null }>>(new Map());
     const lastResetWorkspaceContextIdsRef = useRef<ReadonlySet<string>>(new Set());
     const pendingSeqRef = useRef(0);
+    // Async attachment work belongs to the project/workspace that admitted it.
+    // A null -> created project id is the same owner during ensureProject().
+    const attachmentOwnerKey = JSON.stringify([workspaceContext?.workspaceId, workspaceContext?.workspaceMemberId]);
+    const attachmentOwnerRef = useRef({ key: attachmentOwnerKey, projectId, generation: 0 });
+    const attachmentOwner = attachmentOwnerRef.current;
+    if (attachmentOwner.key !== attachmentOwnerKey
+      || (attachmentOwner.projectId !== null && attachmentOwner.projectId !== projectId)) {
+      attachmentOwner.generation += 1;
+    }
+    attachmentOwner.key = attachmentOwnerKey;
+    attachmentOwner.projectId = projectId;
+    function ownsAttachmentWork(generation: number): boolean {
+      return attachmentOwnerRef.current.generation === generation;
+    }
+    useLayoutEffect(() => {
+      for (const id of pendingFilesRef.current.keys()) releasePendingUpload(id);
+      activeAttachmentPreparationsRef.current.clear();
+      setPendingUploads([]);
+      setActiveAttachmentPreparationCount(0);
+    }, [attachmentOwner.generation]);
+    useLayoutEffect(() => () => { attachmentOwnerRef.current.generation += 1; }, []);
+
     // 组件被卸掉时(切项目 / 关面板)把还没 revoke 的本地缩略图一次收干净。
     useEffect(() => {
       const files = pendingFilesRef.current;
@@ -1504,7 +1576,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           // 否则它们会被折进下一发的正文里。
           onRestoreQuotes?.(restoredQuotes);
           const orderedAttachments = normalizeChatAttachmentOrders(attachments);
-          setStaged(orderedAttachments);
+          replaceStaged(orderedAttachments);
           nextAttachmentOrderRef.current = nextChatAttachmentOrder(orderedAttachments);
           setStagedVisualComments(commentAttachments);
           // Rebuild staged context from the queued turn's meta so the
@@ -1592,8 +1664,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       const nextWorkspaceLinkedDirAdds = Object.fromEntries(
         Object.entries(workspaceLinkedDirAdds).filter(([id]) => linkedWorkspaceContextIds.has(id)),
       );
+      draftRef.current = '';
       setDraft("");
-      setStaged([]);
+      replaceStaged([]);
       nextAttachmentOrderRef.current = 0;
       setStagedVisualComments([]);
       setStagedSkills([]);
@@ -1621,6 +1694,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     function currentCommentAttachments(extra: ChatCommentAttachment[] = []): ChatCommentAttachment[] {
       return sortChatCommentAttachmentsByOrder([...commentAttachments, ...stagedVisualComments, ...extra]);
     }
+    const currentCommentAttachmentsRef = useRef(currentCommentAttachments);
+    currentCommentAttachmentsRef.current = currentCommentAttachments;
 
     function setStreamingAnnotationSendPending(value: boolean) {
       streamingAnnotationSendPendingRef.current = value;
@@ -1660,6 +1735,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       };
       return Object.keys(meta).length > 0 ? meta : undefined;
     }
+    const currentRunContextMetaRef = useRef(currentRunContextMeta);
+    currentRunContextMetaRef.current = currentRunContextMeta;
 
     // Committed composer content, readable from the send promise's stale
     // closure: a handed-back send must see what the user staged after reset().
@@ -1690,11 +1767,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       keptWorkspaceContextIds: ReadonlySet<string>,
     ): boolean {
       const text = editorRef.current?.getText() ?? draftRef.current;
-      if (text.trim() || pendingFilesRef.current.size > 0) return true;
+      if (text.trim() || pendingFilesRef.current.size > 0
+        || Array.from(activeAttachmentPreparationsRef.current.values())
+          .some((kind) => kind !== 'terminal-annotation')) return true;
       const current = latestComposerContentRef.current;
       if (!current) return false;
       return (
-        current.staged.length > 0
+        stagedRef.current.length > 0
         || current.hasPendingUploads
         || current.stagedVisualComments.length > 0
         || current.stagedSkills.length > 0
@@ -1721,7 +1800,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     function captureSendSnapshot(): ComposerSendSnapshot {
       return {
         draft: draftRef.current,
-        staged,
+        staged: stagedRef.current,
         nextAttachmentOrder: nextAttachmentOrderRef.current,
         stagedVisualComments,
         stagedSkills,
@@ -1748,7 +1827,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     ) {
       if (composerChangedSinceReset(snapshot, keptWorkspaceContextIds)) return;
       replaceEditorDraft(snapshot.draft);
-      setStaged(snapshot.staged);
+      replaceStaged(snapshot.staged);
       nextAttachmentOrderRef.current = snapshot.nextAttachmentOrder;
       setStagedVisualComments(snapshot.stagedVisualComments);
       setStagedSkills(snapshot.stagedSkills);
@@ -1766,9 +1845,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       outcome: ChatSendOutcome | Promise<ChatSendOutcome>,
       snapshot: ComposerSendSnapshot,
       keptWorkspaceContextIds: ReadonlySet<string>,
+      owner: number,
       pendingMetadata?: { entryFrom: ChatSendMeta['entryFrom'] | null; sessionMode: ChatSessionMode | null },
-    ) {
+    ): Promise<ComposedSendSettlement> {
       const handBack = () => {
+        if (!ownsAttachmentWork(owner)) return;
         restoreSendSnapshot(snapshot, keptWorkspaceContextIds);
         if (pendingMetadata?.entryFrom && !pendingEntryFromRef.current) {
           pendingEntryFromRef.current = pendingMetadata.entryFrom;
@@ -1777,11 +1858,18 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           pendingSessionModeRef.current = pendingMetadata.sessionMode;
         }
       };
-      void Promise.resolve(outcome).then(
+      return Promise.resolve(outcome).then<ComposedSendSettlement, ComposedSendSettlement>(
         (result) => {
-          if (result === 'restore-draft') handBack();
+          if (result === 'restore-draft') {
+            handBack();
+            return 'restore-draft';
+          }
+          return 'accepted';
         },
-        handBack,
+        () => {
+          handBack();
+          return 'rejected';
+        },
       ).finally(() => {
         composedSendPendingRef.current = false;
         setComposedSendPending(false);
@@ -1791,11 +1879,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     function beginComposedSend(
       send: () => ChatSendOutcome | Promise<ChatSendOutcome>,
       pendingMetadata?: { entryFrom: ChatSendMeta['entryFrom'] | null; sessionMode: ChatSessionMode | null },
-    ): boolean {
-      if (composedSendPendingRef.current) return false;
+      onSubmitted?: () => void,
+    ): Promise<ComposedSendSettlement> | null {
+      if (composedSendPendingRef.current) return null;
       composedSendPendingRef.current = true;
       setComposedSendPending(true);
       const snapshot = captureSendSnapshot();
+      const owner = attachmentOwnerRef.current.generation;
       let outcome: ChatSendOutcome | Promise<ChatSendOutcome>;
       try {
         outcome = send();
@@ -1805,8 +1895,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         throw error;
       }
       const keptWorkspaceContextIds = new Set(reset().map((item) => item.id));
-      finishComposedSend(outcome, snapshot, keptWorkspaceContextIds, pendingMetadata);
-      return true;
+      onSubmitted?.();
+      return finishComposedSend(outcome, snapshot, keptWorkspaceContextIds, owner, pendingMetadata);
     }
 
     /**
@@ -1824,7 +1914,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
      * 清空芯片必须意味着「已经带走」(OPEND-2551 同一族)。
      */
     function composeOutgoingPrompt(body: string): string {
-      return `${quotePromptPrefix(quotes ?? [])}${body}`.trim();
+      return `${quotePromptPrefix(quotesRef.current)}${body}`.trim();
     }
 
     function sendComposedTurn(
@@ -1832,9 +1922,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       attachments: ChatAttachment[],
       nextCommentAttachments: ChatCommentAttachment[],
       meta?: ChatSendMeta,
-    ): boolean {
+    ): Promise<ComposedSendSettlement> | null {
       setStreamingAnnotationSendPending(false);
-      if (!prompt && attachments.length === 0 && nextCommentAttachments.length === 0) return false;
+      if (!prompt && attachments.length === 0 && nextCommentAttachments.length === 0) return null;
       const nextAttachments =
         activeFileContext && !attachments.some((attachment) => attachment.path === activeFileContext)
           ? [
@@ -1850,12 +1940,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       // fields, then clear it so it only colors the immediate next send.
       const pendingEntryFrom = pendingEntryFromRef.current;
       const pendingSessionMode = pendingSessionModeRef.current;
-      pendingEntryFromRef.current = null;
-      pendingSessionModeRef.current = null;
       // 引用同时走两条路:折进正文给 agent 读,和**原样**挂在 meta 上给队列存。
       // 后者是「点编辑取回来还是芯片」的唯一依据 —— 正文那份拆不出结构。
       // 过一道 sanitize 是因为队列会原样落进 localStorage,那一层不设防。
-      const outgoingQuotes = sanitizeQuotes(quotes ?? []);
+      const outgoingQuotes = sanitizeQuotes(quotesRef.current);
       const effectiveMetaShape: ChatSendMeta = {
         ...(meta ?? {}),
         ...(pendingEntryFrom && !meta?.entryFrom ? { entryFrom: pendingEntryFrom } : {}),
@@ -1864,11 +1952,17 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       };
       const effectiveMeta =
         Object.keys(effectiveMetaShape).length > 0 ? effectiveMetaShape : undefined;
-      // 引用是这一条消息的上下文,发出去就该清掉 —— 它不是长期状态
-      onClearQuotes?.();
       return beginComposedSend(
-        () => onSend(prompt, nextAttachments, nextCommentAttachments, effectiveMeta),
+        () => {
+          const outcome = onSend(prompt, nextAttachments, nextCommentAttachments, effectiveMeta);
+          pendingEntryFromRef.current = null;
+          pendingSessionModeRef.current = null;
+          return outcome;
+        },
         { entryFrom: pendingEntryFrom, sessionMode: pendingSessionMode },
+        () => {
+          onClearQuotes?.();
+        },
       );
     }
 
@@ -1877,14 +1971,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     }
 
     function reserveAttachmentOrders(count: number): number {
-      const orderStart = Math.max(nextAttachmentOrderRef.current, nextChatAttachmentOrder(staged));
+      const orderStart = Math.max(nextAttachmentOrderRef.current, nextChatAttachmentOrder(stagedRef.current));
       nextAttachmentOrderRef.current = orderStart + count;
       return orderStart;
     }
 
     function appendOrderedStagedAttachments(attachments: ChatAttachment[]) {
       if (attachments.length === 0) return;
-      setStaged((current) => {
+      updateStaged((current) => {
         const knownPaths = new Set(current.map((attachment) => attachment.path));
         const nextAttachments = attachments.filter((attachment) => !knownPaths.has(attachment.path));
         if (nextAttachments.length === 0) return current;
@@ -1898,7 +1992,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     }
 
     function appendContextAttachment(filePath: string) {
-      setStaged((current) => {
+      updateStaged((current) => {
         if (current.some((item) => item.path === filePath)) return current;
         const order = Math.max(nextAttachmentOrderRef.current, nextChatAttachmentOrder(current));
         nextAttachmentOrderRef.current = order + 1;
@@ -2380,6 +2474,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     }
 
     function releasePendingUpload(id: string) {
+      finishAttachmentPreparation(pendingUploadPreparationId(id));
       const entry = pendingFilesRef.current.get(id);
       if (entry?.previewUrl && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
         try {
@@ -2405,9 +2500,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       projectIdForUpload: string,
       entry: PendingUpload,
     ): Promise<{ ok: boolean; error?: string }> {
+      const owner = attachmentOwnerRef.current.generation;
+      const preparationId = beginAttachmentPreparation(pendingUploadPreparationId(entry.id));
       const local = pendingFilesRef.current.get(entry.id);
       // 人在这一轮里已经把卡「×」掉了 —— 别再把结果塞回托盘。
-      if (!local) return { ok: true };
+      if (!local) {
+        finishAttachmentPreparation(preparationId);
+        return { ok: true };
+      }
       try {
         const result = await uploadProjectFiles(
           projectIdForUpload,
@@ -2418,7 +2518,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         const uploaded = result.uploaded[0];
         // 人在等结果的这几秒里把卡撤了,结果就地丢掉(文件本身已经落到项目里,
         // 和「传完再点×」是同一个语义 —— 不进待发列表,也不回删)。
-        if (!pendingFilesRef.current.has(entry.id)) return { ok: Boolean(uploaded) };
+        if (!ownsAttachmentWork(owner) || pendingFilesRef.current.get(entry.id) !== local) return { ok: Boolean(uploaded) };
         if (uploaded) {
           appendOrderedStagedAttachments([{ ...uploaded, order: entry.order }]);
           dropPendingUpload(entry.id);
@@ -2431,12 +2531,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         return { ok: false, ...(detail ? { error: detail } : {}) };
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
-        if (pendingFilesRef.current.has(entry.id)) {
+        if (ownsAttachmentWork(owner) && pendingFilesRef.current.get(entry.id) === local) {
           setPendingUploads((current) =>
             current.map((item) => (item.id === entry.id ? { ...item, state: 'failed' } : item)),
           );
         }
         return { ok: false, error: detail };
+      } finally {
+        finishAttachmentPreparation(preparationId);
       }
     }
 
@@ -2444,35 +2546,54 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     async function retryPendingUpload(pendingId: string) {
       const target = pendingUploads.find((item) => item.id === pendingId);
       if (!target || !pendingFilesRef.current.has(pendingId)) return;
-      const id = await ensureProject();
-      if (!id) return;
-      setUploadError(null);
-      setPendingUploads((current) =>
-        current.map((item) => (item.id === pendingId ? { ...item, state: 'uploading' } : item)),
-      );
-      await runOnePendingUpload(id, { ...target, state: 'uploading' });
+      if (hasPendingTerminalAnnotationPreparation()) return;
+      const owner = attachmentOwnerRef.current.generation;
+      const preparationId = pendingUploadPreparationId(pendingId);
+      if (activeAttachmentPreparationsRef.current.has(preparationId)) return;
+      beginAttachmentPreparation(preparationId);
+      try {
+        const id = await ensureProject();
+        if (!id || !ownsAttachmentWork(owner)) return;
+        setUploadError(null);
+        setPendingUploads((current) =>
+          current.map((item) => (item.id === pendingId ? { ...item, state: 'uploading' } : item)),
+        );
+        await runOnePendingUpload(id, { ...target, state: 'uploading' });
+      } finally {
+        finishAttachmentPreparation(preparationId);
+      }
     }
 
     async function uploadFiles(files: File[]) {
       if (files.length === 0) return;
-      const id = await ensureProject();
-      if (!id) return;
-      setUploading(true);
-      setUploadError(null);
+      if (hasPendingTerminalAnnotationPreparation()) return;
+      const owner = attachmentOwnerRef.current.generation;
+      const setupPreparationId = beginAttachmentPreparation();
+      let entries: PendingUpload[] = [];
+      let uploadProjectId: string | null = null;
+      const cohort = deriveUploadCohort(files);
       // Cohort math is identical to the Design Files Upload button; see
       // `analytics/upload-tracking.ts`. v2 doc fires one
       // file_upload_result per surface so this path reports
       // `page_name='chat_panel'` / `area='chat_composer'`.
-      const cohort = deriveUploadCohort(files);
-      const orderStart = reserveAttachmentOrders(files.length);
       try {
-        const entries = files.map((file, index) => stageOnePendingUpload(file, orderStart + index));
+        const id = await ensureProject();
+        if (!id || !ownsAttachmentWork(owner)) return;
+        uploadProjectId = id;
+        setUploadError(null);
+        const orderStart = reserveAttachmentOrders(files.length);
+        entries = files.map((file, index) => stageOnePendingUpload(file, orderStart + index));
+        for (const entry of entries) {
+          beginAttachmentPreparation(pendingUploadPreparationId(entry.id));
+        }
         setPendingUploads((current) => [...current, ...entries]);
+        finishAttachmentPreparation(setupPreparationId);
         const outcomes = await runWithConcurrency(
           entries,
           STAGED_UPLOAD_CONCURRENCY,
           (entry) => runOnePendingUpload(id, entry),
         );
+        if (!ownsAttachmentWork(owner)) return;
         const failures = outcomes.filter((outcome) => !outcome.ok);
         const partial = failures.length > 0;
         if (partial) {
@@ -2502,18 +2623,21 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           ...(partial && firstError ? { error_code: firstError } : {}),
         });
       } catch (err) {
+        if (!ownsAttachmentWork(owner)) return;
         const detail = err instanceof Error ? err.message : String(err);
         setUploadError(`${t('chat.annotationUploadFailed')} (${detail})`);
-        trackFileUploadResult(analytics.track, {
-          page_name: 'chat_panel',
-          area: 'chat_composer',
-          project_id: id,
-          ...cohort,
-          result: 'failed',
-          error_code: detail,
-        });
+        if (uploadProjectId) {
+          trackFileUploadResult(analytics.track, {
+            page_name: 'chat_panel',
+            area: 'chat_composer',
+            project_id: uploadProjectId,
+            ...cohort,
+            result: 'failed',
+            error_code: detail,
+          });
+        }
       } finally {
-        setUploading(false);
+        finishAttachmentPreparation(setupPreparationId);
       }
     }
 
@@ -2524,12 +2648,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // consumed.
     async function addAssetsFromLibrary(assets: LibraryAsset[]) {
       if (assets.length === 0) return;
-      const id = await ensureProject();
-      if (!id) return;
-      setUploading(true);
-      setUploadError(null);
-      const orderStart = reserveAttachmentOrders(assets.length);
+      if (hasPendingTerminalAnnotationPreparation()) return;
+      const owner = attachmentOwnerRef.current.generation;
+      const preparationId = beginAttachmentPreparation();
       try {
+        const id = await ensureProject();
+        if (!id || !ownsAttachmentWork(owner)) return;
+        setUploadError(null);
+        const orderStart = reserveAttachmentOrders(assets.length);
         const applied: ChatAttachment[] = [];
         // Element-pick captures carry their picked node's markup; collect it so
         // we can drop the HTML straight into the composer input (the image still
@@ -2544,6 +2670,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             undefined,
             workspaceContext,
           );
+          if (!ownsAttachmentWork(owner)) return;
           if (!res?.relPath) {
             failed += 1;
             continue;
@@ -2559,6 +2686,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             if (html) elementBlocks.push(formatElementHtmlBlock(asset, element, html));
           }
         }
+        if (!ownsAttachmentWork(owner)) return;
         if (applied.length > 0) {
           appendOrderedStagedAttachments(assignChatAttachmentOrders(applied, orderStart));
         }
@@ -2575,10 +2703,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           );
         }
       } catch (err) {
+        if (!ownsAttachmentWork(owner)) return;
         const detail = err instanceof Error ? err.message : String(err);
         setUploadError(`Could not add from library (${detail}).`);
       } finally {
-        setUploading(false);
+        finishAttachmentPreparation(preparationId);
       }
     }
 
@@ -2615,9 +2744,23 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             acked = true;
             detail.ack?.(result);
           };
+          const terminalAnnotationAction = detail.action === 'queue'
+            || (detail.action === 'send' && !streaming);
+          const hasConflictingPreparation = terminalAnnotationAction
+            ? composedSendPendingRef.current || hasPendingAttachmentPreparation()
+            : hasPendingTerminalAnnotationPreparation()
+              || (detail.action === 'send' && hasPendingOrdinaryAttachmentPreparation());
+          if (hasConflictingPreparation) {
+            ack({ ok: false, message: t('questions.uploadingFiles') });
+            return;
+          }
+          const owner = attachmentOwnerRef.current.generation;
           let uploaded: ChatAttachment[] = [];
           let visualAttachmentInput: Parameters<typeof buildVisualAnnotationAttachment>[0] | null = null;
           let visualAttachment: ChatCommentAttachment | null = null;
+          let annotationPreparationId = terminalAnnotationAction
+            ? beginAttachmentPreparation(undefined, 'terminal-annotation')
+            : null;
           try {
             // Upload the annotation screenshot together with any images the
             // user attached in the markup composer. The screenshot (when
@@ -2627,14 +2770,22 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               (f): f is File => Boolean(f),
             );
             if (annotationFiles.length > 0) {
+              annotationPreparationId ??= beginAttachmentPreparation(undefined, 'annotation');
               const orderStart = reserveAttachmentOrders(annotationFiles.length);
               const id = await ensureProject();
+              if (!ownsAttachmentWork(owner)) {
+                ack({ ok: false, message: t('chat.annotationFailed') });
+                return;
+              }
               if (!id) {
                 ack({ ok: false, message: t('chat.annotationProjectCreateFailed') });
                 return;
               }
-              setUploading(true);
               const result = await uploadProjectFiles(id, annotationFiles, undefined, workspaceContext);
+              if (!ownsAttachmentWork(owner)) {
+                ack({ ok: false, message: t('chat.annotationFailed') });
+                return;
+              }
               if (result.uploaded.length > 0) {
                 uploaded = assignChatAttachmentOrders(result.uploaded, orderStart);
               }
@@ -2679,8 +2830,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                     },
               };
             }
-            setUploading(false);
-
             const appendAnnotationToComposer = () => {
               if (uploaded.length > 0) {
                 appendOrderedStagedAttachments(uploaded);
@@ -2718,13 +2867,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               }
               // 引文前缀走共用的那一处 —— 标注面板发出去的这一发同样会清掉芯片,
               // 不折进去就是「清空了但没带走」(OPEND-2551)。
-              const prompt = composeOutgoingPrompt([draft.trim(), detail.note].filter(Boolean).join('\n'));
-              const attachments = sortChatAttachmentsByOrder([...staged, ...uploaded]);
-              const nextCommentAttachments = currentCommentAttachments(visualAttachment ? [visualAttachment] : []);
+              const prompt = composeOutgoingPrompt([draftRef.current.trim(), detail.note].filter(Boolean).join('\n'));
+              const attachments = sortChatAttachmentsByOrder([...stagedRef.current, ...uploaded]);
+              const nextCommentAttachments = currentCommentAttachmentsRef.current(visualAttachment ? [visualAttachment] : []);
               // Mark draw-overlay → run: tag entry_from='mark' so the dashboard
               // separates annotation-driven runs from plain composer sends.
-              sendComposedTurn(prompt, attachments, nextCommentAttachments, { ...queueMeta(currentRunContextMeta()), entryFrom: 'mark' });
-              ack({ ok: true });
+              const settlement = sendComposedTurn(prompt, attachments, nextCommentAttachments, { ...queueMeta(currentRunContextMetaRef.current()), entryFrom: 'mark' });
+              const result = settlement ? await settlement : 'rejected';
+              ack(result === 'accepted' ? { ok: true } : { ok: false, message: t('chat.annotationFailed') });
               return;
             }
 
@@ -2746,13 +2896,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               }
               // 引文前缀走共用的那一处 —— 标注面板发出去的这一发同样会清掉芯片,
               // 不折进去就是「清空了但没带走」(OPEND-2551)。
-              const prompt = composeOutgoingPrompt([draft.trim(), detail.note].filter(Boolean).join('\n'));
-              const attachments = sortChatAttachmentsByOrder([...staged, ...uploaded]);
-              const nextCommentAttachments = currentCommentAttachments(visualAttachment ? [visualAttachment] : []);
+              const prompt = composeOutgoingPrompt([draftRef.current.trim(), detail.note].filter(Boolean).join('\n'));
+              const attachments = sortChatAttachmentsByOrder([...stagedRef.current, ...uploaded]);
+              const nextCommentAttachments = currentCommentAttachmentsRef.current(visualAttachment ? [visualAttachment] : []);
               // Mark draw-overlay → run: tag entry_from='mark' so the dashboard
               // separates annotation-driven runs from plain composer sends.
-              sendComposedTurn(prompt, attachments, nextCommentAttachments, { ...currentRunContextMeta(), entryFrom: 'mark' });
-              ack({ ok: true });
+              const settlement = sendComposedTurn(prompt, attachments, nextCommentAttachments, { ...currentRunContextMetaRef.current(), entryFrom: 'mark' });
+              const result = settlement ? await settlement : 'rejected';
+              ack(result === 'accepted' ? { ok: true } : { ok: false, message: t('chat.annotationFailed') });
               return;
             }
 
@@ -2764,11 +2915,15 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
 
             ack({ ok: false, message: t('chat.annotationFailed') });
           } catch (err) {
+            if (!ownsAttachmentWork(owner)) {
+              ack({ ok: false, message: t('chat.annotationFailed') });
+              return;
+            }
             console.warn('Could not send annotation', err);
             setUploadError(err instanceof Error ? err.message : t('chat.annotationFailed'));
             ack({ ok: false, message: t('chat.annotationFailed') });
           } finally {
-            setUploading(false);
+            if (annotationPreparationId) finishAttachmentPreparation(annotationPreparationId);
           }
         })();
       }
@@ -2777,6 +2932,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     }, [
       commentAttachments,
       draft,
+      externalPendingUploads,
       onSend,
       projectId,
       // 引用要折进这条路发出去的正文,闭包必须拿到当下这一份。
@@ -2812,7 +2968,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
 
     useEffect(() => {
       if (!streamingAnnotationSendPending || !streamingAnnotationSendPendingRef.current) return;
-      if (streaming || sendDisabled) return;
+      if (streaming || sendDisabled || hasPendingAttachmentPreparation()) return;
       // Read the ref, not the closed-over `draft`: the accumulating annotation
       // handler writes draftRef synchronously, so the ref is authoritative even
       // if this effect's render closure predates the last accumulation.
@@ -2832,6 +2988,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       quotes,
       selectedWorkspaceContexts,
       sendDisabled,
+      activeAttachmentPreparationCount,
+      externalPendingUploads,
       staged,
       stagedConnectors,
       stagedMcpServers,
@@ -3166,7 +3324,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
 
     function removeStaged(p: string) {
       trackComposerBar({ element: 'context_remove', resource_kind: 'attachment', resource_id: p });
-      setStaged((s) => s.filter((a) => a.path !== p));
+      updateStaged((current) => current.filter((attachment) => attachment.path !== p));
       setStagedVisualComments((current) => current.filter((attachment) => attachment.screenshotPath !== p));
       // Strip the `@<path>` token from the draft and push the result back into
       // the editor so the pill disappears in lockstep with the chip.
@@ -3361,7 +3519,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
      * 而引用**是折进正文的**,所以同一时刻它非空。同一个问题、两处各算各的,
      * 早晚会分叉;分叉之后症状出现在离原因最远的地方(用户看到的是「按钮坏了」)。
      */
-    const canSend = !sendDisabled && hasComposerPayload;
+    const attachmentPreparationPending = activeAttachmentPreparationCount > 0
+      || Boolean(externalPendingUploads?.some((item) => item.state === 'uploading'));
+    const terminalAnnotationPreparationPending = activeAttachmentPreparationCount > 0
+      && hasPendingTerminalAnnotationPreparation();
+    const canSend = !sendDisabled && !attachmentPreparationPending && hasComposerPayload;
     /**
      * 摆到台面上的那枚「已应用插件」芯片(OPEND-2412)。
      *
@@ -3632,6 +3794,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               onRemoveStaged={removeStaged}
               onRemovePending={removePendingCard}
               onRetryPending={(id) => void retryPendingUpload(id)}
+              retryDisabled={terminalAnnotationPreparationPending}
               t={t}
             />
           ) : null}
@@ -3860,7 +4023,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 trackComposerBar({ element: 'plus_pick', resource_kind: 'workspace', resource_id: 'local-code' });
                 void handleLinkLocalCodeContext();
               }}
-              attachLoading={uploading}
+              attachLoading={attachmentPreparationPending}
               onSelectFromLibrary={() => {
                 trackChatPanelClick(analytics.track, {
                   page_name: 'chat_panel',
@@ -3869,6 +4032,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 });
                 setLibraryPickerOpen(true);
               }}
+              selectFromLibraryDisabled={terminalAnnotationPreparationPending}
               onImportFigma={projectId ? () => {
                 trackChatPanelClick(analytics.track, {
                   page_name: 'chat_panel',
@@ -4017,6 +4181,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           <LibraryPicker
             onClose={() => setLibraryPickerOpen(false)}
             onConfirm={(assets) => addAssetsFromLibrary(assets)}
+            confirmDisabled={terminalAnnotationPreparationPending}
           />
         ) : null}
         {figmaModalOpen && projectId ? (
@@ -4608,6 +4773,7 @@ export function StagedAttachmentTray({
   onRemoveStaged,
   onRemovePending,
   onRetryPending,
+  retryDisabled = false,
   t,
 }: {
   cards: StagedAttachmentCard[];
@@ -4615,6 +4781,7 @@ export function StagedAttachmentTray({
   onRemoveStaged: (path: string) => void;
   onRemovePending: (pendingId: string) => void;
   onRetryPending: (pendingId: string) => void;
+  retryDisabled?: boolean;
   t: TranslateFn;
 }) {
   const { workspaceContext } = useProjectCollabContext();
@@ -4685,6 +4852,7 @@ export function StagedAttachmentTray({
                       type="button"
                       className="msg-att-rt"
                       data-testid="staged-att-retry"
+                      disabled={retryDisabled}
                       onClick={() => card.pendingId && onRetryPending(card.pendingId)}
                       title={card.name}
                     >
