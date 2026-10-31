@@ -25,7 +25,8 @@
  * voice.adjectives / tone / messagingPillars / vocabulary) with production-
  * quality fallbacks, so any brand fills the SAME premium structure with its own
  * words. Pure & deterministic: (brand, tokens) -> string, no network / Date /
- * random. Themed entirely through the --brand-* custom properties.
+ * random. Themed entirely through literals: no `var()` in any attribute, since
+ * mail clients resolve no custom properties.
  */
 
 import type { Brand } from "../../schema.js";
@@ -33,6 +34,7 @@ import { type DesignTokens, varRef } from "../types.js";
 import {
   esc,
   document,
+  brandFontAssets,
   cap,
   brandTagline,
   brandBlurb,
@@ -153,7 +155,7 @@ function literalise(html: string, tokens: DesignTokens, paint: EmailPaint): stri
 function emailHeader(brand: Brand, paint: EmailPaint, t: EmailToken): string {
   const file = trimmed(brand.logo?.primary);
   if (!file) {
-    return `<span style="font-family:var(--display-family);font-weight:${t("fontWeightStrong")};font-size:${t("fontSizeLG")};letter-spacing:-0.01em;color:${paint.ink};white-space:nowrap;">${esc(brand.name)}</span>`;
+    return `<span style="font-family:${brandFontAssets(brand).displayFamily};font-weight:${t("fontWeightStrong")};font-size:${t("fontSizeLG")};letter-spacing:-0.01em;color:${paint.ink};white-space:nowrap;">${esc(brand.name)}</span>`;
   }
   const src = `../../${file.replace(/^\.?\//, "")}`;
   return `<img src="${esc(src)}" alt="${esc(brand.name)}" width="40" height="40" style="display:block;margin:0 auto;border:0;outline:none;text-decoration:none;width:40px;height:40px;" />`;
@@ -367,7 +369,7 @@ export function renderEmail(brand: Brand, tokens: DesignTokens): string {
                 <p style="margin:0 0 ${t("sizeSM")};font-family:${t("fontFamily")};letter-spacing:0.01em;font-size:${t("fontSizeSM")};font-weight:${t("fontWeightStrong")};color:${paint.accentDeep};">${esc(
                   cap(brand.voice.adjectives[0] ?? "Announcement"),
                 )}</p>
-                <h1 style="margin:0 0 ${t("sizeMD")};font-family:var(--display-family);font-size:${t("fontSizeHeading2")};line-height:1.15;letter-spacing:-0.015em;color:${paint.ink};">${esc(
+                <h1 style="margin:0 0 ${t("sizeMD")};font-family:${brandFontAssets(brand).displayFamily};font-size:${t("fontSizeHeading2")};line-height:1.15;letter-spacing:-0.015em;color:${paint.ink};">${esc(
                   cap(leadClaim(brand)),
                 )}</h1>
                 <p style="margin:0 auto ${t("sizeXL")};max-width:46ch;font-family:${t("fontFamily")};font-size:${t("fontSizeLG")};line-height:1.55;color:${paint.muted};">${esc(
