@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { pickHomeTemplate, homeTemplateTrigger } from '../helpers/home-template-picker';
 
 import { act } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -21,6 +22,7 @@ vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => {
 });
 
 import { HomeView } from '../../src/components/HomeView';
+import { stashHomeComposerAttachments } from '../../src/state/home-composer-stash';
 import { requestHomeChip } from '../../src/runtime/home-intent';
 import { HOME_APPLY_TEMPLATE_EVENT } from '../../src/components/home-hero/chips';
 import {
@@ -556,9 +558,9 @@ describe('HomeView prompt handoff', () => {
     await waitFor(() => {
       expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(true);
     });
-    // The arrow never flashes a busy treatment; the disabled lock is the whole
-    // in-flight state.
-    expect(screen.getByTestId('home-hero-submit').getAttribute('aria-busy')).toBe('false');
+    expect(screen.getByTestId('home-hero-submit')).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByTestId('home-hero-submit')).toHaveAttribute('aria-label', 'Sending…');
+    expect(screen.getByTestId('home-hero-submit').querySelector('svg')).toHaveClass('icon-spin');
     expect(homeHeroPromptValue()).toBe('Create an image of a quiet reading room.');
 
     await act(async () => {
@@ -571,11 +573,83 @@ describe('HomeView prompt handoff', () => {
     );
     expect(homeHeroPromptValue()).toBe('Create an image of a quiet reading room.');
     expect(screen.getByTestId('home-hero-submit').getAttribute('aria-busy')).toBe('false');
+    expect(screen.getByTestId('home-hero-submit')).toBeEnabled();
+    expect(screen.getByTestId('home-hero-submit')).toHaveAttribute('aria-label', 'Run');
+    expect(screen.getByTestId('home-hero-submit').querySelector('svg')).not.toHaveClass('icon-spin');
   });
 
-  // Removed with the fresh-home default type seed: Home no longer binds a
-  // type on its own, so there is no binding turn for Send to wait on. Picking
-  // a type from the row below the composer is the only thing that binds one.
+  it('leaves a fresh Home unselected without applying a plugin or changing the draft', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (url === '/api/plugins') return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN, SIMPLE_DECK_PLUGIN] }));
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    stubAnimationFrame();
+    window.localStorage.setItem('open-design:home-composer:prompt', 'Keep my draft');
+    const onSubmit = vi.fn();
+    render(<HomeView projects={[]} onSubmit={onSubmit} onOpenProject={() => undefined} />);
+    await waitFor(() => expect(screen.getByTestId('home-hero-type-pills-more')).not.toBeDisabled());
+    expect(screen.queryByTestId('home-hero-template-picker')).toBeNull();
+    expect(homeHeroPromptValue()).toBe('Keep my draft');
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply'))).toBe(false);
+    expect(onSubmit).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: 'Keep my draft', projectKind: 'other', pluginSelectionProvenance: 'automatic-default',
+    })));
+    expect(onSubmit.mock.calls[0]?.[0]).not.toHaveProperty('automaticStrategyTaskProfile');
+  });
+
+  it('waits for the initial catalog before enabling type choices while preserving a restored draft', async () => {
+    let resolveCatalog!: (response: Response) => void;
+    const catalog = new Promise<Response>((resolve) => { resolveCatalog = resolve; });
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (url) => {
+      if (url === '/api/plugins') return catalog;
+      throw new Error(`unexpected fetch ${url}`);
+    }));
+    window.localStorage.setItem('open-design:home-composer:prompt', 'My first prototype');
+    const onSubmit = vi.fn();
+    render(<HomeView projects={[]} onSubmit={onSubmit} onOpenProject={() => undefined} />);
+    expect(screen.getByTestId('home-hero-type-pills-more')).toBeDisabled();
+    expect(homeHeroPromptValue()).toBe('My first prototype');
+    expect(onSubmit).not.toHaveBeenCalled();
+    await act(async () => {
+      resolveCatalog(new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] })));
+      await catalog;
+    });
+    await waitFor(() => expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(false));
+    expect(screen.queryByTestId('home-hero-template-picker')).toBeNull();
+    expect(screen.getByTestId('home-hero-type-pills-more')).not.toBeDisabled();
+    expect(homeHeroPromptValue()).toBe('My first prototype');
+  });
+
+  it('restores a saved Deck selection instead of seeding Prototype', async () => {
+    window.localStorage.setItem('open-design:home-composer:chip', JSON.stringify({
+      chipId: 'deck', pluginId: SIMPLE_DECK_PLUGIN.id, projectKind: 'deck',
+    }));
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN, SIMPLE_DECK_PLUGIN] }))));
+    stubAnimationFrame();
+    render(<HomeView projects={[]} onSubmit={() => undefined} onOpenProject={() => undefined} />);
+    await waitFor(() => expect(screen.getByTestId('home-hero-template-picker').getAttribute('data-type')).toBe('deck'));
+    await pickHomeTemplate('prototype');
+    expect(screen.getByTestId('home-hero-template-picker').getAttribute('data-type')).toBe('prototype');
+  });
+
+  it('keeps an explicit queued type ahead of the fresh-home default', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN, SIMPLE_DECK_PLUGIN] }))));
+    stubAnimationFrame();
+    requestHomeChip('deck');
+    render(<HomeView projects={[]} onSubmit={() => undefined} onOpenProject={() => undefined} />);
+    await waitFor(() => expect(screen.getByTestId('home-hero-template-picker').getAttribute('data-type')).toBe('deck'));
+    expect(homeHeroPromptValue()).toBe('');
+  });
+
+  it('leaves the dock type to its host', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }))));
+    render(<HomeView variant="dock" projects={[]} onSubmit={() => undefined} onOpenProject={() => undefined} />);
+    await waitFor(() => expect(homeTemplateTrigger().disabled).toBe(false));
+    expect(screen.getByTestId('home-hero-template-picker').getAttribute('data-type')).toBeNull();
+  });
 
   it('keeps creation types actionable while an expired plugin cache refreshes after a project round trip', async () => {
     let resolveRefresh: (response: Response) => void = () => undefined;
@@ -607,7 +681,7 @@ describe('HomeView prompt handoff', () => {
         onOpenProject={() => undefined}
       />,
     );
-    const firstTrigger = await screen.findByTestId('home-hero-type-pill-deck');
+    const firstTrigger = screen.getByTestId('home-hero-type-pills-more');
     await waitFor(() => expect((firstTrigger as HTMLButtonElement).disabled).toBe(false));
     firstHome.unmount();
 
@@ -627,7 +701,7 @@ describe('HomeView prompt handoff', () => {
 
       expect(pluginListReads).toBe(2);
       expect(
-        (screen.getByTestId('home-hero-type-pill-deck') as HTMLButtonElement).disabled,
+        (screen.getByTestId('home-hero-type-pills-more') as HTMLButtonElement).disabled,
       ).toBe(false);
 
       await act(async () => {
@@ -730,7 +804,6 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    await clearActiveTypeChip();
     await clickHomeShortcut('create-plugin');
 
     const input = await screen.findByTestId('home-hero-input');
@@ -1016,7 +1089,6 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    await clearActiveTypeChip();
     await pickHomeTemplate('prototype');
 
     await waitFor(() => {
@@ -1120,7 +1192,6 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    await clearActiveTypeChip();
     await pickHomeTemplate('prototype');
     await pickPrototypeScene(subtype);
 
@@ -1250,7 +1321,6 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    await clearActiveTypeChip();
     await pickHomeTemplate('deck');
     // The deck scenes were example filters on the retired sub-type row; the
     // route under test is the Slide deck type's own.
@@ -1300,7 +1370,6 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    await clearActiveTypeChip();
     await pickHomeTemplate('document');
 
     await waitFor(() => {
@@ -1361,7 +1430,6 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    await clearActiveTypeChip();
     await pickHomeTemplate('prototype');
 
     await waitFor(() => {
@@ -1412,7 +1480,6 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    await clearActiveTypeChip();
     await pickHomeTemplate('prototype');
 
     // The personal default pre-selects, as before.
@@ -1479,7 +1546,6 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    await clearActiveTypeChip();
     await pickHomeTemplate('prototype');
     // The card itself is the single click-to-use affordance — clicking it
     // directly seeds the composer input.
@@ -1578,7 +1644,6 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    await clearActiveTypeChip();
     await pickHomeTemplate('deck');
     fireEvent.click(
       (await screen.findAllByTestId('home-hero-plugin-preset')).find(
@@ -1651,7 +1716,6 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    await clearActiveTypeChip();
     await pickHomeTemplate('prototype');
     await pickPrototypeScene(subtype);
     fireEvent.click(
@@ -1770,7 +1834,6 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    await clearActiveTypeChip();
     await pickHomeTemplate('live-artifact');
 
     await waitFor(() => {
@@ -1849,7 +1912,6 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    await clearActiveTypeChip();
     await pickHomeTemplate('live-artifact');
 
     await waitFor(() => {
@@ -1912,7 +1974,6 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    await clearActiveTypeChip();
     await pickHomeTemplate('deck');
 
     await waitFor(() => {
@@ -1943,10 +2004,10 @@ describe('HomeView prompt handoff', () => {
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply-local'))).toBe(false);
   });
 
-  it('switches output-type chips without replacing an existing prompt', async () => {
+  it('clears and reselects types while retaining the draft and attachments', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
-        return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
+        return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN, DEFAULT_PLUGIN] }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
@@ -1962,6 +2023,8 @@ describe('HomeView prompt handoff', () => {
     vi.stubGlobal('fetch', fetchMock);
     stubAnimationFrame();
 
+    stashHomeComposerAttachments([new File(['brief'], 'brief.txt', { type: 'text/plain' })]);
+
     render(
       <HomeView
         projects={[]}
@@ -1972,7 +2035,6 @@ describe('HomeView prompt handoff', () => {
 
     await screen.findByTestId('home-hero-input');
     await setPromptAndSettle('Keep my current brief');
-    await clearActiveTypeChip();
     await pickHomeTemplate('prototype');
 
     await waitFor(() => {
@@ -1981,6 +2043,17 @@ describe('HomeView prompt handoff', () => {
     expect(fetchMock.mock.calls.some(([url]) => (
       typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply-local')
     ))).toBe(false);
+    expect(homeHeroPromptText()).toBe('Keep my current brief');
+    await pickHomeTemplate('document');
+    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Document');
+    expect(homeHeroPromptText()).toBe('Keep my current brief');
+    expect(screen.getByTestId('home-hero-staged-files').textContent).toContain('brief.txt');
+    fireEvent.click(screen.getByTestId('home-hero-template-clear'));
+    expect(screen.queryByTestId('home-hero-template-picker')).toBeNull();
+    expect(screen.getByTestId('home-hero-type-pills')).toBeTruthy();
+    expect(screen.getByTestId('home-hero-staged-files').textContent).toContain('brief.txt');
+    expect(homeHeroPromptText()).toBe('Keep my current brief');
+    await pickHomeTemplate('prototype');
     expect(homeHeroPromptText()).toBe('Keep my current brief');
     expect(screen.queryByRole('dialog', { name: /replace current prompt/i })).toBeNull();
   });
@@ -2020,7 +2093,6 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    await clearActiveTypeChip();
     await pickHomeTemplate('deck');
     await waitFor(() => {
       expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Slide deck');
@@ -2037,7 +2109,6 @@ describe('HomeView prompt handoff', () => {
       );
     });
 
-    await clearActiveTypeChip();
     await pickHomeTemplate('prototype');
     await waitFor(() => {
       expect(screen.getByTestId('home-hero-plugin-presets')).toBeTruthy();
@@ -2406,7 +2477,6 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    await clearActiveTypeChip();
     await clickHomeShortcut('create-plugin');
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/plugins/od-plugin-authoring/apply-local',
@@ -2462,7 +2532,6 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    await clearActiveTypeChip();
     await clickHomeShortcut('create-plugin');
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/plugins/od-plugin-authoring/apply-local',
@@ -2517,7 +2586,6 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    await clearActiveTypeChip();
     await clickHomeShortcut('create-plugin');
     const input = screen.getByTestId('home-hero-input');
     const inputCard = input.closest('.home-hero__input-card') as HTMLElement | null;
@@ -2566,47 +2634,6 @@ async function setPromptAndSettle(value: string): Promise<void> {
   });
 }
 
-async function clearActiveTypeChip() {
-  // Reset the Template selection back to "None" via the radial's center Clear
-  // (#5517 replaced the dropdown Clear with the radial menu's center button).
-  const trigger = screen.queryByTestId('home-hero-template-trigger');
-  if (!trigger) return;
-  fireEvent.click(trigger);
-  const clear = screen.queryByTestId('home-hero-template-radial-clear');
-  if (clear) fireEvent.click(clear);
-  fireEvent.keyDown(document, { key: 'Escape' });
-}
-
-// #5517 removed the inline template rail (and the "Start with a template…"
-// bar that held it) from Home. Scenario templates are now picked from the
-// composer footer's radial Template picker.
-async function pickHomeTemplate(id: string) {
-  // A type already picked retires the row, and the pill has no menu — so
-  // switching means clearing back to the empty state first.
-  const clear = screen.queryByTestId('home-hero-template-clear');
-  if (clear) fireEvent.click(clear);
-  const lead = await screen.findByTestId('home-hero-type-pill-prototype');
-  await waitFor(() => expect((lead as HTMLButtonElement).disabled).toBe(false));
-  let pill = screen.queryByTestId(`home-hero-type-pill-${id}`);
-  if (!pill) {
-    // Types behind 更多 mount only while its popover is open.
-    fireEvent.click(screen.getByTestId('home-hero-type-pills-more'));
-    pill = screen.queryByTestId(`home-hero-type-pill-${id}-more`);
-  }
-  if (pill) {
-    fireEvent.click(pill);
-    return;
-  }
-  // Types outside the fixed row (media, HyperFrames, …) are reached the way
-  // the workspace tabs-bar hands one off: the apply-template window event,
-  // which HomeHero applies exactly as a row click.
-  fireEvent.keyDown(document, { key: 'Escape' });
-  await act(async () => {
-    window.dispatchEvent(
-      new CustomEvent(HOME_APPLY_TEMPLATE_EVENT, { detail: { chipId: id } }),
-    );
-  });
-}
 
 
 // The hero no longer renders a second-level scene row; a Prototype scene is

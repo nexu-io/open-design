@@ -1,0 +1,51 @@
+.activeShareDialog:global(.modal-confirm) {
+  width: 304px;
+  gap: 12px;
+}
+
+.activeShareFooter:global(.row) {
+  margin-top: 8px;
+  gap: 8px;
+}
+
+.activeShareDialog:global(.modal-confirm) .activeShareFooter:global(.row) .activeShareCancel,
+.activeShareDialog:global(.modal-confirm) .activeShareFooter:global(.row) .activeShareDelete {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.activeShareDialog:global(.modal-confirm) .activeShareFooter:global(.row) :global(button).activeShareCancel {
+  width: 48px;
+  background: #EDEDF0;
+  border-color: #EDEDF0;
+  color: #333;
+}
+
+.activeShareDialog:global(.modal-confirm) .activeShareFooter:global(.row) :global(button.primary.danger).activeShareDelete,
+.activeShareDialog:global(.modal-confirm) .activeShareFooter:global(.row) :global(button.primary.danger).activeShareDelete:hover,
+.activeShareDialog:global(.modal-confirm) .activeShareFooter:global(.row) :global(button.primary.danger).activeShareDelete:active,
+.activeShareDialog:global(.modal-confirm) .activeShareFooter:global(.row) :global(button.primary.danger).activeShareDelete:disabled,
+.activeShareDialog:global(.modal-confirm) .activeShareFooter:global(.row) :global(button.primary.danger).activeShareDelete:disabled:hover {
+  width: 76px;
+  background: rgb(210, 59, 60);
+  border-color: rgb(210, 59, 60);
+  color: #fff;
+}
+
+.activeShareDialog:global(.modal-confirm) .activeShareFooter:global(.row) :global(button.primary.danger).activeShareDelete:hover:not(:disabled) {
+  filter: brightness(0.95);
+}
+
+.activeShareDialog .activeShareFooter button:disabled { cursor: not-allowed; opacity: 0.55; }

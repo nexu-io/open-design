@@ -1,7 +1,9 @@
+import { MCP_BOOTSTRAP_CONTRACT } from "@open-design/sidecar-proto";
 import { describe, expect, it, vi } from "vitest";
 
 import {
   ensureMcpDaemonUrl,
+  parseManagedMcpDiscovery,
   planMcpDaemonBootstrap,
 } from "../src/mcp-bootstrap.js";
 
@@ -167,5 +169,83 @@ describe("ensureMcpDaemonUrl", () => {
     })).resolves.toBe("http://127.0.0.1:61234");
 
     expect(spawnBootstrap).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("managed MCP registrations", () => {
+  const managedEnv = (overrides: Record<string, string> = {}): NodeJS.ProcessEnv => ({
+    OD_MCP_BOOTSTRAP_COMMAND: "/usr/bin/open",
+    OD_MCP_BOOTSTRAP_ARGS: JSON.stringify(["-g", "-j", "/Applications/Open Design.app", "--args", "--headless", MCP_BOOTSTRAP_CONTRACT.MANAGED_ARG]),
+    [MCP_BOOTSTRAP_CONTRACT.DISCOVERY_ENV]: JSON.stringify({
+      daemon: ["/ipc/daemon-runtime.sock", "/ipc/daemon-headless.sock"],
+      desktop: ["/ipc/desktop-runtime.sock", "/ipc/desktop-headless.sock"],
+    }),
+    // Registered while the desktop owned the namespace.
+    OD_SIDECAR_CLIENT_ENDPOINT: "/ipc/daemon-runtime.sock",
+    ...overrides,
+  });
+
+  function statusReader(statuses: Record<string, unknown>) {
+    return vi.fn(async (endpoint: string) => (statuses[endpoint] ?? null) as never);
+  }
+
+  it("parses only well-formed managed registrations", () => {
+    expect(parseManagedMcpDiscovery(managedEnv())).toEqual({
+      daemon: ["/ipc/daemon-runtime.sock", "/ipc/daemon-headless.sock"],
+      desktop: ["/ipc/desktop-runtime.sock", "/ipc/desktop-headless.sock"],
+    });
+    expect(parseManagedMcpDiscovery({ ...managedEnv(), OD_MCP_BOOTSTRAP_ARGS: '["--headless"]' })).toBeNull();
+    expect(parseManagedMcpDiscovery(managedEnv({ [MCP_BOOTSTRAP_CONTRACT.DISCOVERY_ENV]: "{" }))).toBeNull();
+    expect(parseManagedMcpDiscovery(managedEnv({ [MCP_BOOTSTRAP_CONTRACT.DISCOVERY_ENV]: '{"daemon":[],"desktop":[]}' }))).toBeNull();
+  });
+
+  it("finds the daemon in the other mode when the registered endpoint is gone", async () => {
+    const statusAtEndpoint = statusReader({ "/ipc/daemon-headless.sock": { state: "running", url: "http://127.0.0.1:50861" } });
+    const spawnBootstrap = vi.fn(async () => undefined);
+    await expect(ensureMcpDaemonUrl({
+      env: managedEnv(), probeDaemon: async () => true, spawnBootstrap, statusAtEndpoint,
+    })).resolves.toBe("http://127.0.0.1:50861");
+    expect(spawnBootstrap).not.toHaveBeenCalled();
+  });
+
+  it("waits for a running owner instead of reopening the app", async () => {
+    let daemonUp = false;
+    const statusAtEndpoint = vi.fn(async (endpoint: string) => {
+      if (endpoint === "/ipc/desktop-headless.sock") return { state: "running" } as never;
+      if (endpoint === "/ipc/daemon-headless.sock" && daemonUp) return { state: "running", url: "http://127.0.0.1:50900" } as never;
+      return null;
+    });
+    const spawnBootstrap = vi.fn(async () => undefined);
+    const sleep = vi.fn(async () => { daemonUp = true; });
+    await expect(ensureMcpDaemonUrl({
+      env: managedEnv(), probeDaemon: async () => true, sleep, spawnBootstrap, statusAtEndpoint,
+    })).resolves.toBe("http://127.0.0.1:50900");
+    expect(spawnBootstrap).not.toHaveBeenCalled();
+  });
+
+  it("cold-starts exactly once when nothing owns the namespace", async () => {
+    let launched = false;
+    const statusAtEndpoint = vi.fn(async (endpoint: string) =>
+      launched && endpoint === "/ipc/daemon-headless.sock" ? { state: "running", url: "http://127.0.0.1:51000" } as never : null);
+    const spawnBootstrap = vi.fn(async () => { launched = true; });
+    await expect(ensureMcpDaemonUrl({
+      env: managedEnv(), probeDaemon: async () => true, sleep: async () => undefined, spawnBootstrap, statusAtEndpoint,
+    })).resolves.toBe("http://127.0.0.1:51000");
+    expect(spawnBootstrap).toHaveBeenCalledTimes(1);
+    expect(spawnBootstrap).toHaveBeenCalledWith(expect.objectContaining({
+      args: expect.arrayContaining(["--headless", MCP_BOOTSTRAP_CONTRACT.MANAGED_ARG]),
+      command: "/usr/bin/open",
+    }));
+  });
+
+  it("keeps the unmanaged path for registrations from an older outer", async () => {
+    const statusAtEndpoint = vi.fn(async () => null);
+    await expect(ensureMcpDaemonUrl({
+      env: { OD_MCP_BOOTSTRAP_COMMAND: "/usr/bin/open", OD_MCP_BOOTSTRAP_ARGS: '["--headless"]' },
+      connectInherited: () => null,
+      probeDaemon: async () => true,
+      statusAtEndpoint,
+    })).rejects.toThrow(/registration.*refresh/i);
+    expect(statusAtEndpoint).not.toHaveBeenCalled();
   });
 });

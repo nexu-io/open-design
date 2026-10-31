@@ -129,13 +129,13 @@ describe('DesignSystemsTab 团队 collection visibility', () => {
     expect(screen.queryByRole('tab', { name: 'Team' })).toBeTruthy();
   });
 
-  it('does not offer the Team collection for a personal workspace', async () => {
+  it('offers the Team collection for a Personal workspace', async () => {
     workspaceContext = PERSONAL_CONTEXT;
     renderTab();
     await waitFor(() => {
       expect(screen.getByRole('tab', { name: 'Your systems' })).toBeTruthy();
     });
-    expect(screen.queryByRole('tab', { name: 'Team' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Team' })).toBeTruthy();
   });
 
   it('does not offer the Team collection when signed out', async () => {

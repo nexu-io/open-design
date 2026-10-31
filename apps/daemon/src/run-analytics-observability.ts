@@ -712,6 +712,29 @@ export function scanRunEventsForUsageAnalytics(
   let cacheTokenSource: RunUsageAnalytics['cache_token_source'] = 'unavailable';
   let agentReportedModel: string | null = null;
   const needAgentModel = !hasExplicitRequestedModelForAnalytics(reqBodyModel);
+  // Codex app-server marks thread totals explicitly as session-cumulative.
+  // A duplicate or delayed older notification can arrive after a newer total;
+  // exclude only those lower snapshots before the reverse "latest wins" scan.
+  // Unmarked usage keeps its existing per-event semantics.
+  const staleCumulativeUsage = new Set<number>();
+  let greatestCumulativeTotal = -1;
+  let cumulativeSessionId: string | undefined;
+  for (let i = 0; i < events.length; i += 1) {
+    const event = events[i];
+    const data = event?.data as
+      | { type?: string; sessionId?: string; usageScope?: string; usage?: Record<string, unknown> | null }
+      | null
+      | undefined;
+    if (event?.event === 'agent' && data?.type === 'status' && data.sessionId && data.sessionId !== cumulativeSessionId) {
+      cumulativeSessionId = data.sessionId;
+      greatestCumulativeTotal = -1;
+    }
+    if (event?.event !== 'agent' || data?.type !== 'usage' || data.usageScope !== 'sessionCumulative' || !data.usage) continue;
+    const total = extractUsageCacheFields(data.usage).totalTokens;
+    if (total === undefined) continue;
+    if (total < greatestCumulativeTotal) staleCumulativeUsage.add(i);
+    else greatestCumulativeTotal = total;
+  }
   // Provider-usage is true for any real token field (including thought/cache-only
   // ACP frames). Primary usage is complete only once both input and output are
   // known — a trailing output-only or input-only frame must keep the reverse
@@ -745,6 +768,7 @@ export function scanRunEventsForUsageAnalytics(
     if (
       ev?.event === 'agent' &&
       data?.type === 'usage' &&
+      !staleCumulativeUsage.has(i) &&
       !(havePrimaryUsage && haveCacheFields)
     ) {
       const usage = data.usage && typeof data.usage === 'object'

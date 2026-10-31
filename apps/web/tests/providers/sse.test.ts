@@ -8,7 +8,6 @@ import {
   latestUserPromptFromHistory,
   reattachDaemonRun,
   sanitizePriorAssistantTurnForTranscript,
-  STRATEGY_TASK_BLOCKED_MESSAGE,
   streamViaDaemon,
   type DaemonReconnectState,
   type DaemonRunFinishedEventDetail,
@@ -45,9 +44,11 @@ describe('parseSseFrame', () => {
 describe('streamViaDaemon', () => {
   it('sends the latest user turn separately from the full CLI transcript', async () => {
     const handlers = createDaemonHandlers();
+    const onUserSubmissionAccepted = vi.fn();
+    const receipt = { id: 'submission-1', projectId: 'project-1', conversationId: 'conv-1', acceptedAt: 1234 };
     const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const url = String(input);
-      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1', userSubmission: receipt });
       if (url === '/api/runs/run-1/events') {
         return sseResponse('event: end\ndata: {"code":0,"status":"succeeded"}\n\n');
       }
@@ -58,6 +59,8 @@ describe('streamViaDaemon', () => {
     await streamViaDaemon({
       agentId: 'mock',
       userMessageId: '3',
+      submission: { id: 'submission-1', source: 'user' },
+      onUserSubmissionAccepted,
       history: [
         { id: '1', role: 'user', content: 'pre-consent brief' },
         { id: '2', role: 'assistant', content: 'draft response' },
@@ -75,6 +78,8 @@ describe('streamViaDaemon', () => {
     expect(body.message).toContain('post-consent revision');
     expect(body.currentPrompt).toBe('post-consent revision');
     expect(body.userMessageId).toBe('3');
+    expect(body.submission).toEqual({ id: 'submission-1', source: 'user' });
+    expect(onUserSubmissionAccepted).toHaveBeenCalledExactlyOnceWith(receipt);
     expect(body.skillIds).toEqual(['frontend-design', 'imagegen']);
   });
 
@@ -650,6 +655,36 @@ describe('streamViaDaemon', () => {
     expect(body.appliedPluginSnapshotId).toBe('snap-plugin-1');
   });
 
+  it('forwards the plugin identity when the applied snapshot id is empty', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/events') {
+        return sseResponse('event: end\ndata: {"code":0,"status":"succeeded"}\n\n');
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'use the plugin' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+      appliedPluginSnapshotId: '',
+      pluginId: 'plugin-alpha',
+      pluginInputs: { tone: 'warm' },
+    });
+
+    const [, createRunInit] = fetchMock.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit];
+    const body = JSON.parse(String(createRunInit.body));
+    expect(body.pluginId).toBe('plugin-alpha');
+    expect(body.pluginInputs).toEqual({ tone: 'warm' });
+    expect(body).not.toHaveProperty('appliedPluginSnapshotId');
+  });
+
   it('drops prior assistant turns from another agent when composing daemon transcript', async () => {
     const handlers = createDaemonHandlers();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
@@ -760,14 +795,10 @@ describe('streamViaDaemon', () => {
     expect(transcript).toContain('small answer');
   });
 
-  // PR #3157 form-loop investigation: weak / medium plain-stream models
-  // (GPT-OSS-120B Medium, Gemini 3.5 Flash through Antigravity's `agy`)
-  // pattern-match on the literal `<question-form>` markup the agent
-  // emitted on turn 1 and re-emit an identical form on turn 2 even when
-  // the OD-side OVERRIDE block explicitly forbids it. Stripping the
-  // markup from prior assistant turns at the transcript layer kills the
-  // echo source entirely.
-  it('strips question-form markup from prior assistant turns to kill the form-echo loop', () => {
+  // Historical forms are context, not reusable UI templates or proof that the
+  // user answered. Keep their information and let the agent decide what is
+  // useful to ask next; this normalizer cannot erase native session history.
+  it('represents historical question forms without losing questions or claiming they were answered', () => {
     const sanitized = sanitizePriorAssistantTurnForTranscript(
       [
         'Got it — let me ask a few questions:',
@@ -784,10 +815,13 @@ describe('streamViaDaemon', () => {
     expect(sanitized).not.toContain('<question-form');
     expect(sanitized).not.toContain('</question-form>');
     expect(sanitized).not.toContain('"questions": [');
-    expect(sanitized).toContain('question-form was emitted here on a prior turn');
+    expect(sanitized).toContain('What are we making?');
+    expect(sanitized).toContain('I will lock the brief.');
+    expect(sanitized).toContain('historical context');
+    expect(sanitized).not.toContain('already answered');
   });
 
-  it('also strips ```json fenced form-schema echoes that some models add alongside the form tag', () => {
+  it('keeps standalone question JSON as information rather than assuming it is a form echo', () => {
     const sanitized = sanitizePriorAssistantTurnForTranscript(
       [
         'Got it — 请告诉我以下信息：',
@@ -807,9 +841,16 @@ describe('streamViaDaemon', () => {
       ].join('\n'),
     );
 
-    expect(sanitized).not.toContain('```json');
+    expect(sanitized).toContain('```json');
+    expect(sanitized).toContain('"questions": [');
+    expect(sanitized).toContain('我们要做什么？');
     expect(sanitized).not.toContain('<question-form');
-    expect(sanitized).toContain('form schema was echoed here on a prior turn');
+    expect(sanitized).not.toContain('already answered');
+  });
+
+  it('preserves historical form examples inside a code fence', () => {
+    const example = '```xml\n<question-form>{"questions":[{"label":"Explain this markup?"}]}</question-form>\n```';
+    expect(sanitizePriorAssistantTurnForTranscript(example)).toBe(example);
   });
 
   it('preserves unrelated ```json fences (regular JSON snippets without "questions") so model output stays intact', () => {
@@ -1034,8 +1075,9 @@ describe('streamViaDaemon', () => {
 
     // User's <question-form> mention survives.
     expect(transcript).toContain('Why does <question-form id="discovery"> render');
-    // Assistant's emission is replaced with the placeholder.
-    expect(transcript).toContain('question-form was emitted here on a prior turn');
+    // The assistant form becomes historical information, without inferring answers.
+    expect(transcript).toContain('Previous assistant question form');
+    expect(transcript).not.toContain('already answered');
     expect(transcript).not.toContain('<question-form id="discovery" title="Brief">');
   });
 
@@ -1057,7 +1099,8 @@ describe('streamViaDaemon', () => {
       { id: '2', role: 'user', content: 'react native' },
     ]);
 
-    expect(transcript).toContain('question-form was emitted here on a prior turn');
+    expect(transcript).toContain('Previous assistant question form');
+    expect(transcript).not.toContain('already answered');
     expect(transcript).not.toContain('<ask-question id="discovery" title="Brief">');
   });
 
@@ -2244,6 +2287,7 @@ describe('streamViaDaemon', () => {
       route: 'full_plan',
       executionMode: null,
       activeRunId: 'run-request',
+      runMappings: [{ runId: 'run-request', taskRunIndex: 0 }],
       terminal: false,
     };
     const productionProjection = {
@@ -2253,6 +2297,10 @@ describe('streamViaDaemon', () => {
       executionMode: 'simple',
       activeRunId: 'run-production',
       nextRunId: 'run-production',
+      runMappings: [
+        { runId: 'run-request', taskRunIndex: 0 },
+        { runId: 'run-production', taskRunIndex: 1 },
+      ],
     };
     const completedProjection = {
       ...productionProjection,
@@ -2330,10 +2378,13 @@ describe('streamViaDaemon', () => {
     expect(body.taskExecutionId).toBe('task-clarification');
   });
 
+  // A canceled task ends the turn as canceled whatever the process did. A
+  // blocked task does not override the physical result: the Run succeeded, so
+  // the turn ends Done and the verdict rides along on the task projection.
   it.each([
-    { outcome: 'blocked', physicalStatus: 'succeeded', expectedStatus: 'failed', expectsError: true },
+    { outcome: 'blocked', physicalStatus: 'succeeded', expectedStatus: 'succeeded', expectsError: false },
     { outcome: 'canceled', physicalStatus: 'failed', expectedStatus: 'canceled', expectsError: false },
-  ])('renders terminal task outcome $outcome instead of the physical Run status', async ({
+  ])('settles a terminal task outcome $outcome on the physical Run status $physicalStatus', async ({
     outcome,
     physicalStatus,
     expectedStatus,
@@ -2378,9 +2429,7 @@ describe('streamViaDaemon', () => {
 
     expect(onRunStatus).toHaveBeenLastCalledWith(expectedStatus);
     if (expectsError) {
-      expect(handlers.onError).toHaveBeenCalledWith(
-        expect.objectContaining({ message: STRATEGY_TASK_BLOCKED_MESSAGE }),
-      );
+      expect(handlers.onError).toHaveBeenCalledTimes(1);
       expect(handlers.onDone).not.toHaveBeenCalled();
     } else {
       expect(handlers.onError).not.toHaveBeenCalled();
@@ -2393,8 +2442,8 @@ describe('streamViaDaemon', () => {
   // chat and that reply is the turn's outcome. Raising a run error on top of it
   // restated the same sentence inside a red "task execution failed" card, so a
   // turn that had simply asked for more detail read as a crash. A machine gate
-  // that left no text still errors — pinned by the `it.each` above, whose
-  // projection carries no blockedContext.
+  // that left no text ends the same way now — the `it.each` above, whose
+  // projection carries no blockedContext, pins that a succeeded Run stays Done.
   it('leaves a blocked task to its own explanation instead of raising a run error', async () => {
     const handlers = createDaemonHandlers();
     const onRunStatus = vi.fn();
@@ -2441,19 +2490,85 @@ describe('streamViaDaemon', () => {
     expect(onRunStatus).toHaveBeenLastCalledWith('succeeded');
   });
 
-  // The other half of the same rule. A gate the agent did not ask for leaves
-  // the agent's ordinary reply sitting next to the verdict — "sure, three
-  // pages, here is the plan" — and that prose is not an account of the stop.
-  // Suppressing on text alone would hide a real protocol failure behind a
-  // cheerful sentence, so the reason code is what decides.
-  it('still raises a run error when a gate blocked the task the agent did not', async () => {
+  // A planning turn the gate refused is the agent's reply. The user said
+  // "hello", the agent answered and planned nothing, and the daemon recorded
+  // the missing machine block on the task — but the Run finished cleanly and
+  // the reply on screen is the whole outcome of the turn. Raising a run error
+  // over it put a red "task could not complete" card under a greeting.
+  it("leaves a refused planning turn to the agent's reply instead of raising a run error", async () => {
     const handlers = createDaemonHandlers();
+    const onRunStatus = vi.fn();
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-refused' });
+      if (url === '/api/runs/run-refused') {
+        return jsonResponse({ deliverableValid: false, projectDeliverableValid: false });
+      }
+      if (url === '/api/runs/run-refused/events') {
+        return sseResponse(`event: stdout\ndata: ${JSON.stringify({
+          chunk: '你好！告诉我你想做什么设计，我来帮你规划。',
+        })}\n\nevent: end\ndata: ${JSON.stringify({
+          code: 0,
+          status: 'succeeded',
+          strategyTask: {
+            taskExecutionId: 'task-refused',
+            strategy: {
+              id: 'od-next-strategy',
+              version: '2.0.0',
+              packageHash: 'a'.repeat(64),
+              snapshotId: 'snapshot-1',
+            },
+            inputStage: 'request',
+            outcome: 'blocked',
+            route: 'full_plan',
+            executionMode: null,
+            activeRunId: 'run-refused',
+            terminal: true,
+            blockedContext: {
+              reasonCodes: [
+                'od_next_canonical_deliverable_invalid',
+                'od_next_protocol_runtime_state_missing',
+              ],
+              visibleText: '你好！告诉我你想做什么设计，我来帮你规划。',
+            },
+          },
+        })}\n\n`);
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }));
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: '你好' }],
+      signal: new AbortController().signal,
+      handlers,
+      onRunStatus,
+    });
+
+    expect(handlers.onError).not.toHaveBeenCalled();
+    expect(handlers.onDone).toHaveBeenCalledTimes(1);
+    expect(onRunStatus).toHaveBeenLastCalledWith('succeeded');
+  });
+
+  // The same rule at production. The plan was frozen, the build ran, and a
+  // gate refused the turn because nothing usable was written. The Run still
+  // succeeded, so the turn ends Done with the agent's own words; the verdict
+  // and its reason code reach the message through the settled projection, not
+  // through a run error. The next message starts a new task.
+  it("keeps a production turn the gate blocked on the Run's own success", async () => {
+    const handlers = createDaemonHandlers();
+    const onStrategyTaskSettled = vi.fn();
+    const onRunStatus = vi.fn();
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url === '/api/runs') return jsonResponse({ runId: 'run-gated' });
-      if (url === '/api/runs/run-gated') return jsonResponse({ deliverableValid: false });
+      if (url === '/api/runs/run-gated') {
+        return jsonResponse({ deliverableValid: false, projectDeliverableValid: false });
+      }
       if (url === '/api/runs/run-gated/events') {
-        return sseResponse(`event: end\ndata: ${JSON.stringify({
+        return sseResponse(`event: stdout\ndata: ${JSON.stringify({
+          chunk: '好的，按你说的三页来做。计划如下：1) 首页 2) 列表 3) 详情。',
+        })}\n\nevent: end\ndata: ${JSON.stringify({
           code: 0,
           status: 'succeeded',
           strategyTask: {
@@ -2464,10 +2579,10 @@ describe('streamViaDaemon', () => {
               packageHash: 'a'.repeat(64),
               snapshotId: 'snapshot-1',
             },
-            inputStage: 'clarification',
+            inputStage: 'production',
             outcome: 'blocked',
             route: 'full_plan',
-            executionMode: null,
+            executionMode: 'simple',
             activeRunId: 'run-gated',
             terminal: true,
             blockedContext: {
@@ -2485,9 +2600,20 @@ describe('streamViaDaemon', () => {
       history: [{ id: '1', role: 'user', content: '深色，三页' }],
       signal: new AbortController().signal,
       handlers,
+      onRunStatus,
+      onStrategyTaskSettled,
     });
 
-    expect(handlers.onError).toHaveBeenCalledTimes(1);
+    expect(handlers.onError).not.toHaveBeenCalled();
+    expect(handlers.onDone).toHaveBeenCalledTimes(1);
+    expect(onRunStatus).toHaveBeenLastCalledWith('succeeded');
+    expect(onStrategyTaskSettled).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: 'blocked',
+      inputStage: 'production',
+      blockedContext: expect.objectContaining({
+        reasonCodes: ['od_next_protocol_runtime_state_missing'],
+      }),
+    }));
   });
 
   it('reattaches to an existing daemon run after the last stored event id', async () => {
@@ -2674,7 +2800,10 @@ describe('streamViaDaemon', () => {
     }
   });
 
-  it('marks a daemon run failed when the SSE stream closes silently and status is still active', async () => {
+  // P0-24 N15: running out of reconnects is not the run's outcome. With the
+  // daemon still reporting `running`, the run is not reported as failed; the
+  // generic disconnect error still tells the consumer the stream gave up.
+  it('does not mark a daemon run failed when the SSE stream closes silently and status is still active', async () => {
     // 走满 5 次预算的路径现在会**退避**(见 providers/daemon.ts 的
     // DAEMON_STREAM_RECONNECT_BACKOFF_*),整段要十几秒真实时间。用假时钟推,
     // 既保住确定性也不让这一条把套件拖慢。
@@ -2715,7 +2844,7 @@ describe('streamViaDaemon', () => {
       await streaming;
 
       expect(fetchMock.mock.calls.some(([input]) => String(input) === '/api/runs/run-1')).toBe(true);
-      expect(onRunStatus).toHaveBeenCalledWith('failed');
+      expect(onRunStatus).not.toHaveBeenCalledWith('failed');
       expect(handlers.onError).toHaveBeenCalledWith(
         expect.objectContaining({
           message: 'daemon stream disconnected before run completed',

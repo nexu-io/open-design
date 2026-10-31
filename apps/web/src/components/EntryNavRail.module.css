@@ -196,3 +196,72 @@
   background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
   color: var(--accent);
 }
+
+/* A06 final reference cascade: menu touches the trigger, with a count above a
+   bounded 180px scroll region and an inline creation limit below its actions. */
+.workspaceMenu:global(.entry-nav-rail__team-menu) {
+  top: calc(100% - 4px);
+}
+.workspaceMenuHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 9px 9px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+.workspaceCount {
+  color: var(--text-faint, #888);
+  font-size: 11px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.workspaceMenu :global(.entry-nav-rail__workspace-list) {
+  max-height: 180px;
+  scrollbar-width: thin;
+  scrollbar-color: #c8c8c4 transparent;
+}
+.workspaceMenu :global(.entry-nav-rail__workspace-list)::-webkit-scrollbar { width: 4px; }
+.workspaceMenu :global(.entry-nav-rail__workspace-list)::-webkit-scrollbar-thumb { border-radius: 4px; background: #c8c8c4; }
+.workspaceCreateLimited:global(.entry-nav-rail__menu-item) {
+  color: var(--text-faint, #999);
+  cursor: not-allowed;
+}
+.workspaceLimitNote {
+  margin: 0;
+  padding: 2px 9px 7px 31px;
+  color: #d14343;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 18px;
+}
+
+.workspaceCountHidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+
+.workspaceMenu :global(.entry-nav-rail__workspace-list > .entry-nav-rail__menu-item) { height: 32px; }
+.workspaceMenu :global(.entry-nav-rail__workspace-actions > .entry-nav-rail__menu-divider) { margin: 6px 4px; }
+.workspaceMenu :global(.entry-nav-rail__workspace-actions > .entry-nav-rail__menu-item) { height: 34px; padding: 8px 9px; }
+.workspaceMenu :global(.entry-nav-rail__workspace-actions > .entry-nav-rail__menu-item > svg:first-child) { flex: 0 0 auto; }
+
+.workspaceMenu :global(.entry-nav-rail__workspace-list .entry-nav-rail__team-avatar) { line-height: 16.8px; }
+
+.workspaceSelectedMark { margin-left: auto; font-size: 13px; line-height: 18.2px; }
+
+/* The supplied HTML restores neutral ink after leaving the open quota chip. */
+.sharedQuotaPill:global(.entry-top-right-account-pill):not(:global(.entry-top-right-account-pill--upgrade)):has(:global([aria-expanded='true'])):not(:hover) {
+  background: #fafafa;
+  color: #666;
+}
+
+/* An unresolved workspace tier carries no plan identity. */
+.planLoading {
+  display: block;
+  width: 36px;
+  height: 12px;
+  border-radius: 4px;
+  background: currentColor;
+  opacity: .18;
+}

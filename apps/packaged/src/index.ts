@@ -27,6 +27,8 @@ import {
   applyOsLocaleSwitch,
   createSplashWindow,
   setSplashStage,
+  createDesktopStartupTiming,
+  type StartupTiming,
   type DesktopMainHandle,
 } from "@open-design/desktop/main";
 import { releaseChannelFromNamespace, releaseChannelFromVersion } from "@open-design/release";
@@ -65,14 +67,23 @@ import {
 } from "./logging.js";
 import { resolvePackagedNamespacePaths } from "./paths.js";
 import { createObsoleteInstalledOuterRetirement } from "./obsolete-installed-outer.js";
+import {
+  createDeferredDesktopController,
+  isPackagedManagedLaunch,
+  isPackagedPayloadDelegation,
+  markPackagedManagedOuter,
+  supportsDeferredHeadlessDesktop,
+  watchUserDesktopIntent,
+} from "./managed-headless.js";
 import { findPackagedDeeplinkArg, launchPackagedPayloadDesktop } from "./payload-desktop-launch.js";
 import { packagedEntryUrl, registerOdProtocol } from "./protocol.js";
 import { startPackagedSidecars } from "./sidecars.js";
-import { reportStartupFailure, resolveStartupDistinctId } from "./startup-telemetry.js";
+import { classifyStartupFailure, reportLaunchEvent, reportStartupFailure, resolveStartupDistinctId } from "./startup-telemetry.js";
 import { resolvePackagedWindowTitle } from "./window-title.js";
 import { syncWindowsUninstallDisplayVersion } from "./windows-lifecycle.js";
 
 let packagedLogger: PackagedDesktopLogger | null = null;
+let packagedStartupTiming: StartupTiming | null = null;
 const secondInstanceHandoff = createPackagedSecondInstanceHandoff();
 
 // Telemetry context for the fatal-exit path. Populated once config + launcher
@@ -89,8 +100,14 @@ let startupTelemetryContext:
       source: string;
       installationRoot: string;
       nativeModulePath: string | null;
+      channel: string;
+      dataRoot: string;
     }
   | null = null;
+
+async function reportPackagedLaunch(event: Parameters<typeof reportLaunchEvent>[0]["event"], properties: Record<string, unknown>) {
+  if (startupTelemetryContext) await reportLaunchEvent({ ...startupTelemetryContext, event, properties });
+}
 
 function applyPackagedUpdaterEnv(updateMetadataUrl: string | null): void {
   if (updateMetadataUrl == null) return;
@@ -226,7 +243,11 @@ async function main(): Promise<void> {
   if (exitPackagedLauncherForExistingDesktop(existingDesktop, (code) => app.exit(code))) {
     return;
   }
-  if (headlessRequest.headless) {
+  // On macOS a headless runtime runs the full desktop path with its window
+  // deferred, so the same process can become the desktop when the user opens
+  // the app (see managed-headless.ts). Elsewhere headless keeps its own entry.
+  const deferredHeadless = supportsDeferredHeadlessDesktop(headlessRequest);
+  if (headlessRequest.headless && !deferredHeadless) {
     const { runPackagedHeadless } = await import("./headless-runtime.js");
     await runPackagedHeadless(config, headlessRequest);
     return;
@@ -235,7 +256,8 @@ async function main(): Promise<void> {
     delegated,
     resume: handoffResume,
   });
-  if (await launchPackagedPayloadDesktop(launcherRuntime)) {
+  if (isPackagedPayloadDelegation(launcherRuntime)) markPackagedManagedOuter();
+  if (await launchPackagedPayloadDesktop(launcherRuntime, deferredHeadless ? { extraArgs: ["--headless"] } : {})) {
     app.exit(0);
     return;
   }
@@ -243,12 +265,15 @@ async function main(): Promise<void> {
   const paths = launcherRuntime.paths;
   const mcpBootstrap = resolvePackagedMcpBootstrapLaunch({
     installedLaunchPath: launcherRuntime.installedLaunchPath,
+    managed: isPackagedManagedLaunch(launcherRuntime),
   });
 
   // Arm fatal-exit telemetry now that we know the channel key/version. The
   // startPackagedSidecars call below is THE failure this covers (daemon/web
   // dying before reporting status, e.g. issue #4638's missing better-sqlite3).
   startupTelemetryContext = {
+    dataRoot: paths.dataRoot,
+    channel: launchStamp.channel,
     posthogKey: activeConfig.posthogKey,
     posthogHost: activeConfig.posthogHost,
     appVersion: activeConfig.appVersion,
@@ -270,6 +295,14 @@ async function main(): Promise<void> {
       "better_sqlite3.node",
     ),
   };
+
+  // Helper/delegating/headless-only processes are excluded. Node's origin
+  // includes ESM/config work in this process, but not an earlier OS click or
+  // a separate installed launcher process. Early events wait for identity.
+  if (!deferredHeadless) {
+    packagedStartupTiming = createDesktopStartupTiming({ appVersion: activeConfig.appVersion, startupType: "cold" });
+    packagedStartupTiming.mark("runtime_resolved");
+  }
 
   await ensurePackagedNamespacePaths(paths);
   const convergedStamp = launchStamp;
@@ -296,6 +329,9 @@ async function main(): Promise<void> {
     platform: process.platform,
   });
   applyPackagedElectronPathOverrides(paths);
+  // The shared beta feed can replace the entire outer with an unbound build.
+  // Use the existing updater gate for this fixed-environment dogfood package.
+  if (activeConfig.amrEndpointBinding) process.env.OD_UPDATE_ENABLED = "0";
   applyPackagedUpdaterEnv(activeConfig.updateMetadataUrl);
   if (!claimPackagedSingleInstanceLock(app, (argv) => {
     secondInstanceHandoff.handle(findPackagedDeeplinkArg(argv));
@@ -303,6 +339,8 @@ async function main(): Promise<void> {
     return;
   }
   await app.whenReady();
+  const electronReadyAtMs = performance.now();
+  packagedStartupTiming?.mark("electron_ready");
 
   // Show the brand splash IMMEDIATELY, before we await the daemon/web sidecars
   // below. Cold boot otherwise leaves the user staring at no window at all for
@@ -311,7 +349,8 @@ async function main(): Promise<void> {
   // real app has mounted (see createDesktopRuntime). The handle carries the
   // creation timestamp so the runtime's minimum-hold timer counts from here —
   // BEFORE the sidecar boot below — rather than re-adding the delay afterwards.
-  const splash = createSplashWindow();
+  // A deferred headless runtime shows nothing until the user opens the app.
+  let splash: ReturnType<typeof createSplashWindow> | null = deferredHeadless ? null : createSplashWindow();
 
   const runtime = {
     app: APP_KEYS.DESKTOP,
@@ -320,10 +359,16 @@ async function main(): Promise<void> {
     namespace,
     source: convergedStamp.source as SidecarSource,
   } satisfies SidecarRuntimeContext<SidecarStamp>;
+  // The daemon/web peers belong to this process's generation, whose mode is
+  // `headless` for a deferred headless runtime: launchers inspect the peers in
+  // the owner's mode, and MCP registrations address them by that mode.
+  const sidecarRuntime: SidecarRuntimeContext<SidecarStamp> = { ...runtime, mode: convergedStamp.mode };
 
-  const sidecars = await startPackagedSidecars(runtime, paths, {
+  const sidecars = await startPackagedSidecars(sidecarRuntime, paths, {
+    launchContext: packagedStartupTiming?.context(),
     appVersion: activeConfig.appVersion,
     amrProfile: activeConfig.amrProfile,
+    amrEndpointBinding: activeConfig.amrEndpointBinding,
     daemonCliEntry: activeConfig.daemonCliEntry,
     daemonSidecarEntry: activeConfig.daemonSidecarEntry,
     electronNodeCommand: launcherRuntime.electronNodeCommand,
@@ -338,8 +383,10 @@ async function main(): Promise<void> {
     // PR #974 round-5 (lefarcen P2): the Electron entry runs desktop
     // main alongside the daemon, so the import-folder gate must be
     // pinned ON from request 0. See `apps/packaged/src/headless-runtime.ts`
-    // for the windowless counterpart that passes `false`.
-    requireDesktopAuth: true,
+    // for the windowless counterpart that passes `false`. A deferred
+    // headless runtime has no desktop bridge until it is restored; the
+    // gate then activates when desktop main registers its secret.
+    requireDesktopAuth: !deferredHeadless,
     webSidecarEntry: activeConfig.webSidecarEntry,
     webStandaloneRoot: activeConfig.webStandaloneRoot,
     webOutputMode: activeConfig.webOutputMode,
@@ -348,6 +395,12 @@ async function main(): Promise<void> {
     // Both the "spawning" and "ready" edges are mapped so the step counter
     // advances the instant each long native wait clears.
     onPhase(phase) {
+      // Launch events stay buffered on the tracker until desktop main arms the
+      // daemon-backed reporter, so attempt/ready/result share one delivery path
+      // and one installation identity (OPEND-4220). The direct packaged
+      // reporter is reserved for the fatal path below, where no daemon exists.
+      packagedStartupTiming?.mark(phase === "daemon-spawning" ? "daemon_spawning"
+        : phase === "daemon-ready" ? "daemon_ready" : phase === "web-spawning" ? "web_spawning" : "web_ready");
       const stage =
         phase === "daemon-spawning"
           ? "engine"
@@ -356,7 +409,7 @@ async function main(): Promise<void> {
             : phase === "web-spawning"
               ? "interface"
               : "interfaceReady";
-      setSplashStage(splash.window, stage);
+      setSplashStage(splash?.window ?? null, stage);
     },
   });
   if (sidecars.daemon.url) {
@@ -370,11 +423,11 @@ async function main(): Promise<void> {
   // Sidecars are up; the remaining wait is the hidden main window loading and
   // mounting the web bundle (the runtime re-asserts this stage at its reveal
   // gate, which is a no-op when the label is already current).
-  setSplashStage(splash.window, "workspace");
+  setSplashStage(splash?.window ?? null, "workspace");
   // Resolve the web sidecar address per request instead of freezing it here.
   // The restart supervisor may bind a fresh ephemeral port, while a temporary
   // lack of a target should surface as the protocol layer's structured 503.
-  registerOdProtocol(() => sidecars.currentWebUrl());
+  const odProtocol = registerOdProtocol(() => sidecars.currentWebUrl());
 
   const { runDesktopMain } = await import("@open-design/desktop/main");
   let desktopHandle: DesktopMainHandle | null = null;
@@ -382,31 +435,20 @@ async function main(): Promise<void> {
     if (desktopHandle == null) throw new Error("packaged desktop sidecar is not running");
     return await desktopHandle.invoke(action, input);
   };
-  let client!: SidecarClient<DesktopMainHandle>;
-  client = SidecarFactory.create<DesktopMainHandle>({
-    handlers: Object.fromEntries([
-      SIDECAR_MESSAGES.CLICK,
-      SIDECAR_MESSAGES.CONSOLE,
-      SIDECAR_MESSAGES.EVAL,
-      SIDECAR_MESSAGES.EXPORT_ARTIFACT,
-      SIDECAR_MESSAGES.EXPORT_PDF,
-      SIDECAR_MESSAGES.RENDER_FRAMES,
-      SIDECAR_MESSAGES.RENDER_SLIDES,
-      SIDECAR_MESSAGES.SCREENSHOT,
-      SIDECAR_MESSAGES.SHOW,
-      SIDECAR_MESSAGES.UPDATE,
-    ].map((action) => [action, (input: unknown) => invokeDesktop(action, input)])),
-    lifecycle: {
-      async start() {
-        const started = await runDesktopMain(runtime, {
-    splashWindow: splash.window,
-    splashStartedAt: splash.startedAt,
+  const launchDesktop = async (): Promise<DesktopMainHandle> => await runDesktopMain(runtime, {
+    electronReadyAtMs,
+    startupTiming: deferredHeadless ? null : packagedStartupTiming ?? undefined,
+    splashWindow: splash?.window,
+    splashStartedAt: splash?.startedAt,
     async beforeShutdown(record) {
       try {
         await retireObsoleteInstalledOuter();
       } finally {
         await sidecars.close(record);
       }
+    },
+    quiesceRendererTransport() {
+      odProtocol.quiesce();
     },
     async discoverWebUrl() {
       return packagedEntryUrl();
@@ -462,7 +504,48 @@ async function main(): Promise<void> {
       launcherPayloadExtractorPath: activeConfig.resourceRoot == null ? null : join(activeConfig.resourceRoot, "bin", "7z.exe"),
       launcherRuntimePath: launcherRuntime.launcherPaths.runtimePath,
     },
-        });
+  });
+  const deferredDesktop = deferredHeadless
+    ? createDeferredDesktopController({
+      headlessStatus: () => ({
+        pid: process.pid,
+        state: "running",
+        updatedAt: new Date().toISOString(),
+        url: sidecars.currentWebUrl(),
+      }),
+      launch: async () => {
+        splash = createSplashWindow();
+        return await launchDesktop();
+      },
+      onRestoreFailed: (error) => {
+        packagedLogger?.error("failed to restore desktop from headless runtime", { error });
+        if (splash != null && !splash.window.isDestroyed()) splash.window.destroy();
+        splash = null;
+        dialog.showErrorBox(
+          "Open Design",
+          "Open Design could not open its window. Quit Open Design from the Dock and open it again.",
+        );
+      },
+      stopHeadless: async () => { await sidecars.close(); },
+    })
+    : null;
+  let client!: SidecarClient<DesktopMainHandle>;
+  client = SidecarFactory.create<DesktopMainHandle>({
+    handlers: Object.fromEntries([
+      SIDECAR_MESSAGES.CLICK,
+      SIDECAR_MESSAGES.CONSOLE,
+      SIDECAR_MESSAGES.EVAL,
+      SIDECAR_MESSAGES.EXPORT_ARTIFACT,
+      SIDECAR_MESSAGES.EXPORT_PDF,
+      SIDECAR_MESSAGES.RENDER_FRAMES,
+      SIDECAR_MESSAGES.RENDER_SLIDES,
+      SIDECAR_MESSAGES.SCREENSHOT,
+      SIDECAR_MESSAGES.SHOW,
+      SIDECAR_MESSAGES.UPDATE,
+    ].map((action) => [action, (input: unknown) => invokeDesktop(action, input)])),
+    lifecycle: {
+      async start() {
+        const started = deferredDesktop ?? await launchDesktop();
         desktopHandle = started;
         return started;
       },
@@ -474,10 +557,23 @@ async function main(): Promise<void> {
     },
   });
   await client.start();
+  if (deferredDesktop != null) {
+    // A deferred headless runtime is a successful launch of this generation.
+    void confirmPackagedLauncherRuntime(launcherRuntime).catch((error: unknown) => {
+      packagedLogger?.warn("failed to confirm packaged launcher runtime", { error });
+    });
+    watchUserDesktopIntent(app, () => {
+      void deferredDesktop.restore().catch(() => undefined);
+    });
+  }
 }
 
 void main().catch(async (error: unknown) => {
   const isPathAccess = error instanceof PackagedPathAccessError;
+  if (packagedStartupTiming != null) {
+    packagedStartupTiming.setReporter(reportPackagedLaunch);
+    packagedStartupTiming.finish("failed", classifyStartupFailure(error, isPathAccess).failureKind);
+  }
   if (isPathAccess) {
     try {
       dialog.showErrorBox(error.title, error.message);
@@ -496,6 +592,8 @@ void main().catch(async (error: unknown) => {
     await reportStartupFailure({
       error,
       isPathAccess,
+      dataRoot: startupTelemetryContext.dataRoot,
+      launchContext: packagedStartupTiming?.context(),
       posthogKey: startupTelemetryContext.posthogKey,
       posthogHost: startupTelemetryContext.posthogHost,
       distinctId: resolveStartupDistinctId(

@@ -1,4 +1,8 @@
 import fs from 'node:fs';
+import { parseStockSearchRequest, type StockSearchRequest } from '@open-design/contracts';
+import { resolveProjectWritePath, validateProjectPath } from '../projects.js';
+import { stockSearch, StockSearchServiceError, StockSearchInputError } from '../media/stock-search.js';
+import { createStockRecorder } from '../media/stock-telemetry.js';
 import type { Express } from 'express';
 import type {
   HyperFramesScaffoldRequest,
@@ -11,7 +15,9 @@ import type {
 import type { AnalyticsContext } from '../analytics.js';
 import { defaultMediaExecutionPolicy, mediaPolicyDenial } from '../media/policy.js';
 import { formatMediaTaskDiagnostic } from '../media/diagnostics.js';
-import { findMediaModel } from '../media/models.js';
+import { findMediaModel, type MediaModel } from '../media/models.js';
+import { fetchVelaVideoModels } from '../media/vela.js';
+import type { CloudVideoModelsResponse } from '@open-design/contracts';
 import type { ImageGenerationRequestSummary } from '../media/image-generation-retry.js';
 import type { RouteDeps } from '../server-context.js';
 import type {
@@ -31,11 +37,17 @@ import { captureChatArtifactSnapshotFromBytes } from '../chat-artifacts/capture.
 import { resolveChatArtifactQuota } from '../chat-artifacts/quota.js';
 import {
   HYPERFRAMES_SCAFFOLD_TOOL_ENDPOINT,
+  MOTION_REFERENCE_TOOL_ENDPOINT,
+  MOTION_COMPARE_TOOL_ENDPOINT,
+  STOCK_SEARCH_TOOL_ENDPOINT,
   MEDIA_TASK_WAIT_TOOL_ENDPOINT,
   type ToolTokenGrant,
 } from '../tool-tokens.js';
 import { associateLateRunProducedFile } from '../runtimes/run-produced-files.js';
 import { scaffoldHyperFramesComposition } from '../media/hyperframes-scaffold.js';
+import { buildMotionReference, MotionReferenceError } from '../media/motion-reference.js';
+import { compareMotionFilms, MotionCompareError } from '../media/motion-compare.js';
+import path from 'node:path';
 import { assignMediaTaskBatches } from '../media/task-batches.js';
 import { mediaTaskErrorFromFailure } from '../media/task-error.js';
 import { normalizePersistedAutomationWorkspaceScope } from '../automations/workspace-scope.js';
@@ -676,7 +688,28 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       // Analytics is best-effort and must not change the media task outcome.
     }
   };
-  app.get('/api/media/models', (_req, res) => {
+  app.get('/api/media/models', async (req, res) => {
+    if (req.query.cloud === 'true') {
+      if (!isLocalSameOrigin(req, getResolvedPort())) return res.status(403).json({ error: 'cross-origin request rejected' });
+      const grant = optionalToolGrantFromRequest(req, { operation: 'media:generate' });
+      const projectId = grant?.projectId ?? (typeof req.query.projectId === 'string' ? req.query.projectId : '');
+      if (!projectId) return sendApiError(res, 400, 'BAD_REQUEST', 'projectId is required for the scoped cloud catalogue');
+      if (grant) {
+        if (!await ctx.authorizeProjectToolRequest(res, projectId, { mode: 'read' }, grant.runId)) return;
+      } else if (!await ctx.authorizeProjectRequest(req, res, projectId, { mode: 'read' })) return;
+      try {
+        const workspaceId = getWorkspaceProjectByProjectId(db, projectId)?.workspaceId?.trim() || undefined;
+        const available = await fetchVelaVideoModels(workspaceId);
+        const catalogue: CloudVideoModelsResponse = {
+          video: VIDEO_MODELS.filter((model: MediaModel) => model.provider === 'vela'
+            && available.includes(model.id.replace(/^vela\//, ''))),
+          source: 'account_workspace_catalogue',
+        };
+        return res.json(catalogue);
+      } catch {
+        return sendApiError(res, 503, 'MEDIA_CATALOG_UNAVAILABLE', 'Cloud video availability could not be verified; do not infer availability from the static catalogue.');
+      }
+    }
     res.json({
       providers: MEDIA_PROVIDERS,
       image: IMAGE_MODELS,
@@ -996,6 +1029,89 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     }
   });
 
+  const handleStockSearch = async (req: any, res: any, projectId: string, grant: ToolTokenGrant | null, authorizedWorkspaceId?: string | null) => {
+    const project = getProject(db, projectId);
+    if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+    let request: StockSearchRequest;
+    try {
+      request = parseStockSearchRequest(req.body);
+      request.outDir = validateProjectPath(request.outDir ?? 'assets/stock');
+      await resolveProjectWritePath(PROJECTS_DIR, projectId, request.outDir, project.metadata);
+    } catch (err: any) {
+      return sendApiError(res, 400, 'INVALID_STOCK_REQUEST', err.message);
+    }
+    const run = grant?.runId ? design.runs.get(grant.runId) : null;
+    let workspaceId = getWorkspaceProjectByProjectId(db, projectId)?.workspaceId?.trim();
+    if (grant) {
+      const scope = run?.workspaceScope;
+      const bound = scope?.schemaVersion === 1 && scope.projectId === projectId
+        && scope.source === 'persisted_project_binding'
+        && typeof scope.workspaceId === 'string' && Boolean(scope.workspaceId.trim());
+      const accountScoped = scope?.schemaVersion === 1 && scope.projectId === projectId
+        && scope.source === 'unbound_account' && scope.workspaceId === null;
+      if (run?.projectId !== projectId || (!bound && !accountScoped)
+        || (scope.workspaceId ?? null) !== (authorizedWorkspaceId ?? null)) {
+        return sendApiError(res, 403, 'FORBIDDEN', "stock search requires the run's original authorized project workspace");
+      }
+      // A genuine unbound scope stays unbound; absence of proof never borrows
+      // the mutable project's current wallet or the daemon's ambient selection.
+      workspaceId = bound ? scope.workspaceId.trim() : undefined;
+    }
+    const analytics = await mediaAnalyticsContext(req, grant);
+    const recorder = await createStockRecorder({ slotCount: request.slots.length, env: {
+      ...process.env,
+      OD_DATA_DIR: RUNTIME_DATA_DIR,
+      OD_PROJECT_ID: projectId,
+      OD_STOCK_RUN_ID: grant?.runId ?? '',
+      OD_STOCK_SESSION_ID: run?.conversationId ?? '',
+      OD_STOCK_ANALYTICS_DEVICE_ID: analytics?.deviceId ?? '',
+      OD_STOCK_ANALYTICS_SESSION_ID: analytics?.sessionId ?? '',
+      OD_STOCK_ANALYTICS_CLIENT_TYPE: analytics?.clientType ?? '',
+      OD_STOCK_ANALYTICS_LOCALE: analytics?.locale ?? '',
+    } });
+    try {
+      const report = await stockSearch({
+        ...request,
+        cwd: resolveProjectDir(PROJECTS_DIR, projectId, project.metadata),
+        ...(workspaceId ? { workspaceId } : {}),
+        resolveOutputPath: (relative) => resolveProjectWritePath(PROJECTS_DIR, projectId, relative, project.metadata),
+        onAttempt: (event) => { recorder.record(event); },
+      });
+      const collectionStatus = await recorder.finish(report);
+      res.json({ ...report, telemetry: { callId: recorder.callId, collectionStatus } });
+    } catch (err: any) {
+      await recorder.finish({ providers: [], slots: request.slots.map((slot) => ({ ...slot, status: 'error' })) });
+      if (err instanceof StockSearchServiceError) return sendApiError(res, 503, 'STOCK_SEARCH_UNAVAILABLE', err.message);
+      if (err instanceof StockSearchInputError || err.code === 'EPATHESCAPE') return sendApiError(res, 400, 'INVALID_STOCK_REQUEST', err.message);
+      return sendApiError(res, 500, 'STOCK_SEARCH_FAILED', 'stock search could not complete');
+    }
+  };
+
+  app.post(STOCK_SEARCH_TOOL_ENDPOINT, async (req, res) => {
+    const grant = authorizeToolRequest(req, res, 'media:stock-search', { endpoint: STOCK_SEARCH_TOOL_ENDPOINT });
+    if (!grant) return;
+    const authority = await ctx.authorizeProjectToolRequest(res, grant.projectId, { mode: 'write', capability: 'writeFiles' }, grant.runId);
+    if (!authority) return;
+    await handleStockSearch(req, res, grant.projectId, grant, authority.workspace?.workspaceId ?? null);
+  });
+
+  // Existing UI/project clients use the same execution path. Bearer callers
+  // cannot downgrade to browser authority or select a different project.
+  app.post('/api/projects/:id/media/stock-search', async (req, res) => {
+    if (!isLocalSameOrigin(req, getResolvedPort())) return sendApiError(res, 403, 'FORBIDDEN', 'cross-origin request rejected');
+    const bearer = /^Bearer(?:\s|$)/i.test(req.get('authorization')?.trim() ?? '');
+    const grant = bearer ? authorizeToolRequest(req, res, 'media:stock-search', { endpoint: STOCK_SEARCH_TOOL_ENDPOINT }) : null;
+    if (bearer && !grant) return;
+    if (grant && grant.projectId !== req.params.id) return sendApiError(res, 403, 'FORBIDDEN', 'projectId is derived from the tool token');
+    let authorizedWorkspaceId: string | null | undefined;
+    if (grant) {
+      const authority = await ctx.authorizeProjectToolRequest(res, grant.projectId, { mode: 'write', capability: 'writeFiles' }, grant.runId);
+      if (!authority) return;
+      authorizedWorkspaceId = authority.workspace?.workspaceId ?? null;
+    } else if (!await ctx.authorizeProjectRequest(req, res, req.params.id, { mode: 'write', capability: 'writeFiles' })) return;
+    await handleStockSearch(req, res, req.params.id, grant, authorizedWorkspaceId);
+  });
+
   app.post('/api/projects/:id/media/hyperframes/scaffold', async (req, res) => {
     if (!isLocalSameOrigin(req, getResolvedPort())) {
       return res.status(403).json({
@@ -1033,6 +1149,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         res,
         grant.projectId,
         { mode: 'write', capability: 'writeFiles' },
+        grant.runId,
       )) return;
       await handleHyperFramesScaffold(req, res, grant.projectId);
     } catch (err: any) {
@@ -1042,6 +1159,133 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       if (code) body.code = code;
       res.status(status).json(body);
     }
+  });
+
+  // Motion reference pack: measure a user's reference video (attached file or
+  // link) into facts, frames and a contact sheet for replication.
+  const handleMotionReference = async (req: any, res: any, projectId: string) => {
+    const project = getProject(db, projectId);
+    if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+    const body = (req.body ?? {}) as { source?: unknown; id?: unknown };
+    if (typeof body.source !== 'string' || !body.source.trim()) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'source is required (a project file path or an http(s) link)');
+    }
+    const source = body.source.trim();
+    const sourceKind = /^https?:\/\//i.test(source) ? 'url' as const : 'file' as const;
+    const captureReplicationResult = async (props: {
+      result: 'success' | 'failed';
+      durationSec?: number;
+      shotCount?: number;
+      hasAudio?: boolean;
+      failureCode?: string;
+    }) => {
+      // Best effort: a replication never fails because telemetry did. This is
+      // the only product signal that says whether anyone uses replication and
+      // where it stops working — no prompt, no file name, no frame content.
+      try {
+        const context = await mediaAnalyticsContext(req, null);
+        if (!context) return;
+        design.analytics.capture({
+          eventName: 'motion_replicate_result',
+          context,
+          appVersion: design.getAppVersion(),
+          properties: {
+            page_name: 'studio',
+            area: 'motion_replication',
+            project_id: project.id,
+            source_kind: sourceKind,
+            ...props,
+          },
+          // Opaque per-attempt id: never derive it from the source path or link.
+          insertId: `motion_replicate_result:${randomUUID()}`,
+        });
+      } catch {
+        // ignore
+      }
+    };
+    try {
+      const result = await buildMotionReference({
+        projectDir: resolveProjectDir(PROJECTS_DIR, project.id, project.metadata),
+        source: body.source,
+        toolsDir: path.join(RUNTIME_DATA_DIR, 'tools'),
+        rulesFile: path.join(ctx.paths.SKILLS_DIR, 'motion-design', 'references', 'replicate.md'),
+        ...(typeof body.id === 'string' && body.id.trim() ? { id: body.id } : {}),
+      });
+      await captureReplicationResult({
+        result: 'success',
+        durationSec: result.durationSec,
+        shotCount: result.cuts.length + 1,
+        hasAudio: result.hasAudio,
+      });
+      return res.status(201).json(result);
+    } catch (err: any) {
+      if (err instanceof MotionReferenceError) {
+        await captureReplicationResult({ result: 'failed', failureCode: err.code });
+        return sendApiError(res, err.code === 'BAD_REQUEST' ? 400 : 422, err.code, err.message);
+      }
+      await captureReplicationResult({ result: 'failed', failureCode: 'MOTION_REFERENCE_FAILED' });
+      return sendApiError(res, 500, 'MOTION_REFERENCE_FAILED', String(err?.message ?? err));
+    }
+  };
+
+  app.post('/api/projects/:id/media/motion-reference', async (req, res) => {
+    if (!isLocalSameOrigin(req, getResolvedPort())) return sendApiError(res, 403, 'FORBIDDEN', 'cross-origin request rejected');
+    if (!await ctx.authorizeProjectRequest(req, res, req.params.id, { mode: 'write', capability: 'writeFiles' })) return;
+    await handleMotionReference(req, res, req.params.id);
+  });
+
+  app.post(MOTION_REFERENCE_TOOL_ENDPOINT, async (req, res) => {
+    const grant = authorizeToolRequest(req, res, 'media:reference', { endpoint: MOTION_REFERENCE_TOOL_ENDPOINT });
+    if (!grant) return;
+    if (!await ctx.authorizeProjectToolRequest(res, grant.projectId, { mode: 'write', capability: 'writeFiles' }, grant.runId)) return;
+    await handleMotionReference(req, res, grant.projectId);
+  });
+
+  // Motion compare: put the produced film beside the reference at the same
+  // timestamps, so the agent looks at real evidence instead of trusting a
+  // film it remembers writing.
+  const handleMotionCompare = async (req: any, res: any, projectId: string) => {
+    const project = getProject(db, projectId);
+    if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+    const body = (req.body ?? {}) as { reference?: unknown; candidate?: unknown; times?: unknown; cuts?: unknown; id?: unknown };
+    if (typeof body.reference !== 'string' || !body.reference.trim()) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'reference is required (the video the film was made from)');
+    }
+    if (typeof body.candidate !== 'string' || !body.candidate.trim()) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'candidate is required (the film just produced)');
+    }
+    const numbers = (value: unknown): number[] | null => Array.isArray(value)
+      ? value.filter((n): n is number => typeof n === 'number' && Number.isFinite(n))
+      : null;
+    const times = numbers(body.times);
+    const cuts = numbers(body.cuts);
+    try {
+      const result = await compareMotionFilms({
+        projectDir: resolveProjectDir(PROJECTS_DIR, project.id, project.metadata),
+        reference: body.reference,
+        candidate: body.candidate,
+        ...(times ? { times } : {}),
+        ...(cuts ? { cuts } : {}),
+        ...(typeof body.id === 'string' && body.id.trim() ? { id: body.id } : {}),
+      });
+      return res.status(201).json(result);
+    } catch (err: any) {
+      if (err instanceof MotionCompareError) return sendApiError(res, err.status, err.code, err.message);
+      return sendApiError(res, 500, 'MOTION_COMPARE_FAILED', String(err?.message ?? err));
+    }
+  };
+
+  app.post('/api/projects/:id/media/motion-compare', async (req, res) => {
+    if (!isLocalSameOrigin(req, getResolvedPort())) return sendApiError(res, 403, 'FORBIDDEN', 'cross-origin request rejected');
+    if (!await ctx.authorizeProjectRequest(req, res, req.params.id, { mode: 'write', capability: 'writeFiles' })) return;
+    await handleMotionCompare(req, res, req.params.id);
+  });
+
+  app.post(MOTION_COMPARE_TOOL_ENDPOINT, async (req, res) => {
+    const grant = authorizeToolRequest(req, res, 'media:compare', { endpoint: MOTION_COMPARE_TOOL_ENDPOINT });
+    if (!grant) return;
+    if (!await ctx.authorizeProjectToolRequest(res, grant.projectId, { mode: 'write', capability: 'writeFiles' }, grant.runId)) return;
+    await handleMotionCompare(req, res, grant.projectId);
   });
 
   app.post('/api/projects/:id/media/generate', async (req, res) => {
@@ -1097,6 +1341,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         res,
         grant.projectId,
         { mode: 'write', capability: 'writeFiles' },
+        grant.runId,
       )) return;
       await handleGenerate(req, res, { projectId: grant.projectId, grant });
     } catch (err: any) {
@@ -1183,6 +1428,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         res,
         toolGrant.projectId,
         { mode: 'read' },
+        toolGrant.runId,
       )
     ) return;
 

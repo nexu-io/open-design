@@ -1,4 +1,13 @@
+import { homeAutoSendIdentity, stableIdentityDigest, type HomeRequestConcurrencyRejection } from '../runtime/home-auto-send-identity';
+import { withLiveArtifactDeliveries } from '../runtime/live-artifact-delivery';
+import { readAmrRequestConcurrency } from '../runtime/amr-request-concurrency';
+import { newerTaskDisplay } from '../runtime/chat/task-presentation';
+import { useStartupReady } from '../observability/startup-ready';
+import { navigationTiming, useProjectNavigationReady, observeNavigation } from '../observability/navigation-timing';
 import { readRetriedErrorSurface, retriedErrorSurfaceKey, writeRetriedErrorSurface } from '../runtime/chat/retried-error-surface';
+import { runOutcomeAwaitsRunRecord, settleTurnFromRunRecord } from '../runtime/chat/pending-disconnect';
+import type { ObservedPublicShareLink, ObservedShareUpdateRequest } from './share/observed-public-share-link';
+import type { ShareLoginReturn } from './share/share-login-return';
 import {
   startTransition,
   useCallback,
@@ -9,7 +18,6 @@ import {
   useState,
   useSyncExternalStore,
   useLayoutEffect,
-  type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type SetStateAction,
@@ -25,6 +33,7 @@ import {
   type DaemonAgentReconnectState,
   type DaemonAgentRetryState,
   type DaemonReconnectState,
+  type VelaLoginStatus,
   createStrategyTaskBlockedError,
   fetchChatRunStatus,
   GENERIC_DAEMON_DISCONNECT_CODE,
@@ -58,11 +67,9 @@ import {
   fetchLiveArtifacts,
   fetchProjectFiles,
   fetchProjectFileText,
-  fetchSkill,
   invalidateProjectFilesCache,
   patchPreviewCommentSortKey,
   patchPreviewCommentStatus,
-  projectRawUrl,
   uploadProjectFiles,
   upsertPreviewComment,
   writeProjectTextFile,
@@ -80,10 +87,14 @@ import {
   resolveQuestionFormStrategyTaskExecutionId,
   strategySettledMessageFields,
   strategyTaskParkedOnSucceededRun,
+  strategyTaskRunIndex,
 } from '../runtime/strategy-question-continuation';
+import { acknowledgeProjectCompletion, useProjectRunSummaries } from '../hooks/useProjectRunStatuses';
 import {
+  eventsEndedByAskingUser,
   isTodoWriteToolName,
   isWorkspaceLifecycleReadable,
+  turnEndedByAskingUser,
   workspaceBillingAuthorityContext,
   workspacePrincipalKey,
   type AmrWalletSnapshot,
@@ -92,7 +103,6 @@ import {
   type ByokChatProtocol,
   type ChatTaskExecutionAnalytics,
   type ProjectWorkspaceScope,
-  type ResearchOptions,
 } from '@open-design/contracts';
 import {
   anonymizeArtifactId,
@@ -114,11 +124,14 @@ import type {
   TrackingRunRecoveryActionType,
 } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
+import { savedCommentIds } from '@open-design/contracts/analytics';
+import { observeAnalytics } from '../analytics/observe';
 import {
   trackByokPreflightBlocked,
   trackComposerBarClick,
   trackConversationForkClick,
   trackConversationForkResult,
+  trackProjectCommentSendResult,
   trackDesignSystemApplyResult,
   trackDesignSystemEnrichClick,
   trackPageView,
@@ -179,14 +192,20 @@ import {
   isAmrBalanceGateScope,
   type AmrBalanceGateScope,
 } from '../runtime/amr-balance-gate';
+import { checkAmrFundingEvidence, readFreshAmrFundingEvidence } from '../runtime/amr-funding-feedback';
 import {
   amrBalanceBlockedDialog,
   amrBalanceDialogUpgradeIntent,
   amrBalanceUpgradeIntent,
   resolveAmrBalanceBranch,
+  resolveAmrConcurrencyPresentation,
+  withAmrFundingPlan,
+  type AmrBalanceBranch,
   type AmrBalanceBlockedDialogKind,
 } from '../runtime/amr-balance-branch';
 import { AmrBalanceDialog } from './AmrBalanceDialog';
+import { AmrConcurrencyDialog } from './AmrConcurrencyDialog';
+import { isMembershipConcurrencyLimitFailure } from '@open-design/contracts';
 import { AmrOwnerTopUpDialog } from './chat/AmrOwnerTopUpDialog';
 import { markHistoryReplayLanded } from './chat/useCharReveal';
 import { workspaceAutoRechargeUrl, workspaceUpgradeUrl } from './EntryNavRail';
@@ -244,6 +263,7 @@ import {
   loadTabs,
   patchConversation,
   patchProject,
+  registerQueuedSubmission,
   ProjectConversationsHttpError,
   saveMessage,
   startGeneratedPluginShareTask,
@@ -262,6 +282,7 @@ import type {
   InstalledPluginRecord,
   RunContextSelection,
   WorkspaceCollabContext,
+  WorkspaceBillingPreflight,
   WorkspaceContextItem,
 } from '@open-design/contracts';
 import type {
@@ -303,11 +324,12 @@ import { localizePluginTitle } from './plugins-home/localization';
 import { DesignSystemPicker } from './DesignSystemPicker';
 import { PresenceBar } from '../collab/PresenceBar';
 import { useProjectCollab } from '../collab/useProjectCollab';
+import { OwnedContentUpdate } from './OwnedContentUpdate';
 import {
   currentUserDirectoryEntry,
   useTeamMembers,
 } from '../collab/useTeamMembers';
-import { workspaceIdentityCacheKey } from '../collab/workspace-identity';
+import { currentWorkspaceAccountGeneration, workspaceIdentityCacheKey } from '../collab/workspace-identity';
 import {
   useWorkspaceBillingResponse,
   useWorkspaceContext,
@@ -329,13 +351,18 @@ import {
   type ProjectResourceAuthority,
 } from '../collab/collab-context';
 import { persistCommentAnchors } from '../collab/comment-anchor-client';
+import {
+  createSingleflightRunner,
+  reconcileAttachedComments,
+  reconcilePreviewComments,
+} from '../comments/comment-list-refresh';
 import type { AnchorWriteBack } from '../comments';
 import { PluginDetailsModal } from './PluginDetailsModal';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { ChatPane, foldStrategyTaskTurns } from './ChatPane';
 import { trailingMessageIgnoringHostCards } from '../runtime/chat/host-authored-message';
 import historyDockStyles from './chat/ConversationHistoryDock.module.css';
-import type { ChatSendMeta, ChatSendOutcome } from './ChatComposer';
+import type { ChatSendMeta, ChatSendOutcome, RejectedComposerSend } from './ChatComposer';
 import {
   CritiqueTheaterMount,
   useCritiqueTheaterEnabled,
@@ -349,6 +376,7 @@ import {
   selectAutoOpenTurnArtifact,
   selectAutoOpenTurnArtifacts,
 } from './auto-open-file';
+import { nextShareRequestNonce } from './share-request-nonce';
 import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
 import { isDesignSystemProject, resolveProjectDesignSystemId } from './design-system-project';
 import { collectReferencedJsxNames } from '../runtime/jsx-module-refs';
@@ -363,7 +391,22 @@ import {
 } from './design-files/pluginFolderActions';
 import { SHARE_TO_COMMUNITY_PROMPT } from './share-to-community/shareToCommunityPrompt';
 import { CenteredLoader } from './Loading';
-import { ProjectCreationPendingChat } from './ProjectCreationPendingView';
+import { useCreationHandoffMessages } from './useCreationHandoffMessages';
+import {
+  FALLBACK_MAX_CHAT_PANEL_WIDTH,
+  MIN_CHAT_PANEL_WIDTH,
+  MIN_WORKSPACE_PANEL_WIDTH,
+  SPLIT_RESIZE_HANDLE_WIDTH,
+  clampChatPanelWidth,
+  clampPreferredChatPanelWidth,
+  projectSplitClassName,
+  projectSplitStyle,
+  readSavedChatPanelWidth,
+  resolveProjectSplitLayout,
+  saveChatPanelWidth,
+  workspacePanelTrackForMinWidth,
+  writeProjectSplitLayout,
+} from './project-split-layout';
 import type { SettingsSection } from './SettingsDialog';
 import { Toast } from './Toast';
 import { FirstArtifactHint } from './FirstArtifactHint';
@@ -390,13 +433,16 @@ import { createBoundedConcurrency } from '../lib/bounded-concurrency';
 import { buildContinueInCliToast } from '../lib/build-continue-in-cli-toast';
 import { buildClipboardPrompt } from '../lib/build-clipboard-prompt';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
-import { effectiveMaxTokens } from '../state/maxTokens';
 import {
   dismissHomeAttachmentUpload,
   homeAttachmentUploadsFor,
   subscribeHomeAttachmentUploads,
 } from '../state/home-attachment-handoff';
-import { effectiveAgentModelChoice, effectiveAgentModelId } from './agentModelSelection';
+import {
+  effectiveAgentModelChoice,
+  effectiveAgentModelId,
+  selectedAssistantIdentity as resolveSelectedAssistantIdentity,
+} from './agentModelSelection';
 import { mediaExecutionPolicyForProjectMetadata } from '../media/execution-policy';
 import { mediaModelProviderId } from '../media/models';
 import { byokProviderRequiresApiKey } from '../utils/byokProvider';
@@ -440,6 +486,8 @@ type ProjectChatSendMeta = ChatSendMeta & {
    *  lives in the queue item, so a pre-run block (e.g. the AMR balance gate)
    *  must NOT re-queue it — only pause further drains. */
   queueDrain?: boolean;
+  systemSubmission?: boolean;
+  queuedSubmissionId?: string;
   /** The OpenDesign Cloud balance gate already ran for this exact send at
    *  the home submit (with any soft warning answered there); skip re-gating
    *  so the user is never double-prompted for one task. */
@@ -468,6 +516,8 @@ type ProjectChatSendMeta = ChatSendMeta & {
    * 交给队列项保管了,回放时再声称「输入框在等它」就是撒谎。
    */
   composerOwnedDraft?: true;
+  /** Only Home auto-send owns the original Home input and initial request. */
+  initialHomeSend?: true;
   /** Stable task lineage for retries, resumes and clarification answers. */
   taskAnalytics?: ChatTaskExecutionAnalytics;
   /** Explicit daemon-issued OD Next continuation handle. */
@@ -514,6 +564,7 @@ function conversationForkPoint(
 export async function listConversationsWithRetry(
   projectId: string,
   workspaceContext?: WorkspaceCollabContext | null,
+  sharedProject = false,
 ): Promise<Conversation[]> {
   let lastError: unknown;
   for (let attempt = 0; attempt <= CONVERSATION_LOAD_RETRY_DELAYS_MS.length; attempt += 1) {
@@ -531,7 +582,8 @@ export async function listConversationsWithRetry(
       if (
         !(err instanceof ProjectConversationsHttpError)
         || err.status !== 404
-        || workspaceContext?.workspaceType !== 'team'
+        || !workspaceContext
+        || (workspaceContext.workspaceType !== 'team' && !sharedProject)
       ) {
         throw err;
       }
@@ -634,13 +686,35 @@ function localBlockedTurnVerdictUnknownToServer(
   server: ChatMessage,
   local: ChatMessage,
 ): { runStatus: ChatMessage['runStatus']; errorEvent: AgentEvent } | null {
-  if (local.strategyTaskBlocked !== true) return null;
+  if (server.strategyTaskBlocked === false || local.strategyTaskBlocked !== true) return null;
   if (local.runStatus !== 'failed') return null;
   if (!server.runId || server.runId !== local.runId) return null;
   if (terminalErrorEventOf(server)) return null;
   const errorEvent = terminalErrorEventOf(local);
   if (!errorEvent) return null;
   return { runStatus: local.runStatus, errorEvent };
+}
+
+/** Keep a live thinking suffix when an older snapshot has the same event count. */
+function localThinkingExtendsServerSnapshot(server: ChatMessage, local: ChatMessage): boolean {
+  if (!server.runId || server.runId !== local.runId || !isActiveRunStatus(server.runStatus)) {
+    return false;
+  }
+  const serverEvents = server.events ?? [];
+  const localEvents = local.events ?? [];
+  if (serverEvents.length === 0 || serverEvents.length !== localEvents.length) return false;
+  const lastIndex = serverEvents.length - 1;
+  const serverTail = serverEvents[lastIndex];
+  const localTail = localEvents[lastIndex];
+  if (
+    serverTail?.kind !== 'thinking'
+    || localTail?.kind !== 'thinking'
+    || localTail.text.length <= serverTail.text.length
+    || !localTail.text.startsWith(serverTail.text)
+  ) return false;
+  return serverEvents.slice(0, lastIndex).every((event, index) =>
+    JSON.stringify(event) === JSON.stringify(localEvents[index]),
+  );
 }
 
 function mergeServerMessageWithLocal(
@@ -651,11 +725,14 @@ function mergeServerMessageWithLocal(
 ): ChatMessage {
   if (!local) return server;
   const merged: ChatMessage = { ...server };
+  merged.taskDisplay = newerTaskDisplay(local.taskDisplay, server.taskDisplay);
   if (local.role === 'assistant' && server.role === 'assistant' && !absorbedASuccessorRun) {
     if ((local.content?.length ?? 0) > (server.content?.length ?? 0)) {
       merged.content = local.content;
     }
-    if ((local.events?.length ?? 0) > (server.events?.length ?? 0)) {
+    if (!(server.strategyTaskBlocked === false && local.strategyTaskBlocked === true)
+      && ((local.events?.length ?? 0) > (server.events?.length ?? 0)
+        || localThinkingExtendsServerSnapshot(server, local))) {
       merged.events = local.events;
     }
   }
@@ -701,11 +778,9 @@ function mergeServerMessageWithLocal(
   if (!server.runStatus && local.runStatus) {
     merged.runStatus = local.runStatus;
   }
-  // A terminal `blocked` verdict is sticky (the daemon answers every further
-  // continuation of that task with 409 STRATEGY_TASK_STATE_MISMATCH) and the
-  // server row cannot carry it, so a refresh must not quietly un-block the
-  // turn's question form.
-  if (!server.strategyTaskBlocked && local.strategyTaskBlocked) {
+  // Preserve legacy verdicts only when the server has no authoritative value.
+  // An explicit false clears cached protocol blocks after migration.
+  if (server.strategyTaskBlocked === undefined && local.strategyTaskBlocked) {
     merged.strategyTaskBlocked = local.strategyTaskBlocked;
     if (server.strategyTaskBlockedText === undefined) {
       merged.strategyTaskBlockedText = local.strategyTaskBlockedText ?? null;
@@ -814,6 +889,9 @@ function ensureConversationPresent(
 
 interface Props {
   project: Project;
+  workspaceQuotaStatus?: Pick<VelaLoginStatus, 'profile' | 'consoleOrigin'> | null;
+  /** Authenticated daemon profile (or explicit runtime configuration), independent of wallet availability. */
+  amrProfile?: string | null;
   /**
    * Exact project-bound Workspace authority resolved by the route gate.
    * Production deep links pass this instead of borrowing the shell's mutable
@@ -828,6 +906,12 @@ interface Props {
   initialMaterializationPending?: boolean;
   /** Workspace/member authorization lifetime for async title reads. */
   projectAuthorizationKey?: string;
+  onObservedPublicShareLink?: (share: ObservedPublicShareLink | null) => void;
+  observedPublicShareLink?: ObservedPublicShareLink | null;
+  loginUpdateRequest?: ObservedShareUpdateRequest | null;
+  onLoginUpdateRequestHandled?: (nonce: number) => void;
+  shareLoginReturn?: ShareLoginReturn | null;
+  onShareLoginReturnChange?: (request: ShareLoginReturn | null) => void;
   amrAuthRetryContinuation?: AmrAuthRetryContinuation | null;
   onArmAmrAuthRetryContinuation?: (
     continuation: Omit<AmrAuthRetryContinuation, 'accountIdAtArm' | 'createdAtMs'>,
@@ -899,7 +983,7 @@ interface Props {
   onOpenPetSettings?: () => void;
   onBack: () => void;
   onClearPendingPrompt: () => void;
-  onTouchProject: () => void;
+  onTouchProject: (sentAt?: number) => void;
   onProjectChange: (next: Project) => void;
   /** Rename fences from the era of the inline title rename in the chat card.
    *  The card no longer renders a title (OPEND-3128: the project is named once,
@@ -928,17 +1012,31 @@ interface Props {
    * this project can produce a post-run extraction. */
   onRunActivityChange?: (projectId: string, active: boolean) => void;
   /**
-   * The Home send this project was just created from, while its first
-   * transcript is still settling (OPEND-2170). Non-null keeps the hand-off's
-   * chat card on top of the chat column — the same prompt bubble and
-   * preparing row the pending frame already drew — so the column never shows
-   * the whole-pane spinner, the transcript skeleton, or an empty log between
-   * the create answering and the auto-sent turn painting. App clears it on
-   * `onCreationHandoffSettled`.
+   * The Home send this project was just created from (OPEND-3334). App mounts
+   * this view on the click, before `POST /api/projects` answers, and keeps
+   * the record until the first transcript settles (OPEND-2170):
+   *
+   * - `persisted: false` — the project row does not exist on the daemon yet.
+   *   Every project read is held ({@link projectReadsHeldForCreation}); the
+   *   view draws only what this tab already knows.
+   * - `conversationId` — the seed conversation's id, minted with the project
+   *   id, so the chat pane is keyed by its final conversation from the first
+   *   frame and never re-keys when the conversation list answers.
+   * - `prompt` / `files` — the optimistic first turn, drawn under the ids the
+   *   auto-send will use, so the real turn takes over the same rows.
+   *
+   * App clears it on `onCreationHandoffSettled`.
    */
-  creationHandoff?: { prompt: string; files?: readonly File[] } | null;
+  creationHandoff?: {
+    prompt: string;
+    files?: readonly File[];
+    conversationId?: string | null;
+    persisted: boolean;
+  } | null;
   /** The first transcript is on screen (or failed to load): drop the card. */
   onCreationHandoffSettled?: (projectId: string) => void;
+  onInitialHomeRequestConcurrencyRejected?: (input: HomeRequestConcurrencyRejection) => boolean;
+  onInitialHomeRequestProgress?: (projectId: string, clientRequestId: string) => void;
 }
 
 export type ProjectRenameFenceToken = Readonly<{
@@ -955,6 +1053,9 @@ interface QueuedChatSend {
   attachments: ChatAttachment[];
   commentAttachments: ChatCommentAttachment[];
   meta?: ProjectChatSendMeta;
+  // A prior AMR insufficient-funding refusal requires an explicit Send now.
+  // Persist this with the item so a remount cannot silently drain it.
+  manualStartOnly?: boolean;
   createdAt: number;
 }
 
@@ -965,18 +1066,20 @@ interface QueuedChatSendUpdate {
   meta?: ProjectChatSendMeta;
 }
 
+// Split geometry lives in `project-split-layout.ts` (shared with the
+// creation frame, OPEND-3207); re-exported here for existing importers.
+export {
+  defaultChatPanelWidthForSplit,
+  projectSplitClassName,
+  projectSplitStyle,
+} from './project-split-layout';
+
 let liveArtifactEventSequence = 0;
 // The brand-extraction project's design-system (brand kit) preview tab. Mirrors
 // the daemon `BRAND_KIT_FILE` (apps/daemon/src/brands/kit-render.ts); kept as a
 // local literal to respect the web↔daemon boundary.
-const BRAND_KIT_FILE = 'brand.html';
+const _BRAND_KIT_FILE = 'brand.html';
 const BRAND_EMPTY_TRANSCRIPT_RETRY_DELAYS_MS = [120, 500, 1_200, 2_000] as const;
-const CHAT_PANEL_WIDTH_STORAGE_KEY = 'open-design.project.chatPanelWidth';
-const DEFAULT_CHAT_PANEL_WIDTH = 460;
-const MIN_CHAT_PANEL_WIDTH = 345;
-const FALLBACK_MAX_CHAT_PANEL_WIDTH = 720;
-const MIN_WORKSPACE_PANEL_WIDTH = 400;
-const SPLIT_RESIZE_HANDLE_WIDTH = 4;
 const BYOK_OPENCODE_UNAVAILABLE_MESSAGE =
   'BYOK API runs require OpenCode. Install OpenCode, then rescan local agents in Settings before retrying.';
 const BYOK_PROVIDER_REQUIRED_MESSAGE =
@@ -1127,50 +1230,12 @@ const reattachReplayGate = createBoundedConcurrency(REATTACH_REPLAY_CONCURRENCY,
   maxHoldMs: REATTACH_REPLAY_MAX_HOLD_MS,
 });
 
-const MIN_NORMAL_SPLIT_WIDTH =
-  MIN_CHAT_PANEL_WIDTH + SPLIT_RESIZE_HANDLE_WIDTH + MIN_WORKSPACE_PANEL_WIDTH;
 type DesignSystemReviewEntry = NonNullable<ProjectMetadata['designSystemReview']>[string];
 type DesignSystemReviewAgentTask = NonNullable<DesignSystemReviewEntry['agentTask']>;
 interface DesignSystemReviewDetails {
   feedback?: string;
   files?: string[];
   agentTask?: DesignSystemReviewAgentTask;
-}
-
-function workspacePanelMinWidthForSplit(splitWidth: number): number {
-  if (!Number.isFinite(splitWidth) || splitWidth <= 0) return MIN_WORKSPACE_PANEL_WIDTH;
-  return splitWidth < MIN_NORMAL_SPLIT_WIDTH ? 0 : MIN_WORKSPACE_PANEL_WIDTH;
-}
-
-function maxChatPanelWidthForSplit(splitWidth: number): number {
-  if (!Number.isFinite(splitWidth) || splitWidth <= 0) return FALLBACK_MAX_CHAT_PANEL_WIDTH;
-  const workspaceMinWidth = workspacePanelMinWidthForSplit(splitWidth);
-  const viewportAwareMax = splitWidth - SPLIT_RESIZE_HANDLE_WIDTH - workspaceMinWidth;
-  // Keep the established 720px drag ceiling on ordinary windows, widening it
-  // only as far as the equal split on larger project workspaces. That makes
-  // 1:1 reachable without letting the chat drag past and dominate preview.
-  const equalSplitWidth = Math.floor((splitWidth - SPLIT_RESIZE_HANDLE_WIDTH) / 2);
-  const responsiveMax = Math.max(FALLBACK_MAX_CHAT_PANEL_WIDTH, equalSplitWidth);
-  return Math.max(0, Math.min(responsiveMax, Math.floor(viewportAwareMax)));
-}
-
-function clampPreferredChatPanelWidth(width: number): number {
-  return Math.max(MIN_CHAT_PANEL_WIDTH, Math.round(width));
-}
-
-function clampChatPanelWidth(
-  width: number,
-  maxWidth = FALLBACK_MAX_CHAT_PANEL_WIDTH,
-): number {
-  const effectiveMax = Math.max(0, Math.floor(maxWidth));
-  const effectiveMin = Math.min(MIN_CHAT_PANEL_WIDTH, effectiveMax);
-  return Math.min(effectiveMax, Math.max(effectiveMin, Math.round(width)));
-}
-
-export function defaultChatPanelWidthForSplit(splitWidth: number): number {
-  if (!Number.isFinite(splitWidth) || splitWidth <= 0) return DEFAULT_CHAT_PANEL_WIDTH;
-  const equalHalf = (splitWidth - SPLIT_RESIZE_HANDLE_WIDTH) / 2;
-  return clampChatPanelWidth(equalHalf, maxChatPanelWidthForSplit(splitWidth));
 }
 
 function designSystemFeedbackAttachments(
@@ -1401,58 +1466,18 @@ function designSystemNeedsWorkPrompt(
   );
 }
 
-function readSavedChatPanelWidth(): { width: number; customized: boolean } {
-  if (typeof window === 'undefined') {
-    return { width: DEFAULT_CHAT_PANEL_WIDTH, customized: false };
-  }
-  try {
-    const raw = window.localStorage.getItem(CHAT_PANEL_WIDTH_STORAGE_KEY);
-    const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
-    return Number.isFinite(parsed)
-      ? { width: clampPreferredChatPanelWidth(parsed), customized: true }
-      : { width: DEFAULT_CHAT_PANEL_WIDTH, customized: false };
-  } catch {
-    return { width: DEFAULT_CHAT_PANEL_WIDTH, customized: false };
-  }
-}
-
-function saveChatPanelWidth(width: number): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(
-      CHAT_PANEL_WIDTH_STORAGE_KEY,
-      String(clampPreferredChatPanelWidth(width)),
-    );
-  } catch {
-    // localStorage can be unavailable in hardened browser contexts.
-  }
-}
-
 function autoSendFirstMessageKey(projectId: string): string {
   return `od:auto-send-first:${projectId}`;
 }
 
-function stableIdentityDigest(value: string): string {
-  // FNV-1a 64-bit keeps the daemon-facing id bounded while preserving a
-  // deterministic identity across retries and ProjectView remounts.
-  let hash = 0xcbf29ce484222325n;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= BigInt(value.charCodeAt(index));
-    hash = BigInt.asUintN(64, hash * 0x100000001b3n);
-  }
-  return hash.toString(36).padStart(13, '0');
-}
-
-function homeAutoSendIdentity(projectId: string): Pick<
-  ProjectChatSendMeta,
-  'assistantMessageId' | 'clientRequestId' | 'userMessageId'
-> {
-  const handoffId = `home-auto-send-${stableIdentityDigest(projectId)}`;
-  return {
-    clientRequestId: handoffId,
-    userMessageId: `${handoffId}-user`,
-    assistantMessageId: `${handoffId}-assistant`,
-  };
+/**
+ * Whether this view's project resources are off limits: a Home send's project
+ * whose create has not answered yet. Every project read waits on this.
+ */
+export function projectReadsHeldForCreation(
+  creationHandoff: { persisted: boolean } | null | undefined,
+): boolean {
+  return Boolean(creationHandoff && !creationHandoff.persisted);
 }
 
 /**
@@ -1822,10 +1847,6 @@ function appendLiveArtifactEventItem(
   return next.length > 50 ? next.slice(next.length - 50) : next;
 }
 
-export function projectSplitClassName(workspaceFocused: boolean): string {
-  return workspaceFocused ? 'split split-focus' : 'split';
-}
-
 /**
  * Whether a project open should start with the chat pane collapsed (workspace
  * focus mode). Uses `useProjectCollab`'s confirmed shared-non-owner signal
@@ -1874,37 +1895,17 @@ export function buildQuestionFormKey(
     : null;
 }
 
-type ProjectSplitStyle = CSSProperties & {
-  '--project-chat-panel-width': string;
-  '--project-chat-handle-width': string;
-  '--project-workspace-panel-track': string;
-};
-
-export function projectSplitStyle(
-  workspaceFocused: boolean,
-  chatPanelWidth: number,
-  workspacePanelTrack: string,
-): ProjectSplitStyle | undefined {
-  if (workspaceFocused) return undefined;
-  return {
-    '--project-chat-panel-width': `${chatPanelWidth}px`,
-    '--project-chat-handle-width': `${SPLIT_RESIZE_HANDLE_WIDTH}px`,
-    '--project-workspace-panel-track': workspacePanelTrack,
-  };
-}
-
-// Writes the two animatable width custom properties directly (see the
-// `@property` registrations + `.split` / `.split.split-focus` transition
-// rules in shell.css) instead of composing a `gridTemplateColumns` string —
-// the grid layout is always driven by
-// `var(--project-chat-panel-width) var(--project-chat-handle-width) var(--project-workspace-panel-track)`
-// declared once on `.split`, so a plain custom-property write is all a
-// collapse/expand or a live resize needs to animate or track the cursor.
+// The split's three grid custom properties are written directly (see
+// `writeProjectSplitLayout` and the `@property` registrations + `.split` /
+// `.split.split-focus` transition rules in shell.css) instead of composing a
+// `gridTemplateColumns` string, so a collapse/expand or a live resize is a
+// plain custom-property write.
 function applySplitChatPanelWidth(
   split: HTMLDivElement | null,
   width: number,
   workspacePanelTrack: string,
   workspaceFocused: boolean,
+  options: { animate?: boolean } = {},
 ): void {
   if (!split) return;
   if (workspaceFocused) {
@@ -1921,9 +1922,7 @@ function applySplitChatPanelWidth(
     split.style.removeProperty('--project-workspace-panel-track');
     return;
   }
-  split.style.setProperty('--project-chat-panel-width', `${width}px`);
-  split.style.setProperty('--project-chat-handle-width', `${SPLIT_RESIZE_HANDLE_WIDTH}px`);
-  split.style.setProperty('--project-workspace-panel-track', workspacePanelTrack);
+  writeProjectSplitLayout(split, width, workspacePanelTrack, options);
 }
 
 // The media model the user picked in the New Project → Media dialog, keyed by
@@ -2175,6 +2174,8 @@ export function reconcileProjectDetail(
 
 export function ProjectView({
   project,
+  workspaceQuotaStatus,
+  amrProfile,
   workspaceContextOverride,
   initialWorkspaceScope,
   initialProjectDetail,
@@ -2188,6 +2189,12 @@ export function ProjectView({
   resolveAuthoritativeProjectName,
   routeFileName,
   routeConversationId = null,
+  onObservedPublicShareLink,
+  observedPublicShareLink,
+  loginUpdateRequest,
+  onLoginUpdateRequestHandled,
+  shareLoginReturn,
+  onShareLoginReturnChange,
   config,
   agents,
   skills,
@@ -2222,8 +2229,15 @@ export function ProjectView({
   onRunActivityChange,
   creationHandoff = null,
   onCreationHandoffSettled,
+  onInitialHomeRequestConcurrencyRejected,
+  onInitialHomeRequestProgress,
 }: Props) {
   const { locale, t } = useI18n();
+  // A Home send mounts this view before the project row exists on the daemon
+  // (OPEND-3334). Until it does, no project resource is read: every read
+  // would 404, and an unpersisted project must not fan out conversation,
+  // file, or presence requests. The view draws only what this tab knows.
+  const projectReadsHeld = projectReadsHeldForCreation(creationHandoff);
   const amrAuthRetryMountIdRef = useRef<string | null>(null);
   if (amrAuthRetryMountIdRef.current === null) {
     amrAuthRetryMountIdRef.current = randomUUID();
@@ -2295,6 +2309,7 @@ export function ProjectView({
     workspaceContext,
     project.workspaceId,
     initialWorkspaceScope,
+    !projectReadsHeld,
   );
   // The project's resolved scope when there is one. While that first read is
   // pending, the persisted project binding may witness the matching caller;
@@ -2345,6 +2360,8 @@ export function ProjectView({
   }
   const projectRunWorkspaceContext =
     canonicalProjectRunWorkspaceContextRef.current.context;
+  const sharedProjectScope = projectWorkspaceScopeState.scope?.kind !== 'unbound'
+    && projectWorkspaceScopeState.scope?.visibility === 'team';
   const projectResourceAuthority: ProjectResourceAuthority =
     projectWorkspaceScopeState.failure === 'forbidden'
     || projectWorkspaceScopeState.failure === 'unsupported'
@@ -2480,7 +2497,7 @@ export function ProjectView({
   // Team collaboration: presence for a shared project. Dormant (no heartbeat,
   // renders nothing) unless the workspace context marks the viewer an active
   // team member — safe to mount unconditionally.
-  const projectCollab = useProjectCollab(project?.id ?? null, {
+  const projectCollab = useProjectCollab(projectReadsHeld ? null : project?.id ?? null, {
     workspaceContext: projectRunWorkspaceContext,
     workspaceContextLoading: projectWorkspaceScopeState.loading,
     initialMaterializationPending,
@@ -2498,7 +2515,8 @@ export function ProjectView({
   // keyed to `projectCollab.viewerOnly` below so an owner reinstall sees a
   // syncing project, not the misleading “shared by someone else” notice.
   const projectMutationReadOnly =
-    projectCollab.viewerOnly || projectCollab.materializationPending;
+    projectCollab.viewerOnly || projectCollab.materializationPending
+    || projectCollab.contentUpdatePending;
   const { resolve: resolvePresenceMember } = useTeamMembers(
     currentUserDirectoryEntry(projectRunWorkspaceContext),
     projectRunWorkspaceContext,
@@ -2553,6 +2571,7 @@ export function ProjectView({
     projectRunWorkspaceContext,
     project.workspaceId,
     initialProjectDetail,
+    !projectReadsHeld,
   );
   const detailedProject = projectDetail.project?.id === project.id ? projectDetail.project : null;
   const currentProject = reconcileProjectDetail(
@@ -2681,6 +2700,7 @@ export function ProjectView({
       workspaceContext: projectRunWorkspaceContext,
       workspaceContextLoading: projectWorkspaceScopeState.loading,
       projectResourceAuthority,
+      projectVisibility: sharedProjectScope ? 'team' : 'personal',
       onLostAnchors: handleLostAnchors,
     }),
     [
@@ -2688,6 +2708,7 @@ export function ProjectView({
       projectRunWorkspaceContext,
       projectWorkspaceScopeState.loading,
       projectResourceAuthority,
+      sharedProjectScope,
       handleLostAnchors,
     ],
   );
@@ -2712,6 +2733,21 @@ export function ProjectView({
     useRef<ConversationMaterializationRecovery | null>(null);
   const [messageLoadRetryNonce, setMessageLoadRetryNonce] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Claimed by Send/reattach, not by transcript order: a delayed host memory
+  // notification can be appended after the currently running assistant row.
+  const memoryTurnAssistantRef = useRef<{
+    projectId: string;
+    conversationId: string;
+    assistantId: string;
+    observedRunIds: string[];
+  } | null>(null);
+  const observeMemoryRun = useCallback((projectId: string, conversationId: string, assistantId: string, runId: string) => {
+    const owner = memoryTurnAssistantRef.current;
+    if (owner?.projectId === projectId && owner.conversationId === conversationId
+      && owner.assistantId === assistantId && !owner.observedRunIds.includes(runId)) {
+      owner.observedRunIds.push(runId);
+    }
+  }, []);
   const [forkingMessageId, setForkingMessageId] = useState<string | null>(null);
   const [activePluginActionPaths, setActivePluginActionPaths] = useState<Set<string>>(() => new Set());
   const [hiddenAssistantPluginActionPaths, setHiddenAssistantPluginActionPaths] = useState<Set<string>>(() => new Set());
@@ -2725,6 +2761,14 @@ export function ProjectView({
   // attach the runId to.
   const [messagesInitialized, setMessagesInitialized] = useState(false);
   const [previewComments, setPreviewComments] = useState<PreviewComment[]>([]);
+  const [previewCommentsState, setPreviewCommentsState] = useState<'loading' | 'error' | 'success'>('loading');
+  const previewCommentsIdentityRef = useRef('');
+  const previewCommentsReadSeq = useRef(0);
+  const currentCommentsIdentity = `${project.id}\u0000${activeConversationId}\u0000${projectRunAuthorityKey}`;
+  const currentCommentsIdentityRef = useRef(currentCommentsIdentity);
+  currentCommentsIdentityRef.current = currentCommentsIdentity;
+  const visiblePreviewComments = previewCommentsIdentityRef.current === currentCommentsIdentity ? previewComments : [];
+  const visiblePreviewCommentsState = previewCommentsIdentityRef.current === currentCommentsIdentity ? previewCommentsState : 'loading';
   // Every local comment commit invalidates older in-flight list reads. The
   // initial read and the SSE/poll refresher use the same generation as a
   // commit witness, so a slow response can never resurrect a locally deleted
@@ -2884,6 +2928,7 @@ export function ProjectView({
     project.id,
     designMdRefreshKey,
     projectRunWorkspaceContext,
+    !projectReadsHeld,
   );
   const finalize = useFinalizeProject(project.id, projectRunWorkspaceContext);
   const terminalLauncher = useTerminalLaunch();
@@ -2943,12 +2988,28 @@ export function ProjectView({
   const autoOpenedBrandDesignSystemRef = useRef<string | null>(null);
   const brandEmptyTranscriptRetriesRef = useRef<Map<string, number>>(new Map());
   const [chatSeed, setChatSeed] = useState<{ id: string; value: string } | null>(null);
-  // Hard block from the pre-run balance gate (empty wallet or signed out);
-  // non-null renders the AmrBalanceDialog. `conversationId` remembers whose
-  // queue to resume when the dialog resolves (sign-in done / recharge landed).
+  const [concurrencyRejection, setConcurrencyRejection] = useState<{
+    conversationId: string; authorityKey: string; accountGeneration: number; requestId: string;
+    branch: AmrBalanceBranch; workspaceContext: WorkspaceCollabContext | null;
+    preflight: WorkspaceBillingPreflight | null;
+    stage: 'before_run' | 'mid_run' | 'unknown';
+    draft: RejectedComposerSend | null;
+    initialHomeSend: boolean;
+  } | null>(null);
+  const [concurrencyDialogOpen, setConcurrencyDialogOpen] = useState(false);
+  const [fundingRejectedComposerSend, setFundingRejectedComposerSend] = useState<{
+    conversationId: string; authorityKey: string; accountGeneration: number;
+    intentGeneration: number; draft: RejectedComposerSend;
+  } | null>(null);
+  const latestRequestSendRef = useRef(new Map<string, string>());
+  // Sign-in blocks and live gateway funding rejections share these dialogs.
+  // `conversationId` remembers whose sign-in queue may resume. Funding
+  // recovery leaves paused sends under explicit user control.
   const [amrBalanceGateBlock, setAmrBalanceGateBlock] = useState<
     {
       reason: 'insufficient' | 'signed_out';
+      modelId?: string | null;
+      fundingScope?: AmrBalanceGateScope;
       /**
        * 这一档同时唤起哪个弹窗 —— 由**身份**决定(规格 §6.V):`upgrade` 是会员
        * 转化弹窗(owner 那两格共用同一张,T58);`ask_owner` 是「找所有者充值」
@@ -2964,8 +3025,16 @@ export function ProjectView({
        * 工作区,按钮突然指向另一个工作区的账单页。
        */
       upgradeIntent: 'pricing' | 'auto_recharge';
-      snapshot: AmrWalletSnapshot;
+      snapshot: AmrWalletSnapshot | null;
+      profile?: string | null;
+      consoleOrigin?: string | null;
       conversationId: string;
+      /** Live gateway rejections do not wait for a wallet display read. */
+      failureAuthorityKey?: string;
+      fundingRunKey?: string;
+      fundingSource?: 'preflight' | 'gateway';
+      stage: 'before_run' | 'mid_run';
+      workspaceContext?: WorkspaceCollabContext | null;
     } | null
   >(null);
   /**
@@ -3177,6 +3246,26 @@ export function ProjectView({
   );
   const amrBalanceBranchRef = useRef(amrBalanceBranch);
   amrBalanceBranchRef.current = amrBalanceBranch;
+  const concurrencyPresentation = concurrencyRejection
+    ? resolveAmrConcurrencyPresentation({
+        context: concurrencyRejection.workspaceContext,
+        billing: workspaceBillingSummaryForContext(
+          projectRunPreflightBillingResponse, concurrencyRejection.workspaceContext,
+        ),
+        preflight: concurrencyRejection.preflight,
+      })
+    : null;
+  const currentConcurrencyPresentation = resolveAmrConcurrencyPresentation({
+    context: projectRunBillingAuthorityContext,
+    billing: projectRunPreflightBilling,
+  });
+  const concurrencyCardPresentation = concurrencyRejection
+    && concurrencyRejection.conversationId === activeConversationId
+    && concurrencyRejection.authorityKey === projectRunAuthorityKey
+    && concurrencyRejection.accountGeneration === currentWorkspaceAccountGeneration()
+      ? concurrencyPresentation : currentConcurrencyPresentation;
+  const concurrencyCardEligible = concurrencyCardPresentation?.branch.audience === 'member'
+    || concurrencyCardPresentation?.upgradeAllowed === true;
   /**
    * 「找所有者充值」弹窗是从**卡上那颗按钮**点开的(而不是拦截时自动弹出的)。
    * 拦截时自动弹出的那一份记在 `amrBalanceGateBlock.dialog` 上,两者共用同一个
@@ -3201,7 +3290,13 @@ export function ProjectView({
       setAmrOwnerTopUpFromCard(true);
       return;
     }
-    const fallbackProfile = amrBalanceCardProfile;
+    // Archived cards outlive later successful sends, which clear the live
+    // balance-card profile. Use the authenticated runtime for the current
+    // billing entrance, while keeping this project's payer/workspace context.
+    const fallbackProfile = workspaceQuotaStatus
+      ? workspaceQuotaStatus.profile?.trim() || null
+      : amrBalanceCardProfile || config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE || null;
+    const consoleOrigin = workspaceQuotaStatus?.consoleOrigin;
     // 自动充值链接对「可读但不可写」的工作区会返回 null(权限位不同,见
     // `workspaceAutoRechargeUrl`)。那时退回 Pricing —— 少一个功能好过一颗死按钮。
     // 落点和上面那个 `intent` 必须问同一份上下文。分支已经按权威身份算过了,
@@ -3210,9 +3305,9 @@ export function ProjectView({
     // null,把一个 Max 所有者退回套餐页 —— 而同一格的弹窗跳的是自动充值。
     const url =
       (intent === 'auto_recharge'
-        ? workspaceAutoRechargeUrl(projectRunBillingAuthorityContext, { fallbackProfile })
+        ? workspaceAutoRechargeUrl(projectRunBillingAuthorityContext, { fallbackProfile, consoleOrigin })
         : null)
-      ?? workspaceUpgradeUrl(projectRunBillingAuthorityContext, null, { fallbackProfile });
+      ?? workspaceUpgradeUrl(projectRunBillingAuthorityContext, null, { fallbackProfile, consoleOrigin });
     if (!url) return;
     const entrySource =
       intent === 'auto_recharge'
@@ -3234,19 +3329,26 @@ export function ProjectView({
     );
   }, [
     amrBalanceCardProfile,
+    config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE,
     analytics.track,
     config.installationId,
     config.telemetry?.metrics,
     projectRunBillingAuthorityContext,
+    workspaceQuotaStatus?.profile,
+    workspaceQuotaStatus?.consoleOrigin,
   ]);
   // Conversations with a balance-gate check currently in flight. Sends that
   // arrive during the check queue instead of racing a duplicate run through
   // the not-yet-busy window the gate's await opens.
   const amrGateInFlightConversationsRef = useRef<Set<string>>(new Set());
+  // A hint read is not an accepted/queued send. Repeated submissions wait for
+  // another explicit user action rather than queueing behind this advisory read.
+  const amrConcurrencyReadsRef = useRef(new Set<string>());
   // Conversations whose queue auto-drain is paused because the balance gate
   // blocked a send. Without the pause, every unrelated re-run of the drain
-  // effect would re-hit the wallet endpoint and re-pop the dialog. Lifted by
-  // the next send that passes the gate.
+  // effect would re-hit the wallet endpoint and re-pop the dialog. A later
+  // allowed send lifts this in-memory guard; funding-refused queue items also
+  // carry a durable manual-start marker across remounts.
   const amrGatePausedQueueConversationsRef = useRef<Set<string>>(new Set());
   /**
    * 被余额硬拦下来的那一发的 `clientRequestId`(OPEND-2719)。
@@ -3392,6 +3494,42 @@ export function ProjectView({
   const streamingConversationIdRef = useRef<string | null>(null);
   const [queuedChatSends, setQueuedChatSends] = useState<QueuedChatSend[]>([]);
   const queuedChatSendsRef = useRef<QueuedChatSend[]>([]);
+  // A busy "Send now" first stops the live run, then the drain effect sends
+  // exactly the queue item the user selected. Keep that one-click intent
+  // distinct from the durable funding pause on every other queued item.
+  const explicitlyStartedQueuedSendIdRef = useRef<string | null>(null);
+  const busyQueuedSendPreflightRef = useRef<string | null>(null);
+  const requireManualStartAfterFundingRefusal = useCallback((conversationId: string) => {
+    const current = queuedChatSendsRef.current;
+    if (!current.some((item) => item.conversationId === conversationId && !item.manualStartOnly)) return;
+    const next = current.map((item) => item.conversationId === conversationId
+      ? { ...item, manualStartOnly: true }
+      : item);
+    queuedChatSendsRef.current = next;
+    setQueuedChatSends(next);
+    saveQueuedChatSends(project.id, next);
+  }, [project.id]);
+  /**
+   * Queued sends whose drain has been handed to `handleSend` but not yet
+   * settled. Invariant: a queue card is visible only while its send is still
+   * waiting — once the drain starts, the turn is already painted in the
+   * transcript (OPEND-2614), so the card leaves with it instead of lingering
+   * through the AMR balance preflight (OPEND-3221). The item itself stays in
+   * the durable queue until `handleSend` settles: a refused drain relies on it
+   * being there (`queueDrain` never re-queues), and clearing the id then shows
+   * the card again.
+   */
+  const [startingQueuedChatSendIds, setStartingQueuedChatSendIds] =
+    useState<ReadonlySet<string>>(() => new Set());
+  const setQueuedChatSendStarting = useCallback((id: string, starting: boolean) => {
+    setStartingQueuedChatSendIds((current) => {
+      if (current.has(id) === starting) return current;
+      const next = new Set(current);
+      if (starting) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
   // A BYOK preflight can reject a send before any Run exists. Keep that
   // submission's task identity in memory so fixing Settings and resubmitting
   // the same draft completes the original task funnel instead of fabricating a
@@ -3586,6 +3724,126 @@ export function ProjectView({
   }, [project.id]);
   const projectRunAuthorityKeyRef = useRef(projectRunAuthorityKey);
   projectRunAuthorityKeyRef.current = projectRunAuthorityKey;
+  const shownFundingFailuresRef = useRef(new Set<string>());
+  const fundingDialogContext = {
+    isAmr: config.mode === 'daemon' && config.agentId === 'amr',
+    profile: workspaceQuotaStatus?.profile?.trim() || (amrProfile !== undefined
+      ? amrProfile : config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE || null),
+    consoleOrigin: workspaceQuotaStatus?.consoleOrigin,
+    branch: amrBalanceBranch,
+    scope: amrBalanceCardScope,
+    workspaceContext: projectRunBillingAuthorityContext,
+    modelId: effectiveAgentModelId(agents.find((agent) => agent.id === 'amr'), config.agentModels?.amr),
+  };
+  const fundingDialogContextRef = useRef(fundingDialogContext);
+  fundingDialogContextRef.current = fundingDialogContext;
+  // A → B → A is still a new selection intent. Comparing only the current
+  // model/workspace would let A's first, delayed preflight authorize or block
+  // the later A draft. Gateway feedback remains owned by its admitted run.
+  const fundingSelectionKey = JSON.stringify([
+    project.id,
+    projectRunAuthorityKey,
+    config.mode,
+    config.agentId,
+    fundingDialogContext.modelId,
+  ]);
+  const fundingSelectionRef = useRef({
+    key: fundingSelectionKey,
+    generation: 0,
+  });
+  if (fundingSelectionRef.current.key !== fundingSelectionKey) {
+    fundingSelectionRef.current = {
+      key: fundingSelectionKey,
+      generation: fundingSelectionRef.current.generation + 1,
+    };
+  }
+
+  const concurrencyIntentKey = JSON.stringify([fundingSelectionKey, activeConversationId]);
+  const concurrencyIntentRef = useRef({ key: concurrencyIntentKey, generation: 0 });
+  if (concurrencyIntentRef.current.key !== concurrencyIntentKey) {
+    concurrencyIntentRef.current = {
+      key: concurrencyIntentKey, generation: concurrencyIntentRef.current.generation + 1,
+    };
+  }
+
+  // AMR funding feedback owns one dialog in its original conversation/account.
+  // Display-wallet reads and historical replays cannot open or reopen it.
+  const showAmrFundingFailure = useCallback((input: {
+    code: string | undefined;
+    runKey: string;
+    conversationId: string;
+    authorityKey: string;
+    accountGeneration: number;
+    source?: 'preflight' | 'gateway';
+    modelId?: string | null;
+    preflight?: WorkspaceBillingPreflight | null;
+  }) => {
+    if (
+      input.code !== AMR_INSUFFICIENT_BALANCE_CODE
+      || project.id !== projectIdRef.current
+      || input.authorityKey !== projectRunAuthorityKeyRef.current
+      || input.accountGeneration !== currentWorkspaceAccountGeneration()
+    ) return;
+    const source = input.source ?? 'gateway';
+    // Only a real gateway failure pauses pending sends; an independent
+    // preflight read never cancels a run or changes task status. The run can
+    // fail after the user has switched conversations. Its pending sends still
+    // belong to the original conversation and must stay paused
+    // across reload; only the visible dialog depends on the active pane.
+    if (source === 'gateway') {
+      amrGatePausedQueueConversationsRef.current.add(input.conversationId);
+      requireManualStartAfterFundingRefusal(input.conversationId);
+    }
+    if (
+      input.conversationId !== messagesConversationIdRef.current
+      || !fundingDialogContextRef.current.isAmr
+      || (input.source === 'preflight' && input.modelId !== fundingDialogContextRef.current.modelId)
+    ) return;
+    const key = `${input.accountGeneration}:${input.conversationId}:${input.runKey}`;
+    if (shownFundingFailuresRef.current.has(key)) {
+      if (source === 'gateway') setAmrBalanceGateBlock((previous) =>
+        previous?.fundingRunKey === input.runKey ? { ...previous, fundingSource: source, stage: 'mid_run' } : previous);
+      return;
+    }
+    shownFundingFailuresRef.current.add(key);
+    const { branch: displayBranch, scope, workspaceContext, modelId, profile, consoleOrigin } = fundingDialogContextRef.current;
+    const branch = source === 'preflight'
+      ? withAmrFundingPlan(displayBranch, workspaceContext, input.preflight)
+      : displayBranch;
+    setAmrBalanceGateBlock({
+      reason: 'insufficient',
+      dialog: amrBalanceBlockedDialog(branch),
+      upgradeIntent: amrBalanceDialogUpgradeIntent(branch),
+      snapshot: null,
+      profile,
+      consoleOrigin,
+      modelId,
+      fundingScope: scope,
+      workspaceContext,
+      conversationId: input.conversationId,
+      failureAuthorityKey: input.authorityKey,
+      fundingRunKey: input.runKey,
+      fundingSource: source,
+      stage: source === 'preflight' ? 'before_run' : 'mid_run',
+    });
+  }, [project.id, requireManualStartAfterFundingRefusal]);
+  useEffect(() => {
+    if (amrBalanceGateBlock?.failureAuthorityKey === undefined) return;
+    if (amrBalanceGateBlock.conversationId !== activeConversationId
+      || amrBalanceGateBlock.failureAuthorityKey !== projectRunAuthorityKey
+      || config.mode !== 'daemon' || config.agentId !== 'amr') {
+      setAmrBalanceGateBlock(null);
+    }
+  }, [activeConversationId, projectRunAuthorityKey, amrBalanceGateBlock, config.mode, config.agentId]);
+  useEffect(() => {
+    if (concurrencyRejection && (concurrencyRejection.conversationId !== activeConversationId
+      || concurrencyRejection.authorityKey !== projectRunAuthorityKey
+      || concurrencyRejection.accountGeneration !== currentWorkspaceAccountGeneration()
+      || config.mode !== 'daemon' || config.agentId !== 'amr')) {
+      setConcurrencyDialogOpen(false);
+      setConcurrencyRejection(null);
+    }
+  }, [concurrencyRejection, activeConversationId, projectRunAuthorityKey, config.mode, config.agentId]);
   const conversationsLoadedProjectIdRef = useRef<string | null>(null);
   // Live mirror of the full project prop, for async handlers whose useCallback
   // deps only track `project.id` (e.g. the project-events handler below):
@@ -3654,6 +3912,8 @@ export function ProjectView({
   const currentConversationBusy = currentConversationReadPending
     || currentConversationStreaming
     || currentConversationHasActiveRun;
+  const currentConversationBusyRef = useRef(currentConversationBusy);
+  currentConversationBusyRef.current = currentConversationBusy;
   const currentConversationAwaitingActiveRunAttach =
     currentConversationHasActiveRun
     && !currentConversationStreaming
@@ -3714,7 +3974,9 @@ export function ProjectView({
 
   const currentConversationQueuedItems = activeConversationId
     ? queuedChatSends
-        .filter((item) => item.conversationId === activeConversationId)
+        .filter((item) =>
+          item.conversationId === activeConversationId
+          && !startingQueuedChatSendIds.has(item.id))
         .map((item) => {
           const queuedItem = {
             id: item.id,
@@ -3727,6 +3989,32 @@ export function ProjectView({
         })
     : [];
   const newConversationDisabled = creatingConversation || projectMutationReadOnly;
+  // CS03: actionable business Ready, independent of the chat first-paint
+  // metric. Never accept a stale transcript or a merely mounted placeholder.
+  const projectInteractiveReady = Boolean(
+      detailedProject
+      && !projectDetail.loading
+      && !projectWorkspaceScopeState.loading
+      && !projectWorkspaceScopeState.failure
+      && activeConversationId
+      && messagesConversationId === activeConversationId
+      && messagesInitialized
+      && messagesAuthorityKeyRef.current === projectRunAuthorityKey
+      && !currentConversationSendDisabled
+      && !newConversationDisabled
+    );
+  useStartupReady({ visible: Boolean(detailedProject && !projectDetail.loading), interactive: projectInteractiveReady });
+  useProjectNavigationReady({
+    projectId: project.id,
+    conversationId: activeConversationId,
+    visible: Boolean(detailedProject && !projectDetail.loading),
+    ready: projectInteractiveReady,
+    failure: projectWorkspaceScopeState.failure ? 'scope_unavailable'
+      : projectDetail.error ? 'project_unavailable'
+      : conversationLoadFailure ? 'conversations_unavailable'
+      : activeConversationId && failedMessagesConversationId === activeConversationId
+        ? 'messages_unavailable' : null,
+  });
   const activeCompletionNotificationRunsRef = useRef<Set<string>>(new Set());
   const completedNotificationRunsRef = useRef<Set<string>>(new Set());
 
@@ -3734,6 +4022,7 @@ export function ProjectView({
   // pre-conversations, or a freshly created one whose default seed got
   // dropped), create one on the fly.
   useEffect(() => {
+    if (projectReadsHeld) return;
     let cancelled = false;
     const revalidatingCurrentProject =
       conversationsLoadedProjectIdRef.current === project.id;
@@ -3763,6 +4052,7 @@ export function ProjectView({
         const list = await listConversationsWithRetry(
           project.id,
           requestWorkspaceContext,
+          sharedProjectScope,
         );
         if (cancelled) return;
         conversationsLoadedProjectIdRef.current = project.id;
@@ -3802,7 +4092,8 @@ export function ProjectView({
         const materializationRecovery =
           err instanceof ProjectConversationsHttpError
           && err.status === 404
-          && requestWorkspaceContext?.workspaceType === 'team'
+          && requestWorkspaceContext
+          && (requestWorkspaceContext?.workspaceType === 'team' || sharedProjectScope)
             ? {
                 projectId: project.id,
                 authorityKey: projectRunAuthorityKey,
@@ -3838,7 +4129,9 @@ export function ProjectView({
     commitPreviewComments,
     conversationMaterializationGenerationController,
     project.id,
+    projectReadsHeld,
     projectRunAuthorityKey,
+    sharedProjectScope,
   ]);
 
   const recoverMaterializedConversations = useCallback(async (
@@ -4034,6 +4327,9 @@ export function ProjectView({
   // conversation switches.
   useEffect(() => {
     if (!activeConversationId) {
+      ++previewCommentsReadSeq.current;
+      previewCommentsIdentityRef.current = '';
+      setPreviewCommentsState('loading');
       setMessages([]);
       setMessagesInitialized(false);
       commitPreviewComments([]);
@@ -4112,7 +4408,15 @@ export function ProjectView({
       setArtifact(null);
       savedArtifactRef.current = null;
     }
+    const commentIdentity = `${project.id}\u0000${activeConversationId}\u0000${projectRunAuthorityKey}`;
+    if (previewCommentsIdentityRef.current !== commentIdentity) {
+      previewCommentsIdentityRef.current = commentIdentity;
+      commitPreviewComments([]);
+      setAttachedComments([]);
+    }
+    setPreviewCommentsState('loading');
     const commentsGeneration = previewCommentsGenerationRef.current;
+    const commentsReadSeq = ++previewCommentsReadSeq.current;
     if (!reloadingCurrentConversation && !preservingLiveConversation && !preservingLoadedTranscript) {
       messagesConversationIdRef.current = null;
       messagesAuthorityKeyRef.current = null;
@@ -4130,11 +4434,11 @@ export function ProjectView({
           activeConversationId,
           requestWorkspaceContext,
         ).then((comments) => {
-          if (cancelled || previewCommentsGenerationRef.current !== commentsGeneration) return;
-          setPreviewComments(comments);
+          if (cancelled || previewCommentsReadSeq.current !== commentsReadSeq) return;
+          setPreviewCommentsState('success');
+          if (previewCommentsGenerationRef.current === commentsGeneration) setPreviewComments((current) => reconcilePreviewComments(current, comments));
         }).catch(() => {
-          if (cancelled || previewCommentsGenerationRef.current !== commentsGeneration) return;
-          if (!reloadingCurrentConversation) setPreviewComments([]);
+          if (!cancelled && previewCommentsReadSeq.current === commentsReadSeq) setPreviewCommentsState('error');
         });
         const list = await loadConversationTranscript(
           project.id,
@@ -4283,6 +4587,34 @@ export function ProjectView({
     reattachTextBuffersRef.current.clear();
   }, []);
 
+  /*
+   * P0-24 "已查看": the user has seen this project's latest result whenever this
+   * view is showing it with the window in front — including a run that ends
+   * while they are here in another conversation (product answer P2). Keep the
+   * project's run status live while it is open, and spend its new-result
+   * notice (the sidebar's blue dot) as soon as one appears or the window comes
+   * back to the front. Opening the project from anywhere — the rail, search,
+   * the project list, a notification or a link — goes through here.
+   */
+  const viewedProjectRunSummaries = useProjectRunSummaries([project.id], {
+    workspaceContext: projectRunWorkspaceContext,
+  });
+  const viewedProjectRunSummary = viewedProjectRunSummaries.get(project.id);
+  useEffect(() => {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return undefined;
+    const spendViewedNotice = () => {
+      if (document.hidden || !document.hasFocus()) return;
+      acknowledgeProjectCompletion(project.id);
+    };
+    spendViewedNotice();
+    window.addEventListener('focus', spendViewedNotice);
+    document.addEventListener('visibilitychange', spendViewedNotice);
+    return () => {
+      window.removeEventListener('focus', spendViewedNotice);
+      document.removeEventListener('visibilitychange', spendViewedNotice);
+    };
+  }, [project.id, viewedProjectRunSummary]);
+
   const notifyCompletedRun = useCallback((last: ChatMessage) => {
     // Round 7 (mrcfps @ useDesignMdState.ts:131): a chat turn just
     // settled — conversation updatedAt almost certainly moved, so
@@ -4290,43 +4622,54 @@ export function ProjectView({
     // file mutations or live artifacts.
     setDesignMdRefreshKey((n) => n + 1);
 
-    const status =
-      last.resultDeliveryState === 'no_result' ||
-      last.resultDeliveryState === 'delivery_failed'
-        ? 'failed'
-        : last.runStatus;
+    // P0-24: the run record alone names the outcome. A delivery outcome
+    // (`no_result` / `delivery_failed`) no longer turns a finished run into a
+    // failure notification; a stopped run sends nothing.
+    const status = last.runStatus;
     if (status !== 'succeeded' && status !== 'failed') return;
 
-    const cfg = config.notifications ?? DEFAULT_NOTIFICATIONS;
-    if (cfg.soundEnabled) {
-      playSound(status === 'succeeded' ? cfg.successSoundId : cfg.failureSoundId);
-    }
+    // P0-24 N10: on the desktop every turn is announced by the app-root feed
+    // (`useGlobalRunNotices`), wherever the user is; announcing here too would
+    // notify twice. The web has no global feed and keeps this one.
+    if (isOpenDesignHostAvailable()) return;
 
-    if (cfg.desktopEnabled) {
-      // System notifications are useful only when the task is not already in
-      // front of the user. Sounds remain independent feedback for both states.
-      const isHidden = typeof document !== 'undefined' && document.hidden;
-      const isFocused = typeof document === 'undefined' ? true : document.hasFocus();
-      if (isHidden || !isFocused) {
-        const title = status === 'succeeded'
-          ? t('notify.successTitle')
-          : t('notify.failureTitle');
-        const fallbackBody = status === 'succeeded'
-          ? t('notify.successBody')
-          : t('notify.failureBody');
-        const trimmed = (last.content ?? '').trim();
-        const body = trimmed ? trimmed.slice(0, 80) : fallbackBody;
-        void showCompletionNotification({
-          status,
-          title,
-          body,
-          onClick: () => {
-            if (typeof window !== 'undefined') window.focus();
-          },
-        });
+    // Feedback is only for a turn the user is not watching: this view shows the
+    // active conversation, so "not viewing" is the window being hidden or
+    // unfocused.
+    const isHidden = typeof document !== 'undefined' && document.hidden;
+    const isFocused = typeof document === 'undefined' ? true : document.hasFocus();
+    if (!isHidden && isFocused) return;
+
+    // The sound belongs to the notification (P0-24 rule ④, product answer Q2):
+    // "桌面通知" decides whether one is shown, "提示音" whether it makes a sound.
+    // Desktop notifications off, permission denied or the show failing all
+    // mean no notification, and so no sound either.
+    const cfg = config.notifications ?? DEFAULT_NOTIFICATIONS;
+    if (!cfg.desktopEnabled) return;
+
+    // Fixed copy, never the reply text: a reply can open with markup such as
+    // `<question-form …>` or `<od-done …/>`, which must not reach the body.
+    const asksUser =
+      status === 'succeeded'
+      && (turnEndedByAskingUser(last.content) || eventsEndedByAskingUser(last.events));
+    const body = status === 'failed'
+      ? t('notify.runFailedBody')
+      : asksUser
+        ? t('notify.needsReplyBody')
+        : t('notify.newReplyBody');
+    void showCompletionNotification({
+      status,
+      title: project.name,
+      body,
+      onClick: () => {
+        if (typeof window !== 'undefined') window.focus();
+      },
+    }).then((result) => {
+      if (result === 'shown' && cfg.soundEnabled) {
+        playSound(status === 'succeeded' ? cfg.successSoundId : cfg.failureSoundId);
       }
-    }
-  }, [config.notifications, t]);
+    });
+  }, [config.notifications, project.name, t]);
 
   // Fire completion feedback from assistant run-status transitions rather than
   // from the local SSE listener state. A run can finish while its conversation
@@ -4343,6 +4686,9 @@ export function ProjectView({
       }
       if (message.runStatus !== 'succeeded' && message.runStatus !== 'failed') continue;
       if (message.runStatus === 'succeeded' && designDeliveryVerificationPending(message)) continue;
+      // P0-24 N15: the browser losing the stream is not the run's outcome. Do
+      // not notify, and do not mark it notified: the real result still will.
+      if (runOutcomeAwaitsRunRecord(message)) continue;
       if (!keys.some((key) => activeCompletionNotificationRunsRef.current.has(key))) continue;
       if (keys.some((key) => completedNotificationRunsRef.current.has(key))) continue;
       for (const key of keys) completedNotificationRunsRef.current.add(key);
@@ -4356,6 +4702,7 @@ export function ProjectView({
   // load, every mutation flows through saveTabsState() which keeps DB +
   // local state coherent.
   useEffect(() => {
+    if (projectReadsHeld) return;
     let cancelled = false;
     const requestWorkspaceContext = projectRunWorkspaceContextRef.current;
     tabsLoadedRef.current = false;
@@ -4406,7 +4753,7 @@ export function ProjectView({
     return () => {
       cancelled = true;
     };
-  }, [project.id, projectRunAuthorityKey]);
+  }, [project.id, projectReadsHeld, projectRunAuthorityKey]);
 
   // Debounce the canonical (daemon + SQLite) tab-state write. The embedded
   // browser fans out url/title/favicon updates in bursts on a single page load
@@ -4531,7 +4878,7 @@ export function ProjectView({
   }, []);
 
   const refreshProjectFiles = useCallback(async (
-    options?: { fresh?: boolean },
+    options?: { fresh?: boolean; afterChange?: boolean },
     onAcceptedGeneration?: (generation: number) => void,
   ): Promise<ProjectFile[]> => {
     const requestSeq = ++projectFilesRequestSeqRef.current;
@@ -4542,6 +4889,7 @@ export function ProjectView({
         workspaceContext: projectRunWorkspaceContextRef.current,
         requireAuthoritative: true,
         ...(options?.fresh ? { fresh: true } : {}),
+        ...(options?.afterChange ? { afterChange: true } : {}),
       });
     } catch {
       // A transport/HTTP failure is not an authoritative empty directory.
@@ -4609,12 +4957,13 @@ export function ProjectView({
     options?: { freshProjectFiles?: boolean },
     onAcceptedFilesGeneration?: (generation: number) => void,
   ): Promise<ProjectFile[]> => {
+    if (projectReadsHeld) return [];
     const [nextFiles] = await Promise.all([
       refreshProjectFiles({ fresh: options?.freshProjectFiles }, onAcceptedFilesGeneration),
       refreshLiveArtifacts(),
     ]);
     return nextFiles;
-  }, [refreshLiveArtifacts, refreshProjectFiles]);
+  }, [projectReadsHeld, refreshLiveArtifacts, refreshProjectFiles]);
 
   const recordManualFileWrite = useCallback((file: ProjectFile) => {
     for (const [controller, run] of manualFileWritesByRunRef.current) {
@@ -5539,8 +5888,10 @@ export function ProjectView({
         const next = curr.map((m) => {
           if (m.id !== messageId) return m;
           const updated = updater(m);
-          saved = updated;
-          return updated;
+          const taskDisplay = newerTaskDisplay(m.taskDisplay, updated.taskDisplay);
+          const merged = taskDisplay === updated.taskDisplay ? updated : {...updated, taskDisplay};
+          saved = merged;
+          return merged;
         });
         // Same phantom guard as persistMessage: skip writes for a daemon
         // assistant row that is still in-flight (active runStatus, no runId).
@@ -5790,30 +6141,10 @@ export function ProjectView({
   // monogram; stamping the user's currently-selected design agent makes its
   // avatar and role name follow that selection (Claude by default), matching how
   // handleSend identifies a real turn.
-  const selectedAssistantIdentity = useMemo<{
-    agentId: string | undefined;
-    agentName: string | undefined;
-  }>(() => {
-    if (config.mode === 'daemon') {
-      const selectedAgent = config.agentId ? agentsById.get(config.agentId) : null;
-      const selectedAgentChoice = config.agentId
-        ? config.agentModels?.[config.agentId]
-        : undefined;
-      const effectiveChoice = effectiveAgentModelChoice(selectedAgent, selectedAgentChoice);
-      return {
-        agentId: config.agentId ?? undefined,
-        agentName: agentModelDisplayName(
-          config.agentId,
-          selectedAgent?.name,
-          effectiveChoice?.model,
-        ),
-      };
-    }
-    return {
-      agentId: apiProtocolAgentId(config.apiProtocol),
-      agentName: apiProtocolModelLabel(config.apiProtocol, config.model),
-    };
-  }, [config, agentsById]);
+  const selectedAssistantIdentity = useMemo(
+    () => resolveSelectedAssistantIdentity(config, agents),
+    [config, agents],
+  );
 
   // One-shot: when extraction is blocked by an anti-bot wall (or has stalled past
   // the timeout), drop the assist card into the conversation so the user can
@@ -5866,34 +6197,80 @@ export function ProjectView({
   // conversation, so the card is still there after a reload. A batch that wrote
   // nothing never reaches here, so the block simply does not appear at 0 — the
   // draft's rule for every "empty means gone" surface in the panel.
+  const activeMemoryAssistant = messagesConversationId === activeConversationId
+    ? messages.filter(message => message.role === 'assistant' && isActiveRunStatus(message.runStatus)).at(-1)
+    : undefined;
+  useEffect(() => {
+    // A persisted active run is an explicit owner even before its reattach
+    // request completes. Retain its row for the subsequent terminal render.
+    if (activeConversationId && activeMemoryAssistant) {
+      const owner = memoryTurnAssistantRef.current;
+      if (owner?.projectId !== project.id || owner.conversationId !== activeConversationId
+        || owner.assistantId !== activeMemoryAssistant.id) {
+        memoryTurnAssistantRef.current = {
+          projectId: project.id, conversationId: activeConversationId, assistantId: activeMemoryAssistant.id,
+          observedRunIds: activeMemoryAssistant.runId ? [activeMemoryAssistant.runId] : [],
+        };
+      }
+    }
+  }, [project.id, activeConversationId, activeMemoryAssistant]);
+  const memoryTurnOwner = memoryTurnAssistantRef.current;
+  const memoryTurnAssistant = activeMemoryAssistant ?? (messagesConversationId === activeConversationId
+    && memoryTurnOwner?.projectId === project.id
+    && memoryTurnOwner.conversationId === activeConversationId
+    ? messages.find(message => message.id === memoryTurnOwner.assistantId)
+    : undefined);
   const {
     batch: memoryWritten,
     dismiss: dismissMemoryWritten,
-  } = useMemoryWrittenCard(memoryExtractionRunActive);
+  } = useMemoryWrittenCard(memoryExtractionRunActive, {
+    projectId: project.id,
+    conversationId: activeConversationId,
+    workspaceContext: projectRunWorkspaceContext,
+    ...selectedAssistantIdentity,
+  }, {
+    projectId: project.id,
+    conversationId: activeConversationId ?? '',
+    runId: memoryTurnAssistant?.runId,
+    assistantMessageId: memoryTurnAssistant?.id,
+    observedRunIds: memoryTurnOwner?.projectId === project.id
+      && memoryTurnOwner.conversationId === activeConversationId
+      && memoryTurnOwner.assistantId === memoryTurnAssistant?.id ? memoryTurnOwner.observedRunIds : [],
+  });
   useEffect(() => {
-    if (!memoryWritten || !activeConversationId) return;
-    if (messagesConversationId !== activeConversationId) return;
+    if (!memoryWritten) return;
+    const source = memoryWritten.context;
+    if (!source?.conversationId) {
+      dismissMemoryWritten();
+      return;
+    }
     const content = memoryWrittenCardContent(
       memoryWritten,
       t('chat.memoryWrittenSummary', { count: memoryWritten.count }),
     );
-    appendConversationMessage(activeConversationId, {
+    const message: ChatMessage = {
       id: randomUUID(),
       role: 'assistant',
-      agentId: selectedAssistantIdentity.agentId,
-      agentName: selectedAssistantIdentity.agentName,
+      agentId: source.agentId,
+      agentName: source.agentName,
       content,
       events: [{ kind: 'text', text: content }],
       createdAt: Date.now(),
+    };
+    // The extractor finishes after the turn. Persist to its original owner,
+    // and only append on screen if that transcript is still the one displayed.
+    if (projectIdRef.current === source.projectId
+      && activeConversationIdRef.current === source.conversationId
+      && messagesConversationIdRef.current === source.conversationId) {
+      setMessages((current) => [...current, message]);
+    }
+    void saveMessage(source.projectId, source.conversationId, message, {
+      workspaceContext: source.workspaceContext,
     });
     dismissMemoryWritten();
   }, [
     memoryWritten,
     dismissMemoryWritten,
-    activeConversationId,
-    appendConversationMessage,
-    messagesConversationId,
-    selectedAssistantIdentity,
     t,
   ]);
 
@@ -6196,22 +6573,44 @@ export function ProjectView({
     ],
   );
 
-  const refreshPreviewComments = useCallback(async () => {
-    if (!activeConversationId) return;
+  // One comment-list read at a time for this view. The generation guard only
+  // discards a stale answer; it does not stop N triggers (SSE bursts, poll,
+  // visibility, stream reconnect) from each starting a full read. The runner
+  // does: a trigger during a read buys exactly one trailing read, run with the
+  // latest trigger's closure. A different conversation starts its own read.
+  // Note: the daemon announces a pull round before this read's `/pull`
+  // response returns, so a read that itself merged rows always earns one
+  // trailing read. That read is cheap and keeps other tabs' signals honest;
+  // do not suppress it.
+  const [runPreviewCommentsRead] = useState(createSingleflightRunner);
+  const readPreviewCommentsOnce = useCallback(async () => {
+    // A queued trailing read can outlive the project/conversation that queued it.
+    if (!activeConversationId || currentCommentsIdentityRef.current !== currentCommentsIdentity) return;
     const commentsGeneration = ++previewCommentsGenerationRef.current;
-    const next = await fetchPreviewComments(
-      project.id,
-      activeConversationId,
-      projectRunWorkspaceContext,
-    );
-    if (previewCommentsGenerationRef.current !== commentsGeneration) return;
-    setPreviewComments(next);
-    setAttachedComments((current) =>
-      current
-        .map((attached) => next.find((comment) => comment.id === attached.id))
-        .filter((comment): comment is PreviewComment => Boolean(comment)),
-    );
-  }, [project.id, activeConversationId, projectRunWorkspaceContext]);
+    const commentsReadSeq = ++previewCommentsReadSeq.current;
+    // Poll/SSE refreshes keep the committed list visible and eligible for
+    // acknowledgement. Only an unconfirmed identity needs the loading gate.
+    setPreviewCommentsState(current => current === 'success' ? current : 'loading');
+    try {
+      const next = await fetchPreviewComments(project.id, activeConversationId, projectRunWorkspaceContext, true);
+      if (currentCommentsIdentityRef.current !== currentCommentsIdentity
+        || previewCommentsReadSeq.current !== commentsReadSeq) return;
+      setPreviewCommentsState('success');
+      if (previewCommentsGenerationRef.current !== commentsGeneration) return;
+      setPreviewComments((current) => reconcilePreviewComments(current, next));
+      setAttachedComments((current) => reconcileAttachedComments(current, next));
+    } catch {
+      if (currentCommentsIdentityRef.current === currentCommentsIdentity
+        && previewCommentsReadSeq.current === commentsReadSeq) setPreviewCommentsState('error');
+    }
+  }, [project.id, activeConversationId, projectRunWorkspaceContext, currentCommentsIdentity]);
+  const refreshPreviewComments = useCallback(
+    () => runPreviewCommentsRead(
+      currentCommentsIdentity,
+      readPreviewCommentsOnce,
+    ),
+    [runPreviewCommentsRead, currentCommentsIdentity, readPreviewCommentsOnce],
+  );
 
   // Expose the latest refresher to the SSE handler (defined earlier) so a
   // pushed `comment-changed` can re-fetch immediately.
@@ -6267,7 +6666,23 @@ export function ProjectView({
       images: File[] = [],
       commentId?: string,
     ) => {
-      const commentConversationId = activeConversationId ?? routeConversationId;
+      if (projectCollab.materializationPending) return null;
+      let commentConversationId = activeConversationId ?? routeConversationId;
+      if (!commentConversationId && sharedProjectScope && projectRunWorkspaceContext) {
+        // A read-only preview can be ready before its chat list. Resolve the
+        // existing server-owned route without creating a conversation or
+        // granting artifact-write permission to the commenter.
+        try {
+          const list = await listConversationsWithRetry(
+            project.id,
+            projectRunWorkspaceContext,
+            true,
+          );
+          commentConversationId = list[0]?.id ?? null;
+        } catch {
+          // Preserve the existing failure and draft when authority or reads fail.
+        }
+      }
       if (!commentConversationId) {
         setProjectActionsToast({
           message: t('project.previewCommentSaveFailedTitle'),
@@ -6277,7 +6692,6 @@ export function ProjectView({
         });
         return null;
       }
-      if (projectCollab.materializationPending) return null;
       // Upload any attached images first so the saved comment carries durable
       // file paths — this is what lets the comment list / re-opened popover
       // re-display the images instead of losing them on echo.
@@ -6342,6 +6756,7 @@ export function ProjectView({
       projectRunWorkspaceContext,
       t,
       projectCollab.materializationPending,
+      sharedProjectScope,
     ],
   );
 
@@ -6489,6 +6904,64 @@ export function ProjectView({
     ],
   );
 
+  /**
+   * Invariant: handing a comment to the agent never deletes it. Only an
+   * explicit user delete emits a comment tombstone; the hand-off lifecycle is
+   * carried by `status` alone. A run that failed or was canceled did not act
+   * on the comments it was handed, so they return to 'open' and the list
+   * shows them again.
+   */
+  const releaseCommentsAfterUnsuccessfulRun = useCallback(
+    (comments: ReadonlyArray<Pick<PreviewComment, 'id' | 'conversationId'>>) => {
+      if (comments.length === 0) return;
+      const releasedIds = new Set(comments.map((comment) => comment.id));
+      commitPreviewComments((current) =>
+        current.map((comment) =>
+          releasedIds.has(comment.id) ? { ...comment, status: 'open' } : comment,
+        ),
+      );
+      void Promise.all(
+        comments.map((comment) =>
+          patchPreviewCommentStatus(
+            project.id,
+            comment.conversationId,
+            comment.id,
+            'open',
+            projectRunWorkspaceContext,
+          ),
+        ),
+      ).catch(() => {});
+    },
+    [project.id, commitPreviewComments, projectRunWorkspaceContext],
+  );
+
+  /**
+   * Invariant: a comment is 'applying' only while a run that carries it
+   * exists or is still going to be created. A queued send reserves its
+   * comments before any run exists, so every way that send can end without a
+   * run (held by a pre-run gate, stopped or failed before the run was
+   * created, taken out of the queue) gives them back to 'open'. A held send
+   * that starts later reserves them again when its run begins.
+   */
+  const releaseCommentsOfSendWithoutRun = useCallback(
+    (send: Pick<QueuedChatSend, 'conversationId' | 'commentAttachments'>) => {
+      const reservedCommentIds = new Set(
+        previewCommentsRef.current
+          .filter((comment) => comment.status === 'applying')
+          .map((comment) => comment.id),
+      );
+      releaseCommentsAfterUnsuccessfulRun(
+        send.commentAttachments
+          .filter(
+            (attachment) =>
+              attachment.source !== 'board-batch' && reservedCommentIds.has(attachment.id),
+          )
+          .map((attachment) => ({ id: attachment.id, conversationId: send.conversationId })),
+      );
+    },
+    [releaseCommentsAfterUnsuccessfulRun],
+  );
+
   // Maximum number of times we will retry fetching a null status for a
   // spuriouslyFailedPending run before treating the absence as authoritative
   // completion.  Transient null-status retries are bounded; after
@@ -6521,6 +6994,7 @@ export function ProjectView({
     if (config.mode !== 'daemon' || !daemonLive || !activeConversationId || streaming) return;
     let cancelled = false;
     const reattachConversationId = activeConversationId;
+    const reattachAccountGeneration = currentWorkspaceAccountGeneration();
 
     const attachRecoverableRuns = async () => {
       const missingRunIdMessages = messages.filter((m) => {
@@ -6643,6 +7117,8 @@ export function ProjectView({
           ?? await fetchChatRunStatus(runId, projectRunWorkspaceContext);
         if (cancelled) return;
         if (!physicalStatus) {
+          // A missing status response cannot invalidate persisted success.
+          if (message.runStatus === 'succeeded') continue;
           // A local retry seal is not a daemon terminal verdict. Keep this
           // run's receipts for the existing manual reconnect action.
           // `fetchChatRunStatus` returns null on ANY non-OK response or fetch
@@ -6696,25 +7172,13 @@ export function ProjectView({
         if (taskRunAdvanced) {
           findDetachedManualFileWrites(reattachConversationId, runId)?.dispose();
         }
-        const projectedTaskStatus: ChatMessage['runStatus'] =
-          physicalStatus.strategyTask?.terminal === true
-            ? physicalStatus.strategyTask.outcome === 'canceled'
-              ? 'canceled'
-              : physicalStatus.strategyTask.outcome === 'blocked'
-                ? 'failed'
-                : 'succeeded'
-            : 'running';
-        // A crash may persist the predecessor Run after the daemon has already
-        // advanced the logical task. Treat the daemon projection as the
-        // subscription truth: the predecessor's physical `succeeded` status
-        // is not the user task terminal state.
+        // A task may have advanced to production before this request Run was
+        // persisted. Read that physical Run: task `completed` does not say
+        // whether production succeeded, failed, or was canceled.
         const status = taskRunAdvanced
-          ? {
-              ...physicalStatus,
-              id: reattachRunId,
-              status: projectedTaskStatus,
-            }
+          ? await fetchChatRunStatus(reattachRunId, projectRunWorkspaceContext)
           : physicalStatus;
+        if (!status) continue;
         const projectedRunAlreadyHydrated = Boolean(
           taskRunAdvanced
           && messages.some(
@@ -6828,13 +7292,16 @@ export function ProjectView({
         // survive, but still apply the daemon's authoritative `resumable` flag so
         // ChatPane's Continue affordance reflects the daemon's view after a reload.
         if (spuriouslyFailedPending && status.status === 'failed') {
-          if (typeof status.resumable !== 'undefined') {
-            updateMessageById(
-              message.id,
-              (prev) => ({ ...prev, resumable: status.resumable }),
-              true,
-            );
-          }
+          // The record confirms the failure, so the disconnect marker (if any)
+          // no longer stands for "outcome unknown" (N15 / Q7).
+          updateMessageById(
+            message.id,
+            (prev) => ({
+              ...settleTurnFromRunRecord(prev),
+              ...(typeof status.resumable !== 'undefined' ? { resumable: status.resumable } : {}),
+            }),
+            true,
+          );
           // Clear stale retry count — this run is authoritatively done.
           transientFailedRetriesRef.current.delete(runId);
           genericDisconnectRetriesRef.current.delete(runId);
@@ -6940,7 +7407,7 @@ export function ProjectView({
 
             // A terminal run's artifact paths must resolve against a post-run
             // read, not a shared file-list result cached before its last write.
-            let nextFiles = await refreshProjectFiles({ fresh: true });
+            let nextFiles = await refreshProjectFiles({ fresh: true, afterChange: true });
             const beforeFileNames = new Set(
               message.preTurnFileNames ?? nextFiles.map((f) => f.name),
             );
@@ -7010,7 +7477,7 @@ export function ProjectView({
             // OPEND-2588 (2026-09-04): a turn that finishes while we are
             // replaying it opens ALL of its primary artifacts, same as a live
             // completion — the user cannot tell the two apart.
-            const turnArtifacts = selectAutoOpenTurnArtifacts(produced, nextFiles, {
+            const turnArtifacts = withLiveArtifactDeliveries(selectAutoOpenTurnArtifacts(produced, nextFiles, {
               ...autoOpenArtifactOptions,
               preTurnFileNames: beforeFileNames,
               turnStartedAt: status.createdAt || message.startedAt || message.createdAt || null,
@@ -7021,7 +7488,7 @@ export function ProjectView({
                 project.id,
                 projectDetail.resolvedDir,
               ),
-            });
+            }), message.events);
             if (turnArtifacts.focused && !userTookOverPreviewRef.current) {
               requestOpenTurnArtifacts(turnArtifacts.open, turnArtifacts.focused);
             }
@@ -7052,9 +7519,8 @@ export function ProjectView({
               true,
               { telemetryFinalized: true },
             );
-            if (deliveryOutcome === 'no_result' || deliveryOutcome === 'delivery_failed') {
-              setError(artifactPersistenceError ?? DESIGN_RESULT_MISSING_DETAIL);
-            }
+            // P0-24 (PRD C7/C8, Q3): no pane-level failure card for a run that
+            // ended normally without a deliverable; the message keeps the outcome.
             await auditDesignSystemWorkspaceAfterRun(message.id);
             // Clear stale retry count for successfully recovered run.
             transientFailedRetriesRef.current.delete(runId);
@@ -7129,6 +7595,14 @@ export function ProjectView({
         if (!isTerminalRunStatus(status.status)) {
           abortRef.current = controller;
           cancelRef.current = cancelController;
+          const memoryOwner = memoryTurnAssistantRef.current;
+          const observedRunIds = memoryOwner?.projectId === project.id
+            && memoryOwner.conversationId === reattachConversationId && memoryOwner.assistantId === message.id
+            ? memoryOwner.observedRunIds : [];
+          memoryTurnAssistantRef.current = {
+            projectId: project.id, conversationId: reattachConversationId, assistantId: message.id,
+            observedRunIds: [...new Set([...observedRunIds, reattachRunId])],
+          };
           markStreamingConversation(reattachConversationId);
         }
         // Only blank content/events/producedFiles when the daemon confirms the run
@@ -7304,6 +7778,7 @@ export function ProjectView({
             );
           },
           onRunCreated: (nextRunId, strategyTask) => {
+            observeMemoryRun(project.id, reattachConversationId, message.id, nextRunId);
             manualFileWriteRegistration.bindRun(nextRunId);
             activeReattachRunId = nextRunId;
             claimReattachRun(nextRunId);
@@ -7317,8 +7792,16 @@ export function ProjectView({
                 lastRunEventId: undefined,
                 strategyTaskPrefixLength: replayedContent.length,
                 strategyTaskPrefixEventCount: replayedEvents.length,
+                // The row now streams `nextRunId`, so its logical task
+                // position is that Run's — spreading `prev` would leave the
+                // predecessor's index on it. Same exact-map rule as the live
+                // send path: no daemon mapping, no position.
                 ...(strategyTask?.taskExecutionId
-                  ? { strategyTaskExecutionId: strategyTask.taskExecutionId }
+                  ? {
+                    strategyTaskExecutionId: strategyTask.taskExecutionId,
+                    strategyTaskRunIndex: strategyTaskRunIndex(strategyTask, nextRunId),
+                    ...(strategySettledMessageFields(strategyTask) ?? {}),
+                  }
                   : {}),
               }),
               true,
@@ -7377,6 +7860,7 @@ export function ProjectView({
                 attempt: state.attempt,
                 max: state.max,
                 phase: state.phase,
+                ...(state.cause ? { cause: state.cause } : {}),
               });
             },
             onAgentReconnect: (state: DaemonAgentReconnectState) => {
@@ -7455,7 +7939,7 @@ export function ProjectView({
                 const preTurn = message.preTurnFileNames;
                 // Match live completion: the terminal artifact list can be
                 // newer than the GET coalescer's last successful file read.
-                let nextFiles = await refreshProjectFiles({ fresh: true });
+                let nextFiles = await refreshProjectFiles({ fresh: true, afterChange: true });
                 let artifactPersistenceSucceeded = false;
                 let artifactPersistenceError: string | undefined;
                 // Use the turn-start snapshot when available so reload
@@ -7530,7 +8014,7 @@ export function ProjectView({
                 );
                 // OPEND-2588 (2026-09-04): see the replay path above — a run
                 // that lands while reattached is still a turn finishing.
-                const turnArtifacts = selectAutoOpenTurnArtifacts(produced, nextFiles, {
+                const turnArtifacts = withLiveArtifactDeliveries(selectAutoOpenTurnArtifacts(produced, nextFiles, {
                   ...autoOpenArtifactOptions,
                   preTurnFileNames: beforeFileNames,
                   turnStartedAt: status.createdAt || message.startedAt || message.createdAt || null,
@@ -7544,7 +8028,7 @@ export function ProjectView({
                     project.id,
                     projectDetail.resolvedDir,
                   ),
-                });
+                }), needsFullReplay ? replayedEvents : message.events);
                 if (turnArtifacts.focused && !userTookOverPreviewRef.current) {
                   requestOpenTurnArtifacts(turnArtifacts.open, turnArtifacts.focused);
                 }
@@ -7578,9 +8062,8 @@ export function ProjectView({
                   true,
                   { telemetryFinalized: true },
                 );
-                if (deliveryOutcome === 'no_result' || deliveryOutcome === 'delivery_failed') {
-                  setError(artifactPersistenceError ?? DESIGN_RESULT_MISSING_DETAIL);
-                }
+                // P0-24 (PRD C7/C8, Q3): no pane-level failure card for a run that
+                // ended normally without a deliverable; the message keeps the outcome.
                 await auditDesignSystemWorkspaceAfterRun(message.id);
               })();
               onProjectsRefresh();
@@ -7598,6 +8081,13 @@ export function ProjectView({
               const runMayFinalize =
                 !supersededRunsRef.current.has(controller);
               keepManualFileWritesForRecovery = genericDisconnect && runMayFinalize;
+              if (runMayFinalize && isActiveRunStatus(status.status) && (message.agentId ?? status.agentId) === 'amr') {
+                showAmrFundingFailure({
+                  code: errorCode, runKey: message.id, conversationId: reattachConversationId,
+                  authorityKey: projectRunAuthorityKey,
+                  accountGeneration: reattachAccountGeneration,
+                });
+              }
               if (keepManualFileWritesForRecovery) manualFileWriteRegistration.release(true);
               textBuffer.flush();
               textBuffer.cancel();
@@ -7854,7 +8344,7 @@ export function ProjectView({
                     updateMessageById(
                       message.id,
                       (prev) => ({
-                        ...prev,
+                        ...settleTurnFromRunRecord(prev),
                         runStatus: latestRunStatus.status,
                         endedAt: latestRunStatus.updatedAt,
                         ...(latestRunStatus.resumable !== undefined
@@ -8043,6 +8533,7 @@ export function ProjectView({
     persistMessageById,
     auditDesignSystemWorkspaceAfterRun,
     markStreamingConversation,
+    observeMemoryRun,
     clearStreamingMarker,
     clearActiveRunRefs,
     clearCurrentRunStreamingMarker,
@@ -8058,6 +8549,7 @@ export function ProjectView({
     scheduleProjectTimeout,
     scheduleConversationMessageRefresh,
     recoveryTick,
+    showAmrFundingFailure,
   ]);
 
   useEffect(() => {
@@ -8337,15 +8829,30 @@ export function ProjectView({
     }
     const next = [...queuedChatSendsRef.current, item];
     commitQueuedChatSends(next);
+    if (item.meta?.systemSubmission) return true;
+    const ownerGeneration = currentWorkspaceAccountGeneration();
+    void registerQueuedSubmission(project.id, { id: item.id, conversationId: item.conversationId,
+      submittedAt: item.createdAt }, projectRunWorkspaceContext).then((receipt) => {
+      if (receipt && currentWorkspaceAccountGeneration() === ownerGeneration) onTouchProject(receipt.acceptedAt);
+    });
     return true;
-  }, [commitQueuedChatSends]);
+  }, [commitQueuedChatSends, onTouchProject, project.id, projectRunWorkspaceContext]);
 
   const removeQueuedChatSend = useCallback((id: string) => {
     const next = queuedChatSendsRef.current.filter((item) => item.id !== id);
     commitQueuedChatSends(next);
   }, [commitQueuedChatSends]);
 
+  // The user taking a send out of the queue, as opposed to the drain removing
+  // one whose run has started.
+  const discardQueuedChatSend = useCallback((id: string) => {
+    const item = queuedChatSendsRef.current.find((candidate) => candidate.id === id);
+    removeQueuedChatSend(id);
+    if (item) releaseCommentsOfSendWithoutRun(item);
+  }, [releaseCommentsOfSendWithoutRun, removeQueuedChatSend]);
+
   const updateQueuedChatSend = useCallback((id: string, update: QueuedChatSendUpdate) => {
+    const edited = queuedChatSendsRef.current.find((item) => item.id === id);
     const next = queuedChatSendsRef.current.map((item) => {
       if (item.id !== id) return item;
       const meta = stripQueueOnlyFromMeta({ ...(item.meta ?? {}), ...(update.meta ?? {}) });
@@ -8360,7 +8867,16 @@ export function ProjectView({
       return updated;
     });
     commitQueuedChatSends(next);
-  }, [commitQueuedChatSends]);
+    if (edited) {
+      const keptCommentIds = new Set(update.commentAttachments.map((attachment) => attachment.id));
+      releaseCommentsOfSendWithoutRun({
+        conversationId: edited.conversationId,
+        commentAttachments: edited.commentAttachments.filter(
+          (attachment) => !keptCommentIds.has(attachment.id),
+        ),
+      });
+    }
+  }, [commitQueuedChatSends, releaseCommentsOfSendWithoutRun]);
 
   const prioritizeQueuedChatSend = useCallback((id: string) => {
     const item = queuedChatSendsRef.current.find((candidate) => candidate.id === id);
@@ -8398,6 +8914,9 @@ export function ProjectView({
     attachments: ChatAttachment[];
     commentAttachments: ChatCommentAttachment[];
     conversationId: string;
+    /** A pre-run gate is holding this send, so no run is coming on its own
+     *  and its comments are not reserved. */
+    heldBeforeRun?: boolean;
     meta?: ProjectChatSendMeta;
     prompt: string;
   }) => {
@@ -8425,7 +8944,7 @@ export function ProjectView({
       setAttachedComments((current) =>
         current.filter((comment) => !reservedCommentIds.has(comment.id)),
       );
-      if (reservedCommentIds.size > 0) {
+      if (reservedCommentIds.size > 0 && !input.heldBeforeRun) {
         commitPreviewComments((current) =>
           current.map((comment) =>
             reservedCommentIds.has(comment.id)
@@ -8460,6 +8979,8 @@ export function ProjectView({
       if (!activeConversationId) return false;
       if (messagesConversationIdRef.current !== activeConversationId) return false;
       const clientRequestId = meta?.clientRequestId ?? randomUUID();
+      const sendAccountGeneration = currentWorkspaceAccountGeneration();
+      const sendIntentGeneration = concurrencyIntentRef.current.generation;
       meta = {
         ...(meta ?? {}),
         clientRequestId,
@@ -8574,8 +9095,9 @@ export function ProjectView({
           meta: { ...(meta ?? {}), sessionMode: runSessionMode, taskAnalytics },
         });
         // `true` means the send has been durably accepted by this view's
-        // queue. Callers that own persisted annotations may only remove them
-        // after this acknowledgement; preflight rejection remains `false`.
+        // queue. Callers that hold a saved comment in their composer may only
+        // let go of it after this acknowledgement; preflight rejection
+        // remains `false`. The comment itself is never deleted by a send.
         return true;
       }
       if (currentConversationBusy) {
@@ -8608,8 +9130,7 @@ export function ProjectView({
        */
       const amrGateApplies =
         config.mode === 'daemon'
-        && config.agentId === 'amr'
-        && !meta?.amrGatePrechecked;
+        && config.agentId === 'amr';
       // The gate's await opens a window where the conversation is not yet
       // marked busy. A second send arriving during that window behaves like
       // a busy conversation: it queues instead of racing a duplicate run.
@@ -8628,6 +9149,114 @@ export function ProjectView({
         return meta?.acceptDurableQueue === true;
       }
       const runConversationId = activeConversationId;
+      if (amrGateApplies && amrConcurrencyReadsRef.current.has(runConversationId)) {
+        if (meta?.composerOwnedDraft) amrGateBlockedRequestRef.current = clientRequestId;
+        return false;
+      }
+      const selectedAgent =
+        config.mode === 'daemon' && config.agentId
+          ? agentsById.get(config.agentId)
+          : null;
+      const selectedAgentChoice =
+        config.mode === 'daemon' && config.agentId
+          ? config.agentModels?.[config.agentId]
+          : undefined;
+      const effectiveSelectedAgentChoice = effectiveAgentModelChoice(
+        selectedAgent,
+        selectedAgentChoice,
+      );
+      const assistantAgentId =
+        config.mode === 'daemon'
+          ? config.agentId ?? undefined
+          : apiProtocolAgentId(config.apiProtocol);
+      const fundingModelId = effectiveAgentModelId(selectedAgent, selectedAgentChoice);
+      // Read funding alongside the independent concurrency hint, rather than
+      // adding their round trips. Both keep their exact scope/model guards;
+      // a known refusal still settles before persistence or provider dispatch.
+      const modelRequestIdentityIsCurrent = () => mountedRef.current
+        && projectIdRef.current === project.id
+        && projectRunAuthorityKeyRef.current === projectRunAuthorityKey
+        && currentWorkspaceAccountGeneration() === sendAccountGeneration
+        && fundingDialogContextRef.current.isAmr;
+      const fundingSelectionGeneration = fundingSelectionRef.current.generation;
+      const fundingIdentityIsCurrent = () => modelRequestIdentityIsCurrent()
+        && fundingDialogContextRef.current.modelId === fundingModelId
+        && fundingSelectionRef.current.generation === fundingSelectionGeneration;
+      const fundingFeedback = config.mode === 'daemon' && assistantAgentId === 'amr'
+        ? checkAmrFundingEvidence(amrBalanceCardScope, fundingModelId, fundingIdentityIsCurrent)
+        : Promise.resolve({ kind: 'unknown' as const, preflight: null });
+      const refreshConcurrencyPlanProof = (isCurrent: () => boolean) => {
+        const scope = amrBalanceGateScopeForWorkspaceContext(projectRunPreflightContext);
+        if (!scope) return;
+        // A recent positive funding cache may predate a plan change. Once Link
+        // refuses this send, only a fresh exact-member/model preflight may
+        // reveal a purchase action for this rejection.
+        void readFreshAmrFundingEvidence(scope, fundingModelId, isCurrent).then((evidence) => {
+          if (!isCurrent()) return;
+          setConcurrencyRejection((current) => current?.requestId === clientRequestId
+            ? { ...current, preflight: evidence.preflight } : current);
+        });
+      };
+      if (amrGateApplies) {
+        const restoreComposer = () => {
+          if (meta?.composerOwnedDraft) amrGateBlockedRequestRef.current = clientRequestId;
+          return false;
+        };
+        const intentGeneration = concurrencyIntentRef.current.generation;
+        amrConcurrencyReadsRef.current.add(runConversationId);
+        let hint;
+        try {
+          const hintRequest = readAmrRequestConcurrency(amrBalanceGateScopeForWorkspaceContext(projectRunPreflightContext));
+          const firstDecision = await Promise.race([
+            hintRequest.then((result) => ({ source: 'hint' as const, result })),
+            fundingFeedback.then((funding) => ({ source: 'funding' as const, funding })),
+          ]);
+          // The original funding refusal path below still owns draft rollback,
+          // queue pause and the dialog. Only its wait for a non-decisive hint
+          // is skipped; a full hint that arrives first keeps its fast path.
+          hint = firstDecision.source === 'hint' ? firstDecision.result
+            : firstDecision.funding.kind === 'insufficient' ? null : await hintRequest;
+        } finally {
+          amrConcurrencyReadsRef.current.delete(runConversationId);
+        }
+        if (!mountedRef.current || projectIdRef.current !== project.id
+          || projectRunAuthorityKeyRef.current !== projectRunAuthorityKey
+          || currentWorkspaceAccountGeneration() !== sendAccountGeneration
+          || concurrencyIntentRef.current.generation !== intentGeneration
+          || activeConversationIdRef.current !== runConversationId
+          || messagesConversationIdRef.current !== runConversationId
+          || !fundingDialogContextRef.current.isAmr) return restoreComposer();
+        if (hint?.status === 'full') {
+          amrGatePausedQueueConversationsRef.current.add(runConversationId);
+          setConcurrencyRejection({
+            conversationId: runConversationId, authorityKey: projectRunAuthorityKey,
+            accountGeneration: sendAccountGeneration, requestId: clientRequestId,
+            branch: amrBalanceBranchRef.current,
+            workspaceContext: fundingDialogContextRef.current.workspaceContext,
+            preflight: null,
+            stage: 'before_run',
+            initialHomeSend: meta?.initialHomeSend === true,
+            draft: meta?.initialHomeSend ? {
+              nonce: clientRequestId, text: prompt, attachments: effectiveAttachments,
+              commentAttachments, meta,
+            } : null,
+          });
+          setConcurrencyDialogOpen(true);
+          // The Link counter settles the refusal immediately. Funding can
+          // identify the tier later, but must never unlock a newer send.
+          refreshConcurrencyPlanProof(fundingIdentityIsCurrent);
+          // Consume a Home handoff only into its restored draft, never into an
+          // automatic retry when a slot later becomes available.
+          if (meta?.initialHomeSend) return true;
+          return restoreComposer();
+        }
+        // Unsupported/unavailable is not evidence of a slot. Keep the real
+        // Link admission/refusal path as the final authority, without a lease.
+      }
+      latestRequestSendRef.current.set(runConversationId, clientRequestId);
+      setFundingRejectedComposerSend(null);
+      setConcurrencyDialogOpen(false);
+      setConcurrencyRejection(null);
       // This is the accepted retry boundary: all synchronous refusal paths are
       // above it. A later preflight/POST failure supplies its own current surface.
       if (retryTarget && meta?.retryOfAssistantId) {
@@ -8665,28 +9294,15 @@ export function ProjectView({
         commentAttachments: commentAttachments.length > 0 ? commentAttachments : undefined,
       };
       const runCommentAttachments = userMsg.commentAttachments ?? [];
+      const runSavedComments = runCommentAttachments
+        .filter((attachment) => attachment.source !== 'board-batch')
+        .map((attachment) => ({ id: attachment.id, conversationId: runConversationId }));
       const runAttachments = mergeChatAttachments(
         userMsg.attachments ?? [],
         ...runCommentAttachments.map((attachment) =>
           chatAttachmentsFromPreviewCommentImages(attachment.imageAttachments),
         ),
       );
-      const selectedAgent =
-        config.mode === 'daemon' && config.agentId
-          ? agentsById.get(config.agentId)
-          : null;
-      const selectedAgentChoice =
-        config.mode === 'daemon' && config.agentId
-          ? config.agentModels?.[config.agentId]
-          : undefined;
-      const effectiveSelectedAgentChoice = effectiveAgentModelChoice(
-        selectedAgent,
-        selectedAgentChoice,
-      );
-      const assistantAgentId =
-        config.mode === 'daemon'
-          ? config.agentId ?? undefined
-          : apiProtocolAgentId(config.apiProtocol);
       const assistantAgentName =
         config.mode === 'daemon'
           ? agentModelDisplayName(
@@ -8756,11 +9372,19 @@ export function ProjectView({
        * (重试那一路尤其:被重试的那条用户消息和保留下来的失败尝试都在里面)。
        */
       const paintedFrom: { messages: ChatMessage[] | null } = { messages: null };
+      memoryTurnAssistantRef.current = { projectId: project.id, conversationId: runConversationId, assistantId, observedRunIds: [] };
       setMessages((current) => {
         paintedFrom.messages = current;
         return nextVisibleMessages;
       });
       markStreamingConversation(runConversationId);
+      let fundingHintRelevant = true;
+      const retireFundingHint = () => {
+        if (!fundingHintRelevant) return;
+        fundingHintRelevant = false;
+        setAmrBalanceGateBlock((previous) => previous?.fundingSource === 'preflight'
+          && previous.fundingRunKey === assistantId ? null : previous);
+      };
       /**
        * 把刚画出去的那一轮收回 —— 只有预检拒绝时才走这里。
        *
@@ -8769,18 +9393,30 @@ export function ProjectView({
        * 进行中标记仍要清 —— 它是按会话 id 认领的,清的就是这一条。
        */
       const retractPaintedTurn = () => {
-        const restore = paintedFrom.messages;
-        paintedFrom.messages = null;
+        retireFundingHint();
         clearStreamingMarker(runConversationId);
-        if (restore === null) return;
         if (messagesConversationIdRef.current !== runConversationId) return;
-        setMessages(restore);
+        // A cached verdict can settle before React flushes the paint updater.
+        // Queue the rollback behind it so that its original transcript exists.
+        setMessages((current) => {
+          if (messagesConversationIdRef.current !== runConversationId) return current;
+          // React can replay this updater. Keep the snapshot reusable and
+          // remove only this send's provisional rows; preserve transcript
+          // updates and messages that arrived while the preflight was pending.
+          const restore = paintedFrom.messages ?? [];
+          const originalIds = new Set(restore.map((message) => message.id));
+          const currentById = new Map(current.map((message) => [message.id, message]));
+          return [
+            ...restore.map((message) => message.id === userMsg.id || message.id === assistantId
+              ? message : currentById.get(message.id) ?? message),
+            ...current.filter((message) => !originalIds.has(message.id)
+              && message.id !== userMsg.id && message.id !== assistantId),
+          ];
+        });
       };
-      // OpenDesign Cloud pre-run balance gate: a definitively insufficient
-      // wallet blocks the run BEFORE any message is persisted or a daemon run
-      // spawned, surfacing the subscription dialog instead of a mid-run
-      // AMR_INSUFFICIENT_BALANCE failure. Sends the home submit already gated
-      // (amrGatePrechecked) pass straight through — the user answered there.
+      // A Home witness skips only the duplicate sign-in read. Every actual
+      // send still waits for its scoped funding verdict; Link remains the
+      // final authority when the read is unsupported or unavailable.
       if (amrGateApplies) {
         const gateConversationId = runConversationId;
         amrGateInFlightConversationsRef.current.add(gateConversationId);
@@ -8810,7 +9446,7 @@ export function ProjectView({
             config.agentModels?.amr,
           );
           const gate =
-            deferAmrPreflightToDaemon
+            deferAmrPreflightToDaemon || meta?.amrGatePrechecked
               ? { kind: 'allow' as const }
               : await checkAmrBalanceGate(
                   projectRunPreflightContext
@@ -8836,7 +9472,7 @@ export function ProjectView({
           //
           // ⚠️ An EXHAUSTED wallet is not one of those states — see
           // `rejectBlockedSend` below (OPEND-2719).
-          const queueGateSend = (): boolean => {
+          const queueGateSend = (heldBeforeRun = false): boolean => {
             // 判定拒绝 = 这一轮不会有 run。先把已经画出去的那一轮收回,再决定
             // 它去哪儿 —— 三条拒绝路(会话切走 / 拦截 / 读不到)都经过这里,
             // 所以收回只写一处。放行那两档(soft / allow)碰不到它。
@@ -8847,6 +9483,7 @@ export function ProjectView({
                 prompt,
                 attachments: effectiveAttachments,
                 commentAttachments,
+                heldBeforeRun,
                 meta: { ...(meta ?? {}), sessionMode: runSessionMode, taskAnalytics },
               });
               return true;
@@ -8854,7 +9491,7 @@ export function ProjectView({
             return false;
           };
           const parkBlockedSend = (): boolean => {
-            const queued = queueGateSend();
+            const queued = queueGateSend(true);
             amrGatePausedQueueConversationsRef.current.add(gateConversationId);
             return queued;
           };
@@ -8880,6 +9517,10 @@ export function ProjectView({
           const rejectBlockedSend = (): false => {
             retractPaintedTurn();
             amrGatePausedQueueConversationsRef.current.add(gateConversationId);
+            // A previous unavailable/sign-in check may already own a parked
+            // input. This confirmed refusal must survive a remount for those
+            // items too, before the composer-owned draft returns early.
+            requireManualStartAfterFundingRefusal(gateConversationId);
             amrGateBlockedRequestRef.current = clientRequestId;
             return false;
           };
@@ -8893,6 +9534,31 @@ export function ProjectView({
           // the original conversation instead of dropping it.
           if (messagesConversationIdRef.current !== activeConversationId) {
             return acceptedDurableQueue(queueGateSend());
+          }
+          const funding = await fundingFeedback;
+          if (!fundingIdentityIsCurrent()) {
+            if (meta?.composerOwnedDraft) amrGateBlockedRequestRef.current = clientRequestId;
+            if (mountedRef.current) retractPaintedTurn();
+            return false;
+          }
+          if (messagesConversationIdRef.current !== activeConversationId) {
+            return acceptedDurableQueue(queueGateSend());
+          }
+          if (streamingConversationIdRef.current !== runConversationId) return false;
+          if (funding.kind === 'insufficient' && gate.kind !== 'hard') {
+            const accepted = meta?.composerOwnedDraft
+              ? rejectBlockedSend()
+              : acceptedDurableQueue(parkBlockedSend());
+            requireManualStartAfterFundingRefusal(gateConversationId);
+            // Retraction retires the provisional turn. Present the rejection
+            // after it so the current draft owns the dialog, not a phantom run.
+            showAmrFundingFailure({
+              code: AMR_INSUFFICIENT_BALANCE_CODE, runKey: assistantId,
+              conversationId: runConversationId, authorityKey: projectRunAuthorityKey,
+              accountGeneration: sendAccountGeneration, source: 'preflight', modelId: fundingModelId,
+              preflight: funding.preflight,
+            });
+            return accepted;
           }
           if (gate.kind === 'hard') {
             const recoveryActionInstanceId = `blocked:${taskAnalytics.taskExecutionId}`;
@@ -8920,6 +9586,7 @@ export function ProjectView({
             const blockedBranch = amrBalanceBranchRef.current;
             setAmrBalanceGateBlock({
               reason: gate.reason,
+              stage: 'before_run',
               dialog:
                 gate.reason === 'signed_out'
                   ? 'upgrade'
@@ -8929,6 +9596,12 @@ export function ProjectView({
                   ? 'pricing'
                   : amrBalanceDialogUpgradeIntent(blockedBranch),
               snapshot: gate.snapshot,
+              modelId: amrModelId,
+              fundingScope: projectRunPreflightContext ? {
+                workspaceType: projectRunPreflightContext.workspaceType,
+                workspaceId: projectRunPreflightContext.workspaceId,
+                workspaceMemberId: projectRunPreflightContext.workspaceMemberId,
+              } : undefined,
               conversationId: gateConversationId,
             });
             // 拦截档:把流水里那张卡点亮 —— 弹窗一关就什么都不剩,而人回到聊天
@@ -8964,7 +9637,11 @@ export function ProjectView({
               // 下面那条原来的排队路上,行为一个字不变。
               if (meta?.composerOwnedDraft) return rejectBlockedSend();
             }
-            return acceptedDurableQueue(parkBlockedSend());
+            const accepted = acceptedDurableQueue(parkBlockedSend());
+            if (gate.reason === 'insufficient') {
+              requireManualStartAfterFundingRefusal(gateConversationId);
+            }
+            return accepted;
           }
           if (gate.kind === 'unavailable') {
             return acceptedDurableQueue(parkBlockedSend());
@@ -9058,11 +9735,17 @@ export function ProjectView({
         });
         recordFirstLoopStep(analytics.track, 'prompt_sent', project.id);
       }
+      if (sendAccountGeneration !== currentWorkspaceAccountGeneration()) {
+        retractPaintedTurn();
+        return false;
+      }
       activeCompletionNotificationRunsRef.current.add(assistantId);
       updateConversationLatestRun(config.mode === 'daemon' ? 'running' : 'queued');
       setArtifact(null);
       savedArtifactRef.current = null;
-      onTouchProject();
+      // Queued sends already recorded their send time when they entered the
+      // queue. A manual retry is a new user action; replaying a queue is not.
+      // Sorting advances only from a server acceptance receipt.
       if (!retryTarget) {
         // A send whose id was decided from its occupancy (an inline question
         // form's answer) claims that row once: the daemon keeps whichever
@@ -9236,6 +9919,13 @@ export function ProjectView({
       let parsedArtifact: Artifact | null = null;
       let liveHtml = '';
       let streamedText = '';
+      let observedModelWork = false;
+      let homeRejectionSourceRetired = false;
+      const retireHomeRejectionSource = () => {
+        if (homeRejectionSourceRetired || !meta?.initialHomeSend) return;
+        homeRejectionSourceRetired = true;
+        onInitialHomeRequestProgress?.(project.id, clientRequestId);
+      };
 
       const updateAssistant = (updater: (prev: ChatMessage) => ChatMessage) => {
         setMessages((curr) => {
@@ -9350,7 +10040,10 @@ export function ProjectView({
         if (ev.kind === 'live_artifact') {
           setLiveArtifactEvents((prev) => appendLiveArtifactEventItem(prev, ev));
           void refreshLiveArtifacts().then(() => {
-            if (ev.action !== 'deleted') requestOpenFile(liveArtifactTabId(ev.artifactId));
+            if (ev.action !== 'deleted' && !userTookOverPreviewRef.current) {
+              completionSelectedAutoOpen = true;
+              requestOpenFile(liveArtifactTabId(ev.artifactId));
+            }
           });
           onProjectsRefresh();
           return;
@@ -9519,10 +10212,14 @@ export function ProjectView({
       );
       const cancelController = new AbortController();
       let authoritativeArtifactPaths: string[] | undefined;
+      // onDone is delivered for a canceled run too; onRunStatus says which.
+      let runReportedCanceled = false;
       abortRef.current = controller;
       cancelRef.current = cancelController;
       const handlers = {
         onDelta: (delta: string) => {
+          if (delta.trim()) { observedModelWork = true; retireHomeRejectionSource(); }
+          if (delta.trim()) retireFundingHint();
           // See reattach-path comment above for rationale.  PR #4651 round 9.
           if (currentRunId) {
             transientFailedRetriesRef.current.delete(currentRunId);
@@ -9533,6 +10230,8 @@ export function ProjectView({
           textBuffer.appendContent(delta);
         },
         onAgentEvent: (ev: AgentEvent) => {
+          if (ev.kind === 'text' || ev.kind === 'thinking' || ev.kind === 'tool_use' || ev.kind === 'tool_result') { observedModelWork = true; retireHomeRejectionSource(); }
+          if (ev.kind === 'text' || ev.kind === 'thinking' || ev.kind === 'tool_use') retireFundingHint();
           if (currentRunId) {
             transientFailedRetriesRef.current.delete(currentRunId);
             genericDisconnectRetriesRef.current.delete(currentRunId);
@@ -9579,6 +10278,7 @@ export function ProjectView({
             attempt: state.attempt,
             max: state.max,
             phase: state.phase,
+            ...(state.cause ? { cause: state.cause } : {}),
           });
         },
         onAgentReconnect: (state: DaemonAgentReconnectState) => {
@@ -9593,6 +10293,8 @@ export function ProjectView({
           });
         },
         onDone: (fullText = '') => {
+          retireHomeRejectionSource();
+          retireFundingHint();
           liveFocusClosed = true;
           // The daemon delivers onDone even for a canceled run, so a run
           // superseded by a "send now" interrupt can still land here and must
@@ -9631,31 +10333,30 @@ export function ProjectView({
             !liveHtml.trim();
           if (emptyApiResponse) {
             const endedAt = Date.now();
-            const diagnostic = t('assistant.emptyResponseMessage');
+            // P0-24 Q6 (same as P7): a model stream that ends with no reply is a
+            // normal end, not a failure. The turn keeps the `empty_response`
+            // marker other logic reads, without a 运行失败 body text.
             updateMessageById(
               assistantId,
               (prev) => ({
                 ...prev,
                 endedAt,
-                runStatus: 'failed',
+                runStatus: 'succeeded',
                 events: [
                   ...(prev.events ?? []),
                   { kind: 'status', label: 'empty_response', detail: config.model },
-                  { kind: 'text', text: diagnostic },
                 ],
               }),
               true,
               { telemetryFinalized: true },
             );
-            if (runCommentAttachments.length > 0) {
-              void patchAttachedStatuses(runCommentAttachments, 'failed');
-            }
+            releaseCommentsAfterUnsuccessfulRun(runSavedComments);
             const ownsCurrentRun = clearCurrentRunStreamingMarker(
               runConversationId,
               controller,
               cancelController,
             );
-            if (ownsCurrentRun) updateConversationLatestRun('failed', endedAt);
+            if (ownsCurrentRun) updateConversationLatestRun('succeeded', endedAt);
             void refreshProjectFiles().catch(() => {
               // Retain the last accepted file list while the daemon recovers.
             });
@@ -9696,7 +10397,9 @@ export function ProjectView({
               && latestRunMessage?.id === assistantId;
           };
           if (finalizingRunId) finalizingLocalRunIdsRef.current.add(finalizingRunId);
-          if (runCommentAttachments.length > 0) {
+          if (runReportedCanceled) {
+            releaseCommentsAfterUnsuccessfulRun(runSavedComments);
+          } else if (runCommentAttachments.length > 0) {
             void patchAttachedStatuses(runCommentAttachments, 'needs_review');
           }
           const ownsCurrentRun = clearCurrentRunStreamingMarker(
@@ -9715,7 +10418,7 @@ export function ProjectView({
               // otherwise win the race with the file-change invalidation and
               // make this turn persist an empty producedFiles list. Completion
               // attribution needs a fresh post-run snapshot.
-              let nextFiles = await refreshProjectFiles({ fresh: true });
+              let nextFiles = await refreshProjectFiles({ fresh: true, afterChange: true });
               let artifactPersistenceSucceeded = false;
               let artifactPersistenceError: string | undefined;
               const finalText = streamedText || fullText;
@@ -9806,7 +10509,7 @@ export function ProjectView({
               // `turnArtifacts.focused` is byte-for-byte the old
               // `selectAutoOpenTurnArtifact` answer, so the focused tab below
               // is decided exactly as it was before; only `.open` is new.
-              const turnArtifacts = selectAutoOpenTurnArtifacts(produced, nextFiles, {
+              const turnArtifacts = withLiveArtifactDeliveries(selectAutoOpenTurnArtifacts(produced, nextFiles, {
                 ...autoOpenArtifactOptions,
                 preTurnFileNames: beforeFileNames,
                 turnStartedAt: startedAt,
@@ -9820,9 +10523,11 @@ export function ProjectView({
                   project.id,
                   projectDetail.resolvedDir,
                 ),
-              });
+              }), latestAssistantMsg.events);
               const turnArtifactToOpen = turnArtifacts.focused;
-              const producedArtifactToOpen = selectAutoOpenProducedArtifact(
+              const producedArtifactToOpen = turnArtifactToOpen && isLiveArtifactTabId(turnArtifactToOpen)
+                ? turnArtifactToOpen
+                : selectAutoOpenProducedArtifact(
                 [
                   ...provenTraceTouchedFiles(),
                   ...(turnArtifactToOpen
@@ -9882,10 +10587,10 @@ export function ProjectView({
                 return updated;
               });
               if (deliveryOutcome === 'no_result' || deliveryOutcome === 'delivery_failed') {
-                setError(artifactPersistenceError ?? DESIGN_RESULT_MISSING_DETAIL);
-                if (runCommentAttachments.length > 0) {
-                  void patchAttachedStatuses(runCommentAttachments, 'failed');
-                }
+                // P0-24 (PRD C7/C8, Q3): a run that ended normally but delivered no
+                // file is not a failure, so no pane-level failure card. The outcome stays
+                // recorded on the message (resultDeliveryState), as Q3 accepted.
+                releaseCommentsAfterUnsuccessfulRun(runSavedComments);
               }
               await auditDesignSystemWorkspaceAfterRun(assistantId);
             } finally {
@@ -9896,6 +10601,7 @@ export function ProjectView({
           onProjectsRefresh();
         },
         onError: async (err: Error) => {
+          const canRestoreRejectedInput = !liveFocusClosed;
           liveFocusClosed = true;
           // Disconnect-time stamp, used as-is for non-generic-disconnect
           // failures. When the generic-disconnect retry-cap probe below
@@ -9906,6 +10612,8 @@ export function ProjectView({
           // this stale pre-probe timestamp.
           let endedAt = Date.now();
           const errorCode = (err as Error & { code?: string }).code;
+          if (errorCode !== AMR_INSUFFICIENT_BALANCE_CODE) retireFundingHint();
+          else fundingHintRelevant = false;
           const resumable = (err as Error & { resumable?: boolean }).resumable === true;
           let finalRunStatusAfterError: ChatMessage['runStatus'] = 'failed';
           let refreshConversationAfterError = false;
@@ -9926,6 +10634,65 @@ export function ProjectView({
           // tagged superseded. See the onDone above for the ownership rationale.
           const runMayFinalize =
             !supersededRunsRef.current.has(controller);
+          // Admission can fail in the native child after the composer send
+          // promise resolved. Return only that untouched initial input; a
+          // later model/tool request running out of funds keeps its run history.
+          const unstarted = !observedModelWork && !streamedText.trim() && !latestAssistantMsg.content.trim()
+            && !(latestAssistantMsg.events ?? []).some((event) => event.kind !== 'status' && event.kind !== 'done_key');
+          if (errorCode === AMR_INSUFFICIENT_BALANCE_CODE
+            && config.mode === 'daemon' && assistantAgentId === 'amr'
+            && meta?.composerOwnedDraft && unstarted && canRestoreRejectedInput
+            && runMayFinalize && !controller.signal.aborted && !cancelController.signal.aborted
+            && latestRequestSendRef.current.get(runConversationId) === clientRequestId
+            && modelRequestIdentityIsCurrent()
+            && concurrencyIntentRef.current.generation === sendIntentGeneration
+            && activeConversationIdRef.current === runConversationId
+            && messagesConversationIdRef.current === runConversationId) {
+            setFundingRejectedComposerSend({
+              conversationId: runConversationId, authorityKey: projectRunAuthorityKey,
+              accountGeneration: sendAccountGeneration, intentGeneration: sendIntentGeneration,
+              draft: { nonce: clientRequestId, text: prompt, attachments: effectiveAttachments,
+                commentAttachments, meta },
+            });
+          }
+          if (runMayFinalize && config.mode === 'daemon' && assistantAgentId === 'amr') {
+            showAmrFundingFailure({
+              code: errorCode, runKey: assistantId,
+              conversationId: runConversationId, authorityKey: projectRunAuthorityKey,
+              accountGeneration: sendAccountGeneration,
+            });
+          }
+          const limitDetail = (err as Error & { failureDetail?: string }).failureDetail;
+          const requestLimit = limitDetail === 'membership_concurrency_limit'
+            || (limitDetail == null && isMembershipConcurrencyLimitFailure(err.message));
+          if (!requestLimit) retireHomeRejectionSource();
+          // Link's refusal belongs to the original workspace, even if another model is selected meanwhile.
+          if (requestLimit && runMayFinalize && latestRequestSendRef.current.get(runConversationId) === clientRequestId
+            && modelRequestIdentityIsCurrent()
+            && messagesConversationIdRef.current === runConversationId) {
+            const key = `request-limit:${sendAccountGeneration}:${runConversationId}:${assistantId}`;
+            if (!shownFundingFailuresRef.current.has(key)) {
+              shownFundingFailuresRef.current.add(key);
+              // A later model in an active tool workflow can also hit Link's
+              // limit. Keep its history, but never re-inject the whole prompt.
+              setConcurrencyRejection({
+                conversationId: runConversationId, authorityKey: projectRunAuthorityKey,
+                accountGeneration: sendAccountGeneration, requestId: clientRequestId,
+                branch: amrBalanceBranchRef.current,
+                workspaceContext: fundingDialogContextRef.current.workspaceContext,
+                preflight: null,
+                stage: unstarted ? 'before_run' : 'mid_run',
+                initialHomeSend: meta?.initialHomeSend === true,
+                draft: (meta?.composerOwnedDraft || meta?.initialHomeSend) && unstarted ? {
+                  nonce: clientRequestId, text: prompt, attachments: effectiveAttachments,
+                  commentAttachments, meta,
+                } : null,
+              });
+              setConcurrencyDialogOpen(true);
+              refreshConcurrencyPlanProof(modelRequestIdentityIsCurrent);
+              amrGatePausedQueueConversationsRef.current.add(runConversationId);
+            }
+          }
           if (currentRunId && runMayFinalize && isGenericDaemonDisconnect(err)) {
             manualFileWriteRegistration.release(true);
           }
@@ -9939,6 +10706,14 @@ export function ProjectView({
           if (config.mode === 'daemon' && !currentRunId) {
             if (runMayFinalize) {
               setError(null);
+              if (errorCode === 'CONVERSATION_NOT_FOUND') {
+                setProjectActionsToast({
+                  message: t('chat.sendTargetMissing'),
+                  details: null,
+                  tone: 'error',
+                  scope: 'chat-pane',
+                });
+              }
               activeCompletionNotificationRunsRef.current.delete(assistantId);
               setConversations((current) =>
                 current.map((conversation) => {
@@ -9968,9 +10743,7 @@ export function ProjectView({
                 if (failedUser) persistMessage(failedUser);
                 return next;
               });
-              if (runCommentAttachments.length > 0) {
-                void patchAttachedStatuses(runCommentAttachments, 'failed');
-              }
+              releaseCommentsAfterUnsuccessfulRun(runSavedComments);
             }
             clearTraceTouchedFilePaths();
             clearCurrentRunStreamingMarker(
@@ -10004,9 +10777,7 @@ export function ProjectView({
                 : prev.runStatus,
               resumable,
             }));
-            if (runCommentAttachments.length > 0) {
-              void patchAttachedStatuses(runCommentAttachments, 'failed');
-            }
+            releaseCommentsAfterUnsuccessfulRun(runSavedComments);
           }
           // Mark the run as completed in the reattach registry so that
           // attachRecoverableRuns does not race it after streaming ends.
@@ -10117,7 +10888,7 @@ export function ProjectView({
                   if (runMayFinalize) {
                     if (latestRunStatus.status === 'canceled') setError(null);
                     updateAssistant((prev) => ({
-                      ...prev,
+                      ...settleTurnFromRunRecord(prev),
                       endedAt: latestRunStatus.updatedAt,
                       runStatus: latestRunStatus.status,
                       ...(latestRunStatus.resumable !== undefined
@@ -10163,7 +10934,7 @@ export function ProjectView({
             ...(authoritativeArtifactPaths ?? []),
           ];
           void (async () => {
-            const nextFiles = await refreshProjectFiles({ fresh: true });
+            const nextFiles = await refreshProjectFiles({ fresh: true, afterChange: true });
             if (authoritativeArtifactPaths === undefined) return;
             const ownedFiles = attributableRunFiles(
               nextFiles, manualFileWrites, authoritativeTouchedPaths, project.id, projectDetail.resolvedDir,
@@ -10304,6 +11075,11 @@ export function ProjectView({
           userMessageId: userMsg.id,
           assistantMessageId: assistantId,
           clientRequestId,
+          submission: { id: meta?.queuedSubmissionId ?? clientRequestId,
+            source: meta?.systemSubmission ? 'system' : meta?.queueDrain ? 'queue' : 'user' },
+          onUserSubmissionAccepted: (receipt) => {
+            if (currentWorkspaceAccountGeneration() === sendAccountGeneration) onTouchProject(receipt.acceptedAt);
+          },
           skillId: project.skillId ?? null,
           skillIds: Array.isArray(meta?.skillIds) ? meta.skillIds : [],
           context: runContext,
@@ -10314,6 +11090,8 @@ export function ProjectView({
           sessionMode: runSessionMode,
           appliedPluginSnapshotId:
             meta?.appliedPluginSnapshotId ?? meta?.appliedPluginSnapshot?.snapshotId ?? null,
+          pluginId: meta?.appliedPluginSnapshot?.pluginId,
+          pluginInputs: meta?.appliedPluginSnapshot?.inputs,
           research: meta?.research,
           mediaExecution: mediaExecutionPolicyForProjectMetadata(project.metadata),
           model: daemonByokOpenCode ? config.model : choice?.model ?? null,
@@ -10353,6 +11131,7 @@ export function ProjectView({
             );
           },
           onRunCreated: (runId, strategyTask) => {
+            observeMemoryRun(project.id, runConversationId, assistantId, runId);
             // A successor boundary must include the final predecessor delta
             // and buffered text event even when the 250ms UI batch has not
             // fired yet.
@@ -10373,7 +11152,11 @@ export function ProjectView({
               runId,
               runStatus: 'queued' as const,
               taskAnalytics: resolvedTaskAnalytics,
-              ...(strategyTaskExecutionId ? { strategyTaskExecutionId } : {}),
+              ...(strategyTaskExecutionId ? {
+                strategyTaskExecutionId,
+                strategyTaskRunIndex: strategyTaskRunIndex(strategyTask, runId),
+                ...(strategySettledMessageFields(strategyTask) ?? {}),
+              } : {}),
               ...(isTaskSuccessor
                 ? {
                     strategyTaskPrefixLength: latestAssistantMsg.content.length,
@@ -10395,7 +11178,11 @@ export function ProjectView({
               runId,
               runStatus: 'queued',
               taskAnalytics: resolvedTaskAnalytics,
-              ...(strategyTaskExecutionId ? { strategyTaskExecutionId } : {}),
+              ...(strategyTaskExecutionId ? {
+                strategyTaskExecutionId,
+                strategyTaskRunIndex: strategyTaskRunIndex(strategyTask, runId),
+                ...(strategySettledMessageFields(strategyTask) ?? {}),
+              } : {}),
               ...(isTaskSuccessor
                 ? {
                     strategyTaskPrefixLength: prev.content.length,
@@ -10414,6 +11201,7 @@ export function ProjectView({
             // no assistant run to finalize or persist; onError moves the failure
             // to the user row instead.
             if (!currentRunId && runStatus === 'failed') return;
+            runReportedCanceled = runStatus === 'canceled';
             const endedAt = isTerminalRunStatus(runStatus) ? Date.now() : undefined;
             const runMayFinalize =
               !supersededRunsRef.current.has(controller);
@@ -10500,6 +11288,7 @@ export function ProjectView({
                 userMessage: userText,
                 projectId: project.id,
                 conversationId: runConversationId,
+                assistantMessageId: assistantId,
                 byokChatProvider,
               }),
             });
@@ -10542,6 +11331,11 @@ export function ProjectView({
           userMessageId: userMsg.id,
           assistantMessageId: assistantId,
           clientRequestId,
+          submission: { id: meta?.queuedSubmissionId ?? clientRequestId,
+            source: meta?.systemSubmission ? 'system' : meta?.queueDrain ? 'queue' : 'user' },
+          onUserSubmissionAccepted: (receipt) => {
+            if (currentWorkspaceAccountGeneration() === sendAccountGeneration) onTouchProject(receipt.acceptedAt);
+          },
           skillId: project.skillId ?? null,
           skillIds: Array.isArray(meta?.skillIds) ? meta.skillIds : [],
           context: runContext,
@@ -10552,6 +11346,8 @@ export function ProjectView({
           sessionMode: runSessionMode,
           appliedPluginSnapshotId:
             meta?.appliedPluginSnapshotId ?? meta?.appliedPluginSnapshot?.snapshotId ?? null,
+          pluginId: meta?.appliedPluginSnapshot?.pluginId,
+          pluginInputs: meta?.appliedPluginSnapshot?.inputs,
           research: meta?.research,
           mediaExecution: mediaExecutionPolicyForProjectMetadata(project.metadata),
           model: config.model,
@@ -10588,7 +11384,15 @@ export function ProjectView({
             recoveryActionType: taskAnalytics.recoveryActionType,
             recoveryActionInstanceId: taskAnalytics.recoveryActionInstanceId,
           },
+          onStrategyTaskSettled: (strategyTask) => {
+            const settledFields = strategySettledMessageFields(strategyTask);
+            if (!settledFields) return;
+            latestAssistantMsg = {...latestAssistantMsg, ...settledFields,
+              taskDisplay:newerTaskDisplay(latestAssistantMsg.taskDisplay,strategyTask.display)};
+            updateMessageById(assistantId, prev => ({...prev,...settledFields}), true);
+          },
           onRunCreated: (runId, strategyTask) => {
+            observeMemoryRun(project.id, runConversationId, assistantId, runId);
             manualFileWriteRegistration.bindRun(runId);
             textBuffer.flush();
             const resolvedTaskAnalytics = {
@@ -10607,7 +11411,11 @@ export function ProjectView({
               runId,
               runStatus: 'queued' as const,
               taskAnalytics: resolvedTaskAnalytics,
-              ...(strategyTaskExecutionId ? { strategyTaskExecutionId } : {}),
+              ...(strategyTaskExecutionId ? {
+                strategyTaskExecutionId,
+                strategyTaskRunIndex: strategyTaskRunIndex(strategyTask, runId),
+                ...(strategySettledMessageFields(strategyTask) ?? {}),
+              } : {}),
               ...(isTaskSuccessor
                 ? {
                     strategyTaskPrefixLength: latestAssistantMsg.content.length,
@@ -10625,7 +11433,11 @@ export function ProjectView({
               runId,
               runStatus: 'queued',
               taskAnalytics: resolvedTaskAnalytics,
-              ...(strategyTaskExecutionId ? { strategyTaskExecutionId } : {}),
+              ...(strategyTaskExecutionId ? {
+                strategyTaskExecutionId,
+                strategyTaskRunIndex: strategyTaskRunIndex(strategyTask, runId),
+                ...(strategySettledMessageFields(strategyTask) ?? {}),
+              } : {}),
               ...(isTaskSuccessor
                 ? {
                     strategyTaskPrefixLength: prev.content.length,
@@ -10636,6 +11448,7 @@ export function ProjectView({
             }));
           },
           onRunStatus: (runStatus) => {
+            runReportedCanceled = runStatus === 'canceled';
             const endedAt = isTerminalRunStatus(runStatus) ? Date.now() : undefined;
             const runMayFinalize = !supersededRunsRef.current.has(controller);
             // 见 CLI / AMR 路径同名回调:落终态就把重连那一行让出去。
@@ -10703,8 +11516,10 @@ export function ProjectView({
       persistMessageById,
       auditDesignSystemWorkspaceAfterRun,
       patchAttachedStatuses,
+      releaseCommentsAfterUnsuccessfulRun,
       updateMessageById,
       markStreamingConversation,
+      observeMemoryRun,
       clearStreamingMarker,
       clearCurrentRunStreamingMarker,
       clearProjectTimeout,
@@ -10727,6 +11542,10 @@ export function ProjectView({
       projectRunHasBillableAmrPrincipal,
       projectMutationReadOnly,
       projectWorkspaceScopeState.scope,
+      showAmrFundingFailure,
+      requireManualStartAfterFundingRefusal,
+      onInitialHomeRequestProgress,
+      amrBalanceCardScope,
     ],
   );
 
@@ -10871,6 +11690,22 @@ export function ProjectView({
       controller.abort();
     }
     reattachControllersRef.current.clear();
+    // Stopping aborts the stream, so the stopped turn never reports a terminal
+    // status of its own. Release ONLY the in-flight run's comments: queued
+    // sends (including one being prioritized by "send now") also hold their
+    // attachments in 'applying', and those must stay reserved — the run that
+    // drains them re-applies them. The in-flight run's comments are exactly
+    // the 'applying' ones not owned by any queued send.
+    const queuedCommentIds = new Set(
+      queuedChatSendsRef.current.flatMap((send) =>
+        send.commentAttachments.map((attachment) => attachment.id),
+      ),
+    );
+    releaseCommentsAfterUnsuccessfulRun(
+      previewCommentsRef.current.filter(
+        (comment) => comment.status === 'applying' && !queuedCommentIds.has(comment.id),
+      ),
+    );
     setStreaming(false);
     streamingConversationIdRef.current = null;
     setStreamingConversationId(null);
@@ -10887,6 +11722,7 @@ export function ProjectView({
     onProjectsRefresh,
     persistMessage,
     projectDetail.refresh,
+    releaseCommentsAfterUnsuccessfulRun,
     requestOpenFile,
     refreshWorkspaceItems,
   ]);
@@ -10901,10 +11737,43 @@ export function ProjectView({
     setSlideNavRequest({ name: target.filePath, slideIndex: target.slideIndex, nonce: Date.now() });
   }, []);
 
+  // Starts a queued send. One that ends without a run stays in the queue, but
+  // no longer holds its comments.
+  const startQueuedChatSend = useCallback(async (item: QueuedChatSend): Promise<boolean> => {
+    let started = false;
+    try {
+      if (!item.meta?.systemSubmission) {
+        const queueAccountGeneration = currentWorkspaceAccountGeneration();
+        const receipt = await registerQueuedSubmission(project.id, { id: item.id,
+          conversationId: item.conversationId, submittedAt: item.createdAt }, projectRunWorkspaceContext);
+        if (!mountedRef.current || queueAccountGeneration !== currentWorkspaceAccountGeneration()) return false;
+        if (!receipt) {
+          releaseCommentsOfSendWithoutRun(item);
+          return false;
+        }
+      }
+      started = await handleSend(
+        item.prompt,
+        item.attachments,
+        item.commentAttachments,
+        { ...(item.meta ?? {}), queueDrain: true, queuedSubmissionId: item.id },
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+    if (!started) releaseCommentsOfSendWithoutRun(item);
+    return started;
+  }, [handleSend, releaseCommentsOfSendWithoutRun]);
+  // An awaited preflight may outlive the active run. Dispatch through the
+  // current render so handleSend sees its settled busy state, after the
+  // explicit item's scope/account/model guards have been checked again.
+  const startQueuedChatSendRef = useRef(startQueuedChatSend);
+  startQueuedChatSendRef.current = startQueuedChatSend;
+
   const sendQueuedChatSendNow = useCallback((id: string) => {
     const item = queuedChatSendsRef.current.find((candidate) => candidate.id === id);
     if (!item) return;
-    if (currentConversationBusy) {
+    const stopAndPrioritize = () => {
       // "Send now" while the agent is still working: the user has explicitly
       // chosen this turn over the in-flight one, so interrupt the running run
       // and move this item to the front. Stopping flips the conversation out
@@ -10921,56 +11790,75 @@ export function ProjectView({
       for (const controller of reattachControllersRef.current.values()) {
         supersededRunsRef.current.add(controller);
       }
-      // The interrupted turn moved its preview-comment attachments to
-      // 'applying' when it started; since we now suppress its terminal
-      // callbacks, reset them to 'open' so they don't stay stuck mid-apply.
-      // Reset ONLY the in-flight run's comments: queued sends (including the
-      // one being prioritized) also hold their attachments in 'applying', and
-      // those must stay reserved — the replacement run re-applies them. The
-      // in-flight run's comments are exactly the 'applying' ones not owned by
-      // any queued send.
-      const queuedCommentIds = new Set(
-        queuedChatSendsRef.current.flatMap((send) =>
-          send.commentAttachments.map((attachment) => attachment.id),
-        ),
-      );
-      const stuckApplying = previewCommentsRef.current.filter(
-        (comment) => comment.status === 'applying' && !queuedCommentIds.has(comment.id),
-      );
-      if (stuckApplying.length > 0) {
-        const resetIds = new Set(stuckApplying.map((comment) => comment.id));
-        commitPreviewComments((current) =>
-          current.map((comment) =>
-            resetIds.has(comment.id) ? { ...comment, status: 'open' } : comment,
-          ),
-        );
-        void Promise.all(
-          stuckApplying.map((comment) =>
-            patchPreviewCommentStatus(
-              project.id,
-              comment.conversationId,
-              comment.id,
-              'open',
-              projectRunWorkspaceContext,
-            ),
-          ),
-        ).catch(() => {});
-      }
+      // handleStop releases the interrupted turn's comments back to 'open'.
+      explicitlyStartedQueuedSendIdRef.current = id;
       prioritizeQueuedChatSend(id);
       handleStop();
+    };
+    if (currentConversationBusy) {
+      // A balance-paused AMR item needs fresh, exact member/model evidence
+      // before replacing an already running task. If the selected item is
+      // still unfunded, its Send now must not stop that earlier task.
+      if (config.mode === 'daemon' && config.agentId === 'amr'
+        && item.manualStartOnly && amrBalanceCardScope) {
+        if (busyQueuedSendPreflightRef.current) return;
+        busyQueuedSendPreflightRef.current = id;
+        const conversationId = item.conversationId;
+        const authorityKey = projectRunAuthorityKey;
+        const accountGeneration = currentWorkspaceAccountGeneration();
+        const modelId = effectiveAgentModelId(agentsById.get('amr'), config.agentModels?.amr);
+        const selectionGeneration = fundingSelectionRef.current.generation;
+        const isCurrent = () => mountedRef.current && projectIdRef.current === project.id
+          && projectRunAuthorityKeyRef.current === authorityKey
+          && currentWorkspaceAccountGeneration() === accountGeneration
+          && activeConversationIdRef.current === conversationId
+          && messagesConversationIdRef.current === conversationId
+          && fundingSelectionRef.current.generation === selectionGeneration
+          && fundingDialogContextRef.current.modelId === modelId;
+        void (async () => {
+          try {
+            const evidence = await readFreshAmrFundingEvidence(amrBalanceCardScope, modelId, isCurrent);
+            if (!isCurrent() || !queuedChatSendsRef.current.some((send) => send.id === id)) return;
+            if (evidence.kind === 'insufficient') {
+              showAmrFundingFailure({
+                code: AMR_INSUFFICIENT_BALANCE_CODE, runKey: id,
+                conversationId, authorityKey, accountGeneration,
+                source: 'preflight', modelId, preflight: evidence.preflight,
+              });
+              return;
+            }
+            if (currentConversationBusyRef.current) {
+              stopAndPrioritize();
+              return;
+            }
+            setQueuedChatSendStarting(id, true);
+            try {
+              armSlideNavForQueuedSend(item);
+              const started = await startQueuedChatSendRef.current(item);
+              if (started) removeQueuedChatSend(id);
+            } finally {
+              setQueuedChatSendStarting(id, false);
+            }
+          } finally {
+            if (busyQueuedSendPreflightRef.current === id) busyQueuedSendPreflightRef.current = null;
+          }
+        })();
+        return;
+      }
+      stopAndPrioritize();
       return;
     }
+    setQueuedChatSendStarting(id, true);
     void (async () => {
-      armSlideNavForQueuedSend(item);
-      const started = await handleSend(
-        item.prompt,
-        item.attachments,
-        item.commentAttachments,
-        { ...(item.meta ?? {}), queueDrain: true },
-      );
-      if (started) removeQueuedChatSend(id);
+      try {
+        armSlideNavForQueuedSend(item);
+        const started = await startQueuedChatSend(item);
+        if (started) removeQueuedChatSend(id);
+      } finally {
+        setQueuedChatSendStarting(id, false);
+      }
     })();
-  }, [armSlideNavForQueuedSend, commitPreviewComments, currentConversationBusy, handleSend, handleStop, prioritizeQueuedChatSend, project.id, removeQueuedChatSend, projectRunWorkspaceContext]);
+  }, [amrBalanceCardScope, agentsById, armSlideNavForQueuedSend, config, currentConversationBusy, handleStop, prioritizeQueuedChatSend, project.id, projectRunAuthorityKey, removeQueuedChatSend, setQueuedChatSendStarting, showAmrFundingFailure, startQueuedChatSend]);
 
   /*
    * B11 「引导对话」 —— 队列行领头那颗按钮走的就是上面的
@@ -11007,30 +11895,35 @@ export function ProjectView({
     if (startingQueuedChatSendIdRef.current) return;
     if (!activeConversationId) return;
     if (messagesConversationIdRef.current !== activeConversationId) return;
-    // Queue paused by the balance gate: don't re-drain (and re-pop the
-    // dialog) on unrelated state churn while AMR is still the agent. The
-    // manual "run now" path below bypasses this deliberately, and switching
-    // agents makes the pause irrelevant.
-    if (
-      config.mode === 'daemon' &&
-      config.agentId === 'amr' &&
-      amrGatePausedQueueConversationsRef.current.has(activeConversationId)
-    ) {
-      return;
-    }
     const next = queuedChatSendsRef.current.find(
       (item) => item.conversationId === activeConversationId,
     );
     if (!next) return;
+    const explicitlyStarted = explicitlyStartedQueuedSendIdRef.current === next.id;
+    // Queue paused by the balance gate: don't re-drain (and re-pop the
+    // dialog) on unrelated state churn while AMR is still the agent. A busy
+    // "Send now" authorizes only its selected item through this effect.
+    if (
+      config.mode === 'daemon' &&
+      config.agentId === 'amr' &&
+      amrGatePausedQueueConversationsRef.current.has(activeConversationId) &&
+      !explicitlyStarted
+    ) {
+      return;
+    }
+    // Funding refusal belongs to this queued input, not the currently
+    // selected agent. Switching away from AMR must not turn the old input
+    // into an automatic run with another provider.
+    if (next.manualStartOnly && !explicitlyStarted) return;
     startingQueuedChatSendIdRef.current = next.id;
+    setQueuedChatSendStarting(next.id, true);
     armSlideNavForQueuedSend(next);
     void (async () => {
-      const started = await handleSend(
-        next.prompt,
-        next.attachments,
-        next.commentAttachments,
-        { ...(next.meta ?? {}), queueDrain: true },
-      );
+      const started = await startQueuedChatSend(next);
+      if (explicitlyStartedQueuedSendIdRef.current === next.id) {
+        explicitlyStartedQueuedSendIdRef.current = null;
+      }
+      if (!started) setQueuedChatSendStarting(next.id, false);
       if (!started) {
         if (startingQueuedChatSendIdRef.current === next.id) {
           startingQueuedChatSendIdRef.current = null;
@@ -11038,6 +11931,7 @@ export function ProjectView({
         return;
       }
       removeQueuedChatSend(next.id);
+      setQueuedChatSendStarting(next.id, false);
       scheduleProjectTimeout(() => {
         if (startingQueuedChatSendIdRef.current !== next.id) return;
         startingQueuedChatSendIdRef.current = null;
@@ -11052,9 +11946,10 @@ export function ProjectView({
     currentConversationBusy,
     queuedAutoStartTick,
     queuedChatSends,
-    handleSend,
+    startQueuedChatSend,
     removeQueuedChatSend,
     scheduleProjectTimeout,
+    setQueuedChatSendStarting,
   ]);
 
   /*
@@ -11248,7 +12143,7 @@ export function ProjectView({
     const repairText = autoAuditRepairSeed.value.trim();
     setAutoAuditRepairSeed(null);
     if (!repairText) return;
-    void handleSend(repairText, [], []);
+    void handleSend(repairText, [], [], { systemSubmission: true });
   }, [
     activeConversationId,
     autoAuditRepairSeed,
@@ -11262,11 +12157,27 @@ export function ProjectView({
       commentAttachments: ChatCommentAttachment[],
       images: File[] = [],
     ): Promise<CommentSendResult> => {
+      const finish = (result: CommentSendResult): CommentSendResult => {
+        observeAnalytics(() => {
+          const submittedIds = savedCommentIds(commentAttachments) ?? [];
+          const returnedIds = new Set(result.commentIds);
+          trackProjectCommentSendResult(analytics.track, {
+            page_name: 'artifact',
+            area: 'comment_popover',
+            project_id: project.id,
+            project_kind: projectKindFromMetadataToTracking(project.metadata),
+            result: result.status,
+            submitted_comment_ids: submittedIds,
+            comment_ids: submittedIds.filter((id) => returnedIds.has(id)),
+          });
+        });
+        return result;
+      };
       if (currentConversationQueueDisabled) {
-        return { status: 'rejected', commentIds: [] };
+        return finish({ status: 'rejected', commentIds: [] });
       }
       if (commentAttachments.length === 0 && images.length === 0) {
-        return { status: 'rejected', commentIds: [] };
+        return finish({ status: 'rejected', commentIds: [] });
       }
       setWorkspaceFocused(false);
       setCommentInspectorActive(false);
@@ -11282,7 +12193,7 @@ export function ProjectView({
           projectRunWorkspaceContext,
         );
         if (result.uploaded.length !== images.length) {
-          return { status: 'rejected', commentIds: [] };
+          return finish({ status: 'rejected', commentIds: [] });
         }
         uploaded = result.uploaded;
       }
@@ -11290,10 +12201,10 @@ export function ProjectView({
         const queued = uploaded.length > 0
           ? await handleSend('', uploaded, [], { queueOnly: true, entryFrom: 'comment' })
           : false;
-        return {
+        return finish({
           status: queued ? 'queued' : 'rejected',
           commentIds: [],
-        };
+        });
       }
       const queuedCommentIds: string[] = [];
       for (let i = 0; i < commentAttachments.length; i++) {
@@ -11309,13 +12220,13 @@ export function ProjectView({
           { queueOnly: true, entryFrom: 'comment' },
         );
         if (!queued) {
-          return { status: 'rejected', commentIds: queuedCommentIds };
+          return finish({ status: 'rejected', commentIds: queuedCommentIds });
         }
         queuedCommentIds.push(commentAttachment.id);
       }
-      return { status: 'queued', commentIds: queuedCommentIds };
+      return finish({ status: 'queued', commentIds: queuedCommentIds });
     },
-    [handleSend, project.id, currentConversationQueueDisabled, projectRunWorkspaceContext],
+    [handleSend, project.id, project.metadata, analytics.track, currentConversationQueueDisabled, projectRunWorkspaceContext],
   );
   const commentQueueOnSend = currentConversationBusy && !currentConversationQueueDisabled;
 
@@ -11827,8 +12738,12 @@ export function ProjectView({
     projectMutationReadOnly,
   ]);
 
-  const handleSelectConversation = useCallback((id: string) => {
+  const handleSelectConversation = useCallback((id: string, measureNavigation = true) => {
     if (id === activeConversationId && failedMessagesConversationId !== id) return;
+    const navigationId = measureNavigation ? observeNavigation(() => navigationTiming.begin(
+      { kind: 'project', projectId: project.id, conversationId: activeConversationId },
+      { projectId: project.id, conversationId: id },
+    )) : null;
     setMessages([]);
     commitPreviewComments([]);
     setAttachedComments([]);
@@ -11855,7 +12770,11 @@ export function ProjectView({
         conversationId: id,
         fileName: openTabsState.active ?? null,
       },
-      { replace: true },
+      {
+        replace: true,
+        onCommit: () => { if (navigationId) observeNavigation(() => navigationTiming.commit(navigationId)); },
+        onCancel: reason => { if (navigationId) observeNavigation(() => navigationTiming.finish(navigationId, 'cancelled', reason)); },
+      },
     );
     setMessageLoadRetryNonce((nonce) => nonce + 1);
   }, [activeConversationId, commitPreviewComments, failedMessagesConversationId, project.id, openTabsState.active]);
@@ -12156,7 +13075,7 @@ export function ProjectView({
               ? retryPending.failedAssistantId : null,
             supersededErrorAssistantIds,
             onStop: handleStop,
-            onRemoveQueuedSend: removeQueuedChatSend,
+            onRemoveQueuedSend: discardQueuedChatSend,
             onUpdateQueuedSend: updateQueuedChatSend,
             onReorderQueuedSends: reorderCurrentConversationQueuedChatSends,
             // B11 「引导对话」: one button, always offered. The handler already
@@ -12184,7 +13103,7 @@ export function ProjectView({
       handleComposerSend,
       handleStop,
       messages,
-      removeQueuedChatSend,
+      discardQueuedChatSend,
       reorderCurrentConversationQueuedChatSends,
       sendQueuedChatSendNow,
       updateQueuedChatSend,
@@ -12455,7 +13374,11 @@ export function ProjectView({
   const handleArtifactShare = useCallback(
     (fileName: string, anchorId?: string) => {
       requestOpenFile(fileName);
-      setShareRequest({ name: fileName, nonce: Date.now(), ...(anchorId ? { anchorId } : {}) });
+      setShareRequest((previous) => ({
+        name: fileName,
+        nonce: nextShareRequestNonce(previous?.nonce, Date.now()),
+        ...(anchorId ? { anchorId } : {}),
+      }));
     },
     [requestOpenFile],
   );
@@ -12490,10 +13413,7 @@ export function ProjectView({
     [skills, designTemplates, project.skillId],
   );
   const chatResizeLabel = t('project.resizeChatPanel');
-  const workspacePanelTrack =
-    workspacePanelMinWidth === 0
-      ? 'minmax(0, 1fr)'
-      : `minmax(${workspacePanelMinWidth}px, 1fr)`;
+  const workspacePanelTrack = workspacePanelTrackForMinWidth(workspacePanelMinWidth);
   // The comment panel floats over the workspace now, so opening it must not
   // touch the split at all: the chat column keeps the width the user set.
   // (It used to take over this column at COMMENT_INSPECTOR_PANEL_WIDTH.)
@@ -12519,11 +13439,17 @@ export function ProjectView({
   const renderPreferredChatPanelWidth = useCallback((
     preferredWidth: number,
     maxWidth = chatPanelMaxWidthRef.current,
-    options: { commitState?: boolean } = {},
+    options: { commitState?: boolean; animate?: boolean } = {},
   ): number => {
     const next = clampChatPanelWidth(preferredWidth, maxWidth);
     chatPanelWidthRef.current = next;
-    applySplitChatPanelWidth(splitRef.current, next, workspacePanelTrack, workspaceFocusedRef.current);
+    applySplitChatPanelWidth(
+      splitRef.current,
+      next,
+      workspacePanelTrack,
+      workspaceFocusedRef.current,
+      { animate: options.animate },
+    );
     if (options.commitState !== false) setChatPanelWidth(next);
     return next;
   }, [workspacePanelTrack]);
@@ -12580,29 +13506,34 @@ export function ProjectView({
     const split = splitRef.current;
     if (!split) return undefined;
 
-    const updateAllowedWidth = () => {
-      const splitWidth = split.clientWidth;
-      const nextWorkspaceMin = workspacePanelMinWidthForSplit(splitWidth);
-      const nextMax = maxChatPanelWidthForSplit(splitWidth);
-      chatPanelMaxWidthRef.current = nextMax;
-      setWorkspacePanelMinWidth(nextWorkspaceMin);
-      setChatPanelMaxWidth(nextMax);
-      const preferredWidth = chatPanelWidthCustomizedRef.current
-        ? preferredChatPanelWidthRef.current
-        : defaultChatPanelWidthForSplit(splitWidth);
-      renderPreferredChatPanelWidth(preferredWidth, nextMax);
+    const updateAllowedWidth = (options: { animate?: boolean } = {}) => {
+      // Same resolver as the creation frame that may have preceded this view
+      // (OPEND-3207): a saved width, else the equal split of the container.
+      const layout = resolveProjectSplitLayout(split.clientWidth, {
+        width: preferredChatPanelWidthRef.current,
+        customized: chatPanelWidthCustomizedRef.current,
+      });
+      chatPanelMaxWidthRef.current = layout.chatPanelMaxWidth;
+      setWorkspacePanelMinWidth(layout.workspacePanelMinWidth);
+      setChatPanelMaxWidth(layout.chatPanelMaxWidth);
+      renderPreferredChatPanelWidth(layout.chatPanelWidth, layout.chatPanelMaxWidth, options);
     };
 
-    updateAllowedWidth();
+    // The first write settles the column without the `.split` transition:
+    // the `clientWidth` read above has already forced a style pass with the
+    // provisional inline width, so an animated write here would be seen
+    // sliding from that value on every mount.
+    updateAllowedWidth({ animate: false });
 
     if (typeof ResizeObserver !== 'undefined') {
-      const observer = new ResizeObserver(updateAllowedWidth);
+      const observer = new ResizeObserver(() => updateAllowedWidth());
       observer.observe(split);
       return () => observer.disconnect();
     }
 
-    window.addEventListener('resize', updateAllowedWidth);
-    return () => window.removeEventListener('resize', updateAllowedWidth);
+    const onWindowResize = () => updateAllowedWidth();
+    window.addEventListener('resize', onWindowResize);
+    return () => window.removeEventListener('resize', onWindowResize);
   }, [renderPreferredChatPanelWidth]);
 
   useEffect(() => () => finishChatPanelResize(false), [finishChatPanelResize]);
@@ -12772,7 +13703,11 @@ export function ProjectView({
     let isAutoSend = false;
     let amrGateWitness: AmrBalanceGateScope | undefined;
     try {
-      isAutoSend = Boolean(
+      // A Home send mounts this view before App has written the auto-send
+      // keys (they follow the create and the uploads, OPEND-3334). Its prompt
+      // is the first message, never a composer draft; the dispatch below
+      // still waits for the flag and re-reads the session values live.
+      isAutoSend = creationHandoff !== null || Boolean(
         window.sessionStorage.getItem(autoSendFirstMessageKey(project.id)),
       );
       amrGateWitness = readAutoSendAmrGateWitness(project.id);
@@ -12784,7 +13719,7 @@ export function ProjectView({
       ? amrGateWitness
       : undefined;
     autoSendSeedRef.current = isAutoSend
-      ? (readAutoSendPrompt(project.id) ?? project.pendingPrompt ?? '')
+      ? (readAutoSendPrompt(project.id) ?? creationHandoff?.prompt ?? project.pendingPrompt ?? '')
       : '';
     autoSendAttachmentsRef.current = isAutoSend ? readAutoSendAttachments(project.id) : [];
     autoSendContextRef.current = isAutoSend ? readAutoSendContext(project.id) : null;
@@ -12818,6 +13753,8 @@ export function ProjectView({
       : { projectId: project.id, value: project.pendingPrompt },
   );
   useEffect(() => {
+    // Clearing it is a write to the project row, which does not exist yet.
+    if (projectReadsHeld) return;
     const pendingPrompt = project.pendingPrompt;
     if (!pendingPrompt) return;
     if (autoSendFirstMessageRef.current) {
@@ -12831,7 +13768,7 @@ export function ProjectView({
         : { projectId: project.id, value: pendingPrompt },
     );
     onClearPendingPrompt();
-  }, [project.id, project.pendingPrompt, onClearPendingPrompt]);
+  }, [project.id, project.pendingPrompt, projectReadsHeld, onClearPendingPrompt]);
   const chatInitialDraft =
     chatSeed?.value ??
     (
@@ -12913,7 +13850,7 @@ export function ProjectView({
           returnedConversationId !== activeConversationId
           || failedMessagesConversationId === returnedConversationId
         ) {
-          handleSelectConversation(returnedConversationId);
+          handleSelectConversation(returnedConversationId, false);
         } else {
           scheduleConversationMessageRefresh(returnedConversationId);
         }
@@ -13234,7 +14171,7 @@ export function ProjectView({
   // Continue in CLI / Finalize design package handlers + keyboard
   // shortcut wiring. Close to the JSX so the data flow is easy to
   // trace from the toolbar back to its sources.
-  const handleFinalize = useCallback(() => {
+  const _handleFinalize = useCallback(() => {
     const request = buildFinalizeRequest(config);
     if (!request) {
       setProjectActionsToast(buildFinalizeCredentialsMissingToast(config));
@@ -13245,7 +14182,7 @@ export function ProjectView({
     });
   }, [finalize, config, designMdState]);
 
-  const handleCancelFinalize = useCallback(() => {
+  const _handleCancelFinalize = useCallback(() => {
     finalize.cancel();
   }, [finalize]);
 
@@ -13403,16 +14340,59 @@ export function ProjectView({
     return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
   }, [designMdState.exists, handleContinueInCli]);
 
-  // OPEND-2170: the hand-off card App keeps over this column comes down only
-  // once the column has something real to show — the auto-sent turn painted,
-  // or a transcript that is loaded and has nothing to send, or a load that
-  // failed (the error surface is the real thing then). Fired once per mount;
-  // App owns the fallback deadline, so a send parked behind a gate dialog
-  // cannot pin the card forever.
-  const creationHandoffActive = creationHandoff !== null;
+  // The optimistic first turn of a Home send belongs to this view, not to
+  // App's creation record (OPEND-3334). It is captured at mount and retired
+  // only when the column no longer needs it: the real turn owns the rows, the
+  // auto-send was turned down, or nothing is going to be sent. App's record
+  // has its own cleanup deadline; tying the turn to it made the turn vanish
+  // whenever the Home uploads outlived that deadline, and come back when
+  // they finished.
+  const [optimisticFirstTurn, setOptimisticFirstTurn] = useState<{
+    prompt: string;
+    files?: readonly File[];
+  } | null>(() => (creationHandoff
+    ? { prompt: creationHandoff.prompt, files: creationHandoff.files }
+    : null));
+  // The seed conversation's id, minted with the project. Kept for the life of
+  // the view: the pane is keyed by it from the first frame, so the
+  // conversation list answering (or the record being released) never re-keys
+  // it.
+  const [seedConversationId] = useState(() => creationHandoff?.conversationId ?? null);
+  // Until the auto-sent turn is on screen the transcript is empty, but the
+  // turn's first frame is already known: ChatPane draws it from these two
+  // optimistic messages with its own components, so the real turn takes over
+  // the same rows (OPEND-3334). Any real message wins at once.
+  const creationHandoffMessageIds = useMemo(() => {
+    const identity = homeAutoSendIdentity(project.id);
+    return { user: identity.userMessageId!, assistant: identity.assistantMessageId! };
+  }, [project.id]);
+  const creationHandoffMessages = useCreationHandoffMessages(
+    optimisticFirstTurn,
+    selectedAssistantIdentity,
+    creationHandoffMessageIds,
+  );
+  const creationHandoffTurnShown = optimisticFirstTurn !== null && messages.length === 0;
+  const chatPaneConversationKey =
+    activeConversationId
+    ?? seedConversationId
+    ?? 'conversation-unavailable';
+  // A project born from the Home send starts with no files, and the pending
+  // frame already drew the empty state. Keep drawing it (inert) until the
+  // first listing is accepted instead of flipping to "Loading…" in between;
+  // the authority gate itself is untouched, so no CTA acts before that read
+  // (Home attachments are still uploading then). An imported working folder
+  // may hold files, so it keeps the honest loading state.
+  const [emptyLookBeforeFirstListing] = useState(
+    () => creationHandoff !== null && !project.metadata?.baseDir,
+  );
+  const ignoreStopBeforeFirstRun = useCallback(() => undefined, []);
+  // OPEND-2170: the first turn is settled once the column has something real
+  // to show — the auto-sent turn painted, a loaded transcript with nothing to
+  // send, or a load that failed (the error surface is the real thing then).
+  // Then the optimistic turn retires and App may release its record.
   const creationHandoffSettledRef = useRef(false);
   useEffect(() => {
-    if (!creationHandoffActive || creationHandoffSettledRef.current) return;
+    if (optimisticFirstTurn === null || creationHandoffSettledRef.current) return;
     const transcriptLoaded =
       Boolean(activeConversationId)
       && messagesConversationId === activeConversationId
@@ -13431,20 +14411,38 @@ export function ProjectView({
       );
     if (!(transcriptFailed || (transcriptLoaded && (firstTurnPainted || nothingToSend)))) return;
     creationHandoffSettledRef.current = true;
+    setOptimisticFirstTurn(null);
     onCreationHandoffSettled?.(project.id);
   }, [
     activeConversationId,
     conversationLoadError,
-    creationHandoffActive,
     failedMessagesConversationId,
     homeAttachmentUploads.length,
     messages.length,
     messagesConversationId,
     messagesInitialized,
     onCreationHandoffSettled,
+    optimisticFirstTurn,
     project.id,
     projectIsProgrammaticBrandExtraction,
   ]);
+  // App released its record without the first turn settling here. The turn
+  // still stands while the Home uploads are going up (the send follows them)
+  // or while the auto-send keys are written (the send is coming). With
+  // neither, nothing will be sent — e.g. the working-directory hand-off
+  // failed after the create — and the turn must not stand as "Working".
+  useEffect(() => {
+    if (optimisticFirstTurn === null || creationHandoff !== null) return;
+    if (homeAttachmentUploads.length > 0) return;
+    let sendPending = false;
+    try {
+      sendPending = Boolean(window.sessionStorage.getItem(autoSendFirstMessageKey(project.id)));
+    } catch {
+      sendPending = false;
+    }
+    if (sendPending) return;
+    setOptimisticFirstTurn(null);
+  }, [creationHandoff, homeAttachmentUploads.length, optimisticFirstTurn, project.id]);
 
   // PluginLoopHome auto-send: when the user submits on Home, app.tsx
   // sets `sessionStorage['od:auto-send-first:<projectId>']` and routes
@@ -13519,6 +14517,15 @@ export function ProjectView({
     if (!seed && attachments.length === 0) {
       return;
     }
+    // A view mounted from the click read no witness (App writes it after the
+    // create); read it now so Home's gate decision is still reused.
+    if (autoSendAmrGateWitnessRef.current === undefined) {
+      try {
+        autoSendAmrGateWitnessRef.current = readAutoSendAmrGateWitness(project.id);
+      } catch {
+        /* sessionStorage may be unavailable; handleSend runs its own gate. */
+      }
+    }
     const autoSendGateStillMatches =
       autoSendAmrGateWitnessRef.current !== undefined &&
       amrBalanceGateScopesMatch(
@@ -13529,6 +14536,7 @@ export function ProjectView({
     void handleSend(seed, attachments, [], {
         ...(context ? { context } : {}),
         ...homeAutoSendIdentity(project.id),
+        initialHomeSend: true,
         acceptDurableQueue: true,
         // Only reuse Home's decision for the exact persisted project scope.
         // A workspace/member mismatch falls through to handleSend's normal gate.
@@ -13536,6 +14544,10 @@ export function ProjectView({
       })
       .then((accepted) => {
         if (!accepted) {
+          // The turn was turned down (a preflight block, a scope transition):
+          // the optimistic turn must not keep claiming it is running. A later
+          // retry paints the real turn itself.
+          setOptimisticFirstTurn(null);
           // The handoff was not accepted (for example a transient project
           // scope/conversation transition or a recoverable preflight block).
           // Keep every session value intact; a later dependency change can
@@ -13552,6 +14564,7 @@ export function ProjectView({
         autoSendInFlightRef.current = false;
       })
       .catch(() => {
+        setOptimisticFirstTurn(null);
         // `handleSend` normally reports a rejected preflight as `false`, but
         // transport/provider setup may still throw. Preserve the handoff for a
         // later retry instead of silently consuming the user's first prompt.
@@ -13652,12 +14665,24 @@ export function ProjectView({
     </>
   );
 
-  // The `.app` shell belongs to the caller, not to this component. App.tsx
-  // renders the same `div.app` around both this view and
-  // ProjectCreationPendingView so React reconciles one element across the
-  // hand-off. Owning the shell here would make each view mount its own
-  // element and replay the `.app` entrance animation, which reads as the
-  // project frame flashing twice on the way in from Home.
+  let rejectedComposerSend: RejectedComposerSend | undefined;
+  if (concurrencyRejection
+    && concurrencyRejection.conversationId === activeConversationId
+    && concurrencyRejection.authorityKey === projectRunAuthorityKey
+    && concurrencyRejection.accountGeneration === currentWorkspaceAccountGeneration()) {
+    rejectedComposerSend = concurrencyRejection.draft ?? undefined;
+  }
+  if (fundingRejectedComposerSend
+    && fundingRejectedComposerSend.conversationId === activeConversationId
+    && fundingRejectedComposerSend.authorityKey === projectRunAuthorityKey
+    && fundingRejectedComposerSend.accountGeneration === currentWorkspaceAccountGeneration()
+    && fundingRejectedComposerSend.intentGeneration === concurrencyIntentRef.current.generation) {
+    rejectedComposerSend = fundingRejectedComposerSend.draft;
+  }
+
+  // The `.app` shell belongs to the caller, not to this component: App.tsx
+  // owns the `div.app` around every project-route surface, so switching
+  // between them never replays the `.app` entrance animation.
   return (
     <CollabProvider value={collabValue}>
       <CritiqueTheaterMount
@@ -13675,12 +14700,17 @@ export function ProjectView({
           resizingChatPanel && !workspaceFocused ? 'is-resizing-chat' : '',
         ].filter(Boolean).join(' ')}
         style={projectSplitStyle(workspaceFocused, splitLeftPanelWidth, workspacePanelTrack)}
+        // A Home send's creation phase, for tests and diagnostics: `pending`
+        // while the project row does not exist yet (reads held), `persisted`
+        // until the first transcript settles, absent otherwise.
+        data-creation-phase={
+          creationHandoff ? (creationHandoff.persisted ? 'persisted' : 'pending') : undefined
+        }
       >
         <div
           className={[
             'split-chat-slot',
             chatSlotHidden ? 'split-chat-slot-hidden' : '',
-            creationHandoffActive ? 'split-chat-slot--creation-handoff' : '',
           ].filter(Boolean).join(' ')}
           aria-hidden={chatSlotHidden || undefined}
         >
@@ -13715,16 +14745,23 @@ export function ProjectView({
               </button>
             </div>
           ) : null}
-          {activeConversationId || conversationLoadError || emptyConversationReadOnlySettled ? (
+          {activeConversationId || conversationLoadError || emptyConversationReadOnlySettled || seedConversationId !== null || projectCollab.materializationPending || projectCollab.contentUpdatePending ? (
             <ChatPane
               historyPortalTarget={historyPortalTarget}
-              composerLayerHidden={creationHandoffActive}
               // The conversation id is part of the key so switching conversations
               // resets internal scroll/draft state inside ChatPane and ChatComposer.
-              key={`${project.id}:${activeConversationId ?? 'conversation-unavailable'}:${chatSeed?.id ?? 'ready'}`}
-              messages={messages}
-              streaming={currentConversationControlStreaming}
-              loading={currentConversationLoading}
+              key={`${project.id}:${chatPaneConversationKey}:${chatSeed?.id ?? 'ready'}`}
+              // The optimistic first turn carries the auto-send's ids, so the
+              // real rows take over these rows in place (OPEND-3334).
+              messages={creationHandoffTurnShown ? creationHandoffMessages : messages}
+              // The optimistic turn is a running turn: the composer shows the
+              // same stop control the auto-sent turn will, so it does not swap
+              // at the hand-off. There is no run to stop yet.
+              streaming={currentConversationControlStreaming || creationHandoffTurnShown}
+              // The optimistic turn is the column's content while the first
+              // transcript loads; a skeleton under it would be a second
+              // loading form (OPEND-2170).
+              loading={currentConversationLoading && !creationHandoffTurnShown}
               // A read-only viewer of a team-shared project cannot drive artifact
               // changes through chat (comments go through the separate overlay).
               // Home's own prompt has not gone out yet — it is waiting for this
@@ -13746,8 +14783,8 @@ export function ProjectView({
               }
               viewerOnly={projectMutationReadOnly}
               composerPlaceholder={
-                projectCollab.materializationPending
-                  ? t('designFiles.syncing')
+                projectCollab.materializationPending || projectCollab.contentUpdatePending
+                  ? t('collab.contentUpdate.waitToEdit')
                   // Placeholder only EXPLAINS; `sendDisabled` above still keeps
                   // the composer inert from the fail-closed flag. Undefined
                   // here means "disabled, reason not yet known" -- the default
@@ -13771,11 +14808,56 @@ export function ProjectView({
               projectResolvedDir={projectDetail.resolvedDir}
               skills={skills}
               onEnsureProject={handleEnsureProject}
-              previewComments={previewComments}
+              previewComments={visiblePreviewComments}
               attachedComments={attachedComments}
               onAttachComment={attachPreviewComment}
               onDetachComment={detachPreviewComment}
               onDeleteComment={(commentId) => void removePreviewComment(commentId)}
+              rejectedComposerSend={rejectedComposerSend}
+              amrConcurrencyCardAudience={concurrencyRejection
+                && concurrencyRejection.conversationId === activeConversationId
+                && concurrencyRejection.authorityKey === projectRunAuthorityKey
+                && concurrencyRejection.accountGeneration === currentWorkspaceAccountGeneration()
+                ? concurrencyRejection.branch.audience : null}
+              amrConcurrencyCardEligible={concurrencyCardEligible}
+              onAmrConcurrencyUpgrade={() => {
+                if (!activeConversationId || config.mode !== 'daemon' || config.agentId !== 'amr') return;
+                // A retained refusal keeps its original payer and plan proof.
+                // A restored failed-run card can reopen the same notice using
+                // this project's current billing authority, without resending.
+                if (!concurrencyRejection
+                  || concurrencyRejection.conversationId !== activeConversationId
+                  || concurrencyRejection.authorityKey !== projectRunAuthorityKey
+                  || concurrencyRejection.accountGeneration !== currentWorkspaceAccountGeneration()) {
+                  setConcurrencyRejection({
+                    conversationId: activeConversationId,
+                    authorityKey: projectRunAuthorityKey,
+                    accountGeneration: currentWorkspaceAccountGeneration(),
+                    requestId: `restored-concurrency-card:${activeConversationId}`,
+                    branch: amrBalanceBranch,
+                    workspaceContext: projectRunBillingAuthorityContext,
+                    preflight: null,
+                    draft: null,
+                    // A restored card has no reliable observation of when work began.
+                    stage: 'unknown',
+                    initialHomeSend: false,
+                  });
+                }
+                setConcurrencyDialogOpen(true);
+              }}
+              onRejectedComposerSendRestored={(nonce, restored) => {
+                if (!restored || !concurrencyRejection?.initialHomeSend
+                  || concurrencyRejection.draft?.nonce !== nonce
+                  || concurrencyRejection.conversationId !== activeConversationId
+                  || concurrencyRejection.authorityKey !== projectRunAuthorityKey
+                  || concurrencyRejection.accountGeneration !== currentWorkspaceAccountGeneration()) return;
+                onInitialHomeRequestConcurrencyRejected?.({
+                  projectId: project.id, clientRequestId: nonce,
+                  accountGeneration: concurrencyRejection.accountGeneration,
+                  workspaceContext: concurrencyRejection.workspaceContext,
+                  branch: concurrencyRejection.branch,
+                });
+              }}
               onSend={handleComposerSend}
               onResendUserMessage={handleResendUserMessage}
               onRetry={handleRetry}
@@ -13801,12 +14883,12 @@ export function ProjectView({
               onConsumeAmrAuthRetryContinuation={onConsumeAmrAuthRetryContinuation}
               onDiscardAmrAuthRetryContinuation={onDiscardAmrAuthRetryContinuation}
               onResumeRun={handleResumeRun}
-              onStop={handleStop}
+              onStop={creationHandoffTurnShown ? ignoreStopBeforeFirstRun : handleStop}
               // 组件 22 · 重连 · S29:掉线时流水的最后一行。按当前会话过一道 ——
               // 后台重挂可能发生在别的会话上,那一行不该串进这一屏。
               reconnect={reconnectViewForConversation(reconnectView, activeConversationId)}
               onManualReconnect={handleManualReconnect}
-              onRemoveQueuedSend={removeQueuedChatSend}
+              onRemoveQueuedSend={discardQueuedChatSend}
               onUpdateQueuedSend={updateQueuedChatSend}
               onReorderQueuedSends={reorderCurrentConversationQueuedChatSends}
               onSendQueuedNow={sendQueuedChatSendNow}
@@ -13905,6 +14987,7 @@ export function ProjectView({
               onOpenSettings={onOpenSettings}
               amrBalanceCardUsd={amrBalanceCardUsd}
               amrBalanceCardAnchorMessageId={amrBalanceCardAnchorId}
+              amrBalanceAudience={amrBalanceBranch.audience}
               amrBalanceCardUnavailable={amrBalanceFailureWalletUnavailable}
               onAmrBalanceUpgrade={handleAmrBalanceCardUpgrade}
               showByokRecoveryAction={
@@ -13947,7 +15030,9 @@ export function ProjectView({
               // The Home batch, drawn from the local bytes while it uploads.
               // Same tray, same cards, same "uploading" treatment the composer
               // already gives files picked from inside the project.
-              homeAttachmentUploads={homeAttachmentUploads}
+              // The optimistic turn already shows the staged files as the
+              // message's attachments; the tray would show them twice.
+              homeAttachmentUploads={creationHandoffTurnShown ? undefined : homeAttachmentUploads}
               onDismissHomeAttachmentUpload={(cardId) =>
                 dismissHomeAttachmentUpload(project.id, cardId)}
               chatLogTray={
@@ -14005,22 +15090,11 @@ export function ProjectView({
                 />
               )}
             />
-          ) : creationHandoffActive ? null : (
+          ) : (
             <div className="pane" data-testid="chat-pane-loading">
               <CenteredLoader />
             </div>
           )}
-          {creationHandoff ? (
-            /* The hand-off card stays the column's visible pane until the
-               first transcript settles; ChatPane above keeps its layout
-               hidden underneath (see `.split-chat-slot--creation-handoff`). */
-            <ProjectCreationPendingChat
-              projectName={project.name}
-              prompt={creationHandoff.prompt}
-              files={creationHandoff.files}
-              agentId={config.agentId}
-            />
-          ) : null}
         </div>
         {/* The comment panel is a floating card over the workspace in EVERY
             state (per product: 任何状态下评论卡片都在这个位置). It used to dock
@@ -14052,11 +15126,17 @@ export function ProjectView({
           />
         ) : null}
         <FileWorkspace
+          headerActions={projectCollab.enabled && projectCollab.isOwner && projectCollab.requestContentUpdate ? (
+            <OwnedContentUpdate key={`${project.id}:${projectRunWorkspaceContext?.workspaceId}:${projectRunWorkspaceContext?.workspaceMemberId}`}
+              update={projectCollab.ownedContentUpdate ?? null} request={projectCollab.requestContentUpdate} />
+          ) : null}
           projectId={project.id}
           projectName={currentProject.name}
           viewerOnly={projectMutationReadOnly}
           materializationPending={projectCollab.materializationPending}
           filesAuthoritative={committedFilesGeneration > 0}
+          emptyLookBeforeFirstListing={emptyLookBeforeFirstListing}
+          projectReadsHeld={projectReadsHeld}
           readonlyNotice={
             projectCollab.materializationPending
               ? t('designFiles.syncing')
@@ -14078,6 +15158,12 @@ export function ProjectView({
           filesGeneration={committedFilesGeneration}
           onRefreshFiles={refreshFileWorkspace}
           onManualFileWritten={recordManualFileWrite}
+          onObservedPublicShareLink={onObservedPublicShareLink}
+          observedPublicShareLink={observedPublicShareLink}
+          loginUpdateRequest={loginUpdateRequest}
+          onLoginUpdateRequestHandled={onLoginUpdateRequestHandled}
+          shareLoginReturn={shareLoginReturn}
+          onShareLoginReturnChange={onShareLoginReturnChange}
           isDeck={isDeck}
           streaming={currentConversationActionDisabled}
           // The building preview needs a real run, not the disabled-actions
@@ -14087,6 +15173,7 @@ export function ProjectView({
           runInFlight={currentConversationStreaming || currentConversationHasActiveRun}
           commentQueueOnSend={commentQueueOnSend}
           commentSendDisabled={currentConversationQueueDisabled}
+          routeFileName={routeFileName}
           openRequest={openRequest}
           browserOpenRequest={browserOpenRequest}
           pinnedBrowserTabId={projectIsProgrammaticBrandExtraction ? BRAND_BROWSER_TAB_ID : null}
@@ -14097,7 +15184,9 @@ export function ProjectView({
           designSystemActivityEvents={designSystemActivityEvents}
           tabsState={openTabsState}
           onTabsStateChange={persistTabsState}
-          previewComments={previewComments}
+          previewComments={visiblePreviewComments}
+          previewCommentsState={visiblePreviewCommentsState}
+          onRetryPreviewComments={refreshPreviewComments}
           onSavePreviewComment={savePreviewComment}
           onRemovePreviewComment={removePreviewComment}
           onReorderPreviewComment={reorderPreviewComment}
@@ -14140,6 +15229,7 @@ export function ProjectView({
             />
           ) : null}
           chatConfig={config}
+          onTouchProject={onTouchProject}
           chatAgentsById={agentsById}
           handoffAgents={agents}
           handoffArtifactId={headerArtifact.artifact_id}
@@ -14201,12 +15291,28 @@ export function ProjectView({
       {onboardingEntryRef.current && hasPreviewableArtifact && !currentConversationStreaming ? (
         <FirstArtifactHint />
       ) : null}
+      {concurrencyDialogOpen && concurrencyRejection && concurrencyPresentation
+        && concurrencyRejection.conversationId === activeConversationId
+        && concurrencyRejection.authorityKey === projectRunAuthorityKey
+        && concurrencyRejection.accountGeneration === currentWorkspaceAccountGeneration()
+        && config.mode === 'daemon' && config.agentId === 'amr' ? (
+        <AmrConcurrencyDialog branch={{ ...concurrencyRejection.branch, tier: concurrencyPresentation.branch.tier }}
+          stage={concurrencyRejection.stage}
+          upgradeAllowed={concurrencyPresentation.upgradeAllowed && concurrencyRejection.branch.audience === 'owner'}
+          workspaceContext={concurrencyRejection.workspaceContext}
+          profile={workspaceQuotaStatus?.profile?.trim() || config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE || null}
+          consoleOrigin={workspaceQuotaStatus?.consoleOrigin}
+          onClose={() => setConcurrencyDialogOpen(false)} />
+      ) : null}
       {amrBalanceGateBlock?.dialog === 'ask_owner' || amrOwnerTopUpFromCard ? (
         /*
          * 非 owner 的成员。他拿不到账单动作,所以这张弹窗不外跳,而是给他一句
          * 可以直接发给所有者的话 —— 在此之前这一档只有一颗「暂不需要」(§6.Y)。
          */
         <AmrOwnerTopUpDialog
+          stage={amrBalanceGateBlock?.stage ?? 'unknown'}
+          workspaceContext={amrBalanceGateBlock?.workspaceContext === undefined
+            ? projectRunBillingAuthorityContext : amrBalanceGateBlock.workspaceContext}
           onClose={() => {
             setAmrOwnerTopUpFromCard(false);
             // 和现有弹窗的「暂不需要」同义:任务留在队列里,只是不再是唯一选项。
@@ -14217,30 +15323,37 @@ export function ProjectView({
       {amrBalanceGateBlock?.dialog === 'upgrade' ? (
         <AmrBalanceDialog
           reason={amrBalanceGateBlock.reason}
-          balanceUsd={amrBalanceGateBlock.snapshot.balanceUsd}
-          profile={amrBalanceGateBlock.snapshot.profile}
+          stage={amrBalanceGateBlock.stage}
+          manualSendOnRecovery={amrBalanceGateBlock.reason === 'insufficient'}
+          modelId={amrBalanceGateBlock.modelId}
+          fundingScope={amrBalanceGateBlock.fundingScope}
+          balanceUsd={amrBalanceGateBlock.snapshot?.balanceUsd ?? null}
+          profile={amrBalanceGateBlock.snapshot?.profile ?? (amrBalanceGateBlock.profile !== undefined
+            ? amrBalanceGateBlock.profile
+            : workspaceQuotaStatus?.profile?.trim() || amrProfile
+              || config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE || null)}
+          consoleOrigin={amrBalanceGateBlock.profile !== undefined
+            ? amrBalanceGateBlock.consoleOrigin : workspaceQuotaStatus?.consoleOrigin}
           entrySource="chat_balance_gate_upgrade"
           upgradeIntent={amrBalanceGateBlock.upgradeIntent}
           // 弹窗和卡上那颗必须从**同一份**上下文算落点。默认那条(环境里选中
           // 的工作区)对首页是对的,对项目页不是:这一笔钱是项目那个工作区出的,
           // 环境里未必就是它。两处不同源正是产品文档说的「卡和弹窗跳去不同的
           // 地方是缺陷而不是特性」。
-          workspaceContext={projectRunBillingAuthorityContext}
+          workspaceContext={amrBalanceGateBlock.workspaceContext === undefined
+            ? projectRunBillingAuthorityContext : amrBalanceGateBlock.workspaceContext}
           metricsConsent={config.telemetry?.metrics === true}
           installationId={config.installationId}
           onClose={() => setAmrBalanceGateBlock(null)}
           onResolved={() => {
-            // Sign-in completed or the recharge landed: lift the balance
-            // pause and kick the drain so anything parked starts on its own
-            // (it still re-gates, so a half-measure recharge surfaces the
-            // soft reminder rather than silently failing mid-run).
-            //
-            // ⚠️ Since OPEND-2719 the exhausted-wallet block no longer parks
-            // its own send — that draft went back to the composer. What this
-            // still drains is whatever the OTHER blocked states (signed out,
-            // unreadable billing) parked earlier in this conversation.
             const conversationId = amrBalanceGateBlock.conversationId;
             setAmrBalanceGateBlock(null);
+            // Current QA RUN-012: funding recovery does not submit inputs
+            // that have not been sent. Preserve the gateway-paused queue and
+            // its full payload for the existing manual "send now" action;
+            // the failed run also remains in history for explicit retry.
+            // Sign-in recovery retains its original queue behavior.
+            if (amrBalanceGateBlock.reason === 'insufficient') return;
             amrGatePausedQueueConversationsRef.current.delete(conversationId);
             setQueuedAutoStartTick((tick) => tick + 1);
           }}
@@ -14525,7 +15638,7 @@ function normalizeProjectFileName(value: string): string {
   return value.replace(/\\/g, '/').replace(/^\.?\//, '').toLowerCase();
 }
 
-function assistantAgentDisplayName(
+function _assistantAgentDisplayName(
   agentId: string | null,
   fallbackName?: string,
 ): string | undefined {
@@ -14734,6 +15847,7 @@ function stripQueueOnlyFromMeta(
     // 回放走,否则一条排过队的输入框消息在回放时被拦下,会去撤一个早就清空的
     // 草稿,而队列里那条反而被扔掉。见 `composerOwnedDraft` 的说明。
     composerOwnedDraft: _composerOwnedDraft,
+    initialHomeSend: _initialHomeSend,
     ...rest
   } = meta as ProjectChatSendMeta;
   return Object.keys(rest).length > 0 ? rest : undefined;

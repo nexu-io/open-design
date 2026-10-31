@@ -188,7 +188,7 @@ describe('workspace switcher directory — account scope', () => {
     // still attribute to B: the active one, named from B's own context.
     expect(menu().queryByText('Ada private workspace')).toBeNull();
     expect(menu().getByRole('menuitem', { name: /Shared Team/ })).toBeTruthy();
-    expect(menu().queryAllByRole('menuitem', { name: /workspace$/ })).toHaveLength(0);
+    expect(menu().queryByRole('menuitem', { name: 'Bruno private workspace' })).toBeNull();
 
     // Once B's read lands, B's own workspaces appear.
     gate.releaseAll();

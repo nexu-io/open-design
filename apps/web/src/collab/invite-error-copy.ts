@@ -20,17 +20,20 @@ import type { Dict } from '../i18n/types';
  * deliberately NOT read as a duplicate, because the same status also carries
  * seat and subscription conflicts (and codes this client has not learned yet).
  */
-export function workspaceInviteErrorMessageKey(code: string | undefined): keyof Dict {
+export function workspaceInviteErrorMessageKey(code: string | undefined, onboarding = false): keyof Dict {
   switch (normalizeWorkspaceInviteCreateErrorCode(code)) {
     case 'already_member':
-      return 'workspaceInvite.errorAlreadyMember';
+      return onboarding ? 'workspaceInvite.onboardingErrorAlreadyMember' : 'workspaceInvite.errorAlreadyMember';
     case 'active_pending_invite':
-      return 'workspaceInvite.errorPendingInvite';
+      return onboarding ? 'workspaceInvite.onboardingErrorPendingInvite' : 'workspaceInvite.errorPendingInvite';
     case 'workspace_seat_limit_reached':
     case 'workspace_subscription_seat_allocation_unavailable':
       return 'workspaceInvite.seatsExhaustedBody';
   }
   switch (code) {
+    case 'delivery_pending': return 'workspaceInvite.deliveryPending';
+    case 'delivery_failed': return 'workspaceInvite.deliveryFailed';
+    case 'create_invalid_response': return 'workspaceInvite.invalidResponse';
     case 'no_session':
       return 'workspaceInvite.errorNoSession';
     case 'no_workspace':

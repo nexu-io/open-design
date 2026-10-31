@@ -412,12 +412,18 @@
   align-items: center;
   padding: 6px 12px;
   font-size: 12px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   cursor: pointer;
+  transition: background var(--dur-quick) var(--ease-out);
 }
-.present-exit:hover { background: white; }
+.present-exit:hover { background: var(--bg-muted); }
+.present-exit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 /* Picker (legacy in some surfaces) */
 .picker {
@@ -4509,6 +4515,14 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   font-weight: 500;
   color: var(--text-faint);
   font-size: var(--font-size-14);
+}
+/* 产品《报错文案》S24a / S24c(OPEND-2849):状态词是标题,紧跟一句正文。
+   正文比状态词低一档、颜色同为 faint,和状态词同一行流式排布(窄时自然折行)。 */
+.assistant-footer .assistant-label-detail {
+  margin-inline-end: 4px;
+  font-weight: 400;
+  color: var(--text-faint);
+  font-size: var(--font-size-13, 13px);
 }
 .assistant-footer .assistant-stats {
   font-variant-numeric: tabular-nums;

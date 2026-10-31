@@ -147,6 +147,66 @@ export function runMessageEventPersistenceAnalytics(
   };
 }
 
+type RunEventStorageShape = {
+  largestEventChars: number;
+  largestEventKind: string | null;
+  truncatedEventCount: number;
+  truncatedOriginalBytes: number;
+};
+
+// Kept apart from `messageEventPersistenceTelemetry` so that record, its copy
+// (`readRunMessageEventPersistenceTelemetry`) and its analytics projection stay
+// exactly as they were; storage observability only adds new keys.
+const runEventStorageShapes = new WeakMap<ChatRunMessageState, RunEventStorageShape>();
+const EVENT_KIND_PATTERN = /^[a-z][a-z0-9_]{0,31}$/;
+
+function recordRunEventStorageShape(
+  run: ChatRunMessageState,
+  persisted: PersistedAgentEvent,
+  eventChars: number,
+): void {
+  try {
+    let shape = runEventStorageShapes.get(run);
+    if (!shape) {
+      shape = { largestEventChars: 0, largestEventKind: null, truncatedEventCount: 0, truncatedOriginalBytes: 0 };
+      runEventStorageShapes.set(run, shape);
+    }
+    if (eventChars > shape.largestEventChars) {
+      shape.largestEventChars = eventChars;
+      const kind = (persisted as { kind?: unknown }).kind;
+      shape.largestEventKind = typeof kind === 'string' && EVENT_KIND_PATTERN.test(kind) ? kind : null;
+    }
+    const truncated = (persisted as { truncated?: { originalBytes?: unknown } }).truncated;
+    const originalBytes = truncated?.originalBytes;
+    if (typeof originalBytes === 'number' && Number.isSafeInteger(originalBytes) && originalBytes >= 0) {
+      shape.truncatedEventCount += 1;
+      shape.truncatedOriginalBytes += originalBytes;
+    }
+  } catch {
+    // Observability must never change what gets persisted.
+  }
+}
+
+/** In-process event shape counters; absent after a daemon restart, never 0-filled. */
+export function runEventStorageShapeAnalytics(
+  run: ChatRunMessageState,
+): Pick<
+  RunFinishedProps,
+  | 'storage_largest_event_chars'
+  | 'storage_largest_event_kind'
+  | 'storage_truncated_event_count'
+  | 'storage_truncated_original_bytes'
+> {
+  const shape = runEventStorageShapes.get(run);
+  if (!shape) return {};
+  return {
+    storage_largest_event_chars: shape.largestEventChars,
+    ...(shape.largestEventKind ? { storage_largest_event_kind: shape.largestEventKind } : {}),
+    storage_truncated_event_count: shape.truncatedEventCount,
+    storage_truncated_original_bytes: shape.truncatedOriginalBytes,
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
@@ -212,6 +272,7 @@ export function persistRunEventToAssistantMessage(
   telemetry.inputEventCount += 1;
   telemetry.inputCharCount += eventChars;
   if (isDelta) telemetry.deltaEventCount += 1;
+  recordRunEventStorageShape(run, persisted, eventChars);
   appendPendingMessageEvent(pending, persisted);
   telemetry.pendingCharPeak = Math.max(telemetry.pendingCharPeak, pending.chars);
 

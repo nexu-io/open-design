@@ -90,6 +90,8 @@ interface Props {
   amrAccountPlan?: string | null;
   /** Stable account boundary for CMS authorization instances. */
   amrAccountId?: string | null;
+  amrRegistrationStatus?: import('../providers/daemon').VelaLoginStatus | null;
+  onRegistrationInviteActiveChange?: (active: boolean) => void;
   // Execution / model-switching context forwarded to the EntryShell so the
   // sticky top-bar can expose the active CLI/BYOK + model and persist
   // changes through the same channels as the project view.
@@ -123,6 +125,7 @@ interface Props {
   skillsLoading?: boolean;
   designSystemsLoading?: boolean;
   projectsLoading?: boolean;
+  projectsLoadFailed?: boolean;
   promptTemplatesLoading?: boolean;
   onCreateProject: (input: EntryCreateProjectInput) => Promise<boolean> | boolean | void;
   /** Forwarded to EntryShell — see the prop docs there. */
@@ -162,7 +165,6 @@ interface Props {
   onCompleteOnboarding: () => void;
   onSignedOut?: () => void | Promise<void>;
   onAmrLoginStatusChange?: (status: VelaLoginStatus | null) => void;
-  artifactUpgradeSlot?: ReactNode;
 }
 
 export function isTrustedConnectorCallbackOrigin(origin: string, currentOrigin?: string): boolean {
@@ -273,6 +275,8 @@ export function EntryView({
   amrSessionState,
   amrAccountPlan,
   amrAccountId,
+  amrRegistrationStatus,
+  onRegistrationInviteActiveChange,
   config,
   providerModelsCache,
   onProviderModelsCacheChange,
@@ -293,6 +297,7 @@ export function EntryView({
   skillsLoading = false,
   designSystemsLoading = false,
   projectsLoading = false,
+  projectsLoadFailed = false,
   promptTemplatesLoading: _promptTemplatesLoading = false,
   onCreateProject,
   onBeginProjectCreation,
@@ -317,7 +322,6 @@ export function EntryView({
   onCompleteOnboarding,
   onSignedOut,
   onAmrLoginStatusChange,
-  artifactUpgradeSlot,
 }: Props) {
   const [connectors, setConnectors] = useState<ConnectorDetail[]>([]);
   const [connectorsLoading, setConnectorsLoading] = useState(false);
@@ -401,6 +405,7 @@ export function EntryView({
       skillsLoading={skillsLoading}
       designSystemsLoading={designSystemsLoading}
       projectsLoading={projectsLoading}
+      projectsLoadFailed={projectsLoadFailed}
       config={config}
       providerModelsCache={providerModelsCache}
       onProviderModelsCacheChange={onProviderModelsCacheChange}
@@ -410,6 +415,8 @@ export function EntryView({
       {...(amrSessionState !== undefined ? { amrSessionState } : {})}
       {...(amrAccountPlan !== undefined ? { amrAccountPlan } : {})}
       {...(amrAccountId !== undefined ? { amrAccountId } : {})}
+      amrRegistrationStatus={amrRegistrationStatus}
+      onRegistrationInviteActiveChange={onRegistrationInviteActiveChange}
       daemonLive={daemonLive}
       onModeChange={onModeChange}
       onAgentChange={onAgentChange}
@@ -445,7 +452,6 @@ export function EntryView({
       onCompleteOnboarding={onCompleteOnboarding}
       onSignedOut={onSignedOut}
       onAmrLoginStatusChange={onAmrLoginStatusChange}
-      artifactUpgradeSlot={artifactUpgradeSlot}
     />
   );
 }

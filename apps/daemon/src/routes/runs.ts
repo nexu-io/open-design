@@ -4,7 +4,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import {
-  composeOdNextStrategyContinuationV2,
   defaultScenarioPluginIdForProjectMetadata,
   InstalledPluginRecordSchema,
   RUN_RESULT_PACKAGE_SCHEMA,
@@ -14,7 +13,6 @@ import {
   type ChatRunStatus,
   type ChatRunStatusResponse,
   type InstalledPluginRecord,
-  type StrategyTaskProjectionV2,
   type ProjectMetadata as ContractProjectMetadata,
   type RunResultPackageResponse,
 } from '@open-design/contracts';
@@ -37,11 +35,13 @@ import type { AnalyticsContext } from '../analytics.js';
 import { spawnEnvForAgent } from '../agents.js';
 import { agentCliEnvForAgent, readAppConfig } from '../app-config.js';
 import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
+import { validateLocalDaemonRequest } from '../http/local-daemon-request.js';
 import {
   workspaceResourceContextFromRequest,
   type BoundWorkspaceResourceMutationGate,
   type WorkspaceResourceAccessInput,
 } from '../collab/workspace-resource-mutation.js';
+import type { RunNoticeLog } from '../runtimes/run-notices.js';
 import {
   codexSessionIdFromRunEvents,
   readCodexRolloutFirstCall,
@@ -52,21 +52,19 @@ import {
   getFirstProjectConversation,
   getConversation,
   getProject,
+  listConversationsAwaitingInput,
   listProjectsAwaitingInput,
   normalizeConversationSessionMode,
+  acceptProjectUserSubmission,
+  getProjectUserSubmission,
   updateProject,
   upsertMessage,
 } from '../db.js';
 import { readVelaLoginStatus } from '../integrations/vela.js';
 import {
-  ensureDetectedRuntimeCapabilities,
   ensureDetectedRuntimeVersions,
   getDetectedRuntimeVersions,
 } from '../runtimes/detection.js';
-import {
-  odNextAdvertisedCapabilityGap,
-  resolveBundledOdNextRuntimeCapability,
-} from '../runtimes/od-next-capability-gate.js';
 import { mintRunDoneKey } from '../runtimes/run-done-key.js';
 import {
   deriveLangfuseDeliveryState,
@@ -87,19 +85,16 @@ import {
 } from '../services/internal-run-service.js';
 import {
   projectStrategyTask,
-  projectStrategyTaskByRunId,
 } from '../strategies/od-next/automatic-simple-production.js';
 import {
   cancelStrategyTaskExecution,
   createStrategyTaskExecution,
-  getStrategyTaskExecution,
   getStrategyTaskExecutionByRunId,
   InvalidStrategyTaskRecordError,
   type StrategyTaskExecutionRecord,
   StrategyTaskTransitionConflictError,
 } from '../strategies/task-store.js';
 import {
-  beginStrategyClarification,
   prepareStrategyIntake,
 } from '../strategies/od-next/coordinator.js';
 import type { FrozenSkillPackageV1 } from '../strategies/od-next/frozen-skill-package.js';
@@ -117,7 +112,6 @@ import {
 } from '../strategies/od-next/task-input-snapshot.js';
 import {
   evaluateOdNextRollout,
-  odNextTaskTypeForProjectScenarioBinding,
   readOdNextRolloutPolicy,
   type OdNextRolloutDecision,
 } from '../strategies/od-next/rollout.js';
@@ -231,6 +225,7 @@ import {
   type RunEventRecord,
   type SseClient,
 } from '../runtimes/chat-run-records.js';
+import { holdsConversation, resolveStrategyHandoff, strategyHandoffTranscript, StrategyHandoffError } from '../strategies/od-next/task-handoff.js';
 
 // Keep in sync with the web uploader's `looksLikeImage` (apps/web registry):
 // omit-pin seeds must classify the same extensions as `image` so reload chips
@@ -367,9 +362,6 @@ function seededUserMessageTurnMetadataFields(
     ...(appliedPluginSnapshot ? { appliedPluginSnapshot } : {}),
   };
 }
-
-
-
 
 interface RunCreateMeta extends InternalRunCreateInput, JsonRecord {
   projectId?: string;
@@ -662,6 +654,7 @@ export interface RegisterRunRoutesDeps {
     ) => Promise<boolean>;
   };
   telemetry: {
+    taskTelemetryForRun?: (runId: string) => ChatRunStatusResponse['taskTelemetry'];
     reportRunCompletionTelemetryFallback: (input: RunCreatedFallbackInput) => void;
     resolveRunProjectKindForAnalytics: (input: RunProjectKindInput) => string | null;
     runArtifactBaselines: RunArtifactBaselines;
@@ -745,7 +738,22 @@ export interface RegisterRunRoutesDeps {
   amrWorkspaceScope?: {
     isSignedIn: () => boolean | Promise<boolean>;
   };
+  /** Global run notices (P0-24 N10); omitted in fixtures that do not exercise them. */
+  runNotices?: RunNoticeLog;
 }
+
+/**
+ * A response that swallows the authorizer's error body. The notice feed asks
+ * the project gate a yes/no question per notice; a denial must hide that one
+ * notice, not answer the whole request with the denial.
+ */
+const SILENT_RESPONSE = {
+  status() { return this; },
+  json() { return this; },
+  setHeader() { return this; },
+  send() { return this; },
+  end() { return this; },
+} as unknown as ApiResponse;
 
 const AGUI_NATIVE_EVENT_KINDS: ReadonlySet<OdNativeEvent['kind']> = new Set([
   'message_chunk',
@@ -772,16 +780,21 @@ function toProjectFiles(value: unknown): ProjectFileEntry[] {
 // Intents the scenario-plugin fallback resolver is allowed to see. Mirrors the
 // `ProjectMetadata['intent']` contract union so an unknown/legacy string in a
 // stored project row never gets cast into the union.
-const SCENARIO_PROJECT_INTENTS: readonly NonNullable<ContractProjectMetadata['intent']>[] = [
-  'live-artifact',
-  'web-clone',
-  'document',
-  'marketing',
-  'hyperframes',
-];
+const SCENARIO_PROJECT_INTENTS: Record<NonNullable<ContractProjectMetadata['intent']>, true> = {
+  'live-artifact': true,
+  'web-clone': true,
+  document: true,
+  'webgl-experience': true,
+  'worker-visualizer': true,
+  marketing: true,
+  hyperframes: true,
+  'motion-design': true,
+};
 
 function toScenarioProjectIntent(value: unknown): ContractProjectMetadata['intent'] | undefined {
-  return SCENARIO_PROJECT_INTENTS.find((intent) => intent === value);
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(SCENARIO_PROJECT_INTENTS, value)
+    ? value as NonNullable<ContractProjectMetadata['intent']>
+    : undefined;
 }
 
 function toScenarioProjectMetadata(
@@ -1028,7 +1041,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     let projectedSnapshotId: string | undefined;
     try {
       const strategyTask = strategyTaskForRun(run, true);
-      const projection = strategyTask ? projectStrategyTask(strategyTask, run.id) : null;
+      const projection = strategyTask ? projectStrategyTask(strategyTask, run.id, db) : null;
       if (projection) run.strategyTask = projection;
       if (strategyTask && isLegacyHydratedRunWithoutAppliedSnapshot(run)) {
         projectedSnapshotId = strategyTask.snapshotId;
@@ -1050,6 +1063,8 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       }
     }
     const status = design.runs.statusBody(run);
+    const taskTelemetry = status.strategyTask ? ctx.telemetry.taskTelemetryForRun?.(run.id) : undefined;
+    if (taskTelemetry) status.taskTelemetry = taskTelemetry;
     // A read can derive display identity from the validated task, but must not
     // stamp the source Run and bypass clarification's linked-snapshot witness.
     return projectedSnapshotId
@@ -1109,291 +1124,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       return {};
     }
   };
-
-  type ClarificationContinuation = {
-    task: StrategyTaskExecutionRecord;
-    sourceRunId: string;
-    taskRunIndex: number;
-    answer: string;
-    retry: boolean;
-    snapshot: AppliedPluginSnapshot;
-  };
-
-  type ClarificationResolution =
-    | { kind: 'ordinary' }
-    | { kind: 'error'; status: number; code: string; message: string }
-    | { kind: 'continuation'; value: ClarificationContinuation };
-
-  /**
-   * A source Run restored from durable state may miss its applied snapshot
-   * id: `durableRunState` historically never serialized the field, so any
-   * daemon restart dropped it while the task record kept its locked snapshot.
-   * The `applied_plugin_snapshots` row keeps `run_id` FK-linked to the source
-   * Run across restarts; that link is the ownership witness authorizing this
-   * one-time backfill. A Run whose field is set must never be touched — the
-   * caller treats it as a genuine mismatch.
-   */
-  function recoverSourceRunSnapshotId(
-    task: StrategyTaskExecutionRecord,
-    sourceRun: ChatRun,
-  ): boolean {
-    if (sourceRun.appliedPluginSnapshotId) return false;
-    const linkedSnapshot = db
-      .prepare(
-        `SELECT id FROM applied_plugin_snapshots
-          WHERE id = ? AND run_id = ? AND project_id = ?`,
-      )
-      .get(task.snapshotId, sourceRun.id, task.projectId);
-    if (!linkedSnapshot) return false;
-    sourceRun.appliedPluginSnapshotId = task.snapshotId;
-    design.runs.persistState(sourceRun);
-    return true;
-  }
-
-  /**
-   * Resolve only an explicit daemon-issued task handle. Conversation order is
-   * never an ownership signal: an ordinary follow-up in a conversation that
-   * happens to contain an awaiting strategy task must stay an ordinary Run.
-   */
-  function resolveClarificationContinuation(
-    requestBody: JsonRecord,
-  ): ClarificationResolution {
-    if (requestBody.taskExecutionId === undefined) return { kind: 'ordinary' };
-    if (
-      typeof requestBody.taskExecutionId !== 'string'
-      || !requestBody.taskExecutionId.trim()
-      || !isSafeId(requestBody.taskExecutionId)
-    ) {
-      return {
-        kind: 'error',
-        status: 400,
-        code: 'BAD_REQUEST',
-        message: 'taskExecutionId must be a non-empty safe id',
-      };
-    }
-    const task = getStrategyTaskExecution(db, requestBody.taskExecutionId);
-    if (!task) {
-      return {
-        kind: 'error',
-        status: 404,
-        code: 'STRATEGY_TASK_NOT_FOUND',
-        message: 'strategy task execution not found',
-      };
-    }
-    if (
-      requestBody.projectId !== task.projectId
-      || requestBody.conversationId !== task.conversationId
-    ) {
-      return {
-        kind: 'error',
-        status: 409,
-        code: 'STRATEGY_TASK_SCOPE_MISMATCH',
-        message: 'strategy continuation must use the task\'s locked project and conversation',
-      };
-    }
-    if (
-      typeof requestBody.agentId === 'string'
-      && requestBody.agentId
-      && requestBody.agentId !== task.selectedAgentId
-    ) {
-      return {
-        kind: 'error',
-        status: 409,
-        code: 'STRATEGY_TASK_AGENT_MISMATCH',
-        message: 'strategy continuation must use the task\'s locked agent',
-      };
-    }
-    if (
-      typeof requestBody.appliedPluginSnapshotId === 'string'
-      && requestBody.appliedPluginSnapshotId
-      && requestBody.appliedPluginSnapshotId !== task.snapshotId
-    ) {
-      return {
-        kind: 'error',
-        status: 409,
-        code: 'STRATEGY_TASK_SNAPSHOT_MISMATCH',
-        message: 'strategy continuation must use the task\'s locked snapshot',
-      };
-    }
-    if (
-      typeof requestBody.pluginId === 'string'
-      && requestBody.pluginId
-      && requestBody.pluginId !== task.strategyId
-    ) {
-      return {
-        kind: 'error',
-        status: 409,
-        code: 'STRATEGY_TASK_PLUGIN_MISMATCH',
-        message: 'strategy continuation must use the task\'s locked strategy',
-      };
-    }
-    const snapshot = getSnapshot(db, task.snapshotId);
-    if (
-      !snapshot
-      || snapshot.pluginId !== task.strategyId
-      || snapshot.strategy?.id !== task.strategyId
-      || snapshot.strategy.version !== task.strategyVersion
-      || snapshot.strategy.packageHash !== task.strategyPackageHash
-    ) {
-      return {
-        kind: 'error',
-        status: 409,
-        code: 'STRATEGY_TASK_SNAPSHOT_INVALID',
-        message: 'strategy task snapshot identity is unavailable or has drifted',
-      };
-    }
-    const answer = typeof requestBody.currentPrompt === 'string'
-      ? requestBody.currentPrompt
-      : typeof requestBody.message === 'string'
-        ? requestBody.message
-        : '';
-    if (!answer.trim()) {
-      return {
-        kind: 'error',
-        status: 400,
-        code: 'STRATEGY_CLARIFICATION_ANSWER_MISSING',
-        message: 'clarification continuation requires a non-empty answer',
-      };
-    }
-    const existingClientRun =
-      typeof requestBody.clientRequestId === 'string' && requestBody.clientRequestId
-        ? design.runs.list({
-            projectId: task.projectId,
-            conversationId: task.conversationId,
-          }).find((candidate) => candidate.clientRequestId === requestBody.clientRequestId) ?? null
-        : null;
-    const existingMapping = existingClientRun
-      ? task.runs.find((mapping) => mapping.runId === existingClientRun.id)
-      : undefined;
-    const exactRetry = Boolean(
-      existingClientRun
-      && existingMapping?.inputStage === 'clarification'
-      && task.latestRunId === existingClientRun.id
-      && task.activeRunId === existingClientRun.id
-      && task.outcome === 'running',
-    );
-    if (existingClientRun && !exactRetry) {
-      return {
-        kind: 'error',
-        status: 409,
-        code: 'STRATEGY_TASK_RETRY_MISMATCH',
-        message: 'clientRequestId is not bound to this task clarification',
-      };
-    }
-    if (exactRetry && existingMapping) {
-      return {
-        kind: 'continuation',
-        value: {
-          task,
-          sourceRunId: existingMapping.sourceRunId!,
-          taskRunIndex: existingMapping.taskRunIndex,
-          answer,
-          retry: true,
-          snapshot,
-        },
-      };
-    }
-    const latestMapping = task.runs.at(-1);
-    if (
-      task.route !== 'full_plan'
-      || task.inputStage !== 'request'
-      || task.outcome !== 'clarification_required'
-      || task.activeRunId !== null
-      || task.terminalRunId !== null
-      || task.clarificationCount !== 0
-      || !latestMapping
-      || latestMapping.runId !== task.latestRunId
-      || latestMapping.inputStage !== 'request'
-    ) {
-      return {
-        kind: 'error',
-        status: 409,
-        code: 'STRATEGY_TASK_STATE_MISMATCH',
-        message: 'strategy task is not awaiting its first clarification answer',
-      };
-    }
-    const sourceRun = design.runs.get(task.latestRunId);
-    if (
-      !sourceRun
-      || sourceRun.status !== 'succeeded'
-      || sourceRun.projectId !== task.projectId
-      || sourceRun.conversationId !== task.conversationId
-      || sourceRun.agentId !== task.selectedAgentId
-    ) {
-      return {
-        kind: 'error',
-        status: 409,
-        code: 'STRATEGY_TASK_SOURCE_RUN_INVALID',
-        message: 'strategy clarification source Run is unavailable or does not match the locked task',
-      };
-    }
-    if (
-      sourceRun.appliedPluginSnapshotId !== task.snapshotId
-      && !recoverSourceRunSnapshotId(task, sourceRun)
-    ) {
-      return {
-        kind: 'error',
-        status: 409,
-        code: 'STRATEGY_TASK_SOURCE_RUN_INVALID',
-        message: 'strategy clarification source Run is unavailable or does not match the locked task',
-      };
-    }
-    return {
-      kind: 'continuation',
-      value: {
-        task,
-        sourceRunId: task.latestRunId,
-        taskRunIndex: latestMapping.taskRunIndex + 1,
-        answer,
-        retry: false,
-        snapshot,
-      },
-    };
-  }
-
-  function applyClarificationContinuationMeta(
-    meta: RunCreateMeta,
-    continuation: ClarificationContinuation,
-  ): void {
-    const { task, answer, sourceRunId, taskRunIndex } = continuation;
-    const instruction = composeOdNextStrategyContinuationV2({
-      stage: 'clarification',
-      nativeSessionResume: true,
-      taskExecutionId: task.taskExecutionId,
-      taskRunIndex,
-      executionIntent: task.executionIntent ?? 'produce',
-      answer,
-    });
-    meta.taskExecutionId = task.taskExecutionId;
-    meta.agentId = task.selectedAgentId;
-    meta.appliedPluginSnapshotId = task.snapshotId;
-    meta.pluginId = task.strategyId;
-    meta.message = instruction;
-    meta.currentPrompt = instruction;
-    meta.titleGeneration = undefined;
-    meta.analyticsHints = {
-      ...(meta.analyticsHints && typeof meta.analyticsHints === 'object'
-        ? meta.analyticsHints
-        : {}),
-      taskExecutionId: task.taskExecutionId,
-      initialRunId: task.initialRunId,
-      sourceRunId,
-      taskRunIndex,
-    };
-    // A continuation is a second physical Run of the same logical task, and the
-    // rollout is only evaluated on the branch that resolves a project — which
-    // this path skips. Without inheriting, every answered clarification would
-    // report no harness at all, quietly dropping the OD Next runs that asked a
-    // question from the comparison the dimension exists for.
-    //
-    // Inherited from the source Run rather than re-read from settings on
-    // purpose: the user may have flipped the switch while the question was on
-    // screen, and this Run belongs to the decision its task started under.
-    // `resolveClarificationContinuation` already verified that source against
-    // the locked task, so it is the trustworthy copy.
-    const sourceDecision = design.runs.get(sourceRunId)?.strategyRolloutDecision;
-    if (sourceDecision) meta.strategyRolloutDecision = sourceDecision;
-  }
 
   /** Authorize every bound run mutation before plugin or snapshot resolution. */
   async function authorizeRunProjectBeforePluginResolution(
@@ -1679,11 +1409,16 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     }
   }
 
-  const handleRunCreate = async (req: ApiRequest, res: ApiResponse) => {
+  const handleRunCreate = async (req: ApiRequest, res: ApiResponse, stream = false) => {
     if (ctx.lifecycle.isDaemonShuttingDown()) {
       return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
     }
     const requestBody = toJsonRecord(req.body);
+    const submission = requestBody.submission as { id?: unknown; source?: unknown } | undefined;
+    if (submission !== undefined && (!submission || typeof submission.id !== 'string'
+      || !isSafeId(submission.id) || !['user', 'system', 'queue'].includes(String(submission.source)))) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'invalid submission');
+    }
     const requestAnalyticsContext = readAnalyticsContext(req);
     const mediaExecution = parseMediaExecutionPolicyInput(requestBody.mediaExecution);
     if (!mediaExecution.ok) {
@@ -1701,7 +1436,9 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
       );
     }
-    // Reject a client-supplied conversationId that is missing a projectId or
+    // Legacy streaming chat also supports unpersisted conversations without pins.
+    // Preserve that path while rejecting mismatched existing ownership on both routes.
+    // For /api/runs, reject a client-supplied conversationId missing a projectId or
     // not owned by that projectId before plugin snapshot resolve (which links
     // the snapshot to the conversation and would FK-fail / 500) and before
     // omit-pin mint/seed (which would return 202 with an unpersisted
@@ -1709,10 +1446,12 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     if (typeof requestBody.conversationId === 'string' && requestBody.conversationId) {
       const requestConversation = getConversation(db, requestBody.conversationId);
       if (
-        !requestConversation ||
-        typeof requestBody.projectId !== 'string' ||
-        !requestBody.projectId ||
-        requestConversation.projectId !== requestBody.projectId
+        (!stream && (
+          !requestConversation || typeof requestBody.projectId !== 'string' || !requestBody.projectId
+        )) ||
+        (!requestConversation && (requestBody.assistantMessageId || requestBody.userMessageId)) ||
+        (requestConversation && typeof requestBody.projectId === 'string'
+          && requestBody.projectId && requestConversation.projectId !== requestBody.projectId)
       ) {
         return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
       }
@@ -1727,41 +1466,57 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       if (!authorization.ok) return;
       authorizedBoundMutation = authorization.authorizedBoundMutation;
     }
-    let clarificationResolution;
+    const previousSubmission = submission ? getProjectUserSubmission(db, submission.id as string) : undefined;
+    // Resolve ownership before plugin resolution, which can persist bindings.
+    // Project-only retries use the same default-conversation rule as the run.
+    const submissionConversationId = typeof requestBody.conversationId === 'string' && requestBody.conversationId
+      ? requestBody.conversationId
+      : !stream && typeof requestBody.projectId === 'string' && requestBody.projectId
+        ? getFirstProjectConversation(db, requestBody.projectId)?.id
+        : undefined;
+    if (previousSubmission && (previousSubmission.projectId !== requestBody.projectId
+      || previousSubmission.conversationId !== submissionConversationId)) {
+      return sendApiError(res, 409, 'IDEMPOTENCY_CONFLICT', 'submission belongs to another conversation');
+    }
+    if (submission?.source === 'queue' && !previousSubmission) {
+      return sendApiError(res, 409, 'BAD_REQUEST', 'queued submission must be registered before execution');
+    }
+
+    // Keep enrichment's specific recovery response ahead of generic task handoff.
+    // Same-request retries still reach the idempotent claim below.
+    const enrichmentRun = activeRunBlockingDesignSystemEnrichment(design.runs, {
+      conversationId: requestBody.conversationId, analyticsHints: requestBody.analyticsHints,
+    });
+    if (enrichmentRun && !(typeof requestBody.clientRequestId === 'string'
+      && enrichmentRun.clientRequestId === requestBody.clientRequestId)) {
+      return sendApiError(res, 409, 'DESIGN_SYSTEM_ENRICHMENT_IN_PROGRESS',
+        'a design-system enrichment run is already active for this conversation', {
+          details: { kind: 'design_system_enrichment_in_progress', runId: enrichmentRun.id,
+            conversationId: enrichmentRun.conversationId ?? '' },
+        });
+    }
+    let previousStrategyTask: StrategyTaskExecutionRecord | null = null;
     try {
-      clarificationResolution = resolveClarificationContinuation(requestBody);
+      previousStrategyTask = resolveStrategyHandoff(db, requestBody, design.runs.list({
+        projectId: typeof requestBody.projectId === 'string' ? requestBody.projectId : undefined,
+        conversationId: typeof requestBody.conversationId === 'string' ? requestBody.conversationId : undefined,
+      }));
     } catch (error) {
-      if (
-        error instanceof InvalidFrozenSkillPackageError
-        || error instanceof InvalidStrategyTaskRecordError
-      ) {
-        return sendApiError(
-          res,
-          409,
-          error instanceof InvalidFrozenSkillPackageError
-            ? 'OD_NEXT_SKILL_SNAPSHOT_INVALID'
-            : 'OD_NEXT_TASK_STATE_INVALID',
-          error.message,
-        );
+      if (error instanceof StrategyHandoffError) return sendApiError(res, error.status, error.code, error.message);
+      if (error instanceof InvalidStrategyTaskRecordError || error instanceof InvalidFrozenSkillPackageError) {
+        return sendApiError(res, 409, error instanceof InvalidFrozenSkillPackageError
+          ? 'OD_NEXT_SKILL_SNAPSHOT_INVALID' : 'OD_NEXT_TASK_STATE_INVALID', error.message);
       }
       throw error;
     }
-    if (clarificationResolution.kind === 'error') {
-      return sendApiError(
-        res,
-        clarificationResolution.status,
-        clarificationResolution.code,
-        clarificationResolution.message,
-      );
+    if (previousStrategyTask) {
+      requestBody.priorTranscript = strategyHandoffTranscript(db, previousStrategyTask);
+      delete requestBody.taskExecutionId;
+      delete requestBody.appliedPluginSnapshotId;
+      delete requestBody.pluginId;
     }
-    const clarificationContinuation = clarificationResolution.kind === 'continuation'
-      ? clarificationResolution.value
-      : null;
-    const clarificationTask = clarificationContinuation?.task ?? null;
     let effectiveAgentId =
-      clarificationTask
-        ? clarificationTask.selectedAgentId
-        : typeof requestBody.agentId === 'string' && requestBody.agentId
+      typeof requestBody.agentId === 'string' && requestBody.agentId
         ? requestBody.agentId
         : null;
     if (!effectiveAgentId) {
@@ -1797,9 +1552,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     }
     let resolvedSnapshot: SuccessfulRunSnapshotResolution | null = null;
     let strategyRolloutDecision: OdNextRolloutDecision | null = null;
-    let rolloutCapabilitySnapshot: ReturnType<
-      typeof resolveBundledOdNextRuntimeCapability
-    >['snapshot'] = null;
     let resolveAutomaticOrdinaryFallback: (() => ResolveSnapshotResult) | null = null;
     let automaticOrdinaryFallbackPluginId: string | null = null;
     let automaticSnapshotPreparationError: Error | null = null;
@@ -1835,28 +1587,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       }
       throw error;
     }
-    if (clarificationContinuation) {
-      const internalStrategyContinuation = Boolean(
-        clarificationTask?.strategyId === 'od-next-strategy'
-        && clarificationContinuation.snapshot.pluginId === clarificationTask.strategyId
-        && clarificationContinuation.snapshot.strategy?.id === clarificationTask.strategyId,
-      );
-      if (
-        !internalStrategyContinuation
-        && ctx.plugins.authorizePluginRequest
-        && !await ctx.plugins.authorizePluginRequest(
-          req,
-          res,
-          clarificationTask!.strategyId,
-        )
-      ) return;
-      resolvedSnapshot = {
-        ok: true,
-        status: 200,
-        snapshotId: clarificationTask!.snapshotId,
-        snapshot: clarificationContinuation.snapshot,
-      };
-    } else if (idempotentStrategyRetry?.appliedPluginSnapshotId) {
+    if (idempotentStrategyRetry?.appliedPluginSnapshotId) {
       const retrySnapshot = getSnapshot(db, idempotentStrategyRetry.appliedPluginSnapshotId);
       if (retrySnapshot) {
         resolvedSnapshot = {
@@ -1873,7 +1604,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       const rolloutProject = toProjectRecord(getProject(db, requestBody.projectId));
       const snapshotConversationId =
         typeof requestBody.conversationId === 'string' && requestBody.conversationId
-          ? requestBody.conversationId
+          ? getConversation(db, requestBody.conversationId)?.id ?? null
           : getFirstProjectConversation(db, requestBody.projectId)?.id ?? null;
       const defaultPluginId = defaultScenarioPluginIdForProjectMetadata(
         toScenarioProjectMetadata(rolloutProject?.metadata),
@@ -1882,7 +1613,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         && requestBody.appliedPluginSnapshotId.trim().length > 0;
       const suppliedPluginWasNamed = typeof requestBody.pluginId === 'string'
         && requestBody.pluginId.trim().length > 0;
-      const projectHasExplicitPin = Boolean(rolloutProject?.appliedPluginSnapshotId);
+      const projectHasExplicitPin = !previousStrategyTask && Boolean(rolloutProject?.appliedPluginSnapshotId);
       const verifiedScenarioBinding = rolloutProject
         ? readVerifiedProjectScenarioBinding(db, {
             projectId: rolloutProject.id,
@@ -1936,7 +1667,16 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         Array.isArray((rolloutProject?.metadata as ContractProjectMetadata | undefined)?.contextPlugins)
         && (rolloutProject?.metadata as ContractProjectMetadata).contextPlugins!.length > 0
       );
-      const explicitExecutablePlugin = Boolean(
+      const officialTypeEntry = Boolean(defaultPluginId
+        && getInstalledPlugin(db, defaultPluginId)?.sourceKind === 'bundled'
+        && verifiedScenarioBinding?.pluginId === defaultPluginId
+        && (!suppliedPluginWasNamed || requestBody.pluginId === defaultPluginId)
+        && (!suppliedSnapshotWasNamed || requestBody.appliedPluginSnapshotId === rolloutProject?.appliedPluginSnapshotId));
+      const officialTemplateEntry = Boolean(selectedExamplePlugin?.sourceKind === 'bundled'
+        && verifiedExampleBinding
+        && (!suppliedPluginWasNamed || requestBody.pluginId === selectedExamplePlugin.id)
+        && (!suppliedSnapshotWasNamed || requestBody.appliedPluginSnapshotId === rolloutProject?.appliedPluginSnapshotId));
+      const explicitExecutablePlugin = !officialTypeEntry && !officialTemplateEntry && Boolean(
         suppliedSnapshotWasNamed
         || suppliedPluginWasNamed
         || (projectHasExplicitPin && !projectPinIsAutomaticDefault)
@@ -1954,24 +1694,14 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         explicitExecutablePlugin
         || suppliedContextPluginWasNamed
       );
-      // Read per request, not at boot: `odNextStrategyMode` is how a user opts
-      // this installation out of OD Next, and "configure it and it takes
-      // effect" has to mean the next run, not the next daemon restart.
-      //
-      // Deliberately uncaught. `readAppConfig` already answers `{}` for the
-      // states that mean "nothing configured" — no file, unparseable file — and
-      // only throws when the daemon genuinely cannot read its own config. That
-      // is not the same as an opt-out, and swallowing it would silently run the
-      // ordinary route (with no `agentCliEnv` either) while telling the
-      // operator the installation was never opted in.
+      // Subsequent requests use the current policy, including older conversations.
+      // In-flight physical runs and idempotent retries keep their frozen bundle.
       const rolloutAppConfig = await readAppConfig(RUNTIME_DATA_DIR);
       const rolloutPolicy = readOdNextRolloutPolicy(process.env, rolloutAppConfig);
-      const rolloutTaskType = odNextTaskTypeForProjectScenarioBinding(
-        verifiedStrategyBinding ?? verifiedScenarioBinding,
-      );
+      const rolloutTaskType = !explicitUserPlugin ? 'discovery' as const : null;
       const routeApplicability = explicitUserPlugin
         ? 'explicit_user' as const
-        : rolloutTaskType
+        : rolloutTaskType && snapshotConversationId
           ? 'eligible' as const
           : 'not_applicable' as const;
       const rolloutMayObserve = routeApplicability === 'eligible'
@@ -1999,8 +1729,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       }
       const rolloutPlugin = rolloutResolved?.ok ? rolloutResolved.record : null;
       let rolloutVersions: Awaited<ReturnType<typeof ensureDetectedRuntimeVersions>> | null = null;
-      let rolloutCapability: ReturnType<typeof resolveBundledOdNextRuntimeCapability> | null = null;
-      let advertisedCapabilityGap: string[] = [];
       if (routeApplicability === 'eligible' && rolloutPlugin) {
         try {
           if (effectiveAgentId) {
@@ -2008,54 +1736,13 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
               (rolloutAppConfig as { agentCliEnv?: AgentCliEnv }).agentCliEnv,
               effectiveAgentId,
             );
-            // Both probes read the same resolved launch path. The `--version`
-            // read establishes invocability; the `--help` read establishes
-            // which optional flags this installed build advertises. OD Next
-            // needs both, because the fixture registry below only proves what
-            // the runtime *path* can do, not what the user's build exposes.
-            const [versions, advertised] = await Promise.all([
-              ensureDetectedRuntimeVersions(effectiveAgentId, agentCliEnv),
-              ensureDetectedRuntimeCapabilities(effectiveAgentId, agentCliEnv),
-            ]);
-            rolloutVersions = versions;
-            advertisedCapabilityGap = odNextAdvertisedCapabilityGap({
-              agentId: effectiveAgentId,
-              advertised,
-            });
+            rolloutVersions = await ensureDetectedRuntimeVersions(effectiveAgentId, agentCliEnv);
           }
-          rolloutCapability = effectiveAgentId
-            ? resolveBundledOdNextRuntimeCapability({
-                agentId: effectiveAgentId,
-                ...(rolloutVersions?.agentCliVersion
-                  ? { agentCliVersion: rolloutVersions.agentCliVersion }
-                  : {}),
-                ...(rolloutVersions?.runtimeCompanionName
-                  ? { runtimeCompanionName: rolloutVersions.runtimeCompanionName }
-                  : {}),
-                ...(rolloutVersions?.runtimeCompanionVersion
-                  ? { runtimeCompanionVersion: rolloutVersions.runtimeCompanionVersion }
-                  : {}),
-              })
-            : null;
         } catch (error) {
           automaticAdmissionPreparationFailed = true;
-          console.warn('[od-next-rollout] automatic capability preparation failed; using ordinary default', error);
+          console.warn('[od-next-rollout] runtime detection failed; using ordinary default', error);
         }
       }
-      const nativeSubagents = rolloutCapability?.snapshot?.nativeSubagents;
-      const runtimeCapabilityVerified = Boolean(
-        (rolloutVersions as ({ invocable?: boolean } | null))?.invocable === true
-        && rolloutCapability?.reason === 'capability_resolved'
-        && rolloutCapability.snapshot?.nativeSessionContinuation.support === 'verified'
-        && nativeSubagents?.support === 'verified'
-        && (nativeSubagents.evidenceLevel === 'L2' || nativeSubagents.evidenceLevel === 'L3')
-        && advertisedCapabilityGap.length === 0
-      );
-      // An installed CLI that does not advertise what OD Next will demand at
-      // launch must lose admission here, not fail the user's Run at spawn.
-      const advertisedCapabilityReason = advertisedCapabilityGap.length > 0
-        ? 'advertised_capability_missing'
-        : null;
       strategyRolloutDecision = evaluateOdNextRollout({
         policy: rolloutPolicy,
         assignmentIdentity: `${requestBody.projectId}:${snapshotConversationId ?? ''}`,
@@ -2063,10 +1750,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         agentId: effectiveAgentId,
         agentVersion: rolloutVersions?.agentCliVersion ?? null,
         sourceKind: rolloutPlugin?.sourceKind ?? null,
-        runtimeCapabilityVerified,
-        runtimeCapabilityReason: advertisedCapabilityReason
-          ?? rolloutCapability?.reason
-          ?? 'runtime_out_of_scope',
         routeApplicability,
       });
       if (
@@ -2078,9 +1761,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           'od_next_rollout_prestart_preparation_failed',
         );
       }
-      if (strategyRolloutDecision.effectiveMode === 'active') {
-        rolloutCapabilitySnapshot = rolloutCapability?.snapshot ?? null;
-      }
       console.info('[od-next-rollout]', {
         decisionClass: strategyRolloutDecision.decisionClass,
         requestedMode: strategyRolloutDecision.requestedMode,
@@ -2091,9 +1771,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         sourceKind: rolloutPlugin?.sourceKind ?? null,
         assignmentClass: strategyRolloutDecision.eligible ? 'included' : 'not_included',
         primaryReasonCode: strategyRolloutDecision.primaryReasonCode,
-        ...(advertisedCapabilityGap.length > 0
-          ? { advertisedCapabilityGap }
-          : {}),
       });
       if (!explicitExecutablePlugin) {
         const projectRow = rolloutProject;
@@ -2259,9 +1936,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       // unbound project.
       workspaceScope: preparedWorkspaceScope,
       ...(strategyRolloutDecision ? { strategyRolloutDecision } : {}),
-      ...(strategyRolloutDecision?.effectiveMode === 'active' && rolloutCapabilitySnapshot
-        ? { runtimeCapabilitySnapshot: rolloutCapabilitySnapshot }
-        : {}),
     };
     if (resolvedSnapshot?.ok) {
       meta.appliedPluginSnapshotId = resolvedSnapshot.snapshotId;
@@ -2273,12 +1947,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         ).trim();
         if (renderedQuery.length > 0) meta.message = renderedQuery;
       }
-    }
-    if (clarificationContinuation) {
-      applyClarificationContinuationMeta(meta, clarificationContinuation);
-      meta.odNextTaskInputSnapshot = design.runs.get(
-        clarificationContinuation.sourceRunId,
-      )?.odNextTaskInputSnapshot ?? null;
     } else if (idempotentStrategyRetry?.strategyRolloutDecision) {
       // Same skipped-evaluation shape as the continuation above. A retry is the
       // same logical request, so it reports the decision that request already
@@ -2412,6 +2080,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     // earliest conversation so the run has a chat home.
     let conversationFallbackBound = false;
     if (
+      !stream &&
       typeof meta.projectId === 'string' &&
       meta.projectId &&
       (typeof meta.conversationId !== 'string' || !meta.conversationId)
@@ -2436,7 +2105,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     // Require a string projectId so omit-pin never seeds without owning-project
     // context. Must run before omit-pin mint/seed so a missing conversation
     // never yields a 202 with an assistantMessageId that was never persisted.
-    if (typeof meta.conversationId === 'string' && meta.conversationId) {
+    if (!stream && typeof meta.conversationId === 'string' && meta.conversationId) {
       if (
         !conversationSession ||
         typeof meta.projectId !== 'string' ||
@@ -2445,6 +2114,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       ) {
         return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
       }
+    }
+    // Compare against the actual binding, including the project-only fallback.
+    // Replaying an accepted request may still omit conversationId on the wire.
+    if (previousSubmission && previousSubmission.conversationId !== meta.conversationId) {
+      return sendApiError(res, 409, 'IDEMPOTENCY_CONFLICT', 'submission belongs to another conversation');
     }
     // Resolve session mode before omit-pin seed so the user turn stores the
     // same mode the run will use (matches web PUT /messages persistence).
@@ -2580,6 +2254,8 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     if (
       typeof meta.conversationId === 'string' &&
       meta.conversationId &&
+      conversationSession &&
+      typeof meta.projectId === 'string' && meta.projectId &&
       (clientUserMessageId || missingClientPin || conversationFallbackBound)
     ) {
       if (missingClientPin) {
@@ -2624,9 +2300,19 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         };
       }
     }
-    const seedRunUserMessage = () => {
-      if (!runUserSeed) return;
+    const seedRunUserMessage = (candidate: { id: string }) => {
+      const blockingRun = activeRunBlockingDesignSystemEnrichment(design.runs, {
+        conversationId: meta.conversationId, analyticsHints: meta.analyticsHints, excludeRunId: candidate.id,
+      });
+      if (blockingRun) throw new StrategyHandoffError(409, 'DESIGN_SYSTEM_ENRICHMENT_IN_PROGRESS',
+        'a design-system enrichment run is already active for this conversation');
       const now = Date.now();
+      if (submission?.source !== 'system' && typeof meta.projectId === 'string'
+        && typeof meta.conversationId === 'string') {
+        acceptProjectUserSubmission(db, { id: typeof submission?.id === 'string' ? submission.id : clientUserMessageId ?? `run-${candidate.id}`,
+          projectId: meta.projectId, conversationId: meta.conversationId, acceptedAt: now });
+      }
+      if (!runUserSeed) return;
       upsertMessage(db, runUserSeed.conversationId, {
         id: runUserSeed.id,
         role: 'user',
@@ -2649,6 +2335,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       }
     };
     const fallbackAutomaticBeforeStart = async (error: unknown): Promise<boolean> => {
+      if (previousStrategyTask) {
+        sendApiError(res, 409, 'STRATEGY_HANDOFF_PREPARATION_FAILED',
+          error instanceof Error ? error.message : 'Could not prepare the current strategy.');
+        return false;
+      }
       if (
         !strategyRolloutDecision
         || strategyRolloutDecision.effectiveMode !== 'active'
@@ -2686,7 +2377,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         strategyRolloutDecision,
         'od_next_rollout_prestart_preparation_failed',
       );
-      rolloutCapabilitySnapshot = null;
       meta.strategyRolloutDecision = strategyRolloutDecision;
       delete meta.runtimeCapabilitySnapshot;
       delete meta.odNextTaskInputSnapshot;
@@ -2732,8 +2422,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     ) return;
     let frozenSkillPackage: FrozenSkillPackageV1 | undefined;
     if (
-      !clarificationContinuation
-      && !idempotentStrategyRetry
+      !idempotentStrategyRetry
       && strategyRolloutDecision?.effectiveMode === 'active'
     ) {
       // Everything the session selected inside this task type — an @-mentioned
@@ -2765,18 +2454,20 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         ),
       });
     }
-    const fingerprintSnapshot = clarificationTask
-      ? getSnapshot(db, clarificationTask.snapshotId)
-      : resolvedSnapshot?.ok
+    const fingerprintSnapshot = resolvedSnapshot?.ok
         ? resolvedSnapshot.snapshot
         : null;
+    if (previousStrategyTask) {
+      meta.analyticsHints = { ...(meta.analyticsHints ?? {}),
+        continuedFromTaskExecutionId: previousStrategyTask.taskExecutionId,
+        continuedFromRunId: previousStrategyTask.latestRunId };
+    }
     const fingerprintMeta = { ...meta };
     delete fingerprintMeta.strategyRolloutDecision;
     delete fingerprintMeta.runtimeCapabilitySnapshot;
     meta.requestFingerprint = runRequestFingerprint(fingerprintMeta, fingerprintSnapshot);
     if (
-      !clarificationContinuation
-      && !idempotentStrategyRetry
+      !idempotentStrategyRetry
       && strategyRolloutDecision?.effectiveMode === 'active'
     ) {
       // The initial Bundle is frozen before the physical Run exists. Mint the
@@ -2787,8 +2478,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     let createdTaskInputSnapshot: OdNextTaskInputSnapshotDescriptor | null = null;
     let preparedPromptBundleText: string | null = null;
     if (
-      !clarificationContinuation
-      && !idempotentStrategyRetry
+      !idempotentStrategyRetry
       && strategyRolloutDecision?.effectiveMode === 'active'
     ) {
       const taskType = strategyRolloutDecision.taskType;
@@ -2840,6 +2530,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         });
         createdTaskInputSnapshot = createOdNextTaskInputSnapshot({
           snapshotsRoot: taskInputSnapshotsRoot,
+          ...(previousStrategyTask ? { inheritedSnapshot: {
+            taskExecutionId: previousStrategyTask.taskExecutionId,
+            snapshotDir: path.join(taskInputSnapshotsRoot, previousStrategyTask.taskExecutionId),
+            manifestSha256: previousStrategyTask.frozenInputIdentity.taskInputManifestSha256,
+          } } : {}),
           taskExecutionId,
           taskConfiguration,
           projectRoot,
@@ -2885,10 +2580,18 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     try {
       preparedRun = internalRuns.prepare({
         meta,
-        ...((runUserSeed || clarificationTask || strategyRolloutDecision?.effectiveMode === 'active')
+        ...(((meta.projectId && meta.conversationId) || strategyRolloutDecision?.effectiveMode === 'active')
           ? {
               beforeClaimCommit: (candidate) => {
-                if (!clarificationContinuation && createdTaskInputSnapshot) {
+                if (previousStrategyTask) {
+                  // Prompt preparation awaits I/O. Recheck at the atomic claim so
+                  // two follow-ups cannot both start from the same idle conversation.
+                  const active = design.runs.list({ projectId: previousStrategyTask.projectId,
+                    conversationId: previousStrategyTask.conversationId }).find(run =>
+                    run.id !== candidate.id && holdsConversation(run));
+                  if (active) throw new StrategyHandoffError(409, 'RUN_IN_PROGRESS', 'a run is still active in this conversation');
+                }
+                if (createdTaskInputSnapshot) {
                   candidate.odNextTaskInputSnapshot = createdTaskInputSnapshot;
                   // `createOrReuse` persisted the optimistic Run before the
                   // claim hook ran. Persist the daemon-owned descriptor now,
@@ -2897,18 +2600,9 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
                   // falls back to mutable request paths.
                   design.runs.persistState(candidate);
                 }
-                seedRunUserMessage();
-                if (clarificationContinuation && !clarificationContinuation.retry) {
-                  beginStrategyClarification(db, {
-                    taskExecutionId: clarificationContinuation.task.taskExecutionId,
-                    sourceRunId: clarificationContinuation.sourceRunId,
-                    nextRunId: candidate.id,
-                    answer: clarificationContinuation.answer,
-                  });
-                }
+                seedRunUserMessage(candidate);
                 if (
-                  !clarificationContinuation
-                  && strategyRolloutDecision?.effectiveMode === 'active'
+                  strategyRolloutDecision?.effectiveMode === 'active'
                   && resolvedSnapshot?.ok
                   && resolvedSnapshot.snapshot.strategy
                 ) {
@@ -2930,6 +2624,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
                       sessionMode: meta.sessionMode === 'chat' || meta.sessionMode === 'plan' ? meta.sessionMode : 'design',
                       frozenSkillPackage,
                       promptBundleText: preparedPromptBundleText,
+                      ...(previousStrategyTask ? { continuedFromTaskExecutionId: previousStrategyTask.taskExecutionId } : {}),
                       taskInputManifestSha256: initialTaskInputSnapshot.manifestSha256,
                     });
                     // The route stays unlocked through the request turn so the
@@ -2943,10 +2638,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
                       intake: {
                         inputRefs: [{ id: 'request', accessible: true }],
                         selectedAgentAvailable: true,
-                        nativeContinuation: strategyRolloutDecision.syntheticCanary
-                          ? 'verified'
-                          : rolloutCapabilitySnapshot?.nativeSessionContinuation.support
-                            ?? 'unknown',
                         taskProfileAvailable: true,
                         dependencies: [],
                       },
@@ -2987,7 +2678,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         if (!await fallbackAutomaticBeforeStart(error.preparationCause)) return;
         preparedRun = internalRuns.prepare({
           meta,
-          ...(runUserSeed ? { beforeClaimCommit: () => seedRunUserMessage() } : {}),
+          beforeClaimCommit: (candidate) => seedRunUserMessage(candidate),
           resume: {
             requested: requestBody.resume === true,
             canResume: (candidate) =>
@@ -3000,21 +2691,22 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           },
         });
       } else {
-      if (error instanceof OdNextTaskInputSnapshotError) {
-        return sendApiError(res, 400, error.code, error.message);
-      }
-      if (error instanceof InvalidStrategyTaskRecordError) {
-        return sendApiError(res, 409, 'OD_NEXT_TASK_STATE_INVALID', error.message);
-      }
-      if (clarificationTask) {
-        return sendApiError(
-          res,
-          409,
-          'STRATEGY_TASK_TRANSITION_CONFLICT',
-          error instanceof Error ? error.message : String(error),
-        );
-      }
-      throw error;
+        if (error instanceof StrategyHandoffError) return sendApiError(res, error.status, error.code, error.message);
+        if (error instanceof OdNextTaskInputSnapshotError) {
+          return sendApiError(res, 400, error.code, error.message);
+        }
+        if (error instanceof InvalidStrategyTaskRecordError) {
+          return sendApiError(res, 409, 'OD_NEXT_TASK_STATE_INVALID', error.message);
+        }
+        if (previousStrategyTask) {
+          return sendApiError(
+            res,
+            409,
+            'STRATEGY_TASK_TRANSITION_CONFLICT',
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+        throw error;
       }
     }
     if (preparedRun.kind !== 'ready') {
@@ -3041,29 +2733,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         'clientRequestId is already associated with a different logical run request',
       );
     }
-    if (preparedRun.kind === 'ready' && preparedRun.creationKind === 'created') {
-      const blockingRun = activeRunBlockingDesignSystemEnrichment(design.runs, {
-        conversationId: meta.conversationId,
-        analyticsHints: meta.analyticsHints,
-        excludeRunId: preparedRun.run.id,
-      });
-      if (blockingRun) {
-        design.runs.drop(preparedRun.run);
-        return sendApiError(
-          res,
-          409,
-          'DESIGN_SYSTEM_ENRICHMENT_IN_PROGRESS',
-          'a design-system enrichment run is already active for this conversation',
-          {
-            details: {
-              kind: 'design_system_enrichment_in_progress',
-              runId: blockingRun.id,
-              conversationId: blockingRun.conversationId ?? '',
-            },
-          },
-        );
-      }
-    }
     const run = preparedRun.run;
     const analyticsAttributionMismatch =
       (preparedRun.kind !== 'ready' || preparedRun.creationKind === 'reused')
@@ -3071,11 +2740,14 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         run.externalPluginAnalytics,
         meta.analyticsHints,
       );
+    const submissionId = typeof submission?.id === 'string' ? submission.id : clientUserMessageId ?? `run-${run.id}`;
+    const acceptedSubmission = () => submission?.source === 'system'
+      ? undefined : getProjectUserSubmission(db, submissionId);
     if (preparedRun.kind === 'reused') {
       let strategyTask;
       try {
         const task = strategyTaskForRun(run);
-        strategyTask = task ? projectStrategyTask(task, run.id) : null;
+        strategyTask = task ? projectStrategyTask(task, run.id, db) : null;
       } catch (error) {
         if (
           error instanceof InvalidFrozenSkillPackageError
@@ -3092,7 +2764,9 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         }
         throw error;
       }
+      if (stream) { design.runs.stream(run, req, res); return; }
       return res.status(202).json({
+        userSubmission: acceptedSubmission(),
         runId: run.id,
         conversationId: run.conversationId ?? null,
         assistantMessageId: run.assistantMessageId ?? null,
@@ -3136,11 +2810,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       const ua = String(req.get('user-agent') ?? '');
       run.clientType = ua.includes('Electron/') ? 'desktop' : 'web';
     }
-    if (resolvedSnapshot?.ok || clarificationTask) {
+    if (resolvedSnapshot?.ok) {
       try {
         linkSnapshotToRun(
           db,
-          clarificationTask?.snapshotId ?? resolvedSnapshot!.snapshotId,
+          resolvedSnapshot!.snapshotId,
           run.id,
         );
       } catch {
@@ -3150,7 +2824,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     let strategyTask;
     try {
       const task = strategyTaskForRun(run);
-      strategyTask = task ? projectStrategyTask(task, run.id) : null;
+      strategyTask = task ? projectStrategyTask(task, run.id, db) : null;
     } catch (error) {
       if (
         !(error instanceof InvalidFrozenSkillPackageError)
@@ -3163,7 +2837,9 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           : 'OD_NEXT_TASK_STATE_INVALID',
         error.message,
       );
+      if (stream) { design.runs.stream(run, req, res); return; }
       return res.status(202).json({
+        userSubmission: acceptedSubmission(),
         runId: run.id,
         conversationId: run.conversationId ?? null,
         assistantMessageId: run.assistantMessageId ?? null,
@@ -3174,6 +2850,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     }
     if (strategyTask) run.strategyTask = strategyTask;
     const body = {
+      userSubmission: acceptedSubmission(),
       runId: run.id,
       conversationId: run.conversationId ?? null,
       assistantMessageId: run.assistantMessageId ?? null,
@@ -3190,10 +2867,10 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       ...(strategyTask ? { taskExecutionId: strategyTask.taskExecutionId } : {}),
       ...(strategyTask ? { strategyTask } : {}),
     };
-    res.status(202).json(body);
+    if (stream) design.runs.stream(run, req, res);
+    else res.status(202).json(body);
     if (
-      !clarificationTask
-      && !resumed
+      !resumed
       && resolvedSnapshot?.ok
       && resolvedSnapshot.snapshot.pipeline
     ) {
@@ -3241,6 +2918,70 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
   };
 
   registerRunCreateRoute(app, handleRunCreate, sendApiError);
+
+  // Restart-safety probe for the desktop updater. `GET /api/runs` refuses an
+  // unscoped listing once any run belongs to a Workspace-bound project, so a
+  // host-level caller could never learn whether it is safe to restart. This
+  // route answers only that question: it is loopback-only (peer, Host and
+  // Origin, which also defeats DNS rebinding) and returns a bare count — no
+  // run, project or conversation ids — so it cannot enumerate Workspace runs.
+  // Registered before `/api/runs/:id` so the path is not read as a run id.
+  app.get('/api/runs/active-count', (req: ApiRequest, res: ApiResponse) => {
+    const local = validateLocalDaemonRequest(req);
+    if (!local.ok) {
+      return sendApiError(res, 403, 'FORBIDDEN', local.message, { details: local.details });
+    }
+    const activeRunCount = design.runs.list({ status: 'active' }).length;
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ activeRunCount });
+  });
+
+  /*
+   * P0-24 推测项 A-06 (N10): the notices the desktop client turns into
+   * system notifications. Permission takes the most conservative reading:
+   *
+   *  · a project with no Workspace binding (pre-Workspace local) is visible;
+   *  · a bound project is visible only when the caller's asserted Workspace
+   *    identity passes the same read gate the project's own routes use — so a
+   *    Team project's notice reaches only a client currently in that Team,
+   *    and a member whose access was revoked locally sees nothing;
+   *  · a caller with no identity at all (headerless CLI) sees no bound
+   *    project; `od run notices --workspace … --workspace-member …` asserts one.
+   *
+   * Notices carry no reply text, so the worst a wrong grant could reveal is a
+   * project name and that a turn ended. The response is loopback-only.
+   */
+  app.get('/api/run-notices', async (req: ApiRequest, res: ApiResponse) => {
+    // Same loopback / DNS-rebinding guard as the active-count probe: the feed
+    // names projects, so a foreign page must not read it through the browser.
+    const local = validateLocalDaemonRequest(req);
+    if (!local.ok) {
+      return sendApiError(res, 403, 'FORBIDDEN', local.message, { details: local.details });
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    const afterRaw = typeof req.query?.after === 'string' ? Number(req.query.after) : 0;
+    const after = Number.isFinite(afterRaw) && afterRaw > 0 ? Math.floor(afterRaw) : 0;
+    if (!ctx.runNotices) {
+      return res.json({ epoch: 'unavailable', latestSeq: 0, notices: [] });
+    }
+    const requestContext = workspaceResourceContextFromRequest(req);
+    const body = await ctx.runNotices.read(after, async (notice) => {
+      const binding = ctx.projectStore?.getWorkspaceProjectByProjectId(db, notice.projectId);
+      if (!binding) return true;
+      if (requestContext === null || !ctx.authorizeProjectRequest) return false;
+      try {
+        return await ctx.authorizeProjectRequest(
+          req,
+          SILENT_RESPONSE,
+          notice.projectId,
+          { mode: 'read' },
+        );
+      } catch {
+        return false;
+      }
+    });
+    res.json(body);
+  });
 
   app.get('/api/runs', async (req: ApiRequest, res: ApiResponse) => {
     const { projectId, conversationId, status } = req.query;
@@ -3307,9 +3048,21 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     const awaitingInputProjectIds = visibleProjectIds.size
       ? [...listProjectsAwaitingInput(db)].filter((id) => visibleProjectIds.has(id))
       : [];
+    // Per conversation too: a project shows "needs your reply" only when the
+    // conversation that most recently started a Run is the one waiting
+    // (P0-24). Same visibility rule — only conversations the runs expose.
+    const visibleConversationIds = new Set(
+      visibleRuns
+        .map((run) => run.conversationId)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0),
+    );
+    const awaitingInputConversationIds = visibleConversationIds.size
+      ? [...listConversationsAwaitingInput(db)].filter((id) => visibleConversationIds.has(id))
+      : [];
     const body = {
       runs: visibleRuns.map(statusWithStrategyTask),
       awaitingInputProjectIds,
+      awaitingInputConversationIds,
     };
     res.json(body);
   });
@@ -3641,7 +3394,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           'strategy task changed while cancellation was being applied',
         );
       }
-      cancelRun.strategyTask = projectStrategyTask(canceled, cancelRun.id);
+      cancelRun.strategyTask = projectStrategyTask(canceled, cancelRun.id, db);
     }
     // Logical CAS wins before physical finish: the emitted end frame therefore
     // carries the terminal task projection and can never advertise a running
@@ -3719,17 +3472,22 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     // — which is exactly when the user said it.
     const messageId = randomUUID();
     if (run.conversationId) {
-      const now = Date.now();
-      upsertMessage(db, run.conversationId, {
-        id: messageId,
-        role: 'user',
-        content: text,
-        startedAt: now,
-        endedAt: now,
-      });
-      if (typeof run.projectId === 'string' && run.projectId) {
-        updateProject(db, run.projectId, {});
-      }
+      const conversationId = run.conversationId;
+      db.transaction(() => {
+        const now = Date.now();
+        upsertMessage(db, conversationId, {
+          id: messageId,
+          role: 'user',
+          content: text,
+          startedAt: now,
+          endedAt: now,
+        });
+        if (typeof run.projectId === 'string' && run.projectId) {
+          updateProject(db, run.projectId, {});
+          acceptProjectUserSubmission(db, { id: `steer-${messageId}`, projectId: run.projectId,
+            conversationId, acceptedAt: now });
+        }
+      })();
     }
     res.json({
       ok: true,
@@ -3740,358 +3498,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
   });
 
   app.post('/api/chat', async (req: ApiRequest, res: ApiResponse) => {
-    if (ctx.lifecycle.isDaemonShuttingDown()) {
-      return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
-    }
-    const requestBody = toJsonRecord(req.body);
-    const mediaExecution = parseMediaExecutionPolicyInput(requestBody.mediaExecution);
-    if (!mediaExecution.ok) {
-      return sendApiError(res, 400, 'BAD_REQUEST', mediaExecution.message);
-    }
-    const toolBundle = parseRunToolBundleForRequest(requestBody.toolBundle);
-    if (!toolBundle.ok) {
-      return sendApiError(res, 400, 'BAD_REQUEST', toolBundle.message);
-    }
-    let chatProject: ProjectRecord | null = null;
-    if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
-      try {
-        chatProject = toProjectRecord(getProject(db, requestBody.projectId));
-        assertSandboxProjectRootAvailable(chatProject?.metadata);
-      } catch (err) {
-        if (err instanceof SandboxImportedProjectError) {
-          return sendApiError(res, 400, 'BAD_REQUEST', err.message);
-        }
-        throw err;
-      }
-    }
-    // A chat run may only attach to a conversation owned by its own project.
-    // Without this guard, pairing projectId=A with a conversationId owned by
-    // project B runs in A's cwd but pins messages and the native session under
-    // B — corrupting B's history and resume identity. Mirror the ownership
-    // check the sibling routes already enforce (handoff.ts, terminal.ts).
-    if (typeof requestBody.projectId === 'string' && requestBody.projectId &&
-        typeof requestBody.conversationId === 'string' && requestBody.conversationId) {
-      const chatConversation = getConversation(db, requestBody.conversationId);
-      if (chatConversation && chatConversation.projectId !== requestBody.projectId) {
-        return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
-      }
-    }
-    let authorizedBoundMutation = false;
-    if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
-      const authorization = await authorizeRunProjectBeforePluginResolution(
-        req,
-        res,
-        requestBody.projectId,
-      );
-      if (!authorization.ok) return;
-      authorizedBoundMutation = authorization.authorizedBoundMutation;
-    }
-    let clarificationResolution;
-    try {
-      clarificationResolution = resolveClarificationContinuation(requestBody);
-    } catch (error) {
-      if (
-        error instanceof InvalidFrozenSkillPackageError
-        || error instanceof InvalidStrategyTaskRecordError
-      ) {
-        return sendApiError(
-          res,
-          409,
-          error instanceof InvalidFrozenSkillPackageError
-            ? 'OD_NEXT_SKILL_SNAPSHOT_INVALID'
-            : 'OD_NEXT_TASK_STATE_INVALID',
-          error.message,
-        );
-      }
-      throw error;
-    }
-    if (clarificationResolution.kind === 'error') {
-      return sendApiError(
-        res,
-        clarificationResolution.status,
-        clarificationResolution.code,
-        clarificationResolution.message,
-      );
-    }
-    const clarificationContinuation = clarificationResolution.kind === 'continuation'
-      ? clarificationResolution.value
-      : null;
-    const clarificationTask = clarificationContinuation?.task ?? null;
-    if (!hasCompleteByokOpenCodeConfig({
-      ...requestBody,
-      ...(clarificationTask ? { agentId: clarificationTask.selectedAgentId } : {}),
-    })) {
-      return sendApiError(
-        res,
-        400,
-        'VALIDATION_FAILED',
-        BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
-      );
-    }
-    const meta: RunCreateMeta = {
-      ...withoutSensitiveRunInput(requestBody),
-      mediaExecution: mediaExecution.policy,
-      toolBundle: toolBundle.bundle,
-      ...(chatProject?.metadata ? { projectMetadata: chatProject.metadata } : {}),
-      workspaceScope: null,
-    };
-    if (clarificationContinuation) {
-      applyClarificationContinuationMeta(meta, clarificationContinuation);
-      meta.odNextTaskInputSnapshot = design.runs.get(
-        clarificationContinuation.sourceRunId,
-      )?.odNextTaskInputSnapshot ?? null;
-    }
-    const toolBundleSupport = validateRunToolBundleForAgent(
-      toolBundle.bundle,
-      typeof meta.agentId === 'string' ? getAgentDef(meta.agentId) : null,
-      {
-        deliveryTarget: runToolBundleDeliveryTargetForProject(
-          meta.projectId,
-          chatProject?.metadata,
-        ),
-      },
-    );
-    if (!toolBundleSupport.ok) {
-      return sendApiError(res, 400, 'BAD_REQUEST', toolBundleSupport.message);
-    }
-    // Mirror the POST /api/runs ownership check: the assistantMessageId must
-    // reference an assistant message in THIS conversation, or the run mutates a
-    // row it does not own via the id-only writers (#6418 review).
-    const chatAssistantMessageId =
-      typeof meta.assistantMessageId === 'string' && meta.assistantMessageId
-        ? meta.assistantMessageId
-        : null;
-    if (chatAssistantMessageId) {
-      // Without a resolvable conversation there is nothing to validate the
-      // assistantMessageId against — the run would mutate a row it does not
-      // own via the id-only writers (nettee on #6418).
-      if (typeof meta.conversationId !== 'string' || !meta.conversationId) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'assistantMessageId requires a conversation');
-      }
-      const chatConversation = getConversation(db, meta.conversationId);
-      if (
-        !chatConversation
-        || (
-          typeof meta.projectId === 'string'
-          && meta.projectId
-          && chatConversation.projectId !== meta.projectId
-        )
-      ) {
-        return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
-      }
-      const existingAssistantPin = db
-        .prepare(
-          `SELECT role, conversation_id AS conversationId, run_id AS runId, run_status AS runStatus FROM messages WHERE id = ?`,
-        )
-        .get(chatAssistantMessageId) as
-        | { role?: unknown; conversationId?: unknown; runId?: unknown; runStatus?: unknown }
-        | undefined;
-      if (existingAssistantPin && existingAssistantPin.role !== 'assistant') {
-        return sendApiError(
-          res,
-          409,
-          'INVALID_ASSISTANT_MESSAGE',
-          'assistantMessageId must reference an assistant message',
-        );
-      }
-      if (
-        existingAssistantPin
-        && existingAssistantPin.conversationId !== meta.conversationId
-      ) {
-        return sendApiError(
-          res,
-          409,
-          'IDEMPOTENCY_CONFLICT',
-          'assistantMessageId belongs to a different conversation',
-        );
-      }
-    }
-    if (typeof meta.projectId === 'string' && meta.projectId) {
-      const preparedWorkspaceScope =
-        await prepareRunWorkspaceScope(
-          req,
-          res,
-          meta.projectId,
-          meta.agentId,
-          authorizedBoundMutation,
-        );
-      if (!preparedWorkspaceScope.ok) return;
-      meta.workspaceScope = preparedWorkspaceScope.workspaceScope;
-    }
-    const chatPluginId = clarificationTask?.strategyId
-      ?? (typeof requestBody.pluginId === 'string' ? requestBody.pluginId : null);
-    // Same authority as POST /api/runs: the validated task and frozen snapshot
-    // own an internal continuation; it is not a newly requested public plugin.
-    const internalStrategyContinuation = Boolean(
-      clarificationTask?.strategyId === 'od-next-strategy'
-      && clarificationContinuation?.snapshot.pluginId === clarificationTask.strategyId
-      && clarificationContinuation.snapshot.strategy?.id === clarificationTask.strategyId,
-    );
-    if (
-      !internalStrategyContinuation
-      && chatPluginId
-      && ctx.plugins.authorizePluginRequest
-      && !await ctx.plugins.authorizePluginRequest(req, res, chatPluginId)
-    ) return;
-    if (
-      typeof meta.projectId === 'string'
-      && meta.projectId
-      && !requestedSnapshotBelongsToProject(
-        res,
-        meta.projectId,
-        meta.appliedPluginSnapshotId,
-      )
-    ) return;
-    meta.requestFingerprint = runRequestFingerprint(
-      meta,
-      clarificationContinuation?.snapshot,
-    );
-    let preparedRun;
-    try {
-      preparedRun = internalRuns.prepare({
-        meta,
-        ...(clarificationContinuation && !clarificationContinuation.retry
-          ? {
-              beforeClaimCommit: (candidate) => {
-                beginStrategyClarification(db, {
-                  taskExecutionId: clarificationContinuation.task.taskExecutionId,
-                  sourceRunId: clarificationContinuation.sourceRunId,
-                  nextRunId: candidate.id,
-                  answer: clarificationContinuation.answer,
-                });
-              },
-            }
-          : {}),
-      });
-    } catch (error) {
-      if (error instanceof InvalidStrategyTaskRecordError) {
-        return sendApiError(res, 409, 'OD_NEXT_TASK_STATE_INVALID', error.message);
-      }
-      if (clarificationContinuation) {
-        return sendApiError(
-          res,
-          409,
-          'STRATEGY_TASK_TRANSITION_CONFLICT',
-          error instanceof Error ? error.message : String(error),
-        );
-      }
-      throw error;
-    }
-    if (preparedRun.kind === 'idempotency_conflict') {
-      return sendApiError(
-        res,
-        409,
-        'IDEMPOTENCY_CONFLICT',
-        'clientRequestId is already associated with a different logical run request',
-      );
-    }
-    if (preparedRun.kind === 'ready' && preparedRun.creationKind === 'created') {
-      const blockingRun = activeRunBlockingDesignSystemEnrichment(design.runs, {
-        conversationId: meta.conversationId,
-        analyticsHints: meta.analyticsHints,
-        excludeRunId: preparedRun.run.id,
-      });
-      if (blockingRun) {
-        design.runs.drop(preparedRun.run);
-        return sendApiError(
-          res,
-          409,
-          'DESIGN_SYSTEM_ENRICHMENT_IN_PROGRESS',
-          'a design-system enrichment run is already active for this conversation',
-          {
-            details: {
-              kind: 'design_system_enrichment_in_progress',
-              runId: blockingRun.id,
-              conversationId: blockingRun.conversationId ?? '',
-            },
-          },
-        );
-      }
-    }
-    const run = preparedRun.run;
-    if (preparedRun.kind === 'reused') {
-      let strategyTask;
-      try {
-        const task = strategyTaskForRun(run);
-        strategyTask = task ? projectStrategyTask(task, run.id) : null;
-      } catch (error) {
-        if (
-          error instanceof InvalidFrozenSkillPackageError
-          || error instanceof InvalidStrategyTaskRecordError
-        ) {
-          return sendApiError(
-            res,
-            409,
-            error instanceof InvalidFrozenSkillPackageError
-              ? 'OD_NEXT_SKILL_SNAPSHOT_INVALID'
-              : 'OD_NEXT_TASK_STATE_INVALID',
-            error.message,
-          );
-        }
-        throw error;
-      }
-      if (strategyTask) run.strategyTask = strategyTask;
-      design.runs.stream(run, req, res);
-      return;
-    }
-    if (preparedRun.kind === 'assistant_claim_conflict') {
-      return sendApiError(
-        res,
-        409,
-        'RUN_IN_PROGRESS',
-        'assistantMessageId is already bound to an active run',
-      );
-    }
-    if (preparedRun.kind === 'resume_not_allowed') {
-      return sendApiError(
-        res,
-        409,
-        'RUN_NOT_RECHARGE_RESUMABLE',
-        'Only a failed Open Design Cloud run waiting for recharge can be resumed with the same request',
-      );
-    }
-    if (clarificationContinuation) {
-      try {
-        linkSnapshotToRun(db, clarificationContinuation.task.snapshotId, run.id);
-      } catch {
-        // The locked snapshot remains on the in-memory Run; linking is best-effort.
-      }
-    }
-    let strategyTask;
-    try {
-      const task = strategyTaskForRun(run);
-      strategyTask = task ? projectStrategyTask(task, run.id) : null;
-    } catch (error) {
-      if (
-        error instanceof InvalidFrozenSkillPackageError
-        || error instanceof InvalidStrategyTaskRecordError
-      ) {
-        design.runs.fail(
-          run,
-          error instanceof InvalidFrozenSkillPackageError
-            ? 'OD_NEXT_SKILL_SNAPSHOT_INVALID'
-            : 'OD_NEXT_TASK_STATE_INVALID',
-          error.message,
-        );
-        design.runs.stream(run, req, res);
-        return;
-      }
-      throw error;
-    }
-    if (strategyTask) run.strategyTask = strategyTask;
-    design.runs.stream(run, req, res);
-    reconcileAssistantMessageOnRunEnd(db, design.runs, run);
-    const executionMeta: RunCreateMeta = {
-      ...meta,
-      ...(requestBody.byokProvider !== undefined
-        ? { byokProvider: requestBody.byokProvider }
-        : {}),
-    };
-    internalRuns.start(
-      run,
-      { body: requestBody, requestAnalyticsContext: readAnalyticsContext(req) },
-      () => startChatRun(executionMeta, run),
-    );
+    await handleRunCreate(req, res, true);
   });
 }
 

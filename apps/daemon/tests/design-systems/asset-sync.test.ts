@@ -65,6 +65,24 @@ describe('syncUserDesignSystemAssetsFromFiles', () => {
     if (root) await rm(root, { recursive: true, force: true });
   });
 
+  it('snapshots the brand manifest with its assets without copying private project metadata', async () => {
+    await createUserDesignSystem(root, { title: 'Acme Brand', body: '# Acme Brand' });
+    const brand = JSON.stringify({ name: 'Acme Brand', colors: [], logo: { primary: 'assets/logo.svg' } });
+    const result = await syncUserDesignSystemAssetsFromFiles(root, DS_ID, [
+      { path: 'brand.json', content: Buffer.from(brand) },
+      { path: 'assets/logo.svg', content: Buffer.from('<svg>published logo</svg>') },
+      { path: 'open-design.json', content: Buffer.from('private project metadata') },
+    ]);
+    expect(result.synced).toEqual(['brand.json', 'assets/logo.svg']);
+    expect(await readFile(path.join(root, DIR_ID, 'brand.json'), 'utf8')).toBe(brand);
+    expect((await readDesignSystemStaticFile(root, DS_ID, 'brand.json', { idPrefix: 'user:' }))?.bytes.toString()).toBe(brand);
+    expect((await readDesignSystemStaticFile(root, DS_ID, 'assets/logo.svg', { idPrefix: 'user:' }))?.bytes.toString()).toBe('<svg>published logo</svg>');
+    await writeFile(path.join(root, DIR_ID, 'assets/unlisted.txt'), 'not declared by brand');
+    expect(await readDesignSystemStaticFile(root, DS_ID, 'assets/unlisted.txt', { idPrefix: 'user:' })).toBeNull();
+    expect(await readDesignSystemStaticFile(root, DS_ID, 'metadata.json', { idPrefix: 'user:' })).toBeNull();
+    await expect(readFile(path.join(root, DIR_ID, 'open-design.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('copies a real asset into canonical, drops its generated fingerprint, and switches artifactMode to agent-managed', async () => {
     const created = await createUserDesignSystem(root, {
       title: 'Acme Brand',

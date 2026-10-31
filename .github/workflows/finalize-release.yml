@@ -5,8 +5,7 @@ name: finalize-release
 #   2. Opens a PR bumping main's synchronized workspace versions to X.Y.(Z+1),
 #      keeping main strictly ahead of the just-shipped stable tag (the build
 #      guard requires apps/packaged version > the latest open-design-v* tag),
-#      arms it for the merge queue (gh pr merge --auto enqueues on green), and
-#      requests a @nexu-io/core-maintainers review.
+#      validates the exact version-only tree and enqueues once CI is green.
 #
 # Trigger: workflow_run on release-stable completing — NOT `release: published`.
 # release-stable.yml promotes its own draft to published with `gh release edit
@@ -22,35 +21,43 @@ name: finalize-release
 # so `--latest` stays the previous (already-finalized) stable and every step
 # no-ops by idempotency. The draft/prerelease/X.Y.Z guards add belt-and-braces.
 #
-# Why the bump PR still needs ONE human approval (unlike the other automerge
-# bots, which merge hands-free): main enforces require_code_owner_review, and the
-# bump touches CODEOWNERS-owned release manifests (apps/packaged, apps/desktop,
-# packages/platform, packages/sidecar*, tools/pack, tools/dev). A bot approval
-# can't satisfy the code-owner gate, so a core-maintainer must approve. Once they
-# do, the armed merge queue squashes it in automatically — no manual file editing,
-# label cleanup, or enqueue. (release/v* has require_code_owner_review=false,
-# which is why backports CAN auto-approve.)
+# Pure version bumps are validated by the trusted bump_followup job before entering
+# the merge queue. Only the approval ruleset grants the release App an exception;
+# CI, merge queue, linear history and branch integrity remain mandatory.
 
 on:
   workflow_run:
-    workflows: ["release-stable"]
+    workflows: ["release-stable", "ci", "Docker image"]
     types: [completed]
+  schedule:
+    - cron: "17,47 * * * *"
   workflow_dispatch:
     inputs:
       tag:
         description: 'Stable release tag to finalize, e.g. open-design-v0.12.0'
-        required: true
+        required: false
         default: ''
+      follow_bump_only:
+        description: 'Check the latest stable bump PR without finalizing a release'
+        type: boolean
+        default: false
+      dry_run:
+        description: 'Validate bump policy without enqueueing'
+        type: boolean
+        default: true
 
 permissions:
   contents: read               # actual writes go through the App token below
+  checks: read
+  pull-requests: read
 
 jobs:
   finalize:
     if: >-
       github.repository == 'nexu-io/open-design' &&
-      (github.event_name == 'workflow_dispatch' ||
-       github.event.workflow_run.conclusion == 'success')
+      ((github.event_name == 'workflow_dispatch' && inputs.follow_bump_only != true) ||
+       (github.event_name == 'workflow_run' && github.event.workflow_run.name == 'release-stable' &&
+        github.event.workflow_run.conclusion == 'success'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/create-github-app-token@v2
@@ -164,7 +171,7 @@ jobs:
           echo "Bumped $changed manifests from $current to $NEXT."
           echo "changed=true" >> "$GITHUB_OUTPUT"
 
-      - name: Open the bump PR, arm the merge queue, request review
+      - name: Open the bump PR for automatic policy validation
         if: steps.ver.outputs.skip != 'true' && steps.bump.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
@@ -182,7 +189,6 @@ jobs:
           git switch -c "$BRANCH"
           git commit -am "chore(release): bump main to $NEXT ahead of stable $VERSION"
           git push origin "$BRANCH"
-          head_sha=$(git rev-parse HEAD)
           body=$(printf '%s\n' \
             "Automated by \`finalize-release\` after publishing \`open-design-v$VERSION\`." \
             "" \
@@ -190,15 +196,55 @@ jobs:
             "" \
             "The \`backport release/v$VERSION\` label was already deleted by this same run." \
             "" \
-            "**Needs one core-maintainer approval:** this touches CODEOWNERS-owned release manifests, so \`main\`'s code-owner rule requires a human review (a bot approval can't satisfy it). The merge queue is already armed — approve and it squashes in automatically.")
+            "**Automatic version-only policy:** trusted automation verifies the complete change is the expected synchronized version increment, then enqueues after CI. Any additional change needs ordinary maintainer review.")
           pr=$(gh pr create --repo nexu-io/open-design --base main --head "$BRANCH" \
             --title "chore(release): bump main to $NEXT ahead of stable $VERSION" \
             --body "$body")
           echo "Opened $pr"
-          # Request the code owners who must approve (best-effort; never fail finalize on a hiccup).
-          gh pr edit "$pr" --repo nexu-io/open-design --add-reviewer nexu-io/core-maintainers || \
-            echo "::warning::could not request nexu-io/core-maintainers review on $pr"
-          # main is a squash merge queue; --auto arms enqueue-on-green (proven by
-          # bake-plugin-previews-automerge — allow_auto_merge=false does not block the queue).
-          # --match-head-commit pins the armed SHA so a later push isn't merged untested.
-          gh pr merge "$pr" --repo nexu-io/open-design --squash --auto --match-head-commit "$head_sha"
+          echo "The trusted follow-up will validate and enqueue this PR after CI."
+
+  bump_followup:
+    name: Validate and enqueue pure version bump
+    if: >-
+      github.repository == 'nexu-io/open-design' &&
+      (github.event_name == 'schedule' ||
+       (github.event_name == 'workflow_dispatch' && inputs.follow_bump_only == true) ||
+       (github.event_name == 'workflow_run' &&
+        github.event.workflow_run.head_repository.full_name == github.repository &&
+        startsWith(github.event.workflow_run.head_branch, 'release-bot/bump-main-v')))
+    concurrency:
+      group: release-bump-followup
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout trusted policy
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Create narrowly scoped release bot token
+        id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+          owner: nexu-io
+          repositories: open-design
+          permission-contents: write
+          permission-pull-requests: write
+      - name: Validate exact tree and queue through normal CI protections
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUMP_QUEUE_TOKEN: ${{ steps.app.outputs.token }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            node .github/scripts/release/bump-policy.ts
+          else
+            node .github/scripts/release/bump-policy.ts --apply
+          fi

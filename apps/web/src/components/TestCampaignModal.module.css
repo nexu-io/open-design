@@ -2,6 +2,32 @@
 .control > label { display: inline-flex; align-items: center; gap: 8px; margin-left: 8px; padding: 8px 10px; border: 1px solid var(--border, #d4d4d8); border-radius: 8px; background: var(--surface, #fff); font-size: 12px; }
 .control select { min-width: 148px; }
 .control output { display: block; margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: var(--surface, #fff); font: 500 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
-.backdrop { position: fixed; inset: 0; display: grid; place-items: center; background: rgb(0 0 0 / 45%); z-index: 1000; }
-.modal { max-width: calc(100vw - 32px); max-height: calc(100vh - 32px); overflow: auto; background: transparent; }
+.backdrop { position: fixed; inset: 0; padding-right: var(--web-modal-scrollbar-width, 0px); padding-bottom: var(--web-modal-scrollbar-height, 0px); display: grid; place-items: center; background: rgb(0 0 0 / 45%); z-index: 1000; }
+/* Content owns its card gutter (registered templates use a viewport-sized
+   transparent canvas). Bound that canvas once at the viewport, without taking
+   another 16px off each edge and creating scrollbars around fitting content.
+   Oversized legacy content still scrolls; smaller cards keep intrinsic centering. */
+.modal { width: max-content; max-width: calc(100vw - var(--web-modal-scrollbar-width, 0px)); max-height: calc(100vh - var(--web-modal-scrollbar-height, 0px)); overflow: auto; background: transparent; }
 .modal > * { display: block; max-width: 100%; }
+/* Material observes the host, so both viewport dimensions must stay independent
+   of its intrinsic canvas size on shrink and grow. Center intrinsic content in
+   the grid; safe alignment leaves oversized legacy content's top reachable.
+   Round down CSS pixels: material measures integer clientWidth/clientHeight,
+   and a fractional viewport after desktop zoom must not create subpixel overflow.
+   Material paints the rounded card, so the host stays transparent. */
+.modal :global(opend-touchpoint) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-rows: max-content;
+  width: round(down, calc(100vw - var(--web-modal-scrollbar-width, 0px)), 1px);
+  max-width: 100%;
+  height: round(down, calc(100vh - var(--web-modal-scrollbar-height, 0px)), 1px);
+  align-content: safe center;
+  justify-items: safe center;
+  background: transparent;
+}
+/* Focused only as the trap's fallback when content has no control; it is not itself a control, so it paints no platform focus ring. */
+.modal:focus { outline: none; }
+
+.replay { position: fixed; right: 16px; bottom: 16px; z-index: 90; padding: 8px 12px; border: 1px solid var(--border, #d4d4d8); border-radius: 8px; background: var(--surface, #fff); color: var(--foreground, #111); font: inherit; font-size: 12px; cursor: pointer; }
+.replay:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }

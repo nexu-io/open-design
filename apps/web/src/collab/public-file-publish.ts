@@ -1,6 +1,9 @@
 import {
   PUBLIC_FILE_MANUAL_REVOKE_REQUIRED,
+  SHARE_ENTRY_INDEX_CONFLICT,
+  parseApiFailureDetail,
   workspaceContextHasWorkspaceIdentity,
+  type EntryIndexConflictDetails,
   type PublicFileManualRevokeRequiredData,
   type PublicProjectFilePublication,
   type WorkspaceCollabContext,
@@ -12,15 +15,35 @@ export class PublicFilePublishError extends Error {
     readonly status: number,
     readonly code?: string,
     readonly data?: PublicFileManualRevokeRequiredData,
+    /** Present for a 409 {@link SHARE_ENTRY_INDEX_CONFLICT} refusal. */
+    readonly conflict?: EntryIndexConflictDetails,
   ) {
     super(message);
     this.name = 'PublicFilePublishError';
   }
 }
 
+/** The daemon's entry/index.html conflict details, when that is why publishing was refused. */
+export function publicFileEntryIndexConflict(error: unknown): EntryIndexConflictDetails | null {
+  return error instanceof PublicFilePublishError && error.code === SHARE_ENTRY_INDEX_CONFLICT
+    ? error.conflict ?? null
+    : null;
+}
+
+/** Narrow an untrusted 409 `error.data` to the fields the share panel renders. */
+export function parseEntryIndexConflictDetails(value: unknown): EntryIndexConflictDetails | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const data = value as Record<string, unknown>;
+  if (typeof data.agentPrompt !== 'string' || typeof data.referencedFrom !== 'string'
+    || typeof data.suggestedName !== 'string') return undefined;
+  // SAFETY: The share panel reads only the three strings checked above here;
+  // the daemon supplies the remaining conflict-plan fields.
+  return data as unknown as EntryIndexConflictDetails;
+}
+
 export function publicFileManualRevokePublication(
   error: unknown,
-): PublicProjectFilePublication | null {
+): Omit<PublicProjectFilePublication, 'url'> & { url: string | null } | null {
   if (
     !(error instanceof PublicFilePublishError)
     || error.code !== PUBLIC_FILE_MANUAL_REVOKE_REQUIRED
@@ -57,8 +80,8 @@ export function publicFileManualRevokePublication(
  * This must stay the same predicate the daemon applies (`publicFilePrincipal` in
  * apps/daemon/src/routes/collab-sync.ts) — rendering a button where the daemon
  * returns 409 is the exact failure this pair exists to prevent. Both are
- * deliberately narrow: team PROJECT SHARING still requires a real team, because
- * a shared project needs teammates to share it with.
+ * deliberately narrow: project sharing still needs an exact active Workspace
+ * membership and an explicit share action; private projects stay private.
  */
 export function canPublishPublicFile(
   context: WorkspaceCollabContext | null | undefined,
@@ -69,26 +92,60 @@ export function canPublishPublicFile(
 /** Dict keys this module may return; keeps the i18n contract explicit. */
 export type PublicFilePublishFailureKey =
   | 'fileViewer.publishFileRequiresWorkspace'
-  | 'fileViewer.publishFileFailed';
+  | 'fileViewer.publishFileTooLarge'
+  | 'fileViewer.publishFileContentUnavailable'
+  | 'fileViewer.publishFileConflict'
+  | 'fileViewer.publishFileWorkspaceLocked'
+  | 'fileViewer.publishFileFailed'
+  | 'fileViewer.publishFileConnectionFailed'
+  | 'fileViewer.publishFileSignInRequired'
+  | 'fileViewer.publishFileAccessDenied'
+  | 'fileViewer.publishFileServiceRejected'
+  | 'fileViewer.publishFileLocalSessionFailed'
+  | 'fileViewer.publishFileUnconfirmed';
 
-/**
- * Map a publish/unpublish failure to the message key the user should read.
- *
- * The daemon answers with an error CODE, which must never reach the screen. The
- * one code worth its own sentence is `WORKSPACE_IDENTITY_REQUIRED`: it is
- * reachable even with the entry point gated, because a workspace context read
- * can fail transiently (offline, hub hiccup, billing/seat state in flux) and the
- * UI then falls back to the last-known context. Telling that user "your
- * workspace identity could not be confirmed" is actionable; "Publish failed" is
- * not.
- *
- * The sentence must ask the user to SIGN IN, not to switch to a team — the gate
- * no longer has anything to do with teams, and the old copy sent personal users
- * chasing a workspace they did not need.
+/** A rejected mutation without an HTTP receipt may already have committed. */
+export function publicFileMutationNeedsReconciliation(error: unknown): boolean {
+  return error instanceof Error && !(error instanceof PublicFilePublishError)
+    && !error.message.includes('WORKSPACE_IDENTITY_REQUIRED')
+    && !(error && typeof error === 'object' && 'failure' in error);
+}
+
+export function publicFileMutationFailureKey(error: unknown): PublicFilePublishFailureKey {
+  return publicFileMutationNeedsReconciliation(error)
+    ? 'fileViewer.publishFileUnconfirmed' : publicFilePublishFailureKey(error);
+}
+
+/** Render only validated failure tokens, never daemon or CLI message text.
+ * A snapshot/receipt/cleanup failure may follow a committed remote mutation;
+ * its copy must describe an unconfirmed outcome, not a known upload failure.
+ * Workspace identity still asks for sign-in, not a switch to a team.
  */
 export function publicFilePublishFailureKey(error: unknown): PublicFilePublishFailureKey {
+  if (error instanceof PublicFilePublishError && error.code === PUBLIC_FILE_MANUAL_REVOKE_REQUIRED) return 'fileViewer.publishFileUnconfirmed';
   const message = error instanceof Error ? error.message : String(error ?? '');
-  return message.includes('WORKSPACE_IDENTITY_REQUIRED')
-    ? 'fileViewer.publishFileRequiresWorkspace'
-    : 'fileViewer.publishFileFailed';
+  if (message.includes('WORKSPACE_IDENTITY_REQUIRED')) return 'fileViewer.publishFileRequiresWorkspace';
+  const failure = parseApiFailureDetail(error && typeof error === 'object' && 'failure' in error ? error.failure : undefined);
+  if (!failure) return 'fileViewer.publishFileFailed';
+  if ((failure.stage === 'snapshot' || failure.stage === 'persist')
+    && (failure.reason === 'network' || failure.reason === 'timeout')) return 'fileViewer.publishFileUnconfirmed';
+  switch (failure.reason) {
+    case 'network':
+    case 'timeout': return 'fileViewer.publishFileConnectionFailed';
+    case 'not_signed_in': return 'fileViewer.publishFileSignInRequired';
+    case 'cli_missing':
+    case 'session_setup': return 'fileViewer.publishFileLocalSessionFailed';
+    case 'upstream_http':
+      if (failure.upstreamCode === 'public_share_too_large' || failure.upstreamStatus === 413) return 'fileViewer.publishFileTooLarge';
+      if (['public_share_content_unavailable','blob_not_uploaded','blob_size_mismatch','blob_digest_mismatch','manifest_blobs_missing'].includes(failure.upstreamCode ?? '')) return 'fileViewer.publishFileContentUnavailable';
+      if (['public_upload_conflict','public_upload_expired','share_source_conflict','SHARE_GENERATION_MISMATCH','share_binding_stopped'].includes(failure.upstreamCode ?? '')) return 'fileViewer.publishFileConflict';
+      if (['workspace_subscription_locked','workspace_locked'].includes(failure.upstreamCode ?? '')) return 'fileViewer.publishFileWorkspaceLocked';
+      if (failure.upstreamStatus === 401) return 'fileViewer.publishFileSignInRequired';
+      if (failure.upstreamStatus === 403) return 'fileViewer.publishFileAccessDenied';
+      return 'fileViewer.publishFileServiceRejected';
+    case 'session_cleanup':
+    case 'invalid_receipt': return 'fileViewer.publishFileUnconfirmed';
+    default: return failure.stage === 'snapshot' || failure.stage === 'persist'
+      ? 'fileViewer.publishFileUnconfirmed' : 'fileViewer.publishFileFailed';
+  }
 }

@@ -31,8 +31,7 @@ declare global {
 }
 
 const SELECTORS = {
-  handoffView: '[data-testid="project-creation-pending-view"]',
-  handoffChat: '[data-testid="project-creation-pending-chat"]',
+  creationPending: '[data-creation-phase="pending"]',
   chatPaneSpinner: '[data-testid="chat-pane-loading"]',
   chatSkeleton: '.chat-loading-state',
   designFilesReloading: '[data-testid="design-files-reloading"]',
@@ -120,9 +119,8 @@ async function sendFromHome(page: Page, prompt: string): Promise<void> {
 
 async function expectSingleLoadingSequence(page: Page): Promise<void> {
   await expect(page.locator(SELECTORS.userMessage).first()).toBeVisible({ timeout: T.long });
-  // Let the hand-off frame's own release settle before reading the log.
-  await expect(page.locator(SELECTORS.handoffView)).toHaveCount(0, { timeout: T.medium });
-  await expect(page.locator(SELECTORS.handoffChat)).toHaveCount(0, { timeout: T.medium });
+  // Let the create answer before reading the log.
+  await expect(page.locator(SELECTORS.creationPending)).toHaveCount(0, { timeout: T.medium });
   const { log, clickAt } = await page.evaluate(() => ({
     log: window.__odPaintLog ?? [],
     clickAt: window.__odClickAt ?? null,
@@ -134,26 +132,20 @@ async function expectSingleLoadingSequence(page: Page): Promise<void> {
     .join('\n');
   const firstUserMessage = after.find((entry) => entry.key === 'userMessage' && entry.present);
   expect(firstUserMessage, `the user turn was painted:\n${readable}`).toBeDefined();
-  // The hand-off has two surfaces that hand over to each other (the
-  // standalone frame, then the chat card ProjectView keeps drawing); what must
-  // hold is that the column is never without one of them until the user turn
-  // is already on screen. Replay the flips and find the first moment both are
-  // gone.
-  const handoffState = { handoffView: false, handoffChat: false };
-  let handoffGoneAt: number | null = null;
-  let handoffSeen = false;
-  for (const entry of after) {
-    if (entry.key !== 'handoffView' && entry.key !== 'handoffChat') continue;
-    handoffState[entry.key] = entry.present;
-    if (entry.present) handoffSeen = true;
-    if (handoffSeen && handoffGoneAt == null && !handoffState.handoffView && !handoffState.handoffChat) {
-      handoffGoneAt = entry.at;
-    }
-  }
-  expect(handoffSeen, `the hand-off frame was painted:\n${readable}`).toBe(true);
-  expect(handoffGoneAt, `the hand-off frame was released:\n${readable}`).not.toBeNull();
-  expect(handoffGoneAt!, `hand-off frame left before the user turn was painted:\n${readable}`)
-    .toBeGreaterThanOrEqual(firstUserMessage!.at);
+  // OPEND-3334: ProjectView is mounted from the click and draws the
+  // optimistic first turn while the project is still being created, so the
+  // user turn is on screen before the create answers — and it must never
+  // leave: not when the create answers, not when the real turn takes over.
+  const pendingSeenAt = after.find((entry) => entry.key === 'creationPending' && entry.present)?.at;
+  const persistedAt = after.find((entry) => entry.key === 'creationPending' && !entry.present && entry.at > (pendingSeenAt ?? Infinity))?.at;
+  expect(pendingSeenAt, `the pending phase was painted:\n${readable}`).toBeDefined();
+  expect(persistedAt, `the create answered:\n${readable}`).toBeDefined();
+  expect(firstUserMessage!.at, `the user turn was not on screen before the create answered:\n${readable}`)
+    .toBeLessThanOrEqual(persistedAt!);
+  expect(
+    after.some((entry) => entry.key === 'userMessage' && !entry.present && entry.at > firstUserMessage!.at),
+    `the user turn left the screen during the hand-off:\n${readable}`,
+  ).toBe(false);
   for (const key of ['chatPaneSpinner', 'chatSkeleton', 'designFilesReloading'] as const) {
     expect(
       after.some((entry) => entry.key === key && entry.present),
@@ -192,6 +184,7 @@ test('[P0] an AMR send from Home shows one loading state until the first turn is
     accountBalanceUsd: '20.00',
     accountCredits: 2_000,
     accountPlan: 'free',
+    fundingCheck: 'available',
   });
   await routeSuccessfulRuns(page, { runId: 'home-single-loading-amr' });
   await gotoEntryHome(page);

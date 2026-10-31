@@ -61,6 +61,7 @@ import {
   markProposed,
   markSuccess,
   markFailed,
+  captureExtractionOrigin,
 } from './memory-extractions.js';
 import { resolveProviderConfig } from './media/config.js';
 import { AIHUBMIX_APP_CODE } from './integrations/aihubmix.js';
@@ -1210,6 +1211,7 @@ export function __resetMemoryTurnDedupeForTests() {
 }
 
 async function collectProposedEntries(dataDir, input, options) {
+  const extractionOrigin = captureExtractionOrigin(options?.extractionOrigin);
   const projectRoot = options?.projectRoot ?? null;
   const chatAgentId = options?.chatAgentId ?? null;
   const chatModel = options?.chatModel ?? null;
@@ -1228,14 +1230,14 @@ async function collectProposedEntries(dataDir, input, options) {
 
   const cfg = await readMemoryConfig(dataDir);
   if (!cfg.enabled) {
-    recordSkip({ userMessage, reason: 'memory-disabled', kind: extractionKind });
+    recordSkip({ userMessage, reason: 'memory-disabled', kind: extractionKind, extractionOrigin });
     return { status: 'skipped', attemptId: null, proposed: [], existingEntries: [] };
   }
   if (extractionKind !== 'connector' && !cfg.chatExtractionEnabled) {
     return { status: 'skipped', attemptId: null, proposed: [], existingEntries: [] };
   }
   if (userMessage.length === 0) {
-    recordSkip({ userMessage, reason: 'empty-message', kind: extractionKind });
+    recordSkip({ userMessage, reason: 'empty-message', kind: extractionKind, extractionOrigin });
     return { status: 'skipped', attemptId: null, proposed: [], existingEntries: [] };
   }
 
@@ -1279,14 +1281,14 @@ async function collectProposedEntries(dataDir, input, options) {
       projectRoot && await hasUnsupportedMediaProviderConfig(projectRoot)
         ? 'unsupported-provider'
         : 'no-provider';
-    recordSkip({ userMessage, reason, kind: extractionKind });
+    recordSkip({ userMessage, reason, kind: extractionKind, extractionOrigin });
     return { status: 'skipped', attemptId: null, proposed: [], existingEntries: [] };
   }
 
   // Past this point we have a provider committed and an actual model
   // call about to happen — switch from one-shot skip records to a
   // running record we can update through phase transitions.
-  const attemptId = startExtraction({ userMessage, kind: extractionKind });
+  const attemptId = startExtraction({ userMessage, kind: extractionKind, extractionOrigin });
   markProvider(attemptId, {
     kind: provider.kind,
     model: provider.model,

@@ -401,6 +401,41 @@ describe('AvatarMenu', () => {
     expect(screen.queryByRole('dialog', { name: 'avatar.title' })).toBeNull();
   });
 
+  it('exposes the full model name on hover for same-prefix long ids', () => {
+    // The composer popover ellipsises long model ids, so two OpenRouter
+    // variants sharing a prefix read identically. Each row must name the exact
+    // model it would select on hover.
+    const openrouterAgent: AgentInfo = {
+      id: 'codex',
+      name: 'Codex CLI',
+      bin: 'codex',
+      available: true,
+      version: '0.134.0',
+      models: [
+        {
+          id: 'openrouter/google/gemini-2.5-pro-preview-06-05',
+          label: 'openrouter/google/gemini-2.5-pro-preview-06-05',
+        },
+        {
+          id: 'openrouter/google/gemini-2.5-pro-preview-05-06',
+          label: 'openrouter/google/gemini-2.5-pro-preview-05-06',
+        },
+      ],
+    };
+    renderMenu({
+      config: { ...baseConfig, agentId: 'codex' },
+      agents: [openrouterAgent],
+    });
+
+    openMenu();
+    const list = screen.getByTestId('avatar-model-list');
+    for (const model of openrouterAgent.models ?? []) {
+      expect(
+        within(list).getByRole('radio', { name: model.label }).getAttribute('title'),
+      ).toBe(model.label);
+    }
+  });
+
   it('keeps a custom saved model visible when it is not in the declared agent model list', () => {
     renderMenu({
       config: {
@@ -605,6 +640,11 @@ describe('AvatarMenu', () => {
     // The current model reads as the checked option, not as a dead-end box.
     const current = within(menu).getByRole('radio', { name: 'gpt-4o' });
     expect(current.getAttribute('aria-checked')).toBe('true');
+    // BYOK rows ellipsise the same way; the full id stays reachable on hover.
+    expect(current.getAttribute('title')).toBe('gpt-4o');
+    expect(
+      within(menu).getByRole('radio', { name: 'gpt-5.5' }).getAttribute('title'),
+    ).toBe('gpt-5.5');
 
     fireEvent.click(within(menu).getByRole('radio', { name: 'gpt-5.5' }));
     expect(onApiModelChange).toHaveBeenCalledWith('gpt-5.5');
@@ -647,6 +687,7 @@ describe('AvatarMenu', () => {
     workspaceId: string;
     personalMembershipTier?: string;
   }) {
+    const billingUrl = `/api/workspace/billing?scope=workspace&workspaceId=${options.workspaceId}`;
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
       if (url === '/api/integrations/vela/status') {
@@ -681,7 +722,7 @@ describe('AvatarMenu', () => {
       if (url === '/api/workspace/context') {
         return workspaceContextResponse(options.ambientContext ?? null);
       }
-      if (url === `/api/workspace/billing?scope=workspace&workspaceId=${options.workspaceId}`) {
+      if (url === billingUrl || url === `${billingUrl}&includePreflight=1`) {
         return new Response(JSON.stringify({
           summary: options.personalMembershipTier
             ? { membershipTier: options.personalMembershipTier }

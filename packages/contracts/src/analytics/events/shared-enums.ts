@@ -4,6 +4,19 @@
  */
 // ---- Shared enums --------------------------------------------------------
 
+// Persisted product intent is independent of execution strategy or video engine.
+// Unknown preserves old projects without guessing their scene from discovery.
+export type TrackingProjectIntent =
+  | 'live-artifact'
+  | 'web-clone'
+  | 'document'
+  | 'webgl-experience'
+  | 'worker-visualizer'
+  | 'marketing'
+  | 'hyperframes'
+  | 'motion-design'
+  | 'unknown';
+
 export type TrackingProjectKind =
   | 'prototype'
   // `web_clone` / `wireframe` / `mobile` / `live_artifact` are prototype-kind
@@ -350,12 +363,25 @@ export type TrackingRunFailureDetail =
   | 'agent_protocol_error'
   | 'acp_frame_too_large'
   | 'session_resume_expired'
+  // Two local processes raced to refresh the same stored OAuth credential and
+  // one lost the lock (Claude Code: "another Claude Code process is refreshing
+  // it or exited mid-refresh"). The credential itself is valid — nothing is
+  // expired, revoked or misconfigured — so this must not land in `auth`, whose
+  // verdict prescribes a sign-in the user does not need. The contending holder
+  // releases the lock within seconds, which is why the agent itself calls the
+  // condition transient; named here so it stays retryable rather than falling
+  // through to an opaque exit.
+  | 'credential_refresh_contention'
   | 'fabricated_role_marker'
   | 'permission_request_not_found'
   | 'qoder_stop_sequence'
   | 'signal_killed'
   | 'process_crashed'
   | 'cpu_unsupported'
+  // The bundled Bun-compiled runtime cannot load on this OS version (Windows
+  // builds older than 10 1809 exit with STATUS_ENTRYPOINT_NOT_FOUND before
+  // readiness). Deterministic, so never retried.
+  | 'os_unsupported'
   // Risk control suspended the account (vela returns JSON-RPC -32600 with
   // `data.kind: "account_suspended"`, `retryable: false`). Named because
   // retrying is guaranteed to fail the same way: without this it lands in

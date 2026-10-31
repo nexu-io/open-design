@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "type": "sprite-atlas",
+  "parameterSpace": "circular",
+  "frameCount": 240,
+  "columns": 16,
+  "rows": 15,
+  "cellWidth": 240,
+  "cellHeight": 240,
+  "atlasWidth": 3840,
+  "atlasHeight": 3600,
+  "initialFrame": 157,
+  "startAngleRadians": -2.356194490192345,
+  "circular": true,
+  "sourceFps": 24,
+  "outputFps": 48
+}

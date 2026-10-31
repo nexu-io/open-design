@@ -185,6 +185,10 @@ jobs:
         run: cat "${{ runner.temp }}/release-report/mac_arm64/summary.md" >> "$GITHUB_STEP_SUMMARY"
       - name: Upload mac arm64 smoke report
         if: ${{ always() }}
+        # The smoke command above remains the quality signal. A transient
+        # artifact-service outage must not recast a passed packaged smoke as a
+        # failed release validation.
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: open-design-prerelease-mac-arm64-smoke-report
@@ -257,6 +261,9 @@ jobs:
         run: cat "${{ runner.temp }}/release-report/mac_x64/summary.md" >> "$GITHUB_STEP_SUMMARY"
       - name: Upload mac intel smoke report
         if: ${{ always() }}
+        # Keep report retention advisory: the job must still fail when the
+        # packaged smoke assertion itself fails.
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: open-design-prerelease-mac-x64-smoke-report
@@ -390,6 +397,9 @@ jobs:
         run: Get-Content "${{ runner.temp }}\release-report\win_x64\summary.md" | Add-Content $env:GITHUB_STEP_SUMMARY
       - name: Upload windows smoke report
         if: ${{ always() }}
+        # Artifact upload is diagnostic output, not the packaged smoke
+        # assertion. Preserve the latter as the job's authoritative outcome.
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: open-design-prerelease-win-x64-smoke-report

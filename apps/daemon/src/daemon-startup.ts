@@ -46,6 +46,12 @@ export function parseDaemonCliStartupArgs(
   argv: string[],
   env: NodeJS.ProcessEnv = process.env,
 ): DaemonCliStartupParseResult {
+  // An agent's bare CLI probe is help, not permission to boot a second daemon
+  // against its inherited data root and reconcile the still-active parent run.
+  if (argv.length === 0 && env.OD_DAEMON_URL?.trim()
+    && (env.OPEN_DESIGN_RUN_ID?.trim() || env.OD_TOOL_TOKEN?.trim())) {
+    return { ok: false, kind: 'help' };
+  }
   let port = Number(env.OD_PORT) || 7456;
   let host = normalizeDaemonBindHost(env.OD_BIND_HOST);
   let open = true;

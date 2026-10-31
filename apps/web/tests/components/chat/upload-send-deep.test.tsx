@@ -1,10 +1,18 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
+import { workspaceContextFixture } from '../../helpers/workspace-context';
 import { ChatComposer } from '../../../src/components/ChatComposer';
 import { ANNOTATION_EVENT } from '../../../src/components/PreviewDrawOverlay';
 import { uploadProjectFiles } from '../../../src/providers/registry';
-import { flushMounts, pressEnter } from '../../helpers/lexical-composer';
+import { composerText, typeAndSettle, flushMounts, pressEnter } from '../../helpers/lexical-composer';
+
+const collabScope = vi.hoisted(() => ({ workspaceContext: null as WorkspaceCollabContext | null }));
+vi.mock('../../../src/collab/collab-context', async () => {
+  const actual = await vi.importActual<typeof import('../../../src/collab/collab-context')>('../../../src/collab/collab-context');
+  return { ...actual, useProjectCollabContext: () => ({ ...actual.useProjectCollabContext(), workspaceContext: collabScope.workspaceContext }) };
+});
 
 vi.mock('../../../src/providers/registry', async () => {
   const actual = await vi.importActual<typeof import('../../../src/providers/registry')>('../../../src/providers/registry');
@@ -34,11 +42,127 @@ async function settle(g: ReturnType<typeof gate>) {
   await act(async () => { g.resolve(); await g.promise; });
 }
 beforeEach(() => {
+  collabScope.workspaceContext = null;
   vi.stubGlobal('URL', Object.assign(Object.create(URL), URL, { createObjectURL: () => 'blob:local', revokeObjectURL: () => {} }));
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.resetAllMocks(); });
 
 describe('Deep upload/send contract', () => {
+  it.each(['accepted', 'restore-draft', 'rejected'] as const)(
+    'clears a ready asynchronous batch immediately and preserves new work on %s', async (outcome) => {
+      const oldUpload = gate();
+      const newUpload = gate();
+      const admission = gate();
+      upload.mockImplementation(async (_id, files) => {
+        await (files[0]!.name === 'old.png' ? oldUpload.promise : newUpload.promise);
+        return result(files[0]!.name);
+      });
+      const onSend = vi.fn(async () => {
+        await admission.promise;
+        if (outcome === 'rejected') throw new Error('admission failed');
+        return outcome === 'restore-draft' ? 'restore-draft' as const : undefined;
+      });
+      mount({ initialDraft: 'original draft', onSend });
+      await flushMounts();
+      pick(['old.png']);
+      await waitFor(() => expect(upload).toHaveBeenCalledTimes(1));
+      pressEnter();
+      expect(onSend).not.toHaveBeenCalled();
+      expect(composerText()).toBe('original draft');
+      await settle(oldUpload);
+      await waitFor(() => expect(send().disabled).toBe(false));
+      fireEvent.click(send());
+      expect(onSend).toHaveBeenCalledTimes(1);
+      expect(onSend.mock.calls[0]).toEqual(expect.arrayContaining([
+        'original draft', expect.arrayContaining([expect.objectContaining({ name: 'old.png' })]),
+      ]));
+      await waitFor(() => expect(composerText().trim()).toBe(''));
+      expect(screen.queryByRole('button', { name: 'Preview old.png' })).toBeNull();
+      await typeAndSettle('new draft');
+      pick(['new.png']);
+      await waitFor(() => expect(upload).toHaveBeenCalledTimes(2));
+      await settle(admission);
+      expect(composerText()).toBe('new draft');
+      expect(screen.getByRole('button', { name: 'Cancel upload of new.png' })).toBeTruthy();
+      await settle(newUpload);
+      await ready('new.png');
+      expect(composerText()).toBe('new draft');
+      expect(screen.queryByRole('button', { name: 'Preview old.png' })).toBeNull();
+    },
+  );
+
+  it('restores the ready asynchronous batch on admission failure when no new work exists', async () => {
+    const pending = gate();
+    const admission = gate();
+    upload.mockImplementation(async () => { await pending.promise; return result('old.png'); });
+    const onSend = vi.fn(async () => { await admission.promise; return 'restore-draft' as const; });
+    mount({ initialDraft: 'restore this batch', onSend });
+    await flushMounts();
+    pick(['old.png']);
+    await waitFor(() => expect(upload).toHaveBeenCalledTimes(1));
+    await settle(pending);
+    await waitFor(() => expect(send().disabled).toBe(false));
+    fireEvent.click(send());
+    await waitFor(() => expect(composerText().trim()).toBe(''));
+    await settle(admission);
+    expect(composerText()).toBe('restore this batch');
+    await ready('old.png');
+  });
+
+  it('rejects an old project upload after the composer owner changes', async () => {
+    const pending = gate();
+    upload.mockImplementation(async () => { await pending.promise; return result('obsolete.png'); });
+    const view = mount();
+    await flushMounts();
+    pick(['obsolete.png']);
+    await waitFor(() => expect(upload).toHaveBeenCalledTimes(1));
+    view.update({ projectId: 'p2', onEnsureProject: async () => 'p2' });
+    await settle(pending);
+    expect(screen.queryByTitle('obsolete.png')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Preview obsolete.png' })).toBeNull();
+  });
+
+  it('rejects a stale workspace response without releasing the new workspace upload', async () => {
+    const oldUpload = gate();
+    const newUpload = gate();
+    upload.mockImplementation(async (_id, files) => {
+      await (files[0]!.name === 'old.png' ? oldUpload.promise : newUpload.promise);
+      return result(files[0]!.name);
+    });
+    collabScope.workspaceContext = workspaceContextFixture({ workspaceId: 'old', workspaceMemberId: 'old-member' });
+    const view = mount();
+    await flushMounts();
+    pick(['old.png']);
+    await waitFor(() => expect(upload).toHaveBeenCalledTimes(1));
+    collabScope.workspaceContext = workspaceContextFixture({ workspaceId: 'new', workspaceMemberId: 'new-member' });
+    view.update({});
+    pick(['new.png']);
+    await waitFor(() => expect(upload).toHaveBeenCalledTimes(2));
+    await settle(oldUpload);
+    expect(send().disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Preview old.png' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Cancel upload of new.png' })).toBeTruthy();
+    await settle(newUpload);
+    await ready('new.png');
+    await waitFor(() => expect(send().disabled).toBe(false));
+    fireEvent.click(send());
+    expect(view.onSend.mock.calls[0]?.[1]).toEqual([expect.objectContaining({ name: 'new.png' })]);
+  });
+
+  it('ignores upload completion after disposal', async () => {
+    const pending = gate();
+    upload.mockImplementation(async () => { await pending.promise; return result('disposed.png'); });
+    const view = mount();
+    await flushMounts();
+    pick(['disposed.png']);
+    await waitFor(() => expect(upload).toHaveBeenCalledTimes(1));
+    view.unmount();
+    mount();
+    await flushMounts();
+    await settle(pending);
+    expect(screen.queryByRole('button', { name: 'Preview disposed.png' })).toBeNull();
+  });
+
   it.each(['click', 'enter'])('holds partial batch for %s, then sends original order', async (method) => {
     const slow = gate();
     upload.mockImplementation(async (_id, files) => { if (files[0]!.name === 'slow.png') await slow.promise; return result(files[0]!.name); });

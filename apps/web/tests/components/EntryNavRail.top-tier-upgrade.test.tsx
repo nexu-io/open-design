@@ -70,6 +70,7 @@ function billing(overrides: Partial<WorkspaceBillingSummary> = {}): WorkspaceBil
 function renderRail(props: {
   context: WorkspaceCollabContext;
   billing: WorkspaceBillingSummary | null;
+  priorityAnnouncementAmrProfile?: string;
 }) {
   return render(
     <I18nProvider initial="zh-CN">
@@ -80,6 +81,7 @@ function renderRail(props: {
         open
         context={props.context}
         billing={props.billing}
+        priorityAnnouncementAmrProfile={props.priorityAnnouncementAmrProfile}
         balanceUsd="210"
       />
     </I18nProvider>,
@@ -120,9 +122,54 @@ describe('account menu billing card — 升级 at the top plan tier', () => {
     });
 
     const card = billingCard();
-    // The card itself still renders, still labelled 团队版 — only the button goes.
-    expect(card.getByText('团队版')).toBeTruthy();
+    // The card still shows the scoped Max tier; only the upgrade action goes.
+    expect(card.getByRole('img', { name: 'max' })).toBeTruthy();
     expect(card.queryByRole('button', { name: '升级' })).toBeNull();
+  });
+
+  // Design (PR #8364): the top tier's head button says 管理, not 升级, and
+  // lands on the console dashboard (ruling 2026-09-23).
+  it('offers 管理 instead, pointed at the console dashboard', () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    renderRail({
+      context: context({ planId: 'team_max' } as Partial<WorkspaceCollabContext>),
+      billing: billing({ membershipTier: 'team_max' }),
+    });
+
+    fireEvent.click(billingCard().getByRole('button', { name: '管理' }));
+
+    expect(open).toHaveBeenCalledWith(
+      expect.stringContaining('/dashboard'),
+      '_blank',
+      'noopener,noreferrer',
+    );
+    expect(open.mock.calls[0]?.[0]).not.toContain('billing=');
+  });
+
+  // An unresolved tier also fails the upgrade gate. It must not flash 管理 on
+  // the way to 升级.
+  it('shows neither button while the tier is still unknown', () => {
+    renderRail({
+      context: context({ billingState: 'active', planId: null }),
+      billing: null,
+    });
+
+    const card = billingCard();
+    expect(card.queryByRole('button', { name: '管理' })).toBeNull();
+    expect(card.queryByRole('button', { name: '升级' })).toBeNull();
+  });
+
+  it('still hides 管理 from a team_max member without canManageBilling', () => {
+    renderRail({
+      context: context({
+        role: 'member',
+        planId: 'team_max',
+        permissions: MEMBER_PERMISSIONS,
+      } as unknown as Partial<WorkspaceCollabContext>),
+      billing: billing({ membershipTier: 'team_max' }),
+    });
+
+    expect(billingCard().queryByRole('button', { name: '管理' })).toBeNull();
   });
 
   // (2) Team tiers below max can still change plan.
@@ -138,9 +185,26 @@ describe('account menu billing card — 升级 at the top plan tier', () => {
     },
   );
 
-  // (3) The case a careless fix breaks: personal Max is NOT the top of the
-  // ladder — that user can still move onto a team plan.
-  it('keeps 升级 for a personal max owner', () => {
+  it.each([
+    ['local', 'http://localhost:5173'],
+    ['test', 'https://open-design.powerformer.net'],
+    ['prod', 'https://open-design.ai'],
+  ] as const)('keeps the %s billing-card upgrade on the current workspace', (amrProfile, origin) => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    renderRail({ context: context({ workspaceId: 'payer-space-b', planId: 'team_pro' }),
+      billing: billing({ membershipTier: 'team_pro' }), priorityAnnouncementAmrProfile: amrProfile });
+    fireEvent.click(billingCard().getByRole('button', { name: '升级' }));
+    const url = new URL(String(open.mock.calls[0]![0]));
+    expect(url.origin).toBe(origin);
+    expect(url.searchParams.get('workspaceId')).toBe('payer-space-b');
+    expect(url.searchParams.get('billing')).toBe('plan');
+  });
+
+  // (3) Design PR #8364 (ruling 2026-09-23, 「按设计稿」): personal Max shows
+  // 管理 too, pointed at the console dashboard, even though the team ladder
+  // still sits above it.
+  it('offers 管理, not 升级, for a personal max owner', () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     renderRail({
       context: context({
         workspaceType: 'personal',
@@ -149,7 +213,14 @@ describe('account menu billing card — 升级 at the top plan tier', () => {
       billing: billing({ membershipTier: 'max' }),
     });
 
-    expect(billingCard().getByRole('button', { name: '升级' })).toBeTruthy();
+    expect(billingCard().queryByRole('button', { name: '升级' })).toBeNull();
+    fireEvent.click(billingCard().getByRole('button', { name: '管理' }));
+    expect(open).toHaveBeenCalledWith(
+      expect.stringContaining('/dashboard'),
+      '_blank',
+      'noopener,noreferrer',
+    );
+    expect(open.mock.calls[0]?.[0]).not.toContain('billing=');
   });
 
   // (4) Every other personal tier keeps it too.

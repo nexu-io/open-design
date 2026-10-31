@@ -24,19 +24,22 @@ function shapeOf(status: ProjectDisplayStatus) {
 }
 
 describe('ProjectRunStatusIcon', () => {
-  it('draws nothing in the lead slot for finished work', () => {
-    // OPEND-3133: a finished run keeps the folder and reports through the
-    // unread dot at the row's end (ProjectCompletionDot), never a ✓ here.
-    expect(shapeOf('succeeded').kind).toBe('none');
-    expect(hasRunStatusGlyph('succeeded')).toBe(false);
-    expect(hasCompletionNotice('succeeded')).toBe(true);
+  // P0-24 设计答复(2026-10-26):有新结果「也改成蓝色球,无标签」,失败「用新的红色球,
+  // 不用红色感叹号」;研发负责人要求四颗球与设计稿完全一致,所以两颗都按设计稿约 6 秒一圈。
+  it('draws an unopened finished run as the turning blue ball in the lead slot', () => {
+    const result = shapeOf('succeeded');
+    expect(result.kind).toBe('orb');
+    expect((result as { root: HTMLElement }).root.style.getPropertyValue('--c1')).toBe('#578EFF');
+    expect((result as { root: HTMLElement }).root.className).toContain('isThinking');
+    expect((result as { root: HTMLElement }).root.className).toContain('isLiteral');
+    expect(hasRunStatusGlyph('succeeded')).toBe(true);
   });
 
-  it('reports a completion notice for finished work only', () => {
-    const others: ProjectDisplayStatus[] = [
-      'not_started', 'queued', 'running', 'awaiting_input', 'incomplete', 'failed', 'canceled',
+  it('never reports a row-end completion notice any more', () => {
+    const all: ProjectDisplayStatus[] = [
+      'not_started', 'queued', 'running', 'awaiting_input', 'incomplete', 'failed', 'canceled', 'succeeded',
     ];
-    for (const status of others) expect(hasCompletionNotice(status), status).toBe(false);
+    for (const status of all) expect(hasCompletionNotice(status), status).toBe(false);
     expect(hasCompletionNotice(undefined)).toBe(false);
   });
 
@@ -65,28 +68,31 @@ describe('ProjectRunStatusIcon', () => {
   );
 
   it.each<[ProjectDisplayStatus]>([['failed'], ['canceled'], ['incomplete']])(
-    'draws %s as the interrupted badge, not the orb',
+    'draws %s as the design draft\'s red ball',
     (status) => {
-      // A stopped run must not spin: the rotation is what says "working".
-      const result = shapeOf(status);
-      expect(result.kind).toBe('badge');
-      expect(result.root!.querySelector('path')?.getAttribute('fill')).toBe('#F34801');
-      // The glyph is a knockout, so it needs the dark plate behind it.
-      expect(result.root!.querySelector('rect')?.getAttribute('fill')).toBe('#121212');
+      // The draft's `.entry-nav-rail__failed-orb` turns at 6s like the others
+      // (overrides PRD rule ① "失败静止", decided 2026-10-26).
+      const result = shapeOf(status) as { kind: string; root: HTMLElement };
+      expect(result.kind).toBe('orb');
+      expect(result.root.style.getPropertyValue('--c1')).toBe('#F34801');
+      expect(result.root.style.getPropertyValue('--c2')).toBe('#FF6038');
+      expect(result.root.style.getPropertyValue('--c5')).toBe('#FFE6DF');
+      expect(result.root.className).toContain('isThinking');
+      expect(result.root.className).toContain('isBlurOnly');
+      expect(result.root.className).not.toContain('isLiteral');
     },
   );
 
   it('gives every interrupted status the identical mark', () => {
     // One mark for all three; the reason is carried by the status text.
     const marks = (['failed', 'canceled', 'incomplete'] as const).map(
-      (status) => (shapeOf(status) as { root: Element }).root.innerHTML,
+      (status) => (shapeOf(status) as { root: Element }).root.outerHTML,
     );
     expect(new Set(marks).size).toBe(1);
   });
 
-  it('turns the attention orb at running speed', () => {
-    // A pending question is a live run, not a stalled one. Only `queued` may
-    // turn slowly, and only because it has not started.
+  it('turns each orb at the design draft\'s pace', () => {
+    // Draft: green / blue / red turn every 6s, the orange wedge every 20s.
     const speedOf = (status: ProjectDisplayStatus) => {
       const { root } = shapeOf(status) as { root: HTMLElement };
       return root.className
@@ -94,13 +100,24 @@ describe('ProjectRunStatusIcon', () => {
         .find((c) => c.includes('isThinking') || c.includes('isIdle'));
     };
 
-    expect(speedOf('awaiting_input')).toBe(speedOf('running'));
-    expect(speedOf('queued')).not.toBe(speedOf('running'));
+    expect(speedOf('queued')).toBe(speedOf('running'));
+    expect(speedOf('succeeded')).toBe(speedOf('running'));
+    expect(speedOf('failed')).toBe(speedOf('running'));
+    expect(speedOf('awaiting_input')).toContain('isIdle');
+  });
+
+  it('keeps every sidebar orb from breathing or scaling', () => {
+    const all: ProjectDisplayStatus[] = [
+      'queued', 'running', 'awaiting_input', 'incomplete', 'failed', 'canceled', 'succeeded',
+    ];
+    for (const status of all) {
+      const { root } = shapeOf(status) as { root: HTMLElement };
+      expect(root.className, status).toContain('isSteady');
+    }
   });
 
   it('leaves running and queued on the default green', () => {
-    // Same family, same colour — only the speed differs, so neither may set a
-    // palette override.
+    // Same family, same colour and speed, so neither may set a palette override.
     for (const status of ['running', 'queued'] as const) {
       const { root } = shapeOf(status) as { root: HTMLElement };
       expect(root.style.getPropertyValue('--c1')).toBe('');
@@ -113,31 +130,13 @@ describe('ProjectRunStatusIcon', () => {
     expect(attention.style.getPropertyValue('--c1')).toBe('#FF8D02');
   });
 
-  it('renders the attention orb literally', () => {
-    // Without this the orb edits the colour it is given: three slots still
-    // hold green, and the highlight/saturation/texture passes push a
-    // mid-channel accent off its hue.
+  it('draws the attention orb as the draft\'s flat orange wedge', () => {
     const { root } = shapeOf('awaiting_input') as { root: HTMLElement };
-    expect(root.className).toContain('isLiteral');
-    // `contrast()` is one of those passes and is set inline, so a class rule
-    // cannot neutralise it — the component has to.
-    expect(root.style.getPropertyValue('--contrast')).toBe('1');
-  });
-
-  it('moves the second accent with the first', () => {
-    // `--c2` is the other accent AND the glow. Left on the stock spring-green
-    // it blends with an orange `--c1` into a muddy red-green dot, which is
-    // exactly what the first pass shipped.
-    const { root } = shapeOf('awaiting_input') as { root: HTMLElement };
-    const c2 = root.style.getPropertyValue('--c2');
-    expect(c2).not.toBe('');
-    expect(c2.toLowerCase()).not.toBe('#00ffae');
-    // Amber to the accent's orange: a second hue, but the warm neighbour of
-    // the first, the way the stock green/spring-green pair is.
-    expect(c2).toBe('#EDC337');
-    // Gold in the glint slot. `literal` strips the white highlights, so the
-    // orb has no lit side at all unless one is named here.
-    expect(root.style.getPropertyValue('--c5')).toBe('#FFC400');
+    expect(root.className).toContain('isWedge');
+    expect(root.className).not.toContain('isLiteral');
+    for (const slot of ['--c1', '--c2', '--c5', '--fill']) {
+      expect(root.style.getPropertyValue(slot), slot).toBe('#FF8D02');
+    }
   });
 
   it('renders nothing for the status with nothing to say', () => {
@@ -165,9 +164,8 @@ describe('ProjectRunStatusIcon', () => {
     expect(orb.style.getPropertyValue('--size')).toBe('14px');
     cleanup();
 
-    const badge = render(<ProjectRunStatusIcon status="failed" size={14} />)
-      .container.firstElementChild;
-    expect(badge?.getAttribute('width')).toBe('14');
-    expect(badge?.getAttribute('height')).toBe('14');
+    const failed = render(<ProjectRunStatusIcon status="failed" size={14} />)
+      .container.firstElementChild as HTMLElement;
+    expect(failed.style.getPropertyValue('--size')).toBe('14px');
   });
 });

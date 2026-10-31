@@ -1,5 +1,5 @@
 import {
-  workspaceContextHasTeamIdentity,
+  workspaceContextHasWorkspaceIdentity,
   type WorkspaceCollabContext,
 } from '@open-design/contracts';
 
@@ -16,14 +16,17 @@ export interface ResourceHubPrincipal {
   workspaceType?: WorkspaceCollabContext['workspaceType'];
 }
 
-/** Derive resource scope from the one login-backed workspace context. */
+/** Derive resource scope from the one login-backed workspace context.
+ * The resource plane partitions by workspace id for both Personal and Team. */
 export function contextToResourceHubPrincipal(
   context: WorkspaceCollabContext | null,
 ): ResourceHubPrincipal | null {
-  if (!context || !workspaceContextHasTeamIdentity(context)) return null;
+  if (!context || !workspaceContextHasWorkspaceIdentity(context)) return null;
   return {
     memberId: context.workspaceMemberId,
-    teamId: context.teamId ?? context.workspaceId,
+    teamId: context.workspaceType === 'team'
+      ? context.teamId?.trim() || context.workspaceId
+      : context.workspaceId,
     role: context.role,
     lifecycleState: context.lifecycleState,
     workspaceType: context.workspaceType,

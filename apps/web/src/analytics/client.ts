@@ -3,6 +3,7 @@
 // builds and forks impose zero runtime cost. All entry points are
 // fire-and-forget: capture failures must never propagate to product code.
 
+import { getOpenDesignHost } from '@open-design/host';
 import type { PostHog } from 'posthog-js';
 import {
   EVENT_SCHEMA_VERSION,
@@ -219,10 +220,13 @@ export function bootstrapExceptionTracking(context: AnalyticsContext): Promise<v
         return;
       }
       const telemetryEnv = cfg.env || 'unknown';
-      const distinctId =
-        (typeof cfg.installationId === 'string' && cfg.installationId) ||
-        context.anonymousId;
+      const installationId = typeof cfg.installationId === 'string' && cfg.installationId ? cfg.installationId : null;
+      const distinctId = installationId || context.anonymousId;
+      const hostStartupContext = await getOpenDesignHost()?.startup?.context().catch(() => null);
       setExceptionTrackingContext({
+        // Fresh install that has not opted out: the renderer mints the
+        // installation id shortly after; hold stability metrics until then.
+        identityPending: installationId == null && cfg.enabled === true,
         apiKey: cfg.key,
         host: cfg.host,
         distinctId,
@@ -230,6 +234,7 @@ export function bootstrapExceptionTracking(context: AnalyticsContext): Promise<v
         osName: detectBrowserOsName(),
         appVersion: context.appVersion,
         sessionId: context.sessionId,
+        ...(hostStartupContext ? { appSessionId: hostStartupContext.app_session_id } : {}),
         telemetryEnv,
       });
     } catch {
@@ -397,6 +402,8 @@ export async function getAnalyticsClient(
             apiKey: cfgKey,
             host: cfgHost,
             distinctId,
+            // Re-bridging must not end the first-session hold (OPEND-4220).
+            identityPending: !(typeof cfg.installationId === 'string' && cfg.installationId) && cfg.enabled === true,
             clientType: context.clientType,
             osName: detectBrowserOsName(),
             appVersion: context.appVersion,

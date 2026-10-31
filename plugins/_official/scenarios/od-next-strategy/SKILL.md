@@ -1,6 +1,6 @@
 ---
 name: od-next-strategy
-description: Bundled OD Next V2 strategy entrypoint for route-locked planning and Build execution.
+description: Bundled OD Next V2 strategy entrypoint for request-led planning and Build execution.
 ---
 
 # OD Next Strategy V2
@@ -23,6 +23,6 @@ identity with their profile, are never concatenated into the prompt head, and
 are staged by Open Design into the project directory (`.od-frames/`) for the
 rule card to reference.
 
-The runtime owns route selection, task-chain state, session continuation, and
-machine-contract parsing. Content in this folder must not infer that those
-runtime facts exist unless Open Design supplied them.
+The Agent chooses whether the request needs a plan or direct work. The runtime
+owns task state and session continuation. A ready plan ends with the current
+host-keyed production-ready marker; no machine contract is required.

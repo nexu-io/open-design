@@ -21,7 +21,7 @@ import { InviteDialog } from '../../src/components/InviteDialog';
 import { workspaceContextFixture } from '../helpers/workspace-context';
 
 const TEAM_CONTEXT = workspaceContextFixture({
-  workspaceId: 'workspace-team',
+  workspaceId: 'workspace-team', role: 'owner',
   workspaceMemberId: 'member-inviter',
 });
 
@@ -40,7 +40,7 @@ function openDialog() {
 
 function roleTrigger(): HTMLButtonElement {
   return screen.getByRole('button', {
-    name: /分配角色|assign role/i,
+    name: /分配角色|assign role|^角色$|^role$/i,
   }) as HTMLButtonElement;
 }
 
@@ -50,7 +50,7 @@ describe('InviteDialog — role menu escapes the scroll clip', () => {
     fireEvent.click(roleTrigger());
 
     const listbox = screen.getByRole('listbox');
-    const rows = document.querySelector('.entry-invite__rows');
+    const rows = document.querySelector('[data-invite-rows]');
     expect(rows).not.toBeNull();
     // A descendant of the overflow-y:auto rows container is clipped to the
     // container's box by CSS; the menu must live outside it to be visible.

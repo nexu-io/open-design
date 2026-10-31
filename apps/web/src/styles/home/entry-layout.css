@@ -437,7 +437,8 @@
   display: grid;
   gap: 8px;
   width: calc(100% - var(--spacing-16, 16px));
-  margin: 0 auto;
+  /* Breathing room above the social row that follows in the footer. */
+  margin: 0 auto 6px;
   padding: 8px;
   box-sizing: border-box;
   border: 1px solid var(--border);
@@ -476,20 +477,67 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
-  height: 30px;
-  overflow: hidden;
-  padding: 0 16px;
+  min-height: 30px;
+  padding: 5px 12px;
+  box-sizing: border-box;
   border-radius: var(--radius-pill, 999px);
   background: var(--accent);
   color: #00ff08;
   font-size: 12px;
   font-weight: 700;
   line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* Long localized labels (e.g. "Regisztráció / Bejelentkezés") wrap
+     instead of truncating the call to action. */
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+/* A wrapped label hugs its icon instead of centering each line away from it;
+   a single-line label stays centered by the badge's justify-content. */
+.entry-local-mode-tip__login-badge > span {
+  min-width: 0;
+  text-align: start;
+}
+/* `--accent` is the user's accent color, written inline on the root and not
+   theme-aware; the default #353535 is exactly the dark panel color, so the
+   call to action vanished into the card in dark mode. */
+[data-theme="dark"] .entry-local-mode-tip__login-badge {
+  background: var(--bg);
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) .entry-local-mode-tip__login-badge {
+    background: var(--bg);
+  }
 }
 .entry-local-mode-tip p {
   margin: 0;
+}
+/* Signed-out pitch: title + one supporting line, kept tight as one group.
+   The green icon chip reuses the onboarding welcome ribbon's colors so both
+   entry points read as the same free-credits offer. */
+.entry-local-mode-tip__pitch {
+  display: grid;
+  gap: 2px;
+  padding: 2px 2px 0;
+}
+.entry-local-mode-tip__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.entry-local-mode-tip__title-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-pill, 999px);
+  background: color-mix(in srgb, var(--brand) 40%, var(--brand-soft));
+  color: var(--brand-text);
 }
 /* While the vela device-auth flow is pending the card stops being a button:
    the body swaps to a progress line + cancel, so the hover lift would lie. */
@@ -501,23 +549,54 @@
   border-color: var(--border);
   background: var(--bg-panel);
 }
-.entry-local-mode-tip__cancel {
-  justify-self: start;
-  margin-top: 2px;
-  padding: 3px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: transparent;
+.entry-local-mode-tip__login-badge.is-pending {
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+}
+/* Sign-in fallback + cancel: quiet centered text lines under the pending
+   button, never a nested card (it jumped the rail card's height). */
+.entry-local-mode-tip__activation {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px 4px;
   color: var(--text-muted);
   font-size: 11px;
+  line-height: 1.45;
+  text-align: center;
+}
+.entry-local-mode-tip__activation-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--text-strong);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+  text-underline-offset: 2px;
+}
+.entry-local-mode-tip__activation-link:hover {
+  text-decoration-color: currentColor;
+}
+.entry-local-mode-tip__cancel {
+  justify-self: center;
+  /* Plain text link: opt out of the global button box (min-height). */
+  min-height: 0;
+  height: auto;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
   line-height: 1.4;
   cursor: pointer;
-  transition: border-color 120ms, background 120ms, color 120ms;
+  transition: color 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .entry-local-mode-tip__cancel:hover {
-  border-color: var(--border-strong);
-  background: var(--bg-subtle);
-  color: var(--text);
+  color: var(--text-strong);
+}
+.entry-local-mode-tip__error {
+  color: var(--red);
 }
 
 /* ---------- Rail account skeleton (RailAccountSyncTip) ----------
@@ -1504,14 +1583,14 @@
 .entry-nav-rail__search input::placeholder { color: var(--text-faint); }
 
 /* Team switcher row */
-/* Team block: separated from the personal nav above by a very soft divider. */
+/* Separate navigation groups using the same material separator as rail menus. */
 .entry-nav-rail__team-section {
   display: flex;
   flex-direction: column;
   gap: 2px;
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid color-mix(in srgb, var(--border) 42%, transparent);
+  border-top: 1px solid var(--material-separator);
 }
 .entry-nav-rail__team {
   position: relative;
@@ -1665,6 +1744,16 @@
      different content heights (e.g. Community categories) can't toggle the
      scrollbar and shift the centered content sideways — that read as a jitter. */
   scrollbar-gutter: stable;
+}
+
+/* Host modals own the root lock; home owns its independent scrolling pane.
+   Keep the stable gutter and scroll position while removing the background bar. */
+body[data-web-modal-scroll-lock] {
+  overflow: hidden !important;
+}
+
+body[data-web-modal-scroll-lock] .entry-main--scroll {
+  overflow-y: hidden;
 }
 
 /* Top-right cluster inside the tabs chrome's dedicated no-drag actions host:
@@ -3395,50 +3484,43 @@
   color: var(--text-strong);
 }
 
-/* Capsule treatment for the activation-retry card on THIS view only — the
- * base `.amr-login-activation` rule (artifacts.css) stays untouched so
- * Settings/AmrLoginPill and CloudSignInTip keep their compact inline card.
- * Compound selector (not cascade order) guarantees this wins over the base
- * padding/radius regardless of stylesheet import order. */
-.amr-login-activation.onboarding-cloud__activation {
-  padding: 16px;
-  border-radius: 28px;
-}
-
-/* Keep the retry controls centered in the activation card. They deliberately
- * retain their intrinsic width instead of stretching from the left edge — the
- * primary "Open sign-in page" action should read as the card's focal CTA. */
-.onboarding-cloud__activation .amr-login-activation__actions {
-  width: 100%;
+/* Sign-in fallback on the cloud landing: one quiet line under the primary
+ * button rather than a card, so the pending state keeps a single focal CTA
+ * and a single cancel. Settings/AmrLoginPill and CloudSignInTip keep their
+ * own `.amr-login-activation` card (artifacts.css). */
+.onboarding-cloud__activation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
   justify-content: center;
-  gap: 8px;
-}
-
-.onboarding-cloud__activation .amr-login-activation__open {
-  flex: 0 0 auto;
-  justify-content: center;
-}
-
-.onboarding-cloud__activation-dismiss {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  padding: 4px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: transparent;
+  gap: 4px 6px;
+  margin: 14px 0 0;
   color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: border-color 120ms, background 120ms, color 120ms;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
 }
 
-.onboarding-cloud__activation-dismiss:hover {
-  border-color: var(--border-strong);
-  background: var(--bg-subtle);
-  color: var(--text);
+.onboarding-cloud__activation-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--text-strong);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+  text-underline-offset: 3px;
+  transition: text-decoration-color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.onboarding-cloud__activation-link:hover {
+  text-decoration-color: currentColor;
+}
+
+.onboarding-cloud__activation-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 /* Two runtime-choice buttons ("local CLI" or "your own key") on one row,
@@ -6767,6 +6849,7 @@
 .entry-top-right-account-pill {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 7px;
   /* The capsule holds the credits segment alone now — the avatar moved to the
      rail — so it no longer keeps the 3px right inset that used to hug the
@@ -6775,15 +6858,34 @@
      the vertical inset is 0 — a 24px credits segment plus the 1px borders
      already fits inside 28px, and any padding here would push the capsule
      taller than the chips beside it. */
-  /* Shared cluster row height — see .entry-deepseek-campaign-badge. */
-  min-height: 28px;
-  padding: 0 10px;
-  border: 1px solid var(--material-separator);
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--bg-elevated) 86%, transparent);
-  box-shadow: var(--shadow-xs);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  /* Design `.trigger` (docs/ui-previews/plan-panels/index.html). Literal
+     values rather than the cluster's material tokens: the capsule is the
+     design's own object and the standalone HTML is the pixel authority. Note
+     this makes it 2px taller than the GitHub chip beside it, which the
+     design's electron-panel.png draws matched — flagged in the PR. */
+  min-width: 62px;
+  min-height: 30px;
+  padding: 5px 13px;
+  border: 1px solid #d9d9d6;
+  border-radius: 30px;
+  background: #fafafa;
+  color: #666;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+/* Hover and expanded read the same: the capsule brightens and the mark goes
+   to full ink (design `.trigger:hover, .trigger[aria-expanded=true]`).
+   `:not(--upgrade)` is load-bearing: the free capsule paints its own green
+   CTA ground at a LOWER specificity than this pair, so without the exclusion
+   opening the panel would bleach the green pill white. */
+.entry-top-right-account-pill:not(.entry-top-right-account-pill--upgrade):hover,
+.entry-top-right-account-pill:not(.entry-top-right-account-pill--upgrade):has(
+    .entry-top-right-credits[aria-expanded='true']
+  ) {
+  background: #fff;
+  color: #202020;
 }
 /* Avatar-only trigger at the capsule's right end: a circle sized to the
    capsule's inner height — the name/email/plan all live in the hover menu. */
@@ -6814,22 +6916,27 @@
   align-items: center;
   gap: 5px;
   /* Chrome-free segment inside the shared capsule — the wrapper
-     (.entry-top-right-account-pill) owns the pill material. */
-  height: 24px;
+     (.entry-top-right-account-pill) owns the pill material, including its
+     30px design height. A fixed 24px here (plus the capsule's 5px insets and
+     1px border) forced the capsule to 36px instead. */
+  height: auto;
   padding: 0;
   border: 0;
   border-radius: var(--radius-pill);
   background: transparent;
   box-shadow: none;
   font-family: inherit;
-  font-size: var(--font-size-13);
+  font-size: 13px;
   font-weight: 600;
   line-height: 1;
-  color: var(--text-strong);
+  /* The capsule owns the ink (design `.triggerLogo` draws the mark at
+     brightness(0)/opacity .65, i.e. #666 on #fafafa, and full ink on hover);
+     the segment and its wordmark follow it rather than a page token. */
+  color: inherit;
   white-space: nowrap;
 }
 .entry-top-right-credits svg {
-  color: var(--text-soft);
+  color: inherit;
 }
 /* No hover fill on the credits segment — the shared capsule stays calm;
    the pointer cursor alone signals clickability. Needs an explicit :hover
@@ -7150,6 +7257,13 @@
 }
 /* Plan + credits block under the identity header (upgrade CTA on the plan
    row, then remaining/bonus credit rows), mirroring the reference card. */
+/* Panel box, 1:1 with the design (docs/ui-previews/plan-panels/index.html):
+   ink ground, 16px radius, 16px padding, and ONE typographic system —
+   12px / 500 / 18px — that the allowance row, the wallet row and the quota
+   block all inherit. The design's own rule: 「钱包余额与额度文字统一字号、字重、
+   颜色」. Row spacing is explicit per row rather than a column gap, because the
+   design spaces the head (20px), the track (6px) and the wallet separator
+   (14px + 12px) differently. */
 .entry-nav-rail__menu-credits {
   display: flex;
   flex-direction: column;
@@ -7159,6 +7273,7 @@
   /* Inverted card: ink-black ground, white-tier text (颜色规范 #202020 /
      #fafafa 反白文字). */
   background: #202020;
+  color: #fafafa;
   margin-bottom: 6px;
 }
 .entry-nav-rail__menu-credits-head {
@@ -9279,3 +9394,7 @@ button.entry-nav-rail__menu-credits-row:active:not(:disabled) {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
+
+.entry-main--registration-entry { animation: registration-workspace-entry 200ms cubic-bezier(0.23, 1, 0.32, 1); }
+@keyframes registration-workspace-entry { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .entry-main--registration-entry { animation: none; } }

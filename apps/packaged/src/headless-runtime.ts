@@ -2,6 +2,7 @@ import { mkdir } from "node:fs/promises";
 
 import {
   APP_KEYS,
+  MCP_BOOTSTRAP_CONTRACT,
   SIDECAR_SOURCES,
 } from "@open-design/sidecar-proto";
 import {
@@ -128,6 +129,19 @@ export function parsePackagedHeadlessRequest(
 export function resolvePackagedMcpBootstrapLaunch(options: {
   currentExecutablePath?: string;
   installedLaunchPath: string | null;
+  /** The launch belongs to a managed outer; see managed-headless.ts. */
+  managed?: boolean;
+  platform?: NodeJS.Platform;
+}): PackagedMcpBootstrapLaunch {
+  const launch = resolveUnmanagedMcpBootstrapLaunch(options);
+  return options.managed === true
+    ? { ...launch, args: [...launch.args, MCP_BOOTSTRAP_CONTRACT.MANAGED_ARG] }
+    : launch;
+}
+
+function resolveUnmanagedMcpBootstrapLaunch(options: {
+  currentExecutablePath?: string;
+  installedLaunchPath: string | null;
   platform?: NodeJS.Platform;
 }): PackagedMcpBootstrapLaunch {
   const platform = options.platform ?? process.platform;
@@ -219,6 +233,7 @@ export async function runPackagedHeadless(
       await startPackagedSidecars(runtime, paths, {
         appVersion: activeConfig.appVersion,
         amrProfile: activeConfig.amrProfile,
+        amrEndpointBinding: activeConfig.amrEndpointBinding,
         daemonCliEntry: activeConfig.daemonCliEntry,
         daemonSidecarEntry: activeConfig.daemonSidecarEntry,
         electronNodeCommand: launcherRuntime.electronNodeCommand,

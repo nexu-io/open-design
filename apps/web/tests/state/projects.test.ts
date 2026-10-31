@@ -2396,6 +2396,84 @@ describe('deleteProject local caches', () => {
   });
 });
 
+describe('saved project tabs cache', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each([
+    { tabs: ['restore-me.png'], active: '__design_files__' },
+    { tabs: [], active: null },
+  ])('restores a legacy local selection as saved state: $active', async (selection) => {
+    const projectId = `restore-local-${selection.active ?? 'empty'}`;
+    const store = new Map<string, string>([[
+      `open-design:project-tabs:v1:${projectId}`,
+      JSON.stringify({ ...selection, updatedAt: 2 }),
+    ]]);
+    vi.stubGlobal('window', {
+      localStorage: {
+        getItem: (key: string) => store.get(key) ?? null,
+        setItem: (key: string, value: string) => store.set(key, value),
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => Response.json({
+      tabs: [], active: null, hasSavedState: false,
+    })));
+
+    await expect(loadTabs(projectId, null, { reconcileNewerCacheToDaemon: false }))
+      .resolves.toEqual({ ...selection, updatedAt: 2, hasSavedState: true });
+  });
+
+  it('marks an immediate local selection as saved before the debounced daemon write', () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal('window', {
+      localStorage: {
+        getItem: (key: string) => store.get(key) ?? null,
+        setItem: (key: string, value: string) => store.set(key, value),
+      },
+    });
+
+    const saved = cacheTabsLocally('immediate-local-selection', {
+      tabs: ['restore-me.png'], active: '__design_files__',
+    });
+
+    expect(saved).toMatchObject({ active: '__design_files__', hasSavedState: true });
+    expect(JSON.parse([...store.values()][0]!)).toEqual(saved);
+  });
+
+  it('keeps an existing cached empty selection saved when the daemon is unavailable', async () => {
+    vi.stubGlobal('window', { localStorage: { getItem: () => JSON.stringify({
+      tabs: [], active: null, updatedAt: 2,
+    }) } });
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockRejectedValue(new Error('offline')));
+
+    await expect(loadTabs('offline-empty-selection'))
+      .resolves.toEqual({ tabs: [], active: null, updatedAt: 2, hasSavedState: true });
+  });
+
+  it('does not let an older local selection outrank a newer daemon selection', async () => {
+    vi.stubGlobal('window', { localStorage: { getItem: () => JSON.stringify({
+      tabs: [], active: null, updatedAt: 2,
+    }) } });
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => Response.json({
+      tabs: ['new.html'], active: 'new.html', hasSavedState: true, updatedAt: 3,
+    })));
+
+    await expect(loadTabs('newer-daemon-selection')).resolves.toEqual({
+      tabs: ['new.html'], active: 'new.html', hasSavedState: true, updatedAt: 3,
+    });
+  });
+
+  it('keeps an absent local and daemon selection unsaved for first-file auto-open', async () => {
+    vi.stubGlobal('window', { localStorage: { getItem: () => null } });
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => Response.json({
+      tabs: [], active: null, hasSavedState: false,
+    })));
+
+    await expect(loadTabs('never-saved-selection')).resolves.toEqual({ tabs: [], active: null });
+  });
+});
+
 describe('read-only project tabs cache', () => {
   afterEach(() => {
     vi.unstubAllGlobals();

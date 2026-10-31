@@ -501,7 +501,8 @@ describe('annotation upload/send readiness', () => {
     expect(secondAck).toHaveBeenCalledWith({ ok: false, message: 'Uploading files…' });
     expect(upload).toHaveBeenCalledTimes(1);
     expect(onSend).toHaveBeenCalledTimes(1);
-    expect(composerText()).toBe('Retain this draft');
+    expect(composerText().trim()).toBe('');
+    expect(screen.getByTestId('chat-send-pending')).toHaveAttribute('aria-busy', 'true');
     expect(firstAck).not.toHaveBeenCalled();
 
     await settle(admissionGate);
@@ -524,7 +525,8 @@ describe('annotation upload/send readiness', () => {
     // Then
     expect(ack).toHaveBeenCalledWith({ ok: false, message: 'Uploading files…' });
     expect(upload).not.toHaveBeenCalled();
-    expect(composerText()).toBe('Ordinary pending draft');
+    expect(composerText().trim()).toBe('');
+    expect(screen.getByTestId('chat-send-pending')).toHaveAttribute('aria-busy', 'true');
 
     await settle(admissionGate);
   });
@@ -533,10 +535,12 @@ describe('annotation upload/send readiness', () => {
     // Given
     upload.mockImplementation(async (_id, files) => result(files[0]?.name ?? ''));
     const onClearQuotes = vi.fn();
+    const onRestoreQuotes = vi.fn();
     const onSend = vi.fn<Props['onSend']>(async (): Promise<'restore-draft'> => 'restore-draft');
     mount({
       initialDraft: 'Existing draft',
       onClearQuotes,
+      onRestoreQuotes,
       onSend,
       quotes: [{ id: 'quote-1', text: 'Quoted context', messageId: 'message-1' }],
     });
@@ -554,7 +558,10 @@ describe('annotation upload/send readiness', () => {
       entryFrom: 'mark',
       quotes: [{ id: 'quote-1', text: 'Quoted context', messageId: 'message-1' }],
     });
-    expect(onClearQuotes).not.toHaveBeenCalled();
+    expect(onClearQuotes).toHaveBeenCalledTimes(1);
+    expect(onRestoreQuotes).toHaveBeenCalledExactlyOnceWith([
+      { id: 'quote-1', text: 'Quoted context', messageId: 'message-1' },
+    ]);
     expect(composerText()).toBe('Existing draft');
   });
 
@@ -562,12 +569,14 @@ describe('annotation upload/send readiness', () => {
     // Given
     upload.mockImplementation(async (_id, files) => result(files[0]?.name ?? ''));
     const onClearQuotes = vi.fn();
+    const onRestoreQuotes = vi.fn();
     const onSend = vi.fn<Props['onSend']>(async () => {
       throw new Error('admission rejected');
     });
     mount({
       initialDraft: 'Existing draft',
       onClearQuotes,
+      onRestoreQuotes,
       onSend,
       quotes: [{ id: 'quote-1', text: 'Quoted context', messageId: 'message-1' }],
     });
@@ -579,7 +588,10 @@ describe('annotation upload/send readiness', () => {
     // Then
     expect(ack).toHaveBeenCalledWith({ ok: false, message: 'Annotation send failed. Please try again.' });
     expect(onSend).toHaveBeenCalledTimes(1);
-    expect(onClearQuotes).not.toHaveBeenCalled();
+    expect(onClearQuotes).toHaveBeenCalledTimes(1);
+    expect(onRestoreQuotes).toHaveBeenCalledExactlyOnceWith([
+      { id: 'quote-1', text: 'Quoted context', messageId: 'message-1' },
+    ]);
     expect(composerText()).toBe('Existing draft');
   });
 

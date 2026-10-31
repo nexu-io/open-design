@@ -1,0 +1,27 @@
+/* A03 lifts the invitation above its reserved row. Keep the headline and
+   composer in normal flow; the measured lift stays clear of the scroll edge. */
+button.trigger { display: inline-flex; align-items: center; gap: 5px; height: 28px; min-height: 28px; padding: 0 11px; border: 1px solid var(--material-separator); border-radius: var(--radius-pill, 999px); background: color-mix(in srgb, var(--bg-elevated) 86%, transparent); box-shadow: var(--shadow-xs); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); color: var(--text-strong); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 13px; font-weight: 600; line-height: 1; white-space: nowrap; }
+.trigger svg { color: var(--text-soft); }
+button.trigger:hover:not(:disabled) { border-color: var(--border-strong);background:color-mix(in srgb, var(--bg-elevated) 86%, transparent); }
+.banner { position: relative; top: calc(-1px * var(--home-invite-lift, 0)); z-index: 2; display: inline-flex; align-items: center; align-self: center; flex: none; gap: 8px; width: max-content; max-width: calc(100% - 32px); min-height: 36px; margin: 0 0 14px; padding: 7px 14px; box-sizing: border-box; border: 0; border-radius: 8px; background: var(--bg-fill-tertiary, rgba(0,0,0,.03)); color: var(--text, #494949); font-size: 14px; font-weight: 400; line-height: 20px; }
+.copy { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.banner .invite { flex: none; min-height: 0; height:auto;min-height:20px; padding: 0 0 0 12px; border: 0; border-left: 1px solid #dbdbdb; border-radius: 0; color: rgb(2,113,6); font: inherit;font-weight:500; line-height: 18px; background: transparent; }
+.banner .close { border-radius:50%;flex: none; width: 16px; height: 16px; min-height: 0; padding: 0; color: #848484;opacity:.7; background: transparent; }
+@media (max-width: 760px) { .banner { max-width: calc(100% - 24px); padding-inline: 12px; font-size: 13px; } }
+
+.bannerSpace { height:36px;min-height:36px;flex:none;margin:0 0 14px;visibility:hidden;pointer-events:none; }
+.banner .invite:hover:not(:disabled) { border-left-color:#dbdbdb;background:transparent;color:rgb(2,113,6);text-decoration:underline;text-underline-offset:3px; }
+.banner .invite:focus-visible { outline:1px solid currentColor;outline-offset:3px; }
+.banner .close:hover { background:#00000008;color:#555;opacity:1; }
+.banner .close:focus-visible { outline:1px solid currentColor;outline-offset:3px;opacity:1; }
+.toast:global(.placement-top) { left:calc(50% + 134px); }
+@media(max-width:760px) { .banner { top:0; margin:16px 0 14px; } .banner .invite { padding-left:10px; } .bannerSpace { margin:16px 0 14px; } }
+
+button.trigger:focus-visible { outline: 1px solid rgb(26,116,255); outline-offset: 2px; }
+
+@media(max-width:760px) { button.trigger { padding:5px 8px;line-height:1.3; } }
+
+/* The workspace-list reference has no invitation row above the composer.
+   Keep the dismissed row on Home (including recovery), and collapse only
+   that empty row while the workspace switcher is expanded. */
+:global(.entry-shell:has([data-testid="workspace-switcher"][aria-expanded="true"])) .bannerSpace[data-dismissed="true"] { display: none; }

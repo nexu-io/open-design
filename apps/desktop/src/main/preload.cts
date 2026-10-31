@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 import type {
   OpenDesignHostBridge,
   OpenDesignHostActionResult,
+  OpenDesignHostDownloadResult,
   OpenDesignHostBrowserClearDataOptions,
   OpenDesignHostCaptureOptions,
   OpenDesignHostCaptureResult,
@@ -348,6 +349,11 @@ ipcRenderer.on(APP_CONFIG_CHANGED_IPC_CHANNEL, () => {
 
 const hostBridge = {
   version: OPEN_DESIGN_HOST_VERSION,
+  startup: {
+    context: () => ipcRenderer.invoke('od:startup:context'),
+    signal: (value: Parameters<NonNullable<OpenDesignHostBridge['startup']>['signal']>[0]) =>
+      ipcRenderer.invoke('od:startup:business-ready', value),
+  },
   client: {
     type: 'desktop',
     platform: process.platform,
@@ -358,6 +364,17 @@ const hostBridge = {
     // app theme. Fire-and-forget: the main process validates the value.
     setTheme: (theme: 'light' | 'dark' | 'system'): void =>
       ipcRenderer.send('od:appearance:set-theme', theme),
+  },
+  downloads: {
+    subscribe: (listener: (result: OpenDesignHostDownloadResult) => void): (() => void) => {
+      const handler = (_event: unknown, result: OpenDesignHostDownloadResult): void => {
+        if (result == null || typeof result.url !== "string"
+          || !["completed", "cancelled", "interrupted"].includes(result.state)) return;
+        listener({ url: result.url, state: result.state });
+      };
+      ipcRenderer.on("od:download-finished", handler);
+      return () => { ipcRenderer.removeListener("od:download-finished", handler); };
+    },
   },
   shell,
   browser,
@@ -377,6 +394,9 @@ const hostBridge = {
   pet: {
     setVisible: (visible: boolean): void =>
       ipcRenderer.send('desktop-pet:set-visible', Boolean(visible)),
+  },
+  window: {
+    show: (): void => ipcRenderer.send('od:window:show'),
   },
   updater,
 } satisfies OpenDesignHostBridge;

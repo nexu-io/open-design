@@ -217,6 +217,25 @@ class MockWorkspaceEventSource {
 }
 
 describe('RecentProjectsStrip', () => {
+  it('uses user send recency in the default all-projects order', () => {
+    const items = [
+      project({ id: 'a', name: 'A', updatedAt: 900, lastUserQueryAt: 10 }),
+      project({ id: 'b', name: 'B', updatedAt: 1, lastUserQueryAt: 20 }),
+      project({ id: 'c', name: 'C', updatedAt: 1000, lastUserQueryAt: null }),
+    ];
+    const { container, rerender } = render(
+      <RecentProjectsStrip projects={items} onOpen={() => {}} heading="All projects" />,
+    );
+    const ids = () => [...container.querySelectorAll('[data-project-id]')]
+      .map(node => node.getAttribute('data-project-id'));
+    expect(ids()).toEqual(['b', 'a', 'c']);
+    rerender(<RecentProjectsStrip
+      projects={items.map(item => item.id === 'a' ? { ...item, lastUserQueryAt: 30 } : item)}
+      onOpen={() => {}} heading="All projects"
+    />);
+    expect(ids()).toEqual(['a', 'b', 'c']);
+  });
+
   it('turns a script-activated deck into a deterministic visible first-page cover', () => {
     const cover = deckPreviewSrcDoc(`<!doctype html>
       <html><head><style>
@@ -1031,7 +1050,7 @@ describe('RecentProjectsStrip', () => {
       const htmlFrame = container.querySelector<HTMLIFrameElement>('.recent-projects__card-thumb-html iframe');
       expect(htmlFrame).toBeTruthy();
       expect(htmlFrame?.getAttribute('src')).toBe(
-        '/api/projects/project-html/files/index.html?workspaceId=ws-1&workspaceMemberId=wm-1&v=200',
+        '/api/projects/project-html/files/index.html?workspaceId=ws-1&workspaceMemberId=wm-1&v=200&odMotionThumbnail=1',
       );
       expect(container.querySelector('.recent-projects__card-thumb-html .recent-projects__card-glyph')).toBeNull();
     });
@@ -1100,7 +1119,7 @@ describe('RecentProjectsStrip', () => {
       expect(deckCard?.querySelector('.recent-projects__deck-iframe')?.getAttribute('srcdoc'))
         .toContain('slide');
       expect(htmlCard?.querySelector('iframe')?.getAttribute('src')).toBe(
-        '/api/projects/project-html/files/index.html?workspaceId=ws-1&workspaceMemberId=wm-1&v=200',
+        '/api/projects/project-html/files/index.html?workspaceId=ws-1&workspaceMemberId=wm-1&v=200&odMotionThumbnail=1',
       );
       expect(deckCard?.querySelector('.recent-projects__card-glyph')).toBeNull();
       expect(htmlCard?.querySelector('.recent-projects__card-glyph')).toBeNull();
@@ -1362,11 +1381,52 @@ describe('team-shared project with unresolved owner identity', () => {
   });
 });
 
+function stubUnsharedProjectDelete() {
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const projectId = String(input).match(/\/api\/projects\/([^/]+)\/share-state/)?.[1];
+    if (!projectId) throw new Error(`Unexpected fetch: ${String(input)}`);
+    return new Response(JSON.stringify({
+      projectId, hasEverShared: false, bindingExists: false, publications: [],
+    }), { headers: { 'Content-Type': 'application/json' } });
+  }));
+}
+
+describe('A5 — main no-share delete baseline', () => {
+  // Recorded before A5 implementation; production dialog and translations are
+  // byte-identical to main 8e372744dda55f3b2d090d5bcdfd6ceabdc119b5.
+  it('preserves the no-share dialog DOM and cancelling never deletes', async () => {
+    stubUnsharedProjectDelete();
+    const onDelete = vi.fn();
+    render(
+      <RecentProjectsStrip
+        projects={[project({ id: 'project-1', name: 'My project' })]}
+        onOpen={() => {}}
+        onDelete={onDelete}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
+    const dialog = screen.getByRole('alertdialog');
+    await within(dialog).findByText('Delete "My project"?');
+    // React useId depends on prior renders, not product state. Preserve every
+    // other byte, including the title/aria-labelledby relationship.
+    const titleId = dialog.getAttribute('aria-labelledby')!;
+    expect(dialog.outerHTML.replaceAll(titleId, 'delete-title')).toBe(
+      `<div tabindex="-1" class="_focusTarget_8e4a21 _dialog_8e4a21 modal modal-confirm" role="alertdialog" aria-modal="true" aria-labelledby="delete-title" data-testid="project-delete-confirm-dialog"><h2 class="_title_8e4a21" id="delete-title">Delete project</h2><p class="_description_8e4a21">Delete "My project"?</p><div class="_footer_8e4a21 row"><button type="button" data-testid="project-delete-confirm-cancel">Cancel</button><button type="button" class="primary danger" data-testid="project-delete-confirm-accept">Delete</button></div></div>`,
+    );
+    expect(onDelete).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(onDelete).not.toHaveBeenCalled();
+  });
+});
+
 describe('recvqbh189zBY6 — single-card delete confirmation', () => {
   // commitDelete used to await onDelete and drop the result either way, so a
   // 403/network failure closed the confirm dialog exactly like a success —
   // the project stayed put with no signal anything had gone wrong.
   it('keeps the dialog open with a visible error when the delete request fails', async () => {
+    stubUnsharedProjectDelete();
     const onDelete = vi.fn(async () => false);
     render(
       <RecentProjectsStrip
@@ -1380,6 +1440,7 @@ describe('recvqbh189zBY6 — single-card delete confirmation', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
 
     const dialog = await screen.findByRole('alertdialog');
+    await within(dialog).findByText('Delete "My project"?');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => {
@@ -1391,6 +1452,7 @@ describe('recvqbh189zBY6 — single-card delete confirmation', () => {
   });
 
   it('closes the dialog on a successful delete', async () => {
+    stubUnsharedProjectDelete();
     const onDelete = vi.fn(async () => true);
     render(
       <RecentProjectsStrip
@@ -1404,6 +1466,7 @@ describe('recvqbh189zBY6 — single-card delete confirmation', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
 
     const dialog = await screen.findByRole('alertdialog');
+    await within(dialog).findByText('Delete "My project"?');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => {
@@ -1413,6 +1476,7 @@ describe('recvqbh189zBY6 — single-card delete confirmation', () => {
   });
 
   it('submits at most one delete while the request is pending', async () => {
+    stubUnsharedProjectDelete();
     let resolveDelete!: (value: true) => void;
     const pendingDelete = new Promise<true>((resolve) => {
       resolveDelete = resolve;
@@ -1430,6 +1494,7 @@ describe('recvqbh189zBY6 — single-card delete confirmation', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
 
     const dialog = await screen.findByRole('alertdialog');
+    await within(dialog).findByText('Delete "My project"?');
     const deleteButton = within(dialog).getByRole('button', { name: 'Delete' });
     fireEvent.click(deleteButton);
     fireEvent.click(deleteButton);

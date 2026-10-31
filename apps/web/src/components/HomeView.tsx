@@ -108,7 +108,7 @@ import {
 } from './home-hero/sub-chips';
 import { homeHeroChipLabel } from './home-hero/chip-labels';
 import type { PlaceholderScenario } from './home-hero/placeholderScenarios';
-import { consumePendingHomeChip, HOME_CHIP_INTENT_EVENT } from '../runtime/home-intent';
+import { consumePendingHomeChip, hasPendingHomeChip, HOME_CHIP_INTENT_EVENT } from '../runtime/home-intent';
 import { navigate } from '../router';
 import { setPendingDesignSystemCreateEntry } from '../analytics/ds-create-entry';
 import { workspaceContextLinkedDirs } from './workspace-context';
@@ -256,6 +256,8 @@ interface PendingPluginUseHandoff {
   inputs?: Record<string, unknown>;
   chipId?: string;
   projectKind?: ProjectKind;
+  asExample?: boolean;
+  useTracked?: boolean;
 }
 
 const AUTHORING_DEFAULT_SCENARIO_INPUTS = {
@@ -276,6 +278,12 @@ interface Props {
   // own UI (e.g. the AMR balance gate dialog): keep the draft, show no error.
   onSubmit: (
     payload: PluginLoopSubmit,
+  ) => Promise<boolean | 'blocked' | void> | boolean | 'blocked' | void;
+  // EntryShell checks this local cancellation witness during async preflight.
+  // Existing local/plugin submit callbacks retain their single payload argument.
+  onSubmitWithDraftGuard?: (
+    payload: PluginLoopSubmit,
+    isSubmitCurrent: () => boolean,
   ) => Promise<boolean | 'blocked' | void> | boolean | 'blocked' | void;
   onOpenProject: (id: string, fileName?: string) => void;
   onBrowseRegistry?: () => void;
@@ -308,7 +316,7 @@ interface Props {
   }) => boolean | void | Promise<boolean | void>;
   onRecommendationDismiss?: () => void;
   executionSwitcher?: ReactNode;
-  artifactUpgradeSlot?: ReactNode;
+  inviteSurface?: ReactNode;
   deepSeekV4FlashCampaignAudience?: DeepSeekV4FlashCampaignAudience;
   /** Real model switch for the campaign modal's paid 立即使用 CTA (D5).
    *  EntryShell owns the agent/model persistence callbacks; HomeView only
@@ -501,6 +509,7 @@ export function HomeView({
   designSystemsLoading = false,
   defaultDesignSystemId = null,
   onSubmit,
+  onSubmitWithDraftGuard,
   onOpenProject,
   onBrowseRegistry,
   onOpenIntegrations,
@@ -517,7 +526,7 @@ export function HomeView({
   onRecommendationStart,
   onRecommendationDismiss,
   executionSwitcher,
-  artifactUpgradeSlot,
+  inviteSurface,
   deepSeekV4FlashCampaignAudience = 'unknown',
   onDeepSeekV4FlashCampaignUseNow,
   deepSeekV4FlashCampaignMetricsConsent = false,
@@ -625,6 +634,12 @@ export function HomeView({
   // removed), so every Home create runs in the default design mode; the
   // per-conversation picker still lives in the project chat composer.
   const sessionMode: ChatSessionMode = 'design';
+  // Automatic task routes do not apply the placeholder plugin. Its legacy
+  // required fields must not block the free-form brief that the route owns.
+  const activeAutomaticStrategyTaskProfile = sessionMode === 'design'
+    && !pinsPluginOverAutomaticRoute(active, active?.chipId ?? null)
+    ? automaticStrategyTaskProfileForRouteId(active?.chipId ?? null)
+    : null;
   const [activeSkill, setActiveSkill] = useState<SkillSummary | null>(null);
   const [activeSkillCatalogScope, setActiveSkillCatalogScope] =
     useState<LocalCatalogScope | null>(null);
@@ -827,6 +842,8 @@ export function HomeView({
   // Composer in-flight guard: disables the send button, shows Sending…, and
   // swallows repeat clicks across the whole async create tail.
   const [sending, setSending] = useState(false);
+  const submitDraftRef = useRef({ prompt, stagedFiles });
+  submitDraftRef.current = { prompt, stagedFiles };
   const [elevenLabsVoices, setElevenLabsVoices] = useState<AudioVoiceOption[]>([]);
   const [elevenLabsVoicesLoading, setElevenLabsVoicesLoading] = useState(false);
   // Live AIHubMix image catalogue merged into the home media composer's model
@@ -1137,6 +1154,8 @@ export function HomeView({
         ...(promptHandoff.inputs ? { inputs: promptHandoff.inputs } : {}),
         ...(promptHandoff.chipId ? { chipId: promptHandoff.chipId } : {}),
         ...(promptHandoff.projectKind ? { projectKind: promptHandoff.projectKind } : {}),
+        ...(promptHandoff.asExample ? { asExample: true } : {}),
+        ...(promptHandoff.useTracked ? { useTracked: true } : {}),
       });
       if (promptHandoff.focus) {
         focusPromptAtEnd();
@@ -1465,6 +1484,7 @@ export function HomeView({
       // their apply deferred makes Prototype <-> Deck <-> Media changes
       // feel instant; submit() still resolves the snapshot before sending.
       deferApply?: boolean;
+      focusPrompt?: boolean;
       // True when the user explicitly picked this plugin (example-prompt preset
       // or Community card / detail modal) rather than a type chip's default
       // plugin. Stored on `active.explicitPick`; gates the chip's clear button.
@@ -1549,7 +1569,7 @@ export function HomeView({
       setPrompt(optimisticPrompt);
       setPromptEditedByUser(false);
     }
-    focusPromptAtEnd();
+    if (options?.focusPrompt !== false) focusPromptAtEnd();
 
     if (!inputsValid) {
       setPendingChipId(null);
@@ -1739,16 +1759,32 @@ export function HomeView({
     record: InstalledPluginRecord,
     action: PluginUseAction = 'use',
     inputs?: Record<string, unknown>,
-    homeType?: { chipId?: string; projectKind?: ProjectKind },
+    homeType?: { chipId?: string; projectKind?: ProjectKind; asExample?: boolean; useTracked?: boolean },
   ) {
-    trackCommunityGalleryClick(analytics.track, {
-      page_name: 'home',
-      area: 'community_gallery',
-      element: 'use_plugin',
-      plugin_id: record.sourceMarketplaceEntryName ?? record.id,
-      plugin_type: record.marketplaceTrust ?? 'official',
-      action: action === 'use-with-query' ? 'use_with_query' : 'use',
-    });
+    // A hand-off whose surface already recorded the use click (Community)
+    // must not count again as a Home gallery click.
+    if (!homeType?.useTracked) {
+      trackCommunityGalleryClick(analytics.track, {
+        page_name: 'home',
+        area: 'community_gallery',
+        element: 'use_plugin',
+        plugin_id: record.sourceMarketplaceEntryName ?? record.id,
+        plugin_type: record.marketplaceTrust ?? 'official',
+        action: action === 'use-with-query' ? 'use_with_query' : 'use',
+      });
+    }
+    // An example picked elsewhere for its own task type binds as that type's
+    // example card, so it takes the same route as a pick from Home's list —
+    // including the type's own project metadata, which the route is
+    // re-derived from at create time.
+    const examplePick = homeType?.asExample === true;
+    const exampleChip = examplePick && homeType?.chipId ? findChip(homeType.chipId) : undefined;
+    const exampleProjectMetadata = exampleChip?.action.kind === 'apply-scenario'
+      ? exampleChip.action.projectMetadata ?? null
+      : null;
+    const exampleBinding = examplePick
+      ? { examplePick: true, ...(exampleProjectMetadata ? { projectMetadata: exampleProjectMetadata } : {}) }
+      : {};
     if (action === 'use-with-query') {
       // Prompt-loading "Use" seeds the composer with the SAME human-friendly
       // text the Home example-prompt cards use (examplePresetSeedPrompt), NOT the
@@ -1792,6 +1828,7 @@ export function HomeView({
         // when there is no prefix at all.
         queryTemplateAllowsPrefix: hasTemplate,
         explicitPick: true,
+        ...exampleBinding,
       });
       scrollHomeToTop();
       // Plugins with required inputs and no defaults land on the inputs
@@ -1807,6 +1844,7 @@ export function HomeView({
       ...(homeType?.projectKind ? { projectKind: homeType.projectKind } : {}),
       suppressPromptUpdate: true,
       explicitPick: true,
+      ...exampleBinding,
     });
     scrollHomeToTop();
     // Plain Use doesn't seed the composer; with no draft and no staged
@@ -1876,6 +1914,8 @@ export function HomeView({
       {
         chipId: pendingPluginUseHandoff.chipId,
         projectKind: pendingPluginUseHandoff.projectKind,
+        asExample: pendingPluginUseHandoff.asExample === true,
+        useTracked: pendingPluginUseHandoff.useTracked === true,
       },
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1944,13 +1984,8 @@ export function HomeView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingChipRestore, pluginsLoading, plugins, active, pendingPluginUseHandoff]);
 
-  // No default creation type (per product): a cold Home starts with nothing
-  // picked, so the type row below the composer is the only thing on screen and
-  // the composer carries no pill. This used to silently bind the Prototype
-  // chip on the first catalog-resolution turn — which also meant Send had to
-  // stay locked for that turn (`defaultChipSeedPending`). Neither is needed
-  // now: a naked prompt routes through the daemon's own scenario-default table
-  // exactly as it does when the user clears the type with the pill's ×.
+  // Natural-language entry has no implicit task selection.
+  const defaultTypePending = false;
 
   function addPluginContext(record: InstalledPluginRecord, nextPrompt: string | null) {
     setSelectedPluginContexts((prev) => {
@@ -2764,7 +2799,10 @@ export function HomeView({
   async function submit() {
     // The send button disables itself while sending, but the Enter-to-send
     // path lands here directly — swallow re-entry during the in-flight window.
-    if (sending) return;
+    if (sending || defaultTypePending) return;
+    const submittedDraft = { prompt, stagedFiles };
+    const isSubmitCurrent = () => submitDraftRef.current.prompt === submittedDraft.prompt
+      && submitDraftRef.current.stagedFiles === submittedDraft.stagedFiles;
     const trimmed = prompt.trim();
     if (!trimmed && stagedFiles.length === 0) return;
     // P0 ui_click area=chat_composer element=send_button. Fires before the
@@ -2783,10 +2821,7 @@ export function HomeView({
     // Prototype task profile already branches on — and carries no chip id of
     // its own, so it has nothing to swap the route its parent chose for.
     const submittedRouteChipId = submittedActive?.chipId ?? null;
-    const automaticStrategyTaskProfile = sessionMode === 'design'
-      && !pinsPluginOverAutomaticRoute(submittedActive, submittedRouteChipId)
-      ? automaticStrategyTaskProfileForRouteId(submittedRouteChipId)
-      : null;
+    const automaticStrategyTaskProfile = activeAutomaticStrategyTaskProfile;
     // The example's identity, sent in place of a plugin pin. Non-null only on
     // the same picks the gate above releases to the automatic route, so it can
     // never accompany a pinned plugin.
@@ -2799,6 +2834,7 @@ export function HomeView({
     // through and report whatever the daemon decides (below).
     if (
       submittedActive &&
+      !automaticStrategyTaskProfile &&
       !submittedActive.inputsValid &&
       requiredInputsAreUserFillable(submittedActive)
     ) {
@@ -2954,7 +2990,7 @@ export function HomeView({
         examplePromptInfoRef.current != null && localStorage.getItem(examplePromptKey) == null
           ? examplePromptInfoRef.current
           : null;
-      const accepted = await onSubmit({
+      const payload: PluginLoopSubmit = {
         prompt: trimmed,
         pluginId: routedPluginId,
         ...(pluginSelectionProvenance ? { pluginSelectionProvenance } : {}),
@@ -3004,7 +3040,10 @@ export function HomeView({
         ...(contextLinkedDirs.length > 0 ? { linkedDirs: contextLinkedDirs } : {}),
         conversationMode: sessionMode,
         ...(examplePromptToSend ? { examplePromptContext: examplePromptToSend } : {}),
-      });
+      };
+      const accepted = onSubmitWithDraftGuard
+        ? await onSubmitWithDraftGuard(payload, isSubmitCurrent)
+        : await onSubmit(payload);
       if (accepted === false) {
         setError(t('home.createFailed'));
         return;
@@ -3094,6 +3133,7 @@ export function HomeView({
         />
       )}
       <HomeHero
+        inviteSurface={variant === 'dock' ? undefined : inviteSurface}
         variant={variant}
         collapseSignal={collapseSignal}
         workspaceContext={workspaceContext}
@@ -3165,7 +3205,13 @@ export function HomeView({
         connectorOptions={connectors.filter((connector) => connector.status === 'connected')}
         pendingPluginId={pendingApplyId}
         pendingChipId={pendingChipId}
+        typeSelectionPending={
+          defaultTypePending
+          || Boolean(pendingChipRestore)
+          || Boolean(pendingPluginUseHandoff)
+        }
         submitDisabled={
+          defaultTypePending ||
           Boolean(pendingChipRestore) ||
           Boolean(pendingPluginUseHandoff) ||
           Boolean(pendingApplyId) ||
@@ -3173,7 +3219,8 @@ export function HomeView({
           // Only let missing required inputs disable Send where the user has a
           // surface to fill them; otherwise a seeded 「使用」 brief would sit next
           // to a permanently dead button (see requiredInputsAreUserFillable).
-          Boolean(active && !active.inputsValid && requiredInputsAreUserFillable(active))
+          Boolean(active && !activeAutomaticStrategyTaskProfile
+            && !active.inputsValid && requiredInputsAreUserFillable(active))
         }
         onPickPlugin={(record, nextPrompt) => addPluginContext(record, nextPrompt)}
         onPickExamplePlugin={useExamplePlugin}
@@ -3211,7 +3258,6 @@ export function HomeView({
         // third way to say the same thing, wedged between the two. The
         // recommendation engine and `RecommendedStartRegion` are left intact;
         // only this mount point is gone.
-        recommendationSlot={artifactUpgradeSlot}
       />
 
       {/* No 最近项目 grid under the hero on EITHER branch (OPEND-2683, per

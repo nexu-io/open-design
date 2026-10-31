@@ -1,0 +1,376 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-motion-tixfox-ticket-promo",
+  "title": "TixFox Ticket Promo",
+  "title_i18n": {
+    "en": "TixFox Ticket Promo",
+    "id": "Promo Tiket TixFox",
+    "de": "TixFox Ticket-Promo",
+    "zh-CN": "TixFox 票务宣传片",
+    "zh-TW": "TixFox 門票促銷",
+    "pt-BR": "TixFox Promoção de Ingressos",
+    "es-ES": "TixFox Promoción de entradas",
+    "ru": "TixFox Промо-билет",
+    "fa": "TixFox تبلیغاتی بلیط",
+    "ar": "TixFox تذكرة ترويجية",
+    "ja": "TixFox チケットプロモーション",
+    "ko": "TixFox 티켓 프로모션",
+    "pl": "TixFox Promocja biletów",
+    "hu": "TixFox Jegypromó",
+    "fr": "TixFox Promotion de billets",
+    "uk": "TixFox Акція на квиток",
+    "tr": "TixFox Bilet Promosyonu",
+    "th": "TixFox โปรโมชั่นตั๋ว",
+    "it": "TixFox Biglietto Promo"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-10-28T00:00:00Z",
+  "description": "TixFox presents affordable event ticketing, from creating an event to checking in guests.",
+  "description_i18n": {
+    "en": "TixFox presents affordable event ticketing, from creating an event to checking in guests.",
+    "id": "TixFox menghadirkan tiket acara dengan harga terjangkau, mulai dari pembuatan acara hingga check-in tamu.",
+    "de": "TixFox bietet kostengünstigen Ticketverkauf für Veranstaltungen, von der Organisation einer Veranstaltung bis zum Einchecken von Gästen.",
+    "zh-CN": "TixFox 展示低成本售票、活动发布、即时收款与手机检票流程。",
+    "zh-TW": "TixFox 提供價格實惠的活動門票，從創建活動到簽到客人。",
+    "pt-BR": "TixFox apresenta ingressos para eventos a preços acessíveis, desde a criação de um evento até o check-in de convidados.",
+    "es-ES": "TixFox presenta venta de entradas para eventos asequibles, desde la creación de un evento hasta el registro de invitados.",
+    "ru": "TixFox предлагает доступные билеты на мероприятия, от организации мероприятия до регистрации гостей.",
+    "fa": "TixFox بلیط رویداد مقرون به صرفه را ارائه می دهد، از ایجاد یک رویداد تا بررسی مهمانان.",
+    "ar": "يقدم TixFox تذاكر للمناسبات بأسعار معقولة، بدءًا من إنشاء الحدث وحتى تسجيل وصول الضيوف.",
+    "ja": "TixFox は、イベントの作成からゲストのチェックインまで、手頃な価格のイベント チケットを提供します。",
+    "ko": "TixFox은 이벤트 제작부터 게스트 체크인까지 합리적인 가격의 이벤트 티켓팅을 제공합니다.",
+    "pl": "TixFox przedstawia niedrogie bilety na wydarzenia, od stworzenia wydarzenia po zameldowanie gości.",
+    "hu": "TixFox megfizethető rendezvényjegy-értékesítést kínál, a rendezvény létrehozásától a vendégek bejelentkezéséig.",
+    "fr": "TixFox présente une billetterie d'événements abordable, de la création d'un événement à l'enregistrement des invités.",
+    "uk": "TixFox представляє доступний продаж квитків: від створення події до реєстрації гостей.",
+    "tr": "TixFox, etkinlik oluşturmaktan misafirlerin girişini yapmaya kadar uygun fiyatlı etkinlik biletleri sunuyor.",
+    "th": "TixFox นำเสนอการจองตั๋วกิจกรรมราคาไม่แพง ตั้งแต่การสร้างกิจกรรมไปจนถึงการเช็คอินแขก",
+    "it": "TixFox presenta biglietti per eventi a prezzi accessibili, dalla creazione di un evento al check-in degli ospiti."
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io/open-design"
+  },
+  "homepage": "https://github.com/nexu-io/open-design",
+  "tags": [
+    "example",
+    "first-party",
+    "video",
+    "motion-design",
+    "票务",
+    "产品演示",
+    "狐狸",
+    "网点",
+    "动效"
+  ],
+  "od": {
+    "inputs": [
+      {
+        "name": "brand",
+        "type": "string",
+        "label": "brand",
+        "default": "TixFox",
+        "label_i18n": {
+          "en": "brand",
+          "id": "merek",
+          "de": "Marke",
+          "zh-CN": "品牌",
+          "zh-TW": "品牌",
+          "pt-BR": "marca",
+          "es-ES": "marca",
+          "ru": "бренд",
+          "fa": "نام تجاری",
+          "ar": "العلامة التجارية",
+          "ja": "ブランド",
+          "ko": "브랜드",
+          "pl": "marka",
+          "hu": "márka",
+          "fr": "marque",
+          "uk": "бренд",
+          "tr": "marka",
+          "th": "ยี่ห้อ",
+          "it": "marchio"
+        }
+      },
+      {
+        "name": "domain",
+        "type": "string",
+        "label": "URL",
+        "default": "tixfox.co",
+        "label_i18n": {
+          "en": "URL",
+          "id": "URL",
+          "de": "URL",
+          "zh-CN": "网址",
+          "zh-TW": "網址",
+          "pt-BR": "URL",
+          "es-ES": "URL",
+          "ru": "URL-адрес",
+          "fa": "URL",
+          "ar": "عنوان URL",
+          "ja": "URL",
+          "ko": "URL",
+          "pl": "Adres URL",
+          "hu": "URL",
+          "fr": "URL",
+          "uk": "URL",
+          "tr": "URL'si",
+          "th": "URL",
+          "it": "URL"
+        }
+      },
+      {
+        "name": "fee",
+        "type": "string",
+        "label": "Single ticket cost",
+        "default": "39¢",
+        "label_i18n": {
+          "en": "Single ticket cost",
+          "id": "Biaya tiket tunggal",
+          "de": "Einzelticketpreis",
+          "zh-CN": "单票费用",
+          "zh-TW": "單程票費用",
+          "pt-BR": "Custo do bilhete único",
+          "es-ES": "Costo del boleto sencillo",
+          "ru": "Стоимость разового билета",
+          "fa": "هزینه بلیط تکی",
+          "ar": "تكلفة تذكرة واحدة",
+          "ja": "チケット1枚あたりの料金",
+          "ko": "단일 티켓 비용",
+          "pl": "Koszt pojedynczego biletu",
+          "hu": "Egyszeri jegy ára",
+          "fr": "Coût du billet unique",
+          "uk": "Вартість разового квитка",
+          "tr": "Tek bilet maliyeti",
+          "th": "ค่าตั๋วใบเดียว",
+          "it": "Costo biglietto unico"
+        }
+      },
+      {
+        "name": "eventName",
+        "type": "string",
+        "label": "Activity name",
+        "default": "Maple Street Music Fest",
+        "label_i18n": {
+          "en": "Activity name",
+          "id": "Nama aktivitas",
+          "de": "Aktivitätsname",
+          "zh-CN": "活动名称",
+          "zh-TW": "活動名稱",
+          "pt-BR": "Nome da atividade",
+          "es-ES": "Nombre de la actividad",
+          "ru": "Название действия",
+          "fa": "نام فعالیت",
+          "ar": "اسم النشاط",
+          "ja": "アクティビティ名",
+          "ko": "활동명",
+          "pl": "Nazwa działania",
+          "hu": "Tevékenység neve",
+          "fr": "Nom de l'activité",
+          "uk": "Назва діяльності",
+          "tr": "Etkinlik adı",
+          "th": "ชื่อกิจกรรม",
+          "it": "Nome dell'attività"
+        }
+      },
+      {
+        "name": "logo",
+        "type": "string",
+        "label": "brand icon",
+        "default": "assets/fox-logo.png",
+        "label_i18n": {
+          "en": "brand icon",
+          "id": "ikon merek",
+          "de": "Markensymbol",
+          "zh-CN": "品牌图标",
+          "zh-TW": "品牌圖標",
+          "pt-BR": "ícone da marca",
+          "es-ES": "icono de marca",
+          "ru": "значок бренда",
+          "fa": "نماد برند",
+          "ar": "رمز العلامة التجارية",
+          "ja": "ブランドアイコン",
+          "ko": "브랜드 아이콘",
+          "pl": "ikona marki",
+          "hu": "márka ikonra",
+          "fr": "icône de la marque",
+          "uk": "значок бренду",
+          "tr": "marka simgesi",
+          "th": "ไอคอนแบรนด์",
+          "it": "icona del marchio"
+        }
+      },
+      {
+        "name": "coin",
+        "type": "string",
+        "label": "coin pattern",
+        "default": "assets/fox-coin.png",
+        "label_i18n": {
+          "en": "coin pattern",
+          "id": "pola koin",
+          "de": "Münzmuster",
+          "zh-CN": "硬币图案",
+          "zh-TW": "硬幣圖案",
+          "pt-BR": "padrão de moeda",
+          "es-ES": "patrón de moneda",
+          "ru": "образец монеты",
+          "fa": "الگوی سکه",
+          "ar": "نمط العملة",
+          "ja": "コインのパターン",
+          "ko": "동전 패턴",
+          "pl": "wzór monety",
+          "hu": "érme minta",
+          "fr": "modèle de pièce de monnaie",
+          "uk": "візерунок монети",
+          "tr": "madeni para deseni",
+          "th": "รูปแบบเหรียญ",
+          "it": "modello di moneta"
+        }
+      },
+      {
+        "name": "microphone",
+        "type": "string",
+        "label": "Event pictures",
+        "default": "assets/microphone.png",
+        "label_i18n": {
+          "en": "Event pictures",
+          "id": "Gambar acara",
+          "de": "Veranstaltungsbilder",
+          "zh-CN": "活动图片",
+          "zh-TW": "活動圖片",
+          "pt-BR": "Fotos do evento",
+          "es-ES": "Fotos del evento",
+          "ru": "Фотографии событий",
+          "fa": "تصاویر رویداد",
+          "ar": "صور الحدث",
+          "ja": "イベント写真",
+          "ko": "이벤트 사진",
+          "pl": "Zdjęcia z wydarzeń",
+          "hu": "Esemény képek",
+          "fr": "Photos de l'événement",
+          "uk": "Фото події",
+          "tr": "Etkinlik resimleri",
+          "th": "ภาพกิจกรรม",
+          "it": "Immagini dell'evento"
+        }
+      },
+      {
+        "name": "qr",
+        "type": "string",
+        "label": "QR code on ticket face",
+        "default": "assets/ticket-qr.png",
+        "label_i18n": {
+          "en": "QR code on ticket face",
+          "id": "Kode QR di bagian depan tiket",
+          "de": "QR-Code auf der Vorderseite des Tickets",
+          "zh-CN": "票面二维码",
+          "zh-TW": "票面二維碼",
+          "pt-BR": "Código QR na face do bilhete",
+          "es-ES": "Código QR en la carátula del billete",
+          "ru": "QR-код на лицевой стороне билета",
+          "fa": "کد QR روی صفحه بلیط",
+          "ar": "رمز الاستجابة السريعة على وجه التذكرة",
+          "ja": "券面のQRコード",
+          "ko": "티켓 앞면의 QR 코드",
+          "pl": "Kod QR na przodzie biletu",
+          "hu": "QR kód a jegylapon",
+          "fr": "Code QR sur le devant du ticket",
+          "uk": "QR-код на лицьовій стороні квитка",
+          "tr": "Bilet yüzündeki QR kodu",
+          "th": "QR code บนหน้าตั๋ว",
+          "it": "Codice QR sul lato del biglietto"
+        }
+      },
+      {
+        "name": "tickets",
+        "type": "string",
+        "label": "ticket stub decoration",
+        "default": "assets/fox-tickets.png",
+        "label_i18n": {
+          "en": "ticket stub decoration",
+          "id": "dekorasi potongan tiket",
+          "de": "Ticket-Stub-Dekoration",
+          "zh-CN": "票根装饰",
+          "zh-TW": "票根裝飾",
+          "pt-BR": "decoração de canhoto de ingresso",
+          "es-ES": "decoración del talón del billete",
+          "ru": "оформление корешка билета",
+          "fa": "تزئینات خرد بلیط",
+          "ar": "زخرفة كعب التذكرة",
+          "ja": "チケット半券の装飾",
+          "ko": "티켓 반권 장식",
+          "pl": "dekoracja odcinka biletu",
+          "hu": "jegy csonk dekoráció",
+          "fr": "décoration du talon du billet",
+          "uk": "оформлення квитка",
+          "tr": "bilet koçanı dekorasyonu",
+          "th": "การตกแต่งต้นขั้วตั๋ว",
+          "it": "decorazione della matrice del biglietto"
+        }
+      }
+    ],
+    "useCase": {
+      "query": {
+        "en": "Create a ticketing promo for {{brand}} and {{eventName}} at {{fee}} per ticket, ending at {{domain}}, using logo {{logo}}, coin {{coin}}, event art {{microphone}}, QR {{qr}} and ticket art {{tickets}}.",
+        "id": "Buat promo ticketing {{brand}} dan {{eventName}} seharga {{fee}} per tiket, berakhir di {{domain}}, menggunakan logo {{logo}}, coin {{coin}}, event art {{microphone}}, QR {{qr}} dan ticket art {{tickets}}.",
+        "de": "Erstellen Sie eine Ticketverkaufsaktion für {{brand}} und {{eventName}} bei {{fee}} pro Ticket, die bei {{domain}} endet, und verwenden Sie dazu das Logo {{logo}}, die Münze {{coin}}, das Veranstaltungsbild {{microphone}}, den QR {{qr}} und das Ticketbild {{tickets}}.",
+        "zh-CN": "为 {{brand}} 制作 {{eventName}} 票务宣传，突出每票 {{fee}} 和 {{domain}}，使用标志 {{logo}}、硬币 {{coin}}、活动图 {{microphone}}、二维码 {{qr}} 与票根 {{tickets}}。",
+        "zh-TW": "創建 {{brand}} 和 {{eventName}} 的票務促銷，每張門票 {{fee}}，結束於 {{domain}}，使用徽標 {{logo}}、硬幣 {{coin}}、活動藝術 {{microphone}}、QR {{qr}} 和門票藝術{{tickets}}。",
+        "pt-BR": "Crie uma promoção de ingressos para {{brand}} e {{eventName}} a {{fee}} por ingresso, terminando em {{domain}}, utilizando logotipo {{logo}}, moeda {{coin}}, arte do evento {{microphone}}, QR {{qr}} e arte do ingresso {{tickets}}.",
+        "es-ES": "Cree una promoción de venta de boletos para {{brand}} y {{eventName}} a {{fee}} por boleto, que finalice en {{domain}}, usando el logotipo {{logo}}, la moneda {{coin}}, el arte del evento {{microphone}}, el QR {{qr}} y el arte del boleto {{tickets}}.",
+        "ru": "Создайте промо-код для билетов {{brand}} и {{eventName}} по цене {{fee}} за билет, заканчивающийся на {{domain}}, используя логотип {{logo}}, монету {{coin}}, арт события {{microphone}}, QR {{qr}} и обложку билета. {{tickets}}.",
+        "fa": "تبلیغاتی برای خرید بلیط ایجاد کنید {{brand}} و {{eventName}} در {{fee}} هر بلیط، به پایان می رسد {{domain}}، با استفاده از لوگو {{logo}}، سکه {{coin}}، هنر رویداد {{microphone}}، QR {{qr}} و هنر بلیط {{tickets}}.",
+        "ar": "قم بإنشاء عرض ترويجي للتذاكر لـ {{brand}} و{{eventName}} بسعر {{fee}} لكل تذكرة، وينتهي عند {{domain}}، باستخدام الشعار {{logo}}، العملة المعدنية {{coin}}، صورة الحدث {{microphone}}، QR {{qr}} وصورة التذكرة {{tickets}}.",
+        "ja": "ロゴ {{logo}}、コイン {{coin}}、イベント アート {{microphone}}、QR {{qr}}、チケット アートを使用して、{{brand}} および {{eventName}} のチケット販売プロモーションをチケットごとに {{fee}} で作成し、{{domain}} で終了します。 {{tickets}}。",
+        "ko": "로고 {{logo}}, 코인 {{coin}}, 이벤트 아트 {{microphone}}, QR {{qr}} 및 티켓 아트를 사용하여 티켓당 {{fee}}, {{domain}}로 끝나는 {{brand}} 및 {{eventName}}에 대한 티켓팅 프로모션을 만듭니다. {{tickets}}.",
+        "pl": "Utwórz promocję biletów dla {{brand}} i {{eventName}} pod numerem {{fee}} na bilet, kończącą się na {{domain}}, używając logo {{logo}}, monety {{coin}}, grafiki wydarzenia {{microphone}}, QR {{qr}} i grafiki biletu {{tickets}}.",
+        "hu": "Jegyvásárlási promóció létrehozása a következőhöz: {{brand}} és {{eventName}} at {{fee}} jegyenként, melynek vége: {{domain}}, logóval {{logo}}, érme {{coin}}, rendezvényművészet {{microphone}}, QR {{qr}} és jegyművészet {{tickets}}.",
+        "fr": "Créez une promotion de billetterie pour {{brand}} et {{eventName}} à {{fee}} par billet, se terminant à {{domain}}, en utilisant le logo {{logo}}, la pièce {{coin}}, l'art de l'événement {{microphone}}, le QR {{qr}} et l'art du billet {{tickets}}.",
+        "uk": "Створіть рекламу продажу квитків для {{brand}} та події {{eventName}}, з ціною {{fee}} за квиток і адресою {{domain}}. Використайте логотип {{logo}}, монету {{coin}}, зображення події {{microphone}}, QR-код {{qr}} та зображення квитків {{tickets}}.",
+        "tr": "{{logo}} logosu, {{coin}} jetonu, {{microphone}} etkinlik resmi, {{qr}} QR ve bilet resmini kullanarak, {{brand}} ve {{eventName}} için bilet başına {{fee}} fiyatla, {{domain}} ile biten bir bilet promosyonu oluşturun {{tickets}}.",
+        "th": "สร้างโปรโมชันการออกตั๋วสำหรับ {{brand}} และ {{eventName}} ที่ {{fee}} ต่อตั๋ว สิ้นสุดที่ {{domain}} โดยใช้โลโก้ {{logo}} เหรียญ {{coin}} งานศิลปะกิจกรรม {{microphone}} QR {{qr}} และศิลปะตั๋ว {{tickets}}.",
+        "it": "Crea una promozione di biglietteria per {{brand}} e {{eventName}} al {{fee}} per biglietto, con termine a {{domain}}, utilizzando il logo {{logo}}, moneta {{coin}}, illustrazione evento {{microphone}}, QR {{qr}} e illustrazione biglietto {{tickets}}."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "TixFox Ticket Promo"
+        }
+      ]
+    },
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "poster": "./assets/cover.jpg"
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        },
+        {
+          "ref": "motion-design"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  },
+  "credits": [
+    {
+      "name": "@achxvi 原片",
+      "url": "https://x.com/achxvi/status/2108212570096038173"
+    }
+  ]
+}

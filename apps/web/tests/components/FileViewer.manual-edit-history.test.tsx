@@ -177,12 +177,17 @@ describe('FileViewer manual edit history regressions', () => {
       />,
     );
 
+    const initialFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const post = vi.spyOn(initialFrame.contentWindow!, 'postMessage');
     await enterManualEditMode();
     await selectManualEditTarget();
 
     const editFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
     expect(editFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
-    expect(editFrame.srcdoc).toContain('data-od-edit-bridge');
+    fireEvent.load(editFrame);
+    const activation = post.mock.calls.map(([message]) => message)
+      .find((message) => message.type === 'od:srcdoc-transport-activate');
+    expect(activation?.html).toContain('data-od-edit-bridge');
 
     // Exiting edit mode is the toolbar toggle's job — the panel's own close
     // button only collapses the inspector and stays in edit.
@@ -192,8 +197,9 @@ describe('FileViewer manual edit history regressions', () => {
       const previewFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
       expect(previewFrame).toBe(editFrame);
       expect(previewFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
-      expect(previewFrame.srcdoc).toContain('Hero');
-      expect(previewFrame.srcdoc).toContain('data-od-edit-bridge');
+      expect(activation?.html).toContain('Hero');
+      expect(activation?.html).toContain('data-od-edit-bridge');
+      expect(post.mock.calls.filter(([message]) => message.type === 'od:srcdoc-transport-activate')).toHaveLength(1);
     });
   });
 

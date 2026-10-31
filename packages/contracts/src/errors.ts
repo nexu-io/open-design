@@ -1,3 +1,4 @@
+import type { ApiFailureDetail } from './api/failure-detail.js';
 import type { JsonValue } from './common.js';
 
 export const API_ERROR_CODES = [
@@ -200,6 +201,8 @@ export interface ApiError {
   retryable?: boolean;
   requestId?: string;
   taskId?: string;
+  /** Optional closed-token classification; see `api/failure-detail.ts`. */
+  failure?: ApiFailureDetail;
 }
 
 export interface ApiErrorResponse {

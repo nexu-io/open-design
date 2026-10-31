@@ -56,6 +56,9 @@ describe('workspaceInviteErrorMessageKey', () => {
     ['no_session', 'workspaceInvite.errorNoSession'],
     ['no_workspace', 'workspaceInvite.errorNoWorkspace'],
     ['create_unreachable', 'workspaceInvite.errorUnreachable'],
+    ['delivery_pending', 'workspaceInvite.deliveryPending'],
+    ['delivery_failed', 'workspaceInvite.deliveryFailed'],
+    ['create_invalid_response', 'workspaceInvite.invalidResponse'],
   ])('keeps the transport/session outcome %s on its own copy', (code, key) => {
     expect(workspaceInviteErrorMessageKey(code)).toBe(key);
   });

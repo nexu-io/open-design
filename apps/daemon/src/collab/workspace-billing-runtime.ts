@@ -77,6 +77,8 @@ export interface WorkspaceBillingRuntimeCoordinatorOptions {
   fetchProjection(key: WorkspaceBillingRuntimeKey): Promise<VelaWorkspaceBillingProjection>;
   scheduler?: WorkspaceBillingRuntimeScheduler;
   pollIntervalMs?: number;
+  /** Coalesce quota/wallet display invalidations; authoritative reads bypass it. */
+  displayEventRefreshIntervalMs?: number;
   realtimePollFloorMs?: number;
   retryDelaysMs?: readonly number[];
   onStateChange?: (state: WorkspaceBillingRuntimeState) => void;
@@ -140,6 +142,8 @@ interface RuntimeEntry {
   attempt: bigint;
   retryAttempt: number;
   retryTimer: ReturnType<typeof setTimeout> | null;
+  displayRefreshTimer: ReturnType<typeof setTimeout> | null;
+  lastDisplayRefreshAt: number | null;
   waiters: Array<() => void>;
 }
 
@@ -184,6 +188,7 @@ export class WorkspaceBillingRuntimeCoordinator {
   private readonly clients = new Map<string, ClientInterest>();
   private readonly scheduler: WorkspaceBillingRuntimeScheduler;
   private readonly pollIntervalMs: number;
+  private readonly displayEventRefreshIntervalMs: number;
   private readonly retryDelaysMs: readonly number[];
   private readonly interestLeaseMs: number;
   private readonly entryRetentionMs: number;
@@ -208,6 +213,7 @@ export class WorkspaceBillingRuntimeCoordinator {
   constructor(private readonly options: WorkspaceBillingRuntimeCoordinatorOptions) {
     this.scheduler = options.scheduler ?? defaultScheduler();
     this.pollIntervalMs = Math.max(1, options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS);
+    this.displayEventRefreshIntervalMs = Math.max(0, options.displayEventRefreshIntervalMs ?? 0);
     this.retryDelaysMs =
       options.retryDelaysMs?.map((delay) => Math.max(0, delay)) ??
       DEFAULT_RETRY_DELAYS_MS;
@@ -354,6 +360,42 @@ export class WorkspaceBillingRuntimeCoordinator {
       .map((key) => ({ ...key }));
   }
 
+  /**
+   * Fence all projections and leases created under a previous AMR profile.
+   * In-flight reads are allowed to settle, but their incremented attempt token
+   * prevents them from publishing into the new environment.
+   */
+  resetIdentity(): void {
+    this.assertUsable();
+    this.clients.clear();
+    this.realtimeHealthyWorkspaces.clear();
+    if (this.refreshQueueTimer) this.scheduler.clearTimeout(this.refreshQueueTimer);
+    this.refreshQueueTimer = null;
+    this.refreshQueue.length = 0;
+    for (const entry of this.entries.values()) {
+      entry.attempt += 1n;
+      entry.inFlight = null;
+      entry.queued = false;
+      entry.queuedReason = null;
+      entry.pending = false;
+      entry.pendingReason = null;
+      this.clearDisplayRefreshTimer(entry);
+      if (entry.retryTimer) this.scheduler.clearTimeout(entry.retryTimer);
+      entry.retryTimer = null;
+      entry.retryAt = null;
+      entry.legacyInterestExpiresAt = null;
+      entry.projection = EMPTY_PROJECTION;
+      entry.status = 'loading';
+      entry.errorCode = null;
+      entry.reason = 'workspace-identity-changed';
+      entry.observedAt = null;
+      entry.revision += 1n;
+      this.resolveWaiters(entry);
+    }
+    this.entries.clear();
+    this.publishInterestSet();
+  }
+
   async read(
     keyInput: WorkspaceBillingRuntimeKey,
     options: WorkspaceBillingRuntimeReadOptions = {},
@@ -367,9 +409,14 @@ export class WorkspaceBillingRuntimeCoordinator {
     if (
       entry.status === 'fresh' &&
       entry.observedAt != null &&
-      this.scheduler.now() - entry.observedAt >= softTtlMs
+      (this.scheduler.now() - entry.observedAt >= softTtlMs ||
+        this.isProjectionExpired(entry))
     ) {
-      this.markStatus(entry, 'stale', 'soft-ttl-expired');
+      this.markStatus(
+        entry,
+        'stale',
+        this.isProjectionExpired(entry) ? 'wallet-expired' : 'soft-ttl-expired',
+      );
     }
     if (entry.retryTimer && !forceForInterest && !requireFresh) {
       return this.result(entry);
@@ -397,6 +444,14 @@ export class WorkspaceBillingRuntimeCoordinator {
       );
     }
     return this.result(entry);
+  }
+
+  /** DP usage has its own event cursor, independent of money revision clocks. */
+  invalidateCodingPlanUsage(keyInput: WorkspaceBillingRuntimeKey): void {
+    if (this.disposed) return;
+    const entry = this.entries.get(runtimeKey(normalizeKey(keyInput)));
+    if (!entry || !this.hasActiveInterest(entry) || entry.status === 'access-revoked') return;
+    this.requestDisplayRefresh(entry, 'coding-plan-usage-changed');
   }
 
   invalidate(invalidation: WorkspaceBillingRuntimeInvalidation): void {
@@ -447,8 +502,12 @@ export class WorkspaceBillingRuntimeCoordinator {
           : revisionResult.epochChanged
             ? 'revision-epoch-change'
             : invalidation.reason ?? `${invalidation.domain}-invalidation`;
-      this.markStatus(entry, hasProjection(entry) ? 'stale' : 'loading', reason);
-      this.requestRefresh(entry, reason, true);
+      if (invalidation.domain === 'wallet') {
+        this.requestDisplayRefresh(entry, reason);
+      } else {
+        this.markStatus(entry, hasProjection(entry) ? 'stale' : 'loading', reason);
+        this.requestRefresh(entry, reason, true);
+      }
     }
   }
 
@@ -487,6 +546,7 @@ export class WorkspaceBillingRuntimeCoordinator {
       if (
         reason === 'poll-floor' &&
         this.realtimeHealthyWorkspaces.has(entry.key.workspaceId) &&
+        !this.isProjectionExpired(entry) &&
         entry.observedAt != null &&
         this.scheduler.now() - entry.observedAt < this.realtimePollFloorMs
       ) {
@@ -586,6 +646,7 @@ export class WorkspaceBillingRuntimeCoordinator {
     this.refreshQueueTimer = null;
     this.refreshQueue.length = 0;
     for (const entry of this.entries.values()) {
+      this.clearDisplayRefreshTimer(entry);
       if (entry.retryTimer) this.scheduler.clearTimeout(entry.retryTimer);
       entry.retryTimer = null;
       entry.queued = false;
@@ -677,6 +738,8 @@ export class WorkspaceBillingRuntimeCoordinator {
       attempt: 0n,
       retryAttempt: 0,
       retryTimer: null,
+      displayRefreshTimer: null,
+      lastDisplayRefreshAt: null,
       waiters: [],
     };
     this.entries.set(keyText, entry);
@@ -702,6 +765,7 @@ export class WorkspaceBillingRuntimeCoordinator {
 
   private quietIfUninterested(entry: RuntimeEntry): void {
     if (this.hasActiveInterest(entry)) return;
+    this.clearDisplayRefreshTimer(entry);
     if (entry.retryTimer) this.scheduler.clearTimeout(entry.retryTimer);
     entry.retryTimer = null;
     entry.retryAt = null;
@@ -785,6 +849,7 @@ export class WorkspaceBillingRuntimeCoordinator {
       const inactiveAt = entry.uninterestedAt ?? entry.observedAt ?? now;
       const overCapacity = this.entries.size >= this.maxEntries;
       if (!overCapacity && now - inactiveAt < this.entryRetentionMs) continue;
+      this.clearDisplayRefreshTimer(entry);
       if (entry.retryTimer) this.scheduler.clearTimeout(entry.retryTimer);
       this.entries.delete(key);
     }
@@ -824,6 +889,32 @@ export class WorkspaceBillingRuntimeCoordinator {
       acceptedGeneration: interest.generation.toString(),
       leaseExpiresAt: new Date(interest.expiresAt).toISOString(),
     };
+  }
+
+  private clearDisplayRefreshTimer(entry: RuntimeEntry): void {
+    if (entry.displayRefreshTimer) this.scheduler.clearTimeout(entry.displayRefreshTimer);
+    entry.displayRefreshTimer = null;
+  }
+
+  private requestDisplayRefresh(entry: RuntimeEntry, reason: string): void {
+    if (this.disposed || entry.status === 'access-revoked' || !this.hasActiveInterest(entry)) return;
+    if (entry.displayRefreshTimer) return;
+    const elapsed = entry.lastDisplayRefreshAt == null
+      ? Infinity
+      : this.scheduler.now() - entry.lastDisplayRefreshAt;
+    const delay = this.displayEventRefreshIntervalMs - elapsed;
+    if (delay > 0) {
+      // Fixed leading/trailing window: continuous events cannot postpone it.
+      entry.displayRefreshTimer = this.scheduler.setTimeout(() => {
+        entry.displayRefreshTimer = null;
+        this.requestDisplayRefresh(entry, 'display-event-catch-up');
+      }, delay);
+      entry.displayRefreshTimer.unref?.();
+      return;
+    }
+    entry.lastDisplayRefreshAt = this.scheduler.now();
+    this.markStatus(entry, hasProjection(entry) ? 'stale' : 'loading', reason);
+    this.requestRefresh(entry, reason, true);
   }
 
   private requestRefresh(entry: RuntimeEntry, reason: string, force: boolean): void {
@@ -896,6 +987,10 @@ export class WorkspaceBillingRuntimeCoordinator {
 
   private startRefresh(entry: RuntimeEntry, reason: string): void {
     if (this.disposed) return;
+    // Any immediate authoritative/purchase/reconnect read includes pending
+    // display changes, so it also satisfies the trailing display refresh.
+    this.clearDisplayRefreshTimer(entry);
+    if (entry.lastDisplayRefreshAt != null) entry.lastDisplayRefreshAt = this.scheduler.now();
     if (entry.retryTimer) {
       this.scheduler.clearTimeout(entry.retryTimer);
       entry.retryTimer = null;
@@ -908,6 +1003,14 @@ export class WorkspaceBillingRuntimeCoordinator {
         if (entry.attempt !== attempt || this.disposed) return;
         validateProjectionScope(entry.key, projection);
         validateProjectionRevision(entry, projection);
+        // Time alone can invalidate funds without advancing an SSE revision.
+        // A read begun before expiry must not publish its old quote afterwards.
+        const expiresAt = projectionExpiresAt(projection);
+        if (expiresAt != null && expiresAt <= this.scheduler.now()) {
+          throw Object.assign(new Error('workspace billing projection expired'), {
+            code: 'workspace_billing_projection_expired',
+          });
+        }
         recordProjectionRevisions(entry, projection);
         entry.projection = cloneProjection(projection);
         entry.observedAt = this.scheduler.now();
@@ -993,6 +1096,7 @@ export class WorkspaceBillingRuntimeCoordinator {
     this.removeQueuedEntry(entry);
     entry.pending = false;
     entry.pendingReason = null;
+    this.clearDisplayRefreshTimer(entry);
     if (entry.retryTimer) this.scheduler.clearTimeout(entry.retryTimer);
     entry.retryTimer = null;
     entry.retryAt = null;
@@ -1057,14 +1161,22 @@ export class WorkspaceBillingRuntimeCoordinator {
     return {
       workspaceId: entry.key.workspaceId,
       workspaceMemberId: entry.key.workspaceMemberId,
-      status: entry.status,
+      status: entry.status === 'fresh' && this.isProjectionExpired(entry)
+        ? 'stale'
+        : entry.status,
       revision: entry.revision.toString(),
       observedAt: timestamp(entry.observedAt),
       softExpiresAt: timestamp(
-        entry.observedAt == null ? null : entry.observedAt + softTtlMs,
+        entry.observedAt == null ? null : Math.min(
+          entry.observedAt + softTtlMs,
+          projectionExpiresAt(entry.projection) ?? Infinity,
+        ),
       ),
       hardExpiresAt: timestamp(
-        entry.observedAt == null ? null : entry.observedAt + hardTtlMs,
+        entry.observedAt == null ? null : Math.min(
+          entry.observedAt + hardTtlMs,
+          projectionExpiresAt(entry.projection) ?? Infinity,
+        ),
       ),
       retryAt: timestamp(entry.retryAt),
       errorCode: entry.errorCode,
@@ -1079,9 +1191,16 @@ export class WorkspaceBillingRuntimeCoordinator {
 
   private isHardExpired(entry: RuntimeEntry): boolean {
     return (
-      entry.observedAt != null &&
-      this.scheduler.now() - entry.observedAt >= this.effectiveHardTtlMs(entry)
+      this.isProjectionExpired(entry) || (
+        entry.observedAt != null &&
+        this.scheduler.now() - entry.observedAt >= this.effectiveHardTtlMs(entry)
+      )
     );
+  }
+
+  private isProjectionExpired(entry: RuntimeEntry): boolean {
+    const expiresAt = projectionExpiresAt(entry.projection);
+    return expiresAt != null && expiresAt <= this.scheduler.now();
   }
 
   private effectiveSoftTtlMs(entry: RuntimeEntry): number {
@@ -1363,6 +1482,19 @@ function retireRevisionClockEpoch(
       retired.delete(oldest);
     }
   }
+}
+
+/** Earliest server-provided validity boundary. Never subtract gift money here:
+ * a mixed wallet must be re-read so ordinary recharge funds remain intact. */
+function projectionExpiresAt(projection: VelaWorkspaceBillingProjection): number | null {
+  const deadlines = [
+    projection.snapshot?.wallet.expiresAt,
+    projection.workspaceBalance?.expiresAt,
+  ]
+    .filter((value): value is string => typeof value === 'string')
+    .map((value) => Date.parse(value))
+    .filter(Number.isFinite);
+  return deadlines.length ? Math.min(...deadlines) : null;
 }
 
 function cloneProjection(

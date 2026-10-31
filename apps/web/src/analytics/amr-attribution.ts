@@ -18,6 +18,7 @@ type Track = (
 ) => void;
 
 interface RecordAmrEntryOptions {
+  blockContext?: { block_id: string; workspace_key?: string; reason: 'credit_exhausted' | 'concurrency_limit'; stage: 'before_run' | 'mid_run' | 'unknown' };
   metricsConsent?: boolean;
   reuseExistingFrom?: readonly TrackingAmrEntrySource[];
   campaignId?: TrackingCampaignId;
@@ -139,6 +140,7 @@ export function recordAmrEntry(
     area: 'amr_entry',
     element: sourceDetail,
     action: 'click_amr_entry',
+    ...options.blockContext,
     entry_id: attribution.entryId,
     source_product: attribution.sourceProduct,
     source_detail: attribution.sourceDetail,

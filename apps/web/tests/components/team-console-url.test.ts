@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { teamConsoleUrl, workspaceUpgradeUrl } from '../../src/components/EntryNavRail';
-import { setRuntimeAmrConsoleOrigin } from '../../src/runtime/amr-guidance';
+import { teamConsoleUrl, workspaceAutoRechargeUrl, workspaceUpgradeUrl } from '../../src/components/EntryNavRail';
+import { amrWorkspaceUrl, setRuntimeAmrConsoleOrigin } from '../../src/runtime/amr-guidance';
 import type { WorkspaceBillingSummary, WorkspaceCollabContext } from '@open-design/contracts';
 
 // Stand-in for an internal deployment's console origin — the real hostnames are
@@ -15,6 +15,9 @@ const RUNTIME_CONSOLE_ORIGIN = 'https://vela.example.invalid';
  */
 const PROD_CONSOLE_PLAN_URL =
   'https://open-design.ai/cloud/dashboard?source=open_design&billing=plan';
+// CS-04 (DD:1312), inventory C-03: only scoped expectations change.
+const PROD_WORKSPACE_PLAN_URL =
+  'https://open-design.ai/cloud/dashboard?workspaceId=ws-1&source=open_design&billing=plan';
 
 afterEach(() => {
   setRuntimeAmrConsoleOrigin(null);
@@ -54,6 +57,20 @@ describe('teamConsoleUrl', () => {
     expect(teamConsoleUrl(base, 'create-team')).toBe(
       'https://web.example/dashboard?workspaceId=ws-1&workspace=create',
     );
+  });
+
+  it('uses the current financial workspace over the URL and adds attribution in order', () => {
+    expect(amrWorkspaceUrl(teamConsoleUrl('https://web.example/cloud/settings?source=old&workspaceId=stale', 'auto-recharge'), ' current / ', 'auto-recharge')).toBe(
+      'https://web.example/cloud/dashboard?workspaceId=current+%2F&source=open_design&billing=auto-recharge',
+    );
+    expect(amrWorkspaceUrl(teamConsoleUrl('https://web.example/settings', 'billing'), 'ws-1')).toBe(
+      'https://web.example/dashboard?workspaceId=ws-1&source=open_design',
+    );
+  });
+
+  it('keeps unscoped section URLs byte-identical', () => {
+    expect(teamConsoleUrl('https://web.example/settings', 'billing')).toBe('https://web.example/dashboard');
+    expect(teamConsoleUrl('https://web.example/settings', 'auto-recharge')).toBe('https://web.example/dashboard?billing=auto-recharge');
   });
 
   it('falls back to the raw URL when it cannot be parsed', () => {
@@ -109,7 +126,7 @@ describe('workspaceUpgradeUrl', () => {
       ...baseContext,
       workspaceType: 'personal',
     };
-    expect(workspaceUpgradeUrl(context, null)).toBe(PROD_CONSOLE_PLAN_URL);
+    expect(workspaceUpgradeUrl(context, null)).toBe(PROD_WORKSPACE_PLAN_URL);
   });
 
   // 红测(§6.Y 死胡同的第二扇门)。三处注释逐字断言「Personal workspaces always
@@ -129,27 +146,27 @@ describe('workspaceUpgradeUrl', () => {
       role: 'member',
       permissions: { ...baseContext.permissions, canManageBilling: false },
     };
-    expect(workspaceUpgradeUrl(context, null)).toBe(PROD_CONSOLE_PLAN_URL);
+    expect(workspaceUpgradeUrl(context, null)).toBe(PROD_WORKSPACE_PLAN_URL);
     expect(
       workspaceUpgradeUrl(context, billingSummary('team_pro'), {
         fallbackProfile: 'prod',
       }),
-    ).toBe(PROD_CONSOLE_PLAN_URL);
+    ).toBe(PROD_WORKSPACE_PLAN_URL);
   });
 
   it('sends a never-subscribed team to the console plan surface', () => {
-    expect(workspaceUpgradeUrl(baseContext, null)).toBe(PROD_CONSOLE_PLAN_URL);
+    expect(workspaceUpgradeUrl(baseContext, null)).toBe(PROD_WORKSPACE_PLAN_URL);
     expect(workspaceUpgradeUrl(baseContext, billingSummary(''))).toBe(
-      PROD_CONSOLE_PLAN_URL,
+      PROD_WORKSPACE_PLAN_URL,
     );
   });
 
   it('sends an already-subscribed team to the console plan surface', () => {
     expect(
       workspaceUpgradeUrl({ ...baseContext, planId: 'team_pro', billingState: 'active' }, null),
-    ).toBe(PROD_CONSOLE_PLAN_URL);
+    ).toBe(PROD_WORKSPACE_PLAN_URL);
     expect(workspaceUpgradeUrl(baseContext, billingSummary('team_pro'))).toBe(
-      PROD_CONSOLE_PLAN_URL,
+      PROD_WORKSPACE_PLAN_URL,
     );
   });
 
@@ -181,8 +198,18 @@ describe('workspaceUpgradeUrl', () => {
   it('does not require a console URL when workspace ownership is known', () => {
     const context: WorkspaceCollabContext = { ...baseContext };
     delete context.workspaceSettingsUrl;
-    expect(workspaceUpgradeUrl(context, null)).toBe(PROD_CONSOLE_PLAN_URL);
+    expect(workspaceUpgradeUrl(context, null)).toBe(PROD_WORKSPACE_PLAN_URL);
     expect(workspaceUpgradeUrl(null, null)).toBeNull();
+  });
+
+  it('scopes the auto-recharge fallback and settings URL without changing its permission guard', () => {
+    expect(workspaceAutoRechargeUrl({ ...baseContext, workspaceSettingsUrl: undefined }, { fallbackProfile: 'local' })).toBe(
+      'http://localhost:5173/dashboard?workspaceId=ws-1&source=open_design&billing=auto-recharge',
+    );
+    expect(workspaceAutoRechargeUrl(baseContext, { fallbackProfile: 'prod' })).toBe(
+      'https://web.example/dashboard?workspaceId=ws-1&source=open_design&billing=auto-recharge',
+    );
+    expect(workspaceAutoRechargeUrl({ ...baseContext, permissions: { ...baseContext.permissions, canManageAutoRecharge: false } }, { fallbackProfile: 'prod' })).toBeNull();
   });
 
   // The fallback path is where T54's profile-awareness actually shows: with no

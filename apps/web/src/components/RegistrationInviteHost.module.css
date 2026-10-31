@@ -1,0 +1,4 @@
+.recovery { position: fixed; z-index: 1100; bottom: 24px; left: 50%; transform: translateX(-50%); max-width: calc(100vw - 32px); padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-elevated); color: var(--text); box-shadow: var(--shadow-lg); }
+.recovery p { margin: 0 0 12px; font-size: 13px; }
+
+.loading { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: var(--bg-app, #fff); }

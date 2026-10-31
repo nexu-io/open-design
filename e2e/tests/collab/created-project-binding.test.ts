@@ -1,10 +1,9 @@
 // @vitest-environment node
 
-// INVARIANT UNDER TEST: project creation uses an explicit Workspace/member pair
-// only as durable local attribution. Mutable daemon current/default state is
-// never an attribution source: a headerless legacy, CLI, plugin, or signed-out
-// create remains unbound, while an explicitly scoped create is persisted under
-// that exact Workspace without making the local write depend on Vela.
+// INVARIANT UNDER TEST: a scoped create needs verified membership in the exact
+// Workspace/member pair. Mutable daemon current/default state never supplies
+// attribution: a headerless legacy, CLI, plugin, or signed-out create remains
+// unbound, and an unverified explicit pair cannot claim it.
 
 import { createServer, type Server } from 'node:http';
 import { randomUUID } from 'node:crypto';
@@ -235,16 +234,15 @@ describe('a created project is bound only to an explicit Workspace', () => {
   );
 });
 
-describe('an asserted workspace identity is persisted as local attribution', () => {
+describe('an unverified workspace identity cannot claim local attribution', () => {
   test(
-    'a complete explicit pair is not blocked by the remote membership directory',
+    'a complete unverified pair cannot claim a project or create a scoped copy',
     { timeout: 300_000 },
     async () => {
       const suite = await createSmokeSuite('collab-created-project-unverified-claim');
 
-      // The mock directory deliberately does NOT list the asserted pair. Local
-      // project creation/duplication must still use that complete pair as a
-      // namespace and authorship witness without consulting remote membership.
+      // The directory deliberately omits the asserted pair. Workspace-bound
+      // creation must reject it before creating rows or claiming the source.
       await suite.with.toolsDev(
         async ({ webUrl }) => {
           const source = await createProject(webUrl, 'Claim source');
@@ -266,16 +264,11 @@ describe('an asserted workspace identity is persisted as local attribution', () 
               method: 'POST',
             },
           );
-          expect(response.status).toBe(200);
-          const copyId = ((await response.json()) as CreatedProject).project.id;
-
+          expect(response.status).toBe(403);
+          expect(await response.json()).toMatchObject({ error: { code: 'WORKSPACE_PROJECT_PERMISSION_DENIED' } });
           const sourceScope = await readScope(webUrl, source);
-          expect(sourceScope.workspaceId).toBe('ws-bind-foreign');
-          expect(sourceScope.kind).toBe('team');
-
-          const copyScope = await readScope(webUrl, copyId);
-          expect(copyScope.workspaceId).toBe('ws-bind-foreign');
-          expect(copyScope.kind).toBe('team');
+          expect(sourceScope.workspaceId).toBeNull();
+          expect(sourceScope.kind).toBe('unbound');
         },
         {
           env: {

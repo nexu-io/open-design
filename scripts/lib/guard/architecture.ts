@@ -1,6 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import ts from "typescript";
+import * as ts from "@typescript/native/unstable/ast";
+import { parseSource } from "../typescript/source.ts";
 
 import type { GuardContext } from "./core.ts";
 
@@ -35,11 +36,26 @@ export async function loadScriptsArchitectureSources(repoRoot: string): Promise<
 }
 
 function importsFrom(source: string): string[] {
-  return ts.preProcessFile(source, true, true).importedFiles.map(({ fileName }) => fileName);
+  const imports: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && (ts.isStringLiteral(node.moduleSpecifier) || ts.isNoSubstitutionTemplateLiteral(node.moduleSpecifier))) {
+      imports.push(node.moduleSpecifier.text);
+    } else if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference) && node.moduleReference.expression && (ts.isStringLiteral(node.moduleReference.expression) || ts.isNoSubstitutionTemplateLiteral(node.moduleReference.expression))) {
+      imports.push(node.moduleReference.expression.text);
+    } else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument) && ts.isStringLiteral(node.argument.literal)) {
+      imports.push(node.argument.literal.text);
+    } else if (ts.isCallExpression(node) && (node.expression.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(node.expression) && node.expression.text === "require"))) {
+      const argument = node.arguments[0];
+      if (argument && (ts.isStringLiteral(argument) || ts.isNoSubstitutionTemplateLiteral(argument))) imports.push(argument.text);
+    }
+    node.forEachChild(visit);
+  };
+  visit(parseSource("module.ts", source));
+  return imports;
 }
 
 function hasCliProcessControl(source: string): boolean {
-  const sourceFile = ts.createSourceFile("module.ts", source, ts.ScriptTarget.Latest, true);
+  const sourceFile = parseSource("module.ts", source);
   let found = false;
   const visit = (node: ts.Node): void => {
     if (
@@ -51,7 +67,7 @@ function hasCliProcessControl(source: string): boolean {
       found = true;
       return;
     }
-    ts.forEachChild(node, visit);
+    node.forEachChild(visit);
   };
   visit(sourceFile);
   return found;
@@ -119,7 +135,9 @@ export function scriptsArchitectureErrors(sources: ReadonlyMap<string, string>):
       }
 
       if (!module.startsWith(guardLibraryPrefix)) continue;
-      if (specifier.startsWith("node:") || specifier === "typescript") continue;
+      if (specifier.startsWith("node:") || specifier.startsWith("@typescript/native/")) continue;
+      // Syntax tooling is shared by independent guards, without importing policy.
+      if (dependency?.startsWith("scripts/lib/typescript/") && sources.has(dependency)) continue;
       if (dependency != null && specifier.startsWith(".") && !sources.has(dependency)) {
         errors.push(`${module} imports missing module ${dependency}`);
       }

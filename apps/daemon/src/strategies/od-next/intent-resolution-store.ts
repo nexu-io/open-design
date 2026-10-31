@@ -46,12 +46,6 @@ export function migrateIntentResolutionStore(db: SqliteDb): void {
   `);
 }
 
-/** Called only by the new-task transaction. Absence is exclusively old-row compatibility. */
-export function initializeIntentResolution(db: SqliteDb, taskExecutionId: string): void {
-  db.prepare(`INSERT INTO strategy_task_intent_resolution(task_execution_id, version, state)
-    VALUES (?, 1, 'unresolved')`).run(taskExecutionId);
-}
-
 export function readIntentResolution(db: SqliteDb, taskExecutionId: string): StrategyIntentResolution | null {
   const row = db.prepare(`SELECT version, state, attempts, run_id AS runId, source_run_id AS sourceRunId,
     source_result_json AS sourceResultJson, source_result_sha256 AS sourceResultSha256,
@@ -99,63 +93,6 @@ export function readStrategyTaskWriteEvidence(db: SqliteDb, taskExecutionId: str
     runId: row.runId, filesWritten: row.filesWritten, unknown: row.unknown !== 0,
     sources: (Object.keys(WRITE_EVIDENCE_SOURCES) as StrategyWriteEvidenceSource[]).filter(source => ((row.sourceMask ?? 4) & WRITE_EVIDENCE_SOURCES[source]) !== 0),
   }));
-}
-
-/** Caller atomically installs the physical Run and mapping in the same transaction. */
-export function claimIntentResolutionRecord(db: SqliteDb, input: {
-  taskExecutionId: string; runId: string; sourceRunId: string; sourceResultJson: string;
-}): void {
-  if (!db.inTransaction) throw conflict();
-  if (!readIntentResolution(db, input.taskExecutionId)) throw conflict();
-  JSON.parse(input.sourceResultJson);
-  const changed = db.prepare(`UPDATE strategy_task_intent_resolution SET state='claimed', attempts=1,
-    run_id=?, source_run_id=?, source_result_json=?, source_result_sha256=?
-    WHERE task_execution_id=? AND state='unresolved' AND attempts=0`)
-    .run(input.runId, input.sourceRunId, input.sourceResultJson, intentResolutionDigest(input.sourceResultJson), input.taskExecutionId);
-  if (changed.changes !== 1) throw conflict();
-}
-
-function requireActiveResolution(db: SqliteDb, taskExecutionId: string, runId: string): StrategyIntentResolution {
-  const row = readIntentResolution(db, taskExecutionId);
-  const task = db.prepare(`SELECT latest_run_id AS runId, outcome FROM strategy_task_executions WHERE task_execution_id=?`)
-    .get(taskExecutionId) as { runId: string; outcome: string } | undefined;
-  if (!row || row.runId !== runId || task?.runId !== runId || task.outcome !== 'running') throw conflict();
-  return row;
-}
-
-/** Single admission for the provider call, including across process restarts. */
-export function startIntentResolution(db: SqliteDb, taskExecutionId: string, runId: string): void {
-  db.transaction(() => {
-    requireActiveResolution(db, taskExecutionId, runId);
-    const changed = db.prepare(`UPDATE strategy_task_intent_resolution SET state='started'
-      WHERE task_execution_id=? AND run_id=? AND state='claimed'`).run(taskExecutionId, runId);
-    if (changed.changes !== 1) throw conflict();
-  }).immediate();
-}
-
-/** Persist before consuming; identical close replay is harmless, different replies cannot overwrite. */
-export function captureIntentResolutionReply(db: SqliteDb, input: {
-  taskExecutionId: string; runId: string; replyJson: string;
-}): void {
-  db.transaction(() => {
-    const row = requireActiveResolution(db, input.taskExecutionId, input.runId);
-    if (row.state !== 'started' || (row.replyJson !== null && row.replyJson !== input.replyJson)) throw conflict();
-    if (JSON.parse(input.replyJson)?.runId !== input.runId) throw conflict();
-    db.prepare(`UPDATE strategy_task_intent_resolution SET reply_json=?, reply_sha256=?
-      WHERE task_execution_id=? AND run_id=?`).run(input.replyJson, intentResolutionDigest(input.replyJson), input.taskExecutionId, input.runId);
-  }).immediate();
-}
-
-/** Used within the task verdict CAS; a replay consumes saved bytes, never another provider call. */
-export function resolveIntentResolutionRecord(db: SqliteDb, taskExecutionId: string, runId?: string): void {
-  if (!db.inTransaction) throw conflict();
-  const row = readIntentResolution(db, taskExecutionId);
-  if (!row) return;
-  if (runId !== undefined) {
-    requireActiveResolution(db, taskExecutionId, runId);
-    if (row.state !== 'started' || row.replyJson === null) throw conflict();
-  } else if (row.state !== 'unresolved') throw conflict();
-  db.prepare(`UPDATE strategy_task_intent_resolution SET state='resolved' WHERE task_execution_id=?`).run(taskExecutionId);
 }
 
 export function failIntentResolutionRecord(db: SqliteDb, taskExecutionId: string): void {

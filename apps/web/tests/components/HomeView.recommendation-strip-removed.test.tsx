@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { homeTemplateTrigger } from '../helpers/home-template-picker';
 //
 // Home no longer mounts the onboarding "recommended start" strip.
 //
@@ -79,13 +80,13 @@ describe('HomeView — recommended-start strip', () => {
     expect(screen.queryByText('All types')).toBeNull();
   });
 
-  it('keeps the template control that sat below it', async () => {
+  it('keeps the creation type controls below the composer', async () => {
     stubPluginsFetch();
     renderHomeWithRecommendation();
 
     // 「Start with a template…」 is a DIFFERENT control from the strip and must
     // survive its removal — the strip was the row ABOVE it.
-    const trigger = await screen.findByTestId('home-hero-type-pill-prototype');
+    const trigger = homeTemplateTrigger();
     expect(trigger).toBeTruthy();
     expect(screen.getByTestId('home-hero-type-pills')).toBeTruthy();
     await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false));

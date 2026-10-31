@@ -1,0 +1,124 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-motion-visual-lesson",
+  "title": "Bring Ideas to Life",
+  "title_i18n": {
+    "en": "Bring Ideas to Life",
+    "id": "Wujudkan Ide",
+    "de": "Ideen zum Leben erwecken",
+    "zh-CN": "让灵感成真",
+    "zh-TW": "讓靈感成真",
+    "pt-BR": "Dê vida às ideias",
+    "es-ES": "Da vida a tus ideas",
+    "ru": "Воплощай идеи в жизнь",
+    "fa": "به ایده‌ها جان بده",
+    "ar": "امنح أفكارك الحياة",
+    "ja": "アイデアをかたちに",
+    "ko": "아이디어를 현실로",
+    "pl": "Tchnij życie w pomysły",
+    "hu": "Keltsd életre az ötleteket",
+    "fr": "Donnez vie à vos idées",
+    "uk": "Втілюй ідеї в життя",
+    "tr": "Fikirlerine Hayat Ver",
+    "th": "ทำไอเดียให้เป็นจริง",
+    "it": "Dai vita alle idee"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-10-09T00:00:00Z",
+  "description": "A 20-second paper-cutout story: a girl asks OpenDesign what it can design. Interactive prototypes, websites, PPT, posters and motion films unfold into a book of possibilities. It starts with your idea.",
+  "description_i18n": {
+    "en": "A 20-second paper-cutout story: a girl asks OpenDesign what it can design. Interactive prototypes, websites, PPT, posters and motion films unfold into a book of possibilities. It starts with your idea.",
+    "zh-CN": "20 秒纸张拼贴短片：女孩问 OpenDesign「你能设计什么？」小伙伴展示交互原型、网站、PPT、海报和动效短片，再把作品装成小册子寄回。从你的一个想法开始。",
+    "zh-TW": "20 秒紙張拼貼短片：女孩問 OpenDesign「你能設計什麼？」小夥伴展示互動原型、網站、PPT、海報和動態短片，再把作品裝成小冊子寄回。從你的一個想法開始。",
+    "id": "Cerita potongan kertas 20 detik: seorang gadis bertanya apa yang bisa didesain OpenDesign. Prototipe interaktif, situs web, PPT, poster dan film animasi menjadi buku kemungkinan. Semuanya dimulai dari idemu.",
+    "de": "Eine 20-sekündige Papiercollage: Ein Mädchen fragt OpenDesign, was es gestalten kann. Interaktive Prototypen, Websites, Präsentationen, Poster und Animationsfilme werden zu einem Buch voller Möglichkeiten. Alles beginnt mit deiner Idee.",
+    "pt-BR": "Um conto de 20 segundos em recortes de papel: uma menina pergunta o que o OpenDesign pode criar. Protótipos interativos, sites, apresentações, pôsteres e animações viram um livro de possibilidades. Tudo começa com sua ideia.",
+    "es-ES": "Una historia de 20 segundos en papel recortado: una niña pregunta qué puede diseñar OpenDesign. Prototipos interactivos, webs, presentaciones, carteles y animaciones forman un libro de posibilidades. Todo empieza con tu idea.",
+    "ru": "20-секундная бумажная история: девочка спрашивает, что умеет создавать OpenDesign. Интерактивные прототипы, сайты, презентации, плакаты и анимация собираются в книгу возможностей. Всё начинается с вашей идеи.",
+    "fa": "داستان کاغذبری ۲۰ ثانیه‌ای: دختری می‌پرسد OpenDesign چه چیزی می‌تواند طراحی کند. نمونه‌های تعاملی، وب‌سایت‌ها، ارائه‌ها، پوسترها و فیلم‌های متحرک به کتابی از امکان‌ها تبدیل می‌شوند. همه‌چیز با ایدهٔ شما آغاز می‌شود.",
+    "ar": "قصة من قصاصات الورق مدتها 20 ثانية: تسأل فتاة عمّا يستطيع OpenDesign تصميمه. نماذج تفاعلية ومواقع وعروض تقديمية وملصقات وأفلام متحركة تجتمع في كتاب من الإمكانات. كل شيء يبدأ بفكرتك.",
+    "ja": "20秒の切り絵風ストーリー。女の子がOpenDesignに「何をデザインできる？」と尋ねると、インタラクティブなプロトタイプ、Webサイト、PPT、ポスター、モーション動画が一冊の作品集になります。始まりは、あなたのアイデア。",
+    "ko": "20초 종이 콜라주 이야기. 소녀가 OpenDesign에게 무엇을 디자인할 수 있는지 물으면 인터랙티브 프로토타입, 웹사이트, PPT, 포스터, 모션 영상이 작품집으로 모입니다. 당신의 아이디어에서 시작됩니다.",
+    "pl": "20-sekundowa opowieść z papierowych wycinanek: dziewczynka pyta, co potrafi projektować OpenDesign. Interaktywne prototypy, strony, prezentacje, plakaty i animacje tworzą książkę możliwości. Wszystko zaczyna się od twojego pomysłu.",
+    "hu": "20 másodperces papírkollázs-történet: egy kislány megkérdezi, mit tud tervezni az OpenDesign. Interaktív prototípusok, weboldalak, prezentációk, plakátok és animációk állnak össze a lehetőségek könyvévé. Minden az ötleteddel kezdődik.",
+    "fr": "Une histoire de 20 secondes en papier découpé : une fillette demande ce qu’OpenDesign peut créer. Prototypes interactifs, sites, présentations, affiches et animations composent un livre de possibilités. Tout commence par votre idée.",
+    "uk": "20-секундна історія з паперової аплікації: дівчинка запитує, що вміє створювати OpenDesign. Інтерактивні прототипи, сайти, презентації, плакати й анімації складаються в книгу можливостей. Усе починається з вашої ідеї.",
+    "tr": "20 saniyelik kâğıt kolaj hikâyesi: bir kız OpenDesign’a neler tasarlayabildiğini sorar. Etkileşimli prototipler, web siteleri, sunumlar, posterler ve animasyonlar bir olasılıklar kitabına dönüşür. Her şey fikrinle başlar.",
+    "th": "เรื่องราวกระดาษตัดแปะ 20 วินาที เด็กผู้หญิงถามว่า OpenDesign ออกแบบอะไรได้บ้าง ต้นแบบโต้ตอบ เว็บไซต์ สไลด์ PPT โปสเตอร์ และภาพเคลื่อนไหวรวมเป็นหนังสือแห่งความเป็นไปได้ ทุกอย่างเริ่มจากไอเดียของคุณ",
+    "it": "Una storia di 20 secondi in carta ritagliata: una bambina chiede cosa sa progettare OpenDesign. Prototipi interattivi, siti, presentazioni, poster e animazioni compongono un libro di possibilità. Tutto inizia dalla tua idea."
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io/open-design"
+  },
+  "homepage": "https://github.com/nexu-io/open-design",
+  "tags": [
+    "example",
+    "first-party",
+    "video",
+    "motion-design",
+    "paper-cutout",
+    "storytelling",
+    "illustration",
+    "viral-remake"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "poster": "./assets/cover.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "A 20-second paper-cutout story: a girl asks OpenDesign what it can design. Interactive prototypes, websites, PPT, posters and motion films unfold into a book of possibilities. It starts with your idea. Create a 20-second, 1920×1080 paper-cutout film with English hand lettering. Keep the night-town opening, girl, handwritten note, paper-plane journey and OpenDesign buddy. The note reads “OpenDesign, what can you design?” From 7–13s, show five working paper miniatures: tap through an interactive prototype, unfold a website, turn PPT pages, stick a poster and animate a filmstrip. Gather them into a little book and return it to the girl. The open book reads “It starts with your idea.” Preserve the reference’s torn fibres, directional gouache, layered cut-paper limbs and object-led actions. Use the bundled original soundtrack, without voiceover. To close, she hugs the book, waves thanks, pins a note reading “What will you design?” beside the window and brings her hands together: an invitation to the viewer.",
+        "id": "Cerita potongan kertas 20 detik: seorang gadis bertanya apa yang bisa didesain OpenDesign. Prototipe interaktif, situs web, PPT, poster dan film animasi menjadi buku kemungkinan. Semuanya dimulai dari idemu. Buat film guntingan kertas 20 detik, 1920×1080, dengan tulisan tangan berbahasa Inggris. Pertahankan kota malam, gadis, surat dan pesawat kertas. Tampilkan ketukan prototipe, situs yang terbuka, halaman PPT yang dibalik, poster yang ditempel dan animasi dalam bingkai film. Kumpulkan karya menjadi buku dan kirimkan kembali. Gunakan serat sobekan, sapuan guas, anggota tubuh berlapis dan gerakan melipat. Pertahankan musik bawaan tanpa narasi. “OpenDesign, what can you design?” → “It starts with your idea.” Di akhir, ia memeluk buku, melambaikan tangan sebagai terima kasih, lalu menempelkan catatan “What will you design?” di dekat jendela dan menyatukan kedua tangan: undangan bagi penonton untuk mendesain.",
+        "de": "Eine 20-sekündige Papiercollage: Ein Mädchen fragt OpenDesign, was es gestalten kann. Interaktive Prototypen, Websites, Präsentationen, Poster und Animationsfilme werden zu einem Buch voller Möglichkeiten. Alles beginnt mit deiner Idee. Erstelle einen 20 Sekunden langen Papierfilm in 1920×1080 mit englischer Handschrift. Behalte Nachtstadt, Mädchen, Brief und Papierflugzeug bei. Zeige einen antippbaren Prototyp, eine aufgefaltete Website, umgeblätterte PPT-Folien, ein aufgeklebtes Poster und einen animierten Filmstreifen. Sammle die Werke in einem Buch und schicke es zurück. Nutze gerissene Papierkanten, Gouache-Pinselstriche, getrennte Papierglieder und Faltbewegungen. Behalte die vorhandene Musik ohne Sprecherstimme. “OpenDesign, what can you design?” → “It starts with your idea.” Zum Schluss drückt sie das Buch an sich, winkt zum Dank, klebt „What will you design?“ neben das Fenster und legt die Hände zusammen: eine Einladung an das Publikum.",
+        "zh-CN": "制作一支 20 秒、1920×1080 的纸张拼贴动画，画面文字使用英文。保留原片的夜间小镇、女孩、手写纸条、纸飞机和 OpenDesign 小伙伴。女孩写下“OpenDesign, what can you design?”；7–13 秒依次展示五个可辨识的纸片作品：点击切换的交互原型、展开的网站、翻页的 PPT、贴好的海报、运动中的影片画格。作品收成一本小册子寄回，翻开看到“It starts with your idea.”。贴近原片的撕纸纤维、水粉笔触、分层纸片手臂、折纸和物体驱动的动作。使用自带背景音乐，不加配音。 结尾女孩抱住作品册、挥手感谢，再把写着“What will you design?”的纸贴到窗边，双手收回胸前，向观众发出设计邀请。",
+        "zh-TW": "製作一支 20 秒、1920×1080 的紙張拼貼動畫，畫面文字使用英文。保留原片的夜間小鎮、女孩、手寫紙條、紙飛機和 OpenDesign 小夥伴。女孩寫下“OpenDesign, what can you design?”；7–13 秒依次展示五個紙片作品：點擊切換的互動原型、展開的網站、翻頁的 PPT、貼好的海報、運動中的影片畫格。作品收成一本小冊子寄回，翻开看到“It starts with your idea.”。貼近原片的撕紙纖維、水粉筆觸、分層紙片手臂、摺紙和物體驅動的動作。使用自帶背景音樂，不加配音。 結尾女孩抱住作品冊、揮手感謝，再把寫著“What will you design?”的紙貼到窗邊，雙手收回胸前，向觀眾發出設計邀請。",
+        "pt-BR": "Um conto de 20 segundos em recortes de papel: uma menina pergunta o que o OpenDesign pode criar. Protótipos interativos, sites, apresentações, pôsteres e animações viram um livro de possibilidades. Tudo começa com sua ideia. Crie um filme de recortes de papel de 20 segundos em 1920×1080, com letras manuscritas em inglês. Mantenha a cidade noturna, a menina, a carta e o avião de papel. Mostre toques no protótipo, um site se desdobrando, páginas de PPT virando, um pôster sendo colado e uma tira de filme animada. Reúna as obras num livro e envie-o de volta. Use bordas rasgadas, pinceladas de guache, membros de papel articulados e dobras. Preserve a música existente sem narração. “OpenDesign, what can you design?” → “It starts with your idea.” No final, ela abraça o livro, acena em agradecimento, cola “What will you design?” junto à janela e une as mãos, convidando o público a criar seu próprio design.",
+        "es-ES": "Una historia de 20 segundos en papel recortado: una niña pregunta qué puede diseñar OpenDesign. Prototipos interactivos, webs, presentaciones, carteles y animaciones forman un libro de posibilidades. Todo empieza con tu idea. Crea una película de papel recortado de 20 segundos a 1920×1080, con letras manuscritas en inglés. Conserva la ciudad nocturna, la niña, la carta y el avión de papel. Muestra un prototipo que responde al toque, una web que se despliega, páginas de PPT que giran, un cartel que se pega y una tira de película animada. Reúne las obras en un libro y envíalo de vuelta. Usa bordes rasgados, pinceladas de gouache, extremidades de papel articuladas y pliegues. Conserva la música existente sin narración. “OpenDesign, what can you design?” → “It starts with your idea.” Al final, abraza el libro, saluda en agradecimiento, pega “What will you design?” junto a la ventana y junta las manos: una invitación al público a diseñar.",
+        "ru": "20-секундная бумажная история: девочка спрашивает, что умеет создавать OpenDesign. Интерактивные прототипы, сайты, презентации, плакаты и анимация собираются в книгу возможностей. Всё начинается с вашей идеи. Создай 20-секундный бумажный фильм 1920×1080 с рукописным английским текстом. Сохрани ночной город, девочку, письмо и бумажный самолётик. Покажи нажатие в прототипе, разворачивание сайта, перелистывание PPT, приклеивание плаката и анимацию в киноплёнке. Собери работы в книгу и отправь обратно. Используй рваные края, мазки гуаши, отдельные подвижные бумажные руки и сгибы. Сохрани готовую музыку без озвучки. “OpenDesign, what can you design?” → “It starts with your idea.” В финале она обнимает книгу, благодарно машет, приклеивает у окна записку “What will you design?” и складывает ладони: это приглашение зрителю придумать свой дизайн.",
+        "fa": "داستان کاغذبری ۲۰ ثانیه‌ای: دختری می‌پرسد OpenDesign چه چیزی می‌تواند طراحی کند. نمونه‌های تعاملی، وب‌سایت‌ها، ارائه‌ها، پوسترها و فیلم‌های متحرک به کتابی از امکان‌ها تبدیل می‌شوند. همه‌چیز با ایدهٔ شما آغاز می‌شود. یک فیلم کلاژ کاغذی ۲۰ ثانیه‌ای با ابعاد 1920×1080 و نوشته‌های دست‌نویس انگلیسی بساز. شهر شبانه، دختر، نامه و هواپیمای کاغذی را حفظ کن. لمس نمونهٔ اولیه، باز شدن وب‌سایت، ورق خوردن PPT، چسباندن پوستر و حرکت در نوار فیلم را نشان بده. آثار را در یک کتاب جمع کن و برگردان. از لبه‌های پاره، رد قلم‌موی گواش، اندام‌های کاغذی مفصلی و تاخوردگی استفاده کن. موسیقی موجود را بدون گفتار حفظ کن. “OpenDesign, what can you design?” → “It starts with your idea.” در پایان، دختر کتاب را در آغوش می‌گیرد، برای تشکر دست تکان می‌دهد، یادداشت «What will you design?» را کنار پنجره می‌چسباند و دست‌هایش را جمع می‌کند؛ دعوتی از تماشاگر برای طراحی.",
+        "ar": "قصة من قصاصات الورق مدتها 20 ثانية: تسأل فتاة عمّا يستطيع OpenDesign تصميمه. نماذج تفاعلية ومواقع وعروض تقديمية وملصقات وأفلام متحركة تجتمع في كتاب من الإمكانات. كل شيء يبدأ بفكرتك. أنشئ فيلم قصاصات ورقية مدته 20 ثانية بدقة 1920×1080 مع كتابة يدوية بالإنجليزية. احتفظ بالمدينة الليلية والفتاة والرسالة والطائرة الورقية. اعرض لمس النموذج التفاعلي، وفتح الموقع، وتقليب صفحات PPT، ولصق الملصق، وتحريك شريط الفيلم. اجمع الأعمال في كتاب وأرسله إليها. استخدم حواف ممزقة وضربات غواش وأطرافًا ورقية مفصلية وحركات طي. احتفظ بالموسيقى الحالية دون تعليق صوتي. “OpenDesign, what can you design?” → “It starts with your idea.” في النهاية تحتضن الكتاب وتلوّح بالشكر، ثم تلصق ورقة تحمل “What will you design?” بجانب النافذة وتضم يديها: دعوة للمشاهد إلى التصميم.",
+        "ja": "20秒の切り絵風ストーリー。女の子がOpenDesignに「何をデザインできる？」と尋ねると、インタラクティブなプロトタイプ、Webサイト、PPT、ポスター、モーション動画が一冊の作品集になります。始まりは、あなたのアイデア。 英語の手書き文字を使い、1920×1080、20秒の切り紙映像を制作してください。夜の街、少女、手紙、紙飛行機を残します。プロトタイプのタップ、Webサイトの展開、PPTのページめくり、ポスターの貼り付け、フィルム内のアニメーションを見せ、作品を一冊の本にまとめて少女へ返します。破れた紙の縁、ガッシュの筆跡、パーツごとに動く紙の手足、折り目を表現してください。付属の音楽を維持し、ナレーションは追加しません。 “OpenDesign, what can you design?” → “It starts with your idea.” 最後に女の子が本を抱きしめ、感謝して手を振り、「What will you design?」と書いた紙を窓辺に貼って両手を合わせます。観客にデザインを呼びかける締めくくりです。",
+        "ko": "20초 종이 콜라주 이야기. 소녀가 OpenDesign에게 무엇을 디자인할 수 있는지 물으면 인터랙티브 프로토타입, 웹사이트, PPT, 포스터, 모션 영상이 작품집으로 모입니다. 당신의 아이디어에서 시작됩니다. 영어 손글씨를 사용한 1920×1080, 20초 종이 오려붙이기 영상을 만들어 주세요. 밤의 마을, 소녀, 편지와 종이비행기를 유지하세요. 프로토타입 터치, 웹사이트 펼치기, PPT 페이지 넘기기, 포스터 붙이기, 필름 속 애니메이션을 보여 주세요. 작품을 한 권의 책으로 모아 소녀에게 돌려보내세요. 찢어진 종이 가장자리, 과슈 붓 자국, 관절별로 움직이는 종이 팔다리와 접힘을 살리세요. 기존 음악은 유지하고 내레이션은 넣지 마세요. “OpenDesign, what can you design?” → “It starts with your idea.” 마지막에는 소녀가 책을 안고 감사의 손인사를 한 뒤 “What will you design?” 쪽지를 창가에 붙이고 두 손을 모읍니다. 관객에게 디자인을 권하는 마무리입니다.",
+        "pl": "20-sekundowa opowieść z papierowych wycinanek: dziewczynka pyta, co potrafi projektować OpenDesign. Interaktywne prototypy, strony, prezentacje, plakaty i animacje tworzą książkę możliwości. Wszystko zaczyna się od twojego pomysłu. Stwórz 20-sekundowy film z papierowych wycinanek w 1920×1080, z angielskim pismem odręcznym. Zachowaj nocne miasto, dziewczynkę, list i papierowy samolot. Pokaż dotknięcie prototypu, rozłożenie strony, przewracanie slajdów PPT, przyklejenie plakatu i animację na taśmie filmowej. Zbierz prace w książkę i odeślij ją dziewczynce. Użyj poszarpanych krawędzi, pociągnięć gwaszu, ruchomych papierowych kończyn i zgięć. Zachowaj obecną muzykę bez narracji. “OpenDesign, what can you design?” → “It starts with your idea.” Na końcu przytula książkę, macha na podziękowanie, przykleja obok okna kartkę „What will you design?” i składa dłonie: to zaproszenie dla widza do projektowania.",
+        "hu": "20 másodperces papírkollázs-történet: egy kislány megkérdezi, mit tud tervezni az OpenDesign. Interaktív prototípusok, weboldalak, prezentációk, plakátok és animációk állnak össze a lehetőségek könyvévé. Minden az ötleteddel kezdődik. Készíts 20 másodperces, 1920×1080-as papírkivágásos filmet angol kézírással. Maradjon meg az éjszakai város, a kislány, a levél és a papírrepülő. Mutasd a prototípus megérintését, a weboldal kibontását, a PPT lapozását, a plakát felragasztását és a filmszalag animációját. Gyűjtsd könyvbe a munkákat, és küldd vissza. Használj tépett széleket, gouache-ecsetnyomokat, külön mozgó papírvégtagokat és hajtásokat. Tartsd meg a zenét narráció nélkül. “OpenDesign, what can you design?” → “It starts with your idea.” Végül magához öleli a könyvet, köszönetképpen integet, az ablak mellé ragasztja a „What will you design?” feliratot, és összeteszi a kezét: ezzel a nézőt hívja tervezésre.",
+        "fr": "Une histoire de 20 secondes en papier découpé : une fillette demande ce qu’OpenDesign peut créer. Prototypes interactifs, sites, présentations, affiches et animations composent un livre de possibilités. Tout commence par votre idée. Crée un film en papier découpé de 20 secondes en 1920×1080, avec une écriture manuscrite en anglais. Garde la ville nocturne, la fillette, la lettre et l’avion en papier. Montre un prototype qui réagit au toucher, un site qui se déplie, des pages de PPT qui tournent, une affiche qu’on colle et une pellicule animée. Rassemble les œuvres dans un livre et renvoie-le à la fillette. Utilise des bords déchirés, des coups de gouache, des membres articulés en papier et des plis. Conserve la musique existante sans narration. “OpenDesign, what can you design?” → “It starts with your idea.” Pour finir, elle serre le livre contre elle, fait un signe de remerciement, colle « What will you design? » près de la fenêtre et joint les mains : une invitation adressée au public.",
+        "uk": "20-секундна історія з паперової аплікації: дівчинка запитує, що вміє створювати OpenDesign. Інтерактивні прототипи, сайти, презентації, плакати й анімації складаються в книгу можливостей. Усе починається з вашої ідеї. Створи 20-секундний паперовий фільм 1920×1080 з рукописним англійським текстом. Збережи нічне місто, дівчинку, лист і паперовий літачок. Покажи натискання в прототипі, розгортання сайту, перегортання PPT, приклеювання плаката й анімацію в кіноплівці. Збери роботи в книгу та надішли її назад. Використовуй рвані краї, мазки гуаші, окремі рухомі паперові кінцівки та згини. Збережи наявну музику без озвучення. “OpenDesign, what can you design?” → “It starts with your idea.” Наприкінці вона обіймає книжку, вдячно махає, приклеює біля вікна записку “What will you design?” і складає долоні: це запрошення глядачеві створити власний дизайн.",
+        "tr": "20 saniyelik kâğıt kolaj hikâyesi: bir kız OpenDesign’a neler tasarlayabildiğini sorar. Etkileşimli prototipler, web siteleri, sunumlar, posterler ve animasyonlar bir olasılıklar kitabına dönüşür. Her şey fikrinle başlar. İngilizce el yazısıyla 1920×1080 boyutunda, 20 saniyelik bir kâğıt kolaj filmi oluştur. Gece şehrini, kızı, mektubu ve kâğıt uçağı koru. Prototipe dokunmayı, web sitesini açmayı, PPT sayfalarını çevirmeyi, posteri yapıştırmayı ve film şeridindeki animasyonu göster. Çalışmaları bir kitapta toplayıp kıza geri gönder. Yırtık kenarlar, guaj fırça izleri, eklemli kâğıt uzuvlar ve katlama hareketleri kullan. Mevcut müziği koru; seslendirme ekleme. “OpenDesign, what can you design?” → “It starts with your idea.” Sonunda kitabı kucaklar, teşekkür için el sallar, pencerenin yanına “What will you design?” yazılı notu yapıştırıp ellerini birleştirir: izleyiciye bir tasarım daveti.",
+        "th": "เรื่องราวกระดาษตัดแปะ 20 วินาที เด็กผู้หญิงถามว่า OpenDesign ออกแบบอะไรได้บ้าง ต้นแบบโต้ตอบ เว็บไซต์ สไลด์ PPT โปสเตอร์ และภาพเคลื่อนไหวรวมเป็นหนังสือแห่งความเป็นไปได้ ทุกอย่างเริ่มจากไอเดียของคุณ สร้างวิดีโอกระดาษตัดแปะ 20 วินาที ขนาด 1920×1080 พร้อมลายมือภาษาอังกฤษ คงเมืองยามค่ำคืน เด็กผู้หญิง จดหมาย และเครื่องบินกระดาษไว้ แสดงการแตะต้นแบบ การคลี่เว็บไซต์ การพลิกหน้า PPT การติดโปสเตอร์ และภาพเคลื่อนไหวในแถบฟิล์ม รวมผลงานเป็นหนังสือแล้วส่งกลับให้เด็กผู้หญิง ใช้ขอบกระดาษฉีก รอยพู่กันสีกวอช แขนขากระดาษที่ขยับแยกส่วน และการพับ คงเพลงเดิมไว้โดยไม่เพิ่มเสียงบรรยาย “OpenDesign, what can you design?” → “It starts with your idea.” ตอนจบเธอกอดหนังสือ โบกมือขอบคุณ แล้วติดกระดาษ “What will you design?” ไว้ข้างหน้าต่างและประสานมือ เป็นคำเชิญให้ผู้ชมออกแบบผลงานของตนเอง",
+        "it": "Una storia di 20 secondi in carta ritagliata: una bambina chiede cosa sa progettare OpenDesign. Prototipi interattivi, siti, presentazioni, poster e animazioni compongono un libro di possibilità. Tutto inizia dalla tua idea. Crea un film di ritagli di carta di 20 secondi in 1920×1080, con scritte a mano in inglese. Mantieni la città notturna, la bambina, la lettera e l’aeroplano di carta. Mostra un prototipo che reagisce al tocco, un sito che si apre, pagine PPT che girano, un poster che viene incollato e una pellicola animata. Raccogli i lavori in un libro e rispediscilo alla bambina. Usa bordi strappati, pennellate a guazzo, arti di carta articolati e pieghe. Conserva la musica esistente senza voce narrante. “OpenDesign, what can you design?” → “It starts with your idea.” Alla fine abbraccia il libro, saluta per ringraziare, attacca “What will you design?” accanto alla finestra e unisce le mani: un invito a progettare rivolto al pubblico."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Bring Ideas to Life"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        },
+        {
+          "ref": "motion-design"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}

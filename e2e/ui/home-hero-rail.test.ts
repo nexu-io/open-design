@@ -1,10 +1,10 @@
 import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
 import {
-  clearHomeTemplate,
-  HOME_TYPE_ROW_CHIP_IDS,
-  HOME_TYPE_ROW_MORE_CHIP_IDS,
-  homeTypeRow,
+  HOME_TYPE_PRIMARY_CHIP_IDS,
+  HOME_TYPE_OTHER_CHIP_IDS,
+  homeTemplateTrigger,
+  openHomeTemplates,
   pickHomeTemplate,
 } from '@/playwright/home-hero';
 import {
@@ -593,11 +593,10 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('[P1] cold-start Home keeps the type row as its only surface while plugins settle at every breakpoint', async ({ page }) => {
-  // #7635 dropped the examples loading shell: a cold Home starts typeless, so
-  // there is nothing to reserve under the composer while the catalogue loads.
-  // The type row is the only surface, its pills stay out of service until the
-  // plugins land, and the examples only appear once a type is picked.
+test('[P0] cold-start Home keeps creation pills styled and disabled while plugins settle', async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    window.localStorage.removeItem('open-design:home-composer:chip');
+  });
   for (const viewport of [
     { width: 1280, height: 900 },
     { width: 800, height: 900 },
@@ -616,26 +615,61 @@ test('[P1] cold-start Home keeps the type row as its only surface while plugins 
     });
 
     await page.goto('/', { waitUntil: 'domcontentloaded' });
-    const typeRow = homeTypeRow(page);
+    await waitForLoadingToClear(page);
+    const typeRow = homeTemplateTrigger(page);
     try {
       await expect(typeRow).toBeVisible();
       await expect(page.getByTestId('home-hero-examples-loading')).toHaveCount(0);
       await expect(page.getByTestId('home-hero-plugin-presets')).toHaveCount(0);
-      await expect(typeRow.getByTestId('home-hero-type-pill-prototype')).toBeDisabled();
-      await expect(page.getByTestId('home-hero-type-pills-more')).toBeDisabled();
+      await expect(typeRow).toBeDisabled();
+      const primaryPill = page.getByTestId('home-hero-type-pill-prototype');
+      await expect(primaryPill).toBeDisabled();
+      const pillBackground = await primaryPill.evaluate((element) => getComputedStyle(element).backgroundColor);
+      await expect(typeRow).toHaveCSS('background-color', pillBackground);
+      await expect(typeRow).toHaveCSS('border-top-width', '1px');
+      await expect(typeRow).toHaveCSS('box-shadow', 'none');
+      await expect(page.getByTestId('home-hero-template-picker')).toHaveCount(0);
+      await expect(page.getByTestId('home-hero-submit')).toBeDisabled();
+      await testInfo.attach(`home-type-loading-${viewport.width}`, {
+        body: await page.screenshot(), contentType: 'image/png',
+      });
     } finally {
       releasePlugins();
     }
 
     await waitForLoadingToClear(page);
-    await expect(typeRow.getByTestId('home-hero-type-pill-prototype')).toBeEnabled();
-    await expect(page.getByTestId('home-hero-plugin-presets')).toHaveCount(0);
+    await expect(typeRow).toBeEnabled();
+    await expect(page.getByTestId('home-hero-type-pills')).toBeVisible();
+    await expect(page.getByTestId('home-hero-template-picker')).toHaveCount(0);
 
     await pickHomeTemplate(page, 'prototype');
     await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
-    await expect(typeRow).toHaveCount(0);
-    await clearHomeTemplate(page);
+    await expect(typeRow).toBeVisible();
+    await pickHomeTemplate(page, 'deck');
   }
+});
+
+test('[P0] failed initial catalog releases the type picker without claiming a default selection', async ({ page }) => {
+  let failCatalog = true;
+  await page.route('**/api/plugins', async (route) => {
+    await route.fulfill(failCatalog
+      ? { status: 503, json: { error: 'Catalog temporarily unavailable' } }
+      : { json: { plugins: HOME_PLUGINS } });
+  });
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  await expect(homeTemplateTrigger(page)).toBeEnabled();
+  await expect(page.getByTestId('home-hero-template-picker')).toHaveCount(0);
+  const menu = await openHomeTemplates(page);
+  await expect(menu.locator('[aria-selected="true"]')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+
+  failCatalog = false;
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  await expect(homeTemplateTrigger(page)).toBeEnabled();
+  await expect(page.getByTestId('home-hero-type-pills')).toBeVisible();
+  await expect(page.getByTestId('home-hero-template-picker')).toHaveCount(0);
 });
 
 test('[P1] last project list row keeps its overflow menu inside the viewport', async ({ page }) => {
@@ -1346,7 +1380,7 @@ test('[P1] home staged workspace context auto-sends into the first project run',
 test('[P2] home hero exposes the composer footer pickers and the full template set', async ({ page }) => {
   await gotoEntryHome(page);
 
-  await expect(page.getByTestId('home-hero-type-pills')).toBeVisible();
+  await expect(page.getByTestId('home-hero-template-picker')).toBeVisible();
   await expect(page.getByTestId('home-hero-design-system-picker')).toBeVisible();
   await expect(page.getByTestId('working-dir-picker')).toBeVisible();
 
@@ -1360,21 +1394,12 @@ test('[P2] home hero exposes the composer footer pickers and the full template s
   // The row is a curated entry set (product, 2026-09-16 / OPEND-3146): three
   // inline, every other create type behind 更多 in product order, so no kind
   // is stranded outside the row.
-  const typeRow = homeTypeRow(page);
-  for (const id of HOME_TYPE_ROW_CHIP_IDS) {
-    await expect(typeRow.getByTestId(`home-hero-type-pill-${id}`)).toBeVisible();
-  }
-  await page.getByTestId('home-hero-type-pills-more').click();
-  const overflow = page.getByTestId('home-hero-type-pills-popover');
-  const overflowIds = await overflow.locator('button[data-chip]').evaluateAll((buttons) =>
-    buttons.map((button) => button.getAttribute('data-chip')),
-  );
-  expect(overflowIds).toEqual([...HOME_TYPE_ROW_MORE_CHIP_IDS]);
-  for (const id of HOME_TYPE_ROW_MORE_CHIP_IDS) {
-    await expect(typeRow.getByTestId(`home-hero-type-pill-${id}`)).toHaveCount(0);
+  const menu = await openHomeTemplates(page);
+  for (const id of [...HOME_TYPE_PRIMARY_CHIP_IDS, ...HOME_TYPE_OTHER_CHIP_IDS]) {
+    await expect(menu.locator(`[data-chip="${id}"]`)).toBeVisible();
   }
   await page.keyboard.press('Escape');
-  await expect(overflow).toHaveCount(0);
+  await expect(menu).toHaveCount(0);
 });
 
 test('[P0] empty home composer submits the active prototype suggestion without explicit plugin authority', async ({ page }) => {
@@ -1382,8 +1407,6 @@ test('[P0] empty home composer submits the active prototype suggestion without e
   await routeRunsAccepted(page);
   await gotoEntryHome(page);
 
-  // Home starts typeless (#7635); picking Prototype is what narrows the
-  // placeholder carousel to that type's lines.
   await pickHomeTemplate(page, 'prototype');
   await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
   const createRequestPromise = page.waitForRequest((request) =>
@@ -1539,28 +1562,17 @@ test('[P1] brand-backed design system previews as a Brand Kit and carries into p
   expect(body.designSystemId).toBe(BRAND_DESIGN_SYSTEM.id);
 });
 
-// The horizontally-scrolling scenario-card rail this used to drive
-// (`.home-hero__scenario-cards` + `.home-hero__rail-edge`) was deleted with the
-// rest of the inline template rail in #5517; the radial picker is a fixed-size
-// ring with no scroll axis, so there is no overflow behaviour left to pin.
-//
-// The first-run "scroll up to reveal community templates" affordance went with
-// it, so its two specs are gone too.
 
-test('[P2] home template pill clears from its icon and opens nothing', async ({ page }) => {
+test('[P2] home template dropdown switches types and dismisses with Escape', async ({ page }) => {
   await gotoEntryHome(page);
-
   await pickHomeTemplate(page, 'deck');
-
-  // The pill is display + clear: no standalone reset, no dropdown behind it.
-  await expect(page.getByTestId('home-hero-template-reset')).toHaveCount(0);
-  await expect(page.getByTestId('home-hero-template-clear')).toHaveCount(1);
-  await page.getByTestId('home-hero-template-trigger').click();
-  await expect(page.getByTestId('home-hero-template-menu')).toHaveCount(0);
-
-  // Clearing gives the type row back — the only way to a different type.
-  await clearHomeTemplate(page);
-  await expect(page.getByTestId('home-hero-template-picker')).toHaveCount(0);
+  await expect(page.getByTestId('home-hero-template-clear')).toHaveCount(0);
+  const menu = await openHomeTemplates(page);
+  await expect(menu.locator('[data-chip="deck"]')).toHaveAttribute('aria-selected', 'true');
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+  await expect(homeTemplateTrigger(page)).toBeFocused();
+  await pickHomeTemplate(page, 'prototype');
 });
 
 test('[P1] home suggestion entry remains retryable after create failures', async ({ page }) => {
@@ -1594,9 +1606,7 @@ test('[P2] zh-CN home smoke exposes the localized creation type, design system, 
     'title',
     '上传文件、关联设计系统，或描述你想创作的内容',
   );
-  // Nothing picked yet, so the type row under the composer is the type control
-  // (the composer's own pill only exists once one is chosen).
-  await expect(page.getByTestId('home-hero-type-pills')).toBeVisible();
+  await expect(page.getByTestId('home-hero-template-picker')).toBeVisible();
   // The design-system control is permanent at the head of the foot row (设计
   // 系统常驻在添加附件后面), so it is there before any type is chosen.
   await expect(page.getByTestId('home-hero-design-system-trigger')).toBeVisible();
@@ -1608,19 +1618,15 @@ test('[P2] zh-CN home smoke exposes the localized creation type, design system, 
   await expect(page.getByTestId('home-hero-submit')).toHaveAccessibleName('运行');
 });
 
-test('[P1] home type row switches between types through the pill clear', async ({ page }) => {
+test('[P1] home dropdown switches between types', async ({ page }) => {
   await gotoEntryHome(page);
-  // Home starts empty now (no fresh-home default binding), so the type row is
-  // the entry point and both kinds are on it.
-  const typeRow = homeTypeRow(page);
-  await expect(typeRow.getByTestId('home-hero-type-pill-prototype')).toBeVisible();
-  await expect(typeRow.getByTestId('home-hero-type-pill-deck')).toBeVisible();
+  const typeRow = homeTemplateTrigger(page);
+  await expect(typeRow).toBeVisible();
+  await expect(typeRow).toBeVisible();
 
   await pickHomeTemplate(page, 'deck');
   await expect(page.getByTestId('home-hero-template-trigger')).toContainText(/Slide deck|幻灯片|投影片/i);
 
-  // Switching goes clear → row → new type; the pill follows the new one and
-  // deck-only footer chrome drops away.
   await pickHomeTemplate(page, 'prototype');
   await expect(page.getByTestId('home-hero-footer-option-speakerNotes')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-template-trigger')).toContainText(/Prototype|原型/i);
@@ -1639,7 +1645,7 @@ test('[P1] home type row switches between types through the pill clear', async (
 test('[P1] home creation picker switches non-media modes without surfacing media-only footer options', async ({ page }) => {
   await gotoEntryHome(page);
 
-  await expect(page.getByTestId('home-hero-type-pills')).toBeVisible();
+  await expect(page.getByTestId('home-hero-template-picker')).toBeVisible();
   await expect(page.getByTestId('home-hero-footer-option-duration')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-footer-option-audioType')).toHaveCount(0);
 
@@ -1686,7 +1692,7 @@ test('[P1] expired plugin refresh keeps known Home creation types actionable aft
   page,
 }) => {
   await gotoEntryHome(page);
-  await expect(homeTypeRow(page).getByTestId('home-hero-type-pill-prototype')).toBeEnabled();
+  await expect(homeTemplateTrigger(page)).toBeEnabled();
 
   // Age the module-level catalog past its 10-second TTL, then leave Home
   // through an in-app route so HomeView really unmounts while the JS module and
@@ -1717,9 +1723,9 @@ test('[P1] expired plugin refresh keeps known Home creation types actionable aft
     // The revalidation is deliberately unresolved. The latest successful
     // catalog must seed the remount synchronously instead of greying every
     // creation type until this request finishes.
-    const remountedRow = homeTypeRow(page);
-    await expect(remountedRow.getByTestId('home-hero-type-pill-prototype')).toBeEnabled();
-    await expect(remountedRow.getByTestId('home-hero-type-pill-deck')).toBeEnabled();
+    const remountedRow = homeTemplateTrigger(page);
+    await expect(remountedRow).toBeEnabled();
+    await expect(remountedRow).toBeEnabled();
   } finally {
     releaseRefresh();
   }
@@ -1945,11 +1951,8 @@ test('[P2] switching the selected hero template swaps preset chrome and keeps th
   await expect(page.getByTestId('home-hero-footer-option-designSystem')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-footer-option-ratio')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-footer-option-duration')).toHaveCount(0);
-  // Every type is still reachable from any selection: clearing gives the row
-  // back, and a type outside the row (Live artifact) still lands through the
-  // hand-off path the helper drives.
-  await clearHomeTemplate(page);
-  await expect(homeTypeRow(page).getByTestId('home-hero-type-pill-prototype')).toBeVisible();
+
+  await expect(homeTemplateTrigger(page)).toBeVisible();
   await pickHomeTemplate(page, 'live-artifact');
   await expect(page.getByTestId('home-hero-template-trigger')).toContainText(/Live artifact|实时/i);
 });
@@ -2282,3 +2285,49 @@ async function selectHomeDesignSystem(page: Page, id: string | null) {
   }
   await expect(popover).toHaveCount(0);
 }
+
+test('[P1] invitation banner follows the composer when a suggested prompt expands it', async ({ page }, testInfo) => {
+  await routeSignedOutVelaStatus(page);
+  await seedBrowserLocale(page, 'en');
+  await gotoEntryHome(page);
+  const banner = page.getByRole('region', { name: 'Invite', exact: true });
+  await expect(banner).toBeVisible();
+  await expect.poll(() => banner.evaluate(element => element.parentElement?.getAttribute('data-testid'))).toBe('home-hero');
+  await expect.poll(() => banner.evaluate(element => {
+    const next = element.nextElementSibling;
+    return next ? next.getBoundingClientRect().top - element.getBoundingClientRect().bottom : -1;
+  })).toBe(76);
+  await testInfo.attach('invitation-prompt-initial', { body: await page.screenshot(), contentType: 'image/png' });
+
+  await page.getByTestId('home-hero-type-pill-prototype').click();
+  const preset = page.getByTestId('home-hero-plugin-preset').first();
+  await expect(preset).toBeVisible();
+  await preset.click();
+  await expect.poll(() => page.getByTestId('home-hero-input').textContent()).not.toBe('');
+  await page.getByTestId('home-hero-input').fill('Create a detailed product page with an overview, navigation, pricing and frequently asked questions. '.repeat(20));
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 900, height: 700 }, { width: 375, height: 800 }]) {
+    await page.setViewportSize(viewport);
+    await expect.poll(async () => banner.evaluate(element => {
+      const next = element.nextElementSibling;
+      const rect = element.getBoundingClientRect();
+      return Boolean(next && rect.bottom <= next.getBoundingClientRect().top && !['absolute', 'fixed'].includes(getComputedStyle(element).position));
+    })).toBe(true);
+    await expect.poll(() => banner.evaluate(element => {
+      const next = element.nextElementSibling;
+      const scroll = element.closest('.entry-main--scroll');
+      if (!next || !scroll) return false;
+      const rect = element.getBoundingClientRect();
+      const gap = next.getBoundingClientRect().top - rect.bottom;
+      // A03 lifts at most 56px above the reserved row, while a growing
+      // composer must not push the invitation into the clipped toolbar edge.
+      return gap >= 20 && gap <= 76.5
+        && rect.top >= Math.max(0, scroll.getBoundingClientRect().top) + 15.5;
+    })).toBe(true);
+    await testInfo.attach(`invitation-prompt-${viewport.width}`, { body: await page.screenshot(), contentType: 'image/png' });
+  }
+  const title = page.locator('.home-hero__title');
+  const titleTop = await title.evaluate(element => element.getBoundingClientRect().top);
+  await banner.getByRole('button', { name: 'Dismiss invitation banner' }).click();
+  await expect(banner).toHaveCount(0);
+  await expect.poll(() => title.evaluate(element => element.getBoundingClientRect().top)).toBe(titleTop);
+});

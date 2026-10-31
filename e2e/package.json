@@ -1,6 +1,6 @@
 {
   "name": "@open-design/e2e",
-  "version": "0.22.1",
+  "version": "0.25.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -19,6 +19,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
+    "@typescript/native": "npm:typescript@7.0.2",
     "@aws-sdk/client-s3": "3.1050.0",
     "@ffmpeg-installer/ffmpeg": "1.1.0",
     "@ffprobe-installer/ffprobe": "2.1.2",
@@ -32,7 +33,6 @@
     "pixelmatch": "7.2.0",
     "pngjs": "7.0.0",
     "tsx": "4.22.3",
-    "typescript": "5.9.3",
     "vitest": "4.1.6"
   },
   "engines": {

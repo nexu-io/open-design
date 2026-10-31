@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { runProgressSteps } from '../../src/runtime/run-progress';
+import { IN_FLIGHT_TOOL_INPUT_MARKER } from '../../src/runtime/tool-events';
 import type { AgentEvent, ChatMessage } from '../../src/types';
 
 function toolUse(id: string, name: string, input: unknown): AgentEvent {
@@ -95,6 +96,46 @@ describe('runProgressSteps', () => {
     expect(steps).toHaveLength(12);
     // Newest first: the cap drops the oldest calls, not the current one.
     expect(steps[0]?.target).toBe('file-39.html');
+  });
+
+  it('updates one pending call instead of adding each in-flight snapshot to the trail', () => {
+    const steps = runProgressSteps([assistant([
+      toolUse('read-call', 'read', { [IN_FLIGHT_TOOL_INPUT_MARKER]: true }),
+      toolUse('read-call', 'read', { filePath: 'index.html', [IN_FLIGHT_TOOL_INPUT_MARKER]: true }),
+    ])]);
+
+    expect(steps).toHaveLength(1);
+    expect(steps[0]).toMatchObject({ id: 'read-call', category: 'read', target: 'index.html' });
+  });
+
+  it('replaces in-flight snapshots with the terminal input without losing a write anchor', () => {
+    const steps = runProgressSteps([assistant([
+      toolUse('write-call', 'write', { [IN_FLIGHT_TOOL_INPUT_MARKER]: true }),
+      toolUse('write-call', 'write', { filePath: 'index.html', [IN_FLIGHT_TOOL_INPUT_MARKER]: true }),
+      toolUse('write-call', 'write', { filePath: 'index.html', content: '<h1>Team task workspace</h1>' }),
+      { kind: 'tool_result', toolUseId: 'write-call', content: 'Written', isError: false },
+    ])]);
+
+    expect(steps).toHaveLength(1);
+    expect(steps[0]).toMatchObject({ id: 'write-call', target: 'index.html', anchor: 'Team task workspace' });
+  });
+
+  it('counts distinct calls before applying the trail limit, including replayed terminal events', () => {
+    const events = Array.from({ length: 15 }, (_, i) => {
+      const id = `call-${i}`;
+      const call = toolUse(id, 'read', { filePath: `file-${i}.html` });
+      return [
+        toolUse(id, 'read', { [IN_FLIGHT_TOOL_INPUT_MARKER]: true }),
+        toolUse(id, 'read', { filePath: `file-${i}.html`, [IN_FLIGHT_TOOL_INPUT_MARKER]: true }),
+        call,
+        call,
+      ];
+    }).flat();
+    const steps = runProgressSteps([assistant(events)]);
+
+    expect(steps.map((step) => step.id)).toEqual(
+      Array.from({ length: 12 }, (_, i) => `call-${14 - i}`),
+    );
   });
 });
 

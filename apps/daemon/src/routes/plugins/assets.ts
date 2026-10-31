@@ -1,6 +1,8 @@
 import type { Express, Request, Response } from 'express';
 import type * as BetterSqlite3 from 'better-sqlite3';
 import path from 'node:path';
+import { inlinePluginPreviewFonts } from './preview-fonts.js';
+import { findRealTagEnd, HTML_TAG_PATTERNS, prependAfterDoctype } from '@open-design/contracts/runtime/html-injection-points';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import {
   resolveOptionalLocalWorkspaceRequestAuthority,
@@ -192,17 +194,19 @@ export function registerPluginAssetRoutes(app: Express, deps: RegisterPluginAsse
           } catch {}
         }
       }
-      res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self' data: blob:; media-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'none'; frame-ancestors 'self'");
+      res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'none'; frame-ancestors 'self'");
       res.setHeader('X-Content-Type-Options', 'nosniff');
       const ext = path.extname(contentPath).toLowerCase();
       const ct = ext === '.html' ? 'text/html; charset=utf-8' : ext === '.js' ? 'application/javascript; charset=utf-8' : ext === '.css' ? 'text/css; charset=utf-8' : ext === '.json' ? 'application/json; charset=utf-8' : ext === '.md' || ext === '.markdown' ? 'text/markdown; charset=utf-8' : ext === '.svg' ? 'image/svg+xml' : ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'application/octet-stream';
       res.setHeader('Content-Type', ct);
       if (ext === '.html' && typeof contentRel === 'string') {
+        const documentDir = path.posix.dirname(contentRel.replace(/\\/g, '/'));
+        const htmlWithFonts = await inlinePluginPreviewFonts(buf.toString('utf8'), plugin.fsPath, documentDir);
         buf = Buffer.from(
           rewritePluginAssetUrls(
-            buf.toString('utf8'),
+            htmlWithFonts,
             routeParam(req.params.id),
-            path.posix.dirname(contentRel.replace(/\\/g, '/')),
+            documentDir,
             navigationScopeQuery(authority),
           ),
           'utf8',
@@ -245,27 +249,50 @@ export function registerPluginAssetRoutes(app: Express, deps: RegisterPluginAsse
         : `${suffix.slice(0, hashAt)}&${scope}${suffix.slice(hashAt)}`;
     };
     const safeBase = baseDir === '.' ? '' : baseDir;
+    // Maps a document-relative reference to the plugin asset route; null
+    // leaves absolute, fragment, data:/blob: and escaping references alone.
+    const pluginAssetUrl = (value: string): string | null => {
+      if (!value || value.startsWith('#') || value.startsWith('/') || value.startsWith('//') || value.includes('\0') || /^[a-z][a-z0-9+.-]*:/i.test(value)) return null;
+      const splitAt = value.search(/[?#]/);
+      const rel = splitAt === -1 ? value : value.slice(0, splitAt);
+      const suffix = splitAt === -1 ? '' : value.slice(splitAt);
+      const normalized = path.posix.normalize(path.posix.join(safeBase, rel));
+      if (normalized === '.' || normalized === '..' || normalized.startsWith('../') || path.posix.isAbsolute(normalized)) return null;
+      return `/api/plugins/${encodeURIComponent(pluginId)}/asset/${normalized}${scopeAssetSuffix(suffix)}`;
+    };
     const withAttrs = html.replace(/(\s(?:src|href|poster)\s*=\s*)(['"])([^'"]+)(\2)/gi, (match, attr, quote, rawValue, closeQuote) => {
       const value = String(rawValue).trim();
       if (/^https?:\/\//i.test(value) && !/\bhref\b/i.test(String(attr)) && isCacheableExternalUrl(value)) {
         return `${attr}${quote}${assetCacheRewriteUrl(value)}${closeQuote}`;
       }
-      if (!value || value.startsWith('#') || value.startsWith('/') || value.startsWith('//') || value.includes('\0') || /^[a-z][a-z0-9+.-]*:/i.test(value)) return match;
-      const splitAt = value.search(/[?#]/);
-      const rel = splitAt === -1 ? value : value.slice(0, splitAt);
-      const suffix = splitAt === -1 ? '' : value.slice(splitAt);
-      const normalized = path.posix.normalize(path.posix.join(safeBase, rel));
-      if (normalized === '.' || normalized === '..' || normalized.startsWith('../') || path.posix.isAbsolute(normalized)) return match;
-      return `${attr}${quote}/api/plugins/${encodeURIComponent(pluginId)}/asset/${normalized}${scopeAssetSuffix(suffix)}${closeQuote}`;
+      const rewritten = pluginAssetUrl(value);
+      return rewritten === null ? match : `${attr}${quote}${rewritten}${closeQuote}`;
     });
-    const withQuoted = withAttrs.replace(/(['"])(https?:\/\/[^'"]+)\1/g, (match, quote, rawValue) => {
+    // Inline stylesheets reference bundled fonts and images with url(); the
+    // preview URL is not the plugin folder, so they need the same mapping.
+    const withStyles = withAttrs.replace(/(<style\b[^>]*>)([\s\S]*?)(<\/style>)/gi, (_match, open, css, close) => {
+      const rewrittenCss = String(css).replace(/url\(\s*(['"]?)([^'")\s]+)\1\s*\)/gi, (urlMatch, quote, rawValue) => {
+        const rewritten = pluginAssetUrl(String(rawValue).trim());
+        return rewritten === null ? urlMatch : `url(${quote}${rewritten}${quote})`;
+      });
+      return `${open}${rewrittenCss}${close}`;
+    });
+    const withQuoted = withStyles.replace(/(['"])(https?:\/\/[^'"]+)\1/g, (match, quote, rawValue) => {
       const value = String(rawValue).trim();
       return isCacheableExternalUrl(value) ? `${quote}${assetCacheRewriteUrl(value)}${quote}` : match;
     });
-    return withQuoted.replace(/url\(\s*(https?:\/\/[^)'"\s]+)\s*\)/gi, (match, rawValue) => {
+    const rewritten = withQuoted.replace(/url\(\s*(https?:\/\/[^)'"\s]+)\s*\)/gi, (match, rawValue) => {
       const value = String(rawValue).trim();
       return isCacheableExternalUrl(value) ? `url(${assetCacheRewriteUrl(value)})` : match;
     });
+    // Script-created Image/src URLs resolve against the document, not against
+    // the inline script or the rewritten static attributes. Keep CFG strings
+    // untouched (templates also use them to identify image fields).
+    const directory = safeBase ? `${safeBase.split('/').map(encodeURIComponent).join('/')}/` : '';
+    const base = `<base href="/api/plugins/${encodeURIComponent(pluginId)}/asset/${directory}">`;
+    const headEnd = findRealTagEnd(rewritten, HTML_TAG_PATTERNS.headOpen);
+    if (headEnd >= 0) return rewritten.slice(0, headEnd) + base + rewritten.slice(headEnd);
+    return prependAfterDoctype(rewritten, base);
   }
 
   function collectPluginPreviewCandidates(plugin: InstalledPluginLike): string[] {
@@ -368,12 +395,18 @@ export function registerPluginAssetRoutes(app: Express, deps: RegisterPluginAsse
       } catch {
         return res.status(404).json({ error: 'asset not found' });
       }
-      let buf;
-      try { buf = await fsp.readFile(resolved); } catch { return res.status(404).json({ error: 'asset not found' }); }
-      res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self' data: blob:; media-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'none'; frame-ancestors 'self'");
+      res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'none'; frame-ancestors 'self'");
       res.setHeader('X-Content-Type-Options', 'nosniff');
       const ext = path.extname(resolved).toLowerCase();
-      const ct = ext === '.html' ? 'text/html; charset=utf-8' : ext === '.js' ? 'application/javascript; charset=utf-8' : ext === '.css' ? 'text/css; charset=utf-8' : ext === '.json' ? 'application/json; charset=utf-8' : ext === '.md' || ext === '.markdown' ? 'text/markdown; charset=utf-8' : ext === '.svg' ? 'image/svg+xml' : ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'application/octet-stream';
+      // Media seeking requires byte ranges and the media MIME type. Path and
+      // workspace checks above apply before Express serves any partial bytes.
+      if (['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.mp4', '.webm'].includes(ext)) {
+        return res.sendFile(resolved);
+      }
+      let buf;
+      try { buf = await fsp.readFile(resolved); } catch { return res.status(404).json({ error: 'asset not found' }); }
+      const fontTypes: Record<string, string> = { '.ttf': 'font/ttf', '.otf': 'font/otf', '.woff': 'font/woff', '.woff2': 'font/woff2' };
+      const ct = ext === '.html' ? 'text/html; charset=utf-8' : ext === '.js' ? 'application/javascript; charset=utf-8' : ext === '.css' ? 'text/css; charset=utf-8' : ext === '.json' ? 'application/json; charset=utf-8' : ext === '.md' || ext === '.markdown' ? 'text/markdown; charset=utf-8' : ext === '.svg' ? 'image/svg+xml' : ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : fontTypes[ext] ?? 'application/octet-stream';
       res.setHeader('Content-Type', ct);
       res.send(buf);
     } catch (err) {

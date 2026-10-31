@@ -27,6 +27,7 @@ import { listDesignSystems } from './design-systems/index.js';
 import { listFiles, resolveProjectDir } from './projects.js';
 import { registerLibraryAsset } from './library.js';
 import { findReferencedAssetByOrigin, hasDesignSystemSource } from './library-store.js';
+import { observeRead } from './services/daemon-health.js';
 
 type SqliteDb = Database.Database;
 
@@ -230,6 +231,12 @@ async function reconcileDesignSystems(
  * absence = "the user dropped it in" (→ manual-upload).
  */
 function buildProducedMap(db: SqliteDb, projectId: string): Map<string, string> {
+  return observeRead('library_produced_map', () => buildProducedMapUnobserved(db, projectId), {
+    rows: (result) => result.size,
+  });
+}
+
+function buildProducedMapUnobserved(db: SqliteDb, projectId: string): Map<string, string> {
   const produced = new Map<string, string>();
   let conversations: Array<{ id: string }>;
   try {

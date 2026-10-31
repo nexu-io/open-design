@@ -4,7 +4,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
 import {
-  strategyTaskProvesDelivery,
   todoSnapshotHasUnfinishedWork,
   turnEndedByAskingUser,
 } from '@open-design/contracts';
@@ -27,6 +26,7 @@ import {
 } from '../run-analytics-observability.js';
 import {
   interruptDurableRunAfterDaemonRestart,
+  lastRecordedRunActivityAt,
   RESTART_ERROR_CODE,
   RESTART_ERROR_MESSAGE,
 } from './run-restart-recovery.js';
@@ -580,10 +580,16 @@ function durableRunState(run) {
       ? { strategyRolloutDecision: run.strategyRolloutDecision }
       : {}),
     agentId: run.agentId,
+    ...(Array.isArray(run.diagnosticIncidentIds) ? { diagnosticIncidentIds: run.diagnosticIncidentIds } : {}),
     ...(run.appVersionInfo ? { appVersionInfo: run.appVersionInfo } : {}),
     status: run.status,
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
+    // Absent and null mean different things: null is a run created here that
+    // has not started yet; absent is a record that predates the stamp, which
+    // a reader must fall back from (to createdAt), not treat as never started.
+    // Persisting null for it would freeze that mistake into state.json.
+    ...(run.startedAt !== undefined ? { startedAt: run.startedAt } : {}),
     terminalAt: run.terminalAt ?? null,
     exitCode: run.exitCode,
     signal: run.signal,
@@ -740,6 +746,8 @@ export function createChatRunService({
   // outlives buffer truncation. Kept generic here: this service does not
   // interpret event semantics, it just hands each record to the observer.
   onEventEmitted = null,
+  // Internal evidence only; observer failure must never interrupt lifecycle work.
+  onDiagnosticLifecycle = null,
   // Optional synchronous hook invoked immediately before the single physical
   // terminal transition. The daemon uses this to converge durable logical
   // task state before the `end` event is persisted or published. Keeping the
@@ -757,6 +765,9 @@ export function createChatRunService({
   // use the atomic writer above; the result carries only a bounded error type.
   writeDurableState = atomicWriteJson,
 }) {
+  const observeDiagnosticLifecycle = (run, kind, at, errorType = undefined) => {
+    try { onDiagnosticLifecycle?.(run, kind, at, errorType); } catch { /* optional evidence only */ }
+  };
   const runs = new Map();
   const runIdsByClientRequestId = new Map();
   const runIdsByPluginWorkflowId = new Map();
@@ -836,13 +847,16 @@ export function createChatRunService({
     const statePath = path.join(runsLogDir, id, 'state.json');
     const state = readDurableRunState(statePath);
     if (!state || state.id !== id) return null;
-    const interruptedAfterRestart =
-      interruptDurableRunAfterDaemonRestart(state);
+    const eventsLogPath = path.join(runsLogDir, id, 'events.jsonl');
+    const events = readDurableRunEvents(eventsLogPath);
+    const interruptedAfterRestart = interruptDurableRunAfterDaemonRestart(
+      state,
+      Date.now(),
+      lastRecordedRunActivityAt(state, events),
+    );
     if (interruptedAfterRestart) writeDurableState(statePath, state);
     backfillDurableTerminal(state);
     if (!TERMINAL_RUN_STATUSES.has(state.status)) return null;
-    const eventsLogPath = path.join(runsLogDir, id, 'events.jsonl');
-    const events = readDurableRunEvents(eventsLogPath);
     if (
       interruptedAfterRestart
       || state.terminalRecoveryReason === 'daemon_restart'
@@ -850,8 +864,13 @@ export function createChatRunService({
       const timestamp = state.terminalAt ?? state.updatedAt;
       const nextEventId =
         events.reduce((max, record) => Math.max(max, record.id), 0) + 1;
-      events.push(
-        {
+      // The replayed terminal frame says what the record says. A Run the
+      // restart interrupted is stopped (P0-24 Q5), so it ends `canceled` with
+      // no error frame; an older record that was failed this way keeps its
+      // failed replay, including the restart error it was reported with.
+      const restartStopped = state.status === 'canceled';
+      if (!restartStopped) {
+        events.push({
           id: nextEventId,
           event: 'error',
           data: {
@@ -862,21 +881,21 @@ export function createChatRunService({
             },
           },
           timestamp,
+        });
+      }
+      events.push({
+        id: restartStopped ? nextEventId : nextEventId + 1,
+        event: 'end',
+        data: {
+          code: restartStopped ? null : 1,
+          signal: null,
+          status: restartStopped ? 'canceled' : 'failed',
+          terminalAt: timestamp,
+          resumable: false,
+          endedWithUnfinishedWork: Boolean(state.endedWithUnfinishedWork),
         },
-        {
-          id: nextEventId + 1,
-          event: 'end',
-          data: {
-            code: 1,
-            signal: null,
-            status: 'failed',
-            terminalAt: timestamp,
-            resumable: false,
-            endedWithUnfinishedWork: Boolean(state.endedWithUnfinishedWork),
-          },
-          timestamp,
-        },
-      );
+        timestamp,
+      });
     }
     const run = {
       ...state,
@@ -1025,6 +1044,8 @@ export function createChatRunService({
       status: 'queued',
       createdAt: now,
       updatedAt: now,
+      /** Stamped by the first `start` event; null while still queued. */
+      startedAt: null as number | null,
       terminalAt: null,
       events: [],
       nextEventId: 1,
@@ -1246,6 +1267,7 @@ export function createChatRunService({
         },
       });
     }
+    if (!result.ok) observeDiagnosticLifecycle(run, 'terminal_persistence_failure', Date.now(), result.errorType ?? 'unknown');
     return result;
   };
 
@@ -1499,6 +1521,9 @@ export function createChatRunService({
     run.events.push(record);
     if (run.events.length > maxEvents) run.events.splice(0, run.events.length - maxEvents);
     run.updatedAt = timestamp;
+    // The first `start` is when the Run left the queue and began executing.
+    // A retry restart emits `start` again; the Run started at the first one.
+    if (event === 'start' && run.startedAt == null) run.startedAt = timestamp;
     // State writes are synchronous so they survive process termination. Keep
     // them on lifecycle boundaries only: agent/text deltas can arrive many
     // times per second and are already streamed to events.jsonl.
@@ -1536,6 +1561,9 @@ export function createChatRunService({
     status: run.status,
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
+    // Same rule as the durable record: omit a missing stamp rather than send
+    // null, which clients read as "has not started" and drop from the fold.
+    ...(run.startedAt !== undefined ? { startedAt: run.startedAt } : {}),
     terminalAt: run.terminalAt ?? null,
     cancelRequested: !!run.cancelRequested,
     cancelOrigin: run.cancelOrigin ?? null,
@@ -1629,17 +1657,9 @@ export function createChatRunService({
     // if the last TodoWrite looked done. Absence of any TodoWrite snapshot keeps
     // the flag false, so a text-only answer stays "Completed".
     //
-    // A settled strategy verdict outranks the TodoWrite narration: the task
-    // reaches `completed` only once the deliverable was verified on disk, and
-    // the agent's own checklist is routinely left with a stale `pending` item.
-    // Truncation stays an independent term — a cut-off generation is unfinished
-    // whatever verdict was recorded.
-    // The normal composer teaches the model this run's nonce; a matching
-    // marker plus conclusion is therefore stronger than a stale self-reported
-    // Todo snapshot. OD Next's frozen Harness prompt currently bypasses that
-    // per-turn instruction, so its normal completion authority remains
-    // strategyTaskProvesDelivery below (the marker path is unreachable unless
-    // a future frozen bundle explicitly adopts the protocol).
+    // File evidence and task completion do not cancel unfinished todos.
+    // Keep the existing authenticated completion signal and question handoff;
+    // truncation remains independent and always counts as unfinished.
     const authenticatedDoneProvesDelivery =
       status === 'succeeded' && run.authenticatedDoneConclusion === true;
     // A clarification turn writes its plan, asks its question, and exits 0. It
@@ -1655,8 +1675,8 @@ export function createChatRunService({
       status === 'succeeded' && turnEndedByAskingUser(run.askUserScanText);
     // Counter-evidence the host holds against its own turn. It is a term of its
     // own, deliberately OUTSIDE the marker/todo clause below, because that whole
-    // clause is the agent's account of its own work: the completion marker, the
-    // strategy verdict and the TodoWrite snapshot can each veto "unfinished",
+    // clause is the agent's account of its own work: the completion marker and
+    // TodoWrite snapshot can each veto "unfinished",
     // and a run that apologised for a failed generation reached `succeeded` with
     // a green check because the marker vetoed a `cancelled` todo. A failure the
     // daemon watched happen is not something the turn's own narration may
@@ -1669,8 +1689,7 @@ export function createChatRunService({
     run.endedWithUnfinishedWork =
       Boolean(run.truncatedMidTurn)
       || hostRecordedDeliveryFailure
-      || (!strategyTaskProvesDelivery(run.strategyTask)
-        && !authenticatedDoneProvesDelivery
+      || (!authenticatedDoneProvesDelivery
         && !endedByAskingUser
         && todoSnapshotHasUnfinishedWork(run.lastTodoSnapshot));
     // Commit the terminal Run snapshot before exposing its terminal event. The
@@ -2182,6 +2201,17 @@ export function createChatRunService({
     return true;
   };
 
+  /** Like signalProcessGroup, but true only when the signal was delivered. */
+  const deliverProcessGroupSignal = (processGroupId, signal) => {
+    if (process.platform === 'win32' || !Number.isInteger(processGroupId)) return false;
+    try {
+      process.kill(-processGroupId, signal);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const processGroupIsAlive = (processGroupId) => {
     if (process.platform === 'win32' || !Number.isInteger(processGroupId)) return false;
     try {
@@ -2211,12 +2241,18 @@ export function createChatRunService({
    * bounded SIGTERM/SIGKILL escalation while the direct child is still alive.
    * The captured child/pgid key makes repeated verdict/close callbacks
    * idempotent and prevents a retry generation from targeting its successor.
+   *
+   * `onChildSignal` runs once, after the first signal was actually delivered
+   * to a direct child that was still alive, i.e. only when the daemon, not
+   * the child itself, ends it. A child that exits during `gracefulWaitMs`, a
+   * child already gone when signalled, and a failed dispatch never trigger it.
    */
   const terminateProcessTree = (run, child, processGroupId, {
     gracefulWaitMs = 0,
     termGraceMs = cancelGraceMs(),
     killGraceMs = forceWaitMs(),
     reason = 'run_terminal',
+    onChildSignal = undefined as (() => void) | undefined,
   } = {}) => {
     const key = child ?? processGroupId;
     run.processTreeTerminations ??= new Map();
@@ -2225,6 +2261,12 @@ export function createChatRunService({
     }
 
     run.processTreeTerminationPending = (run.processTreeTerminationPending ?? 0) + 1;
+    let childSignalReported = false;
+    const reportChildSignal = () => {
+      if (childSignalReported) return;
+      childSignalReported = true;
+      onChildSignal?.();
+    };
     const task = (async () => {
       if (process.platform !== 'win32' && Number.isInteger(processGroupId)) {
         if (!processGroupIsAlive(processGroupId)) {
@@ -2237,11 +2279,13 @@ export function createChatRunService({
           return { quiescent: true, forced: false, remainingPids: [] };
         }
         if (gracefulWaitMs > 0) closeRunStdin(run);
-        signalProcessGroup(processGroupId, 'SIGTERM');
+        const childAliveBeforeTerm = !childHasExited(child);
+        if (deliverProcessGroupSignal(processGroupId, 'SIGTERM') && childAliveBeforeTerm) reportChildSignal();
         if (await waitForProcessGroupExit(processGroupId, termGraceMs)) {
           return { quiescent: true, forced: false, remainingPids: [] };
         }
-        signalProcessGroup(processGroupId, 'SIGKILL');
+        const childAliveBeforeKill = !childHasExited(child);
+        if (deliverProcessGroupSignal(processGroupId, 'SIGKILL') && childAliveBeforeKill) reportChildSignal();
         const quiescent = await waitForProcessGroupExit(processGroupId, killGraceMs);
         return {
           quiescent,
@@ -2258,11 +2302,11 @@ export function createChatRunService({
           return { quiescent: true, forced: false, remainingPids: [] };
         }
         if (gracefulWaitMs > 0) closeRunStdin(run);
-        signalChildProcess(child, null, 'SIGTERM');
+        if (signalChildProcess(child, null, 'SIGTERM')) reportChildSignal();
         if (await waitForChildExit(child, termGraceMs)) {
           return { quiescent: true, forced: false, remainingPids: [] };
         }
-        signalChildProcess(child, null, 'SIGKILL');
+        if (signalChildProcess(child, null, 'SIGKILL')) reportChildSignal();
         const quiescent = await waitForChildExit(child, killGraceMs);
         return {
           quiescent,
@@ -2286,7 +2330,9 @@ export function createChatRunService({
       const terminationPids = pids.length > 0 || childExitedDuringGrace
         ? pids
         : [child.pid];
-      const result = await stopProcesses(terminationPids, { termGraceMs, killGraceMs });
+      const childStillOwned = !childExitedDuringGrace && !childHasExited(child);
+      const onSignal = (pid) => { if (childStillOwned && pid === child.pid) reportChildSignal(); };
+      const result = await stopProcesses(terminationPids, { termGraceMs, killGraceMs, onSignal });
 
       const verificationSnapshots = await listProcessSnapshots();
       enumerationVerified &&= verificationSnapshots.length > 0;
@@ -2304,6 +2350,7 @@ export function createChatRunService({
         const followUp = await stopProcesses(remainingPids, {
           termGraceMs: 0,
           killGraceMs,
+          onSignal,
         });
         forcedPids = [...new Set([...forcedPids, ...followUp.forcedPids])];
         const finalSnapshots = await listProcessSnapshots();
@@ -2452,6 +2499,7 @@ export function createChatRunService({
     run.cancelRequested = true;
     run.cancelOrigin = origin;
     run.updatedAt = Date.now();
+    if (origin === 'user_stop') observeDiagnosticLifecycle(run, 'user_cancel', run.updatedAt);
     clearPendingRetryRestart(run);
     if (!run.child) {
       closeRunStdin(run);

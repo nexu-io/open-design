@@ -37,6 +37,14 @@ afterEach(() => {
 // powers the project composer be exercised under jsdom on the homepage.
 
 if (typeof window !== 'undefined') {
+  if (typeof window.matchMedia !== 'function') {
+    window.matchMedia = (query) => ({
+      matches: false, media: query, onchange: null,
+      addListener: () => {}, removeListener: () => {},
+      addEventListener: () => {}, removeEventListener: () => {},
+      dispatchEvent: () => false,
+    });
+  }
   const zeroRect = (): DOMRect => ({
     x: 0,
     y: 0,

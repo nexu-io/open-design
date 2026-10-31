@@ -2,7 +2,14 @@
 name: gsap-utils
 description: |
   Official GSAP skill for gsap.utils — clamp, mapRange, normalize, interpolate, random, snap, toArray, wrap, pipe. Use when the user asks about gsap.utils, clamp, mapRange, random, snap, toArray, wrap, or helper utilities in GSAP.
+zh_name: "GSAP · 动画工具函数"
+zh_description: "GSAP 动画工具：数值映射、插值、范围限制、随机和吸附。"
 triggers:
+  - "动效"
+  - "动画"
+  - "motion"
+  - "动画工具"
+  - "插值"
   - "gsap utils"
   - "clamp animation value"
   - "maprange"
@@ -10,8 +17,9 @@ triggers:
   - "gsap random"
 license: MIT
 od:
-  mode: prototype
+  mode: utility
   category: animation-motion
+  source-commit: aed9cfd3277740755f6bfc1155c7aa645403b760
   upstream: "https://github.com/greensock/gsap-skills"
 ---
 

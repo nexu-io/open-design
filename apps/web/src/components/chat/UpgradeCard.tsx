@@ -53,7 +53,20 @@ import styles from './UpgradeCard.module.css';
 export interface UpgradeCardProps {
   /** 钱包余额(美元)。来自 `AmrWalletSnapshot.balanceUsd` */
   balanceUsd: number;
+  /** Frozen r506 F12/F15: the same dark card reports a full Link slot pool. */
+  concurrencyAudience?: 'owner' | 'member';
   onUpgrade?: () => void;
+  /**
+   * 这张卡是「那一轮跑到一半死在钱上」的凭据时,由宿主告诉它**谁在看**
+   * (产品《报错文案》S15 · OPEND-2849):
+   *
+   *   owner   有充值权限 →「额度不足，任务已暂停」+「当前额度不足，请充值或升级套餐后再试。」
+   *   member  无充值权限 →「团队额度不足，任务已暂停」+「当前团队额度不足，请联系团队空间所有者充值或升级订阅。」
+   *
+   * 只影响**归零**那一档的说明句;余额偏低那一档(`whyLow`)、剩余额度数字和〔升级〕
+   * 都不变。不传 = 不是一轮的凭据(发送前被拦下的尾部那张),仍说「现在无法开始新任务」。
+   */
+  pausedAudience?: 'owner' | 'member';
 }
 
 /**
@@ -77,16 +90,20 @@ export function formatBalanceUsd(balanceUsd: number): string {
   return `$${safe.toFixed(2)}`;
 }
 
-export function UpgradeCard({ balanceUsd, onUpgrade }: UpgradeCardProps): ReactElement {
+export function UpgradeCard({ balanceUsd, onUpgrade, pausedAudience, concurrencyAudience }: UpgradeCardProps): ReactElement {
   const t = useT();
-  const out = !(balanceUsd > 0);
+  const concurrency = concurrencyAudience != null;
+  const out = concurrency || !(balanceUsd > 0);
+  const paused = !concurrency && out && pausedAudience != null;
   return (
-    <div className={styles.up} data-testid="chat-upgrade-card" data-out={out ? 'true' : 'false'}>
+    <div className={`${styles.up}${concurrency ? ` ${styles.concurrency}` : ''}`}
+      data-testid={concurrency ? 'chat-concurrency-card' : 'chat-upgrade-card'} data-out={out ? 'true' : 'false'}>
       {/* 卡头只报事实。稿子 `.up .h`:底下压一条细线,右侧留出 48px 给那枚辉光。 */}
       <div className={styles.head}>
         <span className={`${styles.amount}${out ? ` ${styles.out}` : ''}`}>
           <span>
-            {t('chat.upgrade.balance')} <b>{formatBalanceUsd(balanceUsd)}</b>
+            {t(concurrency ? 'chat.amrConcurrencyCard.available' : 'chat.upgrade.balance')}{' '}
+            <b>{concurrency ? t('chat.amrConcurrencyCard.full') : formatBalanceUsd(balanceUsd)}</b>
           </span>
         </span>
       </div>
@@ -94,7 +111,31 @@ export function UpgradeCard({ balanceUsd, onUpgrade }: UpgradeCardProps): ReactE
           按钮不再是 `size="sm"` —— 稿子把它从卡头那枚方块换成了底排 44px 的
           触达档(`.up .up-bottom .btn`),尺寸在 Module 里对着祖先链写死。 */}
       <div className={styles.bottom}>
-        <p className={styles.why}>{out ? t('chat.upgrade.whyOut') : t('chat.upgrade.whyLow')}</p>
+        <p className={styles.why}>
+          {concurrency ? (
+            <>
+              <span className={styles.whyTitle}>
+                {t(concurrencyAudience === 'member' ? 'chat.amrConcurrencyGate.teamTitle' : 'chat.amrConcurrencyGate.title')}
+              </span>
+              <span className={styles.whyBody}>
+                {t(concurrencyAudience === 'member' ? 'chat.amrConcurrencyGate.teamMessage' : 'chat.amrConcurrencyGate.message')}
+              </span>
+            </>
+          ) : paused ? (
+            <>
+              <span className={styles.whyTitle}>
+                {pausedAudience === 'member'
+                  ? t('chat.upgrade.pausedTeamTitle')
+                  : t('chat.upgrade.pausedTitle')}
+              </span>
+              <span className={styles.whyBody}>
+                {pausedAudience === 'member'
+                  ? t('chat.upgrade.pausedTeamMessage')
+                  : t('chat.upgrade.pausedMessage')}
+              </span>
+            </>
+          ) : out ? t('chat.upgrade.whyOut') : t('chat.upgrade.whyLow')}
+        </p>
         <Button
           type="button"
           variant="primary"

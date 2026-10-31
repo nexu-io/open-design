@@ -1,10 +1,20 @@
-# OD Next Marketing Task Profile v2.0.0
+# OD Next Marketing Task Profile v2.0.4
 
 > Rollout: active
 
 Task routing, clarification, Build, and the ship-on-write boundary follow the
-general orchestration Skill. Profile field semantics and the artifact
-contract bind to the V2 machine contract at the recorded taskProfileVersion.
+general orchestration Skill. Use the profile fields and delivery requirements as design guidance in the
+readable plan; do not serialize them into a machine contract.
+
+## Applicability
+
+Apply this profile only to the parts of the current request that call for this
+kind of deliverable. The Core instruction order applies: explicit user scope
+and format outrank these defaults. An independent media or document request
+does not require this profile's HTML source, page structure, or export workflow.
+Keep the normal HTML requirements when building the corresponding prototype,
+deck, marketing layout, or HyperFrames composition. Do not add a wrapper merely
+because this profile is loaded.
 
 ## Profile fields
 
@@ -24,18 +34,20 @@ readability, clear CTA, and asset and factual fidelity.
 
 ## Artifact contract
 
-The canonical deliverable is the editable source for the chosen visual
-system: a single-file HTML source artifact with the canvas sized to the
-channel spec, one canvas per size. Required deliverables list each final
+For editable marketing layout work, the default deliverable is the source
+for the chosen visual system: a single-file HTML source artifact with the
+canvas sized to the channel spec, one canvas per size. Required deliverables list each final
 channel asset and its derivation from the source. Multi-size work uses
 composed variants, not an undifferentiated scale.
 
-Final images and PDFs are rendered by Open Design's product-side engineering
-after the HTML source is written; they are outside the Agent's
-responsibility. Writing each size's HTML source artifact to disk IS the
-delivery — no rendering to image, no looking back, no export validation.
-Never describe a final image or PDF that Open Design's engineering has not
-yet rendered as completed output.
+For this HTML layout route, product-side tools may render final images and
+PDFs. This does not apply to direct image generation: an explicit standalone
+image request uses the actual image-generation capability and delivers its
+image file. For requested exports, use available tools or disclose a missing
+capability; HTML alone does not fulfill an explicit image or PDF requirement.
+For an HTML source request, writing the source is delivery; do not add
+unrequested rendering or exports. Claim a final image or PDF only after that
+file has actually been produced, regardless of which supported tool made it.
 
 ## Build Requirements
 
@@ -66,13 +78,12 @@ scope; this profile's defaults fill only what is left unspecified.
 - Never fabricate product capabilities, prices, discounts, awards,
   endorsements, or campaign rules.
 - **Licensed-asset boundary (scoped override):** for outward-facing marketing
-  collateral, this boundary overrides the core baseline's authentic-imagery
-  fetch-first rule. Real photographs come only from user- or brand-supplied
+  collateral, this boundary overrides the core imagery-by-type rule for real
+  referents. Real photographs come only from user- or brand-supplied
   licensed assets; a web-fetched image of a real entity is a disclosed
   placeholder only, never final photography — and generating a fake stand-in
-  for a named real referent remains forbidden. For fictional or illustrative
-  subjects, image generation may be preferred over fetching (an allowed
-  vertical exception to the fetch-first default). When a required real
+  for a named real referent remains forbidden. Fictional or illustrative
+  subjects follow the core sourcing rule. When a required real
   referent has no licensed asset, resolve the gap through the orchestration
   missing-field policy — ask, or assume and disclose — rather than silently
   using a fetched image as final or generating a fake.

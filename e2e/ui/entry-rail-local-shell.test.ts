@@ -7,8 +7,8 @@ import { T } from '@/timeouts';
 
 // OPEND-3140 — the local (signed-out CLI / BYOK) shell on the entry rail
 // layout: the rail's 最近项目 section lists the local project catalogue with
-// live run status, 项目 is a rail destination, the message centre rides the
-// foot dock, and Home carries no recent-projects grid.
+// live run status, 项目 is a rail destination, and Home carries no recent-
+// projects grid. A01 keeps its sign-in footer without a local identity row.
 //
 // The daemon is real and signed out (the standard mocks answer the vela status
 // probe with an outage, so no Workspace identity is ever claimed). The local
@@ -157,20 +157,33 @@ test('[P1] 项目 is a rail destination in the local shell and lists the same ca
   await expect(page.getByTestId('entry-nav-recent-item')).toHaveCount(PROJECTS.length);
 });
 
-test('[P1] the message centre rides the rail foot dock in the local shell', async ({ page }) => {
+test('[P1] A01 keeps its sign-in footer without the extra local identity and bell', async ({ page }) => {
   await wireLocalProjects(page);
   await gotoHome(page);
 
-  const dock = page.locator('.entry-nav-rail__account-dock');
-  await expect(dock).toBeVisible();
-  const bell = dock.getByTestId('entry-nav-message-center');
-  await expect(bell).toBeVisible();
-  await expect(bell).toHaveAttribute('aria-haspopup', 'dialog');
-  // Not a destination in the nav list any more.
-  await expect(page.locator('.entry-nav-rail__group').getByTestId('entry-nav-message-center')).toHaveCount(0);
-  await expect(dock.getByTestId('entry-nav-rail-social')).toBeVisible();
-  await bell.click();
-  await expect(page.getByTestId('message-center-dialog')).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(page.getByTestId('message-center-dialog')).toHaveCount(0);
+  await expect(page.getByTestId('entry-cloud-signin-tip')).toBeVisible();
+  await expect(page.getByTestId('entry-nav-local-account')).toHaveCount(0);
+  await expect(page.getByTestId('entry-nav-message-center')).toHaveCount(0);
+  await expect(page.getByTestId('entry-nav-rail-social')).toBeVisible();
+  await expect(page.getByTestId('entry-settings-button')).toBeVisible();
+
+  const card = page.getByTestId('entry-cloud-signin-tip');
+  const social = page.getByTestId('entry-nav-rail-social');
+  async function expectCardAboveSocial() {
+    await expect.poll(async () => {
+      const cardBox = await card.boundingBox();
+      const socialBox = await social.boundingBox();
+      return cardBox !== null && socialBox !== null
+        && cardBox.y + cardBox.height <= socialBox.y;
+    }, { message: 'The sign-in invitation card must precede the social icon row visually' }).toBe(true);
+  }
+  await expectCardAboveSocial();
+
+  await page.getByTestId('entry-rail-collapse').click();
+  await expect(page.locator('.entry')).not.toHaveClass(/entry--rail-open/);
+  await expect(page.getByTestId('entry-nav-local-account')).toHaveCount(0);
+  await expect(page.getByTestId('entry-nav-message-center')).toHaveCount(0);
+
+  await ensureRailOpen(page);
+  await expectCardAboveSocial();
 });

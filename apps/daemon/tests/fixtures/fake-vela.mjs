@@ -47,6 +47,9 @@
  *   FAKE_VELA_LOGIN_USER_PLAN    – plan written into the saved profile
  *   FAKE_VELA_SESSION_NEW_ERROR  – when set, session/new returns a JSON-RPC error
  *   FAKE_VELA_SET_MODEL_ERROR    – when set, session/set_model returns a JSON-RPC error
+ *   FAKE_VELA_SET_MODEL_UNAVAILABLE – comma-separated model ids that
+ *                                   session/set_model rejects the way real vela
+ *                                   rejects ids outside its catalog
  *   FAKE_VELA_PROMPT_ERROR       – when set, session/prompt returns a JSON-RPC error
  *   FAKE_VELA_PROMPT_ERROR_ON_LOAD – when set, session/prompt errors only after session/load
  *   FAKE_VELA_STALL_AFTER_PROMPT – when set to '1', session/prompt never completes
@@ -71,6 +74,15 @@
  *                                   alive, modelling a CLI (or a wrapper shim)
  *                                   that is slow to die or never honours the
  *                                   signal at all
+ *   FAKE_VELA_EXIT_CODE_ON_SIGTERM – exit with this code on SIGTERM. `1`
+ *                                   reproduces how a Windows child looks after
+ *                                   the host kills it by pid: code 1, no signal
+ *   FAKE_VELA_EXIT_DELAY_AFTER_EOF_MS – keep running this long after stdin EOF
+ *                                   before exiting, modelling vela's own
+ *                                   post-turn shutdown work
+ *   FAKE_VELA_EXIT_CODE_AFTER_EOF – exit with this code (default 0) once stdin
+ *                                   EOF handling finishes, modelling vela
+ *                                   failing on its own after a clean turn
  *   FAKE_VELA_DESCENDANT_ACTIVITY_FILE – when set, spawn a SIGTERM-ignoring
  *                                   descendant that appends activity ticks to
  *                                   this file while the ACP prompt is stalled
@@ -81,6 +93,13 @@
  *   FAKE_VELA_MODELS             – newline-separated `vela models` stdout
  *   FAKE_VELA_MODEL_PRESET_JSON  – JSON stdout for `model preset --format json`
  *   FAKE_VELA_MODEL_LIST_JSON    – JSON stdout for `model list --all --format json`
+ *   FAKE_VELA_MODEL_LIST_DELAY_MS – delay that remote `model list` answer, so a
+ *                                   run can start before the per-user catalog
+ *   FAKE_VELA_LOG_SET_MODEL_REQUEST – when '1', log every requested set_model id,
+ *                                   including ones rejected below
+ *   FAKE_VELA_ALLOWED_MODELS     – comma-separated ids the caller's plan allows;
+ *                                   session/set_model rejects any other id the
+ *                                   way vela does against its per-user catalog
  *   FAKE_VELA_REQUIRE_SET_MODEL  – strict gate (default on); set to '0' to
  *                                   accept session/prompt without prior
  *                                   session/set_model (legacy behaviour)
@@ -109,6 +128,7 @@ const ASSISTANT_TEXT = Object.prototype.hasOwnProperty.call(env, 'FAKE_VELA_TEXT
 const THOUGHT_TEXT = env.FAKE_VELA_THOUGHT || '';
 const SESSION_NEW_ERROR = env.FAKE_VELA_SESSION_NEW_ERROR || '';
 const SET_MODEL_ERROR = env.FAKE_VELA_SET_MODEL_ERROR || '';
+const unavailableModels = new Set((env.FAKE_VELA_SET_MODEL_UNAVAILABLE || '').split(',').map((id) => id.trim()).filter(Boolean));
 const PROMPT_ERROR = env.FAKE_VELA_PROMPT_ERROR || '';
 const PROMPT_ERROR_ON_LOAD = env.FAKE_VELA_PROMPT_ERROR_ON_LOAD || '';
 const STALL_AFTER_PROMPT = env.FAKE_VELA_STALL_AFTER_PROMPT === '1';
@@ -119,6 +139,11 @@ const TEXT_BEFORE_STALL = env.FAKE_VELA_TEXT_BEFORE_STALL === '1';
 const OPEN_TOOL_BEFORE_STALL = env.FAKE_VELA_OPEN_TOOL_BEFORE_STALL === '1';
 const STDERR_ON_SIGTERM = env.FAKE_VELA_STDERR_ON_SIGTERM === '1';
 const IGNORE_SIGTERM = env.FAKE_VELA_IGNORE_SIGTERM === '1';
+const EXIT_CODE_ON_SIGTERM = env.FAKE_VELA_EXIT_CODE_ON_SIGTERM === undefined
+  ? null
+  : Number(env.FAKE_VELA_EXIT_CODE_ON_SIGTERM);
+const EXIT_DELAY_AFTER_EOF_MS = Number(env.FAKE_VELA_EXIT_DELAY_AFTER_EOF_MS) || 0;
+const EXIT_CODE_AFTER_EOF = Number(env.FAKE_VELA_EXIT_CODE_AFTER_EOF) || 0;
 const DESCENDANT_ACTIVITY_FILE = env.FAKE_VELA_DESCENDANT_ACTIVITY_FILE || '';
 const DESCENDANT_PID_FILE = env.FAKE_VELA_DESCENDANT_PID_FILE || '';
 const PROMPT_RESULT_DELAY_MS = Number(env.FAKE_VELA_PROMPT_RESULT_DELAY_MS) || 0;
@@ -236,6 +261,9 @@ if (STDERR_ON_SIGTERM || IGNORE_SIGTERM) {
     if (!IGNORE_SIGTERM) exit(143);
   });
 }
+if (EXIT_CODE_ON_SIGTERM !== null) {
+  process.on('SIGTERM', () => exit(EXIT_CODE_ON_SIGTERM));
+}
 
 // Append one line per session-bind method (`new` / `load`) to the file named by
 // FAKE_VELA_INVOCATION_LOG, so a multi-turn server test can assert the resume
@@ -321,7 +349,20 @@ function handleMessage(msg) {
         return;
       }
       const next = typeof params?.modelId === 'string' ? params.modelId.trim() : '';
+      if (env.FAKE_VELA_LOG_SET_MODEL_REQUEST === '1') {
+        logInvocation(`set_model_request:${next || '<empty>'}`);
+      }
+      const allowed = (env.FAKE_VELA_ALLOWED_MODELS || '').split(',').map((m) => m.trim()).filter(Boolean);
+      if (allowed.length > 0 && !allowed.includes(next)) {
+        writeError(id, 'session/set_model modelId is not available', -32602);
+        return;
+      }
       const sessionId = typeof params?.sessionId === 'string' ? params.sessionId : SESSION_ID;
+      if (unavailableModels.has(next)) {
+        if (env.FAKE_VELA_LOG_SET_MODEL === '1') logInvocation(`set_model_rejected:${next}`);
+        writeError(id, 'session/set_model modelId is not available', -32602);
+        return;
+      }
       if (next) currentModelId = next;
       if (env.FAKE_VELA_LOG_SET_MODEL === '1') {
         logInvocation(`set_model:${next || '<empty>'}`);
@@ -477,10 +518,13 @@ stdin.on('data', (chunk) => {
 
 stdin.on('end', () => {
   if (argv[2] === 'login') return;
+  // A delayed `model list` finishes on its own timer.
+  if (argv[2] === 'model') return;
   stdout.end();
   // Mirror real ACP runtimes that exit on EOF so the host's child.on('close')
   // fires promptly and the chat run can finalize.
-  process.exit(0);
+  if (EXIT_DELAY_AFTER_EOF_MS > 0) setTimeout(() => process.exit(EXIT_CODE_AFTER_EOF), EXIT_DELAY_AFTER_EOF_MS);
+  else process.exit(EXIT_CODE_AFTER_EOF);
 });
 
 // `vela login`: the daemon's /api/integrations/vela/login route spawns this
@@ -698,6 +742,10 @@ if (argv[2] === 'billing' && argv[3] === 'summary') {
     stderr.write('Error: unknown command "billing" for "vela"\n');
     exit(1);
   }
+  if (env.FAKE_VELA_BILLING_STDERR) {
+    stderr.write(`${env.FAKE_VELA_BILLING_STDERR}\n`);
+    exit(1);
+  }
   const delayMs = Number(env.FAKE_VELA_BILLING_DELAY_MS) || 0;
   const finishBilling = () => {
     const tier = env.FAKE_VELA_BILLING_TIER;
@@ -727,7 +775,10 @@ if (argv[2] === 'model' && argv.includes('--format') && argv.includes('json')) {
     exit(0);
   }
   if (argv[3] === 'list') {
-    stdout.write(`${env.FAKE_VELA_MODEL_LIST_JSON || DEFAULT_MODEL_LIST_JSON}\n`);
-    exit(0);
+    const delayMs = Number(env.FAKE_VELA_MODEL_LIST_DELAY_MS) || 0;
+    setTimeout(() => {
+      stdout.write(`${env.FAKE_VELA_MODEL_LIST_JSON || DEFAULT_MODEL_LIST_JSON}\n`);
+      exit(0);
+    }, delayMs);
   }
 }

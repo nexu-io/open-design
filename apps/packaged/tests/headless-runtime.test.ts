@@ -6,7 +6,7 @@ import {
   resolvePackagedMcpBootstrapLaunch,
   runPackagedMcpActionAgainstExistingDaemon,
 } from "../src/headless-runtime.js";
-import { APP_KEYS, SIDECAR_SOURCES } from "@open-design/sidecar-proto";
+import { APP_KEYS, MCP_BOOTSTRAP_CONTRACT, SIDECAR_SOURCES } from "@open-design/sidecar-proto";
 
 describe("parsePackagedHeadlessRequest", () => {
   it("accepts a headless Codex MCP install request", () => {
@@ -46,6 +46,23 @@ describe("resolvePackagedMcpBootstrapLaunch", () => {
         "--headless",
       ],
     });
+  });
+
+  it("marks a managed outer's bootstrap without changing how it launches", () => {
+    const launch = resolvePackagedMcpBootstrapLaunch({
+      installedLaunchPath: "/Applications/Open Design.app",
+      managed: true,
+      platform: "darwin",
+    });
+    expect(launch).toEqual({
+      command: "/usr/bin/open",
+      args: ["-g", "-j", "/Applications/Open Design.app", "--args", "--headless", MCP_BOOTSTRAP_CONTRACT.MANAGED_ARG],
+    });
+    // Unmanaged launches (an older outer) keep today's exact registration.
+    expect(resolvePackagedMcpBootstrapLaunch({
+      installedLaunchPath: "/Applications/Open Design.app",
+      platform: "darwin",
+    }).args).not.toContain(MCP_BOOTSTRAP_CONTRACT.MANAGED_ARG);
   });
 
   it("invokes a non-macOS installed launcher directly", () => {

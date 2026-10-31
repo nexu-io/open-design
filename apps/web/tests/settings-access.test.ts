@@ -68,9 +68,9 @@ describe('workspace settings shell gating (D4.3)', () => {
     ]);
   });
 
-  it('shows a plain member only the team space entry', () => {
-    expect(visibleWorkspaceSettingsEntries(teamContext({ role: 'member' }))).toEqual(['teamSpace']);
-    expect(visibleWorkspaceSettingsEntries(teamContext({ role: 'member', teamId: null }))).toEqual([]);
+  it('shows members and team space to a member who can invite', () => {
+    expect(visibleWorkspaceSettingsEntries(teamContext({ role: 'member' }))).toEqual(['members', 'teamSpace']);
+    expect(visibleWorkspaceSettingsEntries(teamContext({ role: 'member', teamId: null }))).toEqual(['members']);
   });
 
   it('drops write entries when locked but keeps billing (recovery) + team space visible', () => {

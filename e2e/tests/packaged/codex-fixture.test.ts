@@ -1,9 +1,11 @@
+import { composeOdNextMarkerProductionTurn, renderChatTurnHostProtocolInstructions } from '@open-design/contracts';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+
 import { createFakeAgentRuntimes } from '@/fake-agents';
 import {
   codexAppServerInvocationsCompleted,
@@ -11,10 +13,6 @@ import {
   PACKAGED_HOME_FIRST_RUN_PROMPT,
 } from '@/vitest/packaged-home-first-run';
 import { attachCodexAppServerSession } from '../../../apps/daemon/src/agent-protocol/codex-app-server/session.js';
-import {
-  resolveDaemonOwnedOdNextExecutionPreflight,
-  runExecutionPreflight,
-} from '../../../apps/daemon/src/strategies/od-next/resolver.js';
 
 describe('packaged Codex fixture transport', () => {
   it.each([null, 'resumed-smoke-thread'])(
@@ -95,8 +93,11 @@ describe('packaged Codex fixture transport', () => {
     // Match the identity envelope the production prompt composer supplies;
     // capability admission remains the daemon's responsibility, not this fake's.
     const prompts = [
-      `${PACKAGED_HOME_FIRST_RUN_PROMPT}\n<recipe_identity strategy_version="2.0.0" applied_snapshot="smoke-snapshot" task_profile_version="2.0.0" />\n"packageHash": "${'a'.repeat(64)}"`,
-      '# OD Next native continuation — production',
+      `${PACKAGED_HOME_FIRST_RUN_PROMPT}\n<recipe_identity strategy_version="2.0.0" applied_snapshot="smoke-snapshot" task_profile_version="2.0.0" />\n"packageHash": "${'a'.repeat(64)}"\n<od-production-ready key="abcd1234" />`,
+      composeOdNextMarkerProductionTurn({
+        taskExecutionId: 'smoke-task', taskRunIndex: 1,
+        hostProtocolText: renderChatTurnHostProtocolInstructions('cdef5678', 'od_next_production').text,
+      }),
     ];
     try {
       for (const [index, prompt] of prompts.entries()) {
@@ -113,16 +114,12 @@ describe('packaged Codex fixture transport', () => {
           expect(session.completedSuccessfully()).toBe(true);
           const text = events.filter((event) => event.type === 'text_delta').map((event) => event.delta).join('');
           if (index === 0) {
-            const contract = text.match(/<open-design-plan-contract>\s*([\s\S]*?)\s*<\/open-design-plan-contract>/)?.[1];
-            expect(contract).toBeTruthy();
-            // The packaged daemon admits the built-in request input. A fake
-            // plan must pass that real gate before its native continuation.
-            expect(runExecutionPreflight(resolveDaemonOwnedOdNextExecutionPreflight(JSON.parse(contract!))))
-              .toEqual({ status: 'passed', reasonCodes: [] });
+            expect(text).toContain('<od-production-ready key="abcd1234" />');
+            expect(text).not.toContain('open-design-plan-contract');
           } else {
             expect(text).toContain(PACKAGED_HOME_FIRST_RUN_OUTPUT);
-            expect(text).toContain('"outcome":"completed"');
-            expect(await readFile(join(root, 'od-next-active-canary.html'), 'utf8')).toContain('Delayed Daemon Smoke');
+            expect(text).not.toContain('open-design-runtime-state');
+            expect(await readFile(join(root, 'delayed-daemon-smoke.html'), 'utf8')).toContain('Delayed Daemon Smoke');
           }
         } finally {
           if (child.exitCode == null && child.signalCode == null) child.kill();

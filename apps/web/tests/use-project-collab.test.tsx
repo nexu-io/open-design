@@ -60,6 +60,25 @@ afterEach(() => {
 });
 
 describe('useProjectCollab', () => {
+  it('checks on entry and exposes owner updates despite a legacy local_only stamp', async () => {
+    const owner = makeContext({ workspaceMemberId: 'wm-owner' });
+    const calls: string[] = [];
+    const update = { state: 'confirmation_required', latestVersion: 2, localVersion: 1, promptSuppressedUntil: null, updatedAt: 1 };
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      const pathname = new URL(String(input), 'http://d.local').pathname;
+      calls.push(pathname);
+      const payload = pathname.endsWith('/collab/status')
+        ? { syncState: 'local_only', ownerMemberId: 'wm-owner', ownedContentUpdate: update }
+        : pathname.endsWith('/collab/update') ? { update } : { present: [] };
+      return { ok: true, status: 200, json: async () => payload } as Response;
+    }) as typeof fetch;
+    const { result } = renderHook(() => useProjectCollab('p1', { workspaceContext: owner, fetch: fetchImpl }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(result.current.enabled).toBe(true);
+    expect(result.current.ownedContentUpdate).toEqual(update);
+    expect(calls.filter(p => p.endsWith('/collab/update'))).toHaveLength(1);
+  });
+
   it('activates presence + sync for a team member', async () => {
     const fetchImpl = installFetch(TEAM_CONTEXT, [{ memberId: 'wm-1' }, { memberId: 'other' }]);
     const { result } = renderHook(() =>

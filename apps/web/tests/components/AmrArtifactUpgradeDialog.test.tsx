@@ -58,6 +58,28 @@ describe('AmrArtifactUpgradeDialog', () => {
     expect(features).toBe('noopener,noreferrer');
   });
 
+  it('opens the plans view for the supplied workspace', () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    render(
+      <AmrArtifactUpgradeDialog
+        profile="prod"
+        workspaceId="workspace-artifact"
+        metricsConsent={false}
+        installationId={null}
+        onClose={vi.fn()}
+        onContinue={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('amr-artifact-upgrade-plans'));
+
+    expect(open).toHaveBeenCalledWith(
+      expect.stringContaining('https://open-design.ai/cloud/dashboard?workspaceId=workspace-artifact&source=open_design&billing=plan&'),
+      '_blank',
+      'noopener,noreferrer',
+    );
+  });
+
   it('restarts the seven-day offer countdown at the cycle boundary', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-07-12T23:59:59.000Z'));

@@ -1,4 +1,5 @@
 import type http from 'node:http';
+import { createServer } from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { chmod, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
@@ -14,18 +15,23 @@ import {
   startServer,
 } from '../src/server.js';
 
+type StartedImportServer = {
+  url: string;
+  server: http.Server;
+  shutdown: () => Promise<void> | void;
+};
+
 describe('POST /api/import/folder', () => {
   let server: http.Server;
   let baseUrl: string;
+  let shutdown: () => Promise<void> | void;
   const tempDirs: string[] = [];
 
   beforeAll(async () => {
-    const started = (await startServer({ port: 0, returnServer: true })) as {
-      url: string;
-      server: http.Server;
-    };
+    const started = (await startServer({ port: 0, returnServer: true })) as StartedImportServer;
     baseUrl = started.url;
     server = started.server;
+    shutdown = started.shutdown;
   });
 
   afterEach(() => {
@@ -35,8 +41,11 @@ describe('POST /api/import/folder', () => {
     }
   });
 
-  afterAll(() => {
-    return new Promise<void>((resolve) => server.close(() => resolve()));
+  afterAll(async () => {
+    await shutdown();
+    if (server.listening) {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 
   function makeFolder(): string {
@@ -1112,4 +1121,98 @@ describe('POST /api/import/folder', () => {
     const body = (await resp.json()) as { error?: { message?: string } };
     expect(body.error?.message).toMatch(/data directory/i);
   });
+});
+
+describe('Workspace-scoped imports with Vela membership authority', () => {
+  it.each(['unavailable', 'unknown'] as const)(
+    'rejects both import entry points before creating data when membership is %s',
+    async (mode) => {
+      const folder = mkdtempSync(path.join(tmpdir(), 'od-import-authority-'));
+      const authority = createServer((req, res) => {
+        if (req.url !== '/api/v1/workspaces') {
+          res.writeHead(404).end();
+          return;
+        }
+        res.writeHead(mode === 'unavailable' ? 503 : 200, {
+          'content-type': 'application/json',
+        }).end(JSON.stringify({ items: [] }));
+      });
+      const managedEnv = {
+        OD_WORKSPACE_CONTEXT_SOURCE: 'vela',
+        OD_COLLAB_TRANSPORT: 'off',
+        OD_RESOURCE_TRANSPORT: 'off',
+        OD_TEAM_PROJECTS_TRANSPORT: 'off',
+        VELA_CONTROL_KEY: 'import-authority-fixture-key',
+        VELA_API_URL: '',
+      };
+      const savedEnv = new Map(
+        Object.keys(managedEnv).map((key) => [key, process.env[key]]),
+      );
+      let daemon: StartedImportServer | null = null;
+      try {
+        await new Promise<void>((resolve) => authority.listen(0, '127.0.0.1', resolve));
+        const address = authority.address();
+        if (!address || typeof address === 'string') throw new Error('authority did not bind');
+        Object.assign(process.env, {
+          ...managedEnv,
+          VELA_API_URL: `http://127.0.0.1:${address.port}`,
+        });
+        daemon = await startServer({ port: 0, returnServer: true }) as StartedImportServer;
+        const headers = {
+          'x-od-workspace-id': 'workspace-import-unverified',
+          'x-od-workspace-member-id': 'member-import-unverified',
+          'x-od-workspace-type': 'team',
+          'x-od-workspace-role': 'owner',
+          'x-od-workspace-member-status': 'active',
+          'x-od-workspace-lifecycle-state': 'active',
+        };
+        const before = await fetch(`${daemon.url}/api/projects`);
+        expect(before.status).toBe(200);
+        const beforeProjects = await before.json();
+        const archive = new FormData();
+        archive.append('file', new Blob(['unread-before-authority-check']), 'unverified.zip');
+        const responses = [
+          await fetch(`${daemon.url}/api/import/folder`, {
+            method: 'POST',
+            headers: { ...headers, 'content-type': 'application/json' },
+            body: JSON.stringify({ baseDir: folder }),
+          }),
+          await fetch(`${daemon.url}/api/import/claude-design`, {
+            method: 'POST',
+            headers,
+            body: archive,
+          }),
+        ];
+        for (const response of responses) {
+          expect(response.status).toBe(mode === 'unavailable' ? 503 : 403);
+          await expect(response.json()).resolves.toMatchObject({
+            error: {
+              code: mode === 'unavailable'
+                ? 'WORKSPACE_AUTHORITY_UNAVAILABLE'
+                : 'WORKSPACE_PROJECT_PERMISSION_DENIED',
+            },
+          });
+        }
+        const after = await fetch(`${daemon.url}/api/projects`);
+        expect(after.status).toBe(200);
+        expect(await after.json()).toEqual(beforeProjects);
+      } finally {
+        if (daemon) {
+          await daemon.shutdown();
+          if (daemon.server.listening) {
+            await new Promise<void>((resolve) => daemon!.server.close(() => resolve()));
+          }
+        }
+        authority.closeAllConnections();
+        if (authority.listening) {
+          await new Promise<void>((resolve) => authority.close(() => resolve()));
+        }
+        for (const [key, value] of savedEnv) {
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
+        rmSync(folder, { recursive: true, force: true });
+      }
+    },
+  );
 });

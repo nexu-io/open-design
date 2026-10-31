@@ -1,5 +1,6 @@
 import { renderArtifactFocusInstruction } from '../api/artifact-focus-marker.js';
 import { renderDoneMarker } from '../api/done-marker.js';
+import { renderOdNextProductionReadyInstructions } from './od-next-production-marker.js';
 import { renderNextStepMarkerExample } from '../api/next-step-marker.js';
 import {
   PROMPT_LOCALE_EXEMPT_TERMS_SENTENCE,
@@ -30,8 +31,8 @@ function odNextStageGate(policy: ChatTurnHostProtocolPolicy): string {
   if (policy === 'od_next_production') {
     return [
       'OD Next host handoff gate:',
-      'Use the three keyed host protocols below only when this production-stage response declares inputStage=production and outcome=completed.',
-      'For blocked, failed, or canceled responses, omit all three protocols.',
+      'Use the three keyed host protocols below when the requested work is done and the actual deliverables have been written.',
+      'If work is blocked, failed, canceled, or awaiting an essential answer, omit all three protocols. Describe any remaining gaps in normal prose; no structured state declaration is required.',
     ].join('\n');
   }
   return '';
@@ -87,6 +88,9 @@ export function renderChatTurnHostProtocolInstructions(
   policy: ChatTurnHostProtocolPolicy = 'ordinary',
   locale?: string | undefined,
 ): ChatTurnHostProtocolInstructions {
+  if (policy === 'od_next_request') {
+    return { doneMarker: '', nextSteps: '', artifactFocus: '', text: renderOdNextProductionReadyInstructions(key) };
+  }
   if (!key) {
     return { doneMarker: '', nextSteps: '', artifactFocus: '', text: '' };
   }

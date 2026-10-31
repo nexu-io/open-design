@@ -139,6 +139,8 @@ describe('intent signals × stable prompt cache', () => {
     binDir = await mkdtemp(path.join(os.tmpdir(), 'od-intent-cache-bin-'));
     const bin = await writeResumingOpencode(binDir);
     clearTelemetryEnv();
+    // This suite covers legacy intent/memory stable sections; Discovery has its own prompt.
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
     // Memory auto-extraction folds prior form answers into the stable-region
     // "Personal memory" block, which legitimately changes the stable hash —
     // disable it so the assertions isolate the intent-signal contribution.
@@ -403,6 +405,7 @@ async function putConfig(url: string, patch: Record<string, unknown>): Promise<v
 
 function snapshotEnv(): Record<string, string | undefined> {
   return {
+    OD_NEXT_STRATEGY_ROLLOUT: process.env.OD_NEXT_STRATEGY_ROLLOUT,
     LANGFUSE_PUBLIC_KEY: process.env.LANGFUSE_PUBLIC_KEY,
     LANGFUSE_SECRET_KEY: process.env.LANGFUSE_SECRET_KEY,
     LANGFUSE_BASE_URL: process.env.LANGFUSE_BASE_URL,

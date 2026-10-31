@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { pickHomeTemplate } from '../helpers/home-template-picker';
 
 // Static prompt-example cards must show the Send cue too.
 //
@@ -129,7 +130,7 @@ describe('static prompt-example send pulse', () => {
     // composer footer's radial Template picker.
     // The chip's default plugin exists (so the chip binds) but no plugin
     // matches the example filter → fallback static prompt-example cards.
-    fireEvent.click(await screen.findByTestId('home-hero-type-pill-prototype'));
+    await pickHomeTemplate('prototype');
     const exampleCards = await screen.findAllByTestId('home-hero-prompt-example');
     const firstExample = exampleCards[0];
     if (!firstExample) throw new Error('expected at least one prompt-example card');

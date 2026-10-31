@@ -3,9 +3,10 @@ import { ensureRailOpen, openNewProjectModal } from '@/playwright/rail';
 import { settingsSurface } from '@/playwright/amr';
 import { expectStableCount } from '@/playwright/assertions';
 import {
-  HOME_TYPE_ROW_CHIP_IDS,
-  HOME_TYPE_ROW_MORE_CHIP_IDS,
-  homeTypeRow,
+  HOME_TYPE_PRIMARY_CHIP_IDS,
+  HOME_TYPE_OTHER_CHIP_IDS,
+  homeTemplateTrigger,
+  openHomeTemplates,
   pickHomeTemplate,
 } from '@/playwright/home-hero';
 import type {
@@ -81,7 +82,7 @@ test.beforeEach(async ({ page }) => {
   await applyStandardMocks(page);
 });
 
-test('[P0] @critical entry chrome exposes the primary home creation surface and settings entry', async ({ page }) => {
+test('[P0] @critical entry chrome exposes the primary home creation surface and settings entry', async ({ page }, testInfo) => {
   await page.route('**/api/projects', async (route) => {
     if (route.request().method() === 'GET') {
       await route.fulfill({ json: { projects: [] } });
@@ -108,20 +109,18 @@ test('[P0] @critical entry chrome exposes the primary home creation surface and 
   await expect(page.getByTestId('home-hero-type-pills')).toBeVisible();
   await expect(page.getByTestId('home-hero-design-system-picker')).toBeVisible();
   await expect(page.getByTestId('working-dir-picker')).toBeVisible();
-  // The type row under the composer is a curated entry set (product,
-  // 2026-09-16 / OPEND-3146): three inline pills, the rest behind 更多.
-  const typeRow = homeTypeRow(page);
-  await expect(typeRow).toBeVisible();
-  for (const id of HOME_TYPE_ROW_CHIP_IDS) {
-    await expect(typeRow.getByTestId(`home-hero-type-pill-${id}`)).toBeVisible();
+  await expect(page.getByTestId('home-hero-template-picker')).toHaveCount(0);
+  await testInfo.attach('home-unselected-types', { body: await page.screenshot(), contentType: 'image/png' });
+  for (const id of HOME_TYPE_PRIMARY_CHIP_IDS) {
+    await expect(page.getByTestId(`home-hero-type-pill-${id}`)).toBeVisible();
   }
-  await page.getByTestId('home-hero-type-pills-more').click();
-  const overflow = page.getByTestId('home-hero-type-pills-popover');
-  for (const id of HOME_TYPE_ROW_MORE_CHIP_IDS) {
-    await expect(overflow.getByTestId(`home-hero-type-pill-${id}-more`)).toBeVisible();
+  const menu = await openHomeTemplates(page);
+  for (const id of HOME_TYPE_OTHER_CHIP_IDS) {
+    await expect(menu.locator(`[data-chip="${id}"]`)).toBeVisible();
   }
+  await testInfo.attach('home-type-dropdown', { body: await page.screenshot(), contentType: 'image/png' });
   await page.keyboard.press('Escape');
-  await expect(overflow).toHaveCount(0);
+  await expect(menu).toHaveCount(0);
 
   // The pet picker rail was removed; pet adoption now lives in
   // Settings → Pet exclusively. Make sure no rail leaks back into the
@@ -403,16 +402,14 @@ test('[P1] onboarding lands on the home composer without a recommended-start str
   await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
 
   // Cloud-first onboarding no longer contains the legacy runtime/About-you/
-  // Product-design survey. A signed-in user accepts the recommended Hosted
-  // source and lands directly on Home.
+  // Product-design survey or a model-source chooser. A signed-in user's
+  // "Continue (signed in)" completes onboarding with OpenDesign Hosted and
+  // lands directly on Home.
   const cloudPrimary = page.locator('.onboarding-cloud__primary');
   await expect(cloudPrimary).toBeEnabled();
   await cloudPrimary.click();
-  await expect(page.getByRole('heading', { name: /Choose your model source|选择模型来源/i })).toBeVisible();
-  await page.getByRole('radio', { name: /OpenDesign Hosted/i }).click();
-  await page.getByRole('button', { name: /^Continue$/i }).click();
 
-  // Finishing model-source setup lands the user on Home with the composer
+  // Finishing onboarding lands the user on Home with the composer
   // ready — and NOT on the old recommended-start strip. That strip (sparkle +
   // 「Start with your first project」 + 全部类型 / 开始创作) sat between the
   // composer and the template line, offering a third way to say what the two
@@ -466,7 +463,7 @@ test('[P1] entry top navigation matches the current home tab structure', async (
   await expect(page.locator('.entry-nav-rail__footer').getByTestId('entry-settings-button')).toHaveCount(0);
   await expect(page.locator('.entry-nav-rail__footer').getByTestId('entry-nav-plugins')).toHaveCount(0);
 
-  await expect(page.getByTestId('home-hero-type-pills')).toBeVisible();
+  await expect(page.getByTestId('home-hero-template-picker')).toBeVisible();
   // Nothing is applied on a fresh Home: no plugin chip, no template-driven
   // footer options or presets.
   await expect(page.getByTestId('home-hero-active-plugin')).toHaveCount(0);
@@ -483,7 +480,7 @@ test('[P1] home view exposes the redesigned hero, rail recent projects, and the 
   // either — the rail's 最近项目 section lists the catalogue.
   await expect(page.getByTestId('recent-projects-strip')).toHaveCount(0);
   await expect(home.locator('.recent-projects')).toHaveCount(0);
-  await expect(home.getByTestId('home-hero-type-pills')).toBeVisible();
+  await expect(home.getByTestId('home-hero-template-picker')).toBeVisible();
   await expect(page.getByTestId('home-hero')).toBeVisible();
   await expect(page.getByTestId('entry-nav-home')).toHaveAttribute('aria-current', 'page');
   await ensureRailOpen(page);
@@ -1170,7 +1167,6 @@ test('[P0] @critical home composer delegates the picked prototype scenario to da
   // still what this request routes as, it just is not stated on a control any
   // more. The routing itself is asserted from the request body below.
   await expect(page.getByTestId('composer-mode-trigger')).toHaveCount(0);
-  // Home starts typeless (#7635), so the Prototype type is picked from the row.
   await pickHomeTemplate(page, 'prototype');
 
   const input = page.getByTestId('home-hero-input');
@@ -1404,10 +1400,7 @@ test('[P0] @critical home hero attachment input stages files, enables submit, an
 
   const input = page.getByTestId('home-hero-file-input');
   const submit = page.getByTestId('home-hero-submit');
-  // A fresh Home starts typeless (#7635): the type row under the composer is
-  // the settled state to wait on before checking the attachment lifecycle,
-  // and an empty composer already submits its carousel suggestion.
-  await expect(homeTypeRow(page)).toBeVisible({ timeout: T.long });
+  await expect(homeTemplateTrigger(page)).toBeVisible({ timeout: T.long });
   await expect(submit).toBeEnabled({ timeout: T.long });
 
   await input.setInputFiles({

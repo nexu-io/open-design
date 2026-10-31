@@ -38,12 +38,16 @@ export interface CollabPublishWatcherDeps {
   subscribeFiles: (projectId: string, onChange: () => void) => PublishWatchSubscription;
   /** Reconcile cadence (ms): how often to (re)discover owned+shared projects. */
   reconcileMs?: number;
+  /** Attaching a watch is not a user edit on a device receiving cloud content. */
+  publishInitialContent?: boolean;
   onError?: (error: unknown) => void;
 }
 
 export interface CollabPublishWatcher {
   /** Reconcile once immediately (exposed for tests / eager first pass). */
   reconcile: () => Promise<void>;
+  /** Directory promotion replaces the watched inode; rebuild this subscription. */
+  refresh: (projectId: string) => Promise<void>;
   start: () => void;
   dispose: () => void;
 }
@@ -61,10 +65,13 @@ export function createCollabPublishWatcher(deps: CollabPublishWatcherDeps): Coll
   >();
   let timer: ReturnType<typeof setInterval> | null = null;
   let reconciling = false;
+  let reconciliationDone: Promise<void> = Promise.resolve();
+  let finishReconciliation = () => {};
 
   async function reconcile(): Promise<void> {
     if (reconciling) return;
     reconciling = true;
+    reconciliationDone = new Promise<void>((resolve) => { finishReconciliation = resolve; });
     try {
       const ids = new Set(deps.listProjectIds());
       // Drop watchers for projects that no longer exist locally.
@@ -106,16 +113,29 @@ export function createCollabPublishWatcher(deps: CollabPublishWatcherDeps): Coll
         // (team-shared AND owned by me) above, so this only republishes a
         // single-writer's own project and is loop-safe. Fires once per project
         // per watch session (reconcile only subscribes not-yet-watched ids).
-        if (principal) deps.notifyChanged(projectId, principal);
-        else deps.notifyChanged(projectId);
+        if (deps.publishInitialContent !== false) {
+          if (principal) deps.notifyChanged(projectId, principal);
+          else deps.notifyChanged(projectId);
+        }
       }
     } finally {
       reconciling = false;
+      finishReconciliation();
     }
   }
 
   return {
     reconcile,
+    async refresh(projectId) {
+      await reconciliationDone;
+      const watched = subs.get(projectId);
+      if (watched) {
+        await watched.subscription.unsubscribe();
+        subs.delete(projectId);
+      }
+      await reconciliationDone;
+      await reconcile();
+    },
     start() {
       if (timer) return;
       void reconcile().catch((error) => deps.onError?.(error));

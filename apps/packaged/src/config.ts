@@ -1,6 +1,8 @@
 import { access, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
+import { type AmrEndpointBinding, parseAmrEndpointBinding } from "@open-design/contracts";
+
 import { SIDECAR_DEFAULTS, normalizeNamespace } from "@open-design/sidecar-proto";
 
 // `electron` is loaded lazily so this module can also be imported from the
@@ -25,6 +27,7 @@ export type PackagedVelaWebUrls = Partial<Record<PackagedAmrProfile, string>>;
 
 export type RawPackagedConfig = {
   amrProfile?: string;
+  amrEndpointBinding?: AmrEndpointBinding;
   appVersion?: string;
   daemonCliEntryRelative?: string;
   daemonSidecarEntryRelative?: string;
@@ -59,6 +62,7 @@ export type RawPackagedConfig = {
 
 export type PackagedConfig = {
   amrProfile: PackagedAmrProfile | null;
+  amrEndpointBinding?: AmrEndpointBinding;
   appVersion: string | null;
   daemonCliEntry: string | null;
   daemonSidecarEntry: string | null;
@@ -185,6 +189,7 @@ async function resolvePackagedRelativeEntry(value: string | undefined): Promise<
 
 export async function readPackagedConfig(): Promise<PackagedConfig> {
   const raw = await readRawPackagedConfig();
+  const amrEndpointBinding = parseAmrEndpointBinding(raw.amrEndpointBinding);
   const namespace = normalizeNamespace(
     process.env[PACKAGED_NAMESPACE_ENV] ?? raw.namespace ?? SIDECAR_DEFAULTS.namespace,
   );
@@ -217,7 +222,8 @@ export async function readPackagedConfig(): Promise<PackagedConfig> {
   const webSidecarEntry = await resolvePackagedRelativeEntry(raw.webSidecarEntryRelative);
 
   return {
-    amrProfile: resolvePackagedAmrProfile(raw.amrProfile),
+    amrEndpointBinding,
+    amrProfile: amrEndpointBinding?.profile ?? resolvePackagedAmrProfile(raw.amrProfile),
     appVersion: cleanOptionalString(raw.appVersion),
     daemonCliEntry,
     daemonSidecarEntry,
@@ -229,8 +235,11 @@ export async function readPackagedConfig(): Promise<PackagedConfig> {
     updateMetadataUrl: cleanOptionalString(raw.updateMetadataUrl),
     posthogKey: cleanOptionalString(raw.posthogKey),
     posthogHost: cleanOptionalString(raw.posthogHost),
-    velaWebUrl: cleanOptionalString(raw.velaWebUrl),
-    velaWebUrls: cleanVelaWebUrls(raw.velaWebUrls),
+    velaWebUrl: amrEndpointBinding?.webUrl ?? cleanOptionalString(raw.velaWebUrl),
+    velaWebUrls: {
+      ...cleanVelaWebUrls(raw.velaWebUrls),
+      ...(amrEndpointBinding ? { [amrEndpointBinding.profile]: amrEndpointBinding.webUrl } : {}),
+    },
     webSidecarEntry,
     webStandaloneRoot,
     webOutputMode,

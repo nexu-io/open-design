@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -95,6 +95,60 @@ afterEach(() => {
 });
 
 describe("workload convergence", () => {
+  test("rejects restoring a miss instead of manufacturing successful output", () => {
+    const fixture = createRepository();
+    runPlan(fixture);
+    const result = spawnSync("python3", [
+      convergenceScript, "--root", fixture.root, "--config", fixture.configPath,
+      "restore", "--pending", fixture.pendingPath, "--workload", "a",
+      "--output-dir", path.join(fixture.root, "restored"),
+    ], { cwd: fixture.root, encoding: "utf8" });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("restore requires a selected reusable-result hit");
+  });
+
+  test("keeps invalid result bindings fatal when product misses may fall back", () => {
+    const fixture = createRepository();
+    runPlan(fixture);
+    const pending = JSON.parse(readFileSync(fixture.pendingPath, "utf8")) as any;
+    const expected = pending.workloads.a;
+    expected.resultHit = true;
+    expected.result = {
+      schemaVersion: 1,
+      protocol: "nexu-workload-result-v1",
+      repositoryId: 42,
+      workflow: "ci",
+      policy: "test-v1",
+      workload: "b",
+      digest: expected.digest,
+      executionClass: expected.executionClass,
+      products: {},
+      validated: {
+        event: "pull_request", runId: 12, runAttempt: 1,
+        headSha: "a".repeat(40), baseSha: "b".repeat(40), treeSha: "c".repeat(40),
+        validatedAt: "2026-08-21T00:00:00Z",
+      },
+    };
+    writeFileSync(fixture.pendingPath, JSON.stringify(pending));
+
+    const result = spawnSync("python3", [
+      convergenceScript, "--root", fixture.root, "--config", fixture.configPath,
+      "restore", "--pending", fixture.pendingPath, "--workload", "a", "--allow-miss",
+      "--output-dir", path.join(fixture.root, "restored"),
+    ], { cwd: fixture.root, encoding: "utf8" });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("workload result producer is not explicitly trusted");
+  });
+
+  test("checks complete product restoration and failed-set isolation without network", () => {
+    const fixture = createRepository();
+    const result = spawnSync("python3", [
+      convergenceScript, "--root", fixture.root, "--config", fixture.configPath, "validate",
+    ], { cwd: fixture.root, encoding: "utf8" });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("convergence configuration is valid");
+  });
+
   test("keeps shadow coverage while calculating stable workload identities", () => {
     const fixture = createRepository();
     const first = runPlan(fixture);
@@ -103,6 +157,10 @@ describe("workload convergence", () => {
     expect(first.decision.hit).toEqual({ a: false, b: false });
     expect(workload(second.pending.workloads, "a").digest).toBe(workload(first.pending.workloads, "a").digest);
     expect(workload(second.pending.workloads, "b").digest).toBe(workload(first.pending.workloads, "b").digest);
+    expect(workload(first.pending.workloads, "a").digest)
+      .toBe("aa009c98463dae565677f5671bbe86e7f51922814a5facdd4952d476846cb20b");
+    expect(workload(first.pending.workloads, "b").digest)
+      .toBe("68d78e50ea5aa02be29dd00ad1f0396006600f05eb81f720e7f464ccafd7e54c");
   });
 
   test("composes suites without coupling unrelated workload inputs", () => {
@@ -130,14 +188,115 @@ describe("workload convergence", () => {
     expect(arc).not.toBe(hosted);
   });
 
-  test("keeps broad test workloads on tracked-tree inputs until their closure is proven", () => {
+  test("binds schema-v10 workloads to canonical postinstall delivery plans", () => {
+    const fixture = createRepository();
+    const config = JSON.parse(readFileSync(fixture.configPath, "utf8"));
+    config.schema.version = 10;
+    config.workflows.ci.workloads.a.postinstallIntent = "fixture";
+    config.workflows.ci.workloads.a.success = { "Fixture A": ["Run A"] };
+    config.workflows.ci.workloads.b.success = { "Fixture B": ["Run B"] };
+    writeFileSync(fixture.configPath, JSON.stringify(config));
+    mkdirSync(path.join(fixture.root, ".github/config"), { recursive: true });
+    mkdirSync(path.join(fixture.root, "scripts"), { recursive: true });
+    mkdirSync(path.join(fixture.root, "packages/release"), { recursive: true });
+    writeFileSync(path.join(fixture.root, ".github/config/postinstall.json"), JSON.stringify({
+      schemaVersion: 2,
+      targets: ["packages/release"],
+      intents: { fixture: { installProfile: "workspace", requestedTargets: ["packages/release"] } },
+    }));
+    writeFileSync(path.join(fixture.root, "packages/release/package.json"), JSON.stringify({
+      name: "@open-design/release",
+    }));
+    execFileSync("git", ["add", "."], { cwd: fixture.root });
+
+    const before = runPlan(fixture).pending.workloads;
+    expect((workload(before, "a") as any).postinstallPlan).toEqual({
+      intent: "fixture",
+      digest: expect.stringMatching(/^[0-9a-f]{64}$/),
+    });
+    expect((workload(before, "b") as any).postinstallPlan).toBeUndefined();
+
+    const planConfigPath = path.join(fixture.root, ".github/config/postinstall.json");
+    const planConfig = JSON.parse(readFileSync(planConfigPath, "utf8"));
+    planConfig.intents.fixture.installProfile = "source-web";
+    writeFileSync(planConfigPath, JSON.stringify(planConfig));
+    execFileSync("git", ["add", planConfigPath], { cwd: fixture.root });
+    const after = runPlan(fixture).pending.workloads;
+    expect(workload(after, "a").digest).not.toBe(workload(before, "a").digest);
+    expect(workload(after, "b").digest).toBe(workload(before, "b").digest);
+
+    config.schema.version = 1;
+    writeFileSync(fixture.configPath, JSON.stringify(config));
+    const stale = spawnSync("python3", [convergenceScript, "--root", fixture.root,
+      "--config", fixture.configPath, "validate"], { encoding: "utf8" });
+    expect(stale.status).toBe(2);
+    expect(stale.stderr).toContain("postinstallIntent requires convergence schema.version 10");
+  });
+
+  test("declares schema-v10 CI shards with trusted evidence and canonical setup plans", () => {
     const config = JSON.parse(readFileSync(
       path.join(repoRoot, ".github", "config", "convergence.json"),
       "utf8",
     )) as any;
 
-    expect(config.workflows.ci.workloads.daemon_unit_tests.inputs).toEqual(["*"]);
-    expect(config.workflows.ci.workloads.e2e_vitest.inputs).toEqual(["*"]);
+    expect(config.schema.version).toBe(10);
+    expect(config.workflows.ci.policy).toBe("ci-v2");
+    for (const shard of [1, 2, 3, 4]) {
+      const workload = config.workflows.ci.workloads[`daemon_unit_${shard}`];
+      expect(workload.inputs).toEqual(["suite://daemon"]);
+      expect(workload.postinstallIntent).toBe("ci-daemon");
+      expect(workload.success).toEqual({ [`Daemon tests (${shard}/4)`]: ["Run daemon test shard"] });
+    }
+    expect(config.workflows.ci.workloads.e2e_vitest).toMatchObject({
+      inputs: ["suite://e2e-runtime"],
+      postinstallIntent: "ci-e2e",
+      success: { "E2E Vitest": ["Prebuild workspace type declarations", "E2E Vitest"] },
+    });
+    expect(config.workflows.ci.matrices.daemon).toHaveLength(4);
+    expect(config.workflows.ci.matrices.web).toHaveLength(2);
+    expect(config.workflows.ci.matrices.ui_p0).toHaveLength(6);
+  });
+
+  test("authorizes isolated CI publication only on the repository default branch", () => {
+    const result = spawnSync("python3", ["-c", `
+import os, sys
+from unittest.mock import patch
+sys.path.insert(0, sys.argv[1])
+import convergence as c
+payload = {"repository":{"id":42,"full_name":"nexu-io/open-design","default_branch":"main"}}
+env = {"GITHUB_EVENT_NAME":"workflow_dispatch", "GITHUB_REPOSITORY":"nexu-io/open-design",
+       "GITHUB_REPOSITORY_ID":"42", "GITHUB_RUN_ID":"12", "GITHUB_RUN_ATTEMPT":"1",
+       "GITHUB_REF":"refs/heads/main"}
+with patch.dict(os.environ, env), patch("convergence.event_payload", return_value=payload):
+    context = c.producer_context(payload)
+    candidate = {**context, "workflow":"ci", "policy":"ci-v2"}
+    with patch("convergence.prepare_publication") as validation:
+        c.require_isolated_candidate(candidate)
+        validation.assert_called_once()
+    with patch.dict(os.environ, {"GITHUB_REF":"refs/heads/topic"}):
+        try: c.require_isolated_candidate(candidate)
+        except c.ConfigError: pass
+        else: raise AssertionError("accepted CI publication outside the default branch")
+`, path.dirname(convergenceScript)], { cwd: repoRoot, encoding: "utf8" });
+    expect(result.status, result.stderr).toBe(0);
+  });
+
+  test("selects the newest same-name artifact after a failed-job rerun", () => {
+    const result = spawnSync("python3", ["-c", `
+import sys
+from unittest.mock import patch
+sys.path.insert(0, sys.argv[1])
+from lib import github as g
+older = {"id": 20, "name": "handoff-convergence-ci-results", "expired": False, "created_at": "2026-09-21T08:16:09Z"}
+newer = {"id": 10, "name": "handoff-convergence-ci-results", "expired": False, "created_at": "2026-09-21T08:22:11Z"}
+with patch("lib.github.run_artifacts", return_value=[older, newer]):
+    assert g.latest_run_artifact("example/repo", 12, newer["name"])["id"] == 10
+with patch("lib.github.run_artifacts", return_value=[older, {**newer, "created_at": ""}]):
+    try: g.latest_run_artifact("example/repo", 12, newer["name"])
+    except g.GitHubError: pass
+    else: raise AssertionError("accepted artifact without creation time")
+`, path.dirname(convergenceScript)], { cwd: repoRoot, encoding: "utf8" });
+    expect(result.status, result.stderr).toBe(0);
   });
 
   test("materializes the convergence handoff from the GitHub event context", () => {
@@ -199,6 +358,70 @@ describe("workload convergence", () => {
     expect(readFileSync(outputPath, "utf8")).toContain("publish=true");
   });
 
+  test("skips a changed producer control plane before comparing its policy", () => {
+    const fixture = createRepository();
+    const baseSha = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: fixture.root, encoding: "utf8",
+    }).trim();
+    const config = JSON.parse(readFileSync(fixture.configPath, "utf8"));
+    config.workflows.ci.policy = "test-v2";
+    writeFileSync(fixture.configPath, JSON.stringify(config));
+    writeFileSync(path.join(fixture.root, "control.txt"), "changed control");
+    execFileSync("git", ["add", "."], { cwd: fixture.root });
+    execFileSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com",
+      "commit", "-qm", "change control policy"], { cwd: fixture.root });
+    const headSha = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: fixture.root, encoding: "utf8",
+    }).trim();
+    runPlan(fixture);
+
+    const eventPath = path.join(fixture.root, "event.json");
+    const outputPath = path.join(fixture.root, "github-output.txt");
+    const handoffRoot = path.join(fixture.root, "handoff-root");
+    writeFileSync(eventPath, JSON.stringify({
+      repository: { id: 42, full_name: "example/repo" },
+      pull_request: { head: { sha: headSha }, base: { sha: baseSha } },
+    }));
+    execFileSync("python3", [
+      convergenceScript, "--root", fixture.root, "--config", fixture.configPath,
+      "handoff", "--pending", fixture.pendingPath,
+      "--products-root", path.join(fixture.root, "products"),
+      "--handoff-root", handoffRoot,
+    ], {
+      cwd: fixture.root,
+      env: {
+        ...process.env,
+        GITHUB_EVENT_NAME: "pull_request",
+        GITHUB_EVENT_PATH: eventPath,
+        GITHUB_REPOSITORY: "example/repo",
+        GITHUB_REPOSITORY_ID: "42",
+        GITHUB_RUN_ID: "12",
+        GITHUB_RUN_ATTEMPT: "1",
+        GITHUB_OUTPUT: outputPath,
+      },
+    });
+
+    execFileSync("git", ["checkout", "--detach", baseSha], { cwd: fixture.root });
+    execFileSync("git", ["remote", "add", "origin", fixture.root], { cwd: fixture.root });
+    writeFileSync(eventPath, JSON.stringify({
+      repository: { id: 42, full_name: "example/repo" },
+      workflow_run: {
+        id: 12, run_attempt: 1, name: "ci", event: "pull_request", head_sha: headSha,
+        head_repository: { full_name: "example/repo" },
+      },
+    }));
+    writeFileSync(outputPath, "");
+    execFileSync("python3", [
+      convergenceScript, "--root", fixture.root, "--config", fixture.configPath,
+      "admit", "--handoff-root", handoffRoot,
+    ], {
+      cwd: fixture.root,
+      env: { ...process.env, GITHUB_EVENT_PATH: eventPath, GITHUB_OUTPUT: outputPath },
+    });
+    expect(readFileSync(outputPath, "utf8")).toContain("publish=false");
+    expect(readFileSync(outputPath, "utf8")).toContain("reason=producer-control-plane-changed");
+  });
+
   test("rejects dependency cycles and dangling suites before planning", () => {
     const fixture = createRepository();
     const config = JSON.parse(readFileSync(fixture.configPath, "utf8")) as any;
@@ -225,7 +448,7 @@ describe("workload convergence", () => {
     const candidatePath = path.join(root, "candidate.json");
     writeFileSync(candidatePath, JSON.stringify(candidate({
       bundle: { type: "url", source: "https://results.example/bundle.zip", data: { sha256: "a".repeat(64) } },
-      report: { type: "url", source: "https://results.example/report.json" },
+      report: { type: "url", source: "https://results.example/report.json", data: { sha256: "b".repeat(64) } },
     })));
     execFileSync("python3", [
       convergenceScript, "prepare-publication", "--candidate", candidatePath,
@@ -242,5 +465,15 @@ describe("workload convergence", () => {
     ], { cwd: repoRoot, encoding: "utf8" });
     expect(rejected.status).toBe(2);
     expect(rejected.stderr).toContain("must be promoted to url before publication");
+
+    writeFileSync(candidatePath, JSON.stringify(candidate({
+      bundle: { type: "url", source: "https://results.example/bundle.zip" },
+    })));
+    const missingDigest = spawnSync("python3", [
+      convergenceScript, "prepare-publication", "--candidate", candidatePath,
+      "--output-dir", path.join(root, "missing-digest"),
+    ], { cwd: repoRoot, encoding: "utf8" });
+    expect(missingDigest.status).toBe(2);
+    expect(missingDigest.stderr).toContain("data.sha256 is required");
   });
 });

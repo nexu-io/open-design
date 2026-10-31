@@ -45,6 +45,8 @@ export interface InternalRunCreateInput extends Record<string, unknown> {
 export interface InternalPhysicalRun {
   id: string;
   status: string;
+  cancelRequested?: boolean;
+  manualResumeAttemptCount?: number;
 }
 
 export interface InternalRunAnalyticsLifecycle<TRun> {
@@ -126,6 +128,10 @@ export function createInternalRunCreationService<
    * that wants silence injects a no-op lifecycle and says so.
    */
   analyticsLifecycle: InternalRunAnalyticsLifecycle<TRun>;
+  /** Bounded per-project admission, after Run acceptance and before cwd writes.
+   * Keeps the synchronous start API and analytics lifecycle intact.
+   */
+  coordinateStart?: (run: TRun, starter: () => Promise<unknown>) => Promise<unknown>;
 }): InternalRunCreationService<TMeta, TRun> {
   const isRunActive = (runId: string): boolean => {
     const existing = deps.runs.get(runId);
@@ -187,14 +193,27 @@ export function createInternalRunCreationService<
     return { kind: 'ready', run, creationKind: 'created', resumed: false };
   };
 
+  const startedAttempts = new WeakMap<TRun, number>();
   return {
     prepare,
     start(run, analytics, starter) {
+      const attempt = run.manualResumeAttemptCount ?? 0;
+      if (startedAttempts.get(run) === attempt) return run;
+      startedAttempts.set(run, attempt);
+
       // Before the child is spawned: `run_created` describes a Run that has
       // been accepted, and the terminal half must already be attached when the
       // Run settles — including a Run that fails on its first tick.
       deps.analyticsLifecycle.install({ ...analytics, run });
-      return deps.runs.start(run, () => starter(run));
+      return deps.runs.start(run, () => {
+        if (!deps.coordinateStart) return starter(run);
+        return deps.coordinateStart(run, () => {
+          // Cancellation/shutdown may settle an accepted Run while admission
+          // waits. Never spawn its child after the reservation is released.
+          if (run.cancelRequested || deps.runs.isTerminal(run.status)) return Promise.resolve();
+          return starter(run);
+        });
+      });
     },
   };
 }

@@ -4,6 +4,8 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
+import { type AmrEndpointBinding, parseAmrEndpointBinding } from "@open-design/contracts";
+
 import {
   OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_DEFAULTS,
@@ -106,6 +108,7 @@ export type ToolPackConfig = {
   silent: boolean;
   signed: boolean;
   amrProfile?: ToolPackAmrProfile;
+  amrEndpointBinding?: AmrEndpointBinding;
   telemetryRelayUrl?: string;
   /**
    * PostHog product-analytics ingest key, sourced from process.env.POSTHOG_KEY
@@ -386,6 +389,7 @@ export function resolveToolPackConfig(
   platform: ToolPackPlatform,
   options: ToolPackCliOptions = {},
 ): ToolPackConfig {
+  const amrEndpointBinding = parseAmrEndpointBinding(process.env.OPEN_DESIGN_AMR_ENDPOINT_BINDING);
   const appVersion = resolveToolPackAppVersion(options.appVersion);
   const namespace = resolveNamespace({
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
@@ -433,13 +437,16 @@ export function resolveToolPackConfig(
     requireVelaCli: options.requireVelaCli === true,
     silent: options.silent !== false,
     signed: options.signed === true,
-    amrProfile: resolveToolPackAmrProfile(process.env.OPEN_DESIGN_AMR_PROFILE),
+    amrEndpointBinding,
+    amrProfile: amrEndpointBinding?.profile ?? resolveToolPackAmrProfile(process.env.OPEN_DESIGN_AMR_PROFILE),
     telemetryRelayUrl: resolveToolPackTelemetryRelayUrl(process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL),
     updateMetadataUrl: resolveToolPackUpdateMetadataUrl(process.env.OD_UPDATE_METADATA_URL),
     posthogKey: resolveToolPackPosthogKey(process.env.POSTHOG_KEY),
     posthogHost: resolveToolPackPosthogHost(process.env.POSTHOG_HOST),
-    velaWebUrl: resolveToolPackVelaWebUrl(process.env.OD_VELA_WEB_URL),
-    velaWebUrls: resolveToolPackVelaWebUrls(process.env),
+    velaWebUrl: amrEndpointBinding?.webUrl ?? resolveToolPackVelaWebUrl(process.env.OD_VELA_WEB_URL),
+    velaWebUrls: amrEndpointBinding
+      ? { ...resolveToolPackVelaWebUrls(process.env), [amrEndpointBinding.profile]: amrEndpointBinding.webUrl }
+      : resolveToolPackVelaWebUrls(process.env),
     posthogCliApiKey: resolveToolPackPosthogCliApiKey(
       process.env.POSTHOG_CLI_API_KEY ?? process.env.POSTHOG_PERSONAL_API_KEY,
     ),

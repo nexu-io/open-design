@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { pickHomeTemplate, homeTemplateTrigger } from '../helpers/home-template-picker';
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -143,20 +144,6 @@ function stubAnimationFrame() {
   });
 }
 
-// Mirrors HomeView.prefill.test.tsx's local helper: the inline template rail
-// was replaced by the composer footer's radial Template picker (#5517).
-// Home starts with no creation type: the type row under the composer is the
-// empty state's only control, and it retires once something is picked.
-async function pickHomeTemplate(id: string) {
-  // A type already picked retires the row, and the pill has no menu — so
-  // switching means clearing back to the empty state first.
-  const clear = screen.queryByTestId('home-hero-template-clear');
-  if (clear) fireEvent.click(clear);
-  const rowPill = await screen.findByTestId(`home-hero-type-pill-${id}`);
-  await waitFor(() => expect((rowPill as HTMLButtonElement).disabled).toBe(false));
-  fireEvent.click(rowPill);
-}
-
 function fetchMockFor(plugins: unknown[]) {
   return vi.fn<typeof fetch>(async (url) => {
     if (typeof url === 'string' && url === '/api/plugins') {
@@ -227,7 +214,7 @@ describe('HomeView chip/plugin selection survives a real unmount+remount', () =>
     // the plugin apply until the user actually sends, and leave the type
     // reversible meanwhile. With a type restored the row is retired, so the
     // pill's clear is what must stay live.
-    expect(screen.getByTestId('home-hero-template-clear')).toBeTruthy();
+    expect(homeTemplateTrigger()).toBeTruthy();
     expect(
       fetchMock.mock.calls.some(
         ([url]) => typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply'),

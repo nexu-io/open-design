@@ -73,6 +73,40 @@ describe('publicFilePublishFailureKey', () => {
     );
   });
 
+  it.each([
+    ['network', undefined, 'fileViewer.publishFileUnconfirmed'],
+    ['timeout', undefined, 'fileViewer.publishFileUnconfirmed'],
+    ['not_signed_in', undefined, 'fileViewer.publishFileSignInRequired'],
+    ['upstream_http', 401, 'fileViewer.publishFileSignInRequired'],
+    ['upstream_http', 403, 'fileViewer.publishFileAccessDenied'],
+    ['upstream_http', 409, 'fileViewer.publishFileServiceRejected'],
+    ['upstream_http', 503, 'fileViewer.publishFileServiceRejected'],
+    ['session_setup', undefined, 'fileViewer.publishFileLocalSessionFailed'],
+    ['cli_missing', undefined, 'fileViewer.publishFileLocalSessionFailed'],
+    ['session_cleanup', undefined, 'fileViewer.publishFileUnconfirmed'],
+    ['invalid_receipt', undefined, 'fileViewer.publishFileUnconfirmed'],
+    ['unknown', undefined, 'fileViewer.publishFileUnconfirmed'],
+  ])('maps safe snapshot reason %s / %s to its own explanation', (reason, upstreamStatus, key) => {
+    const error = Object.assign(new Error('PUBLIC_FILE_PUBLISH_UNAVAILABLE'), {
+      failure: { stage: 'snapshot', reason, upstreamStatus },
+    });
+    expect(publicFilePublishFailureKey(error)).toBe(key);
+  });
+
+  it.each([
+    ['public_share_too_large', 413, 'fileViewer.publishFileTooLarge'],
+    ['manifest_blobs_missing', 409, 'fileViewer.publishFileContentUnavailable'],
+    ['public_upload_expired', 409, 'fileViewer.publishFileConflict'],
+    ['workspace_subscription_locked', 403, 'fileViewer.publishFileWorkspaceLocked'],
+  ])('maps server detail %s before generic status', (upstreamCode, upstreamStatus, expected) => {
+    expect(publicFilePublishFailureKey({failure: {stage: 'push',reason:'upstream_http',upstreamCode,upstreamStatus}})).toBe(expected);
+  });
+
+  it('does not infer a network error from unknown or malformed detail', () => {
+    expect(publicFilePublishFailureKey({ failure: { stage: 'push', reason: 'unknown' } })).toBe('fileViewer.publishFileFailed');
+    expect(publicFilePublishFailureKey({ failure: { stage: 'snapshot', reason: 'private text' } })).toBe('fileViewer.publishFileFailed');
+  });
+
   it('falls back to a generic failure for anything else', () => {
     expect(publicFilePublishFailureKey(new Error('PUBLIC_FILE_URL_UNAVAILABLE'))).toBe(
       'fileViewer.publishFileFailed',

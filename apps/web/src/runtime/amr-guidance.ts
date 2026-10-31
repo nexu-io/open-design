@@ -79,6 +79,16 @@ export const AMR_CONSOLE_UPGRADE_INTENT = 'plan';
  */
 export const AMR_CONSOLE_AUTO_RECHARGE_INTENT = 'auto-recharge';
 
+/**
+ * The console's `billing=<intent>` value that means "open the manual top-up
+ * (充值) dialog on arrival". Product ruling 2026-09-23: the billing card's
+ * wallet row lands on the recharge dialog, not on the auto-recharge policy.
+ *
+ * AMR's seats console accepts this intent. Free workspaces
+ * open plan selection; non-owners see the console's restricted surface.
+ */
+export const AMR_CONSOLE_RECHARGE_INTENT = 'recharge';
+
 // The test entry moved off `vela.powerformer.net` onto
 // `open-design.powerformer.net/cloud` when vela cut the test Cloud domain over
 // (vela #1922 prepare, #1929 finalize). That host serves the test Landing page
@@ -146,16 +156,26 @@ export function amrRechargeUrlForProfile(profile: string | null | undefined): st
   return amrConsoleUrlForProfile(profile);
 }
 
-function amrWorkspaceUrl(
-  profile: string | null | undefined,
+export function amrWorkspaceUrl(
+  base: string,
   workspaceId: string | null | undefined,
-  intent?: 'plans',
+  intent?: string,
 ): string | null {
   const normalizedWorkspaceId = workspaceId?.trim();
   if (!normalizedWorkspaceId) return null;
-  const url = new URL(amrConsoleUrlForProfile(profile));
-  url.searchParams.set('workspaceId', normalizedWorkspaceId);
-  if (intent === 'plans') url.searchParams.set('billing', AMR_CONSOLE_UPGRADE_INTENT);
+  let url: URL;
+  try {
+    url = new URL(base);
+  } catch {
+    return null;
+  }
+  // Workspace first, attribution, then intent.
+  const params = new URLSearchParams({ workspaceId: normalizedWorkspaceId, source: 'open_design' });
+  for (const [key, value] of url.searchParams) {
+    if (key !== 'workspaceId' && key !== 'source') params.append(key, value);
+  }
+  url.search = params.toString();
+  if (intent) url.searchParams.set('billing', intent);
   return url.toString();
 }
 
@@ -163,14 +183,14 @@ export function amrConsoleUrlForWorkspace(
   profile: string | null | undefined,
   workspaceId: string | null | undefined,
 ): string | null {
-  return amrWorkspaceUrl(profile, workspaceId);
+  return amrWorkspaceUrl(amrConsoleUrlForProfile(profile), workspaceId);
 }
 
 export function amrPlansUrlForWorkspace(
   profile: string | null | undefined,
   workspaceId: string | null | undefined,
 ): string | null {
-  return amrWorkspaceUrl(profile, workspaceId, 'plans');
+  return amrWorkspaceUrl(amrConsoleUrlForProfile(profile), workspaceId, AMR_CONSOLE_UPGRADE_INTENT);
 }
 
 /**
@@ -187,8 +207,12 @@ export function amrPlansUrlForWorkspace(
  * `setRuntimeAmrConsoleOrigin`), so there is no second source of truth for
  * "which environment am I".
  */
-export function amrPlansUrlForProfile(profile: string | null | undefined): string {
-  return amrConsoleUrlWithBillingIntent(profile, AMR_CONSOLE_UPGRADE_INTENT);
+export function amrPlansUrlForProfile(
+  profile: string | null | undefined,
+  workspaceId?: string | null,
+  consoleOrigin?: string | null,
+): string {
+  return amrConsoleUrlWithBillingIntent(profile, AMR_CONSOLE_UPGRADE_INTENT, workspaceId, consoleOrigin);
 }
 
 /**
@@ -196,15 +220,23 @@ export function amrPlansUrlForProfile(profile: string | null | undefined): strin
  * Max-tier balance card whose owner has no higher plan to buy. See
  * {@link AMR_CONSOLE_AUTO_RECHARGE_INTENT} for the B-side caveat.
  */
-export function amrAutoRechargeUrlForProfile(profile: string | null | undefined): string {
-  return amrConsoleUrlWithBillingIntent(profile, AMR_CONSOLE_AUTO_RECHARGE_INTENT);
+export function amrAutoRechargeUrlForProfile(
+  profile: string | null | undefined,
+  workspaceId?: string | null,
+  consoleOrigin?: string | null,
+): string {
+  return amrConsoleUrlWithBillingIntent(profile, AMR_CONSOLE_AUTO_RECHARGE_INTENT, workspaceId, consoleOrigin);
 }
 
 function amrConsoleUrlWithBillingIntent(
   profile: string | null | undefined,
   intentValue: string,
+  workspaceId?: string | null,
+  consoleOrigin?: string | null,
 ): string {
-  const base = amrConsoleUrlForProfile(profile);
+  const base = amrConsoleUrlForProfile(profile, consoleOrigin);
+  const workspaceUrl = amrWorkspaceUrl(base, workspaceId, intentValue);
+  if (workspaceUrl) return workspaceUrl;
   const intent = `billing=${intentValue}`;
   return base.includes('?') ? `${base}&${intent}` : `${base}?${intent}`;
 }
@@ -314,6 +346,7 @@ export type RunFailureMessageKey =
   | 'chat.runError.sessionExpiredMessage'
   | 'chat.runError.gitBashMissingMessage'
   | 'chat.runError.cpuUnsupportedMessage'
+  | 'chat.runError.osUnsupportedMessage'
   | 'chat.runError.agentCrashedMessage'
   | 'chat.runError.accountSuspendedMessage'
   | 'chat.runError.certificateFailureMessage'
@@ -491,6 +524,7 @@ export type RunFailureTitleKey =
   | 'chat.runError.title.gitBashMissing'
   | 'chat.runError.title.artifactMissing'
   | 'chat.runError.title.cpuUnsupported'
+  | 'chat.runError.title.osUnsupported'
   | 'chat.runError.title.agentCrashed'
   | 'chat.runError.title.accountSuspended'
   | 'chat.runError.title.cliSessionRefused'
@@ -969,9 +1003,18 @@ function runsOnALocalAgent(agentId: string | null | undefined): boolean {
  * 而**不出**的约三十类里包括进程崩了(S19,每月 20,868 次,第二大桶)和没装
  * CLI(S01)。
  *
- * 这里只动**主按钮位**。每一类失败自己的标题 / 正文一个字都没改,阶梯算出来的
- * 那颗动作(换个模型 / 去设置 / 在终端登录 / 重试 …)也一颗都没删 —— 它们让出
- * 主位,退到次级(见 `ChatPane` 的 `errorActionVariant`)。
+ * 这个字段今天只回答一件事:**这一轮该不该拿到那颗 CTA**。卡上画几颗、画哪几颗,
+ * 自 OPEND-2807 起由 `ChatPane` 自己的两个开关决定 —— Cloud 的失败走
+ * `showCloudRetry`,第三颗是〔重试〕;BYOK / 本地 CLI 走 `showCloudSwitchCta`,
+ * 第三颗是这颗 CTA,且要求宿主真的接了 `onSwitchToAmrAndRetry` 或
+ * `onOpenAmrSettings`(接不住就只剩两颗,不画点了没反应的按钮)。
+ * 两颗常驻次级〔联系我们〕〔导出日志〕无条件在场,所以一张卡恒是三颗。
+ *
+ * ⚠️ 阶梯算出来的那组动作(换个模型 / 去设置 / 在终端登录 / 授权并重试 / 续跑)
+ * **已经整组离开卡面**,不是「退到次级」—— 后者是 OPEND-2772 当时的形态,已被推翻。
+ * `primaryActionForFailure` 仍然在算,但结果只喂标题 / 正文 / 交接判据,
+ * 不再决定任何一颗按钮。终局、三个例外与四条代价记在
+ * `specs/current/chat-panel-decisions-sheet.md` 的「OPEND-2807 报错卡终局」。
  */
 function withCloudSwitchCta(ui: RunFailureUi): RunFailureUi {
   return ui.cloudSwitchCta ? ui : { ...ui, cloudSwitchCta: true };
@@ -1314,6 +1357,13 @@ const AGENT_AGNOSTIC_DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
   cpu_unsupported: contactSupportOnly(
     'chat.runError.title.cpuUnsupported',
     'chat.runError.cpuUnsupportedMessage',
+  ),
+  // The bundled runtime cannot load on this Windows build (older than 10 1809 /
+  // build 17763, Bun's floor). Deterministic like cpu_unsupported, so no Retry;
+  // the copy names the OS version so the user updates Windows instead.
+  os_unsupported: contactSupportOnly(
+    'chat.runError.title.osUnsupported',
+    'chat.runError.osUnsupportedMessage',
   ),
   // S19 · the agent exited and did not say why. 20,868 runs/month, 16.3% of all
   // failures, 3,869 devices — the second-largest bucket, and until now it had no

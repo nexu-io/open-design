@@ -83,7 +83,7 @@ describe('S12 · 文案撤回(壳头读回「进行中」)', () => {
     const { container } = render(<ExecutionShell shell={runningShell(START + 30_000)} />);
 
     expect(screen.getByText('进行中')).toBeTruthy();
-    expect(headOf(container)).toContain('30s');
+    expect(headOf(container)).toContain('30 秒');
     expect(document.querySelector('[data-orb="connecting"]')).not.toBeNull();
   });
 });

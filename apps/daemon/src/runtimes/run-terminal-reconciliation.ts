@@ -16,14 +16,17 @@ import {
   normalizeAnalyticsCaptureResult,
   type AnalyticsCaptureResult,
 } from '../analytics.js';
-import type { IntentRecoveryRunState } from '../strategies/od-next/intent-resolution-recovery.js';
+
 import { reconcileStrategyTaskRunTerminal } from '../strategies/task-store.js';
+import { recordStrategyTaskRunLifecycle } from '../strategies/task-display.js';
 import { classifyRunFailure } from '../run-failure-classification.js';
 import { summarizeRunDiagnosticsForAnalytics } from '../run-diagnostics.js';
+import { readRunStorageAnalytics } from '../storage/run-storage-analytics.js';
 import { deriveRunErrorCode, runResultFromStatus } from '../run-result.js';
 import { runAskedUserQuestion } from './run-artifacts.js';
 import {
   interruptDurableRunAfterDaemonRestart,
+  lastRecordedRunActivityAt,
   RESTART_ERROR_CODE,
   RESTART_ERROR_MESSAGE,
   type RestartRecoverableDurableRunState,
@@ -96,7 +99,7 @@ interface AnalyticsRecovery {
   completedAt?: number;
 }
 
-interface DurableRunState extends RestartRecoverableDurableRunState, IntentRecoveryRunState {
+interface DurableRunState extends RestartRecoverableDurableRunState, RestartRecoverableDurableRunState {
   schemaVersion: 1;
   id: string;
   projectId: string | null;
@@ -170,6 +173,21 @@ interface ReconciliationOptions {
     now: number,
   ) => Partial<DurableRunState> | null;
   finalizeTerminalLocally?: (run: DurableRunState, status: string, terminalAt: number) => void;
+}
+
+function replayStorageProperties(
+  db: ReconciliationOptions['db'],
+  state: DurableRunState,
+): Record<string, unknown> | null {
+  try {
+    const properties = readRunStorageAnalytics(db, {
+      runId: state.id,
+      assistantMessageId: state.assistantMessageId,
+    });
+    return Object.keys(properties).length > 0 ? properties : null;
+  } catch {
+    return null;
+  }
 }
 
 function appVersionForRun(state: DurableRunState, options: ReconciliationOptions): string {
@@ -303,11 +321,21 @@ function reconcileMessages(
     const status = state && TERMINAL_STATUSES.has(state.status) ? state.status : 'failed';
     db.prepare(
       `UPDATE messages
-          SET run_status = ?, ended_at = COALESCE(ended_at, ?)
+          SET run_status = ?, ended_at = COALESCE(ended_at, ?),
+              cancel_origin = COALESCE(cancel_origin, ?)
         WHERE id = ? AND run_status IN ('queued', 'running')`,
-    ).run(status, state?.updatedAt ?? now, row.id);
+    ).run(
+      status,
+      state?.updatedAt ?? now,
+      status === 'canceled' ? state?.cancelOrigin ?? null : null,
+      row.id,
+    );
     const isDaemonRestart = state?.terminalRecoveryReason === 'daemon_restart'
       || state?.errorCode === RESTART_ERROR_CODE;
+    // P0-24 Q5: a Run the restart stopped is just stopped. Its message already
+    // says canceled, and the footer reports it; an extra status row would
+    // print the internal reconciliation note into the conversation.
+    if (status === 'canceled' && isDaemonRestart) continue;
     appendMessageStatusEvent(db, row.id, status === 'failed'
       ? {
           label: 'error',
@@ -396,7 +424,8 @@ export async function reconcileDurableRunTerminals(
         // A validated local verdict can correct a previously derived restart
         // failure. Its stale marker would otherwise replay a failed SSE end
         // even though the durable status has now been repaired to succeeded.
-        if (recovered.status === 'succeeded' && entry.state.status === 'failed'
+        if (recovered.status === 'succeeded'
+          && (entry.state.status === 'failed' || entry.state.status === 'canceled')
           && entry.state.errorCode === RESTART_ERROR_CODE
           && entry.state.terminalRecoveryReason === 'daemon_restart') {
           delete next.terminalRecoveryReason;
@@ -422,7 +451,11 @@ export async function reconcileDurableRunTerminals(
   }
 
   for (const entry of states) {
-    if (!interruptDurableRunAfterDaemonRestart(entry.state, now)) continue;
+    if (!interruptDurableRunAfterDaemonRestart(
+      entry.state,
+      now,
+      () => lastRecordedRunActivityAt(entry.state, readEvents(options.runsLogDir, entry.state.id)),
+    )) continue;
     writeState(entry.filePath, entry.state);
     interruptedRunIds.add(entry.state.id);
     result.interrupted += 1;
@@ -449,6 +482,16 @@ export async function reconcileDurableRunTerminals(
   const statesByRunId = new Map(states.map((entry) => [entry.state.id, entry.state]));
   result.messagesReconciled = reconcileMessages(options.db, statesByRunId, now, deferredRunIds);
   for (const { state } of states) {
+    if (TERMINAL_STATUSES.has(state.status)) {
+      try {
+        recordStrategyTaskRunLifecycle(options.db, {
+          runId: state.id, phase: 'end', status: state.status,
+          at: state.terminalAt ?? state.updatedAt, attempt: state.manualResumeAttemptCount ?? 0,
+        });
+      } catch (error) {
+        console.warn('[runs] task display terminal reconciliation skipped', state.id, error);
+      }
+    }
     if (state.status !== 'failed' && state.status !== 'canceled') continue;
     if (reconcileStrategyTaskRunTerminalIsolated(options.db, {
       runId: state.id,
@@ -557,7 +600,11 @@ export async function reconcileDurableRunTerminals(
           ? state.errorCode ?? RESTART_ERROR_CODE
           : deriveRunErrorCode(state)
         : undefined;
-      const failure = failed
+      // A canceled Run is classified too, the way the live path does, so its
+      // replay carries `cancel_origin` / `terminal_trigger` — the SLO
+      // eligibility signal. P0-24 Q5 makes a restart-interrupted Run canceled,
+      // and without this its replay would lose the stop reason entirely.
+      const failure = failed || state.status === 'canceled'
         ? classifyRunFailure({
             result: runResult,
             status: state,
@@ -640,6 +687,9 @@ export async function reconcileDurableRunTerminals(
           : {}),
       };
       Object.assign(properties, buildRunFinishedV4Aliases(properties, taskLineage));
+      // A run that died with its daemon never emitted storage fields, and it is
+      // the heaviest runs that die. Re-measure from SQLite for the emitted copy.
+      const storageProperties = replayStorageProperties(options.db, state);
       let captureResult: AnalyticsCaptureResult;
       try {
         captureResult = normalizeAnalyticsCaptureResult(
@@ -647,7 +697,7 @@ export async function reconcileDurableRunTerminals(
             eventName: 'run_finished',
             context: state.analyticsRecovery.context,
             appVersion: appVersionForRun(state, options),
-            properties,
+            properties: storageProperties ? { ...properties, ...storageProperties } : properties,
             insertId: `${state.analyticsRecovery.insertId}-finish`,
           })),
         );

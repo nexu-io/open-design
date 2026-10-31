@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { pickHomeTemplate, homeTemplateTrigger } from '../helpers/home-template-picker';
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -91,22 +92,12 @@ describe('HomeView media composer options', () => {
     stubFetch({ mediaApplyResponse });
     renderHome();
 
-    // Image lives behind the row's 更多 popover.
-    const more = await screen.findByTestId('home-hero-type-pills-more');
-    await waitFor(() => expect((more as HTMLButtonElement).disabled).toBe(false));
-    fireEvent.click(more);
-    const imageTab = await screen.findByTestId('home-hero-type-pill-image-more');
-    expect((imageTab as HTMLButtonElement).disabled).toBe(false);
+    await pickHomeTemplate('image');
 
-    fireEvent.click(imageTab);
-
-    // Picking retires the row; the composer pill names the type and its clear
-    // stays live while the media apply is still pending, so the choice is
-    // reversible at every moment.
     await waitFor(() => {
       expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Image');
     });
-    expect(screen.getByTestId('home-hero-template-clear')).toBeTruthy();
+    expect(homeTemplateTrigger()).toBeTruthy();
   });
 
   it('defaults to Design mode with no mode picker in the composer', async () => {
@@ -577,7 +568,7 @@ describe('HomeView media composer options', () => {
 
     await screen.findByTestId('home-hero-input');
     expect(
-      (screen.getByTestId('home-hero-type-pill-deck') as HTMLButtonElement).disabled,
+      (homeTemplateTrigger() as HTMLButtonElement).disabled,
     ).toBe(true);
     expect(fetchMock.mock.calls.some(([url]) => (
       typeof url === 'string' && url.includes('/api/plugins/od-media-generation/apply')
@@ -735,33 +726,7 @@ async function openOption(name: string) {
   await waitFor(() => expect(screen.getByTestId(`home-hero-footer-option-${name}-menu`)).toBeTruthy());
 }
 
-async function clickHomeRailChip(id: string) {
-  // A type already picked retires the row, and the pill has no menu — so
-  // switching means clearing back to the empty state first.
-  const clear = screen.queryByTestId('home-hero-template-clear');
-  if (clear) fireEvent.click(clear);
-  const lead = await screen.findByTestId('home-hero-type-pill-prototype');
-  await waitFor(() => expect((lead as HTMLButtonElement).disabled).toBe(false));
-  let pill = screen.queryByTestId(`home-hero-type-pill-${id}`);
-  if (!pill) {
-    // Types behind 更多 mount only while its popover is open.
-    fireEvent.click(screen.getByTestId('home-hero-type-pills-more'));
-    pill = screen.queryByTestId(`home-hero-type-pill-${id}-more`);
-  }
-  if (pill) {
-    fireEvent.click(pill);
-    return;
-  }
-  // Types outside the fixed row (media, HyperFrames, …) are reached the way
-  // the workspace tabs-bar hands one off: the apply-template window event,
-  // which HomeHero applies exactly as a row click.
-  fireEvent.keyDown(document, { key: 'Escape' });
-  await act(async () => {
-    window.dispatchEvent(
-      new CustomEvent(HOME_APPLY_TEMPLATE_EVENT, { detail: { chipId: id } }),
-    );
-  });
-}
+const clickHomeRailChip = pickHomeTemplate;
 
 // Drive the Lexical editor and let the OnChange -> onPromptChange -> setPrompt
 // state flush settle (the submit path reads HomeView's React `prompt` state, not

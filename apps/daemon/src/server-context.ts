@@ -236,13 +236,13 @@ export interface ServerContext {
    * on a re-move). The principal is the same workspace/member that passed D's
    * route-level permission check, so the side effect cannot publish/catalog
    * under a different ambient workspace. D gates the move itself on
-   * `canShareProjects`, so this seam does NOT re-check permission. See
-   * routes/collab-sync.ts for the equivalent HTTP seam (POST /collab/sync-intent)
-   * used by the demo surface.
+   * `canShareProjects`, so this seam does NOT re-check permission. Legacy
+   * sync-intents cannot change policy; permanent deletion is a separate intent.
    */
   collabSync: {
     requestTeamShare(projectId: string, share?: string | ResourceHubPrincipal): Promise<{ version: number | null }>;
     requestTeamUnshare(projectId: string, share?: string | ResourceHubPrincipal): Promise<void>;
+    requestTeamDelete(projectId: string, principal: ResourceHubPrincipal): Promise<void>;
     /**
      * Pull and atomically register a catalog-only Team project before an
      * exact-owner mutation needs local state. This preserves a Personal copy

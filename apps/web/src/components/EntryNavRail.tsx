@@ -1,3 +1,7 @@
+import { WorkspaceQuotaPopover } from './WorkspaceQuotaPopover';
+import { workspaceQuotaView } from '../collab/workspace-quota-view';
+import planCardStyles from './PersonalPlanCard.module.css';
+import styles from './EntryNavRail.module.css';
 // Team-edition entry navigation rail (Lovart/Manus-style labeled column).
 //
 // Structure — faithfully ported from the design demo
@@ -42,22 +46,24 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { coalescedGet, evictCoalescedGet } from '../lib/coalesced-get';
+import { compareRecentProjects } from '../lib/project-order';
 import {
   canReachWorkspaceBillingEntrance,
   workspaceSeatCapacityState,
   type WorkspaceActiveResponse,
   type WorkspaceBillingSummary,
+  type WorkspaceBillingResponse,
   type WorkspaceCollabContext,
   type WorkspaceDirectoryItem,
   type WorkspaceDirectoryResponse,
   type WorkspaceProjectSummary,
-  workspaceContextHasTeamIdentity,
+  workspaceContextHasWorkspaceIdentity,
 } from '@open-design/contracts';
 import {
   fetchVelaLoginStatus,
-  formatVelaBalanceAmount,
   formatVelaBalanceUsd,
   velaLogout,
+  type VelaLoginStatus,
 } from '../providers/daemon';
 import { resetCloudSignInTipDismissal } from './CloudSignInTip';
 import { SignOutConfirmDialog } from './SignOutConfirmDialog';
@@ -85,6 +91,8 @@ import { MessageCenter } from './MessageCenter';
 import type { EntrySettingsSection } from './EntrySettingsMenu';
 import type { Project } from '../types';
 import { isRtlLocale, useI18n } from '../i18n';
+import { communityForLocale } from '../lib/community-links';
+import { FeishuIcon } from './chat/support-brand-icons';
 import { useDismissOnOutsideInteraction } from '../hooks/useDismissOnOutsideInteraction';
 import {
   beginWorkspaceScopedRead,
@@ -97,13 +105,13 @@ import {
   workspaceBillingSummaryForContext,
   workspaceIdentityCacheKey,
 } from '../collab/useWorkspaceContext';
-import { canUpgradeFromPlanTier, resolvePlanLabelTier } from '../collab/team-plan';
-import { shouldShowCreditsBalance } from './entry-rail-account-state';
+import { canUpgradeFromPlanTier, isMaxPlanTier, resolvePlanLabelTier } from '../collab/team-plan';
 import {
   AMR_CONSOLE_AUTO_RECHARGE_INTENT,
   amrAutoRechargeUrlForProfile,
   amrConsoleUrlForWorkspace,
   amrPlansUrlForProfile,
+  amrWorkspaceUrl,
 } from '../runtime/amr-guidance';
 import { useWorkspaceInvalidation } from '../collab/workspace-events';
 import { resolveDeepSeekV4FlashCampaignAudience } from '../campaigns/deepseek-v4-flash';
@@ -128,7 +136,6 @@ import {
   workspaceAnalyticsDimensions,
 } from '../analytics/workspace';
 import { WorkbenchCampaignBadge } from './WorkbenchCampaignBadge';
-import { canRenderProductionCampaignBadge, ProductionCampaignBadge } from './ProductionCampaignBadge';
 import { workspaceChromeAccountActionsHost } from './workspaceChromeActions';
 
 /** Gap the account menu keeps from the rail card's top edge — the same inset
@@ -142,7 +149,6 @@ const ACCOUNT_MENU_MIN_HEIGHT = 200;
 const REPO_URL = 'https://github.com/nexu-io/open-design';
 const GITHUB_HELP_URL = `${REPO_URL}/issues/new`;
 const GITHUB_FEATURE_URL = `${REPO_URL}/pulls`;
-const DISCORD_URL = 'https://discord.gg/mHAjSMV6gz';
 const X_URL = 'https://x.com/OpenDesignHQ';
 const CONTACT_EMAIL_URL = 'mailto:support@open-design.ai';
 const externalLinkProps = { target: '_blank', rel: 'noreferrer noopener' } as const;
@@ -254,11 +260,13 @@ interface Props {
   /** Extra content for the top-right chrome cluster, rendered LEFT of the
    *  account module (e.g. the DeepSeek campaign badge). */
   topRightSlot?: ReactNode;
+  inviteSlot?: ReactNode;
   /** The one shared workspace context; null → local (no cloud identity) state. */
   context: WorkspaceCollabContext | null;
   /** Account billing metadata (via the vela CLI 收口). Null → the billing
    *  chip falls back to the context plan-tier hint. */
   billing?: WorkspaceBillingSummary | null;
+  billingResponse?: WorkspaceBillingResponse | null;
   /** Explicitly scoped balance in USD for `context`. Team callers must pass
    *  only a backend-proven v2 workspace wallet, never account credits. */
   balanceUsd?: string | null;
@@ -313,6 +321,7 @@ interface Props {
   onPriorityAnnouncementPendingChange?: (pending: boolean) => void;
   priorityAnnouncementCurrentPlanId?: string | null;
   priorityAnnouncementAmrProfile?: string | null;
+  workspaceQuotaStatus?: Pick<VelaLoginStatus, 'profile' | 'consoleOrigin'> | null;
   priorityAnnouncementMetricsConsent?: boolean;
 }
 
@@ -433,10 +442,10 @@ function RailRecentSection({
   const collectionPage: TrackingProjectCollectionPage =
     analyticsPage === 'drafts' || analyticsPage === 'all_projects' ? analyticsPage : 'home';
   // The same gates the project cards apply (RecentProjectsStrip): a move needs
-  // a team plane to move into AND the right to share, and only the member's
-  // own projects can be changed at all.
+  // an exact Workspace identity and the right to share. Only the member's
+  // own private projects can be moved into the shared collection.
   const moveToTeamAvailable =
-    workspaceContextHasTeamIdentity(workspaceContext)
+    workspaceContextHasWorkspaceIdentity(workspaceContext)
     && workspaceContext?.permissions.canShareProjects === true;
   const isSharedProject: SharedProjectPredicate = isShared ?? (() => false);
   const ownedBySelf = (projectId: string) => projectOwnedBySelf({
@@ -483,7 +492,7 @@ function RailRecentSection({
   // rest from the rail entirely). The LIST scrolls past ~11 rows, not the rail
   // — see `.entry-nav-rail__recent-list` in entry-layout.css.
   const items = useMemo(
-    () => [...projects].sort((a, b) => b.updatedAt - a.updatedAt),
+    () => [...projects].sort(compareRecentProjects),
     [projects],
   );
   // Run status for the rows' leading glyph. `Project.status` cannot serve it —
@@ -495,14 +504,24 @@ function RailRecentSection({
   const recentListRef = useRef<HTMLUListElement>(null);
   // Keep the full catalog navigable, but poll only rows intersecting its
   // scrollport. The list's existing height cap bounds the status request set.
-  // `null` until the observer has reported once; never reset on a catalog
-  // hand-over, so a re-render cannot blank the rows' glyphs.
-  const [visibleProjectIds, setVisibleProjectIds] = useState<string[] | null>(null);
+  // Visibility belongs to a particular identity and catalog. An empty catalog
+  // removes the list DOM without unmounting this component, so an observer
+  // callback cannot be relied on to retire the previous catalog's IDs.
+  const visibilityScope = JSON.stringify([
+    workspaceIdentityCacheKey(workspaceContext ?? null),
+    items.map((project) => project.id).sort(),
+  ]);
+  const [visibleProjects, setVisibleProjects] = useState<{
+    scope: string;
+    ids: string[];
+  } | null>(null);
   useEffect(() => {
     const list = recentListRef.current;
     if (!open || !list || typeof IntersectionObserver === 'undefined') return;
+    let active = true;
     const visible = new Set<string>();
     const observer = new IntersectionObserver((entries) => {
+      if (!active) return;
       for (const entry of entries) {
         const id = (entry.target as HTMLElement).dataset.projectId;
         if (!id) continue;
@@ -510,22 +529,28 @@ function RailRecentSection({
         else visible.delete(id);
       }
       const next = [...visible].sort();
-      setVisibleProjectIds((prev) =>
-        prev && prev.length === next.length && prev.every((id, index) => id === next[index])
+      setVisibleProjects((prev) =>
+        prev?.scope === visibilityScope
+          && prev.ids.length === next.length
+          && prev.ids.every((id, index) => id === next[index])
           ? prev
-          : next);
+          : { scope: visibilityScope, ids: next });
     }, { root: list });
     for (const row of list.children) observer.observe(row);
-    return () => observer.disconnect();
-  }, [items, open]);
+    return () => {
+      active = false;
+      observer.disconnect();
+    };
+  }, [items, open, visibilityScope]);
   // Until the observer has spoken, ask for the head of the list — the rows the
   // cap shows on a desktop window — in the same commit that paints them
   // (OPEND-2762). The observer's first report lands a frame later, and waiting
   // for it is what left the rows a round trip ahead of their glyphs.
   const runStatusProjectIds = useMemo(
-    () => visibleProjectIds
-      ?? items.slice(0, RECENT_STATUS_HEAD_ROWS).map((project) => project.id),
-    [visibleProjectIds, items],
+    () => visibleProjects?.scope === visibilityScope
+      ? visibleProjects.ids
+      : items.slice(0, RECENT_STATUS_HEAD_ROWS).map((project) => project.id),
+    [visibleProjects, visibilityScope, items],
   );
   const runStatusByProjectId = useProjectRunStatuses(runStatusProjectIds, {
     enabled: open,
@@ -595,6 +620,7 @@ function RailRecentSection({
                     moveToTeamAvailable={moveToTeamAvailable}
                     sharing={moveFlow.sharingId === project.id}
                     shareError={moveFlow.error?.projectId === project.id ? moveFlow.error.kind : null}
+                    runId={project.status?.runId}
                     onOpen={openProject}
                     onRename={onRename}
                     onDuplicate={onDuplicate ? (target) => { void duplicateFlow.duplicate(target); } : undefined}
@@ -610,6 +636,8 @@ function RailRecentSection({
       {deleteFlow.target ? (
         <ProjectDeleteConfirmDialog
           projectName={deleteFlow.target.name}
+          activeShareCount={deleteFlow.activeShareCount}
+          shareReadStatus={deleteFlow.shareReadStatus}
           pending={deleteFlow.pending}
           failed={deleteFlow.failed}
           onCancel={deleteFlow.cancel}
@@ -776,6 +804,27 @@ export function teamConsoleUrl(
 }
 
 /**
+ * The billing card's wallet figure, always spelled 「US$10.00」 — in every
+ * locale, per design PR #8364 and the product ruling on 2026-09-23
+ * (「无论什么语言都显示美刀, 都用 US」).
+ *
+ * Deliberately not `formatVelaBalanceUsd`: that one writes a bare `$` and is
+ * shared with surfaces that already name the currency some other way. This row
+ * stands alone under an allowance measured in percent, so the currency is
+ * named. Not `Intl.NumberFormat` either: it names the currency only where the
+ * locale's own dollar is not the US one ("$10.00" in en), which is exactly the
+ * per-locale drift the ruling removes.
+ */
+function formatWalletBalance(raw: string | null | undefined): string | null {
+  if (raw == null || raw === '') return null;
+  const amount = Number(raw);
+  if (!Number.isFinite(amount)) return null;
+  // Sign before the currency, as `formatVelaBalanceUsd` does: "-US$1.25".
+  const sign = amount < 0 ? '-' : '';
+  return `${sign}US$${Math.abs(amount).toFixed(2)}`;
+}
+
+/**
  * Shared destination for every generic 「升级」/「升级套餐」 affordance. Pricing
  * owns comparison; selecting a concrete card there is what hands checkout to
  * Cloud.
@@ -792,7 +841,7 @@ export function teamConsoleUrl(
 export function workspaceUpgradeUrl(
   context: WorkspaceCollabContext | null | undefined,
   billing: WorkspaceBillingSummary | null | undefined,
-  options: { fallbackProfile: string | null | undefined },
+  options: { fallbackProfile: string | null | undefined; consoleOrigin?: string | null },
 ): string | null;
 export function workspaceUpgradeUrl(
   context: WorkspaceCollabContext | null | undefined,
@@ -801,13 +850,15 @@ export function workspaceUpgradeUrl(
 export function workspaceUpgradeUrl(
   context: WorkspaceCollabContext | null | undefined,
   _billing: WorkspaceBillingSummary | null | undefined,
-  options?: { fallbackProfile: string | null | undefined },
+  options?: { fallbackProfile: string | null | undefined; consoleOrigin?: string | null },
 ): string | null {
   // Missing context can use the caller's fallback profile because there is no
   // workspace identity to authorize yet.
   if (context && !canReachWorkspaceBillingEntrance(context)) return null;
   if (!context && !options) return null;
-  return amrPlansUrlForProfile(options?.fallbackProfile);
+  // Explicit runtime callers wait for a profile rather than guessing production.
+  if (options && !options.fallbackProfile?.trim()) return null;
+  return amrPlansUrlForProfile(options?.fallbackProfile, context?.workspaceId, options?.consoleOrigin);
 }
 
 /**
@@ -827,12 +878,19 @@ export function workspaceUpgradeUrl(
  */
 export function workspaceAutoRechargeUrl(
   context: WorkspaceCollabContext | null | undefined,
-  options: { fallbackProfile: string | null | undefined },
+  options: { fallbackProfile: string | null | undefined; consoleOrigin?: string | null },
 ): string | null {
   if (context && context.permissions?.canManageAutoRecharge !== true) return null;
   const settingsUrl = context?.workspaceSettingsUrl?.trim() || null;
-  if (settingsUrl) return teamConsoleUrl(settingsUrl, 'auto-recharge');
-  return amrAutoRechargeUrlForProfile(options.fallbackProfile);
+  if (settingsUrl) return amrWorkspaceUrl(
+    teamConsoleUrl(settingsUrl, 'auto-recharge'),
+    context?.workspaceId,
+    AMR_CONSOLE_AUTO_RECHARGE_INTENT,
+  ) ?? teamConsoleUrl(settingsUrl, 'auto-recharge');
+  // A resolved workspace URL above remains authoritative. Without it, wait for
+  // the runtime profile just as the plan entrance does; null cannot pick prod.
+  if (!options.fallbackProfile?.trim()) return null;
+  return amrAutoRechargeUrlForProfile(options.fallbackProfile, context?.workspaceId, options.consoleOrigin);
 }
 
 export type WorkspaceInviteTarget =
@@ -840,40 +898,18 @@ export type WorkspaceInviteTarget =
   | { kind: 'vela'; url: string }
   | { kind: 'unavailable' };
 
-/**
- * Whether this member should discover the invite flow.
- *
- * Direct invites and billing recovery are separate capabilities. A Personal
- * Free owner (or a full Team owner) can still enter Vela's upgrade/seat flow
- * without direct invite capability, but an admin never acquires billing power
- * from role alone. Unknown capacity remains usable for a member with explicit
- * invite permission; the invite API is still the authority if the plan is full.
- */
+/** Active members enter the local invitation flow regardless of plan or seats.
+ * The daemon re-verifies membership and remains the mutation authority. */
 export function canAccessWorkspaceInviteFlow(
   context: WorkspaceCollabContext | null | undefined,
 ): boolean {
-  if (
-    !context ||
-    context.memberStatus !== 'active' ||
-    context.lifecycleState !== 'active' ||
-    (context.role !== 'owner' && context.role !== 'admin')
-  ) {
-    return false;
-  }
-
-  const canInviteMembers = context.permissions?.canInviteMembers === true;
-  const canManageBilling = context.permissions?.canManageBilling === true;
-  const needsTeamUpgrade =
-    context.billingState === 'free' || context.billingState === 'inactive';
-  if (needsTeamUpgrade) {
-    return context.role === 'owner' && canManageBilling;
-  }
-  if (context.workspaceType === 'personal') return canInviteMembers;
-
-  const isSeatFull = workspaceSeatFull(context);
-  if (isSeatFull === undefined) return canInviteMembers;
-  if (!isSeatFull) return canInviteMembers;
-  return context.role === 'owner' && canManageBilling;
+  return Boolean(
+    context
+    && context.memberStatus === 'active'
+    && context.lifecycleState === 'active'
+    && context.permissions?.canInviteMembers === true
+    && ['owner', 'admin', 'member'].includes(context.role),
+  );
 }
 
 export function workspaceInviteAvailableSeats(
@@ -883,41 +919,13 @@ export function workspaceInviteAvailableSeats(
   return context?.seatSummary?.availableSeats;
 }
 
-function workspaceSeatFull(
-  context: WorkspaceCollabContext,
-): boolean | undefined {
-  const state = workspaceSeatCapacityState(context.seatSummary);
-  return state === 'unknown' ? undefined : state === 'full';
-}
-
-/**
- * Chooses the first safe invite surface. The local form requires direct invite
- * capability and no proof that the team is already full; unknown capacity is
- * resolved by the invite API when the form is submitted.
- * Personal, Free-plan, and proven full-seat owner states go to Vela, whose
- * dashboard owns the authoritative upgrade/seat/invite decision. Unknown seat
- * data stays on the local permission-gated flow and lets the invite API return
- * an authoritative capacity result.
- */
+/** Invitation is a member action; it never redirects to a purchase flow. */
 export function resolveWorkspaceInviteTarget(
   context: WorkspaceCollabContext | null | undefined,
 ): WorkspaceInviteTarget {
-  if (!context || !canAccessWorkspaceInviteFlow(context)) {
-    return { kind: 'unavailable' };
-  }
-  const needsTeamUpgrade =
-    context.billingState === 'free' || context.billingState === 'inactive';
-  if (
-    context.workspaceType === 'team' &&
-    !needsTeamUpgrade &&
-    workspaceSeatFull(context) !== true &&
-    context.permissions.canInviteMembers === true
-  ) {
-    return { kind: 'local' };
-  }
-  const settingsUrl = context?.workspaceSettingsUrl?.trim() || null;
-  if (!settingsUrl) return { kind: 'unavailable' };
-  return { kind: 'vela', url: teamConsoleUrl(settingsUrl, 'invite') };
+  return canAccessWorkspaceInviteFlow(context)
+    ? { kind: 'local' }
+    : { kind: 'unavailable' };
 }
 
 /**
@@ -952,6 +960,10 @@ function formatBillingTier(tier: string, t: ReturnType<typeof useI18n>['t']): st
   if (normalized === 'pro') return t('entry.billingTierPro');
   if (normalized === 'plus') return t('entry.billingTierPlus');
   if (normalized === 'max') return t('entry.billingTierMax');
+  // Go joined the personal ladder below Plus. Without this it fell through to
+  // the title-case fallback, which happened to read the same today but would
+  // print any future `go_yearly`-shaped id verbatim.
+  if (normalized === 'go') return t('entry.billingTierGo');
   // Unknown id: title-case the segments rather than showing `some_new_tier`.
   return normalized
     .split(/[_-]+/)
@@ -961,15 +973,18 @@ function formatBillingTier(tier: string, t: ReturnType<typeof useI18n>['t']): st
 }
 
 interface EntryTopRightClusterProps {
+  amrProfile?: string | null;
   /** Analytics page the cluster reports from: the entry views map through
    *  `entryViewToTracking`, the workspace mount reports 'project'. */
   page: TrackingWorkspacePage;
   context: WorkspaceCollabContext | null;
   billing?: WorkspaceBillingSummary | null;
+  billingResponse?: WorkspaceBillingResponse | null;
   balanceUsd?: string | null;
   /** Extra content rendered LEFT of the credits pill (e.g. the DeepSeek
    *  campaign badge on Home). */
   leadingSlot?: ReactNode;
+  inviteSlot?: ReactNode;
   /** Update-ready host; rides the account row right after the avatar chip. */
   updaterSlot?: ReactNode;
   /**
@@ -987,6 +1002,7 @@ interface EntryTopRightClusterProps {
   onPriorityAnnouncementPendingChange?: (pending: boolean) => void;
   priorityAnnouncementCurrentPlanId?: string | null;
   priorityAnnouncementAmrProfile?: string | null;
+  workspaceQuotaStatus?: Pick<VelaLoginStatus, 'profile' | 'consoleOrigin'> | null;
   priorityAnnouncementMetricsConsent?: boolean;
 }
 
@@ -1006,11 +1022,14 @@ interface EntryTopRightClusterProps {
  * mutually exclusive.
  */
 export function EntryTopRightCluster({
+  amrProfile,
   page,
   context,
   billing,
+  billingResponse,
   balanceUsd,
   leadingSlot,
+  inviteSlot,
   updaterSlot,
   accountHost,
   onOpenSettings,
@@ -1019,9 +1038,10 @@ export function EntryTopRightCluster({
   onPriorityAnnouncementPendingChange,
   priorityAnnouncementCurrentPlanId,
   priorityAnnouncementAmrProfile,
+  workspaceQuotaStatus,
   priorityAnnouncementMetricsConsent,
 }: EntryTopRightClusterProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const analytics = useAnalytics();
   const workspaceDimensions = workspaceAnalyticsDimensions(context);
   const [chromeActionsHost, setChromeActionsHost] = useState<HTMLElement | null>(
@@ -1070,24 +1090,18 @@ export function EntryTopRightCluster({
       ? t('entry.billingTierTeam')
       : t('entry.billingTierFree');
   const balanceLabel = formatVelaBalanceUsd(balanceUsd);
-  const balanceAmount = formatVelaBalanceAmount(balanceUsd);
-  // A subscriber's $0.00 is a healthy state (their popular models are
-  // unlimited), so the pill stays out of the way instead of alarming them.
-  const showCreditsBalance = shouldShowCreditsBalance({
-    tier: labelTier,
-    balanceUsd,
-  });
-  // #5517: wordmark badge inside the menu's billing card. It names the plan
-  // FAMILY, so a TEAM workspace draws the one `team` wordmark at every tier —
-  // free through max — while the personal ladder keeps its per-tier glyph
-  // (product ruling, see `planBadgeTierForWorkspace`). The workspace kind is
-  // passed because it is the only thing that can name the FREE team tier: B
-  // reports it with a null `planId` and an empty `membershipTier`, an id no
-  // different from a personal free account.
-  const planTier = planBadgeTierForWorkspace({
+  // The billing card's own wallet figure. The design writes it with the
+  // currency NAMED (「US$10.00」, zh-CN), which is what `Intl` produces for the
+  // reader's locale — `formatVelaBalanceUsd`'s bare `$` is kept for every
+  // other surface that already sits next to something naming the currency.
+  const walletBalanceLabel = formatWalletBalance(balanceUsd);
+  // The pill and the card name the same scoped tier. Keep the legacy TEAM
+  // fallback for a team plan that has no recognized D4 tier.
+  const quotaView = workspaceQuotaView({ context, response: billingResponse, tier: labelTier, balanceUsd });
+  const planTier = quotaView.planKnown ? quotaView.tier ?? planBadgeTierForWorkspace({
     tier: rawTier || tierLabel,
     workspaceType: context?.workspaceType,
-  });
+  }) : null;
 
   const [accountMenuMode, setAccountMenuMode] = useState<'closed' | 'hover' | 'pinned'>(
     'closed',
@@ -1256,7 +1270,10 @@ export function EntryTopRightCluster({
 
   // One public comparison destination shared with the rail's invite dialog.
   // Pricing owns plan choice; only a selected card hands off to checkout.
-  const upgradeUrl = workspaceUpgradeUrl(context, billing);
+  const upgradeUrl = workspaceUpgradeUrl(context, billing, {
+    fallbackProfile: workspaceQuotaStatus?.profile?.trim() || amrProfile,
+    consoleOrigin: workspaceQuotaStatus?.consoleOrigin,
+  });
   const billingUpgradeUrl =
     context?.billingRecovery?.recoveryUrl?.trim() || upgradeUrl;
   // #62: the 积分 row links straight OUT to B's console dashboard (usage detail
@@ -1264,7 +1281,8 @@ export function EntryTopRightCluster({
   // #5517. It used to open a wallet page; balance, top-up and the auto-recharge
   // policy were rehomed onto the dashboard (vela #1055).
   const billingConsoleUrl = workspaceSettingsUrl
-    ? teamConsoleUrl(workspaceSettingsUrl, 'billing')
+    ? amrWorkspaceUrl(teamConsoleUrl(workspaceSettingsUrl, 'billing'), context?.workspaceId)
+      ?? teamConsoleUrl(workspaceSettingsUrl, 'billing')
     : null;
   // Where the account menu's 账单 row goes. The workspace-settings URL is the
   // better answer when the context carries one (it pins the console to THIS
@@ -1275,6 +1293,13 @@ export function EntryTopRightCluster({
   // campaign badge already build their plans links.
   const accountBillingUrl =
     billingConsoleUrl ?? amrConsoleUrlForWorkspace(undefined, context?.workspaceId);
+  // Where the card's 「管理」 goes for a tier with nothing left to buy: the same
+  // workspace-scoped console the wallet row opens, asked to open its
+  // auto-recharge settings on arrival. Topping up IS the action for a top-tier
+  // subscriber — see AMR_CONSOLE_AUTO_RECHARGE_INTENT.
+  // 管理 (Max) lands on the plain dashboard — product ruling 2026-09-23
+  // (「点击管理, 就跳转到 vela dashboard 就行」), not on the auto-recharge dialog.
+  const billingManageUrl = accountBillingUrl;
   // Product decision: plan comparison lives on public Pricing and payment
   // lives in Cloud. The client refreshes billing + context when focus returns
   // so a completed web upgrade syncs plan, credits, seats and gates.
@@ -1285,32 +1310,39 @@ export function EntryTopRightCluster({
   // 升级 that could only reopen the plan they already hold. It reads the tier
   // the card LABELS, so the button and the nameplate next to it can never
   // disagree.
-  const canUpgrade =
-    Boolean(billingUpgradeUrl && permissions?.canManageBilling)
-    && canUpgradeFromPlanTier(labelTier);
-  // Whether the top-right pill sells the upgrade instead of reporting a
-  // balance. It reads the same tier the wordmark draws, so the pill's green
-  // ground and its badge can never disagree. `labelTier` alone is not enough:
+  // Whether the Owner's top-right pill sells the upgrade instead of reporting a
+  // balance. It reads the same tier the wordmark draws. `labelTier` alone is not enough:
   // B commonly reports no plan at all for a free account, which leaves the
   // strict read null while the wordmark still resolves free off the display
   // label — that is the state a local dev workspace sits in. It is kept in the
   // test anyway for the case where B DOES say 'free' but the workspace is
   // team-typed, where the wordmark draws `team` instead.
   const isFreePlan = planTier === 'free' || (labelTier ?? '').trim().toLowerCase() === 'free';
+  // The seats HTML uses the Free upgrade chip for every role; it only opens quota.
+  const showUpgradePill = isFreePlan && (quotaView.sharedBilling || context?.role === 'owner');
+  // Design PR #8364: the Owner's Free card sells 升级 like every paid tier. A personal
+  // workspace needs no billing permission — its member IS the payer — and an
+  // account B reports without any plan is upgradeable as free once the card
+  // already labels it free, so the header button and the nameplate agree.
+  const mayActOnBilling =
+    context?.workspaceType === 'personal' || Boolean(permissions?.canManageBilling);
+  const upgradeTier = labelTier ?? (isFreePlan ? 'free' : null);
+  const canUpgrade =
+    Boolean(billingUpgradeUrl) && mayActOnBilling && canUpgradeFromPlanTier(upgradeTier);
+  // The design's Max panel puts 「管理」 where every other tier puts 「升级」
+  // (design PR #8364, product ruling 2026-09-23: 「按设计稿」 — personal Max
+  // included, superseding the earlier 「个人档位都是要显示可升级的」 ruling).
+  // It is asked of `isMaxPlanTier`, not of `!canUpgrade`: an UNKNOWN tier (a
+  // billing read that has not landed) also fails the upgrade gate, and a card
+  // that flashes 管理 before settling on 升级 is worse than one paint of
+  // nothing. 管理 wins over 升级 when both gates pass.
+  const canManageTopTierBilling =
+    isMaxPlanTier(labelTier) && Boolean(billingManageUrl) && mayActOnBilling;
   // The pill exists whenever billing has answered (it is the only way to the
   // billing card under it); what it SAYS follows the zero-balance ruling
   // above — a subscriber at $0.00 keeps the plan wordmark and drops the
   // number, so the card stays reachable without a permanent zero next to it.
-  const showCreditsPill = Boolean(billing || balanceLabel);
-
-  function openBillingUpgrade() {
-    if (!billingUpgradeUrl) return;
-    window.open(billingUpgradeUrl, '_blank', 'noopener,noreferrer');
-    window.setTimeout(() => {
-      notifyWorkspaceBillingRefresh();
-      notifyWorkspaceContextRefresh();
-    }, 3000);
-  }
+  const showCreditsPill = Boolean(context || billing || balanceLabel);
 
   function trackAccountAction(element: AccountMenuClickProps['element']) {
     trackAccountMenuClick(analytics.track, {
@@ -1329,7 +1361,7 @@ export function EntryTopRightCluster({
   }
 
   if (typeof document === 'undefined' || !chromeActionsHost) return null;
-  if (!leadingSlot && !context && !updaterSlot) return null;
+  if (!leadingSlot && !inviteSlot && !context && !updaterSlot) return null;
 
   // With a rail host the account module — and the update-ready rocket that
   // rides its row (per product: 升级提醒按钮跟在头像后边) — render at the foot
@@ -1340,7 +1372,7 @@ export function EntryTopRightCluster({
   // an update reminder parked in a hidden column is no reminder.
   const accountInRail = Boolean(context && accountHost);
   const updaterInRail = accountInRail && !railAutoCollapsed;
-  const clusterVisible = Boolean(leadingSlot || context || updaterControlVisible);
+  const clusterVisible = Boolean(leadingSlot || inviteSlot || context || updaterControlVisible);
   const updaterHostVisible = !updaterInRail && Boolean(context || updaterControlVisible);
 
   return (
@@ -1369,6 +1401,7 @@ export function EntryTopRightCluster({
               <span>{githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)}</span>
             </a>
           ) : null}
+          {inviteSlot}
           {/* The capsule holds the credits segment alone — the avatar moved
               to the rail, and with it the account menu's hover region. The
               anchor around it owns the hover region for the billing panel
@@ -1386,34 +1419,27 @@ export function EntryTopRightCluster({
               }}
             >
               <div
-                className={`entry-top-right-account-pill${isFreePlan ? ' entry-top-right-account-pill--upgrade' : ''}`}
+                className={`entry-top-right-account-pill${showUpgradePill ? ' entry-top-right-account-pill--upgrade' : ''}${quotaView.sharedBilling ? ` ${styles.sharedQuotaPill}` : ''}`}
               >
                 <button
                   type="button"
                   className="entry-top-right-credits"
                   data-testid="entry-top-right-credits"
                   aria-haspopup="dialog"
+                  aria-busy={!quotaView.planKnown || undefined}
                   aria-expanded={creditsPanelOpen}
                   aria-controls={creditsPanelOpen ? creditsPanelId : undefined}
-                  aria-label={isFreePlan ? t('entry.creditsUpgrade') : t('entry.credits')}
+                  aria-label={showUpgradePill ? t('entry.creditsUpgrade') : t('entry.credits')}
                   onClick={() => {
-                    // The free pill IS the upgrade CTA, so it opens the upgrade
-                    // flow when this member is allowed to buy. Without that
-                    // permission (or without an upgrade URL) it falls back to
-                    // the console, which is where the paid pill always goes.
-                    if (isFreePlan && canUpgrade) {
-                      trackAccountAction('upgrade');
-                      openBillingUpgrade();
-                      return;
-                    }
+                    // Clicking, hovering or focusing opens the quota panel.
                     trackAccountAction('credits');
-                    if (accountBillingUrl) {
-                      window.open(accountBillingUrl, '_blank', 'noopener,noreferrer');
-                    }
+                    openCreditsPanel();
                   }}
                 >
-                  {isFreePlan ? (
-                    /* Free plan: the pill stops reporting a balance that is only
+                  {!quotaView.planKnown ? (
+                    <span className={styles.planLoading} aria-label={t('common.loading')} />
+                  ) : showUpgradePill ? (
+                    /* Owner's Free plan: the pill stops reporting a balance that is only
                        ever 0.00 and sells the upgrade instead — spark mark plus
                        the same 升级 / Upgrade label the billing card uses, on
                        the green ground the wrapper paints. */
@@ -1429,12 +1455,17 @@ export function EntryTopRightCluster({
                           icon stays as the fallback for the rare tier string no
                           wordmark matches — without it the chip would be a
                           bare, unlabelled number. */}
+                      {/* The mark alone, at the design's 16px. The balance
+                          moved off the capsule entirely (design + its
+                          electron-panel.png): the number lives in the card the
+                          capsule opens. The battery glyph stays as the
+                          fallback for a tier string no wordmark matches —
+                          without it the capsule would be empty. */}
                       {planTier ? (
-                        <PlanWordmark tier={planTier} height={14} />
+                        <PlanWordmark tier={planTier} height={16} variant={quotaView.sharedBilling ? 'seats-phase1' : undefined} />
                       ) : (
-                        <RemixIcon name="battery-charge-line" size={13} />
+                        <RemixIcon name="battery-charge-line" size={16} />
                       )}
-                      {showCreditsBalance ? <>{' '}{balanceAmount ?? '—'}</> : null}
                     </>
                   )}
                 </button>
@@ -1449,53 +1480,21 @@ export function EntryTopRightCluster({
                   id={creditsPanelId}
                   role="dialog"
                   aria-label={t('entry.credits')}
-                  className="entry-top-right-credits-panel"
+                  className={`entry-top-right-credits-panel ${planCardStyles.panel}`}
                   data-testid="entry-top-right-credits-panel"
                 >
-                  <div className="entry-nav-rail__menu-credits">
-                    <div className="entry-nav-rail__menu-credits-head">
-                      <span className="entry-nav-rail__menu-credits-plan">
-                        {tierLabel}
-                        {planTier ? <PlanWordmark tier={planTier} height={11} /> : null}
-                      </span>
-                      {canUpgrade ? (
-                        <button
-                          type="button"
-                          className="entry-nav-rail__menu-credits-upgrade"
-                          onClick={() => {
-                            trackAccountAction('upgrade');
-                            setCreditsPanelOpen(false);
-                            openBillingUpgrade();
-                          }}
-                        >
-                          {t('entry.creditsUpgrade')}
-                        </button>
-                      ) : null}
-                    </div>
-                    {/* #62 (product ruling): clicking the balance jumps straight
-                        to B's console dashboard for the usage detail — there is
-                        NO intermediate credits popover in the client. */}
-                    <button
-                      type="button"
-                      className="entry-nav-rail__menu-credits-row"
-                      data-testid="entry-nav-credits-row"
-                      onClick={() => {
-                        trackAccountAction('credits');
-                        setCreditsPanelOpen(false);
-                        if (accountBillingUrl) {
-                          window.open(accountBillingUrl, '_blank', 'noopener,noreferrer');
-                        }
-                      }}
-                    >
-                      <span className="entry-nav-rail__menu-credits-label">
-                        <RemixIcon name="battery-charge-line" size={14} /> {t('entry.credits')}
-                      </span>
-                      <span className="entry-nav-rail__menu-credits-value">
-                        {balanceLabel ?? '—'}
-                        <Icon name="chevron-right" size={14} />
-                      </span>
-                    </button>
-                  </div>
+                  <WorkspaceQuotaPopover
+                    view={quotaView}
+                    context={context}
+                    profile={workspaceQuotaStatus?.profile ?? priorityAnnouncementAmrProfile}
+                    consoleOrigin={workspaceQuotaStatus?.consoleOrigin}
+                    badgeTier={planTier}
+                    planLabel={tierLabel}
+                    onNavigate={(action) => {
+                      trackAccountAction(action);
+                      setCreditsPanelOpen(false);
+                    }}
+                  />
                 </div>
               ) : null}
             </div>
@@ -1736,6 +1735,7 @@ export function EntryTopRightCluster({
       {context ? (
         <MessageCenter
           hideTrigger
+          workspaceId={context.workspaceId}
           returnFocusRef={messageCenterBellRef}
           open={messageCenterOpen}
           onOpenChange={setMessageCenterOpen}
@@ -1756,6 +1756,8 @@ export function EntryTopRightCluster({
  * authority explicitly; an unbound local project deliberately falls back to
  * the shell's ambient account context. */
 export function WorkspaceTopRightAccountCluster({
+  amrProfile,
+  workspaceQuotaStatus,
   onOpenSettings,
   onSignedOut,
   updaterSlot,
@@ -1767,6 +1769,8 @@ export function WorkspaceTopRightAccountCluster({
   metricsConsent = false,
   installationId,
 }: {
+  amrProfile?: string | null;
+  workspaceQuotaStatus?: Pick<VelaLoginStatus, 'profile' | 'consoleOrigin'> | null;
   onOpenSettings?: (section?: EntrySettingsSection) => void;
   onSignedOut?: () => void | Promise<void>;
   /** Keep the project-detail account cluster on the same updater surface as Home. */
@@ -1816,23 +1820,24 @@ export function WorkspaceTopRightAccountCluster({
       : deepSeekCampaignAudience;
   return (
     <EntryTopRightCluster
+      amrProfile={amrProfile}
       page="project"
+      workspaceQuotaStatus={workspaceQuotaStatus}
       context={context}
       billing={billing}
+      billingResponse={billingResponse}
       balanceUsd={balanceUsd}
-      leadingSlot={campaignAudience || canRenderProductionCampaignBadge(amrLoggedIn === true, amrAccountId) ? (
-        <>
-          {campaignAudience ? (
-            <WorkbenchCampaignBadge
-              audience={campaignAudience}
-              page="project"
-              metricsConsent={metricsConsent}
-              installationId={installationId}
-              loggedIn={amrLoggedIn}
-            />
-          ) : null}
-          {canRenderProductionCampaignBadge(amrLoggedIn === true, amrAccountId) ? <ProductionCampaignBadge authenticated sessionSubject={amrAccountId} /> : null}
-        </>
+      // No CMS touchpoint here: every placement the app authorizes is a home
+      // placement (`opend.home.*`), and a project workbench is not home. The
+      // built-in campaign pill is product chrome, not a CMS host, and stays.
+      leadingSlot={campaignAudience ? (
+        <WorkbenchCampaignBadge
+          audience={campaignAudience}
+          page="project"
+          metricsConsent={metricsConsent}
+          installationId={installationId}
+          loggedIn={amrLoggedIn}
+        />
       ) : null}
       updaterSlot={updaterSlot}
       onOpenSettings={onOpenSettings}
@@ -1898,7 +1903,8 @@ function RailSocialRow({
   // tooltip: the bubble is the only place the icons say what they do, so
   // the copy leads with the payoff (Discord hands out credits) rather
   // than naming the destination.
-  const communityLabel = t('entry.discordAria');
+  const community = communityForLocale(locale);
+  const communityLabel = t('entry.communityAria');
   const xLabel = t('entry.xAria');
   const mailLabel = t('entry.mailAria');
   const btnClass = 'entry-nav-rail__menu-social-btn od-tooltip';
@@ -1921,14 +1927,17 @@ function RailSocialRow({
     <div className="entry-nav-rail__menu-social" data-testid="entry-nav-rail-social">
       <a
         className={btnClass}
-        href={DISCORD_URL}
+        href={community.href}
         {...externalLinkProps}
         aria-label={communityLabel}
         {...hint(communityLabel)}
         data-testid="entry-nav-rail-discord"
-        onClick={() => track('discord')}
+        data-community-platform={community.platform}
+        onClick={() => track(community.platform)}
       >
-        <Icon name="discord" size={glyph} />
+        {community.platform === 'feishu'
+          ? <FeishuIcon monochrome width={glyph} height={glyph} />
+          : <Icon name="discord" size={glyph} />}
       </a>
       <a
         className={btnClass}
@@ -1961,8 +1970,10 @@ export function EntryNavRail({
   newProjectDisabled,
   open,
   topRightSlot,
+  inviteSlot,
   context,
   billing,
+  billingResponse,
   balanceUsd,
   onOpenSettings,
   onSignedOut,
@@ -1981,6 +1992,7 @@ export function EntryNavRail({
   onPriorityAnnouncementPendingChange,
   priorityAnnouncementCurrentPlanId,
   priorityAnnouncementAmrProfile,
+  workspaceQuotaStatus,
   priorityAnnouncementMetricsConsent,
 }: Props) {
   const { t } = useI18n();
@@ -1999,18 +2011,13 @@ export function EntryNavRail({
   const isHome = view === 'home';
 
   const isTeam = Boolean(context) && context!.workspaceType === 'team';
-  const permissions = context?.permissions;
-  const canInviteMembers = Boolean(permissions?.canInviteMembers);
   const canAccessInviteFlow = canAccessWorkspaceInviteFlow(context);
   const workspaceSettingsUrl = context?.workspaceSettingsUrl?.trim() || null;
 
-  // Message-center panel for the SIGNED-OUT shell only (the bell on the local
-  // account dock in the footer is the one opener there). The signed-in panel —
-  // plus the unread badge on its dock bell — lives inside
+  // Keep signed-out announcement delivery mounted without adding a local
+  // identity or bell to A01. The signed-in inbox and unread badge live in
   // `EntryTopRightCluster` with the account menu.
   const [messageCenterOpen, setMessageCenterOpen] = useState(false);
-  const [messageUnreadCount, setMessageUnreadCount] = useState(0);
-  const messageCenterRailRef = useRef<HTMLButtonElement | null>(null);
   const [teamOpen, setTeamOpen] = useState(false);
   useEffect(() => {
     if (!teamOpen) return;
@@ -2033,9 +2040,6 @@ export function EntryNavRail({
   const [workspaceSwitchingId, setWorkspaceSwitchingId] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const inviteTarget = resolveWorkspaceInviteTarget(context);
-  // The invite dialog's seat-gate upgrade entry uses the same public Pricing
-  // destination as the credits chip's twin decision in EntryTopRightCluster.
-  const upgradeUrl = workspaceUpgradeUrl(context, billing);
   const identityWorkspaceItems = workspaceDirectoryForIdentity(workspaceItems, context);
   const currentWorkspaceItem = context
     ? identityWorkspaceItems.find((item) => item.workspaceId === context.workspaceId) ?? null
@@ -2056,9 +2060,12 @@ export function EntryNavRail({
     context?.workspaceId ||
     '';
   const workspaceInitial = workspaceName.charAt(0).toUpperCase() || 'W';
+  const activeWorkspaceItems = identityWorkspaceItems.filter(
+    (item) => item.memberStatus !== 'removed' && item.lifecycleState !== 'deleted',
+  );
   const visibleWorkspaceItems =
-    identityWorkspaceItems.length > 0
-      ? identityWorkspaceItems
+    activeWorkspaceItems.length > 0
+      ? activeWorkspaceItems
       : context
         ? [{
             workspaceId: context.workspaceId,
@@ -2304,10 +2311,15 @@ export function EntryNavRail({
               <>
                 <div className="entry-nav-rail__menu-backdrop" onClick={() => setTeamOpen(false)} />
                 <div
-                  className="entry-nav-rail__team-menu"
+                  className={`entry-nav-rail__team-menu ${styles.workspaceMenu}`}
                   role="menu"
+                  aria-label={t('workspaceSwitcher.title')}
                   onKeyDown={handleWorkspaceMenuKeyDown}
                 >
+                  <div className={styles.workspaceMenuHead}>
+                    <span>{t('workspaceSwitcher.title')}</span>
+                    <span className={visibleWorkspaceItems.length >= 50 ? styles.workspaceCount : styles.workspaceCountHidden}>{visibleWorkspaceItems.length}/50</span>
+                  </div>
                   <div
                     className="entry-nav-rail__workspace-list"
                     data-testid="workspace-switcher-list"
@@ -2343,7 +2355,7 @@ export function EntryNavRail({
                             className="entry-nav-rail__workspace-menu-name"
                             text={itemName}
                           />
-                          {active ? <Icon name="check" size={14} /> : null}
+                          {active ? <span className={styles.workspaceSelectedMark}><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M9.9997 15.1709L19.1921 5.97852L20.6063 7.39273L9.9997 17.9993L3.63574 11.6354L5.04996 10.2212L9.9997 15.1709Z" /></svg></span> : null}
                         </button>
                       );
                     })}
@@ -2386,7 +2398,14 @@ export function EntryNavRail({
                         directly), so this entry links OUT instead of doing local work.
                         With no console URL there is nowhere to send the user — render
                         nothing rather than a control that silently does nothing. */}
-                    {workspaceSettingsUrl ? (
+                    {workspaceSettingsUrl && visibleWorkspaceItems.length >= 50 ? (
+                      <>
+                        <button type="button" role="menuitem" className={`entry-nav-rail__menu-item ${styles.workspaceCreateLimited}`} disabled>
+                          <Icon name="plus" size={15} /> {t('workspaceSwitcher.createTeam')}
+                        </button>
+                        <p className={styles.workspaceLimitNote} role="note">{t('workspaceSwitcher.limitReached')}</p>
+                      </>
+                    ) : workspaceSettingsUrl ? (
                       <a
                         className="entry-nav-rail__menu-item"
                         role="menuitem"
@@ -2594,9 +2613,7 @@ export function EntryNavRail({
               analyticsPage={analyticsPage}
               label={t('recentProjects.title')}
             />
-            {/* No message-centre item here any more: signed out, the bell
-                rides the local account dock in the footer below (OPEND-3140),
-                the same slot the signed-in dock gives it. */}
+            {/* A01 does not add an account/message-centre row while signed out. */}
           </div>
         )}
         {/* Bottom of the nav column: the host `EntryTopRightCluster` portals
@@ -2608,91 +2625,35 @@ export function EntryNavRail({
       {/* Signed in, the social links ride the account dock above the identity
           row (see `EntryTopRightCluster`), so the footer only renders when it
           has a notice to show — an empty shell here read as a dead white
-          strip under the account row. Signed out renders the local twin of
-          that dock down here, under the sign-in card. */}
+          strip under the account row. Signed out keeps the sign-in card and
+          existing community links without a second identity row. */}
       {context ? (
         footerNotice ? <div className="entry-nav-rail__footer">{footerNotice}</div> : null
       ) : (
         <div className="entry-nav-rail__footer">
           {footerNotice}
-          {/* Local account dock (OPEND-3140): the signed-out twin of the dock
-              `EntryTopRightCluster` portals into the rail foot when signed in
-              — social links above an identity row whose trailing slot is the
-              message-centre bell. The identity here is the local mode itself
-              (there is no account to name), and opening it lands in Settings,
-              where the local CLI / BYOK configuration lives. It sits UNDER the
-              sign-in card so the identity row stays the rail's last line on
-              both branches, and the card keeps its own slot as the one
-              sign-in entry. */}
+          {/* A01 keeps the signed-out footer focused on its sign-in card.
+              Settings already has a navigation entry; do not add a duplicate
+              local identity or message-centre row above the card. Existing
+              community links remain outside this local-row correction. */}
           <div
             className="entry-nav-rail__account-dock entry-nav-rail__account-dock--local"
             data-testid="entry-nav-local-account-dock"
           >
             <RailSocialRow page={analyticsPage} dimensions={workspaceDimensions} />
-            <div className="entry-nav-rail__account">
-              <button
-                type="button"
-                className="entry-nav-rail__account-trigger"
-                aria-label={t('entry.accountSettings')}
-                title={t('entry.accountSettings')}
-                data-testid="entry-nav-local-account"
-                onClick={() => {
-                  trackAccountMenuClick(analytics.track, {
-                    page_name: analyticsPage,
-                    area: 'account_menu',
-                    element: 'settings',
-                  });
-                  onOpenSettings?.();
-                }}
-              >
-                <span
-                  className="entry-nav-rail__account-avatar entry-nav-rail__account-avatar--local"
-                  aria-hidden
-                >
-                  <Icon name="terminal" size={14} />
-                </span>
-                <span className="entry-nav-rail__account-name">{t('entry.localAccountName')}</span>
-              </button>
-              <button
-                type="button"
-                ref={messageCenterRailRef}
-                className="entry-nav-rail__account-bell"
-                aria-haspopup="dialog"
-                aria-expanded={messageCenterOpen}
-                aria-label={t('messageCenter.title')}
-                title={t('messageCenter.title')}
-                data-testid="entry-nav-message-center"
-                onClick={() => {
-                  trackAccountMenuClick(analytics.track, {
-                    page_name: analyticsPage,
-                    area: 'account_menu',
-                    element: 'message_center',
-                  });
-                  setMessageCenterOpen(true);
-                }}
-              >
-                <Icon name="bell" size={15} />
-                {messageUnreadCount > 0 ? (
-                  <span className="entry-nav-rail__menu-item-dot" aria-hidden />
-                ) : null}
-              </button>
-            </div>
           </div>
         </div>
       )}
       </div>
 
-      {/* Signed-out message-center panel + unread polling (the local dock's
-          bell above is its opener). Signed-in mounts move into
-          `EntryTopRightCluster` — context-gating both sides is what keeps
-          exactly one panel (and one unread poller) alive. */}
+      {/* Keep signed-out announcement delivery and unread polling mounted.
+          Signed-in mounts move into `EntryTopRightCluster`; context-gating
+          both sides keeps exactly one panel (and one poller) alive. */}
       {context ? null : (
         <MessageCenter
           hideTrigger
-          returnFocusRef={messageCenterRailRef}
           open={messageCenterOpen}
           onOpenChange={setMessageCenterOpen}
-          onUnreadCountChange={setMessageUnreadCount}
           onOpenNotificationSettings={onOpenSettings ? () => onOpenSettings('notifications') : undefined}
           priorityAnnouncementActive={priorityAnnouncementActive}
           onPriorityAnnouncementPendingChange={onPriorityAnnouncementPendingChange}
@@ -2706,16 +2667,8 @@ export function EntryNavRail({
         open={inviteOpen}
         onClose={() => setInviteOpen(false)}
         workspaceContext={context}
-        canAssignRoles={canInviteMembers}
-        availableSeats={workspaceInviteAvailableSeats(context)}
+        canAssignRoles={context?.role === 'owner'}
         entryFrom="workspace_switcher"
-        onUpgrade={
-          upgradeUrl
-            ? () => {
-                window.open(upgradeUrl, '_blank', 'noopener,noreferrer');
-              }
-            : undefined
-        }
       />
       {/* Top-right chrome cluster: campaign badge (slot) + credits pill,
           mounted into the tabs chrome's no-drag actions host so Electron
@@ -2724,11 +2677,14 @@ export function EntryNavRail({
           project route can mount the same cluster without the rail (see
           `EntryTopRightCluster`). */}
       <EntryTopRightCluster
+        amrProfile={priorityAnnouncementAmrProfile}
         page={analyticsPage}
         context={context}
         billing={billing}
+        billingResponse={billingResponse}
         balanceUsd={balanceUsd}
         leadingSlot={topRightSlot}
+        inviteSlot={inviteSlot}
         updaterSlot={updaterSlot}
         accountHost={accountHost}
         onOpenSettings={onOpenSettings}
@@ -2737,6 +2693,7 @@ export function EntryNavRail({
         onPriorityAnnouncementPendingChange={onPriorityAnnouncementPendingChange}
         priorityAnnouncementCurrentPlanId={priorityAnnouncementCurrentPlanId}
         priorityAnnouncementAmrProfile={priorityAnnouncementAmrProfile}
+        workspaceQuotaStatus={workspaceQuotaStatus}
         priorityAnnouncementMetricsConsent={priorityAnnouncementMetricsConsent}
       />
     </nav>

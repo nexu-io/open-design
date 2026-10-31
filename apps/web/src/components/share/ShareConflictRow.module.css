@@ -1,0 +1,53 @@
+/* entry-index-conflict: red reason row, then a right-aligned copy action. */
+.conflict {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* The soft variant is a fixed 88px slot sized for "Update"; this label is
+   longer in most locales, so let the button grow to fit its text. */
+.actions > button.copyAction {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: var(--share-soft-btn-w);
+}
+
+.hint {
+  margin: 0;
+  color: var(--share-text-notice);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.prompt {
+  margin: 0;
+  max-height: 160px;
+  overflow: auto;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--bg-subtle);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+.labelStack {
+  display: inline-grid;
+}
+
+.labelStack > span {
+  grid-area: 1 / 1;
+  text-align: center;
+}
+
+.hiddenLabel {
+  visibility: hidden;
+}

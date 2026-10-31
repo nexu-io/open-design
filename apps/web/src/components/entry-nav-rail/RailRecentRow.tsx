@@ -1,3 +1,4 @@
+import { reportProjectFailure } from '../../observability/experience-diagnostics';
 // One row of the nav rail's 最近项目 list: the project name, a hover preview
 // that floats out to the right of the rail, and a ⋮ menu.
 //
@@ -13,11 +14,14 @@ import type { ProjectDisplayStatus, WorkspaceCollabContext } from '@open-design/
 import { useT } from '../../i18n';
 import { Icon } from '../Icon';
 import {
+  hasAwaitingReplyTag,
   hasCompletionNotice,
+  ProjectAwaitingReplyTag,
   hasRunStatusGlyph,
   ProjectCompletionDot,
   ProjectFolderGlyph,
   ProjectRunStatusIcon,
+  STATUS_BALL_SIZE,
 } from '../ProjectRunStatusIcon';
 import { STATUS_LABEL_KEYS } from '../../state/projectRunStatus';
 import type { Project } from '../../types';
@@ -136,6 +140,7 @@ export function RailRecentRow({
   project,
   workspaceContext,
   runStatus,
+  runId,
   ownedBySelf = true,
   shared = false,
   moveToTeamAvailable = false,
@@ -154,6 +159,7 @@ export function RailRecentRow({
    *  run the user has not opened since, the unread dot at the row's end
    *  (OPEND-3133) — and nothing else. */
   runStatus?: ProjectDisplayStatus;
+  runId?: string;
   /** The daemon's canMutate is privileged-or-self-created and 403s the rest,
    *  so a row someone else shared keeps its mutations disabled with the same
    *  explanation the project cards give (`recentProjects.ownOnlyMutation`). */
@@ -178,6 +184,10 @@ export function RailRecentRow({
   onDelete?: (project: Project) => void;
 }) {
   const t = useT();
+  useEffect(() => {
+    if (runStatus) reportProjectFailure({ id: project.id,
+      status: { value: runStatus, runId, updatedAt: project.status?.updatedAt } }, 'recent_rail');
+  }, [project.id, project.status?.updatedAt, runStatus, runId]);
   const hoverCover = useProjectHoverCover(project, workspaceContext);
   const { resolveCover } = hoverCover;
   // Where the portalled preview should sit, measured off the row at hover time.
@@ -326,14 +336,14 @@ export function RailRecentRow({
               the workspace tab dropdown leads its rows with
               (`leadGlyphFor` in WorkspaceTabsBar), status and folder alike
               (OPEND-3129), so the two can never tell different stories about
-              the same project. A FINISHED run is not a lead glyph: the folder
-              stays and the unread dot below says it (OPEND-3133). 16 in an
-              18px slot: the box this row always gave the mark. */}
+              the same project. The folder is 16 in the 18px slot; a status
+              ball is the design draft's 10px (P0-24 design reply 2026-10-26),
+              centred in the same slot so every name keeps one left edge. */}
           <span className="entry-nav-rail__recent-icon">
             {runStatus && hasRunStatusGlyph(runStatus) ? (
               <ProjectRunStatusIcon
                 status={runStatus}
-                size={14}
+                size={STATUS_BALL_SIZE}
                 label={t(STATUS_LABEL_KEYS[runStatus])}
               />
             ) : (
@@ -341,6 +351,14 @@ export function RailRecentRow({
             )}
           </span>
           <span className="entry-nav-rail__recent-name">{project.name}</span>
+          {/* P0-24 推测项 A-09:等用户回答时,项目名后面写出「需要你回复」(OPEND-4216) */}
+          {runStatus && hasAwaitingReplyTag(runStatus) ? (
+            <ProjectAwaitingReplyTag
+              className="entry-nav-rail__recent-reply-tag"
+              label={t(STATUS_LABEL_KEYS[runStatus])}
+              testId="entry-nav-recent-reply-tag"
+            />
+          ) : null}
           {/* Completed, unread: the dot at the row's end. The section spends
               it when the row opens the project (`acknowledgeProjectCompletion`
               in the shared run-status store), which is also what drops it from

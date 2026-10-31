@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "music": {
+    "role": "bed",
+    "description": "电子节奏底乐、低频脉冲与明亮合成器，紧凑而有推动感；音色为估计。",
+    "bpm": 129.2,
+    "beatConfidence": "none",
+    "cutOnBeat": false,
+    "sections": [
+      {
+        "scene": "loop",
+        "energy": "mid"
+      },
+      {
+        "scene": "brand",
+        "energy": "mid"
+      },
+      {
+        "scene": "fire-wipe",
+        "energy": "high"
+      },
+      {
+        "scene": "discover",
+        "energy": "mid"
+      },
+      {
+        "scene": "write",
+        "energy": "mid"
+      },
+      {
+        "scene": "schedule",
+        "energy": "mid"
+      },
+      {
+        "scene": "growth",
+        "energy": "high"
+      },
+      {
+        "scene": "proof-flash",
+        "energy": "high"
+      },
+      {
+        "scene": "metrics",
+        "energy": "mid"
+      },
+      {
+        "scene": "close",
+        "energy": "mid"
+      }
+    ]
+  },
+  "effects": [],
+  "effectsPer10s": 0,
+  "voice": {
+    "present": false
+  },
+  "demoTrack": {
+    "file": "assets/soundtrack.mp3",
+    "origin": "reference"
+  }
+}

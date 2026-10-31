@@ -24,6 +24,7 @@ type MockAmrPersonalWorkspaceOptions = {
   accountPlan?: string;
   accountSummaryAvailable?: boolean;
   workspaceBalanceAvailable?: boolean;
+  fundingCheck?: 'available' | 'insufficient' | 'unknown';
 };
 
 export const AMR_PERSONAL_WORKSPACE_ITEM = {
@@ -117,6 +118,23 @@ export async function mockAmrPersonalWorkspace(
   await page.route('**/api/workspace/billing**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
+    if (request.method() === 'GET' && url.pathname === '/api/workspace/billing/preflight'
+      && options.fundingCheck !== undefined) {
+      if (url.searchParams.get('workspaceId') !== AMR_PERSONAL_WORKSPACE_CONTEXT.workspaceId) {
+        await route.fulfill({ status: 404, json: { error: 'workspace_not_found' } });
+        return;
+      }
+      await route.fulfill({ json: { preflight: {
+        schemaVersion: 1,
+        workspaceId: AMR_PERSONAL_WORKSPACE_CONTEXT.workspaceId,
+        workspaceMemberId: AMR_PERSONAL_WORKSPACE_CONTEXT.workspaceMemberId,
+        modelId: url.searchParams.get('modelId'),
+        generatedAt: new Date().toISOString(),
+        balanceUsd: accountBalanceUsd,
+        fundingCheck: options.fundingCheck,
+      } } });
+      return;
+    }
     if (request.method() !== 'GET' || url.pathname !== '/api/workspace/billing') {
       await route.fallback();
       return;

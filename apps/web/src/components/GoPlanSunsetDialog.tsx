@@ -1,3 +1,4 @@
+import { lockWebModalScroll } from './modal-scroll-lock';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Dialog } from '@open-design/components';
@@ -18,6 +19,7 @@ interface Props {
   active: boolean;
   currentPlanId?: string;
   profile?: string | null;
+  workspaceId?: string | null;
   metricsConsent?: boolean;
   onDismiss: (element: DismissElement) => Promise<void>;
 }
@@ -29,6 +31,7 @@ export function GoPlanSunsetDialog({
   active,
   currentPlanId = 'unknown',
   profile,
+  workspaceId,
   metricsConsent = false,
   onDismiss,
 }: Props) {
@@ -40,6 +43,11 @@ export function GoPlanSunsetDialog({
   const dialogId = useId();
   const titleId = useId();
   const descriptionId = useId();
+
+  useEffect(() => {
+    if (!active) return;
+    return lockWebModalScroll();
+  }, [active]);
 
   useEffect(() => {
     if (!active) {
@@ -61,57 +69,6 @@ export function GoPlanSunsetDialog({
       locale,
     });
   }, [active, analytics.track, currentPlanId, locale]);
-
-  useEffect(() => {
-    if (!active || typeof document === 'undefined') return;
-    const panel = document.getElementById(dialogId);
-    const backdrop = panel?.parentElement;
-    if (!panel || !backdrop) return;
-
-    const previouslyFocused =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const previousBodyOverflow = document.body.style.overflow;
-    const inertSiblings = Array.from(document.body.children).filter(
-      (element) => element !== backdrop && !element.hasAttribute('inert'),
-    );
-    for (const element of inertSiblings) element.setAttribute('inert', '');
-    document.body.style.overflow = 'hidden';
-    panel.tabIndex = -1;
-    panel.focus({ preventScroll: true });
-
-    const handleTab = (event: KeyboardEvent) => {
-      if (event.key !== 'Tab') return;
-      const focusable = Array.from(panel.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      )).filter(
-        (element) => !element.hasAttribute('hidden') && element.getAttribute('aria-hidden') !== 'true',
-      );
-      if (focusable.length === 0) {
-        event.preventDefault();
-        return;
-      }
-      const first = focusable[0]!;
-      const last = focusable[focusable.length - 1]!;
-      const focused = document.activeElement;
-      if (focused === panel) {
-        event.preventDefault();
-        (event.shiftKey ? last : first).focus();
-      } else if (event.shiftKey && (focused === first || !panel.contains(focused))) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && (focused === last || !panel.contains(focused))) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener('keydown', handleTab);
-    return () => {
-      document.removeEventListener('keydown', handleTab);
-      for (const element of inertSiblings) element.removeAttribute('inert');
-      document.body.style.overflow = previousBodyOverflow;
-      if (previouslyFocused?.isConnected) previouslyFocused.focus();
-    };
-  }, [active, dialogId]);
 
   const trackClick = useCallback((element: DismissElement | 'view_other_subscriptions') => {
     trackGoPlanSunsetModalClick(analytics.track, {
@@ -154,7 +111,7 @@ export function GoPlanSunsetDialog({
       },
     );
     window.open(
-      attributedAmrUrl(amrPlansUrlForProfile(profile), attribution),
+      attributedAmrUrl(amrPlansUrlForProfile(profile, workspaceId), attribution),
       '_blank',
       'noopener,noreferrer',
     );
@@ -164,6 +121,7 @@ export function GoPlanSunsetDialog({
 
   return createPortal(
     <Dialog
+      inertBackground
       id={dialogId}
       role="alertdialog"
       ariaLabelledBy={titleId}

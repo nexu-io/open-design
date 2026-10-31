@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN" data-composition-variables='[{"id": "fishLine", "type": "image", "label": "线刻鱼", "default": "assets/fish-line.png"}, {"id": "fishScale", "type": "image", "label": "鳞片鱼", "default": "assets/fish-scale.png"}, {"id": "fishFine", "type": "image", "label": "细鳞鱼", "default": "assets/fish-fine.png"}]'>
+<head><meta charset="utf-8"><meta name="od-motion-output" content="video"><title>鸟鱼版画循环</title>
+<style>
+@font-face{font-family:"Geist";src:url(assets/Geist-400.ttf);font-weight:100 900;font-style:normal}
+:root{--od-font-heading:"Geist","Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;--od-font-body:"Geist","Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif}
+*{box-sizing:border-box}body{margin:0;background:#171717;display:grid;place-items:center;height:100vh;font-family:var(--od-font-body)}.od-heading{font-family:var(--od-font-heading)}#main{width:min(100vw,100vh);height:min(100vw,100vh);position:relative;overflow:hidden}canvas{width:100%;height:100%;display:block}#controls{position:fixed;bottom:12px;display:flex;gap:12px;align-items:center;background:#eee;padding:8px 14px;border-radius:6px}button,input{font-family:var(--od-font-body)}html.od-export body{display:block;background:#eee}html.od-export #main{width:1080px;height:1080px}html.od-export #controls{display:none}
+</style><style data-od-font-synthesis>html{font-synthesis:none}</style>
+<style data-od-preview-chrome>
+#controls{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:100;display:flex;align-items:center;gap:14px;width:min(900px,92vw);box-sizing:border-box;padding:12px 18px;border-radius:14px;background:#101214dd;color:#fff;font:600 13px ui-monospace,Menlo,monospace;opacity:0;transition:opacity .2s}
+#controls:hover,#controls:focus-within{opacity:1}
+#controls button{font:inherit;letter-spacing:.06em;background:var(--accent,#3b6cf6);color:#fff;border:0;border-radius:999px;padding:9px 16px;cursor:pointer;min-width:88px;white-space:nowrap}
+#controls input[type=range]{flex:1;width:auto;min-width:0;accent-color:var(--accent,#3b6cf6)}
+#controls span,#controls output{white-space:nowrap;font-variant-numeric:tabular-nums}
+html.od-export #controls{display:none!important}
+</style>
+</head><body><main id="main" data-composition-id="main" data-od-motion-layout="stage" data-start="0" data-duration="4.266667" data-width="1080" data-height="1080"><canvas id="film" width="1080" height="1080" data-od-id="bird-fish-field"></canvas></main><div id="controls"><button id="play">PLAY</button><input id="seek" type="range" min="0" step="0.01"><span id="time"></span></div>
+<script src="assets/engraving.js"></script><script src="assets/gsap.min.js"></script><script>
+const VARS=(window.__hyperframes && window.__hyperframes.getVariables?.()) || {};
+const CFG={duration:4.266667,scenes:[{id:'tessellation',name:'鸟鱼连续循环',dur:4.266667,minDur:3,maxDur:12}],cues:[{id:'flight-start',scene:'tessellation',at:0},{id:'cycle-end',scene:'tessellation',at:0,from:'end'}],fishLine:'assets/fish-line.png',fishScale:'assets/fish-scale.png',fishFine:'assets/fish-fine.png',paper:'#eeece2',ink:'#111111',...VARS};
+const SCENE_START={};CFG.scenes.reduce((t,s)=>(SCENE_START[s.id]=t,t+s.dur),0);
+const cueTime=id=>{const c=CFG.cues.find(c=>c.id===id),s=CFG.scenes.find(s=>s.id===c.scene);return SCENE_START[c.scene]+(c.from==='end'?s.dur-c.at:c.at)};
+const canvas=document.getElementById('film'),ctx=canvas.getContext('2d');
+const images={};let ready=false;
+function path(d,fill,stroke,width=1){const p=new Path2D(d);if(fill){ctx.fillStyle=fill;ctx.fill(p)}if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=width;ctx.stroke(p)}return p}
+const engravings=window.ENGRAVINGS.map(a=>({...a,paths:a.layers.map(l=>l.map(p=>new Path2D(p)))}));
+function engravedBird(x,y,scale,phase,detail){
+ const a=engravings[detail===2?0:detail===1?1:2],flap=Math.cos(phase);ctx.save();ctx.translate(x,y);ctx.scale(scale,scale);ctx.translate(-a.w/2,-a.h*.75);
+ const colors=['#171717','#45443f','#75736b','#a3a196','#cfcdc1'];
+ function layer(n){a.paths[n].forEach((p,i)=>{ctx.fillStyle=colors[i];ctx.fill(p)})}
+ layer(0);ctx.save();ctx.translate(...a.pivot);ctx.transform(1,.08*Math.sin(phase),-.15*(1-flap),detail?.3+.7*flap:.90+.10*flap,0,0);ctx.translate(-a.pivot[0],-a.pivot[1]);layer(1);ctx.restore();ctx.restore();
+}
+function bird(x,y,scale,phase,detail){engravedBird(x,y,scale,phase,detail)}
+function simpleFish(x,y,s){ctx.save();ctx.translate(x,y);ctx.scale(s,s);path('M -156 -29 Q -124 -12 -108 0 Q -40 -11 38 -30 Q 72 -43 94 -31 L 129 0 L 108 13 Q 63 39 6 26 Q -58 17 -109 11 L -151 31 L -132 2 Z',CFG.paper,null,0);ctx.fillStyle=CFG.ink;ctx.beginPath();ctx.arc(92,-10,5,0,7);ctx.fill();ctx.restore()}
+function fish(img,x,y,w,t,phase){let h=w*img.height/img.width;ctx.save();ctx.translate(x,y); // A continuous strip deformation keeps the head stable and flexes the tail.
+ ctx.rotate(.012*Math.sin(t*4+phase));for(let sx=0;sx<img.width;sx+=2){const sw=Math.min(2,img.width-sx),u=sx/img.width,tail=Math.pow(1-u,2);const dy=8*tail*Math.sin(t*7+phase+u*4);ctx.drawImage(img,sx,0,sw,img.height,-w/2+u*w,-h/2+dy,sw*w/img.width+.35,h);}ctx.restore()}
+function render(t){t=Math.max(0,Math.min(t,CFG.duration));if(window.__odFrameRenderer)document.getElementById('controls').style.display='none';const local=t-cueTime('flight-start');const ending=t>=cueTime('cycle-end');
+ ctx.fillStyle=CFG.paper;ctx.fillRect(0,0,1080,1080);
+ // The continuous black water joins the silhouettes in the negative-space band.
+ ctx.fillStyle=CFG.ink;ctx.fillRect(0,627,1080,453);
+ const drift=local*180;
+ // far to near rows: detailed flight gradually becomes a flat tessellation.
+ const rows=[{y:28,off:205,s:1,detail:2},{y:211,off:205,s:1.0,detail:2},{y:350,off:35,s:1.0,detail:1},{y:480,off:6,s:1,detail:0},{y:568,off:171,s:1.0,detail:0},{y:646,off:20,s:1.02,detail:0}];
+ rows.forEach((r,j)=>{for(let i=-10;i<6;i++){let x=i*318+r.off+drift,wave=Math.sin(local*2.5+i*1.1+j*.6);let y=r.y+(j<3?23:8)*wave;let phase=local*7.4+(j===0?i*.3:j===1?([Math.PI/2,0,Math.PI][((i%3)+3)%3]):j===2?i*.3:0);bird(x,y,r.s,phase,r.detail)}});
+ // interlocking cream fish use the black birds as their surrounding water.
+ for(let i=-10;i<6;i++){let x=i*318+203+drift;simpleFish(x,625+12*Math.sin(local*2.5+i*.8),1)}
+ if(ready){for(let row=0;row<3;row++)for(let i=-10;i<6;i++){
+ let x=i*318+204+row*120+local*190,y=[741,904,1060][row]+22*Math.sin(local*2.5+i*1.1+row);
+ let img=row===0?images.fishLine:row===1?(i%2===0?images.fishFine:images.fishScale):images.fishFine;fish(img,x,y,row===0?257:268,local,i+row);
+ }}
+ document.getElementById('seek').value=t;document.getElementById('time').textContent=t.toFixed(2)+' / '+CFG.duration.toFixed(2);
+}
+const clock={t:0};const tl=gsap.timeline({paused:true,onUpdate:()=>render(clock.t)}).to(clock,{t:CFG.duration,duration:CFG.duration,ease:'none'});
+window.__odRenderAt=t=>{tl.pause();clock.t=t;tl.time(t,true);render(t)};
+document.getElementById('main').dataset.duration=CFG.duration;document.getElementById('seek').max=CFG.duration;
+document.getElementById('seek').oninput=e=>window.__odRenderAt(+e.target.value);document.getElementById('play').onclick=()=>{if(tl.paused()){if(tl.time()>=CFG.duration)tl.restart();else tl.play();document.getElementById('play').textContent='PAUSE'}else{tl.pause();document.getElementById('play').textContent='PLAY'}};
+Promise.all(Object.keys(CFG).filter(k=>k.startsWith('fish')).map(k=>new Promise((resolve,reject)=>{let im=new Image();im.onload=()=>{images[k]=im;resolve()};im.onerror=reject;im.src=CFG[k]}))).then(()=>document.fonts.ready).then(()=>{ready=true;requestAnimationFrame(()=>requestAnimationFrame(()=>{render(0);window.__timelines={main:tl};window.__odReady=true}))});
+render(0);
+</script><script data-od-preview-audio>
+(function(){var a=document.getElementById('soundtrack');if(!a||document.documentElement.classList.contains('od-export'))return;
+function tick(){if(window.__odMotionSourcePlayer||window.__odMotionRender)return;var tl=window.__timelines&&window.__timelines.main;
+if(tl){var t=tl.time(),on=tl.isActive();if(on){if(a.paused)a.play().catch(function(){});if(Math.abs(a.currentTime-t)>0.2)a.currentTime=t;}else{if(!a.paused)a.pause();if(Math.abs(a.currentTime-t)>0.05)a.currentTime=t;}}
+requestAnimationFrame(tick);}requestAnimationFrame(tick);})();
+</script>
+</body></html>

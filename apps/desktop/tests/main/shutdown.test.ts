@@ -1,54 +1,79 @@
-import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
-import ts from "typescript";
+import { stripTypeScriptTypes } from "node:module";
+import { fileURLToPath } from "node:url";
+import { API } from "@typescript/native/unstable/sync";
+import * as ts from "@typescript/native/unstable/ast";
 import { describe, expect, it, vi } from "vitest";
 
 // Execute the entry's actual shutdown declarations, substituting only Electron
 // and the sidecar cleanup boundary. This catches premature process.exit calls.
-function shutdownHarness() {
-  const source = readFileSync(new URL("../../src/main/index.ts", import.meta.url), "utf8");
-  const ast = ts.createSourceFile("index.ts", source, ts.ScriptTarget.Latest, true);
+function shutdownHarness(options: {
+  onRendererClosed?: () => void;
+  onRendererTransportQuiesced?: () => void;
+  onSidecarRetirementStarted?: () => void;
+} = {}) {
   const declarations: string[] = [];
-  const names = new Set(["shuttingDown", "shutdownPromise", "shutdownComplete", "shutdownRequestCount", "shutdown", "shutdownAndExit"]);
-  function visit(node: ts.Node): void {
-    if (ts.isExpressionStatement(node) && ts.isCallExpression(node.expression) &&
-        node.expression.expression.getText(ast) === "app.on" &&
-        node.expression.arguments[0]?.getText(ast) === '"before-quit"') {
-      declarations.push(node.getText(ast));
-      return;
+  const file = fileURLToPath(new URL("../../src/main/index.ts", import.meta.url));
+  const compiler = new API();
+  try {
+    using snapshot = compiler.updateSnapshot({ openFiles: [file] });
+    const ast = snapshot.getDefaultProjectForFile(file)?.program.getSourceFile(file);
+    if (!ast) throw new Error(`Native TypeScript could not parse ${file}`);
+    const names = new Set(["shuttingDown", "shutdownPromise", "shutdownComplete", "shutdownRequestCount", "shutdown", "shutdownAndExit"]);
+    function visit(node: ts.Node): void {
+      if (ts.isExpressionStatement(node) && ts.isCallExpression(node.expression) &&
+          node.expression.expression.getText(ast) === "app.on" &&
+          node.expression.arguments[0]?.getText(ast) === '"before-quit"') {
+        declarations.push(node.getText(ast));
+        return;
+      }
+      if (ts.isFunctionDeclaration(node) && node.name != null && names.has(node.name.text)) {
+        declarations.push(node.getText(ast));
+        return;
+      }
+      if (ts.isVariableStatement(node) && node.declarationList.declarations.some((d) => d.name != null && ts.isIdentifier(d.name) && names.has(d.name.text))) {
+        declarations.push(node.getText(ast));
+        return;
+      }
+      node.forEachChild(visit);
     }
-    if (ts.isFunctionDeclaration(node) && node.name != null && names.has(node.name.text)) {
-      declarations.push(node.getText(ast));
-      return;
-    }
-    if (ts.isVariableStatement(node) && node.declarationList.declarations.some((d) => ts.isIdentifier(d.name) && names.has(d.name.text))) {
-      declarations.push(node.getText(ast));
-      return;
-    }
-    ts.forEachChild(node, visit);
+    visit(ast);
+  } finally {
+    compiler.close();
   }
-  visit(ast);
   let finishCleanup!: () => void;
   const cleanup = new Promise<void>((resolve) => { finishCleanup = resolve; });
-  const beforeShutdown = vi.fn(() => cleanup);
-  const close = vi.fn(async () => undefined);
+  const beforeShutdown = vi.fn(() => {
+    options.onSidecarRetirementStarted?.();
+    return cleanup;
+  });
+  const close = vi.fn(async () => {
+    options.onRendererClosed?.();
+  });
+  const quiesceRendererTransport = vi.fn(async () => {
+    options.onRendererTransportQuiesced?.();
+  });
   let beforeQuit!: (event: { preventDefault(): void }) => void;
   const quit = vi.fn();
   const on = (_event: string, listener: typeof beforeQuit) => { beforeQuit = listener; };
   const exit = vi.fn();
   const endSession = vi.fn();
+  const recordHostEvent = vi.fn();
   const recordLifecycle = vi.fn(async (_event: unknown) => undefined);
   const sandbox = {
+    memorySampler: { stop: vi.fn() },
+    startupTiming: { finish: vi.fn() }, removeStartupIpc: vi.fn(),
     updater: { recordLifecycle },
-    options: { beforeShutdown }, desktop: { close }, app: { quit, on }, process: { exit },
+    options: { beforeShutdown, quiesceRendererTransport }, desktop: { close }, app: { quit, on }, process: { exit },
     updateScheduler: { stop: vi.fn() }, disposeMenu: vi.fn(), removeDiagnosticsIpc: vi.fn(),
-    endDesktopSessionCleanly: endSession, sessionStatePath: "test-session", console: { info: vi.fn(), error: vi.fn() },
+    endDesktopSessionCleanly: endSession, recordDesktopHostEvent: recordHostEvent,
+    sessionStatePath: "test-session", console: { info: vi.fn(), error: vi.fn() },
   };
-  const code = ts.transpileModule(declarations.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const code = stripTypeScriptTypes(declarations.join("\n"));
   const api = runInNewContext(`${code}\n({ shutdown, shutdownAndExit })`, sandbox) as {
     shutdown(): Promise<void>; shutdownAndExit(): void;
   };
-  return { ...api, beforeShutdown, close, quit, exit, endSession, finishCleanup, beforeQuit, recordLifecycle };
+  return { ...api, memorySampler: sandbox.memorySampler, beforeShutdown, close, quiesceRendererTransport, quit, exit, endSession, finishCleanup, beforeQuit, recordLifecycle, recordHostEvent };
 }
 
 async function flushPromises() {
@@ -56,6 +81,72 @@ async function flushPromises() {
 }
 
 describe("desktop shutdown", () => {
+  it("records one quit request before cleanup, however often quit is asked for", async () => {
+    const h = shutdownHarness();
+    void h.shutdown();
+    void h.shutdown();
+    await flushPromises();
+    expect(h.memorySampler.stop).toHaveBeenCalled();
+    expect(h.memorySampler.stop.mock.invocationCallOrder[0]).toBeLessThan(h.beforeShutdown.mock.invocationCallOrder[0]!);
+    expect(h.recordHostEvent).toHaveBeenCalledTimes(1);
+    expect(h.recordHostEvent).toHaveBeenCalledWith({ stateFilePath: "test-session" }, { kind: "quit-requested" });
+    expect(h.beforeShutdown).toHaveBeenCalledTimes(1);
+    h.finishCleanup();
+  });
+
+  it("[P0] quiesces the renderer before retiring runtime sidecars", async () => {
+    const h = shutdownHarness();
+    const pending = h.shutdown();
+
+    await flushPromises();
+
+    expect(h.close).toHaveBeenCalledTimes(1);
+    expect(h.beforeShutdown).toHaveBeenCalledTimes(1);
+    expect(h.close.mock.invocationCallOrder[0]).toBeLessThan(
+      h.quiesceRendererTransport.mock.invocationCallOrder[0]!,
+    );
+    expect(h.quiesceRendererTransport.mock.invocationCallOrder[0]).toBeLessThan(
+      h.beforeShutdown.mock.invocationCallOrder[0]!,
+    );
+    expect(h.recordLifecycle).toHaveBeenNthCalledWith(2, {
+      stage: "renderer_quiesced",
+      outcome: "completed",
+    });
+    // Electron main remains alive to finish sidecar cleanup and the deferred
+    // payload handoff after the request-producing renderer has gone away.
+    expect(h.quit).not.toHaveBeenCalled();
+    expect(h.exit).not.toHaveBeenCalled();
+
+    h.finishCleanup();
+    await pending;
+  });
+
+  it("[P0] emits no renderer request after runtime retirement begins", async () => {
+    let rendererCanRequest = true;
+    let staleOriginRequestCount = 0;
+    const h = shutdownHarness({
+      // Model a BrowserWindow.close() held by beforeunload: the transport
+      // barrier, not a cooperative page close, must stop stale-origin dials.
+      onRendererTransportQuiesced: () => {
+        rendererCanRequest = false;
+      },
+      onSidecarRetirementStarted: () => {
+        // Deterministic stand-in for the poll/SSE/resource request that used to
+        // hit the retired localhost origin during the sidecar grace window.
+        if (rendererCanRequest) staleOriginRequestCount += 1;
+      },
+    });
+
+    const pending = h.shutdown();
+    await flushPromises();
+
+    expect(staleOriginRequestCount).toBe(0);
+    expect(h.exit).not.toHaveBeenCalled();
+
+    h.finishCleanup();
+    await pending;
+  });
+
   it("does not exit early when quit is requested again during sidecar cleanup", async () => {
     const h = shutdownHarness();
     h.shutdownAndExit();
@@ -63,7 +154,7 @@ describe("desktop shutdown", () => {
     await flushPromises();
     expect(h.beforeShutdown).toHaveBeenCalledTimes(1);
     expect(h.exit).not.toHaveBeenCalled();
-    expect(h.close).not.toHaveBeenCalled();
+    expect(h.close).toHaveBeenCalledTimes(1);
     expect(h.endSession).not.toHaveBeenCalled();
     h.finishCleanup();
     await flushPromises();
@@ -102,6 +193,7 @@ describe("desktop shutdown", () => {
     expect(h.endSession).toHaveBeenCalledTimes(1);
     expect(h.recordLifecycle.mock.calls.map(([event]) => event)).toEqual([
       { stage: "shutdown_started", outcome: "started" },
+      { stage: "renderer_quiesced", outcome: "completed" },
       { stage: "shutdown_completed", outcome: "completed", repeated_quit_count: 1, duration_ms: expect.any(Number) },
     ]);
   });

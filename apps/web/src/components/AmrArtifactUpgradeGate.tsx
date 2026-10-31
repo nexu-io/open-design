@@ -7,7 +7,6 @@ import {
   AMR_ARTIFACT_UPGRADE_REQUEST_EVENT,
   amrArtifactUpgradeSessionKey,
   type AmrArtifactUpgradeDecision,
-  type AmrArtifactUpgradeHomeOffer,
   type AmrArtifactUpgradeRequestDetail,
 } from '../runtime/amr-artifact-upgrade';
 import { isFreePlanTier } from '../collab/team-plan';
@@ -25,24 +24,23 @@ interface Props {
   plan: string | null;
   planResolved: boolean;
   profile: string | null;
+  workspaceId?: string | null;
   metricsConsent: boolean;
   installationId: string | null | undefined;
   homeVisible: boolean;
   activeProjectId: string | null;
   activeConversationId: string | null;
-  activeFileName: string | null;
-  onHomeOfferChange?: (offer: AmrArtifactUpgradeHomeOffer | null) => void;
 }
 
 interface RouteSurface {
   homeVisible: boolean;
-  offer: AmrArtifactUpgradeHomeOffer | null;
+  sessionKey: string | null;
   plan: string | null;
   planResolved: boolean;
 }
 
-interface PendingHomeOffer {
-  offer: AmrArtifactUpgradeHomeOffer;
+interface PendingHomeSuppression {
+  sessionKey: string;
   plan: string | null;
   planResolved: boolean;
 }
@@ -59,56 +57,30 @@ function hasOpenModal(): boolean {
   ) !== null;
 }
 
-function homeOfferForRoute(
-  projectId: string | null,
-  conversationId: string | null,
-  fileName: string | null,
-): AmrArtifactUpgradeHomeOffer | null {
-  const normalizedProjectId = projectId?.trim();
-  const normalizedConversationId = conversationId?.trim();
-  const sessionKey = amrArtifactUpgradeSessionKey(
-    normalizedProjectId,
-    normalizedConversationId,
-  );
-  if (!sessionKey || !normalizedProjectId || !normalizedConversationId) return null;
-  return {
-    sessionKey,
-    projectId: normalizedProjectId,
-    conversationId: normalizedConversationId,
-    fileName: fileName || null,
-  };
-}
-
 export function AmrArtifactUpgradeGate({
   cloudModelSelected,
   plan,
   planResolved,
   profile,
+  workspaceId,
   metricsConsent,
   installationId,
   homeVisible,
   activeProjectId,
   activeConversationId,
-  activeFileName,
-  onHomeOfferChange,
 }: Props) {
   const [pendingRevision, setPendingRevision] = useState(0);
   const [dialogSessionKey, setDialogSessionKey] = useState<string | null>(null);
-  const [pendingHomeOffer, setPendingHomeOffer] =
-    useState<PendingHomeOffer | null>(null);
+  const [pendingHomeSuppression, setPendingHomeSuppression] =
+    useState<PendingHomeSuppression | null>(null);
   const openRef = useRef(false);
   const pendingSendRef = useRef<PendingSendDecision | null>(null);
   const eligibleSessionsRef = useRef<Set<string>>(new Set());
   const promptedSessionsRef = useRef<Set<string>>(new Set());
-  const homeOfferedSessionsRef = useRef<Set<string>>(new Set());
   const seenRunIdsRef = useRef<Set<string>>(new Set());
   const previousSurfaceRef = useRef<RouteSurface>({
     homeVisible,
-    offer: homeOfferForRoute(
-      activeProjectId,
-      activeConversationId,
-      activeFileName,
-    ),
+    sessionKey: amrArtifactUpgradeSessionKey(activeProjectId, activeConversationId),
     plan,
     planResolved,
   });
@@ -206,29 +178,24 @@ export function AmrArtifactUpgradeGate({
     if (
       homeVisible
       && !previous.homeVisible
-      && previous.offer
-      && eligibleSessionsRef.current.has(previous.offer.sessionKey)
-      && !homeOfferedSessionsRef.current.has(previous.offer.sessionKey)
+      && previous.sessionKey
+      && eligibleSessionsRef.current.has(previous.sessionKey)
+      && !promptedSessionsRef.current.has(previous.sessionKey)
     ) {
-      setPendingHomeOffer({
-        offer: previous.offer,
+      setPendingHomeSuppression({
+        sessionKey: previous.sessionKey,
         plan: previous.plan,
         planResolved: previous.planResolved,
       });
     }
     previousSurfaceRef.current = {
       homeVisible,
-      offer: homeOfferForRoute(
-        activeProjectId,
-        activeConversationId,
-        activeFileName,
-      ),
+      sessionKey: amrArtifactUpgradeSessionKey(activeProjectId, activeConversationId),
       plan,
       planResolved,
     };
   }, [
     activeConversationId,
-    activeFileName,
     activeProjectId,
     homeVisible,
     plan,
@@ -236,32 +203,29 @@ export function AmrArtifactUpgradeGate({
   ]);
 
   useEffect(() => {
-    if (!pendingHomeOffer) return;
+    if (!pendingHomeSuppression) return;
+    // The removed Home card used to consume this session's upgrade reminder.
+    // Keep that suppression so returning to the project does not add a modal.
     if (
-      pendingHomeOffer.planResolved
+      pendingHomeSuppression.planResolved
       && cloudModelSelected
-      && isFreePlanTier(pendingHomeOffer.plan)
+      && isFreePlanTier(pendingHomeSuppression.plan)
       && !hasOpenModal()
     ) {
-      homeOfferedSessionsRef.current.add(pendingHomeOffer.offer.sessionKey);
-      promptedSessionsRef.current.add(pendingHomeOffer.offer.sessionKey);
-      onHomeOfferChange?.(pendingHomeOffer.offer);
-    } else {
-      onHomeOfferChange?.(null);
+      promptedSessionsRef.current.add(pendingHomeSuppression.sessionKey);
     }
-    setPendingHomeOffer(null);
-  }, [cloudModelSelected, onHomeOfferChange, pendingHomeOffer]);
+    setPendingHomeSuppression(null);
+  }, [cloudModelSelected, pendingHomeSuppression]);
 
   useEffect(() => {
     if (cloudModelSelected && (!planResolved || isFreePlanTier(plan))) return;
-    onHomeOfferChange?.(null);
     if (!dialogSessionKey) return;
     const pending = pendingSendRef.current;
     pendingSendRef.current = null;
     pending?.settle(cloudModelSelected ? 'cancel' : 'proceed');
     openRef.current = false;
     setDialogSessionKey(null);
-  }, [cloudModelSelected, dialogSessionKey, onHomeOfferChange, plan, planResolved]);
+  }, [cloudModelSelected, dialogSessionKey, plan, planResolved]);
 
   useEffect(() => () => {
     const pending = pendingSendRef.current;
@@ -280,6 +244,7 @@ export function AmrArtifactUpgradeGate({
   return dialogSessionKey ? (
     <AmrArtifactUpgradeDialog
       profile={profile}
+      workspaceId={workspaceId}
       metricsConsent={metricsConsent}
       installationId={installationId}
       onClose={() => settleDialog('cancel')}

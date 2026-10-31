@@ -4,6 +4,8 @@ import { homedir } from "node:os";
 import { basename, dirname, join, posix } from "node:path";
 import { promisify } from "node:util";
 
+import { parseAmrEndpointBinding } from "@open-design/contracts";
+
 import {
   APP_KEYS,
   SIDECAR_MESSAGES,
@@ -23,6 +25,7 @@ import {
 } from "@open-design/sidecar";
 import { createPackageManagerInvocation, readLogTail } from "@open-design/platform";
 
+import { assertPackagedConfigBinding, packagedAmrConfigFields, writePackagedConfigWithBinding } from "./config/amr-endpoint-binding.js";
 import type { ToolPackConfig } from "./config/index.js";
 import {
   allPackagedSidecarStopRequests,
@@ -236,6 +239,9 @@ export function buildDockerArgs(
     const containerVelaDir = "/opt/vela-cli";
     dockerArgs.push("-v", `${hostVelaDir}:${containerVelaDir}:ro`);
     dockerArgs.push("-e", `OPEN_DESIGN_VELA_CLI_BIN=${containerVelaDir}/${velaBinBase}`);
+  }
+  if (config.amrEndpointBinding != null) {
+    dockerArgs.push("-e", `OPEN_DESIGN_AMR_ENDPOINT_BINDING=${JSON.stringify(config.amrEndpointBinding)}`);
   }
   if (config.amrProfile != null) {
     dockerArgs.push("-e", `OPEN_DESIGN_AMR_PROFILE=${config.amrProfile}`);
@@ -549,25 +555,22 @@ async function writeAssembledApp(
 
   await writeFile(paths.assembledMainEntryPath, renderLinuxPackagedMainEntry(), "utf8");
 
-  await writeFile(
+  await writePackagedConfigWithBinding(
     paths.packagedConfigPath,
     `${JSON.stringify(
       {
-        ...(config.amrProfile == null ? {} : { amrProfile: config.amrProfile }),
+        ...packagedAmrConfigFields(config),
         appVersion: version,
         namespace: config.namespace,
         nodeCommandRelative: "open-design/bin/node",
         ...(config.telemetryRelayUrl == null ? {} : { telemetryRelayUrl: config.telemetryRelayUrl }),
         ...(config.posthogKey == null ? {} : { posthogKey: config.posthogKey }),
         ...(config.posthogHost == null ? {} : { posthogHost: config.posthogHost }),
-        ...(config.velaWebUrl == null ? {} : { velaWebUrl: config.velaWebUrl }),
-        ...(config.velaWebUrls == null ? {} : { velaWebUrls: config.velaWebUrls }),
         ...(config.portable ? {} : { namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot }),
       },
       null,
       2,
     )}\n`,
-    "utf8",
   );
 
   await runProductionInstall(paths.assembledAppRoot);
@@ -669,6 +672,10 @@ async function runElectronBuilderLinux(config: ToolPackConfig, paths: LinuxPaths
     cwd: config.workspaceRoot,
     env: process.env,
   });
+  await assertPackagedConfigBinding(
+    join(paths.appBuilderOutputRoot, "linux-unpacked", "resources", "open-design-config.json"),
+    await readFile(paths.packagedConfigPath, "utf8"),
+  );
 }
 
 async function findBuiltAppImage(paths: LinuxPaths): Promise<string | null> {
@@ -1183,6 +1190,21 @@ export type LinuxHeadlessStartResult = {
   status: DesktopStatusSnapshot;
 };
 
+async function linuxHeadlessBindingEnv(config: ToolPackConfig): Promise<NodeJS.ProcessEnv> {
+  const paths = resolveLinuxPaths(config);
+  const requested = parseAmrEndpointBinding(config.amrEndpointBinding);
+  if (!(await pathExists(paths.packagedConfigPath))) {
+    if (requested) throw new Error("Built headless AMR endpoint binding is missing");
+    return { OPEN_DESIGN_AMR_ENDPOINT_BINDING: "" };
+  }
+  const raw = JSON.parse(await readFile(paths.packagedConfigPath, "utf8")) as Record<string, unknown>;
+  const binding = parseAmrEndpointBinding(raw.amrEndpointBinding);
+  if (requested && JSON.stringify(requested) !== JSON.stringify(binding)) {
+    throw new Error("Headless AMR endpoint binding differs from the built application");
+  }
+  return { OPEN_DESIGN_AMR_ENDPOINT_BINDING: binding ? JSON.stringify(binding) : "" };
+}
+
 export async function installPackedLinuxHeadless(config: ToolPackConfig): Promise<LinuxHeadlessInstallResult> {
   const paths = resolveLinuxPaths(config);
   const entryPath = resolveHeadlessEntryPath(paths);
@@ -1208,10 +1230,12 @@ export async function installPackedLinuxHeadless(config: ToolPackConfig): Promis
   // so the headless process writes its runtime data under the same paths that
   // tools-pack stop/logs expect.
   const dataDir = dirname(config.roots.runtime.namespaceBaseRoot);
+  const bindingEnv = await linuxHeadlessBindingEnv(config);
+  const bindingAssignment = `OPEN_DESIGN_AMR_ENDPOINT_BINDING=${shellQuote(bindingEnv.OPEN_DESIGN_AMR_ENDPOINT_BINDING ?? "")}`;
   const script = [
     "#!/bin/sh",
     `# Open Design headless launcher — namespace: ${config.namespace}`,
-    `OD_PACKAGED_NAMESPACE=${JSON.stringify(config.namespace)} OD_DATA_DIR=${JSON.stringify(dataDir)} OD_RESOURCE_ROOT=${JSON.stringify(paths.resourceRoot)} exec ${JSON.stringify(nodePath)} ${JSON.stringify(entryPath)} "$@"`,
+    `${bindingAssignment} OD_PACKAGED_NAMESPACE=${JSON.stringify(config.namespace)} OD_DATA_DIR=${JSON.stringify(dataDir)} OD_RESOURCE_ROOT=${JSON.stringify(paths.resourceRoot)} exec ${JSON.stringify(nodePath)} ${JSON.stringify(entryPath)} "$@"`,
   ].join("\n") + "\n";
 
   await writeFile(launcherPath, script, { encoding: "utf8", mode: 0o755 });
@@ -1230,6 +1254,7 @@ export async function startPackedLinuxHeadless(config: ToolPackConfig): Promise<
     );
   }
 
+  const bindingEnv = await linuxHeadlessBindingEnv(config);
   const nodeCommand = (await pathExists(nodePath)) ? nodePath : process.execPath;
   const logPath = headlessLogPath(config);
   await mkdir(dirname(logPath), { recursive: true });
@@ -1249,6 +1274,7 @@ export async function startPackedLinuxHeadless(config: ToolPackConfig): Promise<
       cwd: dirname(entryPath),
       env: {
         ...process.env,
+        ...bindingEnv,
         OD_PACKAGED_NAMESPACE: config.namespace,
         OD_DATA_DIR: dirname(config.roots.runtime.namespaceBaseRoot),
         OD_RESOURCE_ROOT: paths.resourceRoot,

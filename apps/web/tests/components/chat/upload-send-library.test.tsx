@@ -10,7 +10,7 @@ import {
   fetchLibraryAssets,
   uploadProjectFiles,
 } from '../../../src/providers/registry';
-import { flushMounts, pressEnter } from '../../helpers/lexical-composer';
+import { composerText, flushMounts, pressEnter } from '../../helpers/lexical-composer';
 
 vi.mock('../../../src/features/libraryUi', () => ({ LIBRARY_UI_VISIBLE: true }));
 vi.mock('../../../src/providers/registry', async () => {
@@ -103,6 +103,34 @@ describe('library attachment preparation ownership', () => {
     expect(onSend.mock.calls[0]?.[1]).toEqual([
       expect.objectContaining({ path: 'library/library-image.png', name: 'Library image' }),
     ]);
+  });
+
+  it('does not restore an obsolete draft over a newly selected library operation', async () => {
+    const pending = gate();
+    const admission = gate();
+    applyAsset.mockImplementation(async () => {
+      await pending.promise;
+      return { relPath: 'library/library-image.png' };
+    });
+    const onSend = vi.fn(async () => { await admission.promise; return 'restore-draft' as const; });
+    render(<ChatComposer projectId="p1" projectFiles={[]} streaming={false}
+      initialDraft="Old submitted draft" onEnsureProject={async () => 'p1'} onSend={onSend} onStop={vi.fn()} />);
+    await flushMounts();
+    pressEnter();
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(composerText().trim()).toBe(''));
+    fireEvent.click(screen.getByTestId('chat-plus-trigger'));
+    fireEvent.click(await screen.findByTestId('composer-plus-library'));
+    fireEvent.click(await screen.findByTitle('Library image'));
+    fireEvent.click(screen.getByTestId('library-picker-confirm'));
+    await waitFor(() => expect(applyAsset).toHaveBeenCalledTimes(1));
+    await act(async () => { admission.open(); await admission.promise; });
+    expect(composerText().trim()).toBe('');
+    expect(screen.getByTestId('library-picker')).toBeTruthy();
+    await act(async () => { pending.open(); await pending.promise; });
+    await waitFor(() => expect(screen.queryByTestId('library-picker')).toBeNull());
+    expect(composerText().trim()).toBe('');
+    expect(screen.getByRole('button', { name: 'Preview Library image' })).toBeTruthy();
   });
 
   it('keeps a selected library asset available while a terminal annotation prepares', async () => {

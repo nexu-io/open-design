@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { pickHomeTemplate } from '../helpers/home-template-picker';
 //
 // Web-clone example-card analytics (埋点文档 row 116, element=example_prompt).
 // The Website-clone examples are plain text prompt cards (no embedded HTML / no
@@ -105,33 +106,7 @@ afterEach(() => {
 
 // #5517 removed the inline template rail from Home; scenario templates are
 // picked from the composer footer's radial Template picker instead.
-async function pickHomeTemplate(id: string) {
-  // A type already picked retires the row, and the pill has no menu — so
-  // switching means clearing back to the empty state first.
-  const clear = screen.queryByTestId('home-hero-template-clear');
-  if (clear) fireEvent.click(clear);
-  const lead = await screen.findByTestId('home-hero-type-pill-prototype');
-  await waitFor(() => expect((lead as HTMLButtonElement).disabled).toBe(false));
-  let pill = screen.queryByTestId(`home-hero-type-pill-${id}`);
-  if (!pill) {
-    // Types behind 更多 mount only while its popover is open.
-    fireEvent.click(screen.getByTestId('home-hero-type-pills-more'));
-    pill = screen.queryByTestId(`home-hero-type-pill-${id}-more`);
-  }
-  if (pill) {
-    fireEvent.click(pill);
-    return;
-  }
-  // Types outside the fixed row (media, HyperFrames, …) are reached the way
-  // the workspace tabs-bar hands one off: the apply-template window event,
-  // which HomeHero applies exactly as a row click.
-  fireEvent.keyDown(document, { key: 'Escape' });
-  await act(async () => {
-    window.dispatchEvent(
-      new CustomEvent(HOME_APPLY_TEMPLATE_EVENT, { detail: { chipId: id } }),
-    );
-  });
-}
+
 
 describe('web-clone example-card tracking', () => {
   it('renders the Website-clone examples as text prompt cards (no plugin preview / no remix)', async () => {

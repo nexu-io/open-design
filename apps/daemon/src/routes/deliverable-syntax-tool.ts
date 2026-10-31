@@ -51,6 +51,7 @@ export interface RegisterDeliverableSyntaxToolRoutesDeps {
     res: Response,
     projectId: string,
     access: { mode: 'read' },
+    runId: string,
   ): Promise<boolean>;
   getProject(projectId: string): ProjectRecord | null;
   getRun(runId: string): ToolRun | null;
@@ -164,6 +165,7 @@ export function registerDeliverableSyntaxToolRoutes(
         res,
         grant.projectId,
         { mode: 'read' },
+        grant.runId,
       )) return;
 
       const project = ctx.getProject(grant.projectId);

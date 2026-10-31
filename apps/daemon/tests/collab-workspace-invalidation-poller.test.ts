@@ -380,7 +380,6 @@ describe('workspace invalidation poller', () => {
   });
 
   it.each([
-    ['personal context with stale team id', { workspaceType: 'personal' }],
     ['removed member', { memberStatus: 'removed' }],
     ['past-due workspace', { lifecycleState: 'billing_past_due' }],
     ['locked workspace', { lifecycleState: 'locked' }],
@@ -402,6 +401,17 @@ describe('workspace invalidation poller', () => {
       expect(h.observed).toEqual([]);
     },
   );
+
+  it('runs shared-project recovery for an active Personal workspace using its workspace id', async () => {
+    const personal = teamContext({ workspaceType: 'personal' });
+    delete personal.teamId;
+    const h = harness({
+      context: personal,
+      projects: [project('p1')],
+    });
+    await h.poller.pollOnce();
+    expect(h.observed).toEqual([{ workspaceId: 'ws-1', projectIds: ['p1'] }]);
+  });
 
   it('schedules immediately after a workspace switch inside the same throttle window', async () => {
     let now = 0;

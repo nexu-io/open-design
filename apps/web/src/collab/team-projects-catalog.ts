@@ -24,7 +24,7 @@
 // consumer downstream.
 
 import {
-  workspaceContextHasTeamIdentity,
+  workspaceContextHasWorkspaceIdentity,
   type TeamProject,
   type WorkspaceCollabContext,
   type WorkspaceTeamProjectsResponse,
@@ -184,30 +184,7 @@ export function asTeamProjectRows(value: unknown): TeamProject[] {
   return [];
 }
 
-/**
- * A workspace with no team has no team-shared catalog. Not an outage.
- *
- * `GET /api/workspace/projects/team` answers 403 WORKSPACE_ACCESS_DENIED for
- * any workspace the membership directory does not report as a team
- * (`apps/daemon/src/routes/collab-context.ts`). On a cold conversation open
- * signed in to a PERSONAL workspace, three separate call sites asked for it and
- * all three got 403 — requests that could not have succeeded, spending three
- * slots of the browser's ~6-connection budget to learn something the client
- * already knew: `workspaceType` is a field it was about to put in its own
- * request headers.
- *
- * This is a precondition, re-evaluated on every call, not a remembered verdict:
- * a personal→team upgrade goes to the wire on the very next read.
- *
- * It rejects rather than returning `[]` so every existing consumer branch is
- * byte-identical to the 403 it replaces — `useWorkspaceContext.loadFull`
- * already catches it as "Personal / offline / daemon without the hub: no
- * team-shared projects", `projectIsSharedWithWorkspace` as `false`, and App's
- * catalog lookup as `{ ok: false }`. Whether a personal workspace ought to read
- * as an authoritative EMPTY catalog instead (which would change deep-link
- * resolution from `unavailable` to `not-found`) is a product call, not a
- * request-count one, and is deliberately left alone here.
- */
+/** No exact active Workspace/member identity means no scoped project catalog. */
 class TeamProjectCatalogUnavailableError extends Error {
   constructor() {
     super('team-projects 403');
@@ -235,9 +212,8 @@ export async function fetchTeamProjectsCatalog(
     cacheDiscriminator?: string;
   },
 ): Promise<TeamProject[]> {
-  // See TeamProjectCatalogUnavailableError: this request is refused by the
-  // daemon for every non-team workspace, so asking is pure waste.
-  if (!workspaceContextHasTeamIdentity(options.context)) {
+  // Personal and Team workspaces can both host member-shared projects.
+  if (!workspaceContextHasWorkspaceIdentity(options.context)) {
     throw new TeamProjectCatalogUnavailableError();
   }
   const cacheKey = `workspace-team-projects:${workspaceIdentityCacheKey(options.context)}`

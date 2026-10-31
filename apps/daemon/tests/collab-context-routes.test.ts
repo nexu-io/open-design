@@ -89,6 +89,12 @@ const TEAM_CONTEXT_PARSED: WorkspaceCollabContext = {
     : {}),
 };
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((complete) => { resolve = complete; });
+  return { promise, resolve };
+}
+
 async function startContextServer(
   overrides: Partial<Omit<RegisterCollabContextRoutesDeps, 'workspaceContext'>> = {},
 ) {
@@ -108,10 +114,12 @@ async function startContextServer(
       route: string,
       options: { method?: string; body?: unknown; headers?: Record<string, string> } = {},
     ) {
-      const init: RequestInit = { method: options.method ?? 'GET' };
-      if (options.headers) init.headers = options.headers;
+      // Each case owns a short-lived port-0 server. Do not let Undici retain
+      // its idle socket for a later server that happens to reuse that port.
+      const headers = { ...options.headers, connection: 'close' };
+      const init: RequestInit = { method: options.method ?? 'GET', headers };
       if (options.body !== undefined) {
-        init.headers = { ...options.headers, 'content-type': 'application/json' };
+        init.headers = { ...headers, 'content-type': 'application/json' };
         init.body = JSON.stringify(options.body);
       }
       const response = await fetch(`${base}${route}`, init);
@@ -119,6 +127,64 @@ async function startContextServer(
     },
   };
 }
+
+describe('read-only Link concurrency route', () => {
+  it.runIf(Boolean(process.env.LINK_CONCURRENCY_HTTP_URL && process.env.LINK_CONCURRENCY_VELA_BINARY))('real daemon route → built Vela CLI → authenticated Link → actual full Redis counter', async () => {
+    const api = await startContextServer({ configuredEnv: () => ({
+      VELA_BIN: process.env.LINK_CONCURRENCY_VELA_BINARY!,
+      VELA_LINK_URL: process.env.LINK_CONCURRENCY_HTTP_URL!,
+      VELA_RUNTIME_KEY: 'runtime',
+    }) });
+    const response = await api.req('/api/workspace/billing/request-concurrency?workspaceId=space');
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ requestConcurrencyHint: { workspaceId: 'space', workspaceMemberId: 'member', status: 'full', running: 10, limit: 10 } });
+    expect((await api.req('/api/workspace/billing/request-concurrency?workspaceId=other')).status).toBe(403);
+  });
+
+  it('uses the authenticated upstream reader without waiting for display billing', async () => {
+    const display = vi.fn(() => new Promise<never>(() => {}));
+    const hint = { workspaceId: 'wm-1', workspaceMemberId: 'member', observedAt: new Date().toISOString(), status: 'full' as const, running: 10, limit: 10 };
+    const read = vi.fn(async () => hint);
+    const api = await startContextServer({ fetchBilling: display, fetchWorkspaceDirectory: display, fetchRequestConcurrency: read });
+    const response = await api.req('/api/workspace/billing/request-concurrency?workspaceId=wm-1');
+    expect(response).toEqual({ status: 200, body: { requestConcurrencyHint: hint } });
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(display).not.toHaveBeenCalled();
+  });
+  it('keeps authorization and absent old capability distinct', async () => {
+    const read = vi.fn().mockRejectedValueOnce(new Error('API request failed with status 403: forbidden')).mockResolvedValueOnce(null);
+    const api = await startContextServer({ fetchRequestConcurrency: read });
+    expect((await api.req('/api/workspace/billing/request-concurrency?workspaceId=wm-1')).status).toBe(403);
+    expect((await api.req('/api/workspace/billing/request-concurrency?workspaceId=wm-1')).status).toBe(503);
+    expect((await api.req('/api/workspace/billing/request-concurrency')).status).toBe(400);
+  });
+});
+
+describe('independent billing preflight', () => {
+  it('reads backend funding directly without waiting for display billing or the directory', async () => {
+    const display = vi.fn(() => new Promise<never>(() => {}));
+    const preflight = {
+      schemaVersion: 1 as const, workspaceId: 'wm-1', workspaceMemberId: 'member',
+      modelId: 'model', generatedAt: new Date().toISOString(), balanceUsd: '0',
+      modelCovered: false, funding: 'gateway' as const, fundingCheck: 'insufficient' as const,
+      codingPlan: { workspaceId: 'wm-1', generatedAt: new Date().toISOString(), eligible: false, tier: null, windows: [] },
+    };
+    const legacy = vi.fn(async () => { throw new Error('early hints must not call legacy preflight'); });
+    const api = await startContextServer({ fetchBilling: display, fetchWorkspaceDirectory: display, fetchBillingPreflight: legacy, fetchBillingFundingCheck: async () => preflight });
+    const response = await api.req('/api/workspace/billing/preflight?workspaceId=wm-1&modelId=model');
+    expect(response.status).toBe(200);
+    expect(response.body.preflight).toEqual(preflight);
+    expect(display).not.toHaveBeenCalled();
+    expect(legacy).not.toHaveBeenCalled();
+  });
+  it('preserves upstream authorization failure and treats missing capability as unavailable', async () => {
+    const read = vi.fn().mockRejectedValueOnce(new Error('API request failed with status 403: forbidden')).mockResolvedValueOnce(null);
+    const api = await startContextServer({ fetchBillingFundingCheck: read });
+    expect((await api.req('/api/workspace/billing/preflight?workspaceId=wm-1')).status).toBe(403);
+    expect((await api.req('/api/workspace/billing/preflight?workspaceId=wm-1')).status).toBe(503);
+    expect((await api.req('/api/workspace/billing/preflight')).status).toBe(400);
+  });
+});
 
 describe('parseWorkspaceCollabContext', () => {
   it('accepts a well-formed team context and derives permissions/seats', () => {
@@ -152,7 +218,7 @@ describe('collab context routes', () => {
     expect(put.body).toEqual({ context: TEAM_CONTEXT_PARSED });
     expect((await api.req('/api/workspace/context', {
       headers: TEAM_HEADERS,
-    })).body).toEqual({ context: TEAM_CONTEXT_PARSED });
+    })).body).toEqual({ context: { ...TEAM_CONTEXT_PARSED, workspaceName: TEAM_DIRECTORY_ITEM.workspaceName, teamName: TEAM_DIRECTORY_ITEM.workspaceName } });
   });
 
   it('uses the settled read verifier for the pure context GET without changing its body', async () => {
@@ -184,6 +250,8 @@ describe('collab context routes', () => {
   it('does not let exact-context enrichment downgrade directory-verified Team authority', async () => {
     const verifiedTeamContext: WorkspaceCollabContext = {
       ...TEAM_CONTEXT_PARSED,
+      workspaceName: 'Directory Workspace',
+      memberCount: 12,
       role: 'admin',
       permissions: buildWorkspacePermissions({ role: 'admin', lifecycleState: 'active' }),
     };
@@ -218,6 +286,8 @@ describe('collab context routes', () => {
       role: 'admin',
       permissions: verifiedTeamContext.permissions,
       planId: 'team_pro',
+      workspaceName: 'Directory Workspace',
+      memberCount: 12,
       teamId: verifiedTeamContext.workspaceId,
     });
   });
@@ -245,7 +315,7 @@ describe('collab context routes', () => {
     expect(response.status).toBe(200);
     expect(observeWorkspace).toHaveBeenCalledWith(
       expect.anything(),
-      TEAM_CONTEXT_PARSED,
+      { ...TEAM_CONTEXT_PARSED, workspaceName: TEAM_DIRECTORY_ITEM.workspaceName, teamName: TEAM_DIRECTORY_ITEM.workspaceName },
       {
         workspace_type: 'team',
         workspace_lifecycle: 'active',
@@ -1165,6 +1235,138 @@ describe('workspace billing routes', () => {
     });
   });
 
+  it('starts all independent billing reads after membership authorization without waiting for another read', async () => {
+    const directory = deferred<Awaited<ReturnType<NonNullable<RegisterCollabContextRoutesDeps['listWorkspaceDirectory']>>>>();
+    const directoryStarted = deferred<void>();
+    const summary = deferred<null>();
+    const summaryStarted = deferred<void>();
+    const projection = deferred<Awaited<ReturnType<NonNullable<RegisterCollabContextRoutesDeps['fetchWorkspaceBillingProjection']>>>>();
+    const projectionStarted = deferred<void>();
+    const preflight = deferred<null>();
+    const fetchBilling = vi.fn(() => {
+      summaryStarted.resolve();
+      return summary.promise;
+    });
+    const fetchWorkspaceBillingProjection = vi.fn(() => {
+      projectionStarted.resolve();
+      return projection.promise;
+    });
+    const fetchBillingPreflight = vi.fn(() => preflight.promise);
+    const api = await startContextServer({
+      listWorkspaceDirectory: () => {
+        directoryStarted.resolve();
+        return directory.promise;
+      },
+      fetchBilling,
+      fetchWorkspaceBillingProjection,
+      fetchBillingPreflight,
+    });
+    const request = api.req('/api/workspace/billing?scope=workspace&workspaceId=wm-1&includePreflight=1&modelId=model');
+    try {
+      await directoryStarted.promise;
+      expect(fetchBilling).not.toHaveBeenCalled();
+      expect(fetchWorkspaceBillingProjection).not.toHaveBeenCalled();
+      expect(fetchBillingPreflight).not.toHaveBeenCalled();
+      directory.resolve(teamDirectory('wm-1'));
+      await Promise.all([summaryStarted.promise, projectionStarted.promise]);
+      // Every upstream result is still unresolved: preflight must already be
+      // running, rather than adding a second network round trip afterwards.
+      expect(fetchBillingPreflight).toHaveBeenCalledExactlyOnceWith('wm-1', 'model');
+    } finally {
+      directory.resolve(teamDirectory('wm-1'));
+      summary.resolve(null);
+      projection.resolve({ snapshot: null, workspaceBalance: null });
+      preflight.resolve(null);
+      const result = await request;
+      expect(result.status).toBe(200);
+      expect(result.body.preflight).toBeNull();
+    }
+  });
+
+  it.each(['unauthorized', 'unavailable', 'inactive'] as const)('keeps all billing reads cold when membership is %s', async (reason) => {
+    const fetchBilling = vi.fn(async () => null);
+    const fetchWorkspaceBillingProjection = vi.fn(async () => ({ snapshot: null, workspaceBalance: null }));
+    const fetchBillingPreflight = vi.fn(async () => null);
+    const api = await startContextServer({
+      fetchWorkspaceDirectory: async () => reason === 'inactive'
+        ? { ok: true, items: [{ ...teamDirectory('wm-1')[0]!, memberStatus: 'removed' }] }
+        : { ok: false, items: [], ...(reason === 'unauthorized' ? { reason: 'unauthorized' as const } : {}) },
+      fetchBilling,
+      fetchWorkspaceBillingProjection,
+      fetchBillingPreflight,
+    });
+    const result = await api.req('/api/workspace/billing?scope=workspace&workspaceId=wm-1&includePreflight=1');
+    const expectedStatus = { unauthorized: 401, unavailable: 503, inactive: 403 };
+    expect(result.status).toBe(expectedStatus[reason]);
+    expect(fetchBilling).not.toHaveBeenCalled();
+    expect(fetchWorkspaceBillingProjection).not.toHaveBeenCalled();
+    expect(fetchBillingPreflight).not.toHaveBeenCalled();
+  });
+
+  it.each([401, 403])('preserves preflight authorization rejection (%s)', async (status) => {
+    const api = await startContextServer({
+      listWorkspaceDirectory: async () => teamDirectory('wm-1'),
+      fetchBilling: async () => null,
+      fetchWorkspaceBillingProjection: async () => ({ snapshot: null, workspaceBalance: null }),
+      fetchBillingPreflight: async () => {
+        throw new Error(`API request failed with status ${status}: forbidden`);
+      },
+    });
+    const result = await api.req('/api/workspace/billing?scope=workspace&workspaceId=wm-1&includePreflight=1');
+    expect(result).toEqual({ status: 403, body: { error: 'workspace_not_authorized' } });
+  });
+
+  it('preserves authoritative runtime failure priority while consuming an early preflight rejection', async () => {
+    const api = await startContextServer({
+      listWorkspaceDirectory: async () => teamDirectory('wm-1'),
+      fetchBilling: async () => null,
+      fetchWorkspaceBillingProjection: async () => {
+        throw Object.assign(new Error('runtime unavailable'), { code: 'temporary' });
+      },
+      fetchBillingPreflight: async () => {
+        throw new Error('API request failed with status 403: forbidden');
+      },
+    });
+    const result = await api.req('/api/workspace/billing?scope=workspace&workspaceId=wm-1&includePreflight=1&freshness=authoritative');
+    expect(result).toEqual({ status: 503, body: { error: 'temporary' } });
+  });
+
+  it.each([true, false])('reports upstream quota health separately from wallet freshness (%s)', async (healthy) => {
+    const quotaRealtimeHealthy = vi.fn(() => healthy);
+    const api = await startContextServer({
+      listWorkspaceDirectory: async () => teamDirectory('wm-1'),
+      fetchBilling: async () => null,
+      fetchWorkspaceBalance: async () => ({ workspaceId: 'wm-1', workspaceMemberId: 'member-1', balanceUsd: '0', billingScopeVersion: 2, expiresAt: null, updatedAt: null }),
+      fetchBillingPreflight: async () => null,
+      quotaRealtimeHealthy,
+    });
+    const result = await api.req('/api/workspace/billing?scope=workspace&workspaceId=wm-1&includePreflight=1');
+    expect(result.status).toBe(200);
+    expect(result.body.quotaRealtime).toEqual({ healthy });
+    expect(quotaRealtimeHealthy).toHaveBeenCalledWith('wm-1');
+  });
+
+  it.each(['member-1', 'old-member'])('returns a preview only for the verified member (%s)', async (member) => {
+    const fetchBillingPreflight = vi.fn(async () => ({
+      schemaVersion: 1 as const, workspaceId: 'wm-1', workspaceMemberId: member,
+      modelId: 'model', generatedAt: new Date().toISOString(), balanceUsd: '0',
+      modelCovered: true, funding: 'coding_plan' as const,
+      codingPlan: { workspaceId: 'wm-1', generatedAt: new Date().toISOString(), eligible: true, tier: 'pro' as const, windows: [] },
+    }));
+    const api = await startContextServer({
+      listWorkspaceDirectory: async () => teamDirectory('wm-1'),
+      fetchBilling: async () => null,
+      fetchWorkspaceBalance: async () => ({ workspaceId: 'wm-1', workspaceMemberId: 'member-1', balanceUsd: '0', billingScopeVersion: 2, expiresAt: null, updatedAt: null }),
+      fetchBillingPreflight,
+    });
+    const result = await api.req('/api/workspace/billing?scope=workspace&workspaceId=wm-1&includePreflight=1&modelId=model');
+    expect(result.status).toBe(200);
+    expect(fetchBillingPreflight).toHaveBeenCalledWith('wm-1', 'model');
+    expect(result.body.quotaRealtime).toEqual({ healthy: false });
+    if (member === 'member-1') expect(result.body.preflight.funding).toBe('coding_plan');
+    else expect(result.body.preflight).toBeNull();
+  });
+
   it('reads the account summary explicitly without requesting a workspace balance', async () => {
     const accountCalls: string[] = [];
     const workspaceCalls: string[] = [];
@@ -1485,7 +1687,7 @@ describe('POST /api/workspace/invite', () => {
     'x-od-workspace-member-id': 'wm-1',
     'x-od-workspace-role': 'owner',
   };
-  const directory = (role: 'admin' | 'member' = 'admin') => ({
+  const directory = (role: 'owner' | 'admin' | 'member' = 'admin') => ({
     ok: true,
     items: [{
       workspaceId: 'wm-1',
@@ -1501,7 +1703,7 @@ describe('POST /api/workspace/invite', () => {
   it('creates each invite against the verified workspaceId and reports per-row results', async () => {
     const calls: Array<{ email: string; role: string; workspaceId: string }> = [];
     const api = await startContextServer({
-      fetchWorkspaceDirectory: async () => directory('admin'),
+      fetchWorkspaceDirectory: async () => directory('owner'),
       createInvite: async (input) => {
         calls.push(input);
         return { ok: true, inviteId: `inv-${input.email}` };
@@ -1510,7 +1712,7 @@ describe('POST /api/workspace/invite', () => {
     const res = await api.req('/api/workspace/invite', {
       method: 'POST',
       headers,
-      body: { invites: [{ email: 'a@x.com', role: 'admin' }, { email: 'b@x.com', role: 'member' }] },
+      body: { invites: [{ email: 'a@x.com', role: 'admin', idempotencyKey: 'row-a-retry' }, { email: 'b@x.com', role: 'member' }] },
     });
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
@@ -1520,7 +1722,7 @@ describe('POST /api/workspace/invite', () => {
       ],
     });
     expect(calls).toEqual([
-      { email: 'a@x.com', role: 'admin', workspaceId: 'wm-1' },
+      { email: 'a@x.com', role: 'admin', workspaceId: 'wm-1', idempotencyKey: 'row-a-retry' },
       { email: 'b@x.com', role: 'member', workspaceId: 'wm-1' },
     ]);
   });
@@ -1544,10 +1746,13 @@ describe('POST /api/workspace/invite', () => {
     expect(res.body.error).toBe('WORKSPACE_CONTEXT_REQUIRED');
   });
 
-  it('403s when the verified team member cannot invite teammates', async () => {
+  it.each(['personal', 'team'] as const)('allows an active member in a %s workspace to invite teammates', async (workspaceType) => {
     let called = false;
     const api = await startContextServer({
-      fetchWorkspaceDirectory: async () => directory('member'),
+      fetchWorkspaceDirectory: async () => {
+        const result = directory('member');
+        return { ...result, items: result.items.map(item => ({ ...item, workspaceType })) };
+      },
       createInvite: async () => {
         called = true;
         return { ok: true, inviteId: 'inv-x' };
@@ -1560,8 +1765,28 @@ describe('POST /api/workspace/invite', () => {
       body: { invites: [{ email: 'a@x.com', role: 'member' }] },
     });
 
-    expect(res.status).toBe(403);
-    expect(res.body).toEqual({ error: 'forbidden' });
+    expect(res.status).toBe(200);
+    expect(res.body.results).toEqual([{ email: 'a@x.com', ok: true, inviteId: 'inv-x' }]);
+    expect(called).toBe(true);
+  });
+
+  it.each(['removed', 'locked', 'missing'] as const)('rejects %s invitation authority without creating an invitation', async (state) => {
+    let called = false;
+    const api = await startContextServer({
+      fetchWorkspaceDirectory: async () => {
+        const result = directory('member');
+        return { ...result, items: state === 'missing' ? [] : result.items.map(item => ({
+          ...item,
+          memberStatus: state === 'removed' ? 'removed' as const : 'active' as const,
+          lifecycleState: state === 'locked' ? 'locked' as const : 'active' as const,
+        })) };
+      },
+      createInvite: async () => { called = true; return { ok: true, inviteId: 'must-not-create' }; },
+    });
+    const response = await api.req('/api/workspace/invite', {
+      method: 'POST', headers, body: { invites: [{ email: 'new@example.test', role: 'member' }] },
+    });
+    expect(response.status).toBe(403);
     expect(called).toBe(false);
   });
 
@@ -1577,6 +1802,32 @@ describe('POST /api/workspace/invite', () => {
     });
     expect(res.status).toBe(401);
     expect(res.body).toEqual({ error: 'no_session' });
+  });
+
+  it('preserves confirmed successes if the session disappears mid-batch and never sends remaining rows', async () => {
+    const createInvite = vi.fn()
+      .mockResolvedValueOnce({ ok: true, inviteId: 'inv-sent' })
+      .mockResolvedValueOnce({ ok: false, status: 401, error: 'no_session' });
+    const api = await startContextServer({
+      fetchWorkspaceDirectory: async () => directory('admin'),
+      createInvite,
+    });
+    const res = await api.req('/api/workspace/invite', {
+      method: 'POST', headers,
+      body: { invites: [
+        { email: 'sent@x.com', role: 'member' },
+        { email: 'lost@x.com', role: 'member' },
+        { email: 'unsent@x.com', role: 'member' },
+      ] },
+    });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ results: [
+      { email: 'sent@x.com', ok: true, inviteId: 'inv-sent' },
+      { email: 'lost@x.com', ok: false, error: 'no_session' },
+      { email: 'unsent@x.com', ok: false, error: 'no_session' },
+    ] });
+    expect(createInvite).toHaveBeenCalledTimes(2);
+    expect(createInvite.mock.calls.map(call => call[0].email)).toEqual(['sent@x.com', 'lost@x.com']);
   });
 
   it("degrades a failed B create (e.g. 404) to an ok:false result, HTTP 200", async () => {
@@ -1645,6 +1896,26 @@ describe('POST /api/workspace/invite/continue', () => {
 });
 
 describe('GET /api/workspace/members', () => {
+  it('reads members and shared projects for a directory-verified Personal workspace', async () => {
+    const personal = {
+      workspaceId: 'personal-shared', workspaceName: 'Personal shared',
+      workspaceType: 'personal' as const, workspaceMemberId: 'member-a',
+      role: 'member' as const, memberStatus: 'active' as const,
+      lifecycleState: 'active' as const,
+    };
+    const listMembers = vi.fn(async () => [{ memberId: 'member-a', displayName: 'A', role: 'member' as const }]);
+    const listTeamProjects = vi.fn(async () => []);
+    const api = await startContextServer({
+      fetchWorkspaceDirectory: async () => ({ ok: true, items: [personal] }),
+      listMembers,
+      listTeamProjects,
+    });
+    const headers = { 'x-od-workspace-id': personal.workspaceId, 'x-od-workspace-member-id': personal.workspaceMemberId };
+    expect((await api.req('/api/workspace/members', { headers })).status).toBe(200);
+    expect((await api.req('/api/workspace/projects/team', { headers })).status).toBe(200);
+    expect(listMembers).toHaveBeenCalledWith(expect.objectContaining({ workspaceId: personal.workspaceId, workspaceType: 'personal' }));
+    expect(listTeamProjects).toHaveBeenCalledWith(expect.objectContaining({ workspaceId: personal.workspaceId, workspaceType: 'personal' }));
+  });
   it('passes the directory-verified Workspace context to the member service', async () => {
     const contexts: unknown[] = [];
     const api = await startContextServer({

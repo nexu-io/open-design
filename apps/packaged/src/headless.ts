@@ -2,6 +2,8 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { parseAmrEndpointBinding } from "@open-design/contracts";
+
 import {
   APP_KEYS,
   OPEN_DESIGN_SIDECAR_CONTRACT,
@@ -42,6 +44,7 @@ function resolveHeadlessAmrProfile(): PackagedConfig["amrProfile"] {
 }
 
 function resolveHeadlessConfig(): PackagedConfig {
+  const amrEndpointBinding = parseAmrEndpointBinding(process.env.OPEN_DESIGN_AMR_ENDPOINT_BINDING);
   const namespace = OPEN_DESIGN_SIDECAR_CONTRACT.normalizeNamespace(
     process.env[PACKAGED_NAMESPACE_ENV] ?? SIDECAR_DEFAULTS.namespace,
   );
@@ -55,7 +58,8 @@ function resolveHeadlessConfig(): PackagedConfig {
     ?? join(__dirname, "..", "..", "..", "open-design");
 
   return {
-    amrProfile: resolveHeadlessAmrProfile(),
+    amrEndpointBinding,
+    amrProfile: amrEndpointBinding?.profile ?? resolveHeadlessAmrProfile(),
     appVersion: null,
     daemonCliEntry: null,
     daemonSidecarEntry: null,
@@ -68,12 +72,15 @@ function resolveHeadlessConfig(): PackagedConfig {
     updateMetadataUrl: process.env.OD_UPDATE_METADATA_URL?.trim() || null,
     posthogKey: process.env.POSTHOG_KEY?.trim() || null,
     posthogHost: process.env.POSTHOG_HOST?.trim() || null,
-    velaWebUrl: process.env.OD_VELA_WEB_URL?.trim() || null,
+    velaWebUrl: amrEndpointBinding?.webUrl ?? (process.env.OD_VELA_WEB_URL?.trim() || null),
     velaWebUrls: (() => {
       try {
-        return JSON.parse(process.env.OD_VELA_WEB_URLS ?? '{}') as Record<string, string>;
+        return {
+          ...(JSON.parse(process.env.OD_VELA_WEB_URLS ?? '{}') as Record<string, string>),
+          ...(amrEndpointBinding ? { [amrEndpointBinding.profile]: amrEndpointBinding.webUrl } : {}),
+        };
       } catch {
-        return {};
+        return amrEndpointBinding ? { [amrEndpointBinding.profile]: amrEndpointBinding.webUrl } : {};
       }
     })(),
     webSidecarEntry: null,

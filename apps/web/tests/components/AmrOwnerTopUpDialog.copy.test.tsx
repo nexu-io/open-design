@@ -58,17 +58,28 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
+/*
+ * ⚠️ OPEND-2849(2026-10-09)《报错文案｜精简版》S06 当时定稿为
+ * 「团队额度不足」/「当前团队额度不足，请联系团队管理员充值或升级订阅。」。
+ * YANG-E2E-005 / RUN-004 (2026-10-21 D0 r847) 将非 Owner 联系对象更新为
+ * 工作空间 Owner；历史原话保留，当前断言按席位一期确认稿校验：
+ * https://powerformer.feishu.cn/docx/D0kEdS6yTov7vfxzru7crkZSnrf#doxcnQ93GxUilBChBd6PUegFh4f
+ * 正文仍没有 Owner 名字的位置，所以 T57 的「拿得到名字就插名字」那一变体不再成立 ——
+ * 有没有名字都是同一句。下面两条把这一点正面钉住(名字不出现),而不是删掉断言。
+ */
+// 席位一期：团队 Admin 不管理充值或订阅，额度不足应联系工作空间 Owner。
+// 本次只同步该联系对象；原逐字、名字不插值、单出口和语言完整性断言保留。
+// 2026-10-20 frozen client/r506 supersedes the earlier wording with the same Owner-only role.
 describe('AmrOwnerTopUpDialog 的正式文案', () => {
   it('标题逐字照产品稿', () => {
     renderDialog();
-    expect(screen.getByText('请联系团队所有者充值')).toBeTruthy();
+    expect(screen.getByText('团队额度不足')).toBeTruthy();
   });
 
-  it('拿得到 Owner 名字时把名字插进去', () => {
+  it('拿得到 Owner 名字时仍是定稿那一句,名字不插进去', () => {
     renderDialog({ ownerName: '张三' });
-    expect(
-      textOf('当前仅团队所有者可以为团队充值，请联系「张三」完成充值后再继续使用。'),
-    ).toBeTruthy();
+    expect(textOf('当前团队额度不足，请联系团队空间所有者充值或升级订阅。')).toBeTruthy();
+    expect(screen.queryByText('张三')).toBeNull();
   });
 
   /**
@@ -77,12 +88,10 @@ describe('AmrOwnerTopUpDialog 的正式文案', () => {
    * `WorkspaceCollabContext` 上根本没有工作区 owner 名。
    */
   it.each([undefined, null, '', '   '])(
-    '拿不到名字(%s)时换成角色名,其余逐字不动',
+    '拿不到名字(%s)时也是定稿那一句',
     (ownerName) => {
       renderDialog({ ownerName: ownerName as string | null | undefined });
-      expect(
-        textOf('当前仅团队所有者可以为团队充值，请联系团队所有者完成充值后再继续使用。'),
-      ).toBeTruthy();
+      expect(textOf('当前团队额度不足，请联系团队空间所有者充值或升级订阅。')).toBeTruthy();
     },
   );
 });

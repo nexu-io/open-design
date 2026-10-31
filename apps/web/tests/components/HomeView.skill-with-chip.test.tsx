@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
+import { pickHomeTemplate } from '../helpers/home-template-picker';
 
 import { act } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SkillSummary } from '@open-design/contracts';
+import newGenerationManifest from '../../../../plugins/_official/scenarios/od-new-generation/open-design.json';
 
 vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
   PlaceholderCarousel: () => null,
@@ -67,7 +69,7 @@ function pluginRecord(id: string, title: string, tags: string[], od: Record<stri
 const CATALOG = [
   pluginRecord('example-web-prototype', 'Web Prototype', ['prototype'], { mode: 'prototype' }),
   pluginRecord('example-simple-deck', 'Simple Deck', ['deck'], { mode: 'deck' }),
-  pluginRecord('od-new-generation', 'New generation', [], {}),
+  pluginRecord('od-new-generation', 'New generation', [], newGenerationManifest.od),
   pluginRecord('od-media-generation', 'Media generation', [], {}),
 ];
 
@@ -167,33 +169,7 @@ async function settle() {
   });
 }
 
-async function pickHomeTemplate(id: string) {
-  // A type already picked retires the row, and the pill has no menu — so
-  // switching means clearing back to the empty state first.
-  const clear = screen.queryByTestId('home-hero-template-clear');
-  if (clear) fireEvent.click(clear);
-  const lead = await screen.findByTestId('home-hero-type-pill-prototype');
-  await waitFor(() => expect((lead as HTMLButtonElement).disabled).toBe(false));
-  let pill = screen.queryByTestId(`home-hero-type-pill-${id}`);
-  if (!pill) {
-    // Types behind 更多 mount only while its popover is open.
-    fireEvent.click(screen.getByTestId('home-hero-type-pills-more'));
-    pill = screen.queryByTestId(`home-hero-type-pill-${id}-more`);
-  }
-  if (pill) {
-    fireEvent.click(pill);
-    return;
-  }
-  // Types outside the fixed row (media, HyperFrames, …) are reached the way
-  // the workspace tabs-bar hands one off: the apply-template window event,
-  // which HomeHero applies exactly as a row click.
-  fireEvent.keyDown(document, { key: 'Escape' });
-  await act(async () => {
-    window.dispatchEvent(
-      new CustomEvent(HOME_APPLY_TEMPLATE_EVENT, { detail: { chipId: id } }),
-    );
-  });
-}
+
 
 
 // The hero no longer renders a second-level scene row; a Prototype scene is
@@ -245,6 +221,20 @@ async function submitAndRead(onSubmit: SubmitSpy) {
 }
 
 describe('HomeView — @-mentioning a Skill on top of a picked task type', () => {
+  it('sends a free-form motion-design brief with the real bundled required-input manifest', async () => {
+    stubFetch();
+    stubAnimationFrame();
+    const onSubmit = submitSpy();
+    renderHome(onSubmit);
+    await act(async () => { requestHomeChip('motion-design'); });
+    await waitFor(() => expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Motion design'));
+    const prompt = '帮我做一段 15 秒的专注计时器产品介绍，产品名叫「一刻」，横版，不需要配音。';
+    setHomeHeroPrompt(prompt);
+    await settle();
+    expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(false);
+    const payload = await submitAndRead(onSubmit);
+    expect(payload).toMatchObject({ prompt, automaticStrategyTaskProfile: 'motion-design', pluginId: null });
+  });
   afterEach(() => {
     vi.unstubAllGlobals();
     cleanup();

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { stat, writeFile } from 'node:fs/promises';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import {
   closeDatabase,
   ensureWorkspaceProject,
@@ -14,12 +15,17 @@ import { ensureProject, renameProjectFile } from '../../src/projects.js';
 import { startServer } from '../../src/server.js';
 import { resolveMediaTaskProjectFile } from '../../src/routes/media.js';
 import { toolTokenRegistry } from '../../src/tool-tokens.js';
+import * as runsModule from '../../src/runtimes/runs.js';
+import * as workspaceDirectoryModule from '../../src/collab/vela-workspace-context.js';
 
 describe('media task route recovery', () => {
   let server: http.Server | null = null;
   let authorityServer: http.Server | null = null;
+  let discardRun: (() => void) | null = null;
 
   afterEach(async () => {
+    discardRun?.();
+    discardRun = null;
     if (server) {
       await new Promise<void>((resolve) => server?.close(() => resolve()));
       server = null;
@@ -29,6 +35,7 @@ describe('media task route recovery', () => {
       authorityServer = null;
     }
     vi.unstubAllEnvs();
+    vi.restoreAllMocks();
     toolTokenRegistry.clear();
     closeDatabase();
   });
@@ -154,7 +161,6 @@ describe('media task route recovery', () => {
     const db = openDatabase(process.cwd(), dataDir === undefined ? {} : { dataDir });
     const projectId = `project_${randomUUID()}`;
     const taskId = `task_${randomUUID()}`;
-    const runId = `run_${randomUUID()}`;
     const now = Date.now();
 
     insertProject(db, {
@@ -181,19 +187,24 @@ describe('media task route recovery', () => {
       endedAt: now,
       updatedAt: now,
     });
+    // A token for a bound project must name a real Run owned by that project.
+    // Capture the real service instead of replacing the project authorizer.
+    const runsFactory = vi.spyOn(runsModule, 'createChatRunService');
+    const started = await startServer({ port: 0, returnServer: true }) as {
+      url: string;
+      server: http.Server;
+    };
+    server = started.server;
+    const runs = runsFactory.mock.results[0]!.value as ReturnType<typeof runsModule.createChatRunService>;
+    const run = runs.create({ projectId });
+    discardRun = () => runs.drop(run);
+    const runId = run.id;
     const token = toolTokenRegistry.mint({
       projectId,
       runId,
       allowedEndpoints: ['/api/media/tasks/:id/wait'],
       allowedOperations: ['media:generate'],
     }).token;
-
-    const started = await startServer({ port: 0, returnServer: true }) as {
-      url: string;
-      server: http.Server;
-    };
-    server = started.server;
-
     const response = await fetch(
       `${started.url}/api/media/tasks/${encodeURIComponent(taskId)}/wait`,
       {
@@ -254,6 +265,20 @@ describe('media task route recovery', () => {
     expect(crossProject.status).toBe(403);
     await expect(crossProject.json()).resolves.toMatchObject({
       error: { code: 'FORBIDDEN' },
+    });
+    // A leftover grant cannot keep a discarded Run's project authority alive.
+    runs.drop(run);
+    const discarded = await fetch(
+      `${started.url}/api/media/tasks/${encodeURIComponent(taskId)}/wait`,
+      {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ since: 0, timeoutMs: 0 }),
+      },
+    );
+    expect(discarded.status).toBe(403);
+    await expect(discarded.json()).resolves.toMatchObject({
+      error: { code: 'WORKSPACE_PROJECT_PERMISSION_DENIED' },
     });
   });
 
@@ -320,7 +345,7 @@ describe('media task route recovery', () => {
     }
   });
 
-  it('uses the tool grant and persisted project binding without querying Workspace authority', async () => {
+  it('rejects a bound-project token without a real Run before consulting Workspace authority', async () => {
     const dataDir = process.env.OD_DATA_DIR;
     const db = openDatabase(process.cwd(), dataDir === undefined ? {} : { dataDir });
     const projectId = `project_${randomUUID()}`;
@@ -378,13 +403,39 @@ describe('media task route recovery', () => {
     vi.stubEnv('VELA_CONTROL_KEY', 'test-control-key');
     vi.stubEnv('VELA_API_URL', `http://127.0.0.1:${authorityAddress.port}`);
 
+    // Attribute reads to the actual wait request, rather than counting unrelated
+    // startup/background refreshes while those requests are in flight.
+    const waitRequestScope = new AsyncLocalStorage<boolean>();
+    let waitAuthorityReads = 0;
+    let waitRequests = 0;
+    const createBroker = workspaceDirectoryModule.createWorkspaceDirectoryAuthorityBroker;
+    vi.spyOn(workspaceDirectoryModule, 'createWorkspaceDirectoryAuthorityBroker')
+      .mockImplementation((options) => {
+        const broker = createBroker(options);
+        for (const method of ['read', 'fresh', 'backgroundFresh'] as const) {
+          const read = broker[method];
+          broker[method] = () => {
+            if (waitRequestScope.getStore()) waitAuthorityReads += 1;
+            return read();
+          };
+        }
+        return broker;
+      });
     const started = await startServer({ port: 0, returnServer: true }) as {
       url: string;
       server: http.Server;
     };
     server = started.server;
+    const requestListeners = server.listeners('request') as http.RequestListener[];
+    expect(requestListeners).toHaveLength(1);
+    const requestListener = requestListeners[0]!;
+    server.removeListener('request', requestListener);
+    server.on('request', (req, res) => {
+      const isWait = req.method === 'POST' && req.url === '/api/media/tasks/missing-task/wait';
+      if (isWait) waitRequests += 1;
+      waitRequestScope.run(isWait, () => requestListener(req, res));
+    });
     await vi.waitFor(() => expect(authorityRequests).toBeGreaterThanOrEqual(1));
-    const startupAuthorityRequests = authorityRequests;
     const waitForMissingTask = () => fetch(
       `${started.url}/api/media/tasks/missing-task/wait`,
       {
@@ -398,16 +449,26 @@ describe('media task route recovery', () => {
     );
 
     const removed = await waitForMissingTask();
-    expect(removed.status).toBe(404);
+    expect(removed.status).toBe(403);
+    await expect(removed.json()).resolves.toMatchObject({
+      error: { code: 'WORKSPACE_PROJECT_PERMISSION_DENIED' },
+    });
 
     authorityMode = 'outage';
     const unavailable = await waitForMissingTask();
-    expect(unavailable.status).toBe(404);
+    expect(unavailable.status).toBe(403);
+    await expect(unavailable.json()).resolves.toMatchObject({
+      error: { code: 'WORKSPACE_PROJECT_PERMISSION_DENIED' },
+    });
 
     authorityMode = 'active';
     const authorized = await waitForMissingTask();
-    expect(authorized.status).toBe(404);
-    expect(authorityRequests).toBe(startupAuthorityRequests);
+    expect(authorized.status).toBe(403);
+    await expect(authorized.json()).resolves.toMatchObject({
+      error: { code: 'WORKSPACE_PROJECT_PERMISSION_DENIED' },
+    });
+    expect(waitRequests).toBe(3);
+    expect(waitAuthorityReads).toBe(0);
   });
 
   it.each([

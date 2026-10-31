@@ -229,7 +229,7 @@ describe('project resource selection uses the persisted exact member', () => {
 
     const response = await fetch(`${baseUrl}/api/projects`, {
       method: 'POST',
-      headers: headers(),
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         id: 'local-only-create',
         name: 'Local-only create',

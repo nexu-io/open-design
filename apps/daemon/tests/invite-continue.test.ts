@@ -41,6 +41,20 @@ function jsonResponse(status: number, body: unknown): Response {
 }
 
 describe('consumeInviteContinuation', () => {
+  it.each(['personal', 'team'] as const)('accepts an active free %s member without a paid plan or available seat', async (workspaceType) => {
+    const out = await consumeInviteContinuation('nonce-free-member', {
+      fetch: (async () => jsonResponse(200, {
+        ...CONSUME_BODY,
+        currentWorkspaceContext: {
+          ...B_CONTEXT, workspaceType, role: 'member', planId: 'free', billingState: 'free',
+          seatSummary: { seatLimit: 1, usedSeats: 1, availableSeats: 0, isSeatFull: true },
+        },
+      })) as typeof fetch,
+      readSession: () => SESSION,
+    });
+    expect(out.ok).toBe(true);
+    if (out.ok) expect(out.context).toMatchObject({ workspaceType, role: 'member', planId: 'free', memberStatus: 'active' });
+  });
   it('consumes the nonce with the session bearer and maps the returned context', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(200, CONSUME_BODY)) as unknown as typeof fetch;
     const out = await consumeInviteContinuation('nonce-1', { fetch: fetchImpl, readSession: () => SESSION });

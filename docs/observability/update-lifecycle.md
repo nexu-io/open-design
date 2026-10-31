@@ -8,6 +8,7 @@
 |---|---|---|
 | install_requested | A persisted install attempt was created | Not installation success |
 | shutdown_started | The desktop entered its single shared teardown | Not proof that it exited |
+| renderer_quiesced | The window close was requested and the packaged transport barrier blocked new forwarding and aborted in-flight old-origin requests before runtime retirement | Failed means teardown continued but either boundary raised an error |
 | cleanup_daemon / cleanup_web | The owned sidecar cleanup returned | Duration, forced and remaining process counts |
 | shutdown_completed | Desktop teardown reached its final boundary | Duration and repeated quit count; failed if a caught teardown error occurred |
 | predecessor_wait_started | An updater successor started waiting for the old desktop | Only present on after-quit launches |
@@ -29,7 +30,7 @@ A persisted receipt records `queued` only after the analytics client returns a l
 Group by `flow_id` and slice by from/to version, channel, platform and architecture. Use `occurred_at` for lifecycle ordering; a replay's ingestion time is not the original event time.
 
 - Predecessor-wait latency: duration percentiles of predecessor_wait_completed; split normal/forced/failed.
-- Shutdown latency and retries: duration percentiles and repeated_quit_count of shutdown_completed, split by outcome.
+- Shutdown latency and retries: duration percentiles and repeated_quit_count of shutdown_completed, split by outcome. Require renderer_quiesced to precede cleanup stages for atomic payload handoffs.
 - Forced cleanup fraction: forced cleanup events divided by observed cleanup completions, separately for daemon and web.
 - Desktop readiness coverage: distinct flows with desktop_ready divided by observed install-request flows, with a defined observation horizon and matching instrumentation versions. Report missing stages as **unknown**, not failure.
 - Version-apply success and desktop readiness are separate outcomes. The existing update_apply_observed event supplies the former; do not substitute one for the other.

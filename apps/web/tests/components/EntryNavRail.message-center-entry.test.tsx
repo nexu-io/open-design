@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-// The signed-in dock bell and the signed-out local-dock bell are stable
-// external openers. Closing MessageCenter must return focus to the initiating
-// control.
+// The signed-in dock bell remains the external opener. A01 has no
+// signed-out identity/notification row. Closing MessageCenter must return
+// focus to the initiating signed-in control.
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
@@ -98,32 +98,20 @@ describe('EntryNavRail message-center openers', () => {
     expect(document.activeElement).toBe(accountBell);
   });
 
-  it('returns focus to the signed-out dock bell when the panel closes', async () => {
+  it('does not add a signed-out bell above the A01 sign-in card', () => {
     renderRail(null);
-    const railOpener = screen.getByTestId('entry-nav-message-center');
-
-    fireEvent.click(railOpener);
-    await waitFor(() => expect(screen.getByTestId('message-center-dialog')).toBeTruthy());
-
-    fireEvent.keyDown(document, { key: 'Escape' });
-
-    expect(screen.queryByTestId('message-center-dialog')).toBeNull();
-    expect(document.activeElement).toBe(railOpener);
+    expect(screen.queryByTestId('entry-nav-message-center')).toBeNull();
+    expect(screen.queryByTestId('entry-nav-account-message-center')).toBeNull();
   });
 
-  it('advertises the dialog on both external openers', () => {
-    const signedOut = renderRail(null);
-    const railOpener = screen.getByTestId('entry-nav-message-center');
-    expect(railOpener.getAttribute('aria-haspopup')).toBe('dialog');
-    expect(railOpener.getAttribute('aria-expanded')).toBe('false');
-
-    fireEvent.click(railOpener);
-    expect(screen.getByTestId('entry-nav-message-center').getAttribute('aria-expanded')).toBe('true');
-    signedOut.unmount();
-
+  it('advertises the dialog on the signed-in account opener', async () => {
     renderRail(teamContext());
     const accountBell = screen.getByTestId('entry-nav-account-message-center');
     expect(accountBell.getAttribute('aria-haspopup')).toBe('dialog');
     expect(accountBell.getAttribute('aria-expanded')).toBe('false');
+
+    fireEvent.click(accountBell);
+    await waitFor(() => expect(screen.getByTestId('message-center-dialog')).toBeTruthy());
+    expect(accountBell.getAttribute('aria-expanded')).toBe('true');
   });
 });

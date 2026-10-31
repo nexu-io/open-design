@@ -1,5 +1,16 @@
 // @ts-nocheck
+import { recordStrategyTaskRunLifecycle } from './strategies/task-display.js';
+import { observeDiscoveryEvent } from './strategies/od-next/discovery-observation.js';
+import { assertCommentFileNotPending } from './collab/comment-file-retirements.js';
+import { captureJsonBodySize } from './http/json-body-size.js';
+
+import { usesProductionMarker, composeResumedRequest } from './strategies/od-next/request-resume.js';
+import { todoSnapshotHasUnfinishedWork } from '@open-design/contracts';
+import { createUserDesignSystem } from './design-systems/index.js';
+import { resolveWorkspaceScope } from './collab/workspace-scope.js';
+import { cancelRevokedWorkspaceRuns, createWorkspaceMembershipRevocationObserver } from './collab/cancel-revoked-workspace-runs.js';
 import { startEvidenceDelivery } from './services/evidence-delivery.js';
+import { createRevokedWorkspaceRunCancellation, workspaceRunActorKey } from './services/cancel-revoked-workspace-runs.js';
 import type {
   DesktopExportArtifactInput,
   DesktopExportArtifactResult,
@@ -25,37 +36,22 @@ import {
   composeOdNextStrategyCorePromptV2,
   OD_NEXT_BUNDLE_ECHO_GUARD_V2,
   odNextStrategyRecipeIdentityV2,
-  renderOdNextRuntimeFactsV2,
   composeOdNextStrategyStableRequestContextV2,
   executionProfileFromStreamFormat,
   PLUGIN_SHARE_ACTION_PLUGIN_IDS,
   renderChatTurnHostProtocolInstructions,
   resolveOdNextDeckFrameworkMode,
 } from '@open-design/contracts';
-import {
-  advanceAuthenticatedDoneCapture,
-  isTodoWriteToolName,
-  stopReasonIsTruncation,
-  todoItemsFromTodoWriteInput,
-} from '@open-design/contracts';
-import {
-  renderUnfinishedTodoRecall,
-  recalledTodosFromTodoWriteInput,
-  type RecalledTodo,
-} from '@open-design/contracts';
+
 import type {
   CollabCloudMemberDirectoryEntry,
   TeamProject,
   WorkspaceCollabContext,
 } from '@open-design/contracts';
-import {
-  detectOdNextDevicePlatformFromText,
-  resolveOdNextDevicePlatform,
-  selectOdNextDeviceFrameContextV2,
-  selectOdNextLayoutPrimitivesCss,
-} from '@open-design/contracts';
+
 import {
   loadOdNextTaskResourcesForSnapshot,
+  loadOdNextTaskAssetsForSnapshot,
   materializeOdNextDeviceFrames,
   observeOdNextDeviceShell,
   observeOdNextLayoutPrimitives,
@@ -142,14 +138,13 @@ import {
   selectPromptImagePaths,
 } from './runtimes/chat-prompt-inputs.js';
 import {
+  agentStdinPromptPayload,
   recordPromptDeliveredAtSpawn,
   runtimeReadsPlainTextPromptFromStdin,
   applyClaudeStreamJsonRunBookkeeping,
   assertValidRuntimeDefFirstOutputTimeoutMs,
   assertValidRuntimeDefInactivityTimeoutMs,
-  bufferedAntigravityGeminiFirstTokenAt,
   classifyChatRunCloseStatus,
-  looksLikeGeminiJsonEventStream,
   resolveAcpStageTimeoutMs,
   resolveActiveInactivityTimeoutMs,
   resolveChatRunArtifactQuietPeriodMs,
@@ -161,6 +156,7 @@ import {
 // Shared with `POST /api/runs/:id/steer` so the opening prompt and a B11
 // mid-turn steering frame are encoded by the same writer.
 import { encodeStreamJsonUserMessage } from './runtimes/run-steering.js';
+import { openCodeSystemTempDirectories } from './runtimes/opencode-permissions.js';
 import { assertOdNextSemanticRequestFactProducerCoverage } from './runtimes/od-next-exact-input.js';
 import {
   normalizeRunContextSelection,
@@ -211,9 +207,7 @@ export {
   applyClaudeStreamJsonRunBookkeeping,
   assertValidRuntimeDefFirstOutputTimeoutMs,
   assertValidRuntimeDefInactivityTimeoutMs,
-  bufferedAntigravityGeminiFirstTokenAt,
   classifyChatRunCloseStatus,
-  looksLikeGeminiJsonEventStream,
   resolveAcpStageTimeoutMs,
   resolveActiveInactivityTimeoutMs,
   resolveChatRunArtifactQuietPeriodMs,
@@ -260,8 +254,6 @@ import {
 import {
   findKnownModel,
   getRememberedLiveModels,
-  preferFreshLiveModels,
-  rememberLiveModels,
   resolveDefaultModelFromOptions,
   resolveModelForAgent,
   resolveModelForServiceTier,
@@ -284,10 +276,17 @@ import {
 } from './runtimes/plain-stream.js';
 import {
   readVelaLoginStatus,
+  readVelaCredentialRevision,
   resolveAmrProfile,
 } from './integrations/vela.js';
 import { isAbortedOperationError } from './integrations/aborted-error.js';
 import { projectResourceIdFor } from './integrations/vela-team-projects.js';
+import { normalizeCurrentFileComment, parseCommentFileState } from './collab/comment-file-facts.js';
+import { createLocalCommentFiles, prepareLocalProjectCommentFile } from './collab/local-comment-files.js';
+import { createCommentFileDeletion } from './collab/comment-file-deletion.js';
+import { createCommentFilePublisher } from './collab/comment-file-publisher.js';
+import { createCommentFilePublicationCoordination } from './collab/comment-file-publication-coordination.js';
+import { runVelaCommand, velaWorkspaceCommandOptions } from './integrations/vela-command.js';
 import {
   getTeamProjectMaterialization,
   latestTeamProjectMaterializationVersion,
@@ -300,7 +299,7 @@ import {
   amrAccountFailureDetails,
   classifyAmrAccountFailureSignal,
 } from './integrations/vela-errors.js';
-import { amrModelLoadingCache } from './runtimes/amr-model-cache.js';
+import { AMR_DEFAULT_MODEL_CATALOG_WAIT_MS, amrModelLoadingCache, amrRunModels } from './runtimes/amr-model-cache.js';
 import {
   fetchVelaPresetModels,
   fetchVelaRemoteModelsWithRetry,
@@ -369,7 +368,6 @@ import {
 import {
   backfillDesignSystemWorkspaceResources,
   buildUserDesignSystemArchive,
-  createUserDesignSystem,
   deleteUserDesignSystem,
   digestDesignSystemContext,
   isTeamSyncedUserDesignSystem,
@@ -401,11 +399,8 @@ import {
   designSystemLogicalResourceId,
   workspaceTeamDesignSystemBindingResourceId,
 } from './design-systems/workspace-team-binding.js';
-import { ownedDesignSystemSourceIsReady } from './design-systems/team-owner-materialization.js';
-import {
-  createDesignSystemBackingProjectPreparer,
-  createLinkedProjectTeamResourceShareService,
-} from './design-systems/team-project-share.js';
+import { ownedWorkspaceResourceSourceIsReady } from './collab/owned-resource-source.js';
+import { createLinkedProjectTeamResourceShareService } from './design-systems/team-project-share.js';
 import { prepareDesignTokenContractRebuild } from './design-systems/token-contract-rebuild.js';
 import { registerBrandRoutes } from './brand-routes.js';
 import {
@@ -470,8 +465,7 @@ import {
 } from './memory.js';
 import { runAutoExtractionCleanup } from './memory-cleanup.js';
 import { attachAcpSession } from './agent-protocol/index.js';
-import { attachPiRpcSession } from './agent-protocol/index.js';
-import { attachDshProfileSession } from './agent-protocol/index.js';
+
 import { stageAmrImagePaths } from './media/amr-image-staging.js';
 import { ingestRoutineConnectorEvolution } from './automation-routine-evolution.js';
 import { createClaudeStreamHandler } from './runtimes/claude-stream.js';
@@ -512,18 +506,8 @@ import {
   getDetectedRuntimeVersions,
   ensureDetectedRuntimeCapabilities,
 } from './runtimes/detection.js';
-import { resolveBundledOdNextRuntimeCapability } from './runtimes/od-next-capability-gate.js';
+
 import {
-  createOdNextNativeBuildPackageBindings,
-  nativeBuildPackageBindingMap,
-} from './strategies/od-next/native-build-package.js';
-import {
-  resolveAutomaticContinuationEvidence,
-  type OdNextComplexProductionResolver,
-  type OdNextExecutionPreflightResolver,
-} from './strategies/od-next/automatic-continuation-service.js';
-import {
-  antigravityAuthGuidance,
   antigravityQuotaGuidance,
   classifyAgentAuthFailure,
   classifyAgentServiceFailure,
@@ -532,6 +516,7 @@ import {
 } from './runtimes/auth.js';
 import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
 import { applyOpenCodeEventPlugin } from './runtimes/opencode-event-plugin.js';
+import { resolveOpenCodeEditBaseDirs } from './runtimes/opencode-permissions.js';
 import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
 import { createQoderStreamHandler } from './runtimes/qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
@@ -562,18 +547,16 @@ import {
 } from './strategies/od-next/initial-prompt-bundle-service.js';
 import { createOdNextRunProtocol } from './strategies/od-next/protocol.js';
 import {
-  blockAutomaticContinuation,
+  endFailedAutomaticContinuation,
   prepareAutomaticStrategyContinuation,
   projectStrategyTask,
-  odNextTurnMayInferDirectEditCompletion,
-  odNextTurnMayInferProductionCompletion,
 } from './strategies/od-next/automatic-simple-production.js';
-import { readOdNextRolloutPolicy } from './strategies/od-next/rollout.js';
-import { createStrategyRunWriteEvidenceRecorder, strategyRunWriteEvidence } from './strategies/od-next/run-write-evidence.js';
-import { recoverPlanningIntentResolution } from './strategies/od-next/intent-resolution-recovery.js';
-import { isStrategyIntentResolutionRun, requiresStrategyIntentResolution, validateStrategyIntentResolutionReply } from './strategies/od-next/intent-resolution.js';
-import { startIntentResolution } from './strategies/od-next/intent-resolution-store.js';
+
+import { createStrategyRunWriteEvidenceRecorder } from './strategies/od-next/run-write-evidence.js';
+
 import {
+  getStrategyTaskExecution,
+  persistStrategyResumeText,
   getStrategyTaskExecutionByRunId,
   reconcileStrategyTaskRunTerminal,
   isInitialStrategyTaskRun,
@@ -592,7 +575,7 @@ import {
   type RunLifecycleStreamEventMarkers,
 } from './run-lifecycle-tracer.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
-import { promptBudgetAnalyticsFromDiagnostic } from './run-diagnostics.js';
+
 import { classifyRunFailure, isResumableFailure } from './run-failure-classification.js';
 import {
   deliverableSyntaxFinalizerEnabled,
@@ -659,13 +642,7 @@ import {
 } from './connectionTest.js';
 import { listProviderModels } from './integrations/provider-models.js';
 import { importClaudeDesignZip } from './design/index.js';
-import {
-  defaultBaseUrlForFinalizeProtocol,
-  finalizeDesignPackage,
-  FinalizePackageLockedError,
-  FinalizeUpstreamError,
-  isFinalizeProviderProtocol,
-} from './design/index.js';
+
 import { buildDocumentPreview } from './document-preview.js';
 import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
 import { loadCraftSections, resolveCraftRequirements } from './craft.js';
@@ -675,7 +652,7 @@ import { generateMedia } from './media/index.js';
 import { resolveHyperFramesCliPath } from './media/hyperframes-runtime.js';
 import { listElevenLabsVoiceOptions } from './integrations/elevenlabs-voices.js';
 import { searchResearch, ResearchError } from './research/index.js';
-import { openBrowser } from './browser/index.js';
+
 import {
   AUDIO_DURATIONS_SEC,
   AUDIO_MODELS_BY_KIND,
@@ -732,14 +709,21 @@ import {
   validateTarget as validateRoutineTarget,
 } from './routines.js';
 import { buildMcpInstallPayload } from './mcp-install-info.js';
+import { createDiagnosticsExportHandler, buildAutomaticDiagnosticSources, resolveDaemonPreviousLogPath } from './diagnostics-export.js';
+import { AutomaticDiagnostics } from './services/automatic-diagnostics.js';
+import { createDiagnosticRunObserver, diagnosticFaultFromApi, diagnosticFaultFromLifecycle } from './services/diagnostic-faults.js';
+import { diagnosticRelayUrl } from './integrations/diagnostic-relay.js';
+import { automaticDiagnosticsConsent, observeAppConfig } from './app-config.js';
+import { observeApiFailures } from './http/api-failure-journal.js';
 import { configureDiagnosticsEvidence } from './services/diagnostics-evidence.js';
-import { createDiagnosticsExportHandler } from './diagnostics-export.js';
+import { beginDaemonHealthSession } from './services/daemon-health.js';
+import { readSqlitePageStats } from './storage/db-inspect.js';
 import {
   CHAT_SCROLL_FORENSICS_PATH,
   chatScrollForensicsBodyParser,
   chatScrollForensicsHandler,
 } from './diagnostics-client-evidence.js';
-import { DIAGNOSTICS_EXPORT_PATH } from '@open-design/diagnostics';
+import { DIAGNOSTIC_DELIVERY_LOG_PREFIX, DIAGNOSTICS_EXPORT_PATH } from '@open-design/diagnostics';
 import {
   createProjectArchiveStream,
   createBatchArchiveStream,
@@ -768,6 +752,7 @@ import {
   searchProjectFiles,
   stageProjectDirsForDelete,
   resolveProjectFilePath,
+  resolveProjectDeletePath,
   writeProjectFile,
   reconcileHtmlArtifactManifest,
 } from './projects.js';
@@ -776,6 +761,7 @@ import { ArtifactPublicationBlockedError } from './artifacts/publication-guard.j
 import {
   appendMessageStatusEvent,
   confirmPreviewCommentPinSeq,
+  confirmPreviewCommentAuthorKey,
   deleteConversation,
   deletePreviewComment,
   deleteProject as dbDeleteProject,
@@ -926,10 +912,11 @@ import { setMessageArtifactHtmlVersionIds } from './chat-artifacts/store.js';
 import { registerVelaRoutes } from './routes/vela.js';
 import { registerFinalizeRoutes, registerImportRoutes, registerProjectExportRoutes } from './import-export-routes.js';
 import { registerHandoffRoutes } from './routes/handoff.js';
-import { EmptyTranscriptError, synthesizeHandoffPrompt } from './design/index.js';
+
 import { TranscriptExportLockedError } from './transcript-export.js';
 import { registerChatRoutes } from './routes/chat.js';
 import { registerRunRoutes } from './routes/runs.js';
+import { composeRunTerminalHooks, createRunNoticeLog } from './runtimes/run-notices.js';
 import { registerStrategyRolloutRoutes } from './routes/strategy-rollout.js';
 import { registerTerminalRoutes } from './routes/terminal.js';
 import { registerBrowserSessionRoutes } from './routes/browser-sessions.js';
@@ -955,7 +942,21 @@ import {
 import { registerTeamResourceRoutes } from './routes/team-resources.js';
 import { registerTeamResourceShareRoutes } from './routes/team-resource-share.js';
 import { createCollabRuntime } from './collab/runtime.js';
-import { createSqlitePublicFilePublicationStore } from './collab/public-file-publication-store.js';
+import { createPublicFileStopStartup, createSqlitePublicFilePublicationStore } from './collab/public-file-publication-store.js';
+import { sourcePathForCurrentPublication } from './collab/comment-relay-publication-mapping.js';
+import { recordPersonalPublishedCommentMutation } from './collab/published-comment-mutation.js';
+import { createPublicFilePublicationRecorder } from './collab/public-file-publication-recording.js';
+import { enqueuePublishedFileComments } from './collab/published-file-comment-backfill.js';
+import { createVelaPublicFileStop } from './collab/vela-public-file-stop.js';
+import { createShareContentFingerprints } from './collab/share-content-fingerprint.js';
+import { createShareBindingOutbox } from './collab/share-binding-outbox.js';
+import { createShareBindingStartup } from './collab/share-binding-startup.js';
+import { createVelaShareBindingPrepare } from './collab/vela-share-binding-prepare.js';
+import { cleanupAbandonedPinnedVelaSessions } from './collab/vela-pinned-command.js';
+import { createProjectPublicFileStop } from './collab/project-public-file-stop.js';
+import { createPublicFileMutations } from './collab/public-file-mutations.js';
+import { resolveLocalProjectCommentWorkspaceContext } from './collab/project-comment-workspace-context.js';
+import { commentRelayScope, personalCommentRelayFilePaths } from './collab/comment-relay-scope.js';
 import {
   createActiveWorkspaceSelectionStore,
 } from './collab/active-workspace-selection.js';
@@ -967,14 +968,16 @@ import {
 } from './collab/workspace-resource-mutation.js';
 import {
   createAuthorizeProjectRequest,
+  createVerifiedProjectRequestAuthority,
+  projectToolActorMember,
+  projectToolActorPinIsCurrent,
+  pinProjectToolActor,
 } from './collab/project-request-authority.js';
 import { withLastKnownWorkspaceContext } from './collab/workspace-context.js';
 import {
   createWorkspaceTypeRegistry,
-  impossibleTeamShareRows,
-  projectCollabScope,
 } from './collab/team-share-scope.js';
-import { resolveWorkspaceScope } from './collab/workspace-scope.js';
+
 import {
   AmrWorkspaceScopeRequiredError,
   openDesignAmrTraceEnvForRun,
@@ -985,8 +988,10 @@ import {
   createWorkspaceDirectoryAuthorityBroker,
   createWorkspaceContextProviderFromEnv,
   fetchVelaWorkspaceDirectory,
+  mapVelaWorkspaceDirectory,
   resolveVelaWorkspaceHubEventsEndpoint,
   velaWorkspaceDirectoryIdentity,
+  velaWorkspaceDirectoryIdentityForSession,
   workspaceContextFromDirectoryItem,
 } from './collab/vela-workspace-context.js';
 import { verifyWorkspaceRequestContext } from './collab/request-workspace-context.js';
@@ -997,6 +1002,7 @@ import {
 } from './collab/workspace-billing-runtime.js';
 import {
   AUTHORITATIVE_PROJECT_PRESENCE_CAPABILITY,
+  CODING_PLAN_USAGE_EVENTS_CAPABILITY,
   startHubEventsSubscriber,
   WORKSPACE_DIRECTORY_EVENTS_CAPABILITY,
 } from './collab/hub-events-subscriber.js';
@@ -1054,7 +1060,17 @@ import {
   createRememberedTeamResourceScopes,
   type RememberedTeamResourceScopeLease,
 } from './collab/remembered-team-resource-scopes.js';
-import { readVelaControlApiContext } from './integrations/vela.js';
+import { createCommentSyncStateService } from './collab/comment-sync-state.js';
+import { registerCommentSyncStateRoutes } from './routes/project/comments.js';
+import { createCommentAlignmentService, runVelaCommentAlignment } from './collab/comment-alignment.js';
+import { registerCommentAlignmentRoutes } from './routes/project/comments.js';
+import { createShareAliasReservations } from './collab/share-alias-reservation.js';
+import { createSharePublicationCompletion } from './collab/share-publication-completion.js';
+import { resolvePublicShareLink } from './collab/public-share-viewer-url.js';
+import { ensurePublicShareProject } from './collab/public-share-project-bootstrap.js';
+import { createVelaProjectShareState } from './collab/vela-project-share-state.js';
+import { registerPublicFileStopRetryRoutes } from './routes/public-file-stop-retry.js';
+import { runPinnedVelaCommand } from './collab/vela-pinned-command.js';
 import {
   fetchBillingCheckoutUrl,
   fetchVelaBillingCatalog,
@@ -1066,6 +1082,9 @@ import { createAccountBillingSummaryCache } from './collab/account-billing-summa
 import { createEventRefreshCoordinator } from './collab/event-refresh-coordinator.js';
 import { createWorkspaceExactAuthorityCache } from './collab/workspace-exact-authority-cache.js';
 import { createCollabPublishWatcher } from './collab/collab-publish-watcher.js';
+import { createOwnedContentSync, type OwnedContentSync } from './collab/owned-content-sync.js';
+import { createSqliteOwnedContentStore, type OwnedContentScope } from './collab/owned-content-store.js';
+import { applyOwnedProjectContent, contentFiles, ownedContentFingerprint } from './collab/owned-content-files.js';
 import {
   isUnmaterializedSharedPlaceholder,
   SHARED_PROJECT_PLACEHOLDER_METADATA_KEY,
@@ -1097,8 +1116,10 @@ import {
 } from './collab/resource-principal.js';
 import { createCollabCloudClientFromEnv } from './integrations/collab-cloud.js';
 import { createCollabCloudService } from './collab/collab-cloud-service.js';
+import { createCommentInboundStore } from './collab/comment-inbound-store.js';
 import {
   commentRelayLocalBindingMatches,
+  commentRelayRecordPromotedToTeam,
   createCommentRelayOutboxStore,
 } from './collab/comment-relay-outbox.js';
 import { createWorkspaceInvalidationPoller } from './collab/workspace-invalidation-poller.js';
@@ -1140,7 +1161,7 @@ import {
   bindProjectToPersistedAutomationWorkspace,
   normalizePersistedAutomationWorkspaceScope,
 } from './automations/workspace-scope.js';
-import { resolveAmrModelProbe } from './runtimes/amr-model-probe.js';
+import { amrModelScope, resolveAmrModelProbe } from './runtimes/amr-model-probe.js';
 import { createPluginInstallationHelpers, normalizeProjectPluginFolderPath, resolveProjectChildDirectory } from './services/plugin-installation.js';
 import { createPluginShareTaskStore } from './services/plugin-share-tasks.js';
 import { getRouteRegistrationInventory, installRouteRegistrationGuard } from './route-registration-guard.js';
@@ -1186,6 +1207,7 @@ import {
   isZeroConfigClipperLibraryRequest,
   parseHostHeader,
 } from './origin-validation.js';
+import { projectPoweredPreviewOriginDecision } from './http/powered-preview-origin.js';
 import { registerLibraryRoutes } from './routes/library.js';
 import {
   libraryExtensionAllowedOrigins,
@@ -1228,6 +1250,41 @@ import {
 } from './http/local-daemon-request.js';
 import { renderOAuthResultPage } from './http/oauth-result-page.js';
 import { bearerTokenFromRequest, createToolRequestAuth } from './http/tool-request-auth.js';
+import {
+  advanceAuthenticatedDoneCapture,
+  isTodoWriteToolName,
+  stopReasonIsTruncation,
+  todoItemsFromTodoWriteInput,
+} from '@open-design/contracts';
+import {
+  renderUnfinishedTodoRecall,
+  recalledTodosFromTodoWriteInput,
+  type RecalledTodo,
+} from '@open-design/contracts';
+import {
+  detectOdNextDevicePlatformFromText,
+  resolveOdNextDevicePlatform,
+  selectOdNextDeviceFrameContextV2,
+  selectOdNextLayoutPrimitivesCss,
+} from '@open-design/contracts';
+import { attachPiRpcSession } from './agent-protocol/index.js';
+import { attachDshProfileSession } from './agent-protocol/index.js';
+import { promptBudgetAnalyticsFromDiagnostic } from './run-diagnostics.js';
+import {
+  defaultBaseUrlForFinalizeProtocol,
+  finalizeDesignPackage,
+  FinalizePackageLockedError,
+  FinalizeUpstreamError,
+  isFinalizeProviderProtocol,
+} from './design/index.js';
+import { openBrowser } from './browser/index.js';
+import { EmptyTranscriptError, synthesizeHandoffPrompt } from './design/index.js';
+import { readVelaControlApiContext } from './integrations/vela.js';
+import {
+  createMemberRemovalProjectReconciler,
+  createVelaMemberRemovalTransferSource,
+} from './collab/member-removal-transfer.js';
+import { initializeAmrEndpointBinding } from './integrations/amr-endpoint-binding.js';
 
 /**
  * `OD_PROJECT_CREATE_PREPARATION_TIMEOUT_MS` shortens the POST /api/projects
@@ -1374,6 +1431,7 @@ const SANDBOX_MODE_ENABLED = isSandboxModeEnabled(process.env);
 const RUNTIME_DATA_DIR = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT, {
   requireExplicit: SANDBOX_MODE_ENABLED,
 });
+initializeAmrEndpointBinding(RUNTIME_DATA_DIR);
 configureDiagnosticsEvidence(RUNTIME_DATA_DIR);
 const SANDBOX_RUNTIME = resolveSandboxRuntimeConfig(SANDBOX_MODE_ENABLED, RUNTIME_DATA_DIR);
 ensureSandboxRuntimeDirs(SANDBOX_RUNTIME);
@@ -1634,7 +1692,7 @@ function emitProjectEvent(projectId, payload) {
 // scope, and broad delivery would reveal cross-workspace activity timing.
 function emitWorkspaceEvent(
   workspaceId: string,
-  payload: { type: string; at?: number },
+  payload: { type: string; at?: number; memberRemoval?: { workspaceId: string; workspaceMemberId: string; reason: 'member-removed' } },
 ): boolean {
   return emitWorkspaceEventToScope(
     workspaceEventSinks,
@@ -1738,12 +1796,15 @@ export function handleHubWorkspaceAccessRevoked(
   pollWorkspaceInvalidation: () => Promise<void>,
   invalidateWorkspaceDirectory: () => void,
   revokeWorkspaceBilling: (workspaceId: string) => void,
+  memberRemoval?: { workspaceId: string; workspaceMemberId: string; reason: 'member-removed' },
+  cancelWorkspaceRuns: (workspaceId: string) => Promise<void> = async () => {},
 ): void {
   invalidateWorkspaceDirectory();
   revokeWorkspaceBilling(workspaceId);
+  void cancelWorkspaceRuns(workspaceId).catch(() => undefined);
   emitWorkspaceEvent(
     workspaceId,
-    { type: 'workspace-context-changed', at: Date.now() },
+    { type: 'workspace-context-changed', at: Date.now(), ...(memberRemoval ? { memberRemoval } : {}) },
   );
   void pollWorkspaceInvalidation().catch(() => undefined);
 }
@@ -1906,12 +1967,18 @@ export function createOpenDesignToolEnv({
   projectDir,
   projectId,
   workspaceScope,
+  runId,
+  conversationId,
+  analyticsContext,
 }: {
   daemonUrl: string;
   hyperFramesBin?: string;
   projectDir?: string | null;
   projectId?: string | null;
   workspaceScope?: RunWorkspaceScope | null;
+  runId?: string | null;
+  conversationId?: string | null;
+  analyticsContext?: AnalyticsContext | null;
 }): NodeJS.ProcessEnv {
   const scope = workspaceScope?.projectId === projectId ? workspaceScope : null;
   return {
@@ -1920,6 +1987,12 @@ export function createOpenDesignToolEnv({
     OD_HYPERFRAMES_BIN: hyperFramesBin,
     OD_NODE_BIN,
     OD_DAEMON_URL: daemonUrl,
+    OD_STOCK_RUN_ID: runId ?? '',
+    OD_STOCK_SESSION_ID: conversationId ?? '',
+    OD_STOCK_ANALYTICS_DEVICE_ID: analyticsContext?.deviceId ?? '',
+    OD_STOCK_ANALYTICS_SESSION_ID: analyticsContext?.sessionId ?? '',
+    OD_STOCK_ANALYTICS_CLIENT_TYPE: analyticsContext?.clientType ?? '',
+    OD_STOCK_ANALYTICS_LOCALE: analyticsContext?.locale ?? '',
     // Always overwrite ambient/configured identities, including unbound runs.
     // An older bound Run without a member keeps its Workspace id so the CLI
     // rejects the incomplete pair rather than silently reading another library.
@@ -2060,7 +2133,6 @@ function filesystemEmptyAnswerFallbackText(fileNames) {
 export function __forTestFilesystemEmptyAnswerFallbackText(fileNames) {
   return filesystemEmptyAnswerFallbackText(fileNames);
 }
-
 
 export function shouldReportRunCompletedFromMessage(saved, body = {}) {
   return Boolean(
@@ -2543,8 +2615,8 @@ export function createFinalizedMessageTelemetryReporter({
   return reportFinalized;
 }
 
-export function shouldReportRunCompletionTelemetryFallbackStatus(status: unknown): boolean {
-  return status === 'failed' || status === 'canceled';
+export function shouldReportRunCompletionTelemetryFallbackStatus(status: unknown, taskOwned = false): boolean {
+  return status === 'failed' || status === 'canceled' || (status === 'succeeded' && taskOwned);
 }
 
 const PROJECT_PREVIEW_SCOPE_TTL_MS = 60 * 60 * 1000;
@@ -2779,6 +2851,13 @@ function rewriteKnownAgentStreamError(agentId, message, failureText = '') {
   ) {
     return 'The run failed due to an unknown upstream streaming error. Please retry.';
   }
+  // agy reports a per-model quota exhaustion as
+  //   RESOURCE_EXHAUSTED (code 429): Individual quota reached. …
+  // Point the user at agy's model picker, the only way to switch to a model
+  // with quota left.
+  if (agentId === 'antigravity' && /individual quota reached/i.test(combined)) {
+    return antigravityQuotaGuidance();
+  }
   // An ACP handshake refusal that reaches one of the stderr-tail fallbacks is
   // deliberately NOT reworded here. The daemon has no locale, so a sentence
   // composed at this layer lands in `run.error` untranslated and the chat
@@ -2892,9 +2971,18 @@ const pluginShareTaskStore = createPluginShareTaskStore({
 // files live under metadata.baseDir.
 let projectMetadataLookup: ((id: string) => Record<string, unknown> | null) | null = null;
 
+/** Reserve names in multipart order, even when directory preparation finishes out of order. */
+function queueProjectUploadNaming(req) {
+  const previous = req._uploadNamingTail ?? Promise.resolve();
+  let release: () => void;
+  req._uploadNamingTail = new Promise<void>((resolve) => { release = resolve; });
+  return { previous, release: () => release() };
+}
+
 const projectUpload = multer({
   storage: multer.diskStorage({
     destination: async (req, _file, cb) => {
+      const naming = queueProjectUploadNaming(req);
       try {
         // Route uploads into the project's actual root: for folder-imported
         // projects (metadata.baseDir set) attachments need to land alongside
@@ -2915,11 +3003,17 @@ const projectUpload = multer({
           subdir,
           meta,
         );
+        // Multer invokes filename synchronously from this callback. Keep
+        // directory I/O concurrent, but let earlier file parts reserve first.
+        await naming.previous;
         (req as any)._uploadRelDir = relDir;
         (req as any)._uploadAbsDir = absDir;
         cb(null, absDir);
       } catch (err) {
+        await naming.previous;
         cb(err, '');
+      } finally {
+        naming.release();
       }
     },
     filename: (req, file, cb) => {
@@ -3093,14 +3187,7 @@ export interface StartServerOptions {
   staticDir?: string;
   /** Opaque child-process environment supplied by the runtime integration seam. */
   inheritedEnvironment?: (baseEnv?: NodeJS.ProcessEnv) => Record<string, string>;
-  /** Daemon-owned host capability facts. HTTP/model output cannot populate it. */
-  odNextExecutionPreflightResolver?: OdNextExecutionPreflightResolver | null;
-  /**
-   * Daemon-owned, runtime-neutral capability/Child facts for complex OD Next
-   * Production. Runtime adapters normalize their native events before this
-   * boundary; HTTP bodies, assistant prose, and raw stdout are never inputs.
-   */
-  odNextComplexProductionResolver?: OdNextComplexProductionResolver | null;
+
 }
 
 export function startAmrTerminalReportDeliveryAfterBind(
@@ -3119,6 +3206,12 @@ export interface StartServerResult {
   routeInventory: import('./route-registration-guard.js').RouteRegistration[];
 }
 
+/** Production callback shared by the registered comment routes and HTTP regression tests. */
+export function createPersonalPublishedCommentMutationHandler(db: Database.Database) {
+  return (comment: PreviewComment, context: WorkspaceCollabContext | null, deleted: boolean) =>
+    recordPersonalPublishedCommentMutation(db, comment, context, deleted);
+}
+
 export async function startServer({
   port = 7456,
   host = normalizeDaemonBindHost(process.env.OD_BIND_HOST),
@@ -3130,8 +3223,6 @@ export async function startServer({
   runtime = null,
   staticDir = STATIC_DIR,
   inheritedEnvironment = () => ({}),
-  odNextExecutionPreflightResolver = null,
-  odNextComplexProductionResolver = null,
 }: StartServerOptions = {}) {
   host = normalizeDaemonBindHost(host);
   let resolvedPort = port;
@@ -3210,7 +3301,7 @@ export async function startServer({
   // exactly the incidents it was built for, and silently: the uploader reports
   // `res.ok` and the export continues without the evidence.
   app.use(CHAT_SCROLL_FORENSICS_PATH, chatScrollForensicsBodyParser);
-  app.use(express.json({ limit: '4mb' }));
+  app.use(express.json({ limit: '4mb', verify: captureJsonBodySize }));
   const projectPreviewScopes = createProjectPreviewScopeRegistry();
 
   // Plan §3.K1 — API-token middleware.
@@ -3390,10 +3481,23 @@ export async function startServer({
     /^\/projects\/[^/]+\/(?:raw|preview)\/|^\/codex-pets\/[^/]+\/spritesheet$|^\/asset-cache$/;
   const _POWERED_PREVIEW_SAFE_RE = /^\/projects\/[^/]+\/powered\/.+$/u;
 
-  // Reject cross-origin requests to API endpoints.
-  // Health/version remain open for monitoring probes.
-  // Non-browser clients (no Origin header) are always allowed.
+  // Reserve project preview hosts before API exceptions and static serving.
+  app.use((req, res, next) => {
+    const projectPreviewDecision = projectPoweredPreviewOriginDecision(req, resolvedPort);
+    if (projectPreviewDecision === 'reject') {
+      return res.status(403).json({
+        error: 'Powered preview origin cannot access this API route',
+      });
+    }
+    res.locals.projectPoweredPreview = projectPreviewDecision === 'allow';
+    next();
+  });
+
+  // Reject cross-origin requests to API endpoints. Normal non-browser
+  // clients (no Origin header) retain their existing access.
   app.use('/api', (req, res, next) => {
+    if (res.locals.projectPoweredPreview === true) return next();
+
     // Live artifact previews have stricter local-daemon validation and
     // loopback CORS handling on the route itself. Let that middleware produce
     // the structured error shape and preflight headers for preview embeds.
@@ -3472,8 +3576,19 @@ export async function startServer({
     }
     next();
   });
+  // Heap/SQLite health: begun before the first SQLite open so a daemon that
+  // dies seconds into startup still leaves a checkpoint for the next boot.
+  const daemonHealth = beginDaemonHealthSession({
+    dataRoot: RUNTIME_DATA_DIR,
+    previousLogPath: resolveDaemonPreviousLogPath(runtime),
+  });
   const db = openDatabase(PROJECT_ROOT, { dataDir: RUNTIME_DATA_DIR });
+  daemonHealth?.setStorageProbe(() => readSqlitePageStats({ db, file: db.name }));
   const amrTerminalReportOutbox = createAmrTerminalReportOutboxStore(db);
+  // P0-24 N10: notices for turns that end while this process runs (never replayed).
+  const runNotices = createRunNoticeLog({
+    projectName: (projectId) => getProject(db, projectId)?.name ?? null,
+  });
   const amrTerminalReportDelivery = createAmrTerminalReportDeliveryService({
     store: amrTerminalReportOutbox,
     env: { ...process.env, OD_DATA_DIR: RUNTIME_DATA_DIR },
@@ -3508,6 +3623,11 @@ export async function startServer({
     requestProjectOverride,
     requestRunOverride,
   } = createToolRequestAuth(toolTokenRegistry);
+  const toolRunWorkspaceActors = new Map<string, {
+    workspaceId: string;
+    workspaceMemberId: string;
+    directoryIdentity: string;
+  }>();
   // Wire the upload-destination bridge to this db so multer can route
   // file uploads into baseDir-rooted projects' actual folders.
   projectMetadataLookup = (id) => {
@@ -3727,7 +3847,6 @@ export async function startServer({
 
   // ---- Projects (DB-backed) -------------------------------------------------
 
-
   // Team collaboration subsystem: presence + author-side publish scheduler.
   // Product team workspaces publish and pull through the login-backed Vela CLI;
   // non-Vela local modes retain the in-memory adapter for isolated development.
@@ -3771,26 +3890,75 @@ export async function startServer({
       console.warn('[od] failed to recover authorized team mirror promotion:', error);
     },
   });
-  // What this daemon has learned about each workspace's type, memoized from
-  // exact directory/context reads it already performs. It is the
-  // second witness behind the team-share invariant: a team share may only be
-  // recorded in — and a project-scoped collab call may only be pinned to — a
-  // workspace that can actually host a team plane. See collab/team-share-scope.ts.
+  // What this daemon has learned about each workspace's type from exact
+  // directory/context reads. This is a presentation hint for project scope;
+  // project sharing itself is available in either workspace type.
   const workspaceTypes = createWorkspaceTypeRegistry();
   const configuredAmrEnv = () =>
     agentCliEnvForAgent(readAppConfigSync(RUNTIME_DATA_DIR).agentCliEnv, 'amr');
+  const reconcileMemberRemovalProjects = createMemberRemovalProjectReconciler({
+    db,
+    source: createVelaMemberRemovalTransferSource({ configuredEnv: configuredAmrEnv }),
+  });
+  const directoryRunActorProofs = new WeakMap();
   const workspaceExactAuthorityCache = createWorkspaceExactAuthorityCache({
     identity: () => velaWorkspaceDirectoryIdentity(
       readVelaControlApiContext,
       configuredAmrEnv(),
     ),
   });
+  // The subscriber can connect while later asynchronous startup is still
+  // constructing the run service. Retain exact account-scoped revocations
+  // until that service exists instead of closing over its temporal dead zone.
+  let revokedWorkspaceRuns = null;
+  const pendingRunRevocations: Array<{ workspaceId: string; identityKey: string; workspaceMemberId?: string }> = [];
+  let stopRevokedWorkspaceRuns = (workspaceId: string, workspaceMemberId?: string, identityKey = velaWorkspaceDirectoryIdentity(readVelaControlApiContext, configuredAmrEnv())) => {
+    pendingRunRevocations.push({ workspaceId, identityKey, ...(workspaceMemberId ? { workspaceMemberId } : {}) });
+  };
+  const workspaceMembershipRevocations = createWorkspaceMembershipRevocationObserver(
+    (workspaceId, memberId, identity) => stopRevokedWorkspaceRuns(workspaceId, memberId, identity),
+  );
   const workspaceDirectoryAuthority = createWorkspaceDirectoryAuthorityBroker({
     fetchDirectory: async () => {
+      const configuredEnv = configuredAmrEnv();
+      const session = readVelaControlApiContext(process.env, configuredEnv);
+      const login = readVelaLoginStatus(process.env, configuredEnv);
+      const identity = velaWorkspaceDirectoryIdentityForSession(session);
+      const credentialEnv = { ...process.env, ...configuredEnv };
+      const actorKey = workspaceRunActorKey({
+        control: session,
+        login,
+        credentialOverrides: Boolean(
+          credentialEnv.VELA_RUNTIME_KEY?.trim() || credentialEnv.VELA_CONTROL_KEY?.trim(),
+        ),
+      });
+      let completePrincipalDirectory = false;
       const result = await fetchVelaWorkspaceDirectory({
-        configuredEnv: configuredAmrEnv(),
+        configuredEnv,
+        fetch: async (input, init) => {
+          const response = await fetch(input, init);
+          const requestUrl = input instanceof Request ? input.url : String(input);
+          const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+          if (
+            response.ok && session?.controlKey && actorKey
+            && requestUrl === new URL('/api/v1/workspaces', session.apiUrl).toString()
+            && headers.get('authorization') === `Bearer ${session.controlKey}`
+          ) {
+            try {
+              const raw = await response.clone().json();
+              // Display mapping may drop malformed entries. Only a complete
+              // valid list is evidence of absence for host cancellation.
+              completePrincipalDirectory = Array.isArray(raw?.items)
+                && mapVelaWorkspaceDirectory(raw).length === raw.items.length;
+            } catch { /* Preserve the existing directory read/error behavior. */ }
+          }
+          return response;
+        },
       });
       if (result.ok) workspaceTypes.learn(result.items);
+      if (result.ok && completePrincipalDirectory) {
+        directoryRunActorProofs.set(result, { identity, actorKey });
+      }
       return result;
     },
     identityKey: () => velaWorkspaceDirectoryIdentity(
@@ -3809,8 +3977,17 @@ export async function startServer({
       mode: workspaceAuthorityCacheMode,
       ...input,
     }),
-    onAcceptedResult: (result, identity) =>
-      workspaceExactAuthorityCache.observe(identity, result.items),
+    onAcceptedResult: (result, identity) => {
+      workspaceExactAuthorityCache.observe(identity, result.items);
+      workspaceMembershipRevocations.observe(identity,
+        velaWorkspaceDirectoryIdentity(readVelaControlApiContext, configuredAmrEnv()), result);
+      const proof = directoryRunActorProofs.get(result);
+      if (
+        proof?.identity !== identity
+        || identity !== velaWorkspaceDirectoryIdentity(readVelaControlApiContext, configuredAmrEnv())
+      ) return;
+      void revokedWorkspaceRuns?.observeDirectory(proof.actorKey, result.items);
+    },
   });
   const fetchWorkspaceDirectory = workspaceDirectoryAuthority.read;
   const fetchFreshMutationWorkspaceDirectory =
@@ -3818,6 +3995,7 @@ export async function startServer({
   const fetchFreshBackgroundWorkspaceDirectory =
     workspaceDirectoryAuthority.backgroundFresh;
   let workspaceHubSubscriptions: WorkspaceHubSubscriptionManager | null = null;
+  const quotaHealthyConnections = new Set<string>();
   const verifyExplicitWorkspaceRequestContext = async (input: {
     req: any;
     requireTeam?: boolean;
@@ -3926,7 +4104,6 @@ export async function startServer({
     const membership = directory.items.find(
       (item) =>
         item.workspaceId === requestedWorkspaceId
-        && item.workspaceType === 'team'
         && item.memberStatus === 'active'
         && item.lifecycleState === 'active',
     );
@@ -3934,12 +4111,21 @@ export async function startServer({
       ? workspaceContextFromDirectoryItem(membership, configuredAmrEnv())
       : null;
   };
+  const reconcileCurrentOwnerMemberRemovals = async (workspaceId: string): Promise<void> => {
+    if (process.env.OD_WORKSPACE_CONTEXT_SOURCE?.trim() !== 'vela') return;
+    const context = await resolveAuthoritativeTeamWorkspaceContext(workspaceId, {
+      fresh: true,
+      backgroundFresh: true,
+    });
+    if (context?.role !== 'owner') return;
+    await reconcileMemberRemovalProjects(workspaceId, context.workspaceMemberId);
+  };
   const teamResourceVersions = createTeamResourceVersionStore(RUNTIME_DATA_DIR);
   const teamProjectContentResourceId = (
     projectId: string,
-    scope: { resourceTeamId: string; ownerMemberId: string },
+    scope: { resourceTeamId: string; ownerMemberId: string; resourceId?: string },
   ) =>
-    projectResourceIdFor(projectId, {
+    scope.resourceId ?? projectResourceIdFor(projectId, {
       teamId: scope.resourceTeamId,
       memberId: scope.ownerMemberId,
       role: 'member',
@@ -4089,20 +4275,36 @@ export async function startServer({
     readVelaControlApiContext,
     configuredAmrEnv(),
   );
+  let workspaceHubAmrProfile = resolveAmrProfile({
+    ...process.env,
+    ...configuredAmrEnv(),
+  });
   const resetWorkspaceIdentityCaches = (): void => {
+    quotaHealthyConnections.clear();
     workspaceDirectoryAuthority.resetIdentity();
     workspaceExactAuthorityCache.resetIdentity();
     workspaceExactContextCache.resetIdentity();
   };
   const refreshWorkspaceHubAccountIdentity = (): void => {
+    const currentAmrProfile = resolveAmrProfile({
+      ...process.env,
+      ...configuredAmrEnv(),
+    });
     const currentIdentity = velaWorkspaceDirectoryIdentity(
       readVelaControlApiContext,
       configuredAmrEnv(),
     );
     if (currentIdentity === workspaceHubAccountIdentity) return;
+    const environmentChanged = currentAmrProfile !== workspaceHubAmrProfile;
     workspaceHubAccountIdentity = currentIdentity;
+    workspaceHubAmrProfile = currentAmrProfile;
     resetWorkspaceIdentityCaches();
-    workspaceHubSubscriptions?.refreshEndpoints();
+    if (environmentChanged) {
+      workspaceHubSubscriptions?.resetForEnvironmentChange();
+      workspaceBillingRuntime.resetIdentity();
+    } else {
+      workspaceHubSubscriptions?.refreshEndpoints();
+    }
   };
   const fetchWorkspaceDirectoryForAccountSurface = () => {
     refreshWorkspaceHubAccountIdentity();
@@ -4160,6 +4362,7 @@ export async function startServer({
       ? { fetchWorkspaceDirectory: fetchProjectCreationWorkspaceDirectory }
       : {}),
     configuredEnv: configuredAmrEnv,
+    allowStaticDevContext: process.env.OD_WORKSPACE_CONTEXT_SOURCE?.trim() !== 'vela',
   });
   function persistWorkspaceProjectSyncState(
     projectId: string,
@@ -4209,15 +4412,15 @@ export async function startServer({
           visibility: 'team',
           createdByWorkspaceMemberId: input.ownerMemberId ?? input.updatedByMemberId ?? null,
           updatedByWorkspaceMemberId: input.updatedByMemberId ?? input.ownerMemberId ?? null,
-          resourceHubResourceId: projectResourceIdFor(input.projectId, input.principal),
+          resourceHubResourceId: getWorkspaceProjectByProjectId(db, input.projectId)?.resourceHubResourceId ?? null,
           cloudTombstonedAt: null,
           syncState: 'synced',
         }
       : {
           visibility: 'personal',
           updatedByWorkspaceMemberId: input.updatedByMemberId ?? input.ownerMemberId ?? null,
-          resourceHubResourceId: null,
-          cloudTombstonedAt: Date.now(),
+          resourceHubResourceId: getWorkspaceProjectByProjectId(db, input.projectId)?.resourceHubResourceId ?? null,
+          cloudTombstonedAt: null,
           syncState: 'local_only',
         };
     const persist = db.transaction(() => {
@@ -4251,10 +4454,63 @@ export async function startServer({
     _projectId: string,
     _workspaceId?: string,
   ): void => {};
+  let ownedContentSync: OwnedContentSync | null = null;
+  let ownerProjectHasActiveRun = (_projectId: string): boolean => true;
+  const publicFileMutations = createPublicFileMutations();
+  const localCommentFiles = createLocalCommentFiles(db);
+  const commentFileRun = (workspaceId: string) => (args: string[]) =>
+    runVelaCommand(args, velaWorkspaceCommandOptions(workspaceId));
+  const commentFilePublications = createCommentFilePublicationCoordination({
+    isBusy: projectId => ownerProjectHasActiveRun(projectId),
+    wake: (projectId, principal) => {
+      collab.scheduler.notifyChanged(projectId, 'run-settled', principal);
+      collab.scheduler.runBoundary(projectId, principal);
+    },
+  });
+  const publishWithCommentFiles = createCommentFilePublisher({
+    db, localFiles: localCommentFiles, runForWorkspace: commentFileRun,
+    resolveRoot: projectId => resolveProjectShareDir(PROJECTS_DIR, projectId, getProject(db, projectId), resolveProjectDir),
+    listFiles: contentFiles,
+  });
   const collab = createCollabRuntime({
+    coordinatePublication: (projectId, principal, publish) => {
+      const operation = () => velaCliTeamProjectCatalog
+        ? publishWithCommentFiles(projectId, principal, publish) : publish();
+      const coordinated = () => ownedContentSync ? ownedContentSync.withPublication(projectId, principal, operation) : operation();
+      return principal && velaCliTeamProjectCatalog
+        ? publicFileMutations.run(projectId, () => commentFilePublications.run(projectId, principal, coordinated), { joinCurrent: true }) : coordinated();
+    },
     workspaceContext: workspaceContextProvider,
+    ...(velaCliTeamProjectCatalog ? {
+      resolveResourceId: async (projectId: string, principal?: ResourceHubPrincipal | null) => {
+        if (!principal) throw new Error('TEAM_PROJECT_ROOT_UNAVAILABLE');
+        const row = getWorkspaceProjectByProjectId(db, projectId);
+        if (row && (row.workspaceId !== principal.teamId || row.resourceState !== 'active'
+          || row.cloudTombstonedAt != null)) throw new Error('TEAM_PROJECT_ROOT_UNAVAILABLE');
+        if (row?.resourceHubResourceId?.trim()) return row.resourceHubResourceId;
+        // Rootless old local data is resolved from the existing catalog identity,
+        // not migrated to a generated alias. Native Vela enforces viewer access.
+        const registration = await velaCliTeamProjectCatalog.getRegistration(projectId, principal);
+        if (!registration || registration.visibility !== 'team' || !registration.resourceId?.trim()) {
+          throw new Error('TEAM_PROJECT_ROOT_UNAVAILABLE');
+        }
+        return registration.resourceId;
+      },
+      retainRegistration: (registration: import('@open-design/contracts').PublicShareProjectRegistration, principal: ResourceHubPrincipal) => {
+        const row = getWorkspaceProjectByProjectId(db, registration.projectId);
+        if (row?.workspaceId !== principal.teamId || row.resourceState !== 'active'
+          || row.createdByWorkspaceMemberId !== principal.memberId || row.cloudTombstonedAt != null
+          || registration.workspaceId !== principal.teamId || registration.ownerMemberId !== principal.memberId) {
+          throw new Error('TEAM_PROJECT_REGISTRATION_SCOPE_MISMATCH');
+        }
+        updateWorkspaceProject(db, principal.teamId, registration.projectId, {
+          resourceHubResourceId: registration.resourceId,
+          updatedAt: SYNC_KEEPS_UPDATED_AT,
+        });
+      },
+    } : {}),
     canPublishProjectContent: (projectId) =>
-      !projectIsUnmaterializedSharedPlaceholder(projectId),
+      !projectIsUnmaterializedSharedPlaceholder(projectId) && !ownedContentSync?.isApplying(projectId),
     resolveProjectDir: async (projectId) => {
       const project = getProject(db, projectId);
       if (project) await ensureProject(PROJECTS_DIR, projectId, project.metadata);
@@ -4302,59 +4558,16 @@ export async function startServer({
       { metadataRefreshPending: Boolean(share.metadataRefreshPending) },
     );
   }
-  /**
-   * Heal `workspace_projects` rows that already violate the team-share
-   * invariant: `visibility: 'team'` pinned to a PERSONAL workspace (see
-   * collab/team-share-scope.ts). Older builds let a share taken while the client
-   * sat on its personal workspace persist such a row, and the code guards alone
-   * leave an affected user permanently stuck — the row 403s every collab call it
-   * scopes and nothing ever rewrites it.
-   *
-   * Reconciliation at startup rather than a schema migration: the contradiction
-   * is only decidable against the workspace DIRECTORY (which ids are teams),
-   * which is a signed-in network fact a migration cannot see. Demotion is
-   * therefore evidence-gated — a workspace the directory does not name is left
-   * exactly as-is, and `visibility: 'personal'` rows are never candidates.
-   *
-   * A demoted row goes back to a local draft rather than being re-pointed at
-   * some team: which team was intended is not recoverable, and the user can
-   * simply re-share from the team workspace, which now writes a valid row. This
-   * touches local state only — no hub resource is deleted — and deliberately
-   * leaves `cloudTombstonedAt` null, so a copy that genuinely exists in the team
-   * catalog keeps showing up instead of being suppressed as "unshared here".
-   */
-  const reconcileImpossibleTeamShares = async (): Promise<number> => {
-    await listWorkspaceDirectory();
-    const broken = impossibleTeamShareRows(listTeamWorkspaceProjectShares(db), workspaceTypes);
-    for (const row of broken) {
-      console.warn(
-        `[od] healing project ${row.projectId}: its team share pointed at personal workspace ` +
-          `${row.workspaceId}, which has no team plane. Re-share it from a team workspace.`,
-      );
-      updateWorkspaceProject(db, row.workspaceId, row.projectId, {
-        visibility: 'personal',
-        resourceHubResourceId: null,
-        cloudTombstonedAt: null,
-        syncState: 'local_only',
-        // A startup heal of a row that was never valid; nobody changed the
-        // project — see SYNC_KEEPS_UPDATED_AT.
-        updatedAt: SYNC_KEEPS_UPDATED_AT,
-      });
-    }
-    return broken.length;
-  };
-  void reconcileImpossibleTeamShares().catch((error) => {
-    console.warn('[od] team-share scope reconciliation failed:', error);
-  });
   // Spec 9.2 one-time backfill: claim every pre-existing user design system
   // whose metadata.json already names a workspace into the generic
   // `workspace_resources` table too. Idempotent (see
   // `backfillDesignSystemWorkspaceResources`'s own doc comment), so running
   // it unconditionally on every startup is deliberate, same as
-  // `reconcileImpossibleTeamShares` just above.
+  // other startup backfills.
   void backfillDesignSystemWorkspaceResources(db, USER_DESIGN_SYSTEMS_DIR).catch((error) => {
     console.warn('[od] design-system workspace-resource backfill failed:', error);
   });
+  const publicFilePublicationStore = createSqlitePublicFilePublicationStore(db);
   const collabCloudClient = velaCliCollabClient ?? createCollabCloudClientFromEnv();
   const resolveBoundProjectWorkspaceContext = async (
     projectId: string,
@@ -4378,7 +4591,6 @@ export async function startServer({
     const membership = directory.items.find(
       (item) =>
         item.workspaceId === workspaceId
-        && item.workspaceType === 'team'
         && item.memberStatus === 'active'
         && item.lifecycleState !== 'deleted',
     );
@@ -4394,6 +4606,7 @@ export async function startServer({
     ...(velaCliTeamProjectCatalog ? { teamProjectCatalog: velaCliTeamProjectCatalog } : {}),
   });
 
+
   // Collab cloud (C-lane §D2.5/§D4): cross-daemon comment sync + member
   // directory. The client is null (all calls degrade to no-op) unless
   // OD_COLLAB_CLOUD_URL is set. The service ties it to the one workspace context
@@ -4404,33 +4617,112 @@ export async function startServer({
     ? createCollabCloudService({
         client: collabCloudClient,
         commentOutbox: createCommentRelayOutboxStore(db),
+        // C3-LITE member comment pages (BO1), served by the AMR API through the
+        // Vela CLI. The HTTP relay (OD_COLLAB_CLOUD_URL) has no paged route, so
+        // it keeps the legacy pull. An unusable cursor is rebuilt from a fresh
+        // snapshot in the same drain (BO2).
+        ...(velaCliCollabClient ? { memberCommentStore: createCommentInboundStore(db) } : {}),
+        isMemberSyncProjectShared: (projectId) => {
+          const binding = getWorkspaceProjectByProjectId(db, projectId);
+          return binding?.visibility === 'team' && binding.resourceState !== 'deleted';
+        },
+        onMemberSyncRebuildRequired: ({ projectId, code }) =>
+          console.warn(`[od] collab member comment cursor rebuilding (${code}) for project ${projectId}`),
+        commentRelayScope: (projectId, filePath, context) => commentRelayScope({
+          binding: getWorkspaceProjectByProjectId(db, projectId),
+          context,
+          projectId,
+          filePath,
+          publications: publicFilePublicationStore,
+        }),
+        listPersonalCommentRelayFilePaths: (projectId, context) =>
+          personalCommentRelayFilePaths({
+            binding: getWorkspaceProjectByProjectId(db, projectId),
+            context,
+            projectId,
+            publications: publicFilePublicationStore,
+          }),
+        // Deliberately unguarded: if the query throws, the batch must fail and
+        // keep its cursor. Swallowing the error here would report "no such
+        // comment" and acknowledge a deletion we never applied.
+        // The server asserted which publication a comment belongs to; this turns
+        // that into the local file it was written against. Everything here is a
+        // gate, and each one is load-bearing:
+        //
+        // - the binding must be this workspace's, active, and created by the
+        //   member we are resolving for — a publication slug alone says which
+        //   share, not that this daemon's user may read into it;
+        // - a comment with no slug (written before the field existed) resolves
+        //   to null rather than to whatever is published now. That fallback is
+        //   exactly how a stopped share's late comment lands on a live one.
+        //
+        // Ambiguity throws out of `sourcePathForCurrentPublication`, which keeps
+        // the batch cursor so the batch can be retried rather than acknowledged.
+        resolvePublishedCommentSourcePath: ({ projectId, publicationSlug, publishedPath, context }) => {
+          if (!publicationSlug) return null;
+          const binding = getWorkspaceProjectByProjectId(db, projectId);
+          const ownerMemberId = binding?.createdByWorkspaceMemberId?.trim() || '';
+          if (
+            !binding
+            || !ownerMemberId
+            || binding.resourceState === 'deleted'
+            || binding.workspaceId?.trim() !== context.workspaceId?.trim()
+          ) return null;
+          return sourcePathForCurrentPublication(db, {
+            resourceTeamId: context.workspaceId,
+            ownerMemberId,
+            projectId,
+            slug: publicationSlug,
+            publishedPath,
+          });
+        },
+        resolveStoredCommentLocation: (projectId, commentId) => {
+          const stored = getProjectPreviewComment(db, projectId, commentId);
+          if (!stored) return { found: false };
+          return { found: true, filePath: stored.filePath?.trim() || null };
+        },
         resolveLocalProjectRelayBinding: (projectId) => {
           const binding = getWorkspaceProjectByProjectId(db, projectId);
           const workspaceId = binding?.workspaceId?.trim() ?? '';
           const ownerMemberId = binding?.createdByWorkspaceMemberId?.trim() || null;
           if (
             !workspaceId
-            || binding?.visibility !== 'team'
+            || (binding?.visibility !== 'team' && binding?.visibility !== 'personal')
             || binding?.resourceState === 'deleted'
           ) return null;
           return { workspaceId, ownerMemberId };
+        },
+        captureCommentRelayProjectBinding: publicFileMutations.captureReconciliation,
+        validateCommentRelayFile: (record) => {
+          assertCommentFileNotPending(db, record.projectId, { sourceFileId: record.comment.sourceFileId });
+          const state = parseCommentFileState(getProject(db, record.projectId)?.metadata?._commentFiles);
+          const fact = state?.files.find(item => item.sourceFileId === record.comment.sourceFileId);
+          if (!fact || fact.sourceFilePath !== (record.comment.sourceFilePath ?? record.comment.filePath)) {
+            throw new Error('COMMENT_FILE_AUTHORITY_UNAVAILABLE');
+          }
+          return fact.retired ? 'retired' : 'current';
         },
         validateCommentRelayProjectBinding: (record) =>
           commentRelayLocalBindingMatches(
             record,
             getWorkspaceProjectByProjectId(db, record.projectId),
           ),
+        isCommentRelayRecordPromotedToTeam: (record) =>
+          commentRelayRecordPromotedToTeam(
+            record,
+            getWorkspaceProjectByProjectId(db, record.projectId),
+          ),
         resolveCommentRelayWorkspaceContext: async (queuedIdentity) => {
-          const context = await resolveAuthoritativeTeamWorkspaceContext(
-            queuedIdentity.workspaceId,
-            { fresh: true, backgroundFresh: true },
+          const context = await resolveBoundProjectWorkspaceContext(
+            queuedIdentity.projectId,
+            { fresh: true },
           );
-          const principal = contextToResourceHubPrincipal(context);
           if (
             !context
-            || !principal
-            || principal.memberId !== queuedIdentity.workspaceMemberId
-            || principal.teamId !== queuedIdentity.teamId
+            || context.workspaceMemberId !== queuedIdentity.workspaceMemberId
+            // Public-file publication scopes use the persisted workspace id as
+            // their resource-team id; relay scope independently proves it.
+            || context.workspaceId !== queuedIdentity.workspaceId
           ) return null;
           return context;
         },
@@ -4456,16 +4748,25 @@ export async function startServer({
         resolveProjectWorkspaceContext: resolveBoundProjectWorkspaceContext,
         resolveLocalConversationId: (projectId) =>
           getProjectCommentAnchorConversationId(db, projectId),
-        mergeComment: ({ projectId, conversationId, comment }) =>
-          mergeSyncedPreviewComment(db, projectId, conversationId, comment),
+        mergeComment: ({ projectId, conversationId, comment, stream }) => {
+          if (!comment.deleted) assertCommentFileNotPending(db, projectId, { sourceFileId: comment.sourceFileId });
+          const normalized = normalizeCurrentFileComment(
+            parseCommentFileState(getProject(db, projectId)?.metadata?._commentFiles), comment,
+          );
+          return normalized ? mergeSyncedPreviewComment(db, projectId, conversationId, normalized, { stream }) : 'unchanged';
+        },
         onError: (error) => console.warn('[od] collab cloud sync error:', error),
-        onCommentPushed: ({ projectId, commentId, seq }) => {
+        onCommentPushed: ({ projectId, commentId, seq, memberId, authorKey }) => {
           confirmPreviewCommentPinSeq(db, projectId, commentId, seq);
+          if (authorKey) confirmPreviewCommentAuthorKey(db, projectId, commentId, memberId, authorKey);
         },
         // Collab realtime hop-2 (reference path): when the ~5s comment self-poll
         // merges any teammate change into local storage (a new comment, a
         // strictly-newer edit/status change, or a delete tombstone all count),
         // push a thin `comment-changed` onto the project's existing events SSE.
+        // The service calls this at most once per pull round (a multi-page
+        // drain plus its legacy pull is one signal), so a burst of merged rows
+        // costs the web one list read, not one per page or row.
         // The open project view re-fetches the comment list on receipt, so the
         // owner sees a member's freshly-synced comment without waiting for the
         // web poll tick.
@@ -4494,7 +4795,6 @@ export async function startServer({
   ): TeamProjectsDisplayScope | null => {
     if (
       !context
-      || context.workspaceType !== 'team'
       || context.memberStatus !== 'active'
       || context.lifecycleState === 'deleted'
     ) {
@@ -4607,17 +4907,18 @@ export async function startServer({
   /**
    * Drop catalog rows this member has already moved back to "personal".
    *
-   * A move to personal deletes the hub catalog row in the same request, but
-   * every display read above goes through a stale-while-revalidate cache, so
-   * for up to one TTL the list still carries the row that was just deleted.
+   * A move to personal changes the hub policy in the same request, but
+   * display reads use stale-while-revalidate caches, so for up to one TTL
+   * the list can still carry the pre-transition team row.
    * That is long enough to paint the "shared" badge back onto a project the
    * user just made private — the unshare looks like it silently reverted. It
    * would also let the publish watcher re-adopt the project as owned-and-
    * shared and republish it.
    *
-   * `cloudTombstonedAt` on the local workspace row is the truth for "this
-   * member unshared it"; a re-share clears it (see `workspaceProjectMovePatch`
-   * in routes/project). The filter runs on the cache OUTPUT, not inside it, so
+   * The runtime's explicit-private suppression is immediate without deleting
+   * the retained root. Persisted legacy tombstones are still respected. On a
+   * fresh daemon these caches are cold and the team-only server list is policy
+   * authority. The filter runs on cache OUTPUT, not inside it, so
    * a value cached before the unshare is still gated. Owner scoping keeps a
    * teammate's own share of the same project id visible.
    */
@@ -4634,9 +4935,9 @@ export async function startServer({
         .filter((row: any) => row.workspaceVisibility === 'personal' && row.cloudTombstonedAt != null)
         .map((row: any) => row.id),
     );
-    if (tombstoned.size === 0) return projects;
     return projects.filter(
-      (entry) => !(entry.ownerMemberId === memberId && tombstoned.has(entry.projectId)),
+      (entry) => !(entry.ownerMemberId === memberId && (tombstoned.has(entry.projectId)
+        || collab.isTeamShareSuppressed(entry.projectId, { teamId: workspaceId, memberId }))),
     );
   };
   const teamProjectsForDisplay = async (
@@ -4700,6 +5001,7 @@ export async function startServer({
     // the result is carried through every catalog/list/tombstone step below.
     const capturedWorkspaceId = requestedWorkspaceId.trim();
     return {
+      captureReconciliation: publicFileMutations.captureReconciliation,
       getWorkspaceIdentity: async () => {
         if (!capturedWorkspaceId) return null;
         const directory = await fetchWorkspaceDirectory().catch(() => ({
@@ -4751,6 +5053,7 @@ export async function startServer({
               },
             )).map((record) => ({
               projectId: record.projectId,
+              visibility: record.visibility,
               ownerMemberId: record.ownerMemberId,
               displayName: record.displayName,
               catalogRevisionAt: Number.isFinite(Date.parse(record.updatedAt))
@@ -4940,7 +5243,7 @@ export async function startServer({
     isProjectShared: async (projectId, context) => {
       const projectContext =
         context ?? await resolveBoundProjectWorkspaceContext(projectId);
-      if (!projectContext || projectContext.workspaceType !== 'team') return false;
+      if (!projectContext || projectContext.memberStatus !== 'active') return false;
       return Boolean(
         await resolveSharedProjectOwner(projectId, {
           workspaceId: projectContext.workspaceId,
@@ -4963,8 +5266,13 @@ export async function startServer({
   // pulled copy is never watched, so an inbound pull can't loop into a publish and
   // a member can't publish edits to someone else's project.
   const collabPublishWatcher = createCollabPublishWatcher({
-    notifyChanged: (projectId, principal) =>
-      collab.scheduler.notifyChanged(projectId, 'file-change', principal),
+    publishInitialContent: false,
+    notifyChanged: (projectId, principal) => {
+      if (!ownedContentSync) return;
+      void ownedContentSync.shouldPublish(projectId, principal).then((changed) => {
+        if (changed) collab.scheduler.notifyChanged(projectId, 'file-change', principal);
+      }).catch(() => console.warn('[od] could not check local project changes'));
+    },
     listProjectIds: () => listProjects(db).map((project: { id: string }) => project.id),
     shouldPublish: async (projectId) => {
       if (projectIsUnmaterializedSharedPlaceholder(projectId)) return false;
@@ -5038,83 +5346,74 @@ export async function startServer({
     projectId,
     { fresh: false },
   );
-  const resolveLocalProjectCommentWorkspaceContext = async (
+  const resolveProjectLocalCommentWorkspaceContext = async (
     req: any,
     projectId: string,
   ) => {
     const binding = getWorkspaceProjectByProjectId(db, projectId);
-    if (revokedTeamProjectMirrors.has(projectId)) {
-      return {
-        ok: false as const,
-        status: 403 as const,
-        code: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
-        message: 'workspace project read is not allowed',
-      };
-    }
-    if (!binding?.workspaceId) {
-      return { ok: true as const, context: null };
-    }
-    if (binding.resourceState === 'deleted') {
-      return {
-        ok: false as const,
-        status: 403 as const,
-        code: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
-        message: 'workspace project read is not allowed',
-      };
-    }
-    const local = resolveOptionalLocalWorkspaceRequestAuthority(req);
-    if (!local.ok) return local;
-    if (local.context) {
-      if (
-        local.context.workspaceId !== binding.workspaceId
-        || (
-          binding.visibility !== 'team'
-          && binding.createdByWorkspaceMemberId
-          && local.context.workspaceMemberId
-            !== binding.createdByWorkspaceMemberId
-        )
-      ) {
-        return {
-          ok: false as const,
-          status: 403 as const,
-          code: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
-          message: 'workspace project access is not allowed',
-        };
-      }
-      return {
-        ok: true as const,
-        context: {
-          ...local.context,
-          workspaceType: binding.visibility === 'team' ? 'team' : 'personal',
-          ...(binding.visibility === 'team'
-            ? { teamId: binding.workspaceId }
-            : { teamId: null }),
-        },
-      };
-    }
-    const persistedMemberId = binding.createdByWorkspaceMemberId?.trim()
-      || 'local-user';
-    return {
-      ok: true as const,
-      context: workspaceContextFromDirectoryItem({
-        workspaceId: binding.workspaceId,
-        workspaceName: binding.workspaceId,
-        workspaceType: binding.visibility === 'team' ? 'team' : 'personal',
-        workspaceMemberId: persistedMemberId,
-        role: 'member',
-        memberStatus: 'active',
-        lifecycleState: 'active',
-      }, configuredAmrEnv()),
-    };
+    return resolveLocalProjectCommentWorkspaceContext({
+      binding,
+      revoked: revokedTeamProjectMirrors.has(projectId),
+      local: binding?.workspaceId
+        ? resolveOptionalLocalWorkspaceRequestAuthority(req)
+        : { ok: true, context: null },
+    });
   };
   const resolveProjectCommentWorkspaceContext = (
     req: any,
     projectId: string,
-  ) => resolveLocalProjectCommentWorkspaceContext(req, projectId);
+  ) => resolveProjectLocalCommentWorkspaceContext(req, projectId);
   const resolveProjectCommentReadWorkspaceContext = (
     req: any,
     projectId: string,
-  ) => resolveLocalProjectCommentWorkspaceContext(req, projectId);
+  ) => resolveProjectLocalCommentWorkspaceContext(req, projectId);
+  // Align is a read: it never resumes a share, re-enqueues an outbox, advances a
+  // cursor or writes a tombstone. The session is re-read after the comparison and
+  // a change between the two reads yields `unknown` rather than a result attributed
+  // to a session that is no longer the one that ran it.
+  const commentAlignment = createCommentAlignmentService({
+    db,
+    readCursor: (projectId, context) => collabCloud?.readMergedCommentCursor(projectId, context) ?? null,
+    compare: async (projectId, context, request, isCurrent) => {
+      const session = readVelaControlApiContext(process.env, configuredAmrEnv());
+      if (!session?.controlKey || !session.apiUrl) return { state: 'unknown', reason: 'unavailable' };
+      const result = await runVelaCommentAlignment({
+        projectId, workspaceId: context.workspaceId, request, session, dataRoot: RUNTIME_DATA_DIR, isCurrent,
+      });
+      const current = readVelaControlApiContext(process.env, configuredAmrEnv());
+      if (current?.controlKey !== session.controlKey || current?.apiUrl !== session.apiUrl) {
+        return { state: 'unknown', reason: 'unavailable' };
+      }
+      return result;
+    },
+  });
+
+  registerCommentSyncStateRoutes(app, {
+    db,
+    authorize: resolveProjectCommentReadWorkspaceContext,
+    service: createCommentSyncStateService(db, async scope => {
+      const session = readVelaControlApiContext(process.env, configuredAmrEnv());
+      if (!session?.controlKey) return false;
+      if (!session.apiUrl) return null;
+      const directory = await fetchVelaWorkspaceDirectory({ readSession: () => session });
+      const current = readVelaControlApiContext(process.env, configuredAmrEnv());
+      if (current?.controlKey !== session.controlKey || current?.apiUrl !== session.apiUrl) return null;
+      if (!directory.ok) return null;
+      return directory.items.some(item => item.workspaceId === scope.workspaceId
+        && item.workspaceMemberId === scope.workspaceMemberId
+        && item.memberStatus === 'active'
+        && item.lifecycleState !== 'deleted' && item.lifecycleState !== 'deleting');
+    }, { readAlign: scope => commentAlignment.read(scope),
+      readProjectShareState: createVelaProjectShareState({
+        dataRoot: RUNTIME_DATA_DIR, configuredEnv: configuredAmrEnv,
+      }),
+      readCredential: () => {
+        const current = readVelaControlApiContext(process.env, configuredAmrEnv());
+        return current?.apiUrl && current.controlKey
+          ? { apiUrl: current.apiUrl, controlKey: current.controlKey } : null;
+      },
+    }),
+  });
   const resolveFreshProjectCommentWorkspaceContext = async (
     req: any,
     projectId: string,
@@ -5136,6 +5435,12 @@ export async function startServer({
     }
     return verifiedWorkspaceContextForRequest(req, projectId);
   };
+  // Registered after the fresh-context resolver it depends on: a route wired
+  // before its authorizer exists captures `undefined` and authorizes nothing.
+  registerCommentAlignmentRoutes(app, {
+    db, alignment: commentAlignment,
+    authorize: resolveFreshProjectCommentWorkspaceContext,
+  });
   const verifiedTeamMirrorScope = async (
     scope: TeamMirrorPullScope,
   ): Promise<boolean> => {
@@ -5148,12 +5453,103 @@ export async function startServer({
       (item) =>
         item.workspaceId === scope.workspaceId
         && item.workspaceMemberId === scope.viewerMemberId
-        && item.workspaceType === 'team'
         && item.memberStatus === 'active'
         && item.lifecycleState === 'active'
         && item.workspaceId === scope.resourceTeamId,
     );
   };
+  const resolveTeamProjectResourceId = async (projectId: string, scope: TeamMirrorPullScope): Promise<string> => {
+    if (!velaCliTeamProjectCatalog || !(await verifiedTeamMirrorScope(scope))) {
+      throw new Error('TEAM_PROJECT_ROOT_UNAVAILABLE');
+    }
+    const registration = await velaCliTeamProjectCatalog.getRegistration(projectId, {
+      teamId: scope.resourceTeamId, memberId: scope.ownerMemberId,
+      role: 'member', lifecycleState: 'active', workspaceType: 'team',
+    });
+    const binding = getWorkspaceProjectByProjectId(db, projectId);
+    if (!registration || registration.workspaceId !== scope.workspaceId
+      || registration.visibility !== 'team' || !registration.resourceId?.trim()
+      || (binding && (binding.workspaceId !== scope.workspaceId
+        || binding.cloudTombstonedAt != null
+        || (binding.resourceHubResourceId != null && binding.resourceHubResourceId !== registration.resourceId)))) {
+      throw new Error('TEAM_PROJECT_ROOT_BINDING_MISMATCH');
+    }
+    return registration.resourceId;
+  };
+  const ownedContentStore = createSqliteOwnedContentStore(db);
+  const ownedProjectDirectory = (scope: OwnedContentScope): string => resolveProjectDir(PROJECTS_DIR, scope.projectId);
+  ownedContentSync = createOwnedContentSync({
+    store: ownedContentStore,
+    head: (scope) => collab.publishedHead(scope.projectId, {
+      teamId: scope.resourceTeamId, memberId: scope.ownerMemberId,
+      role: 'member', lifecycleState: 'active', workspaceType: 'team',
+    }),
+    hasContent: async (scope) => {
+      const project = getProject(db, scope.projectId);
+      if (!project || isUnmaterializedSharedPlaceholder(project)) return false;
+      const entry = await fs.promises.lstat(ownedProjectDirectory(scope)).catch(() => null);
+      return Boolean(entry?.isDirectory() && !entry.isSymbolicLink());
+    },
+    isSupported: (scope) => !getProject(db, scope.projectId)?.metadata?.baseDir,
+    isBusy: (projectId) => ownerProjectHasActiveRun(projectId),
+    fingerprint: (scope) => ownedContentFingerprint(ownedProjectDirectory(scope)),
+    publicationScope: (projectId, principal) => {
+      const binding = getWorkspaceProjectByProjectId(db, projectId);
+      if (!binding?.workspaceId || !binding.createdByWorkspaceMemberId) return null;
+      const memberId = principal?.memberId ?? binding.createdByWorkspaceMemberId;
+      const teamId = principal?.teamId ?? binding.workspaceId;
+      if (memberId !== binding.createdByWorkspaceMemberId || teamId !== binding.workspaceId) return null;
+      return { projectId, workspaceId: binding.workspaceId, resourceTeamId: teamId,
+        viewerMemberId: memberId, ownerMemberId: memberId };
+    },
+    apply: async (capturedScope, expectedVersion) => {
+      const scope = velaCliTeamProjectCatalog
+        ? { ...capturedScope, resourceId: await resolveTeamProjectResourceId(capturedScope.projectId, capturedScope) }
+        : capturedScope;
+      let remoteProject: Awaited<ReturnType<typeof resolveSharedProject>> = null;
+      const authorize = async () => {
+        if (!(await verifiedTeamMirrorScope(scope))) throw new Error('owner workspace is unavailable');
+        remoteProject = await resolveSharedProject(scope.projectId, scope);
+        if (!remoteProject || remoteProject.ownerMemberId !== scope.viewerMemberId) throw new Error('owner project is no longer shared');
+        if (velaCliTeamProjectCatalog
+          && await resolveTeamProjectResourceId(scope.projectId, scope) !== scope.resourceId) throw new Error('owner project root changed');
+        if (remoteProject.metadata?.baseDir) throw Object.assign(new Error('imported project content is not supported'), { code: 'PROJECT_DIRECTORY_UNSUPPORTED' });
+        const binding = getWorkspaceProjectByProjectId(db, scope.projectId);
+        if (binding && (binding.workspaceId !== scope.workspaceId || binding.visibility !== 'team'
+          || (binding.createdByWorkspaceMemberId != null && binding.createdByWorkspaceMemberId !== scope.ownerMemberId))) {
+          throw new Error('owner project binding does not match');
+        }
+      };
+      return applyOwnedProjectContent({
+        projectsRoot: PROJECTS_DIR, scope, expectedVersion, authorize,
+        isBusy: () => ownerProjectHasActiveRun(scope.projectId),
+        commit: () => {
+          if (!remoteProject) throw new Error('owner project authority is unavailable');
+          materializePulledTeamMirror(db, {
+            id: scope.projectId, name: remoteProject.name ?? scope.projectId,
+            skillId: remoteProject.skillId ?? null, designSystemId: remoteProject.designSystemId ?? null,
+            metadata: remoteProject.metadata ?? undefined,
+            createdAt: remoteProject.createdAt ?? Date.now(), updatedAt: remoteProject.updatedAt ?? Date.now(),
+          }, scope);
+          const project = getProject(db, scope.projectId);
+          if (project?.metadata?.sharedProjectPlaceholderAt) {
+            const metadata = { ...project.metadata };
+            delete metadata.sharedProjectPlaceholderAt;
+            updateProject(db, scope.projectId, { metadata, updatedAt: SYNC_KEEPS_UPDATED_AT });
+          }
+        },
+      });
+    },
+    onChange: (scope) => emitProjectEvent(scope.projectId, {
+      type: 'project-content-transfer-state', projectId: scope.projectId, at: Date.now(),
+    }),
+    onApplied: async (scope) => {
+      await collabPublishWatcher.refresh(scope.projectId);
+      emitProjectEvent(scope.projectId, { type: 'file-changed', path: '', kind: 'change' });
+      emitProjectEvent(scope.projectId, { type: 'project-metadata-changed', projectId: scope.projectId, at: Date.now() });
+      emitWorkspaceEvent(scope.workspaceId, { type: 'team-project-content-ready', projectId: scope.projectId, workspaceId: scope.workspaceId, at: Date.now() });
+    },
+  });
   const projectContentTransferStates =
     createProjectContentTransferStateStore({
       onChange: (scope, state) => {
@@ -5169,12 +5565,113 @@ export async function startServer({
     _scope: TeamMirrorPullScope,
     _version: number,
   ): Promise<void> => {};
+  // The store is already bound earlier in this same scope (see the
+  // `createSqlitePublicFilePublicationStore` call above, next to the
+  // design-system backfill). Re-declaring it here is what a merge produced when
+  // two lanes each added their own binding in different hunks: git saw no
+  // conflict, and `tsc` did not object — only esbuild did, at transform time.
+  const shareBindingOutbox = createShareBindingOutbox(db);
+  const retryShareBindingsAtStartup = createShareBindingStartup(shareBindingOutbox, {
+    publications: publicFilePublicationStore,
+    mutations: publicFileMutations,
+    prepare: createVelaShareBindingPrepare({ configuredEnv: configuredAmrEnv, dataRoot: RUNTIME_DATA_DIR }),
+    // An outstanding stop intent wins over completion of the same publication.
+    isCurrent: task => !publicFilePublicationStore.listStops().some(stop =>
+      stop.resourceTeamId === task.resourceTeamId && stop.ownerMemberId === task.ownerMemberId
+      && stop.projectId === task.projectId && stop.filePath === task.receipt.filePath
+      && stop.slug === task.receipt.slug
+      && (!stop.publicationRevision || stop.publicationRevision === task.publicationRevision)),
+  });
+  registerPublicFileStopRetryRoutes(app, {
+    // No projectId: the original project may have been deleted already.
+    verify: req => verifiedWorkspaceContextForRequest(req),
+    store: publicFilePublicationStore,
+    prepare: createVelaPublicFileStop({ configuredEnv: configuredAmrEnv, dataRoot: RUNTIME_DATA_DIR }),
+    mutations: publicFileMutations,
+  });
+  const retryPublicFileStopsAtStartup = createPublicFileStopStartup(
+    publicFilePublicationStore,
+    createVelaPublicFileStop({ configuredEnv: configuredAmrEnv, dataRoot: RUNTIME_DATA_DIR }),
+    publicFileMutations,
+  );
+  const recordPublicFilePublication = createPublicFilePublicationRecorder(
+    db, publicFilePublicationStore, enqueuePublishedFileComments,
+  );
+  const resolveLocalProjectOwner = (projectId: string, workspaceId: string): string | null => {
+    const binding = getWorkspaceProjectByProjectId(db, projectId);
+    if (!binding || binding.workspaceId !== workspaceId || binding.resourceState !== 'active'
+      || binding.cloudTombstonedAt != null || !getProject(db, projectId)
+      || projectIsUnmaterializedSharedPlaceholder(projectId)) return null;
+    return typeof binding.createdByWorkspaceMemberId === 'string' ? binding.createdByWorkspaceMemberId : null;
+  };
   const collabSyncRoutes = registerCollabSyncRoutes(app, {
     collab,
-    publicFilePublicationStore: createSqlitePublicFilePublicationStore(db),
+    publicFilePublicationStore,
+    // Recording a publication and queueing its existing comments for backfill
+    // is ONE transaction. Without this the route falls back to a bare
+    // `publicationStore.set`, which records the share and silently drops the
+    // backfill intent — the publish succeeds, and the comments the person
+    // already wrote never reach the share page.
+    //
+    // The recorder also refuses to proceed without a publication witness
+    // (slug + revision token read back after the write), so a half-written
+    // publication cannot enqueue work that later resolves against nothing.
+    recordPublicFilePublication,
+    resolveLocalPublicShareOwner: resolveLocalProjectOwner,
+    resolvePublicShareLink: (projectId, slug, amr) => resolvePublicShareLink(projectId, slug, amr, process.env, configuredAmrEnv()),
+    sharePublishing: {
+      sourceFileId: (scope, project) => localCommentFiles.identity(scope.projectId, scope.filePath, project?.metadata?._commentFiles),
+      needsCatalogSourceIdentity: scope => localCommentFiles.needsCatalogIdentity(scope.projectId, scope.filePath),
+      admitFileReceipt: (scope, resourceId, versionId, entryPath, run) => localCommentFiles.admit({
+        projectId: scope.projectId, workspaceId: scope.resourceTeamId, creatorMemberId: scope.ownerMemberId,
+        resourceId, versionId, paths: [{ sourceFilePath: scope.filePath, entryPath, sourceFileId: scope.sourceFileId }], run,
+      }),
+      ensureProject: (scope, principal, run) => ensurePublicShareProject({
+        projectId: scope.projectId, principal, run, describeProject: describeCollabProject,
+        retainRoot: registration => {
+          const binding = getWorkspaceProjectByProjectId(db, registration.projectId);
+          if (!binding || binding.workspaceId !== registration.workspaceId
+            || binding.createdByWorkspaceMemberId !== registration.ownerMemberId
+            || binding.resourceState !== 'active' || binding.cloudTombstonedAt != null) {
+            throw new Error('PUBLIC_SHARE_PROJECT_BINDING_UNAVAILABLE');
+          }
+          updateWorkspaceProject(db, registration.workspaceId, registration.projectId, {
+            resourceHubResourceId: registration.resourceId,
+          });
+        },
+      }),
+      reservations: createShareAliasReservations(db),
+      outbox: shareBindingOutbox,
+      complete: createSharePublicationCompletion(db, recordPublicFilePublication, shareBindingOutbox, true),
+      prepare: async scope => {
+        const identity = Object.freeze({ ...scope });
+        const configuredEnv = { ...configuredAmrEnv() };
+        const currentSession = readVelaControlApiContext(process.env, configuredEnv);
+        if (!currentSession?.controlKey || !currentSession.apiUrl) throw new Error('PUBLIC_SHARE_SESSION_UNAVAILABLE');
+        const session = Object.freeze({ ...currentSession });
+        return { run: args => runPinnedVelaCommand({ args, session,
+          workspaceId: identity.resourceTeamId, dataRoot: RUNTIME_DATA_DIR, configuredEnv }) };
+      },
+      retry: () => {
+        // A fresh bounded pass can see tasks created after the startup pass.
+        void createShareBindingStartup(shareBindingOutbox, {
+          publications: publicFilePublicationStore, mutations: publicFileMutations,
+          prepare: createVelaShareBindingPrepare({ configuredEnv: configuredAmrEnv, dataRoot: RUNTIME_DATA_DIR }),
+          isCurrent: task => !publicFilePublicationStore.listStops().some(stop =>
+            stop.resourceTeamId === task.resourceTeamId && stop.ownerMemberId === task.ownerMemberId
+            && stop.projectId === task.projectId && stop.filePath === task.receipt.filePath
+            && stop.slug === task.receipt.slug),
+        })().catch(() => { console.warn('[od] share binding retry unavailable'); });
+      },
+    },
+    readProjectShareState: createVelaProjectShareState({ dataRoot: RUNTIME_DATA_DIR, configuredEnv: configuredAmrEnv }),
+    shareContentFingerprints: createShareContentFingerprints(db, publicFilePublicationStore),
+    publicFileMutations,
+    ownedContentSync,
     verifyWorkspaceRequest: verifiedWorkspaceContextForRequest,
     verifyWorkspaceReadRequest: verifiedWorkspaceReadContextForRequest,
     verifyWorkspaceScope: verifiedTeamMirrorScope,
+    ...(velaCliTeamProjectCatalog ? { resolveTeamProjectResourceId } : {}),
     readContentTransferState: (projectId, scope) =>
       projectContentTransferStates.read({ projectId, ...scope }),
     beginContentTransfer: (projectId, scope, version) =>
@@ -5215,7 +5712,8 @@ export async function startServer({
           updatedAt: input.updatedAt,
         });
       },
-      materializeTeamMirror: (input, scope) => materializePulledTeamMirror(db, input, scope),
+      materializeTeamMirror: (input, scope, fileReceipt) =>
+        materializePulledTeamMirror(db, input, scope, undefined, { fileReceipt }),
       materializeTeamPlaceholder: (input, scope) =>
         materializePulledTeamMirror(db, input, scope, undefined, { placeholder: true }),
       materializeAuthorizedTeamMirror: (input, scope, receipt) =>
@@ -5354,6 +5852,10 @@ export async function startServer({
   const proactiveTeamProjectMaterializedVersion = (
     target: ProactiveContentPullTarget,
   ) => {
+    const binding = getWorkspaceProjectByProjectId(db, target.projectId);
+    const boundTarget = binding?.workspaceId === target.workspaceId && binding.resourceHubResourceId
+      ? { ...target, resourceId: binding.resourceHubResourceId }
+      : target;
     const authorized = getTeamProjectMaterialization(
       db,
       target.workspaceId,
@@ -5364,10 +5866,10 @@ export async function startServer({
       teamResourceVersions.get(
         target.workspaceId,
         'project-content',
-        teamProjectContentResourceId(target.projectId, target),
+        teamProjectContentResourceId(target.projectId, boundTarget),
       ),
       target.projectId,
-      target,
+      boundTarget,
     );
     return version == null ? null : String(version);
   };
@@ -5380,7 +5882,7 @@ export async function startServer({
   const backgroundPullSizeGuard = createBackgroundPullSizeGuard({
     maxEntries: backgroundPullMaxEntriesFromEnv(),
     maxCumulativeEntries: backgroundPullMaxCumulativeEntriesFromEnv(),
-    inspect: (scope, version) =>
+    inspect: async (scope, version) =>
       inspectAuthorizedTeamProjectPull({
         projectId: scope.projectId,
         scope: {
@@ -5388,6 +5890,7 @@ export async function startServer({
           resourceTeamId: scope.resourceTeamId,
           viewerMemberId: scope.viewerMemberId,
           ownerMemberId: scope.ownerMemberId,
+          ...(velaCliTeamProjectCatalog ? { resourceId: await resolveTeamProjectResourceId(scope.projectId, scope) } : {}),
         },
         expectedVersion: version,
       }),
@@ -5406,6 +5909,9 @@ export async function startServer({
       ),
   });
   const proactiveContentPull = createProactiveContentPull({
+    observeOwnedContent: async (scope, version) => {
+      await ownedContentSync!.request(scope, { action: 'check' }, version);
+    },
     assessBackgroundContentPull: (target, version) =>
       backgroundPullSizeGuard.assess(target, version),
     getLocalBinding: (projectId) => {
@@ -5675,6 +6181,7 @@ export async function startServer({
     fetch: () => fetchVelaBillingSummary({ configuredEnv: configuredAmrEnv() }),
   });
   const workspaceBillingRuntime = createWorkspaceBillingRuntimeCoordinator({
+    displayEventRefreshIntervalMs: 5_000,
     fetchProjection: async ({ workspaceId }) => {
       try {
         // The Vela CLI sends only the Bearer credential plus workspace-id
@@ -5690,11 +6197,11 @@ export async function startServer({
         throw error;
       }
     },
-    onAccessRevoked: ({ workspaceId }) => {
-      workspaceDirectoryAuthority.invalidate('auth_reject');
-      workspaceExactAuthorityCache.invalidate(workspaceId);
-      workspaceExactContextCache.invalidate(workspaceId, 'auth_reject');
-    },
+    // No onAccessRevoked hook on purpose (OPEND-3553): billing is
+    // display-only, and Vela also answers internal billing failures with 403.
+    // A rejected billing projection only marks this runtime entry; membership
+    // revocation is owned by the workspace directory and the hub
+    // `workspace-access-revoked` event, never by a billing response.
     onStateChange: (state) => {
       // The request that created a runtime already receives this state in its
       // response. Background catch-up/retry/poll completion needs a thin nudge
@@ -5762,6 +6269,9 @@ export async function startServer({
     onWorkspaceSwitched: (workspaceId) => warmWorkspaceDigestFaces(workspaceId),
     fetchBilling: accountBillingSummary.read,
     billingRuntime: workspaceBillingRuntime,
+    quotaRealtimeHealthy: (workspaceId) => quotaHealthyConnections.has(
+      directoryConnectionKey(workspaceId, currentWorkspaceDirectoryIdentity()),
+    ),
     fetchBillingCatalog: (workspaceId) => fetchVelaBillingCatalog(workspaceId, {
       configuredEnv: configuredAmrEnv(),
     }),
@@ -5964,6 +6474,18 @@ export async function startServer({
       readVelaControlApiContext,
       configuredAmrEnv(),
     );
+  const setQuotaRealtimeHealthy = (workspaceId: string, identityKey: string, healthy: boolean) => {
+    const key = directoryConnectionKey(workspaceId, identityKey);
+    const previous = quotaHealthyConnections.has(key);
+    if (healthy) quotaHealthyConnections.add(key);
+    else quotaHealthyConnections.delete(key);
+    if (previous !== healthy && identityKey === currentWorkspaceDirectoryIdentity()) {
+      emitWorkspaceEvent(workspaceId, {
+        type: 'billing-changed',
+        at: Date.now(),
+      });
+    }
+  };
   const syncWorkspaceDirectoryRealtimeHealth = (): void => {
     const currentIdentity = currentWorkspaceDirectoryIdentity();
     workspaceDirectoryAuthority.setRealtimeHealthy(
@@ -6017,17 +6539,40 @@ export async function startServer({
       await teamProjectsForDisplay(context);
     },
   });
+  const hubRunActors = new Map<string, { identityKey: string; actorKey: string | null }>();
+  const authenticatedRunActor = (
+    env,
+    configuredEnv = {},
+    control = readVelaControlApiContext(env, configuredEnv),
+    login = readVelaLoginStatus(env, configuredEnv),
+  ) => {
+    const merged = { ...env, ...configuredEnv };
+    return workspaceRunActorKey({
+      login,
+      control,
+      credentialOverrides: Boolean(merged.VELA_RUNTIME_KEY?.trim() || merged.VELA_CONTROL_KEY?.trim()),
+    });
+  };
   const startWorkspaceHubSubscriber = (subscribedWorkspaceId: string) =>
     startHubEventsSubscriber({
     resolveEndpoint: async () => {
       // Same gating as the workspace-context provider: only the vela source
       // has a hub to subscribe to (dev daemons must not dial production).
       if (process.env.OD_WORKSPACE_CONTEXT_SOURCE?.trim() !== 'vela') return null;
-      return resolveVelaWorkspaceHubEventsEndpoint(
+      const configuredEnv = configuredAmrEnv();
+      const session = readVelaControlApiContext(process.env, configuredEnv);
+      const endpoint = resolveVelaWorkspaceHubEventsEndpoint(
         subscribedWorkspaceId,
         process.env,
-        configuredAmrEnv(),
+        configuredEnv,
       );
+      if (endpoint?.identityKey === velaWorkspaceDirectoryIdentityForSession(session)) {
+        hubRunActors.set(subscribedWorkspaceId, {
+          identityKey: endpoint.identityKey,
+          actorKey: authenticatedRunActor(process.env, configuredEnv, session),
+        });
+      }
+      return endpoint;
     },
     onStateChange: (state, connection) => {
       if (state === 'disconnected') {
@@ -6043,6 +6588,7 @@ export async function startServer({
           directoryConnectionIdentities.delete(subscribedWorkspaceId);
         }
         if (identityKey) {
+          setQuotaRealtimeHealthy(subscribedWorkspaceId, identityKey, false);
           directoryHealthyConnections.delete(
             directoryConnectionKey(subscribedWorkspaceId, identityKey),
           );
@@ -6077,6 +6623,11 @@ export async function startServer({
       const connectionKey = directoryConnectionKey(
         exactWorkspaceId,
         exactIdentityKey,
+      );
+      setQuotaRealtimeHealthy(
+        exactWorkspaceId,
+        exactIdentityKey,
+        healthy && capabilities.includes(CODING_PLAN_USAGE_EVENTS_CAPABILITY),
       );
       if (
         healthy
@@ -6156,13 +6707,16 @@ export async function startServer({
           `actualWorkspaceId=${actualWorkspaceId ?? 'unknown'}`,
       );
     },
-    onAccessRevoked: ({ workspaceId, identityKey, reason }) => {
+    onAccessRevoked: ({ workspaceId, workspaceMemberId, identityKey, reason }) => {
       if (
         identityKey
         && identityKey !== currentWorkspaceDirectoryIdentity()
       ) {
         return;
       }
+      // Only the subscriber-verified former member may be stopped immediately.
+      // Legacy frames without that proof retain the complete directory diff
+      // fallback, so an old stream cannot stop a newly rejoined member.
       const revocationReceivedAt = performance.now();
       const exactWorkspaceId = workspaceId ?? subscribedWorkspaceId;
       console.info(
@@ -6184,6 +6738,14 @@ export async function startServer({
             revokedWorkspaceId,
             'vela-access-revoked',
           ),
+        reason === 'member-removed' && workspaceId && workspaceMemberId
+          ? { workspaceId, workspaceMemberId, reason: 'member-removed' }
+          : undefined,
+        async (revokedWorkspaceId) => {
+          const actor = hubRunActors.get(revokedWorkspaceId);
+          if (!identityKey || actor?.identityKey !== identityKey || !workspaceMemberId) return;
+          await revokedWorkspaceRuns?.revoke(revokedWorkspaceId, actor.actorKey, workspaceMemberId);
+        },
       );
       recordWorkspaceAuthorityRevocationClear(
         workspaceAuthorityCacheMode,
@@ -6201,6 +6763,8 @@ export async function startServer({
       ) {
         return;
       }
+      // This dirty signal carries no member id. The fresh directory's exact
+      // principal diff owns cancellation, including delayed/replayed events.
       requestWorkspaceDirectoryRefresh(
         'event_dirty',
         event.at
@@ -6416,6 +6980,24 @@ export async function startServer({
           // billing member projection even when no billing event accompanies
           // the roster mutation.
           workspaceBillingRuntime.reconnect(subscribedWorkspaceId);
+          if (event.memberChange === 'removed') {
+            void reconcileCurrentOwnerMemberRemovals(eventWorkspaceId).catch((error) =>
+              console.warn('[od] member removal project transfer refresh failed:', String(error)));
+          }
+          break;
+        case 'coding-plan-usage-changed':
+          if (!event.workspaceId || !event.workspaceMemberId || !event.eventId) break;
+          workspaceBillingRuntime.invalidateCodingPlanUsage({
+            workspaceId: event.workspaceId,
+            workspaceMemberId: event.workspaceMemberId,
+          });
+          emitWorkspaceEvent(event.workspaceId, {
+            type: 'coding-plan-usage-changed',
+            workspaceId: event.workspaceId,
+            workspaceMemberId: event.workspaceMemberId,
+            eventId: event.eventId,
+            at: Date.now(),
+          });
           break;
         case 'billing-changed':
           accountBillingSummary.invalidate(accountBillingInvalidationToken(event));
@@ -6552,6 +7134,8 @@ export async function startServer({
         .catch(() => undefined);
       void reconcileWorkspaceProjectsFromRemote(subscribedWorkspaceId)
         .catch(() => undefined);
+      void reconcileCurrentOwnerMemberRemovals(subscribedWorkspaceId)
+        .catch((error) => console.warn('[od] member removal project transfer catch-up failed:', String(error)));
       void proactiveContentPull.catchUpPublishedHeads(subscribedWorkspaceId)
         .catch(() => undefined);
       void collabCloud?.pollOnce().catch(() => undefined);
@@ -6619,7 +7203,7 @@ export async function startServer({
   const resolveTeamResourceScope = async (req: any) => {
     const verified = await verifyExplicitWorkspaceRequestContext({
       req,
-      requireTeam: true,
+      requireTeam: false,
     });
     if (!verified.ok) return verified;
     const scope = teamResourceRequestScopeFromContext(verified.context);
@@ -6696,15 +7280,33 @@ export async function startServer({
       return candidate.id === expectedHubId;
     });
   };
+  // Ownership may have just transferred to this member. Only a verified
+  // private source on this machine can skip pulling the shared contents.
+  const ownedTeamResourceSourceIsReady = (
+    kind: 'plugin' | 'skill' | 'design_system',
+    resource: TeamResourceShareRecord,
+    scope: TeamResourceRequestScope,
+  ): boolean => {
+    const dirId = kind === 'plugin' ? resource.id : stripPrefixAndValidateId(
+      resource.id, resource.id.startsWith('user:') ? 'user:' : '',
+    );
+    const sourceDir = kind === 'plugin'
+      ? getInstalledPlugin(db, resource.id)?.fsPath
+      : dirId ? path.join(kind === 'skill' ? USER_SKILLS_DIR : USER_DESIGN_SYSTEMS_DIR, dirId) : null;
+    return ownedWorkspaceResourceSourceIsReady({
+      ownerMemberId: resource.ownerMemberId,
+      currentMemberId: scope.principal.memberId,
+      workspaceId: scope.principal.teamId,
+      localSourceExists: typeof sourceDir === 'string' && fs.existsSync(sourceDir),
+      binding: getWorkspaceResourceByResourceId(db, kind, resource.id),
+    });
+  };
   async function syncSharedTeamPlugin(
     resource: TeamResourceShareRecord,
     scope: TeamResourceRequestScope,
   ): Promise<void> {
     const workspaceId = scope.principal.teamId;
-    const isOwnedByCurrentMember =
-      typeof resource.ownerMemberId === 'string' &&
-      resource.ownerMemberId === scope.principal.memberId;
-    if (isOwnedByCurrentMember) return;
+    if (ownedTeamResourceSourceIsReady('plugin', resource, scope)) return;
     const hubResourceId =
       resource.hubResourceId ??
       `plugin-${workspaceId.replace(/[^a-zA-Z0-9_-]/g, '-')}-${resource.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
@@ -6852,13 +7454,7 @@ export async function startServer({
       dirId,
     );
     const workspaceId = scope.principal.teamId;
-    const ownerLocalSourceReady = ownedDesignSystemSourceIsReady({
-      ownerMemberId: resource.ownerMemberId,
-      currentMemberId: scope.principal.memberId,
-      workspaceId,
-      localSourceExists: fs.existsSync(path.join(USER_DESIGN_SYSTEMS_DIR, dirId)),
-      binding: getWorkspaceResourceByResourceId(db, 'design_system', resource.id),
-    });
+    const ownerLocalSourceReady = ownedTeamResourceSourceIsReady('design_system', resource, scope);
     const hubResourceId =
       resource.hubResourceId ??
       `ds-${workspaceId.replace(/[^a-zA-Z0-9_-]/g, '-')}-${resource.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
@@ -6991,9 +7587,7 @@ export async function startServer({
     const hubResourceId =
       resource.hubResourceId ??
       `skill-${workspaceId.replace(/[^a-zA-Z0-9_-]/g, '-')}-${resource.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
-    const isOwnedByCurrentMember =
-      typeof resource.ownerMemberId === 'string' &&
-      resource.ownerMemberId === scope.principal.memberId;
+    const ownerLocalSourceReady = ownedTeamResourceSourceIsReady('skill', resource, scope);
     const bindingResourceId = workspaceTeamSkillBindingResourceId(
       workspaceId,
       resource.id,
@@ -7007,7 +7601,7 @@ export async function startServer({
     // all: `enforceSkillWorkspaceMutation` (routes/static-resource.ts) and
     // `listSkills`'s workspace filter (skills.ts) both read this row.
     function markTeamSynced(): boolean {
-      if (isOwnedByCurrentMember || !workspaceId) return false;
+      if (ownerLocalSourceReady || !workspaceId) return false;
       const existingBinding = getWorkspaceResourceByResourceId(
         db,
         'skill',
@@ -7035,7 +7629,7 @@ export async function startServer({
       });
       return true;
     }
-    if (isOwnedByCurrentMember) return;
+    if (ownerLocalSourceReady) return;
     if (
       fs.existsSync(targetDir) &&
       workspaceId &&
@@ -7218,41 +7812,28 @@ export async function startServer({
   ) => JSON.stringify([workspaceId, resourceId]);
   const designSystemsTeamShare = createLinkedProjectTeamResourceShareService({
     resource: designSystemsTeamResourceShare,
-    prepare: createDesignSystemBackingProjectPreparer({
-      resolveProjectId: async (resourceId, scope) =>
-        (await listAllDesignSystems({
-          workspaceId: scope.principal.teamId,
-          workspaceMemberId: scope.principal.memberId,
-        }))
-          .find((candidate) => candidate.id === resourceId)
-          ?.projectId ?? null,
-      ensureProjectId: async (resourceId, scope) =>
-        (await ensureUserDesignSystemWorkspaceProject(db, resourceId, {
-          workspaceId: scope.principal.teamId,
-          workspaceMemberId: scope.principal.memberId,
-        }))?.project.id ?? null,
-      projectExists: (projectId) => Boolean(getProject(db, projectId)),
-      getProjectBinding: (projectId) =>
-        getWorkspaceProjectByProjectId(db, projectId),
-      publishProject: (projectId, scope) =>
-        collab.requestTeamShare(projectId, scope.principal),
-      unpublishProject: (projectId, scope) =>
-        collab.requestTeamUnshare(projectId, scope.principal),
-      persistVisibility: ({ projectId, scope, visibility }) =>
-        persistWorkspaceProjectVisibility({
-          projectId,
-          principal: scope.principal,
-          visibility,
-          ownerMemberId: scope.principal.memberId,
-          updatedByMemberId: scope.principal.memberId,
-        }),
-      onPrepared: ({ resourceId, projectId, scope }) => {
-        designSystemBackingProjects.set(
-          designSystemBackingProjectKey(scope.principal.teamId, resourceId),
-          projectId,
-        );
-      },
-    }),
+    prepare: async (resourceId, scope) => {
+      const projectId = (await listAllDesignSystems({
+        workspaceId: scope.principal.teamId,
+        workspaceMemberId: scope.principal.memberId,
+      })).find((candidate) => candidate.id === resourceId)?.projectId ?? '';
+      const key = designSystemBackingProjectKey(scope.principal.teamId, resourceId);
+      designSystemBackingProjects.delete(key);
+      return {
+        projectId,
+        transition: async (visibility) => {
+          // A design-system resource action is not a project policy action.
+          // Unshare/compensation cannot demote its independently shared project.
+          if (visibility !== 'team' || !projectId) return;
+          const binding = getWorkspaceProjectByProjectId(db, projectId);
+          if (binding?.workspaceId !== scope.principal.teamId || binding.visibility !== 'team'
+            || binding.resourceState !== 'active' || binding.cloudTombstonedAt != null
+            || binding.createdByWorkspaceMemberId !== scope.principal.memberId) return;
+          await collab.syncExistingTeamProject(projectId, scope.principal);
+          designSystemBackingProjects.set(key, projectId);
+        },
+      };
+    },
   });
   const designSystemsTeamList = cachedTeamResourceList(
     designSystemsTeamShare,
@@ -7265,9 +7846,10 @@ export async function startServer({
   ) => {
     const workspaceId = scope.principal.teamId;
     const key = designSystemBackingProjectKey(workspaceId, resourceId);
-    const projectId = designSystemBackingProjects.get(key);
-    // The linked service already persisted the backing project before it
-    // resolved. `emitTeamProjectsChanged` invalidates the exact Workspace's
+    const rememberedProjectId = designSystemBackingProjects.get(key);
+    const projectId = rememberedProjectId && getWorkspaceProjectByProjectId(db, rememberedProjectId)?.visibility === 'team'
+      ? rememberedProjectId : null;
+    // Only an independently team-visible backing project was synchronized. `emitTeamProjectsChanged` invalidates the exact Workspace's
     // project catalogs before emitting; the resource route invalidates its
     // own listing before it calls this helper.
     emitTeamProjectsChanged(workspaceId, {
@@ -7586,21 +8168,7 @@ export async function startServer({
     scope: TeamResourceRequestScope,
   ): boolean => {
     const workspaceId = scope.principal.teamId;
-    if (resourceType === 'design_system') {
-      const dirId = stripPrefixAndValidateId(resource.id, 'user:');
-      if (
-        dirId
-        && ownedDesignSystemSourceIsReady({
-          ownerMemberId: resource.ownerMemberId,
-          currentMemberId: scope.principal.memberId,
-          workspaceId,
-          localSourceExists: fs.existsSync(path.join(USER_DESIGN_SYSTEMS_DIR, dirId)),
-          binding: getWorkspaceResourceByResourceId(db, 'design_system', resource.id),
-        })
-      ) return true;
-    } else if (resource.ownerMemberId === scope.principal.memberId) {
-      return true;
-    }
+    if (ownedTeamResourceSourceIsReady(resourceType, resource, scope)) return true;
     const bindingResourceId = resourceType === 'plugin'
       ? workspaceTeamPluginBindingResourceId(workspaceId, resource.id)
       : resourceType === 'design_system'
@@ -7780,11 +8348,21 @@ export async function startServer({
   // follow-up — see reconcile decision log.
   // (legacy POST /api/projects body deleted — see registerProjectRoutes below.)
 
+  let automaticDiagnostics: AutomaticDiagnostics | null = null;
   const telemetry = registerTelemetryRoutes(app, {
     dataDir: RUNTIME_DATA_DIR,
     namespace: runtime?.namespace,
     readAppConfig,
     writeAppConfig,
+    onClientExperience: (evidence) => automaticDiagnostics?.record({
+      sourceId: `client:${evidence.occurrenceId}`, kind: evidence.category,
+      at: Date.now(), runId: evidence.runId, projectId: evidence.projectId,
+      conversationId: evidence.conversationId, errorCode: evidence.errorCode, detail: evidence,
+    }) ?? null,
+    onHostFault: (event, properties) => automaticDiagnostics?.record({
+      sourceId: `host:${event}:${typeof properties.previous_session_id === 'string' ? properties.previous_session_id : randomUUID()}`,
+      kind: event, at: Date.now(), detail: properties,
+    }) ?? null,
   });
   const resolvedAppVersionInfo = normalizeTelemetryAppVersionInfo(
     await telemetry.resolveAppVersion(),
@@ -7808,6 +8386,32 @@ export async function startServer({
       readRunTelemetrySinkConfig(process.env, configuredAmrEnv()),
     ),
   );
+  try {
+    automaticDiagnostics = new AutomaticDiagnostics({
+      dataRoot: RUNTIME_DATA_DIR,
+      relayOrigin: diagnosticRelayUrl(process.env),
+      consent: () => automaticDiagnosticsConsent(RUNTIME_DATA_DIR),
+      sources: (incident) => buildAutomaticDiagnosticSources({ runtime, projectRoot: PROJECT_ROOT,
+        runsDir: path.join(RUNTIME_DATA_DIR, 'runs'), dataDir: RUNTIME_DATA_DIR }, incident),
+      baselineSources: () => buildAutomaticDiagnosticSources({ runtime, projectRoot: PROJECT_ROOT,
+        runsDir: path.join(RUNTIME_DATA_DIR, 'runs'), dataDir: RUNTIME_DATA_DIR }, { agentId: '*' }),
+      context: () => currentAppVersionInfo(),
+      onDelivered: (incidentId, receipt, evidence) => {
+        console.info(DIAGNOSTIC_DELIVERY_LOG_PREFIX, incidentId, JSON.parse(receipt).object_key);
+        void analyticsService.captureSafety({ eventName: 'diagnostic_bundle_uploaded',
+          appVersion: currentAppVersion(), properties: { diagnostic_incident_id: incidentId,
+            diagnostic_object_key: JSON.parse(receipt).object_key, run_id: evidence.runId,
+            fault_kind: evidence.kind } }).catch(() => {});
+      },
+    });
+    automaticDiagnostics.start();
+  } catch { console.warn('[diagnostics] local outbox unavailable'); }
+  const stopDiagnosticConfigObserver = observeAppConfig(RUNTIME_DATA_DIR, () => automaticDiagnostics?.consentChanged());
+  const stopDiagnosticApiObserver = observeApiFailures((failure) => {
+    const fault = diagnosticFaultFromApi(failure);
+    if (fault) automaticDiagnostics?.record(fault);
+  });
+  const observeDiagnosticRun = createDiagnosticRunObserver();
   const stopEvidenceDelivery = startEvidenceDelivery(RUNTIME_DATA_DIR);
   const strategyWriteEvidence = createStrategyRunWriteEvidenceRecorder(db);
   const codexThreadCleanupOwner = createCodexThreadCleanupOwner();
@@ -7821,7 +8425,51 @@ export async function startServer({
       // each event is emitted, so the finalization verdict (retry safety gate,
       // artifact_count, close-status artifactProducedThisRun) does not depend on
       // early tool_use/artifact events surviving the run.events ring buffer.
+      onDiagnosticLifecycle: (run, kind, at, errorType) => {
+        const incidentId = automaticDiagnostics?.record(diagnosticFaultFromLifecycle(run, kind, at, errorType));
+        if (incidentId) run.diagnosticIncidentIds = [...new Set([...(run.diagnosticIncidentIds ?? []), incidentId])].slice(-100);
+      },
       onEventEmitted: (run, record) => {
+        if (record.event === 'start' || record.event === 'end' || record.event === 'run_resume_attempted') {
+          try {
+          recordStrategyTaskRunLifecycle(db, { runId: run.id, phase: record.event === 'run_resume_attempted' ? 'prepare' : record.event,
+            at: record.timestamp, status: run.status, attempt: run.manualResumeAttemptCount ?? 0,
+            authenticatedDoneConclusion: run.authenticatedDoneConclusion });
+          const displayTask = getStrategyTaskExecutionByRunId(db, run.id);
+          if (displayTask) {
+            run.strategyTask = projectStrategyTask(displayTask, run.id, db);
+            record.data.strategyTask = run.strategyTask;
+          }
+          } catch (error) { console.warn('[task-display] lifecycle projection unavailable', error instanceof Error ? error.message : 'unknown'); }
+        }
+        if (record.event === 'start') automaticDiagnostics?.trackRun(run.id, {
+          sourceId: `run:${run.id}:interrupted:${run.manualResumeAttemptCount ?? 0}:${record.timestamp}`,
+          kind: 'active_run', at: record.timestamp, runId: run.id, agentId: run.agentId,
+          projectId: run.projectId, conversationId: run.conversationId,
+        });
+        const fault = observeDiagnosticRun(run, record);
+        if (fault) {
+          const incidentId = automaticDiagnostics?.record(fault);
+          if (incidentId) run.diagnosticIncidentIds = [...new Set([...(run.diagnosticIncidentIds ?? []), incidentId])].slice(-100);
+        }
+        if (record.event === 'end') {
+          automaticDiagnostics?.finishRun(run.id);
+          if (run.projectId) queueMicrotask(() => {
+            commentFilePublications.settled(run.projectId);
+            const binding = getWorkspaceProjectByProjectId(db, run.projectId);
+            if (!ownerProjectHasActiveRun(run.projectId) && binding?.visibility === 'team'
+              && binding.createdByWorkspaceMemberId && binding.resourceState === 'active'
+              && (getProject(db, run.projectId)?.metadata?._commentFiles || run.artifactPaths?.some(name => /\.html?$/i.test(name)))) {
+              const principal = { teamId: binding.workspaceId, memberId: binding.createdByWorkspaceMemberId,
+                role: 'member', lifecycleState: 'active', workspaceType: 'team' };
+              collab.scheduler.notifyChanged(run.projectId, 'run-settled', principal);
+              collab.scheduler.runBoundary(run.projectId, principal);
+            }
+          });
+        }
+        if (record.event === 'run_retry_finished' && record.data?.retry_result === 'success') {
+          automaticDiagnostics?.recovered(run.id, record.timestamp);
+        }
         if (!run.sideEffectLedger) run.sideEffectLedger = createRunSideEffectLedger();
         foldEventIntoRunSideEffectLedger(run.sideEffectLedger, record);
         strategyWriteEvidence.observeToolStream(run);
@@ -7835,7 +8483,10 @@ export async function startServer({
           : null;
         if (promptBudget) run.promptBudgetDiagnostics = promptBudget;
       },
-      onTerminal: createAmrTerminalReportFinalizer(amrTerminalReportOutbox),
+      onTerminal: composeRunTerminalHooks(
+        createAmrTerminalReportFinalizer(amrTerminalReportOutbox),
+        runNotices.record,
+      ),
       beforeFinish: (run, status, _code, _signal, terminalAt) => {
         if (run.deliverableSyntaxValidation?.metrics) {
           run.deliverableSyntaxValidation = {
@@ -7851,7 +8502,7 @@ export async function startServer({
         try {
           reconcileStrategyTaskRunTerminal(db, { runId: run.id, status });
           const latestTask = getStrategyTaskExecutionByRunId(db, run.id);
-          if (latestTask) run.strategyTask = projectStrategyTask(latestTask, run.id);
+          if (latestTask) run.strategyTask = projectStrategyTask(latestTask, run.id, db);
         } catch (error) {
           if (!(error instanceof InvalidFrozenSkillPackageError) && !(error instanceof InvalidStrategyTaskRecordError)) throw error;
           // The Run is already failing closed for the corrupt task state. Do
@@ -7864,6 +8515,36 @@ export async function startServer({
     getAppVersion: currentAppVersion,
     readAnalyticsContext,
   };
+  revokedWorkspaceRuns = createRevokedWorkspaceRunCancellation({
+    listRuns: () => design.runs.list({ status: 'active' }),
+    isTerminal: (status) => design.runs.isTerminal(status),
+    cancel: (run, origin) => run.cancelRequested ? Promise.resolve() : design.runs.cancel(run, origin),
+    onError: (run) => console.warn('[od] revoked workspace run cancellation failed', { runId: run.id }),
+  });
+  stopRevokedWorkspaceRuns = (
+    workspaceId: string,
+    workspaceMemberId?: string,
+    expectedIdentity = currentWorkspaceDirectoryIdentity(),
+  ) => {
+    const configuredEnv = configuredAmrEnv();
+    const session = readVelaControlApiContext(process.env, configuredEnv);
+    if (velaWorkspaceDirectoryIdentityForSession(session) !== expectedIdentity) return;
+    // Keep the legacy project/member behavior for other agents. AMR must use
+    // its actual launch actor/member proof, never the project's creator.
+    void cancelRevokedWorkspaceRuns({
+      list: (filter) => design.runs.list(filter).filter(run => run.agentId !== 'amr'),
+      cancel: (run, origin) => design.runs.cancel(run, origin),
+    }, workspaceId, workspaceMemberId)
+      .catch(error => console.error('[od] failed to stop removed Workspace runs', error));
+    if (workspaceMemberId) void revokedWorkspaceRuns.revoke(
+      workspaceId, authenticatedRunActor(process.env, configuredEnv, session), workspaceMemberId,
+    );
+  };
+  for (const revocation of pendingRunRevocations.splice(0)) {
+    if (revocation.identityKey === currentWorkspaceDirectoryIdentity()) {
+      stopRevokedWorkspaceRuns(revocation.workspaceId, revocation.workspaceMemberId, revocation.identityKey);
+    }
+  }
   const taskObservationRollout = createTaskObservationRolloutService({
     db,
     dataDir: RUNTIME_DATA_DIR,
@@ -7922,7 +8603,10 @@ export async function startServer({
     run: any;
     status: string;
   }) => {
-    if (!shouldReportRunCompletionTelemetryFallbackStatus(status)) return;
+    // Headless Task consumers do not save a final assistant message. Keep the UI
+    // grace period and durable delivery gates, but also settle successful Tasks.
+    const taskOwned = status === 'succeeded' && Boolean(getStrategyTaskExecutionByRunId(db, run.id));
+    if (!shouldReportRunCompletionTelemetryFallbackStatus(status, taskOwned)) return;
     const timer = setTimeout(() => {
       terminalTelemetryFallbackTimers.delete(timer);
       if (reportedRuns.has(run.id)) return;
@@ -7961,9 +8645,21 @@ export async function startServer({
   // client, an OD Next automatic continuation, a scheduled Automation, or a
   // live-artifact refresh. Starting a Run any other way drops its analytics
   // silently, which is what OPEND-2365 was.
+  ownerProjectHasActiveRun = (projectId) => design.runs.list({ projectId, status: 'active' }).length > 0;
+  // Recover delayed root work without a UI subscriber. Existing persisted
+  // content checkpoints decide whether bytes changed; receipts/creator CAS,
+  // never snapshot equality, authorize the retirement before the next upload.
+  for (const share of listTeamWorkspaceProjectShares(db)) {
+    const restored = recoverPersistedTeamShareOwnership(share);
+    if (!restored || !getProject(db, restored.projectId)?.metadata?._commentFiles) continue;
+    void ownedContentSync?.shouldPublish(restored.projectId, restored.principal).then(changed => {
+      if (changed) collab.scheduler.notifyChanged(restored.projectId, 'comment-files-reopen', restored.principal);
+    }).catch(() => console.warn('[comments] startup content check deferred'));
+  }
   const runAnalyticsLifecycle = createRunAnalyticsLifecycle({
     db,
     design,
+    workspaceContext: collab.workspaceContext,
     paths: { PROJECTS_DIR, RUNTIME_DATA_DIR },
     agents: { detectAgents },
     telemetry: {
@@ -7978,6 +8674,7 @@ export async function startServer({
     claimAssistantMessage: (run, options) =>
       pinAssistantMessageOnRunCreate(db, run, options),
     analyticsLifecycle: runAnalyticsLifecycle,
+    coordinateStart: (run, starter) => commentFilePublications.start(run.projectId, starter),
   });
   // Runs are process-local, but their terminal obligations are durable. On a
   // fresh daemon boot, repair stale message rows and replay any PostHog or
@@ -7988,7 +8685,6 @@ export async function startServer({
     appVersion: currentAppVersion(),
     appVersionInfo: currentAppVersionInfo(),
     db,
-    recoverBeforeInterrupt: (state, states, now) => recoverPlanningIntentResolution(db, state, states, now),
     reportLangfuse: reportRunCompletedFromDaemon,
     finalizeTerminalLocally: createAmrTerminalReportFinalizer(amrTerminalReportOutbox),
     taskObservationModeForRun: (runId) => taskObservationRollout.modeForRun(runId),
@@ -8141,9 +8837,9 @@ export async function startServer({
   // Powered-preview isolation info. Reports the daemon's own directly-reachable
   // http origin so the web host can render WebGL/Worker/WASM/SharedArrayBuffer
   // artifacts in a cross-origin-isolated iframe (see the /powered route and
-  // apps/web/src/runtime/powered-preview.ts). The web host always swaps this
-  // loopback hostname before loading powered files; the /api origin middleware
-  // then treats that swapped browser origin as preview-only.
+  // apps/web/src/runtime/powered-preview.ts). The web host derives a separate
+  // loopback hostname per project; the /api origin middleware reserves each
+  // hostname for that project's powered GETs.
   app.get('/api/preview/isolation', (_req, res) => {
     const reportHost = reportHostForPoweredPreview();
     const baseOrigin = resolvedPort ? `http://${reportHost}:${resolvedPort}` : null;
@@ -8151,6 +8847,7 @@ export async function startServer({
     /** @type {import('@open-design/contracts').ProjectPreviewIsolationResponse} */
     const body = {
       supported: Boolean(baseOrigin),
+      projectOrigins: true,
       baseOrigin,
       pathPrefix: 'powered',
     };
@@ -8237,6 +8934,7 @@ export async function startServer({
       projectRoot: PROJECT_ROOT,
       runsDir: path.join(RUNTIME_DATA_DIR, 'runs'),
       dataDir: RUNTIME_DATA_DIR,
+      automaticUploadStatus: () => automaticDiagnostics?.outbox.diagnostics() ?? { available: false },
     }),
   );
 
@@ -8262,7 +8960,7 @@ export async function startServer({
     stageProjectDirsForDelete,
     validateLinkedDirs,
   };
-  const authorizeProjectRequest = createAuthorizeProjectRequest({
+  const localProjectRequestAuthority = createAuthorizeProjectRequest({
     db,
     getWorkspaceProject,
     getWorkspaceProjectByProjectId,
@@ -8270,8 +8968,29 @@ export async function startServer({
       revokedTeamProjectMirrors.has(projectId),
     isProjectUnmaterializedPlaceholder: (_db, projectId) =>
       projectIsUnmaterializedSharedPlaceholder(projectId),
+    isProjectReceivingContent: (projectId) => ownedContentSync?.isApplying(projectId) ?? false,
     sendApiError,
   });
+  const authorizeProjectRequest = process.env.OD_WORKSPACE_CONTEXT_SOURCE?.trim() === 'vela'
+    ? createVerifiedProjectRequestAuthority({
+        localAuthority: localProjectRequestAuthority,
+        getBinding: (projectId) => getWorkspaceProjectByProjectId(db, projectId),
+        verifyWorkspaceRequestAuthority,
+        isPersonalWorkspaceForAccount: async (workspaceId, creatorMemberId) => {
+          const directory = await fetchFreshMutationWorkspaceDirectory();
+          return directory.ok && directory.items.some((item) =>
+            item.workspaceId === workspaceId
+            && item.workspaceType === 'personal'
+            && item.memberStatus === 'active'
+            && item.lifecycleState === 'active'
+            && (creatorMemberId
+              ? item.workspaceMemberId === creatorMemberId
+              : item.role === 'owner'));
+        },
+        reconcileMemberRemovalProjects,
+        sendApiError,
+      })
+    : localProjectRequestAuthority;
   // Legacy registrars still receive the historical bound mutation-gate shape,
   // but production delegates it to the same central authorizer as newer route
   // modules. This keeps placeholder stamps authoritative across Figma import,
@@ -8285,8 +9004,48 @@ export async function startServer({
     res,
     projectId,
     options,
+    runId,
   ) => {
     const binding = getWorkspaceProjectByProjectId(db, projectId);
+    const run = binding?.workspaceId ? design.runs.get(runId) : null;
+    if (binding?.workspaceId && (!run || run.projectId !== projectId)) {
+      sendApiError(res, 403, 'WORKSPACE_PROJECT_PERMISSION_DENIED', 'tool run does not belong to this project');
+      return null;
+    }
+    let actorMemberId = binding?.createdByWorkspaceMemberId ?? 'local-user';
+    if (binding?.workspaceId && process.env.OD_WORKSPACE_CONTEXT_SOURCE?.trim() === 'vela') {
+      const directory = await fetchFreshMutationWorkspaceDirectory();
+      if (!directory.ok) {
+        sendApiError(res, 503, 'WORKSPACE_AUTHORITY_UNAVAILABLE', 'workspace membership could not be verified');
+        return null;
+      }
+      // The token's Run pins its launch account and member, independently of
+      // the persisted project creator. A later account switch cannot lend an
+      // old token the new account's standing.
+      const actorPin = toolRunWorkspaceActors.get(runId);
+      if (!projectToolActorPinIsCurrent({
+        pin: actorPin ?? null,
+        workspaceId: binding.workspaceId,
+        currentDirectoryIdentity: currentWorkspaceDirectoryIdentity(),
+        ...(run?.agentId === 'amr'
+          ? { amrPinnedMemberId: revokedWorkspaceRuns.pinnedMember(run) }
+          : {}),
+      })) {
+        sendApiError(res, 403, 'WORKSPACE_ACCESS_DENIED', 'tool run workspace actor is no longer valid');
+        return null;
+      }
+      const verifiedMemberId = projectToolActorMember({
+        workspaceId: binding.workspaceId,
+        pinnedMemberId: actorPin.workspaceMemberId,
+        requirePinnedMember: true,
+        directory: directory.items,
+      });
+      if (!verifiedMemberId) {
+        sendApiError(res, 403, 'WORKSPACE_ACCESS_DENIED', 'tool run workspace membership is no longer active');
+        return null;
+      }
+      actorMemberId = verifiedMemberId;
+    }
     const localRequest = {
       query: {},
       get(name) {
@@ -8294,7 +9053,7 @@ export async function startServer({
         if (normalized === 'x-od-workspace-id') return binding?.workspaceId ?? undefined;
         if (normalized === 'x-od-workspace-member-id') {
           return binding?.workspaceId
-            ? binding.createdByWorkspaceMemberId ?? 'local-user'
+            ? actorMemberId
             : undefined;
         }
         return undefined;
@@ -8305,8 +9064,7 @@ export async function startServer({
     return {
       workspace: {
         workspaceId: binding.workspaceId,
-        workspaceMemberId:
-          binding.createdByWorkspaceMemberId ?? 'local-user',
+        workspaceMemberId: actorMemberId,
       },
     };
   };
@@ -8320,6 +9078,7 @@ export async function startServer({
     readProjectFile,
     resolveProjectDir,
     resolveProjectFilePath,
+    resolveProjectDeletePath,
     parseByteRange,
     renameProjectFile,
     deleteProjectFile,
@@ -8585,8 +9344,29 @@ export async function startServer({
   });
   registerSocialShareRoutes(app, { http: httpDeps });
   const projectCreatePreparationTimeoutMs = projectCreatePreparationTimeoutMsFromEnv();
+  const stopProjectPublicFiles = createProjectPublicFileStop(
+    publicFilePublicationStore,
+    createVelaPublicFileStop({ configuredEnv: configuredAmrEnv, dataRoot: RUNTIME_DATA_DIR }),
+  );
+  const stopPublicFilesBeforeDelete = createCommentFileDeletion({
+    db, localFiles: localCommentFiles,
+    hasActiveRun: ownerProjectHasActiveRun, runForWorkspace: commentFileRun,
+    stopPublicFiles: stopProjectPublicFiles,
+    isPresent: async (projectId, filePath) => {
+      try {
+        const target = await resolveProjectFilePath(PROJECTS_DIR, projectId, filePath, getProject(db, projectId)?.metadata);
+        await fs.promises.lstat(target.filePath);
+        return true;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') return false;
+        throw error;
+      }
+    },
+  });
   registerProjectRoutes(app, {
     db,
+    publicFileMutations,
+    stopPublicFilesBeforeDelete,
     design,
     // Test seam for the POST /api/projects preparation deadline; production
     // keeps the route's 15s default when the variable is unset or invalid.
@@ -8611,7 +9391,11 @@ export async function startServer({
     isProjectUnmaterializedPlaceholder: (projectId) =>
       projectIsUnmaterializedSharedPlaceholder(projectId),
     fetchWorkspaceDirectory,
+    reconcileMemberRemovalProjects: process.env.OD_WORKSPACE_CONTEXT_SOURCE?.trim() === 'vela'
+      ? reconcileMemberRemovalProjects
+      : undefined,
     configuredEnv: configuredAmrEnv,
+    allowStaticDevWorkspaceContext: process.env.OD_WORKSPACE_CONTEXT_SOURCE?.trim() !== 'vela',
     fetchProjectCreationWorkspaceDirectory,
     createWorkspaceOwnedDesignSystem: createWorkspaceOwnedDesignSystemForContext,
     pluginScope: {
@@ -8673,6 +9457,10 @@ export async function startServer({
         invalidatePresenceReadCache(projectId);
         return result;
       },
+      requestTeamDelete: async (projectId, principal) => {
+        await collab.requestTeamDelete(projectId, principal);
+        invalidatePresenceReadCache(projectId);
+      },
       materializeTeamProject: async (projectId, principal) => {
         const outcome = await collabSyncRoutes.pullSharedProject(projectId, {
           workspaceId: principal.teamId,
@@ -8690,27 +9478,48 @@ export async function startServer({
         workspaceTeamProjectCatalog?.invalidate();
       },
     },
-    ...(workspaceTeamProjectCatalog ? { teamProjectCatalog: workspaceTeamProjectCatalog } : {}),
-    // Second witness for the team-share invariant: refuse a team share aimed at
-    // a workspace the directory says is personal, even if the caller's headers
-    // claim otherwise. See collab/team-share-scope.ts.
+    ...(workspaceTeamProjectCatalog ? { teamProjectCatalog: {
+      ...workspaceTeamProjectCatalog,
+      // List reconciliation is a policy consumer too: a cached Team row must
+      // not resurrect a project whose creator explicitly made it private.
+      list: async (principal: ResourceHubPrincipal) => withoutLocallyUnsharedProjects(
+        await workspaceTeamProjectCatalog.list(principal),
+        { workspaceId: principal.teamId, workspaceMemberId: principal.memberId },
+      ),
+    } } : {}),
+    // Carry known workspace types into project-scope presentation.
     workspaceTypes,
     // Collab-cloud comment seams (no-op off-team / when unconfigured): stamp the
     // server-authoritative author, gate status/delete on the caller vs the
     // comment author / project owner, and push the comment lifecycle (create/edit,
     // status change, tombstone) to the cross-daemon relay.
+    prepareCommentFile: async (projectId, filePath, context) => prepareLocalProjectCommentFile({
+      db, projectId, filePath, context,
+      requireWorkspaceAuthority: Boolean(velaCliTeamProjectCatalog),
+    }),
     resolveWorkspaceContext: resolveProjectCommentWorkspaceContext,
+    resolveCurrentAuthorDisplayName: () => {
+      const user = readVelaControlApiContext(process.env, configuredAmrEnv())?.user;
+      return user?.name?.trim() || user?.email?.trim() || null;
+    },
     resolveReadWorkspaceContext: resolveProjectCommentReadWorkspaceContext,
     resolveFreshWorkspaceContext: resolveFreshProjectCommentWorkspaceContext,
     resolveProjectOwnerMemberId: async (projectId, context) => {
-      if (!context || context.workspaceType !== 'team') return null;
+      if (!context || context.memberStatus !== 'active') return null;
       return resolveSharedProjectOwner(projectId, {
         workspaceId: context.workspaceId,
         workspaceMemberId: context.workspaceMemberId,
       });
     },
+    isCommentRelayEligible: (projectId, filePath, context) => Boolean(commentRelayScope({
+      binding: getWorkspaceProjectByProjectId(db, projectId),
+      context,
+      projectId,
+      filePath,
+      publications: publicFilePublicationStore,
+    })),
     isSharedProject: async (projectId, context) => {
-      if (!context || context.workspaceType !== 'team') return false;
+      if (!context || context.memberStatus !== 'active') return false;
       return Boolean(
         await resolveSharedProjectOwner(projectId, {
           workspaceId: context.workspaceId,
@@ -8718,8 +9527,12 @@ export async function startServer({
         }),
       );
     },
+    onPublishedCommentMutation: createPersonalPublishedCommentMutationHandler(db),
     ...(collabCloud
       ? {
+          // Explicit UI/CLI request runs even when no project SSE subscriber
+          // has ever existed; never rely on the hub's in-memory dirty mark.
+          pullCommentsNow: (projectId, context) => collabCloud.pullProject(projectId, context),
           onCommentsRead: async (
             projectId,
             leasedContext,
@@ -8819,6 +9632,8 @@ export async function startServer({
   });
   registerImportRoutes(app, {
     db,
+    publicFileMutations,
+    stopPublicFilesBeforeDelete,
     http: httpDeps,
     uploads: uploadDeps,
     node: nodeDeps,
@@ -8831,6 +9646,7 @@ export async function startServer({
     projectFiles: projectFileDeps,
     validation: validationDeps,
     fetchProjectCreationWorkspaceDirectory,
+    allowStaticDevWorkspaceContext: process.env.OD_WORKSPACE_CONTEXT_SOURCE?.trim() !== 'vela',
     enforceWorkspaceProjectMutation: enforceAuthoritativeProjectMutation,
   });
 
@@ -8934,10 +9750,8 @@ export async function startServer({
             ...(verified.retryable ? { retryable: true } : {}),
           });
         }
-        // Personal resources have no Team hub partition to retract. Their
-        // authoritative Personal scope is still verified above, then local
-        // deletion proceeds without issuing a Team command.
-        if (verified.context.workspaceType !== 'team') return false;
+        // Both workspace kinds can hold explicitly shared resources. Retract
+        // their live hub entry before allowing the source to be deleted.
         const scope = teamResourceRequestScopeFromContext(verified.context);
         if (!scope) {
           throw Object.assign(new Error('the requested workspace is not available to this member'), {
@@ -9125,11 +9939,27 @@ export async function startServer({
     auth: authDeps,
     authorizeProjectRequest,
     authorizeProjectToolRequest,
+    resolveAccountScopedTeamExportMember: process.env.OD_WORKSPACE_CONTEXT_SOURCE?.trim() === 'vela'
+      ? async (workspaceId) => {
+          const identity = currentWorkspaceDirectoryIdentity();
+          const directory = await fetchFreshMutationWorkspaceDirectory();
+          if (!directory.ok || identity !== currentWorkspaceDirectoryIdentity()) return null;
+          const active = directory.items.filter((item) =>
+            item.workspaceId === workspaceId
+            && item.memberStatus === 'active'
+            && item.lifecycleState !== 'deleted');
+          return active.length === 1 ? active[0]!.workspaceMemberId : null;
+        }
+      : undefined,
     isApiTokenAuthorization,
     projectPreviewScopes,
   });
   registerProjectFileRoutes(app, {
     db,
+    isProjectEditingBusy: (projectId) => design.runs.list().some((run) =>
+      run.projectId === projectId && !design.runs.isTerminal(run.status)),
+    publicFileMutations,
+    stopPublicFilesBeforeDelete,
     http: httpDeps,
     paths: pathDeps,
     uploads: uploadDeps,
@@ -9175,12 +10005,13 @@ export async function startServer({
     authorizeProjectToolRequest,
   });
 
-  registerVelaRoutes(app, {
+  const velaRoutesLifecycle = registerVelaRoutes(app, {
     paths: { RUNTIME_DATA_DIR },
     appConfig: { readAppConfig },
     http: { getPublicBaseUrl },
     env: process.env,
     onCredentialStateObserved: refreshWorkspaceHubAccountIdentity,
+    verifyWorkspaceReadAuthority,
   });
 
   const allowScopedPluginReplace = (
@@ -9706,9 +10537,6 @@ export async function startServer({
     platformHintSignal,
     devicePlatformSignal = null,
     frozenSkillPackage,
-    odNextSyntheticCanary = false,
-    odNextAutomaticAdmission = false,
-    runtimeCapabilitySnapshot,
   }) => {
     const project =
       typeof projectId === 'string' && projectId
@@ -10375,23 +11203,13 @@ export async function startServer({
     }
 
     // Strategy identity, package/profile drift checks, atom loading, runtime
-    // capability facts, and local-only synthetic policy are owned by the OD
-    // Next prompt service. This composition root only supplies detected runtime
-    // versions and process configuration.
+    // profile selection are owned by the OD Next prompt service.
     const odNextStrategyRecipe = await resolveOdNextPromptRecipeForRun({
       db,
       bundledPluginsDir: BUNDLED_PLUGINS_DIR,
       appliedPluginSnapshotId,
-      agentId,
       streamFormat,
       atomPromptsEnabled: bundledAtomPromptsEnabled,
-      syntheticCanary: odNextSyntheticCanary,
-      automaticAdmission: odNextAutomaticAdmission,
-      runtimeCapabilitySnapshot,
-      getRuntimeVersions: () => ensureDetectedRuntimeVersions(
-        agentId,
-        agentCliEnvForAgent(appConfigForPrompt?.agentCliEnv, agentId),
-      ),
     });
 
     // Hoisted verbatim out of the composeSystemPrompt() call so the exact same
@@ -10502,7 +11320,8 @@ export async function startServer({
       && freeformDeckSignal === true;
     const isOdNextDeckRequest = odNextStrategyRecipe?.taskType === 'ppt'
       || odNextDeckIntent;
-    const hasSelectedDeckSeed = odNextStrategyRecipe?.taskType === 'ppt' && Boolean(
+    const inspectDeckScaffold = isOdNextDeckRequest || odNextStrategyRecipe?.taskType === 'discovery';
+    const hasSelectedDeckSeed = inspectDeckScaffold && Boolean(
       template?.files?.some((file) => /\.html?$/i.test(file.name))
       || /(?:^|\/)assets\/template\.html\b/i.test(skillBody ?? '')
       || frozenSkillPackage?.selections?.some((selection) =>
@@ -10512,7 +11331,7 @@ export async function startServer({
     );
     let hasExistingDeckArtifact = false;
     if (
-      odNextStrategyRecipe?.taskType === 'ppt'
+      inspectDeckScaffold
       && typeof projectId === 'string'
       && projectId
     ) {
@@ -10545,7 +11364,9 @@ export async function startServer({
           // resolves to null and adds no bytes.
           planToolNote: planToolNoteForRuntime(agentId, streamFormat),
           executionProfile: executionProfileFromStreamFormat(streamFormat),
-          deckIntent: odNextDeckIntent,
+          // Discovery reads the staged framework through the selected PPT Skill.
+          // Suppress the stable-context renderer's eager deck-intent fallback too.
+          deckIntent: odNextStrategyRecipe.taskType !== 'discovery' && odNextDeckIntent,
           deckFrameworkMode: odNextDeckFrameworkMode,
           metadata,
           template,
@@ -10579,7 +11400,6 @@ export async function startServer({
       assertOdNextSemanticRequestFactProducerCoverage('daemon_system_prompt', {
         strategy_task_skill: odNextStrategyRecipe.taskSkill,
         strategy_task_type: odNextStrategyRecipe.taskType,
-        strategy_runtime_capability_facts: odNextStrategyRecipe.planningFacts,
         project_and_design_context: {
           metadata,
           template,
@@ -10601,18 +11421,14 @@ export async function startServer({
       ? composeOdNextStrategyCorePromptV2(odNextStrategyRecipe)
       : composeSystemPrompt(systemPromptInputs);
     // OD Next sends a canonical XML tree, not this Markdown string. The tree's
-    // cache-stable head, its per-task identity, and the runtime-owned planning
-    // facts are three separate products of the same verified recipe, so they are
-    // composed here together and placed in different bundle slots downstream.
+    // cache-stable head and per-task identity are composed here together and
+    // placed in their existing bundle slots downstream.
     const odNextBundleHead = odNextStrategyRecipe
       ? composeOdNextStrategyBundleHeadV2(odNextStrategyRecipe)
       : null;
     const odNextRecipeIdentity = odNextStrategyRecipe
       ? odNextStrategyRecipeIdentityV2(odNextStrategyRecipe)
       : null;
-    const odNextRuntimeFacts = odNextStrategyRecipe
-      ? renderOdNextRuntimeFactsV2(odNextStrategyRecipe, odNextStableRequestContext ?? {})
-      : '';
     // The chat handler also needs to know where the active skill lives
     // on disk so it can stage a per-project copy of its side files
     // before spawning the agent. Returning that here avoids a second
@@ -10623,7 +11439,7 @@ export async function startServer({
       prompt,
       odNextBundleHead,
       odNextRecipeIdentity,
-      odNextRuntimeFacts,
+      odNextRuntimeFacts: '',
       odNextStableContextPrompt: odNextStableRequestContext
         ? composeOdNextStrategyStableRequestContextV2(
             odNextStableRequestContext,
@@ -10796,7 +11612,7 @@ export async function startServer({
         'OD Next Run retains an immutable input owner but has no persisted task mapping.',
       );
     }
-    const strategyRunMapping = strategyTaskAtStart?.runs.find(
+    let strategyRunMapping = strategyTaskAtStart?.runs.find(
       (mapping) => mapping.runId === run.id,
     ) ?? null;
     if (
@@ -10827,18 +11643,27 @@ export async function startServer({
         'OD Next Run, request, immutable input owner, and persisted task mapping are not one exact scope.',
       );
     }
-    const persistedStrategyFinalText = strategyRunMapping?.finalText.text ?? null;
+    let persistedStrategyFinalText = strategyRunMapping?.finalText.text ?? null;
     const isOdNextInitialRun = Boolean(strategyTaskAtStart && isInitialStrategyTaskRun(strategyTaskAtStart, run.id));
-    const isIntentResolution = Boolean(strategyTaskAtStart && isStrategyIntentResolutionRun(strategyTaskAtStart, run.id));
+    let discoveryPromptRecorded = false;
+    const recordDiscoveryPromptDelivered = () => {
+      if (discoveryPromptRecorded || !strategyTaskAtStart?.promptBundle.text.includes('skill_name="discovery"')) return;
+      discoveryPromptRecorded = true;
+      const data = { type: 'skill_discovery_policy', skillId: 'deliverable-discovery',
+        injected: persistedStrategyFinalText?.includes('skill_name="discovery"') === true,
+        skillRoot: path.join(BUNDLED_PLUGINS_DIR, 'scenarios/od-next-strategy/assets/task-profiles'),
+        source: isOdNextInitialRun ? 'request' : 'production_continuation' };
+      observeDiscoveryEvent(run, { event: 'diagnostic', data });
+      design.runs.emit(run, 'diagnostic', data);
+    };
     const hasExplicitCurrentPrompt = Object.prototype.hasOwnProperty.call(
       chatBody,
       'currentPrompt',
     );
     const strategyProtocol = strategyTaskAtStart
-      ? createOdNextRunProtocol(strategyRunMapping)
+      ? createOdNextRunProtocol(strategyRunMapping, run.doneKey ?? '')
       : null;
     let strategyProtocolResult = null;
-    let strategyToolUseCount = 0;
     let pendingStrategyContinuation = null;
     const {
       agentId,
@@ -10911,6 +11736,7 @@ export async function startServer({
           : null;
       design.runs.persistState(run);
     }
+    revokedWorkspaceRuns.begin(run);
     // Stash the original user prompt + per-turn config so the
     // langfuse-bridge report path can include them without reaching back
     // into chatBody across the createChatRunService boundary. Each field
@@ -11022,7 +11848,9 @@ export async function startServer({
       message.trim().length > 0
     ) {
       try {
-        await extractFromMessage(RUNTIME_DATA_DIR, message);
+        await extractFromMessage(RUNTIME_DATA_DIR, message, {
+          extractionOrigin: { projectId: run.projectId, conversationId: run.conversationId, runId: run.id, assistantMessageId: run.assistantMessageId },
+        });
       } catch (err) {
         console.warn('[memory] extractFromMessage failed', err);
       }
@@ -11188,6 +12016,30 @@ export async function startServer({
     }
     const inactivityTimeoutMs = resolveChatRunInactivityTimeoutMs(def.inactivityTimeoutMs);
     const toolTokenTtlMs = resolveChatToolTokenTtlMs(inactivityTimeoutMs);
+    let toolRunWorkspaceActor: {
+      workspaceId: string;
+      workspaceMemberId: string;
+      directoryIdentity: string;
+    } | null = null;
+    if (cwd && typeof projectId === 'string' && projectId
+      && process.env.OD_WORKSPACE_CONTEXT_SOURCE?.trim() === 'vela') {
+      const boundWorkspaceId = getWorkspaceProjectByProjectId(db, projectId)?.workspaceId;
+      if (boundWorkspaceId) {
+        const directoryIdentity = currentWorkspaceDirectoryIdentity();
+        const directory = await fetchFreshMutationWorkspaceDirectory();
+        if (directory.ok) {
+          // The Run's frozen member came from project-start authorization.
+          // A different account appearing during startup cannot adopt it.
+          toolRunWorkspaceActor = pinProjectToolActor({
+            workspaceId: boundWorkspaceId,
+            runWorkspaceMemberId: run.workspaceScope?.workspaceMemberId,
+            directoryIdentityBefore: directoryIdentity,
+            directoryIdentityAfter: currentWorkspaceDirectoryIdentity(),
+            directory: directory.items,
+          });
+        }
+      }
+    }
     const toolTokenGrant = cwd && typeof projectId === 'string' && projectId
       ? toolTokenRegistry.mint({
           runId,
@@ -11198,11 +12050,15 @@ export async function startServer({
           ...(pluginGrantContext ?? {}),
         })
       : null;
+    if (toolTokenGrant && toolRunWorkspaceActor) {
+      toolRunWorkspaceActors.set(runId, toolRunWorkspaceActor);
+    }
     let toolTokenRevoked = false;
     const revokeToolToken = (reason) => {
       if (toolTokenRevoked || !toolTokenGrant) return;
       toolTokenRevoked = true;
       toolTokenRegistry.revokeToken(toolTokenGrant.token, reason);
+      toolRunWorkspaceActors.delete(runId);
     };
     // The async startup phase below (compose prompt, prepare prompt file,
     // probe models, …) has many awaits and no blanket try/finally; an
@@ -11420,6 +12276,25 @@ export async function startServer({
         cwd,
       });
     }
+    // Frozen tasks bypass ordinary prompt composition. Resolve access from the
+    // verified applied package here, alongside the resources every run consumes.
+    let strategyTaskAssets: Awaited<ReturnType<typeof loadOdNextTaskAssetsForSnapshot>> = {
+      taskProfileRoot: null,
+      resources: [],
+    };
+    try {
+      strategyTaskAssets = await loadOdNextTaskAssetsForSnapshot({
+        bundledPluginsDir: BUNDLED_PLUGINS_DIR,
+        snapshot: typeof run.appliedPluginSnapshotId === 'string'
+          ? getSnapshot(db, run.appliedPluginSnapshotId)
+          : null,
+      });
+    } catch (err) {
+      // Unverified assets grant no access, but must not block a frozen run.
+      console.warn(
+        `[od-next-task-assets] loading skipped: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
     // OD Next task-profile resources (the handheld shells for prototype
     // tasks) are staged beside the frozen Skills on every strategy run, so the
     // rule card's `.od-frames/<shell>.html` paths resolve even when no platform
@@ -11429,10 +12304,7 @@ export async function startServer({
       try {
         const staging = await materializeOdNextDeviceFrames({
           cwd,
-          resources: await loadOdNextTaskResourcesForSnapshot({
-            bundledPluginsDir: BUNDLED_PLUGINS_DIR,
-            snapshot: getSnapshot(db, run.appliedPluginSnapshotId),
-          }),
+          resources: strategyTaskAssets.resources,
         });
         if (staging.staged.length > 0) run.odNextStagedDeviceFrames = staging.staged;
         if (staging.skipped.length > 0) {
@@ -11755,12 +12627,19 @@ export async function startServer({
         resolveRunArtifactOutcomeBeforeFinish();
       }
     };
+    const isOpenCodeContent = def.externalMcpInjection === 'opencode-env-content';
     const extraAllowedDirs = [
       ...resolveChatExtraAllowedDirs({
         agentId,
         skillsDir: SKILLS_DIR,
         designSystemsDir: DESIGN_SYSTEMS_DIR,
         linkedDirs,
+        activeSkillDirs,
+        // OpenCode grants this root only after its read-only edit boundary is
+        // resolved below. A generic grant would bypass that failure boundary.
+        strategyResourceDirs: !isOpenCodeContent && strategyTaskAssets.taskProfileRoot
+          ? [strategyTaskAssets.taskProfileRoot]
+          : [],
       }),
       ...(odNextTaskInputSnapshot
         ? [odNextTaskInputSnapshot.projectionAccessRoot]
@@ -11805,13 +12684,30 @@ export async function startServer({
     } catch {
       configuredAgentEnv = {};
     }
-    const requestedLiveModelScope = def.id === 'amr'
-      ? resolveAmrProfile({
+    const requestedAmrModelActor = def.id === 'amr'
+      ? authenticatedRunActor(process.env, configuredAgentEnv)
+      : null;
+    let requestedLiveModelScope = def.id === 'amr'
+      ? amrModelScope({
           ...process.env,
           ...(def.env || {}),
           ...configuredAgentEnv,
-        })
+          ...(run.workspaceScope ? { VELA_WORKSPACE_ID: run.workspaceScope.workspaceId } : {}),
+        }, readVelaCredentialRevision(process.env, configuredAgentEnv))
       : null;
+    // Normal device-login token rotation preserves the actor. Opaque key
+    // overrides have no actor proof, so only their unchanged revision is safe
+    // during preparation. This guard never terminates an already-spawned run.
+    const amrModelIdentityMatches = (env, configuredEnv = {}) => {
+      const currentActor = authenticatedRunActor(env, configuredEnv);
+      if (requestedAmrModelActor && currentActor) return requestedAmrModelActor === currentActor;
+      return amrModelScope({
+        ...env,
+        ...configuredEnv,
+        ...(run.workspaceScope ? { VELA_WORKSPACE_ID: run.workspaceScope.workspaceId } : {}),
+      }, readVelaCredentialRevision(env, configuredEnv)) === requestedLiveModelScope;
+    };
+    const amrModelIdentityChangedMessage = 'AMR sign-in changed during run setup. Retry with the current account.';
     const configuredModel =
       typeof appConfigForRun?.agentModels?.[def.id]?.model === 'string'
         ? appConfigForRun.agentModels[def.id].model
@@ -11860,18 +12756,25 @@ export async function startServer({
       // same rewrite before spawn; keeping this earlier copy aligned prevents
       // stored concrete session models from comparing against raw `default`.
       try {
-        const resumeProbe = await resolveAmrModelProbe({ dataDir: RUNTIME_DATA_DIR, env: process.env, readAppConfig });
-        const resumeCatalog = await amrModelLoadingCache.get(resumeProbe.cacheKey, {
-          fetchPreset: () => fetchVelaPresetModels(resumeProbe.launchPath, resumeProbe.env),
-          fetchRemote: () => fetchVelaRemoteModelsWithRetry(resumeProbe.launchPath, resumeProbe.env),
-        });
-        const resumeLiveModels = preferFreshLiveModels(
-          resumeCatalog.models ?? [],
-          getRememberedLiveModels(def.id, requestedLiveModelScope),
-        );
-        const resumeModelIds = new Set(resumeLiveModels.map((c) => c?.id).filter(Boolean));
+        const resumeProbe = await resolveAmrModelProbe({ dataDir: RUNTIME_DATA_DIR, env: process.env, readAppConfig, workspaceId: run.workspaceScope?.workspaceId });
+        if (!amrModelIdentityMatches(resumeProbe.env, resumeProbe.configuredEnv)) {
+          throw new Error(amrModelIdentityChangedMessage);
+        }
+        requestedLiveModelScope = resumeProbe.modelScope;
         const askedForDefault =
           typeof model !== 'string' || !model.trim() || model.trim().toLowerCase() === 'default';
+        const resumeFetchers = {
+          fetchPreset: () => fetchVelaPresetModels(resumeProbe.launchPath, resumeProbe.env),
+          fetchRemote: () => fetchVelaRemoteModelsWithRetry(resumeProbe.launchPath, resumeProbe.env),
+        };
+        // A `default` request resolves against the caller's own catalog; the
+        // preset seed is shared by every plan and would pick a model this
+        // caller may not be entitled to.
+        const resumeCatalog = askedForDefault && !hasDefaultModelEnvOverride
+          ? await amrModelLoadingCache.getAuthoritative(resumeProbe.cacheKey, resumeFetchers, AMR_DEFAULT_MODEL_CATALOG_WAIT_MS)
+          : await amrModelLoadingCache.get(resumeProbe.cacheKey, resumeFetchers);
+        const resumeLiveModels = amrRunModels(def.id, requestedLiveModelScope, resumeCatalog);
+        const resumeModelIds = new Set(resumeLiveModels.map((c) => c?.id).filter(Boolean));
         const defaultRunModel = resolveDefaultModelFromOptions(resumeLiveModels);
         if (
           !safeModel ||
@@ -11887,12 +12790,18 @@ export async function startServer({
           agentOptions.model = safeModel;
         }
       } catch {
-        // Degrade silently: keep the requested value. The preflight below records
-        // the probe failure and applies the identical fallback.
+        // Same-actor catalog failures retain the normal fallback below.
+      }
+      if (!amrModelIdentityMatches(process.env, configuredAgentEnv)) {
+        return failRun('AMR_AUTH_REQUIRED', amrModelIdentityChangedMessage);
       }
     }
+    const previousMarkerTask = isOdNextInitialRun && strategyTaskAtStart?.continuedFromTaskExecutionId
+      ? getStrategyTaskExecution(db, strategyTaskAtStart.continuedFromTaskExecutionId) : null;
+    const requiresProtocolMigration = Boolean(previousMarkerTask && !usesProductionMarker(previousMarkerTask));
     const resolvedAgentResumeCtx =
       agentSupportsSessionResume && run.conversationId
+        && !requiresProtocolMigration
         ? resolveAgentResumeContext(db, {
             conversationId: run.conversationId,
             agentId: def.id,
@@ -11929,12 +12838,25 @@ export async function startServer({
       strategyTaskAtStart
       && !isOdNextInitialRun
       && !agentResumeCtx.isResuming
+      && !strategyRunMapping?.coldStartFinalText
     ) {
-      const blocked = blockAutomaticContinuation(db, { runId: run.id });
-      if (blocked) run.strategyTask = projectStrategyTask(blocked, run.id);
+      const ended = endFailedAutomaticContinuation(db, { runId: run.id });
+      if (ended) run.strategyTask = projectStrategyTask(ended, run.id, db);
       throw new Error(
         'OD Next continuation requires the locked native session; cold re-seeding is forbidden.',
       );
+    }
+    if (strategyRunMapping?.coldStartFinalText) {
+      const transport = agentResumeCtx.isResuming ? 'resume' : 'cold_start';
+      if (transport === 'cold_start') {
+        strategyRunMapping = { ...strategyRunMapping, finalText: strategyRunMapping.coldStartFinalText };
+        persistedStrategyFinalText = strategyRunMapping.finalText.text;
+      }
+      design.runs.emit(run, 'diagnostic', {
+        type: 'strategy_production_transport', transport,
+        sourceRunId: strategyRunMapping.sourceRunId,
+        promptSha256: strategyRunMapping.finalText.sha256,
+      });
     }
     const publishNativeSessionRecoveryMetadata = () => {
       if (!run.nativeSessionRecovery) return;
@@ -12218,6 +13140,14 @@ export async function startServer({
           odNextTaskInputSnapshot?.requestInputText ?? '',
         ].filter(Boolean).join('\n\n---\n\n')
       : '';
+    if (isOdNextInitialRun && previousMarkerTask && agentResumeCtx.isResuming) {
+      const incremental = composeResumedRequest(strategyTaskAtStart, previousMarkerTask);
+      if (incremental) {
+        const finalText = persistStrategyResumeText(db, run.id, incremental);
+        strategyRunMapping = { ...strategyRunMapping, finalText, resumeFinalText: finalText };
+        persistedStrategyFinalText = finalText.text;
+      }
+    }
     const composedResult = strategyTaskAtStart
       ? {
           composedPrompt: persistedStrategyFinalText!,
@@ -12379,8 +13309,8 @@ export async function startServer({
     let visibleAssistantText = '';
     // Reply text handed to the background memory extractor at child-close.
     // Captures the GUARDED, visible reply from BOTH channels a run can emit on:
-    // structured agents' `agent` `text_delta` (Claude/Codex/Gemini/Copilot/ACP/
-    // qoder/pi-rpc) and the plain/BYOK/antigravity family's `stdout` chunks. So
+    // structured agents' `agent` `text_delta` (Claude/Codex/Gemini/Antigravity/
+    // Copilot/ACP/qoder/pi-rpc) and the plain/BYOK family's `stdout` chunks. So
     // every agent family contributes its actual reply, and none leak raw
     // transport frames (system:init, stream_event, hooks). Kept separate from
     // `visibleAssistantText` so the filesystem empty-output guard that reads
@@ -12447,11 +13377,12 @@ export async function startServer({
       }
     };
     const send = (event, data) => {
+      recordRunTelemetry('skill discovery', () => {
+        if (event === 'agent') recordDiscoveryPromptDelivered();
+        observeDiscoveryEvent(run, { event, data });
+      });
       if (event === 'agent' && data?.type === 'usage') {
         physicalSessionUsage.observe(event, data);
-      }
-      if (strategyProtocol && event === 'agent' && data?.type === 'tool_use') {
-        strategyToolUseCount += 1;
       }
       if (
         strategyProtocol
@@ -12467,7 +13398,7 @@ export async function startServer({
         && event === 'stdout'
         && typeof data?.chunk === 'string'
       ) {
-        const chunk = strategyProtocol.push(data.chunk);
+        const chunk = strategyProtocol.push(data.chunk, false);
         if (!chunk) return;
         data = { ...data, chunk };
       }
@@ -12559,7 +13490,7 @@ export async function startServer({
       }
       // Accumulate the visible reply for the memory extractor from whichever
       // channel this agent family uses: `agent` text_delta (structured streams)
-      // or `stdout` chunks (plain/BYOK/antigravity). Both carry already-guarded,
+      // or `stdout` chunks (plain/BYOK). Both carry already-guarded,
       // user-visible text, so this never captures thinking, tool traffic, or raw
       // transport frames.
       if (memoryReplyText.length < MEMORY_REPLY_CAP) {
@@ -12818,6 +13749,39 @@ export async function startServer({
       if (typeof code === 'number') return code === 0 ? 'exit_0' : 'exit_nonzero';
       return 'unknown';
     };
+    // The protocol withholds any text that might still turn out to be a
+    // reserved `<open-design-…>` block, including a reply's last line until
+    // its newline arrives; `finish()` is what finally rules that out, so the
+    // tail it returns is the first moment those bytes are user-visible. Every
+    // way a Run ends must release it, not only success: a Run that fails or is
+    // stopped right after an unterminated line would otherwise drop text the
+    // agent already produced from the conversation.
+    let strategyProtocolFinished = null;
+    const finishStrategyProtocol = () => {
+      if (strategyProtocolFinished) return strategyProtocolFinished;
+      strategyProtocolFinished = strategyProtocol.finish();
+      const tail = strategyProtocolFinished.visibleTail;
+      if (tail) {
+        const tailEvent = def.streamFormat === 'plain' ? 'stdout' : 'agent';
+        const tailData = tailEvent === 'stdout'
+          ? { chunk: tail }
+          : { type: 'text_delta', delta: tail };
+        // It cannot go back through `send`, which would hold it again, so it
+        // applies the same visible output rule here. For a reply whose visible
+        // text was withheld in its entirety this is the ONLY thing the run ever
+        // puts on screen; without the mark the run reports no visible output at
+        // all and the analytics fallback collapses a real close-time wait back
+        // to `firstTokenAt`.
+        recordRunTelemetry('strategy close-time tail', () => {
+          applyVisibleOutputMarks(
+            runLifecycleMarkersForStreamEvent(tailEvent, tailData),
+          );
+        });
+        persistRunEventToAssistantMessage(db, run, tailEvent, tailData);
+        design.runs.emit(run, tailEvent, tailData);
+      }
+      return strategyProtocolFinished;
+    };
     const finishStrategyAwarePhysicalRun = (status, code = null, signal = null) => {
       const finished = finishRun(status, code, signal);
       return finished;
@@ -12826,26 +13790,38 @@ export async function startServer({
       status,
       code = null,
       signal = null,
-      { allowRetry = true } = {},
+      {
+        allowRetry = true,
+        // P0-24 Q6: an empty reply is a normal end, but a transient one may
+        // still be retried. The guard hands its error frame here instead of
+        // sending it: the frame goes out only if this attempt is retried, and
+        // an attempt that is not retried ends `succeeded` without it.
+        emptyReplyError = null,
+        skipCloseDiagnostic = false,
+      } = {},
     ) => {
-      lifecycle.mark('finalize_start');
-      // A clean child exit does not complete a task rejected by the strategy
-      // gate. Reconcile before persisting the message or publishing the Run
-      // terminal event, while retaining the actual process exit code.
-      if (
-        status === 'succeeded'
-        && run.strategyTask?.outcome === 'blocked'
-        && run.strategyTask.activeRunId === run.id
-      ) {
-        status = 'failed';
-        allowRetry = false;
-        const reasonCodes = run.strategyTask.blockedContext?.reasonCodes ?? [];
-        send('error', createSseErrorPayload(
-          'OD_NEXT_TASK_BLOCKED',
-          `The task could not complete${reasonCodes.length ? `: ${reasonCodes.join(', ')}` : '.'}`,
-          { retryable: false, details: { reasonCodes } },
-        ));
+      if (!skipCloseDiagnostic) lifecycle.mark('finalize_start');
+      if (emptyReplyError) {
+        // Classify and decide retry from exactly the inputs the sent frame
+        // used to leave on the run, so retry behaviour does not change.
+        run.error = emptyReplyError.error?.message ?? run.error;
+        run.errorCode = emptyReplyError.error?.code ?? run.errorCode;
       }
+      const sendEmptyReplyErrorBeforeRetry = () => {
+        if (emptyReplyError) send('error', emptyReplyError);
+      };
+      // Success releases the held tail itself, before it reads the verdict.
+      if (
+        strategyProtocol && status !== 'succeeded'
+        && !design.runs.isTerminal(run.status)
+      ) {
+        finishStrategyProtocol();
+      }
+      // The Run records how the process ended; the strategy task records its
+      // own verdict. A task blocked at any stage keeps a cleanly exited Run
+      // succeeded: the task projection on the terminal event carries the
+      // blocked outcome and its reason codes, and the client decides from
+      // those and the deliverable on disk what this turn produced.
       flushRunMessageEvents(run);
       // Persist the transport-level close mechanism before classifying this
       // attempt. Runtime fatal/stream signals are only known in the close
@@ -12853,13 +13829,15 @@ export async function startServer({
       // them from a generic process exit. Clear the pending value immediately
       // so a scheduled retry cannot inherit the previous attempt's reason.
       const rpcCloseReason = deriveRpcCloseReason(status, code, signal);
-      design.runs.emit(run, 'diagnostic', {
-        type: 'runtime_close',
-        rpc_close_reason: rpcCloseReason,
-        status,
-        ...(typeof code === 'number' ? { exit_code: code } : {}),
-        ...(signal ? { signal } : {}),
-      });
+      if (!skipCloseDiagnostic) {
+        design.runs.emit(run, 'diagnostic', {
+          type: 'runtime_close',
+          rpc_close_reason: rpcCloseReason,
+          status,
+          ...(typeof code === 'number' ? { exit_code: code } : {}),
+          ...(signal ? { signal } : {}),
+        });
+      }
       pendingRpcCloseReason = null;
       const result = runResultFromStatus(status);
       const errorCode = deriveRunErrorCode({
@@ -12926,8 +13904,7 @@ export async function startServer({
         hasNativeSession: !!run.conversationId && !!liveSessionId,
       });
       if (
-        allowRetry && !isIntentResolution &&
-        postToolResumeDecision?.shouldRetry &&
+        allowRetry && postToolResumeDecision?.shouldRetry &&
         !design.runs.isTerminal(run.status) &&
         run.conversationId &&
         liveSessionId
@@ -12960,6 +13937,7 @@ export async function startServer({
           resumed: agentResumeCtx.isResuming,
         });
         publishNativeSessionRecoveryMetadata();
+        sendEmptyReplyErrorBeforeRetry();
         design.runs.emit(run, 'run_retry_attempted', {
           ...retryAnalyticsBase(postToolResumeDecision, failure, errorCode),
           retry_reason: postToolResumeDecision.retryReason,
@@ -12986,7 +13964,7 @@ export async function startServer({
         attemptCount: run.retryAttemptCount ?? 0,
         sideEffects,
       });
-      if (allowRetry && !isIntentResolution && decision.shouldRetry && !design.runs.isTerminal(run.status)) {
+      if (allowRetry && decision.shouldRetry && !design.runs.isTerminal(run.status)) {
         run.retryOriginalFailure ??= failure ?? undefined;
         if ((run.retryAttemptCount ?? 0) === 0) {
           run.retryOriginFailure = failure ? { ...failure } : null;
@@ -12997,6 +13975,7 @@ export async function startServer({
         run.retryStrategy = decision.retryStrategy;
         run.retryFinalResult = undefined;
         run.retrySuppressedReason = undefined;
+        sendEmptyReplyErrorBeforeRetry();
         design.runs.emit(run, 'run_retry_attempted', {
           ...retryAnalyticsBase(decision, failure, errorCode),
           retry_reason: decision.retryReason,
@@ -13004,6 +13983,24 @@ export async function startServer({
         });
         scheduleRetryRestart(decision.retryDelayMs);
         return true;
+      }
+      if (emptyReplyError) {
+        // Not retried: the agent exited cleanly with nothing to say, which is
+        // a normal end (P0-24 Q6, same as P7). Keep the evidence as a
+        // diagnostic, not as an error the turn would display.
+        run.error = null;
+        run.errorCode = null;
+        send('agent', {
+          type: 'diagnostic',
+          name: 'empty_reply_ended_normally',
+          source: 'daemon-run-finalize',
+          code: emptyReplyError.error?.code ?? null,
+          message: emptyReplyError.error?.message ?? null,
+        });
+        return finishWithRetryDecision('succeeded', code, signal, {
+          allowRetry: false,
+          skipCloseDiagnostic: true,
+        });
       }
       // Resume-on-failure: a terminal *resumable* failure (transient mid-stream
       // drop / inactivity) on a session-resuming runtime is not a dead end.
@@ -13035,7 +14032,7 @@ export async function startServer({
         sideEffects.liveArtifactSeen
       );
       const resumableFailure =
-        !isIntentResolution && result === 'failed' &&
+        result === 'failed' &&
         runtimeResumesSessionById(def) &&
         !!run.conversationId &&
         !!liveSessionId &&
@@ -13204,28 +14201,7 @@ export async function startServer({
     // are enabled — overwriting with `{}` would wipe the user's saved
     // mcp section for this single invocation, which is exactly the kind
     // of surprise the previous silent-failure UX taught us to avoid.
-    let opencodeConfigContent: string | null = null;
-    const isOpenCodeContent = def.externalMcpInjection === 'opencode-env-content';
     const isMiMoContent = def.externalMcpInjection === 'mimo-env-content';
-    if (isOpenCodeContent || isMiMoContent) {
-      try {
-        opencodeConfigContent = buildOpenCodeMcpConfigContent(
-          enabledExternalMcp,
-          oauthTokensForSpawn,
-          {
-            allowedDirectories: [effectiveCwd, ...extraAllowedDirs],
-            ...(byokOpenCodeProvider
-              ? { extraConfig: byokOpenCodeProvider.config }
-              : {}),
-          },
-        );
-      } catch (err) {
-        console.warn(
-          '[mcp-config] failed to build OPENCODE_CONFIG_CONTENT:',
-          err && err.message ? err.message : err,
-        );
-      }
-    }
 
     // Pre-flight the composed prompt against any argv-byte budget the
     // adapter declared (only DeepSeek TUI today — its CLI doesn't accept
@@ -13276,6 +14252,9 @@ export async function startServer({
       ));
     };
 
+    // The catalog default an AMR turn switches to when vela rejects the
+    // selected model, e.g. one that has left the catalog since it was saved.
+    let amrFallbackModel = null;
     if (def.id === 'amr' && resolvedBin && agentLaunch.launchPath) {
       const launchPath = agentLaunch.launchPath ?? resolvedBin;
       const modelProbeEnv = launchPath
@@ -13293,7 +14272,7 @@ export async function startServer({
             agentLaunch,
           )
         : null;
-      const amrModelScope = resolveAmrProfile(modelProbeEnv ?? process.env);
+      let liveAmrModelScope = requestedLiveModelScope;
       // Resolve the AMR model catalog through the SAME shared cache the UI's
       // `/api/amr/models` endpoint serves (AmrModelLoadingCache): a cached
       // authoritative `vela model list` when it is hot, otherwise the offline
@@ -13310,27 +14289,40 @@ export async function startServer({
       // AMR became unusable in packaged nightlies. Reusing the cache keeps that
       // blocking probe off the per-run hot path and degrades to preset instead
       // of fail-closing; vela's own `session/set_model` remains the final gate.
+      const userAskedForDefault =
+        typeof model !== 'string' ||
+        !model.trim() ||
+        model.trim().toLowerCase() === 'default';
       let liveModels = [];
       try {
-        const probe = await resolveAmrModelProbe({ dataDir: RUNTIME_DATA_DIR, env: process.env, readAppConfig });
-        const catalog = await amrModelLoadingCache.get(probe.cacheKey, {
+        const probe = await resolveAmrModelProbe({ dataDir: RUNTIME_DATA_DIR, env: process.env, readAppConfig, workspaceId: run.workspaceScope?.workspaceId });
+        if (!amrModelIdentityMatches(probe.env, probe.configuredEnv)) {
+          throw new Error(amrModelIdentityChangedMessage);
+        }
+        requestedLiveModelScope = probe.modelScope;
+        liveAmrModelScope = probe.modelScope;
+        const fetchers = {
           fetchPreset: () => fetchVelaPresetModels(probe.launchPath, probe.env),
           fetchRemote: () => fetchVelaRemoteModelsWithRetry(probe.launchPath, probe.env),
-        });
-        liveModels = catalog.models ?? [];
+        };
+        const catalog = userAskedForDefault && !hasDefaultModelEnvOverride
+          ? await amrModelLoadingCache.getAuthoritative(probe.cacheKey, fetchers, AMR_DEFAULT_MODEL_CATALOG_WAIT_MS)
+          : await amrModelLoadingCache.get(probe.cacheKey, fetchers);
+        liveModels = amrRunModels(def.id, liveAmrModelScope, catalog);
       } catch (error) {
         // Do not swallow silently: a probe failure here is exactly what made
         // the packaged AMR breakage undiagnosable (the old `catch {}` left no
         // trace in any log or diagnostics bundle). Record it and degrade to the
         // remembered catalog below.
         console.warn('[amr] model catalog preflight probe failed', error);
-        liveModels = [];
+        if (amrModelIdentityMatches(process.env, configuredAgentEnv)) {
+          liveModels = getRememberedLiveModels(def.id, liveAmrModelScope);
+        }
       }
-      const rememberedLiveModels = getRememberedLiveModels(def.id, amrModelScope);
-      if (liveModels.length > 0) {
-        rememberLiveModels(def.id, liveModels, amrModelScope);
+      if (!amrModelIdentityMatches(process.env, configuredAgentEnv)) {
+        sendAmrAccountFailure({ code: 'AMR_AUTH_REQUIRED', message: amrModelIdentityChangedMessage, action: 'relogin' });
+        return finishStrategyAwarePhysicalRun('failed', 1, null);
       }
-      liveModels = preferFreshLiveModels(liveModels, rememberedLiveModels);
       const liveModelIds = new Set(
         liveModels.map((candidate) => candidate?.id).filter(Boolean),
       );
@@ -13338,10 +14330,6 @@ export async function startServer({
       // concrete id via the agent-wide cached model order; if it still is not,
       // adopt the catalog's enabled default so the spawn layer always has a
       // usable real id.
-      const userAskedForDefault =
-        typeof model !== 'string' ||
-        !model.trim() ||
-        model.trim().toLowerCase() === 'default';
       const defaultRunModel = resolveDefaultModelFromOptions(liveModels);
       if (
         !safeModel ||
@@ -13394,6 +14382,7 @@ export async function startServer({
         ));
         return finishStrategyAwarePhysicalRun('failed', 1, null);
       }
+      amrFallbackModel = defaultRunModel && defaultRunModel !== safeModel ? defaultRunModel : null;
       // NOTE: when the selected model is absent from the (possibly preset-only
       // or stale) catalog we intentionally do NOT fail-close. The cached/preset
       // catalog can lag the live one, and a logged-in user picked a concrete
@@ -13435,13 +14424,10 @@ export async function startServer({
         )
       : false;
 
-    // Antigravity's `agy` is silent on stdout/stderr in print mode for
-    // both auth-missing and quota-exhausted failures — the actual
-    // RESOURCE_EXHAUSTED / "not logged in" payload only surfaces in
-    // its `--log-file`. We allocate a per-run temp path, pipe agy's
-    // log to it via buildArgs, then read it in the empty-output guard
-    // to disambiguate the silent-failure cause. Other adapters ignore
-    // this field.
+    // Antigravity's `agy` writes its diagnostics to a `--log-file`. We
+    // allocate a per-run temp path and pipe agy's log to it via buildArgs:
+    // the model lock below waits there for agy to confirm it read the
+    // settings.json model override. Other adapters ignore this field.
     const agentLogFilePath =
       def.id === 'antigravity'
         ? path.join(os.tmpdir(), `od-agy-${run.id}.log`)
@@ -13570,33 +14556,6 @@ export async function startServer({
     let args;
     const observeClaudeNativeChildBehavior =
       def.id === 'claude' && strategyTaskAtStart !== null;
-    const nativeBuildPackageBindings =
-      def.id === 'claude'
-      && strategyTaskAtStart?.executionMode === 'complex'
-      && strategyTaskAtStart.inputStage === 'production'
-      && strategyTaskAtStart.planContract
-      && strategyTaskAtStart.planContractHash
-      && strategyRunMapping
-        ? (() => {
-            const version = run.preflightAgentCliVersion
-              ?? getDetectedRuntimeVersions(def.id)?.agentCliVersion;
-            const capability = resolveBundledOdNextRuntimeCapability({
-              agentId: def.id,
-              agentCliVersion: version,
-            });
-            if (capability.reason !== 'capability_resolved') {
-              throw new TypeError(
-                'Claude native Build Package bindings require the exact verified CLI tuple.',
-              );
-            }
-            return createOdNextNativeBuildPackageBindings({
-              taskExecutionId: strategyTaskAtStart.taskExecutionId,
-              taskRunIndex: strategyRunMapping.taskRunIndex,
-              planContractHash: strategyTaskAtStart.planContractHash,
-              plan: strategyTaskAtStart.planContract,
-            });
-          })()
-        : [];
     try {
       // Optional argv flags are gated on the `--help` capability map, which used
       // to be filled only by `GET /api/agents`. Probe it here so a daemon that
@@ -13618,9 +14577,6 @@ export async function startServer({
             def.id === 'codex'
             && run.externalPluginAnalytics?.externalPluginId
               === OPEN_DESIGN_PLUGIN_ID,
-          ...(nativeBuildPackageBindings.length > 0
-            ? { nativeBuildPackageBindings }
-            : {}),
           ...(observeClaudeNativeChildBehavior
             ? { observeNativeChildBehavior: true }
             : {}),
@@ -13844,9 +14800,10 @@ export async function startServer({
     };
     let forcedChildShutdownTimers = [];
     let acpAttemptTermination = null;
+    let acpCompletionShutdownRequested = false;
     const beginAcpAttemptTermination = (
       reason = 'acp_terminal',
-      { gracefulWaitMs = 0 } = {},
+      { gracefulWaitMs = 0, onChildSignal = undefined as (() => void) | undefined } = {},
     ) => {
       if (acpAttemptTermination) return acpAttemptTermination;
       acpAttemptTermination = design.runs.terminateProcessTree(
@@ -13858,6 +14815,7 @@ export async function startServer({
           termGraceMs: inactivityKillGraceMs,
           killGraceMs: inactivityKillGraceMs,
           reason,
+          onChildSignal,
         },
       );
       return acpAttemptTermination;
@@ -14145,9 +15103,37 @@ export async function startServer({
       undefined,
       { resolvedBin: agentLaunch.selectedPath },
     );
+    const runControlSession = def.id === 'amr'
+      ? readVelaControlApiContext(agentSpawnEnv, configuredAgentSpawnEnv)
+      : null;
+    const runLoginStatus = def.id === 'amr'
+      ? readVelaLoginStatus(agentSpawnEnv, configuredAgentSpawnEnv)
+      : null;
+    const runActorKey = def.id === 'amr'
+      ? authenticatedRunActor(agentSpawnEnv, configuredAgentSpawnEnv, runControlSession, runLoginStatus)
+      : null;
+    let runActualWorkspaceMemberId: string | null = null;
+    const runActorWorkspaceId = run.workspaceScope?.workspaceId?.trim();
+    if (runActorKey && runControlSession && runActorWorkspaceId) {
+      const sessionIdentity = velaWorkspaceDirectoryIdentityForSession(runControlSession);
+      // Reuse only a still-valid lease from this exact captured account. The
+      // cached-only method cannot start I/O with a later global account.
+      let directory = sessionIdentity === currentWorkspaceDirectoryIdentity()
+        ? await workspaceDirectoryAuthority.cached()
+        : { ok: false, items: [] };
+      if (sessionIdentity !== currentWorkspaceDirectoryIdentity()) directory = { ok: false, items: [] };
+      if (!directory.ok) directory = await fetchVelaWorkspaceDirectory({ readSession: () => runControlSession });
+      const membership = directory.ok ? directory.items.find(item =>
+        item.workspaceId === runActorWorkspaceId && item.memberStatus === 'active'
+        && item.lifecycleState !== 'deleted' && item.workspaceMemberId.trim(),
+      ) : null;
+      runActualWorkspaceMemberId = membership?.workspaceMemberId ?? null;
+    }
+    const runActorPinned = def.id !== 'amr' || revokedWorkspaceRuns.pin(
+      run, runActorKey, runActualWorkspaceMemberId,
+    );
     if (def.id === 'amr') {
-      const loginStatus = readVelaLoginStatus(agentSpawnEnv, configuredAgentSpawnEnv);
-      if (!loginStatus.loggedIn) {
+      if (!runLoginStatus.loggedIn) {
         cleanupPromptFile();
         revokeToolToken('child_exit');
         unregisterChatAgentEventSink();
@@ -14164,8 +15150,11 @@ export async function startServer({
       projectDir: cwd,
       projectId: typeof projectId === 'string' ? projectId : null,
       workspaceScope: run.workspaceScope,
+      runId: run.id,
+      conversationId: run.conversationId,
+      analyticsContext: run.analyticsContext ?? null,
     });
-    if (run.cancelRequested || design.runs.isTerminal(run.status)) {
+    if (!runActorPinned || run.cancelRequested || design.runs.isTerminal(run.status)) {
       cleanupPromptFile();
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
@@ -14302,19 +15291,6 @@ export async function startServer({
             });
           },
         }),
-        // OpenCode external-MCP injection (issue #2142). Layered AFTER
-        // spawnEnvForAgent / odMediaEnv / configuredAgentEnv so the
-        // daemon-built MCP config wins over a stale value the user
-        // might have exported in their shell — that would let an
-        // outdated content string suppress the user's freshly-saved
-        // MCP servers, which is exactly the bug we are fixing.
-        // `opencodeConfigContent === null` means "no enabled servers";
-        // we deliberately leave the env unset in that case so the
-        // user's saved `~/.config/opencode/opencode.json` continues
-        // to apply as-is.
-        ...(opencodeConfigContent
-          ? { [isMiMoContent ? 'MIMOCODE_CONFIG_CONTENT' : 'OPENCODE_CONFIG_CONTENT']: opencodeConfigContent }
-          : {}),
         // Daemon-owned resolver for task-input: references. Keep this last so
         // configured/BYOK/runtime env cannot redirect the Agent from the
         // verified Run projection back to mutable or canonical bytes.
@@ -14322,6 +15298,54 @@ export async function startServer({
           ? { OD_TASK_INPUT_DIR: odNextTaskInputSnapshot.projectionDir }
           : {}),
       }, agentLaunch);
+      // Build permissions after configured env expansion and launch overrides,
+      // so the granted temp root matches the environment the child receives.
+      if (isOpenCodeContent || isMiMoContent) {
+        try {
+          let readOnlyDirectories: string[] = [];
+          let readOnlyEditBaseDirs: string[] = [];
+          if (isOpenCodeContent && strategyTaskAssets.taskProfileRoot) {
+            try {
+              const editBase = await resolveOpenCodeEditBaseDirs(effectiveCwd);
+              readOnlyEditBaseDirs = editBase.dirs;
+              readOnlyDirectories = [strategyTaskAssets.taskProfileRoot];
+              if (editBase.gitProbe === 'failed') {
+                console.warn(`[opencode-resource-permissions] git probe failed; denying resource edits against every candidate worktree ${JSON.stringify({
+                  reason: editBase.gitProbeError, candidates: editBase.dirs,
+                })}`);
+              }
+            } catch (err) {
+              // Withhold only this resource grant; MCP, provider and ordinary
+              // project permissions must still reach the child process.
+              console.warn(`[opencode-resource-permissions] grant skipped: edit base unconfirmed ${JSON.stringify({
+                reason: err instanceof Error ? err.message : String(err),
+              })}`);
+            }
+          }
+          const opencodeConfigContent = buildOpenCodeMcpConfigContent(
+            enabledExternalMcp,
+            oauthTokensForSpawn,
+            {
+              allowedDirectories: [effectiveCwd, ...extraAllowedDirs, ...openCodeSystemTempDirectories(env)],
+              // Only the verified loader result may authorize rule cards.
+              readOnlyDirectories,
+              readOnlyEditBaseDirs,
+              ...(byokOpenCodeProvider
+                ? { extraConfig: byokOpenCodeProvider.config }
+                : {}),
+            },
+          );
+          if (opencodeConfigContent) {
+            env[isMiMoContent ? 'MIMOCODE_CONFIG_CONTENT' : 'OPENCODE_CONFIG_CONTENT'] = opencodeConfigContent;
+          }
+        } catch (err) {
+          console.warn(
+            '[mcp-config] failed to build OPENCODE_CONFIG_CONTENT:',
+            err && err.message ? err.message : err,
+          );
+        }
+      }
+
       if (def.id === 'opencode' || def.id === 'byok-opencode') {
         try {
           const versions = await ensureDetectedRuntimeVersions('opencode', configuredAgentEnv);
@@ -14333,9 +15357,23 @@ export async function startServer({
           console.warn('[opencode] optional tool previews unavailable:', error instanceof Error ? error.message : String(error));
         }
       }
+      if (def.id === 'amr' && !amrModelIdentityMatches(env)) {
+        cleanupPromptFile();
+        revokeToolToken('child_exit');
+        unregisterChatAgentEventSink();
+        cleanupOdNextRunInputProjection();
+        sendAmrAccountFailure({ code: 'AMR_AUTH_REQUIRED', message: amrModelIdentityChangedMessage, action: 'relogin' });
+        return finishStrategyAwarePhysicalRun('failed', 1, null);
+      }
+      // Re-read the actual launch session without re-pinning this Run. A
+      // profile/account change during setup cannot charge a different actor.
+      const launchActorMatches = def.id !== 'amr' || revokedWorkspaceRuns.pin(
+        run,
+        authenticatedRunActor(env),
+      );
       // Version detection and plugin staging above can yield while a cancel
       // request arrives. Never spawn a child after that cancellation.
-      if (run.cancelRequested || design.runs.isTerminal(run.status)) {
+      if (!launchActorMatches || run.cancelRequested || design.runs.isTerminal(run.status)) {
         cleanupPromptFile();
         revokeToolToken('child_exit');
         unregisterChatAgentEventSink();
@@ -14357,18 +15395,9 @@ export async function startServer({
       }
       lifecycle.mark('launch_preflight_end');
       lifecycle.mark('process_spawn_start');
-      if (isIntentResolution) {
-        if (run.cancelRequested || design.runs.isTerminal(run.status)) {
-          cleanupPromptFile();
-          revokeToolToken('child_exit');
-          unregisterChatAgentEventSink();
-          cleanupOdNextRunInputProjection();
-          return;
-        }
-        startIntentResolution(db, strategyTaskAtStart.taskExecutionId, run.id);
-      }
-      // A plain-text stdin prompt is handed over as a complete file at spawn;
-      // framed stdin protocols (stream-json, JSON-RPC) keep the pipe. The
+      // A whole-prompt stdin prompt (plain text, or the runtime's own
+      // one-shot framing) is handed over as a complete file at spawn; live
+      // stdin protocols (Claude stream-json, JSON-RPC) keep the pipe. The
       // agent stays on record until its process group is gone, so a daemon
       // started after this one dies can reap it. See runtimes/agent-process.ts.
       const spawnedAgent = spawnAgentProcess({
@@ -14378,7 +15407,7 @@ export async function startServer({
         cwd: effectiveCwd,
         windowsVerbatimArguments: invocation.windowsVerbatimArguments,
         stdin: stdinMode === 'pipe' && runtimeReadsPlainTextPromptFromStdin(def)
-          ? { prompt: composed }
+          ? { prompt: agentStdinPromptPayload(def, composed) }
           : stdinMode,
         runDir: path.join(RUNTIME_DATA_DIR, 'runs', run.id),
         runId: run.id,
@@ -14537,6 +15566,7 @@ export async function startServer({
           }
         : null;
       const memoryOptions = {
+        extractionOrigin: { projectId: run.projectId, conversationId: run.conversationId, runId: run.id, assistantMessageId: run.assistantMessageId },
         projectRoot: PROJECT_ROOT,
         chatAgentId: typeof agentId === 'string' ? agentId : null,
         chatModel: typeof safeModel === 'string' ? safeModel : null,
@@ -14759,19 +15789,6 @@ export async function startServer({
     let agentStreamErrorObservedBeforeCancellation = false;
     let acpFatalErrorObservedBeforeCancellation = false;
     run.runtimeFailureObservedBeforeCancellation = false;
-    // Holds buffered plain-text stdout chunks for agents (currently
-    // antigravity) where we need to inspect the full output at close
-    // time before deciding whether to forward it. The auth-prompt guard
-    // in the close handler suppresses the buffer when the output is an
-    // OAuth prompt; otherwise the flush below sends the chunks in order.
-    const plaintextStdoutBuffer: BufferedStdoutChunk[] = [];
-    // Arrival time of the first buffered plain-text stdout chunk
-    // (antigravity). First-token timing is stamped from this value only
-    // when the buffer is actually flushed to the client at close time. If
-    // the auth-prompt guard suppresses the buffer (the OAuth login URL is
-    // printed to stdout), no token ever reaches the user, so TTFT must not
-    // be recorded for that failure mode. See PR #3412.
-    let firstBufferedStdoutAt: number | null = null;
     // Tracks whether any stream the run is using actually emitted user-
     // visible content or a deliverable. Only the streams routed through
     // `sendAgentEvent` contribute to this flag; ACP sessions and plain stdout
@@ -15280,41 +16297,6 @@ export async function startServer({
       }
       emitAgentEvent(ev);
     };
-    const parseBufferedAntigravityGeminiJsonEventStream = () => {
-      if (
-        def.id !== 'antigravity' ||
-        plaintextStdoutBuffer.length === 0
-      ) {
-        return false;
-      }
-      const bufferedStdout = plaintextStdoutBuffer.map((chunk) => chunk.text).join('');
-      if (!looksLikeGeminiJsonEventStream(bufferedStdout)) return false;
-      trackingSubstantiveOutput = true;
-      const firstTokenAt = bufferedAntigravityGeminiFirstTokenAt(plaintextStdoutBuffer);
-      if (firstTokenAt !== null) noteFirstTokenAt(firstTokenAt);
-      const handler = createJsonEventStreamHandler('gemini', sendAgentEvent);
-      handler.feed(bufferedStdout);
-      handler.flush();
-      plaintextStdoutBuffer.length = 0;
-      return true;
-    };
-    const flushBufferedPlaintextStdout = () => {
-      // Stamp from the first chunk's arrival only once the buffer is known to
-      // be visible; suppressed OAuth prompts must never report a first token.
-      if (plaintextStdoutBuffer.length > 0 && firstBufferedStdoutAt !== null) {
-        noteFirstTokenAt(firstBufferedStdoutAt);
-      }
-      for (const chunk of plaintextStdoutBuffer) {
-        const strippedText = visibleStdoutControlStripper.write(chunk.text);
-        const visibleText = titleMarkerStripper.strip(strippedText);
-        if (visibleText) send('stdout', { chunk: visibleText });
-      }
-      const flushedControlText = visibleStdoutControlStripper.flush();
-      const flushedTitleMarkerText =
-        titleMarkerStripper.strip(flushedControlText) + titleMarkerStripper.flush();
-      if (flushedTitleMarkerText) send('stdout', { chunk: flushedTitleMarkerText });
-      plaintextStdoutBuffer.length = 0;
-    };
     const publishRuntimeChildEvidenceCoverage = (coverage) => {
       if (!strategyTaskAtStart || !coverage) return;
       sendAgentEvent({
@@ -15475,13 +16457,6 @@ export async function startServer({
               }),
             }
           : {}),
-        ...(nativeBuildPackageBindings.length > 0
-          ? {
-              nativeBuildPackageBindings: nativeBuildPackageBindingMap(
-                nativeBuildPackageBindings,
-              ),
-            }
-          : {}),
       });
       child.stdout.on('data', (chunk) => claude.feed(chunk));
       child.on('close', (code, signal) => {
@@ -15624,6 +16599,7 @@ export async function startServer({
         executionProfile,
         completePromptOnTurnEnd: def.acpTurnEndCompletesPrompt === true,
         ...(def.id === 'amr' ? { modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE' } : {}),
+        ...(def.id === 'amr' && amrFallbackModel ? { fallbackModel: amrFallbackModel } : {}),
         // Resume the prior upstream session (drives `session/load`) when the
         // resume-identity guard says it is safe; otherwise a fresh session/new.
         ...(def.resumesSessionViaAcpLoad === true && agentResumePromptPolicy.resumeSessionId
@@ -15635,7 +16611,15 @@ export async function startServer({
         onPromptComplete: () => clearFirstOutputWatchdog(),
         onTerminal: (kind) => beginAcpAttemptTermination(
           `acp_${kind}`,
-          { gracefulWaitMs: kind === 'completed' ? 500 : 0 },
+          kind === 'completed'
+            ? {
+              gracefulWaitMs: 500,
+              // Only an exit the daemon causes speaks for the completed
+              // turn; vela exiting non-zero on its own during the grace
+              // wait is still its own failure.
+              onChildSignal: () => { acpCompletionShutdownRequested = true; },
+            }
+            : { gracefulWaitMs: 0 },
         ),
         send: (event, data, meta) => {
           if (event === 'error') {
@@ -15866,7 +16850,7 @@ export async function startServer({
           lifecycle.mark('model_call_start');
           lifecycle.mark('stdin_write_start');
         },
-        onPromptSendEnd: () => lifecycle.mark('stdin_write_end'),
+        onPromptSendEnd: () => { lifecycle.mark('stdin_write_end'); recordRunTelemetry('discovery prompt', recordDiscoveryPromptDelivered); },
         onTurnComplete: () => clearFirstOutputWatchdog(),
       });
       acpSession = codexSession;
@@ -15914,21 +16898,6 @@ export async function startServer({
         publishRuntimeChildEvidenceCoverage(handler.childEvidenceCoverage(
           code === 0 && signal === null && !run.cancelRequested && !agentStreamError,
         ));
-      });
-    } else if (def.id === 'antigravity') {
-      // Buffer stdout until close so the auth-prompt guard can suppress
-      // the OAuth URL before forwarding it to the client as assistant
-      // text. agy exits 0 after printing the auth URL on stdout, so the
-      // chunks would otherwise arrive before the close-time classifier
-      // detects them as an auth prompt. First-token timing is deliberately
-      // NOT stamped here — only the first chunk's arrival time is recorded,
-      // and `firstTokenAt` is stamped from it at flush time so the
-      // suppressed OAuth-prompt path never reports a TTFT (PR #3412).
-      child.stdout.on('data', (chunk) => {
-        noteAgentActivity();
-        const receivedAt = Date.now();
-        if (firstBufferedStdoutAt === null) firstBufferedStdoutAt = receivedAt;
-        plaintextStdoutBuffer.push({ text: String(chunk), receivedAt });
       });
     } else {
       // Plain / BYOK mode: guard raw stdout chunks (#3247).
@@ -16152,12 +17121,18 @@ export async function startServer({
           resumeSessionId: agentResumePromptPolicy.resumeSessionId,
         }).autoReseedFullTranscript
       ) {
-        if (strategyTaskAtStart && !isOdNextInitialRun) {
-          const blocked = blockAutomaticContinuation(db, { runId: run.id });
-          if (blocked) run.strategyTask = projectStrategyTask(blocked, run.id);
+        const resumeSideEffects = runSideEffectsForRun(run);
+        const safeColdProduction = strategyRunMapping?.coldStartFinalText
+          && !resumeSideEffects.toolCallSeen && !resumeSideEffects.artifactWriteSeen
+          && !resumeSideEffects.liveArtifactSeen && !resumeSideEffects.userVisibleOutputSeen;
+        if (strategyTaskAtStart && ((!isOdNextInitialRun && !safeColdProduction)
+          || resumeSideEffects.toolCallSeen || resumeSideEffects.artifactWriteSeen
+          || resumeSideEffects.liveArtifactSeen || resumeSideEffects.userVisibleOutputSeen)) {
+          const ended = endFailedAutomaticContinuation(db, { runId: run.id });
+          if (ended) run.strategyTask = projectStrategyTask(ended, run.id, db);
           send('error', createSseErrorPayload(
             'AGENT_SESSION_RESUME_FAILED',
-            'The locked OD Next native session is unavailable; the task was blocked without cold re-seeding.',
+            'The OD Next native session is unavailable and a safe cold restart cannot be proven.',
             { retryable: false },
           ));
           return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
@@ -16207,7 +17182,6 @@ export async function startServer({
         markRpcCloseReason('fatal_rpc_error');
         return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
       }
-      parseBufferedAntigravityGeminiJsonEventStream();
       flushAgentTitleMarkerBuffer();
       if (agentStreamErrorObservedBeforeCancellation && agentStreamError) {
         markRpcCloseReason('stream_error');
@@ -16250,13 +17224,17 @@ export async function startServer({
         !agentProducedOutput
       ) {
         markRpcCloseReason('empty_output');
-        send('error', createSseErrorPayload(
-          'AGENT_EXECUTION_FAILED',
-          'Agent completed without producing any output. The model or provider may have returned an empty response. Check the agent logs for upstream errors, then try re-authenticating the agent or switching models.',
-          { retryable: true },
-        ));
-        return finishWithRetryDecision('failed', code, signal);
+        return finishWithRetryDecision('failed', code, signal, {
+          emptyReplyError: createSseErrorPayload(
+            'AGENT_EXECUTION_FAILED',
+            'Agent completed without producing any output. The model or provider may have returned an empty response. Check the agent logs for upstream errors, then try re-authenticating the agent or switching models.',
+            { retryable: true },
+          ),
+        });
       }
+      // P0-24 N9: a plugin-authoring run that exited cleanly without the
+      // generated-plugin files still ended normally — what it produced never
+      // decides the run's status. Keep the evidence as a diagnostic only.
       if (
         code === 0 &&
         !run.cancelRequested &&
@@ -16264,22 +17242,19 @@ export async function startServer({
         !(await hasGeneratedPluginArtifacts(cwd)) &&
         !emittedRenderableQuestionForm(run.askUserScanText)
       ) {
-        send('error', createSseErrorPayload(
-          'AGENT_EXECUTION_FAILED',
-          'Plugin authoring ended before generating the required generated-plugin artifacts.',
-          { retryable: true },
-        ));
-        return finishWithRetryDecision('failed', code, signal);
+        send('agent', {
+          type: 'diagnostic',
+          name: 'plugin_authoring_artifacts_missing',
+          source: 'daemon-run-finalize',
+          message: 'Plugin authoring ended before generating the required generated-plugin artifacts.',
+        });
       }
-      // Plain-stream auth-failure guard: plain adapters (today
-      // antigravity, deepseek's TUI variants) may exit cleanly with
-      // visible stdout that's actually an auth prompt — agy prints
-      // "Authentication required. Please visit the URL to log in:
-      // <URL>" + "Error: authentication timed out." rather than
-      // failing with a non-zero exit. Without this guard the chat
-      // shows that raw prompt as the agent's "reply", and the user
-      // has no way to actually complete OAuth from inside the chat.
-      // Override the apparent success with a proper
+      // Plain-stream auth-failure guard: plain adapters (e.g. deepseek's
+      // TUI variants) may exit cleanly with visible stdout that's actually
+      // an auth prompt rather than failing with a non-zero exit. Without
+      // this guard the chat shows that raw prompt as the agent's "reply",
+      // and the user has no way to actually complete the login from inside
+      // the chat. Override the apparent success with a proper
       // AGENT_AUTH_REQUIRED error carrying actionable guidance.
       if (
         code === 0 &&
@@ -16302,13 +17277,7 @@ export async function startServer({
       }
       // Plain-stream empty-output guard: plain agents send raw stdout
       // chunks without structured event tracking. Detect auth failures
-      // and quota / upstream errors when exit 0 but no stdout was
-      // seen. agy in print mode is silent on stdout/stderr for both
-      // missing-auth AND quota-exhausted failures; the daemon piped
-      // agy's `--log-file` to `agentLogFilePath` precisely so this
-      // guard can grep the upstream error code (RESOURCE_EXHAUSTED 429
-      // for quota, "not logged into Antigravity" for auth) and route
-      // to the right user-facing guidance.
+      // and quota / upstream errors when exit 0 but no stdout was seen.
       if (
         code === 0 &&
         !run.cancelRequested &&
@@ -16316,65 +17285,38 @@ export async function startServer({
         !childStdoutSeen
       ) {
         markRpcCloseReason('empty_output');
-        let combinedDetail = `${agentStderrTail}\n${agentStdoutTail}`;
-        if (def.id === 'antigravity' && agentLogFilePath) {
-          try {
-            const logContent = await fs.promises.readFile(agentLogFilePath, 'utf8');
-            // Keep the last 8 KB — quota / auth lines all land near the
-            // tail (after the spawn / model-config preamble).
-            combinedDetail = `${combinedDetail}\n${logContent.slice(-8192)}`;
-          } catch {
-            // Missing log file (agy didn't write it, mounted tmpfs is
-            // read-only, etc.) is fine — fall through to the generic
-            // empty-output message.
-          }
-        }
+        const combinedDetail = `${agentStderrTail}\n${agentStdoutTail}`;
         const authFailure = classifyAgentAuthFailure(agentId, combinedDetail);
-        const serviceFailure = !authFailure
-          ? classifyAgentServiceFailure(combinedDetail)
-          : null;
-        const isAntigravityQuota =
-          def.id === 'antigravity' && serviceFailure === 'RATE_LIMITED';
-        // Antigravity-only fallback: if neither classifier matched but
-        // the run was silent, lean on the empirical observation that
-        // an empty agy print-mode exit almost always means
-        // missing-OAuth (the only other silent path is quota, which
-        // the log-file check above already caught).
-        const useAntigravityAuthFallback =
-          !authFailure && !serviceFailure && def.id === 'antigravity';
-        const errorCode =
-          authFailure || useAntigravityAuthFallback
-            ? 'AGENT_AUTH_REQUIRED'
-            : isAntigravityQuota
-              ? 'RATE_LIMITED'
-              : 'AGENT_EXECUTION_FAILED';
-        const msg = authFailure
-          ? authFailure.message ?? `${def.name} authentication expired. Please re-authenticate and retry.`
-          : isAntigravityQuota
-            ? antigravityQuotaGuidance()
-            : useAntigravityAuthFallback
-              ? antigravityAuthGuidance()
-              : `${def.name} returned an empty response. This may indicate an expired session — try re-authenticating the agent.`;
-        send('error', createSseErrorPayload(
-          errorCode,
-          msg,
-          { retryable: true },
-        ));
-        return finishWithRetryDecision('failed', 0, signal);
+        if (authFailure) {
+          // A login problem is a real failure, not an empty reply.
+          send('error', createSseErrorPayload(
+            'AGENT_AUTH_REQUIRED',
+            authFailure.message ?? `${def.name} authentication expired. Please re-authenticate and retry.`,
+            { retryable: true },
+          ));
+          return finishWithRetryDecision('failed', 0, signal);
+        }
+        return finishWithRetryDecision('failed', 0, signal, {
+          emptyReplyError: createSseErrorPayload(
+            'AGENT_EXECUTION_FAILED',
+            `${def.name} returned an empty response. This may indicate an expired session — try re-authenticating the agent.`,
+            { retryable: true },
+          ),
+        });
       }
-      // ACP agents that don't shut down on stdin.end() (e.g. Devin for
-      // Terminal) are forced to exit via SIGTERM from attachAcpSession after
+      // Native agents that don't shut down on stdin.end() (e.g. Devin or Pi)
+      // are forced to exit via SIGTERM after
       // a clean prompt completion. Without an override, the chat run would
       // be marked `failed` because `code === 0` fails (code is null on a
       // signal exit). `completedSuccessfully()` reports whether the ACP
       // session resolved without a fatal error or abort.
       //
-      // Scope the override narrowly to the exact forced-shutdown shape this
-      // PR introduces: code is null AND signal is SIGTERM AND the ACP
-      // session reported clean completion. Any other post-response failure
-      // (non-zero exit code, SIGKILL, SIGSEGV, etc.) still propagates as
-      // `failed`, preserving the existing close-status behavior for genuine
-      // post-response process problems.
+      // The override covers SIGTERM (or vela's code 130) after clean
+      // completion, and any exit after the daemon itself signalled the
+      // completed attempt (`acpCompletionShutdownRequested`; Windows reports
+      // that kill as code 1 with no signal). Other post-response failures,
+      // including a non-zero exit during the grace wait, still propagate as
+      // `failed`.
       const acpCleanCompletion =
         typeof acpSession?.completedSuccessfully === 'function' &&
         acpSession.completedSuccessfully();
@@ -16384,17 +17326,16 @@ export async function startServer({
         code,
         signal,
         acpCleanCompletion,
+        acpCompletionShutdownRequested: acpCompletionShutdownRequested || (
+          typeof acpSession?.completionShutdownRequested === 'function' &&
+          acpSession.completionShutdownRequested()
+        ),
         artifactQuietShutdownRequested,
         turnCompletedCleanly: !!run.turnCompletedCleanly,
         artifactProducedThisRun:
           runArtifactSideEffects.artifactWriteSeen ||
           runArtifactSideEffects.liveArtifactSeen,
       });
-      // Authentication guards above have now ruled out Antigravity's OAuth
-      // prompt. Publish any remaining guarded plaintext before a close error
-      // so both the emit-time admission ledger and durable-log reconciliation
-      // observe the genuine assistant response before the terminal boundary.
-      flushBufferedPlaintextStdout();
       // Skip the close-handler failure emit when the run is already
       // terminal: the inactivity watchdog (failForInactivity) finishes the
       // run — sending its error and clearing run.clients/eventsLogStream —
@@ -16578,7 +17519,6 @@ export async function startServer({
             }
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            const failureMessage = `Failed to persist plain-stream artifact(s): ${message}`;
             console.warn(`[plain-stream] failed to persist stdout artifact(s): ${message}`);
             send('agent', {
               type: 'diagnostic',
@@ -16586,11 +17526,8 @@ export async function startServer({
               source: 'daemon-run-finalize',
               message,
             });
-            send('error', createSseErrorPayload(
-              'AGENT_EXECUTION_FAILED',
-              failureMessage,
-            ));
-            return finishWithRetryDecision('failed', 1, null);
+            // P0-24 N9: failing to save the page does not fail a run whose
+            // agent finished normally; the diagnostic above keeps the reason.
           }
         }
       }
@@ -16653,31 +17590,10 @@ export async function startServer({
       }
       if (status === 'succeeded') {
         if (strategyProtocol && !strategyProtocolResult) {
-          const finishedProtocol = strategyProtocol.finish();
+          const finishedProtocol = finishStrategyProtocol();
           strategyProtocolResult = finishedProtocol.parsed;
           const tail = finishedProtocol.visibleTail;
           if (tail) {
-            const tailEvent = def.streamFormat === 'plain' ? 'stdout' : 'agent';
-            const tailData = tailEvent === 'stdout'
-              ? { chunk: tail }
-              : { type: 'text_delta', delta: tail };
-            // The protocol withholds any text that might still turn out to be
-            // a reserved `<open-design-…>` block; `finish()` is what finally
-            // rules that out, so this tail is the first moment those bytes are
-            // user-visible. It cannot go back through `send` — `push` throws
-            // once the protocol is finished — so it applies the same visible
-            // output rule here. For a reply whose visible text was withheld in
-            // its entirety this is the ONLY thing the run ever puts on screen;
-            // without the mark the run reports no visible output at all and
-            // the analytics fallback collapses a real close-time wait back to
-            // `firstTokenAt`.
-            recordRunTelemetry('strategy close-time tail', () => {
-              applyVisibleOutputMarks(
-                runLifecycleMarkersForStreamEvent(tailEvent, tailData),
-              );
-            });
-            persistRunEventToAssistantMessage(db, run, tailEvent, tailData);
-            design.runs.emit(run, tailEvent, tailData);
             // The frozen Harness prompt currently does not receive the nonce,
             // so its authoritative completion signal remains the verified
             // strategy verdict. Still fold a marker if a future frozen bundle
@@ -16699,33 +17615,8 @@ export async function startServer({
           }
         }
         let deliverableValid = false;
-        // A turn that emitted no Runtime State can still have delivered. The
-        // coordinator may only infer that Direct Edit completion from verified
-        // physical delivery, so resolve the evidence here too — otherwise the
-        // inference has nothing to accept and correct work is discarded.
-        const mayInferDirectEditCompletion = Boolean(
-          strategyTaskAtStart
-          && (
-            odNextTurnMayInferDirectEditCompletion(
-              strategyTaskAtStart,
-              strategyProtocolResult,
-            )
-            || odNextTurnMayInferProductionCompletion(
-              strategyTaskAtStart,
-              strategyProtocolResult,
-            )
-          ),
-        );
-        const strategyPlanningOnly = isIntentResolution || strategyTaskAtStart?.executionIntent === 'plan_only'
-          || strategyProtocolResult?.runtimeState?.executionIntent === 'plan_only';
-        const strategyCompletionCandidate = Boolean(
-          strategyTaskAtStart
-          && !strategyPlanningOnly
-          && (
-            strategyProtocolResult?.runtimeState?.outcome === 'completed'
-            || mayInferDirectEditCompletion
-          ),
-        );
+        const strategyPlanningOnly = strategyTaskAtStart?.executionIntent === 'plan_only';
+        const strategyCompletionCandidate = Boolean(strategyTaskAtStart && !strategyPlanningOnly);
         let processTreeQuiescentForFinalization = true;
         // Every successful physical Run can produce a final Web deliverable,
         // even when OD Next Runtime State is absent. Resolve the settled
@@ -16736,6 +17627,8 @@ export async function startServer({
         }
         await resolveRunArtifactOutcomeBeforeFinishAsync();
         const deliverableFinalization = await finalizeSuccessfulRunDeliverable({
+          allowIndependentOutput: Boolean(strategyTaskAtStart),
+          allowMultipleOutputCandidates: run.strategyRolloutDecision?.taskType === 'discovery',
           ...(run.artifactOutcome?.diff && baselineEntryFile ? { baselineEntryFile } : {}),
           projectsRoot: PROJECTS_DIR,
           projectId: run.projectId ?? null,
@@ -16897,16 +17790,17 @@ export async function startServer({
           const details = err instanceof AiHtmlVersionSnapshotError
             ? { failures: err.failures }
             : undefined;
-          send('error', createSseErrorPayload(
-            'HTML_VERSION_SNAPSHOT_FAILED',
+          // P0-24 N9: a failed version snapshot does not fail a run whose
+          // agent finished normally; keep the reason as a diagnostic.
+          console.warn(`[html-version-snapshot] ${message}`);
+          send('agent', {
+            type: 'diagnostic',
+            name: 'html_version_snapshot_failed',
+            source: 'daemon-run-finalize',
+            code: 'HTML_VERSION_SNAPSHOT_FAILED',
             message,
-            {
-              retryable: false,
-              ...(details ? { details } : {}),
-            },
-          ));
-          finishStrategyAwarePhysicalRun('failed', 1, signal);
-          return;
+            ...(details ? { details } : {}),
+          });
         }
         try {
           persistDeliveredAgentSessionState();
@@ -16915,55 +17809,6 @@ export async function startServer({
         }
         if (strategyTaskAtStart && strategyProtocolResult) {
           let automaticContinuationChatBody = null;
-          let executionPreflight;
-          let complexRuntimeEvidence;
-          try {
-            let resolution: ReturnType<typeof validateStrategyIntentResolutionReply> | null = null;
-            if (isIntentResolution) {
-              try {
-                resolution = validateStrategyIntentResolutionReply(strategyTaskAtStart, {
-                  runId: run.id, parsed: strategyProtocolResult, toolUseCount: strategyToolUseCount,
-                  completionEvidence: { physicalStatus: 'succeeded', deliverableValid, ...strategyRunWriteEvidence(run) },
-                });
-              } catch {
-                // The coordinator below persists and rejects the actual reply.
-                // Invalid supplemental output must never prepare production facts.
-              }
-            }
-            const effectiveParsed = resolution?.parsed ?? strategyProtocolResult;
-            const planningOnly = resolution ? resolution.executionIntent === 'plan_only' : strategyPlanningOnly;
-            const intentPending = requiresStrategyIntentResolution(strategyTaskAtStart, effectiveParsed);
-            if (!planningOnly && !intentPending) {
-              const lockedPlan = effectiveParsed.planContract ?? effectiveParsed.repairPlanContract ?? strategyTaskAtStart.planContract;
-              const evidence = await resolveAutomaticContinuationEvidence({
-                plan: lockedPlan,
-                phase: effectiveParsed.runtimeState?.outcome === 'completed'
-                  ? 'completion'
-                  : 'eligibility',
-                task: strategyTaskAtStart,
-                run,
-                localSyntheticCanary: readOdNextRolloutPolicy().localSyntheticCanary
-                  && process.env.NODE_ENV !== 'production',
-                executionPreflightResolver: odNextExecutionPreflightResolver,
-                complexProductionResolver: odNextComplexProductionResolver,
-                runtimeCapabilitySnapshot: chatBody.runtimeCapabilitySnapshot,
-              });
-              executionPreflight = evidence.executionPreflight;
-              complexRuntimeEvidence = evidence.complexRuntimeEvidence;
-            }
-          } catch (error) {
-            if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
-            send('error', createSseErrorPayload(
-              'OD_NEXT_EXECUTION_PREFLIGHT_FAILED',
-              error instanceof Error ? error.message : String(error),
-              { retryable: false },
-            ));
-            finishStrategyAwarePhysicalRun('failed', 1, signal);
-            return;
-          }
-          // Cancellation can win while the daemon-owned resolver is awaiting
-          // host facts. Never let the stale continuation allocate a new Run or
-          // mutate the already-terminal task after that boundary.
           if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
           let transition;
           try {
@@ -16972,27 +17817,12 @@ export async function startServer({
               service: internalRunCreation,
               task: strategyTaskAtStart,
               parsed: strategyProtocolResult,
-              toolUseCount: strategyToolUseCount,
-              // OPEND-2765: the production stage closes with the keyed host
-              // protocols, whose follow-up suggestions are user-visible prose.
-              ...(typeof chatBody.locale === 'string' && chatBody.locale
-                ? { locale: chatBody.locale }
-                : {}),
-              ...(executionPreflight ? { executionPreflight } : {}),
-              ...(complexRuntimeEvidence ? { complexRuntimeEvidence } : {}),
-              ...(
-                strategyTaskAtStart.intentResolution
-                || strategyProtocolResult.runtimeState?.outcome === 'completed'
-                || strategyPlanningOnly
-                || mayInferDirectEditCompletion
-                  ? {
-                      completionEvidence: {
-                        physicalStatus: 'succeeded',
-                        deliverableValid,
-                        ...strategyRunWriteEvidence(run),
-                      },
-                    }
-                  : {}),
+              locale: typeof locale === 'string' ? locale : undefined,
+              completionEvidence: {
+                physicalStatus: 'succeeded', deliverableValid,
+                truncated: run.truncatedMidTurn === true,
+                todoUnfinished: todoSnapshotHasUnfinishedWork(run.lastTodoSnapshot),
+              },
               createMeta: (stage, instruction, taskRunIndex) => {
                 const identity = createHash('sha256')
                   .update(`${strategyTaskAtStart.taskExecutionId}:${stage}:${taskRunIndex}`)
@@ -17022,13 +17852,14 @@ export async function startServer({
                 };
                 automaticContinuationChatBody = {
                   ...meta,
+                  // The frozen task/source/index identify this internal request.
+                  // A fresh host-protocol nonce must not change its retry identity.
                   requestFingerprint: createHash('sha256')
                     .update(JSON.stringify({
                       taskExecutionId: strategyTaskAtStart.taskExecutionId,
                       sourceRunId: run.id,
                       stage,
                       taskRunIndex,
-                      instruction,
                       projectId: meta.projectId,
                       conversationId: meta.conversationId,
                       agentId: meta.agentId,
@@ -17049,10 +17880,10 @@ export async function startServer({
             finishStrategyAwarePhysicalRun('failed', 1, signal);
             return;
           }
-          run.strategyTask = projectStrategyTask(transition.result.task, run.id);
+          run.strategyTask = projectStrategyTask(transition.result.task, run.id, db);
           if (transition.start && transition.prepared?.kind === 'ready') {
             const nextRun = transition.prepared.run;
-            nextRun.strategyTask = projectStrategyTask(transition.result.task, nextRun.id);
+            nextRun.strategyTask = projectStrategyTask(transition.result.task, nextRun.id, db);
             pendingStrategyContinuation = {
               run: nextRun,
               chatBody: automaticContinuationChatBody,
@@ -17112,6 +17943,7 @@ export async function startServer({
                 continuation.run.strategyTask = projectStrategyTask(
                   latestTask,
                   continuation.run.id,
+                  db,
                 );
               }
               throw error;
@@ -17125,9 +17957,7 @@ export async function startServer({
         completeCodexEvidenceCollection();
         // Best-effort cleanup of the per-run agy log file on every close
         // path — successful, failed, cancelled, or non-zero exit — so
-        // /tmp doesn't accumulate one file per Antigravity run. The log
-        // is read inside the empty-output guard above before this finally
-        // runs, so the read always happens before the unlink.
+        // /tmp doesn't accumulate one file per Antigravity run.
         if (agentLogFilePath) {
           fs.promises.unlink(agentLogFilePath).catch(() => {});
         }
@@ -17138,7 +17968,7 @@ export async function startServer({
       // The complete plain-text prompt became the child's stdin at spawn
       // (runtimes/agent-process.ts), so there is nothing left to write. A
       // spawn that failed (no PID) never received it.
-      if (typeof child.pid === 'number') recordPromptDeliveredAtSpawn(run, lifecycle);
+      if (typeof child.pid === 'number') { recordPromptDeliveredAtSpawn(run, lifecycle); recordRunTelemetry('discovery prompt', recordDiscoveryPromptDelivered); }
     } else if (writePromptToChildStdin && child.stdin) {
       const promptInputFormat = def.promptInputFormat ?? 'text';
       lifecycle.mark('model_call_start');
@@ -17146,6 +17976,7 @@ export async function startServer({
       const markStdinWriteEnd = (err?: Error | null) => {
         if (err) return;
         lifecycle.mark('stdin_write_end');
+        recordRunTelemetry('discovery prompt', recordDiscoveryPromptDelivered);
       };
       // Plain-text prompts never get here: they are delivered at spawn.
       // stream-json is the one prompt still pumped through a live pipe; a
@@ -17364,6 +18195,7 @@ export async function startServer({
   registerRunRoutes(app, {
     db,
     design,
+    runNotices,
     resources: { listAllSkillLikeEntries },
     http: httpDeps,
     paths: { BUNDLED_PLUGINS_DIR, PROJECTS_DIR, RUNTIME_DATA_DIR },
@@ -17402,6 +18234,7 @@ export async function startServer({
       },
     },
     telemetry: {
+      taskTelemetryForRun: (runId) => taskObservationRollout.telemetryForRun(runId),
       reportRunCompletionTelemetryFallback,
       resolveRunProjectKindForAnalytics,
       runArtifactBaselines,
@@ -17915,7 +18748,6 @@ export async function startServer({
   // Restore the plugin-runs-must-go-through-daemon gate by adding it
   // to chat-routes.ts if needed.
 
-
   registerChatRoutes(app, {
     db,
     design,
@@ -17941,7 +18773,7 @@ export async function startServer({
   //   - `apps/daemon/sidecar/server.ts`     → expects `{ url, server }`
   //   - `apps/daemon/tests/version-route.test.ts` → expects `{ url, server }`
   return await new Promise((resolve, reject) => {
-    let daemonShutdownStarted = false;
+    let daemonShutdownPromise: Promise<void> | null = null;
     const clearTerminalTelemetryFallbackTimers = () => {
       for (const timer of terminalTelemetryFallbackTimers) clearTimeout(timer);
       terminalTelemetryFallbackTimers.clear();
@@ -17952,6 +18784,11 @@ export async function startServer({
     // work below.
     let messageEventPayloadHeal: MessageEventPayloadHealHandle | null = null;
     const cleanupDaemonBackgroundWork = () => {
+      stopDiagnosticConfigObserver();
+      stopDiagnosticApiObserver();
+      void automaticDiagnostics?.stop();
+      daemonHealth?.markCleanShutdown();
+      daemonHealth?.stop();
       void messageEventPayloadHeal?.stop();
       stopEvidenceDelivery();
       clearTerminalTelemetryFallbackTimers();
@@ -17973,23 +18810,27 @@ export async function startServer({
       collabPublishWatcher.dispose();
       collabCloud?.dispose();
     };
-    const shutdownDaemonRuns = async () => {
-      if (daemonShutdownStarted) return;
-      daemonShutdownStarted = true;
-      daemonShuttingDown = true;
-      amrTerminalReportDelivery.stop();
-      clearTerminalTelemetryFallbackTimers();
-      const shutdownGraceMs = resolveChatRunShutdownGraceMs();
-      await design.runs.shutdownActive({ graceMs: shutdownGraceMs });
-      // Cleanup runs independently of user terminal classification. Give
-      // confirmed closed writers at most three additional seconds at shutdown.
-      const cleanupDrain = await codexThreadCleanupOwner.drain(shutdownGraceMs);
-      if (cleanupDrain.pending > 0) {
-        console.warn('[codex] closed-thread cleanup shutdown deadline reached', cleanupDrain);
-      }
-      await terminalService.shutdownActive();
-      await browserSessionService.shutdownActive();
-      await design.analytics.shutdown();
+    const shutdownDaemonRuns = (): Promise<void> => {
+      if (daemonShutdownPromise) return daemonShutdownPromise;
+      daemonShutdownPromise = (async () => {
+        daemonShuttingDown = true;
+        await velaRoutesLifecycle.close();
+        amrTerminalReportDelivery.stop();
+        clearTerminalTelemetryFallbackTimers();
+        const shutdownGraceMs = resolveChatRunShutdownGraceMs();
+        await design.runs.shutdownActive({ graceMs: shutdownGraceMs });
+        // Cleanup runs independently of user terminal classification. Give
+        // confirmed closed writers at most three additional seconds at shutdown.
+        const cleanupDrain = await codexThreadCleanupOwner.drain(shutdownGraceMs);
+        if (cleanupDrain.pending > 0) {
+          console.warn('[codex] closed-thread cleanup shutdown deadline reached', cleanupDrain);
+        }
+        await terminalService.shutdownActive();
+        await browserSessionService.shutdownActive();
+        await telemetry.flushStockTelemetry();
+        await design.analytics.shutdown();
+      })();
+      return daemonShutdownPromise;
     };
     let server;
     try {
@@ -18035,8 +18876,42 @@ export async function startServer({
           return;
         }
         resolvedPort = boundPort;
+        void cleanupAbandonedPinnedVelaSessions(RUNTIME_DATA_DIR).then(({ failed }) => {
+          if (failed) console.warn('[od] private CLI session cleanup incomplete');
+        }).catch(() => { console.warn('[od] private CLI session cleanup unavailable'); });
+        void retryShareBindingsAtStartup().then(result => {
+          if (result.deferred || result.failed || result.persistenceFailures) {
+            console.warn(`[od] public share binding completion pending: ${JSON.stringify(result)}`);
+          }
+        }).catch(() => { console.warn('[od] public share binding completion unavailable'); });
+        void retryPublicFileStopsAtStartup().then((result) => {
+          if (result.deferred || result.failed || result.persistenceFailures) {
+            console.warn(
+              `[od] public share cleanup incomplete: ${JSON.stringify(result)}; queued links may remain public`,
+            );
+          }
+        }).catch(() => {
+          console.warn(
+            "[od] public share cleanup could not read its queue; queued links may remain public",
+          );
+        });
         startAmrTerminalReportDeliveryAfterBind(amrTerminalReportDelivery, boundPort);
         messageEventPayloadHeal ??= startMessageEventPayloadHeal({ db });
+        // Only once listening: a startup-time fatal report would add lines to
+        // the log tail that packaged startup telemetry samples.
+        daemonHealth?.enableFatalReports();
+        daemonHealth?.setAppVersion(currentAppVersion());
+        daemonHealth?.attachSink(({ eventName, properties, insertId }) => {
+          const capture = { eventName, appVersion: currentAppVersion(), properties, insertId };
+          // Periodic health/metric events wait for the installation identity
+          // like every other stability metric (OPEND-4220 retest 2). Fault
+          // signals (unclean exit, memory pressure) stay immediate.
+          return eventName === 'client_process_memory_sample'
+            || eventName === 'daemon_storage_snapshot'
+            || eventName === 'daemon_health_summary'
+            ? telemetry.captureStabilityMetric(capture)
+            : analyticsService.captureSafety(capture);
+        });
         // When binding to all interfaces report localhost for local callers;
         // when binding to a specific address (e.g. a Tailscale IP) report that
         // address so remote callers and the sidecar use the correct URL.

@@ -61,6 +61,7 @@ import {
   resolveWinExecutableVersionTargets,
   rewriteWinExecutableVersion,
 } from "./version-resource.js";
+import { assertPackagedConfigBinding } from "../config/amr-endpoint-binding.js";
 import { buildWinPortableZip } from "./zip.js";
 import type {
   ElectronBuilderDirCacheMetadata,
@@ -70,7 +71,7 @@ import type {
 } from "./types.js";
 
 const execFileAsync = promisify(execFile);
-const WIN_ARCHIVE_CACHE_VERSION = 3;
+const WIN_ARCHIVE_CACHE_VERSION = 4;
 const WIN_ELECTRON_BUILDER_DIR_CACHE_VERSION = 9;
 const WIN_NSIS_BASE_PAYLOAD_INPUT_HASH_CACHE_VERSION = 2;
 
@@ -479,6 +480,10 @@ export async function materializeCachedUnpackedForInstaller(
     join(paths.unpackedRoot, "resources", "open-design-config.json"),
     await readFile(paths.packagedConfigPath),
   );
+  await assertPackagedConfigBinding(
+    join(paths.unpackedRoot, "resources", "open-design-config.json"),
+    await readFile(paths.packagedConfigPath, "utf8"),
+  );
   if (packagedVersion != null) {
     await rewriteUnpackedAppPackageVersion(paths.unpackedRoot, packagedVersion);
     await rewriteWinExecutableVersion(paths.unpackedExePath, packagedVersion);
@@ -661,7 +666,13 @@ export async function runElectronBuilder(
       webStandaloneHookAuditPath: (await pathExists(paths.webStandaloneHookAuditPath)) ? paths.webStandaloneHookAuditPath : null,
     });
   });
+  if (config.amrEndpointBinding && !shouldBuildWinNsisInstaller(config.to) && !shouldBuildWinPortableZip(config.to)) {
+    // A directly launched directory must not read the cache entry's old binding.
+    const materialized = await materializeCachedUnpackedForInstaller(cachedUnpackedRoot, paths, packagedVersion);
+    await writeBuiltAppManifest(paths, materialized);
+  }
   if (shouldBuildWinNsisInstaller(config.to) || shouldBuildWinPortableZip(config.to)) {
+    const packagedConfigBody = await readFile(paths.packagedConfigPath, "utf8");
     const signingCacheKey = resolveWinSigningCacheKey(config);
     const nsisInstallerImplementation = shouldBuildWinNsisInstaller(config.to)
       ? await runSegment("nsis-installer:implementation-hash", () => hashWinNsisInstallerImplementation(config))
@@ -724,6 +735,7 @@ export async function runElectronBuilder(
         key,
         namespace: config.namespace,
         packagedVersion,
+        packagedConfigBody,
         signing: signingCacheKey,
         target: "nsis-payload-overlay",
       }),
@@ -885,6 +897,7 @@ export async function runElectronBuilder(
             namespace: config.namespace,
             packagedAppKey,
             packagedVersion,
+            packagedConfigBody,
             signing: signingCacheKey,
             target: "portable-zip",
           }),

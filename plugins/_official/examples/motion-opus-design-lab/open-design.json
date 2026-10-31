@@ -1,0 +1,413 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-motion-opus-design-lab",
+  "title": "Opus Motion Design Lab",
+  "title_i18n": {
+    "en": "Opus Motion Design Lab",
+    "id": "Opus Lab Desain Gerak",
+    "de": "Opus Labor für Bewegungsdesign",
+    "zh-CN": "Opus 动效设计实验室",
+    "zh-TW": "Opus 運動設計實驗室",
+    "pt-BR": "Opus Laboratório de Design de Movimento",
+    "es-ES": "Opus Laboratorio de Diseño de Movimiento",
+    "ru": "Opus Лаборатория моушн-дизайна",
+    "fa": "Opus آزمایشگاه طراحی حرکت",
+    "ar": "Opus معمل تصميم الحركة",
+    "ja": "Opus モーションデザイン研究室",
+    "ko": "Opus 모션디자인 연구실",
+    "pl": "Opus Laboratorium projektowania ruchu",
+    "hu": "Opus Mozgástervező Lab",
+    "fr": "Opus Laboratoire de conception de mouvements",
+    "uk": "Opus Лабораторія дизайну руху",
+    "tr": "Opus Hareket Tasarımı Laboratuvarı",
+    "th": "Opus ห้องปฏิบัติการออกแบบการเคลื่อนไหว",
+    "it": "Opus Laboratorio di Motion Design"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-10-27T00:00:00Z",
+  "description": "A 15-second interactive motion-design lab for OPUS 5.5, demonstrating spacing, typography, motion blur, easing, follow-through and anticipation before revealing motion designer CLAUDE.",
+  "description_i18n": {
+    "en": "A 15-second interactive motion-design lab for OPUS 5.5, demonstrating spacing, typography, motion blur, easing, follow-through and anticipation before revealing motion designer CLAUDE.",
+    "id": "Lab desain gerak interaktif berdurasi 15 detik untuk OPUS 5.5, mendemonstrasikan spasi, tipografi, keburaman gerakan, pelonggaran, tindak lanjut, dan antisipasi sebelum mengungkap perancang gerak CLAUDE.",
+    "de": "Ein 15-sekündiges interaktives Motion-Design-Labor für OPUS 5.5, in dem Abstand, Typografie, Bewegungsunschärfe, Beschleunigung, Nachverfolgung und Antizipation demonstriert werden, bevor Motion Designer CLAUDE vorgestellt wird.",
+    "zh-CN": "一段 15 秒的 OPUS 5.5 互动动效设计实验室演示，依次展示间距、排版、运动模糊、缓动、跟随与预备动作，最后揭晓动效设计师 CLAUDE。",
+    "zh-TW": "OPUS 5.5 的 15 秒交互式動作設計實驗室，在展示動作設計器 CLAUDE 之前演示間距、排版、運動模糊、緩動、後續和預期。",
+    "pt-BR": "Um laboratório interativo de motion design de 15 segundos para OPUS 5.5, demonstrando espaçamento, tipografia, desfoque de movimento, atenuação, acompanhamento e antecipação antes de revelar o motion designer CLAUDE.",
+    "es-ES": "Un laboratorio interactivo de diseño de movimiento de 15 segundos para OPUS 5.5, que demuestra espaciado, tipografía, desenfoque de movimiento, relajación, seguimiento y anticipación antes de revelar al diseñador de movimiento CLAUDE.",
+    "ru": "15-секундная интерактивная лаборатория моушен-дизайна для номера OPUS 5.5, в которой демонстрируются интервалы, типографика, размытие изображения, плавность, прослеживание и ожидание перед показом моушн-дизайнера CLAUDE.",
+    "fa": "یک آزمایشگاه طراحی حرکت تعاملی 15 ثانیه‌ای برای OPUS 5.5، نشان‌دهنده فاصله، تایپوگرافی، تاری حرکت، آسان‌سازی، پیگیری و پیش‌بینی قبل از آشکار شدن طراح حرکت CLAUDE.",
+    "ar": "معمل تصميم الحركة التفاعلي مدته 15 ثانية لـ OPUS 5.5، يوضح التباعد والطباعة وضبابية الحركة والتخفيف والمتابعة والترقب قبل الكشف عن مصمم الحركة CLAUDE.",
+    "ja": "OPUS 5.5 の 15 秒間のインタラクティブなモーション デザイン ラボ。モーション デザイナー CLAUDE を公開する前に、スペース、タイポグラフィ、モーション ブラー、イージング、フォロースルー、予測をデモンストレーションします。",
+    "ko": "OPUS 5.5를 위한 15초 대화형 모션 디자인 랩으로 모션 디자이너 CLAUDE을 공개하기 전에 간격, 타이포그래피, 모션 블러, 여유, 후속 조치 및 예측을 시연합니다.",
+    "pl": "15-sekundowe interaktywne laboratorium projektowania ruchu dla OPUS 5.5, demonstrujące odstępy, typografię, rozmycie ruchu, wygładzanie, śledzenie i przewidywanie przed ujawnieniem projektanta ruchu CLAUDE.",
+    "hu": "Egy 15 másodperces interaktív mozgástervező labor a OPUS 5.5, bemutatja a térközt, a tipográfiát, az elmosódást, a könnyítést, a követést és a várakozást a mozgástervező bemutatása előtt CLAUDE.",
+    "fr": "Un laboratoire de motion-design interactif de 15 secondes pour OPUS 5.5, démontrant l'espacement, la typographie, le flou de mouvement, l'assouplissement, le suivi et l'anticipation avant de révéler le motion designer CLAUDE.",
+    "uk": "15-секундна інтерактивна лабораторія моушн-дизайну для OPUS 5.5, яка демонструє інтерактивні інтервали, типографіку, розмиття в русі, ослаблення, наскрізне виконання та очікування перед розкриттям моушн-дизайнера CLAUDE.",
+    "tr": "OPUS 5.5 için, hareket tasarımcısı CLAUDE'ü ortaya çıkarmadan önce aralıklandırma, tipografi, hareket bulanıklığı, hareket hızı, takip ve öngörüyü gösteren 15 saniyelik etkileşimli bir hareket tasarımı laboratuvarı.",
+    "th": "ห้องปฏิบัติการออกแบบการเคลื่อนไหวเชิงโต้ตอบ 15 วินาทีสำหรับ OPUS 5.5 สาธิตการเว้นวรรค การพิมพ์ ภาพเบลอจากการเคลื่อนไหว การค่อยๆ เปลี่ยน การติดตามผล และความคาดหวัง ก่อนที่จะเปิดเผยนักออกแบบการเคลื่อนไหว CLAUDE",
+    "it": "Un laboratorio interattivo di motion design di 15 secondi per OPUS 5.5, che mostra spaziatura, tipografia, motion blur, andamento, follow-through e anticipazione prima di rivelare il motion designer CLAUDE."
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io/open-design"
+  },
+  "homepage": "https://github.com/nexu-io/open-design",
+  "tags": [
+    "example",
+    "first-party",
+    "video",
+    "motion-design",
+    "creative-coding",
+    "portfolio",
+    "educational",
+    "web-interface",
+    "kinetic-typography"
+  ],
+  "od": {
+    "inputs": [
+      {
+        "name": "labTitle",
+        "type": "string",
+        "label": "Lab title",
+        "default": "OPUS 5.5 / YOUR F*CKING MOTION DESIGN LAB",
+        "required": false,
+        "label_i18n": {
+          "en": "Lab title",
+          "id": "Judul laboratorium",
+          "de": "Labortitel",
+          "zh-CN": "实验室名称",
+          "zh-TW": "實驗室名稱",
+          "pt-BR": "Título do laboratório",
+          "es-ES": "Título del laboratorio",
+          "ru": "Название лаборатории",
+          "fa": "عنوان آزمایشگاه",
+          "ar": "عنوان المختبر",
+          "ja": "研究室のタイトル",
+          "ko": "연구실 제목",
+          "pl": "Tytuł laboratorium",
+          "hu": "Labor címe",
+          "fr": "Titre du laboratoire",
+          "uk": "Назва лабораторії",
+          "tr": "Laboratuvar başlığı",
+          "th": "ชื่อห้องปฏิบัติการ",
+          "it": "Titolo del laboratorio"
+        }
+      },
+      {
+        "name": "heroCopy",
+        "type": "string",
+        "label": "Hero statement",
+        "default": "I MAKE THINGS MOVE.",
+        "required": false,
+        "label_i18n": {
+          "en": "Hero statement",
+          "id": "Pernyataan pahlawan",
+          "de": "Heldenaussage",
+          "zh-CN": "英雄宣言",
+          "zh-TW": "英雄宣言",
+          "pt-BR": "Declaração do herói",
+          "es-ES": "Declaración de héroe",
+          "ru": "Заявление героя",
+          "fa": "بیانیه قهرمان",
+          "ar": "بيان البطل",
+          "ja": "ヒーローステートメント",
+          "ko": "영웅 선언문",
+          "pl": "Oświadczenie bohatera",
+          "hu": "Hős nyilatkozata",
+          "fr": "Déclaration du héros",
+          "uk": "Поява героя",
+          "tr": "Kahraman beyanı",
+          "th": "แถลงการณ์ของฮีโร่",
+          "it": "Dichiarazione dell'eroe"
+        }
+      },
+      {
+        "name": "designerRole",
+        "type": "string",
+        "label": "Designer role",
+        "default": "MOTION DESIGNER",
+        "required": false,
+        "label_i18n": {
+          "en": "Designer role",
+          "id": "Peran desainer",
+          "de": "Designerrolle",
+          "zh-CN": "设计师角色",
+          "zh-TW": "設計師角色",
+          "pt-BR": "Função do designer",
+          "es-ES": "Rol de diseñador",
+          "ru": "Роль дизайнера",
+          "fa": "نقش طراح",
+          "ar": "دور المصمم",
+          "ja": "デザイナーの役割",
+          "ko": "디자이너 역할",
+          "pl": "Rola projektanta",
+          "hu": "Tervezői szerep",
+          "fr": "Rôle de concepteur",
+          "uk": "Роль дизайнера",
+          "tr": "Tasarımcı rolü",
+          "th": "บทบาทนักออกแบบ",
+          "it": "Ruolo di progettista"
+        }
+      },
+      {
+        "name": "designerName",
+        "type": "string",
+        "label": "Designer name",
+        "default": "CLAUDE.",
+        "required": false,
+        "label_i18n": {
+          "en": "Designer name",
+          "id": "Nama desainer",
+          "de": "Name des Designers",
+          "zh-CN": "设计师姓名",
+          "zh-TW": "設計師姓名",
+          "pt-BR": "Nome do designer",
+          "es-ES": "Nombre del diseñador",
+          "ru": "Имя дизайнера",
+          "fa": "نام طراح",
+          "ar": "اسم المصمم",
+          "ja": "デザイナー名",
+          "ko": "디자이너 이름",
+          "pl": "Nazwa projektanta",
+          "hu": "Tervező neve",
+          "fr": "Nom du concepteur",
+          "uk": "Назва дизайнера",
+          "tr": "Tasarımcı adı",
+          "th": "ชื่อนักออกแบบ",
+          "it": "Nome del progettista"
+        }
+      },
+      {
+        "name": "accent",
+        "type": "string",
+        "label": "Electric blue",
+        "default": "#2F7BF6",
+        "required": false,
+        "label_i18n": {
+          "en": "Electric blue",
+          "id": "Biru elektrik",
+          "de": "Elektrisches Blau",
+          "zh-CN": "电光蓝",
+          "zh-TW": "電光藍",
+          "pt-BR": "Azul elétrico",
+          "es-ES": "Azul electrico",
+          "ru": "Электрический синий",
+          "fa": "آبی برقی",
+          "ar": "الأزرق الكهربائي",
+          "ja": "エレクトリックブルー",
+          "ko": "일렉트릭 블루",
+          "pl": "Elektryczny błękit",
+          "hu": "Elektromos kék",
+          "fr": "Bleu électrique",
+          "uk": "Синій електрик",
+          "tr": "Elektrik mavisi",
+          "th": "ไฟฟ้าสีฟ้า",
+          "it": "Blu elettrico"
+        }
+      },
+      {
+        "name": "warning",
+        "type": "string",
+        "label": "Signal red",
+        "default": "#F23B50",
+        "required": false,
+        "label_i18n": {
+          "en": "Signal red",
+          "id": "Sinyal merah",
+          "de": "Signalrot",
+          "zh-CN": "红色信号",
+          "zh-TW": "紅色信號",
+          "pt-BR": "Sinal vermelho",
+          "es-ES": "Señal roja",
+          "ru": "Сигнальный красный",
+          "fa": "سیگنال قرمز",
+          "ar": "إشارة حمراء",
+          "ja": "シグナルレッド",
+          "ko": "시그널 레드",
+          "pl": "Sygnał czerwony",
+          "hu": "Piros jelzés",
+          "fr": "Signal rouge",
+          "uk": "Сигнальний червоний",
+          "tr": "Kırmızı sinyal",
+          "th": "สัญญาณสีแดง",
+          "it": "Segnale rosso"
+        }
+      },
+      {
+        "name": "mascotColor",
+        "type": "string",
+        "label": "Mascot orange",
+        "default": "#DA7652",
+        "required": false,
+        "label_i18n": {
+          "en": "Mascot orange",
+          "id": "Oranye maskot",
+          "de": "Maskottchenorange",
+          "zh-CN": "吉祥物橙色",
+          "zh-TW": "吉祥物橙色",
+          "pt-BR": "Laranja do mascote",
+          "es-ES": "Naranja de la mascota",
+          "ru": "Оранжевый цвет маскота",
+          "fa": "نارنجی شخصیت",
+          "ar": "برتقالي الشخصية",
+          "ja": "マスコットのオレンジ色",
+          "ko": "마스코트 주황색",
+          "pl": "Pomarańczowy kolor maskotki",
+          "hu": "A kabala narancsszíne",
+          "fr": "Orange de la mascotte",
+          "uk": "Помаранчевий колір маскота",
+          "tr": "Maskot turuncusu",
+          "th": "สีส้มของมาสคอต",
+          "it": "Arancione della mascotte"
+        }
+      },
+      {
+        "name": "anthropicLogo",
+        "type": "file",
+        "label": "Anthropic logo card",
+        "default": "assets/anthropic-card.png",
+        "required": false,
+        "label_i18n": {
+          "en": "Anthropic logo card",
+          "id": "Kartu logo antropik",
+          "de": "Anthropische Logokarte",
+          "zh-CN": "人类标志卡",
+          "zh-TW": "人類標誌卡",
+          "pt-BR": "Cartão com logotipo antrópico",
+          "es-ES": "Tarjeta con logo antrópico",
+          "ru": "Антропный логотип",
+          "fa": "کارت آرم آنتروپیک",
+          "ar": "بطاقة الشعار الأنثروبي",
+          "ja": "人類のロゴカード",
+          "ko": "인류 로고 카드",
+          "pl": "Antropiczna karta z logo",
+          "hu": "Antropikus logó kártya",
+          "fr": "Carte logo anthropique",
+          "uk": "Картка з антропічним логотипом",
+          "tr": "Antropik logo kartı",
+          "th": "การ์ดโลโก้มานุษยวิทยา",
+          "it": "Carta con logo antropico"
+        }
+      },
+      {
+        "name": "claudeCodeLogo",
+        "type": "file",
+        "label": "Claude Code logo card",
+        "default": "assets/claude-code-card.png",
+        "required": false,
+        "label_i18n": {
+          "en": "Claude Code logo card",
+          "id": "Claude Kartu logo kode",
+          "de": "Claude Code-Logo-Karte",
+          "zh-CN": "Claude 代码标志卡",
+          "zh-TW": "Claude 代碼標誌卡",
+          "pt-BR": "Cartão com logotipo de código Claude",
+          "es-ES": "Claude Código logo tarjeta",
+          "ru": "Claude Карта с логотипом и кодом",
+          "fa": "Claude کد آرم کارت",
+          "ar": "Claude بطاقة شعار الرمز",
+          "ja": "Claude コードロゴカード",
+          "ko": "Claude 코드 로고 카드",
+          "pl": "Claude Karta z logo kodu",
+          "hu": "Claude Kód logós kártya",
+          "fr": "Claude Carte logo code",
+          "uk": "Claude Код логотип картки",
+          "tr": "Claude Kod logo kartı",
+          "th": "Claude รหัสโลโก้การ์ด",
+          "it": "Claude Tessera logo codice"
+        }
+      },
+      {
+        "name": "previewStrip",
+        "type": "file",
+        "label": "Delivery preview strip",
+        "default": "assets/preview-strip.png",
+        "required": false,
+        "label_i18n": {
+          "en": "Delivery preview strip",
+          "id": "Strip pratinjau pengiriman",
+          "de": "Liefervorschaustreifen",
+          "zh-CN": "交付预览条",
+          "zh-TW": "交付預覽條",
+          "pt-BR": "Faixa de visualização de entrega",
+          "es-ES": "Tira de vista previa de entrega",
+          "ru": "Полоса предварительного просмотра доставки",
+          "fa": "نوار پیش نمایش تحویل",
+          "ar": "شريط معاينة التسليم",
+          "ja": "配信プレビュー ストリップ",
+          "ko": "배달 미리보기 스트립",
+          "pl": "Pasek podglądu dostawy",
+          "hu": "Szállítás előnézeti csík",
+          "fr": "Bande d'aperçu de livraison",
+          "uk": "Смужка попереднього перегляду доставки",
+          "tr": "Teslimat önizleme şeridi",
+          "th": "แถบแสดงตัวอย่างการนำส่ง",
+          "it": "Striscia di anteprima della consegna"
+        }
+      }
+    ],
+    "useCase": {
+      "query": {
+        "en": "Create a 15-second creative-coding showcase titled {{labTitle}} inside a warm off-white browser workbench, placing {{anthropicLogo}} at top left and {{claudeCodeLogo}} at top right, using electric blue {{accent}}, signal red {{warning}} and an orange {{mascotColor}} pixel guide. Open with a blue ball demonstrating spacing through a traced bounce, then assemble the oversized statement {{heroCopy}} with staggered letters and an underline. Cut to a dark stage where STRETCH, SPIN and SNAP demonstrate motion blur, then return to a light graph where a linear path becomes an ease-in-out curve. Move into a dark dotted field where a blue particle body drags a red-and-blue follow-through trail, then morph it into a circular anticipation gauge that charges from 0% to 100%. Finish on a light stage where {{designerRole}} and the large name {{designerName}} lock into place with a blue period. Keep the six-control code panel and its {{previewStrip}} visible below the stage, and let the pixel guide hop to the active control throughout.",
+        "id": "Buat etalase pengkodean kreatif berdurasi 15 detik berjudul {{labTitle}} di dalam meja kerja browser putih pucat, tempatkan {{anthropicLogo}} di kiri atas dan {{claudeCodeLogo}} di kanan atas, menggunakan warna biru elektrik {{accent}}, sinyal merah {{warning}}, dan panduan piksel oranye {{mascotColor}}. Buka dengan bola biru yang menunjukkan jarak melalui pantulan yang dilacak, lalu susun pernyataan berukuran besar {{heroCopy}} dengan huruf terhuyung-huyung dan garis bawah. Potong ke tahap gelap di mana STRETCH, SPIN, dan SNAP menunjukkan kekaburan gerakan, lalu kembali ke grafik terang di mana jalur linier menjadi kurva masuk-keluar. Pindah ke bidang titik-titik gelap tempat badan partikel biru menyeret jejak tindak lanjut berwarna merah dan biru, lalu ubah menjadi pengukur antisipasi melingkar yang mengisi daya dari 0% hingga 100%. Selesai pada panggung ringan dimana {{designerRole}} dan nama besar {{designerName}} terkunci pada tempatnya dengan titik biru. Biarkan panel kode enam kontrol dan {{previewStrip}} terlihat di bawah panggung, dan biarkan panduan piksel melompat ke kontrol aktif secara keseluruhan.",
+        "de": "Erstellen Sie einen 15-sekündigen Kreativ-Coding-Showcase mit dem Titel {{labTitle}} in einem warmen, cremefarbenen Browser-Workbench, platzieren Sie {{anthropicLogo}} oben links und {{claudeCodeLogo}} oben rechts und verwenden Sie dabei Elektroblau {{accent}}, Signalrot {{warning}} und eine orangefarbene Pixelführung {{mascotColor}}. Öffnen Sie mit einem blauen Ball, der den Abstand durch einen nachgezeichneten Sprung demonstriert, und setzen Sie dann die übergroße Aussage {{heroCopy}} mit versetzten Buchstaben und einer Unterstreichung zusammen. Schneiden Sie zu einer dunklen Bühne, in der STRETCH, SPIN und SNAP Bewegungsunschärfe zeigen, und kehren Sie dann zu einem hellen Diagramm zurück, in dem ein linearer Pfad zu einer Ease-in-out-Kurve wird. Bewegen Sie sich in ein dunkel gepunktetes Feld, in dem ein blauer Partikelkörper eine rot-blaue Folgespur hinter sich herzieht, und verwandeln Sie ihn dann in eine kreisförmige Erwartungsanzeige, die sich von 0 % auf 100 % auflädt. Beenden Sie das Spiel auf einer hellen Bühne, wo {{designerRole}} und der große Name {{designerName}} mit einem blauen Punkt zusammenpassen. Halten Sie das Codefeld mit sechs Steuerelementen und dessen Nummer {{previewStrip}} unter der Bühne sichtbar und lassen Sie die Pixelführung durchgehend zum aktiven Steuerelement springen.",
+        "zh-CN": "制作一段 15 秒的创意编程作品展示，标题为 {{labTitle}}，置于暖白色浏览器工作台中，左上放置 {{anthropicLogo}}、右上放置 {{claudeCodeLogo}}，使用电蓝色 {{accent}}、信号红 {{warning}} 和橙色 {{mascotColor}} 像素向导。开场让蓝色小球沿带残影的弹跳轨迹演示间距，随后用错落字母和下划线组装巨型宣言 {{heroCopy}}。切到深色舞台，用 STRETCH、SPIN、SNAP 展示运动模糊；再回到浅色曲线图，让线性运动变为 ease-in-out 缓动。进入深色点阵场，让蓝色主体拖出红蓝跟随尾迹，再将其变形成从 0% 充到 100% 的圆形预备动作仪表。结尾回到浅色舞台，让 {{designerRole}} 与巨型姓名 {{designerName}} 锁定成版，并以蓝色句点收束。全过程保留下方六项控制代码面板及 {{previewStrip}}，并让像素向导持续跳到当前控制项。",
+        "zh-TW": "在溫暖的灰白色瀏覽器工作臺內創建一個名爲 {{labTitle}} 的 15 秒創意編碼展示，將 {{anthropicLogo}} 放置在左上角，將 {{claudeCodeLogo}} 放置在右上角，使用電藍色 {{accent}}、信號紅色 {{warning}} 和橙色 {{mascotColor}} 像素參考線。打開一個藍色球，通過跟蹤彈跳展示間距，然後組裝帶有交錯字母和下劃線的超大聲明 {{heroCopy}}。切換到黑暗階段，其中“拉伸”、“旋轉”和“捕捉”展示運動模糊，然後返回到光圖，其中線性路徑變成緩入曲線。進入一個黑色虛線區域，其中有一個藍色粒子體拖着一條紅藍相間的軌跡，然後將其變成一個從 0% 充電到 100% 的圓形預期量表。在一個明亮的舞臺上完成，{{designerRole}} 和大名字 {{designerName}} 與藍色句點鎖定到位。保持六控制代碼面板及其 {{previewStrip}} 在舞臺下方可見，並讓像素引導始終跳至活動控件。",
+        "pt-BR": "Crie uma vitrine de codificação criativa de 15 segundos intitulada {{labTitle}} dentro de uma bancada de navegador esbranquiçada, colocando {{anthropicLogo}} no canto superior esquerdo e {{claudeCodeLogo}} no canto superior direito, usando azul elétrico {{accent}}, sinal vermelho {{warning}} e um guia de pixels laranja {{mascotColor}}. Abra com uma bola azul demonstrando o espaçamento através de um salto traçado e, em seguida, monte a declaração grande {{heroCopy}} com letras escalonadas e um sublinhado. Corta para um cenário escuro onde STRETCH, SPIN e SNAP demonstram desfoque de movimento, depois retorna para um gráfico claro onde um caminho linear se torna uma curva de facilidade de entrada e saída. Mova-se para um campo pontilhado escuro onde um corpo de partícula azul arrasta uma trilha vermelha e azul e, em seguida, transforme-o em um medidor de antecipação circular que carrega de 0% a 100%. Termine em um palco leve onde {{designerRole}} e o nome grande {{designerName}} se encaixam com um ponto final azul. Mantenha o painel de código de seis controles e seu {{previewStrip}} visíveis abaixo do palco e deixe o guia de pixels pular para o controle ativo o tempo todo.",
+        "es-ES": "Cree una muestra de codificación creativa de 15 segundos titulada {{labTitle}} dentro de un banco de trabajo de navegador de color blanquecino, colocando {{anthropicLogo}} en la parte superior izquierda y {{claudeCodeLogo}} en la parte superior derecha, usando azul eléctrico {{accent}}, rojo señal {{warning}} y una guía de píxeles naranja {{mascotColor}}. Ábralo con una bola azul que demuestra el espaciado a través de un rebote trazado, luego monte la declaración de gran tamaño {{heroCopy}} con letras escalonadas y un subrayado. Vaya a un escenario oscuro donde ESTIRAR, GIRO y SNAP demuestran el desenfoque de movimiento, luego regrese a un gráfico claro donde una trayectoria lineal se convierte en una curva de entrada y salida. Muévase hacia un campo de puntos oscuros donde un cuerpo de partícula azul arrastra un rastro de seguimiento rojo y azul, luego transfórmelo en un indicador de anticipación circular que se carga del 0% al 100%. Termine en un escenario de luz donde {{designerRole}} y el nombre grande {{designerName}} se bloquean en su lugar con un punto azul. Mantenga el panel de códigos de seis controles y su {{previewStrip}} visibles debajo del escenario y deje que la guía de píxeles salte al control activo en todo momento.",
+        "ru": "Создайте 15-секундную демонстрацию творческого кодирования под названием {{labTitle}} на теплом белоснежном рабочем столе браузера, разместив {{anthropicLogo}} вверху слева и {{claudeCodeLogo}} вверху справа, используя электрический синий {{accent}}, сигнально-красный {{warning}} и оранжевую направляющую {{mascotColor}} пикселей. Откройте синий шарик, демонстрирующий расстояние посредством отскока, затем соберите увеличенный оператор {{heroCopy}} с расположенными в шахматном порядке буквами и подчеркиванием. Перейдите к темной сцене, где STRETCH, SPIN и SNAP демонстрируют размытие при движении, затем вернитесь к световому графику, где линейный путь становится кривой плавности выхода. Переместитесь в темное пунктирное поле, где синее тело-частица тянет за собой красно-синий след, а затем превратите его в круглый индикатор упреждения, который заряжается от 0% до 100%. Закончите на светлой сцене, где {{designerRole}} и большое имя {{designerName}} фиксируются синей точкой. Держите панель кода с шестью элементами управления и ее номер {{previewStrip}} видимыми под сценой и позволяйте пиксельной направляющей переходить к активному элементу управления повсюду.",
+        "fa": "یک ویترین کدنویسی خلاق 15 ثانیه ای با عنوان ایجاد کنید{{labTitle}}داخل یک میز کار مرورگر مایل به سفید گرم، قرار دادن{{anthropicLogo}}در بالا سمت چپ و{{claudeCodeLogo}}در بالا سمت راست، با استفاده از آبی برقی{{accent}}، سیگنال قرمز است{{warning}}و یک پرتقال{{mascotColor}}راهنمای پیکسل با یک توپ آبی که فاصله را از طریق یک جهش ردیابی شده نشان می دهد، باز کنید، سپس عبارت بزرگ را جمع آوری کنید{{heroCopy}}با حروف پلکانی و زیر خط. به یک مرحله تاریک که در آن SRETCH، SPIN و SNAP تاری حرکت را نشان می دهند، برش دهید، سپس به یک نمودار روشن بازگردید که در آن مسیر خطی به منحنی سهولت در خروجی تبدیل می شود. به یک میدان نقطه‌دار تاریک بروید که در آن یک ذره آبی رنگ دنباله‌دار قرمز و آبی را می‌کشد، سپس آن را به یک پیش‌بینی‌سنج دایره‌ای تبدیل کنید که از 0% تا 100% شارژ می‌شود. در یک مرحله سبک که در آن{{designerRole}}و نام بزرگ{{designerName}}با یک نقطه آبی در جای خود قفل کنید. پنل کد شش کنترلی و آن را نگه دارید{{previewStrip}}در زیر استیج قابل مشاهده است و اجازه دهید راهنمای پیکسل به سمت کنترل فعال در تمام طول حرکت کند.",
+        "ar": "قم بإنشاء عرض ترميز إبداعي مدته 15 ثانية بعنوان {{labTitle}} داخل طاولة عمل متصفح دافئة باللون الأبيض الفاتح، مع وضع {{anthropicLogo}} في أعلى اليسار و{{claudeCodeLogo}} في أعلى اليمين، باستخدام اللون الأزرق الكهربائي {{accent}}، والإشارة الحمراء {{warning}} ودليل البكسل البرتقالي {{mascotColor}}. افتح الكرة الزرقاء التي توضح المسافات من خلال الارتداد المتتبع، ثم قم بتجميع البيان الكبير الحجم {{heroCopy}} بأحرف متداخلة وتسطير. انتقل إلى مرحلة مظلمة حيث يُظهر STRETCH وSPIN وSNAP ضبابية الحركة، ثم ارجع إلى الرسم البياني الضوئي حيث يصبح المسار الخطي منحنى سهل الدخول. انتقل إلى حقل منقط داكن حيث يسحب جسم جسيم أزرق مسار متابعة باللونين الأحمر والأزرق، ثم قم بتحويله إلى مقياس ترقب دائري يتم شحنه من 0% إلى 100%. انتهي على مسرح خفيف حيث يتم تثبيت {{designerRole}} والاسم الكبير {{designerName}} في مكانهما بنقطة زرقاء. احتفظ بلوحة التعليمات البرمجية المكونة من ستة عناصر تحكم ورقم {{previewStrip}} الخاص بها مرئيًا أسفل المسرح، ودع دليل البكسل ينتقل إلى عنصر التحكم النشط طوال الوقت.",
+        "ja": "温かみのあるオフホワイトのブラウザ ワークベンチ内で、「{{labTitle}}」というタイトルの 15 秒のクリエイティブ コーディング ショーケースを作成し、エレクトリック ブルー {{accent}}、シグナル レッド {{warning}}、オレンジ {{mascotColor}} のピクセル ガイドを使用して、左上に {{anthropicLogo}}、右上に {{claudeCodeLogo}} を配置します。トレースされたバウンスによる間隔を示す青いボールで開き、千鳥状の文字と下線を使用して特大ステートメント {{heroCopy}} を組み立てます。ストレッチ、スピン、スナップがモーション ブラーをデモンストレーションする暗いステージにカットされ、その後、直線パスがイーズインアウト カーブになる明るいグラフに戻ります。青いパーティクル ボディが赤と青のフォロースルー トレイルをドラッグする暗い点線のフィールドに移動し、それを 0% から 100% まで充電する円形の予測ゲージに変形させます。 {{designerRole}} と大きな名前 {{designerName}} が青いピリオドで定位置に固定される明るいステージで終了します。 6 つのコントロール コード パネルとその {{previewStrip}} をステージの下に表示したままにして、ピクセル ガイドがアクティブなコントロールにホップするようにします。",
+        "ko": "따뜻한 황백색 브라우저 작업대 안에 {{labTitle}}라는 제목의 15초 크리에이티브 코딩 쇼케이스를 만듭니다. 이때 일렉트릭 블루 {{accent}}, 신호 빨간색 {{warning}} 및 주황색 {{mascotColor}} 픽셀 가이드를 사용하여 왼쪽 상단에 {{anthropicLogo}}, 오른쪽 상단에 {{claudeCodeLogo}}을 배치합니다. 추적된 바운스를 통해 간격을 보여주는 파란색 공으로 연 다음 엇갈린 글자와 밑줄로 대형 설명문 {{heroCopy}}을 조립합니다. STRETCH, SPIN 및 SNAP이 모션 블러를 보여주는 어두운 단계로 전환한 다음 선형 경로가 완화 곡선이 되는 밝은 그래프로 돌아갑니다. 파란색 입자 몸체가 빨간색과 파란색의 후속 트레일을 끌고 있는 어두운 점선 필드로 이동한 다음 0%에서 100%까지 충전되는 원형 예측 게이지로 변형됩니다. {{designerRole}}과 큰 이름 {{designerName}}가 파란색 마침표와 함께 고정되는 조명 무대에서 마무리합니다. 6개의 컨트롤 코드 패널과 {{previewStrip}}이 무대 아래에 보이도록 하고 픽셀 가이드가 활성 컨트롤로 이동하도록 합니다.",
+        "pl": "Utwórz 15-sekundową prezentację kreatywnego kodowania zatytułowaną {{labTitle}} w ciepłym, białawym środowisku roboczym przeglądarki, umieszczając {{anthropicLogo}} w lewym górnym rogu i {{claudeCodeLogo}} w prawym górnym rogu, używając jaskrawoniebieskiego {{accent}}, sygnalizacyjnego czerwieni {{warning}} i pomarańczowej linii pomocniczej {{mascotColor}}. Otwórz niebieską kulką pokazującą odstępy poprzez wykreślone odbicie, a następnie złóż powiększony komunikat {{heroCopy}} z przesuniętymi literami i podkreśleniem. Przejdź do ciemnego etapu, gdzie STRETCH, SPIN i SNAP pokazują rozmycie ruchu, a następnie wróć do jasnego wykresu, gdzie liniowa ścieżka staje się krzywą rozluźnienia. Przejdź do ciemnego, kropkowanego pola, gdzie niebieska cząsteczka ciągnie czerwono-niebieski ślad, a następnie przekształć ją w okrągły wskaźnik przewidywania, który ładuje się od 0% do 100%. Zakończ na scenie świetlnej, gdzie {{designerRole}} i duża nazwa {{designerName}} łączą się z niebieską kropką. Trzymaj panel z sześcioma kodami kontrolnymi i jego kodem {{previewStrip}} widocznym pod sceną i pozwól, aby przewodnik pikselowy przeskakiwał do aktywnego elementu sterującego.",
+        "hu": "Hozzon létre egy 15 másodperces kreatív-kódolási bemutatót, melynek címe {{labTitle}} meleg törtfehér böngésző munkaasztalon belül, elhelyezés {{anthropicLogo}} a bal felső sarokban és {{claudeCodeLogo}} a jobb felső sarokban, elektromos kék használatával {{accent}}, piros jelzés {{warning}} és egy narancsot {{mascotColor}} pixel útmutató. Nyissa ki egy kék labdával, amely egy visszapattanó térközt mutat be, majd állítsa össze a túlméretezett kivonatot {{heroCopy}} lépcsőzetes betűkkel és aláhúzással. Vágjon át egy sötét szakaszba, ahol a STRETCH, SPIN és SNAP mozgásos elmosódást mutat be, majd térjen vissza egy világos grafikonhoz, ahol a lineáris pálya könnyedség-be-ki görbévé válik. Lépjen egy sötét pontozott mezőbe, ahol egy kék részecsketest vonzza a piros-kék követési nyomvonalat, majd alakítsa át körkörös előrejelző mérővé, amely 0% és 100% között tölt. Végezzen egy könnyű színpadon, ahol {{designerRole}} és a nagy név {{designerName}} kék ponttal rögzítse a helyére. Tartsa meg a hat vezérlőkód panelt és annak {{previewStrip}} látható a színpad alatt, és hagyja, hogy a pixelvezető végig az aktív vezérlőhöz ugorjon.",
+        "fr": "Créez une vitrine de codage créatif de 15 secondes intitulée {{labTitle}} dans un établi de navigateur blanc cassé, en plaçant {{anthropicLogo}} en haut à gauche et {{claudeCodeLogo}} en haut à droite, en utilisant le bleu électrique {{accent}}, le rouge signal {{warning}} et un guide de pixels orange {{mascotColor}}. Ouvrez avec une boule bleue démontrant l'espacement grâce à un rebond tracé, puis assemblez la déclaration surdimensionnée {{heroCopy}} avec des lettres décalées et un soulignement. Passez à une scène sombre où STRETCH, SPIN et SNAP démontrent un flou de mouvement, puis revenez à un graphique clair où un chemin linéaire devient une courbe d'entrée et de sortie facile. Déplacez-vous dans un champ pointillé sombre où un corps de particule bleu trace une traînée rouge et bleue, puis transformez-le en une jauge d'anticipation circulaire qui se charge de 0 % à 100 %. Terminez sur une scène lumineuse où {{designerRole}} et le grand nom {{designerName}} s'enclenchent avec un point bleu. Gardez le panneau de code à six commandes et son {{previewStrip}} visibles sous la scène et laissez le guide de pixels sauter jusqu'au contrôle actif tout au long.",
+        "uk": "Створіть 15-секундну вітрину творчого кодування під назвою {{labTitle}} всередині теплого брудно-білого робочого столу браузера, розмістивши {{anthropicLogo}} у верхньому лівому куті та {{claudeCodeLogo}} у верхньому правому, використовуючи електрично-синій {{accent}}, сигнально-червоний {{warning}} та помаранчевий {{mascotColor}} піксельну напрямну. Відкрийте синьою кулькою, що демонструє відстань через відскок, а потім складіть велику заяву {{heroCopy}} із розміщеними в шаховому порядку літерами та підкресленням. Перейдіть до темного етапу, де STRETCH, SPIN і SNAP демонструють розмиття руху, а потім поверніться до світлого графіка, де лінійний шлях стає кривою легкого входу. Перейдіть у темне пунктирне поле, де синє тіло частинки тягне за собою червоно-синій наскрізний слід, а потім перетворите його на круглий датчик очікування, який заряджається від 0% до 100%. Завершіть на світлій сцені, де {{designerRole}} і велике ім’я {{designerName}} стають на місце із синьою крапкою. Залиште під сценою видимою панель коду із шістьма елементами керування та смужкою попереднього перегляду {{previewStrip}}. Нехай піксельний персонаж упродовж усього відео перестрибує до активного елемента керування.",
+        "tr": "Elektrik mavisi {{accent}}, sinyal kırmızısı {{warning}} ve turuncu {{mascotColor}} piksel kılavuzunu kullanarak, {{anthropicLogo}}'i sol üste ve {{claudeCodeLogo}}'yı sağ üste yerleştirerek, sıcak kirli beyaz bir tarayıcı tezgahının içinde {{labTitle}} başlıklı 15 saniyelik bir yaratıcı kodlama vitrini oluşturun. İzlenen bir sıçrama arasındaki boşluğu gösteren mavi bir topla açın, ardından büyük boyutlu {{heroCopy}} ifadesini kademeli harflerle ve alt çizgiyle birleştirin. STRETCH, SPIN ve SNAP'ın hareket bulanıklığı gösterdiği karanlık bir sahneye geçin, ardından doğrusal bir yolun bir giriş-çıkış eğrisi haline geldiği açık renkli bir grafiğe dönün. Mavi bir parçacık gövdesinin kırmızı ve mavi bir takip yolunu sürüklediği karanlık noktalı bir alana geçin, ardından onu %0'dan %100'e kadar şarj olan dairesel bir tahmin göstergesine dönüştürün. {{designerRole}} ve büyük isim {{designerName}}'nin mavi bir nokta ile yerine oturduğu hafif bir sahnede bitirin. Altı kontrol kod panelini ve {{previewStrip}}'ü sahnenin altında görünür tutun ve piksel kılavuzunun baştan sona aktif kontrole atlamasına izin verin.",
+        "th": "สร้างการแสดงโค้ดโฆษณาความยาว 15 วินาทีในชื่อ {{labTitle}} ภายในโต๊ะทำงานของเบราว์เซอร์สีขาวนวล โดยวาง {{anthropicLogo}} ไว้ที่ด้านซ้ายบนและ {{claudeCodeLogo}} ทางด้านขวาบน โดยใช้สีน้ำเงินไฟฟ้า {{accent}} สีแดงสัญญาณ {{warning}} และเส้นนำพิกเซลสีส้ม {{mascotColor}} เปิดด้วยลูกบอลสีน้ำเงินที่แสดงระยะห่างผ่านการเด้งแบบลาก จากนั้นประกอบข้อความขนาดใหญ่ {{heroCopy}} ด้วยตัวอักษรที่เซและขีดเส้นใต้ ตัดไปที่พื้นที่มืดซึ่ง STRETCH, SPIN และ SNAP แสดงให้เห็นภาพเบลอจากการเคลื่อนไหว จากนั้นกลับไปที่กราฟแสงซึ่งเส้นทางเชิงเส้นกลายเป็นเส้นโค้งที่เข้าออกได้ง่าย ย้ายไปยังสนามจุดมืดที่ตัวอนุภาคสีน้ำเงินลากเส้นทางตามสีแดงและสีน้ำเงิน จากนั้นแปลงให้เป็นมาตรวัดความคาดหวังแบบวงกลมที่ชาร์จจาก 0% ถึง 100% ปิดท้ายบนเวทีแสงที่ {{designerRole}} และชื่อใหญ่ {{designerName}} ล็อคเข้าที่ด้วยจุดสีน้ำเงิน ให้แผงรหัสควบคุมหกแผงและ {{previewStrip}} มองเห็นได้ด้านล่างพื้นที่งาน และปล่อยให้คำแนะนำพิกเซลกระโดดไปยังส่วนควบคุมที่ใช้งานอยู่ตลอด",
+        "it": "Crea una vetrina di codifica creativa di 15 secondi intitolata {{labTitle}} all'interno di un caldo ambiente di lavoro del browser bianco sporco, posizionando {{anthropicLogo}} in alto a sinistra e {{claudeCodeLogo}} in alto a destra, utilizzando il blu elettrico {{accent}}, il rosso segnale {{warning}} e una guida pixel arancione {{mascotColor}}. Apri con una pallina blu che mostra la spaziatura attraverso un rimbalzo tracciato, quindi assembla la frase sovradimensionata {{heroCopy}} con lettere sfalsate e una sottolineatura. Passa a una fase buia in cui STRETCH, SPIN e SNAP mostrano il motion blur, quindi torna a un grafico chiaro in cui un percorso lineare diventa una curva di entrata e uscita. Spostati in un campo tratteggiato scuro dove un corpo di particelle blu trascina una scia rossa e blu, quindi trasformalo in un indicatore di anticipazione circolare che si carica dallo 0% al 100%. Termina su un palco luminoso dove {{designerRole}} e il grande nome {{designerName}} si fissano con un punto blu. Mantieni il pannello dei codici a sei controlli e il suo {{previewStrip}} visibili sotto il palco e lascia che la guida dei pixel salti al controllo attivo durante tutto il processo."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Opus Motion Design Lab"
+        }
+      ]
+    },
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "poster": "./assets/cover.jpg"
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        },
+        {
+          "ref": "motion-design"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  },
+  "credits": [
+    {
+      "name": "Original motion reference by @beamnxw",
+      "url": "https://x.com/beamnxw/status/2112180280110776797"
+    }
+  ]
+}

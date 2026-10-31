@@ -1,3 +1,4 @@
+import { taskTraceReceipts } from '../../src/observability/task-telemetry-receipt.js';
 import { writeAppConfig } from '../../src/app-config.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
@@ -31,23 +32,30 @@ it('inherits frozen attachments only within the exact conversation and refuses a
   } finally { (await evidenceStore(dir)).close(); await rm(dir, { recursive: true, force: true }); }
 });
 
-it('publishes late object receipts and Task summary together across every stage', async () => {
+it.each(['relay', 'vela'] as const)('publishes late Task manifests on the accepted %s transport', async (transport) => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'od-late-task-receipts-'));
   vi.stubEnv('OPEN_DESIGN_TELEMETRY_RELAY_URL', 'https://telemetry.example.test/api/langfuse');
-  vi.stubEnv('OPEN_DESIGN_VELA_TELEMETRY', 'off');
+  vi.stubEnv('OPEN_DESIGN_VELA_TELEMETRY', transport === 'vela' ? 'on' : 'off');
+  vi.stubEnv('VELA_CONTROL_KEY', 'synthetic-key');
+  vi.stubEnv('VELA_API_URL', 'https://vela.example.test');
   vi.stubEnv('OPEN_DESIGN_OBJECT_OUTBOX_MODE', 'send');
   try {
     await writeAppConfig(dir, { telemetry: { metrics: true, content: true, artifactManifest: true } });
     const store = await evidenceStore(dir);
+    taskTraceReceipts(dir).write({ taskExecutionId: 'late', idempotencyKey: 'late-root', traceId: 'strategy-task:late', transport, protocol: 'legacy-v1' });
     for (const runId of ['request', 'production']) {
-      await enqueueObjectEvidence(dir, { ...context(runId), traceObjectSummary: { new_file_count: 1, modified_file_count: 0, recovered_file_count: 0, candidate_file_count: 1, uploaded_file_count: 0, skipped_file_count: 1, skip_reasons: { unavailable: 1 } } }, [{ objectClass: 'artifact', id: runId, filename: 'index.html', mime: 'text/html', source: 'run_artifact', body: Buffer.from(runId) }], 'strategy-task:late');
+      await enqueueObjectEvidence(dir, { ...context(runId), installationId: 'synthetic-installation', traceObjectSummary: { new_file_count: 1, modified_file_count: 0, recovered_file_count: 0, candidate_file_count: 1, uploaded_file_count: 0, skipped_file_count: 1, skip_reasons: { unavailable: 1 } } }, [{ objectClass: 'artifact', id: runId, filename: 'index.html', mime: 'text/html', source: 'run_artifact', body: Buffer.from(runId) }], 'strategy-task:late');
       store.checkpointReceipt('object', `run:${runId}`, { completeness: 'complete', artifactManifest: [{ artifact_id: runId, object_class: 'artifact', status: 'ok', stored_in_open_design: true, storage_ref: `synthetic:${runId}` }] });
     }
     // A root trace may publish a failure before the outbox ever publishes anything.
     reconcileTaskObjectReasons(store, 'strategy-task:late', { trace_object_summary: { skip_reasons: { authorization_failed: 1 } } });
     const sent: Array<{ batch: Array<{ body: { metadata: Record<string, unknown> } }> }> = [];
     await drainEvidence(dir, (async (_url, init) => {
-      sent.push(JSON.parse(String(init?.body)));
+      const body = JSON.parse(String(init?.body));
+      expect(String(_url)).toBe(transport === 'vela' ? 'https://vela.example.test/api/v1/open-design/telemetry' : 'https://telemetry.example.test/api/langfuse');
+      const trace = transport === 'vela' ? body.events[0].data : body.batch[0].body;
+      expect(trace).toMatchObject({ id: 'strategy-task:late', name: 'open-design-strategy-task', metadata: { schema: 'open-design.strategy-task-observation/v1' } });
+      sent.push({ batch: [{ body: trace }] });
       return new Response('{}', { status: 202 });
     }) as typeof fetch);
     expect(sent).toHaveLength(2);
@@ -67,6 +75,7 @@ it('clears historical skip reasons after recovery for receivers that deep-merge 
   try {
     await writeAppConfig(dir, { telemetry: { metrics: true, content: true, artifactManifest: true } });
     const store = await evidenceStore(dir);
+    taskTraceReceipts(dir).write({ taskExecutionId: 'recovery', idempotencyKey: 'recovery-root', traceId: 'strategy-task:recovery', transport: 'relay', protocol: 'legacy-v1' });
     for (const runId of ['first', 'second']) await enqueueObjectEvidence(dir, context(runId), [{ objectClass: 'artifact', id: runId, filename: 'index.html', mime: 'text/html', source: 'produced_file', body: Buffer.from(runId) }], 'strategy-task:recovery');
     const receipt = (runId: string) => ({ completeness: 'complete', artifactManifest: [{ artifact_id: runId, object_class: 'artifact', status: 'ok', stored_in_open_design: true, storage_ref: `synthetic:${runId}` }] });
     store.checkpointReceipt('object', 'run:first', receipt('first'));

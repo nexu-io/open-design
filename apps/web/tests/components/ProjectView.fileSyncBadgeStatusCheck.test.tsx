@@ -98,6 +98,9 @@ vi.mock('../../src/state/projects', async () => {
   );
   return {
     ...actual,
+    registerQueuedSubmission: vi.fn(async (projectId, submission) => ({
+      id: submission.id, projectId, conversationId: submission.conversationId, acceptedAt: submission.submittedAt,
+    })),
     createConversation: vi.fn(),
     listConversations: vi.fn(),
     listMessages: vi.fn(),

@@ -1,6 +1,7 @@
+import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 
-import type { Page } from '@playwright/test';
+import type { Page, Request, Response } from '@playwright/test';
 
 import {
   createCollabCluster,
@@ -347,9 +348,11 @@ test('[P0] two isolated clients converge live content, presence, and owner unsha
     OD_WORKSPACE_CONTEXT_SOURCE: 'vela',
     VELA_API_URL: hub.url,
     VELA_BIN: velaBin,
+    AMR_HOME: testInfo.outputPath('empty-amr-home'),
   };
   let cluster: CollabCluster | undefined;
   let failed = false;
+  let releaseInitialConversations = () => {};
   try {
     cluster = await test.step('start isolated owner and member clients', async () =>
       await createCollabCluster(browser, testInfo, [
@@ -364,6 +367,12 @@ test('[P0] two isolated clients converge live content, presence, and owner unsha
       ]));
     const ownerPage = cluster.clients.owner!.page;
     const memberPage = cluster.clients.member!.page;
+    const memberConversationWrites: string[] = [];
+    memberPage.on('request', request => {
+      if (request.method() === 'POST' && /\/conversations$/.test(new URL(request.url()).pathname)) {
+        memberConversationWrites.push(request.url());
+      }
+    });
     await test.step('configure isolated workspace clients', async () => {
       await Promise.all([applyStandardMocks(ownerPage), applyStandardMocks(memberPage)]);
       await Promise.all([
@@ -375,7 +384,7 @@ test('[P0] two isolated clients converge live content, presence, and owner unsha
       await openHome(memberPage));
 
     const projectId = await createProject(ownerPage);
-    await writeHtml(ownerPage, projectId, htmlFor('Owner version 1'));
+    await writeHtml(ownerPage, projectId, htmlFor('Owner version 1', false));
 
     const share = await ownerPage.request.post(
       `/api/workspaces/${WORKSPACE_ID}/projects/${projectId}/move`,
@@ -416,6 +425,15 @@ test('[P0] two isolated clients converge live content, presence, and owner unsha
       `.recent-projects__card[data-project-id="${projectId}"]:visible`,
     );
     await expect(memberCard).toContainText(PROJECT_NAME);
+    // File preview is independently readable while the initial chat list is slow.
+    const initialConversationsGate = new Promise<void>(resolve => { releaseInitialConversations = resolve; });
+    let savingComment = false;
+    await memberPage.route(`**/api/projects/${projectId}/conversations`, async route => {
+      if (route.request().method() !== 'GET' || savingComment) return route.continue();
+      const response = await route.fetch();
+      await initialConversationsGate;
+      await route.fulfill({ response });
+    });
     await memberCard.locator('.recent-projects__card-main').click();
     await expect(memberPage).toHaveURL(new RegExp(`/projects/${projectId}`), {
       timeout: T.long,
@@ -471,15 +489,29 @@ test('[P0] two isolated clients converge live content, presence, and owner unsha
         firstConversationId(memberPage, projectId, MEMBER),
       ]);
       const commentStartedAt = Date.now();
-      const response = await memberPage.request.post(
-        `/api/projects/${projectId}/conversations/${memberConversationId}/comments`,
-        {
-          data: { target: COLLAB_COMMENT_TARGET, note: COLLAB_COMMENT_NOTE },
-          headers: workspaceHeaders(MEMBER),
-          timeout: T.long,
-        },
-      );
+      await memberPage.bringToFront();
+      await clickPreviewToolbarAction(memberPage, 'board-mode-toggle', /^Comment$/);
+      const commentFrame = memberPage.frameLocator(PREVIEW_SELECTOR);
+      await expect(commentFrame.locator('html[data-od-comment-mode]')).toHaveCount(1, { timeout: T.medium });
+      await commentFrame.getByRole('heading', { name: 'Owner version 1' }).click();
+      await expect(memberPage.getByTestId('comment-popover')).toBeVisible();
+      await memberPage.getByTestId('comment-popover-input').fill(COLLAB_COMMENT_NOTE);
+      const commentSaved = memberPage.waitForResponse(response => response.request().method() === 'POST'
+        && new URL(response.url()).pathname === `/api/projects/${projectId}/conversations/${memberConversationId}/comments`, { timeout: T.long });
+      void commentSaved.catch(() => {});
+      savingComment = true;
+      await memberPage.getByTestId('comment-popover-save').click();
+      // Saving waits for the existing read instead of reporting an unsaved note.
+      await expect(memberPage.getByTestId('comment-popover-save')).toBeDisabled();
+      releaseInitialConversations();
+      const response = await commentSaved;
       expect(response.ok(), await response.text()).toBeTruthy();
+      await expect(memberPage.getByTestId('comment-popover')).toHaveCount(0);
+      expect(memberConversationWrites).toEqual([]);
+      await memberPage.screenshot({ path: testInfo.outputPath('member-comment-saved.png'), animations: 'disabled' });
+      await testInfo.attach('member saves a comment from the read-only preview', {
+        path: testInfo.outputPath('member-comment-saved.png'), contentType: 'image/png',
+      });
       await hub.waitForCommand(
         (entry) =>
           entry.memberId === MEMBER.memberId
@@ -505,24 +537,94 @@ test('[P0] two isolated clients converge live content, presence, and owner unsha
       ).toContain(COLLAB_COMMENT_NOTE);
       expect(Date.now() - commentStartedAt).toBeLessThan(T.medium);
 
-      await ownerPage.goto(`/projects/${projectId}/files/index.html`, {
-        waitUntil: 'domcontentloaded',
+      // Observe from before navigation, and bind the waiter immediately so a
+      // failed UI assertion is not masked by an unhandled page-close rejection.
+      const [initialRead] = await Promise.all([
+        ownerPage.waitForResponse((response) =>
+          isProjectCommentReadResponse(response, projectId), { timeout: T.long }),
+        (async () => {
+          await ownerPage.goto(`/projects/${projectId}/files/index.html`, {
+            waitUntil: 'domcontentloaded',
+          });
+          await expect(ownerPage.getByTestId('file-workspace')).toBeVisible({ timeout: T.long });
+          await clickPreviewToolbarAction(ownerPage, 'board-mode-toggle', /^Comment$/);
+          await clickPreviewToolbarAction(ownerPage, 'comment-panel-toggle', /^Comments \(\d+\)$/);
+          // The first toggle opens existing comments directly, even for legacy
+          // targets: reading feedback must not require a source-version save.
+          await expect(ownerPage.getByTestId('comment-side-panel').getByTestId('comment-side-item')
+            .filter({ hasText: COLLAB_COMMENT_NOTE })).toBeVisible({ timeout: T.medium });
+          await expect(ownerPage.getByRole('alertdialog', { name: 'Prepare static comments · save source version' })).toHaveCount(0);
+          await expect(ownerPage.getByTestId('comment-identity-preparation')).toHaveCount(0);
+        })(),
+      ]);
+      expect(initialRead.ok()).toBeTruthy();
+
+      await test.step('keep the collapsed rail unread until it is expanded', async () => {
+        const collapsedReadRequests: string[] = [];
+        const recordCollapsedRead = (request: Request) => {
+          if (isProjectCommentReadRequest(request, projectId)) {
+            collapsedReadRequests.push(request.url());
+          }
+        };
+        ownerPage.on('request', recordCollapsedRead);
+        try {
+          await ownerPage.getByRole('button', { name: /hide comments/i }).click();
+          const collapsedRail = ownerPage.getByTestId('comment-side-collapsed-rail');
+          await expect(collapsedRail).toBeVisible();
+          await expect(ownerPage.getByTestId('comment-side-panel')).toHaveCount(0);
+
+          const response = await memberPage.request.post(
+            `/api/projects/${projectId}/conversations/${memberConversationId}/comments`,
+            {
+              data: {
+                target: COLLAB_COMMENT_TARGET,
+                note: 'Member comment received while the owner rail is collapsed.',
+              },
+              headers: workspaceHeaders(MEMBER),
+              timeout: T.long,
+            },
+          );
+          expect(response.ok(), await response.text()).toBeTruthy();
+          await hub.waitForCommand(
+            (entry) =>
+              entry.memberId === MEMBER.memberId
+              && entry.args[0] === 'collab'
+              && entry.args[1] === 'comment'
+              && entry.args[2] === 'push'
+              && entry.args[3] === projectId,
+            T.medium,
+          );
+          await expect.poll(
+            async () => {
+              const ownerComments = await ownerPage.request.get(
+                `/api/projects/${projectId}/conversations/${ownerConversationId}/comments`,
+                { headers: workspaceHeaders(OWNER), timeout: T.long },
+              );
+              if (!ownerComments.ok()) return [];
+              const body = await ownerComments.json() as {
+                comments?: Array<{ note?: string }>;
+              };
+              return body.comments?.map((comment) => comment.note) ?? [];
+            },
+            { timeout: T.medium },
+          ).toContain('Member comment received while the owner rail is collapsed.');
+          await expect(collapsedRail).toContainText('2', { timeout: T.medium });
+          expect(collapsedReadRequests).toEqual([]);
+
+          const expandedRead = ownerPage.waitForResponse((response) =>
+            isProjectCommentReadResponse(response, projectId),
+          );
+          await collapsedRail.click();
+          await expect(ownerPage.getByTestId('comment-side-panel')).toBeVisible();
+          expect((await expandedRead).ok()).toBeTruthy();
+
+          await ownerPage.keyboard.press('Escape');
+          await expect(ownerPage.getByTestId('comment-side-panel')).toHaveCount(0);
+          await expect(ownerPage.getByTestId('comment-side-collapsed-rail')).toHaveCount(0);
+        } finally {
+          ownerPage.off('request', recordCollapsedRead);
+        }
       });
-      await expect(ownerPage.getByTestId('file-workspace')).toBeVisible({
-        timeout: T.long,
-      });
-      await clickPreviewToolbarAction(ownerPage, 'board-mode-toggle', /^Comment$/);
-      await clickPreviewToolbarAction(
-        ownerPage,
-        'comment-panel-toggle',
-        /^Comments \(\d+\)$/,
-      );
-      await expect(
-        ownerPage
-          .getByTestId('comment-side-panel')
-          .getByTestId('comment-side-item')
-          .filter({ hasText: COLLAB_COMMENT_NOTE }),
-      ).toBeVisible({ timeout: T.medium });
     });
 
     const memberDocumentMarker = await memberPage.evaluate(() => {
@@ -620,10 +722,14 @@ test('[P0] two isolated clients converge live content, presence, and owner unsha
       (entry) =>
         entry.memberId === OWNER.memberId &&
         entry.args[0] === 'team-projects' &&
-        entry.args[1] === 'remove' &&
-        entry.args[2] === projectId,
+        entry.args[1] === 'visibility' &&
+        entry.args[2] === projectId &&
+        entry.args[3] === 'private',
       T.long,
     );
+    expect(hub.commandLog.some(entry => entry.memberId === OWNER.memberId
+      && entry.args[0] === 'team-projects' && entry.args[1] === 'remove'
+      && entry.args[2] === projectId)).toBe(false);
 
     // A non-creator's local copy is a Team mirror, not their own draft. Once
     // the owner unshares it, quarantine that mirror: it must disappear from
@@ -679,6 +785,196 @@ test('[P0] two isolated clients converge live content, presence, and owner unsha
       body: JSON.stringify({
         commands: hub.commandLog,
         events: hub.eventLog,
+      }, null, 2),
+      contentType: 'application/json',
+    });
+    throw error;
+  } finally {
+    releaseInitialConversations();
+    await cluster?.close({ preserve: failed });
+    await hub.close();
+  }
+});
+
+test('[P0] removing a team member transfers their team project and leaves their Personal project intact', async ({
+  browser,
+}, testInfo) => {
+  const hubRoot = testInfo.outputPath('fake-member-removal-hub');
+  await mkdir(hubRoot, { recursive: true });
+  const hub = await startFakeCollabHub({
+    root: hubRoot,
+    workspaceId: WORKSPACE_ID,
+    workspaceName: 'Multi-client team',
+    clients: [OWNER, MEMBER],
+    includePersonalWorkspace: true,
+  });
+  const velaBin = await hub.writeVelaBin(testInfo.outputPath('fake-vela-member-removal'));
+  const commonEnv = {
+    OD_COLLAB_TRANSPORT: 'vela-cli',
+    OD_RESOURCE_TRANSPORT: 'vela-cli',
+    OD_TEAM_PROJECTS_TRANSPORT: 'vela-cli',
+    OD_WORKSPACE_CONTEXT_SOURCE: 'vela',
+    VELA_API_URL: hub.url,
+    VELA_BIN: velaBin,
+  };
+  let cluster: CollabCluster | undefined;
+  let failed = false;
+  try {
+    cluster = await createCollabCluster(browser, testInfo, [
+      { id: 'removal-owner', env: { ...commonEnv, VELA_CONTROL_KEY: OWNER.controlKey } },
+      { id: 'removal-member', env: { ...commonEnv, VELA_CONTROL_KEY: MEMBER.controlKey } },
+    ]);
+    const ownerPage = cluster.clients['removal-owner']!.page;
+    const memberPage = cluster.clients['removal-member']!.page;
+    await Promise.all([applyStandardMocks(ownerPage), applyStandardMocks(memberPage)]);
+
+    const personalWorkspaceId = `personal-${MEMBER.memberId}`;
+    const personalMemberId = `personal-member-${MEMBER.memberId}`;
+    const personalProjectId = randomUUID();
+    const teamProjectId = randomUUID();
+    const personalProjectName = `Private Personal project ${personalProjectId.slice(0, 8)}`;
+    const teamProjectName = `Transferred team project ${teamProjectId.slice(0, 8)}`;
+    const personalActive = await memberPage.request.put('/api/workspace/active', {
+      data: { workspaceId: personalWorkspaceId, workspaceMemberId: personalMemberId },
+      timeout: T.long,
+    });
+    expect(personalActive.ok(), await personalActive.text()).toBe(true);
+    const personalCreated = await memberPage.request.post('/api/projects', {
+      headers: {
+        ...workspaceHeaders(MEMBER),
+        'x-od-workspace-id': personalWorkspaceId,
+        'x-od-workspace-type': 'personal',
+        'x-od-workspace-member-id': personalMemberId,
+        'x-od-workspace-role': 'owner',
+      },
+      data: {
+        id: personalProjectId,
+        name: personalProjectName,
+        skillId: null,
+        designSystemId: null,
+        metadata: { kind: 'prototype', nameSource: 'user' },
+      },
+      timeout: T.long,
+    });
+    expect(personalCreated.ok(), await personalCreated.text()).toBe(true);
+
+    await Promise.all([
+      pinWorkspace(ownerPage, OWNER.memberId),
+      pinWorkspace(memberPage, MEMBER.memberId),
+    ]);
+    const teamCreated = await memberPage.request.post('/api/projects', {
+      headers: workspaceHeaders(MEMBER),
+      data: {
+        id: teamProjectId,
+        name: teamProjectName,
+        skillId: null,
+        designSystemId: null,
+        metadata: { kind: 'prototype', nameSource: 'user' },
+      },
+      timeout: T.long,
+    });
+    expect(teamCreated.ok(), await teamCreated.text()).toBe(true);
+    const teamFile = await memberPage.request.post(`/api/projects/${teamProjectId}/files`, {
+      headers: workspaceHeaders(MEMBER),
+      data: {
+        name: 'index.html',
+        content: '<!doctype html><h1>Transferred team content</h1>',
+        artifactManifest: {
+          version: 1,
+          kind: 'html',
+          title: teamProjectName,
+          entry: 'index.html',
+          renderer: 'html',
+          exports: ['html'],
+        },
+      },
+      timeout: T.long,
+    });
+    expect(teamFile.ok(), await teamFile.text()).toBe(true);
+
+    await memberPage.goto('/projects', { waitUntil: 'domcontentloaded' });
+    await ensureRailOpen(memberPage);
+    await memberPage.getByTestId('entry-nav-drafts').click();
+    await memberPage.getByTestId('recent-projects-collection-personalProjects').click();
+    const memberCard = memberPage.locator(
+      `.recent-projects__card[data-project-id="${teamProjectId}"]`,
+    );
+    await expect(memberCard).toBeVisible({ timeout: T.long });
+    await memberCard.getByRole('button', { name: 'More actions' }).click();
+    await memberCard.getByRole('menuitem', { name: 'Move to team space' }).click();
+    const shareResponse = memberPage.waitForResponse((response) =>
+      response.request().method() === 'POST'
+        && new URL(response.url()).pathname.endsWith(`/projects/${teamProjectId}/move`));
+    await memberPage.getByRole('alertdialog', { name: 'Move to team space' })
+      .getByRole('button', { name: 'Confirm move' }).click();
+    const shared = await shareResponse;
+    expect(shared.ok(), `share ${shared.status()}: ${await shared.text()}`).toBe(true);
+
+    await memberPage.goto(`/projects/${teamProjectId}`, { waitUntil: 'domcontentloaded' });
+    await expect(memberPage.getByTestId('file-workspace')).toBeVisible({ timeout: T.long });
+    await expect.poll(() => hub.eventSubscriberCount(MEMBER.memberId), { timeout: T.long })
+      .toBeGreaterThan(0);
+
+    // The fake AMR performs the durable Team resource transfer and emits the
+    // terminal revoke; Chromium exercises the real OD reaction on both sides.
+    hub.removeMember(MEMBER.memberId);
+    const removalNotice = memberPage.getByRole('alertdialog', {
+      name: /removed from Multi-client team/i,
+    });
+    await expect(removalNotice).toBeVisible({ timeout: T.long });
+    await expect(memberPage.getByTestId('file-workspace')).toHaveCount(0);
+    const revokedTeamCatalog = await memberPage.request.get('/api/workspace/projects/team', {
+      headers: workspaceHeaders(MEMBER),
+    });
+    expect(revokedTeamCatalog.status()).toBe(403);
+
+    await expect.poll(async () => {
+      const response = await ownerPage.request.get('/api/workspace/projects/team', {
+        headers: workspaceHeaders(OWNER),
+      });
+      if (!response.ok()) throw new Error(`owner Team catalog ${response.status()}: ${await response.text()}`);
+      const body = await response.json() as { projects?: Array<{
+        projectId?: string; ownerMemberId?: string;
+      }> };
+      expect(body.projects?.some((project) => project.projectId === personalProjectId)).toBe(false);
+      return body.projects?.find((project) => project.projectId === teamProjectId)?.ownerMemberId;
+    }, { timeout: T.long }).toBe(OWNER.memberId);
+
+    await removalNotice.getByRole('button', { name: 'Confirm' }).click();
+    await expect(removalNotice).toHaveCount(0, { timeout: T.long });
+    await expect.poll(async () => {
+      const response = await memberPage.request.get('/api/workspace/directory');
+      if (!response.ok()) throw new Error(`member directory ${response.status()}: ${await response.text()}`);
+      const body = await response.json() as { activeWorkspaceId?: string | null };
+      return body.activeWorkspaceId;
+    }, { timeout: T.long }).toBe(personalWorkspaceId);
+
+    await memberPage.goto('/projects', { waitUntil: 'domcontentloaded' });
+    await ensureRailOpen(memberPage);
+    await memberPage.getByTestId('entry-nav-drafts').click();
+    await memberPage.getByTestId('recent-projects-collection-personalProjects').click();
+    await expect(memberPage.locator(
+      `.recent-projects__card[data-project-id="${personalProjectId}"]`,
+    )).toBeVisible({ timeout: T.long });
+
+    await ownerPage.goto('/projects', { waitUntil: 'domcontentloaded' });
+    await ensureRailOpen(ownerPage);
+    await openTeamProjectsTab(ownerPage);
+    const ownerCard = ownerPage.locator(
+      `.recent-projects__card[data-project-id="${teamProjectId}"]:visible`,
+    );
+    await expect(ownerCard).toContainText(teamProjectName, { timeout: T.long });
+    await ownerCard.locator('.recent-projects__card-main').click();
+    await expect(ownerPage.frameLocator(PREVIEW_SELECTOR).getByRole('heading', {
+      name: 'Transferred team content',
+    })).toBeVisible({ timeout: T.long });
+  } catch (error) {
+    failed = true;
+    await testInfo.attach('fake-member-removal-hub-log', {
+      body: JSON.stringify({
+        commands: hub.commandLog,
+        events: hub.eventLog,
+        requests: hub.requestLog,
       }, null, 2),
       contentType: 'application/json',
     });
@@ -1449,8 +1745,17 @@ function addedWorkspaceHeaders(
   };
 }
 
-function htmlFor(heading: string): string {
-  return `<!doctype html><html><body><main><h1 data-od-id="shared-heading">${heading}</h1></main></body></html>`;
+function isProjectCommentReadRequest(request: Request, projectId: string): boolean {
+  return request.method() === 'PUT'
+    && new URL(request.url()).pathname === `/api/projects/${projectId}/comments/read`;
+}
+
+function isProjectCommentReadResponse(response: Response, projectId: string): boolean {
+  return isProjectCommentReadRequest(response.request(), projectId);
+}
+
+function htmlFor(heading: string, includeElementId = true): string {
+  return `<!doctype html><html><body><main><h1${includeElementId ? ' data-od-id="shared-heading"' : ''}>${heading}</h1></main></body></html>`;
 }
 
 function isProjectPull(args: readonly string[]): boolean {

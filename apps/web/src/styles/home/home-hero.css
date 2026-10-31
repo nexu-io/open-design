@@ -14,11 +14,17 @@
      width exactly — see .home-hero__plugin-presets-wrap. */
   container-type: inline-size;
 }
-/* Empty workspace: no recent projects rendered below, so the hero column
-   centers vertically in the scroll viewport instead of hugging the top. */
+/* Empty Home centers when it fits. If the hero is taller than the available
+   space, start at the top so all content stays in the scrollable area. */
 .home-view--centered {
   min-height: 100%;
-  justify-content: center;
+  justify-content: safe center;
+}
+/* Invitation Home shares the populated Home's top anchor. Example lists grow
+   below the composer without re-centering the invitation, title and input.
+   The dismissed row keeps the same anchor so closing it cannot shift them. */
+.home-view--centered:has([data-home-invite-row]) {
+  justify-content: flex-start;
 }
 /* `.home-hero`'s own fixed top padding (below) is tuned for the OTHER
    variant — hugging the top of the scroll column so a specific reference
@@ -29,7 +35,7 @@
    viewport's true center, reading as an oversized blank band above it. Drop
    it back to match the bottom padding so the hero's own box is symmetric and
    the flex centering does all of the vertical balancing. */
-.home-view--centered .home-hero {
+.home-view--centered:not(:has([data-home-invite-row])) .home-hero {
   padding-top: var(--spacing-4);
 }
 /* The hero block self-constrains to a readable column even though
@@ -1347,6 +1353,10 @@
   border-radius: var(--radius);
   background: var(--bg-panel);
   box-shadow: var(--shadow-lg, 0 14px 36px rgba(0, 0, 0, 0.14));
+  /* Opening upward from the composer, the picker can reach the desktop
+     window's draggable title strip (`.app-chrome-header`, top 44px). Without
+     this, clicks on its tabs inside that strip drag the window instead. */
+  -webkit-app-region: no-drag;
 }
 /* When hosted in the shared CaretFloatingLayer portal (position:fixed,
    width owned by the layer), the picker becomes a static, full-width
@@ -1368,69 +1378,6 @@
   flex-direction: column;
   gap: 3px;
   overflow-y: auto;
-}
-.home-hero__plugin-hover-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px 14px;
-  align-items: center;
-  margin-top: 4px;
-  padding: 10px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--bg-subtle) 72%, var(--bg-panel));
-}
-.home-hero__plugin-hover-card strong {
-  display: block;
-  overflow: hidden;
-  color: var(--text-strong);
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.home-hero__plugin-hover-card p {
-  margin: 3px 0 0;
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.4;
-}
-.home-hero__plugin-hover-kicker {
-  display: block;
-  margin-bottom: 2px;
-  color: var(--text-faint);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-.home-hero__plugin-hover-meta {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 8px;
-  color: var(--text-faint);
-  font-size: 12px;
-}
-.home-hero__plugin-hover-meta span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.home-hero__plugin-hover-card button {
-  appearance: none;
-  padding: 6px 9px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-panel);
-  color: var(--text);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-.home-hero__plugin-hover-card button:hover {
-  border-color: var(--border-strong);
-  color: var(--accent);
 }
 .home-hero__mention-tabs {
   flex: 0 0 auto;
@@ -2935,9 +2882,11 @@
   color: var(--home-hero-submit-fg);
   box-shadow: none;
 }
+/* `pre-line`:部分报错是「标题\n正文」两行(产品《报错文案》S03 / S28a,OPEND-2849)。 */
 .home-hero__error {
   color: var(--red);
   font-size: 13px;
+  white-space: pre-line;
   background: var(--red-bg);
   border: 1px solid var(--red-border);
   padding: 8px 12px;
@@ -3157,7 +3106,7 @@
 
 /* One example per row (per product — the thumbnail cards were dropped): its
    name on the first line, the prompt it seeds on the second. Four rows are
-   visible; the rest scroll. */
+   visible; the rest scroll. At either end, wheel input continues to Home. */
 .home-hero__plugin-presets {
   /* One row's height: 12px top padding + 56px poster + 12px bottom padding.
      The POSTER is what sets it now — enlarged per product, it is taller than
@@ -3174,7 +3123,6 @@
   gap: 0;
   max-height: calc(4 * var(--preset-row-h));
   overflow-y: auto;
-  overscroll-behavior-y: contain;
   padding: 1px 0 8px;
   /* No visible scrollbar — wheel/trackpad covers it, as on the rail before. */
   scrollbar-width: none;

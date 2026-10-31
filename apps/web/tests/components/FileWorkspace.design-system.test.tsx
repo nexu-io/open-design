@@ -211,8 +211,8 @@ describe('FileWorkspace design-system project surface', () => {
     expect(logo).toBeTruthy();
     const logoUrl = new URL(logo!.src);
     expect(logoUrl.pathname).toBe('/api/projects/ds-legacy-logo/raw/assets/logo.svg');
-    expect(logoUrl.searchParams.get('workspaceId')).toBeNull();
-    expect(logoUrl.searchParams.get('workspaceMemberId')).toBeNull();
+    expect(logoUrl.searchParams.get('workspaceId')).toBe('workspace-logo');
+    expect(logoUrl.searchParams.get('workspaceMemberId')).toBe('member-logo');
   });
 
   it('renders the brand.html-style kit modules from the project DESIGN.md', async () => {

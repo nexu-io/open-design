@@ -16,8 +16,8 @@ import {
 	type TouchpointStaticAction,
 } from "./touchpoint-static-actions";
 import { dispatchProductionCampaignAction } from "./ProductionCampaignModal";
-import { emitProductionTouchpointLoadDiagnostic, loadProductionTouchpointDecision } from "./production-touchpoint-loader";
-import { resolveAuthorizationDeadline, type TouchpointLifecycleLoad, useTouchpointLifecycle } from "./touchpoint-lifecycle";
+import { emitProductionTouchpointLoadDiagnostic, loadProductionTouchpointDecision, productionTouchpointRecovery } from "./production-touchpoint-loader";
+import { resolveAuthorizationDeadline, touchpointContentIdentity, touchpointScheduleWindowMs, touchpointLeaseValue, type TouchpointLeaseValue, type TouchpointLifecycleLoad, useTouchpointLifecycle } from "./touchpoint-lifecycle";
 import {
 	TestTouchpointMount,
 	recordVisibleTestTouchpoint,
@@ -27,7 +27,6 @@ import type { TestCampaignPlacement, TestDecision } from "./TestCampaignModal";
 import styles from "./ProductionCampaignBadge.module.css";
 
 const PLACEMENT = "opend.home.account-badge";
-const MAX_LEASE_MS = 5 * 60_000;
 const supportedCapabilities = new Set(["static-action"]);
 type Decision = {
 	activityId: string;
@@ -41,7 +40,7 @@ type Decision = {
 	staticActions: TouchpointStaticAction[];
 	touchpointDecisionId: string;
 };
-type AuthorizedDecision = Decision & {
+type AuthorizedDecision = TouchpointLeaseValue<Decision> & {
 	sessionSubject: string;
 };
 
@@ -62,6 +61,9 @@ export function ProductionCampaignBadge({
 	sessionSubject: string | null;
 }) {
 	const testRuntime = useTestRuntime();
+	// A sibling entering or leaving the session must not rebuild this placement.
+	const testRuntimeRef = useRef(testRuntime);
+	testRuntimeRef.current = testRuntime;
 	const { locale } = useI18n();
 	const testDecision = testRuntime?.decisions.get(PLACEMENT);
 	const containerRef = useRef<HTMLDivElement | null>(null);
@@ -75,7 +77,7 @@ export function ProductionCampaignBadge({
 		}
 		if (loaded.kind === "no-decision") return active ? { kind: "retain" } : { kind: "clear" };
 		const next = loaded.value as Decision;
-		const deadline = resolveAuthorizationDeadline(next, MAX_LEASE_MS);
+		const deadline = resolveAuthorizationDeadline(next);
 		if (!next.activityId || !next.touchpointDecisionId || !next.deploymentId || !next.content?.id || next.placementKey !== PLACEMENT || next.content?.placementKey !== PLACEMENT || deadline === null || !Number.isFinite(deadline)) {
 			if (next.placementKey !== PLACEMENT || next.content?.placementKey !== PLACEMENT) emitWebTouchpointDiagnostic({ code: "touchpoint_decision_mismatch" });
 			return { kind: "clear" };
@@ -84,13 +86,13 @@ export function ProductionCampaignBadge({
 			emitWebTouchpointDiagnostic({ code: "touchpoint_capability_unsupported", detail: next.requiredCapabilities?.join(",") });
 			return { kind: "clear" };
 		}
-		return { kind: "decision", value: { ...next, sessionSubject }, key: `${next.activityId}:${next.deploymentId}:${next.touchpointDecisionId}:${next.content.id}`, validForMs: deadline - Date.parse(next.serverTime) };
+		return { kind: "decision", value: { ...touchpointLeaseValue(next), sessionSubject }, key: touchpointContentIdentity(next), validForMs: deadline - Date.parse(next.serverTime), offlineValidForMs: touchpointScheduleWindowMs(next), offlineRecovery: productionTouchpointRecovery(loaded.offlineReplay) ?? undefined };
 	}, [locale, sessionSubject]);
 	const onError = useCallback((error: unknown) => {
 		const diagnostic = emitProductionTouchpointLoadDiagnostic(error);
 		if (diagnostic) emitWebTouchpointDiagnostic(diagnostic);
 	}, []);
-	const lifecycle = useTouchpointLifecycle({ enabled, identity: enabled ? JSON.stringify([sessionSubject, locale]) : null, load, onError });
+	const lifecycle = useTouchpointLifecycle({ enabled, identity: enabled ? JSON.stringify([sessionSubject, locale]) : null, load, onError, offlineFallback: true });
 	const decision = lifecycle.current;
 	const clear = lifecycle.clear;
 
@@ -114,6 +116,12 @@ export function ProductionCampaignBadge({
 			authenticated &&
 			decision.sessionSubject === sessionSubject &&
 			lifecycle.isCurrent(mountGeneration);
+		// OPEND-3378: a mount abandoned only because the lease was momentarily
+		// not current must be restarted by the next same-key grant.
+		const abandonFencedMount = () => {
+			if (!cancelled) lifecycle.reportFencedMount(mountGeneration);
+			dispose();
+		};
 		let verified: Awaited<ReturnType<typeof verifyWebTouchpoint>> | undefined;
 		const element = document.createElement(
 			"opend-touchpoint",
@@ -140,7 +148,7 @@ export function ProductionCampaignBadge({
 				verified = await verifyWebTouchpoint(decision.content);
 				if (elementDisposed) disposeVerified();
 				if (!current()) {
-					dispose();
+					abandonFencedMount();
 					return;
 				}
 				const manifestPlacement = decision.content.manifest.placements.find(
@@ -169,7 +177,8 @@ export function ProductionCampaignBadge({
 					),
 				);
 				if (!current() || !context) {
-					dispose();
+					if (!current()) abandonFencedMount();
+					else dispose();
 					if (current() && !context)
 						emitWebTouchpointDiagnostic({
 							code: "touchpoint_locale_unsupported",
@@ -195,7 +204,7 @@ export function ProductionCampaignBadge({
 						onDiagnostic: emitWebTouchpointDiagnostic,
 					},
 				);
-				if (!current()) dispose();
+				if (!current()) abandonFencedMount();
 			} catch (error) {
 				if (current()) {
 					emitWebTouchpointDiagnostic({
@@ -212,13 +221,14 @@ export function ProductionCampaignBadge({
 			dispose();
 			container.replaceChildren();
 		};
-	}, [authenticated, decision, sessionSubject, clear, lifecycle.generation, lifecycle.isCurrent]);
+	}, [authenticated, decision, sessionSubject, clear, lifecycle.generation, lifecycle.isCurrent, lifecycle.reportFencedMount]);
 
 	const onTestVisible = useCallback(
 		(next: TestDecision, placementKey: TestCampaignPlacement) => {
-			if (testRuntime) recordVisibleTestTouchpoint(testRuntime, next, placementKey);
+			const runtime = testRuntimeRef.current;
+			if (runtime) recordVisibleTestTouchpoint(runtime, next, placementKey);
 		},
-		[testRuntime],
+		[],
 	);
 	if (authenticated && testRuntime && testDecision) {
 		return (

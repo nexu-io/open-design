@@ -11,7 +11,7 @@ import {
 	screen,
 	waitFor,
 } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 
 const openExternalUrlMock = vi.hoisted(() => vi.fn(async () => true));
 type CampaignHostGlobal = typeof globalThis & {
@@ -25,6 +25,8 @@ vi.mock("@open-design/host", () => ({
 vi.mock("../../src/providers/registry", () => ({
 	openExternalUrl: openExternalUrlMock,
 }));
+import { UseEverywhereModal } from "../../src/components/UseEverywhereModal";
+import { AmrArtifactUpgradeDialog } from "../../src/components/AmrArtifactUpgradeDialog";
 import { ProductionCampaignModal } from "../../src/components/ProductionCampaignModal";
 import { internalActionNavigationUrl } from "../../src/components/touchpoint-navigation";
 import { ProductionCampaignBadge } from "../../src/components/ProductionCampaignBadge";
@@ -171,12 +173,85 @@ const modalHostStyles = readFileSync(
 );
 
 describe("ProductionCampaignModal", () => {
-	it("keeps generic modal chrome content-sized without asymmetric host padding", () => {
+	it.each([
+		[false, false], [false, true], [true, false], [true, true],
+	])("restores scroll with native Dialog isolation (other first: %s, closes first: %s)", async (otherFirst, otherClosesFirst) => {
+		(globalThis as CampaignHostGlobal).__openDesignCampaignTestHost = {
+			client: { osLocale: "en-US", type: "desktop" },
+		};
+		vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(decision()), { status: 200 })));
+		const openOther = () => render(<AmrArtifactUpgradeDialog profile={null} metricsConsent={false} installationId={null} onClose={() => {}} onContinue={() => {}} />);
+		let other = otherFirst ? openOther() : undefined;
+		const campaign = render(<ProductionCampaignModal authenticated sessionSubject="native-dialog-user" />);
+		try {
+			await screen.findByRole("dialog", { name: "Campaign" });
+			other ??= openOther();
+			const [first, last] = otherClosesFirst ? [other, campaign] : [campaign, other];
+			first.unmount();
+			expect(document.body).toHaveAttribute("data-web-modal-scroll-lock");
+			expect(document.documentElement.style.overflow).toBe("hidden");
+			last.unmount();
+			expect(document.body.style.overflow).toBe("");
+			expect(document.body.style.position).toBe("");
+			expect(document.documentElement.style.overflow).toBe("");
+			expect(document.body).not.toHaveAttribute("data-web-modal-scroll-lock");
+		} finally {
+			campaign.unmount();
+			other?.unmount();
+			document.body.style.overflow = "";
+		}
+	});
+	it.each([
+		[false, "campaign-first"], [false, "other-first"],
+		[true, "campaign-first"], [true, "other-first"],
+	] as const)("keeps actual modal hosts locked (other opens first: %s, closes: %s)", async (otherFirst, order) => {
+		(globalThis as CampaignHostGlobal).__openDesignCampaignTestHost = {
+			client: { osLocale: "en-US", type: "desktop" },
+		};
+		vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(decision()), { status: 200 })));
+		const openOther = () => render(<UseEverywhereModal onClose={() => {}} />);
+		let other = otherFirst ? openOther() : undefined;
+		const campaign = render(<ProductionCampaignModal authenticated sessionSubject="interleaved-user" />);
+		try {
+			await screen.findByRole("dialog", { name: "Campaign" });
+			other ??= openOther();
+			const [first, last] = order === "campaign-first" ? [campaign, other] : [other, campaign];
+			first.unmount();
+			expect(document.body).toHaveAttribute("data-web-modal-scroll-lock");
+			expect(document.documentElement.style.overflow).toBe("hidden");
+			last.unmount();
+			expect(document.body.style.overflow).toBe("");
+			expect(document.documentElement.style.overflow).toBe("");
+			expect(document.body.style.position).toBe("");
+		} finally {
+			campaign.unmount();
+			other?.unmount();
+			document.body.style.overflow = "";
+			document.documentElement.style.overflow = "";
+		}
+	});
+
+	it("bounds content and preserves scrolling without imposing a fixed canvas", () => {
 		const modalRule = modalHostStyles.match(/\.modal\s*\{[^}]*\}/)?.[0];
-		expect(modalRule).toContain("max-width: calc(100vw - 32px)");
+		expect(modalRule).toContain("max-width: calc(100vw - var(--web-modal-scrollbar-width, 0px))");
 		expect(modalRule).toContain("background: transparent");
-		expect(modalRule).not.toMatch(/(?:^|[;{]\s*)width:/);
+		expect(modalRule).toContain("max-height: calc(100vh - var(--web-modal-scrollbar-height, 0px))");
+		expect(modalRule).toContain("overflow: auto");
 		expect(modalRule).not.toMatch(/(?:^|[;{]\s*)padding:/);
+	});
+	it("keeps the opend-touchpoint host background transparent inside the modal (OPEND-3478)", () => {
+		const hostRule = modalHostStyles.match(
+			/\.modal\s+:global\(opend-touchpoint\)\s*\{[^}]*\}/,
+		)?.[0];
+		expect(hostRule).toContain("background: transparent");
+		expect(hostRule).toContain("height: round(down, calc(100vh - var(--web-modal-scrollbar-height, 0px)), 1px)");
+		expect(hostRule).toContain("width: round(down, calc(100vw - var(--web-modal-scrollbar-width, 0px)), 1px)");
+		expect(hostRule).toContain("grid-auto-rows: max-content");
+		expect(hostRule).toContain("justify-items: safe center");
+		expect(hostRule).toContain("align-content: safe center");
+		const modalRule = modalHostStyles.match(/\.modal\s*\{[^}]*\}/)?.[0];
+		expect(modalRule).not.toMatch(/border-radius:/);
+		expect(modalRule).not.toMatch(/overflow:\s*hidden/);
 	});
 	it("does not restart the production loader on an unchanged parent render", async () => {
 		(globalThis as CampaignHostGlobal).__openDesignCampaignTestHost = {
@@ -439,7 +514,7 @@ describe("ProductionCampaignModal", () => {
 				.getByTestId("campaign-custom-element")
 				.querySelector("opend-touchpoint"),
 		).not.toBeNull();
-		expect(document.body.style.overflow).toBe("hidden");
+		expect(document.body).toHaveAttribute("data-web-modal-scroll-lock");
 		expect(document.querySelector("iframe,webview")).toBeNull();
 		// The fixture declares the SDK capability but exposes no actual close
 		// control, so the host fallback remains available.
@@ -516,8 +591,11 @@ describe("ProductionCampaignModal", () => {
 		);
 		vi.stubGlobal("fetch", fetchMock);
 		render(<ProductionCampaignModal authenticated sessionSubject="user-a" />);
-		await screen.findByTestId("campaign-custom-element");
-		window.dispatchEvent(new Event("focus"));
+		// Insertion precedes async mounting; renew only after the lease is visible.
+		await screen.findByRole("dialog");
+		await act(async () => {
+			window.dispatchEvent(new Event("focus"));
+		});
 		await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
 		expect(fetchMock.mock.calls[1]?.[0]).toContain(
 			`activeDecisionId=${active.touchpointDecisionId}`,
@@ -656,6 +734,57 @@ describe("Production campaign live refresh", () => {
 		return view;
 	};
 
+	it.each(["success", "failure", "stale"] as const)(
+		"handles modal navigation completion: %s",
+		async (outcome) => {
+			let dispatchAction!: (id: string) => Promise<void>;
+			vi.spyOn(OpenDesignTouchpointElement.prototype, "mount").mockImplementation(
+				async (_entry, _digest, _context, _urls, _actions, options) => {
+					dispatchAction = options!.dispatchAction!;
+				},
+			);
+			Object.defineProperty(navigator, "userActivation", {
+				configurable: true, value: { isActive: true },
+			});
+			vi.stubGlobal("fetch", vi.fn(async (_input, init) =>
+				new Response(JSON.stringify(init?.method === "POST" ? { ok: true } : decision()), { status: 200 }),
+			));
+			let finishNavigation!: (accepted: boolean) => void;
+			openExternalUrlMock.mockImplementationOnce(() => new Promise<boolean>((resolve) => {
+				finishNavigation = resolve;
+			}));
+			const view = await open();
+			await tick(16);
+			expect(screen.queryByRole("dialog")).not.toBeNull();
+			let completion!: Promise<unknown>;
+			await act(async () => {
+				completion = dispatchAction("learn").catch((error: Error) => error.message);
+			});
+			expect(screen.queryByRole("dialog")).not.toBeNull();
+			if (outcome === "stale") {
+				view.rerender(<ProductionCampaignModal authenticated sessionSubject="new-user" />);
+				await tick(16);
+			}
+			let result: unknown;
+			await act(async () => {
+				finishNavigation(outcome !== "failure");
+				result = await completion;
+			});
+			if (outcome === "success") {
+				expect(screen.queryByRole("dialog")).toBeNull();
+				await tick(30_000);
+				expect(screen.queryByRole("dialog")).toBeNull();
+			} else {
+				expect(screen.queryByRole("dialog")).not.toBeNull();
+				if (outcome === "failure") {
+					expect(result).toBe("touchpoint_action_denied");
+					await act(async () => { await dispatchAction("learn"); });
+					expect(screen.queryByRole("dialog")).toBeNull();
+				}
+			}
+		},
+	);
+
 	it("discovers a newly published campaign at 30 seconds without a focus event", async () => {
 		await open();
 		expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -716,6 +845,382 @@ describe("Production campaign live refresh", () => {
 		expect(screen.queryByRole("dialog")).toBeNull();
 	});
 
+	// OPEND-3363 at the component seam. `online` used to run the destructive
+	// wake, which published a null decision and unmounted the dialog — taking the
+	// scroll lock, the focus trap and the mounted host element with it — before
+	// any evidence about the activity had arrived. Everything observable here is
+	// asserted INSIDE the pending revalidation window.
+	it("keeps the dialog mounted, scroll-locked and focus-trapped while an online revalidation is pending", async () => {
+		available = true;
+		let stall!: (value: Response) => void;
+		let calls = 0;
+		const staged = vi.fn(async () => {
+			calls += 1;
+			if (calls === 1)
+				return new Response(JSON.stringify(decision()), { status: 200 });
+			return new Promise<Response>((resolve) => {
+				stall = resolve;
+			});
+		});
+		vi.stubGlobal("fetch", staged);
+		await open();
+		await tick(16);
+		const dialog = screen.getByRole("dialog");
+		const modal = dialog.firstElementChild as HTMLElement;
+		const element = document.querySelector("opend-touchpoint");
+		expect(element).not.toBeNull();
+		expect(document.body).toHaveAttribute("data-web-modal-scroll-lock");
+		const outside = document.createElement("button");
+		document.body.append(outside);
+		outside.focus();
+		await act(async () => {
+			window.dispatchEvent(new Event("online"));
+		});
+		expect(staged).toHaveBeenCalledTimes(2);
+		expect(screen.getByRole("dialog")).toBe(dialog);
+		expect(document.querySelector("opend-touchpoint")).toBe(element);
+		expect(OpenDesignTouchpointElement.prototype.mount).toHaveBeenCalledTimes(1);
+		expect(document.body).toHaveAttribute("data-web-modal-scroll-lock");
+		fireEvent.keyDown(document, { key: "Tab" });
+		expect(modal.contains(document.activeElement)).toBe(true);
+		outside.remove();
+		await act(async () => {
+			stall(new Response(JSON.stringify(decision()), { status: 200 }));
+		});
+		expect(screen.getByRole("dialog")).toBe(dialog);
+		expect(document.querySelector("opend-touchpoint")).toBe(element);
+		expect(OpenDesignTouchpointElement.prototype.mount).toHaveBeenCalledTimes(1);
+	});
+
+	// OPEND-3369 measured this; OPEND-3374 reversed it. **Deliberate contract
+	// change.** The Modal's key was
+	// `touchpointDecisionId:deploymentId:activityId:content.id`, so an id that
+	// rotated every poll rebuilt the host 120 times an hour. The key is now
+	// content identity alone, so the same hour of rotating credentials costs
+	// nothing: one host, one mount.
+	it("keeps one mounted host for a whole hour of rotating decision ids", async () => {
+		const POLLS = 120; // one hour at the 30s interval
+		let issued = 0;
+		const rotating = vi.fn(async () => {
+			issued += 1;
+			return new Response(
+				JSON.stringify(decision({ touchpointDecisionId: `decision-${issued}` })),
+				{ status: 200 },
+			);
+		});
+		vi.stubGlobal("fetch", rotating);
+		await open();
+		await tick(16);
+		expect(screen.getByRole("dialog")).toBeTruthy();
+		const hosts = new Set<Element>();
+		hosts.add(document.querySelector("opend-touchpoint") as Element);
+		for (let poll = 1; poll <= POLLS; poll += 1) {
+			await tick(30_000);
+			hosts.add(document.querySelector("opend-touchpoint") as Element);
+		}
+		expect(rotating).toHaveBeenCalledTimes(POLLS + 1);
+		// One host element for the whole hour, mounted once.
+		expect(hosts.size).toBe(1);
+		expect(OpenDesignTouchpointElement.prototype.mount).toHaveBeenCalledTimes(1);
+	});
+
+	// The control it used to need: with a stable id the answer was already one
+	// host and one mount, and it still is. The two cases now agree, which is the
+	// point — the credential has stopped being able to change the answer.
+	it("keeps one mounted host for a whole hour when the decision id is stable", async () => {
+		const POLLS = 120;
+		available = true;
+		await open();
+		await tick(16);
+		const host = document.querySelector("opend-touchpoint");
+		expect(host).not.toBeNull();
+		await tick(POLLS * 30_000);
+		expect(fetchMock).toHaveBeenCalledTimes(POLLS + 1);
+		expect(document.querySelector("opend-touchpoint")).toBe(host);
+		expect(OpenDesignTouchpointElement.prototype.mount).toHaveBeenCalledTimes(1);
+	});
+
+	// OPEND-3374, the core case. The server credential row lives 60s and the
+	// client polls every 30s, so missing two polls — a Wi-Fi switch, a tunnel, a
+	// closed lid — expires it. On recovery the server INSERTs a new row and
+	// issues a NEW `touchpointDecisionId`, everything else identical. While the
+	// id was part of the lease key that was a changed key, so the campaign was
+	// torn down and rebuilt: shadow DOM, Blob URLs, entry animation, scroll lock.
+	// After OPEND-3369 it was the ONLY thing that still caused a remount, which
+	// moved the flicker from "every 30s for everyone" to "whenever the network
+	// wobbles" — the same users the P1 was about.
+	it("REGRESSION: a network outage that outlives the server credential does not remount the campaign", async () => {
+		const longLived = (overrides: Record<string, unknown> = {}) => {
+			const now = Date.now();
+			return decision({
+				authorizationExpiresAt: new Date(now + 30 * 60_000).toISOString(),
+				endsAt: new Date(now + 40 * 60_000).toISOString(),
+				...overrides,
+			});
+		};
+		let online = true;
+		let decisionId = "decision-1";
+		const requests: string[] = [];
+		const staged = vi.fn(async (input: RequestInfo | URL) => {
+			requests.push(String(input));
+			if (!online) throw new TypeError("Failed to fetch");
+			return new Response(
+				JSON.stringify(longLived({ touchpointDecisionId: decisionId })),
+				{ status: 200 },
+			);
+		});
+		vi.stubGlobal("fetch", staged);
+		await open();
+		await tick(16);
+		const dialog = screen.getByRole("dialog");
+		const host = document.querySelector("opend-touchpoint");
+		expect(host).not.toBeNull();
+		expect(OpenDesignTouchpointElement.prototype.mount).toHaveBeenCalledTimes(1);
+
+		// Three polls' worth of outage: past the 60s credential TTL, well inside
+		// the authorization the server granted.
+		online = false;
+		await tick(90_000);
+		expect(screen.getByRole("dialog")).toBe(dialog);
+		expect(document.querySelector("opend-touchpoint")).toBe(host);
+
+		// Recovery. Same activity, same deployment, same content — new credential.
+		online = true;
+		decisionId = "decision-2";
+		requests.length = 0;
+		// OPEND-3436: a client in offline fallback revalidates on the reconnection
+		// itself rather than on the next poll tick, so the event a real network
+		// restore fires is now what drives recovery. What this case is about —
+		// the host is not rebuilt across the outage — is unchanged.
+		act(() => { window.dispatchEvent(new Event("online")); });
+		await tick(30_000);
+		expect(requests.length).toBeGreaterThan(0);
+		// The client still identifies itself with the credential it is holding,
+		// which by now the server has expired (OPEND-3372 keeps it answerable).
+		expect(requests[0]).toContain("activeDecisionId=decision-1");
+		expect(screen.getByRole("dialog")).toBe(dialog);
+		expect(document.querySelector("opend-touchpoint")).toBe(host);
+		// One mount for the whole episode: no rebuilt shadow DOM, no replayed
+		// entry animation, no scroll lock released and re-taken.
+		expect(OpenDesignTouchpointElement.prototype.mount).toHaveBeenCalledTimes(1);
+		expect(document.body).toHaveAttribute("data-web-modal-scroll-lock");
+	});
+
+	// The other half of OPEND-3372's premise: the client now holds a credential
+	// the server has long since expired, and still has to be able to be told the
+	// activity was withdrawn. The receipt comparison is four fields, and the one
+	// the client offers is the stale id.
+	it("still clears on a 410 whose receipt echoes the stale decision id the client kept", async () => {
+		const longLived = (overrides: Record<string, unknown> = {}) => {
+			const now = Date.now();
+			return decision({
+				authorizationExpiresAt: new Date(now + 30 * 60_000).toISOString(),
+				endsAt: new Date(now + 40 * 60_000).toISOString(),
+				...overrides,
+			});
+		};
+		const original = longLived({ touchpointDecisionId: "decision-1" });
+		let call = 0;
+		const staged = vi.fn(async () => {
+			call += 1;
+			if (call === 1) return new Response(JSON.stringify(original), { status: 200 });
+			if (call === 2)
+				return new Response(
+					JSON.stringify(longLived({ touchpointDecisionId: "decision-2" })),
+					{ status: 200 },
+				);
+			return new Response(
+				JSON.stringify({
+					error: "production_runtime_revoked",
+					receipt: {
+						touchpointDecisionId: "decision-1",
+						deploymentId: original.deploymentId,
+						activityId: original.activityId,
+						contentVersionId: original.content.id,
+					},
+				}),
+				{ status: 410 },
+			);
+		});
+		vi.stubGlobal("fetch", staged);
+		await open();
+		await tick(16);
+		await tick(30_000);
+		expect(screen.getByRole("dialog")).toBeTruthy();
+		await tick(30_000);
+		await tick(16);
+		expect(staged.mock.calls.length).toBeGreaterThanOrEqual(3);
+		expect(screen.queryByRole("dialog")).toBeNull();
+	});
+
+	// OPEND-3364's premise, stated as an assertion rather than an assumption: a
+	// click after the credential rotated reports the id the client is holding,
+	// which is the stale one. Settlement has to be bound to the deployment
+	// window, not to that credential's own sixty seconds.
+	it("reports the stale decision id on a click after the credential rotated", async () => {
+		const longLived = (overrides: Record<string, unknown> = {}) => {
+			const now = Date.now();
+			return decision({
+				authorizationExpiresAt: new Date(now + 30 * 60_000).toISOString(),
+				endsAt: new Date(now + 40 * 60_000).toISOString(),
+				...overrides,
+			});
+		};
+		let dispatchAction: ((actionId: string) => Promise<void>) | undefined;
+		vi
+			.spyOn(OpenDesignTouchpointElement.prototype, "mount")
+			.mockImplementation(async function (
+				this: OpenDesignTouchpointElement,
+				_entry,
+				_digest,
+				_context,
+				_urls,
+				_actions,
+				options,
+			) {
+				dispatchAction = options?.dispatchAction;
+				this.shadowRoot?.replaceChildren(
+					document.createTextNode("Verified campaign"),
+				);
+			});
+		Object.defineProperty(navigator, "userActivation", {
+			configurable: true,
+			value: { isActive: true },
+		});
+		let decisionId = "decision-1";
+		const posted: unknown[] = [];
+		const staged = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+			if (init?.method === "POST") {
+				posted.push(JSON.parse(String(init.body)));
+				return new Response(JSON.stringify({ ok: true }), { status: 200 });
+			}
+			return new Response(
+				JSON.stringify(longLived({ touchpointDecisionId: decisionId })),
+				{ status: 200 },
+			);
+		});
+		vi.stubGlobal("fetch", staged);
+		await open();
+		await tick(16);
+		decisionId = "decision-2";
+		await tick(30_000);
+		await act(async () => {
+			await dispatchAction?.("learn");
+		});
+		expect(posted).toHaveLength(1);
+		expect(posted[0]).toMatchObject({ touchpointDecisionId: "decision-1" });
+	});
+
+	it.each([
+		["the content version changes", { content: { ...content, id: "version-2" } }],
+		["the deployment changes", { deploymentId: "deployment-2" }],
+		["the activity changes", { activityId: "campaign-2" }],
+	])("still rebuilds the host when %s", async (_label, overrides) => {
+		const longLived = (extra: Record<string, unknown> = {}) => {
+			const now = Date.now();
+			return decision({
+				authorizationExpiresAt: new Date(now + 30 * 60_000).toISOString(),
+				endsAt: new Date(now + 40 * 60_000).toISOString(),
+				...extra,
+			});
+		};
+		let next: Record<string, unknown> = {};
+		const staged = vi.fn(
+			async () => new Response(JSON.stringify(longLived(next)), { status: 200 }),
+		);
+		vi.stubGlobal("fetch", staged);
+		await open();
+		await tick(16);
+		const host = document.querySelector("opend-touchpoint");
+		expect(host).not.toBeNull();
+		next = overrides;
+		await tick(30_000);
+		await tick(16);
+		expect(document.querySelector("opend-touchpoint")).not.toBe(host);
+		expect(OpenDesignTouchpointElement.prototype.mount).toHaveBeenCalledTimes(2);
+	});
+
+	// Keeping the previous decision OBJECT when the key matches must never mean
+	// keeping the previous deadline: `validForMs` always comes from the new
+	// result, so an activity cut short still ends on time.
+	it("honours an authorization the server shortens even though the decision object is kept", async () => {
+		let call = 0;
+		const staged = vi.fn(async () => {
+			call += 1;
+			const now = Date.now();
+			if (call === 1)
+				return new Response(
+					JSON.stringify(
+						decision({
+							touchpointDecisionId: "decision-1",
+							authorizationExpiresAt: new Date(now + 30 * 60_000).toISOString(),
+							endsAt: new Date(now + 40 * 60_000).toISOString(),
+						}),
+					),
+					{ status: 200 },
+				);
+			if (call === 2)
+				return new Response(
+					JSON.stringify(
+						decision({
+							touchpointDecisionId: "decision-2",
+							authorizationExpiresAt: new Date(now + 45_000).toISOString(),
+							endsAt: new Date(now + 45_000).toISOString(),
+						}),
+					),
+					{ status: 200 },
+				);
+			throw new TypeError("Failed to fetch");
+		});
+		vi.stubGlobal("fetch", staged);
+		await open();
+		await tick(16);
+		const host = document.querySelector("opend-touchpoint");
+		await tick(30_000);
+		// Same key, so the host survives...
+		expect(document.querySelector("opend-touchpoint")).toBe(host);
+		await tick(44_000);
+		expect(screen.getByRole("dialog")).toBeTruthy();
+		// ...but the shortened authorization still retires it on the new deadline.
+		await tick(1_500);
+		await tick(16);
+		expect(screen.queryByRole("dialog")).toBeNull();
+	});
+
+	// OPEND-3375 through the whole chain: real loader, real lifecycle, real host.
+	// A withdrawn deployment answers 410 with no receipt, and the campaign has to
+	// come off the screen at once rather than ride the failure out on its lease.
+	it("closes at once when a withdrawn deployment answers 410 without a receipt", async () => {
+		let withdrawn = false;
+		const staged = vi.fn(async () => {
+			const now = Date.now();
+			return withdrawn
+				? new Response(JSON.stringify({ error: "production_runtime_withdrawn" }), { status: 410 })
+				: new Response(
+						JSON.stringify(
+							decision({
+								authorizationExpiresAt: new Date(now + 30 * 60_000).toISOString(),
+								endsAt: new Date(now + 40 * 60_000).toISOString(),
+							}),
+						),
+						{ status: 200 },
+					);
+		});
+		vi.stubGlobal("fetch", staged);
+		await open();
+		await tick(16);
+		expect(screen.getByRole("dialog")).toBeTruthy();
+		withdrawn = true;
+		await tick(30_000);
+		await tick(16);
+		expect(screen.queryByRole("dialog")).toBeNull();
+		// Not merely gone: gone and not coming back on a later poll.
+		withdrawn = false;
+		await tick(30_000);
+		await tick(16);
+		expect(screen.queryByRole("dialog")).toBeNull();
+	});
+
 	it("does not poll signed-out users and removes timers and wake listeners on cleanup", async () => {
 		const view = await open(false);
 		await tick(30_000);
@@ -750,6 +1255,27 @@ describe("Production campaign live refresh", () => {
 });
 
 describe("Production campaign action guard", () => {
+	it("rejects an action when the host cannot open the external page", async () => {
+		const { dispatchProductionCampaignAction } = await import(
+			"../../src/components/ProductionCampaignModal"
+		);
+		Object.defineProperty(navigator, "userActivation", {
+			configurable: true,
+			value: { isActive: true },
+		});
+		vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 204 })));
+		openExternalUrlMock.mockResolvedValueOnce(false);
+		const accepted = await dispatchProductionCampaignAction(
+			decision() as any,
+			"learn",
+			1,
+			() => 1,
+			Date.now() + 10_000,
+		);
+		expect(openExternalUrlMock).toHaveBeenCalledWith("https://example.com");
+		expect(accepted).toBe(false);
+	});
+
 	it.each([500, 502, 503])(
 		"consumes an authorized action when telemetry returns %s",
 		async (status) => {
@@ -1155,7 +1681,12 @@ describe("ProductionCampaignModal mount lifetime", () => {
 		}
 	});
 
-	it("fences the old modal action until recovery mounts a fresh decision", async () => {
+	// OPEND-3363, deliberate contract change. This case used to require that
+	// recovery FENCE the mounted decision and mount a second time before the
+	// action was authorized again — the destructive `wake` seen from the action
+	// path. Recovery no longer withdraws a live lease, so the host mounted once
+	// stays the authorized one across both events.
+	it("keeps the mounted modal action authorized across focus and online recovery", async () => {
 		(globalThis as CampaignHostGlobal).__openDesignCampaignTestHost = {
 			client: { osLocale: "en-US", type: "desktop" },
 		};
@@ -1190,11 +1721,12 @@ describe("ProductionCampaignModal mount lifetime", () => {
 		});
 		render(<ProductionCampaignModal authenticated sessionSubject="user-a" />);
 		await waitFor(() => expect(dispatchAction).toBeTypeOf("function"));
+		const host = document.querySelector("opend-touchpoint");
 		window.dispatchEvent(new Event("focus"));
 		window.dispatchEvent(new Event("online"));
-		await waitFor(() =>
-			expect(OpenDesignTouchpointElement.prototype.mount).toHaveBeenCalledTimes(2),
-		);
+		await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+		expect(OpenDesignTouchpointElement.prototype.mount).toHaveBeenCalledTimes(1);
+		expect(document.querySelector("opend-touchpoint")).toBe(host);
 		await dispatchAction?.("learn");
 		expect(fetchMock).toHaveBeenCalledWith(
 			"/api/touchpoints/production-runtime/events",
@@ -1332,10 +1864,203 @@ describe("ProductionCampaignModal mount lifetime", () => {
 	});
 });
 
+describe("ProductionCampaignModal concurrent keyboard ownership", () => {
+	beforeEach(() => {
+		(globalThis as CampaignHostGlobal).__openDesignCampaignTestHost = {
+			client: { osLocale: "en-US", type: "desktop" },
+		};
+		vi.stubGlobal("fetch", vi.fn(async () =>
+			new Response(JSON.stringify(decision()), { status: 200 })));
+		vi.spyOn(OpenDesignTouchpointElement.prototype, "mount").mockImplementation(
+			async function (this: OpenDesignTouchpointElement) {
+				this.shadowRoot?.replaceChildren(document.createElement("button"), document.createElement("button"));
+			},
+		);
+	});
+
+	async function openPair(nativeFirst: boolean) {
+		let native: ReturnType<typeof render>;
+		const onClose = vi.fn(() => native.unmount());
+		const openNative = () => {
+			native = render(<AmrArtifactUpgradeDialog profile={null} metricsConsent={false}
+				installationId={null} onClose={onClose} onContinue={() => {}} />);
+			const top = screen.getByTestId("amr-artifact-upgrade-dialog");
+			// jsdom does not load the CSS modules' actual stacking layers.
+			Object.assign(top.parentElement!.style, { position: "fixed", zIndex: "1700" });
+			return top;
+		};
+		let top = nativeFirst ? openNative() : null;
+		const initialControl = top?.querySelector<HTMLButtonElement>("button");
+		initialControl?.focus();
+		const cms = render(<ProductionCampaignModal authenticated sessionSubject="keyboard-user" />);
+		const campaign = await screen.findByRole("dialog", { name: "Campaign" });
+		Object.assign(campaign.style, { position: "fixed", zIndex: "1000" });
+		if (initialControl) expect(document.activeElement).toBe(initialControl);
+		top ??= openNative();
+		return { cms, campaign, top, onClose };
+	}
+
+	it.each([false, true])("leaves Escape and both Tab directions to the higher Dialog (native first: %s)", async nativeFirst => {
+		const { campaign, top, onClose } = await openPair(nativeFirst);
+		const host = campaign.querySelector("opend-touchpoint")!;
+		const first = Array.from(top.querySelectorAll("button")).find(button => !button.disabled)!;
+		const finalControl = Array.from(top.querySelectorAll("button")).filter(button => !button.disabled).at(-1)!;
+		const focus = vi.spyOn(HTMLElement.prototype, "focus");
+		top.focus();
+		fireEvent.keyDown(top, { key: "Tab" });
+		expect(document.activeElement).toBe(first);
+		fireEvent.keyDown(first!, { key: "Tab", shiftKey: true });
+		expect(document.activeElement).toBe(finalControl);
+		fireEvent.keyDown(finalControl, { key: "Tab" });
+		expect(document.activeElement).toBe(first);
+		expect(focus.mock.instances.some(element => element instanceof Node && campaign.contains(element))).toBe(false);
+		fireEvent.keyDown(first!, { key: "Escape" });
+		expect(onClose).toHaveBeenCalledTimes(1);
+		expect(campaign.isConnected).toBe(true);
+		expect(top.isConnected).toBe(false);
+		// After the higher layer leaves, CMS resumes its Shadow DOM trap and Escape.
+		fireEvent.keyDown(document, { key: "Tab" });
+		expect(host.shadowRoot!.activeElement).toBe(host.shadowRoot!.firstElementChild);
+		fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+		expect(host.shadowRoot!.activeElement).toBe(host.shadowRoot!.lastElementChild);
+		fireEvent.keyDown(document, { key: "Escape" });
+		expect(campaign.isConnected).toBe(false);
+	});
+
+	it("leaves an already handled key event alone", async () => {
+		const { campaign, top } = await openPair(false);
+		fireEvent.keyDown(top, { key: "Escape" });
+		const event = new KeyboardEvent("keydown", { key: "Escape", cancelable: true, bubbles: true });
+		event.preventDefault();
+		fireEvent(document, event);
+		expect(campaign.isConnected).toBe(true);
+	});
+
+	it.each([false, true])("does not restore lower CMS focus over the higher Dialog on withdrawal (native first: %s)", async nativeFirst => {
+		const { cms, top } = await openPair(nativeFirst);
+		const control = top.querySelector("button")!;
+		control.focus();
+		const focus = vi.spyOn(HTMLElement.prototype, "focus");
+		cms.unmount();
+		expect(document.activeElement).toBe(control);
+		expect(focus).not.toHaveBeenCalled();
+	});
+});
+
+// OPEND-3286: the CTA lives in the component's open ShadowRoot, which a
+// light-DOM `querySelector("button")` cannot reach, so entry focus used to fall
+// back to the `.modal` container and the platform painted a ring around the
+// whole campaign on every re-entry.
+describe("ProductionCampaignModal initial focus", () => {
+	const enter = async () => {
+		const view = render(
+			<ProductionCampaignModal authenticated sessionSubject="user-a" />,
+		);
+		await screen.findByRole("dialog");
+		return view;
+	};
+	beforeEach(() => {
+		(globalThis as CampaignHostGlobal).__openDesignCampaignTestHost = {
+			client: { osLocale: "en-US", type: "desktop" },
+		};
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => new Response(JSON.stringify(decision()), { status: 200 })),
+		);
+	});
+	it("focuses the CTA inside the ShadowRoot on entry and on re-entry", async () => {
+		vi.spyOn(OpenDesignTouchpointElement.prototype, "mount").mockImplementation(
+			async function (this: OpenDesignTouchpointElement) {
+				const cta = document.createElement("button");
+				cta.type = "button";
+				cta.textContent = "Try now";
+				this.shadowRoot?.replaceChildren(cta);
+			},
+		);
+		for (let entry = 0; entry < 2; entry += 1) {
+			const view = await enter();
+			const host = document.querySelector("opend-touchpoint")!;
+			const cta = host.shadowRoot!.querySelector("button")!;
+			await waitFor(() => expect(host.shadowRoot!.activeElement).toBe(cta));
+			expect(document.activeElement).toBe(host);
+			expect(document.activeElement).not.toBe(
+				screen.getByRole("dialog").firstElementChild,
+			);
+			view.unmount();
+			// Leaving and coming back: drop the device impression so the same
+			// activity presents again, as the acceptance re-entry does.
+			localStorage.clear();
+		}
+	});
+	it("falls back to the container without a focus ring when content has no control", async () => {
+		await enter();
+		const modal = screen.getByRole("dialog").firstElementChild;
+		await waitFor(() => expect(document.activeElement).toBe(modal));
+		expect(modal?.getAttribute("tabindex")).toBe("-1");
+		const focusRule = modalHostStyles.match(/\.modal:focus\s*\{[^}]*\}/)?.[0];
+		expect(focusRule).toContain("outline: none");
+		// Focus stays trapped on the container instead of escaping the modal.
+		fireEvent.keyDown(document, { key: "Tab" });
+		expect(document.activeElement).toBe(modal);
+	});
+});
+
 describe("ProductionCampaignModal device impressions", () => {
 	const marker = (subject = "user-a", activity = "campaign-1") =>
 		`touchpoint-displayed:v1:${encodeURIComponent(subject)}:${encodeURIComponent(activity)}`;
+	/**
+	 * The impression is recorded inside a `requestAnimationFrame`, so a case that
+	 * waits for one has to fake frames too. Leaving `requestAnimationFrame` out
+	 * of `toFake` leaves it on the REAL clock while the case advances only the
+	 * fake one, and then whether the marker is written comes down to how much
+	 * wall time happened to pass inside the awaits — green on an idle machine,
+	 * red under load.
+	 */
+	const IMPRESSION_TIMERS = [
+		"Date",
+		"performance",
+		"setTimeout",
+		"clearTimeout",
+		"setInterval",
+		"clearInterval",
+		"requestAnimationFrame",
+		"cancelAnimationFrame",
+	] as const;
+	let verification: MockInstance<typeof touchpointComponent.verifyWebTouchpoint>;
+	/**
+	 * Verification and mount must settle on their real completion promises,
+	 * without spending authorization time while native crypto is pending.
+	 * Flush the decision at the current instant, wait for the actual mount,
+	 * then advance the single virtual frame that records the visible impression.
+	 */
+	const advanceToRecordedImpression = async (
+		subject = "user-a",
+		activity = "campaign-1",
+	) => {
+		if (localStorage.getItem(marker(subject, activity)) === "1") return;
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(0);
+		});
+		const result = verification.mock.results.at(-1);
+		if (!result || result.type !== "return")
+			throw new Error("impression readiness requires a started content verification");
+		await act(async () => {
+			await result.value;
+			const mount = vi
+				.mocked(OpenDesignTouchpointElement.prototype.mount)
+				.mock.results.at(-1);
+			if (!mount || mount.type !== "return")
+				throw new Error("verified content did not start a mount");
+			await mount.value;
+		});
+		await act(async () => {
+			await vi.advanceTimersToNextFrame();
+		});
+		expect(localStorage.getItem(marker(subject, activity))).toBe("1");
+	};
 	beforeEach(() => {
+		// Observe the real verifier; neither its crypto nor integrity checks are mocked.
+		verification = vi.spyOn(touchpointComponent, "verifyWebTouchpoint");
 		(globalThis as CampaignHostGlobal).__openDesignCampaignTestHost = {
 			client: { osLocale: "en-US", type: "desktop" },
 		};
@@ -1432,6 +2157,290 @@ describe("ProductionCampaignModal device impressions", () => {
 		await screen.findByRole("dialog");
 		await waitFor(() => expect(localStorage.getItem(marker())).toBe("1"));
 	});
+	// The interaction between OPEND-3363 and the wake fence from #8269.
+	//
+	// The fence exists to compensate for a premise the fence's own comment
+	// states: "A hidden page ... withdraws the lease and takes this modal down
+	// with it". OPEND-3363 removed that premise — hiding now cancels only the
+	// request in flight, and both the lease and the modal stay. The fence still
+	// releases the presentation, so the campaign is on screen with nothing
+	// recorded as presenting it; the poll that follows on return then reads the
+	// device impression, finds no open presentation, and clears the host.
+	//
+	// Two correct fixes producing the P1 symptom between them.
+	it("keeps a displayed campaign through a tab switch now that hiding no longer withdraws it", async () => {
+		let hidden = false;
+		vi.spyOn(document, "hidden", "get").mockImplementation(() => hidden);
+		render(<ProductionCampaignModal authenticated sessionSubject="user-a" />);
+		const dialog = await screen.findByRole("dialog");
+		await waitFor(() => expect(localStorage.getItem(marker())).toBe("1"));
+		const host = document.querySelector("opend-touchpoint");
+
+		// Away. OPEND-3363: the lease is untouched, so the modal is still mounted.
+		hidden = true;
+		await act(async () => {
+			fireEvent(document, new Event("visibilitychange"));
+		});
+		expect(screen.getByRole("dialog")).toBe(dialog);
+
+		// Back, and the revalidation that follows lands.
+		hidden = false;
+		await act(async () => {
+			fireEvent(document, new Event("visibilitychange"));
+		});
+		await act(async () => {});
+		expect(screen.getByRole("dialog")).toBe(dialog);
+		expect(document.querySelector("opend-touchpoint")).toBe(host);
+	});
+
+	it("waits for real verification without spending the authorization clock", async () => {
+		vi.useFakeTimers({ toFake: [...IMPRESSION_TIMERS] });
+		const now = new Date("2026-01-01T00:00:00.000Z");
+		vi.setSystemTime(now);
+		const digest = crypto.subtle.digest.bind(crypto.subtle);
+		let releaseVerification!: () => void;
+		const verificationGate = new Promise<void>((resolve) => {
+			releaseVerification = resolve;
+		});
+		let verificationStarted!: () => void;
+		const started = new Promise<void>((resolve) => {
+			verificationStarted = resolve;
+		});
+		vi.spyOn(crypto.subtle, "digest").mockImplementation(async (...args) => {
+			verificationStarted();
+			await verificationGate;
+			return digest(...args);
+		});
+		render(<ProductionCampaignModal authenticated sessionSubject="user-a" />);
+		const impression = advanceToRecordedImpression();
+		// Observe failures after releasing the external boundary, not as an
+		// unhandled rejection while the test is still inspecting pending work.
+		void impression.catch(() => undefined);
+		try {
+			await started;
+			expect(Date.now()).toBe(now.getTime());
+			expect(OpenDesignTouchpointElement.prototype.mount).not.toHaveBeenCalled();
+			expect(localStorage.getItem(marker())).toBeNull();
+		} finally {
+			releaseVerification();
+			await impression;
+		}
+		expect(localStorage.getItem(marker())).toBe("1");
+		expect(screen.getByRole("dialog")).toBeTruthy();
+	});
+
+	// The same tab switch, but with time actually passing. The visibility-only
+	// case cannot distinguish "the lease was left alone" from "nothing lapsed".
+	// Forty-five seconds of a sixty-second authorization puts a poll tick inside
+	// the hidden spell and still leaves the lease the server's to renew.
+	it("keeps the same host through a background spell shorter than its authorization", async () => {
+		vi.useFakeTimers({ toFake: [...IMPRESSION_TIMERS] });
+		vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+		let hidden = false;
+		vi.spyOn(document, "hidden", "get").mockImplementation(() => hidden);
+		const fetchMock = vi.fn(async () => new Response(JSON.stringify(decision()), { status: 200 }));
+		vi.stubGlobal("fetch", fetchMock);
+
+		render(<ProductionCampaignModal authenticated sessionSubject="user-a" />);
+		// The dialog is presented once verified content has mounted.
+		await advanceToRecordedImpression();
+		const dialog = screen.getByRole("dialog");
+		const host = document.querySelector("opend-touchpoint");
+		expect(host).not.toBeNull();
+		await advanceToRecordedImpression();
+		const callsBeforeHiding = fetchMock.mock.calls.length;
+
+		// Backgrounded. The thirty-second tick lands inside this and must not fire:
+		// no answer could be acted on while `isCurrent` fences a hidden page.
+		hidden = true;
+		await act(async () => { fireEvent(document, new Event("visibilitychange")); });
+		await act(async () => { await vi.advanceTimersByTimeAsync(45_000); });
+		expect(screen.getByRole("dialog")).toBe(dialog);
+		expect(document.querySelector("opend-touchpoint")).toBe(host);
+		expect(fetchMock.mock.calls.length).toBe(callsBeforeHiding);
+
+		// Back with fifteen seconds of authorization left. That revalidates, it
+		// does not re-present: same dialog, same host, no replayed entry animation.
+		hidden = false;
+		await act(async () => { fireEvent(document, new Event("visibilitychange")); });
+		await act(async () => { await vi.advanceTimersByTimeAsync(16); });
+		expect(fetchMock.mock.calls.length).toBeGreaterThan(callsBeforeHiding);
+		expect(screen.getByRole("dialog")).toBe(dialog);
+		expect(document.querySelector("opend-touchpoint")).toBe(host);
+	});
+
+	// Deliberate contract change (OPEND-3363). This case used to assert that
+	// hiding the page took the modal down, and then that waking did not bring it
+	// back. The first half is no longer true: hiding cancels the request in
+	// flight and leaves the lease alone, which is what stopped a tab switch from
+	// tearing a campaign off the screen.
+	//
+	// The second half is what the case was really protecting, and it still holds
+	// — it just needs a sleep long enough to be a real one. The presentation is
+	// anchored to the authorization that opened it, so once that lapses, the
+	// offer arriving on wake is a new presentation and the device impression
+	// closes it.
+	it("does not re-present a displayed campaign after a sleep outlasts its authorization", async () => {
+		vi.useFakeTimers({ toFake: [...IMPRESSION_TIMERS] });
+		vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+		let hidden = false;
+		vi.spyOn(document, "hidden", "get").mockImplementation(() => hidden);
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => new Response(JSON.stringify(decision()), { status: 200 })),
+		);
+		render(<ProductionCampaignModal authenticated sessionSubject="user-a" />);
+		// The dialog is presented once verified content has mounted.
+		await advanceToRecordedImpression();
+		expect(screen.getByRole("dialog")).toBeTruthy();
+
+		// Asleep past the sixty-second authorization this decision carries. The
+		// lease retires on its own deadline while the page is hidden.
+		hidden = true;
+		await act(async () => { fireEvent(document, new Event("visibilitychange")); });
+		await act(async () => { await vi.advanceTimersByTimeAsync(90_000); });
+		expect(screen.queryByRole("dialog")).toBeNull();
+
+		// Awake. The server still offers the same activity; the device impression
+		// has to close it, because this would be a second presentation.
+		hidden = false;
+		await act(async () => { fireEvent(document, new Event("visibilitychange")); });
+		await act(async () => { await vi.advanceTimersByTimeAsync(16); });
+		expect(screen.queryByRole("dialog")).toBeNull();
+		// The frame is presented only after verification, so the published offer
+		// itself is observed through its (still hidden) host element.
+		expect(document.querySelector("opend-touchpoint")).toBeNull();
+
+		// Control. Both assertions above are absences, and an absence is what a
+		// lifecycle that never came back at all also looks like — a `wake` that
+		// stopped waking would leave this case fully green while proving nothing.
+		// Drop the impression and wake once more, through the same event and the
+		// same advance as the assertion above, so the impression is the only
+		// difference between the two outcomes: the same path now has to PRESENT,
+		// which is what makes the nulls above readable as the impression gate
+		// closing a live offer rather than as no offer arriving.
+		localStorage.removeItem(marker());
+		await act(async () => { fireEvent(document, new Event("visibilitychange")); });
+		await act(async () => { await vi.advanceTimersByTimeAsync(16); });
+		expect(document.querySelector("opend-touchpoint")).not.toBeNull();
+		await advanceToRecordedImpression();
+		expect(screen.getByRole("dialog")).toBeTruthy();
+	});
+	it("keeps the displayed campaign on screen when a failed poll later recovers", async () => {
+		// A transport failure is not a withdrawal: the lifecycle keeps the lease
+		// and revalidates when the network comes back. The presentation has to
+		// survive with it, or the recovering attempt reads the device impression
+		// and closes the activity that never left the screen.
+		//
+		// OPEND-3436 changed what schedules that recovery — the in-cycle backoff
+		// chain is gone, because a client with no network answers every attempt
+		// in it the same way — so the recovery here is driven by the `online`
+		// event a real reconnection fires. The property under test is the one it
+		// always was: the same campaign is still on screen afterwards.
+		//
+		// The impression this case needs has to be the REAL one. Writing the
+		// marker by hand reads like a shortcut past an unfaked frame, but it
+		// manufactures a state the product cannot produce: `openPresentation` is
+		// assigned when `mountTouchpoint` resolves and the marker only in the
+		// frame after that, so "impression recorded, nothing open" exists in the
+		// test and nowhere else. It is also precisely the `{kind:"clear"}` branch
+		// of the load callback. Waiting for the marker instead is a mount barrier,
+		// because nothing can write it until the presentation is open.
+		vi.useFakeTimers({ toFake: [...IMPRESSION_TIMERS] });
+		vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+		let mounted!: () => void;
+		const mountedPromise = new Promise<void>((resolve) => {
+			mounted = resolve;
+		});
+		vi
+			.spyOn(OpenDesignTouchpointElement.prototype, "mount")
+			.mockImplementation(async function (this: OpenDesignTouchpointElement) {
+				this.shadowRoot?.replaceChildren(
+					document.createTextNode("Verified campaign"),
+				);
+				mounted();
+			});
+		let calls = 0;
+		const fetchMock = vi.fn(async () => {
+			calls += 1;
+			if (calls === 2) throw new TypeError("Failed to fetch");
+			return new Response(JSON.stringify(decision()), { status: 200 });
+		});
+		vi.stubGlobal("fetch", fetchMock);
+		render(<ProductionCampaignModal authenticated sessionSubject="user-a" />);
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(16);
+		});
+		// Insertion precedes async mounting. Keep the host stable, then wait for
+		// the real impression that the current lifecycle records after mounting.
+		await act(async () => {
+			await mountedPromise;
+		});
+		const host = document.querySelector("opend-touchpoint");
+		expect(host).not.toBeNull();
+		await advanceToRecordedImpression();
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(30_000);
+		});
+		expect(calls).toBe(2);
+		expect(document.querySelector("opend-touchpoint")).toBe(host);
+		act(() => {
+			window.dispatchEvent(new Event("online"));
+		});
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(1_500);
+		});
+		// The failed poll and the online-triggered recovery must both happen.
+		expect(calls).toBe(3);
+		expect(document.querySelector("opend-touchpoint")).toBe(host);
+		expect(screen.queryByRole("dialog")).not.toBeNull();
+		expect(OpenDesignTouchpointElement.prototype.mount).toHaveBeenCalledTimes(1);
+	});
+	it.each(["no-decision", "stale-revocation"] as const)(
+		"keeps the displayed campaign on screen when a retained %s poll recovers",
+		async (interim) => {
+			const active = decision();
+			let calls = 0;
+			const fetchMock = vi.fn(async () => {
+				calls += 1;
+				if (calls !== 2)
+					return new Response(JSON.stringify(active), { status: 200 });
+				if (interim === "no-decision")
+					return new Response(null, { status: 404 });
+				return new Response(
+					JSON.stringify({
+						error: "production_runtime_revoked",
+						receipt: {
+							touchpointDecisionId: active.touchpointDecisionId,
+							deploymentId: "stale-deployment",
+							activityId: active.activityId,
+							contentVersionId: active.content.id,
+						},
+					}),
+					{ status: 410 },
+				);
+			});
+			vi.stubGlobal("fetch", fetchMock);
+			render(<ProductionCampaignModal authenticated sessionSubject="user-a" />);
+			await waitFor(() => expect(calls).toBe(1));
+			// A requested response is not a mounted host. Observe its real visibility
+			// record before capturing identity or starting the recovery poll.
+			await waitFor(() => expect(localStorage.getItem(marker())).toBe("1"));
+			const host = document.querySelector("opend-touchpoint");
+			expect(host).not.toBeNull();
+			await act(async () => {
+				fireEvent(window, new Event("focus"));
+			});
+			await waitFor(() => expect(calls).toBe(2));
+			expect(document.querySelector("opend-touchpoint")).toBe(host);
+			await act(async () => {
+				fireEvent(window, new Event("focus"));
+			});
+			await waitFor(() => expect(calls).toBe(3));
+			expect(document.querySelector("opend-touchpoint")).toBe(host);
+			expect(screen.queryByRole("dialog")).not.toBeNull();
+		},
+	);
 	it("keeps the existing badge and its manual static action usable after automatic suppression", async () => {
 		localStorage.setItem(marker(), "1");
 		const placementKey = "opend.home.account-badge";
@@ -1522,8 +2531,10 @@ describe("ProductionCampaignModal device impressions", () => {
 		const view = render(
 			<ProductionCampaignModal authenticated sessionSubject="user-a" />,
 		);
-		await screen.findByRole("dialog");
+		await waitFor(() => expect(verify).toHaveBeenCalled());
 		await act(async () => {});
+		// A rejected verification releases the page instead of leaving a backdrop.
+		expect(screen.queryByRole("dialog")).toBeNull();
 		expect(localStorage.getItem(marker())).toBeNull();
 		view.unmount();
 		verify.mockRestore();

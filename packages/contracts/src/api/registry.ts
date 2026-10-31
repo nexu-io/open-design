@@ -209,6 +209,7 @@ export interface SkillSummary {
   descriptionI18n?: Record<string, string>;
   triggers: string[];
   mode:
+    | 'utility'
     | 'prototype'
     | 'deck'
     | 'template'

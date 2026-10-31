@@ -12,7 +12,7 @@
 // writing the config file with the active VELA_PROFILE and exiting 0 —
 // mirroring real vela's on-disk side-effect without the device-auth loop.
 
-import { mkdtempSync, existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, chmodSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { createServer } from 'node:http';
 import https from 'node:https';
@@ -30,6 +30,7 @@ import { startServer } from '../../src/server.js';
 import { readAppConfig, writeAppConfig } from '../../src/app-config.js';
 import {
   clearAllVelaLiveAccounts,
+  clearVelaAuthorizationState,
   clearVelaLiveAccountRefreshThrottle,
   isVelaLoginSupervisorSettled,
   parseAmrEntryAnalyticsPayload,
@@ -38,6 +39,7 @@ import {
   velaLiveAccountCacheKey,
 } from '../../src/integrations/vela.js';
 import { registerVelaRoutes } from '../../src/routes/vela.js';
+import { workspaceContextFromDirectoryItem } from '../../src/collab/vela-workspace-context.js';
 
 interface StartedServer {
   url: string;
@@ -260,6 +262,8 @@ afterEach(async () => {
     delete process.env.FAKE_VELA_BILLING_LOG;
     delete process.env.FAKE_VELA_BILLING_DELAY_MS;
     delete process.env.FAKE_VELA_BILLING_UNKNOWN_COMMAND;
+    delete process.env.FAKE_VELA_BILLING_STDERR;
+    clearVelaAuthorizationState();
     delete process.env.FAKE_VELA_MODEL_LIST_JSON;
     delete process.env.FAKE_VELA_MODEL_PRESET_JSON;
     delete process.env.FAKE_VELA_ENV_DUMP_PATH;
@@ -579,7 +583,13 @@ describe('GET /api/integrations/vela/wallet', () => {
       expect(second.body.balanceUsd).toBeNull();
       expect(second.body.source).toBe('unavailable');
       expect(second.body.error?.code).toBe('unauthorized');
-      expect(second.body.error?.message).toMatch(/sign in again/i);
+      expect(second.body.error?.message).not.toMatch(/sign in/i);
+      // Billing is display-only (OPEND-3553): a wallet rejection must not
+      // expire the AMR session.
+      const status = await getJson<{ sessionState?: string }>(
+        `${baseUrl}/api/integrations/vela/status`,
+      );
+      expect(status.body.sessionState).toBe('authenticated');
     } finally {
       await walletApi.close();
     }
@@ -993,6 +1003,27 @@ describe('GET /api/integrations/vela/status', () => {
       ? readFileSync(billingLog, 'utf8').trim().split('\n').filter(Boolean)
       : [];
     expect(attempts).toHaveLength(1);
+  });
+
+  it('keeps the session authenticated when vela billing summary reports 401 (OPEND-3553)', async () => {
+    clearAllVelaLiveAccounts();
+    process.env.FAKE_VELA_BILLING_STDERR =
+      'Error: API request failed with status 401: {"error":"unauthenticated"}';
+    seedLogin('local', {
+      user: { id: 'billing-401', email: 'billing-401@example.com', plan: undefined },
+    });
+
+    const first = await getJson<{ sessionState?: string; account?: unknown }>(
+      `${baseUrl}/api/integrations/vela/status?refresh=1`,
+    );
+    const second = await getJson<{ sessionState?: string; account?: unknown }>(
+      `${baseUrl}/api/integrations/vela/status`,
+    );
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(second.body.account).toBeUndefined();
+    expect(second.body.sessionState).toBe('authenticated');
   });
 
   it('keeps signed-in status usable when old vela CLI lacks billing commands', async () => {
@@ -3620,5 +3651,179 @@ describe('parseAmrEntryAnalyticsPayload — entry sources added in this PR', () 
         conversionSource: 'not_a_real_source',
       }),
     ).toBeNull();
+  });
+});
+
+// Model entitlements must use the request's verified selection, never the
+// daemon's ambient CLI workspace or a different tab's current selection.
+describe('GET /api/amr/models explicit workspace authority', () => {
+  it.each(['replacement', 'rotation'] as const)('preserves the catalog actor boundary through %s credential changes', async (mode) => {
+    const dataDir = process.env.OD_DATA_DIR as string;
+    const previous = await readAppConfig(dataDir);
+    const previousRollout = process.env.OD_NEXT_STRATEGY_ROLLOUT;
+    // This exercises the direct AMR model preflight. An inherited OD Next
+    // rollout would require its separate persisted task mapping first.
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
+    seedLogin('local', { controlKey: 'actor-a-control', runtimeKey: 'actor-a-runtime', user: { id: 'actor-a', email: 'a@example.test' } });
+    const binary = path.join(tmpHome, 'changing-actor-vela.mjs');
+    const changed = path.join(tmpHome, 'changed');
+    const launched = path.join(tmpHome, 'agent-launched');
+    writeFileSync(binary, `#!/usr/bin/env node
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+if (args[0] === 'model') {
+  if (args[1] === 'preset' && !existsSync(${JSON.stringify(changed)})) {
+    const config = JSON.parse(readFileSync(${JSON.stringify(configPath())}, 'utf8'));
+    Object.assign(config.profiles.local, { controlKey: 'actor-b-control', runtimeKey: 'actor-b-runtime', user: { id: ${JSON.stringify(mode === 'rotation' ? 'actor-a' : 'actor-b')}, email: 'b@example.test' } });
+    writeFileSync(${JSON.stringify(configPath())}, JSON.stringify(config));
+    writeFileSync(${JSON.stringify(changed)}, 'yes');
+  }
+  console.log(JSON.stringify({ source: args[1] === 'preset' ? 'preset' : 'remote', data: [{ id: 'public_model_deepseek_v4_flash', enabled: true, default: true }] }));
+} else {
+  if (args[0] === 'agent') writeFileSync(${JSON.stringify(launched)}, 'yes');
+  await import(${JSON.stringify(new URL('../fixtures/fake-vela.mjs', import.meta.url).href)});
+}
+`);
+    chmodSync(binary, 0o755);
+    await setSettingsAmrEnv({ VELA_BIN: binary });
+    try {
+      const project = await postJson(`${baseUrl}/api/projects`, { id: `model-actor-${Date.now()}`, name: 'Catalog actor boundary' });
+      expect(project.status).toBe(200);
+      const projectId = (project.body as { project: { id: string } }).project.id;
+      const response = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: 'amr', projectId, message: 'never run as replacement actor', model: 'default' }),
+      });
+      expect(response.ok).toBe(true);
+      const events = await response.text();
+      expect(existsSync(changed)).toBe(true);
+      expect(existsSync(launched)).toBe(mode === 'rotation');
+      if (mode === 'replacement') expect(events).toContain('AMR_AUTH_REQUIRED');
+      else {
+        expect(events).not.toContain('AMR_AUTH_REQUIRED');
+        expect(events).toContain('event: end');
+      }
+    } finally {
+      if (previousRollout === undefined) delete process.env.OD_NEXT_STRATEGY_ROLLOUT;
+      else process.env.OD_NEXT_STRATEGY_ROLLOUT = previousRollout;
+      await writeAppConfig(dataDir, { ...previous });
+    }
+  });
+
+
+  it('keeps verified A to B to A entitlements separate from the ambient CLI workspace', async () => {
+    const binary = path.join(tmpHome, 'scoped-model-vela.mjs');
+    const reads = path.join(tmpHome, 'model-reads.jsonl');
+    writeFileSync(binary, `#!/usr/bin/env node
+import { appendFileSync } from 'node:fs';
+if (process.argv[2] !== 'model') { console.log('1.0.0'); process.exit(0); }
+const source = process.argv[3] === 'preset' ? 'preset' : 'remote';
+if (process.argv[3] === 'list' && !process.argv.includes('--help')) appendFileSync(${JSON.stringify(reads)}, JSON.stringify({ workspaceId: process.env.VELA_WORKSPACE_ID, argv: process.argv.slice(2) }) + '\\n');
+console.log(JSON.stringify({ source, data: [
+  { id: 'public_model_deepseek_v4_1_flash', enabled: true },
+  { id: 'public_model_deepseek_v4_pro', enabled: source === 'remote' && process.env.VELA_WORKSPACE_ID === 'go-b' },
+] }));
+`);
+    chmodSync(binary, 0o755);
+    const config = await readAppConfig(process.env.OD_DATA_DIR as string);
+    const app = express();
+    const lifecycle = registerVelaRoutes(app, {
+      paths: { RUNTIME_DATA_DIR: process.env.OD_DATA_DIR as string },
+      appConfig: { readAppConfig: async () => ({
+        ...config, agentCliEnv: { amr: { VELA_BIN: binary, VELA_WORKSPACE_ID: 'ambient-go' } },
+      }) },
+      http: {},
+      env: process.env,
+      verifyWorkspaceReadAuthority: async (req) => {
+        const headers = req as { get(name: string): string };
+        return { ok: true, context: workspaceContextFromDirectoryItem({
+          workspaceId: headers.get('x-od-workspace-id'),
+          workspaceMemberId: headers.get('x-od-workspace-member-id'),
+          workspaceName: 'scoped fixture', workspaceType: 'team', role: 'member',
+          memberStatus: 'active', lifecycleState: 'active',
+        }) };
+      },
+    });
+    const scopedServer = app.listen(0, '127.0.0.1');
+    await new Promise<void>((resolve) => scopedServer.once('listening', resolve));
+    try {
+      const address = scopedServer.address() as AddressInfo;
+      let beforeReturnReads = '';
+      for (const workspaceId of ['free-a', 'go-b', 'free-a']) {
+        await vi.waitFor(async () => {
+          const response = await fetch(`http://127.0.0.1:${address.port}/api/amr/models`, {
+            headers: { 'x-od-workspace-id': workspaceId, 'x-od-workspace-member-id': `member-${workspaceId}` },
+          });
+          expect(response.status).toBe(200);
+          const catalog = await response.json() as { source: string; refreshing: boolean; models: Array<{ id: string; enabled?: boolean }> };
+          expect(catalog.source).toBe('remote');
+          expect(catalog.refreshing).toBe(false);
+          expect(catalog.models.find((model) => model.id === 'deepseek-v4-pro')?.enabled).toBe(workspaceId === 'go-b');
+        });
+        if (workspaceId === 'go-b') beforeReturnReads = readFileSync(reads, 'utf8');
+      }
+      // A-return must reuse A's own catalog. A B-refresh already in flight
+      // may still finish, so compare A commands rather than all child writes.
+      const parseReads = (value: string): Array<{ workspaceId: string; argv: string[] }> => value.trim().split('\n').map((line) => JSON.parse(line));
+      const calls = parseReads(readFileSync(reads, 'utf8'));
+      expect(calls.filter((call) => call.workspaceId === 'free-a')).toEqual(
+        parseReads(beforeReturnReads).filter((call) => call.workspaceId === 'free-a'),
+      );
+      expect(new Set(calls.map((call) => call.workspaceId))).toEqual(new Set(['free-a', 'go-b']));
+      expect(calls.every((call) => JSON.stringify(call.argv) === JSON.stringify(['model', 'list', '--all', '--format', 'json']))).toBe(true);
+      const forced = await fetch(`http://127.0.0.1:${address.port}/api/amr/models?refresh=1`, {
+        headers: { 'x-od-workspace-id': 'free-a', 'x-od-workspace-member-id': 'member-free-a' },
+      });
+      expect(forced.status).toBe(200);
+      await vi.waitFor(async () => {
+        const response = await fetch(`http://127.0.0.1:${address.port}/api/amr/models`, {
+          headers: { 'x-od-workspace-id': 'free-a', 'x-od-workspace-member-id': 'member-free-a' },
+        });
+        const catalog = await response.json() as { source: string; refreshing: boolean };
+        expect(catalog.source).toBe('remote');
+        expect(catalog.refreshing).toBe(false);
+      });
+      const afterForced = parseReads(readFileSync(reads, 'utf8'));
+      expect(afterForced.filter((call) => call.workspaceId === 'free-a')).toHaveLength(calls.filter((call) => call.workspaceId === 'free-a').length + 1);
+      expect(afterForced.filter((call) => call.workspaceId === 'go-b')).toEqual(calls.filter((call) => call.workspaceId === 'go-b'));
+      expect(afterForced.at(-1)?.workspaceId).toBe('free-a');
+      const unscoped = await fetch(`http://127.0.0.1:${address.port}/api/amr/models?refresh=1`);
+      expect(unscoped.status).toBe(400);
+    } finally {
+      await lifecycle.close();
+      await new Promise<void>((resolve) => scopedServer.close(() => resolve()));
+    }
+  });
+
+
+  it('rejects a denied selected principal before reading a model catalog', async () => {
+    const app = express();
+    const verifyWorkspaceReadAuthority = vi.fn(async () => ({
+      ok: false as const,
+      status: 403 as const,
+      code: 'WORKSPACE_ACCESS_DENIED' as const,
+      message: 'the requested workspace is not available to this member',
+    }));
+    const lifecycle = registerVelaRoutes(app, {
+      paths: { RUNTIME_DATA_DIR: process.env.OD_DATA_DIR as string },
+      appConfig: { readAppConfig },
+      http: {},
+      env: process.env,
+      verifyWorkspaceReadAuthority,
+    });
+    const scopedServer = app.listen(0, '127.0.0.1');
+    await new Promise<void>((resolve) => scopedServer.once('listening', resolve));
+    try {
+      const address = scopedServer.address() as AddressInfo;
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/amr/models`, {
+        headers: { 'x-od-workspace-id': 'free-a', 'x-od-workspace-member-id': 'foreign-member' },
+      });
+      expect(response.status).toBe(403);
+      expect(await response.json()).toMatchObject({ error: 'WORKSPACE_ACCESS_DENIED' });
+      expect(verifyWorkspaceReadAuthority).toHaveBeenCalledTimes(1);
+    } finally {
+      await lifecycle.close();
+      await new Promise<void>((resolve) => scopedServer.close(() => resolve()));
+    }
   });
 });
