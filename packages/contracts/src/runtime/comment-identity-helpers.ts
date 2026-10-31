@@ -3,9 +3,13 @@ import { commentSelectorClaimsIdentity } from './comment-identity-selector.js';
 /** Comment-only helpers; serialized as a complete closure into both preview bridges.
  * Inspect/tool annotations are deliberately independent. Count the whole document,
  * including hidden nodes, before exposing any persisted identity.
+ *
+ * The bridges call `commentSelectorClaimsIdentity(...)` by name, but a production
+ * minifier renames the function, so `toString()` alone would declare a different
+ * name. Bind the serialized function to the name the bridges use.
  */
 export const COMMENT_IDENTITY_HELPERS = String.raw`
-${commentSelectorClaimsIdentity.toString()}
+  var commentSelectorClaimsIdentity = ${commentSelectorClaimsIdentity.toString()};
   function commentUuid(value){ return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value); }
   function commentSelector(uuid){ return '[data-od-comment-id="' + uuid + '"]'; }
   function uniqueCommentNode(uuid){
