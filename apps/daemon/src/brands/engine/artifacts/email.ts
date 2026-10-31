@@ -7,8 +7,8 @@
  *   From identity → Subject → hidden Preheader (complements, never repeats) →
  *   minimal logo Header → inverted-pyramid Hero (conclusion first) → ONE
  *   primary bulletproof CTA above the fold → scannable Body (3 benefit points
- *   + one named proof point) → compliant Footer (working unsubscribe + physical
- *   address placeholder).
+ *   + an optional proof point) → compliant Footer (working unsubscribe, no address the
+ *   brand never supplied).
  *
  * Inbox-grade constraints honored here:
  *  - One job, one CTA. The single primary action appears above the fold and is
@@ -39,11 +39,126 @@ import {
   pillarList,
   splitPillar,
   sourceHost,
-  wordmark,
   FEATURE_FALLBACKS,
 } from "./_shared.js";
 
 // ─────────────────────────── email-local copy helpers ───────────────────────
+
+export type EmailToken = (key: string, fallback?: string) => string;
+export type EmailPaint = {
+  canvas: string;
+  card: string;
+  ink: string;
+  muted: string;
+  hairline: string;
+  accent: string;
+  accentDeep: string;
+};
+export type EmailButtonStyle = {
+  accent: string;
+  onAccent: string;
+  radius: string;
+  padX: string;
+  fontFamily: string;
+  fontSize: string;
+  fontWeight: string;
+  inverse?: boolean;
+};
+
+const TOKEN_ALIASES: Record<string, string> = {
+  xxs: "XXS",
+  xs: "XS",
+  sm: "SM",
+  md: "MD",
+  lg: "LG",
+  xl: "XL",
+  xxl: "XXL",
+};
+
+/**
+ * Email clients resolve no CSS custom properties — not in a `var()` inside an
+ * attribute, not in `<style>` — so every value the artifact needs is resolved
+ * to a literal here, from the token the design system already derived.
+ */
+function emailTokenOf(tokens: DesignTokens): EmailToken {
+  return (key, fallback) => {
+    const value = (tokens as Record<string, unknown>)[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number") {
+      return /^(lineHeight|fontWeight)/.test(key) ? String(value) : `${value}px`;
+    }
+    return fallback ?? "";
+  };
+}
+
+/** The brand's own role colours; the derived tokens only fill a gap. */
+const EMAIL_ROLES = {
+  canvas: "background",
+  card: "surface",
+  ink: "foreground",
+  muted: "muted",
+  hairline: "border",
+  accent: "accent",
+  accentDeep: "accent-secondary",
+} as const;
+
+function brandHex(brand: Brand, role: string): string {
+  const colour = (brand.colors ?? []).find((entry) => entry?.role === role);
+  const value = trimmed(colour?.hex);
+  return /^#(?:[0-9a-f]{3,8})$/i.test(value) ? value : "";
+}
+
+function emailPaint(brand: Brand, tokens: DesignTokens): EmailPaint {
+  const c = emailTokenOf(tokens);
+  const colour = (key: string, fallback: string) => {
+    const value = c(key, "");
+    return /^#(?:[0-9a-f]{3,8})$/i.test(value) ? value : fallback;
+  };
+  return {
+    canvas: brandHex(brand, EMAIL_ROLES.canvas) || colour("colorBgLayout", "#ffffff"),
+    card: brandHex(brand, EMAIL_ROLES.card) || colour("colorBgContainer", "#ffffff"),
+    ink: brandHex(brand, EMAIL_ROLES.ink) || colour("colorText", "#111111"),
+    muted: brandHex(brand, EMAIL_ROLES.muted) || colour("colorTextSecondary", "#444444"),
+    hairline: brandHex(brand, EMAIL_ROLES.hairline) || colour("colorBorder", "#dddddd"),
+    accent: brandHex(brand, EMAIL_ROLES.accent) || colour("colorPrimary", "#111111"),
+    accentDeep: brandHex(brand, EMAIL_ROLES.accentDeep) || colour("colorPrimaryHover", "#111111"),
+  };
+}
+
+/** Swaps the generated `var(--brand-*)` references in the document shell for literals. */
+function literalise(html: string, tokens: DesignTokens, paint: EmailPaint): string {
+  const overrides: Record<string, string> = {
+    colorBgLayout: paint.canvas,
+    colorBgContainer: paint.card,
+    colorText: paint.ink,
+    colorTextSecondary: paint.muted,
+    colorBorder: paint.hairline,
+    colorBorderSecondary: paint.hairline,
+    colorLink: paint.accent,
+    colorPrimary: paint.accent,
+  };
+  const t = emailTokenOf(tokens);
+  return html.replace(/var\(--brand-([a-z0-9-]+)\)/g, (whole, slug: string) => {
+    const key = slug
+      .split("-")
+      .map((part, index) =>
+        index === 0 ? part : (TOKEN_ALIASES[part] ?? part[0].toUpperCase() + part.slice(1)),
+      )
+      .join("");
+    return overrides[key] ?? t(key, whole);
+  });
+}
+
+/** Brand logo when the brand has one, wordmark otherwise. */
+function emailHeader(brand: Brand, paint: EmailPaint, t: EmailToken): string {
+  const file = trimmed(brand.logo?.primary);
+  if (!file) {
+    return `<span style="font-family:var(--display-family);font-weight:${t("fontWeightStrong")};font-size:${t("fontSizeLG")};letter-spacing:-0.01em;color:${paint.ink};white-space:nowrap;">${esc(brand.name)}</span>`;
+  }
+  const src = `../../${file.replace(/^\.?\//, "")}`;
+  return `<img src="${esc(src)}" alt="${esc(brand.name)}" width="40" height="40" style="display:block;margin:0 auto;border:0;outline:none;text-decoration:none;width:40px;height:40px;" />`;
+}
+
 
 const trimmed = (s: string | undefined | null): string => (s ?? "").trim();
 
@@ -146,14 +261,25 @@ function benefits(brand: Brand): Array<{ title: string; body: string }> {
 }
 
 /** One named proof point — a number beats a pile of adjectives. */
-function proof(brand: Brand): { quote: string; name: string; role: string } {
-  const adj = brand.voice.adjectives.map(trimmed).filter(Boolean);
-  const a0 = adj[0] ?? "useful";
-  return {
-    quote: `${brand.name} is the first tool here that actually feels ${a0}. It was part of our daily flow inside a week.`,
-    name: "Maya Chen",
-    role: "Head of Design, Northwind",
-  };
+/** A proof point only when the brand actually supplies one — never invented. */
+function proofBlock(brand: Brand, paint: EmailPaint, t: EmailToken): string {
+  const quote = trimmed(brand.testimonial?.quote);
+  const name = trimmed(brand.testimonial?.name);
+  if (!quote || !name) return "";
+  const role = trimmed(brand.testimonial?.role);
+  return `            <tr>
+              <td style="padding:0 ${t("sizeXL")} ${t("sizeLG")};">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td style="padding:${t("sizeLG")};background:${paint.canvas};border-left:3px solid ${paint.accent};border-radius:${t("borderRadius")};">
+                      <p style="margin:0 0 ${t("sizeSM")};font-family:${t("fontFamily")};font-size:${t("fontSizeLG")};line-height:1.55;color:${paint.ink};">&ldquo;${esc(quote)}&rdquo;</p>
+                      <p style="margin:0;font-family:${t("fontFamily")};font-size:${t("fontSizeSM")};color:${paint.muted};"><strong style="color:${paint.ink};font-weight:${t("fontWeightStrong")};">${esc(name)}</strong>${role ? ` &middot; ${esc(role)}` : ""}</p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+`;
 }
 
 // ─────────────────────────── markup helpers (email-local) ───────────────────
@@ -161,27 +287,16 @@ function proof(brand: Brand): { quote: string; name: string; role: string } {
 /**
  * Bulletproof CTA button: a `bgcolor` <td> with an inline-styled <a>. No
  * background image, ≥44px tall, fully styled so it renders even when images
- * and remote CSS are blocked. `varRef` keeps it themed by the tokens.
+ * and remote CSS are blocked. Every value is a literal: presentational
+ * attributes and <style>-stripping clients resolve no custom properties.
  */
-function bulletproofButton(label: string, opts?: { inverse?: boolean }): string {
-  const inverse = opts?.inverse ?? false;
-  const bg = inverse ? "#ffffff" : varRef("colorPrimary");
-  const fg = inverse ? varRef("colorPrimary") : "#ffffff";
-  const border = inverse ? "#ffffff" : varRef("colorPrimary");
+function bulletproofButton(label: string, style: EmailButtonStyle): string {
+  const bg = style.inverse ? style.onAccent : style.accent;
+  const fg = style.inverse ? style.accent : style.onAccent;
   return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;border-collapse:separate;line-height:100%;">
                     <tr>
-                      <td align="center" bgcolor="${bg}" style="border-radius:${varRef(
-                        "borderRadiusLG",
-                      )};">
-                        <a href="#" target="_blank" style="display:inline-block;min-width:200px;padding:16px ${varRef(
-                          "sizeXL",
-                        )};font-family:${varRef("fontFamily")};font-size:${varRef(
-                          "fontSizeLG",
-                        )};font-weight:${varRef(
-                          "fontWeightStrong",
-                        )};line-height:1.1;color:${fg};text-decoration:none;text-align:center;border-radius:${varRef(
-                          "borderRadiusLG",
-                        )};border:2px solid ${border};">${esc(label)}</a>
+                      <td align="center" bgcolor="${bg}" style="background-color:${bg};border-radius:${style.radius};">
+                        <a href="#" target="_blank" style="display:inline-block;min-width:200px;padding:16px ${style.padX};font-family:${style.fontFamily};font-size:${style.fontSize};font-weight:${style.fontWeight};line-height:1.1;color:${fg};background-color:${bg};text-decoration:none;text-align:center;border-radius:${style.radius};border:2px solid ${bg};">${esc(label)}</a>
                       </td>
                     </tr>
                   </table>`;
@@ -193,61 +308,25 @@ function checkGlyph(color: string): string {
 }
 
 /** A single numbered/checked benefit row inside the body table. */
-function benefitRow(b: { title: string; body: string }, accent: string): string {
+function benefitRow(b: { title: string; body: string }, paint: EmailPaint, t: EmailToken): string {
   return `<tr>
-                <td valign="top" style="width:40px;padding:${varRef("sizeSM")} ${varRef(
-                  "sizeSM",
-                )} ${varRef("sizeSM")} 0;">${checkGlyph(accent)}</td>
-                <td valign="top" style="padding:${varRef("sizeSM")} 0;">
-                  <p style="margin:0 0 4px;font-family:${varRef("fontFamily")};font-size:${varRef(
-                    "fontSizeLG",
-                  )};font-weight:${varRef("fontWeightStrong")};color:${varRef(
-                    "colorText",
-                  )};line-height:1.3;">${esc(cap(b.title))}</p>
-                  <p style="margin:0;font-family:${varRef("fontFamily")};font-size:16px;color:${varRef(
-                    "colorTextSecondary",
-                  )};line-height:1.55;">${esc(cap(b.body))}</p>
+                <td valign="top" style="width:40px;padding:${t("sizeSM")} ${t("sizeSM")} ${t("sizeSM")} 0;">${checkGlyph(paint.accent)}</td>
+                <td valign="top" style="padding:${t("sizeSM")} 0;">
+                  <p style="margin:0 0 4px;font-family:${t("fontFamily")};font-size:${t("fontSizeLG")};font-weight:${t("fontWeightStrong")};color:${paint.ink};line-height:1.3;">${esc(cap(b.title))}</p>
+                  <p style="margin:0;font-family:${t("fontFamily")};font-size:16px;color:${paint.muted};line-height:1.55;">${esc(cap(b.body))}</p>
                 </td>
               </tr>`;
 }
 
-/**
- * Compliant footer (email-local so the physical-address placeholder the doc
- * requires is guaranteed): a real, working unsubscribe + a physical address
- * line + the brand, all muted/small/restrained. Built inline for clients that
- * strip <style>.
- */
-function compliantFooter(brand: Brand): string {
-  const muted = varRef("colorTextTertiary");
+/** Compliance footer: brand colours, ≥4.5:1, and no address the brand never gave. */
+function compliantFooter(brand: Brand, paint: EmailPaint, t: EmailToken): string {
   const link = (label: string) =>
-    `<a href="#" target="_blank" style="color:${muted};text-decoration:underline;">${esc(label)}</a>`;
+    `<a href="#" target="_blank" style="color:${paint.muted};text-decoration:underline;">${esc(label)}</a>`;
   return `<tr>
-            <td style="padding:${varRef("sizeXL")} ${varRef("sizeXL")};background:${varRef(
-              "colorFillQuaternary",
-            )};border-top:${varRef("lineWidth")} solid ${varRef(
-              "colorBorderSecondary",
-            )};text-align:center;">
-              <p style="margin:0 0 ${varRef("sizeXS")};font-family:${varRef(
-                "fontFamily",
-              )};font-size:${varRef("fontSizeSM")};color:${varRef(
-                "colorTextTertiary",
-              )};line-height:1.5;">You are receiving this because you signed up to hear from ${esc(
-                brand.name,
-              )}.</p>
-              <p style="margin:0 0 ${varRef("sizeXS")};font-family:${varRef(
-                "fontFamily",
-              )};font-size:${varRef("fontSizeSM")};color:${varRef(
-                "colorTextTertiary",
-              )};line-height:1.5;">${link("Update preferences")} &nbsp;&middot;&nbsp; ${link(
-                "Unsubscribe",
-              )}</p>
-              <p style="margin:0;font-family:${varRef("fontFamily")};font-size:${varRef(
-                "fontSizeSM",
-              )};color:${varRef(
-                "colorTextQuaternary",
-              )};line-height:1.5;">${esc(brand.name)} &middot; 100 Market Street, Suite 200 &middot; ${esc(
-                sourceHost(brand),
-              )}</p>
+            <td style="padding:${t("sizeXL")} ${t("sizeXL")};background:${paint.canvas};border-top:${t("lineWidth")} solid ${paint.hairline};text-align:center;">
+              <p style="margin:0 0 ${t("sizeXS")};font-family:${t("fontFamily")};font-size:${t("fontSizeSM")};color:${paint.muted};line-height:1.5;">You are receiving this because you signed up to hear from ${esc(brand.name)}.</p>
+              <p style="margin:0 0 ${t("sizeXS")};font-family:${t("fontFamily")};font-size:${t("fontSizeSM")};color:${paint.muted};line-height:1.5;">${link("Update preferences")} &nbsp;&middot;&nbsp; ${link("Unsubscribe")}</p>
+              <p style="margin:0;font-family:${t("fontFamily")};font-size:${t("fontSizeSM")};color:${paint.muted};line-height:1.5;">&copy; ${esc(brand.name)}</p>
             </td>
           </tr>`;
 }
@@ -255,87 +334,63 @@ function compliantFooter(brand: Brand): string {
 // ─────────────────────────── renderer ───────────────────────────────────────
 
 export function renderEmail(brand: Brand, tokens: DesignTokens): string {
-  const accent = varRef("colorPrimary");
+  const t = emailTokenOf(tokens);
+  const paint = emailPaint(brand, tokens);
   const cta = ctaLabel(brand);
   const rows = benefits(brand)
-    .map((b) => benefitRow(b, accent))
+    .map((b) => benefitRow(b, paint, t))
     .join("\n");
-  const tip = proof(brand);
 
-  // The visual email: a centered 600px table on a layout-tinted page. All
-  // structural styling is inline so it survives <style>-stripping clients;
-  // the document() <style> only adds the :root token block + font links.
+  // The visual email: a centered 600px table on the brand's own page colour. All
+  // structural styling is inline so it survives <style>-stripping clients, and
+  // every value is a literal: the document() shell adds no token block.
   const body = `    <!-- hidden preheader: earns the open, complements the subject, never repeats it -->
-    <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:${varRef(
-      "colorBgLayout",
-    )};opacity:0;">${esc(preheader(brand))}</div>
+    <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:${paint.canvas};opacity:0;">${esc(preheader(brand))}</div>
     <!-- whitespace eater so the body copy does not leak into the inbox preview -->
     <div style="display:none;max-height:0;overflow:hidden;">&#847;&#8204;&#160;&#847;&#8204;&#160;&#847;&#8204;&#160;&#847;&#8204;&#160;&#847;&#8204;&#160;&#847;&#8204;&#160;&#847;&#8204;&#160;</div>
 
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${varRef(
-      "colorBgLayout",
-    )};margin:0;padding:0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${paint.canvas};margin:0;padding:0;">
       <tr>
-        <td align="center" style="padding:${varRef("sizeXL")} ${varRef("sizeMD")};">
-          <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background:${varRef(
-            "colorBgContainer",
-          )};border:${varRef("lineWidth")} solid ${varRef(
-            "colorBorderSecondary",
-          )};border-radius:${varRef("borderRadiusLG")};overflow:hidden;">
+        <td align="center" style="padding:${t("sizeXL")} ${t("sizeMD")};">
+          <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background:${paint.card};border:${t("lineWidth")} solid ${paint.hairline};border-radius:${t("borderRadiusLG")};overflow:hidden;">
 
             <!-- Header: logo only, generous whitespace, no nav -->
             <tr>
-              <td style="padding:${varRef("sizeLG")} ${varRef("sizeXL")};text-align:center;border-bottom:${varRef(
-                "lineWidth",
-              )} solid ${varRef("colorBorderSecondary")};">
-                ${wordmark(brand)}
+              <td style="padding:${t("sizeLG")} ${t("sizeXL")};text-align:center;border-bottom:${t("lineWidth")} solid ${paint.hairline};">
+                ${emailHeader(brand, paint, t)}
               </td>
             </tr>
 
             <!-- Hero: inverted pyramid — conclusion first, then why it matters, then the one CTA -->
             <tr>
-              <td style="padding:${varRef("sizeXXL")} ${varRef("sizeXL")} ${varRef(
-                "sizeLG",
-              )};text-align:center;background:${varRef("colorPrimaryBg")};">
-                <p style="margin:0 0 ${varRef(
-                  "sizeSM",
-                )};font-family:${varRef("fontFamily")};text-transform:uppercase;letter-spacing:0.16em;font-size:${varRef(
-                  "fontSizeSM",
-                )};font-weight:${varRef("fontWeightStrong")};color:${accent};">${esc(
+              <td style="padding:${t("sizeXXL")} ${t("sizeXL")} ${t("sizeLG")};text-align:center;background:${paint.canvas};">
+                <p style="margin:0 0 ${t("sizeSM")};font-family:${t("fontFamily")};letter-spacing:0.01em;font-size:${t("fontSizeSM")};font-weight:${t("fontWeightStrong")};color:${paint.accentDeep};">${esc(
                   cap(brand.voice.adjectives[0] ?? "Announcement"),
                 )}</p>
-                <h1 style="margin:0 0 ${varRef(
-                  "sizeMD",
-                )};font-family:var(--display-family);font-size:${varRef(
-                  "fontSizeHeading2",
-                )};line-height:1.15;letter-spacing:-0.015em;color:${varRef("colorText")};">${esc(
+                <h1 style="margin:0 0 ${t("sizeMD")};font-family:var(--display-family);font-size:${t("fontSizeHeading2")};line-height:1.15;letter-spacing:-0.015em;color:${paint.ink};">${esc(
                   cap(leadClaim(brand)),
                 )}</h1>
-                <p style="margin:0 auto ${varRef(
-                  "sizeXL",
-                )};max-width:46ch;font-family:${varRef("fontFamily")};font-size:${varRef(
-                  "fontSizeLG",
-                )};line-height:1.55;color:${varRef("colorTextSecondary")};">${esc(
+                <p style="margin:0 auto ${t("sizeXL")};max-width:46ch;font-family:${t("fontFamily")};font-size:${t("fontSizeLG")};line-height:1.55;color:${paint.muted};">${esc(
                   heroSupport(brand),
                 )}</p>
                 <!-- the one primary CTA, above the fold -->
-                ${bulletproofButton(cta)}
+                ${bulletproofButton(cta, {
+    accent: paint.accent,
+    onAccent: paint.card,
+    radius: t("borderRadiusLG", "12px"),
+    padX: t("sizeXL", "32px"),
+    fontFamily: t("fontFamily", "sans-serif"),
+    fontSize: t("fontSizeLG", "16px"),
+    fontWeight: t("fontWeightStrong", "600"),
+  })}
               </td>
             </tr>
 
             <!-- Body: scannable, human, one idea per block -->
             <tr>
-              <td style="padding:${varRef("sizeXL")} ${varRef("sizeXL")} ${varRef("sizeSM")};">
-                <p style="margin:0 0 ${varRef(
-                  "sizeMD",
-                )};font-family:${varRef("fontFamily")};font-size:16px;line-height:1.6;color:${varRef(
-                  "colorText",
-                )};">Hi there,</p>
-                <p style="margin:0 0 ${varRef(
-                  "sizeLG",
-                )};font-family:${varRef("fontFamily")};font-size:16px;line-height:1.6;color:${varRef(
-                  "colorTextSecondary",
-                )};">Here is what ${esc(
+              <td style="padding:${t("sizeXL")} ${t("sizeXL")} ${t("sizeSM")};">
+                <p style="margin:0 0 ${t("sizeMD")};font-family:${t("fontFamily")};font-size:16px;line-height:1.6;color:${paint.ink};">Hi there,</p>
+                <p style="margin:0 0 ${t("sizeLG")};font-family:${t("fontFamily")};font-size:16px;line-height:1.6;color:${paint.muted};">Here is what ${esc(
                   brand.name,
                 )} gives your team from the first day — no migration project, no setup tax:</p>
 
@@ -345,63 +400,44 @@ ${rows}
               </td>
             </tr>
 
-            <!-- One named proof point: a person beats a paragraph of adjectives -->
-            <tr>
-              <td style="padding:0 ${varRef("sizeXL")} ${varRef("sizeLG")};">
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                  <tr>
-                    <td style="padding:${varRef("sizeLG")};background:${varRef(
-                      "colorFillQuaternary",
-                    )};border-left:3px solid ${accent};border-radius:${varRef("borderRadius")};">
-                      <p style="margin:0 0 ${varRef(
-                        "sizeSM",
-                      )};font-family:${varRef("fontFamily")};font-size:${varRef(
-                        "fontSizeLG",
-                      )};line-height:1.55;color:${varRef("colorText")};">&ldquo;${esc(
-                        tip.quote,
-                      )}&rdquo;</p>
-                      <p style="margin:0;font-family:${varRef("fontFamily")};font-size:${varRef(
-                        "fontSizeSM",
-                      )};color:${varRef("colorTextTertiary")};"><strong style="color:${varRef(
-                        "colorText",
-                      )};font-weight:${varRef("fontWeightStrong")};">${esc(
-                        tip.name,
-                      )}</strong> &middot; ${esc(tip.role)}</p>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
+            ${proofBlock(brand, paint, t)}
 
             <!-- CTA repeated once near the end — same single action -->
             <tr>
-              <td style="padding:${varRef("sizeSM")} ${varRef("sizeXL")} ${varRef(
-                "sizeXL",
-              )};text-align:center;">
-                ${bulletproofButton(cta)}
-                <p style="margin:${varRef(
-                  "sizeMD",
-                )} 0 0;font-family:${varRef("fontFamily")};font-size:${varRef(
-                  "fontSizeSM",
-                )};color:${varRef(
-                  "colorTextTertiary",
-                )};line-height:1.5;">Questions? Just reply to this email — a real person reads every message.</p>
+              <td style="padding:${t("sizeSM")} ${t("sizeXL")} ${t("sizeXL")};text-align:center;">
+                ${bulletproofButton(cta, {
+    accent: paint.accent,
+    onAccent: paint.card,
+    radius: t("borderRadiusLG", "12px"),
+    padX: t("sizeXL", "32px"),
+    fontFamily: t("fontFamily", "sans-serif"),
+    fontSize: t("fontSizeLG", "16px"),
+    fontWeight: t("fontWeightStrong", "600"),
+  })}
+                <p style="margin:${t("sizeMD")} 0 0;font-family:${t("fontFamily")};font-size:${t("fontSizeSM")};color:${paint.muted};line-height:1.5;">Questions? Just reply to this email — a real person reads every message.</p>
               </td>
             </tr>
 
             <!-- Footer: working unsubscribe + physical address placeholder + brand -->
-${compliantFooter(brand)}
+${compliantFooter(brand, paint, t)}
 
           </table>
         </td>
       </tr>
     </table>`;
 
-  return document({
-    title: subjectLine(brand),
+  return literalise(
+    document({
+      title: subjectLine(brand),
+      tokens,
+      brand,
+      body,
+      fontLinks: false,
+      kitCss: false,
+      cssVariables: false,
+      css: "img{border:0;outline:none;text-decoration:none;}table{border-spacing:0;}",
+    }),
     tokens,
-    brand,
-    body,
-    css: "img{border:0;outline:none;text-decoration:none;}table{border-spacing:0;}",
-  });
+    paint,
+  );
 }

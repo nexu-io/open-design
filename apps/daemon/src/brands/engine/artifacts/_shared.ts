@@ -75,6 +75,24 @@ export function brandFontAssets(brand: Brand): { links: string; displayFamily: s
  * `--brand-*` vars so the whole artifact restyles when the tokens change.
  * Headings pick up the brand's display face via `--display-family`.
  */
+/** Utility classes the web artifacts use; an email needs none of them. */
+function kitStyleRules(): string {
+  return `      .wrap { max-width: 1120px; margin: 0 auto; padding-left: clamp(20px, 4vw, 40px); padding-right: clamp(20px, 4vw, 40px); }
+      .kicker {
+        display: block;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        font-size: ${varRef("fontSizeSM")};
+        font-weight: ${varRef("fontWeightStrong")};
+        color: ${varRef("colorPrimary")};
+        margin-bottom: ${varRef("sizeSM")};
+      }
+      .clamp-2, .clamp-3 { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
+      .clamp-2 { -webkit-line-clamp: 2; }
+      .clamp-3 { -webkit-line-clamp: 3; }
+`;
+}
+
 export function document(opts: {
   title: string;
   tokens: DesignTokens;
@@ -82,8 +100,22 @@ export function document(opts: {
   body: string;
   css?: string;
   script?: string;
+  /** Remote Google Fonts <link>s. Off when the caller injects local @font-face. */
+  fontLinks?: boolean;
+  /** Web-only kit stylesheet and its utility classes. */
+  kitCss?: boolean;
+  /** The `--brand-*` custom-property block. Useless where nothing resolves vars. */
+  cssVariables?: boolean;
 }): string {
-  const { title, tokens, brand, body } = opts;
+  const {
+    title,
+    tokens,
+    brand,
+    body,
+    fontLinks: includeFontLinks = true,
+    kitCss: includeKitCss = true,
+    cssVariables: includeCssVariables = true,
+  } = opts;
   const fonts = brandFontAssets(brand);
   return `<!doctype html>
 <html lang="en">
@@ -91,9 +123,9 @@ export function document(opts: {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${esc(title)}</title>
-    ${fonts.links}
+    ${includeFontLinks ? fonts.links : ""}
     <style>
-    ${rootVars(tokens)}
+    ${includeCssVariables ? rootVars(tokens) : ""}
       :root { --display-family: ${fonts.displayFamily}; }
       * { box-sizing: border-box; }
       html, body { margin: 0; padding: 0; }
@@ -117,20 +149,8 @@ export function document(opts: {
       }
       p { margin: 0; overflow-wrap: break-word; }
       img, svg { max-width: 100%; display: block; }
-      .wrap { max-width: 1120px; margin: 0 auto; padding-left: clamp(20px, 4vw, 40px); padding-right: clamp(20px, 4vw, 40px); }
-      .kicker {
-        display: block;
-        text-transform: uppercase;
-        letter-spacing: 0.14em;
-        font-size: ${varRef("fontSizeSM")};
-        font-weight: ${varRef("fontWeightStrong")};
-        color: ${varRef("colorPrimary")};
-        margin-bottom: ${varRef("sizeSM")};
-      }
-      .clamp-2, .clamp-3 { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
-      .clamp-2 { -webkit-line-clamp: 2; }
-      .clamp-3 { -webkit-line-clamp: 3; }
-      ${KIT_CSS}
+      ${includeKitCss ? kitStyleRules() : ""}
+      ${includeKitCss ? KIT_CSS : ""}
       ${opts.css ?? ""}
     </style>
   </head>
