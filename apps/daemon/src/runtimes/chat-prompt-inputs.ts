@@ -582,6 +582,14 @@ export function normalizeCommentAttachments(input: readonly CommentAttachmentInp
     .sort((a, b) => a.order - b.order);
 }
 
+/**
+ * Edit scope for preview comments (#2796). Shared by the classic
+ * `<attached-preview-comments>` block and the OD Next preview-feedback task
+ * input, so both strategies hold the Agent to the same boundary.
+ */
+export const PREVIEW_COMMENT_HARD_SCOPE_DIRECTIVE =
+  "Hard scope: change ONLY the elements identified below by selector / position / pod members. Do NOT modify sibling sub-pages, parent layout, global CSS, design tokens, or unrelated rules even if you notice issues there — surface those as a follow-up note in your reply instead of editing them. If the user's request cannot be satisfied without touching outside this scope, ask the user before proceeding. For visual marks, inspect the screenshot when one is provided (otherwise locate the region from the structured fields) and modify the marked region first.";
+
 export function renderCommentAttachmentHint(
   commentAttachments: ReturnType<typeof normalizeCommentAttachments>,
 ) {
@@ -590,7 +598,7 @@ export function renderCommentAttachmentHint(
     '',
     '',
     '<attached-preview-comments>',
-    "Hard scope: change ONLY the elements identified below by selector / position / pod members. Do NOT modify sibling sub-pages, parent layout, global CSS, design tokens, or unrelated rules even if you notice issues there — surface those as a follow-up note in your reply instead of editing them. If the user's request cannot be satisfied without touching outside this scope, ask the user before proceeding. For visual marks, inspect the screenshot when one is provided (otherwise locate the region from the structured fields) and modify the marked region first.",
+    PREVIEW_COMMENT_HARD_SCOPE_DIRECTIVE,
   ];
   for (const item of commentAttachments) {
     const targetKind =
