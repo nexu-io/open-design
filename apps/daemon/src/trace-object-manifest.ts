@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import { loadOdNextTaskInputSnapshot, type OdNextTaskInputSnapshotDescriptor } from './strategies/od-next/task-input-snapshot.js';
+import {
+  loadOdNextTaskInputSnapshot,
+  OD_NEXT_PREVIEW_FEEDBACK_CONTENT_CLASS,
+  type OdNextTaskInputSnapshotDescriptor,
+} from './strategies/od-next/task-input-snapshot.js';
 
 import type {
   ArtifactManifestEntry,
@@ -445,6 +449,7 @@ async function collectSources(
     if (attachmentPath.startsWith('task-input:')) {
       const file = taskInputs?.files.find(file => `task-input:${file.relativePath}` === attachmentPath);
       const reason = !taskInputs ? 'task_input_snapshot_invalid' : !file ? 'task_input_reference_missing'
+        : file.contentClass === OD_NEXT_PREVIEW_FEEDBACK_CONTENT_CLASS ? 'preview_feedback_metadata_only'
         : file.bytes > config.objectMaxBytes ? 'object_too_large'
         : opts.snapshotMaxBytes !== undefined && snapshotBytes + file.bytes > opts.snapshotMaxBytes ? 'snapshot_budget_exceeded' : undefined;
       if (file && !reason) snapshotBytes += file.bytes;
