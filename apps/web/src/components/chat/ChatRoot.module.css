@@ -264,8 +264,8 @@
   --chat-bg-fill-secondary: var(--bg-fill-secondary);
   --chat-bg-fill-tertiary: var(--bg-fill-tertiary);
   --chat-confirm-surface: var(--brand-soft);
-  --chat-floating-card-bg: #fff;
-  --chat-floating-card-text: #202020;
+  --chat-floating-card-bg: var(--bg-panel);
+  --chat-floating-card-text: var(--text-strong);
 
   --chat-border: var(--border);
   --chat-border-strong: var(--border-strong);

@@ -16,7 +16,9 @@ describe('chat message rail preview card', () => {
     expect(previewRule).toMatch(/color:\s*var\(--chat-floating-card-text\);/);
     expect(previewRule).not.toMatch(/linear-gradient|backdrop-filter/);
 
-    expect(chatRootCss.match(/--chat-floating-card-bg:\s*#fff;/g)).toHaveLength(2);
-    expect(chatRootCss.match(/--chat-floating-card-text:\s*#202020;/g)).toHaveLength(2);
+    expect(chatRootCss.match(/--chat-floating-card-bg:\s*#fff;/g)).toHaveLength(1);
+    expect(chatRootCss.match(/--chat-floating-card-text:\s*#202020;/g)).toHaveLength(1);
+    expect(chatRootCss.match(/--chat-floating-card-bg:\s*var\(--bg-panel\);/g)).toHaveLength(1);
+    expect(chatRootCss.match(/--chat-floating-card-text:\s*var\(--text-strong\);/g)).toHaveLength(1);
   });
 });
