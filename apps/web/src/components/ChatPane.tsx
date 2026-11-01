@@ -2032,6 +2032,16 @@ export function ChatPane({
   const [conversationSearch, setConversationSearch] = useState('');
   const deferredConversationSearch = useDeferredValue(conversationSearch);
   const [scrolledFromBottom, setScrolledFromBottom] = useState(false);
+  /*
+   * `scrolledFromBottom` 的镜像。浮标的两个写点(`syncFollowState`、
+   * `settleFollowAfterPredictedScroll`)都先对着它比对新值,**值没变就不 dispatch** ——
+   * 不能指望「函数式 setState 返回原值」来省渲染:React 的 eager bailout 只在组件
+   * 没有任何 pending 更新(`fiber.lanes === NoLanes`)时才走 fast path,而流式期间
+   * ChatPane 恒有 pending lanes,值相同的 dispatch 照样进 `scheduleUpdateOnFiber`,
+   * 把 `didScheduleUpdateDuringPassiveEffects` 顶起来 —— 连续 50 轮 passive flush
+   * 每轮都这样就撞 React 的 "Maximum update depth exceeded"(nestedPassiveUpdateCount)。
+   */
+  const jumpToLatestShownRef = useRef(false);
   // SDF liquid-glass refraction on the jump pill (frosted fallback via CSS).
   const jumpBtnGlassRef = useLiquidGlass<HTMLButtonElement>({ strength: 0.2 });
   // Resolved in the initializer, not in an effect: with the target known at
@@ -3247,9 +3257,11 @@ export function ChatPane({
       // 用户上滑背书 —— 那是把跟随焊死,比它要修的 bug 更糟。
       resetWheelWitness();
       snapshot(target);
-      // `syncFollowState` 里的函数式更新在值没变时原地返回,所以流式期间那一串
-      // scroll 事件不会每一跳都排一次重渲,也就不会撞上 React 的
-      // "Maximum update depth exceeded"。
+      /*
+       * `syncFollowState` 在提交口按 ref 镜像短路:值没变连 setState 都不进,
+       * 所以流式期间那一串 scroll 事件不会往任何一拍 passive flush 里塞空转的
+       * dispatch,也就不会把 React 的嵌套更新计数顶到上限。
+       */
       syncFollowState();
       /*
        * 用户的手停在贴近底部的位置时,那块冻住的预留空白要开始收。
@@ -3780,16 +3792,31 @@ export function ChatPane({
      * (`shouldShowJumpToLatest` 的 `scrollHeight <= clientHeight + 1`),不需要在这里
      * 反过来改意图。
      */
-    setScrolledFromBottom((prev) => {
-      const next = shouldShowJumpToLatest({
-        distance: Math.max(0, sample.scrollHeight - sample.scrollTop - sample.clientHeight),
-        clientHeight: sample.clientHeight,
-        scrollHeight: sample.scrollHeight,
-        shown: prev,
-        following: isFollowingTail(),
-      });
-      return prev === next ? prev : next;
-    });
+    commitJumpToLatestShown(shouldShowJumpToLatest({
+      distance: Math.max(0, sample.scrollHeight - sample.scrollTop - sample.clientHeight),
+      clientHeight: sample.clientHeight,
+      scrollHeight: sample.scrollHeight,
+      shown: jumpToLatestShownRef.current,
+      following: isFollowingTail(),
+    }));
+  }
+
+  /*
+   * `scrolledFromBottom` 唯一的提交口:值没变**在这里**短路,连 setState 都不进。
+   *
+   * 为什么不能像 3220 行那条老注释说的那样指望函数式更新的「值没变原地返回」:
+   * 那个省略依赖 React 的 eager bailout,而它只在组件**没有任何 pending 更新**时
+   * 才生效 —— 流式期间每拍都有 pending lanes,值相同的 dispatch 照样被调度,照样
+   * 在 passive flush 里把 `didScheduleUpdateDuringPassiveEffects` 置位。auto-scroll
+   * effect 每个 chunk 都跑一遍 `syncFollowState`,于是这个计数连涨 50 拍后,
+   * React 就把 "Maximum update depth exceeded" 打在任何一次后续 dispatch 上
+   * (实测打在 scroll 事件的 `syncFollowState` 里,栈见 OPEND 报障)。ref 镜像的
+   * 语义和函数式更新一致:`shown` 用最新计算值,连发两次时第二拍读到的就是第一拍的结果。
+   */
+  function commitJumpToLatestShown(next: boolean) {
+    if (next === jumpToLatestShownRef.current) return;
+    jumpToLatestShownRef.current = next;
+    setScrolledFromBottom(next);
   }
 
   function handleQuoteSelectionActivityChange(active: boolean) {
@@ -3836,15 +3863,13 @@ export function ChatPane({
       ? { following: true, escaped: false }
       : { following: false, escaped: true };
     // 浮标仍然按「底下还有没有内容」算 —— 预留空白不是内容。
-    setScrolledFromBottom((prev) =>
-      shouldShowJumpToLatest({
-        distance,
-        clientHeight,
-        scrollHeight: Math.max(clientHeight, el.scrollHeight - reservedTailHeight()),
-        shown: prev,
-        following: isFollowingTail(),
-      }),
-    );
+    commitJumpToLatestShown(shouldShowJumpToLatest({
+      distance,
+      clientHeight,
+      scrollHeight: Math.max(clientHeight, el.scrollHeight - reservedTailHeight()),
+      shown: jumpToLatestShownRef.current,
+      following: isFollowingTail(),
+    }));
   }
 
   /** 显式动作(展开折叠块、anchor-to-top 接管)松开跟随。 */
