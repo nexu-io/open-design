@@ -3,13 +3,23 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
-import { INTEGRATIONS_MCP_PATH } from '@open-design/contracts';
+import { INTEGRATIONS_MCP_PATH, SUBAGENT_TURN_DIRECTIVE } from '@open-design/contracts';
 
 import {
   composeSystemPrompt,
   renderConnectedExternalMcpDirective,
   resolveExclusiveSurface,
 } from '../../src/prompts/system.js';
+
+describe('sub-agent turn host contract', () => {
+  it.each(['classic', 'slim'] as const)('tells the agent to finish delegated work before ending its turn in %s', (promptCoreVariant) => {
+    expect(composeSystemPrompt({ promptCoreVariant, agentId: 'claude' })).toContain(SUBAGENT_TURN_DIRECTIVE);
+  });
+
+  it.each(['classic', 'slim'] as const)('leaves AMR runs out in %s', (promptCoreVariant) => {
+    expect(composeSystemPrompt({ promptCoreVariant, agentId: 'amr' })).not.toContain(SUBAGENT_TURN_DIRECTIVE);
+  });
+});
 
 describe('comment identity host contract', () => {
   it.each(['classic', 'slim'] as const)('carries the conditional edit rule in %s', (promptCoreVariant) => {

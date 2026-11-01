@@ -1,17 +1,20 @@
 // Characterization test for renderMetadataBlock (internal to system.ts).
 // Chat mode omits generation-only sections but still appends the shared comment
-// identity directive. Exclude that verified suffix, not arbitrary Markdown
-// separators that may also occur inside metadata reference content.
+// identity and sub-agent turn directives. Exclude that verified suffix, not
+// arbitrary Markdown separators that may also occur inside metadata reference
+// content.
 // These snapshots pin only the metadata block across kinds/flags.
 
 import { describe, expect, it } from 'vitest';
 import { COMMENT_IDENTITY_EDIT_DIRECTIVE } from '../src/prompts/comment-identity.js';
+import { SUBAGENT_TURN_DIRECTIVE } from '../src/prompts/subagent-turn.js';
 import { composeSystemPrompt } from '../src/prompts/system.js';
 import type { ProjectMetadata, ProjectTemplate } from '../src/api/projects.js';
 
 function metadataBlock(metadata: ProjectMetadata, template?: ProjectTemplate): string {
   const out = composeSystemPrompt({ metadata, template, sessionMode: 'chat' });
-  const trailingDirective = `\n\n---\n\n${COMMENT_IDENTITY_EDIT_DIRECTIVE}`;
+  const trailingDirective =
+    `\n\n---\n\n${COMMENT_IDENTITY_EDIT_DIRECTIVE}\n\n---\n\n${SUBAGENT_TURN_DIRECTIVE}`;
   expect(out.endsWith(trailingDirective)).toBe(true);
   const idx = out.indexOf('\n\n## Project metadata');
   return idx === -1 ? '' : out.slice(idx, out.length - trailingDirective.length);
