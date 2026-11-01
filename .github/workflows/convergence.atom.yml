@@ -1,9 +1,43 @@
 name: convergence.atom
 
 # Atomic capability: publish immutable reusable workload results only after a
-# successful ci run. All validation and R2 writes execute trusted default-branch
+# successful workload execution, independently of the overall gate. All
+# validation and R2 writes execute trusted default-branch
 # Python; pull-request code is treated solely as data.
 on:
+  workflow_call:
+    inputs:
+      config:
+        type: string
+        default: .github/config/convergence.json
+      handoff_id:
+        type: string
+        default: ci-results
+      pending_artifact:
+        description: Collect a completed result lane directly from its frozen Plan
+        type: string
+        default: ''
+      products:
+        description: Result lane to collect (manifest or none)
+        type: string
+        default: none
+      batches:
+        description: JSON array of declared product batches to collect (empty selects all)
+        type: string
+        default: ''
+      consumer_requests:
+        description: Project frozen requests after successful publication
+        type: boolean
+        default: false
+      workloads:
+        description: JSON array of independently completed workloads to collect
+        type: string
+        default: '[]'
+    outputs:
+      requests:
+        value: ${{ jobs.isolated.outputs.requests }}
+      sources:
+        value: ${{ jobs.isolated.outputs.sources }}
   workflow_run:
     workflows: [ci]
     types: [completed]
@@ -13,17 +47,98 @@ permissions:
   contents: read
 
 concurrency:
-  group: convergence-${{ github.event.workflow_run.id }}
+  group: convergence-${{ github.event.workflow_run.id || github.run_id }}-${{ inputs.handoff_id || 'ci-results' }}
   cancel-in-progress: false
 
 jobs:
+  isolated:
+    name: '[cache] Default-branch manual workload results'
+    outputs:
+      requests: ${{ steps.publish.outputs.requests }}
+      sources: ${{ steps.publish.outputs.sources }}
+    if: >-
+      ${{ !cancelled() && github.event_name == 'workflow_dispatch'
+        && github.repository == 'nexu-io/open-design'
+        && github.ref_name == github.event.repository.default_branch }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: '[prepare] Authorized source snapshot'
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - name: '[resolve] Gate handoff name'
+        if: ${{ inputs.pending_artifact == '' }}
+        id: artifact
+        env:
+          HANDOFF_ID: ${{ inputs.handoff_id }}
+        run: echo "name=$(python3 .github/scripts/handoff.py artifact-name convergence "$HANDOFF_ID")" >> "$GITHUB_OUTPUT"
+      - name: '[collect] Successful gate handoff'
+        if: ${{ inputs.pending_artifact == '' }}
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: ${{ runner.temp }}/handoff-convergence
+      - name: '[collect] Frozen execution plan'
+        if: ${{ inputs.pending_artifact != '' }}
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.pending_artifact }}
+          path: ${{ runner.temp }}/plan
+      - name: '[validate] Completed workload evidence'
+        if: ${{ inputs.pending_artifact != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONVERGENCE_CONFIG: ${{ inputs.config }}
+          HANDOFF_ID: ${{ inputs.handoff_id }}
+          PRODUCT_MODE: ${{ inputs.products }}
+          PRODUCT_BATCHES: ${{ inputs.batches || '[]' }}
+          WORKLOADS: ${{ inputs.workloads }}
+        run: >-
+          python3 .github/scripts/convergence.py --config "$CONVERGENCE_CONFIG" handoff
+          --pending "$RUNNER_TEMP/plan/pending-convergence.json" --products-root "$RUNNER_TEMP/references"
+          --products "$PRODUCT_MODE" --batches "$PRODUCT_BATCHES" --workloads "$WORKLOADS"
+          --handoff-root "$RUNNER_TEMP/handoff-convergence" --id "$HANDOFF_ID"
+      - name: '[validate] Branch, run and isolated storage identity'
+        id: trust
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONVERGENCE_CONFIG: ${{ inputs.config }}
+        run: >-
+          python3 .github/scripts/convergence.py --config "$CONVERGENCE_CONFIG" admit --isolated
+          --handoff-root "$RUNNER_TEMP/handoff-convergence"
+      - name: '[collect] Referenced build products'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python3 .github/scripts/convergence.py stage-products
+          --candidate "${{ steps.trust.outputs.candidate }}"
+          --run-id "${{ github.run_id }}" --output-dir "$RUNNER_TEMP/products"
+      - name: '[cache] Publish isolated results'
+        id: publish
+        env:
+          CONVERGENCE_CONFIG: ${{ inputs.config }}
+          CONSUMER_REQUESTS: ${{ inputs.consumer_requests }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_URL: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_URL }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_BUCKET: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_BUCKET }}
+          OD_WORKLOAD_RESULTS_BASE_URL: ${{ secrets.OD_WORKLOAD_RESULTS_BASE_URL }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_AK: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_AK }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_SK: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_SK }}
+        run: |
+          args=()
+          if [ "$CONSUMER_REQUESTS" = true ]; then args+=(--pending "$RUNNER_TEMP/plan/pending-convergence.json"); fi
+          python3 .github/scripts/convergence.py --config "$CONVERGENCE_CONFIG" publish --isolated \
+            --candidate "${{ steps.trust.outputs.candidate }}" \
+            --products-root "$RUNNER_TEMP/products" --output-dir "$RUNNER_TEMP/publication" "${args[@]}"
+
   publish:
-    name: Publish reusable workload results
+    name: '[cache] CI event workload results'
     if: >-
       ${{
         github.repository == 'nexu-io/open-design'
         && github.event.workflow_run.name == 'ci'
-        && github.event.workflow_run.conclusion == 'success'
+        && contains(fromJSON('["success", "failure"]'), github.event.workflow_run.conclusion)
         && github.event.workflow_run.head_repository.full_name == github.repository
         && (
           github.event.workflow_run.event == 'pull_request'
@@ -56,7 +171,7 @@ jobs:
         if: ${{ steps.artifact.outputs.found == 'true' }}
         uses: actions/download-artifact@v8
         with:
-          name: ${{ steps.artifact.outputs.name }}
+          artifact-ids: ${{ steps.artifact.outputs.id }}
           run-id: ${{ github.event.workflow_run.id }}
           path: ${{ runner.temp }}/handoff-convergence
           github-token: ${{ github.token }}
@@ -64,6 +179,8 @@ jobs:
       - name: Validate producing run and control plane
         if: ${{ steps.artifact.outputs.found == 'true' }}
         id: trust
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: >-
           python3 .github/scripts/convergence.py admit
           --handoff-root "$RUNNER_TEMP/handoff-convergence"

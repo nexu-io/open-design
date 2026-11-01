@@ -4,7 +4,7 @@ export {
   DIAGNOSTICS_FILENAME_PREFIX,
 } from "./contract.js";
 
-export { buildAutomaticDiagnostics, DIAGNOSTIC_CHUNK_BYTES, DIAGNOSTIC_MAX_BYTES,
+export { buildAutomaticDiagnostics, DIAGNOSTIC_CHUNK_BYTES, DIAGNOSTIC_DELIVERY_LOG_PREFIX, DIAGNOSTIC_MAX_BYTES,
   type AutomaticDiagnosticManifest, type AutomaticDiagnosticSource } from './automatic.js';
 
 export {

@@ -1,16 +1,15 @@
 {
-  "id": "0.22.1",
-  "title": "The OpenDesign Product Design Hackathon is here!",
-  "body": "Win up to $1,000 in tokens: Share your website, app, or product design built with OpenDesign on X. The 10 entries with the most likes win prizes!\nRewards for the first 50 submissions: Join the OpenDesign Discord or Feishu community and share your work. The first 50 participants each get $5 in tokens!\n40% better prototype designs: Upgrade to version 0.22.0 or later to experience OpenDesign’s latest design improvements!",
+  "id": "0.26.1",
+  "title": "OpenDesign Intelligent Router is here",
+  "body": "Understand your intent in one sentence and route the best skills straight to the work you want to create.\nShare work with a link so people can view it and comment exactly where changes are needed.\nMotion videos track smoothly, with audio dropouts and glitches fixed for steadier sync.",
   "imageUrl": "https://whatsnew.open-design.ai/0.18.0.webp",
-  "linkUrl": "https://open-design.ai/opendesign-hackathon/",
-  "ctaLabel": "Explore the Hackathon",
+  "linkUrl": "https://github.com/nexu-io/open-design/releases/tag/open-design-v0.26.1",
+  "ctaLabel": "View release notes",
   "locales": {
     "zh-CN": {
-      "title": "OpenDesign 产品设计黑客松来了！",
-      "body": "最高获价值 1000 美金 Token：分享用 OpenDesign 做的网页/App/产品设计到 X，点赞 Top 10 均可获奖；\n前50位投稿都有奖：加入OpenDesign Discord/飞书社群分享作品，前 50 名人人可得 $5 Token；\n原型设计效果提升 40%：升级 0.22.0 及以上版本，体验最新OpenDesign设计效果！",
-      "linkUrl": "https://open-design.ai/zh/opendesign-hackathon/",
-      "ctaLabel": "查看活动"
+      "title": "OpenDesign Intelligent Router 正式上线",
+      "body": "一句话就懂你：自动路由优质 skill，直奔你想要的作品\n支持链接分享作品：对方点开就能看，想改哪里就评哪里\n动效视频丝滑跟拍：修复音频断续、跳音问题，音画同步更稳",
+      "ctaLabel": "查看更新说明"
     }
   }
 }

@@ -12,6 +12,7 @@ import {
   currentWorkspaceAccountGeneration,
   notifyWorkspaceContextRefresh,
   resetWorkspaceContextCache,
+  WORKSPACE_CONTEXT_REFRESH_EVENT,
   type WorkspaceContextState,
 } from '../src/collab/useWorkspaceContext';
 import {
@@ -607,5 +608,31 @@ describe('fresh project route Workspace gate', () => {
           === newMembership.workspaceMemberId,
       ),
     ).toBe(true);
+  });
+
+  it('never re-adopts a bootstrap witness issued before an unseeded identity refresh (sign-out)', async () => {
+    // Signed out: the directory no longer lists the membership.
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      JSON.stringify(workspaceDirectoryFixture([])),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    )));
+    // The ambient context was already exact when the route opened, so the
+    // route's bootstrap witness (same account) was never consumed.
+    const bootstrap = { ...WORKSPACE_A };
+    const hook = renderHook(
+      ({ ambient }: { ambient: WorkspaceContextState }) =>
+        useProjectRouteWorkspaceContext(WORKSPACE_A.workspaceId, ambient, bootstrap),
+      { initialProps: { ambient: { context: WORKSPACE_A, loading: false } as WorkspaceContextState } },
+    );
+    expect(hook.result.current.context).toBe(WORKSPACE_A);
+
+    await act(async () => {
+      window.dispatchEvent(new Event(WORKSPACE_CONTEXT_REFRESH_EVENT));
+      hook.rerender({ ambient: { context: WORKSPACE_A, loading: true, identityChangePending: true } });
+    });
+    hook.rerender({ ambient: { context: null, loading: false, identityChangePending: true } });
+    await act(async () => {});
+
+    expect(hook.result.current.context).toBeNull();
   });
 });

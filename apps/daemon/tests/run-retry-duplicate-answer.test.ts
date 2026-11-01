@@ -84,6 +84,7 @@ describe('OPEND-2566 duplicate answer after an upstream reconnect', () => {
     delete process.env.LANGFUSE_BASE_URL;
     delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
     process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = STALL_WATCHDOG_TIMEOUT_MS;
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
 
     started = await startServer({ port: 0, returnServer: true }) as StartedServer;
     await putConfig(started.url, {
@@ -279,6 +280,7 @@ async function createAndWaitForRun(url: string): Promise<RunStatus> {
   });
   expect(runResponse.status).toBe(202);
   const body = await runResponse.json() as { runId: string };
+  expect(body).not.toHaveProperty('strategyTask');
   return await waitForRun(url, body.runId);
 }
 
@@ -317,6 +319,7 @@ async function readRunEvents(file: string): Promise<RunEvent[]> {
 }
 
 const TRACKED_ENV_KEYS = [
+  'OD_NEXT_STRATEGY_ROLLOUT',
   'POSTHOG_KEY',
   'POSTHOG_HOST',
   'LANGFUSE_PUBLIC_KEY',

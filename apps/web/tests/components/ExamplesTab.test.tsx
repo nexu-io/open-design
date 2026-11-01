@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ExamplesTab } from '../../src/components/ExamplesTab';
@@ -42,6 +42,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
   globalThis.IntersectionObserver = originalIntersectionObserver;
 });
 
@@ -142,6 +143,52 @@ function filterRow(name: string) {
 }
 
 describe('ExamplesTab', () => {
+  it.each(
+    (['card', 'preview'] as const).flatMap(surface =>
+      (['desktop', 'cancelled', 'interrupted'] as const).map(result => ({ surface, result }))),
+  )('handles ZIP $result from the $surface export menu', async ({ surface, result }) => {
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let resolveDownload!: (result: 'desktop' | 'cancelled') => void;
+    let rejectDownload!: (error: Error) => void;
+    vi.mocked(exportAsZip).mockReturnValueOnce(new Promise((resolve, reject) => {
+      resolveDownload = resolve;
+      rejectDownload = reject;
+    }));
+    renderExamples();
+    const card = screen.getByTestId('example-card-live-dashboard');
+    let exportSurface = card;
+    if (surface === 'preview') {
+      fireEvent.click(within(card).getByRole('button', { name: /Open preview/ }));
+      exportSurface = await screen.findByRole('dialog', { name: 'live-dashboard preview' });
+      await screen.findByTitle('live-dashboard Preview');
+    } else {
+      fireEvent.mouseEnter(card);
+      await waitFor(() => {
+        expect((within(card).getByRole('button', { name: 'Share ▾' }) as HTMLButtonElement).disabled).toBe(false);
+      });
+    }
+    fireEvent.click(within(exportSurface).getByRole('button', { name: /Share/ }));
+    fireEvent.click(within(exportSurface).getByRole('menuitem', { name: /Download as \.zip/i }));
+    expect(exportAsZip).toHaveBeenCalledWith(
+      '<main><h1>live-dashboard preview</h1></main>', 'live-dashboard',
+    );
+    expect(alertSpy).not.toHaveBeenCalled();
+
+    await act(async () => {
+      if (result === 'interrupted') rejectDownload(new Error('Download was interrupted'));
+      else resolveDownload(result);
+    });
+    if (result === 'interrupted') {
+      expect(alertSpy).toHaveBeenCalledExactlyOnceWith('Export failed\nThis export did not complete. Please try again.');
+    } else {
+      expect(alertSpy).not.toHaveBeenCalled();
+    }
+    // A cancelled or failed save must leave the export action available for retry.
+    fireEvent.click(within(exportSurface).getByRole('button', { name: /Share/ }));
+    expect(within(exportSurface).getByRole('menuitem', { name: /Download as \.zip/i })).toBeTruthy();
+  });
+
   it('shows the empty skills state when the catalog is unavailable', () => {
     render(<ExamplesTab skills={[]} onUsePrompt={vi.fn()} />);
 

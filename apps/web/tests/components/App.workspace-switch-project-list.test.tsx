@@ -49,7 +49,7 @@ import {
   fetchPromptTemplates,
   fetchSkills,
 } from '../../src/providers/registry';
-import { listProjects, listTemplates } from '../../src/state/projects';
+import { listProjects, listTemplates, patchProject } from '../../src/state/projects';
 import {
   notifyWorkspaceContextRefresh,
   resetTeamProjectsCache,
@@ -69,16 +69,25 @@ vi.mock('../../src/components/EntryView', () => ({
   EntryView: ({
     projects,
     projectsLoading,
+    projectsLoadFailed,
+    onProjectsRefresh,
+    onOpenProject,
   }: {
     projects: Project[];
     projectsLoading?: boolean;
+    projectsLoadFailed?: boolean;
+    onProjectsRefresh?: () => Promise<void>;
+    onOpenProject?: (id: string) => void;
   }) => (
     <main>
       <div data-testid="entry-home-surface" />
       <div data-testid="entry-projects-loading">{String(Boolean(projectsLoading))}</div>
+      <div data-testid="entry-projects-failed">{String(Boolean(projectsLoadFailed))}</div>
+      <button onClick={() => void onProjectsRefresh?.().catch(() => {})}>Retry projects</button>
       {projects.map((project) => (
-        <div key={project.id} data-testid={`entry-project-${project.id}`}>
+        <div key={project.id} data-testid={`entry-project-${project.id}`} data-recency={project.lastUserQueryAt}>
           {project.name}
+          <button onClick={() => onOpenProject?.(project.id)}>Open {project.id}</button>
         </div>
       ))}
     </main>
@@ -92,6 +101,7 @@ vi.mock('../../src/components/ProjectView', async () => {
       project: Project;
       workspaceContextOverride?: ReturnType<typeof workspaceContext> | null;
       onBack: () => void;
+      onTouchProject: (sentAt: number) => void;
       onProjectChange: (project: Project) => void;
       onProjectsRefresh: () => Promise<void> | void;
     }) => {
@@ -129,6 +139,8 @@ vi.mock('../../src/components/ProjectView', async () => {
       ]);
       return (
         <main data-testid="project-view">
+          <span data-testid="project-recency">{props.project.lastUserQueryAt}</span>
+          <button data-testid="project-send" onClick={() => props.onTouchProject(5000)}>Send</button>
           <span data-testid="project-title">{props.project.name}</span>
           <button
             type="button"
@@ -204,6 +216,7 @@ vi.mock('../../src/state/projects', async () => {
     ...actual,
     listProjects: vi.fn(),
     listTemplates: vi.fn(),
+    patchProject: vi.fn(),
   };
 });
 
@@ -330,6 +343,35 @@ describe('App project list across a workspace switch', () => {
     resetProjectDisplaySnapshots();
   });
 
+  it('keeps locally shared projects on the All projects page before the shared catalog catches up', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const pathname = new URL(String(input), 'http://d.local').pathname;
+      return Response.json(pathname.endsWith('/workspace/directory')
+        ? workspaceDirectoryFixture([workspaceContext('ws-a')])
+        : pathname.endsWith('/workspace/context')
+          ? workspaceContextPayload('ws-a')
+          : {});
+    }));
+    const sharedProject = {
+      ...WORKSPACE_A_PROJECT,
+      id: 'locally-shared',
+      name: 'Just moved to team',
+      workspaceVisibility: 'team' as const,
+    };
+    vi.mocked(listProjects).mockImplementation(async (options) =>
+      !options?.workspaceContext
+        ? []
+        : options.workspaceView === 'drafts'
+          ? [WORKSPACE_A_PROJECT]
+          : [WORKSPACE_A_PROJECT, sharedProject]);
+    window.history.replaceState(null, '', '/drafts');
+
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId(`entry-project-${WORKSPACE_A_PROJECT.id}`)).toBeTruthy());
+    expect(screen.getByText('Just moved to team').closest('[data-testid]')?.getAttribute('data-testid'))
+      .toBe('entry-project-locally-shared');
+  });
+
   it('never renders the previous workspace\'s projects while the new list is in flight', async () => {
     let activeWorkspaceId = 'ws-a';
     vi.stubGlobal(
@@ -393,8 +435,8 @@ describe('App project list across a workspace switch', () => {
   });
 
   it('shows an exact warm view snapshot while one background refresh runs', async () => {
-    const refreshedDrafts = deferred<Project[]>();
-    let draftsReads = 0;
+    const refreshedRecent = deferred<Project[]>();
+    let recentReads = 0;
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
@@ -409,14 +451,14 @@ describe('App project list across a workspace switch', () => {
       }),
     );
     vi.mocked(listProjects).mockImplementation(async (options) => {
-      if (options?.workspaceView === 'drafts') {
-        draftsReads += 1;
-        return draftsReads === 1 ? [WORKSPACE_A_PROJECT] : refreshedDrafts.promise;
+      if (options?.workspaceView === 'recent') {
+        recentReads += 1;
+        return recentReads === 1 ? [WORKSPACE_A_PROJECT] : refreshedRecent.promise;
       }
       if (options?.workspaceView === 'all') return [WORKSPACE_B_PROJECT];
       return [];
     });
-    window.history.replaceState(null, '', '/drafts');
+    window.history.replaceState(null, '', '/');
 
     render(<App />);
     await waitFor(() =>
@@ -427,23 +469,23 @@ describe('App project list across a workspace switch', () => {
       expect(screen.getByTestId(`entry-project-${WORKSPACE_B_PROJECT.id}`)).toBeTruthy(),
     );
 
-    act(() => navigate({ kind: 'home', view: 'drafts' }));
-    await waitFor(() => expect(draftsReads).toBe(2));
+    act(() => navigate({ kind: 'home', view: 'home' }));
+    await waitFor(() => expect(recentReads).toBe(2));
 
     expect(screen.getByTestId(`entry-project-${WORKSPACE_A_PROJECT.id}`)).toBeTruthy();
     expect(screen.queryByTestId(`entry-project-${WORKSPACE_B_PROJECT.id}`)).toBeNull();
     expect(screen.getByTestId('entry-projects-loading').textContent).toBe('false');
-    expect(draftsReads).toBe(2);
+    expect(recentReads).toBe(2);
 
     await act(async () => {
-      refreshedDrafts.resolve([{ ...WORKSPACE_A_PROJECT, name: 'Workspace A refreshed' }]);
-      await refreshedDrafts.promise;
+      refreshedRecent.resolve([{ ...WORKSPACE_A_PROJECT, name: 'Workspace A refreshed' }]);
+      await refreshedRecent.promise;
     });
     await waitFor(() => expect(screen.getByText('Workspace A refreshed')).toBeTruthy());
   });
 
   it('keeps the exact last-good view when its background refresh fails', async () => {
-    let draftsReads = 0;
+    let recentReads = 0;
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
@@ -458,15 +500,15 @@ describe('App project list across a workspace switch', () => {
       }),
     );
     vi.mocked(listProjects).mockImplementation(async (options) => {
-      if (options?.workspaceView === 'drafts') {
-        draftsReads += 1;
-        if (draftsReads === 1) return [WORKSPACE_A_PROJECT];
-        throw new Error('draft refresh unavailable');
+      if (options?.workspaceView === 'recent') {
+        recentReads += 1;
+        if (recentReads === 1) return [WORKSPACE_A_PROJECT];
+        throw new Error('recent refresh unavailable');
       }
       if (options?.workspaceView === 'all') return [WORKSPACE_B_PROJECT];
       return [];
     });
-    window.history.replaceState(null, '', '/drafts');
+    window.history.replaceState(null, '', '/');
 
     render(<App />);
     await waitFor(() =>
@@ -476,9 +518,9 @@ describe('App project list across a workspace switch', () => {
     await waitFor(() =>
       expect(screen.getByTestId(`entry-project-${WORKSPACE_B_PROJECT.id}`)).toBeTruthy(),
     );
-    act(() => navigate({ kind: 'home', view: 'drafts' }));
+    act(() => navigate({ kind: 'home', view: 'home' }));
 
-    await waitFor(() => expect(draftsReads).toBe(3), { timeout: 3000 });
+    await waitFor(() => expect(recentReads).toBe(3), { timeout: 3000 });
     expect(screen.getByTestId(`entry-project-${WORKSPACE_A_PROJECT.id}`)).toBeTruthy();
     expect(screen.queryByTestId(`entry-project-${WORKSPACE_B_PROJECT.id}`)).toBeNull();
     expect(screen.getByTestId('entry-projects-loading').textContent).toBe('false');
@@ -500,7 +542,8 @@ describe('App project list across a workspace switch', () => {
         );
       }),
     );
-    vi.mocked(listProjects).mockImplementation(async () => {
+    vi.mocked(listProjects).mockImplementation(async (options) => {
+      if (!options?.workspaceContext) return [];
       reads += 1;
       return reads === 1 ? [WORKSPACE_A_PROJECT] : secondAccountProjects.promise;
     });
@@ -521,6 +564,51 @@ describe('App project list across a workspace switch', () => {
     await waitFor(() =>
       expect(screen.getByTestId(`entry-project-${WORKSPACE_B_PROJECT.id}`)).toBeTruthy(),
     );
+  });
+
+  it('separates signed-in workspace projects from signed-out local projects in both directions', async () => {
+    let signedIn = true;
+    let signingInAgain = false;
+    let nextWorkspaceReadStarted = false;
+    const localProjects = deferred<Project[]>();
+    const nextWorkspaceProjects = deferred<Project[]>();
+    const localProject = project('signed-out-local', 'Signed-out local project');
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const pathname = new URL(String(input), 'http://d.local').pathname;
+      return Response.json(pathname.endsWith('/workspace/directory')
+        ? {
+            ...workspaceDirectoryFixture(signedIn ? [workspaceContext('ws-a')] : []),
+            activeWorkspaceId: signedIn ? 'ws-a' : null,
+          }
+        : pathname.endsWith('/workspace/context')
+          ? { context: signedIn ? workspaceContext('ws-a') : null }
+          : {});
+    }));
+    vi.mocked(listProjects).mockImplementation(async (options) => {
+      if (!options?.workspaceContext) return localProjects.promise;
+      if (signingInAgain) nextWorkspaceReadStarted = true;
+      return signingInAgain ? nextWorkspaceProjects.promise : [WORKSPACE_A_PROJECT];
+    });
+    window.history.replaceState(null, '', '/drafts');
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId(`entry-project-${WORKSPACE_A_PROJECT.id}`)).toBeTruthy());
+
+    signedIn = false;
+    await act(async () => notifyWorkspaceContextRefresh());
+    await waitFor(() => expect(screen.queryByTestId(`entry-project-${WORKSPACE_A_PROJECT.id}`)).toBeNull());
+    await act(async () => localProjects.resolve([localProject]));
+    await waitFor(() => expect(screen.getByTestId('entry-project-signed-out-local')).toBeTruthy());
+
+    signedIn = true;
+    signingInAgain = true;
+    await act(async () => notifyWorkspaceContextRefresh());
+    await waitFor(() => expect(nextWorkspaceReadStarted).toBe(true));
+    await waitFor(() => {
+      expect(screen.queryByTestId('entry-project-signed-out-local')).toBeNull();
+      expect(screen.queryByTestId(`entry-project-${WORKSPACE_A_PROJECT.id}`)).toBeNull();
+    });
+    await act(async () => nextWorkspaceProjects.resolve([WORKSPACE_B_PROJECT]));
+    await waitFor(() => expect(screen.getByTestId(`entry-project-${WORKSPACE_B_PROJECT.id}`)).toBeTruthy());
   });
 
   it('keeps an open A project mounted and scoped to A while the ambient shell switches to B', async () => {
@@ -780,6 +868,45 @@ describe('App project list across a workspace switch', () => {
     expect(projectResourceRequests).toHaveLength(1);
   });
 
+  it('waits for the scoped project list on refresh instead of probing a bound project headerless', async () => {
+    const boundProject = { ...WORKSPACE_A_PROJECT, workspaceId: 'ws-a' };
+    const projectList = deferred<Project[]>();
+    const scopeRequests: Headers[] = [];
+    vi.mocked(listProjects).mockImplementation(async (options) =>
+      options?.workspaceContext ? projectList.promise : []);
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const pathname = new URL(String(input), 'http://d.local').pathname;
+      if (pathname === `/api/projects/${boundProject.id}/workspace-scope`) {
+        const headers = new Headers(init?.headers);
+        scopeRequests.push(headers);
+        return Response.json({ error: { code: 'WORKSPACE_CONTEXT_REQUIRED' } }, { status: 400 });
+      }
+      return Response.json(pathname.endsWith('/workspace/directory')
+        ? workspaceDirectoryFixture([workspaceContext('ws-a')])
+        : pathname.endsWith('/workspace/context')
+          ? workspaceContextPayload('ws-a')
+          : {});
+    }));
+    window.history.replaceState(null, '', `/projects/${boundProject.id}`);
+
+    render(<App />);
+    await waitFor(() => expect(vi.mocked(listProjects).mock.calls.some(
+      ([options]) => options?.workspaceContext?.workspaceId === 'ws-a',
+    )).toBe(true));
+    expect(scopeRequests).toEqual([]);
+    expect(screen.queryByTestId('project-view')).toBeNull();
+
+    await act(async () => {
+      projectList.resolve([boundProject]);
+      await projectList.promise;
+    });
+    await waitFor(() => expect(screen.getByTestId('project-view')).toBeTruthy());
+    expect(scopeRequests).toEqual([]);
+    expect(projectViewLifecycle.renders.mock.lastCall?.[0]).toMatchObject({
+      workspaceContextOverride: { workspaceId: 'ws-a', workspaceMemberId: 'member-ws-a' },
+    });
+  });
+
   it('bootstraps a fresh A deep link under ambient B without any headerless project-data read', async () => {
     const boundProjectA: Project = {
       ...WORKSPACE_A_PROJECT,
@@ -916,19 +1043,17 @@ describe('App project list across a workspace switch', () => {
     expect(screen.getByTestId(`entry-project-${boundProjectB.id}`)).toBeTruthy();
   });
 
-  it('starts and mounts an exact deep-link bootstrap while health, directory, and project list stay pending', async () => {
+  it('waits for directory authority before mounting a deep link after the startup catalog settles', async () => {
     const boundProjectA: Project = {
       ...WORKSPACE_A_PROJECT,
       workspaceId: 'ws-a',
     };
-    const health = deferred<boolean>();
     const directory = deferred<Response>();
     let scopeReads = 0;
     let detailReads = 0;
-    vi.mocked(daemonIsLive).mockReturnValue(health.promise);
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const pathname = new URL(String(input), 'http://d.local').pathname;
-      if (pathname === '/api/workspace/directory') return directory.promise;
+      if (pathname === '/api/workspace/directory') return directory.promise.then((response) => response.clone());
       if (pathname === `/api/projects/${boundProjectA.id}/workspace-scope`) {
         scopeReads += 1;
         return new Response(JSON.stringify({
@@ -962,17 +1087,25 @@ describe('App project list across a workspace switch', () => {
         headers: { 'content-type': 'application/json' },
       });
     }));
-    vi.mocked(listProjects).mockImplementation(() => new Promise<Project[]>(() => {}));
+    vi.mocked(listProjects).mockResolvedValue([]);
     window.history.replaceState(null, '', `/projects/${boundProjectA.id}`);
 
     render(<App />);
+
+    await waitFor(() => expect(vi.mocked(listProjects)).toHaveBeenCalled());
+    expect(scopeReads).toBe(0);
+    expect(detailReads).toBe(0);
+    expect(screen.queryByTestId('project-view')).toBeNull();
+    await act(async () => {
+      directory.resolve(new Response(JSON.stringify(workspaceDirectoryFixture([workspaceContext('ws-a')]))));
+    });
 
     await waitFor(() => {
       expect(scopeReads).toBe(2);
       expect(detailReads).toBe(1);
       expect(screen.getByTestId('project-view')).toBeTruthy();
     });
-    expect(vi.mocked(listProjects)).not.toHaveBeenCalled();
+    expect(vi.mocked(listProjects)).toHaveBeenCalled();
     expect(projectViewLifecycle.renders.mock.lastCall?.[0]).toMatchObject({
       project: boundProjectA,
       workspaceContextOverride: {
@@ -1007,20 +1140,18 @@ describe('App project list across a workspace switch', () => {
     ).toBe(false);
   });
 
-  it('adopts a newly completed bootstrap after an earlier workspace refresh while directory stays pending', async () => {
+  it('adopts an in-flight bootstrap after a workspace selection change', async () => {
     const boundProjectA: Project = {
       ...WORKSPACE_A_PROJECT,
       workspaceId: 'ws-a',
     };
-    const health = deferred<boolean>();
     const directory = deferred<Response>();
     const scopeResponse = deferred<Response>();
     let scopeReads = 0;
     let detailReads = 0;
-    vi.mocked(daemonIsLive).mockReturnValue(health.promise);
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const pathname = new URL(String(input), 'http://d.local').pathname;
-      if (pathname === '/api/workspace/directory') return directory.promise;
+      if (pathname === '/api/workspace/directory') return directory.promise.then((response) => response.clone());
       if (pathname === `/api/projects/${boundProjectA.id}/workspace-scope`) {
         scopeReads += 1;
         if (scopeReads === 1) return scopeResponse.promise;
@@ -1058,11 +1189,14 @@ describe('App project list across a workspace switch', () => {
         headers: { 'content-type': 'application/json' },
       });
     }));
-    vi.mocked(listProjects).mockImplementation(() => new Promise<Project[]>(() => {}));
+    vi.mocked(listProjects).mockResolvedValue([]);
     window.history.replaceState(null, '', `/projects/${boundProjectA.id}`);
 
     render(<App />);
 
+    await act(async () => {
+      directory.resolve(new Response(JSON.stringify(workspaceDirectoryFixture([workspaceContext('ws-a')]))));
+    });
     await waitFor(() => expect(scopeReads).toBe(1));
     await act(async () => {
       notifyWorkspaceContextRefresh({ context: workspaceContext('ws-b') });
@@ -1097,4 +1231,109 @@ describe('App project list across a workspace switch', () => {
       },
     });
   });
+  it.each(['before-send', 'during-write'] as const)('preserves send recency against a stale list issued %s', async (timing) => {
+    const original = { ...WORKSPACE_A_PROJECT, workspaceId: 'ws-a', lastUserQueryAt: 100 };
+    const oldRead = deferred<Project[]>();
+    const write = deferred<Project | null>();
+    vi.mocked(patchProject).mockReturnValue(write.promise);
+    vi.mocked(listProjects).mockResolvedValue([original]);
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const pathname = new URL(String(input), 'http://d.local').pathname;
+      const body = pathname.endsWith('/workspace/directory')
+        ? workspaceDirectoryFixture([workspaceContext('ws-a')])
+        : pathname.endsWith('/workspace/context') ? workspaceContextPayload('ws-a')
+        : pathname.endsWith('/workspace-scope') ? { scope: {
+          kind: 'team', projectId: original.id, workspaceId: 'ws-a', visibility: 'team', context: workspaceContext('ws-a'),
+        } }
+        : pathname === `/api/projects/${original.id}` ? { project: original }
+        : {};
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    }));
+    window.history.replaceState(null, '', `/projects/${original.id}`);
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId('project-view')).toBeTruthy());
+    const sendOwner = projectViewLifecycle.renders.mock.lastCall![0];
+    if (timing === 'during-write') fireEvent.click(screen.getByTestId('project-send'));
+    vi.mocked(listProjects).mockReturnValueOnce(oldRead.promise);
+    await act(async () => fireEvent.click(screen.getByTestId('project-refresh')));
+    if (timing === 'before-send') fireEvent.click(screen.getByTestId('project-send'));
+    await waitFor(() => expect(screen.getByTestId('project-recency').textContent).toBe('5000'));
+    await act(async () => write.resolve({ ...original, lastUserQueryAt: 5000 }));
+    await act(async () => oldRead.resolve([original]));
+    expect(screen.getByTestId('project-recency').textContent).toBe('5000');
+    // OPEND-4040: the first-send closure still holds the pre-send project.
+    await act(async () => sendOwner.onProjectChange({ ...original, name: 'Automatic title' }));
+    expect(screen.getByTestId('project-title').textContent).toBe('Automatic title');
+    expect(screen.getByTestId('project-recency').textContent).toBe('5000');
+    // Fresh post-write reads remain authoritative, including newer remote sends.
+    vi.mocked(listProjects).mockResolvedValue([{ ...original, lastUserQueryAt: 6000 }]);
+    await act(async () => fireEvent.click(screen.getByTestId('project-refresh')));
+    await waitFor(() => expect(screen.getByTestId('project-recency').textContent).toBe('6000'));
+    fireEvent.click(screen.getByTestId('project-back'));
+    await waitFor(() => expect(screen.getByTestId(`entry-project-${original.id}`).getAttribute('data-recency')).toBe('6000'));
+  });
+
+  it('OPEND-4067 keeps a delayed A receipt scoped to A after opening workspace B', async () => {
+    const a = { ...WORKSPACE_A_PROJECT, workspaceId: 'ws-a', lastUserQueryAt: 100 };
+    const b = { ...WORKSPACE_B_PROJECT, workspaceId: 'ws-b', lastUserQueryAt: 200 };
+    let current = 'ws-a';
+    vi.mocked(listProjects).mockImplementation(async (options) =>
+      options?.workspaceContext?.workspaceId === 'ws-b' ? [b] : [a]);
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input), 'http://d.local').pathname;
+      const project = path.includes(b.id) ? b : a;
+      return Response.json(path.endsWith('/workspace/directory')
+        ? { ...workspaceDirectoryFixture([workspaceContext('ws-a'), workspaceContext('ws-b')]), activeWorkspaceId: current }
+        : path.endsWith('/workspace/context') ? workspaceContextPayload(current)
+        : path.endsWith('/workspace-scope') ? { scope: { kind: 'team', projectId: project.id,
+          workspaceId: project.workspaceId, visibility: 'team', context: workspaceContext(project.workspaceId) } }
+        : { project });
+    }));
+    window.history.replaceState(null, '', `/projects/${a.id}`);
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId('project-recency').textContent).toBe('100'));
+    const oldSend = projectViewLifecycle.renders.mock.lastCall![0].onTouchProject;
+    await act(async () => navigate({ kind: 'home', view: 'home' }));
+    current = 'ws-b';
+    await act(async () => {
+      notifyWorkspaceContextRefresh({ context: workspaceContext('ws-b') });
+    });
+    await waitFor(() => expect(screen.getByTestId(`entry-project-${b.id}`)).toBeTruthy());
+    await act(async () => {
+      fireEvent.click(screen.getByText(`Open ${b.id}`));
+    });
+    await waitFor(() => expect(projectViewLifecycle.renders.mock.calls.some(([props]) => props.project.id === b.id)).toBe(true));
+    vi.mocked(patchProject).mockClear();
+    await act(async () => oldSend(5000));
+    expect(projectViewLifecycle.renders.mock.calls.filter(([props]) => props.project.id === b.id).at(-1)![0].project.lastUserQueryAt).toBe(200);
+    // The receipt is already persisted: no late PATCH can borrow B's identity.
+    expect(patchProject).not.toHaveBeenCalled();
+  });
+
+  it('keeps a rejected list distinct from an empty success and clears failure after retry', async () => {
+    vi.mocked(listProjects).mockRejectedValue(new Error('projects 403'));
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId('entry-projects-failed').textContent).toBe('true'));
+    expect(screen.queryByTestId(`entry-project-${WORKSPACE_A_PROJECT.id}`)).toBeNull();
+    vi.mocked(listProjects).mockResolvedValue([]);
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Retry projects' })));
+    expect(screen.getByTestId('entry-projects-failed').textContent).toBe('false');
+  });
+
+  it('does not let an older success clear a newer failed refresh', async () => {
+    vi.mocked(listProjects).mockResolvedValue([]);
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId('entry-projects-loading').textContent).toBe('false'));
+    const olderRead = deferred<Project[]>();
+    vi.mocked(listProjects).mockReturnValueOnce(olderRead.promise);
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Retry projects' })));
+    vi.mocked(listProjects).mockRejectedValueOnce(new Error('projects 403'));
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Retry projects' })));
+    expect(screen.getByTestId('entry-projects-failed').textContent).toBe('true');
+    await act(async () => olderRead.resolve([]));
+    expect(screen.getByTestId('entry-projects-failed').textContent).toBe('true');
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Retry projects' })));
+    expect(screen.getByTestId('entry-projects-failed').textContent).toBe('false');
+  });
+
 });

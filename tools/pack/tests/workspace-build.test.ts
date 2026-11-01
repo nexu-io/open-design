@@ -449,7 +449,7 @@ describe("runWorkspaceBuild", () => {
       });
 
       expect(calls.map((call) => call.args)).toEqual(WORKSPACE_BUILD_COMMANDS.map((command) => [...command.args]));
-      expect(calls[1]?.env).toMatchObject({ OD_WEB_OUTPUT_MODE: "standalone" });
+      expect(calls[1]?.env).toMatchObject({ OD_WEB_OUTPUT_MODE: "standalone", OD_WEB_TYPECHECK: "external" });
       expect(calls[1]?.env?.NODE_OPTIONS).toContain("--max-old-space-size=4096");
       expect(await readFile(join(root, "apps/web/next-env.d.ts"), "utf8")).toBe("original\n");
     } finally {

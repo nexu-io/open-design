@@ -81,6 +81,11 @@ export type StopProcessesOptions = {
   termGraceMs?: number;
   /** Wait after SIGKILL before reporting any survivors. Defaults to 5 seconds. */
   killGraceMs?: number;
+  /**
+   * Called after a signal was delivered to a PID (`process.kill` returned).
+   * Not called for a PID that was already gone (`ESRCH`) or when the call threw.
+   */
+  onSignal?: (pid: number, signal: NodeJS.Signals) => void;
 };
 
 function normalizedGraceMs(value: number | undefined): number | undefined {
@@ -811,14 +816,23 @@ export async function terminateProcessGroup(
   return { alreadyStopped: false, forced: true, survived: !gone };
 }
 
-/** Send a signal to each PID, ignoring `ESRCH` (already-dead) but rethrowing other errors. */
-export function signalProcesses(pids: number[], signal: NodeJS.Signals): void {
+/**
+ * Send a signal to each PID, ignoring `ESRCH` (already-dead) but rethrowing other errors.
+ * `onSignal` runs for each PID the signal was actually delivered to.
+ */
+export function signalProcesses(
+  pids: number[],
+  signal: NodeJS.Signals,
+  onSignal?: (pid: number, signal: NodeJS.Signals) => void,
+): void {
   for (const pid of pids) {
     try {
       process.kill(pid, signal);
     } catch (error) {
       if (errorCode(error) !== "ESRCH") throw error;
+      continue;
     }
+    onSignal?.(pid, signal);
   }
 }
 
@@ -850,7 +864,7 @@ export async function stopProcesses(
   if (uniquePids.length === 0) {
     return { alreadyStopped: true, forcedPids: [], matchedPids: [], remainingPids: [], stoppedPids: [] };
   }
-  signalProcesses(uniquePids, "SIGTERM");
+  signalProcesses(uniquePids, "SIGTERM", options.onSignal);
   const remainingAfterTerm = await waitForProcessesToExit(
     uniquePids,
     normalizedGraceMs(options.termGraceMs),
@@ -858,7 +872,7 @@ export async function stopProcesses(
   if (remainingAfterTerm.length === 0) {
     return { alreadyStopped: false, forcedPids: [], matchedPids: uniquePids, remainingPids: [], stoppedPids: uniquePids };
   }
-  signalProcesses(remainingAfterTerm, "SIGKILL");
+  signalProcesses(remainingAfterTerm, "SIGKILL", options.onSignal);
   const remainingAfterKill = await waitForProcessesToExit(
     remainingAfterTerm,
     normalizedGraceMs(options.killGraceMs),

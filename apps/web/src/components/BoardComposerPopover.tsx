@@ -448,6 +448,7 @@ export function BoardComposerPopover({
   offset,
   docked = false,
   commenting = true,
+  discardPending = false,
 }: {
   target: PreviewCommentSnapshot;
   existing: PreviewComment | null;
@@ -499,6 +500,8 @@ export function BoardComposerPopover({
   offset?: PopoverOffset;
   docked?: boolean;
   commenting?: boolean;
+  /** A pick was held back to protect unsent work; the next pick discards it. */
+  discardPending?: boolean;
 }) {
   const pendingCount = notes.length + (draft.trim() ? 1 : 0);
   const podMembers = target.podMembers ?? [];
@@ -818,6 +821,18 @@ export function BoardComposerPopover({
                 }
               }}
             />
+            {/* OP2: explain WHY the textarea is read-only when it's specifically
+                a share-page (external) comment — team-member-vs-team-member
+                read-only (OP3) has no such reason line, board only asked for
+                this on the owner-reads-external-comment case. */}
+            {!canEditComment && existing?.authorKind === 'user' ? (
+              <p className="comment-popover-readonly-note">{t('comment.sharePageCommentReadOnly')}</p>
+            ) : null}
+            {discardPending ? (
+              <p className="comment-popover-readonly-note" role="status">
+                {t('comment.unsentDiscardNotice')}
+              </p>
+            ) : null}
           </section>
         ) : null}
       </div>

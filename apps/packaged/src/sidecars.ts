@@ -1,4 +1,6 @@
+import { type AmrEndpointBinding, parseAmrEndpointBinding } from "@open-design/contracts";
 import type { UpdateLifecycleObservation } from "@open-design/desktop/main";
+import { randomUUID } from "node:crypto";
 import type { ChildProcess } from "node:child_process";
 import { access, appendFile, mkdir, open, rename, type FileHandle } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -39,6 +41,8 @@ import {
   resolveDaemonPrewarmTargets,
   resolveWebPrewarmTargets,
 } from "./prewarm.js";
+import { reportDaemonExit } from "./startup-telemetry.js";
+import { resolvePackagedShareViewerEnv } from "./share-viewer.js";
 import { workspaceTeamTransportEnv } from "./workspace-team.js";
 
 const require = createRequire(import.meta.url);
@@ -61,6 +65,7 @@ const PACKAGED_CHILD_ENV_ALLOWLIST = [
   "https_proxy",
   "no_proxy",
   "OD_ALLOWED_INTERNAL_HOSTS",
+  "OD_JSON_IPC_TRACE",
 ] as const;
 
 // The daemon owns the historical-outer compatibility handoff. Preserve the
@@ -116,6 +121,7 @@ type ManagedSidecarChild = {
   logHandle: FileHandle;
   logPath: string;
   stamp: SidecarStamp;
+  daemonExitObserver?: ReturnType<typeof observeDaemonExit>;
 };
 
 type PackagedDaemonManagedPathEnv = {
@@ -618,8 +624,10 @@ function createPackagedDaemonManagedPathEnv(
 }
 
 export type PackagedDaemonSpawnEnvOptions = {
+  launchContext?: { app_session_id: string; launch_attempt_id: string } | undefined;
   appVersion: string | null;
   amrProfile?: string | null;
+  amrEndpointBinding?: AmrEndpointBinding;
   daemonCliEntry: string | null;
   desktopHandoffEnv?: NodeJS.ProcessEnv;
   mcpBootstrapArgs?: readonly string[];
@@ -645,6 +653,12 @@ export type PackagedDaemonSpawnEnvOptions = {
    */
   velaWebUrl?: string | null;
   velaWebUrls?: Record<string, string>;
+  /**
+   * Launch environment whose explicit `OD_SHARE_VIEWER_URL(S)` debug override
+   * is forwarded (there is no channel default: AMR reports the share address).
+   * The child env allowlist would otherwise drop them.
+   */
+  shareViewerLaunchEnv?: NodeJS.ProcessEnv;
 };
 
 /**
@@ -657,6 +671,13 @@ export function buildPackagedDaemonSpawnEnv(
   paths: PackagedNamespacePaths,
   options: PackagedDaemonSpawnEnvOptions,
 ): NodeJS.ProcessEnv {
+  const binding = parseAmrEndpointBinding(options.amrEndpointBinding);
+  const amrProfile = binding?.profile ?? options.amrProfile;
+  const velaWebUrl = binding?.webUrl ?? options.velaWebUrl;
+  const velaWebUrls = {
+    ...options.velaWebUrls,
+    ...(binding ? { [binding.profile]: binding.webUrl } : {}),
+  };
   return {
     [SIDECAR_ENV.DAEMON_PORT]: "0",
     ...(options.daemonCliEntry == null ? {} : { [SIDECAR_ENV.DAEMON_CLI_PATH]: options.daemonCliEntry }),
@@ -673,16 +694,24 @@ export function buildPackagedDaemonSpawnEnv(
     // fallback, but packaged runtime must not rely on path inference from
     // Electron userData, bundle names, or ports.
     ...createPackagedDaemonManagedPathEnv(paths),
+    ...(options.launchContext ? { OD_APP_SESSION_ID: options.launchContext.app_session_id, OD_LAUNCH_ATTEMPT_ID: options.launchContext.launch_attempt_id } : {}),
     ...(options.nodeCommand == null || options.nodeCommand.length === 0
       ? {}
       : { OD_NODE_BIN: options.nodeCommand }),
-    ...(options.amrProfile == null || options.amrProfile.length === 0
+    ...(amrProfile == null || amrProfile.length === 0
       ? {}
-      : { OPEN_DESIGN_AMR_PROFILE: options.amrProfile }),
-    ...workspaceTeamTransportEnv(options.amrProfile, options.velaWebUrl),
-    ...(options.velaWebUrls == null || Object.keys(options.velaWebUrls).length === 0
+      : { OPEN_DESIGN_AMR_PROFILE: amrProfile }),
+    ...(binding ? {
+      OPEN_DESIGN_AMR_ENDPOINT_BINDING: JSON.stringify(binding),
+      VELA_PROFILE: binding.profile,
+      VELA_API_URL: binding.apiUrl,
+      VELA_LINK_URL: binding.linkUrl,
+    } : {}),
+    ...workspaceTeamTransportEnv(amrProfile, velaWebUrl),
+    ...(Object.keys(velaWebUrls).length === 0
       ? {}
-      : { OD_VELA_WEB_URLS: JSON.stringify(options.velaWebUrls) }),
+      : { OD_VELA_WEB_URLS: JSON.stringify(velaWebUrls) }),
+    ...resolvePackagedShareViewerEnv(options.shareViewerLaunchEnv ?? {}),
     ...(options.appVersion == null ? {} : { OD_APP_VERSION: options.appVersion }),
     ...(options.mcpBootstrapCommand == null
       || options.mcpBootstrapCommand.length === 0
@@ -809,7 +838,42 @@ export function createPackagedSidecarSpawnOptions(input: {
   };
 }
 
+/** Attach before readiness; intentional shutdown is marked before requesting stop. */
+export function observeDaemonExit(
+  child: { exitCode: number | null; signalCode: NodeJS.Signals | null;
+    once(event: 'exit', listener: (code: number | null, signal: NodeJS.Signals | null) => void): unknown },
+  report: (exit: { exit_code: number | null; signal: NodeJS.Signals | null; intentional: boolean; occurred_at: string; reason: 'killed' | 'crash' | 'clean-exit' | 'unknown' }) => Promise<void>,
+) {
+  let ready = false;
+  let intentional = false;
+  let exited = child.exitCode !== null || child.signalCode !== null;
+  let delivery = Promise.resolve();
+  child.once('exit', (code, signal) => {
+    if (exited) return;
+    exited = true;
+    if (!ready) return;
+    // The observed child is the sidecar supervisor; it re-raises a target's
+    // unforwarded terminating signal (see supervisorExitDisposition), so only a
+    // real signal counts as killed. A numeric exit such as 137 stays a crash.
+    const targetSignal = signal;
+    const reason = intentional ? 'clean-exit' : targetSignal ? 'killed' : code === 0 ? 'clean-exit' : code !== null ? 'crash' : 'unknown';
+    const exit = { exit_code: code, signal: targetSignal, intentional, occurred_at: new Date().toISOString(), reason } as const;
+    // Invoke synchronously so the reporter can persist before yielding to network I/O.
+    try { delivery = report(exit).catch(() => undefined); } catch {}
+  });
+  return {
+    markReady(): boolean {
+      if (exited || child.exitCode !== null || child.signalCode !== null) return false;
+      ready = true;
+      return true;
+    },
+    beginShutdown(): void { intentional = true; },
+    flush(): Promise<void> { return delivery; },
+  };
+}
+
 export async function closeManagedChild(child: ManagedSidecarChild, observe?: (event: UpdateLifecycleObservation) => Promise<void>): Promise<void> {
+  child.daemonExitObserver?.beginShutdown();
   const startedAt = Date.now();
   const appendLifecycleLog = async (message: string): Promise<void> => appendSidecarLifecycleLog(child.logPath, message);
   try {
@@ -855,8 +919,10 @@ export async function startPackagedSidecars(
   runtime: SidecarRuntimeContext<SidecarStamp>,
   paths: PackagedNamespacePaths,
   options: {
+    launchContext?: { app_session_id: string; launch_attempt_id: string } | undefined;
     appVersion: string | null;
     amrProfile: string | null;
+    amrEndpointBinding?: AmrEndpointBinding;
     daemonCliEntry: string | null;
     daemonSidecarEntry: string | null;
     electronNodeCommand: string | null;
@@ -934,13 +1000,16 @@ export async function startPackagedSidecars(
     );
 
     options.onPhase?.("daemon-spawning");
+    const processInstanceId = randomUUID();
     const daemon = await spawnSidecarChild({
       app: APP_KEYS.DAEMON,
       channel,
       entryPath: daemonSidecarEntry,
-      env: buildPackagedDaemonSpawnEnv(paths, {
+      env: { OD_DAEMON_PROCESS_INSTANCE_ID: processInstanceId, ...buildPackagedDaemonSpawnEnv(paths, {
+        launchContext: options.launchContext,
         appVersion: options.appVersion,
         amrProfile: options.amrProfile,
+        amrEndpointBinding: options.amrEndpointBinding,
         daemonCliEntry: options.daemonCliEntry,
         desktopHandoffEnv: process.env,
         legacyDataDir: process.env.OD_LEGACY_DATA_DIR ?? null,
@@ -953,12 +1022,24 @@ export async function startPackagedSidecars(
         posthogHost: options.posthogHost,
         velaWebUrl: options.velaWebUrl,
         velaWebUrls: options.velaWebUrls,
-      }),
+        shareViewerLaunchEnv: process.env,
+      }) },
       electronNodeCommand: options.electronNodeCommand,
       nodeCommand: options.nodeCommand,
       paths,
       runtime,
     });
+    daemon.daemonExitObserver = observeDaemonExit(daemon.child, (exit) => reportDaemonExit({
+      dataRoot: paths.dataRoot, installationRoot: paths.installationRoot, namespace: runtime.namespace,
+      posthogKey: options.posthogKey, posthogHost: options.posthogHost, logPath: daemon.logPath,
+      observation: { process_instance_id: processInstanceId,
+        app_session_id: options.launchContext?.app_session_id ?? null,
+        launch_attempt_id: options.launchContext?.launch_attempt_id ?? null,
+        app_version: options.appVersion, occurred_at: exit.occurred_at,
+        exit_code: exit.exit_code, signal: exit.signal,
+        reason: exit.reason,
+        delivered: false },
+    }));
     children.push(daemon);
     // The web prewarm overlaps the daemon's boot wait: its read set (web
     // sidecar dist, .next/server chunks, Next framework code) is disjoint
@@ -989,6 +1070,7 @@ export async function startPackagedSidecars(
       { child: daemon.child, logPath: logPathFor(paths, APP_KEYS.DAEMON) },
     );
     if (daemonStatus.url == null) throw new Error("daemon did not report a URL");
+    daemon.daemonExitObserver.markReady();
     options.onPhase?.("daemon-ready");
 
     // The web payload must be in the page cache before the web sidecar
@@ -1051,6 +1133,7 @@ export async function startPackagedSidecars(
       web: webStatus,
       currentWebUrl: supervisor.currentUrl,
       async close(observe) {
+        daemon.daemonExitObserver?.beginShutdown();
         shutdownObserver = observe;
         const closeErrors: unknown[] = [];
         await supervisor.close().catch((error: unknown) => {
@@ -1069,6 +1152,7 @@ export async function startPackagedSidecars(
       },
     };
   } catch (error) {
+    for (const child of children) child.daemonExitObserver?.beginShutdown();
     await webSupervisor?.close().catch(() => undefined);
     for (const child of [...children].reverse()) {
       await closeManagedChild(child).catch(() => undefined);

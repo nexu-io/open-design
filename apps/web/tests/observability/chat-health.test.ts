@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -9,6 +10,7 @@ import {
 import {
   __resetChatHealthForTest,
   markChatOpenIntent,
+  clearChatOpenIntent,
   openChatSurface,
 } from '../../src/observability/chat-health';
 
@@ -149,6 +151,17 @@ afterEach(() => {
 });
 
 describe('observability/chat-health — first paint', () => {
+  it('drops a cancelled intent before a later unrelated remount', () => {
+    markChatOpenIntent('project_switch');
+    clearChatOpenIntent();
+    clock = 800;
+    const surface = openChatSurface({ element: buildChatLog(1), messageCount: 1, virtualized: false });
+    surface.markFirstPaint({ renderedRowCount: 1 });
+    const [paint] = eventsNamed('client_chat_first_paint');
+    expect(paint?.open_kind).toBe('remount');
+    expect(paint?.duration_ms).toBe(0);
+  });
+
   it('measures from the open intent, not from surface construction', () => {
     // The user clicks a conversation at t=0. React does routing work,
     // fetches, and only mounts the chat surface at t=400. The number the
@@ -161,6 +174,7 @@ describe('observability/chat-health — first paint', () => {
     handle.markFirstPaint({ renderedRowCount: 12 });
 
     const [paint] = eventsNamed('client_chat_first_paint');
+    expect(paint?.timing_origin).toBe('navigation_intent');
     expect(paint).toBeDefined();
     expect(paint?.duration_ms).toBe(1000);
     expect(paint?.open_kind).toBe('conversation_switch');
@@ -191,6 +205,9 @@ describe('observability/chat-health — first paint', () => {
     const handle = openChatSurface({ element: log, messageCount: 1, virtualized: false });
     handle.markFirstPaint({ renderedRowCount: 1 });
     expect(eventsNamed('client_chat_first_paint')[0]?.open_kind).toBe('remount');
+    expect(eventsNamed('client_chat_first_paint')[0]?.timing_origin).toBe('surface_attach_fallback');
+    expect(eventsNamed('client_chat_first_paint')[0]?.measurement_trusted).toBe(false);
+    expect(eventsNamed('client_chat_first_paint')[0]?.untrusted_reason).toBe('missing_open_intent');
   });
 });
 
@@ -389,4 +406,25 @@ describe('observability/chat-health — provider-facing seam', () => {
     }).not.toThrow();
     expect(eventsNamed('client_chat_stream_health')).toHaveLength(0);
   });
+});
+
+
+it('reports chat health and keeps observing after product analytics opt-out', async () => {
+  const { applyConsent } = await import('../../src/analytics/client');
+  applyConsent(false);
+  const handle = openChatSurface({ element: buildChatLog(1), messageCount: 1, virtualized: false });
+  handle.markFirstPaint({ renderedRowCount: 1 });
+  handle.sample('interval');
+  expect(eventsNamed('client_chat_first_paint')).toHaveLength(1);
+  expect(eventsNamed('client_chat_dom_growth')).toHaveLength(1);
+  handle.runStarted('run-optout');
+  advanceClock(1_000);
+  emitLongTask(600);
+  expect(longTaskCallbacks).toHaveLength(1);
+  applyConsent(false);
+  advanceClock(1_000);
+  handle.runEnded('run-optout');
+  expect(eventsNamed('client_chat_stream_health')).toHaveLength(1);
+  handle.detach();
+  expect(longTaskCallbacks).toHaveLength(0);
 });

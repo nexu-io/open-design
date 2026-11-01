@@ -21,18 +21,20 @@ import { createPortal } from 'react-dom';
 import { useT } from '../i18n';
 import type { Dict, Locale } from '../i18n/types';
 import { Icon } from './Icon';
+import { CREATION_TYPE_ORDER, type CreationTypeId } from './creation-type-order';
 import {
   buildCategoryCatalog,
   buildSubcategoryCatalog,
   extractCategories,
   extractSubcategories,
 } from './plugins-home/facets';
+import { curatedPluginPriority } from './plugins-home/curatedPriority';
 import { localizePluginTitle } from './plugins-home/localization';
 import { examplePresetSeedPrompt } from './plugins-home/presetSeedPrompt';
 import { inferPluginPreview, type MediaPreviewSpec } from './plugins-home/preview';
 import { pluginSubfacetLabel } from './plugins-home/subfacetLabel';
 
-export type TemplateType = 'Prototype' | 'Live Artifact' | 'Slides' | 'Document' | 'Image' | 'Video' | 'HyperFrames' | 'Audio' | 'WebGL';
+export type TemplateType = 'Prototype' | 'Live Artifact' | 'Slides' | 'Document' | 'Image' | 'Motion design' | 'Video' | 'HyperFrames' | 'Audio' | 'WebGL';
 
 export type TemplateDemo = {
   id: string;
@@ -63,21 +65,38 @@ export type TemplateDemo = {
   prompt: string;
 };
 
-/** The tabs the Community gallery always renders inline, mirroring the Home
- *  type row's taxonomy and order (`HOME_TYPE_ROW_IDS` + Image; web-clone stays
- *  a Home-only entry). Fixed rather than derived from the catalogue so the row
- *  reads the same set of artifact kinds as Home even while a kind has no
- *  published templates yet. */
-export const COMMUNITY_TAB_TYPES: readonly TemplateType[] = ['Prototype', 'Slides', 'Document', 'Image'];
+// Community owns its supported type set. Website clone remains Home-only.
+const COMMUNITY_TYPES: Partial<Record<CreationTypeId, TemplateType>> = {
+  prototype: 'Prototype',
+  'motion-design': 'Motion design',
+  deck: 'Slides',
+  document: 'Document',
+  image: 'Image',
+  hyperframes: 'HyperFrames',
+  webgl: 'WebGL',
+  'live-artifact': 'Live Artifact',
+  video: 'Video',
+  audio: 'Audio',
+};
 
-/** The kinds behind the row's 更多 popover, in product order (OPEND-3098,
- *  2026-09-16). Fixed like the inline set: a kind with nothing published still
- *  gets its entry and shows the empty state when picked, rather than vanishing
- *  and reappearing with the catalogue. Website clone is a Home-only entry and
- *  stays out of Community. */
-export const COMMUNITY_MORE_TYPES: readonly TemplateType[] = ['HyperFrames', 'Video', 'Audio', 'Live Artifact', 'WebGL'];
+// Grouping is Community-specific; priority comes only from the shared order.
+// Empty categories keep their entry rather than depending on the catalogue.
+const COMMUNITY_INLINE_TYPES: ReadonlySet<TemplateType> = new Set([
+  'Prototype', 'Motion design', 'Slides', 'Document', 'Image',
+]);
 
-export const TEMPLATE_TYPE_ORDER: TemplateType[] = [...COMMUNITY_TAB_TYPES, ...COMMUNITY_MORE_TYPES];
+export const TEMPLATE_TYPE_ORDER: TemplateType[] = CREATION_TYPE_ORDER.flatMap((id) => {
+  const type = COMMUNITY_TYPES[id];
+  return type ? [type] : [];
+});
+
+export const COMMUNITY_TAB_TYPES: readonly TemplateType[] = TEMPLATE_TYPE_ORDER.filter(
+  (type) => COMMUNITY_INLINE_TYPES.has(type),
+);
+
+export const COMMUNITY_MORE_TYPES: readonly TemplateType[] = TEMPLATE_TYPE_ORDER.filter(
+  (type) => !COMMUNITY_INLINE_TYPES.has(type),
+);
 
 /** The Community grid is the plugin catalogue seen through the artifact a user
  *  wants to make. Membership comes from the shared facet derivation in
@@ -90,6 +109,7 @@ const FACET_CATEGORY_TYPE: Record<string, TemplateType> = {
   'document': 'Document',
   'live-artifact': 'Live Artifact',
   'image': 'Image',
+  'motion-design': 'Motion design',
   'video': 'Video',
   'hyperframes': 'HyperFrames',
   'audio': 'Audio',
@@ -105,6 +125,7 @@ export const TEMPLATE_TYPE_LABEL_KEY: Record<TemplateType, keyof Dict> = {
   'Slides': 'community.typeSlides',
   'Document': 'community.typeDocument',
   'Image': 'community.typeImage',
+  'Motion design': 'homeHero.chip.motionDesign',
   'Video': 'community.typeVideo',
   'HyperFrames': 'community.typeHyperFrames',
   'Audio': 'community.typeAudio',
@@ -184,8 +205,9 @@ export function buildCommunityTemplates(
   });
 
   // Group the grid the way the pills read: category order, then the sub-facet
-  // display order, then catalogue order. The subtype pill row is derived from
-  // this array, so sorting here is what puts the pills in taxonomy order.
+  // display order, then the curated Home picks in their Home order, then
+  // catalogue order. The subtype pill row is derived from this array, so
+  // sorting here is what puts the pills in taxonomy order.
   entries.sort((a, b) => {
     const byCategory = categoryOrder.indexOf(a.categorySlug) - categoryOrder.indexOf(b.categorySlug);
     if (byCategory !== 0) return byCategory;
@@ -196,6 +218,9 @@ export function buildCommunityTemplates(
     );
     const bySub = rank(a.categorySlug, a.subSlug) - rank(b.categorySlug, b.subSlug);
     if (bySub !== 0) return bySub;
+    const curated = (record: InstalledPluginRecord) => curatedPluginPriority(record) ?? Number.MAX_SAFE_INTEGER;
+    const byCurated = curated(a.record) - curated(b.record);
+    if (byCurated !== 0) return byCurated;
     return a.index - b.index;
   });
 

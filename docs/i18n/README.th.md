@@ -1,13 +1,9 @@
-<h1 align="center">OpenDesign: ทางเลือกโอเพนซอร์สแทน Claude Design</h1>
+<h1 align="center">OpenDesign: พื้นที่ทำงานร่วมกับเอเจนต์ออกแบบ AI แห่งแรก</h1>
 
-> ⚡ **[OpenDesign Cloud — บริการโมเดลอย่างเป็นทางการ.](https://open-design.ai/zh/pricing/)** เติมเงินครั้งเดียวเพื่อใช้ทั้งโมเดล Agent และโมเดลภาพใน OpenDesign: GPT, Claude และ DeepSeek สำหรับ Agent; GPT Image 2.0, Seedream 5.0 Pro และ Nano Banana 2.0 สำหรับภาพ
->
-> 🚀 **[DeepSeek V4 Flash และ V4 Pro พร้อมใช้งานแล้ว.](https://open-design.ai/zh/pricing/)** ใช้ความสามารถระดับสูงกับ prototype, deck, design system และงาน Agent ประจำวัน สมาชิก OpenDesign ใช้ทั้งสองโมเดลแบบไม่จำกัดได้สองสัปดาห์ภายในแอป
->
-> 🧩 **[รองรับ DeepSeek Harness แล้ว.](https://open-design.ai/zh/agents/deepseek-harness-design/)** เชื่อมต่อ `dsh` Agent Harness อย่างเป็นทางการของ DeepSeek เป็น runtime แบบ native ใน OpenDesign พร้อม structured thinking, tool calls, model discovery, cancellation และ session resume ไฟล์ที่สร้างยังอยู่ใน workflow ของ OpenDesign เพื่อ live preview และส่งมอบ
+> ✨ **[ฉลอง 100K ดาวบน GitHub กับ OpenDesign Go](https://open-design.ai/pricing/)** — เพิ่มเครดิต Go เป็นสองเท่า: **เดือนแรกเพียง 8 ดอลลาร์สหรัฐ พร้อมเครดิตรายเดือนสูงสุด 120 ดอลลาร์สหรัฐสำหรับโมเดลที่รองรับใน Design Plan** ใช้ได้กับโมเดลมากกว่า 10 รุ่น เช่น GPT-6 Luna, DeepSeek V4.1 Flash, GLM-5.3 Flash-X และ MiMo V2.6 Flash แพ็กเกจส่วนบุคคลทุกแบบมีสิทธิ์ใช้ API กับ Codex, Claude Code, DSH, OpenCode และเครื่องมืออื่น ๆ
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="OpenDesign hero banner" width="100%" />
+  <img src="../../docs/assets/readme-hero-design-agent.webp" alt="OpenDesign: พื้นที่ทำงานร่วมกับเอเจนต์ออกแบบ AI แห่งแรก" width="100%" />
 </p>
 
 <p align="center">
@@ -31,79 +27,65 @@
 
 ## OpenDesign คืออะไร
 
-🎨 **ทางเลือก Claude Design แบบ local-first และโอเพนซอร์ส.** &nbsp;🖥️ **แอป desktop native สำหรับ macOS และ Windows.** &nbsp;⚡ **functional skills 100+ รายการ + rendering-template catalog แยกต่างหาก** · ✨ **design-system packages ระดับแบรนด์ 151 ชุด** · 📦 **plugin พร้อมใช้ 277 ตัว.** &nbsp;🖼️ สร้าง **prototype สำหรับ web · desktop · mobile**, **live dashboard / artifact**, **deck**, **image**, **video** และ motion graphics ด้วย **HyperFrames**. 🔒 preview ผ่าน sandboxed iframe · export เป็น HTML / PDF / PPTX / MP4. &nbsp;🤖 **รันบน Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Amp · Hermes · Kimi · Antigravity และ local CLI executable ที่ไม่ซ้ำกัน 25 ตัว**, หรือ endpoint ที่เข้ากันได้กับ OpenAI ผ่าน BYOK.
+OpenDesign คือ**พื้นที่ทำงานร่วมกับเอเจนต์ออกแบบ AI แห่งแรก** เริ่มจากบรีฟ แล้วใช้เอเจนต์เขียนโค้ดที่คุณคุ้นเคยหรือ OpenDesign Cloud สร้างต้นแบบที่สอดคล้องกับระบบดีไซน์ของคุณ แชร์ให้ทีมรับชมและรวบรวมข้อเสนอแนะ ก่อนให้เอเจนต์ปรับปรุงงานต่อในโปรเจกต์เดิม
 
-OpenDesign คือสิ่งที่เกิดขึ้นเมื่อ loop แบบ **agent-native** ที่ Anthropic เปิดตัวกับ Claude Design — ค้นหา brief, ล็อก direction, stream artifact, critique, deliver — เลิกเป็นระบบปิด แล้วกลายเป็น **filesystem ของ functional skills, rendering design templates, design systems และ plugins** ที่ coding agent บน laptop ของคุณอ่าน เขียน และ remix ได้. CLI ของคุณกลายเป็น design engine, laptop ของคุณกลายเป็น studio, และ `DESIGN.md` ของทีมกลายเป็น brand contract.
-
-มันยังเป็น **ทางเลือกแทน Figma สำหรับยุค agent** ด้วย แทนที่จะขยับ pixel บน canvas ระบบจะส่งมอบ artifact หน้าเดียวที่เป็น CSS จริง, font จริง, component จริง และ export ตรงเป็น HTML / PDF / PPTX / MP4 โดยถูก shape ด้วย design system ของคุณแล้ว และรันได้ใน agent ที่คุณใช้ทุกวัน.
+เวิร์กโฟลว์นี้เปิดกว้างและขยายได้ OpenDesign ใช้สัญญาอนุญาต Apache 2.0 ทีมงานจึงตรวจสอบและปรับทักษะ เทมเพลต ระบบดีไซน์ และปลั๊กอินให้เข้ากับกระบวนการของตนได้
 
 
 ---
 
 ## ทัวร์ผลิตภัณฑ์
 
-ดู workflow หลักของ OpenDesign แบบรวดเร็ว เริ่มที่ **Home** ด้วย brief, ค้นหา skill ที่นำกลับมาใช้ซ้ำได้ใน **Plugins** และเปลี่ยนข้อมูลอ้างอิงแบรนด์ให้เป็น **Design System** จากนั้นเข้า **Studio** ของ project เพื่อสร้างและปรับปรุง prototype, deck, mobile app, image, document และ HyperFrame ได้ในที่เดียว
-
 ### หน้าหลัก
 
 <table>
 <tr>
-<td valign="top">
-<img src="../../docs/screenshots/product-tour/home.png" alt="Home" /><br/>
-<sub><b>Home</b> — เลือกประเภท artifact, ใส่ brief และกำหนด design system, working directory กับ model ก่อนเริ่มงาน</sub>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png"><img src="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png" alt="Home — เริ่มจากบรีฟหรือตัวอย่าง" width="500" /></a><br/>
+<sub><b>Home</b> — เริ่มจากบรีฟหรือตัวอย่าง</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp"><img src="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp" alt="All projects — กลับไปดูระบบดีไซน์ สื่อ และต้นแบบ" width="500" /></a><br/>
+<sub><b>All projects</b> — กลับไปดูระบบดีไซน์ สื่อ และต้นแบบ</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png"><img src="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png" alt="Design Systems — ดูองค์ประกอบแบรนด์แล้วปรับปรุงร่วมกับเอเจนต์" width="500" /></a><br/>
+<sub><b>Design Systems</b> — ดูองค์ประกอบแบรนด์แล้วปรับปรุงร่วมกับเอเจนต์</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png"><img src="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png" alt="Plugins — ค้นหาทักษะและเปิดใช้ด้วย Try it" width="500" /></a><br/>
+<sub><b>Plugins</b> — ค้นหาทักษะและเปิดใช้ด้วย Try it</sub>
 </td>
 </tr>
 </table>
+
+### Studio — สร้างและปรับปรุงในโปรเจกต์เดียว
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/plugins.png" alt="Plugins" /><br/>
-<sub><b>Plugins</b> — เรียกดู skill อย่างเป็นทางการตามหมวดหมู่ ค้นหาใน catalog และเริ่ม workflow ด้วย <code>Try it</code></sub>
+<img src="../../docs/screenshots/product-tour/studio-prototype-2026.webp" alt="Prototype — สร้างและปรับปรุงเว็บแบบโต้ตอบกับเอเจนต์ พร้อมดูตัวอย่างสด" /><br/>
+<sub><b>Prototype</b> — สร้างและปรับปรุงเว็บแบบโต้ตอบกับเอเจนต์ พร้อมดูตัวอย่างสด</sub>
 </td>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/design-system.png" alt="Design System" /><br/>
-<sub><b>Design System</b> — ดึงและปรับแต่งภาษาภาพของแบรนด์ preview ผลลัพธ์ และสร้างงานต่อด้วยระบบเดียวกันใน workspace เดียว</sub>
+<img src="../../docs/screenshots/product-tour/studio-slides-2026.png" alt="Slides — สร้างงานนำเสนอ ตรวจสไลด์และบันทึกผู้พูด แล้วส่งออกเมื่อพร้อม" /><br/>
+<sub><b>Slides</b> — สร้างงานนำเสนอ ตรวจสไลด์และบันทึกผู้พูด แล้วส่งออกเมื่อพร้อม</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-image-2026.webp" alt="Image — สร้างภาพจากบทสนทนา ตรวจผลลัพธ์ แล้วดาวน์โหลดหรือเปิด" /><br/>
+<sub><b>Image</b> — สร้างภาพจากบทสนทนา ตรวจผลลัพธ์ แล้วดาวน์โหลดหรือเปิด</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4"><img src="../../docs/screenshots/product-tour/studio-hyperframes-poster-2026.png" alt="HyperFrames — สร้างโมชั่นกราฟิกกับเอเจนต์และส่งออกเป็น MP4" /></a><br/>
+<sub><b>HyperFrames</b> — สร้างโมชั่นกราฟิกกับเอเจนต์และส่งออกเป็น MP4 <a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4">ดูวิดีโอ</a>.</sub>
 </td>
 </tr>
 </table>
 
-### Studio — artifact หลายชนิดใน project เดียว
-
-ใน Studio ของ project การสนทนา ไฟล์ที่สร้าง และ live preview จะอยู่รวมกันสำหรับ artifact หกประเภท:
-
-<table>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-prototype.png" alt="Prototype" /><br/>
-<sub><b>Prototype</b> — สร้างหรือจำลอง web experience ตรวจสอบหน้าที่ render แล้ว และทำงานวนซ้ำกับ Agent ได้ในจุดเดียว</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-deck.png" alt="Deck" /><br/>
-<sub><b>Deck</b> — สร้าง presentation หลายสไลด์ ตรวจสอบ thumbnail และ speaker notes แล้ว export เมื่อพร้อม</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-mobile-app.png" alt="Mobile app" /><br/>
-<sub><b>Mobile app</b> — สร้างและขัดเกลา mobile interface ใน device preview โดยมีการสนทนา ไฟล์ output และ next-step actions อยู่ข้างกัน</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-image.png" alt="Image" /><br/>
-<sub><b>Image</b> — สร้าง visual asset จากการสนทนาใน project, preview ผลลัพธ์แบบเต็มขนาด แล้วดาวน์โหลดหรือเปิดไฟล์</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-document.png" alt="Document" /><br/>
-<sub><b>Document</b> — สร้าง guide หลายหน้าและ editorial document ที่ขัดเกลาแล้ว ตรวจสอบ layout ที่ render และ export หรือ share เมื่อพร้อม</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-hyperframe.png" alt="HyperFrame" /><br/>
-<sub><b>HyperFrame</b> — สร้าง motion graphics ที่ควบคุมด้วย code, preview animation ใน Studio และ export วิดีโอที่เสร็จแล้ว</sub>
-</td>
-</tr>
-</table>
 ---
 
 ## ความเข้ากันได้ของแพลตฟอร์ม
@@ -248,29 +230,12 @@ Live dashboard, decision room, KPI wall — artifact หน้าเดียว
 
 ## ทำไมต้อง OpenDesign
 
-> **ในเดือนเมษายน 2026, Anthropic เปิดตัว Claude Design — ครั้งแรกที่ LLM หยุดแค่เขียนข้อความ และเริ่มส่งมอบ design artifacts โดยตรง.** มัน viral มาก แต่ยังเป็น closed-source, paid-only, cloud-only, ผูกกับโมเดลของ Anthropic, skills ของ Anthropic และ surface ของ Anthropic. ไม่มี checkout, ไม่มี self-host, ไม่มี Vercel deploy, ไม่มีการสลับ agent ของคุณเอง.
-
-OpenDesign (OD) คือทางเลือกโอเพนซอร์ส. Loop เดียวกัน, mental model แบบ artifact-first เดียวกัน, แต่ไม่มี lock-in:
-
 - 🤖 **Agent-native, model-agnostic.** เราไม่ได้ ship agent. `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` ที่มีอยู่แล้วบน `PATH` ของคุณคือ design engine. สลับได้ในคลิกเดียว.
 - 🧠 **Brand-grade เป็นค่าเริ่มต้น.** ทุก render อ่าน `DESIGN.md` ของ package ที่ active เป็น brand contract หลัก. Repo ship design-system packages 151 ชุด; package รุ่นเก่าอาจมีแค่ `DESIGN.md` ส่วน package รุ่นใหม่เพิ่ม `manifest.json`, `tokens.css`, components, assets และ provenance ได้. วาง folder เข้าไป picker ก็หาเจอ.
 - 🖥️ **Local-first, BYOK ทุกชั้น.** แอป desktop native สำหรับ macOS (Apple Silicon + Intel) และ Windows (x64). Linux AppImage อยู่ใน release lane แบบ optional. Product analytics และ session replay ต้องได้รับ consent; safety/reliability telemetry ที่ scrub ข้อมูลแล้วทำงานตลอด. ก่อนอธิบาย path ของ daemon data ต้องอ่าน **Daemon data directory contract** ใน `AGENTS.md` ที่ราก repo และ README นี้ต้องไม่ระบุ path ซ้ำ.
 - 🌍 **ประกอบกันได้บน 4 plane.** **Plugins** พา workflow ที่รันได้ · functional **skills** พาพฤติกรรมของ agent · **design templates** พา rendering blueprint · **design systems** พาแบรนด์. ทั้งสี่ใช้ directory แบบ portable และ versionable ที่ใครก็ author และ publish ได้.
-- 🔁 **Refresh codebase เดิม.** ส่ง `git` repo + `DESIGN.md` ให้ agent แล้วมัน refactor component จริงของคุณให้เข้ากับ brand spec. มี plugin เฉพาะสำหรับ migrate workflow จาก Figma / Pencil ไปเป็น React / Next.js / Vue code.
-- 🔒 **Privacy by conviction.** ทุกอย่างรันในที่ที่ข้อมูลของคุณอยู่ — laptop ของคุณ, server ของทีม, Vercel project ของคุณ. เมื่อจำเป็นต้องใช้ network, BYOK proxy ก็มี SSRF guard.
-
-### เปรียบเทียบ
-
-| | Claude Design | Figma | Lovable / v0 / Bolt | **OpenDesign** |
-|---|---|---|---|---|
-| Open source | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
-| Self-host / desktop | ❌ | ❌ | ❌ | **✅ macOS + Windows + Docker** |
-| Agent-native (รันใน CLI ของคุณ) | Anthropic เท่านั้น | ❌ | Cloud agent เท่านั้น | **✅ 25 CLIs + BYOK** |
-| `DESIGN.md` ระดับแบรนด์ | Proprietary | Theme JSON | Limited tokens | **✅ ship systems 151 ชุด** |
-| Skills / plugins / templates | Closed | Plugin store | Closed | **✅ 100+ functional skills · separate rendering-template catalog · 277 plugins** |
-| HyperFrames (HTML→MP4) | ❌ | ❌ | ❌ | **✅ First-class** |
-| Refresh repo เดิมให้ตรง brand | ❌ | ❌ | ❌ | **✅ ผ่าน agent + `DESIGN.md`** |
-| Minimum billing | Pro / Max / Team | Pro / Org | Pro / Team | **BYOK · endpoint ใดก็ได้ที่เข้ากันได้** |
+- 🔁 **Refresh codebase เดิม.** ส่ง `git` repo + `DESIGN.md` ให้ agent แล้วมัน refactor component จริงของคุณให้เข้ากับ brand spec.
+- 🔒 **Privacy by conviction.** โปรเจกต์ทำงานได้บนเครื่องของคุณหรือระบบที่คุณติดตั้งเอง คำขอไปยังโมเดลคลาวด์และ OpenDesign Cloud จะถูกส่งไปยังบริการที่เกี่ยวข้อง BYOK proxy มีการป้องกัน SSRF
 
 ---
 
@@ -336,7 +301,7 @@ Node `~24`, pnpm `10.33.x`. ผู้ใช้ Windows ดู [`docs/windows-tro
 `brief → plugin → direction → design system → artifact → handoff → memory`
 
 1. **PM ส่ง brief.** Plugin picker เสนอ landing page · pitch deck · dashboard · social post · PM spec · OKR scorecard…
-2. **Designer (หรือ agent) ล็อก direction.** ยังไม่มี brand? เลือกจาก 5 direction ที่ curate ไว้. มี brand แล้ว? วาง screenshot / URL → agent เชื่อม GitHub, import Figma และ codify เป็น `DESIGN.md` ที่ reusable.
+2. **Designer (หรือ agent) ล็อก direction.** ยังไม่มี brand? เลือกจาก 5 direction ที่ curate ไว้. มี brand แล้ว? วาง screenshot / URL → agent เชื่อม GitHub และ codify เป็น `DESIGN.md` ที่ reusable.
 3. **Agent สร้าง deliverable แรก.** Plugin + functional skill หรือ design template + `DESIGN.md` ถูก bind แล้ว. CLI run ที่มี filesystem เขียน canonical project files และ preview ตามไฟล์; BYOK/plain-API run ที่ไม่มี file tools คืน `<artifact>` block ที่สมบูรณ์หนึ่งก้อน.
 4. **ส่งต่อให้ engineering.** Artifact คือ HTML/CSS จริง — วางเข้า Cursor, Codex หรือ Claude Code เพื่อ build ต่อเป็น code. หรือ export PPTX / PDF / MP4 ตรงไป marketing.
 5. **OpenDesign ฉลาดขึ้นเมื่อคุณใช้มัน.** Screenshot, font, palette และ artifact ที่ confirm แล้วจะสะสมเป็น default สำหรับ session ถัดไป. งานซ้ำน้อยลง, drift น้อยลง.
@@ -409,9 +374,9 @@ Protocol และ directory split → [`docs/skills-protocol.md`](../../docs/sk
 
 **AI & LLM** — `claude` · `cohere` · `mistral-ai` · `minimax` · `together-ai` · `replicate` · `runwayml` · `elevenlabs` · `ollama` · `x-ai`
 
-**Developer Tools** — `cursor` · `vercel` · `linear-app` · `framer` · `expo` · `clickhouse` · `mongodb` · `supabase` · `hashicorp` · `posthog` · `sentry` · `warp` · `webflow` · `sanity` · `mintlify` · `lovable` · `composio` · `opencode-ai` · `voltagent`
+**Developer Tools** — `cursor` · `vercel` · `linear-app` · `expo` · `clickhouse` · `mongodb` · `supabase` · `hashicorp` · `posthog` · `sentry` · `warp` · `sanity` · `mintlify` · `composio` · `opencode-ai` · `voltagent`
 
-**Productivity** — `notion` · `figma` · `miro` · `airtable` · `superhuman` · `intercom` · `zapier` · `cal` · `clay` · `raycast`
+**Productivity** — `notion` · `miro` · `airtable` · `superhuman` · `intercom` · `zapier` · `cal` · `clay` · `raycast`
 
 **Fintech** — `stripe` · `coinbase` · `binance` · `kraken` · `mastercard` · `revolut` · `wise`
 
@@ -467,7 +432,7 @@ Plugins มี parity เต็มระหว่าง **web UI** และ **`
 od plugin list                       # list installed plugins (--task-kind / --mode / --tag filters)
 od plugin search "landing page"      # search by keyword
 od plugin info od-default            # inspect a plugin's metadata, inputs, capabilities
-od plugin install od-figma-migration # install from a registry; also accepts ./local-folder or an https://… link
+od plugin install od-default        # install from a registry; also accepts ./local-folder or an https://… link
 od plugin apply od-default --input brief="a one-page pitch for our seed round"
 od plugin upgrade od-default         # upgrade
 od plugin uninstall od-default       # uninstall
@@ -711,11 +676,10 @@ SVG ด้านบน regenerate ทุกวันโดย [`.github/workflow
 
 | Project | Role |
 |---|---|
-| Claude Design | ผลิตภัณฑ์ closed-source ที่ repo นี้เป็นทางเลือกโอเพนซอร์สแทน. |
 | [`alchaincyf/huashu-design`](https://github.com/alchaincyf/huashu-design) | เข็มทิศด้าน design philosophy — workflow ของ junior designer, brand-asset protocol, anti-AI-slop checklist, critique 5 มิติ. |
 | [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) | Skill web PPT สไตล์ magazine ที่ bundle ตรงไว้ใต้ [`design-templates/guizang-ppt/`](../../design-templates/guizang-ppt/). เป็นค่าเริ่มต้นของ deck mode. |
 | [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill) | ตระกูล HTML PPT Studio — 15 deck templates, 36 themes, 31 page layouts, animation runtime, magnetic-card presenter mode. |
-| [`OpenCoworkAI/open-codesign`](https://github.com/OpenCoworkAI/open-codesign) | ทางเลือกโอเพนซอร์สแทน Claude Design ตัวแรก; UX patterns ที่เรายืมมา (streaming-artifact loop, sandboxed iframe, live agent panel). |
+| [`OpenCoworkAI/open-codesign`](https://github.com/OpenCoworkAI/open-codesign) | UX patterns ที่เรายืมมา (streaming-artifact loop, sandboxed iframe, live agent panel). |
 | [`multica-ai/multica`](https://github.com/multica-ai/multica) | สถาปัตยกรรม daemon + adapter — PATH-scan agent detection, local daemon เป็น privileged process เพียงตัวเดียว. |
 | [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md) | แหล่งที่มาในอดีตของ schema `DESIGN.md` 9 section รุ่นแรกและ systems ที่ derive จาก upstream 70 ชุด; package ปัจจุบันขยาย baseline นี้ได้. |
 | [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills) | แหล่งที่มาของ design skills 57 ชุดที่เพิ่มไว้ใต้ `design-systems/`. |

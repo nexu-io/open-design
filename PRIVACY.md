@@ -45,6 +45,9 @@ Design team. The two Settings controls are **Anonymous metrics** and
   performance, and privacy-masked session replay. Replay masks every text node
   and input value and blocks embedded iframes, so prompts, keys, project text,
   and generated previews are not recorded as readable screen content.
+  Share and comment metrics can include opaque project, share-link and saved-comment
+  identifiers, published versions, and interaction results. These metrics do not
+  include comment text, author names, full share URLs or credentials.
 - **Conversation and tool content** — your prompts, assistant responses, tool
   inputs, tool outputs, prompt-stack context, and attachment/artifact manifest
   metadata needed for quality review. Content is truncated and scrubbed; tool

@@ -7,17 +7,24 @@
 // computed against a smaller denominator than the truth.
 
 import Database from 'better-sqlite3';
+import { buildWorkspacePermissions, buildWorkspaceSeatSummary, type WorkspaceCollabContext } from '@open-design/contracts';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
   createRunAnalyticsLifecycle,
   inheritedRunLineageHints,
+  type RunAnalyticsLifecycleDeps,
 } from '../../src/services/run-analytics-lifecycle.js';
 import {
   createRunSideEffectLedger,
   foldEventIntoRunSideEffectLedger,
 } from '../../src/runtimes/run-lifecycle-analytics.js';
 import { createChatRunService } from '../../src/runtimes/runs.js';
+import type { ChatRun } from '../../src/runtimes/chat-run-records.js';
+import {
+  createRunPerRequestUsageLedger,
+  foldEventIntoPerRequestUsageLedger,
+} from '../../src/run-analytics-observability.js';
 
 type Captured = {
   eventName: string;
@@ -30,12 +37,25 @@ function harness(finishCaptureResult: unknown = {
   status: 'queued',
   acknowledgement: 'local_buffer',
   errorType: null,
-}, db: unknown = {}) {
+}, db: unknown = {}, workspaceContext?: RunAnalyticsLifecycleDeps['workspaceContext'], runs?: ReturnType<typeof createChatRunService>, detectAgents: RunAnalyticsLifecycleDeps['agents']['detectAgents'] = async () => []) {
   const captured: Captured[] = [];
+  const captureWaiters = new Map<string, Array<{ occurrence: number; resolve(event: Captured): void }>>();
+  const signalCapture = (event: Captured) => {
+    const events = captured.filter((entry) => entry.eventName === event.eventName);
+    const remaining = [];
+    for (const waiter of captureWaiters.get(event.eventName) ?? []) {
+      const found = events[waiter.occurrence - 1];
+      if (found) waiter.resolve(found);
+      else remaining.push(waiter);
+    }
+    captureWaiters.set(event.eventName, remaining);
+  };
   const recoveries: Array<{ runId: string; properties: Record<string, unknown>; insertId: string }> = [];
   const completed: string[] = [];
   const deliveryBegun: string[] = [];
   const deliveryFinalized: Array<{ runId: string; result: unknown }> = [];
+  let signalDeliveryFinalized: () => void = () => {};
+  const currentDeliveryFinalized = new Promise<void>((resolve) => { signalDeliveryFinalized = resolve; });
   let settle: (status: { status: string; errorCode?: string | null; exitCode?: number | null }) => void = () => {};
   const terminal = new Promise<{ status: string }>((resolve) => {
     settle = (status) => resolve(status as { status: string });
@@ -45,24 +65,30 @@ function harness(finishCaptureResult: unknown = {
     db: db as never,
     design: {
       runs: {
-        wait: () => terminal as never,
+        wait: (run) => (runs ? runs.wait(run) : terminal) as never,
+        ...(runs ? { persistState: runs.persistState } : {}),
         setAnalyticsRecovery: (run, recovery) => {
+          if (runs) runs.setAnalyticsRecovery(run, recovery);
+          else run.analyticsRecovery = recovery;
           recoveries.push({
             runId: run.id,
             properties: recovery.properties,
             insertId: recovery.insertId,
           });
         },
-        beginAnalyticsDelivery: (run) => { deliveryBegun.push(run.id); },
+        beginAnalyticsDelivery: (run) => { runs?.beginAnalyticsDelivery(run); deliveryBegun.push(run.id); },
         finalizeAnalyticsDelivery: (run, result) => {
+          runs?.finalizeAnalyticsDelivery(run, result);
           deliveryFinalized.push({ runId: run.id, result });
+          signalDeliveryFinalized();
         },
-        markAnalyticsCompleted: (run) => { completed.push(run.id); },
+        markAnalyticsCompleted: (run) => { runs?.markAnalyticsCompleted(run); completed.push(run.id); },
         setDeliverableValidation: () => {},
       },
       analytics: {
         capture: (args) => {
           captured.push(args as Captured);
+          signalCapture(args as Captured);
           return args.eventName === 'run_finished'
             ? finishCaptureResult
             : { status: 'queued', acknowledgement: 'local_buffer', errorType: null };
@@ -71,7 +97,8 @@ function harness(finishCaptureResult: unknown = {
       getAppVersion: () => '0.0.0-test',
     },
     paths: { PROJECTS_DIR: '/nonexistent/projects', RUNTIME_DATA_DIR: '/nonexistent/data' },
-    agents: { detectAgents: async () => [] },
+    agents: { detectAgents },
+    ...(workspaceContext ? { workspaceContext } : {}),
     telemetry: {
       reportRunCompletionTelemetryFallback: () => {},
       resolveRunProjectKindForAnalytics: () => null,
@@ -88,10 +115,21 @@ function harness(finishCaptureResult: unknown = {
     lifecycle,
     recoveries,
     settle,
+    // Historical attempts still emit their event, but cannot finalize the current run.
+    waitForCurrentDeliveryFinalized: () => currentDeliveryFinalized,
+    waitForCapture(eventName: string, occurrence = 1): Promise<Captured> {
+      const found = captured.filter((event) => event.eventName === eventName)[occurrence - 1];
+      if (found) return Promise.resolve(found);
+      return new Promise((resolve) => {
+        const waiters = captureWaiters.get(eventName) ?? [];
+        waiters.push({ occurrence, resolve });
+        captureWaiters.set(eventName, waiters);
+      });
+    },
   };
 }
 
-function fakeRun(overrides: Record<string, unknown> = {}) {
+function fakeRun(overrides: Record<string, unknown> = {}): ChatRun {
   const now = Date.now();
   return {
     id: 'run-under-test',
@@ -106,23 +144,317 @@ function fakeRun(overrides: Record<string, unknown> = {}) {
     events: [],
     clients: new Set(),
     ...overrides,
-  } as never;
+  };
 }
 
 const CONTEXT = { deviceId: 'device-1', sessionId: 'session-1', clientType: 'web', locale: 'en' };
 
 async function settled(h: ReturnType<typeof harness>, eventName: string) {
-  for (let attempt = 0; attempt < 200; attempt += 1) {
-    const found = h.captured.find((event) => event.eventName === eventName);
-    if (found) return found;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error(
-    `no ${eventName} captured; saw ${JSON.stringify(h.captured.map((e) => e.eventName))}`,
-  );
+  const captured = await h.waitForCapture(eventName);
+  if (eventName === 'run_finished') await h.waitForCurrentDeliveryFinalized();
+  return captured;
+}
+
+const WORKSPACE_SCOPE = {
+  schemaVersion: 1,
+  projectId: 'project-a',
+  workspaceId: 'workspace-a',
+  workspaceMemberId: 'project-creator',
+  source: 'persisted_project_binding',
+} as const;
+
+function workspaceContext(overrides: Partial<WorkspaceCollabContext> = {}): WorkspaceCollabContext {
+  return {
+    workspaceId: 'workspace-a',
+    workspaceType: 'team',
+    workspaceMemberId: 'actual-caller',
+    role: 'member',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    billingState: 'active',
+    planId: 'team',
+    providerMode: 'platform_credits',
+    seatSummary: buildWorkspaceSeatSummary({ seatLimit: 0, usedSeats: 0 }),
+    permissions: buildWorkspacePermissions({ role: 'member', lifecycleState: 'active' }),
+    memberCount: 7,
+    ...overrides,
+  };
 }
 
 describe('run analytics lifecycle', () => {
+  it('freezes persisted Motion intent for creation, terminal and recovery independently of discovery routing', async () => {
+    const project = { id: 'motion-project', name: 'Motion', metadataJson: JSON.stringify({ kind: 'video', videoModel: 'hyperframes-html', intent: 'motion-design' }) };
+    const db = { prepare: () => ({ get: () => project }) };
+    const h = harness(undefined, db);
+    h.lifecycle.install({
+      run: fakeRun({ projectId: project.id }),
+      body: { projectId: project.id, analyticsHints: { projectKind: 'hyperframes' } },
+      requestAnalyticsContext: CONTEXT as never,
+    });
+    expect((await settled(h, 'run_created')).properties.project_intent).toBe('motion-design');
+    project.metadataJson = JSON.stringify({ intent: 'hyperframes' });
+    h.settle({ status: 'succeeded' });
+    expect((await settled(h, 'run_finished')).properties.project_intent).toBe('motion-design');
+    expect(h.recoveries).toHaveLength(2);
+    expect(h.recoveries.every((row) => row.properties.project_intent === 'motion-design')).toBe(true);
+  });
+
+  it.each([
+    { attachments: undefined, expected: undefined },
+    { attachments: [], expected: [] },
+    { attachments: [{ id: 'board', source: 'board-batch' }, { id: 'legacy' }], expected: [] },
+    { attachments: [{ id: 'saved-1', source: 'saved-comment' }, { id: 'saved-1', source: 'saved-comment' }, { id: 'board', source: 'board-batch' }, { id: 'legacy' }], expected: ['saved-1'] },
+  ])('freezes this Run saved comments across creation, completion and recovery: $expected', async ({ attachments, expected }) => {
+    const h = harness();
+    const body = { agentId: 'codex', commentAttachments: attachments, analyticsHints: { sourceRunId: 'unrelated-run' } };
+    h.lifecycle.install({ run: fakeRun(), body, requestAnalyticsContext: CONTEXT as never });
+    const created = await settled(h, 'run_created');
+    expect(created.properties.comment_ids).toEqual(expected);
+    expect(Object.hasOwn(created.properties, 'comment_ids')).toBe(expected !== undefined);
+    body.commentAttachments = [{ id: 'later', source: 'saved-comment' }];
+    h.settle({ status: 'succeeded' });
+    const finished = await settled(h, 'run_finished');
+    expect(finished.properties.comment_ids).toEqual(expected);
+    expect(h.recoveries.every((recovery) => JSON.stringify(recovery.properties.comment_ids) === JSON.stringify(expected))).toBe(true);
+    expect(h.completed).toEqual(['run-under-test']);
+    expect(h.recoveries).toHaveLength(2);
+  });
+
+  it.each([{ ids: [] }, { ids: ['original'] }])('preserves same-Run recovered comment IDs $ids over new request attachments', async ({ ids }) => {
+    const h = harness();
+    h.lifecycle.install({
+      run: fakeRun({ analyticsRecovery: { context: CONTEXT, properties: { comment_ids: ids } } }),
+      body: { commentAttachments: [{ id: 'new', source: 'saved-comment' }] },
+      requestAnalyticsContext: CONTEXT as never,
+    });
+    expect((await settled(h, 'run_created')).properties.comment_ids).toEqual(ids);
+    h.settle({ status: 'succeeded' });
+    expect((await settled(h, 'run_finished')).properties.comment_ids).toEqual(ids);
+    expect(h.recoveries.at(-1)?.properties.comment_ids).toEqual(ids);
+  });
+  it('uses current Run attachments when the existing recovery predates comment observation', async () => {
+    const h = harness();
+    h.lifecycle.install({
+      run: fakeRun({ analyticsRecovery: { context: CONTEXT, properties: { source_run_id: 'other-run' } } }),
+      body: { commentAttachments: [{ id: 'current', source: 'saved-comment' }], analyticsHints: { sourceRunId: 'other-run' } },
+      requestAnalyticsContext: CONTEXT as never,
+    });
+    expect((await settled(h, 'run_created')).properties.comment_ids).toEqual(['current']);
+    h.settle({ status: 'canceled' });
+    const finished = await settled(h, 'run_finished');
+    expect(finished.properties).toMatchObject({ comment_ids: ['current'], result: 'cancelled' });
+    expect(h.recoveries).toHaveLength(2);
+  });
+
+  it('freezes authorized workspace and member count across page switches and completion', async () => {
+    const authorized = workspaceContext();
+    const resolveExact = vi.fn(async () => authorized);
+    const h = harness(undefined, {}, { resolveExact });
+    const run = fakeRun({ projectId: 'project-a', workspaceScope: WORKSPACE_SCOPE });
+    h.lifecycle.install({
+      run,
+      body: { workspaceId: 'page-b', analyticsHints: { memberCount: 99, creditType: 'design_plan' } },
+      requestAnalyticsContext: CONTEXT as never,
+    });
+    const created = await settled(h, 'run_created');
+    expect(resolveExact).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'workspace-a' });
+    expect(created.properties).toMatchObject({ workspace_id: 'workspace-a', member_count: 7 });
+    expect(created.properties).not.toHaveProperty('credit_type');
+    authorized.workspaceId = 'page-b';
+    authorized.memberCount = 99;
+    h.settle({ status: 'succeeded' });
+    const finished = await settled(h, 'run_finished');
+    expect(finished.properties).toMatchObject({ workspace_id: 'workspace-a', member_count: 7, result: 'success' });
+    expect(finished.properties).not.toHaveProperty('credit_type');
+    expect(h.recoveries.every((recovery) => recovery.properties.workspace_id === 'workspace-a')).toBe(true);
+    expect(h.recoveries.at(-1)?.properties.member_count).toBe(7);
+    expect(finished.insertId).toBe(`${created.insertId}-finish`);
+  });
+
+  it.each([undefined, 0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, '7', NaN, Infinity])(
+    'omits unknown or invalid memberCount %s without using seatSummary or client hints',
+    async (memberCount) => {
+      const h = harness(undefined, {}, { resolveExact: async () => workspaceContext({ memberCount: memberCount as number }) });
+      h.lifecycle.install({
+        run: fakeRun({ projectId: 'project-a', workspaceScope: WORKSPACE_SCOPE }),
+        body: { memberCount: 42, analyticsHints: { memberCount: 42 } },
+        requestAnalyticsContext: CONTEXT as never,
+      });
+      const created = await settled(h, 'run_created');
+      expect(created.properties.workspace_id).toBe('workspace-a');
+      expect(created.properties).not.toHaveProperty('member_count');
+      h.settle({ status: 'succeeded' });
+      const finished = await settled(h, 'run_finished');
+      expect(finished.properties).not.toHaveProperty('member_count');
+    },
+  );
+
+  it.each([
+    { workspaceId: 'workspace-b' },
+    { memberStatus: 'removed' },
+    { lifecycleState: 'deleted' },
+  ] satisfies Partial<WorkspaceCollabContext>[])('does not stamp a mismatched or unauthorized workspace: %j', async (overrides) => {
+    const h = harness(undefined, {}, { resolveExact: async () => workspaceContext(overrides) });
+    h.lifecycle.install({
+      run: fakeRun({ projectId: 'project-a', workspaceScope: WORKSPACE_SCOPE }),
+      body: { workspaceId: 'workspace-a' }, requestAnalyticsContext: CONTEXT as never,
+    });
+    const created = await settled(h, 'run_created');
+    expect(created.properties).not.toHaveProperty('workspace_id');
+    expect(created.properties).not.toHaveProperty('member_count');
+  });
+
+  it('keeps unknown historical workspace context unknown on resume', async () => {
+    const resolveExact = vi.fn(async () => workspaceContext());
+    const h = harness(undefined, {}, { resolveExact });
+    h.lifecycle.install({
+      run: fakeRun({ projectId: 'project-a', workspaceScope: WORKSPACE_SCOPE,
+        analyticsRecovery: { context: CONTEXT, properties: { run_id: 'run-under-test' }, insertId: 'legacy-attempt' },
+      }),
+      body: { workspaceId: 'page-b', memberCount: 99 }, requestAnalyticsContext: CONTEXT as never,
+    });
+    const created = await settled(h, 'run_created');
+    expect(created.properties).not.toHaveProperty('workspace_id');
+    expect(created.properties).not.toHaveProperty('member_count');
+    expect(resolveExact).not.toHaveBeenCalled();
+  });
+
+  it('keeps analytics running when exact workspace authorization is unavailable', async () => {
+    const h = harness(undefined, {}, { resolveExact: async () => { throw new Error('unavailable'); } });
+    h.lifecycle.install({
+      run: fakeRun({ projectId: 'project-a', workspaceScope: WORKSPACE_SCOPE }),
+      body: {}, requestAnalyticsContext: CONTEXT as never,
+    });
+    const created = await settled(h, 'run_created');
+    expect(created.properties).not.toHaveProperty('workspace_id');
+    h.settle({ status: 'failed' });
+    const finished = await settled(h, 'run_finished');
+    expect(finished.properties.result).toBe('failed');
+    expect(finished.properties).not.toHaveProperty('workspace_id');
+  });
+
+  it('retains the original optional workspace snapshot on resume without re-reading page authority', async () => {
+    const resolveExact = vi.fn(async () => workspaceContext({ memberCount: 99 }));
+    const h = harness(undefined, {}, { resolveExact });
+    h.lifecycle.install({
+      run: fakeRun({
+        projectId: 'project-a', workspaceScope: WORKSPACE_SCOPE, manualResumeAttemptCount: 1,
+        analyticsRecovery: { context: CONTEXT, properties: { workspace_id: 'workspace-a', member_count: 7 }, insertId: 'previous-attempt', completedAt: 1 },
+      }),
+      body: { workspaceId: 'page-b' }, requestAnalyticsContext: CONTEXT as never,
+    });
+    const created = await settled(h, 'run_created');
+    expect(created.properties).toMatchObject({ workspace_id: 'workspace-a', member_count: 7 });
+    expect(resolveExact).not.toHaveBeenCalled();
+    h.settle({ status: 'succeeded' });
+    const finished = await settled(h, 'run_finished');
+    expect(finished.properties).toMatchObject({ workspace_id: 'workspace-a', member_count: 7 });
+  });
+
+  it('installs only one created/finished observer for repeated starts of the same attempt', async () => {
+    const h = harness();
+    const input = { run: fakeRun(), body: {}, requestAnalyticsContext: CONTEXT as never };
+    h.lifecycle.install(input);
+    h.lifecycle.install(input);
+    const created = await settled(h, 'run_created');
+    h.settle({ status: 'succeeded' });
+    await settled(h, 'run_finished');
+    expect(h.captured.map((event) => event.eventName)).toEqual(['run_created', 'run_finished']);
+    expect(h.captured[1]?.insertId).toBe(`${created.insertId}-finish`);
+  });
+
+  it.each(['natural', 'current-first', 'original-first'] as const)('keeps a late workspace response on its original attempt after finish and resume (%s)', async (finishOrder) => {
+    const runs = createChatRunService({
+      createSseResponse: () => ({ send: vi.fn(), end: vi.fn(), cleanup: vi.fn() }),
+      createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }),
+    });
+    let resolveContext: (context: ReturnType<typeof workspaceContext>) => void = () => {};
+    const context = new Promise<ReturnType<typeof workspaceContext>>((resolve) => { resolveContext = resolve; });
+    const resolveExact = vi.fn(() => context);
+    let releaseConfiguration: () => void = () => {};
+    const heldConfiguration = new Promise<void>((resolve) => { releaseConfiguration = resolve; });
+    let configurationReads = 0;
+    const h = harness(undefined, {}, { resolveExact }, runs, async () => {
+      const read = configurationReads++;
+      if ((finishOrder === 'current-first' && read === 0)
+        || (finishOrder === 'original-first' && read === 1)) await heldConfiguration;
+      return [];
+    });
+    const run = runs.create({ projectId: 'project-a', agentId: 'amr', workspaceScope: WORKSPACE_SCOPE, clientRequestId: 'original-request' });
+    const perRequestUsageLedger = createRunPerRequestUsageLedger();
+    foldEventIntoPerRequestUsageLedger(perRequestUsageLedger, {
+      event: 'agent', data: { type: 'request_usage', requestId: 'call-old', usage: { input_tokens: 10, output_tokens: 2 } },
+    });
+    const sideEffectLedger = createRunSideEffectLedger();
+    sideEffectLedger.artifactPaths.add('old.html');
+    Object.assign(run, { perRequestUsageLedger, sideEffectLedger });
+    const input = { run: run as never, body: {}, requestAnalyticsContext: CONTEXT as never };
+    h.lifecycle.install(input);
+    runs.finish(run, 'failed', 1, null);
+    expect(runs.prepareRestart(run)).toBe(run);
+    // Let the first attempt's already-resolved terminal promise snapshot its
+    // ledger before the resumed provider completes another model request.
+    await Promise.resolve();
+    foldEventIntoPerRequestUsageLedger(perRequestUsageLedger, {
+      event: 'agent', data: { type: 'request_usage', requestId: 'call-new', usage: { input_tokens: 20, output_tokens: 3 } },
+    });
+    sideEffectLedger.artifactPaths.add('new.html');
+    h.lifecycle.install({ ...input, resumed: true });
+    runs.finish(run, 'succeeded', 0, null);
+    resolveContext(workspaceContext());
+    if (finishOrder !== 'natural') {
+      const first = await h.waitForCapture('run_finished');
+      expect(first.properties.run_attempt).toBe(finishOrder === 'current-first' ? 1 : 0);
+      releaseConfiguration();
+    }
+    await h.waitForCapture('run_finished', 2);
+    await h.waitForCurrentDeliveryFinalized();
+    const created = h.captured.filter((event) => event.eventName === 'run_created');
+    const finished = h.captured.filter((event) => event.eventName === 'run_finished');
+    expect(created).toHaveLength(2);
+    expect(finished.map((event) => event.properties.result).sort()).toEqual(['failed', 'success']);
+    expect(resolveExact).toHaveBeenCalledOnce();
+    expect(finished.map((event) => event.properties.run_attempt).sort()).toEqual([0, 1]);
+    expect(finished.find((event) => event.properties.run_attempt === 0)?.properties).toMatchObject({
+      request_usage_count: 1, request_usage_input_tokens_sum: 10, artifact_count: 1,
+    });
+    expect(finished.find((event) => event.properties.run_attempt === 1)?.properties).toMatchObject({
+      request_usage_count: 2, request_usage_input_tokens_sum: 30, artifact_count: 2,
+    });
+    expect(finished.map((event) => event.insertId).sort()).toEqual(created.map((event) => `${event.insertId}-finish`).sort());
+    expect(h.recoveries.at(-1)?.properties.result).toBe('success');
+    expect(h.recoveries.at(-1)?.properties.run_attempt).toBe(1);
+    expect(h.deliveryFinalized).toHaveLength(1);
+    expect(h.completed).toEqual([run.id]);
+    for (const event of h.captured) expect(event.properties).toMatchObject({ workspace_id: 'workspace-a', member_count: 7, task_execution_id: 'original-request' });
+  });
+
+  it('records text-only settlement as a normal successful reply', async () => {
+    const h = harness();
+    h.lifecycle.install({
+      run: fakeRun({ strategyTask: { terminal: true, outcome: 'completed', settlementReason: 'ended', deliverableValid: false, settlementFacts: { physicalStatus: 'succeeded', deliverableValid: false } } }),
+      body: { agentId: 'codex' }, requestAnalyticsContext: CONTEXT as never,
+    });
+    await settled(h, 'run_created');
+    h.settle({ status: 'succeeded' });
+    const finished = await settled(h, 'run_finished');
+    expect(finished.properties).toMatchObject({ result: 'success', od_next_settlement_reason: 'ended', od_next_settlement_facts: { physicalStatus: 'succeeded', deliverableValid: false } });
+    expect(finished.properties.od_next_blocked_reason_code).toBeUndefined();
+  });
+
+  it('reports a physical failure even when orchestration has ended normally', async () => {
+    const h = harness();
+    h.lifecycle.install({
+      run: fakeRun({ strategyTask: { terminal: true, outcome: 'completed', settlementReason: 'ended', settlementFacts: { physicalStatus: 'failed' } } }),
+      body: { agentId: 'codex' }, requestAnalyticsContext: CONTEXT as never,
+    });
+    await settled(h, 'run_created');
+    h.settle({ status: 'failed' });
+    const finished = await settled(h, 'run_finished');
+    expect(finished.properties).toMatchObject({ result: 'failed', od_next_settlement_reason: 'ended', od_next_settlement_facts: { physicalStatus: 'failed' } });
+    expect(finished.properties.od_next_blocked_reason_code).toBeUndefined();
+  });
+
   it('reports a created run and pairs its finish under the same insert id', async () => {
     const h = harness();
     h.lifecycle.install({
@@ -217,7 +549,7 @@ describe('run analytics lifecycle', () => {
     });
   });
 
-  it('settles matching and conflicting terminal claims before capturing run_finished', async () => {
+  it.each(['noop', 'recording', 'throwing', 'pending'] as const)('keeps real Run terminal state intact with %s measurement', async (measurement) => {
     const captured: Captured[] = [];
     const runs = createChatRunService({
       createSseResponse: () => ({
@@ -247,6 +579,9 @@ describe('run analytics lifecycle', () => {
         analytics: {
           capture: (args) => {
             captured.push(args as Captured);
+            if (measurement === 'noop') return undefined;
+            if (args.eventName === 'run_finished' && measurement === 'throwing') throw new Error('measurement only');
+            if (args.eventName === 'run_finished' && measurement === 'pending') return new Promise(() => {});
             return {
               status: 'queued',
               acknowledgement: 'local_buffer',
@@ -275,7 +610,7 @@ describe('run analytics lifecycle', () => {
     });
     lifecycle.install({
       run: run as never,
-      body: { agentId: 'amr' },
+      body: { agentId: 'amr', commentAttachments: [{ id: 'real-run-comment', source: 'saved-comment' }] },
       requestAnalyticsContext: CONTEXT as never,
     });
     await vi.waitFor(() => {
@@ -288,7 +623,9 @@ describe('run analytics lifecycle', () => {
       expect(captured.some((event) => event.eventName === 'run_finished')).toBe(true);
     });
     const finished = captured.find((event) => event.eventName === 'run_finished');
+    expect(await runs.wait(run)).toMatchObject({ status: 'failed' });
     expect(finished?.properties).toMatchObject({
+      comment_ids: ['real-run-comment'],
       terminal_integrity: 'late',
       duplicate_terminal_count: 1,
       late_terminal_count: 1,
@@ -459,7 +796,7 @@ describe('run analytics lifecycle', () => {
     // A scheduled Automation has no caller to attribute the Run to. Silence is
     // the correct outcome — inventing an identity would be worse than a gap.
     const h = harness();
-    h.lifecycle.install({ run: fakeRun(), body: {}, requestAnalyticsContext: null });
+    h.lifecycle.install({ run: fakeRun(), body: { commentAttachments: [{ id: 'saved', source: 'saved-comment' }] }, requestAnalyticsContext: null });
     h.settle({ status: 'succeeded' });
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(h.captured).toEqual([]);

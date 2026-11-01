@@ -170,6 +170,9 @@ vi.mock('../../src/state/projects', async () => {
   );
   return {
     ...actual,
+    registerQueuedSubmission: vi.fn(async (projectId, submission) => ({
+      id: submission.id, projectId, conversationId: submission.conversationId, acceptedAt: submission.submittedAt,
+    })),
     createConversation: vi.fn(),
     getProject: vi.fn(),
     listConversations: vi.fn(),
@@ -843,6 +846,7 @@ describe('ProjectView shared-project title refresh on project-metadata-changed',
       conversation.id,
       workspace,
       expect.any(AbortSignal),
+      expect.any(Function),
     );
   });
 
@@ -880,6 +884,7 @@ describe('ProjectView shared-project title refresh on project-metadata-changed',
       conversation.id,
       workspace,
       expect.any(AbortSignal),
+      expect.any(Function),
     );
   });
 
@@ -1046,6 +1051,7 @@ describe('ProjectView shared-project title refresh on project-metadata-changed',
       conversation.id,
       workspaceA,
       expect.any(AbortSignal),
+      expect.any(Function),
     );
     await act(async () => {
       resolveOldWorkspaceARecovery?.([conversation]);

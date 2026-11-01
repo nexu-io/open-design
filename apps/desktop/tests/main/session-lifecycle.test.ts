@@ -5,6 +5,7 @@ import {
   clearReportedCrash,
   endDesktopSessionCleanly,
   markDesktopSessionRunning,
+  recordDesktopSessionExit,
   type DesktopSessionState,
 } from "../../src/main/session-lifecycle.js";
 
@@ -107,4 +108,24 @@ describe("desktop session lifecycle", () => {
     expect(() => begin(store, "s5")).not.toThrow();
     expect(store.state().sessionId).toBe("s5");
   });
+});
+
+test('keeps original launch and active version in the persisted crash queue after upgrade', () => {
+  const store = makeStore();
+  beginDesktopSession({ stateFilePath: 'state.json', sessionId: 'old-session', launchAttemptId: 'old-launch',
+    version: '1.0.0-beta.1', now: () => FIXED, ...io(store) });
+  running(store);
+  const pending = begin(store, 'new-session', '2.0.0').previousUncleanSessions;
+  expect(pending).toHaveLength(1);
+  expect(pending[0]).toMatchObject({ sessionId: 'old-session', launchAttemptId: 'old-launch', version: '1.0.0-beta.1', lastObservedAt: expect.any(String) });
+  expect(store.state().unreportedCrashes).toEqual(pending);
+});
+
+test.each([0, 1])('records actual main exit code %d without mistaking a zero exit for a crash', code => {
+  const store = makeStore();
+  begin(store, 'main-session'); running(store);
+  recordDesktopSessionExit({ stateFilePath: 'state.json', ...io(store) }, code);
+  const pending = begin(store, 'next-session').previousUncleanSessions;
+  expect(pending).toHaveLength(code === 0 ? 0 : 1);
+  if (code) expect(pending[0]).toMatchObject({ exitCode: 1, lastObservedAt: expect.any(String) });
 });

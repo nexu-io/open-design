@@ -1,0 +1,2 @@
+/** Shared conditional HTML editing contract; not a request to prepare identities. */
+export const COMMENT_IDENTITY_EDIT_DIRECTIVE = `Only when editing HTML that already contains data-od-comment-id: preserve each same-node UUID through text, style, and move edits; mint a fresh UUID for every copied or new node; never recycle a deleted identity. Do not strip or reassign existing comment identities, and do not infer an old identity from matching text or position. This rule does not request identity preparation for other files.`;

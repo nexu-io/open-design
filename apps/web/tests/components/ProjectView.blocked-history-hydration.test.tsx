@@ -17,7 +17,9 @@ import { en } from '../../src/i18n/locales/en';
 import { streamViaDaemon, reattachDaemonRun } from '../../src/providers/daemon';
 import type { AppConfig, ChatMessage, Project, ProjectFile } from '../../src/types';
 
-const observedChat = vi.hoisted(() => ({ messages: [] as ChatMessage[], proofCompletions: [] as string[] }));
+import type { ProjectEvent } from '../../src/providers/project-events';
+
+const observedChat = vi.hoisted(() => ({ messages: [] as ChatMessage[], proofCompletions: [] as string[], onProjectEvent: undefined as ((event: ProjectEvent) => void) | undefined }));
 
 vi.mock('../../src/router', () => ({ navigate: vi.fn(), registerNavigationGuard: vi.fn(() => () => {}) }));
 vi.mock('../../src/providers/anthropic', () => ({ streamMessage: vi.fn() }));
@@ -34,7 +36,7 @@ vi.mock('../../src/providers/daemon', async () => {
     listActiveChatRuns: vi.fn().mockResolvedValue([]), listProjectRuns: vi.fn().mockResolvedValue([]),
     publishDaemonRunFinishedEvent: vi.fn() };
 });
-vi.mock('../../src/providers/project-events', () => ({ useProjectFileEvents: vi.fn() }));
+vi.mock('../../src/providers/project-events', () => ({ useProjectFileEvents: vi.fn((_id: string, _enabled: boolean, callback: (event: ProjectEvent) => void) => { observedChat.onProjectEvent = callback; }) }));
 vi.mock('../../src/providers/registry', async () => {
   const actual = await vi.importActual<typeof import('../../src/providers/registry')>('../../src/providers/registry');
   return { ...actual, fetchDesignSystem: vi.fn().mockResolvedValue(null),
@@ -45,7 +47,10 @@ vi.mock('../../src/providers/registry', async () => {
 });
 vi.mock('../../src/state/projects', async () => {
   const actual = await vi.importActual<typeof import('../../src/state/projects')>('../../src/state/projects');
-  return { ...actual, createConversation: vi.fn(), listPlugins: vi.fn().mockResolvedValue([]),
+  return { ...actual,
+    registerQueuedSubmission: vi.fn(async (projectId, submission) => ({
+      id: submission.id, projectId, conversationId: submission.conversationId, acceptedAt: submission.submittedAt,
+    })), createConversation: vi.fn(), listPlugins: vi.fn().mockResolvedValue([]),
     getTemplate: vi.fn().mockResolvedValue(null), loadTabs: vi.fn().mockResolvedValue({ tabs: [], active: null }),
     patchConversation: vi.fn().mockResolvedValue(undefined), patchProject: vi.fn().mockResolvedValue(undefined),
     saveTabs: vi.fn().mockResolvedValue(undefined), persistTabsToDaemonNow: vi.fn().mockResolvedValue(undefined) };
@@ -81,7 +86,7 @@ let context: WorkspaceCollabContext;
 let contexts: Map<string, WorkspaceCollabContext>;
 let histories: Map<string, ChatMessage[]>;
 let proofs: Map<string, ChatRunStatusResponse>;
-let proofHttpStatus: number;
+let proofHttpStatus: number | 'network';
 let proofGate: Promise<void> | null;
 let releaseProof: () => void = () => {};
 let reads: string[];
@@ -181,7 +186,7 @@ function errorCodesOnAssistant(id = assistantId()) {
 }
 
 async function expectDoneWithoutCard(id = assistantId()) {
-  await expectDisplayedStatus(en['chat.record.done'], id);
+  await expectDisplayedStatus(en['chat.record.turnElapsed'], id);
   expect(errorCodesOnAssistant(id)).toEqual([]);
   expect(screen.queryByTestId('chat-run-error-card')).toBeNull();
   expect(screen.queryByTestId('chat-error-retry')).toBeNull();
@@ -257,6 +262,7 @@ beforeEach(() => {
         pendingProofReads.push(`${principal}/${proof?.id ?? 'missing-run'}`);
         await gate;
       }
+      if (status === 'network') throw new TypeError('Network unavailable');
       return Response.json(status === 200 && proof ? proof : { error: 'Run unavailable' },
         { status: status === 200 && !proof ? 404 : status });
     }
@@ -293,6 +299,27 @@ describe('blocked task history hydration through real ProjectView and ChatPane (
     expect(reattachDaemonRun).not.toHaveBeenCalled();
   });
 
+  it('clears a cached legacy block after an authoritative migrated history refresh', async () => {
+    setHistory(persistedAssistant({ runStatus: 'failed', strategyTaskBlocked: true,
+      events: [{ kind: 'thinking', text: 'Old work.' }, { kind: 'text', text: 'Old reply.' }, { kind: 'status', label: 'error', code: MISSING_STATE, detail: 'Old contract rejection' }] }));
+    proofs.set(runId(), runProof({ status: 'failed' }));
+    render(view());
+    await expectDisplayedStatus(en['chat.record.failedTurn']);
+    await waitFor(() => expect(observedChat.messages.find(message => message.id === assistantId())?.strategyTaskBlocked).toBe(true));
+    setHistory(persistedAssistant({ runStatus: 'succeeded', strategyTaskBlocked: false,
+      strategyTaskBlockedText: null, strategyTaskDelivered: false,
+      events: [{ kind: 'thinking', text: 'Old work.' }, { kind: 'text', text: 'Old reply.' }] }));
+    proofs.set(runId(), runProof({ status: 'succeeded', strategyTask: blockedTask({ outcome: 'completed', blockedContext: undefined, deliverableValid: false }) }));
+    await act(async () => {
+      observedChat.onProjectEvent?.({ type: 'chat-artifact-refs-changed', projectId: project.id,
+        conversationId: conversationId(), messageId: assistantId(), runId: runId() } as ProjectEvent);
+    });
+    await waitFor(() => expect(observedChat.messages.find(message => message.id === assistantId()))
+      .toMatchObject({ runStatus: 'succeeded', strategyTaskBlocked: false, strategyTaskDelivered: false }));
+    expect(errorCodesOnAssistant()).toEqual([]);
+    await expectDisplayedStatus(en['chat.record.turnElapsed']);
+  });
+
   it('does not turn the successful request predecessor into the later active run failure', async () => {
     const task = blockedTask({ activeRunId: 'later-production-run' });
     proofs.set(runId(), runProof({ strategyTask: task }));
@@ -326,7 +353,7 @@ describe('blocked task history hydration through real ProjectView and ChatPane (
     holdProof();
     render(view());
     await settleExistingTaskProbe();
-    await expectDisplayedStatus(en['chat.record.done']);
+    await expectDisplayedStatus(en['chat.record.turnElapsed']);
     expect(screen.queryByTestId('chat-error-retry')).toBeNull();
     expect(screen.queryByTestId('chat-error-switch-to-cloud')).toBeNull();
   });
@@ -339,7 +366,7 @@ describe('blocked task history hydration through real ProjectView and ChatPane (
     holdProof();
     render(view());
     await settleExistingTaskProbe();
-    await expectDisplayedStatus(en['chat.record.done']);
+    await expectDisplayedStatus(en['chat.record.turnElapsed']);
     expect(screen.queryByTestId('chat-error-retry')).toBeNull();
     expect(screen.queryByTestId('chat-error-switch-to-cloud')).toBeNull();
   });
@@ -381,7 +408,7 @@ describe('blocked task history hydration through real ProjectView and ChatPane (
     holdProof();
     render(view());
     await settleExistingTaskProbe();
-    await expectDisplayedStatus(en['chat.record.done']);
+    await expectDisplayedStatus(en['chat.record.turnElapsed']);
     expect(errorCodesOnAssistant()).toEqual([]);
     expect(screen.queryByTestId('chat-error-retry')).toBeNull();
     expect(screen.queryByTestId('chat-error-switch-to-cloud')).toBeNull();
@@ -408,7 +435,7 @@ describe('blocked task history hydration through real ProjectView and ChatPane (
   });
 
   it.each([
-    ['succeeded', 'chat.record.done'], ['canceled', 'chat.record.canceled'], ['failed', 'chat.record.failedTurn'],
+    ['succeeded', 'chat.record.turnElapsed'], ['canceled', 'chat.record.turnStopped'], ['failed', 'chat.record.failedTurn'],
   ] as const)('preserves ordinary physical %s history without a strategy task', async (status, label) => {
     setHistory(persistedAssistant({ runStatus: status, strategyTaskBlocked: undefined,
       strategyTaskExecutionId: undefined, strategyTaskRunIndex: undefined, strategyTaskBlockedText: undefined }));
@@ -418,14 +445,30 @@ describe('blocked task history hydration through real ProjectView and ChatPane (
     expect(errorCodesOnAssistant()).toEqual([]);
   });
 
-  it.each([403, 404, 503])('keeps the existing unavailable-proof fallback without inventing a specific blocked reason (%s)', async (status) => {
+  it.each([403, 404, 503, 'network'] as const)('preserves persisted success when the status probe is unavailable (OPEND-4117: %s)', async (status) => {
+    const persisted = persistedAssistant({ strategyTaskBlocked: false, strategyTaskBlockedText: undefined,
+      strategyTaskDelivered: true });
+    setHistory(persisted);
+    const original = structuredClone(histories.get(historyKey()));
     proofHttpStatus = status;
+    holdProof();
+    const mounted = render(view());
+    await settleExistingTaskProbe();
+    await expectDoneWithoutCard();
+    expect(observedChat.messages.find((message) => message.id === persisted.id)).toMatchObject({
+      runStatus: 'succeeded', endedAt: persisted.endedAt, content: persisted.content,
+      producedFiles: persisted.producedFiles,
+    });
+    expect(unexpectedWrites).toEqual([]);
+    mounted.unmount();
+    pendingProofReads = [];
+    observedChat.proofCompletions = [];
+    holdProof();
     render(view());
-    // Existing task-probe fallback marks a missing physical status failed.
-    // Changing that policy is outside the authoritative-DTO repair. The first
-    // draft wrongly assumed it retained succeeded; preserve the actual policy.
-    await expectDisplayedStatus(en['chat.record.failedTurn']);
-    expect(errorCodesOnAssistant()).toEqual([]);
+    await settleExistingTaskProbe();
+    await expectDoneWithoutCard();
+    expect(histories.get(historyKey())).toEqual(original);
+    expect(unexpectedWrites).toEqual([]);
   });
 
   it.each(['conversation', 'principal'] as const)('ignores late old %s proof after switching to another visible history', async (boundary) => {
@@ -455,7 +498,7 @@ describe('blocked task history hydration through real ProjectView and ChatPane (
     mounted.rerender(view({ workspaceContextOverride: nextContext, routeConversationId: nextConversation }));
     await waitFor(() => expect(reads).toContain(historyKey(nextConversation, nextContext.workspaceMemberId)));
     await act(async () => { releaseProof(); });
-    await expectDisplayedStatus(en['chat.record.done'], nextMessage.id);
+    await expectDisplayedStatus(en['chat.record.turnElapsed'], nextMessage.id);
     expect(screen.getByText(nextMessage.content)).toBeTruthy();
     expect(document.querySelector(`[data-assistant-message-id="${assistantId()}"]`)).toBeNull();
     expect(screen.queryByTestId('chat-error-retry')).toBeNull();

@@ -3,7 +3,6 @@ import { createHash } from 'node:crypto';
 import type { AmrWalletSnapshot } from '@open-design/contracts';
 
 import {
-  markVelaAuthorizationExpired,
   readVelaControlApiContext,
   readVelaLoginStatus,
   type VelaUser,
@@ -142,12 +141,15 @@ export function createVelaWalletSnapshotReader(options: VelaWalletReaderOptions 
         signal: controller.signal,
       });
       if (response.status === 401 || response.status === 403) {
+        // Billing is display-only (OPEND-3553): a wallet rejection must never
+        // expire the AMR session. Vela also maps internal billing failures to
+        // 403, so this only says the balance is unavailable. Genuine credential
+        // expiry is detected by the non-billing workspace directory path.
         cache.delete(key);
-        markVelaAuthorizationExpired(input.env, input.configuredEnv);
         return unavailableSnapshot({
           code: 'unauthorized',
           fetchedAt,
-          message: 'AMR wallet authorization expired. Sign in again to refresh wallet access.',
+          message: 'AMR wallet balance is unavailable for this account right now.',
           profile: input.profile,
           user: input.user,
         });

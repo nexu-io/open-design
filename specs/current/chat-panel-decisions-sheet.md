@@ -371,6 +371,10 @@ QA 报的是两件(Beta 0.21.1-beta.7,会话 `7f04b326`):**① 提交后同时�
 本轮取**保守解 A**:两颗常驻次级和重试都留在卡上,只降为次级。三个候选写进
 `run-error-catalog.md` §6.ZB 末尾的表,等产品挑。
 
+⚠️ **这一段是历史记录,不再是现行规则。** 产品在 OPEND-2807 里给了终局,A / B / C
+一个都没选:卡上恒三颗,阶梯那组动作**整组下卡**,而不是「留在卡上降为次级」。
+终局见本文件末尾「OPEND-2807 报错卡终局」。
+
 ### 顺手处理掉的一条无理由否决
 
 `UPSTREAM_UNAVAILABLE` 在映射表里明写着要出切换卡,却在 `ChatPane` 里被**单独否掉**,
@@ -525,10 +529,91 @@ T4 / T6 是小的默认值问题,现状能跑,不急。
 
 ⚠️ **标题与正文按裁决明确不对齐**:稿子那一格写的是「本地环境跑不动这一步」+「当前运行在 CLI / BYOK 环境…」,而产品是**每类失败各说各的**(例:Claude 登录过期 → 「Claude 尚未登录」)。这不是遗漏,是产品选择。`chat-panel-edge-audit.md:329`、`run-error-catalog.md:405-406` 等处 2026-09-07 的记载写着「改文案不在授权范围内」—— 那些是**当时的**存档,不改;本条是新的裁决。
 
-⚠️ 按钮**数量**也和稿子不一致(稿子 2 颗,产品 4 颗),`run-error-catalog.md:421-430` 里 A/B 两案仍挂着等产品挑,本次未动。
+⚠️ ~~按钮**数量**也和稿子不一致(稿子 2 颗,产品 4 颗),`run-error-catalog.md:421-430` 里 A/B 两案仍挂着等产品挑,本次未动。~~ **已被 OPEND-2807 拍死(2026-09-16 落地)**:卡上恒是三颗,A/B/C 三个候选一个都没选中 —— Cloud 是〔联系我们〕〔导出日志〕〔重试〕,CLI / BYOK 是〔联系我们〕〔导出日志〕〔切换到 OpenDesign Cloud〕。终局见本文件末尾「OPEND-2807 报错卡终局」。
 
 ### 本轮顺带确认、**未做**的
 
 - `docs/design/chat-mirror/mirror-exec.html:8948` 的说明在文案改后变成了反话(它和 `mirror-gallery.test.tsx:1687` 逐字配对)。生成产物,与 fork 那条同属「重建是 776KB 巨型 diff」的待办。
 - `chat.amrCard.switchTitle` / `switchBody` / 三枚 chip 共 **5 个死键**(OPEND-2772 删掉 AmrGuidance 卡之后没有消费者),19 locale × 5 + `types.ts`。纯机械清理,单独一个 PR 更干净。
 - hu 的 `Cloud-re`、tr 的 `Cloud'ye` 是前元音后缀,而 "Cloud" 读作 /klaud/ 属后元音,按元音和谐应为 `-ra` / `'a`。**旧串里就带着的**,本次只做了「删掉多余部分」的最小变换,没顺手改翻译质量。
+
+---
+
+## OPEND-2807 报错卡终局:两种环境各三颗(2026-09-16 已落地)
+
+**工单逐字**:「[ChatPanel] 错误卡片未还原设计样式,应该只有三个按钮」。
+产品当面补的两句是「**别分那么多情况了**」和「**amr 只有这个 cta**」。
+
+**推翻的是 T68 留下的那半边。** T68 写的是「阶梯不删,只让位」—— §6.Z 那组动作
+(换个模型 / 去设置 / 在终端登录 / 授权并重试 / 重试 / 续跑)只是退到次级,仍在卡上。
+本条把**整组搬下卡面**。`run-error-catalog.md` §6.ZB 末尾摆给产品的 A / B / C 三个候选
+就此作废:落地的既不是 A(最多五颗),也不是逐字照稿的 B(两颗),而是**两种环境各三颗**。
+
+### 终态:一张卡恒三颗
+
+| 环境 | 开关 | 三颗动作(次级在左、主在最右) |
+|---|---|---|
+| **OpenDesign Cloud**(`agentId === 'amr'`) | `showCloudRetry` | 〔联系我们〕· 〔导出日志〕· **〔重试〕** |
+| **CLI / BYOK**(其余全部) | `showCloudSwitchCta` | 〔联系我们〕· 〔导出日志〕· **〔切换到 OpenDesign Cloud〕** |
+
+判据逐字(`apps/web/src/components/ChatPane.tsx`):
+
+```
+failedRunUsesCloud = retryAssistant?.agentId === 'amr'
+showCloudRetry     = retryAssistant && failedRunUsesCloud && onRetry
+showCloudSwitchCta = retryAssistant && !failedRunUsesCloud
+                     && (onSwitchToAmrAndRetry || onOpenAmrSettings)
+```
+
+两颗常驻次级**无条件渲染,不看失败类型**;第三颗由上面两个开关二选一。
+分类器(`primaryActionForFailure`)一行没动,但它现在只管标题 / 正文 / 交接,**不再决定按钮**。
+
+### main 上的三个例外(都是有意的,不是漏做)
+
+| # | 触发 | 卡长什么样 | 判据落点 |
+|---|---|---|---|
+| 1 | **宿主没接交接口** —— `onSwitchToAmrAndRetry` 与 `onOpenAmrSettings` 一个都没传 | CLI / BYOK 的卡**只剩两颗**;不画那颗点了没反应的〔切换到 OpenDesign Cloud〕 | `showCloudSwitchCta` 尾巴上的 `(… \|\| …)`;红测 `apps/web/tests/components/chat/cloud-cta-handoff-presence.test.tsx` |
+| 2 | **`git_bash_missing`** | **整张卡不出。** 失败轮的状态壳照旧 —— 压掉这一面不等于把失败说成成功 | `amr-guidance.ts` 的 `suppressCard: true`(产品 2026-09-14);`apps/web/tests/components/ChatPane.git-bash-no-card.test.tsx` |
+| 3 | **余额为 0** | **报错卡不出,升级卡接管。** 升级卡读不出确定数字时白卡还回来 —— T41 那条不变量一个字没动 | `failureCardHandedToAmrBalanceCard` + `balanceCardCannotTakeTheHandoff` |
+
+⚠️ **例外 1 比三颗那一步早一周落地。** 它是 **#7897**(2026-09-08)单独合的,当时**没有**收按钮,
+只补了「接不住就别画」这条不变量;三颗的形状由 **#8140**(2026-09-16)落地。
+两条一起读才是今天的 main,分开读任一条都会得出错的结论。
+
+### 四条代价(已经发生,记在这里以免后来人当缺陷「修」回去)
+
+1. **S04 卡上没有登录入口。** `hasInlineAmrAuthorizeFailure` 那条轮询还在(每 500ms 查一次登录态,
+   一登上就自动重试),但**卡上没有任何一颗按钮能把用户带去登录** —— 轮询只在用户自己从别处登上时才兑现。
+2. **`POST /api/agents/antigravity/oauth-launch` 在 web UI 已经没有任何入口。**
+   antigravity 的 `agy -p` 自己完不成 OAuth,PR #3157 给的「在终端登录」是它唯一的一键入口,
+   那颗按钮随阶梯组一起下卡。⚠️ **接线还在,但全是空转**:`ProjectView` 仍把
+   `handleLaunchAntigravityOauth` 传给 `ChatPane`(`onLaunchAntigravityOauth`)和
+   `FileWorkspace`(`onLaunchTerminalAuth`),而**两个组件都只声明了这个 prop、没有消费者**。
+   所以这不是「换了个位置」,是**这条路今天不可达**。
+3. **`resumable` 的失败拿不到〔继续运行〕。** 第三颗恒是重试或切 Cloud,`resume_run` 在报错卡上
+   没有落点了。续跑的意义是保住跑了一半的活,重试是从头再来 —— 两者不能互相顶替。
+   (§6.T 那条「`resumable` 被硬写成 `false`」是另一件事,仍然开着。)
+4. **S13 / S30 / 余额这几档只剩一颗必然同结果的重试,与设计原则四正面冲突。**
+   原则四逐字是「**『重试』只在流程说『可重试』的行上出现**」:模型下线了(S13)、
+   代理或证书不对(S30)、钱包空了 —— 重试必然同样结果。这几档在 Cloud 上今天拿到的就是重试。
+   ⚠️ 这同时让 **D-03**(2026-08-26「`AMR_MODEL_UNAVAILABLE` 不给重试,给『换个模型』」)
+   在卡面上不再成立:映射表里它仍是 `switchModelWithGuidance`,但那颗按钮已经不画了。
+
+### 埋点:报错卡这一面的取值收窄成两个
+
+`ChatPane` 的 `visibleRecoveryActionTypes` 现在只推 `manual_retry` 和 `switch_runtime_retry`,
+所以 `run_recovery_action` 的 surface_view / click **从报错卡上再也不会产生**
+`resume_run` / `authorize_and_retry` / `switch_model_retry`。
+
+⚠️ **`TrackingRunRecoveryActionType` 这个联合类型没有删成员**,另外几个值仍由 `ProjectView`
+自己那几条路发出(`switch_model_retry`、`authorize_and_retry`、`resume_run`、`question_answer`)。
+看板要区分的是「报错卡上的恢复动作」和「别处的恢复动作」,不是这个字段整体作废。
+
+### 仍然存在的一处文案错配(只记录,本次不改)
+
+S13 的正文逐字是「**请选择其他可用模型后再试。**」(en:`Please pick another available model
+and try again.`),而卡上**已经没有换模型的入口** —— Cloud 那一面只有〔重试〕。
+正文在教用户做一件这张卡上做不到的事。
+
+不改的理由:2026-09-08 的裁决是「**具体的报错文案不一定跟设计稿对齐,按钮文案对齐先**」,
+动正文要产品单独说。**摆在这里,不要当成没人发现。**

@@ -47,6 +47,20 @@ describe("scripts guard library", () => {
     );
   });
 
+  test.each([
+    'import type { T } from "./lib/guard/core.ts";',
+    'type T = import("./lib/guard/core.ts").T;',
+    'void import("./lib/guard/core.ts");',
+    'const guard = require("./lib/guard/core.ts");',
+    'import guard = require("./lib/guard/core.ts");',
+  ])("detects native AST import edges: %s", (source) => {
+    const errors = scriptsArchitectureErrors(new Map([
+      ["scripts/check.ts", source],
+      ["scripts/lib/guard/core.ts", "export interface T {}"],
+    ]));
+    expect(errors).toContain("scripts/check.ts must consume guard policy through scripts/guard.ts, not scripts/lib/guard/core.ts");
+  });
+
   test("the core runs every check and fails closed on exceptions", async () => {
     const afterFailure = vi.fn(async () => true);
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});

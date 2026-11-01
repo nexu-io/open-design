@@ -63,7 +63,7 @@ triggers: […]
 # --- OD extensions below this line ---
 
 od:
-  mode: deck                        # prototype | deck | template | design-system | image | video | audio
+  mode: deck                        # utility | prototype | deck | template | design-system | image | video | audio
   surface: web                      # web | image | video | audio
   scenario: marketing               # gallery/filter hint
   category: presentations           # free-form lowercase filter slug
@@ -87,7 +87,7 @@ od:
 |---|---|
 | `zh_name` / `en_name` | localized picker title; falls back to `name` |
 | `zh_description` / `en_description` | localized picker description; falls back to `description` |
-| `od.mode` | registry classification and creation-surface filtering |
+| `od.mode` | registry classification and creation-surface filtering; functional helpers use `utility` (or `design-system`), which is preserved rather than inferred from media keywords in the body |
 | `od.surface` | web/image/video/audio surface filtering; defaults from media mode or to `web` |
 | `od.platform` | optional desktop/mobile gallery hint |
 | `od.scenario` / `od.category` | scenario and category filter hints |

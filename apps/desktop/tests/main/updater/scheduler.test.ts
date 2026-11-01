@@ -70,6 +70,8 @@ describe("desktop updater scheduler", () => {
 
       expect(readSilentPreference).toHaveBeenCalledTimes(1);
       expect(updater.installUpdate).toHaveBeenCalledTimes(1);
+      expect(updater.installUpdate).toHaveBeenCalledWith({ trigger: "silent" });
+      expect(updater.checkForUpdates).toHaveBeenCalledWith({ trigger: "silent" });
       expect(requestQuit).toHaveBeenCalledTimes(1);
       expect(scheduler.isRunning()).toBe(false);
       await vi.advanceTimersByTimeAsync(500);

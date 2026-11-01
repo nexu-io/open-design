@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runInNewContext } from "node:vm";
-import { ModuleKind, ScriptTarget, transpileModule } from "typescript";
+import { transformSync } from "esbuild";
 import { describe, expect, it } from "vitest";
 import * as launcherProto from "@open-design/launcher-proto";
 import * as release from "@open-design/release";
@@ -21,17 +21,17 @@ function compile(name: string, entry = false): string {
     if (boundary < 0) throw new Error("packaged entry invocation missing");
     source = `${source.slice(0, boundary)}\nexport { main };\n`;
   }
-  return transpileModule(source, { compilerOptions: {
-    module: ModuleKind.CommonJS, target: ScriptTarget.ES2022,
-  } }).outputText;
+  return transformSync(source, { loader: "ts", format: "cjs", target: "es2022" }).code;
 }
 const entryCode = compile("index", true);
 const helperCode = compile("launcher-after-quit");
 const managedHeadlessCode = compile("managed-headless");
 function evaluate(code: string, modules: Record<string, unknown>, globals: Record<string, unknown> = {}) {
   const exports: Record<string, unknown> = {};
+  const module = { exports };
   runInNewContext(code, {
     exports,
+    module,
     require: (name: string) => {
       if (name.startsWith("node:")) return require(name);
       if (name in modules) return modules[name];
@@ -42,7 +42,7 @@ function evaluate(code: string, modules: Record<string, unknown>, globals: Recor
     console: { info() {}, warn() {}, error() {} },
     ...globals,
   });
-  return exports;
+  return module.exports;
 }
 
 type Kind = "visible" | "hidden" | "gone" | "duplicate" | "timeout";

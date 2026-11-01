@@ -1,3 +1,4 @@
+import { JSDOM } from 'jsdom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installMockOpenDesignHost } from '@open-design/host/testing';
 import { advanceWorkspaceAccountGeneration } from '../../src/collab/workspace-identity';
@@ -19,6 +20,11 @@ import {
   deployProjectFile,
   createDesignSystemDraft,
   fetchAgentsStream,
+  fetchSkills,
+  fetchDesignTemplates,
+  fetchDesignSystems,
+  fetchPromptTemplates,
+  fetchPreviewComments,
   fetchCloudflarePagesZones,
   fetchDeployConfig,
   fetchDesignSystemsResult,
@@ -41,10 +47,86 @@ import {
   patchPreviewCommentSortKey,
   patchPreviewCommentStatus,
   updateDeployConfig,
+  COMMENT_PULL_TIMEOUT_MS,
   uploadProjectFiles,
   upsertPreviewComment,
   writeProjectTextFileDetailed,
 } from '../../src/providers/registry';
+
+describe('passive startup catalog observation', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+  const readers = [
+    (onReadResult: (success: boolean) => void) => fetchSkills(null, { onReadResult }),
+    (onReadResult: (success: boolean) => void) => fetchDesignTemplates({ onReadResult }),
+    (onReadResult: (success: boolean) => void) => fetchDesignSystems(null, { onReadResult }),
+    (onReadResult: (success: boolean) => void) => fetchPromptTemplates({ onReadResult }),
+  ];
+  it.each(readers.map((read, index) => ({ read, index })))(
+    'observes failures without changing the existing empty-list result $index', async ({ read }) => {
+      for (const fetcher of [
+        async () => new Response('', { status: 503 }),
+        async () => { throw new Error('offline'); },
+        async () => new Response('{'),
+      ]) {
+        const observer = vi.fn();
+        vi.stubGlobal('fetch', vi.fn(fetcher));
+        await expect(read(observer)).resolves.toEqual([]);
+        expect(observer).toHaveBeenLastCalledWith(false);
+      }
+      const observer = vi.fn();
+      vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+        skills: [], designTemplates: [], designSystems: [], promptTemplates: [],
+      })));
+      await expect(read(observer)).resolves.toEqual([]);
+      expect(observer).toHaveBeenLastCalledWith(true);
+      await expect(read(() => { throw new Error('observation failed'); })).resolves.toEqual([]);
+    },
+  );
+});
+
+describe('explicit comment pull in the UI provider', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('uses the same pull endpoint as CLI and preserves local comments when remote is unavailable', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith('/pull')) {
+        return new Response(JSON.stringify({ pulled: true, comments: [{ id: 'visitor' }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ comments: [{ id: 'local' }] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await fetchPreviewComments('p', 'conv', personalWorkspaceContext(), true)).toEqual([{ id: 'visitor' }]);
+    expect(fetchMock).toHaveBeenCalledWith('/api/projects/p/conversations/conv/comments/pull',
+      expect.objectContaining({ method: 'POST' }));
+    fetchMock.mockImplementation(async input => String(input).endsWith('/pull')
+      ? new Response(null, { status: 503 })
+      : new Response(JSON.stringify({ comments: [{ id: 'local' }] }), { status: 200 }));
+    expect(await fetchPreviewComments('p', 'conv', personalWorkspaceContext(), true)).toEqual([{ id: 'local' }]);
+  });
+});
+
+describe('comment pull deadline', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('falls back to the local list when the remote pull outlives its deadline', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/pull')) {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+        });
+      }
+      return Promise.resolve(new Response(JSON.stringify({ comments: [{ id: 'local' }] }), { status: 200 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const read = fetchPreviewComments('p', 'conv', personalWorkspaceContext(), true);
+    await vi.advanceTimersByTimeAsync(COMMENT_PULL_TIMEOUT_MS);
+    await expect(read).resolves.toEqual([{ id: 'local' }]);
+  });
+});
 
 describe('skill operation diagnostics', () => {
   afterEach(() => {
@@ -159,7 +241,16 @@ describe('design-system Workspace scope', () => {
       designSystems: [],
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/workspace/design-systems/team', {
+      cache: 'no-store',
+      headers: expect.objectContaining({
+        'x-od-workspace-id': context.workspaceId,
+        'x-od-workspace-type': 'personal',
+        'x-od-workspace-member-id': context.workspaceMemberId,
+      }),
+    });
 
     expect(fetchMock).toHaveBeenCalledWith('/api/design-systems', {
       headers: expect.objectContaining({
@@ -374,7 +465,7 @@ describe('design-system Workspace scope', () => {
     });
   });
 
-  it('keeps personal and official systems available when team materialization fails', async () => {
+  it.each([false, true])('keeps personal and official systems available when team materialization fails (observed=%s)', async (observed) => {
     const context = {
       ...teamWorkspaceContext(),
       workspaceId: 'ws-team-offline',
@@ -399,13 +490,16 @@ describe('design-system Workspace scope', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
+    await expect(fetchDesignSystems(context, observed ? { onReadResult: vi.fn() } : undefined)).resolves.toMatchObject([
+      expect.objectContaining({ id: 'user:local-brand' }),
+    ]);
     await expect(fetchDesignSystemsResult(context)).resolves.toMatchObject({
       ok: true,
       designSystems: [expect.objectContaining({
         id: 'user:local-brand',
       })],
     });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledWith('/api/design-systems', expect.anything());
   });
 
   it('partitions team materialization when the Workspace changes', async () => {
@@ -858,6 +952,126 @@ describe('fetchAppVersionInfo', () => {
     );
 
     await expect(fetchAppVersionInfo()).resolves.toBeNull();
+  });
+});
+
+describe('fetchProjectFiles after an external write', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  const file = (name: string) => ({
+    name, path: name, kind: 'image', mime: 'image/png', size: 1, mtime: 1,
+  });
+  const response = (files: ReturnType<typeof file>[]) => Response.json({ files });
+
+  it.each([0, 249])('replaces a settled forced snapshot after a write %ims later', async (elapsed) => {
+    vi.useFakeTimers();
+    const before = [file('before.png')];
+    const after = [...before, file('generated.png')];
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(response(before))
+      .mockResolvedValueOnce(response(after));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchProjectFiles('post-write-settled', { fresh: true })).resolves.toEqual(before);
+    await vi.advanceTimersByTimeAsync(elapsed);
+    await expect(fetchProjectFiles('post-write-settled', {
+      fresh: true, afterChange: true, requireAuthoritative: true,
+    })).resolves.toEqual(after);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('fences an older in-flight read and shares the post-write request with ordinary readers', async () => {
+    vi.useFakeTimers();
+    const before = [file('before.png')];
+    const after = [...before, file('generated.png')];
+    const oldResponse = deferred<Response>();
+    const newResponse = deferred<Response>();
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockImplementationOnce(() => oldResponse.promise)
+      .mockImplementationOnce(() => newResponse.promise);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const earlier = fetchProjectFiles('post-write-inflight', { fresh: true });
+    await vi.advanceTimersByTimeAsync(95);
+    const completion = fetchProjectFiles('post-write-inflight', {
+      fresh: true, afterChange: true, requireAuthoritative: true,
+    });
+    const ordinary = fetchProjectFiles('post-write-inflight');
+    newResponse.resolve(response(after));
+    oldResponse.resolve(response(before));
+
+    await expect(Promise.all([earlier, completion, ordinary])).resolves.toEqual([after, after, after]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries an overtaken write-boundary read without declaring another write', async () => {
+    vi.useFakeTimers();
+    const firstFiles = [file('first.png')];
+    const latestFiles = [...firstFiles, file('second.png')];
+    const firstResponse = deferred<Response>();
+    const latestResponse = deferred<Response>();
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockImplementationOnce(() => firstResponse.promise)
+      .mockImplementationOnce(() => latestResponse.promise)
+      // A retry that mistakenly declares another write still settles, but its
+      // extra network request is rejected by the count below.
+      .mockImplementation(async () => response(latestFiles));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const first = fetchProjectFiles('post-write-overtaken', { fresh: true, afterChange: true });
+    await vi.advanceTimersByTimeAsync(1);
+    const second = fetchProjectFiles('post-write-overtaken', { fresh: true, afterChange: true });
+    latestResponse.resolve(response(latestFiles));
+    await Promise.resolve();
+    firstResponse.resolve(response(firstFiles));
+
+    await expect(Promise.all([first, second])).resolves.toEqual([latestFiles, latestFiles]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserves ordinary and broadcast-forced concurrent read coalescing', async () => {
+    vi.useFakeTimers();
+    const files = [file('shared.png')];
+    const gate = deferred<Response>();
+    const fetchMock = vi.fn<typeof fetch>(() => gate.promise);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const readers = [
+      fetchProjectFiles('post-write-burst', { fresh: true }),
+      fetchProjectFiles('post-write-burst', { fresh: true }),
+      fetchProjectFiles('post-write-burst'),
+    ];
+    gate.resolve(response(files));
+    await expect(Promise.all(readers)).resolves.toEqual([files, files, files]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('invalidates only the written project and Workspace authority', async () => {
+    vi.useFakeTimers();
+    const workspaceA = personalWorkspaceContext();
+    const workspaceB = { ...workspaceA, workspaceId: 'ws-other', workspaceMemberId: 'wm-other' };
+    const before = [file('before.png')];
+    const after = [...before, file('generated.png')];
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(response(before))
+      .mockResolvedValueOnce(response(before))
+      .mockResolvedValueOnce(response(before))
+      .mockResolvedValueOnce(response(after));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await fetchProjectFiles('post-write-scoped', { workspaceContext: workspaceA, fresh: true });
+    await fetchProjectFiles('post-write-scoped', { workspaceContext: workspaceB, fresh: true });
+    await fetchProjectFiles('post-write-other-project', { workspaceContext: workspaceA, fresh: true });
+    await expect(fetchProjectFiles('post-write-scoped', {
+      workspaceContext: workspaceA, fresh: true, afterChange: true,
+    })).resolves.toEqual(after);
+    await expect(fetchProjectFiles('post-write-scoped', { workspaceContext: workspaceB })).resolves.toEqual(before);
+    await expect(fetchProjectFiles('post-write-other-project', { workspaceContext: workspaceA })).resolves.toEqual(before);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 });
 
@@ -1755,10 +1969,7 @@ describe('connectConnector', () => {
   it('renders a fallback link before navigating the auth popup', async () => {
     const replace = vi.fn();
     const authWindow = {
-      document: {
-        title: '',
-        body: { innerHTML: '' },
-      },
+      document: new JSDOM('<body></body>').window.document,
       location: { replace },
       close: vi.fn(),
     };
@@ -1807,10 +2018,7 @@ describe('connectConnector', () => {
 
   it('keeps the popup open with custom auth guidance when initialization fails', async () => {
     const authWindow = {
-      document: {
-        title: '',
-        body: { innerHTML: '' },
-      },
+      document: new JSDOM('<body></body>').window.document,
       location: { replace: vi.fn() },
       close: vi.fn(),
     };
@@ -1885,10 +2093,7 @@ describe('connectConnector', () => {
 
   it('renders an info notice in the popup when the connect response carries no redirect URL', async () => {
     const authWindow = {
-      document: {
-        title: '',
-        body: { innerHTML: '' },
-      },
+      document: new JSDOM('<body></body>').window.document,
       location: { replace: vi.fn() },
       close: vi.fn(),
     };
@@ -2380,5 +2585,21 @@ describe('deploy provider registry helpers', () => {
       () => { throw new Error('expected deploy to reject'); },
       (err: unknown) => expect((err as { code?: string }).code).toBe('HTTP_404'),
     );
+  });
+});
+
+describe('OPEND-3894 comment reads distinguish errors from empty success', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it.each(['http', 'network', 'invalid'] as const)('rejects final %s failure after a failed pull', async kind => {
+    vi.stubGlobal('fetch', vi.fn(async input => {
+      if (String(input).endsWith('/pull')) return new Response(null, {status: 503});
+      if (kind === 'network') throw new Error('offline');
+      return kind === 'http' ? new Response(null,{status:500}) : Response.json({});
+    }));
+    await expect(fetchPreviewComments('p','c',personalWorkspaceContext(),true)).rejects.toThrow();
+  });
+  it('accepts an explicitly empty successful response', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({comments:[]})));
+    await expect(fetchPreviewComments('p','c')).resolves.toEqual([]);
   });
 });

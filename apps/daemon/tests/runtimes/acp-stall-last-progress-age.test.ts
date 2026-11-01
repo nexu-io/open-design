@@ -444,12 +444,13 @@ describe('ACP stall progress age', () => {
     expect(finished.failure_category).toBe('timeout');
     expect(finished.failure_detail).toBe('timeout');
 
-    // Exactly one terminal failure reached the transcript. A second `error`
-    // here is the inactivity watchdog re-terminalizing the attempt.
-    expect(
-      readRunEventTail(run.eventsLogPath).filter((entry) => entry === 'error').length,
-      progressAgeFailureContext(finished, run),
-    ).toBe(1);
+    // One terminal error per physical attempt. A safe same-run retry is allowed;
+    // another watchdog error within either attempt is still a regression.
+    const attempts = readRunEvents(run.eventsLogPath).join(',').split('run_retry_attempted');
+    for (const attempt of attempts) {
+      expect(attempt.split(',').filter((entry) => entry === 'error').length,
+        progressAgeFailureContext(finished, run)).toBe(1);
+    }
 
     expect(
       finished.last_progress_age_ms,
@@ -479,11 +480,11 @@ function progressAgeFailureContext(
   };
   return [
     `run_finished: ${JSON.stringify(summary)}`,
-    `run event tail: ${JSON.stringify(readRunEventTail(run.eventsLogPath))}`,
+    `run event tail: ${JSON.stringify(readRunEvents(run.eventsLogPath).slice(-30))}`,
   ].join('\n');
 }
 
-function readRunEventTail(eventsLogPath: string | null | undefined): unknown[] {
+function readRunEvents(eventsLogPath: string | null | undefined): unknown[] {
   if (!eventsLogPath) return ['<no eventsLogPath>'];
   try {
     return readFileSync(eventsLogPath, 'utf8')
@@ -498,8 +499,7 @@ function readRunEventTail(eventsLogPath: string | null | undefined): unknown[] {
         } catch {
           return '<unparsable>';
         }
-      })
-      .slice(-30);
+      });
   } catch (error) {
     return [`<unreadable: ${(error as Error).message}>`];
   }

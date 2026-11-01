@@ -1,3 +1,5 @@
+import { readMotionExportSpec, assertMotionExport } from '../artifacts/motion-delivery.js';
+import { injectMotionSourcePlayer, isMotionVideoComposition, markMotionFrameRender, MOTION_TIMELINE_CHECK_SCRIPT } from '@open-design/contracts/runtime/motion-source-player';
 // Media-generation dispatcher. The unifying contract is:
 //
 //   skills + metadata + system-prompt
@@ -93,6 +95,7 @@ import {
   resolveHyperFramesCliPath,
   resolveHyperFramesNodeBin,
 } from './hyperframes-runtime.js';
+import { prepareHyperFramesAudio, hyperFramesAudioEncodingArgs, type HyperFramesAudioTrack } from './hyperframes-audio.js';
 import { renderVelaImage, renderVelaVideo } from './vela.js';
 import {
   ensureProject,
@@ -759,6 +762,7 @@ export async function generateMedia(args: {
         ctx,
         dir,
         args.desktopFrameRenderer ?? null,
+        (safeOut.lastIndexOf('.') > 0 ? safeOut.slice(0, safeOut.lastIndexOf('.')) : safeOut) + '.mp4',
         args.onProgress,
       );
       bytes = result.bytes;
@@ -3877,6 +3881,7 @@ async function renderHyperFrames(
   ctx: MediaContext,
   projectDir: string,
   desktopFrameRenderer: DesktopFrameRenderer | null,
+  outputPath: string,
   onProgress?: ProgressFn,
 ): Promise<RenderResult> {
   const compRel = ctx.compositionDir;
@@ -3935,6 +3940,9 @@ async function renderHyperFrames(
     'The agent must write index.html (with window.__timelines registration) before dispatch.',
   );
 
+  const motionExport = await readMotionExportSpec({
+    projectRoot: projectDir, sourcePath: path.join(compRel, 'index.html'), outputPath,
+  });
   const tmpRoot = await mkdtemp(path.join(os.tmpdir(), 'open-design-hf-'));
   const tmpOutput = path.join(tmpRoot, 'render.mp4');
   const usesHeadlessOverride = Boolean(process.env.HYPERFRAMES_BROWSER_PATH?.trim());
@@ -3957,6 +3965,7 @@ async function renderHyperFrames(
         'Open Design desktop frame renderer is unavailable. Open or upgrade the desktop client and try again.',
       );
     }
+    if (motionExport) await assertMotionExport(tmpOutput, motionExport);
     const bytes = await readFile(tmpOutput);
     return {
       bytes,
@@ -3980,10 +3989,18 @@ async function renderHyperFramesWithDesktop(
   desktopFrameRenderer: DesktopFrameRenderer,
   onProgress?: ProgressFn,
 ): Promise<void> {
-  const sourceHtml = await readFile(path.join(compAbs, 'index.html'), 'utf8');
+  const sourcePath = path.join(compAbs, 'index.html');
+  const original = await readFile(sourcePath, 'utf8');
+  const sourceHtml = injectMotionSourcePlayer(original);
+  if (sourceHtml !== original) await writeFile(sourcePath, sourceHtml, 'utf8');
   const { fps, height, width } = hyperFramesCompositionMetrics(sourceHtml);
   const browserRuntime = await readFile(resolveHyperFramesBrowserRuntimePath(), 'utf8');
-  const html = injectHyperFramesFrameBridge(sourceHtml, browserRuntime);
+  // The strict local-track contract belongs to motion films. Legacy
+  // HyperFrames keeps its authored media syntax and original capture path.
+  const audio = isMotionVideoComposition(sourceHtml)
+    ? await prepareHyperFramesAudio(sourceHtml, compAbs)
+    : { html: sourceHtml, tracks: [] };
+  const html = injectHyperFramesFrameBridge(audio.html, browserRuntime);
   const framesDir = path.join(tmpRoot, 'frames');
 
   onProgress?.('Rendering HyperFrames with the bundled Electron Chromium…');
@@ -4000,7 +4017,7 @@ async function renderHyperFramesWithDesktop(
   }
 
   onProgress?.(`Encoding ${rendered.frameCount} frame(s) at ${rendered.fps} fps…`);
-  await encodeHyperFramesMp4(rendered.framePattern, rendered.fps, tmpOutput);
+  await encodeHyperFramesMp4(rendered.framePattern, rendered.fps, tmpOutput, audio.tracks, rendered.frameCount / rendered.fps);
 }
 
 export function hyperFramesCompositionMetrics(html: string): {
@@ -4029,8 +4046,24 @@ export function hyperFramesCompositionMetrics(html: string): {
 }
 
 export function injectHyperFramesFrameBridge(sourceHtml: string, runtimeScript: string): string {
+  const motionVideo = isMotionVideoComposition(sourceHtml);
   const safeRuntime = runtimeScript.replace(/<\/script/gi, '<\\/script');
-  const bridge = `<script>${safeRuntime}</script><script>
+  const guardedRuntime = motionVideo ? `
+${MOTION_TIMELINE_CHECK_SCRIPT}
+(async () => {
+  try {
+    const deadline = Date.now() + 15000;
+    const root = document.querySelector('[data-composition-id]');
+    let tl;
+    while (!(tl = window.__timelines && root && window.__timelines[root.dataset.compositionId]) && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    const error = window.__odValidateMotionTimeline(root, tl);
+    if (error) throw new Error(error);
+    ${safeRuntime}
+  } catch (error) { window.__odMotionTimingError = String(error.message || error); }
+})();` : safeRuntime;
+  const bridge = `<script>${guardedRuntime}</script><script>
 (() => {
   const nextPaint = () => new Promise((resolve) => {
     let settled = false;
@@ -4045,10 +4078,11 @@ export function injectHyperFramesFrameBridge(sourceHtml: string, runtimeScript: 
   const waitForRuntime = async () => {
     const deadline = Date.now() + 45000;
     while (Date.now() < deadline) {
+      if (window.__odMotionTimingError) throw new Error(window.__odMotionTimingError);
       const player = window.__player;
       const duration = Number(player && typeof player.getDuration === 'function' && player.getDuration());
       if (window.__renderReady === true && player && typeof player.renderSeek === 'function' && duration > 0) {
-        return { duration, seek: (timeSeconds) => player.renderSeek(timeSeconds, { suppressEvents: true }) };
+        return { duration, seek: (timeSeconds) => player.renderSeek(timeSeconds, { suppressEvents: ${!motionVideo} }) };
       }
       const legacy = window.__hf;
       if (legacy && typeof legacy.seek === 'function' && Number(legacy.duration) > 0) {
@@ -4101,6 +4135,7 @@ export function injectHyperFramesFrameBridge(sourceHtml: string, runtimeScript: 
   };
 })();
 </script>`;
+  sourceHtml = markMotionFrameRender(sourceHtml);
   const bodyClose = findRealTagOffset(sourceHtml, HTML_TAG_PATTERNS.bodyClose);
   if (bodyClose >= 0) {
     return sourceHtml.slice(0, bodyClose) + bridge + sourceHtml.slice(bodyClose);
@@ -4112,6 +4147,8 @@ function encodeHyperFramesMp4(
   framePattern: string,
   fps: number,
   outputPath: string,
+  audioTracks: HyperFramesAudioTrack[] = [],
+  duration = 0,
 ): Promise<void> {
   const ffmpegPath = process.env.HYPERFRAMES_FFMPEG_PATH?.trim() || ffmpegInstaller.path;
   return new Promise<void>((resolve, reject) => {
@@ -4128,6 +4165,8 @@ function encodeHyperFramesMp4(
         '0',
         '-i',
         framePattern,
+        ...audioTracks.flatMap((track) => ['-protocol_whitelist', 'file,pipe', '-f', track.format, '-i', track.file]),
+        ...hyperFramesAudioEncodingArgs(audioTracks, duration),
         '-vf',
         'pad=ceil(iw/2)*2:ceil(ih/2)*2',
         '-c:v',

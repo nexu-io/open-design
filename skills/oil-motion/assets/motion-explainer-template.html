@@ -1,0 +1,1043 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Oil Motion — 动画原理</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #191919;
+        --paper: #fffefa;
+        --muted: #92928e;
+        --line: rgba(25, 25, 25, 0.13);
+        --grid: rgba(25, 25, 25, 0.05);
+        --yellow: #ffe28a;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        min-width: 320px;
+        background: var(--paper);
+      }
+
+      body {
+        min-width: 320px;
+        min-height: 100svh;
+        margin: 0;
+        overflow-x: hidden;
+        color: var(--ink);
+        background:
+          linear-gradient(var(--grid) 1px, transparent 1px),
+          linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+          radial-gradient(circle at 8% 4%, rgba(255, 226, 138, 0.24), transparent 28%),
+          var(--paper);
+        background-size: 44px 44px, 44px 44px, auto, auto;
+        font-family:
+          Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "PingFang SC",
+          "Microsoft YaHei", sans-serif;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      .shell {
+        min-height: 100svh;
+        height: 100svh;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        gap: 16px;
+        padding: 22px;
+      }
+
+      body.is-scroll .shell {
+        position: sticky;
+        top: 0;
+      }
+
+      .scroll-spacer {
+        display: none;
+        height: var(--scroll-height, 300svh);
+        pointer-events: none;
+      }
+
+      body.is-scroll .scroll-spacer {
+        display: block;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 24px;
+        min-width: 0;
+        padding: 0 4px;
+      }
+
+      .topbar h1 {
+        margin: 0;
+        font-size: clamp(25px, 2.4vw, 40px);
+        font-weight: 760;
+        line-height: 1;
+        letter-spacing: -0.045em;
+      }
+
+      .topbar p,
+      .kicker,
+      .readout,
+      .formula {
+        font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+      }
+
+      .topbar p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+      }
+
+      .workspace {
+        min-height: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
+        gap: 16px;
+      }
+
+      .panel {
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        background: rgba(255, 255, 255, 0.82);
+      }
+
+      .source-panel,
+      .preview-panel {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+      }
+
+      .panel-head {
+        position: relative;
+        z-index: 4;
+        min-height: 62px;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        padding: 14px 20px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .source-tabs {
+        display: flex;
+        gap: 5px;
+        padding: 4px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(25, 25, 25, 0.035);
+      }
+
+      .source-tab {
+        min-height: 30px;
+        padding: 0 12px;
+        border: 0;
+        border-radius: 999px;
+        color: var(--muted);
+        background: transparent;
+        font-size: 12px;
+        font-weight: 650;
+        cursor: pointer;
+      }
+
+      .source-tab[aria-selected="true"] {
+        color: var(--ink);
+        background: var(--paper);
+        box-shadow: 0 1px 5px rgba(25, 25, 25, 0.1);
+      }
+
+      .source-tab:focus-visible,
+      .zoom-controls button:focus-visible,
+      .zoom-controls input:focus-visible {
+        outline: 2px solid var(--ink);
+        outline-offset: 2px;
+      }
+
+      .kicker {
+        margin: 0;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 650;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .readout {
+        display: flex;
+        align-items: baseline;
+        gap: 9px;
+        margin-left: auto;
+        white-space: nowrap;
+      }
+
+      .readout strong {
+        font-size: 18px;
+      }
+
+      .readout span {
+        color: var(--muted);
+        font-size: 10px;
+      }
+
+      [hidden] {
+        display: none !important;
+      }
+
+      .atlas-viewport {
+        position: relative;
+        min-height: 0;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        cursor: grab;
+        touch-action: none;
+        user-select: none;
+      }
+
+      .atlas-viewport.dragging {
+        cursor: grabbing;
+      }
+
+      .atlas-stage {
+        position: relative;
+        width: min(94%, calc((100svh - 178px) * var(--atlas-ratio)));
+        max-height: 94%;
+        aspect-ratio: var(--atlas-ratio);
+        flex: none;
+        transform: translate3d(var(--pan-x, 0), var(--pan-y, 0), 0)
+          scale(var(--zoom, 1));
+        transform-origin: center;
+        will-change: transform;
+      }
+
+      .atlas-stage img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: fill;
+        pointer-events: none;
+      }
+
+      .atlas-grid {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background:
+          repeating-linear-gradient(
+            90deg,
+            transparent 0 calc(var(--cell-pct-x) - 1px),
+            rgba(25, 25, 25, 0.09) calc(var(--cell-pct-x) - 1px) var(--cell-pct-x)
+          ),
+          repeating-linear-gradient(
+            0deg,
+            transparent 0 calc(var(--cell-pct-y) - 1px),
+            rgba(25, 25, 25, 0.09) calc(var(--cell-pct-y) - 1px) var(--cell-pct-y)
+          );
+      }
+
+      .frame-highlight {
+        position: absolute;
+        z-index: 3;
+        width: var(--cell-pct-x);
+        height: var(--cell-pct-y);
+        border: calc(3px / var(--zoom, 1)) solid var(--ink);
+        background: rgba(255, 226, 138, 0.24);
+        box-shadow:
+          0 0 0 calc(4px / var(--zoom, 1)) var(--yellow),
+          0 0 calc(20px / var(--zoom, 1)) rgba(255, 196, 31, 0.75);
+        pointer-events: none;
+      }
+
+      .zoom-controls,
+      .video-meta {
+        min-height: 58px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 10px 18px;
+        border-top: 1px solid var(--line);
+      }
+
+      .zoom-controls button {
+        min-width: 36px;
+        min-height: 34px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--paper);
+        color: var(--ink);
+        cursor: pointer;
+      }
+
+      .zoom-controls .reset {
+        min-width: 64px;
+        font-size: 11px;
+      }
+
+      .zoom-controls input {
+        width: min(220px, 42%);
+        accent-color: var(--ink);
+      }
+
+      .video-view {
+        min-height: 0;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        padding: 18px;
+      }
+
+      .video-shell {
+        position: relative;
+        width: min(84%, 62svh);
+        max-height: 100%;
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        overflow: hidden;
+        background: #00ff00;
+      }
+
+      .video-shell video {
+        display: block;
+        width: 100%;
+        max-height: calc(100svh - 190px);
+        object-fit: contain;
+      }
+
+      .video-badge {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        z-index: 2;
+        padding: 7px 10px;
+        border: 1px solid rgba(25, 25, 25, 0.18);
+        border-radius: 999px;
+        background: rgba(255, 254, 250, 0.9);
+        font: 650 10px/1 ui-monospace, Menlo, monospace;
+        letter-spacing: 0.08em;
+      }
+
+      .video-meta {
+        color: var(--muted);
+        font-size: 11px;
+        letter-spacing: 0.06em;
+      }
+
+      .preview-stage {
+        position: relative;
+        min-height: 0;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        touch-action: none;
+        user-select: none;
+      }
+
+      .preview-stage.drag-driver {
+        cursor: ew-resize;
+      }
+
+      .preview-stage::before {
+        content: "";
+        position: absolute;
+        width: min(82%, 430px);
+        aspect-ratio: 1;
+        border: 1px dashed rgba(25, 25, 25, 0.12);
+        border-radius: 50%;
+      }
+
+      .sprite {
+        position: relative;
+        z-index: 2;
+        width: min(78%, 430px);
+        aspect-ratio: var(--cell-ratio);
+        background-image: var(--atlas-image);
+        background-repeat: no-repeat;
+        background-size: calc(var(--columns) * 100%) calc(var(--rows) * 100%);
+        filter: drop-shadow(0 18px 22px rgba(25, 25, 25, 0.1));
+        will-change: background-position;
+      }
+
+      .target-dot {
+        position: absolute;
+        z-index: 4;
+        left: 50%;
+        top: 50%;
+        width: 14px;
+        height: 14px;
+        border: 3px solid var(--ink);
+        border-radius: 50%;
+        background: var(--yellow);
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.75);
+        transition: opacity 160ms ease, transform 160ms ease;
+        pointer-events: none;
+      }
+
+      .target-dot.visible {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+      }
+
+      .hint {
+        position: absolute;
+        top: 24px;
+        left: 50%;
+        z-index: 3;
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+        letter-spacing: 0.12em;
+        transform: translateX(-50%);
+        white-space: nowrap;
+        pointer-events: none;
+      }
+
+      .formula {
+        min-height: 58px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 9px;
+        padding: 12px 18px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 11px;
+        text-align: center;
+      }
+
+      .formula b {
+        color: var(--ink);
+        font-weight: 650;
+      }
+
+      .formula i {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: var(--yellow);
+        box-shadow: 0 0 0 1px var(--ink);
+      }
+
+      .loading-cover {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        display: grid;
+        place-items: center;
+        background: var(--paper);
+        transition: opacity 280ms ease, visibility 280ms ease;
+      }
+
+      .loading-cover::before {
+        content: "";
+        width: 34px;
+        aspect-ratio: 1;
+        border: 3px solid rgba(25, 25, 25, 0.12);
+        border-top-color: var(--ink);
+        border-radius: 50%;
+        animation: spin 700ms linear infinite;
+      }
+
+      .loading-cover.ready {
+        opacity: 0;
+        visibility: hidden;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(1turn); }
+      }
+
+      @media (max-width: 820px) {
+        .shell,
+        body.is-scroll .shell {
+          position: relative;
+          height: auto;
+          min-height: 100svh;
+          display: block;
+          padding: 14px;
+        }
+
+        body.is-scroll .shell {
+          position: sticky;
+          top: 0;
+        }
+
+        .topbar {
+          align-items: flex-start;
+          margin: 4px 2px 14px;
+        }
+
+        .topbar p {
+          display: none;
+        }
+
+        .workspace {
+          grid-template-columns: 1fr;
+        }
+
+        .panel {
+          min-height: 70svh;
+          border-radius: 22px;
+        }
+
+        .source-panel {
+          min-height: 78svh;
+        }
+
+        .atlas-stage {
+          width: min(96%, calc(55svh * var(--atlas-ratio)));
+        }
+
+        .preview-panel {
+          min-height: 70svh;
+        }
+
+        .sprite {
+          width: min(68vw, 390px);
+        }
+
+        body.is-scroll .source-panel {
+          display: none;
+        }
+
+        body.is-scroll .workspace {
+          height: calc(100svh - 76px);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .loading-cover,
+        .target-dot {
+          transition: none;
+        }
+
+        .loading-cover::before {
+          animation: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <script type="application/json" id="motion-config">__MOTION_EXPLAINER_CONFIG__</script>
+    <div class="loading-cover" id="loading-cover" aria-hidden="true"></div>
+
+    <main class="shell">
+      <header class="topbar">
+        <h1 id="page-title">动画原理展示</h1>
+        <p id="driver-summary">Input → Smooth → Frame → Sprite</p>
+      </header>
+
+      <div class="workspace">
+        <section class="panel source-panel" aria-label="动画素材">
+          <header class="panel-head">
+            <div class="source-tabs" role="tablist" aria-label="查看动画素材">
+              <button class="source-tab" id="tab-atlas" type="button" role="tab"
+                aria-selected="true" aria-controls="panel-atlas">雪碧图</button>
+              <button class="source-tab" id="tab-video" type="button" role="tab"
+                aria-selected="false" aria-controls="panel-video">母版视频</button>
+            </div>
+            <div class="readout" id="atlas-readout" aria-live="polite">
+              <strong id="frame-number">000</strong>
+              <span id="frame-position">ROW 01 · COL 01</span>
+            </div>
+            <div class="readout" id="video-readout" hidden>
+              <strong id="video-time">00:00</strong>
+              <span>MASTER</span>
+            </div>
+          </header>
+
+          <div class="atlas-viewport" id="panel-atlas" role="tabpanel"
+            aria-labelledby="tab-atlas">
+            <div class="atlas-stage" id="atlas-stage">
+              <img id="atlas-image" alt="动画完整雪碧图" draggable="false" />
+              <div class="atlas-grid" aria-hidden="true"></div>
+              <div class="frame-highlight" id="frame-highlight" aria-hidden="true"></div>
+            </div>
+          </div>
+
+          <div class="video-view" id="panel-video" role="tabpanel"
+            aria-labelledby="tab-video" hidden>
+            <div class="video-shell">
+              <span class="video-badge">AI MOTION · ORIGINAL</span>
+              <video id="source-video" controls muted loop playsinline preload="metadata"></video>
+            </div>
+          </div>
+
+          <div class="zoom-controls" id="atlas-controls" aria-label="雪碧图缩放">
+            <button id="zoom-out" type="button" aria-label="缩小">−</button>
+            <input id="zoom-range" type="range" min="1" max="4" step="0.05"
+              value="1" aria-label="雪碧图缩放比例" />
+            <button id="zoom-in" type="button" aria-label="放大">＋</button>
+            <button class="reset" id="zoom-reset" type="button">100%</button>
+          </div>
+          <div class="video-meta" id="video-meta" hidden>
+            <span>AI 生成的动作母版</span>
+          </div>
+        </section>
+
+        <section class="panel preview-panel" aria-label="实时渲染">
+          <header class="panel-head">
+            <p class="kicker" id="driver-label">实时渲染</p>
+            <div class="readout">
+              <strong id="rendered-frame">000</strong>
+              <span>RENDERED FRAME</span>
+            </div>
+          </header>
+          <div class="preview-stage" id="preview-stage">
+            <p class="hint" id="hint"></p>
+            <div class="sprite" id="sprite" role="img" aria-label="实时动画"></div>
+            <div class="target-dot" id="target-dot" aria-hidden="true"></div>
+          </div>
+          <div class="formula" id="formula" aria-label="动画实现原理"></div>
+        </section>
+      </div>
+    </main>
+    <div class="scroll-spacer" aria-hidden="true"></div>
+
+    <script>
+      (() => {
+        const config = JSON.parse(
+          document.querySelector("#motion-config").textContent,
+        );
+        const FRAME_COUNT = config.frameCount;
+        const COLUMNS = config.columns;
+        const ROWS = config.rows;
+        const REST_FRAME = config.restFrame;
+        const CIRCULAR = config.driver === "pointer-angle";
+        const FULL_TURN = Math.PI * 2;
+        const ANGLE_START = (config.angleStartDeg * Math.PI) / 180;
+        const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+        const root = document.documentElement;
+        const body = document.body;
+        const loadingCover = document.querySelector("#loading-cover");
+        const pageTitle = document.querySelector("#page-title");
+        const driverSummary = document.querySelector("#driver-summary");
+        const driverLabel = document.querySelector("#driver-label");
+        const hint = document.querySelector("#hint");
+        const formula = document.querySelector("#formula");
+        const previewStage = document.querySelector("#preview-stage");
+        const sprite = document.querySelector("#sprite");
+        const targetDot = document.querySelector("#target-dot");
+        const highlight = document.querySelector("#frame-highlight");
+        const frameNumber = document.querySelector("#frame-number");
+        const framePosition = document.querySelector("#frame-position");
+        const renderedFrame = document.querySelector("#rendered-frame");
+        const atlasImage = document.querySelector("#atlas-image");
+        const atlasViewport = document.querySelector("#panel-atlas");
+        const atlasStage = document.querySelector("#atlas-stage");
+        const zoomRange = document.querySelector("#zoom-range");
+        const zoomReset = document.querySelector("#zoom-reset");
+        const sourceVideo = document.querySelector("#source-video");
+        const videoTab = document.querySelector("#tab-video");
+        const videoPanel = document.querySelector("#panel-video");
+        const videoMeta = document.querySelector("#video-meta");
+        const videoReadout = document.querySelector("#video-readout");
+        const atlasReadout = document.querySelector("#atlas-readout");
+        const atlasControls = document.querySelector("#atlas-controls");
+        const videoTime = document.querySelector("#video-time");
+        const sourceTabs = [...document.querySelectorAll(".source-tab")];
+
+        const driverCopy = {
+          "pointer-angle": {
+            label: "POINTER ANGLE",
+            hint: "移动指针，观察方向如何映射成帧",
+            summary: "Pointer → Angle → Frame → Sprite",
+            formula: ["指针方向", "atan2", "smoothDamp", "background-position"],
+          },
+          "pointer-x": {
+            label: "POINTER X",
+            hint: "左右移动指针，控制动画进度",
+            summary: "Pointer X → Progress → Frame → Sprite",
+            formula: ["指针 X", "progress", "smoothDamp", "background-position"],
+          },
+          drag: {
+            label: "DRAG",
+            hint: "左右拖拽，逐帧查看动作",
+            summary: "Drag → Progress → Frame → Sprite",
+            formula: ["拖拽距离", "progress", "smoothDamp", "background-position"],
+          },
+          scroll: {
+            label: "SCROLL",
+            hint: "继续向下滚动，时间轴会跟着前进",
+            summary: "Scroll → Progress → Frame → Sprite",
+            formula: ["滚动进度", "progress", "smoothDamp", "background-position"],
+          },
+          autoplay: {
+            label: "AUTOPLAY",
+            hint: "时间轴正在自动播放",
+            summary: "Time → Progress → Frame → Sprite",
+            formula: ["时间", config.autoplayMode, "frame", "background-position"],
+          },
+        };
+        const copy = driverCopy[config.driver];
+
+        const clamp = (value, min = 0, max = 1) =>
+          Math.min(max, Math.max(min, value));
+        const wrap = (value) =>
+          ((value % FRAME_COUNT) + FRAME_COUNT) % FRAME_COUNT;
+        const shortestDelta = (from, to) => {
+          let delta = wrap(to) - wrap(from);
+          if (delta > FRAME_COUNT / 2) delta -= FRAME_COUNT;
+          if (delta < -FRAME_COUNT / 2) delta += FRAME_COUNT;
+          return delta;
+        };
+        const setTarget = (target) => {
+          frameTarget = CIRCULAR
+            ? frameValue + shortestDelta(frameValue, target)
+            : clamp(target, 0, FRAME_COUNT - 1);
+          schedule();
+        };
+        const smoothDamp = (
+          current, target, velocity, smoothTime, maxSpeed, deltaTime,
+        ) => {
+          const safeTime = Math.max(0.0001, smoothTime);
+          const omega = 2 / safeTime;
+          const x = omega * deltaTime;
+          const decay = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
+          const originalTarget = target;
+          const change = clamp(
+            current - target,
+            -maxSpeed * safeTime,
+            maxSpeed * safeTime,
+          );
+          const limitedTarget = current - change;
+          const temp = (velocity + omega * change) * deltaTime;
+          let nextVelocity = (velocity - omega * temp) * decay;
+          let next = limitedTarget + (change + temp) * decay;
+          if ((originalTarget - current > 0) === (next > originalTarget)) {
+            next = originalTarget;
+            nextVelocity = 0;
+          }
+          return [next, nextVelocity];
+        };
+
+        let frameTarget = REST_FRAME;
+        let frameValue = REST_FRAME;
+        let frameVelocity = 0;
+        let lastRendered = -1;
+        let lastTime = 0;
+        let raf = 0;
+        let autoStart = 0;
+        let dragPreviewId = null;
+        let dragStartX = 0;
+        let dragStartFrame = REST_FRAME;
+
+        let zoom = 1;
+        let panX = 0;
+        let panY = 0;
+        let atlasDragId = null;
+        let atlasDragX = 0;
+        let atlasDragY = 0;
+        let atlasPanX = 0;
+        let atlasPanY = 0;
+
+        const setFrame = (frame) => {
+          const column = frame % COLUMNS;
+          const row = Math.floor(frame / COLUMNS);
+          const x = COLUMNS === 1 ? 0 : (column / (COLUMNS - 1)) * 100;
+          const y = ROWS === 1 ? 0 : (row / (ROWS - 1)) * 100;
+          sprite.style.backgroundPosition = `${x}% ${y}%`;
+          highlight.style.left = `${(column / COLUMNS) * 100}%`;
+          highlight.style.top = `${(row / ROWS) * 100}%`;
+          frameNumber.textContent = String(frame).padStart(3, "0");
+          renderedFrame.textContent = String(frame).padStart(3, "0");
+          framePosition.textContent =
+            `ROW ${String(row + 1).padStart(2, "0")} · COL ${String(column + 1).padStart(2, "0")}`;
+        };
+
+        const schedule = () => {
+          if (!raf) raf = requestAnimationFrame(loop);
+        };
+
+        const autoplayTarget = (now) => {
+          if (!autoStart) autoStart = now;
+          const raw = ((now - autoStart) / 1000) * config.autoplayFps;
+          if (config.autoplayMode === "once") {
+            return Math.min(raw, FRAME_COUNT - 1);
+          }
+          if (config.autoplayMode === "pingpong") {
+            const span = Math.max(1, (FRAME_COUNT - 1) * 2);
+            const phase = raw % span;
+            return phase <= FRAME_COUNT - 1 ? phase : span - phase;
+          }
+          return raw % FRAME_COUNT;
+        };
+
+        const loop = (now) => {
+          raf = 0;
+          const dt = lastTime ? Math.min((now - lastTime) / 1000, 1 / 30) : 1 / 60;
+          lastTime = now;
+
+          if (config.driver === "autoplay" && !reduceMotion) {
+            frameTarget = autoplayTarget(now);
+          }
+
+          if (reduceMotion) {
+            frameValue = config.driver === "scroll" ? frameTarget : REST_FRAME;
+            frameVelocity = 0;
+          } else {
+            [frameValue, frameVelocity] = smoothDamp(
+              frameValue,
+              frameTarget,
+              frameVelocity,
+              config.smoothTime,
+              config.maxFrameSpeed,
+              dt,
+            );
+          }
+
+          const rendered = CIRCULAR || config.autoplayMode === "loop"
+            ? wrap(Math.round(frameValue))
+            : clamp(Math.round(frameValue), 0, FRAME_COUNT - 1);
+          if (rendered !== lastRendered) {
+            setFrame(rendered);
+            lastRendered = rendered;
+          }
+
+          const moving =
+            Math.abs(frameTarget - frameValue) > 0.003 ||
+            Math.abs(frameVelocity) > 0.003;
+          const keepPlaying =
+            config.driver === "autoplay" &&
+            !reduceMotion &&
+            !(config.autoplayMode === "once" && frameTarget >= FRAME_COUNT - 1);
+          if (moving || keepPlaying) raf = requestAnimationFrame(loop);
+        };
+
+        const pointerPosition = (event) => {
+          const rect = previewStage.getBoundingClientRect();
+          targetDot.style.left = `${clamp(event.clientX - rect.left, 10, rect.width - 10)}px`;
+          targetDot.style.top = `${clamp(event.clientY - rect.top, 10, rect.height - 10)}px`;
+          targetDot.classList.add("visible");
+          return rect;
+        };
+
+        const updatePointer = (event) => {
+          if (config.driver !== "pointer-angle" && config.driver !== "pointer-x") return;
+          const stageRect = pointerPosition(event);
+          if (config.driver === "pointer-x") {
+            const progress = clamp((event.clientX - stageRect.left) / stageRect.width);
+            setTarget(progress * (FRAME_COUNT - 1));
+            return;
+          }
+          const rect = sprite.getBoundingClientRect();
+          const originX = rect.left + rect.width / 2;
+          const originY = rect.top + rect.height / 2;
+          const angle = Math.atan2(event.clientY - originY, event.clientX - originX);
+          const progress = ((angle - ANGLE_START + FULL_TURN) % FULL_TURN) / FULL_TURN;
+          setTarget(progress * FRAME_COUNT);
+        };
+
+        const updateScroll = () => {
+          if (config.driver !== "scroll") return;
+          const maxScroll = Math.max(1, document.documentElement.scrollHeight - innerHeight);
+          setTarget(clamp(scrollY / maxScroll) * (FRAME_COUNT - 1));
+        };
+
+        const clampPan = () => {
+          const maxX = Math.max(
+            0,
+            (atlasStage.offsetWidth * zoom - atlasViewport.clientWidth) / 2,
+          );
+          const maxY = Math.max(
+            0,
+            (atlasStage.offsetHeight * zoom - atlasViewport.clientHeight) / 2,
+          );
+          panX = clamp(panX, -maxX, maxX);
+          panY = clamp(panY, -maxY, maxY);
+        };
+        const renderZoom = () => {
+          clampPan();
+          atlasStage.style.setProperty("--zoom", zoom.toFixed(3));
+          atlasStage.style.setProperty("--pan-x", `${panX.toFixed(1)}px`);
+          atlasStage.style.setProperty("--pan-y", `${panY.toFixed(1)}px`);
+          zoomRange.value = String(zoom);
+          zoomReset.textContent = `${Math.round(zoom * 100)}%`;
+        };
+        const setZoom = (next) => {
+          zoom = clamp(next, 1, 4);
+          if (zoom === 1) {
+            panX = 0;
+            panY = 0;
+          }
+          renderZoom();
+        };
+
+        const selectSource = (source) => {
+          const video = source === "video";
+          sourceTabs.forEach((tab) => {
+            const selected = tab.id === (video ? "tab-video" : "tab-atlas");
+            tab.setAttribute("aria-selected", String(selected));
+            tab.tabIndex = selected ? 0 : -1;
+          });
+          atlasViewport.hidden = video;
+          videoPanel.hidden = !video;
+          atlasReadout.hidden = video;
+          videoReadout.hidden = !video;
+          atlasControls.hidden = video;
+          videoMeta.hidden = !video;
+          if (video) sourceVideo.play().catch(() => {});
+          else sourceVideo.pause();
+        };
+
+        pageTitle.textContent = config.title;
+        document.title = `Oil Motion — ${config.title}`;
+        driverSummary.textContent = copy.summary;
+        driverLabel.textContent = copy.label;
+        hint.textContent = copy.hint;
+        formula.innerHTML = copy.formula
+          .map((part, index) => `${index ? "<i></i>" : ""}${index === 0 || index === copy.formula.length - 1 ? `<b>${part}</b>` : `<span>${part}</span>`}`)
+          .join("");
+
+        const atlasRatio =
+          (COLUMNS * config.cellWidth) / (ROWS * config.cellHeight);
+        root.style.setProperty("--atlas-ratio", String(atlasRatio));
+        root.style.setProperty("--cell-ratio", String(config.cellWidth / config.cellHeight));
+        root.style.setProperty("--columns", String(COLUMNS));
+        root.style.setProperty("--rows", String(ROWS));
+        root.style.setProperty("--cell-pct-x", `${100 / COLUMNS}%`);
+        root.style.setProperty("--cell-pct-y", `${100 / ROWS}%`);
+        root.style.setProperty("--atlas-image", `url("${config.atlasUrl.replaceAll('"', '\\"')}")`);
+        root.style.setProperty("--scroll-height", `${config.scrollPages * 100}svh`);
+        atlasImage.src = config.atlasUrl;
+
+        if (config.driver === "scroll") {
+          body.classList.add("is-scroll");
+          addEventListener("scroll", updateScroll, { passive: true });
+        }
+        if (config.driver === "drag") {
+          previewStage.classList.add("drag-driver");
+          previewStage.addEventListener("pointerdown", (event) => {
+            dragPreviewId = event.pointerId;
+            dragStartX = event.clientX;
+            dragStartFrame = clamp(frameValue, 0, FRAME_COUNT - 1);
+            previewStage.setPointerCapture(event.pointerId);
+          });
+          previewStage.addEventListener("pointermove", (event) => {
+            if (event.pointerId !== dragPreviewId) return;
+            const width = Math.max(1, previewStage.clientWidth);
+            setTarget(
+              dragStartFrame +
+              ((event.clientX - dragStartX) / width) * (FRAME_COUNT - 1),
+            );
+          });
+          const endPreviewDrag = (event) => {
+            if (event.pointerId !== dragPreviewId) return;
+            dragPreviewId = null;
+            if (previewStage.hasPointerCapture(event.pointerId)) {
+              previewStage.releasePointerCapture(event.pointerId);
+            }
+          };
+          previewStage.addEventListener("pointerup", endPreviewDrag);
+          previewStage.addEventListener("pointercancel", endPreviewDrag);
+        }
+
+        addEventListener("pointermove", updatePointer, { passive: true });
+        document.documentElement.addEventListener("pointerleave", () => {
+          targetDot.classList.remove("visible");
+        });
+        addEventListener("resize", () => {
+          renderZoom();
+          updateScroll();
+        });
+
+        sourceTabs.forEach((tab) => {
+          tab.addEventListener("click", () => {
+            selectSource(tab.id === "tab-video" ? "video" : "atlas");
+          });
+          tab.addEventListener("keydown", (event) => {
+            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+            event.preventDefault();
+            const index = sourceTabs.indexOf(tab);
+            const next = sourceTabs[(index + 1) % sourceTabs.length];
+            next.focus();
+            next.click();
+          });
+        });
+
+        if (!config.videoUrl) {
+          videoTab.hidden = true;
+          sourceTabs.splice(sourceTabs.indexOf(videoTab), 1);
+        } else {
+          sourceVideo.src = config.videoUrl;
+          sourceVideo.addEventListener("timeupdate", () => {
+            const seconds = Math.max(0, Math.floor(sourceVideo.currentTime || 0));
+            videoTime.textContent =
+              `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+          });
+        }
+
+        atlasViewport.addEventListener("wheel", (event) => {
+          event.preventDefault();
+          setZoom(zoom + (event.deltaY > 0 ? -0.16 : 0.16));
+        }, { passive: false });
+        atlasViewport.addEventListener("pointerdown", (event) => {
+          atlasDragId = event.pointerId;
+          atlasDragX = event.clientX;
+          atlasDragY = event.clientY;
+          atlasPanX = panX;
+          atlasPanY = panY;
+          atlasViewport.setPointerCapture(event.pointerId);
+          atlasViewport.classList.add("dragging");
+        });
+        atlasViewport.addEventListener("pointermove", (event) => {
+          if (event.pointerId !== atlasDragId) return;
+          panX = atlasPanX + event.clientX - atlasDragX;
+          panY = atlasPanY + event.clientY - atlasDragY;
+          renderZoom();
+        });
+        const endAtlasDrag = (event) => {
+          if (event.pointerId !== atlasDragId) return;
+          atlasDragId = null;
+          atlasViewport.classList.remove("dragging");
+          if (atlasViewport.hasPointerCapture(event.pointerId)) {
+            atlasViewport.releasePointerCapture(event.pointerId);
+          }
+        };
+        atlasViewport.addEventListener("pointerup", endAtlasDrag);
+        atlasViewport.addEventListener("pointercancel", endAtlasDrag);
+        zoomRange.addEventListener("input", () => setZoom(Number(zoomRange.value)));
+        document.querySelector("#zoom-out").addEventListener("click", () => setZoom(zoom - 0.25));
+        document.querySelector("#zoom-in").addEventListener("click", () => setZoom(zoom + 0.25));
+        zoomReset.addEventListener("click", () => setZoom(1));
+
+        setFrame(REST_FRAME);
+        renderZoom();
+        updateScroll();
+
+        const asset = new Image();
+        asset.src = config.atlasUrl;
+        const decoded = typeof asset.decode === "function"
+          ? asset.decode()
+          : new Promise((resolve, reject) => {
+              asset.onload = resolve;
+              asset.onerror = reject;
+            });
+        decoded.catch(() => {}).finally(() => {
+          loadingCover.classList.add("ready");
+          schedule();
+        });
+      })();
+    </script>
+  </body>
+</html>

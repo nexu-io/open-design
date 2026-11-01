@@ -69,6 +69,7 @@ export type ChatArtifactVideoFrameExtractor = (input: {
   absolutePath: string;
   outputPath: string;
   budgetMs: number;
+  timeSeconds?: number;
 }) => Promise<void>;
 
 export type FreezeVideoFrameOutcome =
@@ -76,7 +77,7 @@ export type FreezeVideoFrameOutcome =
   | { ok: false; failureCode: ChatArtifactFailureCode };
 
 /**
- * Decode the first frame of `absolutePath` into `outputPath`, or throw.
+ * Decode the frame at `timeSeconds` (default: the first frame) into `outputPath`.
  *
  * `-nostdin` matters: ffmpeg reads stdin by default, and a child that inherits
  * the daemon's would swallow input meant for the process. `-an -sn` keeps the
@@ -92,6 +93,7 @@ export const extractVideoFirstFrameWithFfmpeg: ChatArtifactVideoFrameExtractor =
         '-hide_banner',
         '-loglevel',
         'error',
+        ...(input.timeSeconds === undefined ? [] : ['-ss', String(input.timeSeconds)]),
         '-i',
         input.absolutePath,
         '-frames:v',
@@ -134,7 +136,7 @@ export const extractVideoFirstFrameWithFfmpeg: ChatArtifactVideoFrameExtractor =
   });
 
 /**
- * Extract the first frame inside a verified window.
+ * Extract the selected frame inside a verified window; ordinary videos default to zero.
  *
  * The stat pair around the decode is the whole guarantee: the frame must come
  * from the bytes this turn produced, and a write that landed while ffmpeg was
@@ -149,7 +151,9 @@ export async function freezeVideoFirstFrame(
   absolutePath: string,
   extract: ChatArtifactVideoFrameExtractor = extractVideoFirstFrameWithFfmpeg,
   budgetMs: number = CHAT_ARTIFACT_VIDEO_FRAME_BUDGET_MS,
+  timeSeconds?: number,
 ): Promise<FreezeVideoFrameOutcome> {
+  if (timeSeconds !== undefined && (!Number.isFinite(timeSeconds) || timeSeconds < 0)) return { ok: false, failureCode: 'renderer_unavailable' };
   let before: fs.Stats;
   try {
     before = await fs.promises.stat(absolutePath);
@@ -168,7 +172,7 @@ export async function freezeVideoFirstFrame(
 
   try {
     try {
-      await extract({ absolutePath, outputPath, budgetMs });
+      await extract({ absolutePath, outputPath, budgetMs, ...(timeSeconds === undefined ? {} : { timeSeconds }) });
     } catch (err) {
       // `timeout` is worth telling apart from a decode that simply failed: one
       // is a capacity signal about this daemon, the other is about this file.

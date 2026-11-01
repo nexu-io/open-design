@@ -54,15 +54,25 @@ export function MarqueeLabel({
       }
     };
     measure();
+    // The travel direction comes from the document's `dir`, which I18nProvider
+    // writes in a passive effect — after this layout effect on first mount, and
+    // on a locale switch that leaves both boxes the same size. Neither prompts a
+    // resize, so the attribute itself is watched or the sign would go stale.
+    const dirObserver =
+      typeof MutationObserver === 'undefined' ? null : new MutationObserver(measure);
+    dirObserver?.observe(document.documentElement, { attributeFilter: ['dir'] });
     // The slot resizes with the column it lives in; the inner one settles late
     // when a webfont swaps in. Either changes the answer, so both are watched —
     // and where ResizeObserver is missing (jsdom) the one measurement above
     // still stands, since neither box moves in a test render.
-    if (typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(slot);
-    observer.observe(inner);
-    return () => observer.disconnect();
+    const sizeObserver =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    sizeObserver?.observe(slot);
+    sizeObserver?.observe(inner);
+    return () => {
+      dirObserver?.disconnect();
+      sizeObserver?.disconnect();
+    };
   }, [text]);
   return (
     <span className={className ? `od-marquee ${className}` : 'od-marquee'} ref={slotRef}>

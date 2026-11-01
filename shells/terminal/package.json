@@ -12,11 +12,11 @@
     "typecheck": "tsc -p tsconfig.tests.json --noEmit"
   },
   "devDependencies": {
+    "@typescript/native": "npm:typescript@7.0.2",
     "@open-design/platform": "workspace:*",
     "@open-design/sidecar": "workspace:*",
     "@open-design/standalone": "workspace:*",
     "@types/node": "24.12.2",
-    "typescript": "6.0.3",
     "vitest": "4.1.6"
   },
   "engines": {"node": "~24"}

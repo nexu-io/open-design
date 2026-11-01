@@ -312,7 +312,7 @@ describe('createVelaCliResourceAdapter', () => {
     });
     const adapter = createVelaCliResourceAdapter({ ...OPTS, run });
     const result = await adapter.pull!({ projectId: 'p1' });
-    expect(result).toEqual({ version: 1, versionId: 'v1' });
+    expect(result).toEqual({ version: 1, versionId: 'v1', resourceId: 'project-p1' });
     expect(calls[0]).toEqual(['pull', 'design_system', 'project-p1', '/copies/p1', '--ref', 'published', '--json']);
   });
 
@@ -524,8 +524,8 @@ describe('unpublish retraction idempotency (dangling team-catalog heal)', () => 
     await expect(adapter.unpublish!({ projectId: 'p1' })).rejects.toThrow('network unreachable');
   });
 
-  it('an unshare retry against an already-retracted resource completes the catalog removal', async () => {
-    // The exact retry a stuck sharer fires from the UI: the resource row is
+  it('a permanent-delete retry against an already-retracted resource completes catalog removal', async () => {
+    // Retry a permanent deletion: the resource row is
     // already tombstoned (first attempt half-landed), the catalog row is the
     // one thing left to remove. Before the fix the retry rejected at the
     // resource step and never reached the catalog.
@@ -545,7 +545,7 @@ describe('unpublish retraction idempotency (dangling team-catalog heal)', () => 
       teamProjectCatalog: { upsert: async () => ({}), remove: catalogRemove },
     });
     try {
-      await expect(runtime.requestTeamUnshare('p1', principal)).resolves.toBeUndefined();
+      await expect(runtime.requestTeamDelete('p1', principal)).resolves.toBeUndefined();
       expect(catalogRemove).toHaveBeenCalledWith('p1', principal);
     } finally {
       runtime.dispose();

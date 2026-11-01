@@ -22,6 +22,7 @@
 import type { ProjectKind, ProjectMetadata } from '@open-design/contracts';
 import type { DefaultScenarioPluginId } from '@open-design/contracts';
 import type { IconName } from '../Icon';
+import { CREATION_TYPE_ORDER as CREATE_RAIL_ORDER } from '../creation-type-order';
 
 // Plugin ids the chip rail can dispatch to. Most chips route to a
 // `DefaultScenarioPluginId` so the same fallback table the daemon
@@ -223,6 +224,25 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     },
   },
   {
+    id: 'motion-design',
+    label: 'Motion design',
+    icon: 'video-ai',
+    group: 'create',
+    description: 'Animated stories, typography and product films',
+    hint: 'Describe the idea, style and duration of your motion film.',
+    action: {
+      kind: 'apply-scenario',
+      pluginId: 'od-new-generation',
+      projectKind: 'video',
+      automaticDefault: true,
+      projectMetadata: {
+        kind: 'video',
+        intent: 'motion-design',
+        videoModel: 'hyperframes-html',
+      },
+    },
+  },
+  {
     id: 'hyperframes',
     label: 'HyperFrames',
     icon: 'orbit',
@@ -381,32 +401,19 @@ export function chipsForGroup(group: ChipGroup): HomeHeroChip[] {
   return HOME_HERO_CHIPS.filter((c) => c.group === group);
 }
 
-// Fixed Home information architecture. Only these ten output types are
-// top-level choices. Action-only create entries (for example Create Design
-// System) are intentionally excluded. Prototype leads and Slide deck follows;
-// the media scenarios trail so at typical widths they live in the 更多
-// overflow popover rather than the visible pill row.
-export const CREATE_RAIL_ORDER = [
-  'prototype',
-  'deck',
-  'document',
-  'image',
-  'web-clone',
-  'hyperframes',
-  'webgl',
-  'live-artifact',
-  'video',
-  'audio',
-] as const;
+// Preserve the existing Home API while sharing its priority with Community.
+// Action-only entries (for example Create Design System) remain excluded.
+export { CREATION_TYPE_ORDER as CREATE_RAIL_ORDER } from '../creation-type-order';
 
 // The Home type row is an explicit product decision, not a width computation
 // (OPEND-3146, 2026-09-16): three entry types stay inline, and 更多 holds EVERY
 // other create type in this exact order, so no artifact kind loses its
 // discoverable entry to the fold. The two lists together cover
 // `CREATE_RAIL_ORDER`; `TypePillRow.more-order.test.tsx` pins both.
-export const HOME_TYPE_ROW_IDS: readonly string[] = ['prototype', 'deck', 'document'];
+export const HOME_TYPE_ROW_IDS: readonly string[] = ['prototype', 'motion-design', 'deck'];
 export const HOME_TYPE_ROW_MORE_IDS: readonly string[] = [
   'image',
+  'document',
   'hyperframes',
   'web-clone',
   'video',
@@ -417,11 +424,12 @@ export const HOME_TYPE_ROW_MORE_IDS: readonly string[] = [
 
 // Chip ids the onboarding "build a design system" teaser intentionally omits.
 // Video and Audio are pure-media outputs and the least central to the
-// design-system story, so they are omitted to keep the teaser chips to a
-// single tidy row. Website clone starts
+// design-system story. Motion design is a separate film-creation entry, so
+// it also stays off this curated teaser to preserve its single tidy row.
+// Website clone starts
 // from someone else's site rather than the user's design system, so it stays
 // off the design-system teaser too.
-const ONBOARDING_ARTIFACT_OMIT = new Set<string>(['web-clone', 'video', 'audio']);
+const ONBOARDING_ARTIFACT_OMIT = new Set<string>(['web-clone', 'motion-design', 'video', 'audio']);
 
 // The artifact chips shown on the onboarding "build a design system" step — a
 // curated single-row subset of the create rail. Derived from CREATE_RAIL_ORDER

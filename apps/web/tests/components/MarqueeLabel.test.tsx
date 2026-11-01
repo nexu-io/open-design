@@ -7,10 +7,11 @@
 // which no stylesheet can know. jsdom has no layout, so the two box widths are
 // stubbed per element here.
 
-import { cleanup, render } from '@testing-library/react';
+import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { MarqueeLabel } from '../../src/components/MarqueeLabel';
+import { I18nProvider, useI18n, type Locale } from '../../src/i18n';
 
 type Widths = { slotClientWidth: number; textScrollWidth: number };
 
@@ -76,6 +77,34 @@ describe('MarqueeLabel (OPEND-3112)', () => {
     const slot = container.querySelector<HTMLElement>('.od-marquee');
     expect(slot?.dataset.marquee).toBe('on');
     expect(slot?.style.getPropertyValue('--marquee-duration')).toBe('650ms');
+  });
+
+  // The direction comes from <html dir>, which I18nProvider writes in a passive
+  // effect — after this label's layout effect has already measured. Switching
+  // English → Arabic changes neither the text nor either box, so nothing else
+  // would prompt a re-measure and the name would keep sliding the LTR way.
+  it.each([
+    { name: 'mounts in Arabic', initial: 'ar' as const, switchTo: null },
+    { name: 'switches English → Arabic', initial: 'en' as const, switchTo: 'ar' as const },
+  ])('follows the document direction when the app $name', async ({ initial, switchTo }) => {
+    restore = stubWidths({ slotClientWidth: 120, textScrollWidth: 200 });
+    document.documentElement.setAttribute('dir', 'ltr');
+    let setLocale: ((next: Locale) => void) | null = null;
+    function LocaleHandle() {
+      setLocale = useI18n().setLocale;
+      return null;
+    }
+    const { container } = render(
+      <I18nProvider initial={initial}>
+        <LocaleHandle />
+        <MarqueeLabel text="Leon Wang's very long personal workspace" />
+      </I18nProvider>,
+    );
+    if (switchTo) act(() => setLocale?.(switchTo));
+    expect(document.documentElement.getAttribute('dir')).toBe('rtl');
+    const slot = container.querySelector<HTMLElement>('.od-marquee');
+    await waitFor(() => expect(slot?.style.getPropertyValue('--marquee-shift')).toBe('80px'));
+    document.documentElement.setAttribute('dir', 'ltr');
   });
 
   it('never moves a name that already fits', () => {

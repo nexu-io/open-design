@@ -43,7 +43,7 @@
  *    **在这里量不到**,本文件一个字都没有断言它。那一条只能真机验。
  */
 
-import { act, cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ProjectView } from '../../src/components/ProjectView';
@@ -113,6 +113,9 @@ vi.mock('../../src/providers/project-events', () => ({ useProjectFileEvents: vi.
 vi.mock('../../src/router', () => ({ navigate: vi.fn() }));
 
 vi.mock('../../src/state/projects', () => ({
+  registerQueuedSubmission: vi.fn(async (projectId, submission) => ({
+    id: submission.id, projectId, conversationId: submission.conversationId, acceptedAt: submission.submittedAt,
+  })),
   cacheTabsLocally: vi.fn((projectId: string, tabs: unknown) => ({ projectId, tabs })),
   createConversation: vi.fn(),
   deleteConversation: vi.fn(),
@@ -132,7 +135,10 @@ vi.mock('../../src/components/AvatarMenu', () => ({ AvatarMenu: () => null }));
 vi.mock('../../src/components/Loading', () => ({ CenteredLoader: () => null }));
 vi.mock('../../src/components/FileWorkspace', () => ({
   DESIGN_SYSTEM_TAB: '__design_system__',
-  FileWorkspace: () => null,
+  FileWorkspace: ({ shareRequest }: { shareRequest?: { name: string; nonce: number; anchorId?: string } | null }) => (
+    <output data-testid="project-view-share-request" data-file={shareRequest?.name ?? ''}
+      data-nonce={shareRequest?.nonce ?? ''} data-anchor={shareRequest?.anchorId ?? ''} />
+  ),
 }));
 
 /*
@@ -142,7 +148,7 @@ vi.mock('../../src/components/FileWorkspace', () => ({
 vi.mock('../../src/components/ChatPane', async () => {
   const { AssistantMessage } = await import('../../src/components/AssistantMessage');
   return {
-    ChatPane: ({ messages }: { messages: ChatMessage[] }) => (
+    ChatPane: ({ messages, onArtifactShare }: { messages: ChatMessage[]; onArtifactShare?: (fileName: string, anchorId?: string) => void }) => (
       <>
         {messages
           .filter((message) => message.role === 'assistant')
@@ -152,6 +158,7 @@ vi.mock('../../src/components/ChatPane', async () => {
               message={message}
               streaming={false}
               projectId={PROJECT_ID}
+              onArtifactShare={onArtifactShare}
             />
           ))}
       </>
@@ -292,6 +299,19 @@ beforeEach(() => {
 });
 
 describe('封面在终止帧之后才落地时,卡面必须自己换成快照', () => {
+  it('F13 real ProjectView card passes a monotonic same-ms named request into FileWorkspace', async () => {
+    renderProjectView();
+    const share = await screen.findByTestId(`artifact-card-publish-${ARTIFACT}`);
+    expect(share).toBeEnabled();
+    const bridge = screen.getByTestId('project-view-share-request');
+    vi.spyOn(Date, 'now').mockReturnValue(1710000000000);
+    for (const nonce of [1710000000000, 1710000000001, 1710000000002]) {
+      fireEvent.click(share);
+      await waitFor(() => expect(bridge).toHaveAttribute('data-nonce', String(nonce)));
+      expect(bridge).toHaveAttribute('data-file', ARTIFACT);
+      expect(bridge.getAttribute('data-anchor')).toBeTruthy();
+    }
+  });
   it('refreshes an already-ready latest cover through three revisions without changing an earlier turn', async () => {
     const latest = finishedTurn(readyRef)[0]!;
     const historical: ChatMessage = {

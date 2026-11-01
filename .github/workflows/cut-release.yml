@@ -123,7 +123,9 @@ jobs:
           git config user.email 'open-design-release-bot[bot]@users.noreply.github.com'
           git switch -c "$BRANCH"
           ( cd apps/packaged && npm pkg set version="$VERSION" )
-          git commit -am "chore(release): v$VERSION"
+          # A withdrawn version may already be main's version; keep a cut marker
+          # commit even when setting it again leaves the packaged manifest unchanged.
+          git commit --allow-empty -am "chore(release): v$VERSION"
           git push origin "$BRANCH"   # App token push -> triggers notify-release-feishu (nightly + Feishu)
 
       - name: Create backport label

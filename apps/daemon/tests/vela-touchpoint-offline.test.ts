@@ -24,7 +24,7 @@ import type { AddressInfo } from 'node:net';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AppConfigPrefs } from '../src/app-config.js';
 import { registerVelaRoutes } from '../src/routes/vela.js';
@@ -115,7 +115,21 @@ const RECEIPT = {
   touchpointDecisionId: 'decision-1',
 } as const;
 
-type Reply = Readonly<{ status: number; body: unknown; padTo?: number; gzip?: boolean }>;
+/**
+ * `cut` sends the status line and the start of a body, then drops the
+ * connection; `stall` sends the same and then goes silent. Both are a runtime
+ * that has already ANSWERED — the status is on the wire — but whose body the
+ * daemon never gets to read.
+ */
+type Reply = Readonly<{
+  status: number;
+  body: unknown;
+  padTo?: number;
+  gzip?: boolean;
+  cut?: boolean;
+  stall?: boolean;
+  afterHeaders?: () => void;
+}>;
 
 /**
  * The proxy's own buffering ceiling, restated here so a test can stand a body
@@ -131,12 +145,25 @@ let baseUrl: string;
 let env: Record<string, string>;
 let reply: Reply;
 let upstreamCalls: number;
+let upstreamRequests: string[];
+/** Called once a `stall` reply has put its status and first bytes on the wire. */
+let onStalled: (() => void) | null;
 
 const listen = (server: Server) =>
-  new Promise<AddressInfo>((resolve) => {
-    server.listen(0, '127.0.0.1', () => resolve(server.address() as AddressInfo));
+  new Promise<AddressInfo>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve(server.address() as AddressInfo);
+    });
   });
-const close = (server: Server) => new Promise<void>((resolve) => server.close(() => resolve()));
+const lifecycles = new Map<Server, ReturnType<typeof registerVelaRoutes>>();
+const close = async (server: Server) => {
+  if (!server) return; // A rejected setup has no daemon to close.
+  await lifecycles.get(server)?.close();
+  lifecycles.delete(server);
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+};
 
 /** Takes the runtime away entirely: the next connection is refused, as it is with no network. */
 const cutTheWire = async () => {
@@ -147,9 +174,12 @@ const cutTheWire = async () => {
 beforeEach(async () => {
   dataDir = mkdtempSync(path.join(tmpdir(), 'od-touchpoint-offline-http-'));
   upstreamCalls = 0;
+  upstreamRequests = [];
+  onStalled = null;
   reply = { status: 200, body: decision() };
   upstream = createServer((_req, res) => {
     upstreamCalls += 1;
+    upstreamRequests.push(_req.url ?? '');
     res.setHeader('content-type', 'application/json');
     res.statusCode = reply.status;
     // `padTo` grows the body past the proxy's buffering ceiling while keeping it
@@ -157,6 +187,14 @@ beforeEach(async () => {
     const payload = reply.padTo
       ? JSON.stringify({ ...(reply.body as Record<string, unknown>), pad: 'x'.repeat(reply.padTo) })
       : JSON.stringify(reply.body);
+    if (reply.cut || reply.stall) {
+      res.setHeader('content-length', String(Buffer.byteLength(payload) + 1024));
+      res.flushHeaders();
+      res.write(payload.slice(0, 8));
+      if (reply.cut) setImmediate(() => res.socket?.destroy());
+      else onStalled?.();
+      return;
+    }
     if (reply.gzip) {
       // Small on the wire, oversized once expanded: this crosses the DECODE
       // ceiling without ever crossing the buffering one.
@@ -164,31 +202,50 @@ beforeEach(async () => {
       res.end(gzipSync(Buffer.from(payload, 'utf8')));
       return;
     }
+    if (reply.afterHeaders) {
+      res.flushHeaders();
+      res.write(payload.slice(0, 8));
+      reply.afterHeaders();
+      setImmediate(() => res.end(payload.slice(8)));
+      return;
+    }
     res.end(payload);
   });
   upstreamPort = (await listen(upstream)).port;
   env = { VELA_CONTROL_KEY: 'ck-account-a', VELA_API_URL: `http://127.0.0.1:${upstreamPort}` };
+  await startDaemon();
+});
+
+const startDaemon = async () => {
   const app = express();
   app.use(express.json());
-  registerVelaRoutes(app, {
+  const lifecycle = registerVelaRoutes(app, {
     paths: { RUNTIME_DATA_DIR: dataDir },
     appConfig: { readAppConfig: async () => ({ agentCliEnv: {} }) as AppConfigPrefs },
     http: {},
     env,
   });
   daemon = createServer(app);
+  lifecycles.set(daemon, lifecycle);
   baseUrl = `http://127.0.0.1:${(await listen(daemon)).port}`;
-});
+};
 
 afterEach(async () => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+  daemon?.closeAllConnections();
   await close(daemon);
+  // A stalled reply never ends on its own; `close` would wait for it forever.
+  upstream?.closeAllConnections();
   if (upstream) await close(upstream);
   rmSync(dataDir, { recursive: true, force: true });
 });
 
-const decide = async () => {
+const decide = async (locale = LOCALE, activeDecisionId?: string) => {
+  const query = new URLSearchParams({ placementKey: PLACEMENT, locale });
+  if (activeDecisionId) query.set('activeDecisionId', activeDecisionId);
   const response = await fetch(
-    `${baseUrl}/api/touchpoints/production-runtime?placementKey=${PLACEMENT}&locale=${LOCALE}`,
+    `${baseUrl}/api/touchpoints/production-runtime?${query}`,
   );
   const text = await response.text();
   let body: any = null;
@@ -213,6 +270,39 @@ const storedRecords = (): string[] => {
 };
 
 describe('production touchpoint offline replay', () => {
+  it('carries the persisted decision into a cold recheck and respects the mounted caller credential', async () => {
+    await decide();
+    await close(daemon);
+    await startDaemon();
+    reply = { status: 410, body: { error: 'production_runtime_revoked', receipt: RECEIPT } };
+    expect((await decide()).status).toBe(410);
+    expect(upstreamRequests.at(-1)).toContain('activeDecisionId=decision-1');
+    reply = { status: 200, body: decision() };
+    await decide();
+    await decide(LOCALE, 'caller-mounted-decision');
+    expect(upstreamRequests.at(-1)).toContain('activeDecisionId=caller-mounted-decision');
+  });
+
+  it.each(['full', 'trimmed'] as const)('does not re-grant a five-second window after a nine-second %s download', async kind => {
+    let elapsed = 0;
+    const realNow = performance.now.bind(performance);
+    vi.spyOn(performance, 'now').mockImplementation(() => realNow() + elapsed);
+    if (kind === 'trimmed') await decide();
+    const answer = decision({ startsIn: -HOUR, endsIn: 5_000 });
+    const { content: _content, ...envelope } = answer;
+    reply = {
+      status: 200,
+      body: kind === 'full' ? answer : { ...envelope, contentOmitted: true },
+      afterHeaders: () => { elapsed += 9_000; },
+    };
+    expect((await decide()).status).toBe(200);
+    await cutTheWire();
+    const offline = await decide();
+    expect(offline.status).toBe(502);
+    expect(offline.offlineHeader).toBeNull();
+    expect(offline.body.error).toBe('touchpoint_runtime_unavailable');
+  });
+
   it('answers a cached activity while the runtime is unreachable', async () => {
     const live = await decide();
     expect(live.status).toBe(200);
@@ -265,7 +355,40 @@ describe('production touchpoint offline replay', () => {
     // Neither of those is a reason to throw the package away.
     expect(storedRecords()).toHaveLength(1);
     await cutTheWire();
-    expect((await decide()).body.offlineReplay?.reason).toBe('upstream_unreachable');
+    expect((await decide()).status).toBe(502);
+  });
+
+  it.each([401, 403, 404])('does not revive an earlier grant after %s then an outage or daemon restart', async (status) => {
+    await decide();
+    reply = { status, body: { error: 'decision_refused' } };
+    expect((await decide()).status).toBe(status);
+    expect(storedRecords()).toHaveLength(1); // Keep bytes; retire only display authority.
+    reply = { status: 503, body: { error: 'upstream_down' } };
+    expect((await decide()).status).toBe(503);
+    const { createTouchpointContentCache } = await import('../src/routes/touchpoint-content-cache.js');
+    // The route's opaque scope is persisted in its record; a fresh store must
+    // not forget the refusal when the process holding its timers goes away.
+    const record = JSON.parse(fs.readFileSync(storedRecords()[0]!, 'utf8'));
+    const restarted = createTouchpointContentCache(dataDir);
+    expect(restarted.replayOffline({ scope: record.scope, placementKey: PLACEMENT, locale: LOCALE }, 'upstream_unavailable')).toBeNull();
+    reply = { status: 200, body: decision() };
+    expect((await decide()).status).toBe(200);
+    reply = { status: 503, body: { error: 'upstream_down' } };
+    expect((await decide()).status).toBe(200); // A fresh grant restores authority.
+  });
+
+  it('reclaims every cached locale of a matching withdrawn delivery', async () => {
+    await decide();
+    const translated = decision();
+    translated.content.locale = 'zh-TW';
+    reply = { status: 200, body: translated };
+    await decide('zh-TW');
+    expect(storedRecords()).toHaveLength(2);
+    reply = { status: 410, body: { error: 'production_runtime_revoked', receipt: RECEIPT } };
+    expect((await decide()).status).toBe(410);
+    expect(storedRecords()).toHaveLength(0);
+    reply = { status: 503, body: { error: 'upstream_down' } };
+    expect((await decide('zh-TW')).status).toBe(503);
   });
 
   it('deletes the package a matching withdrawal names, and does not resurrect it offline', async () => {
@@ -419,5 +542,92 @@ describe('production touchpoint offline replay', () => {
     expect(cold.body).toEqual({ error: 'touchpoint_runtime_unavailable' });
     expect(storedRecords()).toHaveLength(0);
     expect(upstreamCalls).toBe(0);
+  });
+  // A status is the runtime's answer the moment it is on the wire. A body that
+  // then breaks off does not turn a 410 back into "unreachable": replaying the
+  // stored package over it would bring back exactly the activity the server
+  // just withdrew, and replaying over a 401/403/404 would overrule an answer.
+  it.each([302, 400, 401, 403, 404, 409, 429])(
+    'answers %i, not the cache, when the body breaks off after the status',
+    async (status) => {
+      await decide();
+      reply = { status, body: { error: 'answered' }, cut: true };
+      const cut = await decide();
+      expect(cut.status).toBe(status);
+      expect(cut.offlineHeader).toBeNull();
+      expect(cut.body?.offlineReplay).toBeUndefined();
+      expect(cut.body?.error).toBe('touchpoint_runtime_response_incomplete');
+      // An answer that is not a withdrawal is no reason to throw the package away.
+      expect(storedRecords()).toHaveLength(1);
+    },
+  );
+
+  it('reclaims the package on a 410 whose body breaks off', async () => {
+    await decide();
+    expect(storedRecords()).toHaveLength(1);
+    reply = { status: 410, body: { error: 'production_runtime_withdrawn' }, cut: true };
+    const cut = await decide();
+    expect(cut.status).toBe(410);
+    expect(cut.offlineHeader).toBeNull();
+    expect(storedRecords()).toHaveLength(0);
+
+    await cutTheWire();
+    expect((await decide()).status).toBe(502);
+  });
+
+  it('still replays the cache for a 5xx whose body breaks off', async () => {
+    await decide();
+    reply = { status: 503, body: { error: 'upstream_down' }, cut: true };
+    const cut = await decide();
+    expect(cut.status).toBe(200);
+    expect(cut.offlineHeader).toBe('1');
+    expect(storedRecords()).toHaveLength(1);
+  });
+
+  // The decision budget is the daemon's own deadline, not the runtime's
+  // answer. When it runs out on a 410 whose body stalls, the withdrawal
+  // already happened and the stored package must not outlive it.
+  it.each([302, 400, 409, 429, 503, 200])('settles a stalled %i body using the received status', async (status) => {
+    await decide();
+    const stalled = new Promise<void>((resolve) => { onStalled = resolve; });
+    reply = { status, body: { error: 'answered' }, stall: true };
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const pending = decide();
+    await stalled;
+    for (let turn = 0; turn < 20; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+    vi.advanceTimersByTime(10_000);
+    const answer = await pending;
+    vi.useRealTimers();
+    if (status === 503 || status === 200) {
+      expect(answer.status).toBe(200);
+      expect(answer.offlineHeader).toBe('1');
+    } else {
+      expect(answer.status).toBe(status);
+      expect(answer.offlineHeader).toBeNull();
+      expect(answer.body?.error).toBe('touchpoint_runtime_response_incomplete');
+    }
+    expect(storedRecords()).toHaveLength(1);
+  });
+
+  it('does not replay over a 410 whose body stalls past the decision budget', async () => {
+    await decide();
+    expect(storedRecords()).toHaveLength(1);
+
+    const stalled = new Promise<void>((resolve) => {
+      onStalled = resolve;
+    });
+    reply = { status: 410, body: { error: 'production_runtime_withdrawn' }, stall: true };
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const pending = decide();
+    await stalled;
+    // Let the daemon read the status line before the budget runs out: the
+    // status is what this case is about. Real I/O turns, no wall clock.
+    for (let turn = 0; turn < 20; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+    vi.advanceTimersByTime(10_000);
+    const answer = await pending;
+    vi.useRealTimers();
+    expect(answer.status).toBe(410);
+    expect(answer.offlineHeader).toBeNull();
+    expect(storedRecords()).toHaveLength(0);
   });
 });

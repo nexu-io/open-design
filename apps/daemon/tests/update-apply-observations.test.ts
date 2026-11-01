@@ -180,3 +180,15 @@ describe('update apply observations', () => {
     }
   });
 });
+
+it('fails closed on damaged consent rather than recovering the default opt-in', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'od-update-consent-'));
+  const capture = vi.fn();
+  try {
+    await writeSummary(root, pendingSummary());
+    await writeFile(path.join(root, 'app-config.json'), '{broken');
+    await observePendingInstallerApplyAttempts({ analytics: { capture }, appVersion: '0.8.0-beta.6',
+      currentVersion: '0.8.0-beta.6', dataRoot: root, namespace: 'release-beta-win', env: { POSTHOG_KEY: 'ph_test' } });
+    expect(capture).not.toHaveBeenCalled();
+  } finally { await rm(root, { force: true, recursive: true }); }
+});

@@ -69,6 +69,7 @@ import {
   freezeVideoFirstFrame,
   type ChatArtifactVideoFrameExtractor,
 } from './video-cover.js';
+import { freezeMotionArtifactCovers } from './motion-cover.js';
 
 export type ChatArtifactCoverRenderer = (
   input: DesktopExportArtifactInput,
@@ -148,9 +149,17 @@ export async function freezeAndRenderChatArtifactCovers(
   const report: FreezeChatArtifactCoversReport = { frozen: 0, skipped: 0, failed: 0 };
   const projectRoot = path.resolve(input.projectRoot);
   const pending: Array<{ row: MessageArtifactRow; render: DesktopExportArtifactInput }> = [];
-  let videoFrames = 0;
+  const motion = await freezeMotionArtifactCovers(deps, input);
+  let videoFrames = motion.attempts;
+  report.frozen += motion.frozen;
+  report.skipped += motion.skipped;
+  for (const failure of motion.failures) {
+    recordCoverFailure(deps, failure.row, failure.code);
+    report.failed++;
+  }
 
   for (const row of input.rows) {
+    if (motion.handled.has(row.id)) continue;
     if (wantsFrozenVideoFrame(row)) {
       if (videoFrames >= CHAT_ARTIFACT_VIDEO_FRAME_MAX_PER_RUN) {
         report.skipped += 1;

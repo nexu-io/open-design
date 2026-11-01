@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { githubInfo, optional, publicUrl, required, storageConfigFromEnv, writeJson } from "./common.ts";
-import { getStorageObjectText, putStorageObjectWithStatus, type StorageConfig } from "./s3-upload.ts";
+import { getStorageObjectText, putStorageObjectWithStatus, storagePrefixHasObjects, type StorageConfig } from "./s3-upload.ts";
 import { parseCountedReleaseVersion, type CountedReleaseChannel } from "@open-design/release";
 
 export type CountedVersionReservation = {
@@ -87,6 +87,12 @@ export async function assertCurrentVersionReservation(storage: StorageConfig, re
   return reservation;
 }
 
+function isCurrentReservationAttempt(reservation: CountedVersionReservation, releaseVersion: string, channel: CountedReleaseChannel): boolean {
+  return validateVersionReservation(reservation, releaseVersion, channel) == null &&
+    reservation.owner.runAttempt === githubInfo().runAttempt;
+}
+
+/** Reserve an empty prefix; retries within an attempt reuse its lock, while a new build attempt gets a new version. */
 export async function reserveVersion(options: {
   baseVersion: string;
   candidateVersion: string;
@@ -109,6 +115,28 @@ export async function reserveVersion(options: {
     const releaseNumber = candidate.releaseNumber + offset;
     const releaseVersion = `${options.baseVersion}-${channel}.${releaseNumber}`;
     const objectKey = versionLockObjectKey(releaseVersion, channel);
+    const accept = (reservation: CountedVersionReservation) => {
+      writeJson(join(options.metadataDir, "reserved-version.lock.json"), reservation);
+      return {
+        objectKey,
+        reservation,
+        url: publicUrl(options.publicOrigin, `${channel}/versions/${releaseVersion}`, "version.lock.json"),
+      };
+    };
+    const existingLock = await readVersionReservation(options.storage, objectKey);
+    if (existingLock != null && isCurrentReservationAttempt(existingLock, releaseVersion, channel)) {
+      return accept(existingLock);
+    }
+    // A version is occupied even when an older publisher wrote only an artifact
+    // and never created a lock or advanced latest/metadata.json.
+    if (existingLock != null || await storagePrefixHasObjects({
+      ...options.storage,
+      prefix: `${channel}/versions/${releaseVersion}/`,
+    })) {
+      if (options.manualOverride) throw new Error(`release_version ${releaseVersion} is already occupied`);
+      console.log(`${channel} version ${releaseVersion} is already occupied; trying next release number`);
+      continue;
+    }
     const reservation: CountedVersionReservation = {
       baseVersion: options.baseVersion,
       channel,
@@ -132,14 +160,6 @@ export async function reserveVersion(options: {
       headers: { "if-none-match": "*" },
       objectKey,
     });
-    const accept = (reservation: CountedVersionReservation) => {
-      writeJson(join(options.metadataDir, "reserved-version.lock.json"), reservation);
-      return {
-        objectKey,
-        reservation,
-        url: publicUrl(options.publicOrigin, `${channel}/versions/${releaseVersion}`, "version.lock.json"),
-      };
-    };
     if (result.ok) {
       return accept(await assertCurrentVersionReservation(options.storage, releaseVersion, objectKey, channel));
     }
@@ -151,9 +171,9 @@ export async function reserveVersion(options: {
     // exact failure the network retry recovers from) can drop the response
     // after R2 already created OUR lock, and the retried PUT then sees 412.
     // Read the lock back — if this run owns it, the reservation truly succeeded.
-    // Only a lock owned by a different run is a real collision.
+    // A lock owned by a different run or build attempt is a real collision.
     const existing = await readVersionReservation(options.storage, objectKey);
-    if (existing != null && validateVersionReservation(existing, releaseVersion, channel) == null) {
+    if (existing != null && isCurrentReservationAttempt(existing, releaseVersion, channel)) {
       return accept(existing);
     }
     if (options.manualOverride) {

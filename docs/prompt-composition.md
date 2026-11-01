@@ -33,9 +33,10 @@ bug rather than a reproducible one:
   `odNextTaskTypeForProjectScenarioBinding`) requires
   `provenance === 'automatic_default'`. A project where the user explicitly
   picked a scenario resolves `taskType` to null and takes the legacy path.
-- `agentId` must be one of `codex` / `claude` / `opencode` / `amr`,
-  `sourceKind` must be `bundled`, and the runtime capability preflight must
-  have passed.
+- The default agent scope comes from the effective runtime registry, including
+  shipped definitions and local profiles. `OD_NEXT_STRATEGY_AGENTS` can explicitly
+  constrain it. `sourceKind` must be `bundled`; capability fixtures, native child
+  evidence and session resume are not admission requirements.
 
 Nothing outside one run's own inputs takes part. There used to be a stop latch —
 a row a failing run wrote that disabled OD Next for the whole daemon instance,
@@ -43,10 +44,9 @@ outranked the saved mode, and survived restart while the Labs switch still read
 "on". It is gone, so a divergence you are chasing cannot be a leftover from an
 earlier run on the same machine.
 
-User-facing switch: Settings → Labs → Design Harness
-(`apps/web/src/components/LabsSection.tsx`, reading
-`GET /api/strategies/od-next/rollout`). Process override:
-`OD_NEXT_STRATEGY_ROLLOUT`. Saved preference: app-config `odNextStrategyMode`.
+The Labs page remains, but its OD Next switch is retired. Historical personal
+`odNextStrategyMode` preferences do not disable the default active route.
+`OD_NEXT_STRATEGY_ROLLOUT` remains an engineering process override.
 
 ## The variant axes
 
@@ -94,6 +94,10 @@ to the **host**, not to either strategy — if a strategy is retired, these stay
 | `id="deck-stage"` | `srcdoc.ts:3145` `isFrameworkDeck` → stage style fix, disables click-nav | ✅ | ✅ |
 | `@media print` block | Share → PDF multi-page stitching | ✅ | ✅ |
 | `<question-form>` | `AssistantMessage.tsx` → `QuestionFormView`; `runAskedUserQuestion` analytics | ✅ `discovery.ts` | ✅ `od-next-strategy.ts:434` |
+| `data-od-comment-id` preservation during HTML editing | strict comment identity readers | ✅ shared `comment-identity.ts` (classic/slim/API-BYOK) | ✅ shared host directive |
+| Motion video export | Actual source/MP4 linkage, local audio and encoded-output checks run inside the exporter; no model-plan gate | ✅ selected motion skill | ✅ motion task profile |
+| Shared motion source player | Composition-only preview controls and persisted playback; suppressed during frame capture | ✅ motion source | ✅ motion source |
+| Motion `data-poster-time` | Agent-selected seconds; daemon validates the linked MP4 and freezes its frame with the composition dimensions | ✅ selected motion skill | ✅ motion task profile |
 | `.od-frames/` device shells | prototype device frames | ❌ | ✅ OD Next only |
 
 Two things to read off this table.

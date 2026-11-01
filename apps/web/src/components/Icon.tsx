@@ -103,6 +103,16 @@ export type IconName =
   | 'send'
   | 'settings'
   | 'share'
+  | 'share-check'
+  | 'share-chevron-down'
+  | 'share-close-fill'
+  | 'share-close-thick'
+  | 'share-close-thin'
+  | 'share-more-dots'
+  | 'share-refresh-arrows'
+  | 'share-retry'
+  | 'share-spinner'
+  | 'share-upload-arrow'
   | 'sliders'
   | 'smartphone'
   | 'spinner'
@@ -1210,6 +1220,86 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
           <path d="M10 10c.5 3 1 4.5 1.5 8c.4 2.8.5 7.167.5 9c-2.167 1-7 3-7 7s5 9 19 9s19-5 19-9s-7-7-7-7s0-5.5.5-9s1-5 1.5-8" />
           <path d="M36 27c0 4-1 8-12.5 8" />
           <ellipse cx="24" cy="10" rx="14" ry="5" />
+        </svg>
+      );
+    // 2026 refactor (item 3, O12): the share panel's own hand-drawn glyphs,
+    // previously copy-pasted inline across ShareTab/CommentSyncBanner/
+    // ShareFeedbackToast/SharePanelHeader/AfterExportShareGuide/ShareMoreMenu.
+    // Each keeps its EXACT original path/viewBox/stroke-width — none of these
+    // are the closest Remix equivalent (`refresh`, `check`, `close`, `upload`,
+    // `chevron-down`, `more-horizontal`), which all draw visibly different
+    // shapes at these sizes — so they get their own names instead of
+    // silently swapping the glyph a screenshot already committed to.
+    case 'share-spinner':
+      return (
+        <svg {...common}>
+          <path d="M12 3a9 9 0 1 0 9 9" />
+        </svg>
+      );
+    case 'share-check':
+      return (
+        <svg {...common} viewBox="0 0 16 16">
+          <path d="m3 8 3 3 7-7" />
+        </svg>
+      );
+    case 'share-retry':
+      // CommentSyncBanner's backfill/align retry glyph.
+      return (
+        <svg {...common}>
+          <path d="M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16m0 4v-4h-4" />
+        </svg>
+      );
+    case 'share-refresh-arrows':
+      // ShareTab's OWN, differently-drawn retry glyph for a failed publish —
+      // deliberately not unified with `share-retry` (O12 flagged these as two
+      // separate hand-drawn "retry" paths; unifying either call site to the
+      // other's shape is a visual change no capture approved).
+      return (
+        <svg {...common}>
+          <path d="M20 7v5h-5M4.9 9a8 8 0 0 1 13.6-3L20 8M4 17v-5h5m6.1 3a8 8 0 0 1-13.6 3L4 16" />
+        </svg>
+      );
+    case 'share-upload-arrow':
+      return (
+        <svg {...common}>
+          <path d="M12 15V4m-4 4 4-4 4 4M5 20h14" />
+        </svg>
+      );
+    case 'share-close-thin':
+      // SharePanelHeader's close glyph.
+      return (
+        <svg {...common} viewBox="0 0 16 16">
+          <path d="M4 4l8 8M12 4l-8 8" />
+        </svg>
+      );
+    case 'share-close-thick':
+      // ShareFeedbackToast's close glyph.
+      return (
+        <svg {...common}>
+          <path d="m6 6 12 12M18 6 6 18" />
+        </svg>
+      );
+    case 'share-close-fill':
+      // AfterExportShareGuide's filled close glyph.
+      return (
+        <svg {...common} fill="currentColor" stroke="none">
+          <path d="M11.9997 10.5865L16.9495 5.63672L18.3637 7.05093L13.4139 12.0007L18.3637 16.9504L16.9495 18.3646L11.9997 13.4149L7.04996 18.3646L5.63574 16.9504L10.5855 12.0007L5.63574 7.05093L7.04996 5.63672L11.9997 10.5865Z" />
+        </svg>
+      );
+    case 'share-more-dots':
+      // ShareMoreMenu's "···" trigger.
+      return (
+        <svg {...common} viewBox="0 0 16 16" fill="currentColor" stroke="none">
+          <circle cx="3" cy="8" r="1" />
+          <circle cx="8" cy="8" r="1" />
+          <circle cx="13" cy="8" r="1" />
+        </svg>
+      );
+    case 'share-chevron-down':
+      // ShareTab's workspace-access-select chevron.
+      return (
+        <svg {...common} viewBox="0 0 16 16">
+          <path d="m4 6 4 4 4-4" />
         </svg>
       );
     default:
