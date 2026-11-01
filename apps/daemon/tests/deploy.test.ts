@@ -708,6 +708,93 @@ describe('deploy plan and analyzer', () => {
     expect(plan.invalid).toEqual([]);
   });
 
+  it.each([undefined, 'share-relative'] as const)('collects and relocates object data assets from a nested entry (%s)', async (assetUrlPolicy) => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await mkdir(path.join(dir, 'pages', 'assets'), { recursive: true });
+    await writeFile(path.join(dir, 'pages', 'entry.html'), [
+      '<object data="assets/diagram.svg?version=1#layer"></object>',
+      "<object data='assets/report.pdf#page=2'></object>",
+      '<OBJECT DATA=/pages/assets/diagram.svg></OBJECT>',
+    ].join('\n'));
+    await writeFile(path.join(dir, 'pages', 'assets', 'diagram.svg'), '<svg/>');
+    await writeFile(path.join(dir, 'pages', 'assets', 'report.pdf'), '%PDF-1.7');
+
+    const plan = await buildDeployFilePlan(projectsRoot, projectId, 'pages/entry.html', {
+      hookScriptUrl: '', ...(assetUrlPolicy ? { assetUrlPolicy } : {}),
+    });
+
+    expect(plan.files.map((file) => file.file).sort()).toEqual([
+      'index.html', 'pages/assets/diagram.svg', 'pages/assets/report.pdf',
+    ]);
+    expect(plan.missing).toEqual([]);
+    expect(plan.invalid).toEqual([]);
+    const html = plan.files.find((file) => file.file === 'index.html')?.data.toString();
+    expect(html).toContain('<object data="pages/assets/diagram.svg?version=1#layer">');
+    expect(html).toContain("<object data='pages/assets/report.pdf#page=2'>");
+    expect(html).toContain(`<OBJECT DATA=${assetUrlPolicy ? '' : '/'}pages/assets/diagram.svg>`);
+  });
+
+  it('preserves external object data and ordinary data attributes without collecting them', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await mkdir(path.join(dir, 'pages'));
+    const html = [
+      '<object data="https://example.com/diagram.svg?x=1#layer"></object>',
+      '<object data="//cdn.example.com/report.pdf"></object>',
+      '<object data="data:image/svg+xml,%3Csvg/%3E"></object>',
+      '<object data="blob:https://example.com/id"></object>',
+      '<object data="#layer" data-src="missing.svg"></object>',
+      '<div data="missing.pdf" data-file="missing.svg"></div>',
+    ].join('\n');
+    await writeFile(path.join(dir, 'pages', 'entry.html'), html);
+
+    const plan = await buildDeployFilePlan(projectsRoot, projectId, 'pages/entry.html', {
+      hookScriptUrl: '', assetUrlPolicy: 'share-relative',
+    });
+
+    expect(plan.files.map((file) => file.file)).toEqual(['index.html']);
+    expect(plan.files[0]?.data.toString()).toBe(html);
+    expect(plan.missing).toEqual([]);
+    expect(plan.invalid).toEqual([]);
+  });
+
+  it('keeps unsafe object data paths invalid and missing assets diagnostic', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await mkdir(path.join(dir, 'pages'));
+    await mkdir(path.join(dir, '.file-versions'));
+    await writeFile(path.join(dir, '.file-versions', 'report.pdf'), 'private');
+    await writeFile(path.join(dir, 'pages', 'entry.html'), [
+      '<object data="../../escape.svg"></object>',
+      '<object data="../.file-versions/report.pdf"></object>',
+      '<object data="missing.pdf?download=1#page=2"></object>',
+    ].join('\n'));
+
+    const plan = await buildDeployFilePlan(projectsRoot, projectId, 'pages/entry.html', {
+      hookScriptUrl: '', assetUrlPolicy: 'share-relative',
+    });
+
+    expect(plan.files.map((file) => file.file)).toEqual(['index.html']);
+    expect(plan.invalid).toEqual(['../../escape.svg', '../.file-versions/report.pdf']);
+    expect(plan.missing).toEqual(['pages/missing.pdf']);
+    expect(plan.files[0]?.data.toString()).toContain('data="../../escape.svg"');
+  });
+
+  it('includes object data bytes in existing large-asset warnings', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await writeFile(path.join(dir, 'index.html'), '<object data="report.pdf"></object>');
+    const data = Buffer.alloc(DEPLOY_PREFLIGHT_LARGE_ASSET_BYTES + 1);
+    await writeFile(path.join(dir, 'report.pdf'), data);
+
+    const plan = await buildDeployFilePlan(projectsRoot, projectId, 'index.html', {
+      hookScriptUrl: '', assetUrlPolicy: 'share-relative',
+    });
+    const result = analyzeDeployPlan(plan);
+
+    expect(result.totalBytes).toBe(data.length + Buffer.byteLength(plan.html));
+    expect(result.warnings).toContainEqual(expect.objectContaining({
+      code: 'large-asset', path: 'report.pdf', size: data.length,
+    }));
+  });
+
   it('reports missing landing image variants from srcset and CSS backgrounds', async () => {
     const { projectsRoot, projectId, dir } = await setupProject();
     await mkdir(path.join(dir, 'assets'), { recursive: true });

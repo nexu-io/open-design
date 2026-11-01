@@ -1441,6 +1441,8 @@ function htmlReferenceSites(html: string): ReferenceSite[] {
       const value = attrs.get(name);
       if (value) push(value, name);
     }
+    const data = tag.name === 'object' ? attrs.get('data') : undefined;
+    if (data) push(data, 'data');
     const href = attrs.get('href');
     if (href && shouldCollectHref(tag.name, attrs)) push(href, 'href');
     const srcset = attrs.get('srcset');
@@ -1943,7 +1945,8 @@ function rewriteHtmlAttributes(rawAttrs: string, tagName: string, attrs: Map<str
         name !== 'poster' &&
         name !== 'srcset' &&
         name !== 'href' &&
-        name !== 'style'
+        name !== 'style' &&
+        !(tagName === 'object' && name === 'data')
       ) {
         return full;
       }
