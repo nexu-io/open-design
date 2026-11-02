@@ -1708,8 +1708,39 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toBe('Sign-in failed.');
     });
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
     expect(screen.queryByText('Signing in…')).toBeNull();
+    expect((await findCloudSignInButton()).hasAttribute('disabled')).toBe(false);
+  });
+
+  it('leaves the primary button usable when a failure arrives while a login is in flight', async () => {
+    let statusCalls = 0;
+    globalThis.fetch = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        statusCalls += 1;
+        return jsonResponse({
+          loggedIn: false,
+          loginInFlight: statusCalls >= 2,
+          profile: 'prod',
+          user: null,
+          configPath: '/x',
+        });
+      }
+      if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+        return jsonResponse({ error: 'login failed' }, 500);
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }) as typeof fetch;
+    renderOnboarding();
+
+    await clickCloudSignIn();
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toBe('Sign-in failed.');
+    });
+    expect(statusCalls).toBeGreaterThanOrEqual(2);
+    expect((await findCloudSignInButton()).hasAttribute('disabled')).toBe(false);
   });
 
   function mockPendingActivation(browserOpenFailed: boolean) {
@@ -2121,7 +2152,7 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     await act(async () => {});
 
     expect(screen.getByRole('alert').textContent).toContain('Sign-in failed.');
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    fireEvent.click(signIn);
     await act(async () => {});
     await vi.advanceTimersByTimeAsync(2000);
     await vi.advanceTimersByTimeAsync(4000);

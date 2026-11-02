@@ -3738,7 +3738,9 @@ function OnboardingView({
   // Cloud remains the primary identity path. Local CLI and BYOK are independent
   // direct setup paths; authenticated users keep the full source chooser.
   if (step === 0) {
-    const cloudBusy = amrLoginBusy;
+    // A failure hands the primary button back even if the daemon still reports
+    // a login in flight: it is the only way to resume or restart from here.
+    const cloudBusy = amrLoginBusy && !amrLoginError;
     const amrStatusResolving = !amrStatusResolved;
     return (
       <section
@@ -3770,6 +3772,10 @@ function OnboardingView({
                 className="onboarding-cloud__primary"
                 onClick={() => {
                   if (amrStatusResolving) return;
+                  if (amrLoginError) {
+                    void retryCloudSignIn();
+                    return;
+                  }
                   if (amrSignedIn) {
                     recordAmrEntry(analytics.track, 'onboarding_amr_card', new Date(), {
                       metricsConsent: config.telemetry?.metrics === true,
@@ -3788,7 +3794,7 @@ function OnboardingView({
                   }
                   void handleCloudSignIn();
                 }}
-                disabled={cloudBusy || amrLoginCancelPending || amrStatusResolving}
+                disabled={cloudBusy || amrLoginPending || amrLoginCancelPending || amrStatusResolving}
                 aria-busy={cloudBusy || amrStatusResolving ? true : undefined}
               >
                 <Icon name="log-in" size={17} />
@@ -3802,7 +3808,7 @@ function OnboardingView({
                         : t('settings.onboardingCloudSignIn')}
                 </span>
               </button>
-              {cloudBusy && !amrLoginError ? (
+              {cloudBusy ? (
                 <button
                   type="button"
                   className={onboardingWelcomeStyles.cancel}
@@ -3869,12 +3875,7 @@ function OnboardingView({
           (activationHintDue || amrStatus.browserOpenFailed)) ? (
           <aside className={onboardingWelcomeStyles.loginStatus} aria-live="polite" data-testid="onboarding-login-status">
             {amrLoginError ? (
-              <>
-                <p role="alert">{t('settings.amrLoginErrorCompact')}</p>
-                <Button onClick={() => void retryCloudSignIn()} disabled={amrLoginPending}>
-                  {t('preview.retry')}
-                </Button>
-              </>
+              <p role="alert">{t('settings.amrLoginErrorCompact')}</p>
             ) : (
               <Button variant="ghost" onClick={() => void reopenCloudSignIn()}>
                 {t('settings.onboardingActivationReopen')}
