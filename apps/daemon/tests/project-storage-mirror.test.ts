@@ -1,6 +1,6 @@
 import http from 'node:http';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -168,6 +168,35 @@ describe('project storage mirror (#7043)', () => {
       expect((await readFile(path.join(projectDir, 'ok.html'))).toString()).toBe('ok');
       expect(await import('node:fs').then((fs) => fs.existsSync(path.join(dir, 'escape.html')))).toBe(false);
     });
+
+    it('restoreIfEmpty stays atomic when a transient read fails, then recovers', async () => {
+      fake.map.set('p1/a.html', Buffer.from('a'));
+      fake.map.set('p1/b.html', Buffer.from('b'));
+      const projectDir = path.join(dir, 'p1');
+      await mkdir(projectDir, { recursive: true });
+
+      // Fail exactly the second read (transient), then let the adapter recover.
+      let reads = 0;
+      const realRead = fake.readFile.bind(fake);
+      fake.readFile = async (projectId: string, relpath: string) => {
+        reads += 1;
+        if (reads === 2) throw new StorageError('IO', projectId + '/' + relpath);
+        return realRead(projectId, relpath);
+      };
+
+      // The per-project chain swallows the failure, so assert on the filesystem:
+      // nothing may be materialized, and no staging dir may be left behind.
+      await mirror.restoreIfEmpty('p1', projectDir);
+      expect(reads).toBe(2);
+      expect(await readdir(projectDir)).toEqual([]);
+      expect(await readdir(dir)).toEqual(['p1']);
+
+      // The adapter has recovered; the next restore materializes the full tree.
+      await mirror.restoreIfEmpty('p1', projectDir);
+      expect((await readFile(path.join(projectDir, 'a.html'))).toString()).toBe('a');
+      expect((await readFile(path.join(projectDir, 'b.html'))).toString()).toBe('b');
+    });
+
     it('folder delete reconciles hidden files and sidecars authoritatively', async () => {
       // Remote state: the folder's visible file, a hidden file, and a sidecar.
       fake.map.set('p1/sub/page.html', Buffer.from('page'));

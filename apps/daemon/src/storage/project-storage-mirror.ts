@@ -122,22 +122,37 @@ export function createProjectStorageMirror(
         }
         if (entries.length > 0) return;
         const remote = await adapter.listFiles(projectId);
-        // Stage every object before materializing any: a partial S3 read
-        // failure must not leave a half-written local tree (all-or-nothing
-        // restore). Each path is confined to the project tree here — a hostile
-        // or corrupt store must never be able to materialize outside localDir.
-        const staged: { rel: string; body: Buffer }[] = [];
-        for (const entry of remote) {
-          const rel = String(entry.path || '').replace(/\\/g, '/');
-          if (!rel || rel.startsWith('/') || rel.split('/').some((seg) => seg === '..' || seg === '.')) {
-            continue;
+        // Stage the complete tree in a sibling temporary directory and commit
+        // it only after every read AND write succeeds. A transient S3 read
+        // failure (or a local write failure) mid-restore therefore leaves
+        // localDir empty and untouched, so the next restore retries the whole
+        // tree instead of treating a half-written project as restored. Each
+        // path is confined to the project tree here — a hostile or corrupt
+        // store must never be able to materialize outside localDir.
+        const staging = await fsp.mkdtemp(
+          path.join(path.dirname(localDir), '.' + path.basename(localDir) + '.restore-'),
+        );
+        try {
+          for (const entry of remote) {
+            const rel = String(entry.path || '').replace(/\\/g, '/');
+            if (!rel || rel.startsWith('/') || rel.split('/').some((seg) => seg === '..' || seg === '.')) {
+              continue;
+            }
+            const body = await adapter.readFile(projectId, rel);
+            const target = path.join(staging, rel);
+            await fsp.mkdir(path.dirname(target), { recursive: true });
+            await fsp.writeFile(target, body);
           }
-          staged.push({ rel, body: await adapter.readFile(projectId, rel) });
-        }
-        for (const { rel, body } of staged) {
-          const target = path.join(localDir, rel);
-          await fsp.mkdir(path.dirname(target), { recursive: true });
-          await fsp.writeFile(target, body);
+          // Commit: localDir is empty (checked above), so replace it with the
+          // staged tree in a single rename — no observer ever sees a partial
+          // project. POSIX rename replaces an empty directory atomically; on
+          // platforms that refuse to rename over an existing directory, remove
+          // the empty dir first (the tree still transitions empty → complete).
+          await fsp.rm(localDir, { recursive: true, force: true });
+          await fsp.rename(staging, localDir);
+        } catch (err) {
+          await fsp.rm(staging, { recursive: true, force: true }).catch(() => {});
+          throw err;
         }
       });
     },
