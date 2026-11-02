@@ -1,3 +1,6 @@
+import { runPinnedVelaCommand } from '../src/collab/vela-pinned-command.js';
+import { createSqlitePublicFilePublicationStore } from '../src/collab/public-file-publication-store.js';
+import { ensureWorkspaceArtifactForPath } from '../src/chat-artifacts/store.js';
 import { afterEach, expect, it } from 'vitest';
 import express from 'express';
 import { createServer } from 'node:http';
@@ -9,7 +12,7 @@ import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildWorkspacePermissions, buildWorkspaceSeatSummary, type WorkspaceCollabContext } from '@open-design/contracts';
-import { closeDatabase, ensureWorkspaceProject, insertProject, insertConversation, openDatabase, mergeSyncedPreviewComment } from '../src/db.js';
+import { updateProject, upsertPreviewComment, closeDatabase, ensureWorkspaceProject, insertProject, insertConversation, openDatabase, mergeSyncedPreviewComment } from '../src/db.js';
 import { createVelaCliCollabClient } from '../src/collab/vela-cli-collab-client.js';
 import { createCollabCloudService } from '../src/collab/collab-cloud-service.js';
 import { createCommentAlignmentService, exportCommentAlignment, parseCommentAlignmentResult, runVelaCommentAlignment } from '../src/collab/comment-alignment.js';
@@ -24,8 +27,9 @@ const context: WorkspaceCollabContext = {
 };
 function setup() {
   root = mkdtempSync(join(tmpdir(), 'od-align-'));
-  const db = openDatabase(root);
+  const db = openDatabase(root, { dataDir: root });
   insertProject(db, { id: 'p', name: 'P', createdAt: 1, updatedAt: 1 });
+  ensureWorkspaceProject(db, { projectId: 'p', workspaceId: 'w', visibility: 'team', createdByWorkspaceMemberId: 'm' });
   insertConversation(db, { id: 'local', projectId: 'p', title: 'C', createdAt: 1, updatedAt: 1 });
   return db;
 }
@@ -62,7 +66,7 @@ it.each([false, true])('exports actual merged rows; deliberately lost merge is d
   expect(await alignment.check('p', context)).toEqual({ state: drop ? 'diverged' : 'aligned', latestSeq: 2 });
   expect(pulls).toBe(1); expect(compares).toBe(1);
   expect(db.prepare('SELECT * FROM preview_comments ORDER BY id').all()).toEqual(before);
-  const rows = exportCommentAlignment(db, 'p');
+  const rows = exportCommentAlignment(db, 'p', context);
   expect(Object.keys(rows[0]!)).toHaveLength(16);
   expect(rows[0]).toMatchObject({ position: { x: 1, y: 3, width: 3, height: 4 }, attachments: [{ id: 'attachment-0', name: '' }], filePath: 'pages/source.html' });
   expect(rows[0]).not.toHaveProperty('authorDisplayName');
@@ -140,4 +144,128 @@ it('writes the actual request to a private file for the pinned CLI, reads state 
     return '{"state":"diverged","latestSeq":4}';
   });
   expect(result).toEqual({ state: 'diverged', latestSeq: 4 }); expect(existsSync(file)).toBe(false);
+});
+
+it.each(['personal', 'team'] as const)('4046 filters personal project payloads in %s workspaces and fences stop/resume', async workspaceType => {
+  const db = setup();
+  db.prepare("UPDATE workspace_projects SET visibility = 'personal' WHERE project_id = 'p'").run();
+  const ctx = { ...context, workspaceType };
+  const publications = createSqlitePublicFilePublicationStore(db);
+  const scope = { resourceTeamId: 'w', ownerMemberId: 'm', projectId: 'p', filePath: 'a.html' };
+  const publication = { slug: 'a', url: null, fileName: 'a.html' };
+  publications.set(scope, publication);
+  publications.set({ ...scope, filePath: 'c.html' }, { ...publication, slug: 'c' });
+  for (const filePath of ['a.html', 'b.html', 'c.html']) {
+    mergeSyncedPreviewComment(db, 'p', 'local', { ...comments[0]!, id: filePath, filePath,
+      note: `private body ${filePath}`, htmlHint: `<p>${filePath}</p>`,
+      authorKind: 'member', status: 'open', projectId: 'p', memberId: 'm', seq: 1 });
+  }
+  let sent: string[] = [];
+  let duringCompare = () => {};
+  const alignment = createCommentAlignmentService({ db, readCursor: () => 1, compare: async (_project, _context, request) => {
+    sent = request.comments.map(comment => comment.filePath);
+    expect(JSON.stringify(request)).not.toContain('b.html');
+    duringCompare();
+    return { state: 'aligned', latestSeq: 1 };
+  } });
+  expect((await alignment.check('p', ctx)).state).toBe('aligned');
+  expect(sent).toEqual(['a.html', 'c.html']);
+  publications.delete(scope);
+  expect(alignment.read({ projectId: 'p', workspaceId: 'w', workspaceMemberId: 'm' })).toEqual({ state: 'unknown', reason: 'snapshot_changed' });
+  expect((await alignment.check('p', ctx)).state).toBe('aligned');
+  expect(sent).toEqual(['c.html']);
+  publications.set(scope, publication);
+  expect((await alignment.check('p', ctx)).state).toBe('aligned');
+  expect(sent).toEqual(['a.html', 'c.html']);
+  duringCompare = () => { publications.delete(scope); publications.set(scope, publication); };
+  expect(await alignment.check('p', ctx)).toEqual({ state: 'unknown', reason: 'snapshot_changed' });
+  duringCompare = () => publications.delete(scope);
+  expect(await alignment.check('p', ctx)).toEqual({ state: 'unknown', reason: 'snapshot_changed' });
+  publications.delete({ ...scope, filePath: 'c.html' });
+  sent = [];
+  expect(await alignment.check('p', ctx)).toEqual({ state: 'unknown', reason: 'unavailable' });
+  expect(sent).toEqual([]);
+});
+
+it('4046 excludes unshared invalid attachments before projection and rejects foreign identity', async () => {
+  const db = setup();
+  db.prepare("UPDATE workspace_projects SET visibility = 'personal' WHERE project_id = 'p'").run();
+  const publications = createSqlitePublicFilePublicationStore(db);
+  publications.set({ resourceTeamId: 'w', ownerMemberId: 'm', projectId: 'p', filePath: 'a.html' }, { slug: 'a', url: null, fileName: 'a.html' });
+  mergeSyncedPreviewComment(db, 'p', 'local', { ...comments[0]!, filePath: 'b.html', authorKind: 'member', status: 'open',
+    projectId: 'p', memberId: 'm', seq: 1, attachments: [{ path: 'never-upload.png', name: 'private' }] });
+  let calls = 0;
+  const alignment = createCommentAlignmentService({ db, readCursor: () => 1, compare: async (_project, _context, request) => {
+    calls++; expect(request.comments).toEqual([]); return { state: 'aligned', latestSeq: 1 };
+  } });
+  expect((await alignment.check('p', context)).state).toBe('aligned');
+  for (const ctx of [{ ...context, workspaceId: 'foreign' }, { ...context, workspaceMemberId: 'foreign' }, { ...context, memberStatus: 'removed' as const }]) {
+    expect(await alignment.check('p', ctx)).toEqual({ state: 'unknown', reason: 'unavailable' });
+  }
+  expect(calls).toBe(1);
+  expect((await alignment.check('p', context)).state).toBe('aligned');
+  db.prepare("UPDATE workspace_projects SET created_by_workspace_member_id = 'other' WHERE project_id = 'p'").run();
+  expect(alignment.read({ projectId: 'p', workspaceId: 'w', workspaceMemberId: 'm' })).toEqual({ state: 'unknown', reason: 'snapshot_changed' });
+});
+
+it('4046 same-path identity replacement invalidates alignment and excludes unadmitted replacement comments', async () => {
+  const db = setup();
+  db.prepare("UPDATE workspace_projects SET visibility = 'personal' WHERE project_id = 'p'").run();
+  const publications = createSqlitePublicFilePublicationStore(db);
+  publications.set({ resourceTeamId: 'w', ownerMemberId: 'm', projectId: 'p', filePath: 'a.html' }, { slug: 'a', url: null, fileName: 'a.html' });
+  const sourceFileId = '11111111-1111-4111-8111-111111111111';
+  const fact = { sourceFileId, sourceFilePath: 'a.html', entryPath: 'index.html', resourceId: 'r', versionId: 'v', retired: false };
+  updateProject(db, 'p', { metadata: { _commentFiles: { schemaVersion: 1, revision: 1, files: [fact] } } });
+  mergeSyncedPreviewComment(db, 'p', 'local', { ...comments[0]!, sourceFileId, sourceFilePath: 'a.html', filePath: 'a.html',
+    authorKind: 'member', status: 'open', projectId: 'p', memberId: 'm', seq: 1 });
+  const alignment = createCommentAlignmentService({ db, readCursor: () => 1, compare: async () => ({ state: 'aligned', latestSeq: 1 }) });
+  expect(exportCommentAlignment(db, 'p', context)).toHaveLength(1);
+  await alignment.check('p', context);
+  updateProject(db, 'p', { metadata: { _commentFiles: { schemaVersion: 1, revision: 2, files: [{ ...fact, retired: true }] } } });
+  const replacement = ensureWorkspaceArtifactForPath(db, { projectId: 'p', path: 'a.html', kind: 'html' });
+  upsertPreviewComment(db, 'p', 'local', { sourceFileId: replacement.id, note: 'unpublished replacement',
+    target: { filePath: 'a.html', elementId: 'new', selector: '#new', label: 'New', position: { x: 0, y: 0, width: 1, height: 1 } } });
+  expect(exportCommentAlignment(db, 'p', context)).toEqual([]);
+  expect(alignment.read({ projectId: 'p', workspaceId: 'w', workspaceMemberId: 'm' })).toEqual({ state: 'unknown', reason: 'snapshot_changed' });
+});
+
+it('4046 rechecks publication scope after async serialization before invoking the CLI', async () => {
+  const db = setup();
+  db.prepare("UPDATE workspace_projects SET visibility = 'personal' WHERE project_id = 'p'").run();
+  const publications = createSqlitePublicFilePublicationStore(db);
+  const scope = { resourceTeamId: 'w', ownerMemberId: 'm', projectId: 'p', filePath: 'a.html' };
+  publications.set(scope, { slug: 'a', url: null, fileName: 'a.html' });
+  let calls = 0;
+  const alignment = createCommentAlignmentService({ db, readCursor: () => 1,
+    compare: async (projectId, ctx, request, isCurrent) => {
+      const pending = runVelaCommentAlignment({ projectId, workspaceId: ctx.workspaceId, request, dataRoot: root!, isCurrent,
+        session: { profile: 'test', apiUrl: 'https://example.invalid', controlKey: 'test-only', user: null, configMtimeMs: null } },
+      async () => { calls++; return '{"state":"aligned","latestSeq":1}'; });
+      publications.delete(scope);
+      return pending;
+    },
+  });
+  expect(await alignment.check('p', context)).toEqual({ state: 'unknown', reason: 'snapshot_changed' });
+  expect(calls).toBe(0);
+});
+
+it('4046 fences scope changes during pinned CLI setup before spawning the transport', async () => {
+  const db = setup();
+  db.prepare("UPDATE workspace_projects SET visibility = 'personal' WHERE project_id = 'p'").run();
+  const publications = createSqlitePublicFilePublicationStore(db);
+  const scope = { resourceTeamId: 'w', ownerMemberId: 'm', projectId: 'p', filePath: 'a.html' };
+  publications.set(scope, { slug: 'a', url: null, fileName: 'a.html' });
+  let transportCalls = 0;
+  const alignment = createCommentAlignmentService({ db, readCursor: () => 1,
+    compare: (projectId, ctx, request, isCurrent) => runVelaCommentAlignment({
+      projectId, workspaceId: ctx.workspaceId, request, dataRoot: root!, isCurrent,
+      session: { profile: 'test', apiUrl: 'https://example.invalid', controlKey: 'fixture', user: null, configMtimeMs: null },
+    }, async input => {
+      const pending = runPinnedVelaCommand(input, async () => { transportCalls++; return '{"state":"aligned","latestSeq":1}'; });
+      publications.delete(scope);
+      return pending;
+    }),
+  });
+  expect(await alignment.check('p', context)).toEqual({ state: 'unknown', reason: 'snapshot_changed' });
+  expect(transportCalls).toBe(0);
 });

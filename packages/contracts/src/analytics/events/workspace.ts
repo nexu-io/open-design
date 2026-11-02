@@ -83,17 +83,22 @@ export interface WorkspaceSwitcherClickProps extends TrackingWorkspaceDimensions
   is_current_workspace?: boolean;
 }
 
+export type WorkspaceInviteEntry = 'workspace_switcher' | 'all_projects' | 'onboarding' | 'home_banner' | 'home_header';
+
 export interface WorkspaceInviteClickProps extends TrackingWorkspaceDimensions {
-  page_name: 'home' | 'all_projects';
-  area: 'workspace_invite_dialog';
+  page_name: 'home' | 'all_projects' | 'onboarding';
+  area: 'workspace_invite_dialog' | 'onboarding_invite_step';
+  invite_surface_id?: string;
+  invite_batch_id?: string;
   element:
     | 'submit'
     | 'add_recipient_row'
     | 'remove_recipient_row'
     | 'role_select'
     | 'upgrade'
-    | 'close';
-  entry_from: 'workspace_switcher' | 'all_projects';
+    | 'close'
+    | 'skip_invite';
+  entry_from: WorkspaceInviteEntry;
   invite_count_bucket?: TrackingCountBucket;
 }
 
@@ -156,7 +161,8 @@ export interface ExtensionMarketplaceClickProps extends TrackingWorkspaceDimensi
 export interface WorkspaceSurfaceViewProps extends TrackingWorkspaceDimensions {
   page_name: TrackingWorkspacePage;
   area: 'account_menu' | 'workspace_switcher' | 'workspace_invite_dialog';
-  entry_from?: 'workspace_switcher' | 'all_projects';
+  entry_from?: WorkspaceInviteEntry;
+  invite_surface_id?: string;
 }
 
 export interface WorkspaceSwitchResultProps extends TrackingWorkspaceDimensions {
@@ -169,10 +175,13 @@ export interface WorkspaceSwitchResultProps extends TrackingWorkspaceDimensions 
 }
 
 export interface WorkspaceInviteResultProps extends TrackingWorkspaceDimensions {
-  page_name: 'home' | 'all_projects';
-  area: 'workspace_invite_dialog';
-  entry_from: 'workspace_switcher' | 'all_projects';
-  result: 'success' | 'partial_success' | 'failed';
+  page_name: 'home' | 'all_projects' | 'onboarding';
+  area: 'workspace_invite_dialog' | 'onboarding_invite_step';
+  invite_surface_id?: string;
+  invite_batch_id?: string;
+  entry_from: WorkspaceInviteEntry;
+  result: 'success' | 'partial_success' | 'failed' | 'unknown';
+  unknown_count?: number;
   requested_count: number;
   succeeded_count: number;
   failed_count: number;
@@ -235,4 +244,27 @@ export interface ProjectCommentCreateResultProps extends TrackingWorkspaceDimens
   comment_id?: string;
   project_id: string;
   project_kind: TrackingProjectKind | null;
+}
+
+
+export interface WorkspaceJourneySurfaceProps extends TrackingWorkspaceDimensions {
+  page_name: 'home' | 'chat_panel';
+  area: 'home_invite_banner' | 'home_invite_header' | 'workspace_quota_popover'
+    | 'credit_exhausted_dialog' | 'concurrency_limit_dialog' | 'workspace_membership_removed';
+  surface_instance_id: string;
+  entry_from?: WorkspaceInviteEntry;
+  block_id?: string;
+  reason?: 'credit_exhausted' | 'concurrency_limit';
+  stage?: 'before_run' | 'mid_run' | 'unknown';
+  run_id?: string;
+}
+export interface WorkspaceJourneyClickProps extends WorkspaceJourneySurfaceProps {
+  element: 'invite_teammates' | 'close' | 'upgrade' | 'return_personal_workspace';
+}
+export interface WorkspaceInvitePageViewProps extends TrackingWorkspaceDimensions {
+  page_name: 'onboarding';
+  area: 'onboarding_invite_step';
+  step_name: 'invite_teammates';
+  entry_from: 'onboarding';
+  invite_surface_id: string;
 }

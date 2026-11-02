@@ -224,6 +224,7 @@ describe('InlineModelSwitcher AMR row', () => {
     cleanup();
     vi.mocked(fetchProviderModels).mockReset();
     analyticsMocks.track.mockReset();
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
     vi.useRealTimers();
     try {
@@ -667,6 +668,7 @@ describe('InlineModelSwitcher AMR row', () => {
     expect(parsed.origin).toBe('https://open-design.powerformer.net');
     expect(parsed.pathname).toBe('/cloud/dashboard');
     expect(parsed.searchParams.get('billing')).toBe('plan');
+    expect(parsed.searchParams.get('workspaceId')).toBe('ws-personal');
     expect(parsed.searchParams.get('od_entry_source')).toBe('inline_amr_upgrade');
     expect(parsed.searchParams.get('od_device_id')).toBe('od-install-abc');
     expect(target).toBe('_blank');
@@ -736,6 +738,125 @@ describe('InlineModelSwitcher AMR row', () => {
       await Promise.resolve();
     });
     expect(screen.queryByTestId('inline-model-switcher-account-upgrade')).toBeNull();
+  });
+
+  async function openLockedTeamModel(options: {
+    role: 'owner' | 'admin' | 'member';
+    compact?: boolean;
+    accountPlan?: string;
+    teamPlan?: string;
+  }) {
+    const context = teamMemberWorkspaceContext({
+      role: options.role,
+      ...(options.role === 'owner'
+        ? { permissions: personalWorkspaceContext().permissions }
+        : {}),
+    });
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/integrations/vela/status') {
+        return Response.json({
+          loggedIn: true,
+          profile: 'test',
+          user: { id: 'user-1', email: 'manual-amr@example.local' },
+          account: { plan: options.accountPlan ?? 'plus', balanceUsd: '42.0000' },
+          configPath: '/Users/test/.amr/config.json',
+        });
+      }
+      if (url === '/api/workspace/directory') return workspaceDirectoryResponse(context);
+      if (url === '/api/workspace/context') return workspaceContextResponse(context);
+      if (url === '/api/workspace/billing?scope=workspace&workspaceId=ws-team') {
+        return Response.json({
+          summary: null,
+          workspaceBalance: {
+            billingScopeVersion: 2,
+            workspaceId: context.workspaceId,
+            workspaceMemberId: context.workspaceMemberId,
+            balanceUsd: '7.8912',
+            expiresAt: null,
+            updatedAt: '2026-07-27T00:00:00.000Z',
+          },
+          workspaceSnapshot: {
+            schemaVersion: 1,
+            billingScopeVersion: 2,
+            workspaceId: context.workspaceId,
+            workspaceMemberId: context.workspaceMemberId,
+            billing: { billingState: 'active', planId: options.teamPlan ?? 'team_go' },
+            wallet: {
+              balanceUsd: '7.8912',
+              expiresAt: null,
+              updatedAt: '2026-07-27T00:00:00.000Z',
+            },
+            revisions: { billing: 'billing-1', wallet: 'wallet-1' },
+          },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+    const view = renderSwitcher({
+      agentModels: { amr: { model: 'deepseek-v4-flash' } },
+      telemetry: { metrics: true },
+      installationId: 'od-install-abc',
+    }, [{
+      ...amrAgent,
+      models: [
+        { id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', enabled: true, default: true },
+        { id: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro', enabled: false },
+      ],
+    }], {}, { compact: options.compact });
+    // Flush the controlled status/context/billing responses before acting on
+    // compact rows, which intentionally have no account-balance label.
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('inline-model-switcher-chip'));
+    });
+    if (!options.compact) {
+      await screen.findByText('$7.89');
+      fireEvent.click(screen.getByTestId('inline-model-switcher-agent-model'));
+    }
+    return view;
+  }
+
+  it.each([false, true])('scopes locked-model upgrades to the current team (compact=%s)', async (compact) => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const view = await openLockedTeamModel({ role: 'owner', compact });
+    fireEvent.click(screen.getByTestId(compact
+      ? 'inline-model-switcher-compact-model-deepseek-v4-pro'
+      : 'model-option-upgrade-lock'));
+    expect(openSpy).toHaveBeenCalledTimes(1);
+    const [url, target, features] = openSpy.mock.calls[0] ?? [];
+    const parsed = new URL(String(url));
+    expect(parsed.searchParams.get('workspaceId')).toBe('ws-team');
+    expect(parsed.searchParams.get('billing')).toBe('plan');
+    expect(parsed.searchParams.get('od_entry_source')).toBe('inline_amr_upgrade');
+    expect(target).toBe('_blank');
+    expect(features).toBe('noopener,noreferrer');
+    expect(view.onAgentModelChange).not.toHaveBeenCalled();
+  });
+
+  it.each(['admin', 'member'] as const)('does not expose a locked-model purchase action to a team %s', async (role) => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const view = await openLockedTeamModel({ role });
+    expect(screen.queryByTestId('model-option-upgrade-lock')).toBeNull();
+    fireEvent.click(screen.getByRole('option', { name: /DeepSeek V4 Pro/ }));
+    expect(openSpy).not.toHaveBeenCalled();
+    expect(view.onAgentModelChange).not.toHaveBeenCalled();
+  });
+
+  it('does not offer a higher plan for a Max team when the personal account is Plus', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const view = await openLockedTeamModel({ role: 'owner', teamPlan: 'team_max' });
+    expect(screen.queryByTestId('model-option-upgrade-lock')).toBeNull();
+    expect(screen.queryByTestId('inline-model-switcher-account-upgrade')).toBeNull();
+    expect(openSpy).not.toHaveBeenCalled();
+    expect(view.onAgentModelChange).not.toHaveBeenCalled();
+  });
+
+  it('keeps upgrades available for a Go team when the personal account is Max', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    await openLockedTeamModel({ role: 'owner', accountPlan: 'max', compact: true });
+    fireEvent.click(screen.getByTestId('inline-model-switcher-compact-model-deepseek-v4-pro'));
+    expect(openSpy).toHaveBeenCalledTimes(1);
+    expect(new URL(String(openSpy.mock.calls[0]?.[0])).searchParams.get('workspaceId')).toBe('ws-team');
   });
 
   it('filters fetched BYOK provider models in the Home switcher search box', async () => {

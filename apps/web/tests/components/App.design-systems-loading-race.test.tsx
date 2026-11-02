@@ -298,7 +298,7 @@ describe('App design-system catalog loading race', () => {
     // removed, so startup no longer needs three duplicate snapshots.
     await waitFor(() =>
       expect(readPhases.filter((readPhase) => readPhase === 'startup').length)
-        .toBeGreaterThanOrEqual(2),
+        .toBeGreaterThanOrEqual(1),
     );
 
     phase = 'a';

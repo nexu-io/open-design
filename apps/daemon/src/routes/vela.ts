@@ -17,6 +17,7 @@ import {
 } from '../agents.js';
 import { readAnalyticsContext } from '../analytics.js';
 import { agentCliEnvForAgent, type AppConfigPrefs, writeAppConfig } from '../app-config.js';
+import { stripAmrEndpointOverrides } from '../integrations/amr-endpoint-binding.js';
 import {
   validateExternalPluginContext,
   validatePluginWorkflowId,
@@ -53,6 +54,7 @@ import {
   velaWalletSnapshotReader,
 } from '../integrations/vela-wallet.js';
 import { amrModelLoadingCache } from '../runtimes/amr-model-cache.js';
+import type { VerifiedWorkspaceRequestContextResult } from '../collab/request-workspace-context.js';
 import { buildAmrModelCacheKey } from '../runtimes/amr-model-probe.js';
 import {
   fetchVelaBillingSummary,
@@ -190,6 +192,7 @@ export interface RegisterVelaRoutesDeps {
     getPublicBaseUrl?: PublicBaseUrlResolver;
   };
   env?: NodeJS.ProcessEnv;
+  verifyWorkspaceReadAuthority?: (req: unknown) => Promise<VerifiedWorkspaceRequestContextResult>;
   /** Reconcile account-scoped caches/streams after credential observation. */
   onCredentialStateObserved?: () => void;
 }
@@ -1101,7 +1104,7 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
     return host ? `${proto}://${host}` : 'http://localhost:7456';
   });
 
-  function resolveAmrModelProbeForEnv(configuredEnv: Record<string, string>): AmrModelProbe {
+  function resolveAmrModelProbeForEnv(configuredEnv: Record<string, string>, workspaceId?: string): AmrModelProbe {
     const def = getAgentDef('amr');
     if (!def) throw new Error('AMR runtime definition is missing');
     const agentLaunch = resolveAgentLaunch(def, configuredEnv);
@@ -1119,6 +1122,7 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
       ),
       agentLaunch,
     );
+    if (workspaceId !== undefined) spawnEnv.VELA_WORKSPACE_ID = workspaceId;
     const credentialRevision = readVelaCredentialRevision(env, configuredEnv);
     const cacheKey = buildAmrModelCacheKey({
       launchPath,
@@ -1128,10 +1132,10 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
     return { launchPath, env: spawnEnv, configuredEnv, cacheKey };
   }
 
-  async function resolveAmrModelProbe(): Promise<AmrModelProbe> {
+  async function resolveAmrModelProbe(workspaceId?: string): Promise<AmrModelProbe> {
     const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
     const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
-    return resolveAmrModelProbeForEnv(configuredEnv);
+    return resolveAmrModelProbeForEnv(configuredEnv, workspaceId);
   }
 
   // Single-flight the live billing fetch per credential revision. Treating
@@ -1188,9 +1192,32 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
     return pending;
   }
 
-  app.get('/api/amr/models', async (_req, res) => {
+  app.get('/api/amr/models', async (req, res) => {
     try {
-      const probe = await resolveAmrModelProbe();
+      let workspaceId: string | undefined;
+      if (req.get('x-od-workspace-id') !== undefined || req.get('x-od-workspace-member-id') !== undefined) {
+        const authority = await deps.verifyWorkspaceReadAuthority?.(req);
+        if (!authority) {
+          res.status(503).json({ error: 'WORKSPACE_AUTHORITY_UNAVAILABLE' });
+          return;
+        }
+        if (!authority.ok) {
+          res.status(authority.status).json({ error: authority.code, message: authority.message });
+          return;
+        }
+        workspaceId = authority.context.workspaceId;
+      }
+      const probe = await resolveAmrModelProbe(workspaceId);
+      if (req.query.refresh === '1') {
+        // A subscription transition can change enabled flags without changing
+        // the credential or workspace ID. Only a proven selected principal may
+        // invalidate its exact workspace catalog; other scopes stay warm.
+        if (!workspaceId) {
+          res.status(400).json({ error: 'WORKSPACE_SCOPE_REQUIRED' });
+          return;
+        }
+        amrModelLoadingCache.invalidate(probe.cacheKey);
+      }
       const response = await amrModelLoadingCache.get(probe.cacheKey, {
         fetchPreset: () => fetchVelaPresetModels(probe.launchPath, probe.env),
         fetchRemote: () => fetchVelaRemoteModelsWithRetry(probe.launchPath, probe.env),
@@ -1597,7 +1624,7 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
       delete env.VELA_RUNTIME_KEY;
       delete env.VELA_LINK_URL;
       const agentCliEnv = { ...(appConfig.agentCliEnv ?? {}) };
-      const amrEnv = { ...(agentCliEnv.amr ?? {}) };
+      const amrEnv = stripAmrEndpointOverrides({ ...(agentCliEnv.amr ?? {}) });
       delete amrEnv.VELA_RUNTIME_KEY;
       delete amrEnv.VELA_LINK_URL;
       if (Object.keys(amrEnv).length > 0) {

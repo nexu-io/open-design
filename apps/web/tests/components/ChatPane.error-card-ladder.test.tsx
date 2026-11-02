@@ -29,7 +29,7 @@ vi.mock('../../src/i18n', () => ({
 
 vi.mock('../../src/components/AssistantMessage', () => ({
   AssistantMessage: ({ message }: { message: ChatMessage }) => (
-    <div data-testid={`assistant-${message.id}`}>{message.content}</div>
+    <div data-testid={`assistant-${message.id}`} data-run-status={message.runStatus}>{message.content}</div>
   ),
 }));
 
@@ -219,15 +219,11 @@ describe('R9 断线:报错卡让位给流水最后一行的重连行', () => {
   });
 
   /*
-   * 交接只在接手方真的在场时成立 —— 这是余额那一档
-   * (`balanceCardCannotTakeTheHandoff`)早就写死的同一条不变量,断线这一档漏了半边。
-   *
-   * 现场:一轮因断流失败,用户退出项目再进来。`ProjectView` 有一条专门的卸载
-   * effect 把 `reconnectView` 清空(「换项目 / 离开这一屏,本地就不再跟着那条流了」),
-   * 于是重连行不在场;而报错卡这边仍然无条件让位。两边都不说话,那一轮在屏幕上
-   * 一个字都没有 —— 既没有失败的说明,也没有任何恢复入口。
+   * P0-24 Q7(产品 2026-10-21,同 N15):断流之后用户离开项目再回来,重连行已被清空,
+   * 这一轮仍然不自行判定失败 —— 按「进行中」画,不出报错卡;恢复连上 daemon 后按运行
+   * 记录显示真实结果。这推翻了原来「接手方不在场时由报错卡接住」的那一档。
    */
-  it('重连行不在场时(退出项目再进来),断线那一轮必须由报错卡接住', () => {
+  it('重连行不在场时(退出项目再进来),断线那一轮仍按「进行中」画,不出报错卡', () => {
     const { container } = renderChat(
       failedMessage({}, {
         code: GENERIC_DAEMON_DISCONNECT_CODE,
@@ -235,31 +231,18 @@ describe('R9 断线:报错卡让位给流水最后一行的重连行', () => {
       }),
       { reconnect: null },
     );
-    // 接手方不在场。
     expect(screen.queryByTestId('chat-reconnect')).toBeNull();
-    // 所以这张卡不能再让位。
-    const card = container.querySelector('[data-user-action-card="run-recovery"]');
-    expect(card).toBeTruthy();
-    // 说的是断线这件事本身,不是兜底那句。
-    const description = card!.querySelector(
-      '[data-testid="chat-run-error-description"]',
-    )!.textContent;
-    expect(description).toContain('chat.connectionDropped');
-    expect(description).not.toContain('chat.runError.fallbackMessage');
-    // 而且带得出恢复动作 —— 屏幕上什么都不剩才是这条 bug 的形状。
-    expect(screen.getByTestId('chat-error-switch-to-cloud').dataset.runErrorAction).toBe('primary');
-    expect(screen.queryByTestId('chat-error-retry')).toBeNull();
+    expect(screen.getByTestId('assistant-msg-failed').dataset.runStatus).toBe('running');
+    expect(container.querySelector('[data-user-action-card="run-recovery"]')).toBeNull();
   });
 
-  it('重连行不在场时,老行(只有 detail、没有 code)同样由报错卡接住', () => {
+  it('重连行不在场时,老行(只有 detail、没有 code)同样按「进行中」画', () => {
     const { container } = renderChat(
       failedMessage({}, { code: undefined, detail: GENERIC_DAEMON_DISCONNECT_MESSAGE }),
       { reconnect: null },
     );
-    expect(screen.queryByTestId('chat-reconnect')).toBeNull();
-    expect(container.querySelector('[data-user-action-card="run-recovery"]')).toBeTruthy();
-    expect(screen.getByTestId('chat-error-switch-to-cloud').dataset.runErrorAction).toBe('primary');
-    expect(screen.queryByTestId('chat-error-retry')).toBeNull();
+    expect(screen.getByTestId('assistant-msg-failed').dataset.runStatus).toBe('running');
+    expect(container.querySelector('[data-user-action-card="run-recovery"]')).toBeNull();
   });
 
   it('重连行在场时,屏幕上只有它一块 UI', () => {

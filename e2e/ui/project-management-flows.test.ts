@@ -1352,6 +1352,13 @@ async function wireTeamRunBalanceFixtures(
       models: [{ id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' }],
     },
   ]);
+  await page.route('**/api/amr/models', (route) => route.fulfill({
+    json: {
+      source: 'remote',
+      models: [{ id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' }],
+      refreshing: false,
+    },
+  }));
   await page.route('**/api/integrations/vela/status', async (route) => {
     await route.fulfill({
       json: {

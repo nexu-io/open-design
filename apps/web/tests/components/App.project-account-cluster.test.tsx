@@ -369,8 +369,13 @@ describe('project route — floating account cluster', () => {
     expect(creditsCard.textContent).not.toContain('98.76');
 
     fireEvent.click(screen.getByTestId('entry-top-right-credits'));
+    // C-01 E-state trigger opens the panel; only its amount arrow navigates.
+    expect(open).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('entry-nav-credits-row'));
     expect(open).toHaveBeenCalledOnce();
-    expect(open.mock.calls[0]?.[0]).toContain('/dashboard?workspaceId=ws-project');
+    const target = new URL(String(open.mock.calls[0]?.[0]));
+    expect(target.pathname).toMatch(/\/dashboard$/);
+    expect(target.searchParams.get('workspaceId')).toBe('ws-project');
   });
 
   it.each([

@@ -1,6 +1,8 @@
+import * as workspaceContextModule from '../../src/collab/useWorkspaceContext';
+import { workspaceContextFixture } from '../helpers/workspace-context';
 // @vitest-environment jsdom
 
-import { useState } from 'react';
+import { StrictMode, useState } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -177,6 +179,7 @@ function renderOnboarding(
 function renderHome(
   overrides: Partial<React.ComponentProps<typeof EntryShell>> = {},
   path = '/',
+  strict = false,
 ) {
   window.history.replaceState(null, '', path);
   const props: React.ComponentProps<typeof EntryShell> = {
@@ -218,11 +221,8 @@ function renderHome(
     ...overrides,
   };
 
-  render(
-    <I18nProvider initial="en">
-      <EntryShell {...props} />
-    </I18nProvider>,
-  );
+  const shell = <I18nProvider initial="en"><EntryShell {...props} /></I18nProvider>;
+  render(strict ? <StrictMode>{shell}</StrictMode> : shell);
 
   return props;
 }
@@ -720,17 +720,44 @@ describe('EntryShell Home submit handoff', () => {
     // explicit user plugin choice on the public create contract.
     expect(onCreateProject.mock.calls[0]?.[0]?.pluginId).toBeUndefined();
     expect(submit.disabled).toBe(true);
-    // The arrow stays visually stable while creation is in flight: no spinner,
-    // no busy state — the disabled lock above is the whole sending treatment.
-    expect(submit.getAttribute('aria-busy')).toBe('false');
-    expect(submit.getAttribute('aria-label')).toBe('Run');
+    expect(submit.getAttribute('aria-busy')).toBe('true');
+    expect(submit.getAttribute('aria-label')).toBe('Sending…');
+    expect(submit.querySelector('svg')).toHaveClass('icon-spin');
 
     resolveCreate(true);
-    await waitFor(() => expect(submit.disabled).toBe(false));
+    await waitFor(() => {
+      expect(submit.disabled).toBe(false);
+      expect(submit.getAttribute('aria-busy')).toBe('false');
+      expect(submit.getAttribute('aria-label')).toBe('Run');
+      expect(submit.querySelector('svg')).not.toHaveClass('icon-spin');
+    });
   });
 });
 
 describe('EntryShell onboarding OpenDesign AMR runtime', () => {
+  it.each(['header', 'banner'] as const)('opens the client welcome screen and starts one browser sign-in from the signed-out %s invitation', async (entry) => {
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({ loggedIn: false, profile: 'prod', configPath: '/x', user: null });
+      }
+      if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+        return jsonResponse({ pid: 123 }, 202);
+      }
+      return jsonResponse({});
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    renderHome({ config: baseConfig({ onboardingCompleted: true, agentId: 'claude-code' }), amrLoggedIn: false }, '/', true);
+    const entries = await screen.findAllByRole('button', { name: /^Invite$/ });
+    expect(entries).toHaveLength(2);
+    fireEvent.click(entries[entry === 'header' ? 0 : 1]!);
+    expect(await screen.findByRole('heading', { name: 'Welcome to OpenDesign' })).toBeTruthy();
+    expect(window.location.pathname).toBe('/onboarding');
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([url, init]) => String(url).endsWith('/api/integrations/vela/login') && init?.method === 'POST')).toHaveLength(1));
+    expect(screen.getByRole('button', { name: /Cancel sign-in/i })).toBeTruthy();
+    expect(screen.queryByRole('dialog', { name: /Invite members/i })).toBeNull();
+  });
+
   it('gates Home on an authoritative signed-out Cloud session without clearing saved setup', async () => {
     globalThis.fetch = vi.fn(async () =>
       jsonResponse({ loggedIn: false, profile: 'prod', configPath: '/x', user: null }),
@@ -1463,6 +1490,7 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
 
     expect(screen.getByRole('heading', { name: 'Welcome to OpenDesign' })).toBeTruthy();
     expect(await findCloudSignInButton()).toBeTruthy();
+    expect(document.querySelector('.onboarding-cloud__art img')?.getAttribute('src')).toBe('/onboarding/registration-invite-art.webp');
     // No runtime card, no AMR version text, no "Sign in to continue" CTA.
     expect(screen.queryByRole('button', { name: /OpenDesign AMR/i })).toBeNull();
     expect(screen.queryByText('AMR v0.1.0')).toBeNull();
@@ -2544,4 +2572,46 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     expect(skipClicks).toHaveLength(0);
     expect(trackedEvents('onboarding_complete_result')).toHaveLength(0);
   });
+});
+
+
+it('shows the first-registration invite on a hydrated login before another Continue click', async () => {
+  const base = workspaceContextFixture({ workspaceId: 'registered-workspace', workspaceMemberId: 'registered-member', role: 'owner' });
+  vi.spyOn(workspaceContextModule, 'useWorkspaceContext').mockReturnValue({ context: { ...base, permissions: { ...base.permissions, canInviteMembers: true } }, loading: false });
+  const status = { loggedIn: true, sessionState: 'authenticated' as const, profile: 'prod', credentialRevision: 'registered-credential', configPath: '/test', user: { id: 'registered-account', email: 'new@example.com' }, registrationInvite: { accountId: 'registered-account', deviceAuthorizationId: 'new-authorization' } };
+  globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => String(input) === '/api/workspace/context' ? jsonResponse({ context: { ...base, permissions: { ...base.permissions, canInviteMembers: true } } }) : jsonResponse(status)) as typeof fetch;
+  const activeChange = vi.fn();
+  const props = renderOnboarding({ onRegistrationInviteActiveChange: activeChange, amrLoggedIn: true, amrSessionState: 'authenticated', amrAccountId: status.user.id, amrRegistrationStatus: status });
+  cleanup();
+  function RuntimeHarness() {
+    const [config, setConfig] = useState(props.config);
+    return <I18nProvider initial="en"><EntryShell {...props} config={config}
+      onModeChange={mode => { props.onModeChange(mode); setConfig(old => ({ ...old, mode })); }}
+      onAgentChange={agentId => { props.onAgentChange(agentId); setConfig(old => ({ ...old, agentId })); }} /></I18nProvider>;
+  }
+  render(<RuntimeHarness />);
+  await screen.findByRole('heading', { name: /^Invite colleagues for free\.\s*Design together\.$/ });
+  expect(activeChange).toHaveBeenLastCalledWith(true);
+  expect(props.onAgentChange).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }));
+  await waitFor(() => expect(localStorage.getItem('od.registration-invite.completed:registered-account:new-authorization')).toBe('1'));
+  expect(props.onModeChange).toHaveBeenCalledWith('daemon');
+  expect(props.onAgentChange).toHaveBeenCalledWith('amr');
+  expect(props.onCompleteOnboarding).toHaveBeenCalledOnce();
+  expect(activeChange).toHaveBeenLastCalledWith(false);
+});
+
+it.each([
+  ['Local', baseConfig({ mode: 'daemon', agentId: 'claude-code' })],
+  ['BYOK', baseConfig({ mode: 'api', agentId: null })],
+])('preserves a selected %s runtime during a hydrated registration login', async (_source, config) => {
+  const base = workspaceContextFixture({ workspaceId: 'registered-workspace', workspaceMemberId: 'registered-member', role: 'owner' });
+  vi.spyOn(workspaceContextModule, 'useWorkspaceContext').mockReturnValue({ context: { ...base, permissions: { ...base.permissions, canInviteMembers: true } }, loading: false });
+  const status = { loggedIn: true, sessionState: 'authenticated' as const, profile: 'prod', credentialRevision: 'registered-credential', configPath: '/test', user: { id: 'registered-account', email: 'new@example.com' }, registrationInvite: { accountId: 'registered-account', deviceAuthorizationId: 'new-authorization' } };
+  globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => String(input) === '/api/workspace/context' ? jsonResponse({ context: base }) : jsonResponse(status)) as typeof fetch;
+  const props = renderOnboarding({ config, amrLoggedIn: true, amrSessionState: 'authenticated', amrAccountId: status.user.id, amrRegistrationStatus: status });
+  await screen.findByRole('button', { name: /Continue \(signed in\)/i });
+  expect(screen.queryByRole('heading', { name: /^Invite colleagues for free\.\s*Design together\.$/ })).toBeNull();
+  expect(props.onAgentChange).not.toHaveBeenCalled();
+  expect(props.onCompleteOnboarding).not.toHaveBeenCalled();
 });

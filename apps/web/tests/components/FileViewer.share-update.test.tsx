@@ -37,31 +37,46 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
-function publishedRoute(options: { freshness?: 'outdated' | 'current' | 'unknown'; failures?: number; failureStage?: 'push' | 'snapshot' | 'manual' | 'file'; historyStatus?: 'active' | 'stopped'; fileStatus?: 'active' | 'stopped'; amrAuthenticated?: boolean; noPublication?: boolean } = {}) {
+function publishedRoute(options: { lostResponse?: 'update' | 'stop'; failReadAfterLoss?: boolean; freshness?: 'outdated' | 'current' | 'unknown'; failures?: number; failureStage?: 'push' | 'snapshot' | 'manual' | 'file'; historyStatus?: 'active' | 'stopped'; fileStatus?: 'active' | 'stopped'; amrAuthenticated?: boolean; noPublication?: boolean } = {}) {
   let freshness = options.freshness ?? 'outdated';
   let fileStatus = options.fileStatus ?? 'active';
   let failures = options.failures ?? 0;
   let readFails = false;
+  let lostResponse = options.lostResponse;
   let deferReads = false;
-  let resolveDeferredRead: ((response: Response) => void) | null = null;
+  const deferredReads: Array<(response: Response) => void> = [];
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.endsWith('/api/integrations/vela/status')) return new Response(JSON.stringify({ loggedIn: Boolean(options.amrAuthenticated), loginInFlight: false, profile: 'prod', user: options.amrAuthenticated ? { id: 'owner' } : null, configPath: '/x' }), { status: 200 });
     if (url.includes('/share-state')) return new Response(JSON.stringify({ projectId: 'proj', hasEverShared: !options.noPublication, bindingExists: !options.noPublication, publications: options.noPublication ? [] : [{ sourceFilePath: 'index.html', slug: 'stable', status: options.historyStatus ?? 'active' }] }), { status: 200 });
     if (url.includes('publish-public')) {
+      if (init?.method === 'DELETE') {
+        fileStatus = 'stopped';
+        if (lostResponse === 'stop') {
+          lostResponse = undefined;
+          readFails = Boolean(options.failReadAfterLoss);
+          throw new TypeError('Failed to fetch');
+        }
+        return Response.json({ status: 'stopped' });
+      }
       if (init?.method === 'POST') {
         if (failures-- > 0) return new Response(JSON.stringify(options.failureStage === 'file'
           ? { error: 'FILE_UNAVAILABLE' } : options.failureStage === 'manual'
           ? { error: { code: 'PUBLIC_FILE_MANUAL_REVOKE_REQUIRED', message: 'Publication metadata could not be saved', data: { projectId: 'proj', ...publication } } }
           : { error: 'PUBLIC_FILE_PUBLISH_UNAVAILABLE', failure: { stage: options.failureStage ?? 'push', reason: 'network' } }), { status: options.failureStage === 'file' ? 400 : 502 });
         freshness = 'current';
+        if (lostResponse === 'update') {
+          lostResponse = undefined;
+          readFails = Boolean(options.failReadAfterLoss);
+          throw new TypeError('Failed to fetch');
+        }
         // Contract shape: SharePublishResponse.
         return new Response(JSON.stringify({ status: 'published', url: publication.url,
           receipt: { filePath: 'index.html', slug: publication.slug, publishedAt: 1, version: 1, versionId: 'v1' } }), { status: 200 });
       }
       if (readFails) return new Response(JSON.stringify({ error: 'SHARE_STATE_UNAVAILABLE' }), { status: 503 });
       if (options.noPublication) return new Response(JSON.stringify({ publication: null, status: 'none', freshness: 'unknown' }), { status: 200 });
-      if (deferReads) return await new Promise<Response>(resolve => { resolveDeferredRead = resolve; });
+      if (deferReads) return await new Promise<Response>(resolve => { deferredReads.push(resolve); });
       return new Response(JSON.stringify({ publication, status: fileStatus, freshness }), { status: 200 });
     }
     if (url.includes('/social-share')) return new Response('{}', { status: 503 });
@@ -74,7 +89,9 @@ function publishedRoute(options: { freshness?: 'outdated' | 'current' | 'unknown
     setFreshness: (next: typeof freshness) => { freshness = next; },
     setFileStatus: (next: typeof fileStatus) => { fileStatus = next; },
     setReadDeferred: (next: boolean) => { deferReads = next; },
-    resolveDeferredRead: () => resolveDeferredRead?.(new Response(JSON.stringify({ publication, status: 'active', freshness }), { status: 200 })),
+    resolveDeferredRead: () => {
+      for (const resolve of deferredReads.splice(0)) resolve(Response.json({ publication, status: fileStatus, freshness }));
+    },
   };
 }
 function posts(fetch: ReturnType<typeof vi.fn>) {
@@ -357,7 +374,7 @@ it.each(['push', 'file'] as const)('S6-ERR %s failure preserves old link, never 
   await waitFor(() => expect(posts(fetch)).toHaveLength(1));
   expect(screen.getByText(publication.url)).toBeTruthy();
   expect(screen.getByRole('button', { name: /copy share link/i })).toBeEnabled();
-  expect((await screen.findByText(/Update failed/i)).closest('[role="alert"]')).toBeTruthy();
+  expect((await screen.findByText(failureStage === 'push' ? /Connection failed or timed out/i : /Could not create the share link/i)).closest('[role="status"]')).toBeTruthy();
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
   expect(posts(fetch)).toHaveLength(1);
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^retry$/i })); });
@@ -372,7 +389,7 @@ it.each(['snapshot', 'manual'] as const)('S6-ERR %s remote outcome is uncertain;
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: /update link/i })); });
   await waitFor(() => expect(posts(fetch)).toHaveLength(1));
   expect(screen.getByText(publication.url)).toBeTruthy();
-  expect((await screen.findByText(/Update outcome unknown/i)).closest('[role="alert"]')).toBeTruthy();
+  expect((await screen.findByText(/share result could not be confirmed/i)).closest('[role="status"]')).toBeTruthy();
   expect(screen.queryByText(/previous version is still available/i)).toBeNull();
   expect(screen.queryByRole('button', { name: /^retry$/i })).toBeNull();
   expect(copy).not.toHaveBeenCalled();
@@ -427,4 +444,59 @@ it('unknown freshness keeps the existing copyable link but does not falsely labe
   expect(screen.getByRole('button', { name: /copy share link/i })).toBeEnabled();
   expect(screen.queryByRole('button', { name: /update link/i })).toBeNull();
   expect(posts(fetch)).toHaveLength(0);
+});
+
+
+it('reconciles a committed update whose response was lost without repeating the publication', async () => {
+  const route = publishedRoute({ lostResponse: 'update' });
+  await openShare();
+  const before = route.fetch.mock.calls.filter(([url, init]) => String(url).includes('publish-public') && !String(url).includes('localOnly') && !init?.method).length;
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /update link/i })); });
+  await waitFor(() => expect(route.fetch.mock.calls.filter(([url, init]) => String(url).includes('publish-public') && !String(url).includes('localOnly') && !init?.method).length).toBeGreaterThan(before));
+  await waitFor(() => expect(screen.queryByRole('button', { name: /update link/i })).toBeNull());
+  expect(posts(route.fetch)).toHaveLength(1);
+  expect(screen.queryByRole('button', { name: /^retry$/i })).toBeNull();
+  expect(screen.getByText(publication.url)).toBeVisible();
+  expect(copy).not.toHaveBeenCalled();
+});
+
+it('reconciles a committed stop whose response was lost and removes the old live link', async () => {
+  const route = publishedRoute({ lostResponse: 'stop' });
+  await openShare();
+  await act(async () => { fireEvent.click(screen.getByRole('switch', { name: /link access/i })); });
+  await waitFor(() => expect(screen.queryByText(publication.url)).toBeNull());
+  expect(route.fetch.mock.calls.filter(([, init]) => init?.method === 'DELETE')).toHaveLength(1);
+  expect(screen.queryByRole('button', { name: /^retry$/i })).toBeNull();
+  expect(copy).not.toHaveBeenCalled();
+});
+
+it('keeps a lost update unconfirmed when reconciliation fails and retries only the status read', async () => {
+  const route = publishedRoute({ lostResponse: 'update', failReadAfterLoss: true });
+  await openShare();
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /update link/i })); });
+  expect(await screen.findByText(/share result could not be confirmed/i)).toBeVisible();
+  expect(screen.getByText(publication.url)).toBeVisible();
+  expect(posts(route.fetch)).toHaveLength(1);
+  route.setReadFails(false);
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^retry$/i })); });
+  await waitFor(() => expect(screen.queryByText(/share result could not be confirmed/i)).toBeNull());
+  expect(posts(route.fetch)).toHaveLength(1);
+});
+
+
+it('propagates a successful local freshness comparison to the observed link without another cloud read', async () => {
+  const route = publishedRoute({ freshness: 'current' });
+  const observed = vi.fn();
+  const view = render(<CollabProvider value={collab}><FileViewer {...props} onObservedPublicShareLink={observed} /></CollabProvider>);
+  fireEvent.click(await screen.findByRole('button', { name: /^share$/i }));
+  await screen.findByText(publication.url);
+  await waitFor(() => expect(observed).toHaveBeenCalledWith(expect.objectContaining({ freshness: 'current' })));
+  const cloudReads = () => route.fetch.mock.calls.filter(([url, init]) => String(url).includes('publish-public') && !String(url).includes('localOnly') && !init?.method).length;
+  const before = cloudReads();
+  observed.mockClear();
+  route.setFreshness('outdated');
+  view.rerender(<CollabProvider value={collab}><FileViewer {...props} filesRefreshKey={99} onObservedPublicShareLink={observed} /></CollabProvider>);
+  await waitFor(() => expect(observed).toHaveBeenCalledWith(expect.objectContaining({ freshness: 'outdated', slug: publication.slug, filePath: 'index.html' })));
+  expect(cloudReads()).toBe(before);
+  expect(posts(route.fetch)).toHaveLength(0);
 });

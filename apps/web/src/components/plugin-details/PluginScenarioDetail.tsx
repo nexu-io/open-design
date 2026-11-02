@@ -7,6 +7,7 @@
 // is reused by every other variant; this file owns the modal shell
 // (backdrop, header, byline, hero, footer with Use plugin CTA).
 
+import { lockWebModalScroll } from '../modal-scroll-lock';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog } from '@open-design/components';
 import type {
@@ -63,13 +64,7 @@ export function PluginScenarioDetail({
     return () => document.removeEventListener('mousedown', onDoc);
   }, [useMenuOpen]);
 
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, []);
+  useEffect(() => lockWebModalScroll(), []);
 
   // Move focus to the close button on mount so keyboard users land
   // somewhere sensible without trapping them inside the long body.

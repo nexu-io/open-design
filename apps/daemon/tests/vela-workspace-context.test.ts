@@ -11,6 +11,7 @@ import {
   createVelaWorkspaceContextProvider,
   fetchVelaWorkspaceDirectory,
   mapVelaWorkspaceContext,
+  mapVelaWorkspaceDirectory,
   resolveVelaWorkspaceHubEventsEndpoint,
   velaWorkspaceDirectoryIdentityForSession,
   workspaceContextFromDirectoryItem,
@@ -18,8 +19,11 @@ import {
 import { createActiveWorkspaceSelectionStore } from '../src/collab/active-workspace-selection.js';
 import {
   clearVelaAuthorizationState,
+  markVelaAuthorizationExpired,
   readVelaControlApiContext,
+  readVelaCredentialRevision,
   readVelaLoginStatus,
+  readVelaRuntimeLinkContext,
 } from '../src/integrations/vela.js';
 
 // A well-formed rich workspace-context body, as returned inside flows such as
@@ -76,6 +80,53 @@ afterEach(() => {
 });
 
 describe('mapVelaWorkspaceContext', () => {
+  it.each(['owner', 'admin', 'member'] as const)(
+    'carries the same authorized workspace active member count for %s without changing permissions',
+    (role) => {
+      const mapped = mapVelaWorkspaceContext({ ...B_TEAM_CONTEXT, role, memberCount: 7 });
+      expect(mapped).toMatchObject({
+        workspaceId: 'ws-team-1',
+        workspaceMemberId: 'wm-1',
+        memberCount: 7,
+        permissions: B_TEAM_CONTEXT.permissions,
+      });
+      expect(mapped?.seatSummary.usedSeats).toBe(2);
+    },
+  );
+
+  it.each([undefined, null, 0, -1, 1.5, '7', NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])(
+    'omits unknown or invalid active member count %s rather than deriving it from seats',
+    (memberCount) => {
+      const mapped = mapVelaWorkspaceContext({ ...B_TEAM_CONTEXT, memberCount });
+      expect(mapped).not.toBeNull();
+      expect(mapped).not.toHaveProperty('memberCount');
+    },
+  );
+
+  it('keeps member counts bound to each rich context across A to B to A', () => {
+    const inputs = [
+      { ...B_TEAM_CONTEXT, memberCount: 2 },
+      { ...B_TEAM_CONTEXT, workspaceId: 'ws-team-2', workspaceMemberId: 'wm-2', memberCount: 5 },
+      { ...B_TEAM_CONTEXT, memberCount: 3 },
+    ];
+    expect(inputs.map((input) => {
+      const mapped = mapVelaWorkspaceContext(input);
+      return [mapped?.workspaceId, mapped?.workspaceMemberId, mapped?.memberCount];
+    })).toEqual([
+      ['ws-team-1', 'wm-1', 2],
+      ['ws-team-2', 'wm-2', 5],
+      ['ws-team-1', 'wm-1', 3],
+    ]);
+  });
+
+  it('does not synthesize an active member count from a directory entry or its seat placeholder', () => {
+    expect(workspaceContextFromDirectoryItem(B_DIRECTORY_ITEM)).not.toHaveProperty('memberCount');
+    expect(mapVelaWorkspaceContext({ ...B_TEAM_CONTEXT, memberCount: 0, seatSummary: undefined }))
+      .not.toHaveProperty('memberCount');
+    expect(mapVelaWorkspaceContext({ ...B_TEAM_CONTEXT, workspaceMemberId: '', memberCount: 7 }))
+      .toBeNull();
+  });
+
   it('maps a team context, deriving teamId from workspaceId and preserving BYOK', () => {
     const mapped = mapVelaWorkspaceContext(B_TEAM_CONTEXT);
     expect(mapped).not.toBeNull();
@@ -165,7 +216,10 @@ describe('mapVelaWorkspaceContext', () => {
 
 describe('createCachedWorkspaceDirectoryFetcher', () => {
   it('builds hub URL, authorization, and identity from the same merged session', () => {
+    const amrHome = mkdtempSync(join(tmpdir(), 'od-vela-hub-session-'));
+    tempDirs.push(amrHome);
     const inherited = {
+      AMR_HOME: amrHome,
       VELA_API_URL: 'https://account-a.example',
       VELA_CONTROL_KEY: 'account-a-control-key',
     } as NodeJS.ProcessEnv;
@@ -1158,7 +1212,10 @@ describe('createVelaWorkspaceContextProvider explicit local scope', () => {
       workspaceId: B_DIRECTORY_ITEM.workspaceId,
     });
     expect(fetchWorkspaceDirectory).toHaveBeenCalledTimes(2);
-    expect(directFetch).not.toHaveBeenCalled();
+    // Only the optional count enrichment bypasses the directory broker.
+    expect(directFetch).toHaveBeenCalledOnce();
+    expect(String((directFetch as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]))
+      .toBe('https://vela.example/api/v1/workspaces/current');
   });
 
   it('does not bootstrap when the directory returns 401', async () => {
@@ -1180,6 +1237,151 @@ describe('createVelaWorkspaceContextProvider explicit local scope', () => {
     expect(await provider.current({})).toBeNull();
     const directoryCalls = calls.filter((c) => c.url.endsWith('/api/v1/workspaces'));
     expect(directoryCalls.length).toBe(2);
+  });
+});
+
+describe('createVelaWorkspaceContextProvider exact member count enrichment', () => {
+  it.each(['owner', 'admin', 'member'] as const)(
+    'reads %s count using the exact authorized workspace header and preserves directory permissions',
+    async (role) => {
+      const item = { ...B_DIRECTORY_ITEM, role };
+      const directoryContext = workspaceContextFromDirectoryItem(item);
+      const fetchImpl = vi.fn(async () => jsonResponse(200, {
+        ...B_TEAM_CONTEXT,
+        role,
+        memberCount: 7,
+        planId: 'upstream-owner-financial-field',
+        seatSummary: { seatLimit: 999, usedSeats: 999 },
+      }));
+      const provider = createVelaWorkspaceContextProvider({
+        fetch: fetchImpl as typeof fetch,
+        readSession: () => SESSION,
+        fetchWorkspaceDirectory: async () => ({ ok: true, items: [item] }),
+        getActiveWorkspaceId: () => 'unrelated-page-workspace',
+      });
+
+      await expect(provider.resolveExact?.({ workspaceId: ' ws-team-1 ' }))
+        .resolves.toEqual({ ...directoryContext, memberCount: 7 });
+      expect(fetchImpl).toHaveBeenCalledWith(
+        new URL('https://vela.example/api/v1/workspaces/current'),
+        expect.objectContaining({
+          method: 'GET',
+          headers: {
+            authorization: 'Bearer ck-1',
+            'x-vela-workspace-id': 'ws-team-1',
+          },
+          signal: expect.any(AbortSignal),
+        }),
+      );
+    },
+  );
+
+  it.each([
+    { workspaceId: 'other-workspace', memberCount: 7 },
+    { workspaceMemberId: 'other-actor', memberCount: 7 },
+    { memberStatus: 'removed', memberCount: 7 },
+    { lifecycleState: 'deleted', memberCount: 7 },
+    { lifecycleState: 'unknown', memberCount: 7 },
+    { memberCount: undefined },
+    { memberCount: 0 },
+    { memberCount: -1 },
+    { memberCount: 1.5 },
+    { memberCount: '7' },
+    { memberCount: Number.MAX_SAFE_INTEGER + 1 },
+  ])('omits count for a mismatched, unavailable or invalid context %j', async (delta) => {
+    const provider = createVelaWorkspaceContextProvider({
+      fetch: async () => jsonResponse(200, { ...B_TEAM_CONTEXT, ...delta }),
+      readSession: () => SESSION,
+      fetchWorkspaceDirectory: async () => ({ ok: true, items: [B_DIRECTORY_ITEM] }),
+    });
+    await expect(provider.resolveExact?.({ workspaceId: 'ws-team-1' }))
+      .resolves.toEqual(workspaceContextFromDirectoryItem(B_DIRECTORY_ITEM));
+  });
+
+  it.each([403, 404, 500])('omits unavailable count on HTTP %s without changing original context', async (status) => {
+    const provider = createVelaWorkspaceContextProvider({
+      fetch: async () => jsonResponse(status, { error: 'unavailable' }),
+      readSession: () => SESSION,
+      fetchWorkspaceDirectory: async () => ({ ok: true, items: [B_DIRECTORY_ITEM] }),
+    });
+    await expect(provider.resolveExact?.({ workspaceId: 'ws-team-1' }))
+      .resolves.toEqual(workspaceContextFromDirectoryItem(B_DIRECTORY_ITEM));
+  });
+
+  it('omits count after its abort deadline without discarding the authorized directory context', async () => {
+    vi.useFakeTimers();
+    try {
+      let signal: AbortSignal | undefined;
+      const provider = createVelaWorkspaceContextProvider({
+        fetch: async (_url, init) => new Promise<Response>((_resolve, reject) => {
+          signal = init?.signal as AbortSignal;
+          signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+        }),
+        readSession: () => SESSION,
+        fetchWorkspaceDirectory: async () => ({ ok: true, items: [B_DIRECTORY_ITEM] }),
+        timeoutMs: 50,
+      });
+      const resolved = provider.resolveExact!({ workspaceId: 'ws-team-1' });
+      await vi.advanceTimersByTimeAsync(49);
+      expect(signal?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(signal?.aborted).toBe(true);
+      await expect(resolved).resolves.toEqual(workspaceContextFromDirectoryItem(B_DIRECTORY_ITEM));
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not request enrichment before a matching active directory authorization', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(200, { ...B_TEAM_CONTEXT, memberCount: 7 }));
+    for (const result of [
+      { ok: false, items: [] },
+      { ok: true, items: [] },
+      { ok: true, items: [{ ...B_DIRECTORY_ITEM, memberStatus: 'removed' as const }] },
+    ]) {
+      const provider = createVelaWorkspaceContextProvider({
+        fetch: fetchImpl as typeof fetch,
+        readSession: () => SESSION,
+        fetchWorkspaceDirectory: async () => result,
+      });
+      await expect(provider.resolveExact?.({ workspaceId: 'ws-team-1' })).resolves.toBeNull();
+    }
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('keeps the captured session and fixed workspace across a concurrent account and page switch', async () => {
+    let session = SESSION;
+    let selected = 'ws-team-1';
+    let releaseDirectory!: (result: { ok: boolean; items: WorkspaceDirectoryItem[] }) => void;
+    const directory = new Promise<{ ok: boolean; items: WorkspaceDirectoryItem[] }>((resolve) => {
+      releaseDirectory = resolve;
+    });
+    const fetchImpl = vi.fn(async (url: URL | string) => {
+      if (String(url).endsWith('/api/v1/workspaces')) {
+        return jsonResponse(200, await directory);
+      }
+      return jsonResponse(200, { ...B_TEAM_CONTEXT, memberCount: 7 });
+    });
+    const readSession = vi.fn(() => session);
+    const provider = createVelaWorkspaceContextProvider({
+      fetch: fetchImpl as typeof fetch,
+      readSession,
+      getActiveWorkspaceId: () => selected,
+    });
+    const resolved = provider.resolveExact!({ workspaceId: 'ws-team-1' });
+    session = { ...SESSION, apiUrl: 'https://account-b.example', controlKey: 'ck-b' };
+    selected = 'page-workspace-b';
+    releaseDirectory({ ok: true, items: [B_DIRECTORY_ITEM] });
+    await expect(resolved).resolves.toMatchObject({ workspaceId: 'ws-team-1', workspaceMemberId: 'wm-1', memberCount: 7 });
+    expect(readSession).toHaveBeenCalledOnce();
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenNthCalledWith(1, new URL('https://vela.example/api/v1/workspaces'), expect.objectContaining({
+      headers: { authorization: 'Bearer ck-1' },
+    }));
+    expect(fetchImpl).toHaveBeenNthCalledWith(2, new URL('https://vela.example/api/v1/workspaces/current'), expect.objectContaining({
+      headers: { authorization: 'Bearer ck-1', 'x-vela-workspace-id': 'ws-team-1' },
+    }));
   });
 });
 
@@ -1453,4 +1655,158 @@ describe('workspace authority failure evidence', () => {
       expect(record.mock.calls[0]![0]).not.toHaveProperty('controlKey');
     } finally { record.mockRestore(); }
   });
+});
+
+
+describe('workspace directory verified default marker', () => {
+  it('preserves only the upstream boolean true default marker', () => {
+    const row = { workspaceId: 'w', workspaceName: 'Default', workspaceType: 'personal', workspaceMemberId: 'm', role: 'owner', memberStatus: 'active', lifecycleState: 'active' };
+    expect(mapVelaWorkspaceDirectory({ items: [{ ...row, isDefault: true }] })[0]).toMatchObject({ isDefault: true });
+    for (const value of [false, 'true', 1, undefined]) {
+      expect(mapVelaWorkspaceDirectory({ items: [{ ...row, isDefault: value }] })[0]).not.toHaveProperty('isDefault');
+    }
+  });
+});
+
+
+it('preserves explicit member counts without deriving them from legacy seat usage', () => {
+  expect(mapVelaWorkspaceContext({ ...B_TEAM_CONTEXT, memberCount: 5 })?.memberCount).toBe(5);
+  expect(mapVelaWorkspaceContext(B_TEAM_CONTEXT)?.memberCount).toBeUndefined();
+  expect(mapVelaWorkspaceContext({ ...B_TEAM_CONTEXT, memberCount: -1 })?.memberCount).toBeUndefined();
+});
+
+
+describe('invitation actual directory member count', () => {
+  it('preserves the active count through directory parsing into selected context', () => {
+    const [item] = mapVelaWorkspaceDirectory({ items: [{ ...B_DIRECTORY_ITEM, memberCount: 52 }] });
+    expect(item?.memberCount).toBe(52);
+    expect(workspaceContextFromDirectoryItem(item!).memberCount).toBe(52);
+    expect(workspaceContextFromDirectoryItem(B_DIRECTORY_ITEM).memberCount).toBeUndefined();
+    const [invalid] = mapVelaWorkspaceDirectory({ items: [{ ...B_DIRECTORY_ITEM, memberCount: -1 }] });
+    expect(invalid?.memberCount).toBeUndefined();
+  });
+});
+
+
+describe('Settings-selected AMR credential directory isolation', () => {
+  function fixture(label: string): { directory: string; contents: string } {
+    const directory = mkdtempSync(join(tmpdir(), 'od-vela-profile-isolation-'));
+    tempDirs.push(directory);
+    const contents = JSON.stringify({ profiles: Object.fromEntries(['prod', 'local'].map((profile) => [profile, {
+      apiUrl: `https://${label}-${profile}.example`, linkUrl: `https://${label}-${profile}-link.example`,
+      controlKey: `${label}-${profile}-control`, runtimeKey: `${label}-${profile}-runtime`,
+      user: { id: `${label}-${profile}-user`, email: `${label}-${profile}@example.test` },
+    }])) });
+    writeFileSync(join(directory, 'config.json'), contents);
+    return { directory, contents };
+  }
+
+  it('uses the configured directory and profile consistently for control, login, and revision reads', () => {
+    const inheritedHome = fixture('inherited');
+    const selectedHome = fixture('selected');
+    vi.stubEnv('AMR_HOME', inheritedHome.directory);
+    const inherited = { AMR_HOME: inheritedHome.directory, VELA_PROFILE: 'prod' };
+    const configured = { AMR_HOME: selectedHome.directory, VELA_PROFILE: 'local' };
+
+    expect(readVelaControlApiContext(inherited, configured)).toMatchObject({
+      profile: 'local', apiUrl: 'https://selected-local.example', controlKey: 'selected-local-control',
+      user: { id: 'selected-local-user' },
+    });
+    expect(readVelaLoginStatus(inherited, configured)).toMatchObject({
+      loggedIn: true, configPath: join(selectedHome.directory, 'config.json'), user: { id: 'selected-local-user' },
+    });
+    expect(readVelaCredentialRevision(inherited, configured)).toMatchObject({
+      profile: 'local', authSource: 'file', userId: 'selected-local-user',
+    });
+    expect(readVelaCredentialRevision(inherited, configured).credentialFingerprint)
+      .not.toBe(readVelaCredentialRevision(inherited).credentialFingerprint);
+    expect(readVelaControlApiContext(inherited)?.controlKey).toBe('inherited-prod-control');
+    expect(fs.readFileSync(join(inheritedHome.directory, 'config.json'), 'utf8')).toBe(inheritedHome.contents);
+    expect(fs.readFileSync(join(selectedHome.directory, 'config.json'), 'utf8')).toBe(selectedHome.contents);
+  });
+
+  it('never borrows the inherited profile when the configured directory has no session', () => {
+    const inheritedHome = fixture('inherited');
+    const emptyHome = mkdtempSync(join(tmpdir(), 'od-vela-empty-profile-'));
+    tempDirs.push(emptyHome);
+    vi.stubEnv('AMR_HOME', inheritedHome.directory);
+    const inherited = { AMR_HOME: inheritedHome.directory, VELA_PROFILE: 'prod' };
+    const configured = { AMR_HOME: emptyHome, VELA_PROFILE: 'local' };
+
+    expect(readVelaControlApiContext(inherited, configured)).toBeNull();
+    expect(readVelaLoginStatus(inherited, configured)).toMatchObject({
+      loggedIn: false, configPath: join(emptyHome, 'config.json'), user: null,
+    });
+    expect(readVelaCredentialRevision(inherited, configured)).toMatchObject({ authSource: 'none', loggedIn: false, userId: '' });
+  });
+
+  it('uses the same explicit API override as the CLI with the selected file profile', () => {
+    const selectedHome = fixture('selected');
+    vi.stubEnv('AMR_HOME', selectedHome.directory);
+    const inherited = { AMR_HOME: selectedHome.directory, VELA_PROFILE: 'prod', VELA_API_URL: 'https://inherited-api.example' };
+    const configured = { VELA_PROFILE: 'local', VELA_API_URL: 'https://settings-api.example' };
+    expect(readVelaControlApiContext(inherited, configured)).toMatchObject({
+      profile: 'local', apiUrl: 'https://settings-api.example', controlKey: 'selected-local-control',
+      user: { id: 'selected-local-user' },
+    });
+  });
+
+  it('reads the runtime key and Link origin from the same selected directory and profile', () => {
+    const inheritedHome = fixture('inherited');
+    const selectedHome = fixture('selected');
+    const inherited = { AMR_HOME: inheritedHome.directory, VELA_PROFILE: 'prod' };
+    const configured = { AMR_HOME: selectedHome.directory, VELA_PROFILE: 'local' };
+    expect(readVelaRuntimeLinkContext(inherited, configured)).toEqual({
+      profile: 'local', linkUrl: 'https://selected-local-link.example', runtimeKey: 'selected-local-runtime',
+    });
+    expect(fs.readFileSync(join(selectedHome.directory, 'config.json'), 'utf8')).toBe(selectedHome.contents);
+    expect(fs.readFileSync(join(inheritedHome.directory, 'config.json'), 'utf8')).toBe(inheritedHome.contents);
+  });
+
+  it('uses the CLI environment precedence for complete and partial runtime overrides', () => {
+    const home = fixture('selected');
+    const env = { AMR_HOME: home.directory, VELA_PROFILE: 'local' };
+    expect(readVelaRuntimeLinkContext(env, { VELA_LINK_URL: 'https://settings-link.example' })).toEqual({
+      profile: 'local', linkUrl: 'https://settings-link.example', runtimeKey: 'selected-local-runtime',
+    });
+    expect(readVelaRuntimeLinkContext(env, { VELA_RUNTIME_KEY: 'settings-runtime' })).toEqual({
+      profile: 'local', linkUrl: 'https://selected-local-link.example', runtimeKey: 'settings-runtime',
+    });
+    expect(readVelaRuntimeLinkContext(env, { VELA_RUNTIME_KEY: 'settings-runtime', VELA_LINK_URL: 'https://settings-link.example' })).toEqual({
+      profile: 'local', linkUrl: 'https://settings-link.example', runtimeKey: 'settings-runtime',
+    });
+  });
+
+  it('does not borrow the inherited home or another saved profile for a missing runtime key', () => {
+    const home = fixture('inherited');
+    const emptyHome = mkdtempSync(join(tmpdir(), 'od-vela-empty-runtime-'));
+    tempDirs.push(emptyHome);
+    expect(readVelaRuntimeLinkContext({ AMR_HOME: home.directory, VELA_PROFILE: 'prod' }, { AMR_HOME: emptyHome, VELA_PROFILE: 'local' })).toBeNull();
+    expect(readVelaRuntimeLinkContext({ AMR_HOME: home.directory, VELA_PROFILE: 'test' })).toBeNull();
+  });
+
+  it.each([
+    ['prod', 'https://amr-link.open-design.ai'], ['test', 'https://vela-link.powerformer.net'],
+    ['feature-test', 'https://amr-feature-link.powerformer.net'], ['local', 'http://localhost:18081'],
+  ])('uses only the CLI builtin Link endpoint for %s when no saved endpoint exists', (profile, linkUrl) => {
+    const home = mkdtempSync(join(tmpdir(), 'od-vela-builtin-link-'));
+    tempDirs.push(home);
+    writeFileSync(join(home, 'config.json'), JSON.stringify({ profiles: { [profile]: { runtimeKey: 'own-runtime' } } }));
+    expect(readVelaRuntimeLinkContext({ AMR_HOME: home, VELA_PROFILE: profile })).toEqual({ profile, linkUrl, runtimeKey: 'own-runtime' });
+  });
+
+  it.each(['not a URL', 'file:///tmp/link', 'https://user:secret@link.example'])('rejects an invalid Link override without falling back: %s', (linkUrl) => {
+    const home = fixture('selected');
+    expect(readVelaRuntimeLinkContext({ AMR_HOME: home.directory, VELA_PROFILE: 'local' }, { VELA_LINK_URL: linkUrl })).toBeNull();
+  });
+
+  it('does not return an explicitly expired runtime credential revision', () => {
+    const home = fixture('selected');
+    const env = { AMR_HOME: home.directory, VELA_PROFILE: 'local' };
+    expect(readVelaRuntimeLinkContext(env)).not.toBeNull();
+    markVelaAuthorizationExpired(env);
+    expect(readVelaRuntimeLinkContext(env)).toBeNull();
+    expect(readVelaRuntimeLinkContext(env, { VELA_RUNTIME_KEY: 'rotated-runtime', VELA_LINK_URL: 'https://rotated-link.example' })).toMatchObject({ runtimeKey: 'rotated-runtime' });
+  });
+
 });

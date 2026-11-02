@@ -67,6 +67,17 @@
   overflow: hidden;
 }
 
+/* Frozen r506 F12/F15 use the 480 × 118 in-conversation concurrency card.
+   Balance cards retain their existing fluid width. */
+.concurrency {
+  width: min(100%, 480px);
+  min-height: 118px;
+}
+
+.concurrency .head {
+  padding-bottom: 6px;
+}
+
 /* 右上角那枚辉光(两颗星,渐变从那支绿收到卡面色)。
    稿子把提供的 SVG 旋转 180° 放在右上:小星在上、大星在下。
    `z-index: -1` 落在卡片自己的背景之上、内容之下 —— 所以它压在底色上、
@@ -175,20 +186,20 @@
    才不靠顺序取胜。同一副病灶在 `routines.css` 上也出现过一次:两条声明逐字相同、
    纯靠顺序取胜,文本 diff 照不出来,只有量计算样式才看得见。
 
-   `height: auto` 必须显式写:共享 Button 基底是固定 `height: 36px`,
-   不松开的话下面那条 `min-height: 44px` 永远不会生效 —— 而 44 是触达尺寸,
-   不是装饰。 */
+   冻结 r506 的 `.limit-upBtn` 是 44px 高、1px 绿边、8px 角。
+   这里显式覆盖共享 Button 的 36px 高和胶囊角，四张失败卡共用这一处。 */
 .up .bottom .cta {
   flex: none;
   gap: 8px;
-  height: auto;
+  height: 44px;
   min-height: 44px;
   padding: 12px 16px 12px 12px;
   font-size: var(--chat-t-lead);
   line-height: 20px;
   font-weight: 400;
   background: var(--upgrade-surface);
-  border-color: var(--upgrade-surface);
+  border: 1px solid var(--upgrade-surface);
+  border-radius: 8px;
   color: var(--upgrade-button-ink);
 }
 
