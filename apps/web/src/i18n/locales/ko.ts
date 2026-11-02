@@ -495,6 +495,7 @@ export const ko: Dict = {
   'settings.onboardingCloudAlternative': '로컬 CLI 또는 자체 API 키 사용',
   'settings.onboardingCloudRights': '모든 권리 보유.',
   'settings.onboardingCloudOr': '또는',
+  'settings.onboardingCloudCancel': '취소하고 OpenDesign으로 돌아가기',
   'settings.onboardingGateTooltipNoRuntime': '다음 단계는 AI로 실행됩니다 — 계속하려면 실행 방식을 선택하세요.',
   'settings.onboardingGateTooltipAmr': '다음 단계는 AI로 실행됩니다 — 계속하려면 OpenDesign Cloud에 로그인하세요.',
   'settings.onboardingGateTooltipLocal': '다음 단계는 AI로 실행됩니다 — 계속하려면 사용 가능한 로컬 CLI를 선택하세요.',

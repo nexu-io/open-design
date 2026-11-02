@@ -106,6 +106,7 @@ import {
   RailAccountRecoveryTip,
   RailAccountSyncTip,
 } from './CloudSignInTip';
+import { cloudGateDecision } from '../cloud-gate';
 import {
   resolveEntryRailAccountFooterState,
   requiresAmrReauthentication,
@@ -588,6 +589,16 @@ interface Props {
   onPersistComposioKey: (composio: AppConfig['composio']) => Promise<void> | void;
   onOpenSettings: (section?: EntrySettingsSection) => void;
   onCompleteOnboarding: () => void;
+  /**
+   * Escape hatch for the passive Cloud reauth gate. A returning user who
+   * accidentally selects the Cloud agent while signed out has no way back:
+   * the gate re-derives from config on every non-onboarding route, so the
+   * owner of the config has to revert the saved selection, not just navigate.
+   * Only surfaced when `onboardingCompleted` is already true, so first-run
+   * Connect stays a required step.
+   */
+  onCancelCloudOnboarding?: () => void;
+  cloudGateDismissed?: boolean;
   onSignedOut?: () => void | Promise<void>;
   onAmrLoginStatusChange?: (status: VelaLoginStatus | null) => void;
 }
@@ -698,6 +709,8 @@ export function EntryShell({
   onPersistComposioKey,
   onOpenSettings,
   onCompleteOnboarding,
+  onCancelCloudOnboarding,
+  cloudGateDismissed = false,
   onSignedOut,
   onAmrLoginStatusChange,
 }: Props) {
@@ -740,12 +753,20 @@ export function EntryShell({
   useEffect(() => {
     // The entry shell is an authenticated surface. Both an explicit signed-out
     // status and a definitive credential rejection return to the existing
-    // Cloud identity gate. Passive reauthentication preserves the saved model
-    // source and Home's locally persisted, not-yet-sent draft.
-    const selectedCloudIdentityRejected = usesOpenDesignCloud && amrLoggedIn === false;
-    if ((!selectedCloudIdentityRejected && !amrAuthRequired) || view === 'onboarding') return;
+    // Cloud identity gate. A completed user who cancelled the passive gate is
+    // left on Home while amrAuthRequired keeps workspace/Cloud writes blocked.
+    const redirectRequired = cloudGateDecision({
+      usesOpenDesignCloud,
+      amrLoggedIn: amrLoggedIn ?? undefined,
+      amrSessionState: requiresAmrReauthentication(amrSessionState, undefined)
+        ? 'reauth_required' : null,
+      workspaceFailure: workspaceContextState.failure,
+      dismissed: cloudGateDismissed,
+    });
+    if (!redirectRequired || view === 'onboarding') return;
     navigate({ kind: 'home', view: 'onboarding' }, { replace: true });
-  }, [amrAuthRequired, amrLoggedIn, usesOpenDesignCloud, view]);
+  }, [amrLoggedIn, amrSessionState, cloudGateDismissed, usesOpenDesignCloud, view,
+      workspaceContextState.failure]);
   let accountFooterNotice: ReactNode = null;
   if (accountFooterState === 'syncing') {
     accountFooterNotice = <RailAccountSyncTip />;
@@ -2096,6 +2117,7 @@ export function EntryShell({
             onRefreshAgents={onRefreshAgents}
             onAmrLoginStatusChange={onAmrLoginStatusChange}
             onFinish={finishOnboarding}
+            onCancelCloudOnboarding={onCancelCloudOnboarding}
           />
         </main>
       </div>
@@ -2591,6 +2613,7 @@ function OnboardingView({
   onRefreshAgents,
   onAmrLoginStatusChange,
   onFinish,
+  onCancelCloudOnboarding,
 }: {
   autoCloudSignInRequested?: boolean;
   onAutoCloudSignInConsumed?: () => void;
@@ -2612,6 +2635,7 @@ function OnboardingView({
   onRefreshAgents: () => Promise<AgentInfo[]> | AgentInfo[];
   onAmrLoginStatusChange?: (status: VelaLoginStatus | null) => void;
   onFinish: () => void;
+  onCancelCloudOnboarding?: () => void;
 }) {
   const t = useT();
   const analytics = useAnalytics();
@@ -4152,6 +4176,18 @@ function OnboardingView({
                 </div>
               ) : null}
             </div>
+            {!cloudBusy && config.onboardingCompleted === true && onCancelCloudOnboarding ? (
+              <button
+                type="button"
+                className="onboarding-cloud__cancel"
+                onClick={() => {
+                  emitOnboardingClick('back', 'back');
+                  onCancelCloudOnboarding();
+                }}
+              >
+                {t('settings.onboardingCloudCancel')}
+              </button>
+            ) : null}
           </div>
           <footer className="onboarding-cloud__footer">
             <LanguageMenu placement="up" align="start" />
