@@ -1450,7 +1450,7 @@ function popupBlockedMessage(): string {
 export async function openExternalUrl(url: string): Promise<boolean> {
   let accountUrl: string;
   try { accountUrl = await prepareAmrWebUrl(url); }
-  catch { window.dispatchEvent(new CustomEvent('amr-web-intent-error', { detail: url })); return false; }
+  catch { window.dispatchEvent(new Event('amr-web-intent-error')); return false; }
   const bridgedUrl = await bridgeFirstPartyUrl(accountUrl);
   const targetUrl = bridgedUrl ?? accountUrl;
   if (isOpenDesignHostAvailable()) {
