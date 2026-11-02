@@ -365,6 +365,13 @@ describe("runElectronBuilder", () => {
     const cliPath = join(root, "fake-electron-builder.mjs");
 
     const config = makeConfig(root, {
+      amrEndpointBinding: {
+        profile: "test",
+        apiUrl: "https://api.example.invalid",
+        linkUrl: "https://link.example.invalid",
+        webUrl: "https://console.example.invalid",
+        credentialScope: "builder-fixture",
+      },
       appVersion: "1.2.3-prerelease.4",
       electronBuilderCliPath: cliPath,
       signed: true,
@@ -372,6 +379,16 @@ describe("runElectronBuilder", () => {
       ...overrides,
     });
     const paths = resolveMacPaths(config);
+    await mkdir(dirname(paths.packagedConfigPath), { recursive: true });
+    await writeFile(
+      paths.packagedConfigPath,
+      renderMacPackagedConfig({
+        appVersion: config.appVersion ?? "1.2.3-prerelease.4",
+        config,
+        usePrebundledStandaloneWeb: false,
+      }),
+      "utf8",
+    );
     const nodePtyPrebuildRoot = join(
       paths.appPath,
       "Contents",
@@ -385,7 +402,9 @@ describe("runElectronBuilder", () => {
     await writeFile(
       cliPath,
       [
-        'import { chmod, mkdir, writeFile } from "node:fs/promises";',
+        'import { chmod, copyFile, mkdir, readFile, writeFile } from "node:fs/promises";',
+        'const args = process.argv.slice(2);',
+        'const builderConfig = JSON.parse(await readFile(args[args.indexOf("--config") + 1], "utf8"));',
         `const prebuildRoot = ${JSON.stringify(nodePtyPrebuildRoot)};`,
         `const appRoot = ${JSON.stringify(join(paths.appPath, "Contents", "Resources", "app"))};`,
         'for (const name of ["sidecar", "platform"]) {',
@@ -397,6 +416,9 @@ describe("runElectronBuilder", () => {
         '}',
         'await writeFile(appRoot + "/main.cjs", "");',
         'await writeFile(appRoot + "/package.json", "{}");',
+        'const configResource = builderConfig.extraResources.find((entry) => entry.to === "open-design-config.json");',
+        'if (!configResource) throw new Error("packaged config resource missing");',
+        'await copyFile(configResource.from, appRoot + "/../open-design-config.json");',
         "await mkdir(prebuildRoot, { recursive: true });",
         'await writeFile(new URL("pty.node", `file://${prebuildRoot}/`), Buffer.alloc(32 * 1024, 1));',
         'await writeFile(new URL("spawn-helper", `file://${prebuildRoot}/`), "#!/bin/sh\\nexit 0\\n", "utf8");',

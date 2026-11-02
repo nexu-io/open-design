@@ -1,31 +1,9 @@
-// ┌──────────────────────────────────────────────────────────────────────────┐
-// │ 回归网 (Z9) —— 为 A7「统一同步资格闸门 `commentRelayScope()`」准备           │
-// └──────────────────────────────────────────────────────────────────────────┘
-//
-// 1. 这是什么
-//    A7 要把 daemon 里分散的「这条评论该不该同步」判断收敛成一个入口。那些判断
-//    今天散落在路由、collab-cloud service、outbox 和 server.ts 的 context 解析器
-//    里。任一处漏改的症状是**静默的**:用户本地写了评论,看起来成功了,但永远
-//    不上行,也没有任何报错。这个文件就是那次改动的安全网。
-//
-// 2. 🔴 所有断言钉的是「现状」,不是「应然」
-//    下面每一条 expect 都是 2026-09-21 在本分支实测出来的当前行为。其中有几条
-//    看起来很可疑(见文件末尾的「可疑行为」注释块),但这里**照现状写**,并在
-//    就近位置用注释标出。请不要把可疑项改成「正确」的期望值 —— 一条今天就红的
-//    断言,会被后来的人当成自己改坏了然后回退,那比没有测试更糟。
-//
-// 3. 改动之后某条变红怎么办
-//    先判断是「有意改变」还是「漏改」:
-//      - 有意改变:在 A7 的 PR 描述里写清哪一格的语义变了、为什么,再改断言。
-//      - 漏改:修生产代码,不要改断言。
-//    尤其注意「同步 → 不同步」方向的变红 —— 那正是这个网要抓的静默回归。
-//
-// 4. 本文件的层次
-//    照抄 `tests/project-comment-workspace-gate.test.ts` 的做法:真 SQLite、真
-//    express、真路由、真 `enforceWorkspaceResourceMutation` 闸门、真
-//    `createCollabCloudService` + 真 `createCommentRelayOutboxStore`,只有最外面
-//    的 collab-cloud HTTP client 是假的(它就是「云端」本身)。
-//    唯一一处抄写见 `resolveCommentWorkspaceContext` 上方的说明。
+// Comment relay eligibility across workspace type × project visibility.
+// Shared projects relay in both personal and team workspaces. Private projects
+// without an active public-file publication remain local in either workspace.
+// The fixture uses the production context/scope helpers, real SQLite, routes,
+// and durable outbox; only the external cloud client and fresh directory are mocked.
+// Public-file publication coverage lives in opend-3855-comment-relay-scope.test.ts.
 
 import http from 'node:http';
 import express from 'express';
@@ -68,6 +46,8 @@ import {
 } from '../src/collab/workspace-resource-mutation.js';
 import { createCollabCloudService } from '../src/collab/collab-cloud-service.js';
 import { resolveLocalProjectCommentWorkspaceContext } from '../src/collab/project-comment-workspace-context.js';
+import { commentRelayScope, personalCommentRelayFilePaths } from '../src/collab/comment-relay-scope.js';
+import { createSqlitePublicFilePublicationStore } from '../src/collab/public-file-publication-store.js';
 import {
   commentRelayLocalBindingMatches,
   createCommentRelayOutboxStore,
@@ -83,12 +63,8 @@ import type { CollabCloudClient } from '../src/integrations/collab-cloud.js';
 //   个人项目 → 用户自己的个人工作区;团队项目 → 一个团队工作区。
 //   请求头 `x-od-workspace-type` 如实声明这一点。
 //
-// 「分享状态」 = 绑定行的 `visibility`。今天 daemon 侧没有别的分享开关:
-//   `packages/contracts/src/api/share.ts`(本分支新增)还只是契约,没有任何
-//   daemon 代码消费它。所以「分享中」== `visibility: 'team'`。
-//
-// 两个维度在 fixture 里是真正正交的(4 个项目,2×2)。它们在生产代码里是否
-// 正交,正是下面的测试要回答的问题。
+// 「分享状态」在本矩阵中仅指项目 visibility，不是公开链接发布状态。
+// 四格都没有公开文件 publication，避免把公开文件通道混入团队项目通道。
 
 const WORKSPACE_PERSONAL = 'ws-personal-alice';
 const WORKSPACE_TEAM = 'ws-team-acme';
@@ -180,27 +156,7 @@ type LocalBinding = {
   createdByWorkspaceMemberId?: string | null;
 };
 
-/**
- * ⚠️ 全文件唯一一处**抄写**的生产逻辑。
- *
- * 来源:`resolveLocalProjectCommentWorkspaceContext`,
- * `apps/daemon/src/server.ts:5016-5084`(2026-09-21 亲自打开确认)。它定义在
- * `startServer` 内部,没有导出,无法 import;这里只保留「请求带了 workspace
- * 头」的那条分支(server.ts:5039-5067),因为本文件的每个请求都带头。
- *
- * 这段抄写之所以必须存在:整条同步资格链上最关键的一行在这里 ——
- *
- *     server.ts:5062   workspaceType: binding.visibility === 'team' ? 'team' : 'personal'
- *     server.ts:5063-5065  teamId: binding.visibility === 'team' ? binding.workspaceId : null
- *
- * 也就是说,评论路由拿到的 `context.workspaceType` 是从**分享状态**推出来的,
- * 跟项目实际住在哪种工作区无关。下游每一道同步闸门读的都是
- * `context.workspaceType === 'team'`,所以「项目类型」这一维根本到不了它们面前。
- * 不把这一行放进网里,6 格矩阵的结论就是假的。
- *
- * A7 注意:如果你动了 server.ts 的这个解析器,这份抄写不会自动变红 —— 请手动
- * 同步它,或者(更好)把它抽成一个可 import 的纯函数,然后让这里 import 真货。
- */
+/** Keep request identity intact; project visibility is evaluated separately. */
 function resolveCommentWorkspaceContext(
   db: ReturnType<typeof openDatabase>,
   req: unknown,
@@ -211,9 +167,6 @@ function resolveCommentWorkspaceContext(
     binding,
     revoked: false,
     local: resolveOptionalLocalWorkspaceRequestAuthority(req),
-    fallbackContext: () => {
-      throw new Error('fixture invariant: every request must carry workspace headers');
-    },
   });
 }
 
@@ -243,6 +196,9 @@ interface RelayLog {
 async function startHarness() {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-comment-sync-eligibility-'));
   const db = openDatabase(tempDir);
+  const publications = createSqlitePublicFilePublicationStore(db);
+  const resolveRelayScope = (projectId: string, filePath: string, context: WorkspaceCollabContext | null) =>
+    commentRelayScope({ binding: getWorkspaceProjectByProjectId(db, projectId), context, projectId, filePath, publications });
   const now = Date.now();
 
   for (const cell of ALL_CELLS) {
@@ -315,6 +271,19 @@ async function startHarness() {
   const collabCloud = createCollabCloudService({
     client,
     commentOutbox: createCommentRelayOutboxStore(db),
+    // Match current server wiring: workspace type identifies the caller;
+    // persisted visibility/publication facts decide relay eligibility.
+    isMemberSyncProjectShared: (projectId) => {
+      const binding = getWorkspaceProjectByProjectId(db, projectId);
+      return binding?.visibility === 'team' && binding.resourceState !== 'deleted';
+    },
+    commentRelayScope: resolveRelayScope,
+    listPersonalCommentRelayFilePaths: (projectId, context) => personalCommentRelayFilePaths({
+      binding: getWorkspaceProjectByProjectId(db, projectId),
+      context,
+      projectId,
+      publications,
+    }),
     resolveLocalProjectRelayBinding: (projectId) => {
       const binding = getWorkspaceProjectByProjectId(db, projectId) as
         | LocalBinding
@@ -372,6 +341,8 @@ async function startHarness() {
   app.use(express.json());
   registerProjectCommentRoutes(app, {
     db,
+    isCommentRelayEligible: (projectId, filePath, context) =>
+      resolveRelayScope(projectId, filePath, context) !== null,
     projectStore: {
       updateProject,
       getWorkspaceProject,
@@ -411,24 +382,6 @@ async function startHarness() {
         projectId,
         capability,
       ),
-    // The cast is the ONE place this fixture stops being type-honest, and it
-    // is here rather than inside the transcription on purpose.
-    //
-    // Production writes `teamId: null` for a personal binding while
-    // `WorkspaceCollabContext` declares `teamId?: string`. That divergence
-    // typechecks in production only because the resolver lives inside
-    // `startServer`, is never exported, and is never annotated — so nothing
-    // ever compares it to the declared type. The transcription reproduces
-    // production verbatim, which means it inherits the divergence.
-    //
-    // Making the transcription type-clean would mean writing `undefined`
-    // where production writes `null`, i.e. pinning behaviour the code does
-    // not have. Casting here keeps the fixture honest about the code and
-    // localises the lie to one line with its reason attached.
-    //
-    // A7: when this resolver is lifted out of `startServer` and becomes
-    // importable, delete the cast, import the real function, and decide
-    // whether `teamId: null` or `teamId?: string` is the truth.
     resolveWorkspaceContext: async (req, projectId) =>
       resolveCommentWorkspaceContext(db, req, projectId),
     resolveReadWorkspaceContext: async (req, projectId) =>
@@ -604,9 +557,7 @@ describe('同步资格矩阵 · 上行(本地写 → 推云端)', () => {
       listPreviewComments(harness.db, PERSONAL_UNSHARED.projectId, PERSONAL_UNSHARED.conversationId),
     ).toHaveLength(1);
 
-    // 闸门:comments.ts:303-323 `isLocalTeamRelayCandidate` 要求
-    // context.workspaceType === 'team';未分享 → server.ts:5062 判出
-    // 'personal' → syncEnabled=false → comments.ts:469 的入队分支不执行。
+    // No team visibility or active exact-file publication: the shared scope helper refuses relay.
     expect(harness.relay.pushes).toEqual([]);
   });
 
@@ -620,8 +571,7 @@ describe('同步资格矩阵 · 上行(本地写 → 推云端)', () => {
 
     expect(status).toBe(200);
     expect(commentId).toBeTruthy();
-    // 可疑,但这里钉的是现状:分享一个**个人工作区**里的项目之后,评论会以
-    // teamId = 个人工作区 id 推到 collab relay 上去。见文件末尾「可疑行为 #2」。
+    // Personal subscription workspaces use their own workspace id as the relay partition.
     expect(harness.relay.pushes).toEqual([
       expect.objectContaining({
         teamId: WORKSPACE_PERSONAL,
@@ -644,10 +594,7 @@ describe('同步资格矩阵 · 上行(本地写 → 推云端)', () => {
     expect(
       listPreviewComments(harness.db, TEAM_UNSHARED.projectId, TEAM_UNSHARED.conversationId),
     ).toHaveLength(1);
-    // 三道各自独立的闸门都会拦下它,A7 合并时三处都要照顾到:
-    //  1. comments.ts:316-322 binding.visibility === 'team'
-    //  2. collab-cloud-service.ts:311-316(经 server.ts:4386-4391 的 binding 解析)
-    //  3. comment-relay-outbox.ts:53-64 `commentRelayLocalBindingMatches`
+    // A team workspace alone cannot publish a private project's comments.
     expect(harness.relay.pushes).toEqual([]);
   });
 
@@ -685,9 +632,7 @@ describe('同步资格矩阵 · 下行(云端拉 → 本地)', () => {
 
     expect(status).toBe(200);
     expect(comments).toEqual([]);
-    // 闸门:collab-cloud-service.ts:676-678 `pullProject` 先过
-    // `explicitTeamIdentity`(:249-255,要求 workspaceType === 'team'),
-    // 未分享 → 'personal' → 直接 return false,client.pullComments 根本没被调用。
+    // Neither a shared project nor a creator publication can authorize this pull.
     expect(harness.relay.pulls).toEqual([]);
     // 一次没兑现的脏标记必须留着,否则这条评论这辈子只有的这一个信号就丢了。
     expect(harness.dirtyCommentProjects.has(PERSONAL_UNSHARED.projectId)).toBe(true);
@@ -700,7 +645,7 @@ describe('同步资格矩阵 · 下行(云端拉 → 本地)', () => {
     const { status, comments } = await readCommentsAfterDirtyMark(harness, PERSONAL_SHARED);
 
     expect(status).toBe(200);
-    // 可疑,但这里钉的是现状:teamId 就是那个个人工作区的 id。见「可疑行为 #2」。
+    // The remote partition remains the exact selected personal workspace.
     expect(harness.relay.pulls).toEqual([
       expect.objectContaining({
         teamId: WORKSPACE_PERSONAL,
@@ -907,35 +852,7 @@ describe('同步资格矩阵 · 结构', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// 可疑行为(**没有修**,断言一律按现状写)
-// ---------------------------------------------------------------------------
-//
-// #1 「项目类型」这一维在评论同步链上根本不存在。
-//    `resolveLocalProjectCommentWorkspaceContext`(server.ts:5062)把
-//    `context.workspaceType` 直接从 `binding.visibility` 推出来,而不是从工作区
-//    本身的类型。于是一个住在**个人工作区**里、visibility 被置成 'team' 的项目,
-//    对下游所有闸门而言就是一个「团队项目」。上面两条「项目类型不影响…」的
-//    测试就是这个事实的现状快照。
-//
-// #2 分享一个个人工作区的项目,会把评论推到 teamId = 个人工作区 id 的 relay 通道上。
-//    这是 #1 的直接后果(`explicitTeamIdentity`,collab-cloud-service.ts:256:
-//    `teamId = context.teamId?.trim() || context.workspaceId.trim()`,而
-//    server.ts:5063-5065 在 visibility==='team' 时把 teamId 设成 binding.workspaceId)。
-//    一个个人工作区 id 是否是合法的 relay team 命名空间,daemon 这一侧没有任何
-//    校验。P0 分享功能要真正落到个人项目上时,这一点需要产品/服务端拍板。
-//
-// #3 下行 `pullProject` 完全不看项目的 binding。
-//    collab-cloud-service.ts:672-679 只过 `explicitTeamIdentity(context)`。今天
-//    它之所以还安全,只是因为 context 的 workspaceType 本身是从 visibility 推出来的
-//    (#1)。A7 如果把 context 的来源换掉、却没给 `pullProject` 补上 binding 校验,
-//    下行就会对未分享项目放开 —— 而且不会有任何一条现有断言变红(除了这个文件里
-//    的「团队项目 · 未分享 · 下行」)。
-//
-// #4 上行的资格判断出现了三份各自独立的实现,措辞还不完全一致:
-//      - comments.ts:303-323 `isLocalTeamRelayCandidate`
-//      - server.ts:4382-4392 `resolveLocalProjectRelayBinding`
-//      - comment-relay-outbox.ts:53-64 `commentRelayLocalBindingMatches`
-//    三者都要求 visibility === 'team' 且 resourceState !== 'deleted',但只有第一份
-//    额外检查了 context.memberStatus / lifecycleState,只有第三份检查了
-//    expectedOwnerMemberId。这正是 A7 要统一的东西。
+// The original September snapshot inferred workspace type from project visibility.
+// Current production keeps request identity intact and supplies commentRelayScope
+// plus isMemberSyncProjectShared; omitting those hooks exercises a legacy fallback
+// rather than the workspace-isolated production relay.

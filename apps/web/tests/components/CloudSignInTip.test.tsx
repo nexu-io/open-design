@@ -47,6 +47,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+  vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
   globalThis.fetch = originalFetch;
   try {
     window.localStorage.clear();

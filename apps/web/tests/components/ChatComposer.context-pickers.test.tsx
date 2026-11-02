@@ -776,6 +776,42 @@ describe('ChatComposer context pickers', () => {
     );
   });
 
+  it('late rejection restores a sent draft beside the linked directory deliberately retained by reset', async () => {
+    const composerRef = createRef<ChatComposerHandle>();
+    const onSend = vi.fn();
+    render(<ChatComposer ref={composerRef} {...composerElement({ onSend }).props} />);
+    await flushMounts();
+    fireEvent.click(screen.getByTestId('chat-plus-trigger'));
+    fireEvent.click(await screen.findByText('Link local code'));
+    await waitFor(() => expect(screen.getByTestId('staged-contexts')).toHaveTextContent('reference-dir'));
+    await typeAndSettle('original linked code input');
+    fireEvent.click(screen.getByTestId('chat-send'));
+    await waitFor(() => expect(onSend).toHaveBeenCalledOnce());
+    await waitFor(() => expect(composerText().trim()).toBe(''));
+    let restored: boolean | void = undefined;
+    act(() => { restored = composerRef.current?.restoreDraft({
+      text: 'original linked code input', meta: onSend.mock.calls[0]?.[3], onlyIfEmpty: true,
+    }); });
+    expect(restored).toBe(true);
+    await waitFor(() => expect(composerText()).toBe('original linked code input'));
+    expect(screen.getByTestId('staged-contexts')).toHaveTextContent('reference-dir');
+  });
+
+  it('late rejection cannot replace a newly linked workspace context with no prompt text', async () => {
+    const composerRef = createRef<ChatComposerHandle>();
+    render(<ChatComposer ref={composerRef} {...composerElement().props} />);
+    await flushMounts();
+    fireEvent.click(screen.getByTestId('chat-plus-trigger'));
+    fireEvent.click(await screen.findByText('Link local code'));
+    await waitFor(() => expect(screen.getByTestId('staged-contexts')).toHaveTextContent('reference-dir'));
+    await typeAndSettle('');
+    let restored: boolean | void = undefined;
+    act(() => { restored = composerRef.current?.restoreDraft({ text: 'old rejected prompt', onlyIfEmpty: true }); });
+    expect(restored).toBe(false);
+    expect(composerText().trim()).toBe('');
+    expect(screen.getByTestId('staged-contexts')).toHaveTextContent('reference-dir');
+  });
+
   it('does not remove a pre-existing linked dir when a matching workspace chip is cleared', async () => {
     const onProjectMetadataChange = vi.fn();
     renderComposer({

@@ -8,11 +8,11 @@ import {
   buildWorkspacePermissions,
   buildWorkspaceSeatSummary,
   SHARE_MAX_TOTAL_BYTES,
-  type SharePlanSummary,
   type WorkspaceCollabContext,
 } from '@open-design/contracts';
 
 import { FileViewer } from '../../src/components/FileViewer';
+import { REMIX_ICON_PATHS } from '../../src/components/remix-icon-paths';
 import {
   CollabProvider,
   type CollabContextValue,
@@ -106,7 +106,7 @@ function renderProjectFileViewer(
 }
 
 function stubFetch(
-  options: { publishStatus?: number; publishBody?: unknown; unpublishStatus?: number; sharePlan?: () => SharePlanSummary } = {},
+  options: { publishStatus?: number; publishBody?: unknown; unpublishStatus?: number } = {},
 ) {
   const { publishStatus = 200, publishBody, unpublishStatus = 200 } = options;
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -114,9 +114,7 @@ function stubFetch(
     if (url.includes('/api/workspace/context')) {
       return new Response(JSON.stringify({ context: teamWorkspaceContext() }), { status: 200 });
     }
-    if (url.includes('/share-plan')) {
-      return Response.json(options.sharePlan?.() ?? { fileCount: 1, totalBytes: 1024, exceedsSizeLimit: false, exclusions: [] });
-    }
+    if (url.includes('/share-plan')) throw new Error('Client preflight must not run');
     if (url.includes('publish-public')) {
       if (init?.method === 'POST') {
         const body =
@@ -176,46 +174,28 @@ async function setup(options: Parameters<typeof stubFetch>[0] = { publishBody: p
   return { fetch, view };
 }
 
-it.each(['allowed', 'oversize', 'blocked', 'failed'] as const)('3639: routing-only 3 MiB uses original-file preflight (%s), never uploads preview text', async outcome => {
+it.each([3 * 1024 * 1024, SHARE_MAX_TOTAL_BYTES + 1])('submits original-file publication directly for a %s-byte file without preflight or preview upload', async size => {
   const fallback = stubFetch();
-  const pending = deferred<Response>();
   const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(input);
-    if (url.includes('/text-preview/')) return Promise.resolve(Response.json({
+    if (String(input).includes('/text-preview/')) return Promise.resolve(Response.json({
       text: '<html><body>Routing preview only</body></html>', truncated: true,
       poweredPreview: { required: false },
     }));
-    if (url.includes('/share-plan')) return pending.promise;
+    if (String(input).includes('/share-plan')) throw new Error('Client preflight must not run');
     return fallback(input, init);
   });
   vi.stubGlobal('fetch', fetch);
   renderProjectFileViewer(teamWorkspaceContext(), { ...props, liveHtml: undefined,
-    file: { ...htmlFile(), size: 3 * 1024 * 1024 } });
-  await vi.waitFor(() => expect(fetch.mock.calls.some(([url]) => String(url).includes('/text-preview/'))).toBe(true));
-  const share = screen.getByRole('button', { name: /^share$/i });
-  expect(share).toBeEnabled();
-  expect(screen.queryByRole('button', { name: /^export$/i })).toBeNull();
-  fireEvent.click(share);
-  fireEvent.click(await screen.findByRole('menuitem', { name: /generate and copy link/i }));
+    file: { ...htmlFile(), size } });
+  fireEvent.click(await screen.findByRole('button', { name: /^share$/i }));
   expect(posts(fetch)).toHaveLength(0);
-  await act(async () => pending.resolve(outcome === 'failed' ? new Response('{}', { status: 503 }) : Response.json({
-    fileCount: 1, totalBytes: outcome === 'oversize' ? SHARE_MAX_TOTAL_BYTES + 1 : 3 * 1024 * 1024,
-    exceedsSizeLimit: outcome === 'oversize', exclusions: [],
-    ...(outcome === 'blocked' ? { blockers: [{ code: 'entry_index_conflict' }] } : {}),
-  })));
-  if (outcome === 'allowed') {
-    await vi.waitFor(() => expect(posts(fetch)).toHaveLength(1));
-    expect(posts(fetch)[0]).toEqual([
-      '/api/projects/s15-project/files/index.html/publish-public', expect.objectContaining({ method: 'POST' }),
-    ]);
-    expect(posts(fetch)[0]?.[1]?.body).toBeUndefined();
-  } else {
-    expect(posts(fetch)).toHaveLength(0);
-    if (outcome === 'failed') {
-      fireEvent.click(screen.getByRole('menuitem', { name: /generate and copy link/i }));
-      expect(posts(fetch)).toHaveLength(0);
-    }
-  }
+  fireEvent.click(await screen.findByRole('menuitem', { name: /generate and copy link/i }));
+  await vi.waitFor(() => expect(posts(fetch)).toHaveLength(1));
+  expect(posts(fetch)[0]).toEqual([
+    '/api/projects/s15-project/files/index.html/publish-public', expect.objectContaining({ method: 'POST' }),
+  ]);
+  expect(posts(fetch)[0]?.[1]?.body).toBeUndefined();
+  expect(fetch.mock.calls.some(([url]) => String(url).includes('/share-plan'))).toBe(false);
   expect(fetch.mock.calls.some(([url]) => String(url).includes('/raw/'))).toBe(false);
 });
 
@@ -238,107 +218,16 @@ it.each(['viewerOnly', 'streaming'] as const)('3639: routing-only preview preser
   expect(fetch.mock.calls.some(([url]) => String(url).includes('/raw/'))).toBe(false);
 });
 
-it('reopens unchanged content with usable controls while the second preflight is pending (OPEND-3536)', async () => {
-  const fallback = stubFetch();
-  const pending = deferred<Response>();
-  let reads = 0;
-  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-    if (String(input).includes('/share-plan')) {
-      reads++;
-      return reads === 1 ? Promise.resolve(Response.json({ fileCount: 1, totalBytes: 100, exceedsSizeLimit: false, exclusions: [] })) : pending.promise;
-    }
-    return fallback(input, init);
-  }));
-  renderProjectFileViewer(teamWorkspaceContext(), props);
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^share$/i })); });
-  await vi.waitFor(() => expect(screen.getByRole('menuitem', { name: /generate and copy link/i })).toBeEnabled());
-  fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-  fireEvent.click(screen.getByRole('button', { name: /^share$/i }));
-  await vi.waitFor(() => expect(reads).toBe(2));
-  expect(screen.getByRole('switch', { name: /link access/i })).toBeEnabled();
-  expect(screen.getByRole('menuitem', { name: /generate and copy link/i })).toBeEnabled();
-});
-
-it.each([false, true])('accepts a click before first preflight, waits, and honors its size block (oversize=%s)', async (oversize) => {
-  const fallback = stubFetch();
-  const pending = deferred<Response>();
-  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
-    String(input).includes('/share-plan') ? pending.promise : fallback(input, init)));
+it('reopens unchanged content with usable controls and no preflight or automatic upload', async () => {
+  const fetch = stubFetch();
   renderProjectFileViewer(teamWorkspaceContext(), props);
   fireEvent.click(await screen.findByRole('button', { name: /^share$/i }));
-  const generate = await screen.findByRole('menuitem', { name: /generate and copy link/i });
-  expect(generate).toBeEnabled();
-  fireEvent.click(generate);
-  expect(generate).toHaveAttribute('aria-busy', 'true');
-  expect(generate).toBeDisabled();
-  expect(posts(fallback)).toHaveLength(0);
-  await act(async () => { pending.resolve(Response.json({ fileCount: 1, totalBytes: oversize ? SHARE_MAX_TOTAL_BYTES + 1 : 100, exceedsSizeLimit: oversize, exclusions: [] })); });
-  await vi.waitFor(() => expect(posts(fallback)).toHaveLength(oversize ? 0 : 1));
-  if (oversize) expect(generate).toBeDisabled();
-});
-
-it.each(['content', 'file', 'account'] as const)('invalidates the cached plan and queued click when %s changes', async (change) => {
-  const fallback = stubFetch();
-  const pending = deferred<Response>();
-  let reads = 0;
-  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-    if (String(input).includes('/share-plan')) {
-      reads++;
-      return reads === 1 ? Promise.resolve(Response.json({ fileCount: 1, totalBytes: 100, exceedsSizeLimit: false, exclusions: [] })) : pending.promise;
-    }
-    return fallback(input, init);
-  }));
-  const context = teamWorkspaceContext();
-  const view = renderProjectFileViewer(context, props);
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^share$/i })); });
-  const next = change === 'content' ? { ...props, liveHtml: '<html><body>changed</body></html>' }
-    : change === 'file' ? { ...props, file: { ...props.file, name: 'other.html', path: 'other.html' } } : props;
-  view.rerenderWith(next, change === 'account' ? { ...context, workspaceMemberId: 'other-member' } : context);
-  await vi.waitFor(() => expect(reads).toBe(2));
-  fireEvent.click(screen.getByRole('menuitem', { name: /generate and copy link/i }));
-  expect(posts(fallback)).toHaveLength(0);
-  expect(screen.getByRole('menuitem', { name: /checking sharing/i })).toHaveAttribute('aria-busy', 'true');
-  // A queued click must not publish after the viewer becomes read-only.
-  view.rerenderWith({ ...next, viewerOnly: true }, context);
-  await act(async () => { pending.resolve(Response.json({ fileCount: 1, totalBytes: 100, exceedsSizeLimit: false, exclusions: [] })); });
-  expect(posts(fallback)).toHaveLength(0);
-});
-
-it('retains one queued first-share click across panel close and reopen', async () => {
-  const fallback = stubFetch();
-  const pending = deferred<Response>();
-  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
-    String(input).includes('/share-plan') ? pending.promise : fallback(input, init)));
-  renderProjectFileViewer(teamWorkspaceContext(), props);
-  fireEvent.click(screen.getByRole('button', { name: /^share$/i }));
-  fireEvent.click(screen.getByRole('menuitem', { name: /generate and copy link/i }));
+  expect(await screen.findByRole('menuitem', { name: /generate and copy link/i })).toBeEnabled();
   fireEvent.click(screen.getByRole('button', { name: 'Close' }));
   fireEvent.click(screen.getByRole('button', { name: /^share$/i }));
-  expect(screen.getByRole('menuitem', { name: /checking sharing/i })).toBeDisabled();
-  await act(async () => { pending.resolve(Response.json({ fileCount: 1, totalBytes: 100, exceedsSizeLimit: false, exclusions: [] })); });
-  await vi.waitFor(() => expect(posts(fallback)).toHaveLength(1));
-});
-it('S15 blocks an over-limit planned file before publish, then rechecks a smaller file on reopen', async () => {
-  let totalBytes = SHARE_MAX_TOTAL_BYTES + 1;
-  const fetch = stubFetch({ sharePlan: () => ({ fileCount: 1, totalBytes, exceedsSizeLimit: totalBytes > SHARE_MAX_TOTAL_BYTES, exclusions: [] }) });
-  renderProjectFileViewer(teamWorkspaceContext(), props);
-  fireEvent.click(await screen.findByRole('button', { name: /^share$/i }));
-  const generate = await screen.findByRole('menuitem', { name: /generate and copy link/i });
-  const warning = (await screen.findByText(/20\.00 MiB/)).closest('[role="status"]');
-  expect(warning).not.toBeNull();
-  expect(warning).toHaveTextContent('20 MiB');
-  expect(warning).toHaveTextContent('20.00 MiB');
-  expect(generate).toBeDisabled();
-  fireEvent.click(generate);
+  expect(await screen.findByRole('menuitem', { name: /generate and copy link/i })).toBeEnabled();
   expect(posts(fetch)).toHaveLength(0);
-  fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-  totalBytes = SHARE_MAX_TOTAL_BYTES;
-  fireEvent.click(await screen.findByRole('button', { name: /^share$/i }));
-  const reopenedGenerate = await screen.findByRole('menuitem', { name: /generate and copy link/i });
-  await vi.waitFor(() => expect(reopenedGenerate).toBeEnabled());
-  expect(posts(fetch)).toHaveLength(0);
-  fireEvent.click(reopenedGenerate);
-  await vi.waitFor(() => expect(posts(fetch)).toHaveLength(1));
+  expect(fetch.mock.calls.some(([url]) => String(url).includes('/share-plan'))).toBe(false);
 });
 
 it('S1 opens with selected link access but makes no public HTTP write until Generate and copy', async () => {
@@ -445,10 +334,10 @@ function retry() {
 }
 const sensitive = 'secret-raw-error-token';
 const tooLarge = {
-  error: 'too_large', bytes: 20971521, totalBytes: 20971521, limit: 20971520,
-  plan: { fileCount: 2, totalBytes: 20971521, exceedsSizeLimit: true, exclusions: [] },
+  error: 'public_share_too_large',
+  failure: { stage: 'push', reason: 'upstream_http', upstreamStatus: 413, upstreamCode: 'public_share_too_large' },
 };
-const sizeMessage = /exceeds the 20 MiB sharing limit/i;
+const sizeMessage = /exceeds the server sharing limit/i;
 const genericMessage = /Could not create the share link/i;
 it('real 413 too_large ends progress, explains the limit and retries only on demand', async () => {
   const { fetch } = await setup({ publishStatus: 413, publishBody: tooLarge });
@@ -482,7 +371,7 @@ it('retries a generic publish failure once and shows the recovered URL', async (
   expect(document.body.textContent).not.toContain(sensitive);
   expect(document.querySelector('progress')).toBeNull();
   expect(retry()).toBeEnabled();
-  expect(retry().querySelector('svg path')?.getAttribute('d')).toContain('M20 7v5h-5');
+  expect(retry().querySelector('svg path')?.getAttribute('d')).toBe(REMIX_ICON_PATHS['refresh-line']);
   expect(write).not.toHaveBeenCalled();
   expect(posts(fetch)).toHaveLength(1);
   await tick(10_000);
@@ -524,7 +413,7 @@ it('S15 closes an over-limit panel and permits a fresh publish after the same HT
   expect(posts(fetch)).toHaveLength(1); // Editing a failed package must not auto-upload.
   fireEvent.click(screen.getByRole('button', { name: /^share$/i }));
   expect(screen.queryByText(sizeMessage)).toBeNull();
-  await tick(0); // The same-file source revision revalidates the share-plan GET.
+  await tick(0); // Flush the local source revision without a preflight request.
   expect(posts(fetch)).toHaveLength(1); // Reopening only offers a fresh manual attempt.
   expect(screen.getByRole('menuitem', { name: /generate and copy link/i })).toBeEnabled();
   fetch.mockImplementationOnce(async () => new Response(JSON.stringify(publication), { status: 200 }));

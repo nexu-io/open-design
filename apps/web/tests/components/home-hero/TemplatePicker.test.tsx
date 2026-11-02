@@ -28,7 +28,7 @@ function labelFor(chipId: string): string {
 }
 
 describe('TemplatePicker', () => {
-  it('shows the committed type without offering direct switching', () => {
+  it('opens the selected type dropdown and keeps the independent clear action', () => {
     const onPick = vi.fn();
     const onClear = vi.fn();
     render(<TemplatePicker templates={templates} onPick={onPick} onClear={onClear}
@@ -36,9 +36,10 @@ describe('TemplatePicker', () => {
 
     expect(screen.getByTestId('home-hero-template-picker').className).toContain('has-selection');
     fireEvent.click(screen.getByText(labelFor('deck')));
-    expect(screen.queryByRole('listbox')).toBeNull();
-    expect(document.querySelector('[aria-haspopup="listbox"]')).toBeNull();
-    expect(onPick).not.toHaveBeenCalled();
+    expect(screen.getByRole('listbox')).toBeTruthy();
+    expect(screen.getByRole('option', { name: labelFor('deck') }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(screen.getByRole('option', { name: labelFor('prototype') }));
+    expect(onPick).toHaveBeenCalledWith(chipById('prototype'));
     expect(onClear).not.toHaveBeenCalled();
   });
 
@@ -121,9 +122,9 @@ describe('TemplatePicker', () => {
     expect(screen.getByRole('listbox')).toBeTruthy();
 
     rerender(<TemplatePicker templates={templates} activeChipId="prototype" labelFor={labelFor} />);
-    fireEvent.click(screen.getByText(labelFor('prototype')));
     expect(screen.queryByRole('listbox')).toBeNull();
-    expect(document.querySelector('[aria-haspopup="listbox"]')).toBeNull();
+    fireEvent.click(screen.getByText(labelFor('prototype')));
+    expect(screen.getByRole('listbox')).toBeTruthy();
 
     rerender(<TemplatePicker templates={templates} activeChipId={null} labelFor={labelFor} />);
     fireEvent.click(screen.getByTestId('home-hero-template-trigger').querySelector('button')!);

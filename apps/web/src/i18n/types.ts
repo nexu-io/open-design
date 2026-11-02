@@ -30,6 +30,28 @@ export const LOCALE_LABEL: Record<Locale, string> = {
 // flat (not deeply nested) so missing-key TS errors point straight at the
 // offending string instead of a generic object mismatch.
 export interface Dict {
+  'workspaceQuota.unavailable': string;
+  'workspaceQuota.designPlanAllowance': string;
+  'workspaceQuota.subscribeToUse': string;
+  'workspaceQuota.usageUnavailable': string;
+  'workspaceQuota.periodMinutes': string;
+  'workspaceQuota.resetIn': string;
+  'workspaceQuota.planHelp': string;
+  'workspaceQuota.meteredHelp': string;
+  'workspaceQuota.freeMeteredHelp': string;
+  'workspaceQuota.exhausted': string;
+  'workspaceQuota.meteredFallback': string;
+  'workspaceQuota.shared': string;
+  'workspaceQuota.contactOwnerForBilling': string;
+  'workspaceQuota.unsubscribed': string;
+  'workspaceQuota.contactOwner': string;
+  'workspaceQuota.payAsYouGo': string;
+  'workspaceQuota.resetAt': string;
+  'workspaceQuota.viewBalance': string;
+  'workspaceInvite.deliveryPending': string;
+  'workspaceInvite.deliveryFailed': string;
+  'workspaceInvite.invalidResponse': string;
+
   'billing.wallet': string;
   /** The product name of the allowance pool; kept untranslated in every locale. */
   'billing.codingPlanDesignPlan': string;
@@ -79,6 +101,27 @@ export interface Dict {
   'invite.error.retry': string;
   'workspaceInvite.dialogAria': string;
   'workspaceInvite.title': string;
+  'workspaceInvite.onboardingTitle': string;
+  'workspaceInvite.onboardingBody1': string;
+  'workspaceInvite.onboardingBody2': string;
+  'workspaceInvite.onboardingEmailLabel': string;
+  'workspaceInvite.batchSent': string;
+  'workspaceInvite.completeReceipt': string;
+  'workspaceInvite.completeTitle': string;
+  'workspaceInvite.completeBody': string;
+  'workspaceInvite.completeCountdown': string;
+  'workspaceInvite.submitFailedPreserved': string;
+  'workspaceInvite.enterWorkspace': string;
+  'workspaceInvite.skip': string;
+  'workspaceInvite.cancel': string;
+  'workspaceInvite.helpLabel': string;
+  'workspaceInvite.memberCount': string;
+  'workspaceInvite.errorInvalidEmail': string;
+  'workspaceInvite.errorDuplicateEmail': string;
+  'workspaceInvite.partialSummary': string;
+  'workspaceInvite.sentCount': string;
+  'workspaceInvite.adminDescription': string;
+  'workspaceInvite.memberDescription': string;
   'workspaceInvite.freePlanBody': string;
   'workspaceInvite.teamPlanBody': string;
   'workspaceInvite.seatsExhaustedBody': string;
@@ -87,6 +130,10 @@ export interface Dict {
   'workspaceInvite.roleLabel': string;
   'workspaceInvite.defaultRoleLabel': string;
   'workspaceInvite.emailPlaceholder': string;
+  'workspaceInvite.onboardingEmailPlaceholder': string;
+  'workspaceInvite.onboardingErrorAlreadyMember': string;
+  'workspaceInvite.onboardingErrorPendingInvite': string;
+  'workspaceInvite.onboardingPartialSummary': string;
   'workspaceInvite.removeRow': string;
   'workspaceInvite.addMember': string;
   'workspaceInvite.visibilityQuestion': string;
@@ -1097,6 +1144,9 @@ export interface Dict {
   'notify.failureTitle': string;
   'notify.successBody': string;
   'notify.failureBody': string;
+  'notify.needsReplyBody': string;
+  'notify.runFailedBody': string;
+  'notify.newReplyBody': string;
 
   // Desktop updater
   'updater.available': string;
@@ -1213,6 +1263,12 @@ export interface Dict {
   'entry.useEverywhereTitle': string;
   'entry.useEverywhereAria': string;
   'entry.workspaceTeamsLabel': string;
+  'workspaceRemoval.confirm': string;
+  'workspaceRemoval.title': string;
+  'workspaceRemoval.description': string;
+  'workspaceRemoval.retry': string;
+  'workspaceSwitcher.title': string;
+  'workspaceSwitcher.limitReached': string;
   'workspaceSwitcher.invite': string;
   'workspaceSwitcher.createTeam': string;
   'workspaceSwitcher.draftsTooltip': string;
@@ -2904,6 +2960,18 @@ export interface Dict {
   'chat.amrError.balanceMessage': string;
   'chat.amrError.authorizeCta': string;
   'chat.amrError.rechargeCta': string;
+  'chat.amrConcurrencyGate.title': string;
+  'chat.amrConcurrencyGate.message': string;
+  'chat.amrConcurrencyGate.teamTitle': string;
+  'chat.amrConcurrencyGate.teamMessage': string;
+  'chat.amrConcurrencyGate.maxTitle': string;
+  'chat.amrConcurrencyGate.maxMessage': string;
+  'chat.amrConcurrencyCard.available': string;
+  'chat.amrConcurrencyCard.full': string;
+  'chat.amrConcurrencyGate.benefit1': string;
+  'chat.amrConcurrencyGate.benefit2': string;
+  'chat.amrConcurrencyGate.benefit3': string;
+  'chat.amrConcurrencyGate.benefit4': string;
   'chat.amrBalanceGate.title': string;
   'chat.amrBalanceGate.message': string;
   'chat.amrBalanceGate.benefitsTitle': string;
@@ -2917,6 +2985,7 @@ export interface Dict {
   'chat.amrBalanceGate.signedOutMessage': string;
   'chat.amrBalanceGate.signInCta': string;
   'chat.amrBalanceGate.watchingWallet': string;
+  'chat.amrBalanceGate.watchingWalletManual': string;
   'chat.amrArtifactUpgrade.title': string;
   'chat.amrArtifactUpgrade.message': string;
   'chat.amrArtifactUpgrade.benefit1': string;
@@ -2926,11 +2995,7 @@ export interface Dict {
   'chat.amrArtifactUpgrade.promoBanner': string;
   'chat.amrArtifactUpgrade.countdownLabel': string;
   'chat.amrArtifactUpgrade.plansCta': string;
-  'chat.amrArtifactUpgrade.homePlansCta': string;
   'chat.amrArtifactUpgrade.laterCta': string;
-  'chat.amrArtifactUpgrade.homeTitle': string;
-  'chat.amrArtifactUpgrade.homeMessage': string;
-  'chat.amrArtifactUpgrade.homeArtifactCta': string;
   'chat.antigravityError.launchTerminalCta': string;
   'chat.antigravityError.launchSwitchModelCta': string;
   'chat.connectionDropped': string;
@@ -3015,6 +3080,7 @@ export interface Dict {
   'chat.runError.modelWindowLimitMessageNoTime': string;
   'chat.runError.membershipConcurrencyLimitMessage': string;
   'chat.runError.membershipConcurrencyLimitMessageNoTime': string;
+  'chat.runError.membershipConcurrencyLimitOwnerMessage': string;
   'chat.runError.upstreamUnavailableMessage': string;
   'chat.runError.toolLoopMessage': string;
   'chat.runError.outputInvalidMessage': string;
@@ -3053,6 +3119,7 @@ export interface Dict {
   'chat.comments.attached': string;
   'chat.comments.emptyAttached': string;
   'chat.comments.saved': string;
+  'chat.comments.loadFailed': string;
   'chat.comments.emptySaved': string;
   'chat.comments.add': string;
   'chat.comments.addAll': string;
@@ -4061,6 +4128,7 @@ export interface Dict {
   'fileViewer.versions.sourceAi': string;
   'collab.contentUpdate.available': string;
   'collab.contentUpdate.updating': string;
+  'collab.contentUpdate.waitToEdit': string;
   'collab.contentUpdate.askAgain': string;
   'collab.contentUpdate.title': string;
   'collab.contentUpdate.description': string;
@@ -4294,6 +4362,7 @@ export interface Dict {
   'fileViewer.shareCheckLoading': string;
   'fileViewer.shareCheckFailed': string;
   'fileViewer.shareUpdateHint': string;
+  'fileViewer.shareUpdatingLink': string;
   'fileViewer.shareUpdateLink': string;
   'fileViewer.signInToUpdate': string;
   'fileViewer.signInToShare': string;
@@ -4305,6 +4374,9 @@ export interface Dict {
   'fileViewer.shareUpdateRetry': string;
   'fileViewer.unpublishFileFailed': string;
   'fileViewer.publishFileTooLarge': string;
+  'fileViewer.publishFileContentUnavailable': string;
+  'fileViewer.publishFileConflict': string;
+  'fileViewer.publishFileWorkspaceLocked': string;
   'fileViewer.publishFileEntryIndexConflict': string;
   'fileViewer.copyFixForAgent': string;
   'fileViewer.copyFixForAgentFailed': string;
@@ -5753,6 +5825,10 @@ export interface Dict {
   'chat.record.thinkingTokens': string;
   'chat.record.thoughts': string;
   'chat.record.done': string;
+  'chat.record.turnElapsed': string;
+  'chat.record.elapsedSeconds': string;
+  'chat.record.elapsedMinutes': string;
+  'chat.record.turnStopped': string;
   'chat.record.canceled': string;
   'chat.record.pending': string;
   /**
@@ -5817,4 +5893,8 @@ export interface Dict {
   'labs.optOutSkip': string;
   'labs.optOutOtherPlaceholder': string;
   'labs.optOutSubmit': string;
+  'homeInvite.banner': string;
+  'homeInvite.invite': string;
+  'homeInvite.dismiss': string;
+  'homeInvite.sent': string;
 }

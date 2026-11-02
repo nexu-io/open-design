@@ -47,7 +47,7 @@
           {
             "taskType": "prototype",
             "path": "./assets/task-profiles/prototype.md",
-            "version": "3.1.9",
+            "version": "3.1.10",
             "rollout": "active",
             "projectKinds": [
               "prototype"

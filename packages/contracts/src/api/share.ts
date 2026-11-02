@@ -754,6 +754,9 @@ export const SHARE_PAGE_ANNOUNCES_NEW_VERSION = true;
  */
 export interface ProjectCommentReadState {
   projectId: string;
+  /** Exact displayed comments; scoped to this file when present. */
+  filePath?: string;
+  seenCommentIds?: string[];
   /** Epoch ms; absent means the viewer has never opened this project's comments. */
   lastReadAt?: number;
 }
@@ -772,7 +775,7 @@ export interface ProjectCommentReadState {
  */
 export function hasUnreadComments(input: {
   readState: ProjectCommentReadState | null | undefined;
-  comments: ReadonlyArray<{ createdAt: number; author: { authorKey?: string } }>;
+  comments: ReadonlyArray<{ id?: string; createdAt: number; author: { authorKey?: string } }>;
   viewerAuthorKey: string | null;
 }): boolean {
   const lastReadAt = input.readState?.lastReadAt;
@@ -780,12 +783,16 @@ export function hasUnreadComments(input: {
     if (comment.author.authorKey && comment.author.authorKey === input.viewerAuthorKey) {
       return false;
     }
+    if (input.readState?.seenCommentIds) return !comment.id || !input.readState.seenCommentIds.includes(comment.id);
     return lastReadAt === undefined || comment.createdAt > lastReadAt;
   });
 }
 
-/** `PUT /api/projects/:projectId/comments/read` — stamps `lastReadAt` to now. */
+/** `PUT /api/projects/:projectId/comments/read` — acknowledges rows or a legacy timestamp. */
 export interface ProjectCommentReadRequest {
+  /** Together these acknowledge only rendered rows, never unseen older arrivals. */
+  filePath?: string;
+  commentIds?: string[];
   /** Epoch ms. Server-clamped: a client clock ahead of the server cannot hide future comments. */
   readAt: number;
 }
@@ -1138,6 +1145,11 @@ export function shareEntryPresentation(input: {
  * read the SAME entry — two independent polls of the same fact would let the
  * two surfaces disagree on screen.
  */
+/** Local content comparison only; makes no claim about cloud link lifecycle. */
+export interface ProjectFilePublicShareFreshnessResponse {
+  freshness: ShareContentFreshness;
+}
+
 export interface ProjectFilePublicShareResponse {
   /** Local record of the published link; `null` when we hold none. */
   publication: PublicProjectFilePublication | null;

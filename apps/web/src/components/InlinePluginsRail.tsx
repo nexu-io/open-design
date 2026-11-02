@@ -7,6 +7,7 @@
 // (hydrate the brief, show the input form, etc.).
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { workspaceContextHasWorkspaceIdentity } from '@open-design/contracts';
 import type {
   ApplyResult,
   InstalledPluginRecord,
@@ -113,7 +114,7 @@ export function InlinePluginsRail(props: Props) {
   ]);
 
   useEffect(() => {
-    if (workspaceContext?.workspaceType === 'team') return;
+    if (workspaceContextHasWorkspaceIdentity(workspaceContext)) return;
     void refresh();
     return () => {
       // Prevent an in-flight read from committing after unmount or after a
@@ -123,7 +124,7 @@ export function InlinePluginsRail(props: Props) {
   }, [refresh, workspaceContext?.workspaceType]);
 
   const handlePluginStreamActive = useWorkspaceSnapshotActivation({
-    enabled: !workspaceContextUnavailable && workspaceContext?.workspaceType === 'team',
+    enabled: !workspaceContextUnavailable && workspaceContextHasWorkspaceIdentity(workspaceContext),
     identity: workspaceIdentity,
     refresh: () => { void refresh(); },
   });
@@ -131,16 +132,16 @@ export function InlinePluginsRail(props: Props) {
   useWorkspaceInvalidation(
     {
       'team-resources-changed': (payload) => {
-        if (payload.resourceKind === 'plugin') void refresh();
+        if (!payload.resourceKind || payload.resourceKind === 'plugin') void refresh();
       },
     },
     {
       workspaceContext:
-        !workspaceContextUnavailable && workspaceContext?.workspaceType === 'team'
+        !workspaceContextUnavailable && workspaceContextHasWorkspaceIdentity(workspaceContext)
           ? workspaceContext
           : null,
       enabled:
-        !workspaceContextUnavailable && workspaceContext?.workspaceType === 'team',
+        !workspaceContextUnavailable && workspaceContextHasWorkspaceIdentity(workspaceContext),
       onActive: handlePluginStreamActive,
     },
   );

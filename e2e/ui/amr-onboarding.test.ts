@@ -522,6 +522,7 @@ test('[P0] onboarding AMR runtime selection carries into the first Home run requ
     accountBalanceUsd: '20.00',
     accountCredits: 2_000,
     accountPlan: 'free',
+    fundingCheck: 'available',
   });
 
   await seedOnboardingConfig(page, config);

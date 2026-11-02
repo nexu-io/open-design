@@ -23,6 +23,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
 import type { OdNextRolloutMode } from '@open-design/contracts';
 
+import { amrSettingsBindingConflict } from './integrations/amr-endpoint-binding.js';
 import { expandHomePrefix } from './home-expansion.js';
 
 import {
@@ -224,7 +225,7 @@ const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ['kimi', new Set(['KIMI_BIN'])],
   ['kiro', new Set(['KIRO_BIN'])],
   ['kilo', new Set(['KILO_BIN'])],
-  ['opencode', new Set(['OPENCODE_BIN'])],
+  ['opencode', new Set(['OPENCODE_BIN', 'TMPDIR', 'TMP', 'TEMP'])],
   // PI_CODING_AGENT_DIR is pi's own config-directory override (default
   // `~/.pi/agent`), the same contract CLAUDE_CONFIG_DIR and CODEX_HOME carry
   // for their CLIs. Without it here, a user isolating pi's config had the key
@@ -933,6 +934,9 @@ async function doWrite(
   partial: Record<string, unknown>,
 ): Promise<AppConfigPrefs> {
   assertWritableControlValues(partial);
+  if (amrSettingsBindingConflict(partial.agentCliEnv)) {
+    throw new InvalidAppConfigValueError('agentCliEnv', 'AMR environment binding cannot be overridden by CLI settings');
+  }
   const existing = await readAppConfig(dataDir);
   const next: Record<string, unknown> = { ...existing };
   for (const key of Object.keys(partial)) {

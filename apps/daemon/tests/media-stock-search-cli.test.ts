@@ -13,6 +13,19 @@ import { ensureProject } from '../src/projects.js';
 import { startServer } from '../src/server.js';
 import { toolTokenRegistry } from '../src/tool-tokens.js';
 
+// Explicit run proofs keep these HTTP fixtures faithful to the daemon's
+// immutable scope contract; token minting alone does not create a Run.
+const fixtureRuns = vi.hoisted(() => new Map<string, any>());
+vi.mock('../src/runtimes/runs.js', async (original) => {
+  const actual = await original<typeof import('../src/runtimes/runs.js')>();
+  return { ...actual, createChatRunService: (...args: Parameters<typeof actual.createChatRunService>) => {
+    const service = actual.createChatRunService(...args);
+    const get = service.get;
+    service.get = (id: string) => fixtureRuns.get(id) ?? get(id);
+    return service;
+  } };
+});
+
 vi.mock('../src/integrations/vela-command.js', async (original) => ({ ...await original<typeof import('../src/integrations/vela-command.js')>(), runVelaCommand: vi.fn() }));
 
 const cliEntry = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
@@ -69,6 +82,7 @@ afterEach(async () => {
   if (server) await new Promise<void>((resolve) => server!.close(() => resolve()));
   server = undefined;
   toolTokenRegistry.clear();
+  fixtureRuns.clear();
   closeDatabase();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
@@ -76,7 +90,11 @@ afterEach(async () => {
 });
 
 it('writes a Pexels 429 to stderr and preserves it in a successful fallback JSON result', async () => {
-  const grant = toolTokenRegistry.mint({ projectId, runId: `run_${randomUUID()}` });
+  const runId = `run_${randomUUID()}`;
+  fixtureRuns.set(runId, { id: runId, projectId, workspaceScope: {
+    schemaVersion: 1, projectId, workspaceId: null, source: 'unbound_account',
+  } });
+  const grant = toolTokenRegistry.mint({ projectId, runId });
   const result = await exec(process.execPath, [
     '--import', import.meta.resolve('tsx'), cliEntry,
     'media', 'stock-search', '--slots', JSON.stringify([{ id: 'tofu', query: 'mapo tofu' }]),

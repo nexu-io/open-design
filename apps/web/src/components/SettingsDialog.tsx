@@ -5072,6 +5072,7 @@ export function SettingsDialog({
                                         hideSignedOutStatus
                                         hideSignedInStatus
                                         initialStatus={amrCardStatus}
+                                        workspaceId={workspaceContext?.workspaceId}
                                         skipInitialRefresh
                                         signInLabel={t('entry.cloudCreditsCta')}
                                         signInIcon="log-in"

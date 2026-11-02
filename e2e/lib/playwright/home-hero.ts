@@ -2,7 +2,7 @@ import { expect } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 
 export function homeTemplateTrigger(page: Page): Locator {
-  return page.getByTestId('home-hero-template-trigger').getByRole('button')
+  return page.getByTestId('home-hero-template-trigger').locator('button[aria-haspopup="listbox"]')
     .or(page.getByTestId('home-hero-type-pills-more'));
 }
 

@@ -140,15 +140,24 @@ const PATHS: Record<PlanWordmarkTier, string[]> = {
   ],
 };
 
+// The reviewed seats design replaces Go only; legacy surfaces keep their vector.
+const SEATS_GO_PATHS = [
+  "M0.5 2.5H63C75.1503 2.5 85 12.3497 85 24.5C85 36.6503 75.1503 46.5 63 46.5H0",
+  "M27.5 18.25C25.25 14.15 20.9 11.5 15.75 11.5C8.43 11.5 2.5 17.32 2.5 24.5C2.5 31.68 8.43 37.5 15.75 37.5C22.55 37.5 27.5 33.32 27.5 27H16.5",
+  "M38.5 24.5C38.5 17.32 44.32 11.5 51.5 11.5C58.68 11.5 64.5 17.32 64.5 24.5C64.5 31.68 58.68 37.5 51.5 37.5C44.32 37.5 38.5 31.68 38.5 24.5Z"
+];
+
 interface Props {
   tier: PlanBadgeTier;
   /** Rendered height in px; width follows the badge's aspect ratio. */
   height?: number;
+  variant?: 'seats-phase1';
 }
 
-export function PlanWordmark({ tier, height = 13 }: Props) {
+export function PlanWordmark({ tier, height = 13, variant }: Props) {
   const box = VIEW_BOX[tier];
-  const round = ROUND_ENDS.has(tier);
+  const reviewedGo = tier === 'go' && variant === 'seats-phase1';
+  const round = !reviewedGo && ROUND_ENDS.has(tier);
   return (
     <svg
       viewBox={`0 0 ${box.width} ${box.height}`}
@@ -160,7 +169,7 @@ export function PlanWordmark({ tier, height = 13 }: Props) {
       aria-hidden
       className="plan-wordmark"
     >
-      {PATHS[tier].map((d) => (
+      {(reviewedGo ? SEATS_GO_PATHS : PATHS[tier]).map((d) => (
         <path key={d.slice(0, 24)} d={d} stroke="currentColor" strokeWidth={5} />
       ))}
     </svg>

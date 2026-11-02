@@ -143,7 +143,7 @@ async function startServer() {
 
   const runs = new Map<string, any>();
   seedRun(runs, { id: 'run-team-amr', projectId: TEAM_PROJECT, agentId: 'amr' });
-  seedRun(runs, { id: 'run-unbound', projectId: UNBOUND_PROJECT, agentId: 'claude' });
+  seedRun(runs, { id: 'run-unbound', projectId: UNBOUND_PROJECT, conversationId: `conv-${UNBOUND_PROJECT}`, agentId: 'claude' });
   seedRun(runs, { id: 'run-answered', projectId: ANSWERED_PROJECT, agentId: 'claude' });
   seedRun(runs, { id: 'run-quiet', projectId: QUIET_PROJECT, agentId: 'claude' });
 
@@ -258,7 +258,19 @@ async function startServer() {
 type RunListBody = {
   runs: Array<{ id: string; projectId: string | null; status: string }>;
   awaitingInputProjectIds?: string[];
+  awaitingInputConversationIds?: string[];
 };
+
+describe('GET /api/runs — awaitingInputConversationIds (P0-24 N4)', () => {
+  it('names the conversation holding the unanswered question, only among the returned runs', async () => {
+    const baseUrl = await startServer();
+    const body = (await (await fetch(`${baseUrl}/api/runs?projectId=${UNBOUND_PROJECT}`)).json()) as RunListBody;
+    expect(body.awaitingInputConversationIds).toEqual([`conv-${UNBOUND_PROJECT}`]);
+
+    const quiet = (await (await fetch(`${baseUrl}/api/runs?projectId=${QUIET_PROJECT}`)).json()) as RunListBody;
+    expect(quiet.awaitingInputConversationIds).toEqual([]);
+  });
+});
 
 describe('GET /api/runs — awaitingInputProjectIds', () => {
   it('flags a project whose succeeded run left a question the user has not answered', async () => {

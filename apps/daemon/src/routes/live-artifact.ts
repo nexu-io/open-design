@@ -147,6 +147,7 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
         res,
         toolGrant.projectId,
         { mode: 'write', capability: 'writeFiles' },
+        toolGrant.runId,
       )) return;
 
       const record = await createLiveArtifact({
@@ -178,6 +179,7 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
         res,
         toolGrant.projectId,
         { mode: 'read' },
+        toolGrant.runId,
       )) return;
 
       const artifacts = await listLiveArtifacts({
@@ -207,6 +209,7 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
         res,
         toolGrant.projectId,
         { mode: 'write', capability: 'writeFiles' },
+        toolGrant.runId,
       )) return;
 
       const record = await updateLiveArtifact({
@@ -241,6 +244,7 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
         res,
         toolGrant.projectId,
         { mode: 'write', capability: 'writeFiles' },
+        toolGrant.runId,
       )) return;
 
       let result;
