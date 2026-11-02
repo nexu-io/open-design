@@ -16,6 +16,19 @@ import { workspaceDirectoryFixture } from '../helpers/workspace-context';
 
 const analyticsMocks = vi.hoisted(() => ({ track: vi.fn() }));
 
+vi.mock('../../src/providers/registry', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/registry')>('../../src/providers/registry');
+  return {
+    ...actual,
+    // Locked-model tests assert the billing URL at window.open; the account-intent test uses the real route.
+    openExternalUrl: async (url: string) => {
+      if (!vi.isMockFunction(window.open)) return actual.openExternalUrl(url);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      return true;
+    },
+  };
+});
+
 vi.mock('../../src/analytics/provider', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/analytics/provider')>();
   return {

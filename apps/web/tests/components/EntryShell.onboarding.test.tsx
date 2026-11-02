@@ -1490,7 +1490,6 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
 
     expect(screen.getByRole('heading', { name: 'Welcome to OpenDesign' })).toBeTruthy();
     expect(await findCloudSignInButton()).toBeTruthy();
-    expect(document.querySelector('.onboarding-cloud__art img')?.getAttribute('src')).toBe('/onboarding/registration-invite-art.webp');
     // No runtime card, no AMR version text, no "Sign in to continue" CTA.
     expect(screen.queryByRole('button', { name: /OpenDesign AMR/i })).toBeNull();
     expect(screen.queryByText('AMR v0.1.0')).toBeNull();

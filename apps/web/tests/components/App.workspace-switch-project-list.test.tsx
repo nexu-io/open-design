@@ -1066,7 +1066,7 @@ describe('App project list across a workspace switch', () => {
           },
         }), {
           status: 200,
-          headers: { 'content-type': 'application/json', 'x-od-verified-team-member': 'member-ws-a' },
+          headers: { 'content-type': 'application/json' },
         });
       }
       if (pathname === `/api/projects/${boundProjectA.id}`) {
@@ -1079,12 +1079,12 @@ describe('App project list across a workspace switch', () => {
           resolvedDir: '/tmp/project-in-a',
         }), {
           status: 200,
-          headers: { 'content-type': 'application/json', 'x-od-verified-team-member': 'member-ws-a' },
+          headers: { 'content-type': 'application/json' },
         });
       }
       return new Response('{}', {
         status: 200,
-        headers: { 'content-type': 'application/json', 'x-od-verified-team-member': 'member-ws-a' },
+        headers: { 'content-type': 'application/json' },
       });
     }));
     vi.mocked(listProjects).mockResolvedValue([]);
@@ -1168,7 +1168,7 @@ describe('App project list across a workspace switch', () => {
           },
         }), {
           status: 200,
-          headers: { 'content-type': 'application/json', 'x-od-verified-team-member': 'member-ws-a' },
+          headers: { 'content-type': 'application/json' },
         });
       }
       if (pathname === `/api/projects/${boundProjectA.id}`) {
@@ -1181,12 +1181,12 @@ describe('App project list across a workspace switch', () => {
           resolvedDir: '/tmp/project-in-a',
         }), {
           status: 200,
-          headers: { 'content-type': 'application/json', 'x-od-verified-team-member': 'member-ws-a' },
+          headers: { 'content-type': 'application/json' },
         });
       }
       return new Response('{}', {
         status: 200,
-        headers: { 'content-type': 'application/json', 'x-od-verified-team-member': 'member-ws-a' },
+        headers: { 'content-type': 'application/json' },
       });
     }));
     vi.mocked(listProjects).mockResolvedValue([]);
@@ -1213,7 +1213,7 @@ describe('App project list across a workspace switch', () => {
         },
       }), {
         status: 200,
-        headers: { 'content-type': 'application/json', 'x-od-verified-team-member': 'member-ws-a' },
+        headers: { 'content-type': 'application/json' },
       }));
       await scopeResponse.promise;
     });
