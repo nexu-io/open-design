@@ -39,10 +39,11 @@ import {
 } from '../collab/useWorkspaceContext';
 import { Icon, type IconName } from './Icon';
 import { SignOutConfirmDialog } from './SignOutConfirmDialog';
-import { amrConsoleUrlForProfile, amrProfileBadgeLabel } from '../runtime/amr-guidance';
+import { amrConsoleUrlForProfile, amrProfileBadgeLabel, amrWorkspaceUrl } from '../runtime/amr-guidance';
 import { AmrActivationHintText } from './AmrActivationHintText';
 
 interface AmrLoginPillProps {
+  workspaceId?: string | null;
   className?: string;
   hideSignedOutStatus?: boolean;
   hideSignedInStatus?: boolean;
@@ -76,6 +77,7 @@ export type AmrAccountControlStatus =
   | 'error';
 
 export interface AmrAccountControlProps {
+  workspaceId?: string | null;
   status: AmrAccountControlStatus;
   className?: string;
   compact?: boolean;
@@ -125,6 +127,7 @@ function classNames(...names: Array<string | false | null | undefined>): string 
 }
 
 export function AmrAccountControl({
+  workspaceId,
   status,
   className,
   compact = false,
@@ -158,7 +161,8 @@ export function AmrAccountControl({
   const hasError = status === 'error';
   const badgeLabel = showProfileBadge ? amrProfileBadgeLabel(profile) : null;
   const visibleBadgeLabel = isSignedIn ? badgeLabel : null;
-  const resolvedConsoleUrl = consoleUrl ?? amrConsoleUrlForProfile(profile);
+  const consoleBaseUrl = consoleUrl ?? amrConsoleUrlForProfile(profile);
+  const resolvedConsoleUrl = amrWorkspaceUrl(consoleBaseUrl, workspaceId) ?? consoleBaseUrl;
   const loginErrorText = errorMessage || t('settings.amrLoginErrorCompact');
   const statusText = isSignedIn
     ? hideSignedInStatus
@@ -281,6 +285,7 @@ export function AmrAccountControl({
 // agent card. The pill polls `/api/integrations/vela/status` after a Sign-in
 // click until the daemon reports loggedIn=true.
 export function AmrLoginPill({
+  workspaceId,
   className,
   hideSignedOutStatus = false,
   hideSignedInStatus = false,
@@ -756,10 +761,11 @@ export function AmrLoginPill({
   // visible profile badge and account data. The module-level runtime origin is
   // only a compatibility fallback; it can be reset by a dev hot reload while
   // React retains the feature-test status shown on this card.
-  const statusConsoleUrl = amrConsoleUrlForProfile(
+  const statusConsoleBaseUrl = amrConsoleUrlForProfile(
     status?.profile,
     status?.consoleOrigin,
   );
+  const statusConsoleUrl = amrWorkspaceUrl(statusConsoleBaseUrl, workspaceId) ?? statusConsoleBaseUrl;
 
   const handleConsoleClick = useCallback(
     (event: MouseEvent<HTMLAnchorElement>) => {
@@ -826,6 +832,7 @@ export function AmrLoginPill({
         signInIcon={signInIcon}
         showConsoleAction={showConsoleAction}
         consoleUrl={statusConsoleUrl}
+        workspaceId={workspaceId}
         iconOnlySignOut={iconOnlySignOut}
         signInDisabled={loginInFlight}
         signOutDisabled={logoutInFlight}

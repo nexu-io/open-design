@@ -2,11 +2,13 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { buildWorkspacePermissions } from '@open-design/contracts';
 import {
   AmrBalanceDialog,
   WALLET_WATCH_INTERVAL_MS,
   WALLET_WATCH_TIMEOUT_MS,
 } from '../../src/components/AmrBalanceDialog';
+import { HomeAmrBalanceGateDialogs } from '../../src/components/HomeAmrBalanceGateDialogs';
 import { resetWorkspaceContextCache } from '../../src/collab/useWorkspaceContext';
 import {
   workspaceContextFixture,
@@ -39,6 +41,69 @@ afterEach(() => {
 });
 
 describe('AmrBalanceDialog', () => {
+  it('shows four F07 benefits including free invitations and shared allowance', () => {
+    render(<AmrBalanceDialog
+      reason="insufficient"
+      balanceUsd="0.00"
+      profile="local"
+      entrySource="home_balance_gate_upgrade"
+      workspaceContext={workspaceContextFixture({
+        workspaceId: 'f07-free-space', workspaceMemberId: 'f07-owner',
+        workspaceType: 'team', role: 'owner', planId: null,
+      })}
+      metricsConsent={false}
+      installationId={null}
+      onClose={vi.fn()}
+      onResolved={vi.fn()}
+    />);
+    expect(screen.getAllByRole('listitem').map(item => item.textContent)).toEqual([
+      'No complex setup, choose from leading SOTA models',
+      'Invite members for free and share allowance',
+      'Create multimodal images and text in one place',
+      'Publish in one click and share your work with a link',
+    ]);
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Invite members for free and share allowance');
+  });
+
+  // RUN-004 / frozen product r271 and client QA r2282: the funding
+  // rejection dialog offers neither auto-recharge nor a nonexistent higher
+  // tier to Max Owners. The separate chat card/settings entry is unchanged.
+  it.each(['personal', 'team'] as const)('Max %s Owner has no purchase shortcut in the funding dialog', (workspaceType) => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const onClose = vi.fn();
+    const onResolved = vi.fn();
+    render(<AmrBalanceDialog
+      reason="insufficient" balanceUsd="0" profile="local"
+      entrySource="chat_balance_gate_upgrade" upgradeIntent="auto_recharge"
+      workspaceContext={workspaceContextFixture({
+        workspaceId: 'max-space', workspaceMemberId: 'max-owner',
+        workspaceType, role: 'owner', planId: 'team_max',
+        permissions: buildWorkspacePermissions({ role: 'owner', lifecycleState: 'active' }),
+      })}
+      metricsConsent={false} installationId={null}
+      onClose={onClose} onResolved={onResolved}
+    />);
+    expect(screen.getByRole('alertdialog')).toBeVisible();
+    expect(screen.queryByTestId('amr-balance-dialog-plans')).toBeNull();
+    expect(screen.queryByRole('button', { name: /upgrade|recharge/i })).toBeNull();
+    expect(open).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Not now' }));
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(onResolved).not.toHaveBeenCalled();
+  });
+
+  it('preserves the existing sign-in invitation benefits', () => {
+    render(<AmrBalanceDialog reason="signed_out" balanceUsd={null} profile="test"
+      entrySource="home_balance_gate_upgrade" metricsConsent={false} installationId={null}
+      workspaceContext={null} onClose={vi.fn()} onResolved={vi.fn()} />);
+    expect(screen.getAllByRole('listitem').map(item => item.textContent)).toEqual([
+      'No API keys — top models included', 'Invite members for free and share allowance',
+      'Official service you can rely on',
+      'Always improving: one-click publishing, multimodal generation, teams, and more',
+    ]);
+    expect(screen.queryByTestId('amr-balance-dialog-plans')).toBeNull();
+  });
+
   it('dismisses from the corner close button', () => {
     const onClose = vi.fn();
 
@@ -362,6 +427,85 @@ describe('AmrBalanceDialog', () => {
     expect(target.searchParams.get('billing')).toBe('plan');
   });
 
+
+  it.each([
+    {profile:'local',origin:'http://127.0.0.1:49195'},
+    {profile:'prod',origin:'https://open-design.ai'},
+    {profile:null,origin:null},
+  ])('Home uses authenticated runtime $profile rather than a default wallet profile', async ({profile,origin}) => {
+    const open=vi.spyOn(window,'open').mockImplementation(()=>null);
+    const context=workspaceContextFixture({workspaceId:'home-runtime-origin',workspaceMemberId:'home-runtime-owner',workspaceType:'team',role:'owner'});
+    context.permissions.canManageBilling=true;
+    context.permissions.canManageAutoRecharge=true;
+    vi.spyOn(globalThis,'fetch').mockImplementation(async input=>{
+      const url=String(input);
+      if(url.includes('/api/workspace/directory'))return new Response(JSON.stringify(workspaceDirectoryFixture([context])));
+      if(url.includes('/api/workspace/context'))return new Response(JSON.stringify({context}));
+      return new Response(JSON.stringify({summary:null}));
+    });
+    render(<HomeAmrBalanceGateDialogs
+      block={{reason:'insufficient',dialog:'upgrade',upgradeIntent:'pricing',
+        snapshot:{status:'available',profile:'default',user:null,balanceUsd:'0',updatedAt:null,
+          fetchedAt:new Date().toISOString(),stale:false,source:'daemon_cache'},resolve:vi.fn()}}
+      runtimeProfile={profile} consoleOrigin="http://127.0.0.1:49195"
+      metricsConsent={false} installationId={null}/>);
+    await screen.findByTestId('amr-balance-dialog');
+    if(profile===null){
+      await waitFor(()=>expect(screen.queryByTestId('amr-balance-dialog-plans')).toBeNull());
+      expect(open).not.toHaveBeenCalled();
+    }else{
+      fireEvent.click(await screen.findByTestId('amr-balance-dialog-plans'));
+      const target=new URL(String(open.mock.calls[0]![0]));
+      expect(target.origin).toBe(origin);
+      expect(target.searchParams.get('workspaceId')).toBe(context.workspaceId);
+      expect(target.searchParams.get('billing')).toBe('plan');
+    }
+  });
+
+  it('Home actual wallet watch dismisses the block on exact funding recovery instead of authorizing an automatic submit', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(window, 'open').mockImplementation(() => null);
+    const resolve = vi.fn();
+    const context = workspaceContextFixture({ workspaceId: 'ws-home', workspaceMemberId: 'wm-home', workspaceType: 'team', role: 'owner' });
+    context.permissions.canManageBilling = true;
+    let actualWorkspace = 'unrelated-workspace';
+    const recoveryReads: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('includePreflight=1') && url.includes('modelId=model')) {
+        recoveryReads.push(url);
+        const observedAt = new Date().toISOString();
+        return new Response(JSON.stringify({
+          workspaceBalance: { billingScopeVersion: 2, workspaceId: actualWorkspace, workspaceMemberId: 'wm-home', balanceUsd: '10', updatedAt: observedAt },
+          workspaceRuntime: { workspaceId: actualWorkspace, workspaceMemberId: 'wm-home', status: 'fresh', observedAt, hardExpiresAt: new Date(Date.now() + 60_000).toISOString() },
+          authoritativeWorkspaceRead: { workspaceId: actualWorkspace, workspaceMemberId: 'wm-home', observedAt },
+        }));
+      }
+      if (url.includes('/api/workspace/directory')) return new Response(JSON.stringify(workspaceDirectoryFixture([context])));
+      if (url.includes('/api/workspace/context')) return new Response(JSON.stringify({ context }));
+      if (url.includes('/api/workspace/billing')) return new Response(JSON.stringify({ summary: { workspaceId: 'ws-home', membershipTier: 'go' } }));
+      return new Response('{}');
+    });
+    await act(async () => {
+      render(<HomeAmrBalanceGateDialogs
+        block={{ reason: 'insufficient', dialog: 'upgrade', upgradeIntent: 'pricing',
+          modelId: 'model', fundingScope: { workspaceType: 'team', workspaceId: 'ws-home', workspaceMemberId: 'wm-home' },
+          snapshot: { status: 'available', profile: 'prod', user: null, balanceUsd: '0', updatedAt: null, fetchedAt: new Date().toISOString(), stale: false, source: 'vela_api' }, resolve }}
+        metricsConsent={false} installationId={null}
+      />);
+    });
+    fireEvent.click(screen.getByTestId('amr-balance-dialog-plans'));
+    expect(screen.getByTestId('amr-balance-dialog-watching')).toHaveTextContent('send again manually');
+    expect(screen.getByTestId('amr-balance-dialog-watching')).not.toHaveTextContent('continue automatically');
+    await act(async () => { await vi.advanceTimersByTimeAsync(WALLET_WATCH_INTERVAL_MS); });
+    expect(resolve).not.toHaveBeenCalled();
+    actualWorkspace = 'ws-home';
+    await act(async () => { await vi.advanceTimersByTimeAsync(WALLET_WATCH_INTERVAL_MS); });
+    expect(resolve).toHaveBeenCalledExactlyOnceWith('dismiss');
+    expect(recoveryReads).toHaveLength(2);
+    expect(recoveryReads.every((url) => url.includes('workspaceId=ws-home') && url.includes('modelId=model'))).toBe(true);
+  });
+
   it('keeps one recovery preflight in flight and stops watching after ten minutes', async () => {
     vi.useFakeTimers();
     vi.spyOn(window, 'open').mockImplementation(() => null);
@@ -389,7 +533,7 @@ describe('AmrBalanceDialog', () => {
     });
     vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
       const url = String(input);
-      if (url.includes('includePreflight=1')) {
+      if (url.includes('includePreflight=1') && url.includes('modelId=model')) {
         preflightUrls.push(url);
         return hungPreflight;
       }
@@ -431,6 +575,7 @@ describe('AmrBalanceDialog', () => {
     );
 
     fireEvent.click(screen.getByTestId('amr-balance-dialog-plans'));
+    expect(screen.getByTestId('amr-balance-dialog-watching')).toHaveTextContent("We'll continue automatically once your allowance updates.");
     expect(screen.getByTestId('amr-balance-dialog-watching')).toBeTruthy();
 
     await act(async () => {

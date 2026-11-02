@@ -102,7 +102,7 @@ const MEDIA_SCAFFOLD_STRING_FLAGS = new Set([
 ]);
 const MEDIA_SCAFFOLD_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const MEDIA_STOCK_SEARCH_STRING_FLAGS = new Set(['slots', 'slots-file', 'out-dir', 'budget-ms', 'timeout-ms', 'concurrency', 'project', 'workspace', 'workspace-member', 'daemon-url']);
-const MEDIA_STOCK_SEARCH_BOOLEAN_FLAGS = new Set(['help', 'h']);
+const MEDIA_STOCK_SEARCH_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 
 const MCP_STRING_FLAGS = new Set([
   'daemon-url',
@@ -133,6 +133,12 @@ const MCP_INSTALL_BOOLEAN_FLAGS = new Set([
   'uninstall',
   'remove',
 ]);
+
+// Hoisted for the same TDZ reason as the MEDIA / MCP flags above: `od run
+// notices` dispatches through SUBCOMMAND_MAP during module evaluation.
+const RUN_NOTICES_STRING_FLAGS = new Set(['daemon-url', 'workspace', 'workspace-member', 'after']);
+const RUN_NOTICES_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'watch']);
+const RUN_NOTICES_POLL_MS = 3_000;
 
 const RESEARCH_SEARCH_STRING_FLAGS = new Set([
   'query',
@@ -333,7 +339,7 @@ const SHARE_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json',
 ]);
 const COMMENT_STRING_FLAGS = new Set([
-  'daemon-url', 'workspace', 'workspace-member', 'prompt', 'prompt-file', 'target', 'status', 'read-at', 'file',
+  'daemon-url', 'workspace', 'workspace-member', 'prompt', 'prompt-file', 'target', 'status', 'read-at', 'file', 'comment-ids',
 ]);
 const COMMENT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 // Defined near the top because `runFigma` is reachable through the
@@ -470,7 +476,8 @@ Options:
   --prompt-file <path|->      Read the comment body from a file or stdin; mutually exclusive with --prompt.
   --workspace <id>            Exact Workspace for bound project requests.
   --workspace-member <id>     Exact caller membership for bound project requests.
-  --read-at <epoch-ms>        Mark comments read at this time (defaults to now; server clamps).
+  --read-at <epoch-ms>        Legacy project read timestamp (defaults to now; server clamps).
+  --comment-ids <ids>         With --file, acknowledge only these displayed IDs (comma-separated).
   --daemon-url <url>          Override daemon URL.
   --json                      Emit the daemon response as JSON.`);
 }
@@ -572,12 +579,14 @@ async function runComment(args) {
   if (sub === 'read') {
     const readAt = flags['read-at'] === undefined ? Date.now() : Number(flags['read-at']);
     if (!Number.isFinite(readAt)) commentUsageError('--read-at must be a finite epoch milliseconds value');
+    const commentIds = typeof flags['comment-ids'] === 'string' ? flags['comment-ids'].split(',').filter(Boolean) : undefined;
+    if (commentIds && !flags.file) commentUsageError('--comment-ids requires --file');
     let response;
     try {
       response = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/comments/read`, {
         method: 'PUT',
         headers: { 'content-type': 'application/json', ...workspaceHeaders },
-        body: JSON.stringify({ readAt }),
+        body: JSON.stringify({ readAt, ...(commentIds ? { filePath: flags.file, commentIds } : {}) }),
       });
     } catch (error) {
       surfaceFetchError(error, base);
@@ -1257,6 +1266,14 @@ function printRootHelp() {
   od media scaffold --composition-dir .hyperframes-cache/<id>
       Create a deterministic HyperFrames composition without npx or global
       skill installation, before dispatching it through media generate.
+
+  od media reference --source <file|link>
+      Measure a reference video (shot cuts, frames, contact sheet) before
+      replicating it as a Motion film.
+
+  od media compare --reference <video> --candidate <film>
+      Put the produced film beside the reference at the same timestamps and
+      score how far apart the frames are, so a check reads real evidence.
 
   od media stock-search --slots '<json>'
       Download licensed Pexels / Pixabay photos for several image slots in one
@@ -1982,7 +1999,7 @@ async function runMedia(args) {
     printMediaHelp();
     return;
   }
-  if (sub !== 'generate' && sub !== 'wait' && sub !== 'scaffold' && sub !== 'stock-search' && sub !== 'models') {
+  if (sub !== 'generate' && sub !== 'wait' && sub !== 'scaffold' && sub !== 'stock-search' && sub !== 'models' && sub !== 'reference' && sub !== 'compare') {
     console.error(`unknown subcommand: od media ${sub}`);
     printMediaHelp();
     process.exit(1);
@@ -2007,7 +2024,109 @@ async function runMedia(args) {
   if (sub === 'wait') return runMediaWait(subArgs);
   if (sub === 'scaffold') return runMediaScaffold(subArgs);
   if (sub === 'stock-search') return runMediaStockSearch(subArgs);
+  if (sub === 'reference') return runMediaReference(subArgs);
+  if (sub === 'compare') return runMediaCompare(subArgs);
   return runMediaGenerate(subArgs);
+}
+
+async function runMediaReference(rawArgs) {
+  let flags;
+  try {
+    flags = parseFlags(rawArgs, { string: ['daemon-url', 'project', 'source', 'id', 'workspace', 'workspace-member'], boolean: ['json', 'help', 'h'] });
+  } catch (err) {
+    console.error(err.message);
+    printMediaHelp();
+    process.exit(2);
+  }
+  if (flags.help || flags.h) { printMediaHelp(); return; }
+  const source = flags.source;
+  if (!source) {
+    console.error('--source required: a project file path (an attached video) or an http(s) link');
+    process.exit(2);
+  }
+  const daemonUrl = await cliDaemonUrl(flags);
+  const projectId = flags.project || process.env.OD_PROJECT_ID;
+  const token = process.env.OD_TOOL_TOKEN;
+  if (!projectId && !token) {
+    console.error('project id required. Pass --project <id> or set OD_PROJECT_ID.');
+    process.exit(2);
+  }
+  const url = token
+    ? `${daemonUrl.replace(/\/$/, '')}/api/tools/media/motion-reference`
+    : `${daemonUrl.replace(/\/$/, '')}/api/projects/${encodeURIComponent(projectId)}/media/motion-reference`;
+  let resp;
+  try {
+    resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+        ...(token ? {} : workspaceHeadersFromExplicitFlags(flags) ?? {}),
+      },
+      body: JSON.stringify({ source, ...(flags.id ? { id: flags.id } : {}) }),
+    });
+  } catch (err) {
+    surfaceFetchError(err, daemonUrl);
+    process.exit(3);
+  }
+  const text = await resp.text();
+  if (!resp.ok) {
+    console.error(`daemon ${resp.status}: ${text}`);
+    process.exit(resp.status === 422 ? 5 : 4);
+  }
+  process.stdout.write(`${text.trim()}\n`);
+}
+
+async function runMediaCompare(rawArgs) {
+  let flags;
+  try {
+    flags = parseFlags(rawArgs, { string: ['daemon-url', 'project', 'reference', 'candidate', 'times', 'id', 'workspace', 'workspace-member'], boolean: ['json', 'help', 'h'] });
+  } catch (err) {
+    console.error(err.message);
+    printMediaHelp();
+    process.exit(2);
+  }
+  if (flags.help || flags.h) { printMediaHelp(); return; }
+  const reference = flags.reference;
+  const candidate = flags.candidate;
+  if (!reference || !candidate) {
+    console.error('--reference and --candidate required: two project file paths (the video the film was made from, and the film just produced)');
+    process.exit(2);
+  }
+  const daemonUrl = await cliDaemonUrl(flags);
+  const projectId = flags.project || process.env.OD_PROJECT_ID;
+  const token = process.env.OD_TOOL_TOKEN;
+  if (!projectId && !token) {
+    console.error('project id required. Pass --project <id> or set OD_PROJECT_ID.');
+    process.exit(2);
+  }
+  const times = typeof flags.times === 'string' && flags.times.trim()
+    ? flags.times.split(',').map((t) => Number(t.trim())).filter((t) => Number.isFinite(t))
+    : undefined;
+  const url = token
+    ? `${daemonUrl.replace(/\/$/, '')}/api/tools/media/motion-compare`
+    : `${daemonUrl.replace(/\/$/, '')}/api/projects/${encodeURIComponent(projectId)}/media/motion-compare`;
+  let resp;
+  try {
+    resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+        ...(token ? {} : workspaceHeadersFromExplicitFlags(flags) ?? {}),
+      },
+      body: JSON.stringify({ reference, candidate, ...(times ? { times } : {}), ...(flags.id ? { id: flags.id } : {}) }),
+    });
+  } catch (err) {
+    surfaceFetchError(err, daemonUrl);
+    process.exit(3);
+  }
+  const text = await resp.text();
+  if (!resp.ok) {
+    console.error(`daemon ${resp.status}: ${text}`);
+    process.exit(4);
+  }
+  process.stdout.write(`${text.trim()}\n`);
 }
 
 async function runMediaStockSearch(rawArgs) {
@@ -2575,8 +2694,18 @@ function printMediaHelp() {
   console.log(`Usage: od media models [--cloud --project <id>] --json
        od media scaffold --composition-dir .hyperframes-cache/<id> [opts]
        od media generate --surface <image|video|audio> --model <id> [opts]
-       od media stock-search --slots '<json>' [opts]
+       od media stock-search --slots '<json>' [--json] [opts]
+       od media reference --source <project-file|http(s)-link> [--id <id>]
+       od media compare --reference <video> --candidate <film> [--times t1,t2] [--id <id>]
        "$OD_NODE_BIN" "$OD_BIN" media generate --surface <image|video|audio> --model <id> [opts]
+
+Reference:
+  Measures a reference video for replication: copies an attached project file
+  (or downloads a link with yt-dlp when installed, else a direct video file
+  link) into .motion-reference/<id>/, and writes facts.json (duration, size,
+  fps, audio, shot cuts), one frame per shot under frames/ and contact.jpg.
+  Up to 200 MB and 180 s. Exit 5 means the link needs the user to upload the
+  file instead; the JSON error says why.
 
 Scaffold:
   Creates hyperframes.json, meta.json, and index.html without running
@@ -7376,7 +7505,7 @@ function printProjectShareHelp() {
                     "link temporarily unavailable" plus its slug, and no URL.
                     When AMR cannot be reached, the last known link is shown
                     with a stale notice on stderr ("stale": true in --json).
-  od project share status <id> [--path <file>] [--json]
+  od project share status <id> [--path <file>] [--local-only] [--json]
                     Project binding history, or file lifecycle with --path.
   od project share stop <id> --path <file> --slug <slug> [--json]
                     Stop the stable public alias; its identity is retained for resume.
@@ -7437,7 +7566,7 @@ async function runProjectShare(args) {
     ...(['stop', 'retry-stop'].includes(action) ? ['slug'] : [])]);
   let flags;
   try {
-    flags = parseFlags(rest, { string: stringFlags, boolean: new Set(['json']) });
+    flags = parseFlags(rest, { string: stringFlags, boolean: new Set(['json', 'local-only']) });
   } catch {
     console.error('Usage: od project share <preflight|publish|resume|get|status|stop|retry-stop> <id> --path <file> [--json] (stop requires --slug <slug>). See --help for accepted flags.');
     process.exit(2);
@@ -7453,13 +7582,16 @@ async function runProjectShare(args) {
     console.error('Usage: od project share <preflight|publish|resume|get|status|stop|retry-stop> <id> --path <file> [--json] (stop requires --slug <slug>)');
     process.exit(2);
   }
+  if (flags['local-only'] && (action !== 'get' || !filePath)) {
+    console.error('--local-only requires share get/status with --path'); process.exit(2);
+  }
   // Validate before discovery; malformed invocations must not contact a daemon.
   const headers = workspaceHeadersFromExplicitFlags(flags) ?? {};
   const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
   let resp;
   try {
     resp = await fetch(
-      projectStatus ? `${base}/api/projects/${encodeURIComponent(id)}/share-state` : action === 'retry-stop' ? `${base}/api/public-file-stops/retry` : `${base}/api/projects/${encodeURIComponent(id)}/files/${encodeURIComponent(filePath)}/${action === 'preflight' ? 'share-plan' : 'publish-public'}`,
+      projectStatus ? `${base}/api/projects/${encodeURIComponent(id)}/share-state` : action === 'retry-stop' ? `${base}/api/public-file-stops/retry` : `${base}/api/projects/${encodeURIComponent(id)}/files/${encodeURIComponent(filePath)}/${action === 'preflight' ? 'share-plan' : 'publish-public'}${flags['local-only'] ? '?localOnly=true' : ''}`,
       action === 'retry-stop'
         ? { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify({ projectId: id, filePath, slug }) }
         : action === 'stop'
@@ -7494,6 +7626,7 @@ async function runProjectShare(args) {
   const blockers = action === 'preflight' && Array.isArray(data?.blockers) ? data.blockers : [];
   if (blockers.length) process.exitCode = 1;
   if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+  if (flags['local-only']) return console.log(`Local share content: ${data.freshness ?? 'unknown'}`);
   if (projectStatus) return console.log(JSON.stringify(data, null, 2));
   if (action === 'preflight') {
     console.log(`Share plan: ${data.fileCount} files, ${data.totalBytes} bytes.`);
@@ -7558,7 +7691,7 @@ async function runProject(args) {
                     Resume sharing through the same stable-alias lifecycle as the UI.
   od project share get <id> --path <file> [--json]
                     Read the current publication.
-  od project share status <id> [--path <file>] [--json]
+  od project share status <id> [--path <file>] [--local-only] [--json]
                     Project binding history, or file lifecycle with --path.
   od project share stop <id> --path <file> --slug <slug> [--json]
                     Stop the stable public alias; its identity is retained for resume.
@@ -8086,8 +8219,8 @@ Common options:
   --daemon-url <url>   OpenDesign daemon HTTP base.
   --member <id>        Workspace member id for route-level authorization.
   --role <role>        Workspace role: owner, admin, or member.
-  --workspace-type <t> personal or team. A team share is refused in a personal
-                       workspace, which has no team plane to share into.
+  --workspace-type <t> personal or team. Shared projects and resources stay
+                       scoped to the selected workspace and active member.
   --json               Emit raw JSON.`);
     process.exit(args.length === 0 ? 2 : 0);
   }
@@ -8151,6 +8284,18 @@ Common options:
   // explicit CLI argument, never daemon active-workspace state: account is the
   // compatibility default; team requires both type + workspace id.
   if (area === 'billing') {
+    if (sub === 'request-concurrency') {
+      const workspaceId = typeof flags.workspace === 'string' ? flags.workspace.trim() : '';
+      if (!workspaceId) {
+        console.error('Usage: od workspace billing request-concurrency --workspace <id> [--json]');
+        process.exit(2);
+      }
+      const query = new URLSearchParams({ workspaceId });
+      const data = await workspaceContextRequest(`/api/workspace/billing/request-concurrency?${query}`);
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      console.log(`Request concurrency: ${data.requestConcurrencyHint?.status ?? 'unknown'} (Link decides admission)`);
+      return;
+    }
     if (sub === 'preflight') {
       const workspaceId = typeof flags.workspace === 'string' ? flags.workspace.trim() : '';
       if (!workspaceId) {
@@ -8261,12 +8406,8 @@ Common options:
   }
   const workspaceHeaders = {
     'x-od-workspace-id': workspaceId,
-    // Only sent when the caller actually says which kind of workspace this is.
-    // The daemon reads an explicit `personal` as the caller ASSERTING there is
-    // no team plane here and refuses a team share on the strength of it (see
-    // collab/team-share-scope.ts), so defaulting the header to 'personal' would
-    // have made `--visibility team` impossible from the CLI. Absent still reads
-    // as personal everywhere it only affects view filtering.
+    // Preserve an explicit workspace type; the daemon verifies workspace and
+    // membership authority for both Personal and Team shared resources.
     ...(typeof flags['workspace-type'] === 'string' && flags['workspace-type'].trim()
       ? { 'x-od-workspace-type': flags['workspace-type'].trim() }
       : {}),
@@ -8371,6 +8512,63 @@ Common options:
   }
 }
 
+/**
+ * `od run notices` — the same feed as `GET /api/run-notices` (P0-24 N10).
+ * Without `--watch` it prints what is there after `--after` and exits; with
+ * it, it keeps polling and prints each new notice once (ND-JSON with --json).
+ * A daemon restart starts a new epoch: the watcher resumes from its newest
+ * notice instead of replaying, matching the desktop client.
+ */
+async function runRunNotices(args) {
+  const flags = parseFlags(args, {
+    string: RUN_NOTICES_STRING_FLAGS,
+    boolean: RUN_NOTICES_BOOLEAN_FLAGS,
+  });
+  const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
+  const headers = workspaceHeadersFromExplicitFlags(flags) ?? {};
+  let after = Number.parseInt(flags.after ?? '0', 10);
+  if (!Number.isFinite(after) || after < 0) after = 0;
+  const fetchPage = async (from) => {
+    const resp = await fetch(`${base}/api/run-notices?after=${from}`, { headers });
+    if (!resp.ok) return { failure: resp };
+    return { data: await resp.json() };
+  };
+  const print = (notice) => {
+    if (flags.json) {
+      process.stdout.write(JSON.stringify(notice) + '\n');
+      return;
+    }
+    console.log(`${notice.seq}\t${notice.kind}\tproject=${notice.projectId}\tconversation=${notice.conversationId ?? '-'}\trun=${notice.runId}\t${notice.projectName ?? ''}`);
+  };
+  const first = await fetchPage(after);
+  if (first.failure) return structuredHttpFailure(first.failure);
+  if (!flags.watch) {
+    if (flags.json) return process.stdout.write(JSON.stringify(first.data, null, 2) + '\n');
+    for (const notice of first.data?.notices ?? []) print(notice);
+    return;
+  }
+  let epoch = first.data?.epoch;
+  for (const notice of first.data?.notices ?? []) print(notice);
+  after = Math.max(after, first.data?.latestSeq ?? 0);
+  for (;;) {
+    await new Promise((resolve) => setTimeout(resolve, RUN_NOTICES_POLL_MS));
+    let page;
+    try {
+      page = await fetchPage(after);
+    } catch {
+      continue;
+    }
+    if (page.failure) continue;
+    if (page.data?.epoch !== epoch) {
+      epoch = page.data?.epoch;
+      after = page.data?.latestSeq ?? 0;
+      continue;
+    }
+    for (const notice of page.data?.notices ?? []) print(notice);
+    after = Math.max(after, page.data?.latestSeq ?? 0);
+  }
+}
+
 async function runRun(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
@@ -8398,6 +8596,12 @@ async function runRun(args) {
   od run info   <runId>                     One run's status.
   od run result-package <runId> [--json]    Inspect run outputs and workspace
                                             provenance without applying them.
+  od run notices [--after <seq>] [--watch] [--json]
+                                            Turns that ended on this machine and
+                                            should reach the user (needs reply /
+                                            new reply / failed) — the feed the
+                                            desktop client turns into system
+                                            notifications. --watch keeps polling.
 
 BYOK start options:
   BYOK requires --model <id>; Azure also requires --byok-base-url.
@@ -8418,6 +8622,7 @@ Common options:
   }
   const sub = args[0];
   const rest = args.slice(1);
+  if (sub === 'notices') return runRunNotices(rest);
   const flags = parseFlags(rest, {
     string: sub === 'start' ? RUN_START_STRING_FLAGS : PROJECT_RESOURCE_STRING_FLAGS,
     boolean: sub === 'start' ? RUN_START_BOOLEAN_FLAGS : PROJECT_BOOLEAN_FLAGS,

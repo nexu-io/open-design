@@ -645,7 +645,7 @@ describe('project preview containment routes', () => {
     expect(thumbnail.status).toBe(200);
     const html = await thumbnail.text();
     expect(html).not.toContain('oldPlayer();');
-    expect(html).toContain('data-od-motion-source-player="8"');
+    expect(html).toContain('data-od-motion-source-player="11"');
     expect(html).toContain("searchParams.get('odMotionThumbnail')");
     expect(html.match(/<script data-od-motion-source-player/g)).toHaveLength(1);
     expect(html).not.toContain('data-od-url-scroll-bridge');

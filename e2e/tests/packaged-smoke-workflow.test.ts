@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -959,6 +960,13 @@ else { process.stderr.write("unexpected gh call: " + args + "\\n"); process.exit
     expect(workflow).toContain("--squash");
     expect(workflow).toContain("--delete-branch");
 
+    const velaGate = sectionBetween(workflow, "Check stable Vela CLI version before backport auto-merge", "Approve the clean backport");
+    expect(velaGate).toContain('steps.pr.outputs.head_oid == github.event.workflow_run.head_sha');
+    expect(velaGate).toContain('git show "$HEAD_SHA:tools/pack/package.json"');
+    expect(velaGate).toContain('git show "$HEAD_SHA:pnpm-lock.yaml"');
+    expect(velaGate).toContain('.github/scripts/release/vela-version.ts');
+    expect(workflow.indexOf("Check stable Vela CLI version before backport auto-merge")).toBeLessThan(workflow.indexOf("Approve the clean backport"));
+
     // To satisfy release/v*'s one-approval rule, the bot's own clean backport is auto-approved by
     // github-actions[bot] (pull-requests: write) — under the same author==bot gate as the merge.
     expect(workflow).toContain("pull-requests: write");
@@ -980,6 +988,12 @@ else { process.stderr.write("unexpected gh call: " + args + "\\n"); process.exit
     expect(feishuStep).toContain(
       "(github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'timed_out')",
     );
+    expect(feishuStep).toContain("always()");
+    expect(feishuStep).toContain("steps.vela_guard.outcome == 'failure'");
+    expect(feishuStep).toContain("steps.vela_guard.outputs.reason_b64");
+    expect(feishuStep).toContain("github.event.workflow_run.head_sha");
+    expect(velaGate).toContain('exit 1');
+    expect(velaGate).toContain('reason_b64=$reason');
     expect(feishuStep).not.toContain("'cancelled'");
   });
 
@@ -1918,7 +1932,7 @@ process.stdin.on("end", () => {
     expect(uiP0Groups["critical-extras"]).toEqual({
       grep: "@merge-extra",
       workers: 1,
-      files: ["ui/app.test.ts"],
+      files: ["ui/app.test.ts", "ui/settings-amr-models.test.ts"],
     });
     expect(uiP0Groups["workspace-restoration"]).toEqual({
       fullyParallel: true,
@@ -2034,7 +2048,32 @@ process.stdin.on("end", () => {
       .map(([file]) => file)
       .sort();
 
-    expect(playwrightConfig).toContain("testIgnore: 'visual-*.test.ts'");
+    const explicitIgnores = playwrightConfig.match(/testIgnore:\s*\[([^\]]*)\]/)?.[1];
+    expect(explicitIgnores, "Keep visual ownership and private real-service lanes outside the generic UI pool").toBeDefined();
+    expect([...explicitIgnores!.matchAll(/'([^']+)'/g)].map((match) => match[1])).toEqual([
+      "visual-*.test.ts",
+      "workspace-depletion-sandbox.test.ts",
+      "api-security-view016.test.ts",
+      "workspace-free-concurrency-sandbox.test.ts",
+      "workspace-manual-retry-sandbox.test.ts",
+      "workspace-funding-sandbox.test.ts",
+      "qa-bill001.private.test.ts",
+      "workspace-notice-sandbox.test.ts",
+      "workspace-free-wallet-sandbox.test.ts",
+      "workspace-switch-billing-sandbox.test.ts",
+      "workspace-concurrency-sandbox.test.ts",
+      "workspace-concurrency-retry-sandbox.test.ts",
+      "workspace-api-wallet-sandbox.test.ts",
+      "workspace-api-wallet-readback-sandbox.test.ts",
+      "link-closure-sandbox.test.ts",
+      "link-f04-sandbox.test.ts",
+      "link-run013-sandbox.test.ts",
+      "link-run011-matrix-sandbox.test.ts",
+      "link-run003-latency-sandbox.test.ts",
+      "link-run012-checkout-sandbox.test.ts",
+      "link-run010-reconnect-sandbox.test.ts",
+      "link-run012-controlled-sandbox.test.ts",
+    ]);
     expect(benchmarkWorkflow).toContain("  workflow_call:");
     expect(benchmarkWorkflow).toContain('description: "Exact git ref to validate. Prerelease passes its resolved build commit."');
     expect(benchmarkWorkflow).toContain("ref: ${{ inputs.ref || github.sha }}");
@@ -2527,17 +2566,17 @@ process.stdin.on("end", () => {
     }
   });
 
-  it("[P2] makes a publish=false beta dispatch retrievable on both platforms without touching a channel", async () => {
+  it("[P2] makes a publish=false beta dispatch retrievable on all enabled desktop platforms without touching a channel", async () => {
     // A publish=false dispatch is the standing shape for dogfood/QA builds: they
-    // must never enter the public beta feed. mac already handed back a DMG, but
-    // the Windows job produced nothing retrievable at all, so a Windows dogfood
-    // build was impossible without also publishing. Both platforms now emit a
-    // GitHub artifact plus an R2 upload under the dogfood prefix.
+    // must never enter the public beta feed. Every enabled desktop platform must
+    // retain its installer even when public publication is disabled: a GitHub
+    // artifact plus an R2 upload under the dogfood prefix.
     const workflow = await readFile(releaseBetaWorkflowPath, "utf8");
     const macJob = sectionBetween(workflow, "  build_mac_arm64:", "  build_mac_x64:");
+    const macX64Job = sectionBetween(workflow, "  build_mac_x64:", "  build_win_x64:");
     const winJob = sectionBetween(workflow, "  build_win_x64:", "  build_linux_x64:");
 
-    for (const [label, job] of [["mac_arm64", macJob], ["win_x64", winJob]] as const) {
+    for (const [label, job] of [["mac_arm64", macJob], ["mac_x64", macX64Job], ["win_x64", winJob]] as const) {
       expect(job, label).toContain("run: pnpm exec tools-release publish-dogfood");
       expect(job, label).toContain("DOGFOOD_VERSION: ${{ needs.metadata.outputs.beta_version }}");
       expect(job, label).toContain("DOGFOOD_BUILD_ID: ${{ github.run_id }}-${{ github.run_attempt }}");
@@ -2546,6 +2585,11 @@ process.stdin.on("end", () => {
       expect(job, label).toContain("DOGFOOD_BUILD_JSON_PATH:");
       expect(job, label).toContain("DOGFOOD_BUILD_JSON_KEYS:");
     }
+
+    expect(macX64Job).toContain("name: open-design-beta-mac-x64-dmg");
+    expect(macX64Job).toContain("namespaces/release-beta-x64/**/*.dmg");
+    expect(macX64Job).toContain("DOGFOOD_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_x64/build.json");
+    expect(macX64Job).toContain("DOGFOOD_BUILD_JSON_KEYS: dmgPath");
 
     // The Windows installer is retrievable as a GitHub artifact too, covering
     // every win_x64_target (nsis -> setup exe, zip -> portable zip, all -> both).
@@ -2558,7 +2602,7 @@ process.stdin.on("end", () => {
     const dogfoodSteps = workflow.split("\n      - name: ").filter((step) =>
       /publish-dogfood|for manual distribution/.test(step)
     );
-    expect(dogfoodSteps).toHaveLength(4);
+    expect(dogfoodSteps).toHaveLength(6);
     for (const step of dogfoodSteps) {
       expect(step, step.split("\n")[0]).toContain("if: ${{ !cancelled() && !inputs.publish }}");
     }
@@ -3496,6 +3540,216 @@ process.stdin.on("end", () => {
     expect(publishStep).toContain(artifactMode);
   });
 
+  it("[P1] reserves prerelease versions before building and validates ownership before publishing", async () => {
+    const workflow = parseYaml(await readFile(releasePrereleaseWorkflowPath, "utf8"));
+    expect(workflow.env).toMatchObject({
+      RELEASE_REPOSITORY: "${{ github.repository }}",
+      RELEASE_RUN_ID: "${{ github.run_id }}",
+      RELEASE_WORKFLOW: "${{ github.workflow }}",
+    });
+    const metadata = workflow.jobs.metadata;
+    const reservation = metadata.steps.find((step: { id?: string }) => step.id === "reservation");
+    expect(reservation?.run).toBe("pnpm exec tools-release reserve-version prerelease");
+    expect(reservation.env.RELEASE_VERSION_CANDIDATE).toBe("${{ steps.prerelease.outputs.release_version }}");
+    for (const name of ["prerelease_version", "prerelease_number", "release_version", "release_number", "release_name", "state_source", "version_lock_key"]) {
+      expect(metadata.outputs[name]).toBe(`\${{ steps.reservation.outputs.${name} }}`);
+    }
+    for (const job of Object.values(workflow.jobs) as Array<{ steps?: Array<{ run?: string; env?: Record<string, string> }> }>) {
+      for (const step of job.steps ?? []) {
+        if (!/tools-release publish-(platform|metadata)$/.test(step.run ?? "")) continue;
+        expect(step.env?.RELEASE_VERSION_LOCK_REQUIRED).toBe("true");
+        expect(step.env?.RELEASE_VERSION_LOCK_KEY).toBe("${{ needs.metadata.outputs.version_lock_key }}");
+      }
+    }
+  });
+
+  it("[P1] skips legacy prerelease artifacts without locks and reserves separate versions for concurrent runs", async () => {
+    const version = "1.2.3-prerelease.4";
+    const legacyKey = `prerelease/versions/${version}/open-design-${version}-mac-arm64.dmg`;
+    const fixture = await startReleaseMetadataObjectStore({ [legacyKey]: Buffer.from("old signed dmg") });
+    const root = await mkdtemp(join(tmpdir(), "od-prerelease-reservation-"));
+    const reserve = async (runId: string, attempt = "1", overrides: Record<string, string> = {}) => {
+      const metadataDir = join(root, `${runId}-${attempt}`);
+      await mkdir(metadataDir, { recursive: true });
+      const outputsPath = join(metadataDir, "outputs.txt");
+      await execFileAsync(process.execPath, ["--experimental-strip-types", "tools/release/src/index.ts", "reserve-version", "prerelease"], {
+        cwd: workspaceRoot,
+        env: {
+          ...process.env,
+          BASE_VERSION: "1.2.3",
+          GITHUB_OUTPUT: outputsPath,
+          RELEASE_CHANNEL: "prerelease",
+          RELEASE_COMMIT: "abc123",
+          RELEASE_LANE: "release-prerelease",
+          RELEASE_METADATA_DIR: metadataDir,
+          RELEASE_PUBLIC_ORIGIN: "https://releases.example.test",
+          RELEASE_REPOSITORY: "nexu-io/open-design",
+          RELEASE_RUN_ID: runId,
+          RELEASE_RUN_ATTEMPT: attempt,
+          RELEASE_STORAGE_ACCESS_KEY_ID: "test-access-key",
+          RELEASE_STORAGE_BUCKET: fixture.bucket,
+          RELEASE_STORAGE_ENDPOINT: fixture.endpointUrl,
+          RELEASE_STORAGE_REGION: "auto",
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: "test-secret-key",
+          RELEASE_VERSION_CANDIDATE: version,
+          RELEASE_VERSION_MANUAL_OVERRIDE: "false",
+          RELEASE_VERSION_RESERVATION_MAX_ATTEMPTS: "10",
+          RELEASE_WORKFLOW: "release-prerelease",
+          ...overrides,
+        },
+      });
+      return Object.fromEntries((await readFile(outputsPath, "utf8")).trim().split("\n").map((line) => {
+        const separator = line.indexOf("=");
+        return [line.slice(0, separator), line.slice(separator + 1)];
+      }));
+    };
+    try {
+      const results = await Promise.all([reserve("101"), reserve("102")]);
+      expect(results.map((result) => result.release_version).sort()).toEqual(["1.2.3-prerelease.5", "1.2.3-prerelease.6"]);
+      expect(fixture.object(legacyKey)).toEqual(Buffer.from("old signed dmg"));
+      expect(fixture.object(`prerelease/versions/${version}/version.lock.json`)).toBeNull();
+      for (let index = 0; index < results.length; index += 1) {
+        const result = results[index]!;
+        expect(JSON.parse(fixture.object(result.version_lock_key!)!.toString())).toMatchObject({
+          channel: "prerelease", releaseVersion: result.release_version, owner: { runId: index + 101 },
+        });
+      }
+      const retry = await reserve("101");
+      expect(retry.release_version).toBe(results[0]!.release_version);
+      expect(retry.prerelease_version).toBe(retry.release_version);
+      expect(retry.prerelease_number).toBe(retry.release_number);
+      const rerun = await reserve("101", "2");
+      expect(rerun.release_version).toBe("1.2.3-prerelease.7");
+      await expect(reserve("103", "1", { RELEASE_VERSION_MANUAL_OVERRIDE: "true" }))
+        .rejects.toThrow("already occupied");
+      await expect(reserve("104", "1", { RELEASE_VERSION_RESERVATION_MAX_ATTEMPTS: "1" }))
+        .rejects.toThrow("failed to reserve a prerelease version after 1 attempts");
+    } finally {
+      await fixture.close();
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("refuses to replace a versioned release asset with different bytes", async () => {
+    const fixture = await startReleaseMetadataObjectStore({});
+    const runnerTemp = await mkdtemp(join(tmpdir(), "od-release-immutable-assets-"));
+    const assetsDir = join(runnerTemp, "assets");
+    const manifestDir = join(runnerTemp, "manifests");
+    const outputsPath = join(runnerTemp, "outputs.json");
+    const version = "1.2.3-prerelease.4";
+    const assetName = `open-design-${version}-mac-arm64.dmg`;
+    const objectKey = `prerelease/versions/${version}/${assetName}`;
+    const firstBytes = Buffer.from("first signed dmg");
+    const secondBytes = Buffer.from("different signed dmg");
+    const writeAssets = async (bytes: Buffer) => {
+      await writeFile(join(assetsDir, assetName), bytes);
+      await writeFile(
+        join(assetsDir, `${assetName}.sha256`),
+        `${createHash("sha256").update(bytes).digest("hex")}  ${assetName}\n`,
+      );
+    };
+    const publish = () => execFileAsync(
+      process.execPath,
+      ["--experimental-strip-types", releaseBetaPlatformPublishScriptPath],
+      {
+        cwd: workspaceRoot,
+        env: {
+          ...process.env,
+          RELEASE_ARTIFACT_MODE: "dmg-only",
+          RELEASE_ASSETS_DIR: assetsDir,
+          RELEASE_CHANNEL: "prerelease",
+          RELEASE_MANIFEST_DIR: manifestDir,
+          RELEASE_OUTPUTS_PATH: outputsPath,
+          RELEASE_PUBLIC_ORIGIN: "https://releases.example.test",
+          RELEASE_SIGNED: "true",
+          RELEASE_STORAGE_ACCESS_KEY_ID: "test-access-key",
+          RELEASE_STORAGE_BUCKET: fixture.bucket,
+          RELEASE_STORAGE_ENDPOINT: fixture.endpointUrl,
+          RELEASE_STORAGE_REGION: "auto",
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: "test-secret-key",
+          RELEASE_TARGET: "mac_arm64",
+          RELEASE_VERSION: version,
+        },
+      },
+    );
+
+    try {
+      await mkdir(assetsDir, { recursive: true });
+      await writeAssets(firstBytes);
+      await publish();
+      await writeAssets(secondBytes);
+
+      await expect(publish()).rejects.toThrow(/immutable release asset already exists with different content/);
+      expect(fixture.object(objectKey)).toEqual(firstBytes);
+    } finally {
+      await fixture.close();
+      await rm(runnerTemp, { force: true, recursive: true });
+    }
+  });
+
+  it("publishes both macOS architectures while keeping their shared feed replaceable", async () => {
+    const fixture = await startReleaseMetadataObjectStore({});
+    const runnerTemp = await mkdtemp(join(tmpdir(), "od-release-shared-mac-feed-"));
+    const assetsDir = join(runnerTemp, "assets");
+    const manifestDir = join(runnerTemp, "manifests");
+    const outputsPath = join(runnerTemp, "outputs.json");
+    const version = "1.2.3-prerelease.4";
+    const versionPrefix = `prerelease/versions/${version}`;
+    const writeAsset = async (name: string, bytes: Buffer) => {
+      await writeFile(join(assetsDir, name), bytes);
+      await writeFile(
+        join(assetsDir, `${name}.sha256`),
+        `${createHash("sha256").update(bytes).digest("hex")}  ${name}\n`,
+      );
+    };
+    const writeMacAssets = async (arch: "arm64" | "x64") => {
+      await rm(assetsDir, { force: true, recursive: true });
+      await mkdir(assetsDir, { recursive: true });
+      await writeAsset(`open-design-${version}-mac-${arch}.dmg`, Buffer.from(`${arch} dmg`));
+      await writeAsset(`open-design-${version}-mac-${arch}-payload.zip`, Buffer.from(`${arch} payload`));
+      await writeAsset(`open-design-${version}-mac-${arch}.zip`, Buffer.from(`${arch} zip`));
+      await writeFile(join(assetsDir, "latest-mac.yml"), `arch: ${arch}\n`);
+    };
+    const publish = (target: "mac_arm64" | "mac_x64") => execFileAsync(
+      process.execPath,
+      ["--experimental-strip-types", releaseBetaPlatformPublishScriptPath],
+      {
+        cwd: workspaceRoot,
+        env: {
+          ...process.env,
+          RELEASE_ARTIFACT_MODE: "all",
+          RELEASE_ASSETS_DIR: assetsDir,
+          RELEASE_CHANNEL: "prerelease",
+          RELEASE_MANIFEST_DIR: manifestDir,
+          RELEASE_OUTPUTS_PATH: outputsPath,
+          RELEASE_PUBLIC_ORIGIN: "https://releases.example.test",
+          RELEASE_SIGNED: "true",
+          RELEASE_STORAGE_ACCESS_KEY_ID: "test-access-key",
+          RELEASE_STORAGE_BUCKET: fixture.bucket,
+          RELEASE_STORAGE_ENDPOINT: fixture.endpointUrl,
+          RELEASE_STORAGE_REGION: "auto",
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: "test-secret-key",
+          RELEASE_TARGET: target,
+          RELEASE_VERSION: version,
+        },
+      },
+    );
+
+    try {
+      await writeMacAssets("arm64");
+      await publish("mac_arm64");
+      await writeMacAssets("x64");
+      await publish("mac_x64");
+
+      expect(fixture.object(`${versionPrefix}/latest-mac.yml`)).toEqual(Buffer.from("arch: x64\n"));
+      expect(fixture.object(`${versionPrefix}/platforms/mac_arm64.json`)).not.toBeNull();
+      expect(fixture.object(`${versionPrefix}/platforms/mac_x64.json`)).not.toBeNull();
+    } finally {
+      await fixture.close();
+      await rm(runnerTemp, { force: true, recursive: true });
+    }
+  });
+
   it("rejects stale latest platform manifests from a previous beta version", async () => {
     const fixture = await startReleaseMetadataObjectStore({});
     const runnerTemp = await mkdtemp(join(tmpdir(), "od-release-betas-metadata-"));
@@ -4191,6 +4445,7 @@ async function startReleaseMetadataObjectStore(objects: Record<string, unknown>)
   bucket: string;
   close: () => Promise<void>;
   endpointUrl: string;
+  object: (key: string) => Buffer | null;
   uploadedObjectKeys: () => string[];
 }> {
   const bucket = "release-bucket";
@@ -4219,6 +4474,11 @@ async function startReleaseMetadataObjectStore(objects: Record<string, unknown>)
         server.close((error) => (error == null ? resolve() : reject(error)));
       }),
     endpointUrl: `http://127.0.0.1:${address.port}`,
+    object: (key) => {
+      const value = objects[key];
+      if (Buffer.isBuffer(value)) return value;
+      return value == null ? null : Buffer.from(JSON.stringify(value));
+    },
     uploadedObjectKeys: () => [...uploadedObjectKeys],
   };
 }
@@ -4230,7 +4490,15 @@ async function handleReleaseMetadataObjectStoreRequest(
   objects: Record<string, unknown>,
   uploadedObjectKeys: string[],
 ): Promise<void> {
-  const path = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
+  const url = new URL(request.url ?? "/", "http://127.0.0.1");
+  const path = url.pathname;
+  if (request.method === "GET" && path === `/${bucket}/` && url.searchParams.get("list-type") === "2") {
+    const prefix = url.searchParams.get("prefix") ?? "";
+    const count = Object.keys(objects).some((key) => key.startsWith(prefix)) ? 1 : 0;
+    response.setHeader("content-type", "application/xml");
+    response.end(`<ListBucketResult><KeyCount>${count}</KeyCount></ListBucketResult>`);
+    return;
+  }
   const bucketPrefix = `/${bucket}/`;
   if (!path.startsWith(bucketPrefix)) {
     response.statusCode = 404;
@@ -4245,17 +4513,23 @@ async function handleReleaseMetadataObjectStoreRequest(
       response.end("not found");
       return;
     }
-    const body = JSON.stringify(objects[objectKey]);
+    const value = objects[objectKey];
+    const body = Buffer.isBuffer(value) ? value : Buffer.from(JSON.stringify(value));
     response.setHeader("content-type", "application/json; charset=utf-8");
     response.end(body);
     return;
   }
 
   if (request.method === "PUT") {
-    uploadedObjectKeys.push(objectKey);
-    for await (const _chunk of request) {
-      // Drain the request body so the client can complete cleanly.
+    if (request.headers["if-none-match"] === "*" && objectKey in objects) {
+      response.statusCode = 412;
+      response.end("precondition failed");
+      return;
     }
+    uploadedObjectKeys.push(objectKey);
+    const chunks: Buffer[] = [];
+    for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    objects[objectKey] = Buffer.concat(chunks);
     response.statusCode = 200;
     response.end("ok");
     return;

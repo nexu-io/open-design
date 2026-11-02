@@ -1,0 +1,44 @@
+{
+  "recorded_date": "2026-10-25",
+  "timezone": "UTC+08:00",
+  "environment": {
+    "os": "macOS arm64",
+    "node": "24.19.0",
+    "pnpm": "10.33.2",
+    "vitest": "4.1.6"
+  },
+  "base": "9724c44142ea0afaee3d207f37901b31c66a44ad",
+  "fix_commit": "ffd7ca711a7cbfc3c2ca26ae5cc00a4fbdc35ee4",
+  "same_child_natural_exit_delay_ms": 80,
+  "before": {
+    "setup": "upstream test plus explicit 80ms fixture delay; unconditional 10ms host shutdown",
+    "source_sha256": "0ef30831c0839a0ef11615cb34d138c99f8a803ef94789a4ad06c1e72a58a6d7",
+    "passed": 4,
+    "failed": 1,
+    "duration_seconds": 13.19,
+    "error": "expected 'succeeded' to be 'failed'"
+  },
+  "after": {
+    "setup": "same delayed fixture; natural nonzero case uses production default grace; other modes retain 10ms",
+    "source_sha256": "42928a58aff454df585946ae34131a8b2a9a32e4e3e7b6f314ea0ce8c4455e0c",
+    "passed": 5,
+    "failed": 0,
+    "duration_seconds": 13.02
+  },
+  "additional_validation": {
+    "related_group": {
+      "files": 3,
+      "tests_passed": 64
+    },
+    "close_file_fixed_executions": 3,
+    "retry": 0,
+    "guard": "passed",
+    "root_typecheck": "passed"
+  },
+  "limitations": [
+    "Screenshot renders recorded test evidence; it is not a product UI or native-terminal capture.",
+    "The before fixture intentionally adds the same 80ms child exit delay used after; it is not unmodified upstream.",
+    "Original unmodified upstream and PR #9062 each also reproduced the intermittent failure in one of three fixed local runs.",
+    "No hosted CI or Windows/Linux native execution is claimed by these local results."
+  ]
+}

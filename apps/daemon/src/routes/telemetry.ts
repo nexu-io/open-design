@@ -27,8 +27,7 @@ import { readCurrentAppVersionInfo, UNKNOWN_APP_VERSION, type AppVersionInfo } f
 import { getDaemonHealth } from '../services/daemon-health.js';
 import { createIdentityGatedQueue } from '../services/identity-gated-queue.js';
 
-const LAUNCH_METRIC_EVENTS = new Set(['client_launch_attempt', 'client_business_ready', 'client_launch_result']);
-const LAUNCH_EVENT_RETENTION_LIMIT = 16;
+const LAUNCH_EVENT_RETENTION_LIMIT = 64;
 import { readTelemetryEnvironment } from '../telemetry-environment.js';
 import { reportRunFeedbackFromDaemon } from '../langfuse-bridge.js';
 import { observePendingInstallerApplyAttempts } from '../migration/index.js';
@@ -52,6 +51,10 @@ export interface DaemonTelemetry {
     customReason: string;
     scoreMetadata?: Record<string, unknown>;
   }) => ReturnType<typeof reportRunFeedbackFromDaemon>;
+  /** Stability metrics produced inside the daemon (e.g. its own memory samples)
+   * share the identity-gated queue so a fresh install never sends them under
+   * the synthetic daemon-anon id (OPEND-4220 retest 2). */
+  captureStabilityMetric: (capture: Parameters<ReturnType<typeof createAnalyticsService>['captureSafety']>[0]) => Promise<void>;
 }
 
 export interface RegisterTelemetryRoutesDeps {
@@ -155,9 +158,17 @@ export function registerTelemetryRoutes(app: Express, deps: RegisterTelemetryRou
   const launchEventQueue = createIdentityGatedQueue<Parameters<typeof analyticsService.captureSafety>[0]>({
     limit: LAUNCH_EVENT_RETENTION_LIMIT,
     resolveIdentity: async () => {
-      const appCfg = await deps.readAppConfig(dataDir);
+      // An unreadable config can never yield an id, so deliver immediately
+      // through captureSafety's fallback identity instead of holding.
+      let appCfg: Awaited<ReturnType<typeof deps.readAppConfig>>;
+      try { appCfg = await deps.readAppConfig(dataDir); } catch { return 'none'; }
       if (typeof appCfg.installationId === 'string' && appCfg.installationId) return 'ready';
-      return appCfg.telemetry?.metrics === false ? 'none' : 'pending';
+      if (appCfg.telemetry?.metrics === false) return 'none';
+      // Only a readable consent that is still on can produce an id later. An
+      // explicit opt-out or a damaged/unreadable config never will, so those
+      // deliver immediately instead of waiting on an identity that won't come.
+      const consent = await readMetricsConsent(dataDir);
+      return consent.status !== 'unavailable' && consent.metrics === true ? 'pending' : 'none';
     },
     deliver: (capture) => analyticsService.captureSafety(capture),
   });
@@ -322,7 +333,11 @@ export function registerTelemetryRoutes(app: Express, deps: RegisterTelemetryRou
       properties: { ...(metric ?? properties), ...(incidentId ? { diagnostic_incident_id: incidentId } : {}) },
       ...(metric ? { insertId: metric.event_id as string } : typeof properties.event_id === 'string' && /^[a-zA-Z0-9_.:-]{1,128}$/.test(properties.event_id) ? { insertId: properties.event_id } : {}),
     };
-    if (metric && LAUNCH_METRIC_EVENTS.has(eventName)) {
+    if (metric && !isProcessExitEventName(eventName)) {
+      // Every stability metric (launch, memory, ...) waits for the installation
+      // identity so one first session never splits across device ids
+      // (OPEND-4220 retest 2). Exit reports stay immediate: capture beats
+      // attribution for the rare fault path.
       await launchEventQueue.submit(capture);
     } else {
       await launchEventQueue.flush();
@@ -394,6 +409,7 @@ export function registerTelemetryRoutes(app: Express, deps: RegisterTelemetryRou
 
   return {
     analyticsService,
+    captureStabilityMetric: (capture) => launchEventQueue.submit(capture),
     flushStockTelemetry: stockCollector.flush,
     disposeFatalHandlers: () => {
       telemetryDisposed = true;

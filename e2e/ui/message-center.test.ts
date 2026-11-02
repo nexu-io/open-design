@@ -74,6 +74,25 @@ async function seedEntryHome(page: Page, options?: { locale?: string }) {
       },
     });
   });
+  // These cases exercise authenticated inbox controls. Supply the matching
+  // Workspace identity instead of relying on A01's former signed-out bell.
+  const context = {
+    workspaceId: 'message-center-workspace',
+    workspaceType: 'personal',
+    workspaceMemberId: 'message-center-member',
+    role: 'owner',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    billingState: 'active',
+    planId: 'go',
+    displayName: 'Message center account',
+    permissions: { canInviteMembers: true, canViewWorkspaceSettings: true },
+  };
+  await page.route('**/api/workspace/context', (route) => route.fulfill({ json: { context } }));
+  await page.route('**/api/workspace/directory', (route) => route.fulfill({ json: {
+    items: [{ ...context, workspaceName: 'Message center workspace' }],
+    activeWorkspaceId: context.workspaceId,
+  } }));
 }
 
 async function gotoEntryHome(page: Page, timeout = 10_000) {
@@ -131,7 +150,7 @@ test('[P1] message center uses account read APIs when Vela is signed in', async 
 
   await gotoEntryHome(page);
 
-  const trigger = page.getByTestId('entry-nav-message-center');
+  const trigger = page.getByTestId('entry-nav-account-message-center');
   await expect(trigger.locator('.entry-nav-rail__menu-item-dot')).toBeVisible();
   await trigger.click();
 
@@ -249,7 +268,7 @@ test('[P1] message center dismisses with Escape and restores the trigger state',
   });
 
   await gotoEntryHome(page, 3_000);
-  const trigger = page.getByTestId('entry-nav-message-center');
+  const trigger = page.getByTestId('entry-nav-account-message-center');
   await trigger.click();
 
   const dialog = page.getByTestId('message-center-dialog');
@@ -292,7 +311,7 @@ test('[P1] message center formats published dates with the selected zh-CN locale
   });
 
   await gotoEntryHome(page, 3_000);
-  await page.getByTestId('entry-nav-message-center').click();
+  await page.getByTestId('entry-nav-account-message-center').click();
 
   const dialog = page.getByTestId('message-center-dialog');
   await expect(dialog).toBeVisible();

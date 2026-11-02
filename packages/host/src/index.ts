@@ -97,6 +97,7 @@ export {
   printHostPdf,
   subscribeHostDownloads,
   setHostPetVisible,
+  showHostWindow,
   getHostUpdaterStatus,
   checkHostUpdater,
   clearHostUpdaterCache,

@@ -287,7 +287,7 @@ describe('DesignSystemsTab — repeat share reads as "sync" once already team-sh
     expect(teamReadHeaders).toHaveLength(1);
   });
 
-  it('does not issue a Team-index request for a Personal workspace', async () => {
+  it('reads the shared index through the exact Personal workspace identity', async () => {
     workspaceInvalidationHarness.autoActivate = false;
     workspaceContext = {
       ...TEAM_CONTEXT,
@@ -301,8 +301,10 @@ describe('DesignSystemsTab — repeat share reads as "sync" once already team-sh
     renderTab([MY_SHARED_SYSTEM]);
     await act(async () => Promise.resolve());
 
-    expect(teamReadHeaders).toHaveLength(0);
-    expect(screen.queryByRole('tab', { name: /Team/i })).toBeNull();
+    expect(teamReadHeaders).toHaveLength(1);
+    expect(teamReadHeaders[0]?.get('x-od-workspace-id')).toBe('ws-personal');
+    expect(teamReadHeaders[0]?.get('x-od-workspace-member-id')).toBe('mem-personal');
+    expect(screen.queryByRole('tab', { name: /Team/i })).toBeTruthy();
   });
 
   it('does not commit an older Workspace A Team index after switching to B', async () => {

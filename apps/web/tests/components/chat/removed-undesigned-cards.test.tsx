@@ -71,7 +71,9 @@ describe.each(['shell', 'prose'] as const)('removed ChatPanel cards in %s', (lan
         // Exercise the real web history client against its public HTTP shape;
         // this component test does not claim a real daemon/database round-trip.
         const rows = await listMessages('project-1', 'conversation-1');
-        expect(fetchMock).toHaveBeenCalledWith(endpoint, undefined);
+        expect(fetchMock).toHaveBeenCalledWith(endpoint, {
+          headers: { Accept: 'application/x-ndjson' },
+        });
         const row = rows[0];
         if (!row) throw new Error('Missing history fixture');
         loaded = row;

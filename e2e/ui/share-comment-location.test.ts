@@ -2,7 +2,7 @@ import { expect, test } from '@/playwright/suite';
 import { mockAmrPersonalWorkspace, AMR_PERSONAL_WORKSPACE_CONTEXT } from '../lib/playwright/amr.js';
 import { T } from '@/timeouts';
 for (const forceInline of [false, true])
-    test(`[P1] Owner locates an old H2 again after scrolling away (srcdoc=${forceInline})`, async ({ page }) => {
+    test(`[P1] Owner locates an old H2 again after scrolling away (srcdoc=${forceInline})`, async ({ page }, testInfo) => {
         test.setTimeout(T.xlong * 2);
         const team = { ...AMR_PERSONAL_WORKSPACE_CONTEXT, workspaceId: 'ws-ui-audit-team', workspaceName: 'UI audit team', workspaceType: 'team' as const, workspaceMemberId: 'mem-ui-audit-team', seatSummary: { seatLimit: 5, usedSeats: 1, availableSeats: 4, isSeatFull: false }, teamId: 'team-ui-audit', teamName: 'UI audit team', role: 'owner' as const };
         await page.addInitScript(() => {
@@ -50,7 +50,17 @@ for (const forceInline of [false, true])
         await page.route(`**/api/projects/${projectId}/collab/status`, r => r.fulfill({ json: { publishedVersion: 2, materializedVersion: 2, awaitingFirstMaterialization: false, syncState: 'synced', ownerMemberId: team.workspaceMemberId, ownerDisplayName: 'Fixture Owner', ownerRole: 'owner', contentTransferState: null } }));
         const now = Date.now();
         const comment = { id: 'old-h2-comment', projectId, conversationId, filePath: 'index.html', elementId: 'old-cloud-id', selector: 'body > main > section > h2', label: 'h2', text: '评论定位目标', htmlHint: '<h2>', position: { x: 0, y: 0, width: 752, height: 38 }, note: '旧版本 H2 定位评论', status: 'open', anchorState: 'lost', anchoredVersion: 1, authorKind: 'user', authorKey: 'fixture-location-author', createdAt: now, updatedAt: now };
-        await page.route(`**/api/projects/${projectId}/conversations/${conversationId}/comments`, r => r.request().method() === 'GET' ? r.fulfill({ json: { comments: [comment] } }) : r.fallback());
+        const saved = await page.request.post(`/api/projects/${projectId}/conversations/${conversationId}/comments`, {
+            data: { target: comment, note: comment.note },
+        });
+        expect(saved.ok(), await saved.text()).toBeTruthy();
+        comment.id = (await saved.json()).comment.id;
+        let failList = false;
+        await page.route(`**/api/projects/${projectId}/conversations/${conversationId}/comments`, r => r.request().method() === 'GET'
+            ? r.fulfill(failList ? { status: 503, json: { error: 'temporary read failure' } } : { json: { comments: [comment] } })
+            : r.fallback());
+        await page.route(`**/api/projects/${projectId}/conversations/${conversationId}/comments/pull`, r => r.fulfill(
+            failList ? { status: 503, json: { error: 'temporary read failure' } } : { json: { comments: [comment] } }));
         await page.route(`**/api/projects/${projectId}/conversations/${conversationId}/comments/lost-anchors`, r => r.fulfill({ json: { updated: 0 } }));
         await page.goto(`/projects/${projectId}${forceInline ? '?forceInline=1' : ''}`);
         await page.getByTestId('file-workspace').getByText('index.html', { exact: true }).first().click();
@@ -104,6 +114,29 @@ for (const forceInline of [false, true])
             const expected = await target.boundingBox();
             return actual && expected ? Math.max(Math.abs(actual.y - expected.y), Math.abs(actual.height - expected.height)) : 999;
         }).toBeLessThan(3);
+        // A canonical report changes selector shape after the same target gains
+        // a new authored identity. Saved and selected pins must remain together.
+        await target.evaluate(element => element.setAttribute('data-od-id', 'replacement-h2'));
+        await row.click();
+        const pin = page.getByTestId('comment-active-pin');
+        await expect(pin).toBeVisible();
+        await expect.poll(async () => {
+            const activePin = await pin.boundingBox();
+            const savedPin = await page.getByTestId('comment-saved-marker-' + comment.elementId).locator('.comment-saved-pin').boundingBox();
+            return activePin && savedPin ? Math.max(Math.abs(activePin.x - savedPin.x), Math.abs(activePin.y - savedPin.y)) : 999;
+        }).toBeLessThan(3);
+        await page.screenshot({ path: testInfo.outputPath('3869-aligned-pins.png') });
+        failList = true;
+        await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+        const readError = page.getByRole('alert').filter({ hasText: '评论加载失败' });
+        await expect(readError).toBeVisible();
+        await expect(row).toBeVisible();
+        await page.screenshot({ path: testInfo.outputPath('3894-retained-comments-on-error.png') });
+        failList = false;
+        await readError.getByRole('button').click();
+        await expect(readError).toHaveCount(0);
+        await expect(row).toBeVisible();
+        await page.screenshot({ path: testInfo.outputPath('3894-retry-restored.png') });
         // The original target can disappear while its old annotation id is
         // still attached to the root. Neither transport may select that root.
         await target.evaluate(element => element.remove());

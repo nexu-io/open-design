@@ -3,6 +3,7 @@
  * *_result event prop types (run, feedback, settings, packaged).
  */
 import type { ApiFailureReason, ApiFailureStage } from '../../api/failure-detail.js';
+import type { TrackingProjectIntent } from './shared-enums.js';
 import type {
   AnalyticsAttributionQuality,
   AnalyticsDistributionMechanism,
@@ -20,6 +21,29 @@ import type { TrackingSettingsPage } from './event-names.js';
 import type { TrackingAmrOpenCodeErrorPhase, TrackingAmrOpenCodeLastEventType, TrackingAmrOpenCodeLastToolKind, TrackingAmrOpenCodeLastToolStatus, TrackingArtifactKind, TrackingArtifactWriteSource, TrackingArtifactWriteStatus, TrackingByokPreflightBlockReason, TrackingByokProviderId, TrackingCliProviderId, TrackingDesignSystemSource, TrackingExecutionMode, TrackingExportFormat, TrackingExportResult, TrackingFeedbackAction, TrackingFeedbackProviderId, TrackingFeedbackRating, TrackingFeedbackRatingWithNone, TrackingFeedbackReasonCode, TrackingFidelity, TrackingFileSizeBucket, TrackingFileType, TrackingFirstModelEventType, TrackingHarness, TrackingLabsItemId, TrackingLabsOptOutReason, TrackingLabsSystemReason, TrackingLabsToggleSource, TrackingLangfuseDeliveryStatus, TrackingLangfuseDropReason, TrackingLangfuseReportResult, TrackingLangfuseReportSkipReason, TrackingProjectKind, TrackingProjectSource, TrackingPublishErrorCode, TrackingResult, TrackingRunAdmissionPhase, TrackingRunPolicyReason, TrackingRunAdmissionStatus, TrackingRunCancelOrigin, TrackingRunCloseReason, TrackingRunDiagnosticSource, TrackingRunEvidenceLevel, TrackingRunFailureCategory, TrackingRunFailureDetail, TrackingRunFailureDomain, TrackingRunFailureMechanism, TrackingRunFailureStage, TrackingRunFailureUserAction, TrackingRunLifecyclePhase, TrackingRunMatureUnfinishedState, TrackingRunPhaseTimingStatus, TrackingRunPosthogAcknowledgement, TrackingRunPosthogDeliveryStatus, TrackingRunPosthogErrorType, TrackingRunReconciliationIntegrity, TrackingRunRepairOwner, TrackingRunResult, TrackingRunRetryFinalResult, TrackingRunRetryStrategy, TrackingRunRetrySuppressedReason, TrackingRunTerminalIntegrity, TrackingRunTerminalPersistenceErrorType, TrackingRunTerminalPersistenceStatus, TrackingRunTerminalTrigger, TrackingRunTerminationOrigin, TrackingStderrLineCountBucket, TrackingTestResult, TrackingTokenCountSource } from './shared-enums.js';
 import type { ConversationForkAnalyticsContext, TrackingFileVersionSource, TrackingPluginImportSource, TrackingSessionMode, TrackingSettingsArea } from './ui-click.js';
 // ---- Result events -------------------------------------------------------
+
+/**
+ * One replication attempt through `od media reference`. Answers the only
+ * questions the product needs about this feature: is anyone using it, and
+ * where does it stop working. No prompts, no file names, no frame content.
+ */
+export interface MotionReplicateResultProps {
+  page_name: 'studio';
+  area: 'motion_replication';
+  project_id: string;
+  run_id?: string;
+  /** `file` for an attached video, `url` for a pasted link. */
+  source_kind: 'file' | 'url';
+  result: 'success' | 'failed';
+  /** Present when the measurement succeeded. */
+  duration_sec?: number;
+  /** Present when the measurement succeeded. */
+  shot_count?: number;
+  /** Present when the measurement succeeded. */
+  has_audio?: boolean;
+  /** Present when it failed: the tool's own error code. */
+  failure_code?: string;
+}
 
 // Final outcome for the paid provider submission. Keep this envelope free of
 // prompts, response bodies, configured URLs, credentials, and output paths.
@@ -82,6 +106,8 @@ export interface ProjectCreateResultProps {
   project_source: TrackingProjectSource;
   project_id: string | null;
   project_kind: TrackingProjectKind | null;
+  /** Saved product scene; optional for producers predating this dimension. */
+  project_intent?: TrackingProjectIntent;
   design_system?: string;
   target_platforms?: string;
   companion_surfaces?: string;
@@ -387,7 +413,13 @@ export interface RunCreatedProps extends RunTaskLineageProps {
   project_id: string;
   conversation_id: string | null;
   run_id: string;
+  /** Daemon-authorized workspace pinned to this run, never the current UI selection. */
+  workspace_id?: string;
+  /** Positive safe integer from that workspace's authorized context; omitted when unknown. */
+  member_count?: number;
   project_kind: TrackingProjectKind | null;
+  /** Frozen from project metadata at physical Run creation, independent of strategy. */
+  project_intent?: TrackingProjectIntent;
   design_system_id?: string;
   design_system_source: TrackingDesignSystemSource;
   // Official preset vs user-built; `design_system_slug` carries the concrete

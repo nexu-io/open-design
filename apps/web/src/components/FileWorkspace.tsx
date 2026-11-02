@@ -283,6 +283,8 @@ interface Props {
   tabsState: OpenTabsState;
   onTabsStateChange: (next: OpenTabsState) => void;
   previewComments?: PreviewComment[];
+  previewCommentsState?: 'loading' | 'error' | 'success';
+  onRetryPreviewComments?: () => void;
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean, images?: File[], commentId?: string) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<boolean>;
   onReorderPreviewComment?: (commentId: string, sortKey: number) => Promise<void>;
@@ -348,6 +350,7 @@ interface Props {
   // launcher affordance to create new side chats — only persisted `chat:` tabs
   // are restored.
   chatConfig?: AppConfig;
+  onTouchProject?: (sentAt: number) => void;
   chatAgentsById?: Map<string, AgentInfo>;
   handoffAgents?: AgentInfo[];
   handoffArtifactId?: string;
@@ -1367,6 +1370,8 @@ export function FileWorkspace({
   tabsState,
   onTabsStateChange,
   previewComments = NO_PREVIEW_COMMENTS,
+  previewCommentsState = 'success',
+  onRetryPreviewComments,
   onSavePreviewComment,
   onRemovePreviewComment,
   onReorderPreviewComment,
@@ -1400,6 +1405,7 @@ export function FileWorkspace({
   commentPortalId,
   onCommentModeChange,
   chatConfig,
+  onTouchProject,
   chatAgentsById,
   handoffAgents,
   handoffArtifactId,
@@ -3519,6 +3525,8 @@ export function FileWorkspace({
       commentQueueOnSend={commentQueueOnSend}
       commentSendDisabled={commentSendDisabled}
       previewComments={previewCommentsByFile.get(file.name) ?? NO_PREVIEW_COMMENTS}
+      previewCommentsState={previewCommentsState}
+      onRetryPreviewComments={onRetryPreviewComments}
       onSavePreviewComment={onSavePreviewComment}
       onRemovePreviewComment={onRemovePreviewComment}
       onReorderPreviewComment={onReorderPreviewComment}
@@ -4640,6 +4648,7 @@ export function FileWorkspace({
             projectId={projectId}
             conversationId={conversationIdFromSideChatTabId(activeTab)}
             config={chatConfig}
+            onTouchProject={onTouchProject}
             agentsById={chatAgentsById}
             locale={chatLocale ?? 'en'}
             workspaceContext={workspaceContext}

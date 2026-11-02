@@ -406,6 +406,12 @@ export type OpenDesignHostBridge = {
     setVisible(visible: boolean): void;
   };
   // Optional so web builds and older desktop hosts keep the same contract.
+  // Brings the app window to the front even when it is minimized or hidden,
+  // which the renderer's own `window.focus()` cannot do.
+  window?: {
+    show(): void;
+  };
+  // Optional so web builds and older desktop hosts keep the same contract.
   // Electron is the only layer that can observe a compositor-affecting
   // subframe navigation failure after the iframe DOM remains healthy.
   preview?: {

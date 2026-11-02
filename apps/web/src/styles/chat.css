@@ -1397,6 +1397,15 @@ body:has(.manual-edit-workspace) .chat-composer-fixed-layer {
   word-break: break-word;
   color: var(--text-soft);
 }
+/* A non-editable composer uses the app's existing disabled-button palette.
+   Override the idle send colours, which intentionally stay bright when the
+   composer is editable but empty (viewer/routines.css). */
+.composer.composer-readonly .composer-send:not(.stop):disabled {
+  --composer-send-bg: var(--bg-subtle);
+  --composer-send-fg: var(--text-faint);
+  cursor: not-allowed;
+  transform: none;
+}
 /* Design-system picker row at the top of the composer card (moved out of
    the former chrome header). A full-bleed hairline divider separates it
    from the textarea, so the shell carries no padding and each inner row

@@ -16,7 +16,7 @@ import { Dialog } from '@open-design/components';
 import {
   PLUGIN_SHARE_ACTION_PLUGIN_IDS,
   resolveLocalizedText,
-  workspaceContextHasTeamIdentity,
+  workspaceContextHasWorkspaceIdentity,
   type ApplyResult,
   type InstalledPluginRecord,
   type PluginSourceKind,
@@ -1057,16 +1057,9 @@ export function ExtensionsMarketplace({
   const catalogStaleRef = useRef(false);
   const sharedResourcesStaleRef = useRef(false);
   const myMemberId = workspaceContext?.workspaceMemberId ?? null;
-  // The 团队 scope is a team-workspace surface backed by the resource hub: it
-  // lists the resources shared into the team and offers a share-to-team action.
-  // Gate it on TEAM IDENTITY — the same predicate the daemon uses to accept a
-  // hub share (workspaceContextHasTeamIdentity; see team-resource-share.ts) —
-  // NOT on the billing plan. A team on a free/unpaid tier (trial, lapsed, or
-  // billing not yet resolved) still has a real team resource plane with shared
-  // resources; gating on the plan hid the scope from those teams even though the
-  // daemon happily serves and shares their resources. Personal / signed-out
-  // sessions have no team plane and correctly get no team pill.
-  const hasTeamWorkspace = workspaceContextHasTeamIdentity(workspaceContext);
+  // Shared resources belong to a verified workspace, including Personal.
+  // Plan and workspace type do not replace the server's member permissions.
+  const hasSharedWorkspace = workspaceContextHasWorkspaceIdentity(workspaceContext);
   const pageViewFiredRef = useRef(false);
   useEffect(() => {
     if (!isActive) return;
@@ -1118,8 +1111,8 @@ export function ExtensionsMarketplace({
     });
   }
   useEffect(() => {
-    if (scope === 'team' && !hasTeamWorkspace) setScope('official');
-  }, [scope, hasTeamWorkspace]);
+    if (scope === 'team' && !hasSharedWorkspace) setScope('official');
+  }, [scope, hasSharedWorkspace]);
   const [query, setQuery] = useState('');
   // Selected category chip (`null` = 全部). Slugs come from the cards in scope.
   const [category, setCategory] = useState<string | null>(null);
@@ -1454,7 +1447,7 @@ export function ExtensionsMarketplace({
   useEffect(() => {
     if (!isActive) return;
     if (workspaceContextLoading) return;
-    if (hasTeamWorkspace) return;
+    if (hasSharedWorkspace) return;
     if (
       refreshedIdentityRef.current === marketplaceIdentity
       && !catalogStaleRef.current
@@ -1472,7 +1465,7 @@ export function ExtensionsMarketplace({
     }
     void refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasTeamWorkspace, isActive, workspaceContextLoading, marketplaceIdentity, marketplaceReadMode]);
+  }, [hasSharedWorkspace, isActive, workspaceContextLoading, marketplaceIdentity, marketplaceReadMode]);
 
   const refreshSharedResources = useCallback(async () => {
     const requestGeneration = ++sharedResourcesRequestGenerationRef.current;
@@ -1485,7 +1478,7 @@ export function ExtensionsMarketplace({
       && currentWorkspaceAccountGeneration() === accountGeneration
       && marketplaceIdentityRef.current === issuedIdentity
       && read.isStillCurrent(emContextRef.current);
-    if (!read.context || !workspaceContextHasTeamIdentity(read.context)) {
+    if (!read.context || !workspaceContextHasWorkspaceIdentity(read.context)) {
       if (!readIsStillCurrent()) return;
       setSharedPluginIds(new Set());
       setSharedSkillIds(new Set());
@@ -1557,7 +1550,7 @@ export function ExtensionsMarketplace({
   }, []);
 
   const handleMarketplaceStreamActive = useWorkspaceSnapshotActivation({
-    enabled: isActive && hasTeamWorkspace,
+    enabled: isActive && hasSharedWorkspace,
     identity: marketplaceIdentity,
     refresh: () => {
       void refresh();
@@ -1586,8 +1579,8 @@ export function ExtensionsMarketplace({
       },
     },
     {
-      workspaceContext: hasTeamWorkspace ? workspaceContext : null,
-      enabled: hasTeamWorkspace,
+      workspaceContext: hasSharedWorkspace ? workspaceContext : null,
+      enabled: hasSharedWorkspace,
       onActive: () => {
         if (!isActiveRef.current) {
           catalogStaleRef.current = true;
@@ -1606,7 +1599,7 @@ export function ExtensionsMarketplace({
   // the page is visible so owner/admin unshares in another client converge.
   useEffect(() => {
     if (!isActive) return;
-    if (!hasTeamWorkspace) {
+    if (!hasSharedWorkspace) {
       sharedResourcesStaleRef.current = false;
       void refreshSharedResources();
     }
@@ -1616,7 +1609,7 @@ export function ExtensionsMarketplace({
     return () => {
       window.clearInterval(interval);
     };
-  }, [hasTeamWorkspace, isActive, refreshSharedResources, marketplaceIdentity]);
+  }, [hasSharedWorkspace, isActive, refreshSharedResources, marketplaceIdentity]);
 
   const userPlugins = useMemo(
     () => plugins.filter(isPersonalPluginRecord),
@@ -1635,7 +1628,7 @@ export function ExtensionsMarketplace({
   async function shareResource(kind: MarketMode, id: string, title: string) {
     if (sharingId || unsharingId) return;
     const context = emContextRef.current;
-    if (!context || !workspaceContextHasTeamIdentity(context)) {
+    if (!context || !workspaceContextHasWorkspaceIdentity(context)) {
       setToast({ message: t('pluginsView.shareUnavailable', { title }), tone: 'error' });
       return;
     }
@@ -1703,7 +1696,7 @@ export function ExtensionsMarketplace({
   async function unshareResource(kind: MarketMode, id: string, title: string) {
     if (sharingId || unsharingId) return;
     const context = emContextRef.current;
-    if (!context || !workspaceContextHasTeamIdentity(context)) {
+    if (!context || !workspaceContextHasWorkspaceIdentity(context)) {
       setToast({ message: t('pluginsView.unshareUnavailable', { title }), tone: 'error' });
       return;
     }
@@ -2149,7 +2142,7 @@ export function ExtensionsMarketplace({
 
       <div className="plugin-marketplace__filter-block">
         <div className="plugin-marketplace__filters" aria-label={t('pluginsView.marketplaceSourceFiltersAria')}>
-          {MARKET_SCOPES.filter((item) => item.id !== 'team' || hasTeamWorkspace).map((item) => (
+          {MARKET_SCOPES.filter((item) => item.id !== 'team' || hasSharedWorkspace).map((item) => (
             <button
               key={item.id}
               type="button"
@@ -2341,7 +2334,7 @@ export function ExtensionsMarketplace({
                       <button
                         type="button"
                         className="plugin-marketplace__row-action"
-                        disabled={busy}
+                        disabled={busy || sharingId !== null || unsharingId !== null}
                         onClick={(event) => {
                           event.stopPropagation();
                           const share = card.share!;
@@ -2358,7 +2351,7 @@ export function ExtensionsMarketplace({
                       <button
                         type="button"
                         className="plugin-marketplace__row-action"
-                        disabled={busy}
+                        disabled={busy || sharingId !== null || unsharingId !== null}
                         onClick={(event) => {
                           event.stopPropagation();
                           const unshare = card.unshare!;
@@ -2398,7 +2391,7 @@ export function ExtensionsMarketplace({
                               <button
                                 type="button"
                                 role="menuitem"
-                                disabled={busy}
+                                disabled={busy || sharingId !== null || unsharingId !== null}
                                 onClick={() => {
                                   const share = card.share!;
                                   void shareResource(share.kind, share.id, card.title);
@@ -2412,7 +2405,7 @@ export function ExtensionsMarketplace({
                               <button
                                 type="button"
                                 role="menuitem"
-                                disabled={busy}
+                                disabled={busy || sharingId !== null || unsharingId !== null}
                                 onClick={() => {
                                   const unshare = card.unshare!;
                                   void unshareResource(unshare.kind, unshare.id, card.title);
@@ -4289,7 +4282,7 @@ function TeamPanel({
     if (
       workspaceReadModeRef.current !== 'scoped'
       || !read.context
-      || !workspaceContextHasTeamIdentity(read.context)
+      || !workspaceContextHasWorkspaceIdentity(read.context)
     ) {
       if (!readIsStillCurrent()) return;
       setSkills([]);
@@ -4364,7 +4357,7 @@ function TeamPanel({
     if (
       workspaceReadModeRef.current !== 'scoped'
       || !context
-      || !workspaceContextHasTeamIdentity(context)
+      || !workspaceContextHasWorkspaceIdentity(context)
     ) {
       setFailed(true);
       return;

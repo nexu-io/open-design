@@ -1,6 +1,9 @@
+import { useWorkspaceJourney } from '../analytics/use-workspace-journey';
+import { workspaceAnalyticsDimensions } from '../analytics/workspace';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Dialog } from '@open-design/components';
+import type { WorkspaceJourneySurfaceProps } from '@open-design/contracts/analytics';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { useT } from '../i18n';
 import { useAnalytics } from '../analytics/provider';
@@ -11,7 +14,7 @@ import {
   recordAmrEntry,
 } from '../analytics/amr-attribution';
 import { useWorkspaceBilling, useWorkspaceContext } from '../collab/useWorkspaceContext';
-import { workspaceAutoRechargeUrl, workspaceUpgradeUrl } from './EntryNavRail';
+import { workspaceUpgradeUrl } from './EntryNavRail';
 import {
   amrBalanceGateScopeForWorkspaceContext,
   hasAmrFundingRecovered,
@@ -30,6 +33,10 @@ export const WALLET_WATCH_TIMEOUT_MS = 10 * 60_000;
 interface Props {
   /** Backend funding rejection, or a pre-send sign-in block. */
   reason: 'insufficient' | 'signed_out';
+  /** Funding recovery may dismiss the prompt without authorizing a send. */
+  manualSendOnRecovery?: boolean;
+  /** When the caller observed the funding refusal, independent of recovery behavior. */
+  stage?: WorkspaceJourneySurfaceProps['stage'];
   modelId?: string | null;
   fundingScope?: AmrBalanceGateScope;
   /**
@@ -40,22 +47,16 @@ interface Props {
   balanceUsd: string | null;
   /** OpenDesign Cloud profile from the blocking snapshot; picks the console origin. */
   profile: string | null;
+  /** Origin captured with the same authenticated runtime profile, when available. */
+  consoleOrigin?: string | null;
   /** Which surface blocked the send — keys the amr_entry attribution. */
   entrySource: 'home_balance_gate_upgrade' | 'chat_balance_gate_upgrade';
   /**
-   * Where THIS caller's primary CTA has to land — the one thing that differs
-   * between the two owner cells of the balance matrix (spec T58). The dialog
-   * itself, including every word of its copy, is identical in both.
-   *
-   *   pricing        — 非 Max 所有者:the console's plan surface (`billing=plan`).
-   *   auto_recharge  — Max 所有者:the console's auto-recharge settings. A Max
-   *                    subscriber has no higher plan to buy, so the plan surface
-   *                    would sell them what they already own.
-   *
-   * Resolved by the caller from `amrBalanceDialogUpgradeIntent`, so the dialog
-   * and the in-conversation UpgradeCard cannot drift apart. Defaults to
-   * `pricing` — the destination that needs no billing permission, and the
-   * behavior every caller had before T58.
+   * The caller's plan classification. `pricing` offers the current workspace's
+   * plan page; the existing `auto_recharge` value identifies a Max Owner.
+   * RUN-004 / frozen product r271 removes auto-recharge shortcuts from this
+   * dialog, so Max has no purchase CTA. Separate card/settings entries keep
+   * their own contracts.
    */
   upgradeIntent?: 'pricing' | 'auto_recharge';
   /**
@@ -66,12 +67,8 @@ interface Props {
    *
    * The project view is not in that position: its run is paid for by the
    * PROJECT's workspace, which is not necessarily the one the rail is showing.
-   * Leaving this dialog on the ambient selection there let the dialog's primary
-   * CTA and the in-conversation UpgradeCard resolve their destination from two
-   * different contexts, which is precisely the defect
-   * `amrBalanceDialogUpgradeIntent` warns about — 「卡和弹窗…两者跳去不同的
-   * 地方是缺陷而不是特性」. Passing the caller's one billing context makes them
-   * agree by construction rather than by coincidence.
+   * Passing the payer's context keeps an available plan CTA in the original
+   * workspace even when the navigation selection changes.
    *
    * `null` is a deliberate value (no billing identity resolved), distinct from
    * `undefined` (use the ambient one).
@@ -88,20 +85,11 @@ interface Props {
 
 // Sign-in blocks and live backend funding rejections share this dialog.
 // Wallet balance alone cannot decide admission: Coding Plan quota and
-// automatic recharge may still fund the request. Two variants share CTAs
-// with the in-conversation card:
+// automatic recharge may still fund the request. The two dialog variants are:
 //
 //   insufficient — the backend rejected funding. The CTA must LAND on
-//     the surface that fixes it rather than drop the user on a page to hunt for
-//     it, and WHICH surface that is depends on the caller's plan (spec T58):
-//     a 非 Max owner is sold a plan (`workspaceUpgradeUrl` → this runtime
-//     profile's console plan surface, `/dashboard?…&billing=plan`, spec T54),
-//     while a Max owner — who has no higher plan to buy — lands on the console's
-//     auto-recharge settings (`workspaceAutoRechargeUrl`). The caller picks via
-//     `upgradeIntent`; both destinations are the same shared decision points the
-//     account menu and the UpgradeCard use. It has NOT been `billing=checkout`
-//     since #7122; the older comment here said so long after that stopped being
-//     true.
+//     the current workspace's higher plans when available. A Max Owner has no
+//     higher plan and no automatic-recharge shortcut in this dialog (RUN-004).
 //
 //   signed_out — OpenDesign Cloud selected but no account session. The CTA
 //     is the in-app sign-in (AmrLoginPill: spawns vela login, surfaces the
@@ -113,9 +101,12 @@ interface Props {
 // to retry explicitly. Local cached amounts never trigger this dialog.
 export function AmrBalanceDialog({
   reason,
+  manualSendOnRecovery = false,
+  stage = 'unknown',
   modelId,
   fundingScope,
   profile,
+  consoleOrigin,
   entrySource,
   upgradeIntent = 'pricing',
   workspaceContext: workspaceContextOverride,
@@ -149,22 +140,15 @@ export function AmrBalanceDialog({
   const workspaceContextLoading =
     workspaceContextOverride !== undefined ? false : ambientWorkspaceContextLoading;
   const workspaceBilling = useWorkspaceBilling();
-  // Both destinations come from the two shared decision points in
-  // `EntryNavRail`, so this dialog cannot grow a link the account menu, the
-  // settings panel and the in-conversation UpgradeCard do not agree with.
-  //
-  // The auto-recharge link is withheld for a readable-but-not-writable
-  // workspace (`canManageAutoRecharge` is `writable && isOwner`, one notch
-  // stricter than billing's `readable && isOwner`). Falling back to the plan
-  // surface there is the same rule the UpgradeCard follows: one fewer
-  // capability beats one dead button.
-  const upgradeUrl = workspaceContextLoading
+  const journey = useWorkspaceJourney({ page_name: entrySource === 'home_balance_gate_upgrade' ? 'home' : 'chat_panel', area: 'credit_exhausted_dialog', reason: 'credit_exhausted', stage, ...workspaceAnalyticsDimensions(workspaceContext) }, !signedOut && !workspaceContextLoading);
+  const close = () => { journey.click('close'); onClose(); };
+  // A Max classification cannot fall back to selling the same plan. The
+  // frozen funding dialog has no auto-recharge shortcut for any Owner.
+  const upgradeUrl = workspaceContextLoading || upgradeIntent === 'auto_recharge'
     ? null
-    : (upgradeIntent === 'auto_recharge'
-        ? workspaceAutoRechargeUrl(workspaceContext, { fallbackProfile: profile })
-        : null)
-      ?? workspaceUpgradeUrl(workspaceContext, workspaceBilling, {
+    : workspaceUpgradeUrl(workspaceContext, workspaceBilling, {
         fallbackProfile: profile,
+        consoleOrigin,
       });
   const resolvedRef = useRef(false);
   const resolveOnce = () => {
@@ -220,6 +204,7 @@ export function AmrBalanceDialog({
     // the consent-gated device id, and open the console for the profile.
     const attribution = recordAmrEntry(analytics.track, entrySource, new Date(), {
       metricsConsent,
+      blockContext: { block_id: journey.id, ...(workspaceContext ? { workspace_key: workspaceContext.workspaceId } : {}), reason: 'credit_exhausted', stage },
     });
     const deviceId = amrHandoffDeviceId({
       metricsConsent,
@@ -233,24 +218,25 @@ export function AmrBalanceDialog({
     );
   };
   const benefits = [
-    t('chat.amrBalanceGate.benefit1'),
-    t('chat.amrBalanceGate.benefit2'),
-    t('chat.amrBalanceGate.benefit3'),
-    t('chat.amrBalanceGate.benefit4'),
+    t(signedOut ? 'chat.amrBalanceGate.benefit1' : 'chat.amrConcurrencyGate.benefit1'),
+    t('chat.amrConcurrencyGate.benefit2'),
+    t(signedOut ? 'chat.amrBalanceGate.benefit3' : 'chat.amrConcurrencyGate.benefit3'),
+    t(signedOut ? 'chat.amrBalanceGate.benefit4' : 'chat.amrConcurrencyGate.benefit4'),
   ];
   const dialog = (
     <Dialog
       role="alertdialog"
       ariaLabel={signedOut ? t('chat.amrBalanceGate.signedOutTitle') : t('chat.amrBalanceGate.title')}
-      onClose={onClose}
+      onClose={close}
       closeOnEscape
-      className={styles.panel}
+      className={signedOut ? styles.panel : `${styles.panel} ${styles.frozenPanel}`}
+      backdropClassName={signedOut ? undefined : styles.frozenBackdrop}
       data-testid="amr-balance-dialog"
     >
       <button
         type="button"
         className={styles.closeButton}
-        onClick={onClose}
+        onClick={close}
         aria-label={t('common.close')}
       >
         <Icon name="close" size={14} />
@@ -294,7 +280,7 @@ export function AmrBalanceDialog({
       {/* Dismissal first in DOM so it lands on the left of the row and focus
           order matches the reading order; the CTA follows on the right. */}
       <div className={styles.actions}>
-        <Button variant="ghost" className={styles.later} onClick={onClose}>
+        <Button variant="ghost" className={signedOut ? styles.later : `${styles.later} ${styles.frozenLater}`} onClick={close}>
           {t('chat.amrBalanceGate.laterCta')}
         </Button>
         {signedOut ? (
@@ -315,7 +301,7 @@ export function AmrBalanceDialog({
         ) : upgradeUrl ? (
           <Button
             variant="primary"
-            className={styles.cta}
+            className={`${styles.cta} ${styles.frozenCta}`}
             onClick={openUpgrade}
             data-testid="amr-balance-dialog-plans"
           >
@@ -325,7 +311,7 @@ export function AmrBalanceDialog({
       </div>
       {watchingWallet ? (
         <p className={styles.watchingHint} data-testid="amr-balance-dialog-watching">
-          {t('chat.amrBalanceGate.watchingWallet')}
+          {t(manualSendOnRecovery ? 'chat.amrBalanceGate.watchingWalletManual' : 'chat.amrBalanceGate.watchingWallet')}
         </p>
       ) : null}
     </Dialog>

@@ -105,7 +105,6 @@ describe('EntryNavRail sign-out (recvqbkcLqIFH7)', () => {
     );
 
     expect(screen.getByTestId('entry-cloud-signin-tip')).toBeTruthy();
-    expect(screen.getByText('注册 / 登录')).toBeTruthy();
-    expect(screen.getByText('注册即领免费额度')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'OpenDesign Cloud 版' })).toBeTruthy();
   });
 });

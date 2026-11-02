@@ -207,7 +207,9 @@ describe("production component acceptance", () => {
     // A sleeping device advances wall time but may pause performance.now().
     vi.setSystemTime(T0 + 600_000); pending = true; wake("pageshow"); await step();
     expect(view.container.querySelector("opend-touchpoint")).toBe(element);
-    expect(document.body.style.overflow).toBe("hidden");
+    expect(document.body.hasAttribute("data-web-modal-scroll-lock")).toBe(true);
+    expect(document.documentElement.style.overflow).toBe("hidden");
+    expect(document.body.style.position).toBe("fixed");
     expect(host.OpenDesignTouchpointElement.prototype.mount).toHaveBeenCalledTimes(1);
   });
   it("3378 wall-clock round trip during verification recovers the mount on a fresh same-key grant", async () => {

@@ -7,6 +7,33 @@ import {
 } from '../src/run-analytics-observability.js';
 
 describe('scanRunEventsForUsageAnalytics', () => {
+  it('keeps the highest explicit session-cumulative usage after duplicate and late snapshots', () => {
+    const totals = [100, 180, 240, 180, 100];
+    const events = totals.map((total) => ({
+      event: 'agent',
+      data: {
+        type: 'usage',
+        usageScope: 'sessionCumulative',
+        usage: { input_tokens: total, output_tokens: 0, total_tokens: total },
+      },
+    }));
+
+    expect(totals.map((_, index) =>
+      scanRunEventsForUsageAnalytics(events.slice(0, index + 1), 'codex', 0).total_tokens,
+    )).toEqual([100, 180, 240, 240, 240]);
+  });
+
+  it('starts a new cumulative high-water mark when Codex starts another session', () => {
+    const result = scanRunEventsForUsageAnalytics([
+      { event: 'agent', data: { type: 'status', sessionId: 'first' } },
+      { event: 'agent', data: { type: 'usage', usageScope: 'sessionCumulative', usage: { input_tokens: 240, output_tokens: 0, total_tokens: 240 } } },
+      { event: 'agent', data: { type: 'status', sessionId: 'second' } },
+      { event: 'agent', data: { type: 'usage', usageScope: 'sessionCumulative', usage: { input_tokens: 40, output_tokens: 0, total_tokens: 40 } } },
+    ], 'codex', 0);
+
+    expect(result.total_tokens).toBe(40);
+  });
+
   it('extracts provider usage, cache tokens, and estimated context tokens', () => {
     const result = scanRunEventsForUsageAnalytics(
       [

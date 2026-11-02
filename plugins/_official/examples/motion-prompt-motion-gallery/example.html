@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en" data-composition-variables='[{"id": "brand", "type": "string", "label": "网站名称", "default": "Prompt Motion", "maxLength": 24}, {"id": "headline", "type": "string", "label": "页面介绍", "default": "A collection of motion videos made with Claude Opus 5.5, with the prompts and skills behind them.", "maxLength": 110}, {"id": "wordmark", "type": "string", "label": "图片应用字标", "default": "develop.", "maxLength": 8}, {"id": "album", "type": "image", "label": "素材 album", "default": "assets/album.png"}, {"id": "avatar_LexnLin", "type": "image", "label": "素材 avatar-LexnLin", "default": "assets/avatar-LexnLin.png"}, {"id": "avatar_LinearUncle", "type": "image", "label": "素材 avatar-LinearUncle", "default": "assets/avatar-LinearUncle.png"}, {"id": "avatar_Majin_AppSheet", "type": "image", "label": "素材 avatar-Majin_AppSheet", "default": "assets/avatar-Majin_AppSheet.png"}, {"id": "avatar_Ror_Fly", "type": "image", "label": "素材 avatar-Ror_Fly", "default": "assets/avatar-Ror_Fly.png"}, {"id": "avatar_ajith_io", "type": "image", "label": "素材 avatar-ajith_io", "default": "assets/avatar-ajith_io.png"}, {"id": "avatar_alex_prompter", "type": "image", "label": "素材 avatar-alex_prompter", "default": "assets/avatar-alex_prompter.png"}, {"id": "avatar_davidmarcus", "type": "image", "label": "素材 avatar-davidmarcus", "default": "assets/avatar-davidmarcus.png"}, {"id": "avatar_emollick", "type": "image", "label": "素材 avatar-emollick", "default": "assets/avatar-emollick.png"}, {"id": "avatar_gabrielbuzziv", "type": "image", "label": "素材 avatar-gabrielbuzziv", "default": "assets/avatar-gabrielbuzziv.png"}, {"id": "avatar_himanshutwtxs", "type": "image", "label": "素材 avatar-himanshutwtxs", "default": "assets/avatar-himanshutwtxs.png"}, {"id": "avatar_itsolehmann", "type": "image", "label": "素材 avatar-itsolehmann", "default": "assets/avatar-itsolehmann.png"}, {"id": "avatar_jacksonfall", "type": "image", "label": "素材 avatar-jacksonfall", "default": "assets/avatar-jacksonfall.png"}, {"id": "avatar_kloss_xyz", "type": "image", "label": "素材 avatar-kloss_xyz", "default": "assets/avatar-kloss_xyz.png"}, {"id": "avatar_sab8a", "type": "image", "label": "素材 avatar-sab8a", "default": "assets/avatar-sab8a.png"}, {"id": "avatar_samuel_yostt", "type": "image", "label": "素材 avatar-samuel_yostt", "default": "assets/avatar-samuel_yostt.png"}, {"id": "avatar_shneural", "type": "image", "label": "素材 avatar-shneural", "default": "assets/avatar-shneural.png"}, {"id": "avatar_stephanlivera", "type": "image", "label": "素材 avatar-stephanlivera", "default": "assets/avatar-stephanlivera.png"}, {"id": "avatar_steventey", "type": "image", "label": "素材 avatar-steventey", "default": "assets/avatar-steventey.png"}, {"id": "avatar_tdinh_me", "type": "image", "label": "素材 avatar-tdinh_me", "default": "assets/avatar-tdinh_me.png"}, {"id": "avatar_thatyto_dev", "type": "image", "label": "素材 avatar-thatyto_dev", "default": "assets/avatar-thatyto_dev.png"}, {"id": "avatar_thismacapital", "type": "image", "label": "素材 avatar-thismacapital", "default": "assets/avatar-thismacapital.png"}, {"id": "avatar_ultimaxbt", "type": "image", "label": "素材 avatar-ultimaxbt", "default": "assets/avatar-ultimaxbt.png"}, {"id": "avatar", "type": "image", "label": "素材 avatar", "default": "assets/avatar.png"}, {"id": "door", "type": "image", "label": "素材 door", "default": "assets/door.png"}, {"id": "newsletter", "type": "image", "label": "素材 newsletter", "default": "assets/newsletter.png"}, {"id": "photo_arch", "type": "image", "label": "素材 photo-arch", "default": "assets/photo-arch.png"}, {"id": "photo_cyclist", "type": "image", "label": "素材 photo-cyclist", "default": "assets/photo-cyclist.png"}, {"id": "photo_earth", "type": "image", "label": "素材 photo-earth", "default": "assets/photo-earth.png"}, {"id": "photo_green", "type": "image", "label": "素材 photo-green", "default": "assets/photo-green.png"}, {"id": "photo_nebula", "type": "image", "label": "素材 photo-nebula", "default": "assets/photo-nebula.png"}, {"id": "photo_portrait", "type": "image", "label": "素材 photo-portrait", "default": "assets/photo-portrait.png"}, {"id": "photo_sunset", "type": "image", "label": "素材 photo-sunset", "default": "assets/photo-sunset.png"}, {"id": "photo_valley", "type": "image", "label": "素材 photo-valley", "default": "assets/photo-valley.png"}, {"id": "tile_ascii", "type": "image", "label": "素材 tile-ascii", "default": "assets/tile-ascii.png"}, {"id": "tile_ball", "type": "image", "label": "素材 tile-ball", "default": "assets/tile-ball.png"}, {"id": "tile_blue", "type": "image", "label": "素材 tile-blue", "default": "assets/tile-blue.png"}, {"id": "tile_claude", "type": "image", "label": "素材 tile-claude", "default": "assets/tile-claude.png"}, {"id": "tile_creator", "type": "image", "label": "素材 tile-creator", "default": "assets/tile-creator.png"}, {"id": "tile_dis", "type": "image", "label": "素材 tile-dis", "default": "assets/tile-dis.png"}, {"id": "tile_drop", "type": "image", "label": "素材 tile-drop", "default": "assets/tile-drop.png"}, {"id": "tile_every", "type": "image", "label": "素材 tile-every", "default": "assets/tile-every.png"}, {"id": "tile_icons", "type": "image", "label": "素材 tile-icons", "default": "assets/tile-icons.png"}, {"id": "tile_japan", "type": "image", "label": "素材 tile-japan", "default": "assets/tile-japan.png"}, {"id": "tile_launch", "type": "image", "label": "素材 tile-launch", "default": "assets/tile-launch.png"}, {"id": "tile_math", "type": "image", "label": "素材 tile-math", "default": "assets/tile-math.png"}, {"id": "tile_money", "type": "image", "label": "素材 tile-money", "default": "assets/tile-money.png"}, {"id": "tile_motion", "type": "image", "label": "素材 tile-motion", "default": "assets/tile-motion.png"}, {"id": "tile_move", "type": "image", "label": "素材 tile-move", "default": "assets/tile-move.png"}, {"id": "tile_negroni", "type": "image", "label": "素材 tile-negroni", "default": "assets/tile-negroni.png"}, {"id": "tile_play", "type": "image", "label": "素材 tile-play", "default": "assets/tile-play.png"}, {"id": "tile_price", "type": "image", "label": "素材 tile-price", "default": "assets/tile-price.png"}, {"id": "tile_prompter", "type": "image", "label": "素材 tile-prompter", "default": "assets/tile-prompter.png"}, {"id": "tile_purple", "type": "image", "label": "素材 tile-purple", "default": "assets/tile-purple.png"}, {"id": "tile_spark", "type": "image", "label": "素材 tile-spark", "default": "assets/tile-spark.png"}, {"id": "tile_theatre", "type": "image", "label": "素材 tile-theatre", "default": "assets/tile-theatre.png"}, {"id": "tile_wire", "type": "image", "label": "素材 tile-wire", "default": "assets/tile-wire.png"}, {"id": "tile_woman", "type": "image", "label": "素材 tile-woman", "default": "assets/tile-woman.png"}, {"id": "ui_photo_code", "type": "image", "label": "素材 ui-photo-code", "default": "assets/ui-photo-code.png"}, {"id": "ui_photo_long", "type": "image", "label": "素材 ui-photo-long", "default": "assets/ui-photo-long.png"}, {"id": "ui_photo_scroll", "type": "image", "label": "素材 ui-photo-scroll", "default": "assets/ui-photo-scroll.png"}, {"id": "ui_photo_short", "type": "image", "label": "素材 ui-photo-short", "default": "assets/ui-photo-short.png"}, {"id": "ui_player_code", "type": "image", "label": "素材 ui-player-code", "default": "assets/ui-player-code.png"}, {"id": "ui_player_long", "type": "image", "label": "素材 ui-player-long", "default": "assets/ui-player-long.png"}, {"id": "ui_player_scroll", "type": "image", "label": "素材 ui-player-scroll", "default": "assets/ui-player-scroll.png"}, {"id": "ui_player_short", "type": "image", "label": "素材 ui-player-short", "default": "assets/ui-player-short.png"}, {"id": "trackTitle", "type": "string", "label": "曲目名", "default": "motion study 02", "maxLength": 20}, {"id": "trackByline", "type": "string", "label": "曲目说明", "default": "made in code", "maxLength": 24}, {"id": "generateLabel", "type": "string", "label": "生成按钮", "default": "Generate", "maxLength": 12}, {"id": "actionLabel", "type": "string", "label": "图片操作按钮", "default": "Develop", "maxLength": 12}]'>
+<head><meta charset="utf-8"><meta name="od-motion-output" content="video"><title>Prompt Motion</title>
+<style>
+@font-face{font-family:Inter;src:url(assets/inter-variable.ttf);font-weight:100 900}
+@font-face{font-family:Geist;src:url(assets/geist-variable.ttf);font-weight:100 900}
+:root{--od-font-heading:"Geist","Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;--od-font-body:"Inter","Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#fdfdfc}body{font-family:var(--od-font-body)}.od-heading{font-family:var(--od-font-heading)}#main{position:absolute;inset:0;width:100%;height:100%}canvas{width:100%;height:100%;object-fit:contain}#controls{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);display:flex;gap:12px;align-items:center;background:#ffffffdd;padding:9px 16px;border-radius:24px;font-size:12px;opacity:0;transition:opacity .2s}#controls:hover{opacity:1}#controls input{width:240px}button{cursor:pointer}html.od-export #controls{display:none}html.od-export #main{position:absolute;left:0;top:0}
+</style><style data-od-font-synthesis>html{font-synthesis:none}</style>
+<style data-od-preview-chrome>
+#controls{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:100;display:flex;align-items:center;gap:14px;width:min(900px,92vw);box-sizing:border-box;padding:12px 18px;border-radius:14px;background:#101214dd;color:#fff;font:600 13px ui-monospace,Menlo,monospace;opacity:0;transition:opacity .2s}
+#controls:hover,#controls:focus-within{opacity:1}
+#controls button{font:inherit;letter-spacing:.06em;background:var(--accent,#3b6cf6);color:#fff;border:0;border-radius:999px;padding:9px 16px;cursor:pointer;min-width:88px;white-space:nowrap}
+#controls input[type=range]{flex:1;width:auto;min-width:0;accent-color:var(--accent,#3b6cf6)}
+#controls span,#controls output{white-space:nowrap;font-variant-numeric:tabular-nums}
+html.od-export #controls{display:none!important}
+</style>
+</head><body>
+<div id="main" data-composition-id="main" data-od-motion-layout="stage" data-start="0" data-duration="15.189333" data-width="1868" data-height="1080">
+<audio id="soundtrack" src="assets/soundtrack.mp3" data-start="0" data-duration="15.189" data-track-index="2" data-volume="1" preload="auto"></audio><canvas id="film" width="1868" height="1080" data-od-id="motion-film"></canvas></div>
+<div id="controls"><button id="toggle">PLAY</button><input id="seek" type="range" min="0" step="0.01"><span id="clock"></span></div>
+<script src="assets/gsap.min.js"></script><script>
+const VARS=(window.__hyperframes && window.__hyperframes.getVariables?.()) || {};
+const CFG = {
+  "duration": 15.189333,
+  "scenes": [
+    {
+      "id": "gallery",
+      "name": "浏览作品墙",
+      "dur": 4.7,
+      "minDur": 4.7,
+      "maxDur": 6.5
+    },
+    {
+      "id": "player",
+      "name": "播放器形态变换",
+      "dur": 4.5,
+      "minDur": 4.5,
+      "maxDur": 6.5
+    },
+    {
+      "id": "browse",
+      "name": "返回作品墙",
+      "dur": 1.2,
+      "minDur": 1.2,
+      "maxDur": 2
+    },
+    {
+      "id": "photo",
+      "name": "图片打印演示",
+      "dur": 4.05,
+      "minDur": 4.05,
+      "maxDur": 6
+    },
+    {
+      "id": "close",
+      "name": "返回首页",
+      "dur": 0.739333,
+      "minDur": 0.739333,
+      "maxDur": 1.5
+    }
+  ],
+  "cues": [
+    {
+      "id": "gallery-open",
+      "scene": "gallery",
+      "at": 0.3,
+      "from": "end"
+    },
+    {
+      "id": "player-loader",
+      "scene": "player",
+      "at": 0.42
+    },
+    {
+      "id": "player-check",
+      "scene": "player",
+      "at": 0.82
+    },
+    {
+      "id": "player-island",
+      "scene": "player",
+      "at": 1.1
+    },
+    {
+      "id": "player-expand",
+      "scene": "player",
+      "at": 1.591667
+    },
+    {
+      "id": "player-play",
+      "scene": "player",
+      "at": 2.3
+    },
+    {
+      "id": "player-scrub",
+      "scene": "player",
+      "at": 2.95
+    },
+    {
+      "id": "player-volume",
+      "scene": "player",
+      "at": 3.55
+    },
+    {
+      "id": "player-out",
+      "scene": "player",
+      "at": 0.08,
+      "from": "end"
+    },
+    {
+      "id": "photo-enter",
+      "scene": "browse",
+      "at": 0.2,
+      "from": "end"
+    },
+    {
+      "id": "photo-dot",
+      "scene": "photo",
+      "at": 0.85
+    },
+    {
+      "id": "photo-pill",
+      "scene": "photo",
+      "at": 1.25
+    },
+    {
+      "id": "photo-label",
+      "scene": "photo",
+      "at": 1.8
+    },
+    {
+      "id": "photo-iris",
+      "scene": "photo",
+      "at": 2.35
+    },
+    {
+      "id": "photo-open",
+      "scene": "photo",
+      "at": 2.64
+    },
+    {
+      "id": "photo-grid",
+      "scene": "photo",
+      "at": 3.77
+    },
+    {
+      "id": "photo-out",
+      "scene": "photo",
+      "at": 0.08,
+      "from": "end"
+    }
+  ],
+  "brand": "Prompt Motion",
+  "headline": "A collection of motion videos made with Claude Opus 5.5, with the prompts and skills behind them.",
+  "wordmark": "develop.",
+  "album": "assets/album.png",
+  "avatar_LexnLin": "assets/avatar-LexnLin.png",
+  "avatar_LinearUncle": "assets/avatar-LinearUncle.png",
+  "avatar_Majin_AppSheet": "assets/avatar-Majin_AppSheet.png",
+  "avatar_Ror_Fly": "assets/avatar-Ror_Fly.png",
+  "avatar_ajith_io": "assets/avatar-ajith_io.png",
+  "avatar_alex_prompter": "assets/avatar-alex_prompter.png",
+  "avatar_davidmarcus": "assets/avatar-davidmarcus.png",
+  "avatar_emollick": "assets/avatar-emollick.png",
+  "avatar_gabrielbuzziv": "assets/avatar-gabrielbuzziv.png",
+  "avatar_himanshutwtxs": "assets/avatar-himanshutwtxs.png",
+  "avatar_itsolehmann": "assets/avatar-itsolehmann.png",
+  "avatar_jacksonfall": "assets/avatar-jacksonfall.png",
+  "avatar_kloss_xyz": "assets/avatar-kloss_xyz.png",
+  "avatar_sab8a": "assets/avatar-sab8a.png",
+  "avatar_samuel_yostt": "assets/avatar-samuel_yostt.png",
+  "avatar_shneural": "assets/avatar-shneural.png",
+  "avatar_stephanlivera": "assets/avatar-stephanlivera.png",
+  "avatar_steventey": "assets/avatar-steventey.png",
+  "avatar_tdinh_me": "assets/avatar-tdinh_me.png",
+  "avatar_thatyto_dev": "assets/avatar-thatyto_dev.png",
+  "avatar_thismacapital": "assets/avatar-thismacapital.png",
+  "avatar_ultimaxbt": "assets/avatar-ultimaxbt.png",
+  "avatar": "assets/avatar.png",
+  "door": "assets/door.png",
+  "newsletter": "assets/newsletter.png",
+  "photo_arch": "assets/photo-arch.png",
+  "photo_cyclist": "assets/photo-cyclist.png",
+  "photo_earth": "assets/photo-earth.png",
+  "photo_green": "assets/photo-green.png",
+  "photo_nebula": "assets/photo-nebula.png",
+  "photo_portrait": "assets/photo-portrait.png",
+  "photo_sunset": "assets/photo-sunset.png",
+  "photo_valley": "assets/photo-valley.png",
+  "tile_ascii": "assets/tile-ascii.png",
+  "tile_ball": "assets/tile-ball.png",
+  "tile_blue": "assets/tile-blue.png",
+  "tile_claude": "assets/tile-claude.png",
+  "tile_creator": "assets/tile-creator.png",
+  "tile_dis": "assets/tile-dis.png",
+  "tile_drop": "assets/tile-drop.png",
+  "tile_every": "assets/tile-every.png",
+  "tile_icons": "assets/tile-icons.png",
+  "tile_japan": "assets/tile-japan.png",
+  "tile_launch": "assets/tile-launch.png",
+  "tile_math": "assets/tile-math.png",
+  "tile_money": "assets/tile-money.png",
+  "tile_motion": "assets/tile-motion.png",
+  "tile_move": "assets/tile-move.png",
+  "tile_negroni": "assets/tile-negroni.png",
+  "tile_play": "assets/tile-play.png",
+  "tile_price": "assets/tile-price.png",
+  "tile_prompter": "assets/tile-prompter.png",
+  "tile_purple": "assets/tile-purple.png",
+  "tile_spark": "assets/tile-spark.png",
+  "tile_theatre": "assets/tile-theatre.png",
+  "tile_wire": "assets/tile-wire.png",
+  "tile_woman": "assets/tile-woman.png",
+  "ui_photo_code": "assets/ui-photo-code.png",
+  "ui_photo_long": "assets/ui-photo-long.png",
+  "ui_photo_scroll": "assets/ui-photo-scroll.png",
+  "ui_photo_short": "assets/ui-photo-short.png",
+  "ui_player_code": "assets/ui-player-code.png",
+  "ui_player_long": "assets/ui-player-long.png",
+  "ui_player_scroll": "assets/ui-player-scroll.png",
+  "ui_player_short": "assets/ui-player-short.png"
+,
+"trackTitle":"motion study 02","trackByline":"made in code","generateLabel":"Generate","actionLabel":"Develop",
+...VARS
+};
+document.getElementById('main').dataset.duration=CFG.duration;
+const SCENE_START={};CFG.scenes.reduce((t,s)=>(SCENE_START[s.id]=t,t+s.dur),0);
+const cueTime=id=>{const c=CFG.cues.find(x=>x.id===id),s=CFG.scenes.find(x=>x.id===c.scene);return SCENE_START[c.scene]+(c.from==='end'?s.dur-c.at:c.at)};
+const canvas=document.getElementById('film'),ctx=canvas.getContext('2d');
+const bodyFont=getComputedStyle(document.documentElement).getPropertyValue('--od-font-body'),headFont=getComputedStyle(document.documentElement).getPropertyValue('--od-font-heading');
+const images={};for(const k in CFG){if(typeof CFG[k]==='string'&&CFG[k].startsWith('assets/')&&CFG[k].endsWith('.png')){images[k]=new Image();images[k].src=CFG[k]}}
+const clamp=x=>Math.max(0,Math.min(1,x));const ease=x=>{x=clamp(x);return 1-Math.pow(1-x,4)};const mix=(a,b,p)=>a+(b-a)*p;
+function rr(x,y,w,h,r=0,fill='#000'){ctx.beginPath();ctx.roundRect(x,y,w,h,Math.min(r,w/2,h/2));ctx.fillStyle=fill;ctx.fill()}
+function text(s,x,y,size=16,color='#111',weight=400,align='left',heading=false){ctx.font=`${weight} ${size}px ${heading?headFont:bodyFont}`;ctx.fillStyle=color;ctx.textAlign=align;ctx.textBaseline='alphabetic';ctx.fillText(s,x,y)}
+function img(id,x,y,w,h,r=0){let im=images[id];if(!im?.complete||!im.naturalWidth)return;ctx.save();ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.clip();ctx.drawImage(im,x,y,w,h);ctx.restore()}
+function line(x,y,x2,y2,col='#ddd',w=1){ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x2,y2);ctx.strokeStyle=col;ctx.lineWidth=w;ctx.stroke()}
+function cursor(x,y,s=1){ctx.save();ctx.translate(x,y);ctx.scale(s,s);ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(1,21);ctx.lineTo(6,16);ctx.lineTo(11,24);ctx.lineTo(15,22);ctx.lineTo(10,14);ctx.lineTo(17,14);ctx.closePath();ctx.fillStyle='#050505';ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.shadowColor='#0005';ctx.shadowBlur=4;ctx.fill();ctx.stroke();ctx.restore()}
+function key(t,arr){if(t<=arr[0][0])return arr[0][1];for(let i=1;i<arr.length;i++)if(t<arr[i][0]){const p=clamp((t-arr[i-1][0])/(arr[i][0]-arr[i-1][0]));return mix(arr[i-1][1],arr[i][1],p*p*(3-2*p))}return arr.at(-1)[1]}
+function check(x,y,r){ctx.save();ctx.translate(x,y);ctx.strokeStyle='#fff';ctx.lineWidth=r*.12;ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();ctx.moveTo(-r*.3,0);ctx.lineTo(-r*.05,r*.24);ctx.lineTo(r*.37,-r*.25);ctx.stroke();ctx.restore()}
+function player(t,cx,cy,scale=1){
+ const a=cueTime('player-loader'),b=cueTime('player-check'),c=cueTime('player-island'),d=cueTime('player-expand'),v=cueTime('player-volume');
+ const play=cueTime('player-play'),scrub=cueTime('player-scrub');
+ if(t>=cueTime('player-out')){ctx.save();ctx.translate(cx,cy);ctx.scale(scale,scale);rr(-69,-69,138,138,69);check(0,0,65);ctx.restore();return}
+ let w=key(t,[[0,386],[a,386],[a+.16,138],[c,138]]);
+ let h=key(t,[[0,118],[a,118],[a+.16,138],[c,138]]);
+ // Measured island overshoot, followed by the card's separate spring landing.
+ if(t>=c && t<d){
+  w=key(t-c,[[0,138],[.04,280],[.08,375],[.12,457],[.16,510],[.20,520],[.24,520],[.28,519],[.32,514],[.36,512],[.40,511],[.44,508],[d-c,505]]);
+  h=key(t-c,[[0,138],[.04,134],[.08,136],[.12,137],[.16,135],[.20,134],[.24,132],[.28,131],[.32,130],[.40,128],[d-c,128]]);
+ }else if(t>=d && t<v){
+  w=key(t-d,[[0,505],[.008333,522],[.028333,541],[.05,560],[.068333,593],[.108333,605],[.148333,627],[.188333,625],[.228333,622],[.268333,607],[.308333,604],[.348333,596],[.388333,592],[.428333,587],[.468333,586],[.508333,584],[.548333,584]]);
+  h=key(t-d,[[0,128],[.008333,160],[.028333,195],[.05,232],[.068333,298],[.108333,324],[.148333,374],[.188333,390],[.228333,390],[.268333,386],[.308333,384],[.348333,378],[.388333,376],[.428333,374],[.468333,372],[.548333,372]]);
+ }else if(t>=v){w=key(t,[[v,624],[v+.23,650]]);h=key(t,[[v,392],[v+.23,116]])}
+ ctx.save();ctx.translate(cx,cy);ctx.scale(scale,scale);ctx.shadowColor='#0003';ctx.shadowBlur=33;ctx.shadowOffsetY=22;const bodyBlur=t>=d&&t<d+.18?key(t-d,[[0,0],[.03,3],[.10,2],[.18,0]]):0;ctx.filter=`blur(${bodyBlur}px)`;rr(-w/2,-h/2,w,h,Math.min(56,h/2));ctx.shadowColor='transparent';ctx.filter='none';
+ if(t<SCENE_START.player){rr(-69,-69,138,138,69);check(0,0,65)}
+ else if(t<a){text(CFG.generateLabel,0,10,36,'white',500,'center');cursor(150,36,.8)}
+ else if(t<b){ctx.save();ctx.rotate(t*13);ctx.strokeStyle='#fff';ctx.lineWidth=9;ctx.beginPath();ctx.arc(0,0,37,-1,3);ctx.stroke();ctx.restore()}
+ else if(t<c){check(0,0,65)}
+ else if(t<d){
+  const reveal=ease((t-c-.06)/.12),sz=key(t-c,[[0,0],[.08,0],[.16,76],[.20,74],[.32,72],[d-c,70]]);
+  if(t<c+.1){ctx.globalAlpha=1-ease((t-c)/.1);check(0,0,65);ctx.globalAlpha=1}
+  ctx.save();ctx.globalAlpha=reveal;ctx.filter=`blur(${(1-reveal)*5}px)`;img('album',-w/2+30,-sz/2,sz,sz,18);
+  for(let i=0;i<5;i++)rr(w/2-101+i*12,-9-Math.sin(t*19+i)*7,6,18+Math.sin(t*19+i)*14,3,'white');ctx.restore();
+  if(t>d-.16)cursor(155,36,.95);
+ }
+ else if(t<v){
+  const q=t-d;
+  const sz=key(q,[[0,70],[.028333,88],[.068333,113],[.108333,120],[.148333,134],[.188333,140],[.308333,140],[.348333,138],[.428333,136],[.548333,134],[.65,132]]);
+  const inset=key(q,[[0,30],[.028333,34],[.068333,41],[.108333,42],[.148333,43],[.188333,40],[.228333,38],[.268333,36],[.348333,35],[.65,36]]);
+  ctx.save();ctx.filter=`blur(${bodyBlur}px)`;img('album',-w/2+inset,-h/2+inset,sz,sz,Math.min(24,sz*.23));ctx.restore();
+  // The text and controls resolve in sequence, after the body has opened.
+  const reveal=(start,dur,draw,soft=false)=>{const raw=clamp((q-start)/dur),p=soft?raw*raw*(3-2*raw):ease(raw);if(p<=0)return;ctx.save();ctx.globalAlpha=p;ctx.filter=`blur(${(1-p)*7}px)`;draw();ctx.restore()};
+  reveal(.15,.18,()=>text(CFG.trackTitle,-w/2+190,-h/2+91+key(q,[[.15,12],[.25,8],[.4,0]]),28,'white',600),true);
+  reveal(.26,.18,()=>text(CFG.trackByline,-w/2+190,-h/2+125,21,'#888'));
+  const yy=h/2-151;
+  const prog=t<play ? .268156 : key(t,[[d,.03],[play,.244],[scrub-.12,.272],[scrub+.08,.34],[scrub+.26,.82],[v,.84]]);
+  reveal(.285,.22,()=>{
+   line(-w/2+41,yy,w/2-41,yy,'#333',8);line(-w/2+41,yy,-w/2+41+(w-82)*prog,yy,'#fff',8);
+   if(t>=play)rr(-w/2+34+(w-82)*prog,yy-7,14,14,7,'white');
+   let seconds=Math.round(prog*179);text(Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0'),-w/2+36,yy+40,16,'#999');text('-'+Math.floor((179-seconds)/60)+':'+String((179-seconds)%60).padStart(2,'0'),w/2-36,yy+40,16,'#999',400,'right');
+  });
+  reveal(.35,.20,()=>{
+   for(const sign of [-1,1]){let x=sign*110;line(x-sign*13,h/2-71,x-sign*13,h/2-49,'white',3);for(let j=0;j<2;j++){ctx.beginPath();ctx.moveTo(x+sign*(j*10-10),h/2-72);ctx.lineTo(x+sign*(j*10+2),h/2-60);ctx.lineTo(x+sign*(j*10-10),h/2-48);ctx.fillStyle='white';ctx.fill()}}
+   if(t<play-.13){rr(-13,h/2-75,9,30,0,'white');rr(5,h/2-75,9,30,0,'white')}
+   else if(t<play){ctx.beginPath();ctx.moveTo(-10,h/2-76);ctx.lineTo(17,h/2-60);ctx.lineTo(-10,h/2-44);ctx.closePath();ctx.fillStyle='white';ctx.fill()}
+   else{rr(-13,h/2-75,9,30,0,'white');rr(5,h/2-75,9,30,0,'white')}
+  });
+  if(t<play){cursor(key(q,[[0,155],[.1,92],[.23,110],[.31,62],[.48,0]]),key(q,[[0,36],[.15,38],[.23,45],[.31,113],[.48,h/2-48]]),.95)}
+  else cursor(t<play+.18?0:-w/2+45+(w-82)*prog,t<play+.18?h/2-55:yy+7,.95);
+ }
+ else{ctx.globalAlpha=ease((t-v)/.16);text('◀',-w/2+52,12,28,'white',600,'center');line(-w/2+106,0,w/2-54,0,'#333',14);let p=.5+.3*Math.sin(t*2);line(-w/2+106,0,-w/2+106+(w-160)*p,0,'white',14);cursor(50+Math.sin(t*2)*100,7,.8);ctx.globalAlpha=1}
+ ctx.restore()
+}
+function photo(t,cx,cy,scale=1){
+ const dot=cueTime('photo-dot'),pill=cueTime('photo-pill'),label=cueTime('photo-label'),iris=cueTime('photo-iris'),open=cueTime('photo-open'),grid=cueTime('photo-grid');
+ ctx.save();ctx.translate(cx,cy);ctx.scale(scale,scale);
+ if(t>=cueTime('photo-out')){rr(264,-20,40,40,20,'#070708')}
+ else if(t<SCENE_START.photo){rr(264,-20,40,40,20,'#070708')}
+ else if(t<dot){let p=1-ease((t-dot+.25)/.25);ctx.save();ctx.scale(Math.max(.01,p)*1.2,1);text(CFG.wordmark,7,16,132,'#070708',900,'center',false);ctx.restore();if(t<SCENE_START.photo+.35)text('from screen to wall.',0,85,17,'#777',400,'center')}
+ else if(t<pill){rr(264,-20,40,40,20,'#070708')}
+ else if(t<iris){let p=ease((t-pill)/.22),w=mix(40,354,p),press=ease((t-iris+.13)/.13);rr(-w/2,-56-press*8,w,112+press*16,56,'#09090d');if(t>label){ctx.globalAlpha=ease((t-label)/.15);text(CFG.actionLabel,0,14,37,'#fff',500,'center');ctx.globalAlpha=1}if(t>label)cursor(54+8*Math.sin((t-label)*5),23,.9)}
+ else if(t<open){const p=ease((t-iris)/.14),w=mix(354,280,p),h=mix(128,280,p);let g=ctx.createRadialGradient(0,0,5,0,0,145);g.addColorStop(0,'#37383e');g.addColorStop(1,'#191a1f');rr(-w/2,-h/2,w,h,h/2,g);ctx.save();ctx.beginPath();ctx.ellipse(0,0,w/2,h/2,0,0,7);ctx.clip();for(let i=0;i<6;i++){let ang=i*Math.PI/3+(t-iris)*2.2;line(0,0,Math.cos(ang)*160,Math.sin(ang)*160,'#999',1.5)}ctx.restore();cursor(58,24,.9)}
+ else if(t<grid){let sz=key(t,[[open,280],[open+.4,622],[open+.55,622],[open+.8,622],[grid-.16,430],[grid,184]]);let r=key(t,[[open,140],[open+.4,66],[open+.75,66],[grid-.2,32],[grid,18]]);let breath=1+.004*Math.sin(t*6);ctx.scale(breath,breath);img('door',-sz/2,-sz/2,sz,sz,r);if(t>open+.65){ctx.strokeStyle='#7778';ctx.lineWidth=4;ctx.beginPath();ctx.roundRect(-sz/2,-sz/2,sz,sz,r);ctx.stroke()}}
+ else{ctx.scale(1+.018*Math.sin(t*3.2),1+.018*Math.sin(t*3.2));const p=ease((t-grid)/.3),sz=178;const defs=[['sunset',-1,-1],['earth',0,-1],['cyclist',1,-1],['portrait',-1,0],['door',0,0],['arch',1,0],['nebula',-1,1],['valley',0,1],['green',1,1]];for(const [id,x,y] of defs){let k=(x&&y)?ease((t-grid-.1)/.22):p;let xx=x*188*k,yy=y*188*k;img(id==='door'?'door':'photo_'+id,xx-sz/2,yy-sz/2,sz,sz,18)}}
+ ctx.restore()
+}
+const tileColumns=[
+ [['claude',186,'stephanlivera'],['photo',331,'twoclipping'],['blue',186,'thismacapital'],['drop',186,'twoclipping'],['prompter',186,'alex_prompter'],['woman',186,'sab8a'],['math',186,'LinearUncle'],['orange',186,'jasonzhou1993'],['sky',186,'samuel_yostt']],
+ [['player',331,'twoclipping'],['ask',589,'LexnLin'],['launch',186,'steventey'],['price',186,'thatyto_dev'],['theatre',186,'itsolehmann'],['spark',186,'kloss_xyz'],['writing',186,'HO_BA']],
+ [['ball',186,'shneural'],['move',186,'himanshutwtxs'],['negroni',331,'Ror_Fly'],['creator',186,'samuel_yostt'],['japan',186,'Majin_AppSheet'],['money',589,'davidmarcus'],['water',186,'itisRazak']],
+ [['every',186,'ajith_io'],['purple',186,'gabrielbuzziv'],['icons',186,'notdwd'],['dis',186,'ajith_io'],['play',186,'emollick'],['wire',186,'tdinh_me'],['motion',186,'ultimaxbt'],['ascii',186,'jacksonfall'],['cross',186,'robj3d3'],['screens',186,'emollick']]
+];
+function gallery(t,scroll=0){
+ rr(0,0,1868,1080,0,'#fdfdfd');ctx.save();ctx.translate(0,-scroll);
+ text(CFG.brand,241,32,14,'#111',500);text('Submit',1450,32,14,'#555');text('𝕏 @p4nthera_',1523,32,14,'#555');text(CFG.brand,241,275,31,'#111',500);text(CFG.headline,241,309,16,'#626262');
+ ctx.shadowColor='#0001';ctx.shadowBlur=22;ctx.shadowOffsetY=12;rr(1212,122,417,317,23,'#fff');ctx.shadowColor='transparent';ctx.strokeStyle='#ddd';ctx.lineWidth=1;ctx.stroke();img('newsletter',1221,131,400,100,15);text('Get new videos and prompts by email',1234,273,19,'#111',500);text('An email when new ones are added, plus a weekly recap.',1234,298,12,'#666');text('Unsubscribe anytime.',1234,315,12,'#666');rr(1234,335,373,50,13,'#eee');text('Your email',1250,366,16,'#666');text('⌃',1593,418,21,'#555');
+ text('Filter:',241,503,16,'#999');rr(292,480,76,33,18);text('Prompt',330,502,14,'#fff',400,'center');rr(377,480,54,33,17,'#fff');ctx.strokeStyle='#ddd';ctx.stroke();text('Skill',404,502,14,'#555',400,'center');text('↕    Popular  ⌄       Ⅱ Pause previews',1346,502,14,'#666');
+ tileColumns.forEach((col,ci)=>{let y=538;for(const [id,h,author]of col){let x=241+352*ci;ctx.save();ctx.beginPath();ctx.roundRect(x,y,331,h,12);ctx.clip();
+ if(id==='player'||id==='photo'){rr(x,y,331,h,12,'#eceee8');ctx.save();ctx.beginPath();ctx.rect(x,y,331,h);ctx.clip();if(id==='player'){const fake=t<3.58?SCENE_START.player+.1:t<3.82?cueTime('player-loader')+.05:cueTime('player-check')+.04;player(fake,x+165.5,y+h/2,.365)}else{let tt=t<.6?cueTime('photo-dot')+.1:t<1.4?cueTime('photo-label')+.1:t<2.6?cueTime('photo-open')+.5:t<14.4?cueTime('photo-open')+.5:cueTime('photo-dot')+.1;photo(tt,x+165.5,y+h/2,.36)}ctx.restore()}
+ else if(id==='money'){rr(x,y,331,h,12,'#f7f8f6');text('Lightspark',x+24,y+41,10);text('A Money Company',x+308,y+41,10,'#111',400,'right');['Money','still moves',...(t>2.9?["like it’s"]:[])].forEach((word,i)=>text(word,x+26,y+207+i*53,50,'#151615'))}
+ else if(id==='orange'){rr(x,y,331,h,12,'#08090b');let radius=130+26*Math.sin(t*7);ctx.save();ctx.beginPath();ctx.rect(x,y,331,h);ctx.clip();ctx.shadowColor='#f66319';ctx.shadowBlur=25;rr(x+165-radius,y+93-radius,radius*2,radius*2,radius,'#f65e17');ctx.restore()}
+ else if(id==='sky'){rr(x,y,331,h,12,'#cfdfeb');for(let i=0;i<6;i++)rr(x+30+i*53+Math.sin(t)*5,y+90+Math.sin(i)*30,70,18,10,'#dfeaf0')}
+ else if(id==='writing'){rr(x,y,331,h,12,'#efeee9');text('# Writ'+(Math.sin(t*8)>0?'|':''),x+165,y+101,22,'#8c7770',400,'center')}
+ else if(id==='water'){rr(x,y,331,h,12,'#f7f5ee');text('2 The Water Cycle',x+5,y+40,34,'#171717',700);for(let i=0;i<6;i++)text(['Every day, the sun heats the surface of the','water turns into invisible water vapour.','The clouds gather in the sky above.'][i%3],x+4,y+77+i*25,16,'#333')}
+ else if(id==='cross'){rr(x,y,331,h,12,'#08090a');ctx.save();ctx.translate(x+165,y+93);ctx.rotate(Math.sin(t)*.1);for(let k=0;k<2;k++){line(-34,-34,34,34,'#743b3b',2);ctx.rotate(Math.PI/2)}ctx.restore()}
+ else if(id==='screens'){img('tile_icons',x,y,331,h,12)}
+ else if(id==='ask'){rr(x,y,331,h,12,'#fdfdfd');text(t>1.35?'task':'ask?',x+165,y+300,78,'#111',600,'center',true);for(let i=0;i<18;i++){ctx.save();ctx.translate(x+165,y+460);ctx.rotate(i*.349+t*.15);line(0,0,140,0,'#999',1);ctx.restore()}}
+ else{let active=(id==='claude'||id==='ball'||id==='every');if(active){let red=(id==='claude'&&t>.4&&t<3.7)||(id==='ball'&&t>.8&&t<1.4)||(id==='every'&&t<1.5);rr(x,y,331,h,12,red?'#f24232':'#09090c');if(id==='claude'){if(red)text('CLAUDE',x+165,y+112,55,'#060606',850,'center',true);else for(let i=0;i<12;i++){let aa=i*Math.PI/6+t*1.1;line(x+165,y+94,x+165+Math.cos(aa)*48,y+94+Math.sin(aa)*48,'#db584b',6)}}else if(id==='ball'){if(t>3.25&&t<3.75){text('FRAME',x+165,y+113,64,'#f44a29',850,'center',true)}else if(red)text('EVERY',x+165,y+113,64,'#09090c',800,'center',true);else{rr(x+165+Math.sin(t*7)*9,y+93+Math.cos(t*8)*12,19,19,10,'#ed472c');line(x+50,y+150,x+280,y+150,'#555')}}else{if(red){text('EVERY FRAME',x+165,y+90,33,'#070708',850,'center',true);text('ON PURPOSE',x+165,y+124,30,'#070708',850,'center',true)}else for(let k=0;k<3;k++)rr(x+155+Math.sin(t*6+k)*12,y+90+Math.cos(t*6+k)*12,7,7,4,'#ef4937')}}
+ else if(id==='move'&&t>3.2&&t<4.4){rr(x,y,331,h,12,'#f3f4f5');line(x+20,y+145,x+311,y+145,'#555');text('slow in, slow out',x+25,y+35,11,'#526daa');for(let j=7;j>=0;j--){let a=t*5-j*.13,xx=160+Math.sin(a)*65,yy=45+Math.abs(Math.cos(a))*92;ctx.beginPath();ctx.arc(x+xx,y+yy,9,0,7);ctx.strokeStyle='#bdd0ea';ctx.lineWidth=1;ctx.stroke()}rr(x+151+Math.sin(t*5)*65,y+36+Math.abs(Math.cos(t*5))*92,18,18,9,'#3581ff')}
+ else{let z=1+.03*Math.sin(t*2+ci);ctx.translate(x+165,y+h/2);ctx.scale(z,z);img('tile_'+id,-165,-h/2,331,h,12)}}ctx.restore();
+ ctx.strokeStyle='#e8e8e6';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(x,y,331,h,12);ctx.stroke();if(ci===1&&y===538){ctx.strokeStyle='#111';ctx.lineWidth=2;ctx.beginPath();ctx.roundRect(x-4,y-4,339,h+8,17);ctx.stroke()}
+ if(author==='twoclipping')img('avatar',x,y+h+12,23,23,12);else if(images['avatar_'+author])img('avatar_'+author,x,y+h+12,23,23,12);else rr(x,y+h+12,23,23,12,'#bbb');text('@'+author,x+33,y+h+30,14,'#666');rr(x+271,y+h+13,60,21,11,'#fff');ctx.strokeStyle='#ddd';ctx.stroke();text('Prompt',x+301,y+h+28,12,'#777',400,'center');y+=h+67;}});ctx.restore();if(scroll>10)rr(1860,24+scroll/24,7,60,4,'#777')
+}
+const PROMPT_FLOW={"player": {"start": 2.05, "positions": [[2.05, 0], [2.06, 5], [2.1, 97], [2.14, 191], [2.18, 448], [2.22, 614], [2.26, 793], [2.3, 917], [2.4, 1197], [2.5, 1378], [2.6, 1418], [2.7, 1415], [2.8, 1411], [2.9, 1409], [3.0, 1365], [3.1, 959], [3.2, 536], [3.3, 280], [3.4, 106], [3.5, 0]]}, "photo": {"start": 1.6, "positions": [[1.6, 0], [1.7, 77], [1.8, 536], [1.9, 1085], [2.0, 1458], [2.1, 1699], [2.2, 1854], [2.3, 1939], [2.4, 1977], [2.5, 2100], [2.6, 2420], [2.7, 2690], [2.8, 2653]]}};
+function modal(t,kind,progress=1){
+ ctx.save();ctx.fillStyle=`rgba(0,0,0,${.29*progress})`;ctx.fillRect(0,0,1868,1080);
+ let x=mix(kind==='player'?532:242,249,progress),y=mix(kind==='player'?458:650,82,progress),w=mix(515,1371,progress),h=mix(435,914,progress);
+ ctx.save();ctx.translate(x,y);ctx.scale(w/1371,h/914);ctx.shadowColor='#0004';ctx.shadowBlur=36;ctx.shadowOffsetY=27;rr(0,0,1371,914,17,'#fff');ctx.shadowColor='transparent';ctx.beginPath();ctx.roundRect(0,0,1371,914,17);ctx.clip();
+ let ui;if(kind==='player'){ui=t<cueTime('player-expand')+.05?'ui_player_short':t<cueTime('player-play')?'ui_player_long':t<cueTime('player-scrub')?'ui_player_scroll':t<cueTime('player-volume')?'ui_player_code':'ui_player_long'}else{ui=t<cueTime('photo-pill')?'ui_photo_short':t<cueTime('photo-label')?'ui_photo_long':t<cueTime('photo-iris')?'ui_photo_code':'ui_photo_scroll'}
+ const flow=PROMPT_FLOW[kind], flowTime=t-SCENE_START[kind], flowId=kind==='player'?'ui_player_scroll':'ui_photo_code';
+ if(flowTime>=flow.start && flowTime<=flow.positions.at(-1)[0]){ctx.save();ctx.beginPath();ctx.rect(957,1,413,913);ctx.clip();const im=images[flowId];if(im?.complete)ctx.drawImage(im,957,1-key(flowTime,flow.positions));ctx.restore();if(kind==='player')rr(1362,14+key(flowTime,flow.positions)*.387,4,350,2,'#777');else rr(1360,80+key(flowTime,[[flow.start,70],[flow.start+.6,450],[flow.start+1.2,200]]),7,220,4,'#777');rr(1318,28,29,29,15,'#fff');text('×',1332,54,25,'#111',400,'center');for(const [xx,ss] of [[1294,'‹'],[1331,'›']]){rr(xx-14,860,28,28,14,'#f0f0ef');text(ss,xx,881,25,'#111',400,'center')}}
+ else if(ui===flowId){const im=images[flowId];if(im?.complete)ctx.drawImage(im,0,flow.positions[0][1],413,913,957,1,413,913);}
+ else img(ui,957,1,413,913);line(956,0,956,914,'#ddd');
+ let g=ctx.createRadialGradient(478,430,40,478,430,760);g.addColorStop(0,'#f1f2ed');g.addColorStop(1,'#e5e8e2');ctx.beginPath();ctx.roundRect(54,33,847,847,13);ctx.fillStyle=g;ctx.fill();
+ ctx.save();ctx.beginPath();ctx.roundRect(54,33,847,847,13);ctx.clip();if(kind==='player')player(t,478,457);else photo(t,478,457);ctx.restore();ctx.restore();ctx.restore()
+}
+function render(t){
+ ctx.clearRect(0,0,1868,1080);const out=cueTime('gallery-open'),pout=cueTime('player-out'),pin=cueTime('photo-enter'),fout=cueTime('photo-out');
+ let scroll=t<out?key(t,[[0,0],[.4,0],[.95,404],[1.5,650],[2,1110],[2.5,1501],[3.1,1787],[3.5,308],[3.75,0],[out,0]]):0;
+ gallery(t,scroll);
+ if(t>=out&&t<SCENE_START.browse+.24){ctx.filter='blur(10px)';ctx.drawImage(canvas,0,0);ctx.filter='none';let p=Math.min(ease((t-out-.15)/.25),1-ease((t-pout)/.28));modal(t,'player',p)}
+ if(t>=pin&&t<fout+.27){ctx.filter='blur(10px)';ctx.drawImage(canvas,0,0);ctx.filter='none';let p=Math.min(ease((t-pin-.08)/.34),1-ease((t-fout)/.27));modal(t,'photo',p)}
+ let x=key(t,[[0,832],[1,980],[3,980],[4.4,839],[4.9,795],[6,983],[9.1,1580],[9.5,635],[10.2,423],[10.8,998],[12,998],[13,983],[14.3,1578],[14.8,1520]]);let y=key(t,[[0,930],[1,455],[3,455],[4.4,660],[4.9,560],[6,785],[9.1,128],[9.5,650],[10.2,950],[10.8,785],[12,785],[13,785],[14.3,146],[14.8,487]]);if(t<cueTime('player-island')||t>=cueTime('player-play'))cursor(x+Math.sin(t*3)*2,y+Math.cos(t*2)*2,.8);else if(t<cueTime('player-expand')-.1)cursor(key(t,[[cueTime('player-island'),998],[cueTime('player-island')+.3,950],[cueTime('player-expand')-.1,1284]]),key(t,[[cueTime('player-island'),785],[cueTime('player-island')+.3,737],[cueTime('player-expand')-.1,511]]),.8);
+ document.getElementById('seek').value=t;document.getElementById('clock').textContent=t.toFixed(2)+' / '+CFG.duration.toFixed(2)
+}
+const state={t:0};const tl=gsap.timeline({paused:true,onUpdate:()=>render(state.t)});tl.to(state,{t:CFG.duration,duration:CFG.duration,ease:'none'});window.__timelines={main:tl};
+window.__odRenderAt=t=>{tl.pause();tl.time(t);state.t=t;render(t)};
+const slider=document.getElementById('seek');slider.max=CFG.duration;slider.oninput=()=>window.__odRenderAt(+slider.value);document.getElementById('toggle').onclick=()=>{if(tl.paused()){if(tl.time()>=CFG.duration)tl.time(0);tl.play();document.getElementById('toggle').textContent='PAUSE'}else{tl.pause();document.getElementById('toggle').textContent='PLAY'}};
+Promise.all([document.fonts.ready,...Object.values(images).map(im=>im.decode().catch(()=>{}))]).then(()=>{render(state.t);window.__odReady=true});
+</script><script data-od-preview-audio>
+(function(){var a=document.getElementById('soundtrack');if(!a||document.documentElement.classList.contains('od-export'))return;
+function tick(){if(window.__odMotionSourcePlayer||window.__odMotionRender)return;var tl=window.__timelines&&window.__timelines.main;
+if(tl){var t=tl.time(),on=tl.isActive();if(on){if(a.paused)a.play().catch(function(){});if(Math.abs(a.currentTime-t)>0.2)a.currentTime=t;}else{if(!a.paused)a.pause();if(Math.abs(a.currentTime-t)>0.05)a.currentTime=t;}}
+requestAnimationFrame(tick);}requestAnimationFrame(tick);})();
+</script>
+</body></html>

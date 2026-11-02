@@ -469,6 +469,7 @@
  */
 .fold.flat .body.stack .body.stack > .fold { padding-inline: 0; }
 .fold.flat > summary .stFail { color: var(--chat-red); }
+.fold.flat > summary .stStopped { color: var(--chat-text-muted); }
 
 /*
  * **可折叠的命令行整行退到静音灰**(稿子 components.css:1151-1154):
@@ -1168,8 +1169,23 @@
   30% { transform: translateY(-3px); }
 }
 
+/*
+ * P0-24(设计答复 2026-10-26「PRD」,按 PRD 场景写法):回合标题写成「已停止 · 31 秒」
+ * 「用时 · 1 分 20 秒」,时长前加分隔符。只挂在回合标题(执行记录壳)上,工具行等其他
+ * 折叠头不受影响;分隔符走伪元素,时长文字本身不变。原推测项 A-04,现已确认。
+ */
+.turnHead > summary .meta::before {
+  content: '·';
+  margin-right: 0.35em;
+  /* 时长走等宽字体,而等宽字体里的「·」画成一个小方块(真机所见);分隔符跟状态词用同一种字体 */
+  font-family: var(--chat-font-sans);
+}
+
 /* 整轮失败时壳头的状态词 */
 .stFail { color: var(--chat-red); }
+
+/* 被停止的一轮壳头的状态词:PRD 规定「已停止」灰色(P0-24) */
+.stStopped { color: var(--chat-text-muted); }
 
 @media (prefers-reduced-motion: reduce) {
   .shimmer { animation: none; color: var(--dia-base, var(--chat-text-muted)); -webkit-text-fill-color: currentColor; }
