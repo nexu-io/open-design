@@ -1,11 +1,11 @@
-import { DEFAULT_MODEL_OPTION } from './shared.js';
 import {
   OPENCODE_PERMISSION_CAPABILITY,
   appendOpenCodePermissionBypass,
   appendOpenCodeWorkspaceDir,
 } from '../opencode-permissions.js';
-import { getRememberedLiveModels } from '../models.js';
-import type { RuntimeAgentDef, RuntimeModelOption } from '../types.js';
+import { execAgentFile } from '../invocation.js';
+import { DEFAULT_MODEL_OPTION, getRememberedLiveModels } from '../models.js';
+import type { RuntimeAgentDef, RuntimeEnv, RuntimeModelOption } from '../types.js';
 
 const OPENCODE_VARIANT_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u;
 const OPENCODE_MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._/:@-]*$/u;
@@ -96,6 +96,100 @@ export function parseOpenCodeModels(stdout: string): RuntimeModelOption[] | null
   return models.length > 1 ? models : null;
 }
 
+/** Read OpenCode 2's model API without retaining provider settings or credentials. */
+export function parseOpenCodeApiModels(stdout: string): RuntimeModelOption[] | null {
+  let response: unknown;
+  try {
+    response = JSON.parse(stdout);
+  } catch {
+    return null;
+  }
+  if (!response || typeof response !== 'object' || Array.isArray(response)) return null;
+  const data = (response as Record<string, unknown>)['data'];
+  if (!Array.isArray(data)) return null;
+
+  const models: RuntimeModelOption[] = [DEFAULT_MODEL_OPTION];
+  const seen = new Set<string>();
+  for (const entry of data) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const row = entry as Record<string, unknown>;
+    if (row['enabled'] === false || typeof row['providerID'] !== 'string' || typeof row['id'] !== 'string') continue;
+    const id = `${row['providerID']}/${row['id']}`;
+    if (!OPENCODE_MODEL_ID.test(id) || seen.has(id)) continue;
+    seen.add(id);
+
+    const variants = Array.isArray(row['variants']) ? row['variants'] : [];
+    const variantIds = [...new Set(variants.flatMap((entry: unknown) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
+      const variant = (entry as Record<string, unknown>)['id'];
+      return typeof variant === 'string' && variant !== 'default' && OPENCODE_VARIANT_ID.test(variant)
+        ? [variant]
+        : [];
+    }))];
+    models.push({
+      id,
+      label: id,
+      ...(variantIds.length > 0 ? { reasoningOptions: reasoningOptions(variantIds) } : {}),
+    });
+  }
+  return models.length > 1 ? models : null;
+}
+
+const OPENCODE_LIST_MODELS_TIMEOUT_MS = 15_000;
+const OPENCODE_LIST_MODELS_MAX_BUFFER = 8 * 1024 * 1024;
+
+function rejectsVerboseModelFlag(error: unknown): boolean {
+  const failure = error as { stdout?: unknown; stderr?: unknown } | null;
+  const output = [
+    error instanceof Error ? error.message : String(error),
+    String(failure?.stderr ?? ''),
+    String(failure?.stdout ?? ''),
+  ].join('\n');
+  return /(?:unrecognized flag|unknown option|unknown argument|unknown flag)[^\n]*--verbose/iu.test(output);
+}
+
+/**
+ * Keep the 1.x verbose probe unchanged. A rejected flag selects the 2.x API,
+ * which retains exact variant IDs; unavailable API metadata falls back to the
+ * plain catalog. All attempts share the existing model-discovery time budget.
+ */
+async function fetchOpenCodeModels(
+  resolvedBin: string,
+  env: RuntimeEnv,
+): Promise<RuntimeModelOption[] | null> {
+  const deadline = Date.now() + OPENCODE_LIST_MODELS_TIMEOUT_MS;
+  const read = async (
+    args: string[],
+    parse: (stdout: string) => RuntimeModelOption[] | null,
+  ): Promise<RuntimeModelOption[] | null> => {
+    const timeout = deadline - Date.now();
+    if (timeout <= 0) return null;
+    const { stdout } = await execAgentFile(resolvedBin, args, {
+      env,
+      timeout,
+      maxBuffer: OPENCODE_LIST_MODELS_MAX_BUFFER,
+    });
+    return parse(String(stdout));
+  };
+
+  try {
+    return await read(['models', '--verbose'], parseOpenCodeModels);
+  } catch (error) {
+    if (!rejectsVerboseModelFlag(error)) return null;
+  }
+  try {
+    const models = await read(['api', 'model.list', '--standalone'], parseOpenCodeApiModels);
+    if (models) return models;
+  } catch {
+    // The experimental API may be unavailable while the plain catalog works.
+  }
+  try {
+    return await read(['models', '--standalone'], parseOpenCodeModels);
+  } catch {
+    return null;
+  }
+}
+
 function supportsOpenCodeVariant(
   modelId: string | null | undefined,
   variant: string | null | undefined,
@@ -112,20 +206,10 @@ export const opencodeAgentDef = {
     fallbackBins: ['opencode'],
     versionArgs: ['--version'],
     ...OPENCODE_PERMISSION_CAPABILITY,
-    // `opencode models` prints `provider/model` per line. Real-world
-    // `opencode models` calls can take >8s (network round-trip to the
-    // provider registry), so the previous 8s budget timed out and fell back
-    // to the hardcoded `fallbackModels`, hiding the user's actual catalog.
-    // 15s matches the listModels budget the rest of the agent defs use
-    // (devin, hermes, kiro, kilo, kimi, trae-cli, vibe, reasonix).
-    listModels: {
-      args: ['models', '--verbose'],
-      parse: parseOpenCodeModels,
-      timeoutMs: 15_000,
-    },
+    fetchModels: fetchOpenCodeModels,
     fallbackModels: OPENCODE_FALLBACK_MODELS,
     // OpenCode 1.18.x exposes provider/model-specific variants. Detection
-    // reads the exact live variant keys from `models --verbose`. The fallback
+    // reads exact live variant keys from verbose output or the 2.x API. The fallback
     // keeps Sol/Terra/Luna model ids usable during a catalog outage but does
     // not guess their variants. Unknown model/variant pairs omit `--variant`
     // rather than inventing a provider capability or preventing the base
