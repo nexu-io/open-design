@@ -162,9 +162,20 @@ describe('/api/chat', () => {
     const previousLogSetModel = process.env.FAKE_VELA_LOG_SET_MODEL;
     const previousLogPrompt = process.env.FAKE_VELA_LOG_PROMPT;
     const invocationLog = join(tmpdir(), `od-amr-model-request-${randomUUID()}.jsonl`);
-    const previousExtraEnv = Object.fromEntries(Object.keys(extraEnv).map((key) => [key, process.env[key]]));
+    // Every request owns its catalog. The fixture's legacy remote list still
+    // contains delisted models; it must not become a later test's fallback.
+    const fixtureEnv = {
+      FAKE_VELA_MODEL_LIST_JSON: JSON.stringify({
+        source: 'remote',
+        data: [{ id: 'deepseek-v4.1-flash', default: true }, { id: 'deepseek-v3.2' }],
+      }),
+      ...extraEnv,
+    };
+    const previousExtraEnv = Object.fromEntries(Object.keys(fixtureEnv).map((key) => [key, process.env[key]]));
+    amrModelLoadingCache.resetForTests();
+    resetLiveModelsForTests();
     try {
-      Object.assign(process.env, extraEnv);
+      Object.assign(process.env, fixtureEnv);
       process.env.VELA_RUNTIME_KEY = `fake-runtime-key-${randomUUID()}`;
       process.env.VELA_LINK_URL = 'https://amr-link.open-design.ai/v1';
       process.env.FAKE_VELA_INVOCATION_LOG = invocationLog;
@@ -218,6 +229,10 @@ child.on('exit', (code, signal) => {
         : [];
       return { body, invocations, responseOk };
     } finally {
+      // Detached in-flight refreshes may finish, but can no longer populate
+      // a cache state used by the next request.
+      amrModelLoadingCache.resetForTests();
+      resetLiveModelsForTests();
       rmSync(invocationLog, { force: true });
       for (const [key, value] of Object.entries(previousExtraEnv)) {
         if (value == null) delete process.env[key];

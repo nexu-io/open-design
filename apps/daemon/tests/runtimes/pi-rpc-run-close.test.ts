@@ -30,6 +30,7 @@ describe('Pi RPC public Run close', () => {
     { mode: 'success', expected: 'succeeded' },
     { mode: 'sigterm-exit', expected: 'succeeded' },
     { mode: 'nonzero', expected: 'failed' },
+    { mode: 'delayed-nonzero', expected: 'failed' },
     { mode: 'error', expected: 'failed' },
     { mode: 'cancel', expected: 'canceled' },
   ])('keeps $mode as $expected when the Pi process remains alive after EOF', async ({ mode, expected }) => {
@@ -61,10 +62,15 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
   if (mode === 'error') W({ type: 'message_update', assistantMessageEvent: { type: 'error', reason: 'Native Pi fixture failure' } });
   W({ type: 'agent_end' });
   if (mode === 'nonzero') process.exit(143);
+  if (mode === 'delayed-nonzero') setTimeout(() => process.exit(143), 50);
 });
 `, 'utf8');
     await chmod(bin, 0o755);
-    process.env.PI_GRACEFUL_SHUTDOWN_MS = '10';
+    // Only the lingering success fixtures need an accelerated daemon kill.
+    // A 10 ms deadline can race the natural nonzero exit on a loaded runner,
+    // turning that fixture into a daemon-initiated (successful) shutdown.
+    process.env.PI_GRACEFUL_SHUTDOWN_MS =
+      mode === 'success' || mode === 'sigterm-exit' ? '10' : '5000';
     started = await startServer({ port: 0, returnServer: true }) as StartedServer;
     const config = await fetch(`${started.url}/api/app-config`, {
       method: 'PUT', headers: { 'content-type': 'application/json' },
@@ -108,7 +114,7 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
       expect(run.exitCode).toBe(143);
       expect(run.signal ?? null).toBeNull();
       expect(run.error ?? null).toBeNull();
-    } else if (mode === 'nonzero') {
+    } else if (mode === 'nonzero' || mode === 'delayed-nonzero') {
       expect(run.exitCode).toBe(143);
       expect(run.signal ?? null).toBeNull();
     } else if (mode === 'error') {
