@@ -41,6 +41,7 @@ const saveTabs = vi.fn();
 const cacheTabsLocally = vi.fn();
 const writeProjectTextFile = vi.fn();
 const checkAmrBalanceGate = vi.fn();
+const checkAmrFundingEvidence = vi.fn();
 
 const chatPaneSpy = vi.fn();
 const fileWorkspaceSpy = vi.fn();
@@ -91,6 +92,19 @@ vi.mock('../../src/runtime/amr-balance-gate', async () => {
   return {
     ...actual,
     checkAmrBalanceGate: (...args: unknown[]) => checkAmrBalanceGate(...args),
+  };
+});
+
+// The funding read is the send path's second await inside the AMR gate. Its
+// default mirrors the real read with no workspace scope (`unknown`), so only
+// the tests that park it see any difference.
+vi.mock('../../src/runtime/amr-funding-feedback', async () => {
+  const actual = await vi.importActual<typeof import('../../src/runtime/amr-funding-feedback')>(
+    '../../src/runtime/amr-funding-feedback',
+  );
+  return {
+    ...actual,
+    checkAmrFundingEvidence: (...args: unknown[]) => checkAmrFundingEvidence(...args),
   };
 });
 
@@ -177,7 +191,11 @@ function deferred<T>() {
 // the send path that awaits before a turn takes ownership of auto-open — only
 // runs for the `amr` agent.
 function renderProjectView(projectId: string, agentId = 'agent-1') {
-  return render(
+  return render(projectViewElement(projectId, agentId));
+}
+
+function projectViewElement(projectId: string, agentId: string) {
+  return (
     <ProjectView
       project={{ id: projectId, name: 'Project', skillId: null, designSystemId: null } as never}
       routeFileName={null}
@@ -202,7 +220,7 @@ function renderProjectView(projectId: string, agentId = 'agent-1') {
       onTouchProject={() => {}}
       onProjectChange={() => {}}
       onProjectsRefresh={() => {}}
-    />,
+    />
   );
 }
 
@@ -272,6 +290,7 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
     patchConversation.mockResolvedValue(undefined);
     patchProject.mockResolvedValue(undefined);
     checkAmrBalanceGate.mockResolvedValue({ kind: 'allow' });
+    checkAmrFundingEvidence.mockResolvedValue({ kind: 'unknown', preflight: null });
   });
 
   afterEach(() => {
@@ -324,7 +343,7 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
       return new Promise<void>(() => {});
     });
 
-    renderProjectView(options.projectId, options.agentId);
+    const view = renderProjectView(options.projectId, options.agentId);
 
     const sendProps = await waitForSend();
     await act(async () => {
@@ -352,6 +371,10 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
       // "the chokidar-driven list now carries it" without re-driving the turn.
       landDeliverable: (files: ProjectFile[]) => {
         settledFiles = files;
+      },
+      // Re-render the same project under another agent selection.
+      switchAgent: (agentId: string) => {
+        view.rerender(projectViewElement(options.projectId, agentId));
       },
     };
   }
@@ -1187,5 +1210,121 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
     await waitFor(() =>
       expect(openRequestKeys().map((key) => key.name)).toContain('index.html'),
     );
+  });
+
+  // The gate's second await: turn B clears `checkAmrBalanceGate` and parks on
+  // its funding read, with turn A's deliverable landing inside that window.
+  // Every exit below it that does not become a turn has to hand the held
+  // evaluation back, not just the hard/unavailable gate verdicts above it.
+  async function sendParkedOnFunding(turn: Awaited<ReturnType<typeof armedAmrWatch>>) {
+    const funding = deferred<{ kind: string; preflight: null }>();
+    checkAmrFundingEvidence.mockReturnValueOnce(funding.promise);
+    const sendPropsB = await waitForSend();
+    let sendB!: Promise<void>;
+    await act(async () => {
+      sendB = sendPropsB.onSend!('turn B', [], []);
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(checkAmrBalanceGate).toHaveBeenCalledTimes(2));
+    expect(checkAmrFundingEvidence).toHaveBeenCalledTimes(2);
+
+    turn.landDeliverable([NOTES, OTHER, RUN_LOG, INDEX]);
+    await landSettledFileList();
+    expect(openRequestKeys().map((key) => key.name)).not.toContain('index.html');
+
+    return {
+      settle: async (verdict: { kind: string; preflight: null }) => {
+        await act(async () => {
+          funding.resolve(verdict);
+          await sendB;
+        });
+      },
+    };
+  }
+
+  it('lets the held watch open again when the funding read outlives its selection', async () => {
+    const turn = await armedAmrWatch('project-amr-funding-identity');
+    const parked = await sendParkedOnFunding(turn);
+
+    // The user moves off OpenDesign Cloud while the read is in flight, so its
+    // verdict belongs to a selection that no longer exists.
+    await act(async () => {
+      turn.switchAgent('agent-1');
+    });
+    await parked.settle({ kind: 'available', preflight: null });
+
+    expect(streamViaDaemon).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(openRequestKeys().map((key) => key.name)).toContain('index.html'),
+    );
+  });
+
+  it('lets the held watch open again when the parked send is stopped before its funding read lands', async () => {
+    const turn = await armedAmrWatch('project-amr-funding-stopped');
+    const parked = await sendParkedOnFunding(turn);
+
+    // The painted turn already shows Stop; pressing it clears the streaming
+    // marker this send would have run under.
+    await act(async () => {
+      (chatPaneSpy.mock.calls.at(-1)?.[0] as { onStop?: () => void }).onStop?.();
+    });
+    await parked.settle({ kind: 'available', preflight: null });
+
+    expect(streamViaDaemon).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(openRequestKeys().map((key) => key.name)).toContain('index.html'),
+    );
+  });
+
+  it('lets the held watch open again when the funding read refuses the parked send', async () => {
+    const turn = await armedAmrWatch('project-amr-funding-insufficient');
+    const parked = await sendParkedOnFunding(turn);
+
+    // The balance gate allowed it; the funding read is what turns it away.
+    await parked.settle({ kind: 'insufficient', preflight: null });
+
+    expect(streamViaDaemon).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(openRequestKeys().map((key) => key.name)).toContain('index.html'),
+    );
+  });
+
+  // The conversation-switch exit cannot be asserted as "opens again": leaving
+  // the conversation is itself a reason to retire the watch. What it must do is
+  // still hand back the evaluation, so the retirement happens at the exit. A
+  // watch merely released would sit pending in the conversation the user left
+  // and focus turn A's artifact the moment they come back.
+  it('retires the held watch when a conversation switch strands the parked send', async () => {
+    listConversations.mockResolvedValue([
+      { id: 'conv-1', title: 'Conversation' },
+      { id: 'conv-2', title: 'Second conversation' },
+    ]);
+    const turn = await armedAmrWatch('project-amr-funding-switch');
+    const parked = await sendParkedOnFunding(turn);
+
+    const selectConversation = async (id: string) => {
+      await act(async () => {
+        (chatPaneSpy.mock.calls.at(-1)?.[0] as {
+          onSelectConversation?: (id: string) => void;
+        }).onSelectConversation?.(id);
+      });
+      await waitFor(() => {
+        expect(
+          (chatPaneSpy.mock.calls.at(-1)?.[0] as { activeConversationId?: string | null })
+            .activeConversationId,
+        ).toBe(id);
+      });
+    };
+
+    await selectConversation('conv-2');
+    await parked.settle({ kind: 'available', preflight: null });
+    expect(streamViaDaemon).toHaveBeenCalledTimes(1);
+
+    await selectConversation('conv-1');
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(openRequestKeys().map((key) => key.name)).not.toContain('index.html');
   });
 });
