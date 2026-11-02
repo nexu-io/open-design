@@ -103,6 +103,9 @@ vi.mock('../../src/router', () => ({
 }));
 
 vi.mock('../../src/state/projects', () => ({
+  registerQueuedSubmission: vi.fn(async (projectId: string, submission: { id: string; conversationId: string; submittedAt: number }) => ({
+    id: submission.id, projectId, conversationId: submission.conversationId, acceptedAt: submission.submittedAt,
+  })),
   cacheTabsLocally: (...args: unknown[]) => cacheTabsLocally(...args),
   createConversation: (...args: unknown[]) => createConversation(...args),
   getTemplate: (...args: unknown[]) => getTemplate(...args),

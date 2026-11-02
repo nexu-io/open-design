@@ -1,3 +1,4 @@
+import type { WorkspaceJourneyClickProps } from './workspace.js';
 /**
  * @module analytics/events/ui-click
  * ui_click event prop types and their union.
@@ -966,6 +967,10 @@ export interface RunRecoveryActionClickProps {
 }
 
 export interface AmrEntryClickProps {
+  block_id?: string;
+  workspace_key?: string;
+  reason?: 'credit_exhausted' | 'concurrency_limit';
+  stage?: 'before_run' | 'mid_run' | 'unknown';
   page_name: TrackingPageName;
   area: 'amr_entry';
   element: TrackingAmrEntrySource;
@@ -1695,6 +1700,7 @@ export interface SettingsExternalMcpClickProps {
 
 // Discriminated union of every supported ui_click payload.
 export type UiClickProps =
+  | WorkspaceJourneyClickProps
   | EntryNavigationClickProps
   | AccountMenuClickProps
   | WorkspaceSwitcherClickProps

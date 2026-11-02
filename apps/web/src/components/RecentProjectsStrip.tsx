@@ -1,3 +1,4 @@
+import { compareRecentProjects } from '../lib/project-order';
 import { reportProjectFailure } from '../observability/experience-diagnostics';
 // Horizontal "Recent projects" rail for the Home view.
 //
@@ -29,7 +30,6 @@ import type { DesignSystemSummary, Project } from '../types';
 import { Icon } from './Icon';
 import type { IconName } from './Icon';
 import { RemixIcon } from './RemixIcon';
-import { InviteDialog } from './InviteDialog';
 import { ProjectDeleteConfirmDialog } from './project-actions/ProjectDeleteConfirmDialog';
 import { useProjectDeleteFlow } from './project-actions/useProjectDeleteFlow';
 import { useBatchProjectShareCount } from './project-actions/useBatchProjectShareCount';
@@ -40,18 +40,11 @@ import type { SharedProjectPredicate } from '../collab/all-projects-list';
 import { useTeamMembers } from '../collab/useTeamMembers';
 import {
   notifyTeamProjectsChanged,
-  useWorkspaceBilling,
   useWorkspaceContext,
 } from '../collab/useWorkspaceContext';
-import {
-  canAccessWorkspaceInviteFlow,
-  resolveWorkspaceInviteTarget,
-  workspaceInviteAvailableSeats,
-  workspaceUpgradeUrl,
-} from './EntryNavRail';
 import { moveWorkspaceProject } from '../state/projects';
 import {
-  workspaceContextHasTeamIdentity,
+  workspaceContextHasWorkspaceIdentity,
   type WorkspaceCollabContext,
   type WorkspaceProjectSummary,
 } from '@open-design/contracts';
@@ -377,7 +370,6 @@ export function RecentProjectsStrip({
   projectOwnerMemberIds,
   openingProjectId = null,
   collaborationEnabled,
-  canAssignInviteRoles,
   canManageProjectCollection,
   isActive = true,
 }: Props) {
@@ -401,7 +393,6 @@ export function RecentProjectsStrip({
   const workspaceContextLoadingRef = useRef(workspaceContextLoading);
   workspaceContextLoadingRef.current = workspaceContextLoading;
   const workspaceIdentity = workspaceIdentityCacheKey(workspaceContext);
-  const workspaceBilling = useWorkspaceBilling();
   const workspaceDimensions = workspaceAnalyticsDimensions(workspaceContext);
   function trackCollection(
     element: ProjectCollectionClickProps['element'],
@@ -417,24 +408,12 @@ export function RecentProjectsStrip({
     }, requestId ? { requestId } : undefined);
   }
   const selfMemberId = workspaceContext?.workspaceMemberId ?? null;
-  // `canShareProjects` alone is a ROLE permission ("could this member share IF
-  // a team existed"), not a "does a team exist" signal — a purely personal
-  // workspace's owner still gets `canShareProjects: true`. Without also
-  // requiring `workspaceContextHasTeamIdentity`, this stayed true for a
-  // personal-only workspace and the move-to-team menu item rendered a button
-  // the daemon can only ever 403 (recvqfZsR901YQ "无法共享方案了" /
-  // recvqgif6Xa7Wb "隐藏非 Team workspace 分享到团队的入口") — the exact class
-  // of bug `workspaceContextHasTeamIdentity`'s own doc comment warns about:
-  // "Deriving it twice is how a UI grows a button that can only ever fail."
+  // Project sharing needs an exact Workspace/member identity and permission;
+  // the resource plane now accepts Personal workspaces as well as Team.
   const collaborationAvailable =
     collaborationEnabled ??
-    (workspaceContextHasTeamIdentity(workspaceContext) &&
+    (workspaceContextHasWorkspaceIdentity(workspaceContext) &&
       workspaceContext?.permissions.canShareProjects === true);
-  const canAccessInviteFlow = canAccessWorkspaceInviteFlow(workspaceContext);
-  // The invite dialog's seat-gate upgrade CTA shares the public Pricing
-  // destination owned by `workspaceUpgradeUrl` in EntryNavRail.tsx.
-  const inviteUpgradeUrl = workspaceUpgradeUrl(workspaceContext, workspaceBilling);
-  const inviteTarget = resolveWorkspaceInviteTarget(workspaceContext);
   const canManageCollection =
     canManageProjectCollection ??
     (workspaceContext?.permissions.canManageSharedResources === true ||
@@ -447,11 +426,9 @@ export function RecentProjectsStrip({
   // The 全部项目 page (drafts space) splits its one catalog into three tabs; the
   // team space and the home rail have no such split.
   const showCollectionTabs = space === 'drafts';
-  // 团队项目 is a team-workspace tab only (OPEND-3285): a personal workspace
-  // has no shared catalog to show, so the tab would only ever open an empty
-  // state. Keyed on the workspace kind, not on `canShareProjects` (a role bit
-  // a personal owner also carries).
-  const teamCollectionAvailable = workspaceContext?.workspaceType === 'team';
+  // Every verified workspace may now have projects explicitly shared to its
+  // members; a private project still belongs only in the personal collection.
+  const teamCollectionAvailable = workspaceContextHasWorkspaceIdentity(workspaceContext);
   const collectionOptions = teamCollectionAvailable
     ? COLLECTION_OPTIONS
     : COLLECTION_OPTIONS.filter((option) => option.id !== 'teamProjects');
@@ -491,7 +468,6 @@ export function RecentProjectsStrip({
     'owner' | 'kind' | 'display' | null
   >(null);
   const displayTriggerRef = useRef<HTMLButtonElement>(null);
-  const [inviteOpen, setInviteOpen] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedProjectIds, setSelectedProjectIds] = useState<Set<string>>(() => new Set());
   // Confirmation gates for the bulk bar. Batch move reuses the single-card
@@ -534,7 +510,7 @@ export function RecentProjectsStrip({
     () => [...projects].sort((a, b) => {
       if (sort === 'updatedAsc') return a.updatedAt - b.updatedAt;
       if (sort === 'nameAsc') return a.name.localeCompare(b.name);
-      return b.updatedAt - a.updatedAt;
+      return compareRecentProjects(a, b);
     }),
     [projects, sort],
   );
@@ -1251,27 +1227,6 @@ export function RecentProjectsStrip({
             </div>
           ) : null}
           <div className="recent-projects__controls">
-            {/* The invite CTA belongs to the team collection: the team space
-                grid, and the 团队项目 tab of 全部项目 that replaced the rail's
-                team entry (OPEND-3108). */}
-            {(space === 'team' || (showCollectionTabs && collection === 'teamProjects')) &&
-            canAccessInviteFlow &&
-            inviteTarget.kind !== 'unavailable' ? (
-              <button
-                type="button"
-                className="recent-projects__invite"
-                onClick={() => {
-                  trackCollection('invite_teammates');
-                  if (inviteTarget.kind === 'vela') {
-                    window.open(inviteTarget.url, '_blank', 'noopener,noreferrer');
-                  } else if (inviteTarget.kind === 'local') {
-                    setInviteOpen(true);
-                  }
-                }}
-              >
-                <Icon name="share" size={15} /> {t('recentProjects.inviteTeammates')}
-              </button>
-            ) : null}
             {canManageCollection ? (
               <button
                 type="button"
@@ -2065,23 +2020,6 @@ export function RecentProjectsStrip({
           </DialogFooter>
         </Dialog>
       ) : null}
-      <InviteDialog
-        open={inviteOpen}
-        onClose={() => setInviteOpen(false)}
-        workspaceContext={workspaceContext}
-        canAssignRoles={
-          canAssignInviteRoles ?? workspaceContext?.permissions.canInviteMembers === true
-        }
-        availableSeats={workspaceInviteAvailableSeats(workspaceContext)}
-        entryFrom="all_projects"
-        onUpgrade={
-          inviteUpgradeUrl
-            ? () => {
-                window.open(inviteUpgradeUrl, '_blank', 'noopener,noreferrer');
-              }
-            : undefined
-        }
-      />
     </section>
   );
 }

@@ -28,6 +28,8 @@ export type { CollabPresenceMember };
 
 export interface CollabSnapshot {
   ownedContentUpdate?: OwnedProjectContentUpdate | null;
+  /** This client is still waiting for an accepted content replacement. */
+  contentUpdatePending?: boolean;
   present: CollabPresenceMember[];
   publishedVersion: number | null;
   materializedVersion: number | null;
@@ -99,6 +101,7 @@ class CollabRequestError extends Error {
 }
 
 export class CollabClient {
+  private contentReplacementsInFlight = 0;
   private readonly projectId: string;
   /**
    * One lease identity for this mounted client session. A member can leave and
@@ -330,14 +333,26 @@ export class CollabClient {
 
   async requestContentUpdate(input: OwnedProjectContentUpdateRequest): Promise<OwnedProjectContentUpdate> {
     const generation = ++this.ownedContentGeneration;
-    const body = await this.post('/collab/update', input);
-    const update = parseOwnedProjectContentUpdate(body?.update);
-    if (!update) throw new Error('invalid cloud update response');
-    if (generation === this.ownedContentGeneration) {
-      ++this.ownedContentGeneration;
-      this.update({ ownedContentUpdate: update });
+    const replacing = input.action === 'accept';
+    if (replacing) {
+      ++this.contentReplacementsInFlight;
+      this.update({ contentUpdatePending: true });
     }
-    return update;
+    try {
+      const body = await this.post('/collab/update', input);
+      const update = parseOwnedProjectContentUpdate(body?.update);
+      if (!update) throw new Error('invalid cloud update response');
+      if (generation === this.ownedContentGeneration) {
+        ++this.ownedContentGeneration;
+        this.update({ ownedContentUpdate: update });
+      }
+      return update;
+    } finally {
+      if (replacing) {
+        --this.contentReplacementsInFlight;
+        this.update({ contentUpdatePending: this.contentReplacementsInFlight > 0 });
+      }
+    }
   }
 
   async heartbeat(): Promise<void> {

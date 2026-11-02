@@ -1,3 +1,4 @@
+import { readAmrEndpointBinding } from './amr-endpoint-binding.js';
 import { resolveAmrProfile } from './vela-profile.js';
 
 type EnvMap = NodeJS.ProcessEnv | Record<string, string | undefined>;
@@ -62,6 +63,8 @@ export function resolveEffectiveVelaConsoleOrigin(
   env: EnvMap = process.env,
   configuredEnv: EnvMap = {},
 ): string | undefined {
+  const binding = readAmrEndpointBinding(env);
+  if (binding) return binding.webUrl;
   const packagedProfile = resolveAmrProfile(env);
   const selectedProfile = resolveAmrProfile({ ...env, ...configuredEnv });
   const mapped = originsByProfile(env)[selectedProfile];

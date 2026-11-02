@@ -168,6 +168,11 @@ concurrency:
   group: open-design-release-prerelease
   cancel-in-progress: false
 env:
+  RELEASE_REPOSITORY: ${{ github.repository }}
+  RELEASE_RUN_ATTEMPT: ${{ github.run_attempt }}
+  RELEASE_RUN_ID: ${{ github.run_id }}
+  RELEASE_WORKFLOW: ${{ github.workflow }}
+  RELEASE_BRANCH: ${{ inputs.ref != '' && inputs.ref || github.ref_name }}
   OPEN_DESIGN_TELEMETRY_RELAY_URL: ${{ vars.OPEN_DESIGN_TELEMETRY_RELAY_URL }}
   # PostHog product-analytics ingest. Defined as repository secret + var
   # so official builds ship with analytics enabled; PR builds and forks
@@ -220,12 +225,13 @@ jobs:
       github_release_enabled: ${{ steps.prerelease.outputs.github_release_enabled }}
       latest_stable: ${{ steps.prerelease.outputs.latest_stable }}
       previous_commit: ${{ steps.prev.outputs.previous_commit }}
-      prerelease_number: ${{ steps.prerelease.outputs.prerelease_number }}
-      prerelease_version: ${{ steps.prerelease.outputs.prerelease_version }}
-      release_number: ${{ steps.prerelease.outputs.release_number }}
-      release_name: ${{ steps.prerelease.outputs.release_name }}
-      release_version: ${{ steps.prerelease.outputs.release_version }}
-      state_source: ${{ steps.prerelease.outputs.state_source }}
+      prerelease_number: ${{ steps.reservation.outputs.prerelease_number }}
+      prerelease_version: ${{ steps.reservation.outputs.prerelease_version }}
+      release_number: ${{ steps.reservation.outputs.release_number }}
+      release_name: ${{ steps.reservation.outputs.release_name }}
+      release_version: ${{ steps.reservation.outputs.release_version }}
+      state_source: ${{ steps.reservation.outputs.state_source }}
+      version_lock_key: ${{ steps.reservation.outputs.version_lock_key }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
@@ -279,6 +285,22 @@ jobs:
           RELEASE_STORAGE_REGION: auto
           RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
         run: pnpm exec tools-release check-storage
+      - name: Reserve prerelease version
+        id: reservation
+        env:
+          BASE_VERSION: ${{ steps.prerelease.outputs.base_version }}
+          RELEASE_COMMIT: ${{ env.BUILT_SHA }}
+          RELEASE_CHANNEL: prerelease
+          RELEASE_LANE: release-prerelease
+          RELEASE_METADATA_DIR: ${{ runner.temp }}/release-metadata
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_VERSION_CANDIDATE: ${{ steps.prerelease.outputs.release_version }}
+        run: pnpm exec tools-release reserve-version prerelease
   dispatch_validation:
     name: Dispatch prerelease validation
     # Fire-and-forget, and deliberately absent from every other job's `needs`.
@@ -834,6 +856,8 @@ jobs:
           RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
           RELEASE_TARGET: mac_arm64
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          RELEASE_VERSION_LOCK_REQUIRED: "true"
+          RELEASE_VERSION_LOCK_KEY: ${{ needs.metadata.outputs.version_lock_key }}
         run: pnpm exec tools-release publish-platform
       - name: Upload mac prerelease publish manifest
         uses: actions/upload-artifact@v7
@@ -1139,6 +1163,8 @@ jobs:
           RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
           RELEASE_TARGET: mac_x64
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          RELEASE_VERSION_LOCK_REQUIRED: "true"
+          RELEASE_VERSION_LOCK_KEY: ${{ needs.metadata.outputs.version_lock_key }}
         run: pnpm exec tools-release publish-platform
       - name: Upload mac intel prerelease publish manifest
         uses: actions/upload-artifact@v7
@@ -1343,6 +1369,8 @@ jobs:
           RELEASE_TARGET: win_x64
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
           WIN_INCLUDE_ZIP: "true"
+          RELEASE_VERSION_LOCK_REQUIRED: "true"
+          RELEASE_VERSION_LOCK_KEY: ${{ needs.metadata.outputs.version_lock_key }}
         run: pnpm exec tools-release publish-platform
       - name: Upload windows prerelease publish manifest
         uses: actions/upload-artifact@v7
@@ -1479,6 +1507,8 @@ jobs:
           RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
           RELEASE_TARGET: linux_x64
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          RELEASE_VERSION_LOCK_REQUIRED: "true"
+          RELEASE_VERSION_LOCK_KEY: ${{ needs.metadata.outputs.version_lock_key }}
         run: pnpm exec tools-release publish-platform
       - name: Upload linux prerelease publish manifest
         uses: actions/upload-artifact@v7
@@ -1634,6 +1664,8 @@ jobs:
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
           STATE_SOURCE: ${{ needs.metadata.outputs.state_source }}
           WIN_X64_RESULT: ${{ needs.build_win.result }}
+          RELEASE_VERSION_LOCK_REQUIRED: "true"
+          RELEASE_VERSION_LOCK_KEY: ${{ needs.metadata.outputs.version_lock_key }}
         run: pnpm exec tools-release publish-metadata
       - name: Read metadata outputs
         id: outputs

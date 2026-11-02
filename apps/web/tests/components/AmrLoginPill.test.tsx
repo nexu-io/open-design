@@ -351,6 +351,45 @@ describe('AmrLoginPill', () => {
     );
   });
 
+  it('scopes the account management URL to the supplied workspace', () => {
+    renderAccountControl({
+      status: 'signed-in',
+      profile: 'test',
+      showConsoleAction: true,
+      workspaceId: 'workspace-settings',
+    });
+
+    expect(screen.getByRole('link', { name: 'Manage' }).getAttribute('href')).toBe(
+      'https://open-design.powerformer.net/cloud/dashboard?workspaceId=workspace-settings&source=open_design',
+    );
+  });
+
+  it.each([undefined, null, '   '])('keeps an explicit console URL unchanged for workspace %s', (workspaceId) => {
+    renderAccountControl({
+      status: 'signed-in',
+      showConsoleAction: true,
+      consoleUrl: 'https://feature.example/dashboard?source=open_design&legacy=%2f',
+      workspaceId,
+    });
+
+    expect(screen.getByRole('link', { name: 'Manage' }).getAttribute('href')).toBe(
+      'https://feature.example/dashboard?source=open_design&legacy=%2f',
+    );
+  });
+
+  it('preserves an unparseable console URL when a workspace is supplied', () => {
+    renderAccountControl({
+      status: 'signed-in',
+      showConsoleAction: true,
+      consoleUrl: '/legacy-console?source=open_design',
+      workspaceId: 'workspace-settings',
+    });
+
+    expect(screen.getByRole('link', { name: 'Manage' }).getAttribute('href')).toBe(
+      '/legacy-console?source=open_design',
+    );
+  });
+
   it('uses the local-profile AMR management URL for signed-in users', () => {
     renderAccountControl({
       status: 'signed-in',
@@ -437,6 +476,38 @@ describe('AmrLoginPill', () => {
         body: JSON.stringify({ url: 'https://open-design.ai/amr/dashboard?od_bridge=odbr_12345678' }),
       }),
     );
+  });
+
+  it('keeps the status consoleOrigin when scoping the management link and click to a workspace', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ body: { ok: true } }));
+    vi.stubGlobal('fetch', fetchMock);
+    renderPill({
+      workspaceId: 'workspace-settings',
+      initialStatus: {
+        loggedIn: true,
+        loginInFlight: false,
+        profile: 'feature-test',
+        consoleOrigin: 'https://feature.example',
+        configPath: '/x',
+        user: { id: 'u', email: 'leaf@example.com', plan: 'plus' },
+      },
+      skipInitialRefresh: true,
+      showConsoleAction: true,
+    });
+
+    const link = screen.getByRole('link', { name: 'Manage' }) as HTMLAnchorElement;
+    expect(link.href).toBe('https://feature.example/dashboard?workspaceId=workspace-settings&source=open_design');
+    fireEvent.click(link);
+
+    expect(new URL(link.href).searchParams.get('workspaceId')).toBe('workspace-settings');
+    expect(new URL(link.href).searchParams.get('od_entry_source')).toBe('settings_amr_console');
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/system/open-external',
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.stringContaining('https://feature.example/dashboard?workspaceId=workspace-settings&source=open_design&'),
+      }),
+    ));
   });
 
   it('uses the feature-test origin carried by the visible status for management', async () => {

@@ -47,6 +47,9 @@ import {
 } from '../src/plugins/registry.js';
 import { startServer } from '../src/server.js';
 import * as automaticProduction from '../src/strategies/od-next/automatic-simple-production.js';
+import * as deviceFrames from '../src/strategies/od-next/device-frames.js';
+import * as openCodePermissions from '../src/runtimes/opencode-permissions.js';
+import * as invocationModule from '../src/runtimes/invocation.js';
 import {
   getStrategyTaskExecution
 } from '../src/strategies/task-store.js';
@@ -627,6 +630,141 @@ process.exit(127);
     }
   });
 
+  it.each([
+    { agentId: 'opencode', availability: 'available' },
+    { agentId: 'byok-opencode', availability: 'available' },
+    { agentId: 'opencode', availability: 'unavailable' },
+    { agentId: 'byok-opencode', availability: 'unavailable' },
+    { agentId: 'opencode', availability: 'edit-base-unavailable' },
+    { agentId: 'byok-opencode', availability: 'edit-base-unavailable' },
+    // Windows packaged QA W03: `git rev-parse` was killed by its timeout, the
+    // grant was withheld, the run could not read its task profile, and it
+    // still finished as completed without the requested change.
+    { agentId: 'opencode', availability: 'git-probe-failed' },
+    { agentId: 'byok-opencode', availability: 'git-probe-failed' },
+    { agentId: 'opencode', availability: 'ordinary' },
+  ] as const)('starts a frozen $agentId run with bundled task assets $availability and preserves unrelated config', async ({ agentId, availability }) => {
+    delete process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY;
+    const active = availability !== 'ordinary';
+    const label = `${agentId}-resource-access-${availability}`;
+    const fixture = await createPublicRolloutFixture(label, active ? 'design' : 'chat');
+    started = fixture.started; binDir = fixture.binDir;
+    const bin = path.join(binDir, 'opencode-resource-access');
+    const configPath = path.join(binDir, 'spawn-config.json');
+    await writeFile(bin, `#!/usr/bin/env node
+const fs = require('node:fs');
+const argv = process.argv.slice(2);
+if (argv.includes('--version')) { console.log('1.18.18'); process.exit(0); }
+if (argv.includes('--help')) { console.log('Usage: opencode run --format --dir'); process.exit(0); }
+if (argv[0] !== 'run') { console.log('[]'); process.exit(0); }
+let stdin = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', chunk => { stdin += chunk; });
+process.stdin.on('end', () => {
+  fs.writeFileSync(${JSON.stringify(configPath)}, JSON.stringify({ argv, stdin, cwd: process.cwd(), config: JSON.parse(process.env.OPENCODE_CONFIG_CONTENT || '{}') }));
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'Permission fixture completed.' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+});
+`);
+    await chmod(bin, 0o755);
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = active ? 'active' : 'off';
+    const configured = await fetch(`${started.url}/api/app-config`, {
+      method: 'PUT', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ agentId, agentCliEnv: { opencode: { OPENCODE_BIN: bin } }, odNextStrategyMode: active ? 'active' : 'off' }),
+    });
+    expect(configured.status).toBe(200);
+    const previousMcp = await (await fetch(`${started.url}/api/mcp/servers`)).json();
+    try {
+      const mcp = await fetch(`${started.url}/api/mcp/servers`, {
+        method: 'PUT', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ servers: [{ id: 'fixture', transport: 'stdio', enabled: true, command: process.execPath, args: ['--version'] }] }),
+      });
+      expect(mcp.status).toBe(200);
+      const warning = vi.spyOn(console, 'warn');
+      if (availability === 'unavailable') {
+        vi.spyOn(deviceFrames, 'loadOdNextTaskAssetsForSnapshot')
+          .mockRejectedValue(new Error('Bundled strategy package identity drift'));
+      } else if (availability === 'edit-base-unavailable') {
+        vi.spyOn(openCodePermissions, 'resolveOpenCodeEditBaseDirs')
+          .mockRejectedValue(new Error('Fixture edit base unconfirmed'));
+      } else if (availability === 'git-probe-failed') {
+        const runAgentFile = invocationModule.execAgentFile;
+        vi.spyOn(invocationModule, 'execAgentFile').mockImplementation(((command, args, options) => (
+          command === 'git' && args?.[0] === 'rev-parse'
+            ? Promise.reject(Object.assign(new Error('Command failed: git rev-parse --show-toplevel'), {
+              killed: true, signal: 'SIGTERM', stderr: '',
+            }))
+            : runAgentFile(command, args, options)
+        )) as typeof invocationModule.execAgentFile);
+      }
+      const created = await postRun(started.url, {
+        ...publicRunRequest(fixture, 'Build a motion page.', label),
+        agentId,
+        model: 'fixture-model',
+        ...(agentId === 'byok-opencode' ? { byokProvider: {
+          protocol: 'openai', baseUrl: 'http://127.0.0.1:1/v1', apiKey: '', requiresApiKey: false, model: 'fixture-model',
+        } } : {}),
+      });
+      expect(Boolean(created.strategyTask), JSON.stringify(created)).toBe(active);
+      await waitForRunTerminal(started.url, created.runId as string);
+      const invocation = JSON.parse(await readFile(configPath, 'utf8')) as {
+        argv: string[];
+        stdin: string;
+        cwd: string;
+        config: {
+          permission?: { external_directory?: Record<string, string>; edit?: Record<string, string> };
+          mcp?: Record<string, { command: string[] }>;
+          provider?: Record<string, { options: { baseURL: string } }>;
+        };
+      };
+      expect(invocation.argv).not.toContain('--dangerously-skip-permissions');
+      if (active) expect(invocation.stdin).toContain('skill_name="discovery"');
+      // Withholding one resource must never discard the project's existing
+      // access, enabled MCP servers, or the run-scoped BYOK provider.
+      expect(invocation.config.mcp?.fixture?.command).toEqual([process.execPath, '--version']);
+      if (agentId === 'byok-opencode') {
+        expect(invocation.config.provider?.['open-design-byok']?.options.baseURL).toBe('http://127.0.0.1:1/v1');
+      }
+      const rules = invocation.config.permission?.external_directory ?? {};
+      expect(rules[invocation.cwd]).toBe('allow');
+      const bundledRoot = path.join(REPO_ROOT, 'plugins/_official');
+      const root = path.join(bundledRoot, 'scenarios/od-next-strategy/assets/task-profiles');
+      const granted = availability === 'available' || availability === 'git-probe-failed';
+      for (const entry of [root, path.join(root, '*'), path.join(root, '**')]) {
+        if (granted) {
+          expect(rules[entry]).toBe('allow');
+          expect(invocation.config.permission?.edit?.[entry]).toBe('deny');
+        } else {
+          expect(rules[entry]).toBeUndefined();
+          expect(invocation.config.permission?.edit?.[entry]).toBeUndefined();
+        }
+      }
+      if (granted) {
+        // Fixture projects are outside Git; the CLI checks file edits against
+        // the volume root while preserving writes inside its own project.
+        const relativePattern = path.join(path.relative(path.parse(root).root, root), '**');
+        expect(invocation.config.permission?.edit?.[relativePattern]).toBe('deny');
+        expect(invocation.config.permission?.edit?.[invocation.cwd]).toBeUndefined();
+      }
+      if (availability === 'unavailable') {
+        expect(warning).toHaveBeenCalledWith(expect.stringContaining('Bundled strategy package identity drift'));
+      } else if (availability === 'edit-base-unavailable') {
+        expect(warning).toHaveBeenCalledWith(expect.stringContaining('Fixture edit base unconfirmed'));
+      } else if (availability === 'git-probe-failed') {
+        expect(warning).toHaveBeenCalledWith(expect.stringContaining('git probe failed'));
+      }
+      expect(rules[path.join(bundledRoot, '*')]).toBeUndefined();
+    } finally {
+      const restored = await fetch(`${started.url}/api/mcp/servers`, {
+        method: 'PUT', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(previousMcp),
+      });
+      expect(restored.status).toBe(200);
+      await restored.json();
+    }
+  });
+
   it('runs an unregistered non-resume Qoder through public cold production and follow-ups', async () => {
     delete process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY;
     const fixture = await createPublicRolloutFixture('qoder-cold', 'design');
@@ -915,6 +1053,7 @@ process.exit(127);
       taskExecutionId: asked.taskExecutionId,
     });
     expect(answer.strategyTask!.taskExecutionId).not.toBe(asked.taskExecutionId);
+    expect(answer.strategyTask!.display?.id).not.toBe(first.strategyTask!.display?.id);
     const task = await waitForTask(answer.strategyTask!.taskExecutionId, 'completed');
     expect(task.continuedFromTaskExecutionId).toBe(asked.taskExecutionId);
     expect(task.runs).toHaveLength(2);
@@ -1021,6 +1160,35 @@ process.exit(127);
     expect((await waitForRunTerminal(started.url, next.runId as string)).status).toBe('succeeded');
     const task = await waitForTask(next.strategyTask!.taskExecutionId, 'completed');
     expect(task.continuedFromTaskExecutionId).toBe(first.strategyTask!.taskExecutionId);
+  }, 45_000);
+
+  it.each([
+    ['off', 'failed'], ['active', 'failed'], ['active', 'canceled'],
+  ] as const)('keeps the unterminated reply already streamed when a %s rollout Run ends %s', async (mode, ending) => {
+    const fixture = await createPublicRolloutFixture('unterminated-tail', 'design');
+    started = fixture.started; binDir = fixture.binDir;
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    if (mode === 'off') process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
+    const message = ending === 'failed'
+      ? 'Fail after an unterminated plan.'
+      : 'Stop after an unterminated plan.';
+    const run = await postRun(started.url, publicRunRequest(fixture, message, `unterminated-${mode}-${ending}`));
+    const runId = run.runId as string;
+    if (mode === 'off') expect(run.strategyTask).toBeUndefined();
+    else expect(run.strategyTask).toBeDefined();
+    if (ending === 'canceled') {
+      await vi.waitFor(async () => {
+        const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
+        expect(invocations.some(call => call.stdin.includes(message))).toBe(true);
+      });
+      // Let the streamed reply reach the daemon before stopping.
+      await new Promise(resolve => setTimeout(resolve, 200));
+      await fetch(`${started.url}/api/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' });
+    }
+    expect((await waitForRunTerminal(started.url, runId)).status).toBe(ending);
+    const reply = listMessages(database(), fixture.conversationId)
+      .find(entry => entry.runId === runId);
+    expect(reply?.content).toContain('Plan before the run ended.');
   }, 45_000);
 
   it('resumes current marker conversations with only the current request and host directives', async () => {
@@ -3031,6 +3199,20 @@ process.stdin.on('end', () => {
     process.on('SIGTERM', () => setTimeout(() => process.exit(0), 2500));
     fs.appendFileSync(logPath, JSON.stringify({ drainReady: true }) + '\\n');
     setInterval(() => {}, 1 << 30);
+    return;
+  }
+  if (stdin.includes('Fail after an unterminated plan.') || stdin.includes('Stop after an unterminated plan.')) {
+    // The reply's last line has no trailing newline, so the OD Next protocol
+    // still holds it when the Run ends without succeeding.
+    console.log(JSON.stringify({
+      type: 'item.completed', item: { id: 'plan', type: 'agent_message', text: 'Plan before the run ended.' },
+    }));
+    if (stdin.includes('Stop after an unterminated plan.')) {
+      setInterval(() => {}, 1 << 30);
+      return;
+    }
+    process.stderr.write('controlled failure after the plan\\n');
+    setTimeout(() => process.exit(1), 5);
     return;
   }
   if (${JSON.stringify(label)} === 'marker-tool-split' && !stdin.includes('This is the production turn')) {

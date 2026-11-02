@@ -1,3 +1,4 @@
+import type { RunSubmission, UserSubmissionReceipt } from "@open-design/contracts";
 /**
  * Daemon provider — fetch-based SSE client for /api/runs. The daemon can
  * emit three event streams depending on the agent's streamFormat:
@@ -39,6 +40,7 @@ import type {
   RunContextSelection,
   SseErrorPayload,
   StrategyTaskProjectionV2,
+  RunNoticesResponse,
   WorkspaceCollabContext,
 } from '@open-design/contracts';
 import type { StreamHandlers } from './anthropic';
@@ -475,6 +477,8 @@ function daemonAnsweredWithError(bodyText: string): boolean {
 }
 
 export interface DaemonStreamOptions {
+  submission?: RunSubmission;
+  onUserSubmissionAccepted?: (receipt: UserSubmissionReceipt) => void;
   agentId: string;
   history: ChatMessage[];
   /** Legacy field accepted by older tests/callers. Daemon-owned prompt composition ignores it. */
@@ -986,6 +990,8 @@ export async function streamViaDaemon({
   userMessageId,
   assistantMessageId,
   clientRequestId,
+  submission,
+  onUserSubmissionAccepted,
   skillId,
   skillIds,
   designSystemId,
@@ -1035,6 +1041,7 @@ export async function streamViaDaemon({
     userMessageId: userMessageId ?? null,
     assistantMessageId: assistantMessageId ?? null,
     clientRequestId: clientRequestId ?? null,
+    submission,
     skillId: skillId ?? null,
     skillIds: Array.isArray(skillIds) ? skillIds : [],
     designSystemId: designSystemId ?? null,
@@ -1104,6 +1111,7 @@ export async function streamViaDaemon({
 
     const created = (await createResp.json()) as ChatRunCreateResponse;
     const runId = created.runId;
+    if (created.userSubmission) onUserSubmissionAccepted?.(created.userSubmission);
     if (created.strategyTask) onRunCreated?.(runId, created.strategyTask);
     else onRunCreated?.(runId);
     // Start the stuck-run watchdog. trackRunProgress is called inside the
@@ -1295,6 +1303,8 @@ export interface VelaLiveAccount {
 }
 
 export interface VelaLoginStatus {
+  /** One-time AMR new-registration claim persisted by the CLI. */
+  registrationInvite?: { accountId: string; deviceAuthorizationId: string };
   loggedIn: boolean;
   sessionState?: import('@open-design/contracts').AmrSessionState;
   credentialRevision?: string;
@@ -1420,9 +1430,15 @@ export async function fetchAmrWalletSnapshot(options: { refresh?: boolean } = {}
   }
 }
 
-export async function fetchAmrModels(): Promise<AmrModelsResponse | null> {
+export async function fetchAmrModels(
+  context?: WorkspaceCollabContext | null,
+  options?: { refresh?: boolean },
+): Promise<AmrModelsResponse | null> {
   try {
-    const resp = await fetch('/api/amr/models', { cache: 'no-store' });
+    const resp = await fetch(options?.refresh ? '/api/amr/models?refresh=1' : '/api/amr/models', {
+      cache: 'no-store',
+      ...(context ? { headers: workspaceProjectHeaders(context) } : {}),
+    });
     if (!resp.ok) return null;
     return (await resp.json()) as AmrModelsResponse;
   } catch {
@@ -1689,7 +1705,12 @@ export async function listProjectRunsWithScope(
 export async function listRunsForProject(
   projectId: string,
   workspaceContext?: WorkspaceCollabContext | null,
-): Promise<{ runs: ChatRunStatusResponse[]; awaitingInputProjectIds: string[] } | null> {
+): Promise<{
+  runs: ChatRunStatusResponse[];
+  awaitingInputProjectIds: string[];
+  /** `undefined` when the daemon predates the per-conversation set. */
+  awaitingInputConversationIds?: string[];
+} | null> {
   try {
     const resp = await fetch(`/api/runs?projectId=${encodeURIComponent(projectId)}`, {
       ...(workspaceContext
@@ -1703,11 +1724,48 @@ export async function listRunsForProject(
       // Absent on daemons older than this field; treat as "no pending
       // question" rather than failing the whole read.
       awaitingInputProjectIds: body.awaitingInputProjectIds ?? [],
+      ...(Array.isArray(body.awaitingInputConversationIds)
+        ? { awaitingInputConversationIds: body.awaitingInputConversationIds }
+        : {}),
     };
   } catch {
     return null;
   }
 }
+
+/**
+ * The global run-notice feed after `after` (P0-24 N10). `null` when the daemon
+ * is unreachable or refuses, so the poller keeps its cursor and tries again.
+ */
+export async function fetchRunNotices(
+  after: number,
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<RunNoticesResponse | null> {
+  try {
+    const resp = await fetch(`/api/run-notices?after=${Math.max(0, Math.floor(after))}`, {
+      cache: 'no-store',
+      ...(workspaceContext
+        ? { headers: workspaceProjectHeaders(workspaceContext) }
+        : {}),
+    });
+    if (!resp.ok) return null;
+    const body = (await resp.json()) as RunNoticesResponse;
+    if (typeof body?.epoch !== 'string' || !Array.isArray(body.notices)) return null;
+    return body;
+  } catch {
+    return null;
+  }
+}
+
+/** Agent event kinds that put something the user can see on screen. */
+const AGENT_VISIBLE_OUTPUT_KINDS: ReadonlySet<string> = new Set([
+  'text',
+  'thinking',
+  'tool_use',
+  'tool_result',
+  'image',
+  'live_artifact',
+]);
 
 interface DaemonPhysicalRunResult {
   nextRunId?: string;
@@ -2128,7 +2186,14 @@ async function consumeDaemonPhysicalRun({
               // This is transport telemetry, never assistant content.
               continue;
             }
-            if (translated.kind !== 'status') clearAgentSelfHealOnVisibleOutput();
+            /*
+             * Only output the user can see ends the retry/reconnect row. Every
+             * attempt opens with protocol frames (`done_key` is minted per run
+             * attempt before any model output, plus `usage` / diagnostics), and
+             * clearing on those dropped 「正在重试」 the instant the retry began —
+             * the row was never on screen (P0-24 A4, found on a real runtime).
+             */
+            if (AGENT_VISIBLE_OUTPUT_KINDS.has(translated.kind)) clearAgentSelfHealOnVisibleOutput();
             if (translated.kind === 'text') {
               acc += translated.text;
               handlers.onDelta(translated.text);
@@ -2139,6 +2204,7 @@ async function consumeDaemonPhysicalRun({
 
           if (event.event === 'start') {
             const data = event.data as ChatSseStartPayload;
+            if (data.strategyTask) onStrategyTaskSettled?.(data.strategyTask);
             onRunStatus?.('running');
             handlers.onAgentEvent({
               kind: 'status',
@@ -2253,7 +2319,10 @@ async function consumeDaemonPhysicalRun({
         // 在这里再发一次会让 blocked/canceled 的改写被旧值盖掉。
         clearReconnect();
       } else {
-        onRunStatus?.('failed');
+        // P0-24 N15:浏览器重连用尽**不是**这一轮的结局,以运行记录为准。daemon
+        // 还说在跑、或者根本问不到时,这里不替它判 `failed` —— 回合标题保持
+        // 「进行中」,恢复后由运行记录给出真实结果。下面的 `onError` 仍然发出,
+        // 消费方靠它收起这条流、排队恢复。
         // 预算用尽、这一轮还没落终态 —— 组件 22-3:停止自动重连,交回给人。
         // 这条要在 onError 之前发:报错卡与重连行今天在抢同一件事(盘点 R9),
         // 先把「已经交回给人」这个事实摆出来,分流由消费方决定。

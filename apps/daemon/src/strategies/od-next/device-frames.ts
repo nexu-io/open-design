@@ -91,14 +91,18 @@ export interface OdNextDeviceFrameStagingResult {
 /**
  * Load the selected task profile's declared resources for an applied OD Next
  * snapshot, re-verified against the snapshot's package identity. Returns an
- * empty list for non-strategy snapshots and for profiles that ship nothing.
+ * absent root and empty resources for non-strategy snapshots. The root comes
+ * from the same verified package that renders the prompt, including on frozen
+ * task runs that bypass ordinary prompt composition.
  */
-export async function loadOdNextTaskResourcesForSnapshot(input: {
+export async function loadOdNextTaskAssetsForSnapshot(input: {
   bundledPluginsDir: string;
   snapshot: Pick<AppliedPluginSnapshot, 'pluginId' | 'strategy'> | null | undefined;
-}): Promise<OdNextTaskResource[]> {
+}): Promise<{ taskProfileRoot: string | null; resources: OdNextTaskResource[] }> {
   const binding = input.snapshot?.strategy;
-  if (!binding || input.snapshot?.pluginId !== OD_NEXT_STRATEGY_ID) return [];
+  if (!binding || input.snapshot?.pluginId !== OD_NEXT_STRATEGY_ID) {
+    return { taskProfileRoot: null, resources: [] };
+  }
   const folder = path.join(input.bundledPluginsDir, 'scenarios', OD_NEXT_STRATEGY_ID);
   const resolved = await resolvePluginFolder({
     folder,
@@ -110,8 +114,8 @@ export async function loadOdNextTaskResourcesForSnapshot(input: {
   if (!resolved.ok) {
     throw new Error(`Bundled OD Next strategy is unavailable: ${resolved.errors.join('; ')}`);
   }
-  const resources = loadBundledStrategyPromptAssetsV2({ plugin: resolved.record, binding })
-    .taskResources.map((resource) => ({ path: resource.path, text: resource.text }));
+  const assets = loadBundledStrategyPromptAssetsV2({ plugin: resolved.record, binding });
+  const resources = assets.taskResources.map((resource) => ({ path: resource.path, text: resource.text }));
   if (binding.selectedTaskProfile.taskType === 'discovery') {
     // Same host-owned source as explicitly selected PPT; load only when needed.
     resources.push({ path: 'deck-framework.md', text: [
@@ -121,7 +125,13 @@ export async function loadOdNextTaskResourcesForSnapshot(input: {
       '## New deck only', renderDeckFrameworkDirective('filesystem'),
     ].join('\n\n') });
   }
-  return resources;
+  return { taskProfileRoot: assets.taskProfileRoot, resources };
+}
+
+export async function loadOdNextTaskResourcesForSnapshot(
+  input: Parameters<typeof loadOdNextTaskAssetsForSnapshot>[0],
+): Promise<OdNextTaskResource[]> {
+  return (await loadOdNextTaskAssetsForSnapshot(input)).resources;
 }
 
 function digest(text: string): string {

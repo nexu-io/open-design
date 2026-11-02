@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { getTopModalDialog, observeModalStack } from '@open-design/components';
 
 type TooltipPlacement = 'top' | 'bottom' | 'left' | 'right';
 type InputModality = 'keyboard' | 'pointer';
@@ -59,6 +60,12 @@ function readTooltipTarget(start: EventTarget | null): HTMLElement | null {
   if (!(start instanceof Element)) return null;
   const candidate = start.closest('.od-tooltip[data-tooltip]');
   return isTooltipTarget(candidate) ? candidate : null;
+}
+
+function isActiveTooltipTarget(target: HTMLElement): boolean {
+  if (!target.isConnected || target.closest('[inert], [hidden], [aria-hidden="true"]')) return false;
+  const modal = getTopModalDialog(target.ownerDocument);
+  return !modal || modal.contains(target);
 }
 
 function tooltipPlacement(target: HTMLElement): TooltipPlacement {
@@ -194,6 +201,10 @@ export function TooltipLayer() {
   }, [hideTooltip, suppressNativeTitle]);
 
   const showTooltip = useCallback((target: HTMLElement) => {
+    if (!isActiveTooltipTarget(target)) {
+      hideTooltip({ instant: true });
+      return;
+    }
     const text = target.dataset.tooltip?.trim();
     if (!text) return;
     suppressNativeTitle(target);
@@ -219,7 +230,7 @@ export function TooltipLayer() {
           : { x: 0, y: 0, visibility: 'hidden' },
       };
     });
-  }, [suppressNativeTitle]);
+  }, [hideTooltip, suppressNativeTitle]);
 
   const updatePosition = useCallback(() => {
     setState((current) => {
@@ -227,7 +238,7 @@ export function TooltipLayer() {
       /* 已经在淡出的气泡不再跟着滚动/缩放重新定位 —— 它要停在原地淡完。 */
       if (!current.visible) return current;
       /* 触发元素没了就立刻收,别对着空气淡 */
-      if (!document.contains(current.target)) {
+      if (!isActiveTooltipTarget(current.target)) {
         return { ...current, visible: false, instant: true };
       }
       if (current.target.getAttribute('aria-expanded') === 'true') {
@@ -262,10 +273,13 @@ export function TooltipLayer() {
     });
   }, [updatePosition]);
 
+  // A route can remove the trigger in the same commit without changing this
+  // portal's state. Recheck every host commit before paint; the body observer
+  // remains responsible for DOM changes outside React's commit lifecycle.
   useLayoutEffect(() => {
     if (!state?.visible) return;
     updatePosition();
-  }, [state?.target, state?.text, state?.placement, state?.visible, updatePosition]);
+  });
 
   useEffect(() => {
     return () => {
@@ -289,6 +303,18 @@ export function TooltipLayer() {
       attributeFilter: ['aria-expanded', 'class', 'data-tooltip', 'disabled'],
     });
     return () => observer.disconnect();
+  }, [hideTooltip, state?.target, state?.visible]);
+
+  useEffect(() => {
+    if (!state?.visible) return;
+    // A modal can arrive after a send while the pointer stays still. Its
+    // portal is a sibling of the trigger, so watching only that trigger misses
+    // the transition. Dismiss immediately, keeping normal hover fades intact.
+    const dismissInactive = () => {
+      if (!isActiveTooltipTarget(state.target)) hideTooltip({ instant: true });
+    };
+    dismissInactive();
+    return observeModalStack(document, dismissInactive);
   }, [hideTooltip, state?.target, state?.visible]);
 
   useEffect(() => {

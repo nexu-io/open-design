@@ -109,7 +109,7 @@ it.each(['personal', 'team', 'personal-failure-retry', 'personal-association-fai
       if (failAssociation) {
         const failed = await publish();
         expect(failed.status).toBe(503);
-        expect(await failed.json()).toEqual({ error: 'PUBLIC_SHARE_RESOURCE_REGISTRATION_UNAVAILABLE' });
+        expect(await failed.json()).toEqual({ error: 'PUBLIC_SHARE_RESOURCE_REGISTRATION_UNAVAILABLE', failure: { stage: 'push', reason: 'unknown' } });
         expect(commands.some(args => args[0] === 'resource')).toBe(false);
         expect(store.get(scope)).toBeNull();
         expect(queue.count()).toBe(0);
