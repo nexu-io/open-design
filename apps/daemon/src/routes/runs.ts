@@ -1521,10 +1521,24 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         : null;
     if (!effectiveAgentId) {
       try {
+        const fallbackProject =
+          typeof requestBody.projectId === 'string' && requestBody.projectId
+            ? toProjectRecord(getProject(db, requestBody.projectId))
+            : null;
+        const projectPreferredAgent =
+          typeof previousStrategyTask?.selectedAgentId === 'string' &&
+          previousStrategyTask.selectedAgentId
+            ? previousStrategyTask.selectedAgentId
+            : typeof fallbackProject?.metadata?.runtimePrefs?.agentId === 'string' &&
+                fallbackProject.metadata.runtimePrefs.agentId
+              ? fallbackProject.metadata.runtimePrefs.agentId
+              : null;
         const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
-        const cfgAgent = typeof appCfg.agentId === 'string' && appCfg.agentId
-          ? appCfg.agentId
-          : null;
+        const cfgAgent =
+          projectPreferredAgent ??
+          (typeof appCfg.agentId === 'string' && appCfg.agentId
+            ? appCfg.agentId
+            : null);
         const agents = await detectAgents(
           toJsonRecord(appCfg.agentCliEnv),
         ).catch((): DetectedAgent[] => []);
@@ -1967,10 +1981,20 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     }
     if (typeof meta.agentId !== 'string' || !meta.agentId) {
       try {
+        const projectPreferredAgent =
+          typeof previousStrategyTask?.selectedAgentId === 'string' &&
+          previousStrategyTask.selectedAgentId
+            ? previousStrategyTask.selectedAgentId
+            : typeof runProject?.metadata?.runtimePrefs?.agentId === 'string' &&
+                runProject.metadata.runtimePrefs.agentId
+              ? runProject.metadata.runtimePrefs.agentId
+              : null;
         const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
-        const cfgAgent = typeof appCfg.agentId === 'string' && appCfg.agentId
-          ? appCfg.agentId
-          : null;
+        const cfgAgent =
+          projectPreferredAgent ??
+          (typeof appCfg.agentId === 'string' && appCfg.agentId
+            ? appCfg.agentId
+            : null);
         const agents = await detectAgents(
           toJsonRecord(appCfg.agentCliEnv),
         ).catch((): DetectedAgent[] => []);

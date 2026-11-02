@@ -161,6 +161,7 @@ import {
 import { playSound, showCompletionNotification } from '../utils/notifications';
 import { randomUUID } from '../utils/uuid';
 import { DEFAULT_NOTIFICATIONS, KNOWN_PROVIDERS } from '../state/config';
+import { resolveProjectAppConfig } from '../state/projectRuntimePrefs';
 import type { TodoItem } from '../runtime/todos';
 import {
   amrAuthRetryMatchesRouteContext,
@@ -2169,7 +2170,17 @@ export function reconcileProjectDetail(
     // regress the catalog/local record along with its synthetic title.
     return routedProject;
   }
-  return authoritativeName ? { ...detail, name: authoritativeName } : detail;
+  const reconciled = authoritativeName ? { ...detail, name: authoritativeName } : detail;
+  if (routedProject.metadata?.runtimePrefs) {
+    return {
+      ...reconciled,
+      metadata: {
+        ...(reconciled.metadata ?? { kind: 'other' }),
+        runtimePrefs: routedProject.metadata.runtimePrefs,
+      },
+    };
+  }
+  return reconciled;
 }
 
 export function ProjectView({
@@ -2195,7 +2206,7 @@ export function ProjectView({
   onLoginUpdateRequestHandled,
   shareLoginReturn,
   onShareLoginReturnChange,
-  config,
+  config: rawConfig,
   agents,
   skills,
   designTemplates,
@@ -2233,6 +2244,15 @@ export function ProjectView({
   onInitialHomeRequestProgress,
 }: Props) {
   const { locale, t } = useI18n();
+  const [fetchedRuntimePrefs, setFetchedRuntimePrefs] = useState(
+    () => initialProjectDetail?.project?.metadata?.runtimePrefs,
+  );
+  const effectiveRuntimePrefs =
+    project.metadata?.runtimePrefs ?? fetchedRuntimePrefs;
+  const config = useMemo(
+    () => resolveProjectAppConfig(rawConfig, effectiveRuntimePrefs),
+    [rawConfig, effectiveRuntimePrefs],
+  );
   // A Home send mounts this view before the project row exists on the daemon
   // (OPEND-3334). Until it does, no project resource is read: every read
   // would 404, and an unpersisted project must not fan out conversation,
@@ -2574,6 +2594,11 @@ export function ProjectView({
     !projectReadsHeld,
   );
   const detailedProject = projectDetail.project?.id === project.id ? projectDetail.project : null;
+  useEffect(() => {
+    if (detailedProject?.metadata?.runtimePrefs) {
+      setFetchedRuntimePrefs(detailedProject.metadata.runtimePrefs);
+    }
+  }, [detailedProject?.metadata?.runtimePrefs]);
   const currentProject = reconcileProjectDetail(
     project,
     detailedProject,
