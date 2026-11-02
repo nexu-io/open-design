@@ -12706,10 +12706,15 @@ export async function startServer({
       }, readVelaCredentialRevision(env, configuredEnv)) === requestedLiveModelScope;
     };
     const amrModelIdentityChangedMessage = 'AMR sign-in changed during run setup. Retry with the current account.';
+    const projectAgentPrefs =
+      projectRecord?.metadata?.runtimePrefs?.agentModels?.[def.id];
+    const configuredAgentPrefs = appConfigForRun?.agentModels?.[def.id];
     const configuredModel =
-      typeof appConfigForRun?.agentModels?.[def.id]?.model === 'string'
-        ? appConfigForRun.agentModels[def.id].model
-        : null;
+      typeof projectAgentPrefs?.model === 'string' && projectAgentPrefs.model
+        ? projectAgentPrefs.model
+        : typeof configuredAgentPrefs?.model === 'string'
+          ? configuredAgentPrefs.model
+          : null;
     let safeModel = resolveModelForAgent(
       def,
       typeof requestedRuntimeModel === 'string'
@@ -12725,21 +12730,33 @@ export async function startServer({
       typeof process.env[def.defaultModelEnvVar] === 'string' &&
       process.env[def.defaultModelEnvVar]?.trim(),
     );
-    const safeReasoning =
-      typeof reasoning === 'string' &&
-      isKnownReasoningEffort(def, safeModel, reasoning, requestedLiveModelScope)
+    const effectiveRequestedReasoning =
+      typeof reasoning === 'string'
         ? reasoning
+        : typeof projectAgentPrefs?.reasoning === 'string'
+          ? projectAgentPrefs.reasoning
+          : null;
+    const safeReasoning =
+      typeof effectiveRequestedReasoning === 'string' &&
+      isKnownReasoningEffort(def, safeModel, effectiveRequestedReasoning, requestedLiveModelScope)
+        ? effectiveRequestedReasoning
         : null;
+    const effectiveRequestedServiceTier =
+      typeof serviceTier === 'string'
+        ? serviceTier
+        : typeof projectAgentPrefs?.serviceTier === 'string'
+          ? projectAgentPrefs.serviceTier
+          : null;
     safeModel = resolveModelForServiceTier(
       def,
       safeModel,
-      typeof serviceTier === 'string' ? serviceTier : null,
+      effectiveRequestedServiceTier,
       requestedLiveModelScope,
     );
     const safeServiceTier =
-      typeof serviceTier === 'string' &&
-      isKnownServiceTier(def, safeModel, serviceTier, requestedLiveModelScope)
-        ? serviceTier
+      typeof effectiveRequestedServiceTier === 'string' &&
+      isKnownServiceTier(def, safeModel, effectiveRequestedServiceTier, requestedLiveModelScope)
+        ? effectiveRequestedServiceTier
         : null;
     const agentOptions = {
       model: safeModel,
