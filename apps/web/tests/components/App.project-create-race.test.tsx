@@ -712,6 +712,11 @@ vi.mock('../../src/providers/registry', async () => {
     fetchDesignTemplates: vi.fn(),
     fetchPromptTemplates: vi.fn(),
     fetchSkills: vi.fn(),
+    openExternalUrl: async (url: string) => {
+      if (!vi.isMockFunction(window.open)) return actual.openExternalUrl(url);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      return true;
+    },
     replaceProjectWorkingDir: vi.fn(),
     uploadProjectFiles: vi.fn(),
   };
@@ -4241,7 +4246,7 @@ describe('App project creation routing', () => {
 
   it('returns to the original project location after reauthentication without starting a task', async () => {
     mockedLoadConfig.mockReturnValue({ ...baseConfig, mode: 'daemon', agentId: 'amr', onboardingCompleted: true });
-    mockedListProjects.mockResolvedValue([{ ...existingProject, workspaceId: 'ws-1' }]);
+    mockWorkspaceProjectList([{ ...existingProject, workspaceId: 'ws-1' }]);
     let loginStatus: VelaLoginStatus = { loggedIn: true, profile: 'test', user: { id: 'account-a', email: 'a@example.com' }, configPath: '' };
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const pathname = new URL(String(input), 'http://d.local').pathname;

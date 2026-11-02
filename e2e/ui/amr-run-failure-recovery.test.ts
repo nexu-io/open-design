@@ -333,10 +333,17 @@ test('[P0] @critical AMR project preflight retains text and files, rejects other
       } });
     });
     await page.clock.install();
-    const consolePage = page.waitForEvent('popup');
+    const opened: string[] = [];
+    await page.route('**/api/amr/web-intent', async (route) => {
+      const { target } = route.request().postDataJSON() as { target: string };
+      await route.fulfill({ json: { url: `http://localhost:5173${target}` } });
+    });
+    await page.route('**/api/system/open-external', async (route) => {
+      opened.push((route.request().postDataJSON() as { url: string }).url);
+      await route.fulfill({ json: { ok: true } });
+    });
     await page.getByTestId('amr-balance-dialog-plans').click();
-    const opened = await consolePage;
-    await opened.close();
+    await expect.poll(() => opened.length).toBe(1);
     const otherRead = page.waitForResponse((response) => response.url().includes('includePreflight=1'));
     await page.clock.fastForward(T.short);
     await otherRead;
