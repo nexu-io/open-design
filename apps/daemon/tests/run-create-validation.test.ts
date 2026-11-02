@@ -20,13 +20,21 @@ describe('run creation input validation (#7040)', () => {
 
   afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
 
-  it('rejects an empty run request', async () => {
+  it('rejects an empty run request before agent discovery', async () => {
+    // #7040 — the no-source preflight must reject this before the multi-second
+    // detectAgents() CLI probe. The repro without an explicit agentId paid ~16s
+    // of agent discovery before the normalized gate returned 400, so assert the
+    // empty body is rejected well under that (allowing for first-request lazy
+    // init); a regression that lets agent discovery run would blow this budget.
+    const startedAt = Date.now();
     const resp = await fetch(baseUrl + '/api/runs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: '{}',
     });
+    const elapsedMs = Date.now() - startedAt;
     expect(resp.status).toBe(400);
+    expect(elapsedMs).toBeLessThan(8000);
   });
 
   it('rejects a whitespace-only message', async () => {
@@ -39,12 +47,17 @@ describe('run creation input validation (#7040)', () => {
   });
 
   it('rejects malformed source fields', async () => {
+    // Source-less bodies (non-string prompts) are rejected by the early
+    // preflight before agent discovery. Bodies that carry a raw attachment or
+    // plugin source but no resolvable one are rejected by the normalized gate;
+    // give those an explicit agentId so the spec does not pay the multi-second
+    // detectAgents() CLI probe on the way to that gate.
     const cases = [
       { message: {} },
       { message: 42 },
-      { attachments: [null, 42] },
-      { commentAttachments: [42] },
-      { pluginId: 'definitely-not-installed' },
+      { agentId: 'missing-agent', attachments: [null, 42] },
+      { agentId: 'missing-agent', commentAttachments: [42] },
+      { agentId: 'missing-agent', pluginId: 'definitely-not-installed' },
     ];
     for (const body of cases) {
       const resp = await fetch(baseUrl + '/api/runs', {
@@ -80,10 +93,13 @@ describe('run creation input validation (#7040)', () => {
   });
 
   it('still accepts a normal prompt', async () => {
+    // Explicit agentId keeps this spec off the multi-second detectAgents()
+    // probe; the early/normalized gates run before agent detection anyway, so
+    // the guard against false rejection is unchanged.
     const resp = await fetch(baseUrl + '/api/runs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: 'build a landing page' }),
+      body: JSON.stringify({ agentId: 'missing-agent', message: 'build a landing page' }),
     });
     expect(resp.status).not.toBe(400);
   });
