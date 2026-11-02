@@ -62,7 +62,14 @@ export function exportOpenCodeSession(
   notBeforeMs: number | null,
   maxBytes: number = AGENT_SESSION_TAIL_BYTES,
 ): string {
-  if (windows.length === 0) return '';
+  return exportOpenCodeSessionWithNotes(xdgDataHome, sessionId, windows, notBeforeMs, maxBytes).content;
+}
+
+export function exportOpenCodeSessionWithNotes(
+  xdgDataHome: string, sessionId: string, windows: readonly AgentSessionTimeWindow[],
+  notBeforeMs: number | null, maxBytes: number = AGENT_SESSION_TAIL_BYTES,
+): { content: string; notes: string[] } {
+  if (windows.length === 0) return { content: '', notes: [] };
   const db = new Database(openCodeDatabasePath(xdgDataHome), { readonly: true, fileMustExist: true, timeout: 1_000 });
   try {
     const ids = (db.prepare(`
@@ -87,8 +94,16 @@ export function exportOpenCodeSession(
         SELECT * FROM (SELECT 'part' AS kind, id, message_id, session_id, time_created, octet_length(data) AS bytes
           FROM part WHERE session_id IN (${marks}) AND (${during}) ORDER BY time_created LIMIT ?)
       ) ORDER BY time_created, kind = 'part', id`)
-      .all(...ids, ...bounds, MAX_MESSAGES, ...ids, ...bounds, MAX_PARTS) as RowMeta[];
-    if (rows.length === 0) return '';
+      .all(...ids, ...bounds, MAX_MESSAGES + 1, ...ids, ...bounds, MAX_PARTS + 1) as RowMeta[];
+    const notes: string[] = [];
+    const messages = rows.filter((row) => row.kind === 'message');
+    const parts = rows.filter((row) => row.kind === 'part');
+    if (messages.length > MAX_MESSAGES) notes.push('message_row_limit');
+    if (parts.length > MAX_PARTS) notes.push('part_row_limit');
+    const retained = new Set([...messages.slice(0, MAX_MESSAGES), ...parts.slice(0, MAX_PARTS)]);
+    const selected = rows.filter((row) => retained.has(row));
+    if (selected.length === 0) return { content: '', notes };
+    rows.splice(0, rows.length, ...selected);
     const readData = {
       message: db.prepare('SELECT data FROM message WHERE id = ?').pluck(),
       part: db.prepare('SELECT data FROM part WHERE id = ?').pluck(),
@@ -129,11 +144,12 @@ export function exportOpenCodeSession(
     }
     tail.reverse();
     if (last >= next) {
+      notes.push('byte_budget_truncated');
       let omittedBytes = 0;
       for (let i = next; i <= last; i++) omittedBytes += rows[i]!.bytes ?? 0;
       head.push(JSON.stringify({ truncated: 'middle', omittedLines: last - next + 1, omittedBytes }));
     }
-    return [...head, ...tail].join('\n') + '\n';
+    return { content: [...head, ...tail].join('\n') + '\n', notes };
   } finally {
     db.close();
   }

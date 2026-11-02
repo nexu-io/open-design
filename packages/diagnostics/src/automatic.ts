@@ -34,7 +34,7 @@ export interface AutomaticDiagnosticSource extends LogSource {
    * exported from a database, for example). The consent fence sets
    * `notBeforeMs`; records older than it must not be returned.
    */
-  render?: (notBeforeMs: number | null) => Promise<string>;
+  render?: (notBeforeMs: number | null) => Promise<string | { content: string; notes: string[] }>;
   notBeforeMs?: number;
 }
 
@@ -136,8 +136,11 @@ export async function buildAutomaticDiagnostics(input: {
         limit = Math.min(source.tailBytes ?? DIAGNOSTIC_CHUNK_BYTES, DIAGNOSTIC_CHUNK_BYTES, remaining);
         if (limit <= 0) { notes.push({ name: source.name, reason: 'incident_size_limit' }); continue; }
         const rendered = await source.render(source.notBeforeMs ?? null)
-          .then((content) => ({ content, error: false }))
-          .catch(() => ({ content: '', error: true }));
+          .then((result) => typeof result === 'string'
+            ? { content: result, notes: [] as string[], error: false }
+            : { ...result, error: false })
+          .catch(() => ({ content: '', notes: [] as string[], error: true }));
+        for (const reason of rendered.notes) notes.push({ name: source.name, reason });
         // `size` past `limit` is what reports `tail_truncated` below.
         size = Buffer.byteLength(rendered.content);
         file = { content: keepTail(rendered.content, limit), error: rendered.error };

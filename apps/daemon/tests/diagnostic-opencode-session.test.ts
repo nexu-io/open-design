@@ -237,3 +237,55 @@ it('keeps the first and last OpenCode rows and says what was omitted when the ru
   expect(middle).toMatchObject({ truncated: 'middle' });
   expect(middle!.omittedLines).toBeGreaterThan(0);
 });
+
+it.each([
+  ['message', 5000], ['part', 20000],
+] as const)('reports %s row limits only when exceeded in automatic and manual exports', async (kind, limit) => {
+  await writeRun('run-oc');
+  await writeOpenCodeDb();
+  const db = new Database(join(root, 'xdg', 'opencode', 'opencode.db'));
+  db.exec(`DELETE FROM ${kind}`);
+  const insert = kind === 'message'
+    ? db.prepare('INSERT INTO message VALUES (?, ?, ?, ?, ?)')
+    : db.prepare('INSERT INTO part VALUES (?, ?, ?, ?, ?, ?)');
+  const add = (i: number) => kind === 'message'
+    ? insert.run(`m${i}`, SESSION, RUN_START + 1000 + i, RUN_START + 1000 + i, '{}')
+    : insert.run(`p${i}`, 'm', SESSION, RUN_START + 1000 + i, RUN_START + 1000 + i, '{}');
+  db.transaction(() => { for (let i = 0; i < limit; i++) add(i); })();
+  const sources = await buildAutomaticDiagnosticSources(options(), { runId: 'run-oc', agentId: 'opencode' });
+  const sessionSources = sources.filter((s) => s.name.startsWith('agent-sessions/opencode'));
+  const exact = JSON.parse((await bundleText(sessionSources)).trim().split('\n').at(-1)!);
+  expect(exact).toMatchObject({ completeness: 'complete', notes: [] });
+  add(limit);
+  db.close();
+  const over = JSON.parse((await bundleText(sessionSources)).trim().split('\n').at(-1)!);
+  expect(over).toMatchObject({ completeness: 'partial', notes: [{ reason: `${kind}_row_limit` }] });
+  const handler = createDiagnosticsExportHandler(options());
+  const res: { capturedPayload?: Buffer } & Record<string, unknown> = {};
+  Object.assign(res, { status() { return res; }, setHeader() { return res; }, end(payload: Buffer) { res.capturedPayload = payload; }, json() { return res; } });
+  await handler({} as never, res as never, () => undefined);
+  const zip = await JSZip.loadAsync(res.capturedPayload!);
+  const manifest = JSON.parse(await zip.file('summary/manifest.json')!.async('string'));
+  expect(manifest.warnings).toContain(`agent-sessions/opencode/${SESSION}.jsonl: ${kind}_row_limit`);
+});
+
+it('reports byte-budget omissions in automatic and manual manifests', async () => {
+  await writeRun('run-oc');
+  await writeOpenCodeDb();
+  const db = new Database(join(root, 'xdg', 'opencode', 'opencode.db'));
+  const insert = db.prepare('INSERT INTO part VALUES (?, ?, ?, ?, ?, ?)');
+  db.transaction(() => {
+    for (let i = 0; i < 40; i++) insert.run(`big${i}`, 'msg_new', SESSION, RUN_START + 1000 + i, RUN_START + 1000 + i, JSON.stringify({ text: 'x'.repeat(150 * 1024) }));
+  })();
+  db.close();
+  const sources = await buildAutomaticDiagnosticSources(options(), { runId: 'run-oc', agentId: 'opencode' });
+  const collection = JSON.parse((await bundleText(sources.filter((s) => s.name.startsWith('agent-sessions/opencode')))).trim().split('\n').at(-1)!);
+  expect(collection).toMatchObject({ completeness: 'partial', notes: [{ reason: 'byte_budget_truncated' }] });
+  const handler = createDiagnosticsExportHandler(options());
+  const res: { capturedPayload?: Buffer } & Record<string, unknown> = {};
+  Object.assign(res, { status() { return res; }, setHeader() { return res; }, end(payload: Buffer) { res.capturedPayload = payload; }, json() { return res; } });
+  await handler({} as never, res as never, () => undefined);
+  const zip = await JSZip.loadAsync(res.capturedPayload!);
+  const manifest = JSON.parse(await zip.file('summary/manifest.json')!.async('string'));
+  expect(manifest.warnings).toContain(`agent-sessions/opencode/${SESSION}.jsonl: byte_budget_truncated`);
+});

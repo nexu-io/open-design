@@ -51,7 +51,7 @@ import {
 import { diagnosticId } from './services/diagnostics-environment.js';
 import { daemonHealthPaths } from './services/daemon-health.js';
 import { readVelaLoginStatus } from './integrations/vela.js';
-import { exportOpenCodeSession, openCodeDatabaseExists } from './opencode-session-export.js';
+import { exportOpenCodeSessionWithNotes, openCodeDatabaseExists } from './opencode-session-export.js';
 
 interface ResolvedDiagnosticsAgentEnvironment {
   amrHome: string | null;
@@ -402,7 +402,7 @@ async function buildRunOpenCodeSessionSources(
     absolutePath: join(xdg, 'opencode', 'opencode.db'),
     kind: 'text',
     tailBytes: AGENT_SESSION_TAIL_BYTES,
-    render: async (notBeforeMs) => exportOpenCodeSession(xdg, session.sessionId, [session], notBeforeMs),
+    render: async (notBeforeMs) => exportOpenCodeSessionWithNotes(xdg, session.sessionId, [session], notBeforeMs),
     selectLines: selectAgentSessionLines(session.startMs, session.endMs),
   }];
 }
@@ -418,6 +418,7 @@ async function buildExportedRunSessionSources(
   runEventSources: LogSource[],
   environment: ResolvedDiagnosticsAgentEnvironment,
   scratchDir: string,
+  warnings: string[],
 ): Promise<LogSource[]> {
   const files = new Map<string, { source: LogSource; windows: AgentSessionTimeWindow[] }>();
   const openCodeSessions = new Map<string, AgentSessionTimeWindow[]>();
@@ -454,13 +455,14 @@ async function buildExportedRunSessionSources(
     sources.push({ ...source, absolutePath });
   }
   for (const [sessionId, windows] of openCodeSessions) {
-    let exported = '';
-    try { exported = exportOpenCodeSession(xdg, sessionId, windows, null); } catch { continue; }
-    if (!exported) continue;
+    let exported: ReturnType<typeof exportOpenCodeSessionWithNotes>;
+    try { exported = exportOpenCodeSessionWithNotes(xdg, sessionId, windows, null); } catch { continue; }
+    for (const reason of exported.notes) warnings.push(`agent-sessions/opencode/${sessionId}.jsonl: ${reason}`);
+    if (!exported.content) continue;
     // Rows are already limited to the windows; this only stubs oversized lines.
     const span = selectAgentSessionLines(Math.min(...windows.map((w) => w.startMs)), Math.max(...windows.map((w) => w.endMs)));
     const absolutePath = join(scratchDir, `${sessionId}.jsonl`);
-    await writeFile(absolutePath, span(exported.split('\n')).join('\n'));
+    await writeFile(absolutePath, span(exported.content.split('\n')).join('\n'));
     sources.push({ name: `agent-sessions/opencode/${sessionId}.jsonl`, absolutePath, kind: 'text', tailBytes: AGENT_SESSION_TAIL_BYTES });
   }
   return sources;
@@ -476,10 +478,11 @@ export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOption
       const agentEnvironment = await resolveDiagnosticsAgentEnvironment(options.dataDir);
       const browserUse = collectBrowserUseDiscoveryFacts();
       const runEventSources = await buildRunEventLogSources(options.runsDir);
+      const warnings: string[] = [];
       const sources = [
         ...(await buildSidecarLogSources(options.runtime)),
         ...runEventSources,
-        ...(await buildExportedRunSessionSources(runEventSources, agentEnvironment, scratchDir)),
+        ...(await buildExportedRunSessionSources(runEventSources, agentEnvironment, scratchDir, warnings)),
         ...(await buildAgentCliLogSources({
           homeDir: home,
           dataDir: options.dataDir ?? null,
@@ -511,7 +514,6 @@ export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOption
       // apart from "no runs happened". buildRunEventLogSources returns [] both
       // when the dir is missing AND when persistence is off, adding no manifest
       // entries — without this note an empty bundle looks like a clean run.
-      const warnings: string[] = [];
       if (options.runtime == null) warnings.push(STANDALONE_LAUNCH_WARNING);
       if (runEventSources.length > 0) warnings.push(RUN_EVENT_CONTENT_WARNING);
       if (options.runsDir && runEventSources.length === 0) {
