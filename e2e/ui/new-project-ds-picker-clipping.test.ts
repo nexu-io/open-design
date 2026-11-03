@@ -303,6 +303,57 @@ test('[P1] finalized-brand preview flyout is not clipped by the modal body', asy
   ).toBeGreaterThanOrEqual(-1);
 });
 
+// #4253: the "Target platforms" dropdown shares the `ds-picker` popover shell
+// but still rendered inline inside `.newproj-body { overflow-y: auto }`, so in
+// a short window its lower options were clipped by the modal body and could
+// not be clicked. Every option must stay inside the visible body and viewport.
+test('[P1] target platforms dropdown is not clipped by the modal body', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto('/');
+  await openNewProjectPanel(page);
+  await page.getByTestId('new-project-tab-prototype').click();
+
+  const trigger = page.locator('.platform-picker .ds-picker-trigger');
+  await expect(trigger).toBeVisible();
+  await trigger.click();
+  const listbox = page.getByRole('listbox', { name: 'Target platforms' });
+  await expect(listbox).toBeVisible();
+
+  const options = await listbox.evaluate((el: Element) => {
+    const body = document.querySelector('.newproj-body') as HTMLElement | null;
+    const bodyRect = body?.getBoundingClientRect() ?? null;
+    return Array.from(el.querySelectorAll('[role="option"]')).map((option) => {
+      const r = option.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return {
+        label: (option.textContent ?? '').trim().slice(0, 24),
+        top: Math.round(r.top),
+        bottom: Math.round(r.bottom),
+        reachable: hit != null && option.contains(hit),
+        viewportH: window.innerHeight,
+        bodyBottom: bodyRect ? Math.round(bodyRect.bottom) : null,
+      };
+    });
+  });
+
+  expect(options.length).toBeGreaterThan(0);
+  for (const option of options) {
+    expect(
+      option.reachable,
+      `Option "${option.label}" is covered or clipped (no hit at its centre). ${JSON.stringify(option)}`,
+    ).toBe(true);
+    expect(option.bottom).toBeLessThanOrEqual(option.viewportH + 1);
+    expect(option.top).toBeGreaterThanOrEqual(-1);
+  }
+
+  // The picked option still toggles from its new position.
+  await page.getByRole('option', { name: /Desktop app/i }).click();
+  await expect(page.getByRole('option', { name: /Desktop app/i })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+});
+
 async function openNewProjectPanel(page: Page) {
   await openNewProjectModal(page);
 }
