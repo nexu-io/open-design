@@ -892,6 +892,10 @@ ${COMMENT_IDENTITY_HELPERS}
 ${NESTED_COMMENT_HELPERS}
   function domSelectorFor(el){
     if (!el || !el.tagName || el === document.documentElement || el === document.body) return null;
+    if (el.id) {
+      var stableSelector = '[id=' + JSON.stringify(el.id) + ']';
+      if (el.ownerDocument.querySelectorAll(stableSelector).length === 1) return stableSelector;
+    }
     var parts = [];
     var node = el;
     while (node && node !== document.documentElement && node !== document.body) {
@@ -1008,6 +1012,8 @@ ${NESTED_COMMENT_HELPERS}
       label: tag + cls,
       text: (el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160),
       position: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+      visiblePosition: commentVisiblePosition(el, rect),
+      domIdUnique: el.id ? el.ownerDocument.querySelectorAll('[id=' + JSON.stringify(el.id) + ']').length === 1 : undefined,
       htmlHint: html.slice(0, 180),
       style: styleSnapshot(el)
     };
@@ -1057,6 +1063,9 @@ ${NESTED_COMMENT_HELPERS}
     }, 120);
   }
   function findCommentTargetByIdentity(elementId, selector){
+    if (selector && String(selector).indexOf('[id=') === 0) {
+      try { var stableNodes = document.querySelectorAll(String(selector)); return stableNodes.length === 1 ? stableNodes[0] : null; } catch (_) { return null; }
+    }
     if (isNestedCommentAnchor(elementId, selector)) return resolveNestedComment(elementId, selector);
     if (String(elementId || '').indexOf('cmt:') === 0 || commentSelectorClaimsIdentity(selector)) return strictCommentNode(elementId, selector);
     var el = null;
@@ -1091,10 +1100,12 @@ ${NESTED_COMMENT_HELPERS}
     else if (isNestedCommentAnchor(activeCommentElementId, activeCommentSelector)) schedulePostTargets();
   }
   function schedulePostActiveCommentTarget(){
-    if (!active() || !activeCommentElementId || activeTargetPending) return;
+    if (!active() || activeTargetPending) return;
     activeTargetPending = true;
     window.requestAnimationFrame(function(){
       activeTargetPending = false;
+      // Pins and the open detail use one scroll measurement.
+      postTargets();
       postActiveCommentTarget();
     });
   }
@@ -1334,6 +1345,7 @@ ${NESTED_COMMENT_HELPERS}
     };
   }
   document.addEventListener('keydown', function(event){
+    if (forwardCommentEscape(event)) return;
     if (event.defaultPrevented || !commentShortcutEnabled || event.key.toLowerCase() !== 'c' || event.ctrlKey || event.metaKey || event.altKey || event.repeat || event.isComposing || event.keyCode === 229) return;
     var target = event.target;
     if (target && target.closest && (target.isContentEditable || target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="menu"], [role="dialog"], dialog, [popover]'))) return;
@@ -1516,7 +1528,6 @@ ${NESTED_COMMENT_HELPERS}
   window.addEventListener('resize', schedulePostTargets);
   document.addEventListener('scroll', function(){
     schedulePostActiveCommentTarget();
-    schedulePostTargets();
   }, true);
   var mo = new MutationObserver(schedulePostTargets);
   mo.observe(document.documentElement, { subtree: true, childList: true });

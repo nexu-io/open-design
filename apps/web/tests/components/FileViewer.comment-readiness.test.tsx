@@ -67,12 +67,31 @@ it('OPEND-3604 only acknowledges the opened detail; opening a list and delayed a
   await act(async()=>{await new Promise(resolve=>setTimeout(resolve,35));});expect(writes).toEqual([]);
   view.rerender(tree('success',[a,other]));
   await act(async()=>{await new Promise(resolve=>setTimeout(resolve,35));});expect(writes).toEqual([]);
+  const reportTarget = async () => act(async () => {
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow,
+      data: { type: 'od:comment-targets', targets: [a] } }));
+  });
+  await reportTarget();
   fireEvent.click(screen.getByTestId('comment-side-item'));
+  const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+  const post = vi.spyOn(frame.contentWindow!, 'postMessage');
+  await reportTarget();
+  const request = post.mock.calls.map(call => call[0]).find(data => data?.locate);
+  expect(request).toBeDefined();
+  expect(writes).toEqual([]);
+  await act(async () => { window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow,
+    data: { ...a, type: 'od:comment-active-target-update', requestId: request.requestId } })); });
   await waitFor(()=>expect(writes).toHaveLength(1));expect(writes[0]).toMatchObject({filePath:'a.html',commentIds:['a']});
   view.rerender(tree('success',[a,other,{...a,id:'late',createdAt:10}]));
   await act(async()=>{await new Promise(resolve=>setTimeout(resolve,35));});
   expect(writes).toHaveLength(1);
   fireEvent.click(screen.getAllByTestId('comment-side-item').find(node => node.textContent?.includes('Visible review'))!);
+  await reportTarget();
+  const repeated = post.mock.calls.map(call => call[0]).filter(data => data?.locate).at(-1);
+  expect(repeated.requestId).not.toBe(request.requestId);
+  await act(async () => { window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow,
+    data: { ...a, type: 'od:comment-active-target-update', requestId: repeated.requestId } })); });
   expect(screen.getByTestId('comment-popover-detail')).toHaveTextContent('Visible review');
   expect(screen.queryByTestId('comment-popover-input')).toBeNull();
 });

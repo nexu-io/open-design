@@ -170,18 +170,22 @@ it('Personal: waits for the active frame target report and marker selection also
   expect(post.mock.calls.filter(call => call[0]?.locate)).toHaveLength(2);
   expect(screen.queryByTestId('comment-active-pin')).toBeNull();
 });
-it('Personal: preserves legacy row selection without adding a live-locate request', async () => {
-  vi.stubGlobal('fetch', vi.fn(async () => Response.json({})));
+it('Personal: locates a legacy ordinary element on selection without a fake pin', async () => {
   const legacy = { ...comment, elementId: 'legacy', selector: 'p' };
-  render(tree(file, html, [legacy]));
-  fireEvent.click(screen.getByTestId('comment-panel-toggle'));
-  const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-  const post = vi.spyOn(frame.contentWindow!, 'postMessage');
-  fireEvent.click(screen.getByTestId('comment-side-item'));
-  expect(post.mock.calls.filter(call => call[0]?.locate)).toHaveLength(0);
+  const { post, dispatch, selectRow } = await setup('url', false, [legacy]);
+  const target = { ...legacy, position: { x: 57, y: 80, width: 193, height: 29 } };
+  await dispatch({ type: 'od:comment-targets', targets: [target] });
+  await selectRow();
+  const requests = post.mock.calls.map(call => call[0]).filter(data => data?.locate);
+  expect(requests).toHaveLength(1);
+  expect(requests[0]).toMatchObject({ elementId: legacy.elementId, selector: legacy.selector });
   expect(screen.getByTestId('comment-side-item')).toHaveAttribute('aria-current', 'true');
   expect(screen.queryByTestId('comment-active-pin')).toBeNull();
   expect(screen.queryByTestId('comment-location-unavailable')).toBeNull();
+  await dispatch({ ...target, type: 'od:comment-active-target-update', requestId: requests[0].requestId });
+  await dispatch({ ...target, type: 'od:comment-active-target-update' });
+  expect(post.mock.calls.filter(call => call[0]?.locate)).toHaveLength(1);
+  expect(screen.queryByTestId('comment-active-pin')).toBeNull();
 });
 it.each([false, true])('URL locate (collab=%s): consumes an initially visible reply, not later owner scrolling', async enabled => {
   const { post, dispatch, target, selectRow } = await setup('url', enabled);

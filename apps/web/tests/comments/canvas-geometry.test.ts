@@ -64,4 +64,15 @@ describe('current comment canvas geometry', () => {
     expect(clippedCommentTarget({ ...target, position: { x: 798, y: 598, width: 4, height: 4 } }, { scale: 1 }, canvas)).toEqual({ left: 798, top: 598, width: 2, height: 2 });
     expect(clippedCommentTarget({ ...target, position: { x: 900, y: 20, width: 4, height: 4 } }, { scale: 1 }, canvas)).toBeNull();
   });
+  it('uses the observed ancestor clip for the outline while preserving the full anchor', () => {
+    const clipped = { ...target, visiblePosition: { x: 120, y: 210, width: 140, height: 40 } };
+    expect(clippedCommentTarget(clipped, { scale: .5, offset: { x: 24, y: 30 } }, { left: 90, top: 0, width: 50, height: 600 }))
+      .toEqual({ left: 90, top: 135, width: 50, height: 20 });
+    expect(projectCommentPoint(clipped, { scale: .5, offset: { x: 24, y: 30 } })).toEqual({ x: 124, y: 160 });
+    expect(clipped.position).toEqual(target.position);
+    expect(clippedCommentTarget({ ...clipped, visiblePosition: { ...clipped.visiblePosition, width: 0 } }, { scale: 1 }, canvas)).toBeNull();
+    expect(clippedCommentTarget({ ...clipped, visiblePosition: { ...clipped.visiblePosition, height: 0 } }, { scale: 1 }, canvas)).toBeNull();
+    expect(clippedCommentTarget(target, { scale: .5, offset: { x: 24, y: 30 } }, canvas))
+      .toEqual({ left: 74, top: 130, width: 200, height: 40 });
+  });
 });

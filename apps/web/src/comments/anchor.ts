@@ -17,6 +17,10 @@ export interface PreviewCommentSnapshot {
   label: string;
   text: string;
   position: PreviewComment['position'];
+  /** Current visible intersection; never persisted as the source anchor rectangle. */
+  visiblePosition?: PreviewComment['position'];
+  /** Result of checking all DOM nodes, including hidden duplicates. */
+  domIdUnique?: boolean;
   hoverPoint?: { x: number; y: number };
   htmlHint: string;
   style?: PreviewAnnotationStyle;

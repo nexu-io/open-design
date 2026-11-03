@@ -319,8 +319,8 @@ describe('selection bridge — empty annotation surface (#890)', () => {
       .map((call) => call[0])
       .filter((message) => message?.type === 'od:comment-target');
     expect(clickMessages).toHaveLength(1);
-    expect(clickMessages[0].elementId).toBe('dom:body > main:nth-of-type(1) > button:nth-of-type(1)');
-    expect(clickMessages[0].selector).toBe('body > main:nth-of-type(1) > button:nth-of-type(1)');
+    expect(clickMessages[0].elementId).toBe('dom:[id="cta"]');
+    expect(clickMessages[0].selector).toBe('[id="cta"]');
     expect(clickMessages[0].text).toBe('Launch');
   });
 
@@ -343,8 +343,8 @@ describe('selection bridge — empty annotation surface (#890)', () => {
       .filter((message) => message?.type === 'od:comment-target');
     expect(clickMessages).toHaveLength(1);
     expect(clickMessages[0]).toMatchObject({
-      elementId: 'dom:body > main:nth-of-type(1) > button:nth-of-type(1)',
-      selector: 'body > main:nth-of-type(1) > button:nth-of-type(1)',
+      elementId: 'dom:[id="cta"]',
+      selector: '[id="cta"]',
       text: 'Launch',
     });
   });
@@ -368,8 +368,8 @@ describe('selection bridge — empty annotation surface (#890)', () => {
       .filter((message) => message?.type === 'od:comment-target');
     expect(clickMessages).toHaveLength(1);
     expect(clickMessages[0]).toMatchObject({
-      elementId: 'dom:body > section:nth-of-type(1) > h1:nth-of-type(1)',
-      selector: 'body > section:nth-of-type(1) > h1:nth-of-type(1)',
+      elementId: 'dom:[id="headline"]',
+      selector: '[id="headline"]',
       label: 'h1',
       text: 'ERP and CRM delivery',
       position: {
@@ -421,8 +421,8 @@ describe('selection bridge — empty annotation surface (#890)', () => {
     expect(last.targets).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          elementId: 'dom:body > main:nth-of-type(1) > section:nth-of-type(1)',
-          selector: 'body > main:nth-of-type(1) > section:nth-of-type(1)',
+          elementId: 'dom:[id="card"]',
+          selector: '[id="card"]',
           text: 'Card',
         }),
       ]),

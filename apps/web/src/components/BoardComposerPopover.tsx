@@ -395,6 +395,28 @@ export function BoardComposerPopover({
   const composingRef = useRef(false);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!existing) return;
+    const dismiss = (event: Event) => {
+      if (event.defaultPrevented) return;
+      event.preventDefault();
+      if (menuRef.current?.matches(':popover-open')) {
+        menuRef.current.hidePopover();
+        event.stopPropagation();
+        return;
+      }
+      onClose();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') dismiss(event);
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('od:comment-escape', dismiss);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('od:comment-escape', dismiss);
+    };
+  }, [existing, onClose]);
   const [popoverSize, setPopoverSize] = useState<PopoverSize | undefined>(undefined);
   useLayoutEffect(() => {
     const node = popoverRef.current;
@@ -487,7 +509,7 @@ export function BoardComposerPopover({
       aria-label={`${t('chat.comments.comment')}${target.label ? `: ${target.label}` : ''}`}
       style={positionStyle ?? popoverStyle}
       onKeyDown={(event) => {
-        if (event.key === 'Escape') {
+        if (!existing && event.key === 'Escape') {
           event.preventDefault();
           if (menuRef.current?.matches(':popover-open')) {
             menuRef.current.hidePopover();

@@ -4,7 +4,7 @@ import { CommentAvatarRail, CommentHoverPreview, CommentImage, useCommentHoverPr
 import { preserveCommentPoint } from '../comments/anchor';
 import { validateCommentSaveTarget } from '../comments/validate-save-target';
 import { previewStorageKey, readPreviewStorage, savePreviewStorageMessage } from '../runtime/preview-storage';
-import { commentSelectorsMatch, commentUsesIdentity, ownerCommentNeedsLocation, resolveOwnerCommentAnchor } from '../comments/owner-anchor';
+import { commentSelectorsMatch, commentUsesIdentity, ownerCommentNeedsLocation, ownerCommentSelector, resolveOwnerCommentAnchor } from '../comments/owner-anchor';
 import { indexCommentTargets } from '../comments/target-index';
 import { useShareSourceGuard } from './share/useShareSourceGuard';
 import { useExperienceError } from '../observability/use-experience-error';
@@ -12961,6 +12961,11 @@ function HtmlViewer({
           label: String(item?.label || ''),
           text: String(item?.text || ''),
           position,
+          domIdUnique: item.domIdUnique,
+          visiblePosition: item.visiblePosition ? {
+            x: clampBridgeCoordinate(item.visiblePosition.x), y: clampBridgeCoordinate(item.visiblePosition.y),
+            width: clampBridgeCoordinate(item.visiblePosition.width), height: clampBridgeCoordinate(item.visiblePosition.height),
+          } : undefined,
           htmlHint: String(item?.htmlHint || ''),
           style: normalizeAnnotationStyle(item?.style),
           selectionKind: 'element',
@@ -13079,6 +13084,11 @@ function HtmlViewer({
             y: clampBridgeCoordinate(data.hoverPoint.y),
           }
         : undefined,
+      domIdUnique: data.domIdUnique,
+      visiblePosition: data.visiblePosition ? {
+            x: clampBridgeCoordinate(data.visiblePosition.x), y: clampBridgeCoordinate(data.visiblePosition.y),
+            width: clampBridgeCoordinate(data.visiblePosition.width), height: clampBridgeCoordinate(data.visiblePosition.height),
+          } : undefined,
       htmlHint: String(data.htmlHint || ''),
       style: normalizeAnnotationStyle(data.style),
       selectionKind: data.selectionKind === 'pod' ? 'pod' : 'element',
@@ -13332,12 +13342,14 @@ function HtmlViewer({
     setHoveredCommentTarget(null);
     if (commentTargetsReadyKey !== commentTargetsKey) return;
     const requestId = `comment-location-${++commentLocateSequenceRef.current}`;
+    const selector = ownerCommentSelector(comment);
+    const elementId = selector !== comment.selector ? `dom:${selector}` : comment.elementId;
     const resolution = resolveOwnerCommentAnchor(comment, liveCommentTargets, collab.publishedVersion ?? undefined);
-    commentLocateRequestRef.current = { requestId, commentId: comment.id, previewKey: commentTargetsKey, selector: comment.selector,
+    commentLocateRequestRef.current = { requestId, commentId: comment.id, previewKey: commentTargetsKey, selector,
       targetId: resolution.state !== 'lost' ? resolution.snapshot?.elementId ?? null : null, scrolled: false,
       reportRevision: commentTargetReportRevisionRef.current };
     iframeRef.current?.contentWindow?.postMessage({ type: 'od:comment-active-target',
-      elementId: comment.elementId, selector: comment.selector, locate: true, requestId }, '*');
+      elementId, selector, locate: true, requestId }, '*');
     return () => { commentLocateRequestRef.current = null; };
   }, [workspaceActive, boardMode, collab.enabled, activePreviewCommentId, commentLocationIntent, previewComments, file.name, commentTargetsKey, commentTargetsReadyKey]);
 
@@ -15603,6 +15615,10 @@ function HtmlViewer({
       commentShortcutRef.current();
     };
     const handleFrameShortcut = (event: MessageEvent) => {
+      if (event.data?.type === 'od:comment-escape' && isActivePreviewIframeSource(event.source)) {
+        document.dispatchEvent(new CustomEvent('od:comment-escape', { cancelable: true }));
+        return;
+      }
       if (event.data?.type === 'od:comment-shortcut' && isActivePreviewIframeSource(event.source)) {
         commentShortcutRef.current();
       }

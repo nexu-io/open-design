@@ -43,6 +43,56 @@ it('detail mounts its real author, menu and close while keeping the old controls
   expect(close).toHaveBeenCalledOnce();
 });
 const savedComment = {...props.target,id:'comment-1',projectId:'project',conversationId:'conversation',note:'Read only detail',status:'open' as const,createdAt:1,updatedAt:1};
+it('closes saved detail on Escape when focus is outside the dialog', () => {
+  const close = vi.fn();
+  render(<><button>Outside</button><BoardComposerPopover {...props} existing={savedComment} onClose={close}/></>);
+  const outside = screen.getByRole('button', {name: 'Outside'});
+  outside.focus();
+  fireEvent.keyDown(outside, {key: 'Escape'});
+  expect(close).toHaveBeenCalledOnce();
+});
+it('closes saved detail once on Escape inside the dialog', () => {
+  const close = vi.fn();
+  render(<BoardComposerPopover {...props} existing={savedComment} onClose={close}/>);
+  fireEvent.keyDown(screen.getByLabelText('common.close'), {key: 'Escape'});
+  expect(close).toHaveBeenCalledOnce();
+});
+it('dismisses the saved detail menu before closing on an outside Escape', () => {
+  const close = vi.fn();
+  render(<><button>Outside</button><BoardComposerPopover {...props} existing={savedComment} onClose={close}/></>);
+  const menu = screen.getByRole('menu', {hidden: true});
+  let open = true;
+  vi.spyOn(menu, 'matches').mockImplementation(selector => selector === ':popover-open' && open);
+  const hide = vi.fn(() => { open = false; });
+  Object.assign(menu, {hidePopover: hide});
+  const outside = screen.getByRole('button', {name: 'Outside'});
+  fireEvent.keyDown(outside, {key: 'Escape'});
+  expect(hide).toHaveBeenCalledOnce();
+  expect(close).not.toHaveBeenCalled();
+  fireEvent.keyDown(outside, {key: 'Escape'});
+  expect(close).toHaveBeenCalledOnce();
+});
+it('handles forwarded comment Escape without broadcasting a keyboard event', () => {
+  const close = vi.fn();
+  const unrelatedKeydown = vi.fn();
+  document.addEventListener('keydown', unrelatedKeydown);
+  const { unmount } = render(<BoardComposerPopover {...props} existing={savedComment} onClose={close}/>);
+  const menu = screen.getByRole('menu', {hidden: true});
+  let open = true;
+  vi.spyOn(menu, 'matches').mockImplementation(selector => selector === ':popover-open' && open);
+  const hide = vi.fn(() => { open = false; });
+  Object.assign(menu, {hidePopover: hide});
+  document.dispatchEvent(new CustomEvent('od:comment-escape'));
+  expect(hide).toHaveBeenCalledOnce();
+  expect(close).not.toHaveBeenCalled();
+  document.dispatchEvent(new CustomEvent('od:comment-escape'));
+  expect(close).toHaveBeenCalledOnce();
+  expect(unrelatedKeydown).not.toHaveBeenCalled();
+  unmount();
+  document.dispatchEvent(new CustomEvent('od:comment-escape'));
+  expect(close).toHaveBeenCalledOnce();
+  document.removeEventListener('keydown', unrelatedKeydown);
+});
 const labels: Record<string, string> = {
   'chat.comments.sendToChat':'Send to Agent',
   'chat.annotationQueue':'Queue',

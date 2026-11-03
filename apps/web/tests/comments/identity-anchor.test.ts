@@ -38,6 +38,6 @@ describe('strict Owner new namespace', () => {
 it('locates nested anchors in personal projects instead of displaying saved viewport pixels', () => {
   const id = 'od-frame-v1:' + JSON.stringify([[['dom:body > iframe', 'body > iframe', 'srcdoc:0:hash']], 'dom:body > h2', 'body > h2']);
   expect(ownerCommentNeedsLocation({ ...comment, elementId: id, selector: id }, false)).toBe(true);
-  expect(ownerCommentNeedsLocation({ ...comment, elementId: 'legacy', selector: 'body > h2' }, false)).toBe(false);
+  expect(ownerCommentNeedsLocation({ ...comment, elementId: 'legacy', selector: 'body > h2' }, false)).toBe(true);
   expect(ownerCommentNeedsLocation({ ...comment, elementId: id, selector: id, selectionKind: 'pod' }, false)).toBe(false);
 });

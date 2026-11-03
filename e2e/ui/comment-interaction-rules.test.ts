@@ -32,8 +32,8 @@ async function seed(page: Page, controls = false, extraHtml = '', artifactHtml?:
   return { id, conversationId };
 }
 
-async function open(page: Page, id: string) {
-  await page.goto(`/projects/${id}/files/index.html`);
+async function open(page: Page, id: string, forceInline = false) {
+  await page.goto(`/projects/${id}/files/index.html${forceInline ? "?forceInline=1" : ""}`);
   await expect(page.frameLocator('iframe:visible').getByRole('heading')).toBeVisible({ timeout: T.long });
   // Match the design review's expanded artifact surface. The chat-open split
   // can hide the original toolbar button after the comments dock mounts.
@@ -195,6 +195,9 @@ test('[P1] comment detail visual review uses the reference author and Chinese no
   const hover = page.getByTestId('comment-hover-preview');
   await expect(hover).toBeVisible();
   await page.setViewportSize({ width: 1200, height: 900 });
+  // Resize moves the hovered pin away from the stationary pointer. Keep the
+  // reading card under the pointer while checking its reflowed anchor.
+  await hover.hover();
   await expect.poll(async () => {
     const pin = await savedPin.boundingBox();
     const card = await hover.boundingBox();
@@ -564,7 +567,10 @@ test(`[P0] CV05 real small-element bounds and canvas intersections preserve sele
     <div class="cv05" id="left-edge" data-od-id="left-edge">Left edge</div>
     <div class="cv05" id="right-edge" data-od-id="right-edge">Right edge</div>
     <div class="cv05" id="top-edge" data-od-id="top-edge">Top edge</div>
-    <div class="cv05" id="bottom-edge" data-od-id="bottom-edge">Bottom edge</div>`);
+    <div class="cv05" id="bottom-edge" data-od-id="bottom-edge">Bottom edge</div>
+    <div id="clip-container" style="position:absolute;left:220px;top:480px;width:140px;height:60px;overflow:hidden">
+      <button id="clipped" data-od-id="clipped" style="width:260px;height:50px;padding:0;border:0">Clipped target</button>
+    </div>`);
   await open(page, id);
   // CV05 uses exact screen rectangles. Pin the product's preview zoom as well
   // as the browser zoom: auto-fit can choose a fractional scale (96% in CI),
@@ -592,11 +598,18 @@ test(`[P0] CV05 real small-element bounds and canvas intersections preserve sele
       return Math.max(...(['x', 'y', 'width', 'height'] as const).map(key => Math.abs(actual[key] - expected[key])));
     }).toBeLessThanOrEqual(1 / 64);
   }
-  for (const name of ['tiny', 'left-edge', 'right-edge', 'top-edge', 'bottom-edge']) {
+  for (const name of ['tiny', 'left-edge', 'right-edge', 'top-edge', 'bottom-edge', 'clipped']) {
     const target = frame.locator(`#${name}`);
     const rect = await target.boundingBox();
-    const canvas = await page.locator('iframe:visible').boundingBox();
+    let canvas = await page.locator('iframe:visible').boundingBox();
     if (!rect || !canvas) throw new Error('Missing CV05 geometry');
+    if (name === 'clipped') {
+      const ancestor = await frame.locator('#clip-container').boundingBox();
+      if (!ancestor) throw new Error('Missing clipping container');
+      const x = Math.max(canvas.x, ancestor.x), y = Math.max(canvas.y, ancestor.y);
+      canvas = { x, y, width: Math.min(canvas.x + canvas.width, ancestor.x + ancestor.width) - x,
+        height: Math.min(canvas.y + canvas.height, ancestor.y + ancestor.height) - y };
+    }
     const expected = { x: Math.max(rect.x, canvas.x), y: Math.max(rect.y, canvas.y),
       width: Math.min(rect.x + rect.width, canvas.x + canvas.width) - Math.max(rect.x, canvas.x), height: Math.min(rect.y + rect.height, canvas.y + canvas.height) - Math.max(rect.y, canvas.y) };
     await page.mouse.move(expected.x + expected.width / 2, expected.y + expected.height / 2);
@@ -616,3 +629,133 @@ test(`[P0] CV05 real small-element bounds and canvas intersections preserve sele
   }
 });
 }
+
+
+for (const { forceInline, nested } of [{ forceInline: false, nested: false }, { forceInline: true, nested: false }, { forceInline: false, nested: true }]) {
+  test(`[P0] QA ordinary personal rail locates offscreen target and iframe Escape restores its opener (inline=${forceInline}, nested=${nested})`, async ({ page }, info) => {
+    const inner = '<!doctype html><html><body style="margin:0;padding:40px"><h1>Personal comment geometry</h1><img src="/qa-marker.svg" style="display:none"><div style="height:1400px"></div><div id="far-clip" style="width:140px;height:70px;overflow:hidden"><button data-od-id="far-target" style="width:200px;height:60px">FAR TARGET BUTTON</button></div><div style="height:1400px"></div></body></html>';
+    const artifact = nested ? `<html><body><h1>Nested personal comment geometry</h1><iframe id="nested-frame" width="600" height="360" srcdoc="${inner.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"></iframe></body></html>` : inner;
+    const { id, conversationId } = await seed(page, false, '', artifact);
+    if (forceInline) {
+      const asset = await page.request.post(`/api/projects/${id}/files`, { data: {
+        name: 'qa-marker.svg', content: '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>',
+      } });
+      expect(asset.ok(), await asset.text()).toBeTruthy();
+    }
+    const anchor = nested ? 'od-frame-v1:' + JSON.stringify([[['dom:[id="nested-frame"]', '[id="nested-frame"]', '']], 'far-target', '[data-od-id="far-target"]']) : null;
+    const response = await page.request.post(`/api/projects/${id}/conversations/${conversationId}/comments`, { data: {
+      target: { filePath: 'index.html', elementId: anchor ?? 'far-target', selector: anchor ?? '[data-od-id="far-target"]', label: 'button', text: 'FAR TARGET BUTTON', htmlHint: '<button data-od-id="far-target">', position: { x:40,y:1500,width:200,height:60 } },
+      note: 'QA ordinary local far target',
+    } });
+    expect(response.ok(), await response.text()).toBeTruthy();
+    await open(page, id, forceInline);
+    const artifactFrame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+    const content = nested ? artifactFrame.frameLocator('#nested-frame') : artifactFrame;
+    const target = content.locator('[data-od-id="far-target"]');
+    await expect(page.getByTestId('artifact-preview-frame')).toHaveAttribute('data-od-render-mode', forceInline ? 'srcdoc' : 'url-load');
+    await expect(target).not.toBeInViewport();
+    await page.getByTestId('comment-panel-toggle').click();
+    await page.locator('.comment-side-collapse').click();
+    const rail = page.getByTestId('comment-side-collapsed-rail');
+    const avatar = rail.getByRole('button', { name: /QA ordinary local far target/ });
+    await avatar.click();
+    await expect(target).toBeInViewport();
+    await expect(page.getByTestId('comment-popover-detail')).toHaveText('QA ordinary local far target');
+    await expect(rail).toBeVisible();
+    const pin = page.locator('.comment-saved-pin');
+    await expect(pin).toHaveCount(1);
+    await expect(pin).toBeVisible();
+    const clippingBox = await content.locator('#far-clip').boundingBox();
+    if (!clippingBox) throw new Error('Missing actual clipping ancestor');
+    await expect.poll(async () => (await page.getByTestId('comment-target-overlay').boundingBox())?.width).toBe(clippingBox.width);
+    await page.screenshot({ path: info.outputPath('QA-4729-located.png') });
+    // The real key originates in the artifact document, not a synthetic event on the card.
+    await target.focus();
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('comment-popover')).toHaveCount(0);
+    await expect(avatar).toBeFocused();
+    await page.screenshot({ path: info.outputPath('QA-4733-frame-escape.png') });
+    await avatar.click();
+    await expect(page.getByTestId('comment-popover-detail')).toBeVisible();
+    const outerFrame = await (await page.getByTestId('artifact-preview-frame').elementHandle())!.contentFrame();
+    const frame = nested && outerFrame ? await (await outerFrame.locator('#nested-frame').elementHandle())!.contentFrame() : outerFrame;
+    if (!frame) throw new Error('Missing actual artifact frame');
+    // Return from each direction using actual artifact scroll, retaining the opened detail.
+    for (const edge of ['top', 'bottom'] as const) {
+      await frame.evaluate(direction => window.scrollTo(0, direction === 'top' ? 0 : document.documentElement.scrollHeight), edge);
+      await expect(target).not.toBeInViewport();
+      await expect(pin).toHaveCount(0);
+      await target.evaluate(element => element.scrollIntoView({ block: 'center', behavior: 'instant' }));
+      await expect(target).toBeInViewport();
+      await expect(pin).toHaveCount(1);
+      await expect(pin).toBeVisible();
+      await expect(page.getByTestId('comment-popover-detail')).toBeVisible();
+      await page.screenshot({ path: info.outputPath(`QA-4734-return-${edge}.png`) });
+    }
+  });
+}
+
+
+test('[P0] OPEND-4731 deleted comment target does not move to its neighbor', async ({ page }, testInfo) => {
+  await applyStandardMocks(page);
+  await page.addInitScript(() => {
+    localStorage.setItem('open-design:locale', 'en');
+    localStorage.setItem('open-design:locale-source', 'manual');
+  });
+  const id = `deleted-comment-target-${randomUUID()}`;
+  const created = await page.request.post('/api/projects', { data: {
+    id, name: 'Deleted comment target', skillId: null, designSystemId: null,
+    metadata: { kind: 'prototype', nameSource: 'user' },
+  } });
+  expect(created.ok(), await created.text()).toBeTruthy();
+  const { conversationId } = await created.json();
+  const manifest = { version: 1, kind: 'html', title: 'Deleted comment target', entry: 'index.html', renderer: 'html', exports: ['html'] };
+  const write = async (content: string) => {
+    const response = await page.request.post(`/api/projects/${id}/files`, { data: { name: 'index.html', content, artifactManifest: manifest } });
+    expect(response.ok(), await response.text()).toBeTruthy();
+  };
+  const start = '<!doctype html><html><body style="padding:80px"><h1>Deleted target regression</h1><button id="delete-target">Original button to delete</button><button id="neighbor">Distinct neighbor remains here</button></body></html>';
+  await write(start);
+  await open(page, id, true);
+  await expect(page.getByTestId('board-mode-toggle')).toBeEnabled({ timeout: T.long });
+  await page.getByTestId('board-mode-toggle').click();
+  await page.frameLocator('[data-testid="artifact-preview-frame"]').locator('#delete-target').click();
+  const input = page.getByTestId('comment-popover-input');
+  await input.fill('Comment on the deleted button');
+  const savedResponse = page.waitForResponse(response => response.request().method() === 'POST'
+    && response.url().endsWith(`/conversations/${conversationId}/comments`));
+  await input.press('Enter');
+  const response = await savedResponse;
+  expect(response.ok(), await response.text()).toBeTruthy();
+  const comment = (await response.json()).comment;
+  const anchor = { elementId: comment.elementId, selector: comment.selector, htmlHint: comment.htmlHint };
+  expect(comment.selector).toBe('[id="delete-target"]');
+  await testInfo.attach('OPEND-4731-saved-anchor', { body: JSON.stringify(anchor), contentType: 'application/json' });
+  console.log('OPEND-4731 saved anchor:', JSON.stringify(anchor));
+  await expect(input).toHaveCount(0);
+  const legacy = await page.request.post(`/api/projects/${id}/conversations/${conversationId}/comments`, { data: {
+    target: { ...comment, elementId: 'dom:body > button:nth-of-type(1)', selector: 'body > button:nth-of-type(1)', htmlHint: '<button id="delete-target">' },
+    note: 'Legacy comment on the deleted button',
+  } });
+  expect(legacy.ok(), await legacy.text()).toBeTruthy();
+  const legacyComment = (await legacy.json()).comment;
+  await page.screenshot({ path: testInfo.outputPath('OPEND-4731-before-deletion.png') });
+  await write('<!doctype html><html><body style="padding:80px"><h1>Deleted target regression</h1><button id="neighbor">Distinct neighbor remains here</button></body></html>');
+  await page.reload();
+  await expect(page.frameLocator('[data-testid="artifact-preview-frame"]').locator('#neighbor')).toBeVisible();
+  await expect(page.frameLocator('[data-testid="artifact-preview-frame"]').locator('#delete-target')).toHaveCount(0);
+  await page.getByTestId('comment-panel-toggle').click();
+  for (const [commentId, note] of [[comment.id, 'Comment on the deleted button'], [legacyComment.id, 'Legacy comment on the deleted button']]) {
+    const row = page.locator(`[data-testid="comment-side-item"][data-comment-id="${commentId}"]`);
+    await expect(row).toBeVisible();
+    await row.click();
+    await expect(page.frameLocator('[data-testid="artifact-preview-frame"]').locator('#neighbor')).toBeVisible();
+    const detail = page.getByTestId('comment-popover');
+    await expect(detail).toContainText(note);
+    await expect(detail.getByRole('status')).toContainText(/cannot locate|unable to locate|location unavailable/i);
+    await expect(page.getByTestId('comment-target-overlay')).toHaveCount(0);
+    await expect(page.locator('.comment-saved-pin, .comment-saved-outline')).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath(`OPEND-4731-after-deletion-${note.startsWith('Legacy') ? 'legacy' : 'new'}.png`) });
+    await detail.getByRole('button', { name: 'Close' }).click();
+  }
+});

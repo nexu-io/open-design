@@ -4,6 +4,32 @@
  */
 export const NESTED_COMMENT_HELPERS = String.raw`
   var nestedCommentAnchors = new WeakMap(), nestedCommentDocuments = new WeakSet();
+  function forwardCommentEscape(event) {
+    if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing || event.repeat) return false;
+    if (!(typeof active === 'function' ? active() : commentEnabled)) return false;
+    var target = event.target;
+    if (target && target.closest && target.closest('input, textarea, select, [contenteditable="true"], [role="menu"], [role="dialog"], dialog, [popover]')) return false;
+    window.parent.postMessage({ type: 'od:comment-escape' }, '*');
+    return true;
+  }
+  // Keep the full target rect for anchor fractions; this separate rect describes
+  // only the part painted through clipping ancestors in the same viewport.
+  function commentVisiblePosition(el, rect) {
+    var left = rect.x, top = rect.y, right = rect.x + rect.width, bottom = rect.y + rect.height;
+    for (var parent = el.parentElement; parent; parent = parent.parentElement) {
+      var style = parent.ownerDocument.defaultView.getComputedStyle(parent);
+      var clipX = /^(hidden|clip|scroll|auto)$/.test(style.overflowX);
+      var clipY = /^(hidden|clip|scroll|auto)$/.test(style.overflowY);
+      if (!clipX && !clipY) continue;
+      var bounds = parent.getBoundingClientRect();
+      var sx = parent.offsetWidth ? bounds.width / parent.offsetWidth : 1;
+      var sy = parent.offsetHeight ? bounds.height / parent.offsetHeight : 1;
+      var x = bounds.left + parent.clientLeft * sx, y = bounds.top + parent.clientTop * sy;
+      if (clipX) { left = Math.max(left, x); right = Math.min(right, x + parent.clientWidth * sx); }
+      if (clipY) { top = Math.max(top, y); bottom = Math.min(bottom, y + parent.clientHeight * sy); }
+    }
+    return { x: left, y: top, width: Math.max(0, right - left), height: Math.max(0, bottom - top) };
+  }
   function isNestedCommentAnchor(id, selector) {
     return String(id || '').indexOf('od-frame-v1:') === 0 || String(selector || '').indexOf('od-frame-v1:') === 0;
   }
@@ -35,6 +61,7 @@ export const NESTED_COMMENT_HELPERS = String.raw`
         if (!nestedCommentDocuments.has(doc) && typeof schedulePostActiveCommentTarget === 'function') {
           nestedCommentDocuments.add(doc);
           doc.addEventListener('scroll', schedulePostActiveCommentTarget, true);
+          doc.addEventListener('keydown', forwardCommentEscape);
           doc.defaultView.addEventListener('resize', schedulePostActiveCommentTarget);
         }
       }
@@ -50,6 +77,7 @@ export const NESTED_COMMENT_HELPERS = String.raw`
       if (!node.isConnected || resolveNestedComment(anchor.id, anchor.selector) !== node) return null;
       var r = node.getBoundingClientRect(), x = r.left, y = r.top, width = r.width, height = r.height;
       if (!(width > 0 && height > 0)) return null;
+      var visible = commentVisiblePosition(node, r);
       for (var i = anchor.frames.length - 1; i >= 0; i--) {
         var f = anchor.frames[i];
         // Paint only the part visible through this child viewport before
@@ -72,12 +100,17 @@ export const NESTED_COMMENT_HELPERS = String.raw`
         var b = f.getBoundingClientRect();
         if (!f.offsetWidth || !f.offsetHeight || !b.width || !b.height) return null;
         var sx = b.width / f.offsetWidth, sy = b.height / f.offsetHeight;
+        var visibleRight = Math.min(view.innerWidth, visible.x + visible.width), visibleBottom = Math.min(view.innerHeight, visible.y + visible.height);
+        visible.x = Math.max(0, visible.x); visible.y = Math.max(0, visible.y);
+        visible.width = Math.max(0, visibleRight - visible.x); visible.height = Math.max(0, visibleBottom - visible.y);
+        visible = commentVisiblePosition(f, { x: b.left + (f.clientLeft + visible.x) * sx,
+          y: b.top + (f.clientTop + visible.y) * sy, width: visible.width * sx, height: visible.height * sy });
         x = b.left + (f.clientLeft + x) * sx; y = b.top + (f.clientTop + y) * sy; width *= sx; height *= sy;
       }
       if (![x, y, width, height].every(Number.isFinite)) return null;
       return { type: 'od:comment-target', elementId: anchor.id, selector: anchor.selector,
         label: node.localName, text: (node.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 160),
-        position: { x: x, y: y, width: width, height: height }, htmlHint: '<' + node.localName + '>', style: null };
+        position: { x: x, y: y, width: width, height: height }, visiblePosition: visible, htmlHint: '<' + node.localName + '>', style: null };
     } catch (_) { return null; }
   }
   function scrollNestedComment(node) {

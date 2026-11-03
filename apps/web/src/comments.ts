@@ -150,6 +150,7 @@ export function commentSnapshotOverlayEqual(
     && positionA.y === positionB.y
     && positionA.width === positionB.width
     && positionA.height === positionB.height
+    && JSON.stringify(a.visiblePosition) === JSON.stringify(b.visiblePosition)
     && (a.slideIndex ?? -1) === (b.slideIndex ?? -1)
   );
 }
@@ -162,6 +163,7 @@ export function commentSnapshotEqual(
   return (
     a.selector === b.selector
     && a.domSelector === b.domSelector
+    && a.domIdUnique === b.domIdUnique
     && a.label === b.label
     && trimContextText(a.text) === trimContextText(b.text)
     && trimHtmlHint(a.htmlHint) === trimHtmlHint(b.htmlHint)

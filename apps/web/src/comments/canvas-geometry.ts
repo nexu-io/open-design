@@ -23,7 +23,15 @@ export function commentPointInCanvas(point: CommentCanvasPoint, canvas: CommentC
 }
 
 export function clippedCommentTarget(target: PreviewCommentSnapshot, transform: CommentCanvasTransform, canvas: CommentCanvasRect): CommentCanvasRect | null {
-  const rect = overlayBoundsFromSnapshot(target, transform.scale, transform.offset);
+  const visible = target.visiblePosition;
+  if (visible && (visible.width <= 0 || visible.height <= 0)) return null;
+  const scale = Number.isFinite(transform.scale) && transform.scale > 0 ? transform.scale : 1;
+  const rect = visible ? {
+    left: (transform.offset?.x ?? 0) + visible.x * scale,
+    top: (transform.offset?.y ?? 0) + visible.y * scale,
+    width: visible.width * scale,
+    height: visible.height * scale,
+  } : overlayBoundsFromSnapshot(target, transform.scale, transform.offset);
   const left = Math.max(canvas.left, rect.left), top = Math.max(canvas.top, rect.top);
   const right = Math.min(canvas.left + canvas.width, rect.left + rect.width);
   const bottom = Math.min(canvas.top + canvas.height, rect.top + rect.height);
