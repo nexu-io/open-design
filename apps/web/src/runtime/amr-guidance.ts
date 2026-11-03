@@ -7,6 +7,7 @@ import {
   isModelWindowLimitFailure,
   readMembershipConcurrencyResetAt,
   readModelWindowResetAt,
+  readToolPermissionRejection,
 } from '@open-design/contracts';
 import type { RunFailureAction } from '@open-design/contracts';
 import { byokApiKeyIsEditableInSettings } from '../utils/byokProvider';
@@ -324,6 +325,8 @@ export type RunFailureMessageKey =
   | 'chat.runError.timedOutMessage'
   | 'chat.runError.inactivityTimeoutMessage'
   | 'chat.runError.emptyOutputMessage'
+  | 'chat.runError.toolPermissionRejectedMessage'
+  | 'chat.runError.toolPermissionRejectedMessageNoTarget'
   | 'chat.runError.sessionExpiredMessage'
   | 'chat.runError.gitBashMissingMessage'
   | 'chat.runError.cpuUnsupportedMessage'
@@ -501,6 +504,7 @@ export type RunFailureTitleKey =
   | 'chat.runError.title.quotaExhausted'
   | 'chat.runError.title.timedOut'
   | 'chat.runError.title.emptyOutput'
+  | 'chat.runError.title.toolPermissionRejected'
   | 'chat.runError.title.sessionExpired'
   | 'chat.runError.title.gitBashMissing'
   | 'chat.runError.title.artifactMissing'
@@ -1689,6 +1693,30 @@ function resolveRunFailureUiIgnoringSelfPromotion(
         ? 'chat.runError.modelWindowLimitMessage'
         : 'chat.runError.modelWindowLimitMessageNoTime',
       retryAt ? { messageVars: { retryAt } } : {},
+    );
+  }
+  // A headless OpenCode run auto-denied a tool call outside the folders it may
+  // access and then stopped without output. The daemon named the call in its
+  // sentence; read the tool and the full target back out through the shared
+  // contracts reader so the card can tell the user exactly which path was
+  // blocked. The target is a value the daemon extracted, not upstream prose,
+  // so naming it here does not break the card's own-words invariant.
+  // Retrying unchanged hits the same denial, but it succeeds once the user has
+  // moved the file or redirected the agent (rung 2).
+  if (detail === 'tool_permission_rejected') {
+    const rejection = readToolPermissionRejection(rawMessage);
+    return failureCard(
+      { transient: true },
+      'chat.runError.title.toolPermissionRejected',
+      rejection?.target
+        ? 'chat.runError.toolPermissionRejectedMessage'
+        : 'chat.runError.toolPermissionRejectedMessageNoTarget',
+      {
+        messageVars: {
+          tool: rejection?.tool ?? 'tool',
+          ...(rejection?.target ? { target: rejection.target } : {}),
+        },
+      },
     );
   }
   // Membership concurrency is a temporary policy gate carried inside an ACP

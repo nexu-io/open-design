@@ -6,22 +6,22 @@
  * empty-output guard used to report as an empty provider response.
  *
  * The tracker remembers the last denied call so that guard can name the tool
- * and target instead.
+ * and target instead. The sentence itself lives in contracts, where the web
+ * failure card reads the target back out.
  */
+import type { ToolPermissionRejection } from '@open-design/contracts';
+
 export const OPENCODE_PERMISSION_REJECTION_TEXT =
   'The user rejected permission to use this specific tool call';
 
-/** Stable wording the failure classifier keys on; keep in sync with it. */
-export const TOOL_PERMISSION_REJECTED_MARKER =
-  'is outside the folders this run is allowed to access';
-
-export interface ToolPermissionRejection {
-  tool: string;
-  target: string | null;
-}
+export {
+  TOOL_PERMISSION_REJECTED_MARKER,
+  toolPermissionRejectionMessage,
+  type ToolPermissionRejection,
+} from '@open-design/contracts';
 
 const TARGET_KEYS = ['filePath', 'file_path', 'path', 'file', 'directory', 'pattern', 'command'] as const;
-const MAX_TARGET_CHARS = 200;
+const MAX_TARGET_CHARS = 1000;
 
 export function createToolPermissionRejectionTracker() {
   const uses = new Map<string, { tool: string; input: unknown }>();
@@ -49,14 +49,6 @@ export function createToolPermissionRejectionTracker() {
     },
     latest: () => latest,
   };
-}
-
-export function toolPermissionRejectionMessage(rejection: ToolPermissionRejection): string {
-  const target = rejection.target ? ` on ${rejection.target}` : '';
-  return (
-    `The agent's ${rejection.tool} call${target} was blocked: the path ${TOOL_PERMISSION_REJECTED_MARKER}, ` +
-    'and the agent stopped without producing output. Move the file into the project folder, or ask the agent to work inside the project, then retry.'
-  );
 }
 
 function describeTarget(input: unknown): string | null {
