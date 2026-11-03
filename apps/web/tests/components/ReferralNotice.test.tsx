@@ -9,33 +9,27 @@ const base = {
  inviteeIssuedCount: 0, availableCardCount: 0,
  invitee: { status: 'pending', purchaseDeadline: null, dueAt: new Date(Date.now() - 1000).toISOString() },
 };
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
-it('H02 pending notice has neither dismiss nor subscription action', async () => {
- vi.stubGlobal('fetch', vi.fn(async () => Response.json(base)));
- render(<I18nProvider initial="en"><ReferralNotice accountId="a" profile="local" active context={null} billing={null} /></I18nProvider>);
- const notice = await screen.findByTestId('referral-notice');
- expect(notice.getAttribute('data-state')).toBe('pending');
- expect(notice.querySelector('button')).toBeNull();
-});
-it('removes prior account pending data while the next account is still loading', async () => {
- const fetch = vi.fn(async () => Response.json(base)); vi.stubGlobal('fetch', fetch);
- const view = (id:string) => <I18nProvider initial="en"><ReferralNotice accountId={id} profile="local" active context={null} billing={null} /></I18nProvider>;
- const { rerender } = render(view('a')); await screen.findByTestId('referral-notice');
- fetch.mockImplementation(() => new Promise(() => {})); rerender(view('b'));
+afterEach(() => { cleanup(); localStorage.clear(); vi.unstubAllGlobals(); });
+it.each([-1000, 60000])('OPEND-4675 never renders a pending reward notice at due offset %s', async (offset) => {
+ vi.stubGlobal('fetch', vi.fn(async () => Response.json({...base, invitee:{...base.invitee,dueAt:new Date(Date.now()+offset).toISOString()}})));
+ render(<I18nProvider initial="en"><ReferralNotice accountId="pending" profile="local" active context={null} billing={null} /></I18nProvider>);
+ const { act } = await import('@testing-library/react');
+ await act(async () => {});
  expect(screen.queryByTestId('referral-notice')).toBeNull();
 });
-
-it.each(["2028-03-01T00:02:00Z", "2028-03-01T01:00:00Z"])("renders server due time %s rather than a fixed waiting period", async (dueAt) => {
- vi.stubGlobal('fetch', vi.fn(async () => Response.json({...base, rewardDelaySeconds:120,invitee:{...base.invitee,dueAt}})));
- render(<I18nProvider initial="en"><ReferralNotice accountId="time" profile="local" active context={null} billing={null} /></I18nProvider>);
- const notice=await screen.findByTestId('referral-notice');
- expect(notice.textContent).toContain(new Intl.DateTimeFormat('en',{dateStyle:'medium',timeStyle:'short'}).format(new Date(dueAt)));
- expect(notice.textContent).not.toContain('48 hours');
-});
-it('uses a truthful pending fallback when the server has no due time',async()=>{
- vi.stubGlobal('fetch',vi.fn(async()=>Response.json({...base,invitee:{...base.invitee,dueAt:null}})));
- render(<I18nProvider initial="en"><ReferralNotice accountId="missing" profile="local" active context={null} billing={null}/></I18nProvider>);
- expect((await screen.findByTestId('referral-notice')).textContent).toContain('awaiting issuance');
+it('OPEND-4674 persists dismissal across remounts and isolates accounts', async () => {
+ const { fireEvent } = await import('@testing-library/react');
+ vi.stubGlobal('fetch', vi.fn(async () => Response.json({...base,invitee:{...base.invitee,status:'registered',purchaseDeadline:new Date(Date.now()+60000).toISOString(),dueAt:null}})));
+ const view = (id:string) => <I18nProvider initial="en"><ReferralNotice accountId={id} profile="local" active context={null} billing={null} /></I18nProvider>;
+ const first = render(view('persist'));
+ fireEvent.click(await screen.findByRole('button',{name:'Dismiss reset card notice'}));
+ expect(localStorage.getItem('od:referral-notice:local:persist:registered')).toBe('dismissed');
+ first.unmount();
+ const second = render(view('persist'));
+ expect((await screen.findByTestId('referral-notice')).getAttribute('aria-hidden')).toBe('true');
+ second.unmount();
+ render(view('other'));
+ expect((await screen.findByTestId('referral-notice')).getAttribute('aria-hidden')).toBeNull();
 });
 
 it('opens the selected environment for the subscription action', async () => {
@@ -50,4 +44,11 @@ it('opens the selected environment for the subscription action', async () => {
  expect(url.searchParams.get('billing')).toBe('plan');
  expect(url.searchParams.get('source')).toBe('open_design');
  openExternalUrl.mockRestore();
+});
+
+it('OPEND-4674 reads a dismissal saved by a previous client session', async () => {
+ localStorage.setItem('od:referral-notice:local:previous-session:registered', 'dismissed');
+ vi.stubGlobal('fetch', vi.fn(async () => Response.json({...base, invitee: {...base.invitee,status:'registered',purchaseDeadline:new Date(Date.now()+60000).toISOString(),dueAt:null}})));
+ render(<I18nProvider initial="en"><ReferralNotice accountId="previous-session" profile="local" active context={null} billing={null} /></I18nProvider>);
+ expect((await screen.findByTestId('referral-notice')).getAttribute('aria-hidden')).toBe('true');
 });

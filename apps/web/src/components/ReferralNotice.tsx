@@ -17,6 +17,21 @@ import { openReferralActivity } from "../runtime/referral-navigation";
 import styles from "./ReferralNotice.module.css";
 
 const dismissed = new Set<string>();
+function wasDismissed(key: string) {
+  try {
+    return localStorage.getItem(`od:referral-notice:${key}`) === "dismissed" || dismissed.has(key);
+  } catch {
+    return dismissed.has(key);
+  }
+}
+function dismissNotice(key: string) {
+  dismissed.add(key);
+  try {
+    localStorage.setItem(`od:referral-notice:${key}`, "dismissed");
+  } catch {
+    // Keep the current session usable if persistent storage is unavailable.
+  }
+}
 export function ReferralNotice({
 	accountId,
 	profile,
@@ -32,7 +47,7 @@ export function ReferralNotice({
 	context: WorkspaceCollabContext | null;
 	billing: WorkspaceBillingResponse | null;
 }) {
-	const { t, locale } = useI18n();
+	const { t } = useI18n();
 	const scopeKey = `${profile}:${accountId}`;
 	const currentScope = useRef(scopeKey);
 	currentScope.current = scopeKey;
@@ -108,8 +123,8 @@ export function ReferralNotice({
 		);
 	const kind = referralNoticeKind(data, exhausted, serverNow);
 	const key = `${profile}:${accountId}:${kind}`;
-	const hidden = kind !== "pending" && dismissed.has(key);
-	if (!active || !accountId || !kind) return null;
+	const hidden = wasDismissed(key);
+	if (!active || !accountId || !kind || kind === "pending") return null;
 	const open = async () => {
 		if (opening) return;
 		setOpening(true);
@@ -141,9 +156,7 @@ export function ReferralNotice({
 				data-state={kind}
 			>
 				<span className={styles.copy}>
-					{kind === "pending" && data?.invitee?.dueAt
-            ? t("referral.notice.pendingAt", { time: new Intl.DateTimeFormat(locale, {dateStyle: "medium", timeStyle: "short"}).format(new Date(data.invitee.dueAt)) })
-            : t(`referral.notice.${kind}`)}
+					{t(`referral.notice.${kind}`)}
 					{kind === "registered" && data?.invitee?.purchaseDeadline ? (
 						<span className={styles.countdown}>
 							{t("referral.notice.remaining", {
@@ -155,8 +168,7 @@ export function ReferralNotice({
 						</span>
 					) : null}
 				</span>
-				{kind !== "pending" ? (
-					<button
+				<button
 						type="button"
 						className={styles.action}
 						disabled={opening}
@@ -167,14 +179,13 @@ export function ReferralNotice({
 								? "referral.notice.invite"
 								: "referral.notice.subscribe",
 						)}
-					</button>
-				) : null}
-				{kind !== "pending" ? <button
+				</button>
+				<button
 					type="button"
 					className={styles.close}
 					aria-label={t("referral.notice.dismiss")}
 					onClick={() => {
-						dismissed.add(key);
+						dismissNotice(key);
 						render((value) => value + 1);
 					}}
 				>
@@ -190,7 +201,7 @@ export function ReferralNotice({
 					>
 						<path d="m4.5 4.5 7 7m0-7-7 7" />
 					</svg>
-				</button> : null}
+				</button>
 			</section>
 			{failed ? (
 				<p className={styles.error} role="alert">
