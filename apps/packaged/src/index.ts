@@ -437,6 +437,7 @@ async function main(): Promise<void> {
   };
   const launchDesktop = async (): Promise<DesktopMainHandle> => await runDesktopMain(runtime, {
     electronReadyAtMs,
+    amrEndpointBinding: activeConfig.amrEndpointBinding,
     startupTiming: deferredHeadless ? null : packagedStartupTiming ?? undefined,
     splashWindow: splash?.window,
     splashStartedAt: splash?.startedAt,
