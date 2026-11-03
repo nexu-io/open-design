@@ -44,6 +44,7 @@ interface PluginManifestLike {
 
 interface InstalledPluginLike {
   fsPath: string;
+  sourceKind?: string;
   title?: string;
   manifest?: PluginManifestLike;
   [key: string]: unknown;
@@ -374,6 +375,21 @@ export function registerPluginAssetRoutes(app: Express, deps: RegisterPluginAsse
       const root = path.resolve(plugin.fsPath);
       const rootWithSep = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
       if (!(resolved + path.sep).startsWith(rootWithSep) && resolved !== root) return res.status(400).json({ error: 'asset escape rejected' });
+      // Sandboxed srcdoc previews have an opaque origin. WebGL textures,
+      // model fetches and FontFace loads need CORS even for local assets.
+      // Only expose declared assets shipped with the app: installed/team
+      // plugins may contain private files and must keep their existing policy.
+      const declaredAsset = plugin.manifest?.od?.context?.assets?.some(
+        (asset) => typeof asset === 'string' && path.resolve(root, asset) === resolved,
+      );
+      const publicBundledAsset = plugin.sourceKind === 'bundled' && declaredAsset;
+      if (req.headers.origin === 'null' && !publicBundledAsset) {
+        return res.status(403).json({ error: 'Origin: null requires a declared bundled asset' });
+      }
+      if (publicBundledAsset) {
+        res.vary('Origin');
+        if (req.headers.origin === 'null') res.setHeader('Access-Control-Allow-Origin', 'null');
+      }
       const relativeSegments = path.relative(root, resolved).split(path.sep).filter(Boolean);
       let current = root;
       try {

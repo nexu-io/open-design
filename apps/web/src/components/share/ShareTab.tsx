@@ -18,7 +18,6 @@ import { ShareConflictRow } from './ShareConflictRow';
 import styles from './ShareTab.module.css';
 export type SharePublishFailureKey =
   | PublicFilePublishFailureKey
-  | 'fileViewer.shareFinishEditing'
   | 'fileViewer.publishFileTooLarge'
   | 'fileViewer.publishFileEntryIndexConflict'
   | 'fileViewer.unpublishFileFailed';
@@ -292,7 +291,7 @@ export function ShareTab({
                         <p className={styles.publishHint} role="status"><Icon name="share-spinner" size={13} className="icon-spin" /> {t('common.loading')}</p>
                       ) : publicationQueryState === 'error' ? (
                         <><ShareErrorRow message={t('fileViewer.shareCheckFailed')} role="alert" />
-                        <ShareButton variant="primary" hoverLighten={false} onClick={retryPublicationQuery}><Icon name="share-refresh-arrows" size={13} /><span>{t('preview.retry')}</span></ShareButton></>
+                        <ShareButton variant="primary" hoverLighten={false} onClick={retryPublicationQuery}><Icon name="refresh" size={14} /><span>{t('preview.retry')}</span></ShareButton></>
                       ) : null}
                       {shownConflict ? (
                         <ShareConflictRow conflict={shownConflict} t={t} />
@@ -302,7 +301,7 @@ export function ShareTab({
                       {filePublished && publishRetry ? (
                         <ShareButton variant="primary" hoverLighten={false} disabled={!canMutatePublicShare || viewerOnly || publishing || streaming}
                           onClick={() => { void retryPublicShare?.(); }}>
-                          <Icon name="share-refresh-arrows" size={13} /><span>{t('preview.retry')}</span>
+                          <Icon name="refresh" size={14} /><span>{t('preview.retry')}</span>
                         </ShareButton>
                       ) : null}
                       {filePublished ? (
@@ -392,7 +391,7 @@ export function ShareTab({
                           {publishing ? (
                             <Icon name="share-spinner" size={13} strokeWidth={2} className="icon-spin" />
                           ) : publishRetry ? (
-                            <Icon name="share-refresh-arrows" size={13} strokeWidth={1.8} />
+                            <Icon name="refresh" size={14} />
                           ) : (
                             <Icon name="share-upload-arrow" size={13} strokeWidth={1.8} />
                           )}
@@ -510,7 +509,7 @@ export function ShareTab({
                       {shareAccessFailureKey ? <>
                         <ShareErrorRow message={t(shareAccessFailureKey)} />
                         <ShareButton variant="primary" hoverLighten={false} disabled={shareAccessBusy || viewerOnly} onClick={retryWorkspaceShareAccess}>
-                          <Icon name="share-refresh-arrows" size={13} /><span>{t('preview.retry')}</span>
+                          <Icon name="refresh" size={14} /><span>{t('preview.retry')}</span>
                         </ShareButton>
                       </> : null}
                       </>

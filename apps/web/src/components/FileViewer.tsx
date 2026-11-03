@@ -8302,13 +8302,7 @@ function HtmlViewer({
   async function publishCurrentFilePublic(mode?: 'resume') {
     if (!shareSourceGuard.isCurrent()) return;
     if (streaming || viewerOnly || publishingPublicFile) return;
-    // Sharing publishes authored bytes, independently of comment identity setup
-    // and its preview witness. Never prepare/mutate source as a side effect.
-    // Retained share-plan callbacks must still reject stale or unsettled edits.
-    if (guardShareSource && mode !== 'resume' && (!shareSourceGuard.canPublish() || manualEditTextSessionIdRef.current || manualEditTextCommitInFlightRef.current || manualEditPendingStyleRef.current || manualEditSavingRef.current)) {
-      setPublishFailureKey('fileViewer.shareFinishEditing');
-      return;
-    }
+    // Publish the saved file without gating on editor modes or save state.
     publicFileStateReadRef.current = null;
     const requestProjectId = projectId;
     const requestFileName = file.name;
@@ -8422,10 +8416,6 @@ function HtmlViewer({
     if (!shareSourceGuard.isCurrent()) return;
     if (!canPublishPublic || streaming || viewerOnly || !publishedFileSlug || publishingPublicFile
       || updateInFlightRef.current || (fileShareFreshness !== 'outdated' && !publishFailureKey) || fileShareStatus !== 'active') return;
-    if (guardShareSource && (!shareSourceGuard.canPublish() || manualEditTextSessionIdRef.current || manualEditTextCommitInFlightRef.current || manualEditPendingStyleRef.current || manualEditSavingRef.current)) {
-      setPublishFailureKey('fileViewer.shareFinishEditing');
-      return;
-    }
     publicFileStateReadRef.current = null;
     const requestProjectId = projectId;
     const requestFileName = file.name;
@@ -12819,20 +12809,8 @@ function HtmlViewer({
     && (resolveOwnerCommentAnchor(selectedLocationComment, liveCommentTargets, collab.publishedVersion ?? undefined).state === 'lost'
       || (missingCommentLocation?.commentId === selectedLocationComment.id && missingCommentLocation.previewKey === commentTargetsKey
         && missingCommentLocation.intent === commentLocationIntent)) ? selectedLocationComment.id : null;
-  const guardShareSource = workspaceActive && !viewerOnly && Boolean(workspaceContext?.permissions.canWriteSyncedFiles)
-    && !needsPowered && !passiveLargeHtmlPreview && liveHtml === undefined;
-  const shareSourceSettled = !streaming && !manualEditDraftDirty
-    && !manualEditSaving && !manualEditEntryHandoffPending && !manualEditExitHandoffPending
-    && !manualEditPendingStyleRef.current && !inspectMode && !savingInspect && !drawOverlayOpen
-    // Publication reads saved disk contents. Comment drafts and preview
-    // navigation do not change those bytes and must not block publication.
-    && source !== null && !versionModalOpen
-    && !_speakerNotesSaving && !publishingPublicFile;
-  const shareSourceInputKey = useMemo(() => JSON.stringify([
-    source, reloadKey, file.mtime, filesRefreshKey, manualEditDraft, speakerNotesDraft, workspaceActive,
-  ]), [source, reloadKey, file.mtime, filesRefreshKey, manualEditDraft, speakerNotesDraft, workspaceActive]);
   const shareSourceGuard = useShareSourceGuard({ projectId, fileName: file.name,
-    context: workspaceContext ?? null, inputKey: shareSourceInputKey, settled: shareSourceSettled });
+    context: workspaceContext ?? null });
   const commentIdentityFrameReady = commentTargetsReadyKey === commentTargetsKey
     && (useUrlLoadPreview ? urlSelectionBridgeReady
       : commentPreviewReady?.frame === iframeRef.current && commentPreviewReady.generation === srcDocTransportGeneration);

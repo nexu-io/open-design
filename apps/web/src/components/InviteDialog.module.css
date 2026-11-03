@@ -52,7 +52,7 @@
 .onboarding .panel > header,.onboarding .panel > p,.onboarding form,.onboarding .skip { width:440px;max-width:100%;align-self:center;box-sizing:border-box; }
 .onboarding .heading { justify-content:center;padding:0; }
 .onboarding .heading h2 { font-size:clamp(24px,2vw,28px);line-height:1.35;font-weight:700;letter-spacing:-.6px;text-align:center;overflow-wrap:anywhere; }
-.onboarding .context { text-align:center;margin:12px 0 24px;font-size:14px;line-height:21px;color:#666; }
+.onboarding .context { text-align:left;margin:12px 0 24px;font-size:14px;line-height:21px;color:#666; }
 .onboarding .sentence { display:block;overflow-wrap:anywhere; }
 .onboarding .labels,.onboarding .row { grid-template-columns:minmax(0,1fr) 112px;gap:8px;position:relative; }
 .onboarding .labels { width:calc(100% - 14px);font-size:13px;line-height:18px; }

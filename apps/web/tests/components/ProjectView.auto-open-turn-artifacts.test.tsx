@@ -261,13 +261,18 @@ async function runTurn(options: {
   await waitFor(() => expect(chatPaneHarness.onSend).toBeTruthy());
   await waitFor(() => expect(fetchProjectFiles).toHaveBeenCalled());
 
-  // Every read after the turn starts sees the finished set of files. The
-  // pre-turn snapshot is already captured by the send above.
-  fetchProjectFiles.mockResolvedValue(options.afterFiles);
-
-  void chatPaneHarness.onSend!('Generate four images', [], []);
+  await act(async () => {
+    void chatPaneHarness.onSend!('Generate four images', [], []);
+  });
   await waitFor(() => expect(handlers).toBeTruthy());
-  handlers!.onDone(options.doneText ?? 'Done.');
+  await waitFor(() => expect(chatPaneHarness.messages.some(
+    (message) => message.role === 'assistant' && message.runId === 'run-batch-images',
+  )).toBe(true));
+
+  // Publish output only after the turn captured its baseline and its running
+  // assistant committed. Bootstrap reads must not see future generated files.
+  fetchProjectFiles.mockResolvedValue(options.afterFiles);
+  await act(async () => { handlers!.onDone(options.doneText ?? 'Done.'); });
 }
 
 const IMAGE_TURN_FILES = [

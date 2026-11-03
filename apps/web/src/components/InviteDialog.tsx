@@ -328,7 +328,7 @@ export function InviteDialog({ open, onClose, workspaceContext, onSubmit, canAss
         <Button className={styles.close} onClick={close} aria-label={t('workspaceInvite.cancel')}>✕</Button>
         </> : null}
       </header>
-      {onboarding ? <p className={styles.context}>{onboardingSentences(t('workspaceInvite.onboardingBody1'), locale)}{' '}{onboardingSentences(t('workspaceInvite.onboardingBody2'), locale)}</p> : <p className={styles.context}>{workspaceContext?.workspaceName ?? workspaceContext?.teamName ?? ''}{workspaceContext?.memberCount === undefined ? null : <> · {t('workspaceInvite.memberCount').replace('{count}', String(workspaceContext.memberCount))}</>}</p>}
+      {onboarding ? <p className={styles.context} dir="auto">{t('workspaceInvite.onboardingBody1')}{' '}{t('workspaceInvite.onboardingBody2')}</p> : <p className={styles.context}>{workspaceContext?.workspaceName ?? workspaceContext?.teamName ?? ''}{workspaceContext?.memberCount === undefined ? null : <> · {t('workspaceInvite.memberCount').replace('{count}', String(workspaceContext.memberCount))}</>}</p>}
       <form onSubmit={event => { event.preventDefault(); void submit(); }} noValidate>
         <div className={`${styles.labels} ${rows.length === 1 ? styles.single : ''}`}><span>{t(onboarding ? 'workspaceInvite.onboardingEmailLabel' : 'workspaceInvite.emailLabel')}</span><span>{t('workspaceInvite.roleLabel')}</span></div>
         <div className={styles.rows} data-invite-rows>

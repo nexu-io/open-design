@@ -12,6 +12,7 @@ import {
 } from '@open-design/contracts';
 
 import { FileViewer } from '../../src/components/FileViewer';
+import { REMIX_ICON_PATHS } from '../../src/components/remix-icon-paths';
 import {
   CollabProvider,
   type CollabContextValue,
@@ -370,7 +371,7 @@ it('retries a generic publish failure once and shows the recovered URL', async (
   expect(document.body.textContent).not.toContain(sensitive);
   expect(document.querySelector('progress')).toBeNull();
   expect(retry()).toBeEnabled();
-  expect(retry().querySelector('svg path')?.getAttribute('d')).toContain('M20 7v5h-5');
+  expect(retry().querySelector('svg path')?.getAttribute('d')).toBe(REMIX_ICON_PATHS['refresh-line']);
   expect(write).not.toHaveBeenCalled();
   expect(posts(fetch)).toHaveLength(1);
   await tick(10_000);
