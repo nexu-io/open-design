@@ -1,7 +1,7 @@
 import {
   PUBLIC_FILE_MANUAL_REVOKE_REQUIRED,
   SHARE_ENTRY_INDEX_CONFLICT,
-  workspaceContextHasTeamIdentity,
+  workspaceContextHasWorkspaceIdentity,
   type PublicFileManualRevokeRequiredData,
   type ProjectFilePublicShareResponse,
   type ShareUnpublishResponse,
@@ -703,7 +703,7 @@ async function materializeTeamDesignSystems(
   accountGeneration: number,
   options?: FetchDesignSystemsOptions,
 ): Promise<ReadonlySet<string>> {
-  if (!workspaceContext || !workspaceContextHasTeamIdentity(workspaceContext)) {
+  if (!workspaceContext || !workspaceContextHasWorkspaceIdentity(workspaceContext)) {
     return new Set();
   }
   if (options?.materializedTeamIds) {
@@ -2143,9 +2143,12 @@ export async function unpublishProjectFilePublic(
         : typeof payload?.error === 'string'
           ? payload.error
           : payload?.message;
-    throw withDaemonFailure(new Error(errorMessage || `Unpublish failed (${resp.status})`), {
+    const rawCode = typeof payload?.error === 'object' ? payload.error.code : payload?.error;
+    const code = typeof rawCode === 'string' ? rawCode : undefined;
+    // An HTTP refusal is distinct from fetch rejecting without any response.
+    throw withDaemonFailure(new PublicFilePublishError(errorMessage || `Unpublish failed (${resp.status})`, resp.status, code), {
       failure: payload?.failure,
-      daemonErrorCode: typeof payload?.error === 'object' ? payload.error.code : payload?.error,
+      daemonErrorCode: rawCode,
     });
   }
   return (await resp.json()) as ShareUnpublishResponse;
@@ -3400,7 +3403,7 @@ export async function uploadProjectFiles(
 export function projectRawUrl(
   projectId: string,
   filePath: string,
-  _workspaceContext?: WorkspaceCollabContext | null,
+  workspaceContext?: WorkspaceCollabContext | null,
 ): string {
   // Encode each path segment individually so a slash inside the file
   // path stays a path separator, not %2F.
@@ -3408,7 +3411,13 @@ export function projectRawUrl(
     .split('/')
     .map((seg) => encodeURIComponent(seg))
     .join('/');
-  return `/api/projects/${encodeURIComponent(projectId)}/raw/${safePath}`;
+  // iframe and image navigations cannot send Workspace headers. The daemon
+  // treats this exact identity pair as a claim and freshly verifies membership
+  // and the project's persisted binding before serving Team-owned bytes.
+  return workspaceResourceUrl(
+    `/api/projects/${encodeURIComponent(projectId)}/raw/${safePath}`,
+    workspaceContext,
+  );
 }
 
 export function designSystemStaticUrl(
@@ -3449,7 +3458,8 @@ export async function deleteProjectFile(
 ): Promise<boolean> {
   try {
     const resp = await fetch(
-      projectRawUrl(projectId, name, workspaceContext),
+      // This write can set headers, so keep its URL free of navigation scope.
+      projectRawUrl(projectId, name),
       {
         method: 'DELETE',
         ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),

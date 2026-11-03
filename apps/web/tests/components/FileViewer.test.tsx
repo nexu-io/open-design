@@ -716,8 +716,8 @@ describe('FileViewer preview scale', () => {
       expect(document.querySelector('.viewer-loading')).toBeNull();
       expect(screen.getByTestId('artifact-preview-frame')).toBeTruthy();
     });
-    expect(rawReads[0]?.url).not.toContain('workspaceId=');
-    expect(rawReads[0]?.url).not.toContain('workspaceMemberId=');
+    expect(new URL(rawReads[0]!.url, 'https://od.local').searchParams.get('workspaceId')).toBe('ws-1');
+    expect(new URL(rawReads[0]!.url, 'https://od.local').searchParams.get('workspaceMemberId')).toBe('wm-1');
     expect(rawReads[0]?.init?.headers).toMatchObject({
       'x-od-workspace-id': 'ws-1',
       'x-od-workspace-member-id': 'wm-1',
@@ -2264,7 +2264,7 @@ describe('FileViewer SVG artifacts', () => {
     ))).toBe(false);
   });
 
-  it('keeps browser-owned URL preview navigation server-authorized by project id', () => {
+  it('carries verified Team identity on browser-owned URL preview navigation', () => {
     const file = baseFile({
       name: 'team-page.html',
       path: 'team-page.html',
@@ -2293,9 +2293,9 @@ describe('FileViewer SVG artifacts', () => {
 
     expect(markup).toContain('data-od-render-mode="url-load" data-od-active="true"');
     expect(markup).toContain(
-      'src="/api/projects/project-1/raw/team-page.html?v=1710000000',
+      'src="/api/projects/project-1/raw/team-page.html?workspaceId=ws-1',
     );
-    expect(markup).not.toContain('workspaceMemberId=');
+    expect(markup).toContain('workspaceMemberId=wm-1');
   });
 
   it('routes brand extraction stop requests from the preview iframe', async () => {
@@ -5645,7 +5645,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.queryByTestId('deck-thumbnail-rail')).toBeNull();
   });
 
-  it('keeps deck thumbnail resource URLs independent of shell Workspace changes', async () => {
+  it('re-scopes deck thumbnail resource URLs when the Workspace identity changes', async () => {
     const file = baseFile({
       name: 'deck.html',
       path: 'deck.html',
@@ -5684,8 +5684,8 @@ describe('FileViewer SVG artifacts', () => {
 
     const thumbnail = container.querySelector('.deck-thumbnail-frame iframe') as HTMLIFrameElement | null;
     expect(thumbnail).toBeTruthy();
-    expect(thumbnail!.srcdoc).not.toContain('workspaceId=');
-    expect(thumbnail!.srcdoc).not.toContain('workspaceMemberId=');
+    expect(thumbnail!.srcdoc).toContain('workspaceId=ws-1');
+    expect(thumbnail!.srcdoc).toContain('workspaceMemberId=wm-1');
     const originalSrcDoc = thumbnail!.srcdoc;
 
     rerender(
@@ -5696,9 +5696,10 @@ describe('FileViewer SVG artifacts', () => {
 
     await waitFor(() => {
       const updated = container.querySelector('.deck-thumbnail-frame iframe') as HTMLIFrameElement | null;
-      expect(updated?.srcdoc).toBe(originalSrcDoc);
-      expect(updated?.srcdoc).not.toContain('workspaceId=');
-      expect(updated?.srcdoc).not.toContain('workspaceMemberId=');
+      expect(updated?.srcdoc).not.toBe(originalSrcDoc);
+      expect(updated?.srcdoc).toContain('workspaceId=ws-2');
+      expect(updated?.srcdoc).toContain('workspaceMemberId=wm-2');
+      expect(updated?.srcdoc).not.toContain('workspaceId=ws-1');
     });
   });
 
@@ -7033,11 +7034,10 @@ describe('FileViewer SVG artifacts', () => {
     // missing — is back for a personal workspace.
     expect(await screen.findByText('Generate and copy link')).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /Generate and copy link/i })).toBeTruthy();
-    // "Share project in workspace" is TEAM project sharing, which a personal
-    // workspace has no team to receive — see the dedicated test below
-    // (recvq5bM78HWCE) for the card's own gating.
+    // The retired section label stays absent; project visibility is available
+    // in a personal workspace through the same selector as a team workspace.
     expect(screen.queryByText('Share project in workspace')).toBeNull();
-    expect(screen.queryByText('Visibility in workspace')).toBeNull();
+    expect(screen.getByText('Visibility in workspace')).toBeVisible();
   });
 
   // recvq56lzckGtE: publishing a file from a real team workspace 403'd against
@@ -7247,8 +7247,8 @@ describe('FileViewer SVG artifacts', () => {
     expect(writes).toEqual([]);
   });
 
-  // Scope help is persistent content in the HTML share panel. It remains
-  // team-gated; unlike provider tooltips it needs no focus or hover.
+  // Scope help is persistent content in the HTML share panel and needs no
+  // focus or hover.
   it('shows workspace-access help inline without a focus or hover prerequisite', async () => {
     const context = teamWorkspaceContext();
     stubFetchWithWorkspaceContext(context);
@@ -7270,13 +7270,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.queryByTestId('workspace-access-help')).toBeNull();
   });
 
-  // recvq5bM78HWCE: the "在工作空间中分享项目" card rendered for a personal
-  // workspace with no gate at all, so clicking its access toggle called
-  // `moveWorkspaceProject({ visibility: 'team' })`, which the daemon's
-  // `teamShareRefusalFor` always refuses outside a team workspace — the click
-  // silently failed. The public single-file publish card right above it is
-  // unaffected (that one IS meant to work for a personal workspace).
-  it('hides the team-only workspace-share card for a personal workspace', async () => {
+  it('offers workspace visibility choices to a personal workspace', async () => {
     const context: WorkspaceCollabContext = {
       ...teamWorkspaceContext(),
       workspaceType: 'personal',
@@ -7295,14 +7289,17 @@ describe('FileViewer SVG artifacts', () => {
     expect(await screen.findByRole('menu')).toBeTruthy();
     await screen.findByText('Generate and copy link');
     expect(screen.queryByText('Share project in workspace')).toBeNull();
-    expect(screen.queryByText('Visibility in workspace')).toBeNull();
+    expect(screen.getByText('Visibility in workspace')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Only me' }));
+    expect(screen.getByRole('option', { name: 'Only me' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('option', { name: 'Workspace members' })).toBeEnabled();
   });
 
   // recvqgif6Xa7Wb: product ruled the "no team to share with yet" bridge card
   // (added for recvqae3pK5hyx/recvq6W8GX8NaH) out entirely — it was never a
   // designed surface, just a stopgap to avoid a blank tab. A personal
-  // workspace that can already publish must show ONLY the publish card, with
-  // no team-CTA card and no create-team link underneath it.
+  // workspace that can already publish needs no team-CTA card or create-team
+  // link underneath it.
   it('does not show a create-team CTA for a personal workspace that can already publish', async () => {
     const context: WorkspaceCollabContext = {
       ...teamWorkspaceContext(),
@@ -10790,7 +10787,7 @@ describe('FileViewer tweaks toolbar', () => {
         expect(frame.srcdoc).toContain(
           `/api/projects/${projectId}/raw/${fontPath}`,
         );
-        expect(frame.srcdoc).not.toContain('workspaceMemberId=');
+        expect(frame.srcdoc).toContain('workspaceMemberId=wm-1');
         expect(frame.srcdoc).not.toContain('../../fonts/inter-variable-400.woff2');
       });
     } finally {
@@ -10853,7 +10850,7 @@ describe('FileViewer tweaks toolbar', () => {
         expect(frame.srcdoc).toContain(
           `/api/projects/${projectId}/raw/${imagePath}`,
         );
-        expect(frame.srcdoc).not.toContain('workspaceMemberId=');
+        expect(frame.srcdoc).toContain('workspaceMemberId=wm-1');
         expect(frame.srcdoc).not.toContain('../images/hero.png');
       });
     } finally {

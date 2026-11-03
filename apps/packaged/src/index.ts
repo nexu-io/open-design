@@ -329,6 +329,9 @@ async function main(): Promise<void> {
     platform: process.platform,
   });
   applyPackagedElectronPathOverrides(paths);
+  // The shared beta feed can replace the entire outer with an unbound build.
+  // Use the existing updater gate for this fixed-environment dogfood package.
+  if (activeConfig.amrEndpointBinding) process.env.OD_UPDATE_ENABLED = "0";
   applyPackagedUpdaterEnv(activeConfig.updateMetadataUrl);
   if (!claimPackagedSingleInstanceLock(app, (argv) => {
     secondInstanceHandoff.handle(findPackagedDeeplinkArg(argv));
@@ -365,6 +368,7 @@ async function main(): Promise<void> {
     launchContext: packagedStartupTiming?.context(),
     appVersion: activeConfig.appVersion,
     amrProfile: activeConfig.amrProfile,
+    amrEndpointBinding: activeConfig.amrEndpointBinding,
     daemonCliEntry: activeConfig.daemonCliEntry,
     daemonSidecarEntry: activeConfig.daemonSidecarEntry,
     electronNodeCommand: launcherRuntime.electronNodeCommand,

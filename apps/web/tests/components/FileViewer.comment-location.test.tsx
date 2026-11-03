@@ -209,3 +209,28 @@ it('keeps a missing legacy comment in the list without drawing a pin or posting 
   expect(screen.queryByTestId('comment-popover-input')).toBeNull();
   expect(fetcher.mock.calls.filter(([, init]) => init?.method?.toUpperCase() === 'POST')).toHaveLength(0);
 });
+
+it('OPEND-3869 keeps the saved pin on canonical refresh through canonical refresh in the current preview document', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({})));
+  render(tree()); fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+  const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+  const post = vi.spyOn(frame.contentWindow!, 'postMessage');
+  const dispatch = async (data: object) => { await act(async () => {
+    const currentFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    window.dispatchEvent(new MessageEvent('message', {source:currentFrame.contentWindow,data}));
+  }); };
+  await dispatch({type:'od:comment-targets',targets:[{...comment,domSelector:comment.selector}]});
+  fireEvent.click(screen.getByTestId('comment-side-item'));
+  const request = post.mock.calls.map(([value])=>value).filter(value=>value?.locate).at(-1);
+  const located = {...comment,elementId:'new-id',selector:'[data-od-id="new-id"]',domSelector:comment.selector,position:{x:320,y:400,width:200,height:40}};
+  expect(request).toBeUndefined();
+  await dispatch({type:'od:comment-targets',targets:[located]});
+  await dispatch({...located,type:'od:comment-active-target-update'});
+  const same = () => {
+    expect(screen.queryByTestId('comment-active-pin')).toBeNull();
+    expect(markerCanvasStyle(screen.getByTestId('comment-saved-marker-'+comment.elementId))).toMatchObject({left:'320px',top:'372px',width:'28px',height:'28px'});
+  };
+  same();
+  await dispatch({type:'od:comment-targets',targets:[{...located,selector:'[data-od-id="new-id"]',domSelector:comment.selector}]});
+  same();
+});

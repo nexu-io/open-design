@@ -1,5 +1,6 @@
 import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { readAmrEndpointBinding, registerPinnedAmrCredentialHome } from '../integrations/amr-endpoint-binding.js';
 import { runVelaCommand } from '../integrations/vela-command.js';
 import type { VelaControlApiContext } from '../integrations/vela.js';
 import { safeVelaCommandError } from './public-file-failure.js';
@@ -62,9 +63,11 @@ export async function runPinnedVelaCommand(
     await cleanupAbandonedPinnedVelaSessions(dataRoot);
     const home = await mkdtemp(path.join(dataRoot, `vela-session-v1-${process.pid}-`));
     let commandRejected = false;
+    let releasePinnedHome = () => {};
     try {
+      releasePinnedHome = registerPinnedAmrCredentialHome(home, input.session);
       await writeFile(path.join(home, 'config.json'), JSON.stringify({
-        profiles: { [profile]: { controlKey, apiUrl } },
+        profiles: { [profile]: { controlKey, apiUrl, linkUrl: readAmrEndpointBinding()?.linkUrl } },
       }), { mode: 0o600, flag: 'wx' });
       if (input.isCurrent && !input.isCurrent()) throw new Error('VELA_REQUEST_SNAPSHOT_CHANGED');
       preparing = false;
@@ -84,6 +87,7 @@ export async function runPinnedVelaCommand(
       commandRejected = true;
       throw error;
     } finally {
+      releasePinnedHome();
       try {
         await rm(home, { recursive: true, force: true });
       } catch (error) {

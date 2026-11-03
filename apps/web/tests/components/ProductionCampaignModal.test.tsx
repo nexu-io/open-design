@@ -25,6 +25,8 @@ vi.mock("@open-design/host", () => ({
 vi.mock("../../src/providers/registry", () => ({
 	openExternalUrl: openExternalUrlMock,
 }));
+import { UseEverywhereModal } from "../../src/components/UseEverywhereModal";
+import { AmrArtifactUpgradeDialog } from "../../src/components/AmrArtifactUpgradeDialog";
 import { ProductionCampaignModal } from "../../src/components/ProductionCampaignModal";
 import { internalActionNavigationUrl } from "../../src/components/touchpoint-navigation";
 import { ProductionCampaignBadge } from "../../src/components/ProductionCampaignBadge";
@@ -171,12 +173,85 @@ const modalHostStyles = readFileSync(
 );
 
 describe("ProductionCampaignModal", () => {
-	it("keeps generic modal chrome content-sized without asymmetric host padding", () => {
+	it.each([
+		[false, false], [false, true], [true, false], [true, true],
+	])("restores scroll with native Dialog isolation (other first: %s, closes first: %s)", async (otherFirst, otherClosesFirst) => {
+		(globalThis as CampaignHostGlobal).__openDesignCampaignTestHost = {
+			client: { osLocale: "en-US", type: "desktop" },
+		};
+		vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(decision()), { status: 200 })));
+		const openOther = () => render(<AmrArtifactUpgradeDialog profile={null} metricsConsent={false} installationId={null} onClose={() => {}} onContinue={() => {}} />);
+		let other = otherFirst ? openOther() : undefined;
+		const campaign = render(<ProductionCampaignModal authenticated sessionSubject="native-dialog-user" />);
+		try {
+			await screen.findByRole("dialog", { name: "Campaign" });
+			other ??= openOther();
+			const [first, last] = otherClosesFirst ? [other, campaign] : [campaign, other];
+			first.unmount();
+			expect(document.body).toHaveAttribute("data-web-modal-scroll-lock");
+			expect(document.documentElement.style.overflow).toBe("hidden");
+			last.unmount();
+			expect(document.body.style.overflow).toBe("");
+			expect(document.body.style.position).toBe("");
+			expect(document.documentElement.style.overflow).toBe("");
+			expect(document.body).not.toHaveAttribute("data-web-modal-scroll-lock");
+		} finally {
+			campaign.unmount();
+			other?.unmount();
+			document.body.style.overflow = "";
+		}
+	});
+	it.each([
+		[false, "campaign-first"], [false, "other-first"],
+		[true, "campaign-first"], [true, "other-first"],
+	] as const)("keeps actual modal hosts locked (other opens first: %s, closes: %s)", async (otherFirst, order) => {
+		(globalThis as CampaignHostGlobal).__openDesignCampaignTestHost = {
+			client: { osLocale: "en-US", type: "desktop" },
+		};
+		vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(decision()), { status: 200 })));
+		const openOther = () => render(<UseEverywhereModal onClose={() => {}} />);
+		let other = otherFirst ? openOther() : undefined;
+		const campaign = render(<ProductionCampaignModal authenticated sessionSubject="interleaved-user" />);
+		try {
+			await screen.findByRole("dialog", { name: "Campaign" });
+			other ??= openOther();
+			const [first, last] = order === "campaign-first" ? [campaign, other] : [other, campaign];
+			first.unmount();
+			expect(document.body).toHaveAttribute("data-web-modal-scroll-lock");
+			expect(document.documentElement.style.overflow).toBe("hidden");
+			last.unmount();
+			expect(document.body.style.overflow).toBe("");
+			expect(document.documentElement.style.overflow).toBe("");
+			expect(document.body.style.position).toBe("");
+		} finally {
+			campaign.unmount();
+			other?.unmount();
+			document.body.style.overflow = "";
+			document.documentElement.style.overflow = "";
+		}
+	});
+
+	it("bounds content and preserves scrolling without imposing a fixed canvas", () => {
 		const modalRule = modalHostStyles.match(/\.modal\s*\{[^}]*\}/)?.[0];
-		expect(modalRule).toContain("max-width: calc(100vw - 32px)");
+		expect(modalRule).toContain("max-width: calc(100vw - var(--web-modal-scrollbar-width, 0px))");
 		expect(modalRule).toContain("background: transparent");
-		expect(modalRule).not.toMatch(/(?:^|[;{]\s*)width:/);
+		expect(modalRule).toContain("max-height: calc(100vh - var(--web-modal-scrollbar-height, 0px))");
+		expect(modalRule).toContain("overflow: auto");
 		expect(modalRule).not.toMatch(/(?:^|[;{]\s*)padding:/);
+	});
+	it("keeps the opend-touchpoint host background transparent inside the modal (OPEND-3478)", () => {
+		const hostRule = modalHostStyles.match(
+			/\.modal\s+:global\(opend-touchpoint\)\s*\{[^}]*\}/,
+		)?.[0];
+		expect(hostRule).toContain("background: transparent");
+		expect(hostRule).toContain("height: round(down, calc(100vh - var(--web-modal-scrollbar-height, 0px)), 1px)");
+		expect(hostRule).toContain("width: round(down, calc(100vw - var(--web-modal-scrollbar-width, 0px)), 1px)");
+		expect(hostRule).toContain("grid-auto-rows: max-content");
+		expect(hostRule).toContain("justify-items: safe center");
+		expect(hostRule).toContain("align-content: safe center");
+		const modalRule = modalHostStyles.match(/\.modal\s*\{[^}]*\}/)?.[0];
+		expect(modalRule).not.toMatch(/border-radius:/);
+		expect(modalRule).not.toMatch(/overflow:\s*hidden/);
 	});
 	it("does not restart the production loader on an unchanged parent render", async () => {
 		(globalThis as CampaignHostGlobal).__openDesignCampaignTestHost = {
@@ -439,7 +514,7 @@ describe("ProductionCampaignModal", () => {
 				.getByTestId("campaign-custom-element")
 				.querySelector("opend-touchpoint"),
 		).not.toBeNull();
-		expect(document.body.style.overflow).toBe("hidden");
+		expect(document.body).toHaveAttribute("data-web-modal-scroll-lock");
 		expect(document.querySelector("iframe,webview")).toBeNull();
 		// The fixture declares the SDK capability but exposes no actual close
 		// control, so the host fallback remains available.
@@ -794,7 +869,7 @@ describe("Production campaign live refresh", () => {
 		const modal = dialog.firstElementChild as HTMLElement;
 		const element = document.querySelector("opend-touchpoint");
 		expect(element).not.toBeNull();
-		expect(document.body.style.overflow).toBe("hidden");
+		expect(document.body).toHaveAttribute("data-web-modal-scroll-lock");
 		const outside = document.createElement("button");
 		document.body.append(outside);
 		outside.focus();
@@ -805,7 +880,7 @@ describe("Production campaign live refresh", () => {
 		expect(screen.getByRole("dialog")).toBe(dialog);
 		expect(document.querySelector("opend-touchpoint")).toBe(element);
 		expect(OpenDesignTouchpointElement.prototype.mount).toHaveBeenCalledTimes(1);
-		expect(document.body.style.overflow).toBe("hidden");
+		expect(document.body).toHaveAttribute("data-web-modal-scroll-lock");
 		fireEvent.keyDown(document, { key: "Tab" });
 		expect(modal.contains(document.activeElement)).toBe(true);
 		outside.remove();
@@ -928,7 +1003,7 @@ describe("Production campaign live refresh", () => {
 		// One mount for the whole episode: no rebuilt shadow DOM, no replayed
 		// entry animation, no scroll lock released and re-taken.
 		expect(OpenDesignTouchpointElement.prototype.mount).toHaveBeenCalledTimes(1);
-		expect(document.body.style.overflow).toBe("hidden");
+		expect(document.body).toHaveAttribute("data-web-modal-scroll-lock");
 	});
 
 	// The other half of OPEND-3372's premise: the client now holds a credential
@@ -1786,6 +1861,89 @@ describe("ProductionCampaignModal mount lifetime", () => {
 		});
 		await waitFor(() => expect(release).toHaveBeenCalledTimes(1));
 		expect(mount).not.toHaveBeenCalled();
+	});
+});
+
+describe("ProductionCampaignModal concurrent keyboard ownership", () => {
+	beforeEach(() => {
+		(globalThis as CampaignHostGlobal).__openDesignCampaignTestHost = {
+			client: { osLocale: "en-US", type: "desktop" },
+		};
+		vi.stubGlobal("fetch", vi.fn(async () =>
+			new Response(JSON.stringify(decision()), { status: 200 })));
+		vi.spyOn(OpenDesignTouchpointElement.prototype, "mount").mockImplementation(
+			async function (this: OpenDesignTouchpointElement) {
+				this.shadowRoot?.replaceChildren(document.createElement("button"), document.createElement("button"));
+			},
+		);
+	});
+
+	async function openPair(nativeFirst: boolean) {
+		let native: ReturnType<typeof render>;
+		const onClose = vi.fn(() => native.unmount());
+		const openNative = () => {
+			native = render(<AmrArtifactUpgradeDialog profile={null} metricsConsent={false}
+				installationId={null} onClose={onClose} onContinue={() => {}} />);
+			const top = screen.getByTestId("amr-artifact-upgrade-dialog");
+			// jsdom does not load the CSS modules' actual stacking layers.
+			Object.assign(top.parentElement!.style, { position: "fixed", zIndex: "1700" });
+			return top;
+		};
+		let top = nativeFirst ? openNative() : null;
+		const initialControl = top?.querySelector<HTMLButtonElement>("button");
+		initialControl?.focus();
+		const cms = render(<ProductionCampaignModal authenticated sessionSubject="keyboard-user" />);
+		const campaign = await screen.findByRole("dialog", { name: "Campaign" });
+		Object.assign(campaign.style, { position: "fixed", zIndex: "1000" });
+		if (initialControl) expect(document.activeElement).toBe(initialControl);
+		top ??= openNative();
+		return { cms, campaign, top, onClose };
+	}
+
+	it.each([false, true])("leaves Escape and both Tab directions to the higher Dialog (native first: %s)", async nativeFirst => {
+		const { campaign, top, onClose } = await openPair(nativeFirst);
+		const host = campaign.querySelector("opend-touchpoint")!;
+		const first = Array.from(top.querySelectorAll("button")).find(button => !button.disabled)!;
+		const finalControl = Array.from(top.querySelectorAll("button")).filter(button => !button.disabled).at(-1)!;
+		const focus = vi.spyOn(HTMLElement.prototype, "focus");
+		top.focus();
+		fireEvent.keyDown(top, { key: "Tab" });
+		expect(document.activeElement).toBe(first);
+		fireEvent.keyDown(first!, { key: "Tab", shiftKey: true });
+		expect(document.activeElement).toBe(finalControl);
+		fireEvent.keyDown(finalControl, { key: "Tab" });
+		expect(document.activeElement).toBe(first);
+		expect(focus.mock.instances.some(element => element instanceof Node && campaign.contains(element))).toBe(false);
+		fireEvent.keyDown(first!, { key: "Escape" });
+		expect(onClose).toHaveBeenCalledTimes(1);
+		expect(campaign.isConnected).toBe(true);
+		expect(top.isConnected).toBe(false);
+		// After the higher layer leaves, CMS resumes its Shadow DOM trap and Escape.
+		fireEvent.keyDown(document, { key: "Tab" });
+		expect(host.shadowRoot!.activeElement).toBe(host.shadowRoot!.firstElementChild);
+		fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+		expect(host.shadowRoot!.activeElement).toBe(host.shadowRoot!.lastElementChild);
+		fireEvent.keyDown(document, { key: "Escape" });
+		expect(campaign.isConnected).toBe(false);
+	});
+
+	it("leaves an already handled key event alone", async () => {
+		const { campaign, top } = await openPair(false);
+		fireEvent.keyDown(top, { key: "Escape" });
+		const event = new KeyboardEvent("keydown", { key: "Escape", cancelable: true, bubbles: true });
+		event.preventDefault();
+		fireEvent(document, event);
+		expect(campaign.isConnected).toBe(true);
+	});
+
+	it.each([false, true])("does not restore lower CMS focus over the higher Dialog on withdrawal (native first: %s)", async nativeFirst => {
+		const { cms, top } = await openPair(nativeFirst);
+		const control = top.querySelector("button")!;
+		control.focus();
+		const focus = vi.spyOn(HTMLElement.prototype, "focus");
+		cms.unmount();
+		expect(document.activeElement).toBe(control);
+		expect(focus).not.toHaveBeenCalled();
 	});
 });
 

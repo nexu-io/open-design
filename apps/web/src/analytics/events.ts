@@ -1,3 +1,4 @@
+import type { WorkspaceJourneySurfaceProps, WorkspaceJourneyClickProps, WorkspaceInvitePageViewProps } from '@open-design/contracts/analytics';
 import { reportExperienceEvent } from '../observability/experience-diagnostics';
 import { observeAnalytics } from './observe';
 import type { ProjectCommentSendResultProps, ShareGuideClickProps, ShareGuideSurfaceViewProps } from '@open-design/contracts/analytics';
@@ -1584,4 +1585,14 @@ export function trackExperienceSurveySent(
     $survey_questions: answered,
     ...responses,
   });
+}
+
+export function trackWorkspaceJourneyView(track: Track, props: WorkspaceJourneySurfaceProps): void {
+  send(track, 'surface_view', props);
+}
+export function trackWorkspaceJourneyClick(track: Track, props: WorkspaceJourneyClickProps): void {
+  send(track, 'ui_click', props);
+}
+export function trackWorkspaceInvitePageView(track: Track, props: WorkspaceInvitePageViewProps): void {
+  send(track, 'page_view', props);
 }

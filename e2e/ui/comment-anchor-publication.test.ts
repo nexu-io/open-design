@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test } from '@/playwright/suite';
 import { T } from '@/timeouts';
-import { AMR_PERSONAL_WORKSPACE_CONTEXT, mockAmrPersonalWorkspace } from '@/playwright/amr';
+import { AMR_PERSONAL_WORKSPACE_CONTEXT, AMR_PERSONAL_WORKSPACE_HEADERS, mockAmrPersonalWorkspace } from '@/playwright/amr';
 
 // Actual client selection/save and daemon persistence. Cloud workspace discovery
 // is controlled; the separate cross-client runtime probe owns Vela locating.
@@ -59,7 +59,8 @@ test('[P1] OPEND-3887 saved srcdoc anchors resolve in the original file bytes', 
   const comment = (await response.json()).comment;
   expect(comment.elementId).toMatch(/^dom:/);
   expect(comment.selector).toMatch(/^body > /);
-  const persisted = await page.request.get(`/api/projects/${id}/conversations/${conversationId}/comments`);
+  const persisted = await page.request.get(`/api/projects/${id}/conversations/${conversationId}/comments`, { headers: AMR_PERSONAL_WORKSPACE_HEADERS });
+  expect(persisted.ok(), await persisted.text()).toBeTruthy();
   expect((await persisted.json()).comments).toContainEqual(expect.objectContaining({ id: comment.id, selector: comment.selector }));
   expect(comment.position.anchor.u).toBeGreaterThan(0);
   expect(comment.position.anchor.u).toBeLessThan(1);

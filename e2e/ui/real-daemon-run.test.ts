@@ -1025,9 +1025,9 @@ test('[P1] real daemon run survives reload before the create response reaches th
 
 for (const ending of ['failed', 'canceled'] as const) {
   test(`[P1] saved comment returns after Agent ${ending}`, async ({ page }, testInfo) => {
-    await createProject(page, `Comment mainline ${ending}`);
+    await createProject(page, `Comment mainline ${ending}`, 'qwen');
     const { projectId, conversationId } = await currentProjectContext(page);
-    const note = ending === 'failed' ? 'Return an empty daemon smoke response' : 'Hold the daemon run open until canceled';
+    const note = ending === 'failed' ? 'Return a stderr-only daemon smoke failure' : 'Hold the daemon run open until canceled';
     const written = await page.request.post(`/api/projects/${projectId}/files`, { data: {
       name: 'index.html', content: '<html><body><h1 data-od-id="headline">Comment mainline</h1></body></html>',
       artifactManifest: { version: 1, kind: 'html', title: 'Comment mainline', entry: 'index.html', renderer: 'html', exports: ['html'] },
@@ -1067,31 +1067,28 @@ for (const ending of ['failed', 'canceled'] as const) {
   });
 }
 
-test('[P0] empty daemon output fails cleanly, persists after reload, and does not leave ghost files', async ({ page }) => {
-  await createProject(page, 'Empty daemon failure smoke');
+// P0-24 Q6 (PRD failure rule; test case X08): a CLI that exits cleanly without
+// output is not a failure. After the existing automatic retry the turn ends
+// normally — no failure card, no failure status — and still leaves no files.
+test('[P0] empty daemon output ends normally, persists after reload, and does not leave ghost files', async ({ page }) => {
+  await createProject(page, 'Empty daemon output smoke');
   await expectWorkspaceReady(page);
 
   await sendPrompt(page, 'Return an empty daemon smoke response');
 
-  const rawError = 'Agent completed without producing any output.';
-  const card = runErrorCard(page);
-  await expect(card).toContainText('Unable to generate content', { timeout: 15_000 });
-  await expect(card).toContainText('The AI could not generate content. Please start the task again, or switch models and try again.');
-  await expect(card).not.toContainText(rawError);
-
   const { projectId, conversationId } = await currentProjectContext(page);
-  await expectPersistedAssistantErrorDetail(page, projectId, conversationId, rawError);
   await expect.poll(async () => {
     const messages = await listConversationMessages(page, projectId, conversationId);
     return messages.find((message) => message.role === 'assistant')?.runStatus ?? 'missing';
-  }, { timeout: 15_000 }).toBe('failed');
+  }, { timeout: 30_000 }).toBe('succeeded');
+  await expect(runErrorCard(page)).toHaveCount(0);
+  await expect(page.getByText('Unable to generate content')).toHaveCount(0);
   expect(await listProjectFiles(page, projectId)).toEqual([]);
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
-  await expect(runErrorCard(page)).toContainText('Unable to generate content');
-  await expect(runErrorCard(page)).toContainText('The AI could not generate content. Please start the task again, or switch models and try again.');
-  await expect(runErrorCard(page)).not.toContainText(rawError);
+  await expect(runErrorCard(page)).toHaveCount(0);
+  await expect(page.getByText('Unable to generate content')).toHaveCount(0);
   expect(await listProjectFiles(page, projectId)).toEqual([]);
 });
 

@@ -151,6 +151,8 @@ import {
   publicFileEntryIndexConflict,
   publicFileManualRevokePublication,
   publicFilePublishFailureKey,
+  publicFileMutationFailureKey,
+  publicFileMutationNeedsReconciliation,
 } from '../collab/public-file-publish';
 import { moveWorkspaceProject, workspaceProjectMoveErrorCode } from '../state/projects';
 import { MoveToTeamConfirmDialog, moveConfirmSkipped } from './MoveToTeamConfirmDialog';
@@ -5077,7 +5079,7 @@ export function CommentSidePanel({
         {loadState === 'loading' ? <div role="status">{t('common.loading')}</div> : null}
         {loadState === 'error' ? <div role="alert">
           {t('chat.comments.loadFailed')}
-          {onRetry ? <button type="button" onClick={onRetry}>{t('preview.retry')}</button> : null}
+          {onRetry ? <Button variant="ghost" onClick={onRetry}>{t('preview.retry')}</Button> : null}
         </div> : null}
         {sorted.length === 0 && loadState === 'success' ? (
           <div className="comment-side-empty">
@@ -7382,6 +7384,7 @@ function HtmlViewer({
     workspaceContext: observedWorkspaceContext,
     workspaceContextLoading,
     projectResourceAuthority,
+    projectVisibility,
   } = useProjectCollabContext();
   const observedSourceAuthorizationScopeKey = fileViewerSourceAuthorizationScopeKey(
     workspaceContextLoading,
@@ -7414,6 +7417,10 @@ function HtmlViewer({
     };
   }
   const workspaceContext = stableWorkspaceContextRef.current.value;
+  const workspaceScopedSharedAssets = Boolean(
+    workspaceContext
+    && (workspaceContext.workspaceType === 'team' || projectVisibility === 'team'),
+  );
   const sourceAuthorizationScopeKey = stableWorkspaceContextRef.current.key;
   const projectResourceReadBlocked =
     sourceAuthorizationScopeKey === null;
@@ -8086,12 +8093,23 @@ function HtmlViewer({
   }
 
   // The one way a share-state read lands in this viewer's share state.
-  function applyPublicShareStateRead(state: ProjectFilePublicShareResponse) {
+  function applyPublicShareStateRead(state: ProjectFilePublicShareResponse, reconcileMutation = false) {
+    const reconciling = reconcileMutation || publishFailureKey === 'fileViewer.publishFileUnconfirmed';
+    if (reconciling) {
+      const confirmed = !state.stale && (state.status === 'stopped' || state.status === 'none'
+        || (state.status === 'active' && (state.freshness === 'current' || state.freshness === 'outdated')));
+      if (!confirmed) {
+        setPublicQuery({ identity: publicFileReadIdentity, status: 'error' });
+        return;
+      }
+      setPublishFailureKey(null);
+      setFileShareFreshness(state.freshness ?? 'unknown');
+    }
     setPublicQuery({ identity: publicFileReadIdentity, status: 'success' });
     setFileShareStatus(state.status ?? null);
     const knownLink = publicFileShareLinkFromRead(state);
     // Missing local metadata is not proof a live remote link was stopped.
-    if (state.status === 'stopped') {
+    if (state.status === 'stopped' || (reconciling && state.status === 'none')) {
       onObservedPublicShareLink?.(null);
       // A confirmed remote stop outranks a previously known local URL.
       // An unavailable read is not a confirmed stop and keeps the link.
@@ -8200,13 +8218,21 @@ function HtmlViewer({
     setFileShareFreshness('unknown');
     void fetchProjectFilePublicShareFreshness(projectId, file.name, workspaceContext)
       .then(freshness => {
-        if (!cancelled && generation === currentWorkspaceAccountGeneration()) setFileShareFreshness(freshness);
+        if (cancelled || generation !== currentWorkspaceAccountGeneration()) return;
+        setFileShareFreshness(freshness);
+        if (fileShareStatus === 'active' && publishedFileSlug && publishedFileUrl
+          && workspaceContext && sourceAuthorizationScopeKey) {
+          onObservedPublicShareLink?.({ status: 'active', projectId, filePath: file.name,
+            slug: publishedFileSlug, url: publishedFileUrl,
+            workspaceId: workspaceContext.workspaceId, workspaceMemberId: workspaceContext.workspaceMemberId,
+            authorizationScopeKey: sourceAuthorizationScopeKey, freshness });
+        }
       }).catch(() => {
         if (!cancelled && generation === currentWorkspaceAccountGeneration()) setFileShareFreshness('unknown');
       });
     return () => { cancelled = true; };
   }, [deployMenuOpen, unifiedActionTab, sourceSnapshotRefreshKey, liveHtml, streaming, publishingPublicFile,
-    projectId, file.name, workspaceActive, canPublishPublic, viewerOnly, publicFileReadIdentity, publishedFileSlug, loginUpdateRequest]);
+    projectId, file.name, workspaceActive, canPublishPublic, viewerOnly, publicFileReadIdentity, publishedFileSlug, publishedFileUrl, fileShareStatus, loginUpdateRequest]);
 
   // Shared identity fields for the publish-flow events (HtmlViewer copy).
   // `artifactKindToTracking` only recognises HTML through the renderer id — an HTML
@@ -8297,16 +8323,25 @@ function HtmlViewer({
     if (reRead) applyPublicShareStateRead(reRead);
   }
 
+  async function reconcilePublicShareMutation(requestSeq: number, accountGeneration: number): Promise<void> {
+    // Use a fresh authorized read; never reuse a read started before the mutation.
+    publicFileStateReadRef.current = null;
+    const isCurrent = () => requestSeq === publicFileRequestSeqRef.current
+      && accountGeneration === currentWorkspaceAccountGeneration()
+      && publicFileIdentityRef.current.projectId === projectId
+      && publicFileIdentityRef.current.fileName === file.name;
+    try {
+      const state = await readCurrentPublicShareState();
+      if (isCurrent()) applyPublicShareStateRead(state, true);
+    } catch {
+      if (isCurrent()) setPublicQuery({ identity: publicFileReadIdentity, status: 'error' });
+    }
+  }
+
   async function publishCurrentFilePublic(mode?: 'resume') {
     if (!shareSourceGuard.isCurrent()) return;
     if (streaming || viewerOnly || publishingPublicFile) return;
-    // Sharing publishes authored bytes, independently of comment identity setup
-    // and its preview witness. Never prepare/mutate source as a side effect.
-    // Retained share-plan callbacks must still reject stale or unsettled edits.
-    if (guardShareSource && mode !== 'resume' && (!shareSourceGuard.canPublish() || manualEditTextSessionIdRef.current || manualEditTextCommitInFlightRef.current || manualEditPendingStyleRef.current || manualEditSavingRef.current)) {
-      setPublishFailureKey('fileViewer.shareFinishEditing');
-      return;
-    }
+    // Publish the saved file without gating on editor modes or save state.
     publicFileStateReadRef.current = null;
     const requestProjectId = projectId;
     const requestFileName = file.name;
@@ -8420,10 +8455,6 @@ function HtmlViewer({
     if (!shareSourceGuard.isCurrent()) return;
     if (!canPublishPublic || streaming || viewerOnly || !publishedFileSlug || publishingPublicFile
       || updateInFlightRef.current || (fileShareFreshness !== 'outdated' && !publishFailureKey) || fileShareStatus !== 'active') return;
-    if (guardShareSource && (!shareSourceGuard.canPublish() || manualEditTextSessionIdRef.current || manualEditTextCommitInFlightRef.current || manualEditPendingStyleRef.current || manualEditSavingRef.current)) {
-      setPublishFailureKey('fileViewer.shareFinishEditing');
-      return;
-    }
     publicFileStateReadRef.current = null;
     const requestProjectId = projectId;
     const requestFileName = file.name;
@@ -8478,8 +8509,8 @@ function HtmlViewer({
         ...daemonErrorCodeProp(error), ...failureDetailProps(error),
       }, requestId);
       if (requestSeq === publicFileRequestSeqRef.current) {
-        setPublishFailureKey(publicFilePublishFailureKey(error));
-
+        setPublishFailureKey(publicFileMutationFailureKey(error));
+        if (publicFileMutationNeedsReconciliation(error)) await reconcilePublicShareMutation(requestSeq, requestAccountGeneration);
       }
     } finally {
       if (requestSeq === publicFileRequestSeqRef.current) {
@@ -8596,10 +8627,11 @@ function HtmlViewer({
       if (publicFileRequestSeqRef.current === requestSeq) {
         // Stopping a link is not a clipboard operation. Keep the URL and copy
         // feedback independent while preserving actionable identity failures.
-        const failureKey = publicFilePublishFailureKey(error);
+        const failureKey = publicFileMutationFailureKey(error);
         setPublishFailureKey(failureKey === 'fileViewer.publishFileFailed'
           ? 'fileViewer.unpublishFileFailed'
           : failureKey);
+        if (publicFileMutationNeedsReconciliation(error)) await reconcilePublicShareMutation(requestSeq, requestAccountGeneration);
       }
     } finally {
       if (publicFileRequestSeqRef.current === requestSeq) {
@@ -10490,12 +10522,12 @@ function HtmlViewer({
   );
   // Browser-owned iframe subresource requests cannot attach Workspace headers,
   // and URL resolution does not inherit the query string from the document's
-  // scoped raw URL. Hold the Team preview until every confirmed relative asset
+  // scoped raw URL. Hold a shared-project preview until every confirmed relative asset
   // has been rewritten to its own scoped raw URL; otherwise the first srcDoc
   // paint can leak an unscoped font/image request before the async rewrite
   // finishes.
   const scopedRelativeAssetRefs =
-    workspaceContext?.workspaceType === 'team' && relativeProjectAssetRefs;
+    workspaceScopedSharedAssets && relativeProjectAssetRefs;
   const livePreviewSource = scopedRelativeAssetRefs && inlinedSource === null
     ? null
     : (inlinedSource ?? deckVisualSource);
@@ -11294,16 +11326,16 @@ function HtmlViewer({
     setInlinedSource(null);
     if (useUrlLoadPreview) return;
     if (!assetInliningSource) return;
-    // Personal-project srcDoc previews already have a stable raw-file base,
+    // Private-project srcDoc previews already have a stable raw-file base,
     // so Chromium can resolve ordinary relative assets itself. Re-fetching
     // and inlining every stylesheet/script here replaces an already-visible
-    // document after asynchronous file discovery settles. Team previews are
+    // document after asynchronous file discovery settles. Shared previews are
     // different: iframe subresource requests cannot carry workspace auth, so
     // they still require per-asset materialization. Personal root-relative
     // refs also keep this pass because they first need project-file-list
     // normalization before the stable base can resolve them correctly.
     const requiresAssetMaterialization =
-      workspaceContext?.workspaceType === 'team' || projectRootAssetRefs;
+      workspaceScopedSharedAssets || projectRootAssetRefs;
     if (!requiresAssetMaterialization) return;
     // Root-relative project asset refs need the confirmed file list before
     // they can be normalized; wait for it rather than inlining a half-fixed
@@ -11317,6 +11349,7 @@ function HtmlViewer({
       file.name,
       projectFilePathSet,
       workspaceContext,
+      workspaceScopedSharedAssets,
     ).then((next) => {
       if (!cancelled) setInlinedSource(next);
     });
@@ -11334,6 +11367,7 @@ function HtmlViewer({
     scopedRelativeAssetRefs,
     projectFilePathSet,
     workspaceContext,
+    workspaceScopedSharedAssets,
   ]);
 
   const srcDocBaseSeedHref = effectiveScopedSrcDocPreviewBase?.href
@@ -12869,20 +12903,8 @@ function HtmlViewer({
     && (resolveOwnerCommentAnchor(selectedLocationComment, liveCommentTargets, collab.publishedVersion ?? undefined).state === 'lost'
       || (missingCommentLocation?.commentId === selectedLocationComment.id && missingCommentLocation.previewKey === commentTargetsKey
         && missingCommentLocation.intent === commentLocationIntent)) ? selectedLocationComment.id : null;
-  const guardShareSource = workspaceActive && !viewerOnly && Boolean(workspaceContext?.permissions.canWriteSyncedFiles)
-    && !needsPowered && !passiveLargeHtmlPreview && liveHtml === undefined;
-  const shareSourceSettled = !streaming && !manualEditDraftDirty
-    && !manualEditSaving && !manualEditEntryHandoffPending && !manualEditExitHandoffPending
-    && !manualEditPendingStyleRef.current && !inspectMode && !savingInspect && !drawOverlayOpen
-    // Publication reads saved disk contents. Comment drafts and preview
-    // navigation do not change those bytes and must not block publication.
-    && source !== null && !versionModalOpen
-    && !_speakerNotesSaving && !publishingPublicFile;
-  const shareSourceInputKey = useMemo(() => JSON.stringify([
-    source, reloadKey, file.mtime, filesRefreshKey, manualEditDraft, speakerNotesDraft, workspaceActive,
-  ]), [source, reloadKey, file.mtime, filesRefreshKey, manualEditDraft, speakerNotesDraft, workspaceActive]);
   const shareSourceGuard = useShareSourceGuard({ projectId, fileName: file.name,
-    context: workspaceContext ?? null, inputKey: shareSourceInputKey, settled: shareSourceSettled });
+    context: workspaceContext ?? null });
   const commentIdentityFrameReady = commentTargetsReadyKey === commentTargetsKey
     && (useUrlLoadPreview ? urlSelectionBridgeReady
       : commentPreviewReady?.frame === iframeRef.current && commentPreviewReady.generation === srcDocTransportGeneration);
@@ -19581,6 +19603,7 @@ async function inlineRelativeAssets(
   fileName: string,
   projectFilePaths: ReadonlySet<string> | null = null,
   workspaceContext?: WorkspaceCollabContext | null,
+  workspaceScopedSharedAssets = workspaceContext?.workspaceType === 'team',
 ): Promise<string> {
   const toRawUrl = (projectPath: string) =>
     projectRawUrl(projectId, projectPath, workspaceContext);
@@ -19642,7 +19665,7 @@ async function inlineRelativeAssets(
     (next, { from, to }) => next.replace(from, () => to),
     normalized,
   );
-  return workspaceContext?.workspaceType === 'team' && projectFilePaths
+  return workspaceScopedSharedAssets && projectFilePaths
     ? rewriteProjectAssetRefsToRawUrls(inlined, fileName, projectFilePaths, toRawUrl)
     : inlined;
 }

@@ -140,6 +140,7 @@ export function mapVelaWorkspaceContext(
     : billingStateFromLifecycle(lifecycleState);
 
   const context: WorkspaceCollabContext = {
+    ...(typeof raw.memberCount === 'number' && Number.isSafeInteger(raw.memberCount) && raw.memberCount > 0 ? { memberCount: raw.memberCount } : {}),
     workspaceId,
     workspaceType,
     workspaceMemberId,
@@ -207,6 +208,9 @@ function mapVelaWorkspaceDirectoryItem(input: unknown): WorkspaceDirectoryItem |
   if (!MEMBER_STATUSES.has(raw.memberStatus as WorkspaceMemberStatus)) return null;
   if (!LIFECYCLE_STATES.has(raw.lifecycleState as WorkspaceLifecycleState)) return null;
   const item: WorkspaceDirectoryItem = {
+    ...(Number.isInteger(raw.memberCount) && (raw.memberCount as number) >= 0
+      ? { memberCount: raw.memberCount as number } : {}),
+    ...(raw.isDefault === true ? { isDefault: true } : {}),
     workspaceId,
     workspaceName,
     workspaceType: raw.workspaceType as WorkspaceType,
@@ -352,9 +356,42 @@ export function createVelaWorkspaceContextProvider(
           && entry.memberStatus === 'active'
           && entry.lifecycleState !== 'deleted',
       );
-      return item
-        ? withUserIdentity(workspaceContextFromDirectoryItem(item, selectedEnv, directory.authorKey), session)
-        : null;
+      if (!item) return null;
+      const context = workspaceContextFromDirectoryItem(item, selectedEnv, directory.authorKey);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        // This explicit header asks B to authorize this workspace without
+        // reading or changing the account's global active selection. Keep the
+        // session captured for the original directory read across both calls.
+        const response = await fetchImpl(new URL('/api/v1/workspaces/current', session.apiUrl), {
+          method: 'GET',
+          headers: {
+            authorization: `Bearer ${session.controlKey}`,
+            'x-vela-workspace-id': workspaceId,
+          },
+          signal: controller.signal,
+        });
+        if (response.ok) {
+          const enriched = mapVelaWorkspaceContext(await response.json(), selectedEnv);
+          if (
+            enriched?.workspaceId === context.workspaceId
+            && enriched.workspaceMemberId === context.workspaceMemberId
+            && enriched.memberStatus === 'active'
+            && enriched.lifecycleState !== 'deleted'
+            && enriched.memberCount !== undefined
+          ) {
+            // Only this same-principal count is supplemental. Directory
+            // permissions, plan/billing fields and local selection stay intact.
+            context.memberCount = enriched.memberCount;
+          }
+        }
+      } catch {
+        // Count is optional; outages and older providers leave it unknown.
+      } finally {
+        clearTimeout(timeout);
+      }
+      return withUserIdentity(context, session);
     } catch {
       return null;
     }
@@ -379,6 +416,7 @@ export function workspaceContextFromDirectoryItem(
 ): WorkspaceCollabContext {
   const context: WorkspaceCollabContext = {
     ...(authorKey ? { authorKey } : {}),
+    ...(typeof item.memberCount === 'number' && Number.isSafeInteger(item.memberCount) && item.memberCount > 0 ? { memberCount: item.memberCount } : {}),
     workspaceId: item.workspaceId,
     workspaceType: item.workspaceType,
     workspaceMemberId: item.workspaceMemberId,
@@ -902,10 +940,14 @@ export async function fetchVelaWorkspaceDirectory(
         status: response.status,
       };
     }
-    const payload = await response.json() as { authorKey?: unknown };
-    const items = mapVelaWorkspaceDirectory(payload);
-    const authorKey = typeof payload?.authorKey === 'string' && isValidAuthorKey(payload.authorKey)
-      ? payload.authorKey : undefined;
+    const body = await response.json() as { items?: unknown; authorKey?: unknown } | null;
+    const items = mapVelaWorkspaceDirectory(body);
+    // A directory is an authority snapshot, not a best-effort display list.
+    // Dropping malformed rows would falsely revoke previously active members.
+    if (!Array.isArray(body?.items) || items.length !== body.items.length) {
+      return { ok: false, items: [], reason: 'upstream', status: 502 };
+    }
+    const authorKey = typeof body?.authorKey === 'string' && isValidAuthorKey(body.authorKey) ? body.authorKey : undefined;
     getDiagnosticsEvidence()?.observeDirectory(items);
     return { ok: true, items, ...(authorKey ? { authorKey } : {}) };
   } catch (error) {

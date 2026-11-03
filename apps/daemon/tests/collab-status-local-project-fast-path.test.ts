@@ -78,9 +78,8 @@ function verifiedScopeDeps(context: WorkspaceCollabContext) {
       resourceTeamId: string;
       viewerMemberId: string;
     }) =>
-      context.workspaceType === 'team'
-      && scope.workspaceId === context.workspaceId
-      && scope.resourceTeamId === context.teamId
+      scope.workspaceId === context.workspaceId
+      && scope.resourceTeamId === (context.teamId ?? context.workspaceId)
       && scope.viewerMemberId === context.workspaceMemberId,
   };
 }
@@ -402,7 +401,15 @@ describe('collab/status local-only fast path', () => {
     expect(verificationReads).toBe(4);
   });
 
-  it('does not enrich an owner name from a personal workspace without a team principal', async () => {
+  it.each([
+    { rememberedWorkspaceId: 'team-1', expectedOwner: null, expectedSyncState: 'local_only', expectedLookups: 0 },
+    { rememberedWorkspaceId: 'personal-workspace', expectedOwner: 'member-owner', expectedSyncState: 'synced', expectedLookups: 1 },
+  ])('isolates a personal workspace status from remembered owner scope $rememberedWorkspaceId', async ({
+    rememberedWorkspaceId,
+    expectedOwner,
+    expectedSyncState,
+    expectedLookups,
+  }) => {
     const context: WorkspaceCollabContext = {
       workspaceId: 'personal-workspace',
       workspaceType: 'personal',
@@ -428,7 +435,7 @@ describe('collab/status local-only fast path', () => {
     runtime.rememberTeamShare(
       'personal-context-project',
       {
-        teamId: 'team-1',
+        teamId: rememberedWorkspaceId,
         memberId: 'member-owner',
         role: 'member',
         lifecycleState: 'active',
@@ -462,10 +469,10 @@ describe('collab/status local-only fast path', () => {
     await new Promise<void>((resolve) => setImmediate(resolve));
 
     expect(res.status).toBe(200);
-    expect(body.ownerMemberId).toBe('member-owner');
-    expect(body.syncState).toBe('synced');
+    expect(body.ownerMemberId).toBe(expectedOwner);
+    expect(body.syncState).toBe(expectedSyncState);
     expect(body.ownerDisplayName).toBeUndefined();
-    expect(ownerNameLookups).toBe(0);
+    expect(ownerNameLookups).toBe(expectedLookups);
   });
 
   it('bounds scoped enrichment caches with LRU eviction and never reuses an evicted scope', async () => {

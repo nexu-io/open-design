@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cloneElement, type ComponentProps } from 'react';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ProjectView } from '../../src/components/ProjectView';
 import type { PreviewComment, PreviewCommentTarget } from '../../src/types';
@@ -53,6 +53,9 @@ vi.mock('../../src/providers/registry', () => ({
 vi.mock('../../src/providers/project-events', () => ({ useProjectFileEvents: vi.fn() }));
 vi.mock('../../src/router', () => ({ navigate: vi.fn() }));
 vi.mock('../../src/state/projects', () => ({
+  registerQueuedSubmission: vi.fn(async (projectId, submission) => ({
+    id: submission.id, projectId, conversationId: submission.conversationId, acceptedAt: submission.submittedAt,
+  })),
   createConversation: vi.fn(),
   deleteConversation: vi.fn(),
   getTemplate: (...args: unknown[]) => getTemplate(...args),
@@ -259,7 +262,11 @@ it('OPEND-3894 retains same-scope rows on failed refresh and accepts a successfu
   fetchPreviewComments.mockImplementationOnce(() => new Promise(resolve => { finishOldRead = resolve; }));
   let oldRead!: Promise<void>;
   act(() => { oldRead = preview().onRetryPreviewComments(); });
-  fetchPreviewComments.mockResolvedValue([{ ...comment, id: 'new-project-comment' }]);
+  // A second trigger queues a trailing read with the old project's closure.
+  act(() => { void preview().onRetryPreviewComments(); });
+  fetchPreviewComments.mockImplementation(async (id) => id === 'other-project'
+    ? [{ ...comment, id: 'new-project-comment' }]
+    : [comment]);
   view.rerender(cloneElement(tree, { project: { ...tree.props.project, id: 'other-project' } }));
   expect(preview().previewComments).toEqual([]);
   await waitFor(() => expect(preview().previewComments).toEqual([{ ...comment, id: 'new-project-comment' }]));

@@ -18,7 +18,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from 'react';
-import type { AmrWalletSnapshot } from '@open-design/contracts';
+import { canReachWorkspaceBillingEntrance, type AmrWalletSnapshot } from '@open-design/contracts';
 import { VisuallyHidden } from '@open-design/components';
 import { useT } from '../i18n';
 import {
@@ -33,7 +33,7 @@ import {
   recordAmrEntry,
   type AmrEntryAttribution,
 } from '../analytics/amr-attribution';
-import { amrPlansUrlForProfile } from '../runtime/amr-guidance';
+import { amrPlansUrlForWorkspace } from '../runtime/amr-guidance';
 import { getResolvedDeviceId } from '../analytics/client';
 import {
   trackDeepSeekCampaignModelBenefitSurfaceView,
@@ -50,6 +50,7 @@ import {
   useWorkspaceBillingResponse,
   useWorkspaceContext,
   workspaceBillingBalanceUsd,
+  workspaceBillingSummaryForContext,
 } from '../collab/useWorkspaceContext';
 import { KNOWN_PROVIDERS } from '../state/config';
 import { fetchProviderModels } from '../providers/provider-models';
@@ -209,11 +210,10 @@ export function InlineModelSwitcher({
   const compactModelListRef = useRef<HTMLDivElement | null>(null);
   const compactSelectionAnchoredRef = useRef(false);
   const campaignBenefitTrackedForOpenRef = useRef(false);
-  // Viewport clamp for the popover (issue #99): the anchor chip can sit
-  // anywhere on screen (home hero mid-page, chat composer at the bottom), so
-  // a fixed downward placement runs past the screen edge once the model list
-  // is long. Measured on open: cap the height to the space on the chosen
-  // side and flip upward when below is tight.
+  // Keep the menu inside its scrollport as the composer moves. Home's async
+  // examples can move the chip without a scroll, resize, or chip size change.
+  // The absolute menu follows that movement, but its chosen side and height
+  // must be measured again or its first rows can end up behind shell chrome.
   const [popoverPlacement, setPopoverPlacement] = useState<{
     up: boolean;
     maxHeight: number;
@@ -226,19 +226,32 @@ export function InlineModelSwitcher({
     const update = () => {
       const anchor = wrapRef.current?.getBoundingClientRect();
       if (!anchor) return;
-      const viewportHeight = window.innerHeight;
-      const below = viewportHeight - anchor.bottom - 16;
-      const above = anchor.top - 16;
+      const scrollport = wrapRef.current?.closest('.entry-main--scroll');
+      const bounds = scrollport?.getBoundingClientRect();
+      const safeTop = Math.max(0, bounds?.top ?? 0);
+      const safeBottom = Math.min(window.innerHeight, bounds?.bottom ?? window.innerHeight);
+      const below = Math.max(0, safeBottom - anchor.bottom - 16);
+      const above = Math.max(0, anchor.top - safeTop - 16);
       const up = below < 280 && above > below;
-      setPopoverPlacement({
-        up,
-        maxHeight: Math.max(160, Math.min(560, up ? above : below)),
+      const maxHeight = Math.min(560, up ? above : below);
+      setPopoverPlacement((previous) => {
+        if (previous?.up === up && previous.maxHeight === maxHeight) return previous;
+        return { up, maxHeight };
       });
     };
     update();
+    let frame = 0;
+    const followAnchor = () => {
+      update();
+      frame = window.requestAnimationFrame(followAnchor);
+    };
+    if (typeof window.requestAnimationFrame === 'function') {
+      frame = window.requestAnimationFrame(followAnchor);
+    }
     window.addEventListener('resize', update);
     window.addEventListener('scroll', update, true);
     return () => {
+      if (frame !== 0) window.cancelAnimationFrame(frame);
       window.removeEventListener('resize', update);
       window.removeEventListener('scroll', update, true);
     };
@@ -576,7 +589,10 @@ export function InlineModelSwitcher({
       setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'Escape') {
+        setOpen(false);
+        chipRef.current?.focus();
+      }
     };
     document.addEventListener('mousedown', onClick);
     document.addEventListener('keydown', onKey);
@@ -842,9 +858,32 @@ export function InlineModelSwitcher({
     open,
   ]);
 
+  const amrLoggedIn = isAmrSessionAuthenticated(amrStatus);
+  const scopedWorkspaceBilling = workspaceBillingSummaryForContext(
+    workspaceBillingResponse,
+    workspaceContext,
+  );
+  // An account's personal plan cannot decide a team's upgrade eligibility.
+  const amrUpgradePlan = workspaceContext?.workspaceType === 'team'
+    ? scopedWorkspaceBilling?.membershipTier?.trim() || null
+    : scopedWorkspaceBilling?.membershipTier?.trim() || amrStatus?.account?.plan;
+  const amrPlansUrl = workspaceContextLoading
+    ? null
+    : amrPlansUrlForWorkspace(
+        amrStatus?.profile ?? config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE,
+        workspaceContext?.workspaceId,
+      );
+  const amrCanUpgrade =
+    amrLoggedIn &&
+    canUpgradeVelaPlan(amrUpgradePlan?.replace(/^team[_-]/i, '')) &&
+    workspaceContext !== null &&
+    canReachWorkspaceBillingEntrance(workspaceContext) &&
+    amrPlansUrl !== null;
+
   /** Where a refused model pick sends the user instead — the same plans
    *  destination the settings picker's upgrade lock already opens. */
   const openAmrModelUpgrade = useCallback(() => {
+    if (!amrCanUpgrade || !amrPlansUrl) return;
     const attribution = recordAmrEntry(
       analytics.track,
       campaignNeedsUpgrade
@@ -868,9 +907,7 @@ export function InlineModelSwitcher({
     });
     window.open(
       attributedAmrUrl(
-        amrPlansUrlForProfile(
-          amrStatus?.profile ?? config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE,
-        ),
+        amrPlansUrl,
         attribution,
         deviceId,
       ),
@@ -878,14 +915,13 @@ export function InlineModelSwitcher({
       'noopener,noreferrer',
     );
   }, [
-    amrStatus?.profile,
+    amrCanUpgrade,
+    amrPlansUrl,
     analytics.track,
     campaignNeedsUpgrade,
-    config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE,
     config.installationId,
     config.telemetry?.metrics,
   ]);
-  const amrLoggedIn = isAmrSessionAuthenticated(amrStatus);
 
   useEffect(() => {
     if (!amrLoggedIn || workspaceContext?.workspaceType === 'team') {
@@ -945,13 +981,6 @@ export function InlineModelSwitcher({
               : t('common.loading')
       )
     : null;
-  // Personal workspaces always resolve `canManageBilling` true (the user is
-  // their own owner), so this does not affect the personal-workspace upgrade
-  // path.
-  const amrCanUpgrade =
-    amrLoggedIn &&
-    canUpgradeVelaPlan(amrStatus?.account?.plan) &&
-    Boolean(workspaceContext?.permissions?.canManageBilling);
   const amrActionLabel = amrLoginPending
     ? t('settings.amrSigningIn')
     : amrLoggedIn
@@ -1643,29 +1672,7 @@ export function InlineModelSwitcher({
                         data-testid="inline-model-switcher-account-upgrade"
                         onClick={(e) => {
                           e.stopPropagation();
-                          const attribution = recordAmrEntry(
-                            analytics.track,
-                            'inline_amr_upgrade',
-                            new Date(),
-                            { metricsConsent: config.telemetry?.metrics === true },
-                          );
-                          const deviceId = amrHandoffDeviceId({
-                            metricsConsent: config.telemetry?.metrics === true,
-                            resolvedDeviceId: getResolvedDeviceId(),
-                            installationId: config.installationId,
-                          });
-                          window.open(
-                            attributedAmrUrl(
-                              amrPlansUrlForProfile(
-                                amrStatus?.profile ??
-                                  config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE,
-                              ),
-                              attribution,
-                              deviceId,
-                            ),
-                            '_blank',
-                            'noopener,noreferrer',
-                          );
+                          openAmrModelUpgrade();
                         }}
                       >
                         {t('settings.amrUpgrade')}
@@ -1764,7 +1771,7 @@ export function InlineModelSwitcher({
                         : undefined
                     }
                     onDisabledOptionUpgrade={
-                      currentAgent?.id === 'amr'
+                      currentAgent?.id === 'amr' && amrCanUpgrade
                         ? openAmrModelUpgrade
                         : undefined
                     }

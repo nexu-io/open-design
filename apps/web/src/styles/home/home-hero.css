@@ -20,6 +20,12 @@
   min-height: 100%;
   justify-content: safe center;
 }
+/* Invitation Home shares the populated Home's top anchor. Example lists grow
+   below the composer without re-centering the invitation, title and input.
+   The dismissed row keeps the same anchor so closing it cannot shift them. */
+.home-view--centered:has([data-home-invite-row]) {
+  justify-content: flex-start;
+}
 /* `.home-hero`'s own fixed top padding (below) is tuned for the OTHER
    variant — hugging the top of the scroll column so a specific reference
    window's fold lines up with the recent-projects grid. `.home-view--centered`
@@ -29,7 +35,7 @@
    viewport's true center, reading as an oversized blank band above it. Drop
    it back to match the bottom padding so the hero's own box is symmetric and
    the flex centering does all of the vertical balancing. */
-.home-view--centered .home-hero {
+.home-view--centered:not(:has([data-home-invite-row])) .home-hero {
   padding-top: var(--spacing-4);
 }
 /* The hero block self-constrains to a readable column even though

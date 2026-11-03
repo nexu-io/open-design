@@ -253,3 +253,112 @@
     transform: none;
   }
 }
+
+/* Frozen client 2026-10-20/r506 limit surfaces. Explicitly opt in after a
+ * funding/concurrency rejection; the sign-in invitation keeps its own skin. */
+.frozenPanel.frozenPanel {
+  --accent: var(--text-strong);
+  --accent-hover: var(--text);
+  --accent-tint: var(--bg-subtle);
+  display: flex;
+  flex-direction: column;
+  max-width: 480px;
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+  font-weight: 400;
+  line-height: normal;
+  background: var(--bg);
+  border-radius: 16px;
+  box-shadow: var(--frozen-limit-shadow, var(--shadow-lg));
+}
+
+:global([data-theme="light"]) .frozenPanel {
+  --accent: #353535;
+  --accent-hover: #202020;
+  --accent-tint: #f7f7f7;
+  --frozen-limit-shadow: 0 24px 64px rgb(0 0 0 / 18%), 0 2px 8px rgb(0 0 0 / 6%);
+}
+
+@media (prefers-color-scheme: light) {
+  :global(html:not([data-theme])) .frozenPanel {
+    --accent: #353535;
+    --accent-hover: #202020;
+    --accent-tint: #f7f7f7;
+    --frozen-limit-shadow: 0 24px 64px rgb(0 0 0 / 18%), 0 2px 8px rgb(0 0 0 / 6%);
+  }
+}
+
+.frozenPanel.frozenPanel h2 {
+  margin: 0 0 10px;
+  line-height: normal;
+}
+
+.frozenPanel p,
+.frozenPanel li {
+  font-weight: 400;
+}
+
+.frozenPanel .frozenLater {
+  font-size: 13.5px;
+  font-weight: 400;
+  line-height: normal;
+  color: var(--text);
+}
+
+.frozenPanel .frozenCta {
+  justify-content: center;
+  border: 0;
+  line-height: normal;
+  color: var(--bg);
+  background: var(--accent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent),
+    0 8px 20px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.frozenPanel .frozenCta:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent),
+    0 10px 24px color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+.frozenPanel .fullCta {
+  width: 100%;
+  flex: none;
+}
+
+.memberMessage {
+  margin-bottom: 18px;
+}
+
+.frozenBackdrop.frozenBackdrop {
+  /* The shared .modal-backdrop may be injected after this module in the
+   * integrated app. Keep the frozen F04 scrim blur-free at the token too. */
+  --scrim-backdrop: none;
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow: auto;
+  background: rgb(0 0 0 / 28%);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  z-index: 1500;
+}
+
+.frozenPanel .closeButton {
+  color: var(--text-muted);
+}
+
+.frozenPanel .closeButton:hover {
+  color: var(--text);
+  background: var(--bg-subtle);
+}
+
+.frozenPanel button:focus-visible {
+  outline: 2px solid #159447;
+  outline-offset: 3px;
+}

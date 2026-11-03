@@ -1,3 +1,4 @@
+import { lockWebModalScroll } from './modal-scroll-lock';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Dialog } from '@open-design/components';
@@ -57,13 +58,7 @@ export function SkillDetailsModal({ skillId, summary, onClose, onUse }: Props) {
     closeRef.current?.focus();
   }, []);
 
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, []);
+  useEffect(() => lockWebModalScroll(), []);
 
   const skill = loadError ? summary : detail ?? summary;
   const title = skill ? localizeSkillName(locale, skill) : skillId;

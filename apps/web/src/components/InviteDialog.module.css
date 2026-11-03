@@ -1,0 +1,227 @@
+/* Local invitation tokens copied from the final HTML console invitation cascade. */
+.root,.menu { --invite-ink:#202020;--invite-text:#333;--invite-tooltip:#292929;--invite-surface:#fff;--invite-muted:#888;--invite-note:#777;--invite-faint:#999;--invite-secondary:#666;--invite-label:#555;--invite-option:#444;--invite-border:#dedede;--invite-menu-border:#e8e8e8;--invite-error-border:#cf6868;--invite-error:#c54c4c;--invite-error-bg:#fffafa;--invite-secondary-bg:#f3f3f3;--invite-selected:#f5f5f5; }
+.root { pointer-events:auto;position:fixed;inset:0;z-index:1000;display:grid;place-items:center;font-family:inherit;color:var(--invite-ink);font-size:13px;font-weight:500; }
+.backdrop { position:absolute;inset:0;background:rgb(0 0 0 / 38%); }
+.panel { position:relative;box-sizing:border-box;width:560px;max-width:calc(100vw - 32px);max-height:calc(100dvh - 48px);overflow:auto;padding:24px;border-radius:16px;background:var(--invite-surface);box-shadow:0 24px 72px rgb(0 0 0 / 12%); }
+.heading { position:relative;display:flex;align-items:center;gap:7px;min-height:30px;margin-bottom:0;padding-right:32px; }
+.onboarding .heading { min-height:24px; }
+.heading h2 { margin:0;font-size:16px;font-weight:600;line-height:24px; }
+.close { position:absolute!important;right:-4px;top:-4px;width:28px;min-width:28px;height:28px;min-height:28px;padding:0;border:0;border-radius:8px;background:none;box-shadow:none;font-size:20px;font-weight:500;line-height:20px; }
+.context { margin:8px 0 20px;font-size:12px;line-height:20px;color:var(--invite-muted); }
+.labels,.row { display:grid;grid-template-columns:minmax(0,1fr) 112px 24px;column-gap:12px;align-items:center; }
+.single { grid-template-columns:minmax(0,1fr) 112px; }
+.labels { margin-bottom:8px;font-size:12px;line-height:20px;color:var(--invite-secondary); }
+.rows { max-height:240px;overflow-y:auto; }
+.row { margin-bottom:8px; }
+.row:last-child { margin-bottom:0; }
+.input,.role { box-sizing:border-box;width:100%;min-width:0;height:38px;min-height:38px;border:1px solid var(--invite-border);border-radius:8px;background:var(--invite-surface);padding:0 12px;color:var(--invite-text);font-family:inherit;font-size:13px;font-weight:500;line-height:20px;box-shadow:none; }
+.input:focus,.role:focus-visible { outline:none;border-color:var(--invite-faint); }
+.input[aria-invalid=true] { border-color:var(--invite-error-border);background:var(--invite-error-bg); }
+.role { display:flex;align-items:center;justify-content:space-between;gap:8px; }
+.fixedRole { display:flex;align-items:center;height:38px;padding:0;font-size:13px;color:var(--invite-note); }
+.remove { width:24px;min-width:24px;height:28px;min-height:28px;padding:0;border:0;background:transparent;box-shadow:none;color:var(--invite-muted); }
+.lineError,.error { margin:8px 0 0;font-size:12px;line-height:20px;color:var(--invite-error); }
+.lineError { grid-column:1/-1; }
+.add { display:flex;align-items:center;gap:5px;width:max-content;height:28px;min-height:28px;margin-top:8px;padding:0;border:0;border-radius:0;background:transparent;color:var(--invite-label);font-size:12px;font-weight:500;box-shadow:none; }
+.footer { display:flex;justify-content:flex-end;gap:8px;min-height:36px;margin-top:20px; }
+.cancel,.submit { min-width:64px;height:36px;min-height:36px;padding:0 16px;border:0;border-radius:10px;font-size:14px;font-weight:500;line-height:20px;box-shadow:none; }
+.cancel { background:var(--invite-secondary-bg);color:var(--invite-text); }
+.submit { background:var(--invite-ink);color:var(--invite-surface); }
+.root button:disabled { opacity:.4;cursor:default; }
+.root button:not(:disabled):hover { filter:none; }
+.help { position:relative;display:inline-flex; }
+.info { display:inline-flex;align-items:center;justify-content:center;width:18px;min-width:18px;height:18px;min-height:18px;padding:0;border:0;background:none;box-shadow:none;color:var(--invite-faint); }
+.tooltip { -webkit-font-smoothing:auto;position:fixed;z-index:1101;box-sizing:border-box;width:max-content;max-width:calc(100vw - 24px);padding:8px 10px;border-radius:8px;background:var(--invite-tooltip,#292929);color:#f5f5f5;font:11px/16.5px Arial,sans-serif;pointer-events:none; }
+.tooltip::after { content:"";position:absolute;top:100%;left:var(--tooltip-arrow-left,50%);transform:translateX(-50%);border:6px solid transparent;border-top-color:#292929;border-bottom:0; }
+.menu { position:fixed;z-index:1100;box-sizing:border-box;max-width:calc(100vw - 24px);max-height:min(320px,calc(100dvh - 24px));overflow:auto;padding:4px;border:1px solid var(--invite-menu-border);border-radius:8px;background:var(--invite-surface);box-shadow:0 4px 12px rgb(0 0 0 / 4%);font-family:inherit; }
+.option { display:flex;align-items:flex-start;justify-content:space-between;gap:8px;box-sizing:border-box;width:100%;height:auto;min-height:32px;padding:6px 10px;border:0;border-radius:4px;background:transparent;text-align:left;font-size:12px;font-weight:500;line-height:20px;color:var(--invite-option);white-space:normal;box-shadow:none; }
+.option[aria-selected=true],.option:hover,.option:focus-visible { background:var(--invite-selected);color:var(--invite-text);outline:none; }
+.option small { display:block;margin-top:4px;font-size:11px;line-height:1.6;font-weight:500;color:var(--invite-note);white-space:normal; }
+/* Keep the domain palette when shared Button hover/active selectors apply. */
+.root .submit:is(:hover,:active):not(:disabled) { background:var(--invite-ink);color:var(--invite-surface); }
+.root .cancel:is(:hover,:active):not(:disabled) { background:var(--invite-secondary-bg);color:var(--invite-text); }
+.root .role:is(:hover,:active):not(:disabled) { background:var(--invite-surface);color:var(--invite-text); }
+.root .add:is(:hover,:active):not(:disabled) { background:transparent;color:var(--invite-label); }
+.root .remove:is(:hover,:active):not(:disabled),.root .close:is(:hover,:active):not(:disabled) { background:transparent;color:var(--invite-text); }
+.root .info:is(:hover,:active):not(:disabled) { background:transparent;color:var(--invite-faint); }
+.root .skip:is(:hover,:active):not(:disabled) { background:transparent;color:#666; }
+.menu .option:is(:hover,:active):not(:disabled) { background:var(--invite-selected);color:var(--invite-text); }
+@media(max-width:480px) { .panel { padding:20px; }.labels,.row { grid-template-columns:minmax(0,1fr) 92px 20px;gap:8px 6px; }.single { grid-template-columns:minmax(0,1fr) 92px; }.row { margin-bottom:12px; } }
+.onboarding { position:fixed;inset:0;width:100%;height:100dvh;min-height:0;z-index:1000;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);place-items:stretch;gap:0;padding:8px;box-sizing:border-box;background:#fff;font-size:14px;font-weight:600; }
+.onboarding .panel { display:flex;flex-direction:column;justify-content:center;align-items:stretch;width:auto;max-width:none;max-height:none;min-width:0;padding:32px 54px;border-radius:0;box-shadow:none;overflow-y:auto; }
+.onboarding .panel > header,.onboarding .panel > p,.onboarding form,.onboarding .skip { width:440px;max-width:100%;align-self:center;box-sizing:border-box; }
+.onboarding .heading { justify-content:center;padding:0; }
+.onboarding .heading h2 { font-size:clamp(24px,2vw,28px);line-height:1.35;font-weight:700;letter-spacing:-.6px;text-align:center;overflow-wrap:anywhere; }
+.onboarding .context { text-align:left;margin:12px 0 24px;font-size:14px;line-height:21px;color:#666; }
+.onboarding .sentence { display:block;overflow-wrap:anywhere; }
+.onboarding .labels,.onboarding .row { grid-template-columns:minmax(0,1fr) 112px;gap:8px;position:relative; }
+.onboarding .labels { width:calc(100% - 14px);font-size:13px;line-height:18px; }
+.onboarding .labels > span { font-size:12px;line-height:18px;color:#5c5c5c; }
+.onboarding .labels > span:first-child { position:relative;top:6px; }
+.onboarding .labels > span:last-child { padding-left:13px; }
+.onboarding .rows { display:flex;flex-direction:column;gap:12px;width:calc(100% + 38px);margin-left:-4px;padding:4px 42px 4px 4px;box-sizing:border-box;max-height:176px;overflow-x:hidden;scroll-padding-block:4px;scrollbar-gutter:stable;scrollbar-width:auto; }
+.onboarding .rows::-webkit-scrollbar { width:6px; }
+.onboarding .rows::-webkit-scrollbar-thumb { background:#c7c7c7;border-radius:4px; }
+.onboarding .input,.onboarding .role,.onboarding .fixedRole { height:48px;min-height:48px;font-size:14px;font-weight:600;line-height:17.5px;border-radius:9px; }
+/* Fixed member roles follow B03 plain text; align with the registration role label. */
+.onboarding .fixedRole { margin-inline-start:13px;padding:0;border:0;border-radius:0;background:transparent;color:var(--invite-note);font-size:13px;font-weight:500;line-height:20px; }
+.onboarding .input { background:#fafafa;color:#494949; }
+.onboarding .role:not(:disabled),.onboarding .role:is(:hover,:active):not(:disabled) { color:#494949;border-color:#dedede; }
+.onboarding .input::placeholder { color:#bdbdbd;opacity:1; }
+.onboarding .remove { position:absolute;left:calc(100% + 6px);top:12px;width:24px;min-width:24px;height:24px;min-height:24px;font-size:17px;font-weight:600;line-height:17px; }
+.onboarding .add { color:#666;line-height:13px;height:36px;min-height:36px;margin:12px 0 24px;font-size:13px;font-weight:600;gap:6px; }
+.onboarding .footer { margin:0;display:block; }
+.onboarding .submit { width:100%;height:48px;border-radius:12px;padding:12px 16px;font-size:15px;font-weight:600;line-height:21px; }
+.onboarding .submit:disabled { opacity:1;background:#f2f2f2;color:#b6b6b6; }
+.onboarding .skip { line-height:1.4;position:relative;top:-8px;width:max-content;height:48px;min-height:48px;margin:24px 0 0;padding:12px 16px;border:0;background:none;box-shadow:none;color:#888;font-size:13px;font-weight:600; }
+.onboarding .lineError,.onboarding .error { color:#d43c32; }
+.onboarding .row { flex-shrink:0;margin-bottom:0;row-gap:0; }
+.onboarding .lineError { position:relative;top:2px;grid-column:1;margin:0;line-height:20px;color:#f04142; }
+.onboarding .input[aria-invalid=true] { border-color:#cf6868;background:#fffafa; }
+.onboarding .error { position:relative;top:2px;margin:12px 0;line-height:20px;color:#f04142; }
+.onboarding .summary { position:relative;top:2px;margin:36px 0 12px;font-size:12px;line-height:18px;color:#f04142;font-weight:600; }
+.art { min-width:0;min-height:0;padding:8px 8px 8px 0;overflow:hidden; }
+.art img { display:block;width:100%;height:100%;border-radius:8px;object-fit:cover;object-position:center; }
+.onboardingFooter { position:absolute;left:32px;bottom:24px;display:flex;flex-direction:column;align-items:flex-start;gap:8px;color:#999;font-size:11px;line-height:16px; }
+.onboardingFooter > span { opacity:.8; }
+@media(max-width:900px) { .onboarding { grid-template-columns:minmax(0,1fr);padding:0; }.art { display:none; }.onboarding .panel { padding:32px 24px 110px; }.onboardingFooter { left:24px;bottom:32px; } }
+
+.languagePicker { display:inline-flex;align-items:center;width:132px;max-width:100%;padding:0;box-sizing:border-box;border:1px solid #e5e5e5;border-radius:100px;background:#f5f5f5;color:#666; }
+.languagePicker select { width:100%;max-width:180px;padding:8px 32px 8px 14px;border:0;background-color:transparent;background-position:right 12px center;color:inherit;font:400 12px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;cursor:pointer; }
+
+/* Ordinary invitation follows the console reference; onboarding keeps its own geometry. */
+.root:not(.onboarding) .lineError { margin:0; }
+.root:not(.onboarding) .input::placeholder { color:#757575;opacity:1; }
+.dialogMenu .option { align-items:center;gap:24px; }
+
+/* Preserve the console palette before applying disabled opacity; shared Button
+   disabled tokens otherwise wash out both the foreground and background. */
+.root:not(.onboarding) .submit:disabled { background:var(--invite-ink);color:var(--invite-surface);opacity:.4; }
+.root:not(.onboarding) .role:disabled { background:var(--invite-surface);color:var(--invite-text);border-color:var(--invite-border); }
+.root:not(.onboarding) .cancel:disabled { background:var(--invite-secondary-bg);color:#444; }
+.root:not(.onboarding) .remove:disabled,.root:not(.onboarding) .close:disabled { background:transparent;color:var(--invite-note); }
+.root:not(.onboarding) .add:disabled { background:transparent;color:var(--invite-label);opacity:.45; }
+/* Registration reference uses explicit disabled inks rather than primitive fills. */
+.onboarding .role:disabled { background:#fff;color:#bdbdbd;border-color:#dedede;opacity:1; }
+.onboarding .remove:disabled { background:transparent;color:#c6c6c6;opacity:1; }
+.onboarding .add:disabled { background:transparent;color:#666;opacity:1; }
+.onboarding .skip:disabled { background:transparent;color:#888;opacity:1; }
+
+.onboarding .panel > .submit { width:440px;max-width:100%;align-self:center;box-sizing:border-box;margin-top:24px; }
+
+/* The ordinary dialog uses the final console reference's compact actions. */
+.root:not(.onboarding) .submit { width:auto;min-width:80px;padding-inline:12px; }
+.root:not(.onboarding) .cancel { width:auto;min-width:64px;padding-inline:12px;color:#444; }
+@media(max-width:480px) {
+ .root:not(.onboarding) .labels { display:none; }
+ .root:not(.onboarding) .footer .submit { flex:1; }
+ .root:not(.onboarding) .row,.root:not(.onboarding) .single { grid-template-columns:minmax(0,1fr) 24px;column-gap:12px;row-gap:8px; }
+ .root:not(.onboarding) .input { grid-column:1/-1; }
+ .root:not(.onboarding) .role,.root:not(.onboarding) .fixedRole { grid-column:1; }
+}
+
+/* Ordinary client invitation: measured independently from the console. */
+.root:not(.onboarding) { font-family:"Albert Sans",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif;font-weight:400;-webkit-font-smoothing:auto;font-feature-settings:normal; }
+.root:not(.onboarding) .heading { min-height:24px;gap:8px; }
+.root:not(.onboarding) .context { margin-top:14px; }
+.root:not(.onboarding) :is(.input,.role,.add) { font-weight:400; }
+.root:not(.onboarding) :is(.input,.role) { line-height:22px; }
+.root:not(.onboarding) .role { justify-content:space-between;gap:6px; }
+.root:not(.onboarding) .role svg { flex-shrink:0;width:14px;height:14px;color:#888; }
+.root:not(.onboarding) .fixedRole { line-height:normal; }
+.root:not(.onboarding) .labels { color:#555; }
+.root:not(.onboarding) .close { top:-2px;font-weight:400;line-height:normal;color:#333; }
+.root:not(.onboarding) .input::placeholder { color:#757575;opacity:1; }
+
+.root:not(.onboarding) .lineError { position:relative;top:2px;color:#f04142; }
+.dialogMenu { font-feature-settings:normal;font-family:"Albert Sans",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif;-webkit-font-smoothing:auto;font-weight:400; }
+.dialogMenu .option { font-weight:400;line-height:18px; }
+.dialogMenu .option small { font-weight:400; }
+.dialogMenu .option[data-highlighted=true] { background:#f0f0f0; }
+.dialogMenu .check { flex:0 0 14px;width:14px;text-align:start;font-size:12px;line-height:18px;color:#666; }
+
+.root:not(.onboarding) .remove { height:24px;min-height:24px;border-radius:6px;color:var(--invite-note);font-size:17px;font-weight:400;line-height:17px; }
+
+.root:not(.onboarding) .labels:not(.single) { grid-template-columns:minmax(0,1fr) 120px 24px; }
+.root:not(.onboarding) .error { position:relative;top:2px;margin-top:12px;color:#f04142; }
+.root:not(.onboarding) .close:disabled { opacity:1;color:#333; }
+.root:not(.onboarding) .add { line-height:20px; }
+
+.complete { display:flex;flex-direction:column;align-items:center;justify-content:center;width:440px;max-width:100%;align-self:center;box-sizing:border-box;text-align:center;animation:invite-complete-in 180ms ease-out both; }
+.completeIcon { display:flex;align-items:center;justify-content:center;width:48px;height:48px;flex:none;margin-bottom:20px;border-radius:50%;color:#159447;background:#edf9ef; }
+.completeIcon svg { display:block;width:24px;height:24px; }
+.complete h2 { margin:0;color:#202020;font-size:28px;line-height:38px;font-weight:700;letter-spacing:-.6px;outline:none; }
+.complete p { margin:12px 0 32px;color:#666;font-size:14px;line-height:21px;font-weight:400;text-wrap:pretty; }
+.complete .completeEnter { display:flex;align-items:center;justify-content:center;width:100%;height:48px;min-height:48px;padding:12px 16px;border:0;border-radius:10px;background:#202020;color:#fff;font-size:15px;font-weight:500;line-height:21px;box-sizing:border-box; }
+.complete .completeEnter:hover { background:#333; }
+.complete .completeEnter:focus-visible { outline:2px solid #7b9d70;outline-offset:4px; }
+.complete .countdown { margin:12px 0 0;color:#999;font-size:12px;line-height:18px;font-weight:400; }
+.countdown span { font-variant-numeric:tabular-nums; }
+.complete.leaving { animation:invite-complete-out 180ms ease-in both;pointer-events:none; }
+@keyframes invite-complete-out { from { opacity:1; } to { opacity:0; } }
+@keyframes invite-complete-in { from { opacity:0; } to { opacity:1; } }
+@media(prefers-reduced-motion:reduce) { .complete,.complete.leaving { animation:none; } }
+
+@media(max-width:900px) {
+ .onboarding .panel:has(.complete) { min-height:100%;padding:32px 24px;justify-content:flex-start;gap:32px; }
+ .complete { min-height:450px;margin:auto 0;flex-shrink:0; }
+ .onboarding .panel:has(.complete) .onboardingFooter { position:static;margin:0;flex-shrink:0; }
+}
+
+/* Registration role menu measured from the client reference, separate from dialogs. */
+.onboardingMenu { display:flex;flex-direction:column;gap:2px;padding:6px;border-color:#dedede;border-radius:10px;box-shadow:0 8px 24px rgb(0 0 0 / 6%); }
+.onboardingMenu .option { gap:12px;padding:10px 12px;border-radius:6px;font-size:14px;font-weight:500;line-height:22px;color:#292929; }
+.onboardingMenu .option small { font-size:13px;font-weight:400;line-height:19.5px;color:#666; }
+.onboardingMenu .option > span { display:flex;flex-direction:column;min-width:0; }
+.onboardingMenu .option strong { font-size:14px;font-weight:500;line-height:21px; }
+.onboardingMenu .option > svg { flex-shrink:0;align-self:center;color:#666; }
+@media(max-width:480px) {
+ .onboarding .heading h2 { font-size:24px;line-height:1.35; }
+ .onboarding .panel:not(:has(.complete)) { padding-bottom:124px; }
+ .onboarding .rows { padding-right:34px; }
+ .onboarding .labels { width:calc(100% - 8px);grid-template-columns:minmax(0,1fr) 112px 22px; }
+ .onboarding .row { grid-template-columns:minmax(0,1fr) 112px 22px; }
+ .onboarding .role { padding-inline:10px; }
+ .onboarding .remove { left:calc(100% - 22px); }
+ .onboarding .lineError { width:min(306px,calc(100vw - 48px)); }
+}
+
+.onboarding .input:focus:not([aria-invalid=true]) { border-color:#dedede;outline:none;box-shadow:none; }
+
+.onboarding .role:focus-visible { border-color:#dedede;outline:1px solid #888;outline-offset:2px;box-shadow:none; }
+.onboarding .role[aria-expanded=true] > svg { transform:rotate(180deg); }
+
+.onboarding .add:is(:hover,:active):not(:disabled) { color:#666; }
+
+.onboardingMenu .option[aria-selected=true]:not(:disabled) { color:#202020; }
+
+.onboarding .submit:is(:hover,:active):not(:disabled) { background:#353535;color:#fafafa;filter:brightness(1.05); }
+.onboarding .skip:is(:hover,:active):not(:disabled) { color:#888; }
+.onboardingMenu .option:is(:hover,:active):not(:disabled) { color:#202020; }
+
+.root:not(.onboarding) .submit:hover:not(:disabled) { background:#333; }
+
+.root:not(.onboarding) .cancel:hover:not(:disabled) { background:#eaeaea;color:#333; }
+.root:not(.onboarding) .close:hover:not(:disabled) { background:#f4f4f4;color:#333; }
+
+.root:not(.onboarding) .info:focus-visible { outline:1px solid #c7c7c7;outline-offset:1px;filter:brightness(.92);box-shadow:none; }
+
+.root:not(.onboarding) .role[aria-expanded=true] { border-color:var(--invite-border); }
+.root:not(.onboarding) .role[aria-expanded=true] > svg { transform:rotate(180deg); }
+
+.dialogMenu .option[aria-selected=false]:is(:hover,:focus-visible):not(:disabled) { color:var(--invite-option); }
+
+.root:not(.onboarding) .role[data-menu-keyboard=true] { border-color:#999;filter:brightness(.92);outline:none;box-shadow:none; }
+
+.root:not(.onboarding) .remove:hover:not(:disabled) { background:#f2f2f2;color:#333; }
+
+.root:not(.onboarding) :is(.cancel,.submit) { line-height:19.6px; }
+
+/* Short windows keep the language/copyright footer at the bottom when there
+   is room, and let it follow overflowing content without covering actions. */
+@media(max-height:720px) {
+ .onboarding .panel { min-height:0;justify-content:flex-start; }
+ .onboarding .panel:not(:has(.complete)) { padding-bottom:24px; }
+ .onboarding .panel > header,.onboarding .panel > p,.onboarding form,.onboarding .skip { flex-shrink:0; }
+ .onboarding .panel > .onboardingFooter { position:static;align-self:flex-start;flex-shrink:0;margin-top:auto;padding-top:32px; }
+}

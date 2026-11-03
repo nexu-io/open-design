@@ -40,6 +40,7 @@ it('production public-share identity retains its artifact UUID while comment ret
     });
     const before = snapshot();
     expect(sourceFileId({ projectId, filePath, resourceTeamId: 'share-team', ownerMemberId: 'share-owner' })).toBe(artifact.id);
+    expect(registered?.sharePublishing?.needsCatalogSourceIdentity?.({ projectId, filePath, resourceTeamId: 'share-team', ownerMemberId: 'share-owner' })).toBe(false);
     expect(snapshot()).toEqual(before);
   } finally {
     await started?.shutdown();

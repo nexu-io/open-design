@@ -241,7 +241,16 @@ describe('design-system Workspace scope', () => {
       designSystems: [],
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/workspace/design-systems/team', {
+      cache: 'no-store',
+      headers: expect.objectContaining({
+        'x-od-workspace-id': context.workspaceId,
+        'x-od-workspace-type': 'personal',
+        'x-od-workspace-member-id': context.workspaceMemberId,
+      }),
+    });
 
     expect(fetchMock).toHaveBeenCalledWith('/api/design-systems', {
       headers: expect.objectContaining({

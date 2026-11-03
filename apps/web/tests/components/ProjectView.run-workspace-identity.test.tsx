@@ -215,6 +215,9 @@ vi.mock('../../src/state/projects', async () => {
   );
   return {
     ...actual,
+    registerQueuedSubmission: vi.fn(async (projectId, submission) => ({
+      id: submission.id, projectId, conversationId: submission.conversationId, acceptedAt: submission.submittedAt,
+    })),
     createConversation: vi.fn(),
     listConversations: vi.fn(),
     listMessages: vi.fn(),
@@ -563,7 +566,7 @@ describe('a Home auto-send identifies its caller before the project scope resolv
         String(input).includes(`/api/projects/${PROJECT_ID}/raw/index.html`),
       );
       expect(rawCall).toBeDefined();
-      expect(String(rawCall?.[0])).toBe(`/api/projects/${PROJECT_ID}/raw/index.html`);
+      expect(String(rawCall?.[0])).toBe(`/api/projects/${PROJECT_ID}/raw/index.html?workspaceId=${TEAM_WORKSPACE}&workspaceMemberId=${TEAM_MEMBER}`);
       expect(rawCall?.[1]).toEqual(expect.objectContaining({
         headers: expect.objectContaining({
           'x-od-workspace-id': TEAM_WORKSPACE,
@@ -692,6 +695,34 @@ describe('a Home auto-send identifies its caller before the project scope resolv
     view.unmount();
     await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
     expect(mockedListMessages).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps loading while transcript bytes arrive beyond 15 seconds and accepts only the complete history', async () => {
+    vi.useFakeTimers();
+    const pending = deferred<ChatMessage[]>();
+    mockedListMessages.mockReturnValueOnce(pending.promise);
+    const view = renderProjectView({ project: { ...project(), pendingPrompt: '' } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    const progress = mockedListMessages.mock.calls[0]?.[4];
+    const signal = mockedListMessages.mock.calls[0]?.[3];
+    expect(progress).toBeTypeOf('function');
+    for (let chunk = 0; chunk < 3; chunk += 1) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+        progress?.();
+      });
+      expect(signal?.aborted).toBe(false);
+      expect(chatPaneSpy.mock.calls.at(-1)?.[0].loading).toBe(true);
+      expect(view.getByTestId('normal-send')).toBeDisabled();
+    }
+    await act(async () => {
+      pending.resolve([{ id: 'large-history', role: 'assistant', content: 'Complete large history', createdAt: 1 }]);
+    });
+    expect(chatPaneSpy.mock.calls.at(-1)?.[0].loading).toBe(false);
+    expect(view.getByTestId('transcript').textContent).toBe('Complete large history');
+    expect(view.getByTestId('normal-send')).not.toBeDisabled();
+    expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
+    view.unmount();
   });
 
   it.each([false, true])('settles a hung transcript read within the original budget (retry: %s)', async (retry) => {

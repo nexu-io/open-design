@@ -66,7 +66,7 @@ it('keeps a failed draft, then saves at its click point, exits picking and reope
   const viewingFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
   const viewingPost = vi.spyOn(viewingFrame.contentWindow!, 'postMessage');
   fireEvent.load(viewingFrame);
-  await waitFor(() => expect(viewingPost).toHaveBeenCalledWith(expect.objectContaining({ type: 'od:comment-mode', enabled: false, observe: true }), '*')); 
+  await waitFor(() => expect(viewingPost).toHaveBeenCalledWith(expect.objectContaining({ type: 'od:comment-mode', enabled: false, observe: true }), '*'));
   await act(async () => { window.dispatchEvent(new MessageEvent('message', { source: viewingFrame.contentWindow, data: { type: 'od:comment-targets', targets: [target] } })); });
   const marker = screen.getByTestId('comment-saved-marker-title');
   expect(markerCanvasStyle(marker)).toMatchObject({ left: '70.75px', top: '32.75px', width: '28px', height: '28px' });

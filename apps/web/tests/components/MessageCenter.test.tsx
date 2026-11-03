@@ -102,6 +102,25 @@ describe('MessageCenter', () => {
     expect(onPendingChange).toHaveBeenLastCalledWith(false);
   });
 
+  it('forwards the workspace to the targeted announcement plans action', async () => {
+    mockFetch({ loggedIn: true, messages: [targetedAnnouncement()] });
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    render(
+      <I18nProvider initial="zh-CN">
+        <MessageCenter priorityAnnouncementActive workspaceId="workspace-message-center" />
+      </I18nProvider>,
+    );
+
+    await screen.findByRole('alertdialog');
+    fireEvent.click(screen.getByRole('button', { name: '查看其他订阅' }));
+
+    expect(open).toHaveBeenCalledWith(
+      expect.stringContaining('https://open-design.ai/cloud/dashboard?workspaceId=workspace-message-center&source=open_design&billing=plan&'),
+      '_blank',
+      'noopener,noreferrer',
+    );
+  });
+
   it('keeps the strong dialog open and reports a failed required acknowledgement', async () => {
     mockFetch({
       loggedIn: true,

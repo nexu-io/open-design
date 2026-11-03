@@ -1,3 +1,5 @@
+import { packagedAmrConfigFields, writePackagedConfigWithBinding } from "../config/amr-endpoint-binding.js";
+
 import { finalizeRuntimeManifest } from "../resources/runtime-manifest.js";
 import { cp, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -166,7 +168,7 @@ export function renderMacPackagedConfig(options: {
 }): string {
   return `${JSON.stringify(
     {
-      ...(options.config.amrProfile == null ? {} : { amrProfile: options.config.amrProfile }),
+      ...packagedAmrConfigFields(options.config),
       appVersion: options.appVersion,
       ...(options.usePrebundledStandaloneWeb ? { daemonCliEntryRelative: MAC_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH } : {}),
       ...(options.usePrebundledStandaloneWeb
@@ -177,8 +179,6 @@ export function renderMacPackagedConfig(options: {
       ...(options.config.updateMetadataUrl == null ? {} : { updateMetadataUrl: options.config.updateMetadataUrl }),
       ...(options.config.posthogKey == null ? {} : { posthogKey: options.config.posthogKey }),
       ...(options.config.posthogHost == null ? {} : { posthogHost: options.config.posthogHost }),
-      ...(options.config.velaWebUrl == null ? {} : { velaWebUrl: options.config.velaWebUrl }),
-      ...(options.config.velaWebUrls == null ? {} : { velaWebUrls: options.config.velaWebUrls }),
       ...(options.usePrebundledStandaloneWeb ? { webSidecarEntryRelative: MAC_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH } : {}),
       webOutputMode: options.config.webOutputMode,
       ...(options.config.portable ? {} : { namespaceBaseRoot: options.config.roots.runtime.namespaceBaseRoot }),
@@ -373,14 +373,13 @@ export async function writeAssembledApp(
     renderMacPackagedMainEntry(usePrebundledStandaloneWeb),
     "utf8",
   );
-  await writeFile(
+  await writePackagedConfigWithBinding(
     paths.packagedConfigPath,
     renderMacPackagedConfig({
       appVersion: packagedVersion,
       config,
       usePrebundledStandaloneWeb,
     }),
-    "utf8",
   );
   await runNpmInstall(paths.assembledAppRoot);
   if (usePrebundledStandaloneWeb) {

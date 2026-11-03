@@ -410,3 +410,15 @@ it.each(['owner', 'workspace', 'replacement'] as const)('OPEND-4083 rejects conc
   expect(getProjectPreviewComment(db, 'p', 'pending-change')?.sourceFileId).toBe(localId);
   expect(getProject(db, 'p')?.metadata?._commentFiles).toBeUndefined();
 });
+
+it('requests catalog identity recovery only when no local lifetime exists, including retired lifetimes', () => {
+  const db = setup();
+  const files = createLocalCommentFiles(db);
+  expect(files.needsCatalogIdentity('p', 'a.html')).toBe(true);
+  const fact = { sourceFileId: '11111111-1111-4111-8111-111111111111', sourceFilePath: 'a.html',
+    entryPath: 'a.html', resourceId: 'root', versionId: 'old', retired: false };
+  for (const retired of [false, true]) {
+    updateProject(db, 'p', { metadata: { _commentFiles: { schemaVersion: 1, revision: 1, files: [{ ...fact, retired }] } } });
+    expect(files.needsCatalogIdentity('p', 'a.html')).toBe(false);
+  }
+});

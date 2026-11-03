@@ -101,6 +101,7 @@ export interface ChatArtifactRefsChangedSsePayload {
 export const CHAT_SSE_PROTOCOL_VERSION = 1;
 
 export interface ChatSseStartPayload {
+  strategyTask?: StrategyTaskProjectionV2;
   runId?: string;
   agentId?: string;
   bin: string;

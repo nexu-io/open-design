@@ -26,6 +26,7 @@ import {
   buildWorkspaceSeatSummary,
   type AmrWalletSnapshot,
   type WorkspaceCollabContext,
+  type WorkspaceBillingPreflight,
 } from '@open-design/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -38,6 +39,7 @@ import {
 import { I18nProvider } from '../../src/i18n';
 import { checkAmrBalanceGate } from '../../src/runtime/amr-balance-gate';
 import { resolveAmrPlan } from '../../src/runtime/amr-low-balance-plan';
+import { invalidateAmrFundingFeedback } from '../../src/runtime/amr-funding-feedback';
 import type { AgentInfo, AppConfig } from '../../src/types';
 import { setHomeHeroPrompt } from '../helpers/home-hero-lexical';
 import { workspaceDirectoryFixture } from '../helpers/workspace-context';
@@ -120,6 +122,8 @@ function amrConfig(): AppConfig {
 
 /** QA 报的余额。 */
 const REPORTED_BALANCE = '1.79';
+let fundingVerdict: 'available' | 'insufficient' = 'available';
+let fundingBalance = REPORTED_BALANCE;
 
 function lowBalanceSnapshot(): AmrWalletSnapshot {
   return {
@@ -193,6 +197,9 @@ describe('T53 / T66 · 首页非硬拦档一律静默放行', () => {
     resetWorkspaceContextCache();
     resetWorkspaceBillingCache();
     resetTeamProjectsCache();
+    invalidateAmrFundingFeedback();
+    fundingVerdict = 'available';
+    fundingBalance = REPORTED_BALANCE;
     const workspace = personalContext();
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -201,6 +208,27 @@ describe('T53 / T66 · 首页非硬拦档一律静默放行', () => {
       }
       if (url.endsWith('/api/workspace/context')) {
         return jsonResponse({ context: workspace });
+      }
+      // Seats phase1 confirms the current model/member before handoff; the
+      // legacy sign-in gate mock alone no longer supplies funding evidence.
+      if (url.includes('/api/workspace/billing/preflight?')) {
+        const query = new URL(url, 'http://localhost').searchParams;
+        expect(query.get('workspaceId')).toBe(workspace.workspaceId);
+        expect(query.get('modelId')).toBe('glm-5');
+        const dpAvailable = fundingVerdict === 'available' && fundingBalance === '0';
+        const generatedAt = new Date().toISOString();
+        const preflight: WorkspaceBillingPreflight = {
+          schemaVersion: 1, workspaceId: workspace.workspaceId,
+          workspaceMemberId: workspace.workspaceMemberId, modelId: 'glm-5',
+          generatedAt, balanceUsd: fundingBalance, fundingCheck: fundingVerdict,
+          funding: dpAvailable ? 'coding_plan' : fundingVerdict === 'available' ? 'wallet' : 'gateway',
+          modelCovered: dpAvailable,
+          codingPlan: { workspaceId: workspace.workspaceId, generatedAt, eligible: dpAvailable, tier: dpAvailable ? 'pro' : null,
+            windows: dpAvailable ? [{ policyId: 'available-dp', durationSeconds: 18000,
+              resetMode: 'anchored_recurring', usedCredits: '0', limitCredits: '100', remainingCredits: '100',
+              windowStart: generatedAt, resetsAt: new Date(Date.now() + 18000_000).toISOString() }] : [] },
+        };
+        return jsonResponse({ preflight });
       }
       if (url.includes('/api/workspace/billing?')) {
         return jsonResponse({ summary: null, workspaceBalance: null });
@@ -227,6 +255,7 @@ describe('T53 / T66 · 首页非硬拦档一律静默放行', () => {
     resetWorkspaceContextCache();
     resetWorkspaceBillingCache();
     resetTeamProjectsCache();
+    invalidateAmrFundingFeedback();
   });
 
   // T66 之后余额低于原来那条线的人拿到的就是一个 `allow` —— 首页对它必须
@@ -253,7 +282,8 @@ describe('T53 / T66 · 首页非硬拦档一律静默放行', () => {
   // 空钱包但硬拦让了位(T55)。项目页会给它一张 $0 的卡,首页没有流水可挂,
   // 所以这一档在首页同样是「什么都不显示、直接放行」——**不许**顺手拿硬拦
   // 那张弹窗去顶替,让位的意思就是不拦。
-  it('空钱包但硬拦让位:首页同样静默放行', async () => {
+  it('空钱包但 Design Plan 可用:首页同样静默放行', async () => {
+    fundingBalance = '0';
     mockedCheckAmrBalanceGate.mockResolvedValue({
       kind: 'empty_not_blocked',
       snapshot: { ...lowBalanceSnapshot(), balanceUsd: '0' },
@@ -288,6 +318,8 @@ describe('T53 / T66 · 首页非硬拦档一律静默放行', () => {
   // 嵌在同一个 describe 里是为了继承上面那套 fetch / workspace 夹具。
   describe('反向对照 · 闸门本身还活着', () => {
     it('硬拦档(余额耗尽)照旧弹带插画的那张,并且**不**建项目', async () => {
+      fundingVerdict = 'insufficient';
+      fundingBalance = '0';
       mockedCheckAmrBalanceGate.mockResolvedValue({
         kind: 'hard',
         reason: 'insufficient',

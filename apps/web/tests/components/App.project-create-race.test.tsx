@@ -13,6 +13,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../../src/App';
+import { homeAutoSendIdentity } from '../../src/runtime/home-auto-send-identity';
 import { navigationTiming } from '../../src/observability/navigation-timing';
 import { reportSafetyEvent } from '../../src/analytics/error-tracking';
 import { notifyAmrLoginStatusChanged } from '../../src/components/amrLoginPolling';
@@ -90,6 +91,10 @@ const iframePoolHarness = vi.hoisted(() => ({
   evictProject: vi.fn(),
 }));
 
+const requestLimitHandoff = vi.hoisted(() => ({
+  reject: undefined as undefined | ((input: { projectId: string; clientRequestId: string; accountGeneration: number; workspaceContext: WorkspaceCollabContext | null; branch: { tier: 'below_max' | 'max'; audience: 'owner' | 'member' } }) => boolean),
+}));
+
 const projectViewRenameFenceHarness = vi.hoisted(() => ({
   token: null as ProjectRenameFenceToken | null,
 }));
@@ -108,6 +113,15 @@ const workspaceTabsHarness = vi.hoisted(() => ({
   projectIds: new Set<string>(),
 }));
 
+const concurrencyAnalytics = vi.hoisted(() => ({ track: vi.fn() }));
+beforeEach(() => concurrencyAnalytics.track.mockClear());
+vi.mock('../../src/analytics/provider', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/analytics/provider')>();
+  return { ...actual, useAnalytics: () => ({ ...actual.useAnalytics(), track: concurrencyAnalytics.track }) };
+});
+function concurrencyViews() {
+  return concurrencyAnalytics.track.mock.calls.filter(([event, props]) => event === 'surface_view' && props.area === 'concurrency_limit_dialog');
+}
 vi.mock('../../src/collab/workspace-events', () => ({
   useWorkspaceInvalidation: vi.fn((
     handlers: Record<string, (payload: any) => void>,
@@ -420,7 +434,9 @@ vi.mock('../../src/components/ProjectView', () => ({
     onCreationHandoffSettled,
     shareLoginReturn,
     onShareLoginReturnChange,
+    onInitialHomeRequestConcurrencyRejected,
   }: {
+    onInitialHomeRequestConcurrencyRejected?: typeof requestLimitHandoff.reject;
     onBack: () => void;
     onCreateProjectFromDesignSystem?: (designSystemId: string, title: string) => Promise<void> | void;
     onCreateDesignSystemFromProject?: (
@@ -468,6 +484,7 @@ vi.mock('../../src/components/ProjectView', () => ({
     useEffect(() => {
       if (creationPersisted) onCreationHandoffSettled?.(project.id);
     }, [creationPersisted, onCreationHandoffSettled, project.id]);
+    requestLimitHandoff.reject = onInitialHomeRequestConcurrencyRejected;
     projectViewRetryScopeHarness.latest = {
       context: workspaceContextOverride ?? null,
       continuation: amrAuthRetryContinuation ?? null,
@@ -749,6 +766,14 @@ const mockedDuplicateProject = vi.mocked(duplicateProject);
 const mockedGetProject = vi.mocked(getProject);
 const mockedInvalidatePluginCatalogCache = vi.mocked(invalidatePluginCatalogCache);
 const mockedListProjects = vi.mocked(listProjects);
+
+/** Workspace fixtures become visible only after their request identity resolves.
+ * An unscoped boot response belongs to signed-out/local state. */
+function mockWorkspaceProjectList(projects: Project[]): void {
+  mockedListProjects.mockImplementation(async (options) =>
+    options?.workspaceContext ? projects : []);
+}
+
 const mockedListTemplates = vi.mocked(listTemplates);
 const mockedPatchProject = vi.mocked(patchProject);
 const mockedFetchDaemonConfig = vi.mocked(fetchDaemonConfig);
@@ -871,6 +896,7 @@ function stubWorkspaceContext(
 
 describe('App project creation routing', () => {
   beforeEach(() => {
+    requestLimitHandoff.reject = undefined;
     navigationTiming.cancel('page_exit');
     resetCoalescedGet();
     resetWorkspaceContextCache();
@@ -959,6 +985,107 @@ describe('App project creation routing', () => {
     resetCoalescedGet();
     workspaceInvalidationHarness.handlers.length = 0;
     workspaceInvalidationHarness.onActive.length = 0;
+  });
+
+  it('returns a first request rejected by Link concurrency to Home with the original files, without deleting the created project', async () => {
+    mockedListProjects.mockResolvedValue([]);
+    let createdId = '';
+    mockedCreateProject.mockImplementation(async (input) => {
+      createdId = input.id!;
+      return { project: { ...freshProject, id: createdId }, conversationId: 'conv-new' };
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Create prompted project' }));
+    await screen.findByTestId('project-view');
+    await waitFor(() => expect(mockedUploadProjectFiles).toHaveBeenCalledTimes(1));
+    expect(requestLimitHandoff.reject).toBeTypeOf('function');
+    let restored = false;
+    await act(async () => {
+      restored = requestLimitHandoff.reject!({ projectId: createdId, clientRequestId: homeAutoSendIdentity(createdId).clientRequestId,
+        accountGeneration: currentWorkspaceAccountGeneration(), workspaceContext: null,
+        branch: { tier: 'below_max', audience: 'owner' } });
+    });
+    expect(restored).toBe(true);
+    expect(await screen.findByTestId('entry-home-surface')).toBeTruthy();
+    expect(screen.getByTestId('amr-concurrency-dialog')).toBeTruthy();
+    expect(concurrencyViews().at(-1)?.[1]).toMatchObject({ page_name: 'home', stage: 'before_run' });
+    expect(window.localStorage.getItem('open-design:home-composer:prompt')).toContain('Build the retained artifact prompt');
+    const files = peekHomeComposerAttachments();
+    expect(files.map((f) => f.name)).toEqual(['brief.txt']);
+    expect(files[0]).toBe(mockedUploadProjectFiles.mock.calls[0]![1][0]);
+    expect(files[0]!.size).toBe(5);
+    expect(mockedDeleteProject).not.toHaveBeenCalled();
+    expect(mockedCreateProject).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByTestId('amr-concurrency-close'));
+    expect(mockedCreateProject).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['local', 'http://localhost:5173'],
+    ['test', 'https://open-design.powerformer.net'],
+    ['prod', 'https://open-design.ai'],
+  ] as const)('App recovered Home concurrency upgrade preserves %s profile and original space', async (profile, origin) => {
+    mockedLoadConfig.mockReturnValue({ ...baseConfig, agentId: 'amr',
+      agentCliEnv: { amr: { OPEN_DESIGN_AMR_PROFILE: profile } } });
+    mockedListProjects.mockResolvedValue([]);
+    let createdId = '';
+    mockedCreateProject.mockImplementation(async (input) => {
+      createdId = input.id!;
+      return { project: { ...freshProject, id: createdId }, conversationId: 'conv-new' };
+    });
+    const context = { ...workspaceContext('rejected-space-a', 'owner-a'), role: 'owner' as const,
+      planId: 'team_pro', permissions: buildWorkspacePermissions({ role: 'owner', lifecycleState: 'active' }) };
+    stubWorkspaceContext(context.workspaceId, context.workspaceMemberId);
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    render(<App />);
+    await screen.findByRole('button', { name: 'Create prompted project' });
+    await act(async () => { notifyWorkspaceContextRefresh({ context }); });
+    fireEvent.click(screen.getByRole('button', { name: 'Create prompted project' }));
+    await screen.findByTestId('project-view');
+    await waitFor(() => expect(requestLimitHandoff.reject).toBeTypeOf('function'));
+    await act(async () => {
+      expect(requestLimitHandoff.reject!({ projectId: createdId,
+        clientRequestId: homeAutoSendIdentity(createdId).clientRequestId,
+        accountGeneration: currentWorkspaceAccountGeneration(), workspaceContext: context,
+        branch: { tier: 'below_max', audience: 'owner' } })).toBe(true);
+    });
+    fireEvent.click(await screen.findByTestId('amr-concurrency-upgrade'));
+    const target = new URL(String(open.mock.calls[0]![0]));
+    expect(target.origin).toBe(origin);
+    expect(target.searchParams.get('workspaceId')).toBe('rejected-space-a');
+    expect(target.searchParams.get('billing')).toBe('plan');
+    expect(mockedCreateProject).toHaveBeenCalledOnce();
+    open.mockRestore();
+  });
+
+  it.each(['request', 'account', 'workspace', 'route'] as const)('rejects stale Home recovery across %s boundaries without overwriting the current draft', async (boundary) => {
+    mockedListProjects.mockResolvedValue([]);
+    let createdId = '';
+    mockedCreateProject.mockImplementation(async (input) => {
+      createdId = input.id!;
+      return { project: { ...freshProject, id: createdId }, conversationId: 'conv-new' };
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Create prompted project' }));
+    await screen.findByTestId('project-view');
+    await waitFor(() => expect(mockedUploadProjectFiles).toHaveBeenCalledTimes(1));
+    const reject = requestLimitHandoff.reject!;
+    if (boundary === 'route') {
+      act(() => navigate({ kind: 'home', view: 'home' }));
+      await screen.findByTestId('entry-home-surface');
+    }
+    window.localStorage.setItem('open-design:home-composer:prompt', 'new unsent Home draft');
+    let restored = true;
+    await act(async () => { restored = reject({ projectId: createdId,
+      clientRequestId: boundary === 'request' ? 'another-request' : homeAutoSendIdentity(createdId).clientRequestId,
+      accountGeneration: currentWorkspaceAccountGeneration() + (boundary === 'account' ? 1 : 0),
+      workspaceContext: boundary === 'workspace' ? workspaceContext('other-space', 'other-member') : null,
+      branch: { tier: 'below_max', audience: 'owner' } }); });
+    expect(restored).toBe(false);
+    expect(window.localStorage.getItem('open-design:home-composer:prompt')).toBe('new unsent Home draft');
+    expect(screen.queryByTestId('amr-concurrency-dialog')).toBeNull();
+    expect(mockedDeleteProject).not.toHaveBeenCalled();
+    expect(mockedCreateProject).toHaveBeenCalledOnce();
   });
 
   it('declares Home business Ready after successful empty required catalogs', async () => {
@@ -2901,7 +3028,7 @@ describe('App project creation routing', () => {
       createdAt: 20,
       updatedAt: 20,
     };
-    mockedListProjects.mockResolvedValue([workspaceAProject]);
+    mockWorkspaceProjectList([workspaceAProject]);
     mockedGetProject.mockResolvedValue(workspaceAProject);
 
     render(<App />);
@@ -3496,7 +3623,7 @@ describe('App project creation routing', () => {
       name: 'Before rename',
       workspaceId: 'ws-1',
     };
-    mockedListProjects.mockResolvedValue([sharedProject]);
+    mockWorkspaceProjectList([sharedProject]);
     const olderMetadataRefresh = deferred<Response>();
     const newerMetadataRefresh = deferred<Response>();
     let catalogReads = 0;
@@ -3923,7 +4050,7 @@ describe('App project creation routing', () => {
       ...existingProject,
       workspaceId: context.workspaceId,
     };
-    mockedListProjects.mockResolvedValue([scopedProject]);
+    mockWorkspaceProjectList([scopedProject]);
     stubWorkspaceContext(context.workspaceId, context.workspaceMemberId);
 
     render(<App />);
@@ -4013,7 +4140,7 @@ describe('App project creation routing', () => {
 
   it('passes the active project persisted Workspace to the tab switch guard', async () => {
     stubWorkspaceContext('ws-1', 'wm-1');
-    mockedListProjects.mockResolvedValue([{
+    mockWorkspaceProjectList([{
       ...existingProject,
       workspaceId: 'ws-1',
     }]);
@@ -4030,7 +4157,7 @@ describe('App project creation routing', () => {
 
   it('owns one AMR auth continuation above ProjectView and clears it after consume, cancel, or route exit', async () => {
     stubWorkspaceContext('ws-1', 'wm-1');
-    mockedListProjects.mockResolvedValue([{
+    mockWorkspaceProjectList([{
       ...existingProject,
       workspaceId: 'ws-1',
     }]);
@@ -4110,7 +4237,7 @@ describe('App project creation routing', () => {
   });
 
   it('preserves an exact retry through Settings and returns to its project after sign-in', async () => {
-    mockedListProjects.mockResolvedValue([{
+    mockWorkspaceProjectList([{
       ...existingProject,
       workspaceId: 'ws-1',
     }]);
@@ -4183,7 +4310,7 @@ describe('App project creation routing', () => {
     expect(workspaceIdentityCacheKey(scopeContext)).not.toBe(
       workspaceIdentityCacheKey(accountContext),
     );
-    mockedListProjects.mockResolvedValue([{ ...existingProject, workspaceId: 'ws-1' }]);
+    mockWorkspaceProjectList([{ ...existingProject, workspaceId: 'ws-1' }]);
     const loginStatus: VelaLoginStatus = {
       loggedIn: true,
       profile: 'test',
