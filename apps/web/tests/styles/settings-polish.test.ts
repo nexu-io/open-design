@@ -42,6 +42,14 @@ describe('settings polish CSS', () => {
     expect(ruleValue(selectedHover, 'background')).toBe('color-mix(in srgb, var(--selected) 13%, var(--bg-subtle))');
   });
 
+  it('keeps the disabled design-system import button label readable', () => {
+    const disabledImportButton = cssBlock(expandedIndexCss, '.library-install-submit:disabled');
+
+    expect(ruleValue(disabledImportButton, 'background')).toBe('var(--bg-subtle)');
+    expect(ruleValue(disabledImportButton, 'color')).toBe('var(--text)');
+    expect(ruleValue(disabledImportButton, 'cursor')).toBe('not-allowed');
+  });
+
   it('keeps the settings header above scrolling content rows', () => {
     const head = cssBlock(mentionHomeCss, '.modal-settings .modal-head');
     const body = cssBlock(mentionHomeCss, '.modal-settings .modal-body');
