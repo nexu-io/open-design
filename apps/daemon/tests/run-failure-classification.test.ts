@@ -452,6 +452,30 @@ describe('classifyRunFailure', () => {
     });
   });
 
+  // OPEND-4704: the bundled OpenCode (a Bun build) could not open a connection
+  // to AMR Link at all and gave up after its own retries. Bun words that as
+  // "Cannot connect to API: …" with one of two hints, and carries no errno, so
+  // the run used to fall through to the fatal_rpc_error close-reason promotion.
+  // Shapes copied from production diagnostic bundles.
+  it.each([
+    'Unable to connect. Is the computer able to access the url?',
+    'Was there a typo in the url or port?',
+  ])('classifies an exhausted Bun "Cannot connect to API: %s" as an upstream network error', (hint) => {
+    const message =
+      `json-rpc id 4: opencode event stream: {"id":"evt_19b86712c001i1GP16bnRzaHGe","properties":{"error":{"data":{"isRetryable":true,"message":"Cannot connect to API: ${hint}","metadata":{"retryAttempts":"6","retryExhausted":"true","totalAttempts":"7","url":"https://amr-link.open-design.ai/v1/chat/completions"}},"name":"APIError"},"sessionID":"ses_e647b9254ffewvK9Q7KJFVyUFP"},"type":"session.error"} (event=session.error, session=ses_e647b9254ffewvK9Q7KJFVyUFP)`;
+    expect(
+      classifyForAgent('amr', 'AGENT_EXECUTION_FAILED', message, [
+        errorEvent('AGENT_EXECUTION_FAILED', message, false),
+        runtimeCloseEvent('fatal_rpc_error'),
+      ]),
+    ).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'network_error',
+      // OpenCode already spent its own retries; keep honouring that verdict.
+      retryable: false,
+    });
+  });
+
   it('promotes AMR exit 130 connection resets into upstream stream disconnects', () => {
     expect(
       classify(
