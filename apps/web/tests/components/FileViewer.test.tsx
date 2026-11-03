@@ -11109,6 +11109,20 @@ describe('FileViewer tweaks toolbar', () => {
     ).toBeTruthy();
   });
 
+  async function selectCommentWithLiveLocation(target: PreviewComment, select: () => void) {
+    const previous = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const previousPost = vi.spyOn(previous.contentWindow!, 'postMessage');
+    select();
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const post = frame.contentWindow === previous.contentWindow ? previousPost : vi.spyOn(frame.contentWindow!, 'postMessage');
+    await act(async () => { window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow,
+      data: { type: 'od:comment-targets', targets: [target] } })); });
+    const request = post.mock.calls.map(call => call[0]).filter(data => data?.locate).at(-1);
+    expect(request).toBeDefined();
+    await act(async () => { window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow,
+      data: { ...target, type: 'od:comment-active-target-update', requestId: request.requestId } })); });
+  }
+
   it('keeps the unread dot independent from the open count and clears it only from authoritative read responses', async () => {
     const comment = (id: string, createdAt: number, authorMemberId?: string): PreviewComment => ({
       id, projectId: 'project-1', conversationId: 'conversation-1', filePath: 'preview.html',
@@ -11134,7 +11148,7 @@ describe('FileViewer tweaks toolbar', () => {
     await waitFor(() => expect(screen.queryByTestId('comment-unread-dot')).toBeNull());
     expect(screen.getByTestId('comment-panel-toggle').getAttribute('aria-label')).toBe('Comments (3)');
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'PUT')).toHaveLength(0);
-    fireEvent.click(screen.getAllByTestId('comment-side-item')[0]!);
+    await selectCommentWithLiveLocation(comments[2]!, () => fireEvent.click(screen.getAllByTestId('comment-side-item')[0]!));
     await waitFor(() => expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'PUT')).toHaveLength(1));
     const write = fetchMock.mock.calls.find(([, init]) => init?.method === 'PUT')!;
     expect(JSON.parse(String(write[1]?.body)).commentIds).toEqual(['three']);
@@ -11200,7 +11214,7 @@ describe('FileViewer tweaks toolbar', () => {
     fireEvent.click(within(screen.getByTestId('comment-side-collapsed-rail')).getByRole('button', { name: /show comments/i }));
     expect(screen.queryByTestId('comment-rail-unread-dot')).toBeNull();
     expect(readRequests).not.toHaveBeenCalled();
-    fireEvent.click(screen.getAllByTestId('comment-side-item').find(item => item.getAttribute('data-comment-id') === 'external-new')!);
+    await selectCommentWithLiveLocation(comment('external-new', 201), () => fireEvent.click(screen.getAllByTestId('comment-side-item').find(item => item.getAttribute('data-comment-id') === 'external-new')!));
     await waitFor(() => expect(readRequests).toHaveBeenCalledTimes(1));
   });
 
@@ -13944,11 +13958,12 @@ describe('FileViewer tweaks toolbar', () => {
     } })));
     const pin = await screen.findByTestId('comment-saved-marker-hero-copy');
     expect(pin.querySelector('.comment-saved-pin')).toHaveTextContent('琼');
-    fireEvent.click(within(pin).getByRole('button'));
+    await selectCommentWithLiveLocation(comment, () => fireEvent.click(within(pin).getByRole('button')));
     expect(await screen.findByTestId('comment-popover-detail')).toHaveTextContent('My comment');
     expect(pin.querySelector('.comment-saved-pin')).toHaveTextContent('琼');
     fireEvent.keyDown(document.body, { key: 'c' });
-    act(() => window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, data: {
+    const currentFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    act(() => window.dispatchEvent(new MessageEvent('message', { source: currentFrame.contentWindow, data: {
       type: 'od:comment-target', elementId: 'new-target', selector: 'h2', label: 'New target', text: '', htmlHint: '',
       position: { x: 16, y: 80, width: 100, height: 30 },
     } })));

@@ -78,7 +78,16 @@ it('keeps a failed draft, then saves at its click point, exits picking and reope
   const movedTarget = { ...target, position: { x: 100.5, y: 80.25, width: 400, height: 160 } };
   await act(async () => { window.dispatchEvent(new MessageEvent('message', { source: refreshedFrame.contentWindow, data: { type: 'od:comment-targets', targets: [movedTarget] } })); });
   expect(markerCanvasStyle(screen.getByTestId('comment-saved-marker-title'))).toMatchObject({ left: '201px', top: '93.25px', width: '28px', height: '28px' });
+  const refreshedPost = vi.spyOn(refreshedFrame.contentWindow!, 'postMessage');
   fireEvent.click(screen.getByTestId('comment-side-item'));
+  const activeFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+  const activePost = activeFrame.contentWindow === refreshedFrame.contentWindow ? refreshedPost : vi.spyOn(activeFrame.contentWindow!, 'postMessage');
+  await act(async () => { window.dispatchEvent(new MessageEvent('message', { source: activeFrame.contentWindow,
+    data: { type: 'od:comment-targets', targets: [movedTarget] } })); });
+  const request = activePost.mock.calls.map(call => call[0]).filter(data => data?.locate).at(-1);
+  expect(request).toBeDefined();
+  await act(async () => { window.dispatchEvent(new MessageEvent('message', { source: activeFrame.contentWindow,
+    data: { ...movedTarget, type: 'od:comment-active-target-update', requestId: request.requestId } })); });
   expect(screen.getByTestId('comment-popover-detail')).toHaveTextContent('Please improve this');
   expect(screen.queryByTestId('comment-popover-input')).toBeNull();
   expect(screen.queryByTestId('comment-popover-save')).toBeNull();

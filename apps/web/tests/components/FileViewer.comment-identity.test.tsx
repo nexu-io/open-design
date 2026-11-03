@@ -111,7 +111,16 @@ it('reprojects a Viewer left/top position and fractional anchor through current 
   const marker = await screen.findByTestId('comment-saved-marker-pin');
   // True point = (70, 100), and the 28px avatar extends upward from it.
   expect(markerCanvasStyle(marker)).toMatchObject({ left: '70px', top: '72px', width: '28px', height: '28px' });
+  const beforeFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+  const beforePost = vi.spyOn(beforeFrame.contentWindow!, 'postMessage');
   fireEvent.click(marker.querySelector('button')!);
+  const activeFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+  const post = activeFrame.contentWindow === beforeFrame.contentWindow ? beforePost : vi.spyOn(activeFrame.contentWindow!, 'postMessage');
+  await report(target.position);
+  const request = post.mock.calls.map(call => call[0]).filter(data => data?.locate).at(-1);
+  expect(request).toBeDefined();
+  await act(async () => { window.dispatchEvent(new MessageEvent('message', { source: activeFrame.contentWindow,
+    data: { ...target, type: 'od:comment-active-target-update', requestId: request.requestId } })); });
   expect(await screen.findByTestId('comment-popover-detail')).toHaveTextContent(comment.note);
   expect(screen.getByTestId('comment-target-overlay')).toHaveStyle({ left: '20px', top: '40px', width: '200px', height: '80px' });
   // A selected saved comment keeps one avatar rather than adding a draft avatar.

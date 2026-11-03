@@ -3,8 +3,17 @@ import { JSDOM } from 'jsdom';
 import { expect, it } from 'vitest';
 import { buildSrcdoc } from '../../src/runtime/srcdoc';
 
+function controlAnimationFrames(win: JSDOM['window']) {
+  let nextId = 0;
+  const queued = new Map<number, FrameRequestCallback>();
+  win.requestAnimationFrame = callback => { const id = ++nextId; queued.set(id, callback); return id; };
+  win.cancelAnimationFrame = id => { queued.delete(id); };
+  return () => queued.clear();
+}
+
 it('save validation follows the current selector across text/replacement changes, and reports deletion', () => {
   const dom = new JSDOM('<body><button>Original</button></body>', { runScripts: 'outside-only', pretendToBeVisual: true });
+  const clearFrames = controlAnimationFrames(dom.window);
   try {
     const win = dom.window;
     const replies: Record<string, unknown>[] = [];
@@ -30,11 +39,12 @@ it('save validation follows the current selector across text/replacement changes
       requestedSelector: 'body > button:nth-of-type(1)' });
     win.document.querySelector('button')!.remove();
     expect(save()).toMatchObject({ type: 'od:comment-location-missing', requestId: 'save' });
-  } finally { dom.window.close(); }
+  } finally { clearFrames(); dom.window.close(); }
 });
 
 it.each(['span', 'div'])('save accepts an existing %s after picker eligibility changes', tag => {
   const dom = new JSDOM(`<body><${tag}>Original</${tag}></body>`, { runScripts: 'outside-only', pretendToBeVisual: true });
+  const clearFrames = controlAnimationFrames(dom.window);
   try {
     const win = dom.window;
     const replies: Record<string, unknown>[] = [];
@@ -51,5 +61,5 @@ it.each(['span', 'div'])('save accepts an existing %s after picker eligibility c
     expect(save()).toMatchObject({ type: 'od:comment-active-target-update', text: 'Original' });
     win.document.querySelector(tag)!.innerHTML = tag === 'span' ? '' : '<span>A</span><span>B</span>';
     expect(save()).toMatchObject({ type: 'od:comment-active-target-update', text: tag === 'span' ? '' : 'AB' });
-  } finally { dom.window.close(); }
+  } finally { clearFrames(); dom.window.close(); }
 });
