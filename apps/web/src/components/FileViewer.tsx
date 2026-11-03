@@ -16670,29 +16670,6 @@ function HtmlViewer({
     }).catch(() => undefined);
     return () => { cancelled = true; };
   }, [commentReadScopeKey, mergeReadState, projectId, file.name, workspaceContext]);
-  useEffect(() => {
-    if (!activePreviewCommentId || !activeCommentTarget || previewCommentsState !== 'success') return;
-    const scopeKey = commentReadScopeKey;
-    // A rendered detail acknowledges only that comment; expanding the list does not.
-    const ids = unreadSideComments.filter(comment => comment.id === activePreviewCommentId && !commentReadState?.seenCommentIds?.includes(comment.id)).map(comment => comment.id);
-    if (!ids.length) return;
-    const requestKey = `${scopeKey}\u0000${activePreviewCommentId}`;
-    const frame = requestAnimationFrame(() => {
-      if (document.visibilityState === 'hidden' || pendingCommentReadsRef.current.has(requestKey)) return;
-      pendingCommentReadsRef.current.add(requestKey);
-      void fetch(`/api/projects/${encodeURIComponent(projectId)}/comments/read`, {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json', ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}) },
-        body: JSON.stringify({ readAt: latestVisibleSideCommentCreatedAt, filePath: file.name, commentIds: ids }),
-      }).then(async (response) => {
-        if (!response.ok) return;
-        // Anchor/data rerenders do not invalidate an already dispatched read.
-        // mergeReadState still rejects responses from a different account/file.
-        mergeReadState(scopeKey, await response.json() as ProjectCommentReadState);
-      }).catch(() => undefined).finally(() => { pendingCommentReadsRef.current.delete(requestKey); });
-    });
-    return () => { cancelAnimationFrame(frame); };
-  }, [unreadSideComments, commentReadState, file.name, previewCommentsState, activePreviewCommentId, activeCommentTarget, commentReadScopeKey, latestVisibleSideCommentCreatedAt, mergeReadState, projectId, workspaceContext]);
   // Trusted current member/app-account identities are filtered above. Never
   // fabricate an authorKey from names, colors, or either identity namespace.
   const hasUnreadSideComments = hasUnreadComments({
@@ -17237,6 +17214,30 @@ function HtmlViewer({
   const commentComposer = workspaceActive && commentComposerNode && commentComposerPortalMetrics
     ? createPortal(commentComposerNode, commentComposerPortalMetrics.host)
     : workspaceActive ? commentComposerNode : null;
+  const commentDetailVisible = Boolean(commentComposer && activeComposerComment);
+  useEffect(() => {
+    if (!commentDetailVisible || !activePreviewCommentId || previewCommentsState !== 'success') return;
+    const scopeKey = commentReadScopeKey;
+    // A rendered detail acknowledges only that comment; expanding the list does not.
+    const ids = unreadSideComments.filter(comment => comment.id === activePreviewCommentId && !commentReadState?.seenCommentIds?.includes(comment.id)).map(comment => comment.id);
+    if (!ids.length) return;
+    const requestKey = `${scopeKey}\u0000${activePreviewCommentId}`;
+    const frame = requestAnimationFrame(() => {
+      if (document.visibilityState === 'hidden' || pendingCommentReadsRef.current.has(requestKey)) return;
+      pendingCommentReadsRef.current.add(requestKey);
+      void fetch(`/api/projects/${encodeURIComponent(projectId)}/comments/read`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json', ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}) },
+        body: JSON.stringify({ readAt: latestVisibleSideCommentCreatedAt, filePath: file.name, commentIds: ids }),
+      }).then(async (response) => {
+        if (!response.ok) return;
+        // Anchor/data rerenders do not invalidate an already dispatched read.
+        // mergeReadState still rejects responses from a different account/file.
+        mergeReadState(scopeKey, await response.json() as ProjectCommentReadState);
+      }).catch(() => undefined).finally(() => { pendingCommentReadsRef.current.delete(requestKey); });
+    });
+    return () => { cancelAnimationFrame(frame); };
+  }, [unreadSideComments, commentReadState, file.name, previewCommentsState, activePreviewCommentId, commentDetailVisible, commentReadScopeKey, latestVisibleSideCommentCreatedAt, mergeReadState, projectId, workspaceContext]);
   const boardPreviewImage =
     boardPreviewIndex !== null ? boardImagePreviews[boardPreviewIndex] ?? null : null;
   const boardImagePreviewModal = workspaceActive && boardPreviewImage

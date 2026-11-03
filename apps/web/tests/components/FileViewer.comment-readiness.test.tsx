@@ -76,3 +76,48 @@ it('OPEND-3604 only acknowledges the opened detail; opening a list and delayed a
   expect(screen.getByTestId('comment-popover-detail')).toHaveTextContent('Visible review');
   expect(screen.queryByTestId('comment-popover-input')).toBeNull();
 });
+
+it('acknowledges a rendered missing-target detail without requiring a location or acknowledging other rows', async () => {
+  const writes: Array<{ filePath: string; commentIds: string[] }> = [];
+  const seen = new Set<string>();
+  vi.stubGlobal('fetch', vi.fn(async (input, init) => {
+    if (String(input).includes('/comments/read')) {
+      if (init?.method === 'PUT') {
+        const body = JSON.parse(String(init.body)); writes.push(body);
+        for (const id of body.commentIds) seen.add(id);
+      }
+      return Response.json({ projectId: 'p', filePath: 'index.html', seenCommentIds: [...seen] });
+    }
+    return Response.json({});
+  }));
+  const collab: CollabContextValue = {
+    workspaceContext: null, workspaceContextLoading: false, enabled: true,
+    member: null, present: [], publishedVersion: 2, syncState: 'synced', viewerOnly: false,
+    writerAuthority: 'allowed', isOwner: true, isEffectiveOwner: true, isSharedNonOwner: false,
+    ownerDisplayName: null, ownerRole: null, downloadPending: false,
+    reportChange() {}, requestPublish() {}, refreshPresence() {}, checkStatusNow() {},
+  };
+  const file: ProjectFile = { name: 'index.html', path: 'index.html', type: 'file', size: 100, mtime: 1, kind: 'html', mime: 'text/html' };
+  const comment: PreviewComment = {
+    id: 'missing-read', projectId: 'p', conversationId: 'c', filePath: file.name,
+    elementId: 'gone', selector: '#gone', label: 'Gone', text: 'Gone', htmlHint: '<h2>',
+    position: { x: 20, y: 40, width: 100, height: 30 }, anchorState: 'lost', anchoredVersion: 1,
+    note: 'Missing but readable', status: 'open', createdAt: 1, updatedAt: 1,
+  };
+  render(<CollabProvider value={collab}><FileViewer projectId="p" projectKind="prototype" file={file}
+    liveHtml="<h2>New content</h2>" previewComments={[comment, { ...comment, id: 'other-missing', note: 'Other unread' }]}
+    previewCommentsState="success" /></CollabProvider>);
+  const reportMissing = async () => act(async () => {
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, data: { type: 'od:comment-targets', targets: [] } }));
+  });
+  fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+  await reportMissing();
+  expect(writes).toEqual([]);
+  fireEvent.click(screen.getAllByTestId('comment-side-item').find(row => row.textContent?.includes(comment.note))!);
+  await reportMissing();
+  expect(await screen.findByTestId('comment-popover-detail')).toHaveTextContent(comment.note);
+  expect(screen.queryByTestId('comment-active-pin')).toBeNull();
+  await waitFor(() => expect(writes).toHaveLength(1));
+  expect(writes[0]).toMatchObject({ filePath: file.name, commentIds: [comment.id] });
+});
