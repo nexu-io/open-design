@@ -28,6 +28,7 @@ const listConversations = vi.fn();
 const listMessages = vi.fn();
 const fetchPreviewComments = vi.fn();
 const loadTabs = vi.fn();
+const upsertPreviewComment = vi.fn();
 const fetchProjectFiles = vi.fn();
 const fetchLiveArtifacts = vi.fn();
 const fetchSkill = vi.fn();
@@ -258,7 +259,7 @@ vi.mock('../../src/providers/registry', () => ({
   fetchProjectFiles: (...args: unknown[]) => fetchProjectFiles(...args),
   fetchSkill: (...args: unknown[]) => fetchSkill(...args),
   patchPreviewCommentStatus: (...args: unknown[]) => patchPreviewCommentStatus(...args),
-  upsertPreviewComment: vi.fn(),
+  upsertPreviewComment: (...args: unknown[]) => upsertPreviewComment(...args),
   writeProjectTextFile: vi.fn(),
 }));
 
@@ -303,6 +304,7 @@ vi.mock('../../src/components/FileWorkspace', () => ({
     onSendBoardCommentAttachments,
     onCommentModeChange,
     onFocusModeChange,
+    onSavePreviewComment,
   }: {
     streaming: boolean;
     messages?: ChatMessage[];
@@ -311,6 +313,7 @@ vi.mock('../../src/components/FileWorkspace', () => ({
     onSendBoardCommentAttachments: (attachments: unknown[]) => void;
     onCommentModeChange?: (active: boolean) => void;
     onFocusModeChange?: (focused: boolean) => void;
+    onSavePreviewComment?: (target: unknown, note: string, attachAfterSave: boolean) => Promise<unknown>;
   }) => {
     const failedAssistant =
       [...(messages ?? [])]
@@ -360,6 +363,27 @@ vi.mock('../../src/components/FileWorkspace', () => ({
         onClick={() => onSendBoardCommentAttachments([{ id: 'comment-1' }])}
       >
         workspace send
+      </button>
+      <button
+        type="button"
+        data-testid="workspace-save-preview-comment"
+        onClick={() => {
+          void onSavePreviewComment?.(
+            {
+              filePath: 'index.html',
+              elementId: 'hero',
+              selector: '[data-od-id="hero"]',
+              label: 'Hero',
+              text: 'Hero copy',
+              position: { x: 1, y: 2, width: 30, height: 40 },
+              htmlHint: '<section data-od-id="hero">Hero copy</section>',
+            },
+            'tighten this area',
+            false,
+          );
+        }}
+      >
+        save preview comment
       </button>
       {showAuthorizeAction && onAuthorizeAndRetry ? (
         <button
@@ -1838,6 +1862,28 @@ describe('ProjectView conversation run isolation', () => {
     fireEvent.click(screen.getByTestId('new-conversation'));
 
     expect(createConversation).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolves the conversation for a route-less preview comment in a personal workspace (#9305)', async () => {
+    // The file preview is ready before the chat list: the first lookup never
+    // settles, so there is no active or route conversation at save time.
+    listConversations
+      .mockReturnValueOnce(new Promise<Conversation[]>(() => {}))
+      .mockResolvedValue(conversations);
+    upsertPreviewComment.mockResolvedValue(previewComment);
+
+    renderProjectView();
+
+    await waitFor(() => expect(listConversations).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByTestId('workspace-save-preview-comment'));
+
+    await waitFor(() => expect(upsertPreviewComment).toHaveBeenCalledTimes(1));
+    expect(upsertPreviewComment).toHaveBeenCalledWith(
+      project.id,
+      conversations[0]!.id,
+      expect.objectContaining({ note: 'tighten this area' }),
+      expect.anything(),
+    );
   });
 
   it('does not create a conversation for a read-only member of a shared project', async () => {
