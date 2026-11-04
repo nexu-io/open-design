@@ -8,8 +8,10 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { BrowserWindow, app, dialog, ipcMain, nativeImage, nativeTheme, screen, session, shell, webFrameMain } from "electron";
-import type { WebFrameMain } from "electron";
+import { BrowserWindow, Menu, Tray, app, dialog, ipcMain, nativeImage, nativeTheme, screen, session, shell, webFrameMain } from "electron";
+import type { NativeImage, WebFrameMain } from "electron";
+import { createBackgroundTray, nonDarwinCloseAction } from "./close-to-tray.js";
+import type { BackgroundTray, BackgroundTraySurface } from "./close-to-tray.js";
 import {
   DESKTOP_UPDATE_CHANNELS,
   DESKTOP_UPDATE_MODES,
@@ -1551,6 +1553,42 @@ function resolveDesktopIconPath(): string {
   return resolve(dirname(fileURLToPath(import.meta.url)), "../../../web/public/app-icon.png");
 }
 
+// The tray icon comes from the executable, whose .ico carries 16px and 32px
+// frames; offering both lets Windows pick a sharp one at 100% and 200%
+// scaling instead of resampling a single bitmap.
+async function loadWindowsTrayIcon(): Promise<NativeImage> {
+  try {
+    const [small, normal] = await Promise.all([
+      app.getFileIcon(process.execPath, { size: "small" }),
+      app.getFileIcon(process.execPath, { size: "normal" }),
+    ]);
+    if (!small.isEmpty()) {
+      const icon = nativeImage.createEmpty();
+      icon.addRepresentation({ scaleFactor: 1, buffer: small.toPNG() });
+      if (!normal.isEmpty()) icon.addRepresentation({ scaleFactor: 2, buffer: normal.toPNG() });
+      return icon;
+    }
+  } catch (error) {
+    console.warn("[open-design desktop] tray icon from executable failed", error);
+  }
+  return nativeImage.createFromPath(resolveDesktopIconPath()).resize({ width: 16, height: 16 });
+}
+
+function createElectronBackgroundTray(icon: NativeImage): BackgroundTraySurface {
+  const tray = new Tray(icon);
+  return {
+    setToolTip: (text) => tray.setToolTip(text),
+    setContextMenu: (items) =>
+      tray.setContextMenu(Menu.buildFromTemplate(items.map((item) => ({ label: item.label, click: item.click })))),
+    onClick: (listener) => {
+      tray.on("click", listener);
+    },
+    displayBalloon: ({ title, content }) => tray.displayBalloon({ title, content, icon }),
+    destroy: () => tray.destroy(),
+    isDestroyed: () => tray.isDestroyed(),
+  };
+}
+
 function applyDockIcon(): void {
   if (process.platform !== "darwin" || !app.dock) return;
   const icon = nativeImage.createFromPath(resolveDesktopIconPath());
@@ -1799,7 +1837,9 @@ export type MainWindowCloseSurface = {
  * runs with a diagnostic bundle on 10/23-10/26 were Windows, typically ~20
  * minutes into the task). `confirmCloseWithActiveRuns` resolves true to let
  * the close go ahead: when nothing is running, when the count is unknown, or
- * when the user chooses to quit anyway.
+ * when the user chooses to quit anyway. It resolves false to keep the app
+ * alive, which on Windows includes hiding the window to the tray instead
+ * (see `close-to-tray.ts`).
  */
 export function attachNonDarwinMainWindowCloseShutdown(
   window: MainWindowCloseSurface,
@@ -2763,6 +2803,10 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     void shell.openExternal(url);
   });
 
+  // Windows only: holds the notification-area icon while the window is hidden
+  // over running tasks (OPEND-4390). Null elsewhere.
+  let backgroundTray: BackgroundTray | null = null;
+  const productName = windowTitle;
   if (process.platform === "darwin") {
     // Track the in-flight fullscreen-enter window so the close handler can
     // tell mid-transition apart from "definitely not fullscreen". HTML
@@ -2803,25 +2847,58 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       });
     });
   } else {
+    const askBeforeInterruptingRuns = async (activeRunCount: number, parent: BrowserWindow | null): Promise<boolean> => {
+      const prompt = closeWithActiveRunsPrompt(activeRunCount, app.getLocale());
+      const box: Electron.MessageBoxOptions = {
+        type: "warning",
+        title: productName,
+        message: prompt.message,
+        detail: prompt.detail,
+        buttons: prompt.buttons,
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true,
+      };
+      // A hidden parent would hide the dialog with it (tray Quit).
+      const { response } = parent != null && !parent.isDestroyed() && parent.isVisible()
+        ? await dialog.showMessageBox(parent, box)
+        : await dialog.showMessageBox(box);
+      return response === 1;
+    };
+    if (process.platform === "win32") {
+      let trayIcon: NativeImage | null = null;
+      void loadWindowsTrayIcon().then((icon) => {
+        trayIcon = icon;
+      });
+      const requestQuit = options.requestQuit ?? (() => app.quit());
+      backgroundTray = createBackgroundTray({
+        createTray: () => createElectronBackgroundTray(trayIcon ?? nativeImage.createFromPath(resolveDesktopIconPath()).resize({ width: 16, height: 16 })),
+        window: { hide: () => window.hide(), show: () => ensureWindowVisible(window) },
+        productName,
+        locale: () => app.getLocale(),
+        confirmQuit: async () => {
+          const safety = await checkUpdateRestartSafety({ discoverDaemonBaseUrl: discoverUpdateDaemonBaseUrl });
+          if (stopped) return false;
+          if (safety.state !== "blocked") return true;
+          return await askBeforeInterruptingRuns(safety.activeRunCount, window);
+        },
+        requestQuit,
+      });
+      window.on("show", () => backgroundTray?.windowShown());
+    }
     attachNonDarwinMainWindowCloseShutdown(window, {
       isStopped: () => stopped,
       requestQuit: options.requestQuit,
       confirmCloseWithActiveRuns: async () => {
         const safety = await checkUpdateRestartSafety({ discoverDaemonBaseUrl: discoverUpdateDaemonBaseUrl });
         if (stopped || window.isDestroyed()) return false;
-        if (safety.state !== "blocked") return true;
-        const prompt = closeWithActiveRunsPrompt(safety.activeRunCount, app.getLocale());
-        const { response } = await dialog.showMessageBox(window, {
-          type: "warning",
-          title: "Open Design",
-          message: prompt.message,
-          detail: prompt.detail,
-          buttons: prompt.buttons,
-          defaultId: 0,
-          cancelId: 0,
-          noLink: true,
-        });
-        return response === 1;
+        const action = nonDarwinCloseAction(process.platform, safety);
+        if (action === "close" || safety.state !== "blocked") return true;
+        if (action === "hide-to-tray" && backgroundTray != null) {
+          backgroundTray.hideToTray(safety.activeRunCount);
+          return false;
+        }
+        return await askBeforeInterruptingRuns(safety.activeRunCount, window);
       },
     });
   }
@@ -3095,6 +3172,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     },
     async close() {
       stopped = true;
+      backgroundTray?.dispose();
       if (timer != null) {
         clearTimeout(timer);
         timer = null;
