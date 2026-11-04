@@ -378,6 +378,11 @@ export type OpenDesignHostDownloadResult = {
 };
 
 export type OpenDesignHostBridge = {
+  /** Local-only input telemetry PoC. Asynchronous replies acknowledge durable transactions. */
+  inputTelemetry?: {
+    read(scope: string): Promise<[string, string][]>;
+    write(scope: string, put: [string, string][], drop: string[]): Promise<void>;
+  };
   startup?: {
     context(): Promise<{ launch_attempt_id: string; app_session_id: string } | null>;
     signal(value: { launch_attempt_id: string; app_session_id: string;

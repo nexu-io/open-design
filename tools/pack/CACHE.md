@@ -73,6 +73,10 @@ Inputs include file content, configuration values, tool versions, and process
 environment. An input that is read by `build` but absent from `key` is a
 defect, not an optimization.
 
+The workspace-build key also records `NEXT_PUBLIC_OD_INPUT_AGGREGATION_POC` and
+`NEXT_PUBLIC_OD_INPUT_QA_BUNDLE`, because private telemetry QA builds bake these
+flags into the browser bundle. Ordinary builds leave both unset.
+
 **R2 — A node key must carry the key of every upstream node it consumes.**
 Re-deriving an upstream node's own inputs is not a substitute: upstream keys
 carry inputs that are not file content (see R3), so re-derivation silently

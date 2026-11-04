@@ -158,7 +158,24 @@ export const CLIENT_METRIC_SCHEMAS = {
   client_update_stage_result: metricCommonSchema.extend(updateStageMetricFields),
   client_responsiveness_window: metricCommonSchema.extend(responsivenessWindowFields),
   client_input_responsiveness: metricCommonSchema.extend(inputResponsivenessFields)
+    .extend({ aggregation_page_id: token.optional() })
     .refine((value) => value.over_500ms_count <= value.qualified_sample_count),
+  client_input_responsiveness_summary: metricCommonSchema.extend({
+    area: z.enum(['settings', 'search']),
+    aggregation_page_id: token,
+    period_ms: z.union([z.literal(300_000), z.literal(600_000)]),
+    window_start: time, window_end: time,
+    flush_reason: z.enum(['window', 'pagehide', 'hidden', 'identity_change', 'recovery']),
+    source_event_count: z.number().int().positive().safe(),
+    source_window_ms: measurement,
+    input_attempt_count: inputResponsivenessFields.input_attempt_count,
+    qualified_sample_count: inputResponsivenessFields.qualified_sample_count,
+    over_500ms_count: inputResponsivenessFields.over_500ms_count,
+    max_input_to_presentation_ms: inputResponsivenessFields.max_input_to_presentation_ms,
+    max_queue_delay_ms: inputResponsivenessFields.max_queue_delay_ms,
+    sample_floor_ms: z.literal(16),
+  }).refine((value) => value.over_500ms_count <= value.qualified_sample_count
+    && Date.parse(value.window_end) - Date.parse(value.window_start) === value.period_ms),
   client_chat_scroll_frames: metricCommonSchema.extend(scrollFrameFields),
   client_responsiveness_recovery: metricCommonSchema.extend(responsivenessRecoveryFields),
   client_launch_attempt: launchAttemptSchema,

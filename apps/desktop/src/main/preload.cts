@@ -349,6 +349,11 @@ ipcRenderer.on(APP_CONFIG_CHANGED_IPC_CHANNEL, () => {
 
 const hostBridge = {
   version: OPEN_DESIGN_HOST_VERSION,
+  ...(process.argv.includes('--od-input-native-poc') ? { inputTelemetry: {
+    read: (scope: string): Promise<[string, string][]> => ipcRenderer.invoke('od:input-native-poc', 'read', scope),
+    write: (scope: string, put: [string, string][], drop: string[]): Promise<void> =>
+      ipcRenderer.invoke('od:input-native-poc', 'write', scope, put, drop),
+  } } : {}),
   startup: {
     context: () => ipcRenderer.invoke('od:startup:context'),
     signal: (value: Parameters<NonNullable<OpenDesignHostBridge['startup']>['signal']>[0]) =>

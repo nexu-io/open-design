@@ -1,7 +1,7 @@
 import { classifyProcessExit } from "@open-design/contracts/analytics";
 import { reportDesktopObservabilityEvent } from "./observability.js";
 import { execFile } from "node:child_process";
-import { createHmac, randomBytes, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { appendFile, mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { release } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
@@ -35,6 +35,7 @@ import type {
 } from "@open-design/host";
 
 import { renderDeckSlides } from "./deck-capture.js";
+import { NativeInputStore, nativeInputPocEnabled } from "./input-native-store.js";
 import { renderDeterministicFrames } from "./frame-capture.js";
 import { openFirstPartyMailto } from "./mailto-open.js";
 import { openValidatedDirectory } from "./open-path.js";
@@ -2022,6 +2023,10 @@ async function showDirectoryPickerForSender(
 export async function createDesktopRuntime(options: DesktopRuntimeOptions): Promise<DesktopRuntime> {
   const preloadPath = options.preloadPath ?? join(dirname(fileURLToPath(import.meta.url)), "preload.cjs");
   applyDockIcon();
+  const nativeStores = new Map<string, NativeInputStore>();
+  const nativeHost = process.env.POSTHOG_HOST ?? '';
+  const nativePrefix = `${nativeHost.replace(/\/+$/, '')}/i/v0/e/:phc_local_poc_only:`;
+  const nativeEnabled = nativeInputPocEnabled(app.isPackaged, process.env);
 
   // ipcMain.handle() registers a handler in an internal map that is *not*
   // surfaced via eventNames(); the previous `!eventNames().includes(...)`
@@ -2266,7 +2271,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     autoHideMenuBar: true,
     ...MAC_WINDOW_CHROME,
     webPreferences: {
-      additionalArguments: osLocaleAdditionalArguments(options.osLocale),
+      additionalArguments: [...(osLocaleAdditionalArguments(options.osLocale) ?? []), ...(nativeEnabled ? ['--od-input-native-poc'] : [])],
       backgroundThrottling: false,
       contextIsolation: true,
       nodeIntegration: false,
@@ -2276,6 +2281,10 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     },
     width: 1280,
   });
+  if (nativeEnabled && process.env.OD_INPUT_QA_AUTOMATION === '1') {
+    window.setFocusable(false);
+    window.on('show', () => window.hide());
+  }
   installWindowChromeCssHook(window);
   showWindowButtons(window);
   attachDownloadSaveAsDialog(window);
@@ -2472,6 +2481,27 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       throw new Error("host IPC is only available to the main OpenDesign window");
     }
   };
+  ipcMain.removeHandler('od:input-native-poc');
+  ipcMain.handle('od:input-native-poc', async (event, op: unknown, scope: unknown, put: unknown, drop: unknown) => {
+    requireMainWindowSender(event);
+    if (!nativeEnabled || event.senderFrame !== event.sender.mainFrame || !currentUrl
+      || new URL(event.senderFrame.url).origin !== new URL(currentUrl).origin
+      || typeof scope !== 'string' || !scope.startsWith(nativePrefix) || scope.length > 512
+      || !['read', 'write'].includes(String(op))) throw new Error('native input PoC unavailable');
+    let store = nativeStores.get(scope);
+    if (!store) {
+      if (nativeStores.size >= 4) throw new Error('native input scope limit');
+      const dir = join(app.getPath('userData'), 'input-aggregation-poc');
+      await mkdir(dir, { recursive: true, mode: 0o700 });
+      store = nativeStores.get(scope);
+      if (!store) {
+        store = new NativeInputStore(join(dir, createHash('sha256').update(scope).digest('hex') + '.sqlite'));
+        nativeStores.set(scope, store);
+      }
+    }
+    if (op === 'read') return store.read();
+    return store.write(put as [string, string][], drop as string[]);
+  });
   const discoverUpdateDaemonBaseUrl = async (): Promise<string> => {
     const daemonUrl = await options.discoverDaemonUrl?.();
     const baseUrl = daemonUrl ?? await options.discoverUrl();
@@ -3055,6 +3085,8 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         timer = null;
       }
       unsubscribeUpdater();
+      ipcMain.removeHandler('od:input-native-poc');
+      await Promise.allSettled([...nativeStores.values()].map(store => store.close()));
       ipcMain.removeAllListeners("desktop-pet:set-visible");
       ipcMain.removeAllListeners("od:appearance:set-theme");
       ipcMain.removeAllListeners("od:window:show");

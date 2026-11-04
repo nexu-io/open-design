@@ -42,6 +42,8 @@ import {
 } from '@open-design/contracts/analytics';
 import { isResolvedAppVersion } from './app-version';
 import { scrubExceptionList, scrubFilePath } from './scrub';
+import { InputAggregation, localInputAggregationEnabled } from './input-aggregation';
+import { openInputAggregationStore } from './input-aggregation-store';
 
 export type BrowserOsName =
   | 'Mac OS X'
@@ -132,6 +134,51 @@ let context: ExceptionTrackingContext | null = null;
 let installationDistinctId: string | null = null;
 const buffer: BufferedSafetyEvent[] = [];
 let installed = false;
+let inputAggregation: { instance: InputAggregation; destination: string } | null = null;
+let inputAggregationTimer: ReturnType<typeof setInterval> | null = null;
+let flushInputCollector: (() => void) | null = null;
+
+export function registerInputCollectorFlush(flush: () => void): () => void {
+  flushInputCollector = flush;
+  return () => { if (flushInputCollector === flush) flushInputCollector = null; };
+}
+
+function ensureInputAggregation(): InputAggregation | null {
+  if (typeof window === 'undefined' || window.location.pathname === '/desktop-pet' || !context || holdsMetricsForIdentity()
+    || !localInputAggregationEnabled(process.env.NEXT_PUBLIC_OD_INPUT_AGGREGATION_POC, process.env.NODE_ENV, context.host, process.env.NEXT_PUBLIC_OD_INPUT_QA_BUNDLE, context.apiKey)) return null;
+  const destination = `${context.host.replace(/\/+$/, '')}/i/v0/e/`;
+  const contextHost = context.host.replace(/\/+$/, '');
+  const key = context.apiKey;
+  const scope = `${destination}:${key}:${context.distinctId}`;
+  if (!inputAggregation || inputAggregation.destination !== scope) {
+    if (inputAggregation) {
+      const previous = inputAggregation.instance;
+      void previous.flush('identity_change').finally(() => previous.close());
+    }
+    const instance = new InputAggregation(async (events) => {
+      try {
+        const response = await fetch(`${contextHost}/batch/`, { method: 'POST', headers: { 'content-type': 'application/json' },
+          credentials: 'omit', keepalive: true, signal: AbortSignal.timeout(5000),
+          body: JSON.stringify({ api_key: key, batch: events.map(({ event, properties }) => ({ event,
+            distinct_id: properties.device_id, timestamp: properties.occurred_at,
+            properties: { ...properties, distinct_id: properties.device_id, $insert_id: properties.event_id } })) }),
+        });
+        return response.ok;
+      } catch { return false; }
+    }, openInputAggregationStore(scope));
+    inputAggregation = { instance, destination: scope };
+    void instance.tick();
+    if (!inputAggregationTimer) {
+      inputAggregationTimer = setInterval(() => { void inputAggregation?.instance.tick(); }, 5000);
+      window.addEventListener('pagehide', () => { flushInputCollector?.(); void inputAggregation?.instance.flush('pagehide'); });
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') { flushInputCollector?.(); void inputAggregation?.instance.flush('hidden'); }
+      });
+      window.addEventListener('online', () => { flushInputCollector?.(); void inputAggregation?.instance.flush('recovery'); });
+    }
+  }
+  return inputAggregation.instance;
+}
 
 // Upper bound on how long stability metrics wait for the installation id. If
 // the id never arrives (e.g. a failed config write), held metrics are released
@@ -158,6 +205,7 @@ function releaseHeldMetrics(): void {
 }
 
 function drainBuffer(): void {
+  ensureInputAggregation();
   if (context == null || buffer.length === 0) return;
   const holding = holdsMetricsForIdentity();
   const keep: BufferedSafetyEvent[] = [];
@@ -169,7 +217,7 @@ function drainBuffer(): void {
 }
 
 export function setExceptionTrackingContext(next: ExceptionTrackingContext): void {
-  context = {
+  const updated = {
     ...next,
     // An installation id learned via setIdentity outranks a bootstrap that
     // resolved its config before the id was minted (OPEND-4220).
@@ -178,6 +226,9 @@ export function setExceptionTrackingContext(next: ExceptionTrackingContext): voi
     // A later re-bridge that does not know about identity keeps the hold.
     identityPending: next.identityPending ?? context?.identityPending,
   };
+  if (context && ['apiKey', 'host', 'distinctId', 'appSessionId', 'appVersion', 'channel', 'telemetryEnv'].some(k =>
+    context?.[k as keyof ExceptionTrackingContext] !== updated[k as keyof ExceptionTrackingContext])) flushInputCollector?.();
+  context = updated;
   // Invariant (OPEND-4220 retest 2): on a fresh install, stability metrics
   // emitted before the installation id exists are held, not sent under the
   // anonymous id, so one first session never splits across device ids — e.g.
@@ -193,8 +244,11 @@ export function clearExceptionTrackingContext(): void {
   // POSTHOG_KEY, e.g. a fork build). The buffered events stay in memory
   // until the page unloads — no key, nowhere to send them, but also
   // nothing leaks.
+  flushInputCollector?.();
   context = null;
   installationDistinctId = null;
+  if (inputAggregation) void inputAggregation.instance.close();
+  inputAggregation = null;
   if (identityHoldTimer !== null) { clearTimeout(identityHoldTimer); identityHoldTimer = null; }
 }
 
@@ -205,6 +259,7 @@ export function clearExceptionTrackingContext(): void {
 // installation id (OPEND-4220). No-op until a context exists.
 export function patchExceptionTrackingDistinctId(distinctId: string | null): void {
   if (!distinctId) return;
+  if (context && context.distinctId !== distinctId) flushInputCollector?.();
   installationDistinctId = distinctId;
   if (!context) return;
   if (context.distinctId !== distinctId) context = { ...context, distinctId };
@@ -218,6 +273,7 @@ export function patchExceptionTrackingDistinctId(distinctId: string | null): voi
 // been set yet.
 export function patchExceptionTrackingAppVersion(version: string): void {
   if (!context || !isResolvedAppVersion(version)) return;
+  if (context.appVersion !== version) flushInputCollector?.();
   context = { ...context, appVersion: version };
 }
 
@@ -382,19 +438,40 @@ function enqueue(eventName: string, properties: Record<string, unknown>): void {
   dispatch(item);
 }
 
+function telemetryParams(original: Record<string, unknown>, timestamp: string) {
+  const ctx = context!;
+  return buildClientTelemetryParams(original, {
+    eventId: String(original.$insert_id), deviceId: ctx.distinctId,
+    appSessionId: ctx.appSessionId ?? ctx.sessionId ?? null,
+    appVersion: ctx.appVersion ?? null,
+    ...(ctx.channel ? { channel: ctx.channel } : {}),
+    clientType: ctx.clientType, captureSource: 'web/error-tracking',
+    env: ctx.telemetryEnv ?? 'unknown',
+    platform: ctx.platform ?? null, osVersion: ctx.osVersion ?? null,
+    arch: ctx.arch ?? null, occurredAt: timestamp, reportedAt: new Date().toISOString(),
+  });
+}
+
+/** Local trial only: a cumulative source window stays mutable until it is finalized. */
+export function checkpointInputResponsiveness(properties: Record<string, unknown>, final: boolean): boolean {
+  if (!['settings', 'search'].includes(String(properties.area))) return false;
+  const aggregation = ensureInputAggregation();
+  if (!aggregation || aggregation.stopped || !context) return false;
+  const common = telemetryParams({ ...properties, $insert_id: properties.event_id }, new Date().toISOString());
+  const metric = parseClientMetricEvent('client_input_responsiveness', { ...properties, ...common });
+  if (!metric) return false;
+  const destination = `${context.host.replace(/\/+$/, '')}/i/v0/e/`, key = context.apiKey;
+  void aggregation.checkpointSource(metric, final).then(saved => {
+    if (!saved && final && !aggregation.ownsSource(common.event_id)) sendSafetyPayload(destination, { api_key: key, event: 'client_input_responsiveness',
+      distinct_id: common.device_id, timestamp: common.occurred_at, properties: { ...metric, $insert_id: common.event_id } });
+  });
+  return true;
+}
+
 function dispatch(item: BufferedSafetyEvent): void {
   if (context == null) return;
   const original = item.body.properties;
-  const common = buildClientTelemetryParams(original, {
-    eventId: String(original.$insert_id), deviceId: context.distinctId,
-    appSessionId: context.appSessionId ?? context.sessionId ?? null,
-    appVersion: context.appVersion ?? null,
-    ...(context.channel ? { channel: context.channel } : {}),
-    clientType: context.clientType, captureSource: 'web/error-tracking',
-    env: context.telemetryEnv ?? 'unknown',
-    platform: context.platform ?? null, osVersion: context.osVersion ?? null,
-    arch: context.arch ?? null, occurredAt: item.timestamp, reportedAt: new Date().toISOString(),
-  });
+  const common = telemetryParams(original, item.timestamp);
   const metric = isClientMetricEventName(item.eventName)
     ? parseClientMetricEvent(item.eventName, { ...original, ...common }) : null;
   if (isClientMetricEventName(item.eventName) && !metric) return;
@@ -413,11 +490,25 @@ function dispatch(item: BufferedSafetyEvent): void {
     },
     timestamp: common.occurred_at,
   };
+  const destination = `${context.host.replace(/\/+$/, '')}/i/v0/e/`;
+  const send = (properties = payload.properties) => sendSafetyPayload(destination, { ...payload, properties });
+  if (metric && item.eventName === 'client_input_responsiveness') {
+    const aggregation = ensureInputAggregation();
+    if (aggregation) {
+      // The durable outbox sends raw and summary events; never also dispatch the raw witness here.
+      void aggregation.observe(metric).then(saved => { if (!saved && !aggregation.ownsSource(common.event_id)) send(); });
+      return;
+    }
+  }
+  send();
+}
+
+function sendSafetyPayload(destination: string, payload: unknown): void {
   // `keepalive` ensures the request survives an immediate window unload —
   // important for events that fire during navigation that are followed by
   // a route change a millisecond later.
   try {
-    void fetch(`${context.host.replace(/\/+$/, '')}/i/v0/e/`, {
+    void fetch(destination, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(payload),
