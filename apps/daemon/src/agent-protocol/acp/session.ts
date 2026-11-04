@@ -1484,7 +1484,13 @@ export function attachAcpSession({
       // pending non-think tools flips emittedConcreteToolEvent so we take
       // finishCleanPrompt instead of acp_no_visible_output (which would re-flush
       // them as isError via fail()). Think-only open tools do not flip the flag.
-      flushOpenAcpTools();
+      // (#9268: best-effort — a throwing send here must not skip the guaranteed
+      // teardown in finishCleanPrompt below.)
+      try {
+        flushOpenAcpTools();
+      } catch (err) {
+        console.error('[acp] flushOpenAcpTools threw before AMR classification:', err);
+      }
       const usage = formatUsage(result.usage);
       // Prepare buffered text without notifying observers. Publish it only
       // inside finishCleanPrompt's existing finished/re-entry protection.
