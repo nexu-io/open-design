@@ -65,6 +65,7 @@ export * from './api/version.js';
 export * from './api/whats-new.js';
 export * from './api/workspaces.js';
 export * from './api/workspace-invites.js';
+export * from './api/referral.js';
 export * from './examples.js';
 export * from './execution-profile.js';
 export * from './artifacts/od-card.js';

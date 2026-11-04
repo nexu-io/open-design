@@ -1,6 +1,16 @@
 import type { Dict } from '../types';
 
 export const fa: Dict = {
+  "referral.notice.label": "اعلان کارت بازنشانی",
+  "referral.notice.registered": "با اولین اشتراک خود در ۴۸ ساعت، یک کارت بازنشانی دریافت کنید",
+  "referral.notice.pending": "اولین اشتراک شما تکمیل شد و کارت در انتظار صدور است.",
+  "referral.notice.pendingAt": "اولین اشتراک شما تکمیل شد و کارت احتمالاً در {time} می‌رسد.",
+  "referral.notice.exhausted": "سهمیه Design Plan تمام شده است. دوستانتان را دعوت کنید تا کارت بازنشانی بگیرید و پس از دریافت به کار ادامه دهید.",
+  "referral.notice.remaining": "زمان باقی‌مانده: {time}",
+  "referral.notice.invite": "دعوت دوستان",
+  "referral.notice.subscribe": "اشتراک",
+  "referral.notice.dismiss": "بستن اعلان",
+  "referral.notice.openFailed": "صفحه باز نشد. دوباره تلاش کنید.",
   "workspaceInvite.deliveryPending": "ارسال دعوت در انتظار است. کمی بعد بررسی کنید.",
   "workspaceInvite.deliveryFailed": "ارسال دعوت ناموفق بود. دوباره تلاش کنید.",
   "workspaceInvite.invalidResponse": "تأیید ارسال دعوت ممکن نیست. بعداً دوباره تلاش کنید.",

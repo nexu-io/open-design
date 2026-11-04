@@ -1,6 +1,16 @@
 import type { Dict } from '../types';
 
 export const ru: Dict = {
+  "referral.notice.label": "Уведомление о карте сброса",
+  "referral.notice.registered": "Получите карту сброса при первой подписке в течение 48 часов",
+  "referral.notice.pending": "Первая подписка оформлена. Карта ожидает выдачи.",
+  "referral.notice.pendingAt": "Первая подписка оформлена. Карта ожидается {time}.",
+  "referral.notice.exhausted": "Лимит Design Plan исчерпан. Пригласите друзей, чтобы получить карты сброса и продолжить работу после их выдачи.",
+  "referral.notice.remaining": "Осталось {time}",
+  "referral.notice.invite": "Пригласить друзей",
+  "referral.notice.subscribe": "Оформить подписку",
+  "referral.notice.dismiss": "Закрыть уведомление",
+  "referral.notice.openFailed": "Не удалось открыть страницу. Повторите попытку.",
   "workspaceInvite.deliveryPending": "Доставка приглашения ожидается. Проверьте позже.",
   "workspaceInvite.deliveryFailed": "Не удалось доставить приглашение. Повторите попытку.",
   "workspaceInvite.invalidResponse": "Не удалось подтвердить доставку приглашения. Повторите попытку позже.",

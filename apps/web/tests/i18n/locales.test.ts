@@ -526,3 +526,16 @@ describe('i18n locales', () => {
     }
   });
 });
+
+it('localizes every reset-card notice state and preserves placeholders', async () => {
+  const keys = ['label', 'registered', 'pending', 'pendingAt', 'exhausted', 'remaining', 'invite', 'subscribe', 'dismiss', 'openFailed'] as const;
+  for (const locale of LOCALES) {
+    const dict = await loadDict(locale);
+    for (const suffix of keys) {
+      const key = `referral.notice.${suffix}` as keyof Dict;
+      expect(dict[key], `${locale} ${key}`).toBeTruthy();
+      expect(placeholders(dict[key]), `${locale} ${key}`).toEqual(placeholders(en[key]));
+      if (locale !== 'en') expect(dict[key], `${locale} ${key}`).not.toBe(en[key]);
+    }
+  }
+});
