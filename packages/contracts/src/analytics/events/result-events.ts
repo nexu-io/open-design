@@ -415,6 +415,8 @@ export interface RunCreatedProps extends RunTaskLineageProps {
   run_id: string;
   /** Daemon-authorized workspace pinned to this run, never the current UI selection. */
   workspace_id?: string;
+  /** Actual authorized caller, frozen with workspace_id for the run lifetime. */
+  workspace_member_id?: string;
   /** Positive safe integer from that workspace's authorized context; omitted when unknown. */
   member_count?: number;
   project_kind: TrackingProjectKind | null;

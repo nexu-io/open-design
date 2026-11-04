@@ -31,7 +31,7 @@ beforeEach(() => {
   analytics.track.mockReset();
   analytics.newRequestId.mockClear();
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
-    results: [{ ok: true }],
+    results: [{ ok: true, inviteId: 'invite-created-1' }],
   }), {
     status: 200,
     headers: { 'content-type': 'application/json' },
@@ -39,6 +39,26 @@ beforeEach(() => {
 });
 
 describe('InviteDialog analytics', () => {
+  it('counts effective recipient roles and only links successful invitation IDs in a mixed batch', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ results: [
+      { email: 'admin@example.com', ok: true, inviteId: 'invite-admin' },
+      { email: 'member@example.com', ok: false, inviteId: 'must-not-link', error: 'already_member' },
+    ] }), { status: 200 })));
+    render(<InviteDialog open onClose={() => {}} workspaceContext={{ ...TEAM_CONTEXT, role: 'owner' }} />);
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'admin@example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: /分配角色|assign role|^角色$|^role$/i }));
+    fireEvent.click(screen.getByRole('option', { name: /管理员|admin/i }));
+    fireEvent.click(screen.getByRole('button', { name: /添加成员|add member/i }));
+    fireEvent.change(screen.getAllByRole('textbox')[1]!, { target: { value: 'member@example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: /发送邀请|send invitations/i }));
+    await waitFor(() => expect(analytics.track).toHaveBeenCalledWith('workspace_invite_result', expect.objectContaining({
+      result: 'partial_success', requested_roles: ['admin', 'member'], requested_admin_count: 1,
+      requested_member_count: 1, succeeded_count: 1, failed_count: 1, invite_ids: ['invite-admin'],
+      workspace_role: 'owner',
+    }), expect.anything()));
+    expect(JSON.stringify(analytics.track.mock.calls)).not.toMatch(/@example.com|must-not-link/);
+  });
+
   it('links submit and authoritative success without sending the email', async () => {
     render(
       <InviteDialog
@@ -64,6 +84,10 @@ describe('InviteDialog analytics', () => {
           result: 'success',
           requested_count: 1,
           succeeded_count: 1,
+          requested_roles: ['member'],
+          requested_admin_count: 0,
+          requested_member_count: 1,
+          invite_ids: ['invite-created-1'],
           failed_count: 0,
           workspace_key: 'workspace-team',
           $groups: { workspace: 'workspace-team' },
@@ -76,6 +100,8 @@ describe('InviteDialog analytics', () => {
       expect.objectContaining({
         element: 'submit',
         invite_count_bucket: '1',
+        requested_roles: ['member'],
+        requested_member_count: 1,
       }),
       { requestId: 'request-invite-1' },
     );

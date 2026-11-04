@@ -18,7 +18,7 @@ type Track = (
 ) => void;
 
 interface RecordAmrEntryOptions {
-  blockContext?: { block_id: string; workspace_key?: string; reason: 'credit_exhausted' | 'concurrency_limit'; stage: 'before_run' | 'mid_run' | 'unknown' };
+  blockContext?: { block_id: string; workspace_key?: string; workspace_member_id?: string; project_key?: string; conversation_id?: string; reason: 'credit_exhausted' | 'concurrency_limit'; stage: 'before_run' | 'mid_run' | 'unknown' };
   metricsConsent?: boolean;
   reuseExistingFrom?: readonly TrackingAmrEntrySource[];
   campaignId?: TrackingCampaignId;
