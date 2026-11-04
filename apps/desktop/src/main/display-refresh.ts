@@ -23,8 +23,9 @@ export type DisplayRefreshWindow = EventSource & {
  * Restore after one frame interval (main has no requestAnimationFrame), then
  * invalidate the shadow. This is a preventive refresh, not proof of GPU recovery.
  * Maximized windows only cycle material so their zoom state is preserved.
- * User gestures skip refresh; a gesture starting during the pulse restores it
- * synchronously before macOS applies the user's bounds. Only pass application
+ * Refreshes requested during a user gesture wait until it settles; a gesture
+ * starting during the pulse restores it synchronously before macOS applies the
+ * user's bounds. Only pass application
  * windows created with MAC_WINDOW_CHROME, never invisible capture windows.
  */
 export function attachDisplayRefresh(input: {
@@ -46,6 +47,9 @@ export function attachDisplayRefresh(input: {
   const busy = new Set<DisplayRefreshWindow>();
   const moveTimers = new Map<DisplayRefreshWindow, ReturnType<typeof setTimeout>>();
   const restores = new Map<DisplayRefreshWindow, () => void>();
+  // Reasons that arrived during a gesture; dragging across displays is the
+  // common way to change scale, so they run once the gesture settles.
+  const deferred = new Map<DisplayRefreshWindow, Set<string>>();
   const reasons = new Set<string>();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let disposed = false;
@@ -54,31 +58,49 @@ export function attachDisplayRefresh(input: {
     listeners.push(() => source.removeListener(event, listener));
   };
   for (const window of input.getWindows()) {
+    // Clear busy after `ms` without gesture events. A click on the title bar
+    // emits `will-move` with no `moved`, so the gesture start arms a fallback.
+    const idle = () => {
+      const previous = moveTimers.get(window);
+      if (previous !== undefined) cancel(previous);
+      moveTimers.delete(window);
+      busy.delete(window);
+      const pending = deferred.get(window);
+      deferred.delete(window);
+      if (pending && !disposed) refresh(window, [...pending]);
+    };
+    const settle = (ms: number) => {
+      const previous = moveTimers.get(window);
+      if (previous !== undefined) cancel(previous);
+      moveTimers.set(window, later(idle, ms));
+    };
     const start = () => {
       restores.get(window)?.();
       busy.add(window);
+      settle(1000);
     };
     listen(window, "will-move", start);
     listen(window, "will-resize", start);
     // On macOS `moved` aliases `move`, so it fires throughout a drag.
     listen(window, "moved", () => {
-      if (!busy.has(window)) return;
-      const previous = moveTimers.get(window);
-      if (previous !== undefined) cancel(previous);
-      moveTimers.set(window, later(() => {
-        moveTimers.delete(window);
-        busy.delete(window);
-      }, 500));
+      if (busy.has(window)) settle(500);
     });
-    listen(window, "resized", () => busy.delete(window));
+    listen(window, "resized", idle);
     listen(window, "closed", () => {
       restores.get(window)?.();
       busy.delete(window);
+      deferred.delete(window);
     });
   }
-  const refresh = (window: DisplayRefreshWindow, refreshReasons: string[]) => {
+  function refresh(window: DisplayRefreshWindow, refreshReasons: string[]) {
+    if (busy.has(window)) {
+      const pending = deferred.get(window) ?? new Set<string>();
+      for (const reason of refreshReasons) pending.add(reason);
+      deferred.set(window, pending);
+      return;
+    }
     if (window.isDestroyed() || !window.isVisible() || window.isMinimized()
-      || window.isFullScreen() || busy.has(window)) return;
+      || window.isFullScreen()) return;
     const bounds = window.getBounds();
     const pulse = !window.isMaximized();
     let frame: ReturnType<typeof setTimeout> | undefined;
@@ -110,7 +132,7 @@ export function attachDisplayRefresh(input: {
       restore();
       throw error;
     }
-  };
+  }
   const schedule = (reason: string) => {
     if (disposed) return;
     reasons.add(reason);
@@ -139,5 +161,6 @@ export function attachDisplayRefresh(input: {
     moveTimers.clear();
     for (const restore of restores.values()) restore();
     busy.clear();
+    deferred.clear();
   };
 }

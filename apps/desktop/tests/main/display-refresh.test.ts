@@ -99,16 +99,32 @@ describe('macOS display refresh', () => {
     f.dispose();
   });
 
-  it.each([['will-move', 'moved'], ['will-resize', 'resized']])('skips an active %s gesture', (start, end) => {
+  it('defers a refresh requested during a resize until it ends', () => {
     const f = fixture();
-    f.window.emit(start!);
+    f.window.emit('will-resize');
     f.powerMonitor.emit('resume');
     vi.advanceTimersByTime(516);
     expect(f.window.setBounds).not.toHaveBeenCalled();
-    f.window.emit(end!);
-    f.powerMonitor.emit('resume');
-    vi.advanceTimersByTime(516);
+    f.window.emit('resized');
+    vi.advanceTimersByTime(16);
     expect(f.notify).toHaveBeenCalledOnce();
+    expect(f.notify.mock.calls[0]![1].reasons).toEqual(['resume']);
+    f.dispose();
+  });
+
+  it('refreshes after a drag across displays settles', () => {
+    const f = fixture();
+    f.window.emit('will-move');
+    f.window.emit('moved');
+    f.screen.emit('display-metrics-changed', {}, {}, ['scaleFactor']);
+    vi.advanceTimersByTime(400);
+    f.window.emit('moved');
+    vi.advanceTimersByTime(499);
+    expect(f.window.setBounds).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(f.window.setBounds).toHaveBeenCalledOnce();
+    vi.advanceTimersByTime(16);
+    expect(f.notify.mock.calls[0]![1].reasons).toEqual(['display-metrics-changed']);
     f.dispose();
   });
 
@@ -123,6 +139,16 @@ describe('macOS display refresh', () => {
     vi.advanceTimersByTime(216);
     expect(f.window.setBounds).not.toHaveBeenCalled();
     expect(f.notify).not.toHaveBeenCalled();
+    f.dispose();
+  });
+
+  it('clears busy when a gesture starts without any move or resize', () => {
+    const f = fixture();
+    f.window.emit('will-move');
+    vi.advanceTimersByTime(1000);
+    f.powerMonitor.emit('resume');
+    vi.advanceTimersByTime(516);
+    expect(f.notify).toHaveBeenCalledOnce();
     f.dispose();
   });
 
