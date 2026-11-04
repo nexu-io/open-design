@@ -1,6 +1,16 @@
 import type { Dict } from '../types';
 
 export const th: Dict = {
+  "referral.notice.label": "การแจ้งเตือนการ์ดรีเซ็ต",
+  "referral.notice.registered": "รับการ์ดรีเซ็ตเมื่อสมัครสมาชิกครั้งแรกภายใน 48 ชั่วโมง",
+  "referral.notice.pending": "การสมัครครั้งแรกเสร็จสมบูรณ์ กำลังรอรับการ์ด",
+  "referral.notice.pendingAt": "การสมัครครั้งแรกเสร็จสมบูรณ์ คาดว่าจะได้รับการ์ดใน {time}",
+  "referral.notice.exhausted": "โควตา Design Plan หมดแล้ว ชวนเพื่อนเพื่อรับการ์ดรีเซ็ตและสร้างสรรค์ต่อเมื่อได้รับการ์ด",
+  "referral.notice.remaining": "เหลือเวลา {time}",
+  "referral.notice.invite": "ชวนเพื่อน",
+  "referral.notice.subscribe": "สมัครสมาชิก",
+  "referral.notice.dismiss": "ปิดการแจ้งเตือน",
+  "referral.notice.openFailed": "เปิดหน้าไม่ได้ โปรดลองอีกครั้ง",
   "workspaceInvite.deliveryPending": "กำลังรอส่งคำเชิญ โปรดตรวจสอบอีกครั้งภายหลัง",
   "workspaceInvite.deliveryFailed": "ส่งคำเชิญไม่สำเร็จ โปรดลองอีกครั้ง",
   "workspaceInvite.invalidResponse": "ไม่สามารถยืนยันการส่งคำเชิญได้ โปรดลองอีกครั้งภายหลัง",
@@ -280,6 +290,7 @@ export const th: Dict = {
   'chat.runError.clientEnvironmentCause.network': 'เข้าถึงเครือข่ายไม่ได้',
   'chat.runError.clientEnvironmentCause.hostPolicy': 'ถูกบล็อกโดยนโยบายของระบบ',
   'chat.runError.clientEnvironmentCause.localStorage': 'อ่านหรือเขียนที่จัดเก็บในเครื่องไม่สำเร็จ',
+  'account.openFailed': 'Could not open the account page. Please try again.',
   'common.cancel': 'ยกเลิก',
   'chat.selectFromLibrary': 'นำเข้าจากไลบรารี',
   'chat.importFigma': 'นำเข้าจาก Figma',
@@ -964,6 +975,7 @@ export const th: Dict = {
   "entry.accountSignOut": "ออกจากระบบ",
   "signOut.confirmTitle": "ออกจากระบบ",
   "signOut.confirmMessage": "คุณแน่ใจหรือไม่ว่าต้องการออกจากระบบ?",
+  "signOut.confirmAccountMessage": "ออกจากระบบบัญชีต่อไปนี้หรือไม่?",
   "signOut.confirmAction": "ออกจากระบบ",
   "entry.navRecents": "หน้าแรก",
   "entry.navDashboard": "Dashboard",

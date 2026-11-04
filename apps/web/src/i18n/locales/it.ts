@@ -1,6 +1,16 @@
 import type { Dict } from '../types';
 
 export const it: Dict = {
+  "referral.notice.label": "Avviso carta di ripristino",
+  "referral.notice.registered": "Ricevi una carta di ripristino con il primo abbonamento entro 48 ore",
+  "referral.notice.pending": "Il primo abbonamento è completato. La carta è in attesa di emissione.",
+  "referral.notice.pendingAt": "Il primo abbonamento è completato. La carta arriverà presumibilmente il {time}.",
+  "referral.notice.exhausted": "La quota Design Plan è esaurita. Invita amici per ottenere carte di ripristino e continuare a creare quando arrivano.",
+  "referral.notice.remaining": "Restano {time}",
+  "referral.notice.invite": "Invita amici",
+  "referral.notice.subscribe": "Abbonati",
+  "referral.notice.dismiss": "Chiudi avviso",
+  "referral.notice.openFailed": "Impossibile aprire la pagina. Riprova.",
   "workspaceInvite.deliveryPending": "Invio dell’invito in sospeso. Controlla più tardi.",
   "workspaceInvite.deliveryFailed": "Invio dell’invito non riuscito. Riprova.",
   "workspaceInvite.invalidResponse": "Impossibile confermare l’invio dell’invito. Riprova più tardi.",
@@ -280,6 +290,7 @@ export const it: Dict = {
   'chat.runError.clientEnvironmentCause.network': 'rete irraggiungibile',
   'chat.runError.clientEnvironmentCause.hostPolicy': 'bloccato da un criterio di sistema',
   'chat.runError.clientEnvironmentCause.localStorage': 'lettura/scrittura dell’archivio locale non riuscita',
+  'account.openFailed': 'Could not open the account page. Please try again.',
   'common.cancel': 'Annulla',
   'chat.selectFromLibrary': 'Importa dalla libreria',
   'chat.importFigma': 'Importa da Figma',
@@ -964,6 +975,7 @@ export const it: Dict = {
   "entry.accountSignOut": "Esci",
   "signOut.confirmTitle": "Esci",
   "signOut.confirmMessage": "Vuoi davvero uscire?",
+  "signOut.confirmAccountMessage": "Uscire dal seguente account?",
   "signOut.confirmAction": "Esci",
   "entry.navRecents": "Home",
   "entry.navDashboard": "Dashboard",

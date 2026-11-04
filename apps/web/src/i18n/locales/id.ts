@@ -1,6 +1,16 @@
 import type { Dict } from '../types';
 
 export const id: Dict = {
+  "referral.notice.label": "Pemberitahuan kartu reset",
+  "referral.notice.registered": "Dapatkan kartu reset dengan langganan pertama dalam 48 jam",
+  "referral.notice.pending": "Langganan pertama selesai. Kartu sedang menunggu penerbitan.",
+  "referral.notice.pendingAt": "Langganan pertama selesai. Kartu diperkirakan tiba pada {time}.",
+  "referral.notice.exhausted": "Kuota Design Plan habis. Undang teman untuk mendapatkan kartu reset dan lanjutkan berkarya setelah kartu tiba.",
+  "referral.notice.remaining": "Tersisa {time}",
+  "referral.notice.invite": "Undang teman",
+  "referral.notice.subscribe": "Berlangganan",
+  "referral.notice.dismiss": "Tutup pemberitahuan",
+  "referral.notice.openFailed": "Halaman tidak dapat dibuka. Coba lagi.",
   "workspaceInvite.deliveryPending": "Pengiriman undangan sedang berlangsung. Periksa lagi nanti.",
   "workspaceInvite.deliveryFailed": "Pengiriman undangan gagal. Coba lagi.",
   "workspaceInvite.invalidResponse": "Tidak dapat memastikan pengiriman undangan. Coba lagi nanti.",
@@ -280,6 +290,7 @@ export const id: Dict = {
   'chat.runError.clientEnvironmentCause.network': 'jaringan tidak dapat dijangkau',
   'chat.runError.clientEnvironmentCause.hostPolicy': 'diblokir oleh kebijakan sistem',
   'chat.runError.clientEnvironmentCause.localStorage': 'gagal membaca/menulis penyimpanan lokal',
+  'account.openFailed': 'Could not open the account page. Please try again.',
   'common.cancel': 'Batal',
   'chat.selectFromLibrary': 'Impor dari pustaka',
   'chat.importFigma': 'Impor dari Figma',
@@ -964,6 +975,7 @@ export const id: Dict = {
   "entry.accountSignOut": "Keluar",
   "signOut.confirmTitle": "Keluar",
   "signOut.confirmMessage": "Yakin ingin keluar dari akun?",
+  "signOut.confirmAccountMessage": "Keluar dari akun berikut?",
   "signOut.confirmAction": "Keluar",
   "entry.navRecents": "Beranda",
   "entry.navDashboard": "Dashboard",

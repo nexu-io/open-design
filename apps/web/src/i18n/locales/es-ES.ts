@@ -1,6 +1,16 @@
 import type { Dict } from '../types';
 
 export const esES: Dict = {
+  "referral.notice.label": "Aviso de tarjeta de reinicio",
+  "referral.notice.registered": "Recibe una tarjeta de reinicio con tu primera suscripción en 48 horas",
+  "referral.notice.pending": "Tu primera suscripción se completó. La tarjeta está pendiente de entrega.",
+  "referral.notice.pendingAt": "Tu primera suscripción se completó. La tarjeta llegará aproximadamente el {time}.",
+  "referral.notice.exhausted": "Agotaste tu cuota de Design Plan. Invita a amigos para obtener tarjetas de reinicio y seguir creando cuando lleguen.",
+  "referral.notice.remaining": "Quedan {time}",
+  "referral.notice.invite": "Invitar amigos",
+  "referral.notice.subscribe": "Suscribirse",
+  "referral.notice.dismiss": "Cerrar aviso",
+  "referral.notice.openFailed": "No se pudo abrir la página. Inténtalo de nuevo.",
   "workspaceInvite.deliveryPending": "La entrega de la invitación está pendiente. Compruébalo más tarde.",
   "workspaceInvite.deliveryFailed": "No se ha podido entregar la invitación. Vuelve a intentarlo.",
   "workspaceInvite.invalidResponse": "No se ha podido confirmar la entrega. Vuelve a intentarlo más tarde.",
@@ -280,6 +290,7 @@ export const esES: Dict = {
   'chat.runError.clientEnvironmentCause.network': 'red inaccesible',
   'chat.runError.clientEnvironmentCause.hostPolicy': 'bloqueado por una directiva del sistema',
   'chat.runError.clientEnvironmentCause.localStorage': 'fallo de lectura/escritura en el almacenamiento local',
+  'account.openFailed': 'Could not open the account page. Please try again.',
   'common.cancel': 'Cancelar',
   'chat.selectFromLibrary': 'Importar de la biblioteca',
   'chat.importFigma': 'Importar de Figma',
@@ -975,6 +986,7 @@ export const esES: Dict = {
   "entry.accountSignOut": "Cerrar sesión",
   "signOut.confirmTitle": "Cerrar sesión",
   "signOut.confirmMessage": "¿Seguro que quieres cerrar sesión?",
+  "signOut.confirmAccountMessage": "¿Cerrar sesión en la siguiente cuenta?",
   "signOut.confirmAction": "Cerrar sesión",
   "entry.navRecents": "Inicio",
   "entry.navDashboard": "Dashboard",

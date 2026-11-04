@@ -23,7 +23,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
 import type { OdNextRolloutMode } from '@open-design/contracts';
 
-import { amrSettingsBindingConflict } from './integrations/amr-endpoint-binding.js';
+import { amrSettingsBindingConflict, stripAmrEndpointOverrides } from './integrations/amr-endpoint-binding.js';
 import { expandHomePrefix } from './home-expansion.js';
 
 import {
@@ -771,8 +771,22 @@ export async function readMetricsConsent(dataDir: string): Promise<MetricsConsen
   }
 }
 
+/** A fixed package binding owns endpoints and credentials. Do not round-trip
+ * stale CLI overrides from older installs back through the web config writer.
+ * This is a read projection only; explicit conflicting writes still fail. */
+function projectBoundAmrConfig(prefs: AppConfigPrefs): AppConfigPrefs {
+  const amr = prefs.agentCliEnv?.amr;
+  if (!amr) return prefs;
+  const effective = stripAmrEndpointOverrides(amr);
+  if (Object.keys(effective).length === Object.keys(amr).length) return prefs;
+  const agentCliEnv = { ...prefs.agentCliEnv };
+  if (Object.keys(effective).length > 0) agentCliEnv.amr = effective;
+  else delete agentCliEnv.amr;
+  return normalizeAgentCliEnvPrefs({ ...prefs, agentCliEnv });
+}
+
 export async function readAppConfig(dataDir: string): Promise<AppConfigPrefs> {
-  const base = await readAppConfigFileOnly(dataDir);
+  const base = projectBoundAmrConfig(await readAppConfigFileOnly(dataDir));
   // Channel-root installation file is the new authoritative source for the
   // identity bits that must survive a namespace-scoped data-dir wipe. It
   // lives outside `<namespace>/data/` so a reinstall of the same channel
@@ -811,7 +825,7 @@ export async function readAppConfig(dataDir: string): Promise<AppConfigPrefs> {
 // legacy→channel-root migration *write*, which is a side effect rather than
 // part of the read result.
 export function readAppConfigSync(dataDir: string): AppConfigPrefs {
-  const base = readAppConfigFileOnlySync(dataDir);
+  const base = projectBoundAmrConfig(readAppConfigFileOnlySync(dataDir));
   const installation = readInstallationFileSync(resolveInstallationDir(dataDir));
   if (
     typeof installation.installationId === 'string' &&

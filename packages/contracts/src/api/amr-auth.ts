@@ -11,3 +11,14 @@ export interface AmrSessionStatus {
    */
   credentialRevision: string;
 }
+
+export interface AmrLogoutRequest {
+  expectedAppUserId: string;
+  expectedCredentialRevision: string;
+}
+
+export interface AmrLogoutResponse {
+  ok: true;
+  revocationPending: boolean;
+  legacyCredentialNotRevoked: boolean;
+}

@@ -240,7 +240,7 @@ const DIAGNOSTICS_STRING_FLAGS = new Set(['daemon-url', 'output']);
 const DIAGNOSTICS_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const CONFIG_STRING_FLAGS = new Set(['daemon-url', 'value', 'value-json']);
 const CONFIG_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
-const AMR_STRING_FLAGS = new Set(['daemon-url']);
+const AMR_STRING_FLAGS = new Set(['daemon-url', 'target']);
 const AMR_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'refresh']);
 const COLLAB_STRING_FLAGS = new Set([
   'daemon-url', 'project', 'member', 'name', 'role', 'client-id', 'sequence', 'design-system',
@@ -1312,6 +1312,8 @@ async function runAmr(args) {
   od amr login [--json]
   od amr logout [--json]
   od amr status [--refresh] [--json]
+  od amr referral [--json]
+  od amr open [--target /dashboard] [--json]
 
 Options:
   --daemon-url <url>   OpenDesign daemon HTTP base.
@@ -1323,11 +1325,32 @@ Options:
   const flags = parseFlags(rest, { string: AMR_STRING_FLAGS, boolean: AMR_BOOLEAN_FLAGS });
   const base = await cliDaemonBaseUrl(flags);
   switch (sub) {
+    case 'referral': {
+      const response = await fetch(`${base}/api/integrations/vela/referral-summary`);
+      if (!response.ok) return structuredHttpFailure(response);
+      const summary = await response.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(summary, null, 2) + '\n');
+      console.log(`Campaign\t${summary.campaignStatus}`);
+      console.log(`Invitation rewards\t${summary.inviterIssuedCount}`);
+      console.log(`Available reset cards\t${summary.availableCardCount}`);
+      return;
+    }
+    case 'open': {
+      const response = await fetch(`${base}/api/amr/web-intent`, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({target:flags.target || '/dashboard?source=open_design'})});
+      if (!response.ok) return structuredHttpFailure(response);
+      const result = await response.json();
+      process.stdout.write(flags.json ? JSON.stringify(result, null, 2) + '\n' : result.url + '\n');
+      return;
+    }
     case 'logout': {
+      const statusResp = await fetch(`${base}/api/integrations/vela/status`);
+      if (!statusResp.ok) throw new Error(`AMR status failed: HTTP ${statusResp.status}`);
+      const status = await statusResp.json() as {user?: {id?: string} | null; credentialRevision?: string};
+      if (!status.credentialRevision) throw new Error('Update Open Design before signing out: logout target verification is unavailable.');
       const logoutResp = await fetch(`${base}/api/integrations/vela/logout`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: '{}',
+        headers: {'content-type': 'application/json'},
+        body: JSON.stringify({expectedAppUserId: status.user?.id ?? '', expectedCredentialRevision: status.credentialRevision}),
       });
       if (!logoutResp.ok) return structuredHttpFailure(logoutResp);
       const result = await logoutResp.json();

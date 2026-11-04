@@ -1,6 +1,16 @@
 import type { Dict } from '../types';
 
 export const tr: Dict = {
+  "referral.notice.label": "Sıfırlama kartı bildirimi",
+  "referral.notice.registered": "48 saat içinde ilk aboneliğinizle bir sıfırlama kartı kazanın",
+  "referral.notice.pending": "İlk aboneliğiniz tamamlandı. Kartın verilmesi bekleniyor.",
+  "referral.notice.pendingAt": "İlk aboneliğiniz tamamlandı. Kartın {time} tarihinde gelmesi bekleniyor.",
+  "referral.notice.exhausted": "Design Plan kotanız doldu. Sıfırlama kartları kazanmak için arkadaşlarınızı davet edin ve kartlar gelince üretmeye devam edin.",
+  "referral.notice.remaining": "Kalan süre: {time}",
+  "referral.notice.invite": "Arkadaşlarını davet et",
+  "referral.notice.subscribe": "Abone ol",
+  "referral.notice.dismiss": "Bildirimi kapat",
+  "referral.notice.openFailed": "Sayfa açılamadı. Lütfen tekrar deneyin.",
   "workspaceInvite.deliveryPending": "Davetin iletimi bekleniyor. Daha sonra tekrar kontrol edin.",
   "workspaceInvite.deliveryFailed": "Davet iletilemedi. Tekrar deneyin.",
   "workspaceInvite.invalidResponse": "Davetin iletimi doğrulanamadı. Daha sonra tekrar deneyin.",
@@ -280,6 +290,7 @@ export const tr: Dict = {
   'chat.runError.clientEnvironmentCause.network': 'ağa ulaşılamıyor',
   'chat.runError.clientEnvironmentCause.hostPolicy': 'sistem ilkesi tarafından engellendi',
   'chat.runError.clientEnvironmentCause.localStorage': 'yerel depolama okuma/yazma hatası',
+  'account.openFailed': 'Could not open the account page. Please try again.',
   'common.cancel': 'İptal et',
   'chat.selectFromLibrary': 'Kitaplıktan içe aktar',
   'chat.importFigma': 'Figma\'dan içe aktar',
@@ -964,6 +975,7 @@ export const tr: Dict = {
   "entry.accountSignOut": "Çıkış yap",
   "signOut.confirmTitle": "Çıkış yap",
   "signOut.confirmMessage": "Çıkış yapmak istediğinizden emin misiniz?",
+  "signOut.confirmAccountMessage": "Aşağıdaki hesaptan çıkış yapılsın mı?",
   "signOut.confirmAction": "Çıkış yap",
   "entry.navRecents": "Ana sayfa",
   "entry.navDashboard": "Dashboard",

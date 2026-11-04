@@ -488,6 +488,7 @@ export type ShareCommentEventType = (typeof SHARE_COMMENT_EVENT_TYPES)[number];
  * the contract, so the order is asserted directly.
  */
 export const SHARE_COMMENT_ERROR_CODES = [
+  "ACCOUNT_CHANGED",
   /** 401 — no session, or the session expired mid-compose. */
   'UNAUTHENTICATED',
   /** 410 — the owner stopped this share. Both GET and POST answer this. */
@@ -611,6 +612,8 @@ export interface ShareCommentListResponse {
 
 /** `POST` a comment from the share page. */
 export interface ShareCommentCreateRequest {
+  /** Account accepted by the share composer; must match the current share session. */
+  expectedAuthorKey: string;
   /** Pinned version of the rendered snapshot; a new key is rejected if the alias advanced. */
   expectedVersion: number;
   /** See {@link IDEMPOTENCY_KEY_MAX_LENGTH}. Required — replay safety. */

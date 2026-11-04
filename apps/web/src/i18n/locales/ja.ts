@@ -1,6 +1,16 @@
 import type { Dict } from '../types';
 
 export const ja: Dict = {
+  "referral.notice.label": "リセットカードの招待通知",
+  "referral.notice.registered": "48時間以内に初めてサブスクリプションを開始するとリセットカードを1枚獲得できます",
+  "referral.notice.pending": "初回のサブスクリプションが完了しました。カードの付与をお待ちください。",
+  "referral.notice.pendingAt": "初回のサブスクリプションが完了しました。カードは {time} に付与予定です。",
+  "referral.notice.exhausted": "Design Plan の利用枠を使い切りました。友達を招待してリセットカードを獲得し、付与後に制作を続けられます。",
+  "referral.notice.remaining": "残り {time}",
+  "referral.notice.invite": "友達を招待",
+  "referral.notice.subscribe": "プランを選ぶ",
+  "referral.notice.dismiss": "通知を閉じる",
+  "referral.notice.openFailed": "ページを開けませんでした。もう一度お試しください。",
   "workspaceInvite.deliveryPending": "招待メールを送信中です。しばらくしてからご確認ください。",
   "workspaceInvite.deliveryFailed": "招待メールの送信に失敗しました。もう一度お試しください。",
   "workspaceInvite.invalidResponse": "招待の送信結果を確認できません。後でもう一度お試しください。",
@@ -280,6 +290,7 @@ export const ja: Dict = {
   'chat.runError.clientEnvironmentCause.network': 'ネットワークに到達できません',
   'chat.runError.clientEnvironmentCause.hostPolicy': 'システムポリシーによりブロック',
   'chat.runError.clientEnvironmentCause.localStorage': 'ローカルストレージの読み書きに失敗',
+  'account.openFailed': 'Could not open the account page. Please try again.',
   'common.cancel': 'キャンセル',
   'chat.selectFromLibrary': 'ライブラリからインポート',
   'chat.importFigma': 'Figma からインポート',
@@ -964,6 +975,7 @@ export const ja: Dict = {
   "entry.accountSignOut": "ログアウト",
   "signOut.confirmTitle": "ログアウト",
   "signOut.confirmMessage": "ログアウトしてもよろしいですか？",
+  "signOut.confirmAccountMessage": "次のアカウントからログアウトしますか？",
   "signOut.confirmAction": "ログアウト",
   "entry.navRecents": "ホーム",
   "entry.navDashboard": "Dashboard",
