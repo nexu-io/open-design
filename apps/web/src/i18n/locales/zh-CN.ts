@@ -1008,6 +1008,7 @@ export const zhCN: Dict = {
   "entry.teamSlotNote": "该视图由团队服务提供，接入中。",
   "entry.cloudCalloutTitle": "OpenDesign Cloud 版",
   'entry.cloudRecovering': '账号连接中断，正在自动恢复…',
+  'entry.createDeviceProject': '新建仅保存在本机的项目',
   'entry.authExpiredBody': 'Open Design 尚未登录\n请先登录，以便查看项目和继续对话。',
   'home.createFailed': '启动任务失败，请重试。',
   'home.daemonRecovering': '本地连接已断开\n暂时无法连接这台电脑上的 Open Design 服务，请重启客户端。',

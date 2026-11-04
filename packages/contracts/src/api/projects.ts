@@ -193,6 +193,8 @@ export interface DesignSystemReviewEntry {
 }
 
 export interface ProjectMetadata {
+  /** Daemon-owned marker for a project explicitly created on this device. */
+  deviceOnly?: true;
   /** Reserved admitted facts; installed only with the matching local content receipt. */
   _commentFiles?: import('./comments.js').CommentFileState;
   kind: ProjectKind;
@@ -438,6 +440,8 @@ export interface CreateProjectExampleReference {
 }
 
 export interface CreateProjectRequest {
+  /** Create an unbound project that is exempt from workspace adoption. */
+  deviceOnly?: boolean;
   name: string;
   /** Optional project library location id. Omit or use `default` for .od/projects. */
   projectLocationId?: string;

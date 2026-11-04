@@ -233,6 +233,36 @@ describe('workspace project routes', () => {
     expect(project.currentUserAccess.canDelete).toBe(true);
   });
 
+  it('keeps an explicitly device-only project unbound after metadata edits and a personal catalog read', async () => {
+    const projectId = `device-only-${Date.now()}`;
+    const created = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'Device draft', deviceOnly: true }),
+    });
+    expect(created.status).toBe(200);
+    await expect(created.json()).resolves.toMatchObject({
+      project: { id: projectId, metadata: { deviceOnly: true } },
+    });
+
+    const patched = await fetch(`${baseUrl}/api/projects/${projectId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ metadata: { kind: 'prototype' } }),
+    });
+    expect(patched.status).toBe(200);
+
+    const ownerCatalog = await list('personal-owner', '?view=all', { 'x-od-workspace-role': 'owner' });
+    expect(ownerCatalog.projects.map((item) => item.id)).not.toContain(projectId);
+    const localCatalog = await fetch(`${baseUrl}/api/projects`);
+    expect(localCatalog.status).toBe(200);
+    expect((await localCatalog.json()).projects).toContainEqual(expect.objectContaining({
+      id: projectId,
+      workspaceId: null,
+      metadata: expect.objectContaining({ deviceOnly: true }),
+    }));
+  });
+
   it('keeps unattributed legacy drafts private when a member joins the Personal workspace', async () => {
     const projectId = `workspace-legacy-private-${Date.now()}`;
     await createProject(projectId, 'Owner legacy draft');

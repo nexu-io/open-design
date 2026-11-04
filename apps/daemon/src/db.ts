@@ -1406,7 +1406,11 @@ export function ensureWorkspaceProject(db: SqliteDb, input: DbRow) {
   const now = Date.now();
   const existing = getWorkspaceProjectByProjectId(db, input.projectId);
   if (existing) return existing;
-  const boundProjectUpdatedAt = getProject(db, input.projectId)?.updatedAt;
+  const project = getProject(db, input.projectId);
+  if (project?.metadata?.deviceOnly === true) {
+    throw new Error('Cannot bind a project stored only on this device');
+  }
+  const boundProjectUpdatedAt = project?.updatedAt;
   const insertedUpdatedAt = typeof input.updatedAt === 'number'
     ? input.updatedAt
     : typeof boundProjectUpdatedAt === 'number'
@@ -2186,6 +2190,12 @@ export function updateProject(db: SqliteDb, id: string, patch: DbRow) {
     ...patch,
     updatedAt: nextUpdatedAt(patch.updatedAt, existing.updatedAt),
   };
+  if (existing.metadata?.deviceOnly === true) {
+    merged.metadata = { kind: existing.metadata.kind, ...merged.metadata, deviceOnly: true };
+  } else if (merged.metadata?.deviceOnly !== undefined) {
+    const { deviceOnly: _deviceOnly, ...metadata } = merged.metadata;
+    merged.metadata = metadata;
+  }
   db.prepare(
     `UPDATE projects
         SET name = ?,

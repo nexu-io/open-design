@@ -283,6 +283,7 @@ import type {
 } from './types';
 
 type AppCreateProjectInput = Omit<CreateInput, 'metadata'> & {
+  deviceOnly?: boolean;
   metadata?: CreateInput['metadata'];
   pendingPrompt?: string;
   pluginId?: string;
@@ -1040,6 +1041,7 @@ function AppInner() {
       return listProjects({
         ...options,
         workspaceContext: context,
+        includeDeviceProjects: true,
         workspaceView: context ? options?.workspaceView ?? 'recent' : undefined,
       });
     },
@@ -3562,7 +3564,7 @@ function AppInner() {
         // block creation on Workspace availability. Remote share/sync/move
         // operations retain their authoritative gates.
         const createWorkspaceState = workspaceContextStateRef.current;
-        createWorkspaceContext = createWorkspaceState.failure === 'unsupported'
+        createWorkspaceContext = input.deviceOnly || createWorkspaceState.failure === 'unsupported'
           ? null
           : workspaceResourceReadContext(createWorkspaceState);
         if (
@@ -3586,6 +3588,7 @@ function AppInner() {
           ...(optimisticProjectId ? { id: optimisticProjectId } : {}),
           ...(optimisticConversationId ? { conversationId: optimisticConversationId } : {}),
           name: input.name,
+          ...(input.deviceOnly ? { deviceOnly: true } : {}),
           skillId: input.skillId,
           ...(input.skillCatalogScope
             ? { skillCatalogScope: input.skillCatalogScope }
@@ -6275,7 +6278,22 @@ function AppInner() {
           || (route.kind === 'project'
             && activeProjectWorkspaceContext
             && projectRouteWorkspaceContext.failure === 'unavailable')) ? (
-          <ProjectWorkspaceRecoveryTip />
+          <ProjectWorkspaceRecoveryTip
+            onCreateDeviceProject={route.kind === 'home' && daemonLive
+              ? async () => {
+                  try {
+                    await handleCreateProject({
+                      name: t('common.untitled'),
+                      skillId: null,
+                      designSystemId: null,
+                      deviceOnly: true,
+                    });
+                  } catch (error) {
+                    setProjectCreateError(homeCreateFailureNotice(error, t, t('home.createFailed')));
+                  }
+                }
+              : undefined}
+          />
         ) : null}
         <div className="workspace-shell__body">
           {appMain}
