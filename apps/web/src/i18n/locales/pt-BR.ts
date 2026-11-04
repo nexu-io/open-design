@@ -1,6 +1,16 @@
 import type { Dict } from '../types';
 
 export const ptBR: Dict = {
+  "referral.notice.label": "Aviso de cartão de redefinição",
+  "referral.notice.registered": "Receba um cartão de redefinição com sua primeira assinatura em até 48 horas",
+  "referral.notice.pending": "Sua primeira assinatura foi concluída. O cartão aguarda emissão.",
+  "referral.notice.pendingAt": "Sua primeira assinatura foi concluída. O cartão deve chegar em {time}.",
+  "referral.notice.exhausted": "Sua cota Design Plan acabou. Convide amigos para ganhar cartões de redefinição e continuar criando quando chegarem.",
+  "referral.notice.remaining": "Restam {time}",
+  "referral.notice.invite": "Convidar amigos",
+  "referral.notice.subscribe": "Assinar",
+  "referral.notice.dismiss": "Fechar aviso",
+  "referral.notice.openFailed": "Não foi possível abrir a página. Tente novamente.",
   "workspaceInvite.deliveryPending": "A entrega do convite está pendente. Verifique novamente em breve.",
   "workspaceInvite.deliveryFailed": "Não foi possível entregar o convite. Tente novamente.",
   "workspaceInvite.invalidResponse": "Não foi possível confirmar a entrega do convite. Tente novamente mais tarde.",
