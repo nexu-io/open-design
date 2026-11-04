@@ -54,9 +54,9 @@ export function ReferralNotice({
 	const [snapshot, setSnapshot] = useState<{
 		scopeKey: string;
 		data: ReferralSummary;
-		received: number;
+		requestedAt: number;
 	} | null>(null);
-	const [clock, setClock] = useState(Date.now);
+	const [clock, setClock] = useState(() => performance.now());
 	const [, render] = useState(0);
 	const [opening, setOpening] = useState(false);
 	const [failed, setFailed] = useState(false);
@@ -67,6 +67,7 @@ export function ReferralNotice({
 		const controller = new AbortController();
 		const read = async () => {
 			const request = ++generation;
+			const requestedAt = performance.now();
 			try {
 				const response = await fetch(
 					"/api/integrations/vela/referral-summary",
@@ -75,8 +76,10 @@ export function ReferralNotice({
 				if (!response.ok) throw new Error("unavailable");
 				const data = parseReferralSummary(await response.json());
 				if (!data) throw new Error("invalid summary");
-				if (current && request === generation)
-					setSnapshot({ scopeKey, data, received: Date.now() });
+				if (current && request === generation) {
+					setClock(performance.now());
+					setSnapshot({ scopeKey, data, requestedAt });
+				}
 			} catch {
 				if (current && request === generation) setSnapshot(null);
 			}
@@ -94,7 +97,7 @@ export function ReferralNotice({
 	}, [accountId, profile, active, scopeKey]);
 	useEffect(() => {
 		if (!active) return;
-		const timer = window.setInterval(() => setClock(Date.now()), 1000);
+		const timer = window.setInterval(() => setClock(performance.now()), 1000);
 		return () => window.clearInterval(timer);
 	}, [active]);
 	useEffect(() => {
@@ -104,7 +107,7 @@ export function ReferralNotice({
 	const data = snapshot?.scopeKey === scopeKey ? snapshot.data : null;
 	const serverNow =
 		data && snapshot
-			? Date.parse(data.serverTime) + Math.max(0, clock - snapshot.received)
+			? Date.parse(data.serverTime) + Math.max(0, clock - snapshot.requestedAt)
 			: clock;
 	const preflight =
 		context?.workspaceType === "personal" &&

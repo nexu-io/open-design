@@ -52,3 +52,29 @@ it('OPEND-4674 reads a dismissal saved by a previous client session', async () =
  render(<I18nProvider initial="en"><ReferralNotice accountId="previous-session" profile="local" active context={null} billing={null} /></I18nProvider>);
  expect((await screen.findByTestId('referral-notice')).getAttribute('aria-hidden')).toBe('true');
 });
+
+it('OPEND-4735 does not advertise time remaining after a delayed summary response', async () => {
+ const { act } = await import('@testing-library/react');
+ const wallClock = Date.now();
+ let elapsed = 0;
+ const monotonic = vi.spyOn(performance, 'now').mockImplementation(() => elapsed);
+ const wall = vi.spyOn(Date, 'now').mockReturnValue(wallClock);
+ try {
+  vi.stubGlobal('fetch', vi.fn(async () => {
+   elapsed += 2500;
+   wall.mockReturnValue(wallClock - 2000);
+   return Response.json({
+    ...base,
+    serverTime: new Date(wallClock).toISOString(),
+    invitee: { status: 'registered', purchaseDeadline: new Date(wallClock + 1500).toISOString(), dueAt: null },
+   });
+  }));
+  render(<I18nProvider initial="en"><ReferralNotice accountId="delayed-summary" profile="local" active context={null} billing={null} /></I18nProvider>);
+  await act(async () => {});
+  expect(fetch).toHaveBeenCalled();
+  expect(screen.queryByTestId('referral-notice')).toBeNull();
+ } finally {
+  monotonic.mockRestore();
+  wall.mockRestore();
+ }
+});
