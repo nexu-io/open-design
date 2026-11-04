@@ -15329,6 +15329,8 @@ export function ProjectView({
       {amrBalanceGateBlock?.dialog === 'upgrade' ? (
         <AmrBalanceDialog
           reason={amrBalanceGateBlock.reason}
+          projectId={project.id}
+          conversationId={amrBalanceGateBlock.conversationId}
           stage={amrBalanceGateBlock.stage}
           manualSendOnRecovery={amrBalanceGateBlock.reason === 'insufficient'}
           modelId={amrBalanceGateBlock.modelId}

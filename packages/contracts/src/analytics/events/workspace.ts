@@ -221,6 +221,7 @@ export interface WorkspaceProjectActionResultProps extends TrackingWorkspaceDime
 }
 
 export interface WorkspaceSharedProjectOpenResultProps extends TrackingWorkspaceDimensions {
+  project_key: string;
   page_name: 'all_projects' | 'drafts' | 'home';
   area: 'project_collection';
   result: 'success' | 'failed';
@@ -272,6 +273,16 @@ export interface WorkspaceJourneySurfaceProps extends TrackingWorkspaceDimension
 }
 export interface WorkspaceJourneyClickProps extends WorkspaceJourneySurfaceProps {
   element: 'invite_teammates' | 'close' | 'upgrade' | 'return_personal_workspace';
+}
+
+/** Funding admission recovered; this does not assert payment or a resumed run. */
+export interface WorkspaceFundingRecoveryResultProps extends WorkspaceJourneySurfaceProps {
+  result: 'recovered' | 'timeout';
+  recovery_method: 'funding_preflight';
+  duration_ms: number;
+  requires_manual_send: boolean;
+  project_key?: string;
+  conversation_id?: string;
 }
 export interface WorkspaceInvitePageViewProps extends TrackingWorkspaceDimensions {
   page_name: 'onboarding';

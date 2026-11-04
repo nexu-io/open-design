@@ -47,13 +47,37 @@ For this funnel, join the committed membership to the exposure and run using
 workspace ID plus member ID (or verified account `user_id` for older events),
 and require chronological order. The inviter and recipient are different
 people: do not put all six steps into a same-person funnel. These events span
-the OD and AMR PostHog projects and require an explicit cross-project join;
-event changes alone do not turn static dashboard snapshots into live queries.
+the OD and AMR PostHog projects. The companion AMR change mirrors committed
+workspace outcomes into OD with the `amr_` prefix even without an installation
+ID. Those API records use `amr:account:<id>`, disable person-profile processing,
+and omit email. Join on workspace/member IDs; do not count the mirror identity
+as a second client person. Until both changes are deployed, an explicit
+cross-project join is still needed. Event changes alone do not turn static
+dashboard snapshots into live queries.
 Missing attribution, consent-disabled capture, and older client versions are
 coverage gaps, not proof of zero creation. New fields are not backfilled.
 
 `workspace_key` is the existing analytics name for `WorkspaceCollabContext.workspaceId`. Existing workspace switches, project sharing/opening and run lifecycle events remain the downstream sources. `is_first_run` retains its existing meaning; analysts must derive first post-join collaboration from the committed join timestamp, workspace/user identity and run outcome.
 
-The AMR companion adds invitation landing states, committed membership and continuation results, seats console behavior and payment observations. The client PR can be reviewed independently, but the complete cross-product funnel requires that companion. `block_id` currently correlates the displayed client interruption and its click; it is not propagated into a payment operation or later retry. Temporal correlation is not proof of a causal recovery.
+The AMR companion adds invitation landing states, committed membership and continuation results, seats console behavior and payment observations. The client PR can be reviewed independently, but the complete cross-product funnel requires that companion. The upgrade click binds `block_id` to `entry_id`. AMR's checkout result binds that entry to `operation_id`, also carried by the server payment outcome. Subsequent creation requires an actual run in the same workspace/member and, where available, project/conversation. Temporal association is not proof that payment caused creation or that the original failed run resumed.
 
 No invitation-copy control or migration-notice UI exists on this feature branch, so no synthetic events are emitted for those draft rows. This change has automated coverage; deployed-client/PostHog acceptance remains a separate validation step after merge.
+
+## Collaboration and funding continuity
+
+Shared-project open results carry `project_key` and the opening member's
+workspace dimensions. Relate successful opens to subsequent `run_created`
+and `run_finished` by project and workspace/member, not project creator.
+
+`workspace_funding_recovery_result` reports `recovered` only after the existing
+workspace-scoped funding check succeeds. `timeout` means the bounded watch
+ended without confirmation, not that payment failed. It carries the original
+`block_id`, member, stage, and project/conversation when known. No event is
+fabricated on dismissal or sign-in. `requires_manual_send` separates funding
+recovery from submitting a new task.
+
+The companion AMR patch adds workspace auto-recharge success/failure outcomes,
+legacy subscription initial/upgrade/renewal classification, and directory
+search/filter/menu/sort/pagination clicks. Search events contain only an active
+flag, never names, emails or search text. Existing usage member/model filters
+already emit events; its fixed seven-day range is not a date-filter action.
