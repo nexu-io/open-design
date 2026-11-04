@@ -933,6 +933,9 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       'deepseek-v4-flash',
     );
     expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe('https://api.deepseek.com');
+    expect(screen.getByRole('link', { name: 'Get key ↗' }).getAttribute('href')).toBe(
+      'https://platform.deepseek.com/api_keys',
+    );
   });
 
   it('offers Atlas Cloud as an OpenAI-compatible gateway preset', () => {
