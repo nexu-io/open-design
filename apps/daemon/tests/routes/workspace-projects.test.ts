@@ -256,7 +256,8 @@ describe('workspace project routes', () => {
     expect(ownerCatalog.projects.map((item) => item.id)).not.toContain(projectId);
     const localCatalog = await fetch(`${baseUrl}/api/projects`);
     expect(localCatalog.status).toBe(200);
-    expect((await localCatalog.json()).projects).toContainEqual(expect.objectContaining({
+    const { projects } = await localCatalog.json() as { projects: unknown[] };
+    expect(projects).toContainEqual(expect.objectContaining({
       id: projectId,
       workspaceId: null,
       metadata: expect.objectContaining({ deviceOnly: true }),
