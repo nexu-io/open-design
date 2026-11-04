@@ -36,7 +36,7 @@
   "dependencies": {
     "@babel/parser": "7.29.3",
     "@ffmpeg-installer/ffmpeg": "1.1.0",
-    "@modelcontextprotocol/sdk": "1.29.0",
+    "@modelcontextprotocol/sdk": "1.32.0",
     "@open-design/agui-adapter": "workspace:*",
     "@open-design/contracts": "workspace:*",
     "@open-design/diagnostics": "workspace:*",
@@ -59,18 +59,18 @@
     "hyperframes": "0.8.1",
     "jszip": "3.10.1",
     "kiwi-schema": "0.5.0",
-    "multer": "2.2.0",
+    "multer": "2.4.0",
     "node-pty": "1.1.0",
     "pdf-lib": "1.17.1",
-    "postcss": "8.5.15",
+    "postcss": "8.5.23",
     "posthog-node": "5.34.6",
     "pptxgenjs": "4.0.1",
     "prom-client": "15.1.3",
     "tar": "7.5.22",
-    "undici": "7.29.0"
+    "undici": "7.29.1"
   },
   "devDependencies": {
-    "esbuild": "0.28.0",
+    "esbuild": "0.28.1",
     "@typescript/native": "npm:typescript@7.0.2",
     "@babel/types": "7.29.0",
     "@types/better-sqlite3": "7.6.13",
@@ -78,7 +78,7 @@
     "@types/multer": "2.1.0",
     "@types/node": "20.19.39",
     "jsdom": "29.1.1",
-    "vitest": "4.1.6"
+    "vitest": "4.1.12"
   },
   "engines": {
     "node": "~24"

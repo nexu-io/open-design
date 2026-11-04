@@ -4,7 +4,14 @@
   "private": true,
   "type": "module",
   "description": "Native POSIX sh and PowerShell carrier for Standalone exact distributions.",
-  "files": ["contract", "node-lock.json", "ps1", "runtime", "sh", "version"],
+  "files": [
+    "contract",
+    "node-lock.json",
+    "ps1",
+    "runtime",
+    "sh",
+    "version"
+  ],
   "scripts": {
     "pretest": "pnpm --filter @open-design/platform build && pnpm --filter @open-design/sidecar build && pnpm --filter @open-design/standalone build && pnpm --filter @open-design/closure build",
     "test": "vitest run",
@@ -17,7 +24,9 @@
     "@open-design/sidecar": "workspace:*",
     "@open-design/standalone": "workspace:*",
     "@types/node": "24.12.2",
-    "vitest": "4.1.6"
+    "vitest": "4.1.12"
   },
-  "engines": {"node": "~24"}
+  "engines": {
+    "node": "~24"
+  }
 }

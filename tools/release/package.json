@@ -16,15 +16,15 @@
     "@open-design/launcher-proto": "workspace:*",
     "@open-design/release": "workspace:*",
     "cac": "6.7.14",
-    "sharp": "0.35.3",
+    "sharp": "0.35.5",
     "yaml": "2.9.0"
   },
   "devDependencies": {
     "@typescript/native": "npm:typescript@7.0.2",
     "@types/node": "24.12.2",
-    "esbuild": "0.28.0",
+    "esbuild": "0.28.1",
     "tsx": "4.22.3",
-    "vitest": "4.1.6"
+    "vitest": "4.1.12"
   },
   "optionalDependencies": {
     "playwright": "1.60.0"

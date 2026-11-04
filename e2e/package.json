@@ -33,7 +33,7 @@
     "pixelmatch": "7.2.0",
     "pngjs": "7.0.0",
     "tsx": "4.22.3",
-    "vitest": "4.1.6"
+    "vitest": "4.1.12"
   },
   "engines": {
     "node": "~24"
