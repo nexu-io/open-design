@@ -1027,9 +1027,16 @@ function AppInner() {
     workspaceContextState.resourceReadIdentity?.generation,
   );
   workspaceContextStateRef.current = workspaceContextState;
+  // Keep the last Workspace identity for scoped operations. During an outage,
+  // only the project catalog switches to the daemon's unbound-project list.
+  const projectCatalogContext = workspaceContextState.failure === 'unavailable'
+    ? null
+    : workspaceContext;
+  const projectCatalogContextRef = useRef(projectCatalogContext);
+  projectCatalogContextRef.current = projectCatalogContext;
   const listCurrentWorkspaceProjects = useCallback(
     (options?: { throwOnError?: boolean; workspaceView?: WorkspaceProjectListView }) => {
-      const context = workspaceContextRef.current;
+      const context = projectCatalogContextRef.current;
       return listProjects({
         ...options,
         workspaceContext: context,
@@ -1604,11 +1611,11 @@ function AppInner() {
   // not what the callback does with it) — re-fetching the identical list on
   // every click. Mirror the callback's own collapse here so the effect's
   // dependency is stable outside a workspace, matching the fetch it triggers.
-  const effectiveWorkspaceProjectView = workspaceContext ? workspaceProjectView : undefined;
+  const effectiveWorkspaceProjectView = projectCatalogContext ? workspaceProjectView : undefined;
   const projectDisplayAccountGeneration = currentWorkspaceAccountGeneration();
   const currentProjectDisplayKey = projectDisplaySnapshotKey({
     accountGeneration: projectDisplayAccountGeneration,
-    context: workspaceContext,
+    context: projectCatalogContext,
     view: effectiveWorkspaceProjectView,
   });
   useStartupReady({
@@ -1663,9 +1670,9 @@ function AppInner() {
           pendingLocalProjectScopeRef.current === currentPendingLocalProjectScope
           && pendingLocalProjectIdsRef.current.has(project.id)
           && (
-            workspaceContext === null
+            projectCatalogContext === null
               ? project.workspaceId == null
-              : project.workspaceId === workspaceContext.workspaceId
+              : project.workspaceId === projectCatalogContext.workspaceId
           ));
     projectDisplayKeyRef.current = currentProjectDisplayKey;
     if (snapshot) {
@@ -1782,7 +1789,7 @@ function AppInner() {
     workspaceView: WorkspaceProjectListView | undefined,
   ): ProjectListRequest => {
     projectListRequestGenerationRef.current += 1;
-    const issuedContext = workspaceContextRef.current;
+    const issuedContext = projectCatalogContextRef.current;
     const accountGeneration = currentWorkspaceAccountGeneration();
     const effectiveView = issuedContext ? workspaceView ?? 'recent' : undefined;
     return {
@@ -1803,7 +1810,7 @@ function AppInner() {
     if (
       request.generation === projectListRequestGenerationRef.current
       && request.accountGeneration === currentWorkspaceAccountGeneration()
-      && request.scopeKey === projectListScopeKey(workspaceContextRef.current)
+      && request.scopeKey === projectListScopeKey(projectCatalogContextRef.current)
     ) {
       setProjectListFailure({ displayKey: request.displayKey, generation: request.generation });
     }
@@ -1812,7 +1819,7 @@ function AppInner() {
   const reconcileFetchedProjects = useCallback((list: Project[], request: ProjectListRequest) => {
     if (
       request.accountGeneration !== currentWorkspaceAccountGeneration()
-      || request.scopeKey !== projectListScopeKey(workspaceContextRef.current)
+      || request.scopeKey !== projectListScopeKey(projectCatalogContextRef.current)
     ) {
       return false;
     }
@@ -1924,13 +1931,14 @@ function AppInner() {
         : fetchedIds;
     writeProjectDisplaySnapshot({
       accountGeneration: request.accountGeneration,
-      context: workspaceContextRef.current,
+      context: projectCatalogContextRef.current,
       view: request.workspaceView,
     }, visibleList);
     setProjects((current) => {
       const preserved = current.filter(
         (project) =>
           pendingLocalProjectIds.has(project.id) &&
+          (projectCatalogContextRef.current !== null || project.workspaceId == null) &&
           !visibleFetchedIds.has(project.id) &&
           !activeDeletedProjectIds.has(project.id),
       );
@@ -6263,9 +6271,10 @@ function AppInner() {
             installationId={config.installationId}
           />
         ) : null}
-        {route.kind === 'project'
-          && activeProjectWorkspaceContext
-          && projectRouteWorkspaceContext.failure === 'unavailable' ? (
+        {((route.kind === 'home' && workspaceContextState.failure === 'unavailable')
+          || (route.kind === 'project'
+            && activeProjectWorkspaceContext
+            && projectRouteWorkspaceContext.failure === 'unavailable')) ? (
           <ProjectWorkspaceRecoveryTip />
         ) : null}
         <div className="workspace-shell__body">
