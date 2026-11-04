@@ -1491,3 +1491,13 @@ export interface PackagedRuntimeFailedProps {
   source: string;
   platform: string;
 }
+
+/** Consent-gated native refresh attempt; never a claim that blur was detected or fixed. */
+export interface ClientDisplayRefreshProps {
+  reasons: string[];
+  scale_factor: number;
+  display_count: number;
+  device_pixel_ratio: number;
+  reduced_transparency: boolean;
+  scale_mismatch: boolean;
+}

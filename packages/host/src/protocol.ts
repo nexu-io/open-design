@@ -163,6 +163,13 @@ export const OPEN_DESIGN_HOST_APPEARANCE_THEMES = Object.freeze({
   SYSTEM: "system",
 } as const);
 
+/** Structural evidence after a native macOS display refresh; no display identifiers. */
+export type OpenDesignHostDisplayRefresh = {
+  reasons: string[];
+  scaleFactor: number;
+  displayCount: number;
+};
+
 export type OpenDesignHostAppearanceTheme =
   (typeof OPEN_DESIGN_HOST_APPEARANCE_THEMES)[keyof typeof OPEN_DESIGN_HOST_APPEARANCE_THEMES];
 
@@ -391,6 +398,7 @@ export type OpenDesignHostBridge = {
   // must feature-detect before invoking.
   appearance?: {
     setTheme(theme: OpenDesignHostAppearanceTheme): void;
+    subscribeDisplayRefresh?(listener: (refresh: OpenDesignHostDisplayRefresh) => void): () => void;
   };
   browser: {
     clearData(options?: OpenDesignHostBrowserClearDataOptions): Promise<OpenDesignHostActionResult>;
