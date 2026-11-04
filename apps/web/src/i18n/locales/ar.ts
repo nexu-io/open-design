@@ -1,6 +1,16 @@
 import type { Dict } from '../types';
 
 export const ar: Dict = {
+  "referral.notice.label": "إشعار بطاقة إعادة الضبط",
+  "referral.notice.registered": "احصل على بطاقة إعادة ضبط عند اشتراكك الأول خلال 48 ساعة",
+  "referral.notice.pending": "اكتمل اشتراكك الأول والبطاقة بانتظار الإصدار.",
+  "referral.notice.pendingAt": "اكتمل اشتراكك الأول ومن المتوقع وصول البطاقة في {time}.",
+  "referral.notice.exhausted": "نفدت حصة Design Plan. ادعُ الأصدقاء للحصول على بطاقات إعادة الضبط ومتابعة العمل بعد وصولها.",
+  "referral.notice.remaining": "المتبقي {time}",
+  "referral.notice.invite": "دعوة الأصدقاء",
+  "referral.notice.subscribe": "اشترك",
+  "referral.notice.dismiss": "إغلاق الإشعار",
+  "referral.notice.openFailed": "تعذر فتح الصفحة. حاول مرة أخرى.",
   "workspaceInvite.deliveryPending": "جارٍ إرسال الدعوة. يرجى التحقق لاحقًا.",
   "workspaceInvite.deliveryFailed": "فشل إرسال الدعوة. يرجى إعادة المحاولة.",
   "workspaceInvite.invalidResponse": "تعذر تأكيد إرسال الدعوة. يرجى المحاولة لاحقًا.",

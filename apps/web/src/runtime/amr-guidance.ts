@@ -152,6 +152,17 @@ export function amrConsoleUrlForProfile(
   return AMR_CONSOLE_URL_BY_PROFILE[normalized] ?? DEFAULT_AMR_RECHARGE_URL;
 }
 
+/** The referral surface shares the selected console's origin, basename, and query. */
+export function amrReferralUrlForProfile(profile: string | null | undefined, expectedAppUserId?: string): string {
+  const url = new URL(amrConsoleUrlForProfile(profile));
+  url.pathname = url.pathname.replace(/\/dashboard\/?$/, '/reset');
+  url.searchParams.delete('billing');
+  url.searchParams.set('source', 'open_design');
+  url.hash = '';
+  if (expectedAppUserId) url.searchParams.set('expectedAppUserId', expectedAppUserId);
+  return url.toString();
+}
+
 export function amrRechargeUrlForProfile(profile: string | null | undefined): string {
   return amrConsoleUrlForProfile(profile);
 }
