@@ -144,6 +144,7 @@ import {
   applyClaudeStreamJsonRunBookkeeping,
   claudeStreamEventCountsAsActionableProgress,
   productionRunMissingArtifact,
+  filesystemArtifactProduced,
   assertValidRuntimeDefFirstOutputTimeoutMs,
   assertValidRuntimeDefInactivityTimeoutMs,
   classifyChatRunCloseStatus,
@@ -209,6 +210,7 @@ export {
   applyClaudeStreamJsonRunBookkeeping,
   claudeStreamEventCountsAsActionableProgress,
   productionRunMissingArtifact,
+  filesystemArtifactProduced,
   assertValidRuntimeDefFirstOutputTimeoutMs,
   assertValidRuntimeDefInactivityTimeoutMs,
   classifyChatRunCloseStatus,
@@ -17256,13 +17258,23 @@ export async function startServer({
         cancelRequested: !!run.cancelRequested,
         artifactProducedThisRun,
       })) {
-        markRpcCloseReason('empty_output');
-        send('error', createSseErrorPayload(
-          'AGENT_EXECUTION_FAILED',
-          'The production run finished without creating an artifact. The selected model may have skipped its file-writing tool. Retry with a tool-capable model or ask it to create the requested file.',
-          { retryable: true },
-        ));
-        return finishWithRetryDecision('failed', code, signal);
+        // The event ledger only recognizes direct artifact events and
+        // successful Write/Edit tool results, but the filesystem contract also
+        // permits artifacts created through Bash (e.g. a production run that
+        // writes index.html via a shell redirect). Resolve the authoritative
+        // filesystem verdict before rejecting, so a real on-disk deliverable is
+        // never failed as "missing" just because it never flowed through a
+        // recognized tool event.
+        const artifactOutcome = await resolveRunArtifactOutcomeBeforeFinishAsync();
+        if (!filesystemArtifactProduced(artifactOutcome)) {
+          markRpcCloseReason('empty_output');
+          send('error', createSseErrorPayload(
+            'AGENT_EXECUTION_FAILED',
+            'The production run finished without creating an artifact. The selected model may have skipped its file-writing tool. Retry with a tool-capable model or ask it to create the requested file.',
+            { retryable: true },
+          ));
+          return finishWithRetryDecision('failed', code, signal);
+        }
       }
       // P0-24 N9: a plugin-authoring run that exited cleanly without the
       // generated-plugin files still ended normally — what it produced never

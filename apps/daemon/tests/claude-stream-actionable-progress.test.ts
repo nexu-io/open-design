@@ -74,7 +74,71 @@ describe('Claude stream actionable-progress watchdog (#5036)', () => {
     expect(run.errorCode).toBe('AGENT_EXECUTION_FAILED');
     expect(run.error).toContain('without producing a response or making tool progress');
   }, 15_000);
+
+  it.skipIf(process.platform === 'win32')('keeps a Claude stream alive while it streams tool arguments longer than the inactivity timeout', async () => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-claude-toolinput-bin-'));
+    const claudeBin = await writeToolInputStreamingClaude(binDir);
+
+    // The tool-argument stream (16 frames at 60ms ≈ 960ms) outlasts the 400ms
+    // inactivity window several times over. Only tool_input_delta progress can
+    // hold the watchdog back; without it the run is killed mid-write as stalled.
+    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '400';
+    process.env.OD_CHAT_RUN_INACTIVITY_KILL_GRACE_MS = '100';
+    delete process.env.POSTHOG_KEY;
+    delete process.env.POSTHOG_HOST;
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+
+    started = await startServer({ port: 0, returnServer: true }) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'claude',
+      agentCliEnv: { claude: { CLAUDE_BIN: claudeBin } },
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const run = await createAndWaitForRun(started.url);
+    expect(run.status).toBe('succeeded');
+    expect(run.errorCode).toBeNull();
+  }, 15_000);
 });
+
+async function writeToolInputStreamingClaude(dir: string): Promise<string> {
+  const bin = path.join(dir, 'claude-tool-input-stream');
+  await writeFile(bin, `#!/usr/bin/env node
+const fs = require('node:fs');
+function write(value) { fs.writeSync(1, JSON.stringify(value) + '\\n'); }
+if (process.argv.includes('--version')) { fs.writeSync(1, 'claude-code 1.0.0-toolinput-test\\n'); process.exit(0); }
+if (process.argv.includes('--help')) { fs.writeSync(1, 'Usage: claude -p [--include-partial-messages] [--add-dir DIR]\\n'); process.exit(0); }
+const sid = 's-tool-input-stream';
+write({ type: 'system', subtype: 'init', model: 'tool-input-stream-test', session_id: sid });
+write({ type: 'stream_event', event: { type: 'message_start', message: { id: 'msg_1', type: 'message', role: 'assistant', content: [], model: 'tool-input-stream-test' } }, session_id: sid });
+write({ type: 'stream_event', event: { type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'toolu_1', name: 'Write', input: {} } }, session_id: sid });
+const chunks = ['{"file_path":"prod.html","content":"'];
+for (let n = 0; n < 14; n++) chunks.push('<p>line ' + n + '</p>');
+chunks.push('"}');
+let i = 0;
+const timer = setInterval(() => {
+  write({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: chunks[i++] } }, session_id: sid });
+  if (i >= chunks.length) {
+    clearInterval(timer);
+    write({ type: 'stream_event', event: { type: 'content_block_stop', index: 0 }, session_id: sid });
+    write({ type: 'stream_event', event: { type: 'content_block_start', index: 1, content_block: { type: 'text', text: '' } }, session_id: sid });
+    write({ type: 'stream_event', event: { type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: 'DONE' } }, session_id: sid });
+    write({ type: 'stream_event', event: { type: 'content_block_stop', index: 1 }, session_id: sid });
+    write({ type: 'stream_event', event: { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 4 } }, session_id: sid });
+    write({ type: 'stream_event', event: { type: 'message_stop' }, session_id: sid });
+    write({ type: 'result', subtype: 'success', stop_reason: 'end_turn', session_id: sid });
+    process.exit(0);
+  }
+}, 60);
+process.on('SIGTERM', () => { try { clearInterval(timer); } catch {} process.exit(0); });
+`, 'utf8');
+  await chmod(bin, 0o755);
+  return bin;
+}
 
 async function writeThinkingOnlyClaude(dir: string): Promise<string> {
   const bin = path.join(dir, 'claude-thinking-only');

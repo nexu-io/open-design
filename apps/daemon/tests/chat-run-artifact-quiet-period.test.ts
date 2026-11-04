@@ -24,6 +24,7 @@ import {
   applyClaudeStreamJsonRunBookkeeping,
   claudeStreamEventCountsAsActionableProgress,
   classifyChatRunCloseStatus,
+  filesystemArtifactProduced,
   productionRunMissingArtifact,
   resolveActiveInactivityTimeoutMs,
   resolveChatRunArtifactQuietPeriodMs,
@@ -34,13 +35,15 @@ const ONE_MINUTE_MS = 60 * 1000;
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
 describe('Claude stream actionable progress (#5036)', () => {
-  it('does not treat thinking frames or empty text deltas as actionable progress', () => {
+  it('does not treat thinking frames or empty deltas as actionable progress', () => {
     expect(claudeStreamEventCountsAsActionableProgress({ type: 'thinking_delta', delta: 'thinking' })).toBe(false);
     expect(claudeStreamEventCountsAsActionableProgress({ type: 'text_delta', delta: '' })).toBe(false);
+    expect(claudeStreamEventCountsAsActionableProgress({ type: 'tool_input_delta', delta: '' })).toBe(false);
   });
 
   it.each([
     { type: 'text_delta', delta: 'answer' },
+    { type: 'tool_input_delta', delta: '{"path":"index' },
     { type: 'tool_use', name: 'Write' },
     { type: 'tool_result', content: 'written' },
     { type: 'artifact' },
@@ -69,6 +72,23 @@ describe('production artifact completion guard (#5036)', () => {
   it('does not turn a failed or canceled process into the missing-artifact failure', () => {
     expect(productionRunMissingArtifact({ ...base, inputStage: 'production', code: 1 })).toBe(false);
     expect(productionRunMissingArtifact({ ...base, inputStage: 'production', cancelRequested: true })).toBe(false);
+  });
+});
+
+describe('filesystemArtifactProduced (#5036 shell-written artifact verdict)', () => {
+  it('treats no outcome, a zero count, and an empty diff as no artifact', () => {
+    expect(filesystemArtifactProduced(null)).toBe(false);
+    expect(filesystemArtifactProduced(undefined)).toBe(false);
+    expect(filesystemArtifactProduced({ artifactCount: 0 })).toBe(false);
+    expect(filesystemArtifactProduced({ artifactCount: 0, diff: { touchedPaths: [] } })).toBe(false);
+  });
+
+  it('confirms an artifact the event ledger missed but the filesystem diff saw (e.g. a Bash-written file)', () => {
+    // artifactCount stays 0 because no Write/Edit tool event fired, yet the
+    // end-of-run diff lists the shell-written file: the production guard must
+    // treat this as a real deliverable, not a missing artifact.
+    expect(filesystemArtifactProduced({ artifactCount: 0, diff: { touchedPaths: ['prod.html'] } })).toBe(true);
+    expect(filesystemArtifactProduced({ artifactCount: 2 })).toBe(true);
   });
 });
 
