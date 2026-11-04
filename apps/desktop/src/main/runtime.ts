@@ -10,7 +10,7 @@ import { promisify } from "node:util";
 
 import { BrowserWindow, Menu, Tray, app, dialog, ipcMain, nativeImage, nativeTheme, screen, session, shell, webFrameMain } from "electron";
 import type { NativeImage, WebFrameMain } from "electron";
-import { createBackgroundTray, nonDarwinCloseAction } from "./close-to-tray.js";
+import { attachWindowsCloseToTray, createBackgroundTray } from "./close-to-tray.js";
 import type { BackgroundTray, BackgroundTraySurface } from "./close-to-tray.js";
 import {
   DESKTOP_UPDATE_CHANNELS,
@@ -1837,9 +1837,9 @@ export type MainWindowCloseSurface = {
  * runs with a diagnostic bundle on 10/23-10/26 were Windows, typically ~20
  * minutes into the task). `confirmCloseWithActiveRuns` resolves true to let
  * the close go ahead: when nothing is running, when the count is unknown, or
- * when the user chooses to quit anyway. It resolves false to keep the app
- * alive, which on Windows includes hiding the window to the tray instead
- * (see `close-to-tray.ts`).
+ * when the user chooses to quit anyway. Windows does not use the prompt on
+ * close: the window hides to the tray instead (see `close-to-tray.ts`), and
+ * only the tray's Quit asks.
  */
 export function attachNonDarwinMainWindowCloseShutdown(
   window: MainWindowCloseSurface,
@@ -2803,8 +2803,8 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     void shell.openExternal(url);
   });
 
-  // Windows only: holds the notification-area icon while the window is hidden
-  // over running tasks (OPEND-4390). Null elsewhere.
+  // Windows only: the notification-area icon that closing the window hides
+  // to (OPEND-4390). Null elsewhere.
   let backgroundTray: BackgroundTray | null = null;
   const productName = windowTitle;
   if (process.platform === "darwin") {
@@ -2884,23 +2884,26 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         },
         requestQuit,
       });
-      window.on("show", () => backgroundTray?.windowShown());
+      const tray = backgroundTray;
+      attachWindowsCloseToTray(window, { isStopped: () => stopped, hideToTray: () => tray.hideToTray() });
+      // Only the shutdown path (stopped) really closes the window; it still
+      // has to end the app the way it did before.
+      attachNonDarwinMainWindowCloseShutdown(window, {
+        isStopped: () => stopped,
+        requestQuit: options.requestQuit,
+      });
+    } else {
+      attachNonDarwinMainWindowCloseShutdown(window, {
+        isStopped: () => stopped,
+        requestQuit: options.requestQuit,
+        confirmCloseWithActiveRuns: async () => {
+          const safety = await checkUpdateRestartSafety({ discoverDaemonBaseUrl: discoverUpdateDaemonBaseUrl });
+          if (stopped || window.isDestroyed()) return false;
+          if (safety.state !== "blocked") return true;
+          return await askBeforeInterruptingRuns(safety.activeRunCount, window);
+        },
+      });
     }
-    attachNonDarwinMainWindowCloseShutdown(window, {
-      isStopped: () => stopped,
-      requestQuit: options.requestQuit,
-      confirmCloseWithActiveRuns: async () => {
-        const safety = await checkUpdateRestartSafety({ discoverDaemonBaseUrl: discoverUpdateDaemonBaseUrl });
-        if (stopped || window.isDestroyed()) return false;
-        const action = nonDarwinCloseAction(process.platform, safety);
-        if (action === "close" || safety.state !== "blocked") return true;
-        if (action === "hide-to-tray" && backgroundTray != null) {
-          backgroundTray.hideToTray(safety.activeRunCount);
-          return false;
-        }
-        return await askBeforeInterruptingRuns(safety.activeRunCount, window);
-      },
-    });
   }
 
   const rendererLogPath = options.rendererLogPath ?? null;
@@ -2962,6 +2965,9 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   const revealMainWindow = (): void => {
     if (revealed || window.isDestroyed()) return;
     revealed = true;
+    // Windows: the tray icon is the way back to a closed window and the way
+    // to quit, so it appears together with the window.
+    backgroundTray?.install();
     showWindowButtons(window);
     window.show();
     window.focus();
