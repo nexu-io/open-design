@@ -155,6 +155,8 @@ export async function bootstrapSidecarProcess(
     command?: string;
     cwd?: string;
     env?: NodeJS.ProcessEnv;
+    /** Parent descriptors the detached supervisor must inherit (POSIX only). */
+    inheritFds?: readonly number[];
     launch?: typeof launchSidecar;
     waitUntilReady?: (stamp: SidecarStamp, pid: number) => Promise<void>;
   } = {},
@@ -169,6 +171,7 @@ export async function bootstrapSidecarProcess(
     command: options.command ?? process.execPath,
     cwd: options.cwd ?? process.cwd(),
     env: options.env ?? process.env,
+    ...(options.inheritFds == null ? {} : { inheritFds: options.inheritFds }),
     logFd: null,
     resources,
     stamp,

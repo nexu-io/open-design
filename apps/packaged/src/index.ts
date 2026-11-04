@@ -35,6 +35,7 @@ import { releaseChannelFromNamespace, releaseChannelFromVersion } from "@open-de
 import { join } from "node:path";
 import { app, dialog } from "electron";
 
+import { inheritedAppImageLockFds } from "./appimage-lock.js";
 import { readPackagedConfig } from "./config.js";
 import {
   claimPackagedDownloadAttribution,
@@ -225,12 +226,16 @@ async function main(): Promise<void> {
   if (exitPackagedLauncherForExistingDesktop(oppositeDesktop, (code) => app.exit(code))) {
     return;
   }
-  if (await bootstrapSidecarProcess(launchStamp, {
-    dataRoot: initialPaths.dataRoot,
-    ownerPid: null,
-    port: 0,
-    runtimeRoot: initialPaths.runtimeRoot,
-  })) {
+  if (await bootstrapSidecarProcess(
+    launchStamp,
+    {
+      dataRoot: initialPaths.dataRoot,
+      ownerPid: null,
+      port: 0,
+      runtimeRoot: initialPaths.runtimeRoot,
+    },
+    { inheritFds: inheritedAppImageLockFds() },
+  )) {
     app.exit(0);
     return;
   }

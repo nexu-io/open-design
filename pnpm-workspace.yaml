@@ -18,11 +18,13 @@ overrides:
   yaml: 2.9.0
 
 onlyBuiltDependencies:
+  - "@ffmpeg-installer/linux-x64"
   - better-sqlite3
   - core-js
   - electron
   - electron-winstaller
   - esbuild
+  - node-pty
   - onnxruntime-node
   - protobufjs
   - sharp

@@ -1,11 +1,13 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { access, chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
+import { isProcessGroupAlive } from "@open-design/platform";
 import { findSidecarProcesses, getSidecarStatus, invokeSidecar, stopSidecar } from "@open-design/sidecar";
 import {
   APP_KEYS,
@@ -56,21 +58,37 @@ vi.mock("@open-design/sidecar", async (importOriginal) => {
 import type { ToolPackConfig } from "@/config/index.js";
 import {
   buildDockerArgs,
+  classifyLinuxBuilderArtifacts,
   cleanupPackedLinuxNamespace,
   createLinuxDesktopLaunchEnv,
+  createLinuxTargetConfig,
   inspectPackedLinuxApp,
   LINUX_APPIMAGE_EXECUTABLE_ARGS,
+  LINUX_RPM_DEPENDS,
+  linuxRpmBuilderOptions,
   matchesAppImageProcess,
   renderDesktopTemplate,
   renderLinuxAppImageAppRun,
+  renderLinuxLauncher,
   renderLinuxPackagedMainEntry,
+  renderLinuxPnpmWorkspace,
+  resolveLinuxElectronBuilderEnv,
+  resolveLinuxElectronTargets,
   resolveLinuxLifecycleMode,
+  resolveLinuxPackagedDaemonPaths,
   resolveProductionInstallCommand,
+  resolveProductionInstallEnv,
+  linuxAssembledAllowScripts,
+  LINUX_ASSEMBLED_ALLOW_SCRIPTS,
   shouldRejectLinuxHeadlessInspectOptions,
   stopPackedLinuxApp,
   sanitizeNamespace,
   stopPackedLinuxHeadless,
+  verifyLinuxPackagedDaemon,
 } from "@/linux.js";
+import { linuxResources } from "@/resources/index.js";
+
+const execFileAsync = promisify(execFile);
 
 async function pathExists(path: string): Promise<boolean> {
   try {
@@ -532,29 +550,37 @@ describe("stopPackedLinuxApp", () => {
 });
 
 describe("resolveProductionInstallCommand", () => {
-  it("defaults to npm install --omit=dev --no-package-lock when OD_TOOLS_PACK_PNPM_BIN is unset", () => {
+  it("defaults to npm install --omit=dev --no-package-lock with native scripts enabled when OD_TOOLS_PACK_PNPM_BIN is unset", () => {
     expect(resolveProductionInstallCommand({})).toEqual({
       command: "npm",
-      args: ["install", "--omit=dev", "--no-package-lock"],
+      args: ["install", "--omit=dev", "--no-package-lock", "--ignore-scripts=false"],
     });
   });
 
   it("treats an empty OD_TOOLS_PACK_PNPM_BIN as unset and keeps the npm host default", () => {
     expect(resolveProductionInstallCommand({ OD_TOOLS_PACK_PNPM_BIN: "" })).toEqual({
       command: "npm",
-      args: ["install", "--omit=dev", "--no-package-lock"],
+      args: ["install", "--omit=dev", "--no-package-lock", "--ignore-scripts=false"],
     });
   });
 
-  it("uses OD_TOOLS_PACK_PNPM_BIN with hoisted-layout pnpm flags when set", () => {
+  it("uses OD_TOOLS_PACK_PNPM_BIN with hoisted-layout and native-script pnpm flags when set", () => {
     // --config.node-linker=hoisted intentionally matches the prior
     // npm/electron-builder packaging layout so the AppImage pack step keeps
     // working when the assembled-app install runs through pnpm.
+    // --config.ignore-scripts=false is required for the packaged daemon's
+    // better-sqlite3 binding; the ONNX CUDA download is skipped separately.
     expect(
       resolveProductionInstallCommand({ OD_TOOLS_PACK_PNPM_BIN: "/tmp/pnpm" }),
     ).toEqual({
       command: "/tmp/pnpm",
-      args: ["install", "--prod", "--no-lockfile", "--config.node-linker=hoisted"],
+      args: [
+        "install",
+        "--prod",
+        "--no-lockfile",
+        "--config.node-linker=hoisted",
+        "--config.ignore-scripts=false",
+      ],
     });
   });
 
@@ -570,17 +596,249 @@ describe("resolveProductionInstallCommand", () => {
     const resolved = resolveProductionInstallCommand({ OD_TOOLS_PACK_PNPM_BIN: envValue });
     expect(resolved).toEqual({
       command: "/tmp/pnpm",
-      args: ["install", "--prod", "--no-lockfile", "--config.node-linker=hoisted"],
+      args: [
+        "install",
+        "--prod",
+        "--no-lockfile",
+        "--config.node-linker=hoisted",
+        "--config.ignore-scripts=false",
+      ],
     });
     expect(resolved.command).not.toBe("npm");
   });
+});
+
+describe("resolveProductionInstallEnv", () => {
+  it("keeps native install scripts enabled and skips the optional CUDA download by default", () => {
+    expect(resolveProductionInstallEnv({ PATH: "/bin" })).toMatchObject({
+      PATH: "/bin",
+      npm_config_ignore_scripts: "false",
+      ONNXRUNTIME_NODE_INSTALL_CUDA: "skip",
+    });
+  });
+
+  it("honors an explicit CUDA install choice", () => {
+    expect(
+      resolveProductionInstallEnv({ ONNXRUNTIME_NODE_INSTALL_CUDA: "1" })
+        .ONNXRUNTIME_NODE_INSTALL_CUDA,
+    ).toBe("1");
+  });
+
+  it("overrides an inherited npm ignore-scripts setting", () => {
+    expect(
+      resolveProductionInstallEnv({ npm_config_ignore_scripts: "true" })
+        .npm_config_ignore_scripts,
+    ).toBe("false");
+  });
+});
+
+describe("linuxAssembledAllowScripts", () => {
+  it("approves the packaged daemon's native install scripts for npm 12", () => {
+    const allowScripts = linuxAssembledAllowScripts();
+    expect(allowScripts).toMatchObject({
+      "better-sqlite3": true,
+      "node-pty": true,
+      "onnxruntime-node": true,
+    });
+    expect(Object.values(allowScripts).every((approved) => approved === true)).toBe(true);
+    expect(LINUX_ASSEMBLED_ALLOW_SCRIPTS).toContain("better-sqlite3");
+    expect(LINUX_ASSEMBLED_ALLOW_SCRIPTS).toContain("node-pty");
+  });
+});
+
+describe("renderLinuxPnpmWorkspace", () => {
+  it("renders pnpm 10's native build approval list", () => {
+    const workspace = renderLinuxPnpmWorkspace();
+    expect(workspace).toContain("onlyBuiltDependencies:");
+    expect(workspace).toContain('  - "better-sqlite3"');
+    expect(workspace).toContain('  - "node-pty"');
+    expect(workspace).toContain('  - "@ffmpeg-installer/linux-x64"');
+  });
+
+  it("renders caller-provided approvals and internal-tarball overrides", () => {
+    expect(
+      renderLinuxPnpmWorkspace(
+        ["@open-design/daemon"],
+        { "@open-design/registry-protocol": "file:/tmp/registry-protocol.tgz" },
+      ),
+    ).toBe(
+      'onlyBuiltDependencies:\n' +
+      '  - "@open-design/daemon"\n' +
+      'overrides:\n' +
+      '  "@open-design/registry-protocol": "file:/tmp/registry-protocol.tgz"\n',
+    );
+  });
+});
+
+describe("resolveLinuxElectronBuilderEnv", () => {
+  it("forces electron-builder's traversal collector for pnpm-installed trees", () => {
+    const input = {
+      PATH: "/bin",
+      npm_config_user_agent: "pnpm/10.33.2",
+      npm_execpath: "/opt/pnpm/bin/pnpm.cjs",
+    };
+    const env = resolveLinuxElectronBuilderEnv(input);
+    expect(env).toMatchObject({
+      PATH: "/bin",
+      npm_config_user_agent: "traversal",
+      npm_execpath: "traversal",
+    });
+    expect(input.npm_config_user_agent).toBe("pnpm/10.33.2");
+  });
+});
+
+describe("resolveLinuxPackagedDaemonPaths", () => {
+  it("targets the electron-builder linux-unpacked app and bundled Node", () => {
+    expect(resolveLinuxPackagedDaemonPaths("/out")).toEqual({
+      appOutDir: join("/out", "linux-unpacked"),
+      daemonCliPath: join(
+        "/out",
+        "linux-unpacked",
+        "resources",
+        "app",
+        "node_modules",
+        "@open-design",
+        "daemon",
+        "dist",
+        "cli.js",
+      ),
+      nodePath: join("/out", "linux-unpacked", "resources", "open-design", "bin", "node"),
+    });
+  });
+});
+
+describe("verifyLinuxPackagedDaemon", () => {
+  const canRunProbe = process.platform !== "win32";
+
+  async function makeProbeFixture(daemonScript: string): Promise<string> {
+    const root = await mkdtemp(join(tmpdir(), "open-design-daemon-probe-"));
+    const paths = resolveLinuxPackagedDaemonPaths(root);
+    await mkdir(paths.appOutDir, { recursive: true });
+    await mkdir(dirname(paths.nodePath), { recursive: true });
+    await mkdir(dirname(paths.daemonCliPath), { recursive: true });
+    // The probe only needs a runnable Node entrypoint; delegate to the Node
+    // running the test suite instead of copying the ~120 MB binary.
+    await writeFile(paths.nodePath, '#!/bin/sh\nexec node "$@"\n', "utf8");
+    await chmod(paths.nodePath, 0o755);
+    await writeFile(paths.daemonCliPath, daemonScript, "utf8");
+    return root;
+  }
+
+  it.skipIf(!canRunProbe)("accepts a packaged daemon that reports healthy", async () => {
+    const root = await makeProbeFixture(`
+const http = require("node:http");
+const portIndex = process.argv.indexOf("--port");
+const port = Number(process.argv[portIndex + 1]);
+const server = http.createServer((_request, response) => {
+  response.setHeader("content-type", "application/json");
+  response.end(JSON.stringify({ ok: true }));
+});
+server.listen(port, "127.0.0.1");
+process.on("SIGTERM", () => process.exit(0));
+`);
+    try {
+      await expect(
+        verifyLinuxPackagedDaemon({ appBuilderOutputRoot: root }),
+      ).resolves.toBeUndefined();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(!canRunProbe)("rejects a packaged daemon that exits before listening", async () => {
+    const root = await makeProbeFixture("process.exit(1);\n");
+    try {
+      await expect(
+        verifyLinuxPackagedDaemon({ appBuilderOutputRoot: root }),
+      ).rejects.toThrow(/daemon exited before becoming healthy/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("pnpm approval in the assembled project", () => {
+  it("runs a native postinstall and resolves internal tarballs from a temp directory outside the workspace", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-pnpm-approval-"));
+    const registryName = "@open-design/registry-protocol";
+    const daemonName = "@open-design/daemon";
+    const registryRoot = join(root, "registry-protocol");
+    const daemonRoot = join(root, "daemon");
+    const appRoot = join(root, "app");
+    try {
+      await mkdir(registryRoot, { recursive: true });
+      await writeFile(
+        join(registryRoot, "package.json"),
+        `${JSON.stringify({
+          name: registryName,
+          version: "0.5.0",
+        }, null, 2)}\n`,
+        "utf8",
+      );
+      await execFileAsync("npm", ["pack", "--pack-destination", root], { cwd: registryRoot });
+      const registryTarball = join(root, "open-design-registry-protocol-0.5.0.tgz");
+
+      await mkdir(daemonRoot, { recursive: true });
+      await writeFile(
+        join(daemonRoot, "package.json"),
+        `${JSON.stringify({
+          name: daemonName,
+          version: "0.25.1",
+          dependencies: { [registryName]: "0.5.0" },
+          scripts: {
+            postinstall: "node -e \"require('fs').writeFileSync('built.txt','yes')\"",
+          },
+        }, null, 2)}\n`,
+        "utf8",
+      );
+      await execFileAsync("npm", ["pack", "--pack-destination", root], { cwd: daemonRoot });
+      const daemonTarball = join(root, "open-design-daemon-0.25.1.tgz");
+
+      await mkdir(appRoot, { recursive: true });
+      await writeFile(
+        join(appRoot, "package.json"),
+        `${JSON.stringify({
+          name: "open-design-packaged",
+          version: "0.0.0",
+          private: true,
+          // Pin the version the container uses so a newer global pnpm still
+          // delegates to pnpm 10 and exercises its onlyBuiltDependencies path.
+          packageManager: "pnpm@10.33.2",
+          dependencies: {
+            [registryName]: `file:${registryTarball}`,
+            [daemonName]: `file:${daemonTarball}`,
+          },
+        }, null, 2)}\n`,
+        "utf8",
+      );
+      await writeFile(
+        join(appRoot, "pnpm-workspace.yaml"),
+        renderLinuxPnpmWorkspace([daemonName], { [registryName]: `file:${registryTarball}` }),
+        "utf8",
+      );
+
+      const pnpmBin = process.env.OD_TOOLS_PACK_TEST_PNPM_BIN ?? "pnpm";
+      const install = resolveProductionInstallCommand({ OD_TOOLS_PACK_PNPM_BIN: pnpmBin });
+      await execFileAsync(install.command, install.args, {
+        cwd: appRoot,
+        env: resolveProductionInstallEnv(process.env),
+      });
+
+      await expect(readFile(join(appRoot, "node_modules", daemonName, "built.txt"), "utf8"))
+        .resolves.toBe("yes");
+      await expect(readFile(join(appRoot, "node_modules", registryName, "package.json"), "utf8"))
+        .resolves.toContain('"version": "0.5.0"');
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  }, 60_000);
 });
 
 describe("renderDesktopTemplate", () => {
   const template = `[Desktop Entry]
 Type=Application
 Name=Open Design (@@NAMESPACE@@)
-Exec=env -u ELECTRON_RUN_AS_NODE OD_PACKAGED_NAMESPACE=@@NAMESPACE@@ @@EXEC_PATH@@ --appimage-extract-and-run %U
+Exec=env -u ELECTRON_RUN_AS_NODE OD_PACKAGED_NAMESPACE=@@NAMESPACE@@ @@EXEC_PATH@@ %U
 Icon=@@ICON_PATH@@
 MimeType=x-scheme-handler/od;
 `;
@@ -593,7 +851,7 @@ MimeType=x-scheme-handler/od;
     });
     expect(out).toContain("Name=Open Design (default)");
     expect(out).toContain(
-      "Exec=env -u ELECTRON_RUN_AS_NODE OD_PACKAGED_NAMESPACE=default /home/u/.local/bin/Open-Design.default.AppImage --appimage-extract-and-run %U",
+      'Exec=env -u ELECTRON_RUN_AS_NODE OD_PACKAGED_NAMESPACE=default "/home/u/.local/bin/Open-Design.default.AppImage" %U',
     );
     expect(out).toContain("Icon=open-design-default");
   });
@@ -617,13 +875,13 @@ MimeType=x-scheme-handler/od;
     expect(out).toMatch(/^Exec=env -u ELECTRON_RUN_AS_NODE /m);
   });
 
-  it("preserves --appimage-extract-and-run on the Exec= line so menu launches bypass FUSE", () => {
+  it("does not force --appimage-extract-and-run on every menu launch", () => {
     const out = renderDesktopTemplate(template, {
       namespace: "ns",
       execPath: "/x",
       iconName: "open-design-ns",
     });
-    expect(out).toMatch(/^Exec=.*--appimage-extract-and-run .*%U$/m);
+    expect(out).not.toContain("--appimage-extract-and-run");
   });
 
   it("leaves no @@...@@ tokens unsubstituted", () => {
@@ -643,6 +901,162 @@ MimeType=x-scheme-handler/od;
     });
     expect(out).toContain("MimeType=x-scheme-handler/od;");
   });
+
+  it("quotes the Exec path so a home directory with spaces stays one argument", () => {
+    const out = renderDesktopTemplate(template, {
+      namespace: "ns",
+      execPath: "/home/a b/.local/share/open-design/ns/launch.sh",
+      iconName: "open-design-ns",
+    });
+    expect(out).toContain(
+      'Exec=env -u ELECTRON_RUN_AS_NODE OD_PACKAGED_NAMESPACE=ns "/home/a b/.local/share/open-design/ns/launch.sh" %U',
+    );
+  });
+
+  it("escapes a literal percent in the Exec path as a desktop-entry field code", () => {
+    const out = renderDesktopTemplate(template, {
+      namespace: "ns",
+      execPath: "/home/a%b/.local/share/open-design/ns/launch.sh",
+      iconName: "open-design-ns",
+    });
+    expect(out).toContain(
+      'Exec=env -u ELECTRON_RUN_AS_NODE OD_PACKAGED_NAMESPACE=ns "/home/a%%b/.local/share/open-design/ns/launch.sh" %U',
+    );
+  });
+});
+
+describe("renderLinuxLauncher", () => {
+  const launcherTemplate = readFileSync(linuxResources.launcherTemplate, "utf8");
+
+  async function createLauncherHarness(): Promise<{
+    appImagePath: string;
+    launcherPath: string;
+    observedPath: string;
+    root: string;
+    run: (options?: { args?: string[]; env?: NodeJS.ProcessEnv }) => Promise<{ stderr: string; stdout: string }>;
+  }> {
+    const root = await mkdtemp(join(tmpdir(), "od-linux-launcher-"));
+    const appImagePath = join(root, "app dir", "Open Design.AppImage");
+    const launcherPath = join(root, "launch dir", "launch.sh");
+    const observedPath = join(root, "observed.txt");
+
+    await mkdir(dirname(appImagePath), { recursive: true });
+    await mkdir(dirname(launcherPath), { recursive: true });
+    await writeFile(
+      appImagePath,
+      `#!/bin/sh
+{
+  printf 'args=%s\\n' "$*"
+  printf 'no_cleanup=%s\\n' "\${NO_CLEANUP-unset}"
+  printf 'namespace=%s\\n' "\${OD_PACKAGED_NAMESPACE-unset}"
+  printf 'electron_run_as_node=%s\\n' "\${ELECTRON_RUN_AS_NODE-unset}"
+} > "$OD_TEST_LAUNCHER_OBSERVED"
+`,
+      "utf8",
+    );
+    await chmod(appImagePath, 0o755);
+    await writeFile(
+      launcherPath,
+      renderLinuxLauncher(launcherTemplate, { appImagePath, namespace: "default" }),
+      "utf8",
+    );
+    await chmod(launcherPath, 0o755);
+
+    return {
+      appImagePath,
+      launcherPath,
+      observedPath,
+      root,
+      run: async (options = {}) => await execFileAsync(launcherPath, options.args ?? [], {
+        env: {
+          ...process.env,
+          OD_TEST_LAUNCHER_OBSERVED: observedPath,
+          ...options.env,
+        },
+      }),
+    };
+  }
+
+  it("quotes the AppImage path and namespace into the generated launcher", () => {
+    const out = renderLinuxLauncher(launcherTemplate, {
+      appImagePath: "/home/a b/Open Design.AppImage",
+      namespace: "default",
+    });
+    expect(out).toContain("APPIMAGE='/home/a b/Open Design.AppImage'");
+    expect(out).toContain("NAMESPACE='default'");
+  });
+
+  it("chooses the cached/FUSE path when mounting works", async () => {
+    const harness = await createLauncherHarness();
+    try {
+      const result = await harness.run({ env: { OD_APPIMAGE_FUSE: "on" } });
+      expect(result.stderr).toBe("");
+      expect(await readFile(harness.observedPath, "utf8")).toBe(
+        "args=\nno_cleanup=unset\nnamespace=default\nelectron_run_as_node=unset\n",
+      );
+    } finally {
+      await rm(harness.root, { force: true, recursive: true });
+    }
+  });
+
+  it("falls back to --appimage-extract-and-run when FUSE is unavailable", async () => {
+    const harness = await createLauncherHarness();
+    try {
+      const result = await harness.run({
+        args: ["--flag"],
+        env: { OD_APPIMAGE_FUSE: "off" },
+      });
+      expect(result.stderr).toBe("");
+      expect(await readFile(harness.observedPath, "utf8")).toBe(
+        "args=--appimage-extract-and-run --flag\nno_cleanup=1\nnamespace=default\nelectron_run_as_node=unset\n",
+      );
+    } finally {
+      await rm(harness.root, { force: true, recursive: true });
+    }
+  });
+
+  it("lets the installed desktop entry launch through the no-FUSE fallback", async () => {
+    const harness = await createLauncherHarness();
+    try {
+      const desktop = renderDesktopTemplate(readFileSync(linuxResources.desktopTemplate, "utf8"), {
+        namespace: "default",
+        execPath: harness.launcherPath,
+        iconName: "open-design-default",
+      });
+      const execLine = desktop.split("\n").find((line) => line.startsWith("Exec="));
+      expect(execLine).toBeDefined();
+      const command = execLine!.slice("Exec=".length).replaceAll("%U", "");
+
+      await execFileAsync("sh", ["-c", command], {
+        env: {
+          ...process.env,
+          OD_APPIMAGE_FUSE: "off",
+          OD_TEST_LAUNCHER_OBSERVED: harness.observedPath,
+        },
+      });
+
+      expect(await readFile(harness.observedPath, "utf8")).toContain(
+        "args=--appimage-extract-and-run\n",
+      );
+    } finally {
+      await rm(harness.root, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("createLinuxTargetConfig", () => {
+  it("leaves native package sandboxing to electron-builder's after-install template", () => {
+    const config = createLinuxTargetConfig(["rpm"]);
+    expect(config).not.toHaveProperty("executableArgs");
+    expect(config).toMatchObject({
+      target: ["rpm"],
+      vendor: "Open Design Team",
+    });
+  });
+
+  it("does not disable the sandbox for the unpacked dir target either", () => {
+    expect(createLinuxTargetConfig(["dir"])).not.toHaveProperty("executableArgs");
+  });
 });
 
 describe("renderLinuxPackagedMainEntry", () => {
@@ -658,6 +1072,82 @@ describe("renderLinuxPackagedMainEntry", () => {
 describe("LINUX_APPIMAGE_EXECUTABLE_ARGS", () => {
   it("keeps the AppImage no-sandbox fallback explicit for constrained Linux hosts", () => {
     expect([...LINUX_APPIMAGE_EXECUTABLE_ARGS]).toEqual(["--no-sandbox"]);
+  });
+});
+
+describe("resolveLinuxElectronTargets", () => {
+  it("keeps `all` on the single release-published AppImage target", () => {
+    expect(resolveLinuxElectronTargets("all")).toEqual(["AppImage"]);
+    expect(resolveLinuxElectronTargets("appimage")).toEqual(["AppImage"]);
+  });
+
+  it("maps the native rpm target and the unpacked dir target", () => {
+    expect(resolveLinuxElectronTargets("rpm")).toEqual(["rpm"]);
+    expect(resolveLinuxElectronTargets("dir")).toEqual(["dir"]);
+  });
+
+  it("rejects deb and build outputs that belong to other platforms", () => {
+    expect(() => resolveLinuxElectronTargets("deb" as never)).toThrow(/unsupported linux build output: deb/);
+    expect(() => resolveLinuxElectronTargets("dmg")).toThrow(/unsupported linux build output: dmg/);
+    expect(() => resolveLinuxElectronTargets("nsis")).toThrow(/unsupported linux build output: nsis/);
+  });
+});
+
+describe("linuxRpmBuilderOptions", () => {
+  it("pins fpm's single-threaded xz encoder for RPM payloads", () => {
+    expect(linuxRpmBuilderOptions(["rpm"])).toEqual({
+      depends: [...LINUX_RPM_DEPENDS],
+      fpm: ["--rpm-compression", "xz"],
+    });
+  });
+
+  it("declares Electron's gbm and ALSA sonames in addition to the Fedora defaults", () => {
+    const depends = linuxRpmBuilderOptions(["rpm"])?.depends ?? [];
+    expect(depends).toEqual(expect.arrayContaining([
+      "gtk3",
+      "libnotify",
+      "nss",
+      "libXScrnSaver",
+      "(libXtst or libXtst6)",
+      "xdg-utils",
+      "at-spi2-core",
+      "(libuuid or libuuid1)",
+      "libgbm.so.1()(64bit)",
+      "libasound.so.2()(64bit)",
+    ]));
+  });
+
+  it("leaves non-RPM targets on electron-builder's default", () => {
+    expect(linuxRpmBuilderOptions(["dir"])).toBeNull();
+    expect(linuxRpmBuilderOptions(["AppImage"])).toBeNull();
+  });
+});
+
+describe("classifyLinuxBuilderArtifacts", () => {
+  it("finds every artifact kind in one output directory", () => {
+    const root = "/work/out/linux/namespaces/default/builder";
+
+    expect(classifyLinuxBuilderArtifacts(
+      ["Open Design-default.AppImage", "Open Design-default.deb", "Open Design-default.rpm", "builder-debug.yml"],
+      root,
+    )).toEqual({
+      appImage: join(root, "Open Design-default.AppImage"),
+      deb: join(root, "Open Design-default.deb"),
+      rpm: join(root, "Open Design-default.rpm"),
+    });
+  });
+
+  it("returns nulls for artifact kinds that were not built", () => {
+    expect(classifyLinuxBuilderArtifacts(["Open Design-default.deb"], "/out")).toEqual({
+      appImage: null,
+      deb: "/out/Open Design-default.deb",
+      rpm: null,
+    });
+    expect(classifyLinuxBuilderArtifacts([], "/out")).toEqual({
+      appImage: null,
+      deb: null,
+      rpm: null,
+    });
   });
 });
 
@@ -729,6 +1219,424 @@ describe("renderLinuxAppImageAppRun", () => {
       expect(await readFile(observedEnvPath, "utf8")).toBe(
         `APPIMAGE=${appRunPath}\nELECTRON_RUN_AS_NODE=unset\n`,
       );
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("renderLinuxAppImageAppRun sandbox policy", () => {
+  async function observeElectronArgs(options: {
+    args?: string[];
+    env?: NodeJS.ProcessEnv;
+    usernsProbeExitCode?: number;
+  }): Promise<string[]> {
+    const root = await mkdtemp(join(tmpdir(), "od-linux-apprun-sandbox-"));
+    const appDir = join(root, "AppDir");
+    const binDir = join(root, "bin");
+    const appRunPath = join(appDir, "AppRun");
+    const electronPath = join(appDir, "Open Design");
+    const argsPath = join(root, "args.txt");
+
+    try {
+      await mkdir(appDir, { recursive: true });
+      await mkdir(binDir, { recursive: true });
+      await writeFile(appRunPath, renderLinuxAppImageAppRun(), "utf8");
+      await chmod(appRunPath, 0o755);
+      await writeFile(
+        join(binDir, "unshare"),
+        `#!/bin/bash\nexit ${options.usernsProbeExitCode ?? 0}\n`,
+        "utf8",
+      );
+      await chmod(join(binDir, "unshare"), 0o755);
+      await writeFile(
+        electronPath,
+        `#!/bin/bash\nprintf '%s\\n' "$@" > ${JSON.stringify(argsPath)}\n`,
+        "utf8",
+      );
+      await chmod(electronPath, 0o755);
+
+      const isolatedEnv: NodeJS.ProcessEnv = { ...process.env };
+      delete isolatedEnv.OD_LINUX_SANDBOX;
+      delete isolatedEnv.APPIMAGE;
+      delete isolatedEnv.OD_APPIMAGE_EXTRACTED_RUN;
+
+      const child = spawn(appRunPath, options.args ?? [], {
+        env: {
+          ...isolatedEnv,
+          APPDIR: appDir,
+          PATH: `${binDir}:/usr/bin:/bin`,
+          ...options.env,
+        },
+        stdio: "ignore",
+      });
+      const exit = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
+        child.once("error", reject);
+        child.once("exit", (code, signal) => resolve({ code, signal }));
+      });
+
+      expect(exit).toEqual({ code: 0, signal: null });
+      const raw = await readFile(argsPath, "utf8");
+      return raw.length === 0 ? [] : raw.trimEnd().split("\n");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  }
+
+  it("keeps the sandbox when unprivileged user namespaces work", async () => {
+    await expect(observeElectronArgs({ args: ["--flag"], usernsProbeExitCode: 0 }))
+      .resolves.toEqual(["--flag"]);
+  });
+
+  it("strips --no-sandbox from desktop-entry launches when the sandbox works", async () => {
+    await expect(observeElectronArgs({ args: ["--no-sandbox", "--flag"], usernsProbeExitCode: 0 }))
+      .resolves.toEqual(["--flag"]);
+  });
+
+  it("adds --no-sandbox when the user namespace probe fails", async () => {
+    await expect(observeElectronArgs({ args: ["--flag"], usernsProbeExitCode: 1 }))
+      .resolves.toEqual(["--flag", "--no-sandbox"]);
+  });
+
+  it("does not duplicate an explicit --no-sandbox fallback", async () => {
+    await expect(observeElectronArgs({ args: ["--no-sandbox"], usernsProbeExitCode: 1 }))
+      .resolves.toEqual(["--no-sandbox"]);
+  });
+
+  it("honors OD_LINUX_SANDBOX=off on hosts where the probe would pass", async () => {
+    await expect(observeElectronArgs({
+      args: ["--flag"],
+      env: { OD_LINUX_SANDBOX: "off" },
+      usernsProbeExitCode: 0,
+    })).resolves.toEqual(["--flag", "--no-sandbox"]);
+  });
+
+  it("honors OD_LINUX_SANDBOX=on on hosts where the probe would fail", async () => {
+    await expect(observeElectronArgs({
+      args: ["--no-sandbox", "--flag"],
+      env: { OD_LINUX_SANDBOX: "on" },
+      usernsProbeExitCode: 1,
+    })).resolves.toEqual(["--flag"]);
+  });
+});
+
+describe("renderLinuxAppImageAppRun cache", () => {
+  type CacheHarness = {
+    appRunPath: string;
+    argsPath: string;
+    cacheRoot: string;
+    envPath: string;
+    extractMarkerPath: string;
+    fallbackArgsPath: string;
+    fuseAppDir: string;
+    root: string;
+    runtimePath: string;
+    run: (options?: { args?: string[]; env?: NodeJS.ProcessEnv }) => Promise<{
+      code: number | null;
+      signal: NodeJS.Signals | null;
+      stderr: string;
+    }>;
+    writeCachedAppRun: (body?: string) => Promise<void>;
+    writeRuntime: (body: string) => Promise<void>;
+  };
+
+  const extractionRuntimeBody = `if [ "$1" = "--appimage-extract" ] ; then
+  mkdir -p squashfs-root
+  cp "$OD_TEST_CACHED_APPRUN" squashfs-root/AppRun
+  chmod +x squashfs-root/AppRun
+  printf 'extracted\\n' >> "$OD_TEST_EXTRACT_MARKER"
+  exit 0
+fi
+printf 'runtime-called\\n' >> "$OD_TEST_EXTRACT_MARKER"
+exit 97
+`;
+
+  async function createHarness(): Promise<CacheHarness> {
+    const root = await mkdtemp(join(tmpdir(), "od-linux-apprun-cache-"));
+    const fuseAppDir = join(root, "mount", ".mount_odcache");
+    const appRunPath = join(root, "AppRun");
+    const runtimePath = join(root, "Open Design-default.AppImage");
+    const cachedAppRunPath = join(root, "cached-AppRun");
+    const cacheRoot = join(root, "cache");
+    const argsPath = join(root, "args.txt");
+    const envPath = join(root, "env.txt");
+    const extractMarkerPath = join(root, "extract-marker.txt");
+    const fallbackArgsPath = join(root, "fallback-args.txt");
+
+    await mkdir(fuseAppDir, { recursive: true });
+    await writeFile(appRunPath, renderLinuxAppImageAppRun(), "utf8");
+    await chmod(appRunPath, 0o755);
+
+    const writeCachedAppRun = async (
+      body = `#!/bin/bash\nprintf '%s\\n' "$@" > "$OD_TEST_ARGS_PATH"\nprintf 'APPDIR=%s\\nAPPIMAGE=%s\\n' "$APPDIR" "$APPIMAGE" > "$OD_TEST_ENV_PATH"\n`,
+    ) => {
+      await writeFile(cachedAppRunPath, body, "utf8");
+      await chmod(cachedAppRunPath, 0o755);
+    };
+
+    const writeRuntime = async (body: string) => {
+      await writeFile(runtimePath, `#!/bin/bash\n${body}`, "utf8");
+      await chmod(runtimePath, 0o755);
+    };
+
+    const run = async (options: { args?: string[]; env?: NodeJS.ProcessEnv } = {}) => {
+      const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        APPDIR: fuseAppDir,
+        APPIMAGE: runtimePath,
+        XDG_CACHE_HOME: cacheRoot,
+        OD_TEST_ARGS_PATH: argsPath,
+        OD_TEST_ENV_PATH: envPath,
+        OD_TEST_EXTRACT_MARKER: extractMarkerPath,
+        OD_TEST_FALLBACK_ARGS_PATH: fallbackArgsPath,
+        OD_TEST_CACHED_APPRUN: cachedAppRunPath,
+      };
+      delete env.OD_APPIMAGE_EXTRACTED_RUN;
+      delete env.OD_APPIMAGE_LOCK_FD;
+      Object.assign(env, options.env);
+
+      const child = spawn(appRunPath, options.args ?? [], {
+        env,
+        stdio: ["ignore", "ignore", "pipe"],
+      });
+      let stderr = "";
+      child.stderr?.on("data", (chunk) => {
+        stderr += String(chunk);
+      });
+      const exit = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
+        child.once("error", reject);
+        // Wait for stdio to drain so stderr assertions see every byte.
+        child.once("close", (code, signal) => resolve({ code, signal }));
+      });
+      return { ...exit, stderr };
+    };
+
+    return {
+      appRunPath,
+      argsPath,
+      cacheRoot,
+      envPath,
+      extractMarkerPath,
+      fallbackArgsPath,
+      fuseAppDir,
+      root,
+      runtimePath,
+      run,
+      writeCachedAppRun,
+      writeRuntime,
+    };
+  }
+
+  it("no longer re-execs every FUSE launch through the runtime extractor", () => {
+    const out = renderLinuxAppImageAppRun();
+
+    expect(out).not.toContain('exec "$APPIMAGE" --appimage-extract-and-run');
+    expect(out).toContain('"$APPIMAGE" --appimage-extract >extract.log');
+    expect(out).toContain("XDG_CACHE_HOME");
+  });
+
+  it("uses a non-blocking launch lock instead of a timed wait", () => {
+    const out = renderLinuxAppImageAppRun();
+
+    expect(out).toContain('exec 8>"$lock_path"');
+    expect(out).toContain("flock -n 8");
+    expect(out).toContain("export OD_APPIMAGE_LOCK_FD=8");
+    expect(out).toContain("Open Design is already running");
+    expect(out).not.toContain("flock -w 600");
+  });
+
+  it("keys the launch lock to the AppImage path, not the size/mtime cache key", () => {
+    const out = renderLinuxAppImageAppRun();
+    const start = out.indexOf("appimage_lock_path()");
+    const end = out.indexOf("\n}", start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const lockFunction = out.slice(start, end);
+    expect(lockFunction).toContain("cksum");
+    expect(lockFunction).not.toContain("stat -c");
+  });
+
+  const handoffFixturePath = fileURLToPath(new URL("./fixtures/linux-lock-handoff.ts", import.meta.url));
+
+  async function waitForFile(path: string, timeoutMs = 5_000): Promise<string> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      try {
+        return await readFile(path, "utf8");
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+    }
+    throw new Error(`timed out waiting for ${path}`);
+  }
+
+  linuxOnlyIt("keeps the launch lock across a detached sidecar handoff", async () => {
+    const harness = await createHarness();
+    const handoffPidPath = join(harness.root, "handoff.pid");
+    const handoffEnv: NodeJS.ProcessEnv = {
+      OD_TEST_HANDOFF: "1",
+      OD_TEST_HANDOFF_PID_PATH: handoffPidPath,
+      OD_TEST_HANDOFF_SCRIPT: handoffFixturePath,
+      OD_TEST_NODE: process.execPath,
+    };
+    let handoffPid: number | null = null;
+
+    try {
+      await harness.writeCachedAppRun(
+        `#!/bin/bash
+printf 'started\\n' >> "$OD_TEST_ARGS_PATH"
+if [ "\${OD_TEST_HANDOFF:-1}" = 1 ] ; then
+  "$OD_TEST_NODE" --import tsx "$OD_TEST_HANDOFF_SCRIPT" "$OD_TEST_HANDOFF_PID_PATH"
+fi
+`,
+      );
+      await harness.writeRuntime(extractionRuntimeBody);
+
+      const first = await harness.run({ args: ["--first"], env: handoffEnv });
+      expect(first).toMatchObject({ code: 0, signal: null });
+      const detachedPid = Number((await waitForFile(handoffPidPath)).trim());
+      expect(Number.isSafeInteger(detachedPid)).toBe(true);
+      handoffPid = detachedPid;
+
+      // The initial launcher has exited; only the detached handoff child still
+      // owns the lock. A second menu launch must exit before extracting or
+      // starting a competing runtime.
+      const second = await harness.run({ args: ["--second"], env: handoffEnv });
+      expect(second).toMatchObject({ code: 0, signal: null });
+      expect(second.stderr).toContain("Open Design is already running");
+      expect(await readFile(harness.argsPath, "utf8")).toBe("started\n");
+
+      process.kill(-detachedPid, "SIGKILL");
+      const deadline = Date.now() + 5_000;
+      while (Date.now() < deadline && isProcessGroupAlive(detachedPid)) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      expect(isProcessGroupAlive(detachedPid)).toBe(false);
+
+      const third = await harness.run({
+        args: ["--third"],
+        env: { ...handoffEnv, OD_TEST_HANDOFF: "0" },
+      });
+      expect(third).toMatchObject({ code: 0, signal: null });
+      expect(await readFile(harness.argsPath, "utf8")).toBe("started\nstarted\n");
+    } finally {
+      if (handoffPid != null) {
+        try {
+          process.kill(-handoffPid, "SIGKILL");
+        } catch {
+          // already gone
+        }
+      }
+      await rm(harness.root, { force: true, recursive: true });
+    }
+  });
+
+  linuxOnlyIt("extracts once into XDG_CACHE_HOME and reuses the cached AppRun", async () => {
+    const harness = await createHarness();
+
+    try {
+      await harness.writeCachedAppRun();
+      await harness.writeRuntime(extractionRuntimeBody);
+
+      const first = await harness.run({ args: ["--user-flag"] });
+      expect(first).toMatchObject({ code: 0, signal: null });
+      expect(await readFile(harness.extractMarkerPath, "utf8")).toBe("extracted\n");
+      expect(await readFile(harness.argsPath, "utf8")).toBe("--user-flag\n");
+      const cachedEnv = await readFile(harness.envPath, "utf8");
+      expect(cachedEnv).toContain(`APPDIR=${join(harness.cacheRoot, "open-design", "appimage")}`);
+      expect(cachedEnv).toContain(`APPIMAGE=${harness.runtimePath}`);
+
+      // A warm cache must not invoke the runtime at all; the same script
+      // records a non-extract invocation, so its absence proves the cache hit.
+      const second = await harness.run({ args: ["--second-flag"] });
+      expect(second).toMatchObject({ code: 0, signal: null });
+      expect(await readFile(harness.extractMarkerPath, "utf8")).toBe("extracted\n");
+      expect(await readFile(harness.argsPath, "utf8")).toBe("--second-flag\n");
+    } finally {
+      await rm(harness.root, { force: true, recursive: true });
+    }
+  });
+
+  linuxOnlyIt("keys the cache on the AppImage identity so a replaced file re-extracts", async () => {
+    const harness = await createHarness();
+
+    try {
+      await harness.writeCachedAppRun();
+      await harness.writeRuntime(extractionRuntimeBody);
+      await harness.run({ args: ["--first"] });
+      expect(await readFile(harness.extractMarkerPath, "utf8")).toBe("extracted\n");
+
+      // Changing the runtime's size changes the cache key.
+      await harness.writeRuntime(`${extractionRuntimeBody}\n# rebuilt\n`);
+      await harness.run({ args: ["--second"] });
+      expect(await readFile(harness.extractMarkerPath, "utf8")).toBe("extracted\nextracted\n");
+      expect(await readFile(harness.argsPath, "utf8")).toBe("--second\n");
+    } finally {
+      await rm(harness.root, { force: true, recursive: true });
+    }
+  });
+
+  linuxOnlyIt("falls back to the mounted payload when extraction fails", async () => {
+    const harness = await createHarness();
+
+    try {
+      await harness.writeRuntime("exit 1\n");
+      await writeFile(
+        join(harness.fuseAppDir, "Open Design"),
+        `#!/bin/bash\nprintf '%s\\n' "$@" > "$OD_TEST_FALLBACK_ARGS_PATH"\n`,
+        "utf8",
+      );
+      await chmod(join(harness.fuseAppDir, "Open Design"), 0o755);
+
+      const result = await harness.run({
+        args: ["--flag"],
+        env: { OD_LINUX_SANDBOX: "on" },
+      });
+      expect(result).toMatchObject({ code: 0, signal: null });
+      expect(await readFile(harness.fallbackArgsPath, "utf8")).toBe("--flag\n");
+      expect(result.stderr).toContain("could not prepare the AppImage cache");
+    } finally {
+      await rm(harness.root, { force: true, recursive: true });
+    }
+  });
+
+  linuxOnlyIt("does not re-enter the cache when the runtime already extracted", async () => {
+    const harness = await createHarness();
+
+    try {
+      await harness.writeRuntime(`printf 'runtime-called\\n' >> "$OD_TEST_EXTRACT_MARKER"\nexit 97\n`);
+      await writeFile(
+        join(harness.fuseAppDir, "Open Design"),
+        `#!/bin/bash\nprintf '%s\\n' "$@" > "$OD_TEST_FALLBACK_ARGS_PATH"\n`,
+        "utf8",
+      );
+      await chmod(join(harness.fuseAppDir, "Open Design"), 0o755);
+
+      const result = await harness.run({
+        args: ["--flag"],
+        env: { OD_APPIMAGE_EXTRACTED_RUN: "1", OD_LINUX_SANDBOX: "on" },
+      });
+      expect(result).toMatchObject({ code: 0, signal: null });
+      expect(await readFile(harness.fallbackArgsPath, "utf8")).toBe("--flag\n");
+      await expect(access(harness.extractMarkerPath)).rejects.toThrow();
+    } finally {
+      await rm(harness.root, { force: true, recursive: true });
+    }
+  });
+
+  linuxOnlyIt("renders a bash script that parses cleanly", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-linux-apprun-syntax-"));
+    const scriptPath = join(root, "AppRun");
+
+    try {
+      await writeFile(scriptPath, renderLinuxAppImageAppRun(), "utf8");
+      const child = spawn("bash", ["-n", scriptPath], { stdio: "ignore" });
+      const exit = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
+        child.once("error", reject);
+        child.once("exit", (code, signal) => resolve({ code, signal }));
+      });
+
+      expect(exit).toEqual({ code: 0, signal: null });
     } finally {
       await rm(root, { force: true, recursive: true });
     }
@@ -934,6 +1842,30 @@ describe("matchesAppImageProcess", () => {
       installPath,
     );
     expect(ok).toBe(true);
+  });
+
+  it("matches AppRun cache mode (executable under open-design/appimage/<key>/<binary>)", () => {
+    const ok = matchesAppImageProcess(
+      {
+        pid: 1234,
+        executable: "/home/u/.cache/open-design/appimage/123456-7890/Open Design",
+        env: { APPIMAGE: installPath },
+      },
+      installPath,
+    );
+    expect(ok).toBe(true);
+  });
+
+  it("rejects cache mode with mismatched APPIMAGE env", () => {
+    const ok = matchesAppImageProcess(
+      {
+        pid: 1234,
+        executable: "/home/u/.cache/open-design/appimage/123456-7890/Open Design",
+        env: { APPIMAGE: "/elsewhere/Other.AppImage" },
+      },
+      installPath,
+    );
+    expect(ok).toBe(false);
   });
 
   it("rejects extract-and-run mode with mismatched APPIMAGE env", () => {
