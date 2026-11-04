@@ -6672,10 +6672,12 @@ export function ProjectView({
         // without creating a conversation or granting artifact-write
         // permission to the commenter.
         try {
+          // Only a shared project waits out the materialization retries; a
+          // personal 404 is settled and should fail fast.
           const list = await listConversationsWithRetry(
             project.id,
             projectRunWorkspaceContext,
-            true,
+            sharedProjectScope,
           );
           commentConversationId = list[0]?.id ?? null;
         } catch {
@@ -6755,6 +6757,7 @@ export function ProjectView({
       projectRunWorkspaceContext,
       t,
       projectCollab.materializationPending,
+      sharedProjectScope,
     ],
   );
 

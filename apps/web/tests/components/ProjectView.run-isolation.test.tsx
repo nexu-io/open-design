@@ -1886,6 +1886,27 @@ describe('ProjectView conversation run isolation', () => {
     );
   });
 
+  it('fails a route-less personal preview comment on the first conversation 404 (#9305)', async () => {
+    // A personal 404 means the project is gone: it must not wait out the
+    // shared-project materialization retries before the failure toast.
+    listConversations
+      .mockReturnValueOnce(new Promise<Conversation[]>(() => {}))
+      .mockRejectedValue(new ProjectConversationsHttpError(404));
+    upsertPreviewComment.mockResolvedValue(previewComment);
+
+    renderProjectView();
+
+    await waitFor(() => expect(listConversations).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByTestId('workspace-save-preview-comment'));
+
+    await waitFor(() => expect(listConversations).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+    });
+    expect(listConversations).toHaveBeenCalledTimes(2);
+    expect(upsertPreviewComment).not.toHaveBeenCalled();
+  });
+
   it('does not create a conversation for a read-only member of a shared project', async () => {
     const teamContext = teamWorkspaceContext('workspace-team', 'member-team');
     workspaceScopeMocks.ambientContext = teamContext;
