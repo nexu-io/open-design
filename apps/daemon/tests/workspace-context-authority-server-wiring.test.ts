@@ -106,7 +106,7 @@ describe('server workspace context authority wiring', () => {
         error: { code: 'WORKSPACE_AUTHORITY_UNAVAILABLE' },
       });
     } finally {
-      h.directory.beforeResponse = undefined;
+      delete h.directory.beforeResponse;
       releaseDirectory();
     }
 
