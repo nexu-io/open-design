@@ -151,10 +151,21 @@ test("[P1] C09 first subscription reminder remains readable, opens Subscribe and
 	await expect(notice).toHaveAttribute("data-state", "registered");
 	await expect(notice).toContainText("48 小时内首次订阅即可领取");
 	await capture(page, "client-C09-desktop");
+	const subscribeTarget = "/dashboard?source=open_design&billing=plan";
+	const subscribeUrl = `http://localhost:5173${subscribeTarget}&intentId=test-intent`;
+	let requestedTarget = "";
+	await page.route("**/api/amr/web-intent", async (route) => {
+		requestedTarget = route.request().postDataJSON().target;
+		await route.fulfill({ json: { url: subscribeUrl } });
+	});
 	let opened = "";
-	await page.route("**/api/system/open-external", async route => { opened = route.request().postDataJSON().url; await route.fulfill({ json: { ok: true } }); });
+	await page.route("**/api/system/open-external", async (route) => {
+		opened = route.request().postDataJSON().url;
+		await route.fulfill({ json: { ok: true } });
+	});
 	await notice.getByRole("button", { name: "去订阅" }).click();
-	await expect.poll(() => opened).toBe("http://localhost:5173/dashboard?source=open_design&billing=plan");
+	await expect.poll(() => opened).toBe(subscribeUrl);
+	expect(requestedTarget).toBe(subscribeTarget);
 	const noticeBox = await notice.boundingBox();
 	const titleBox = await page.locator(".home-hero__title").boundingBox();
 	expect(noticeBox!.y + noticeBox!.height).toBeLessThan(titleBox!.y);
@@ -174,7 +185,8 @@ test("[P1] C09 first subscription reminder remains readable, opens Subscribe and
 	await notice.getByRole("button", { name: "关闭重置卡提示" }).click();
 	await expect(notice).toBeHidden();
 	await page.reload();
-	await expect(notice).toBeVisible();
+	await expect(notice).toHaveAttribute("data-state", "registered");
+	await expect(notice).toBeHidden();
 });
 test("[P1] quota invitation uses the active environment independent page and preserves attribution", async ({
 	page,
