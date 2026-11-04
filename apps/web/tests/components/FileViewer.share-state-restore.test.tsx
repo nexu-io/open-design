@@ -37,6 +37,7 @@ function tree(next = props, workspace = context) {
 function route(read: () => Response | Promise<Response>) {
   const request = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
+    if (url.includes('localOnly')) return Response.json({ freshness: 'current' });
     if (url.includes('/publish-public')) {
       if (init?.method === 'POST' || init?.method === 'DELETE') throw new Error('Restoring share state must not mutate it');
       return read();
@@ -74,6 +75,8 @@ it('opening Share joins the entry binding check instead of superseding a success
   await open();
   try {
     expect(reads).toBe(1);
+    expect(screen.queryByRole('menuitem', { name: /generate and copy link/i })).toBeNull();
+    expect(mutations(request)).toHaveLength(0);
   } finally {
     await act(async () => held.resolve(Response.json({ publication, status: 'active', freshness: 'current' })));
   }
@@ -150,14 +153,12 @@ it.each([false, true])('publishes only B after switching from shared A (B reject
   const writes: string[] = [];
   let bPublished = false;
   const bBinding = deferred<Response>();
-  const bPlan = deferred<Response>();
   const copy = vi.fn().mockResolvedValue(undefined);
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: copy } });
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const isB = url.includes('/files/other.html/');
-    if (url.includes('/share-plan')) return isB ? (await bPlan.promise).clone()
-      : Response.json({ fileCount: 1, totalBytes: 123, exceedsSizeLimit: false, exclusions: [] });
+    if (url.includes('localOnly')) return Response.json({ freshness: 'current' });
     if (url.includes('/publish-public')) {
       if (init?.method === 'POST') {
         writes.push(url);
@@ -180,14 +181,11 @@ it.each([false, true])('publishes only B after switching from shared A (B reject
   const view = await open();
   expect(await screen.findByText(publication.url)).toBeVisible();
   view.rerender(tree(b));
-  expect(await screen.findByRole('menuitem', { name: /generate and copy link/i })).toBeVisible();
+  expect(screen.queryByRole('menuitem', { name: /generate and copy link/i })).toBeNull();
   expect(screen.queryByText(publication.url)).toBeNull();
-  // A restored binding changes the preflight identity. Finish B's restoration
-  // before its plan and click; an earlier queued intent belongs to the old plan.
+  // A's link must disappear immediately, while B's unknown state cannot publish.
   await act(async () => bBinding.resolve(Response.json({ publication: null, status: 'none', freshness: 'current' })));
-  await act(async () => bPlan.resolve(Response.json({ fileCount: 1, totalBytes: 123, exceedsSizeLimit: false, exclusions: [] })));
-  await waitFor(() => expect(screen.queryByText('Checking sharing…')).toBeNull());
-  const generate = screen.getByRole('menuitem', { name: /generate and copy link/i });
+  const generate = await screen.findByRole('menuitem', { name: /generate and copy link/i });
   expect(generate).toBeEnabled();
   await act(async () => fireEvent.click(generate));
   await waitFor(() => expect(writes).toEqual(['/api/projects/proj/files/other.html/publish-public']));
@@ -196,4 +194,18 @@ it.each([false, true])('publishes only B after switching from shared A (B reject
   view.rerender(tree());
   expect(await screen.findByText(publication.url)).toBeVisible();
   expect(writes).toHaveLength(1);
+});
+
+it('OPEND-4105 failed state lookup offers a read-only retry and never infers an unpublished file', async () => {
+  let failed = true;
+  const request = route(() => failed ? Response.json({ error: 'SHARE_STATE_UNAVAILABLE' }, { status: 503 })
+    : Response.json({ publication, status: 'active', freshness: 'current' }));
+  await open();
+  expect(await screen.findByRole('alert')).toHaveTextContent('Could not complete the sharing check');
+  expect(screen.queryByRole('menuitem', { name: /generate and copy link/i })).toBeNull();
+  failed = false;
+  fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+  expect(await screen.findByText(publication.url)).toBeVisible();
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(mutations(request)).toHaveLength(0);
 });

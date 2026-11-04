@@ -6,6 +6,11 @@ import type { OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
 import { installMockOpenDesignHost } from '@open-design/host/testing';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { en } from '../../src/i18n/locales/en';
+import { settingsSectionToTracking } from '@open-design/contracts/analytics';
+import type { LabsExperiment } from '../../src/components/labs-experiments';
+
+const { labsExperiments } = vi.hoisted(() => ({ labsExperiments: [] as LabsExperiment[] }));
+vi.mock('../../src/components/labs-experiments', () => ({ LABS_EXPERIMENTS: labsExperiments }));
 
 function optionNames(container: HTMLElement): string[] {
   return within(container).getAllByRole('option').map((option) => {
@@ -374,13 +379,13 @@ function renderSettingsDialog(
   const onClose = vi.fn();
   const onRefreshAgents = options.onRefreshAgents ?? vi.fn<OnRefreshAgents>();
 
-  const dialog = (
+  const makeDialog = (section = options.initialSection ?? 'execution') => (
     <SettingsDialog
       initial={{ ...baseConfig, ...initial }}
       agents={options.agents ?? availableAgents}
       daemonLive={options.daemonLive ?? true}
       appVersionInfo={options.appVersionInfo ?? null}
-      initialSection={options.initialSection ?? 'execution'}
+      initialSection={section}
       providerModelsCache={options.providerModelsCache}
       welcome={options.welcome}
       onPersist={onPersist}
@@ -391,11 +396,10 @@ function renderSettingsDialog(
       onRefreshAgents={onRefreshAgents}
     />
   );
-  const view = render(
-    options.locale
-      ? <I18nProvider initial={options.locale}>{dialog}</I18nProvider>
-      : dialog,
-  );
+  const wrapDialog = (section?: SettingsSection) => options.locale
+    ? <I18nProvider initial={options.locale}>{makeDialog(section)}</I18nProvider>
+    : makeDialog(section);
+  const view = render(wrapDialog());
 
   return {
     onPersist,
@@ -404,6 +408,7 @@ function renderSettingsDialog(
     onClose,
     onRefreshAgents,
     ...view,
+    rerenderSection: (section?: SettingsSection) => view.rerender(wrapDialog(section)),
   };
 }
 
@@ -492,6 +497,7 @@ function deferred<T>() {
 }
 
 beforeEach(() => {
+  labsExperiments.length = 0;
   playSoundMock.mockReset();
   requestNotificationPermissionMock.mockReset();
   showCompletionNotificationMock.mockReset();
@@ -1362,11 +1368,83 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(errorStatus?.parentElement).toHaveClass('settings-autosave-layer');
   });
 
-  it('keeps the Labs navigation without exposing the retired strategy switch', () => {
+  it('hides the Labs navigation when no experiments are available', () => {
     renderSettingsDialog();
-    fireEvent.click(screen.getByRole('button', { name: /Labs/i }));
+    expect(screen.queryByRole('button', { name: /Labs/i })).toBeNull();
     expect(screen.queryByTestId('labs-harness-switch')).toBeNull();
-    expect(screen.getByRole('button', { name: /Labs/i })).toBeTruthy();
+  });
+
+  describe('Labs availability', () => {
+    function registerExperiment() {
+      labsExperiments.push({
+        id: 'test-experiment',
+        Component: () => <input type="checkbox" role="switch" aria-label="Test experiment" />,
+      });
+    }
+
+    function expectGeneral() {
+      expect(screen.getByRole('button', { name: /General/i })).toHaveClass('active');
+      expect(screen.queryByRole('switch', { name: 'Test experiment' })).toBeNull();
+    }
+
+    it('resolves an empty Labs deep link to General, including its analytics', () => {
+      renderSettingsDialog({}, { initialSection: 'labs' });
+      expectGeneral();
+      const views = analyticsTrackMock.mock.calls.filter(([event]) => event === 'settings_view');
+      expect(views.length).toBeGreaterThan(0);
+      expect(views.every(([, props]) => props.area === settingsSectionToTracking('general'))).toBe(true);
+    });
+
+    it('shows registered experiments even when their switches are all off', () => {
+      registerExperiment();
+      renderSettingsDialog();
+      fireEvent.click(screen.getByRole('button', { name: /Labs/i }));
+      expect(screen.getByRole('button', { name: /Labs/i })).toHaveClass('active');
+      expect(screen.getByRole('switch', { name: 'Test experiment' })).not.toBeChecked();
+    });
+
+    it('leaves an emptied Labs page and stays in General when experiments return', () => {
+      registerExperiment();
+      const view = renderSettingsDialog({}, { initialSection: 'labs' });
+      expect(screen.getByRole('switch', { name: 'Test experiment' })).toBeTruthy();
+      labsExperiments.length = 0;
+      view.rerenderSection();
+      expectGeneral();
+      expect(screen.queryByRole('button', { name: /Labs/i })).toBeNull();
+      registerExperiment();
+      view.rerenderSection();
+      expectGeneral();
+      expect(screen.getByRole('button', { name: /Labs/i })).not.toHaveClass('active');
+    });
+
+    it('discards a later empty Labs request before experiments return', () => {
+      const view = renderSettingsDialog();
+      view.rerenderSection('labs');
+      expectGeneral();
+      registerExperiment();
+      view.rerenderSection('labs');
+      expectGeneral();
+    });
+
+    it('honors a simultaneous deep link when the Labs page becomes empty', () => {
+      registerExperiment();
+      const view = renderSettingsDialog({}, { initialSection: 'labs' });
+      labsExperiments.length = 0;
+      view.rerenderSection('privacy');
+      expect(within(view.container.querySelector('.settings-sidebar') as HTMLElement).getByRole('button', { name: /^Privacy/i })).toHaveClass('active');
+    });
+
+    it('does not reset another selected section when availability changes', () => {
+      registerExperiment();
+      const view = renderSettingsDialog();
+      fireEvent.click(within(view.container.querySelector('.settings-sidebar') as HTMLElement).getByRole('button', { name: /^Privacy/i }));
+      labsExperiments.length = 0;
+      view.rerenderSection();
+      expect(within(view.container.querySelector('.settings-sidebar') as HTMLElement).getByRole('button', { name: /^Privacy/i })).toHaveClass('active');
+      registerExperiment();
+      view.rerenderSection();
+      expect(within(view.container.querySelector('.settings-sidebar') as HTMLElement).getByRole('button', { name: /^Privacy/i })).toHaveClass('active');
+    });
   });
 
   it('closes BYOK via the close button or backdrop', () => {

@@ -18,6 +18,11 @@ import type {
 } from '@open-design/contracts/analytics';
 import type { AmrSessionState } from '@open-design/contracts';
 
+import {
+  applyAmrEndpointBinding,
+  amrStoredProfileMatchesBinding,
+  readAmrEndpointBinding,
+} from './amr-endpoint-binding.js';
 import { resolveAgentLaunch } from '../runtimes/launch.js';
 import { spawnEnvForAgent } from '../runtimes/env.js';
 import { getAgentDef } from '../runtimes/registry.js';
@@ -253,7 +258,10 @@ export interface VelaUser {
   balanceUsd?: string | null;
 }
 
+export interface VelaRegistrationInvite { accountId: string; deviceAuthorizationId: string; }
+
 export interface VelaLoginStatus {
+  registrationInvite?: VelaRegistrationInvite;
   loggedIn: boolean;
   sessionState?: AmrSessionState;
   credentialRevision?: string;
@@ -394,7 +402,14 @@ export interface VelaApiContext {
   apiUrl: string;
 }
 
+export interface VelaRuntimeLinkContext {
+  profile: string;
+  linkUrl: string;
+  runtimeKey: string;
+}
+
 interface VelaProfileShape {
+  registrationInvite?: unknown;
   controlKey?: string;
   runtimeKey?: string;
   apiUrl?: string;
@@ -416,32 +431,40 @@ export function mergeVelaEnv(
   env: NodeJS.ProcessEnv = process.env,
   configuredEnv: Record<string, string> = {},
 ): NodeJS.ProcessEnv {
-  return {
+  return applyAmrEndpointBinding({
     ...env,
     ...configuredEnv,
-  };
+  });
 }
 
-function configDir(): string {
-  const amrHome = process.env.AMR_HOME?.trim();
+function configDir(env: NodeJS.ProcessEnv = process.env): string {
+  const amrHome = (readAmrEndpointBinding(env) ? applyAmrEndpointBinding(env).AMR_HOME : env.AMR_HOME)?.trim();
   if (amrHome === '~') return homedir();
   if (amrHome?.startsWith('~/')) return path.join(homedir(), amrHome.slice(2));
   if (amrHome) return amrHome;
   return path.join(homedir(), '.amr');
 }
 
-export function amrConfigPath(): string {
-  return path.join(configDir(), 'config.json');
+export function amrConfigPath(env: NodeJS.ProcessEnv = process.env): string {
+  return path.join(configDir(env), 'config.json');
 }
 
-function readConfigFile(): VelaConfigFileShape | null {
-  const file = amrConfigPath();
+function readConfigFile(env: NodeJS.ProcessEnv = process.env, includeMismatched = false): VelaConfigFileShape | null {
+  const file = amrConfigPath(env);
   if (!existsSync(file)) return null;
   try {
     const data = readFileSync(file, 'utf8');
     const parsed = JSON.parse(data) as unknown;
     if (!parsed || typeof parsed !== 'object') return null;
-    return parsed as VelaConfigFileShape;
+    const config = parsed as VelaConfigFileShape;
+    const binding = readAmrEndpointBinding(env);
+    if (binding && !includeMismatched
+      && !amrStoredProfileMatchesBinding(config.profiles?.[binding.profile], env)) {
+      const profiles = { ...config.profiles };
+      delete profiles[binding.profile];
+      return { ...config, profiles };
+    }
+    return config;
   } catch {
     return null;
   }
@@ -453,11 +476,12 @@ function readVelaProfileConfigSnapshot(
 ): VelaProfileConfigSnapshot {
   const mergedEnv = mergeVelaEnv(env, configuredEnv);
   const profile = resolveAmrProfile(mergedEnv);
-  const file = readConfigFile();
+  const file = readConfigFile(mergedEnv);
+  const configPath = amrConfigPath(mergedEnv);
   return {
     profile,
     stored: file?.profiles?.[profile],
-    configMtimeMs: existsSync(amrConfigPath()) ? statSync(amrConfigPath()).mtimeMs : null,
+    configMtimeMs: existsSync(configPath) ? statSync(configPath).mtimeMs : null,
   };
 }
 
@@ -475,8 +499,10 @@ export function readVelaLoginStatus(
   } else if (expiredVelaCredentialRevisions.has(credentialRevision)) {
     sessionState = 'reauth_required';
   }
+  const { registrationInvite, ...sessionStatus } = rawStatus;
   return {
-    ...rawStatus,
+    ...sessionStatus,
+    ...(sessionState === 'authenticated' && registrationInvite ? { registrationInvite } : {}),
     // `loggedIn` remains the backwards-compatible "credential is present"
     // projection. Routing must not treat an expired credential like a brand
     // new user and throw them back into first-run onboarding; new callers use
@@ -487,13 +513,48 @@ export function readVelaLoginStatus(
   };
 }
 
+function readRegistrationInvite(raw: unknown, accountId: string | undefined): VelaRegistrationInvite | undefined {
+  if (!accountId || !raw || typeof raw !== 'object') return undefined;
+  const claim = raw as Record<string, unknown>;
+  if (claim.accountId !== accountId || typeof claim.deviceAuthorizationId !== 'string'
+    || !claim.deviceAuthorizationId.trim() || claim.deviceAuthorizationId.length > 256) return undefined;
+  return { accountId, deviceAuthorizationId: claim.deviceAuthorizationId };
+}
+
+/** A CLI-issued receipt belongs to the stored account/control API source.
+ * Runtime/env authorization remains unchanged; only onboarding eligibility is
+ * withheld when those request credentials no longer describe that source. */
+function registrationInviteUsesStoredControlSource(
+  stored: VelaProfileShape | undefined,
+  env: NodeJS.ProcessEnv,
+): boolean {
+  const controlOverride = env.VELA_CONTROL_KEY?.trim() ?? '';
+  if (controlOverride && controlOverride !== stored?.controlKey?.trim()) return false;
+  const defaultApi = 'https://amr-api.open-design.ai';
+  const storedApi = stored?.apiUrl?.trim() || defaultApi;
+  // Match readRawVelaControlApiContext: an env control key selects env/default
+  // API directly; otherwise readVelaApiContext applies the explicit API override.
+  const effectiveApi = controlOverride
+    ? env.VELA_API_URL?.trim() || defaultApi
+    : env.VELA_API_URL?.trim() || stored?.apiUrl?.trim() || defaultApi;
+  const normalize = (value: string): string | null => {
+    try {
+      const url = new URL(value);
+      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) return null;
+      return `${url.origin}${url.pathname.replace(/\/+$/, '')}`;
+    } catch { return null; }
+  };
+  const source = normalize(storedApi);
+  return source !== null && source === normalize(effectiveApi);
+}
+
 function readRawVelaLoginStatus(
   env: NodeJS.ProcessEnv = process.env,
   configuredEnv: Record<string, string> = {},
 ): Omit<VelaLoginStatus, 'sessionState' | 'credentialRevision'> {
   const mergedEnv = mergeVelaEnv(env, configuredEnv);
   const profile = resolveAmrProfile(mergedEnv);
-  const configPath = amrConfigPath();
+  const configPath = amrConfigPath(mergedEnv);
   const loginInFlight = isVelaLoginInFlight();
   // Only meaningful while signing in (loggedIn becomes true once vela writes the
   // runtime key); empty otherwise so completed sessions don't echo a stale URL.
@@ -523,7 +584,7 @@ function readRawVelaLoginStatus(
       ...readVelaLoginAttemptSnapshot(),
     };
   }
-  const file = readConfigFile();
+  const file = readConfigFile(mergedEnv);
   const stored = file?.profiles?.[profile];
   const storedRuntimeKey = stored?.runtimeKey?.trim() ?? '';
   if (!storedRuntimeKey) {
@@ -547,11 +608,14 @@ function readRawVelaLoginStatus(
         ...(typeof rawUser.plan === 'string' ? { plan: rawUser.plan } : {}),
       }
     : null;
+  const registrationInvite = registrationInviteUsesStoredControlSource(stored, mergedEnv)
+    ? readRegistrationInvite(stored?.registrationInvite, user?.id) : undefined;
   return {
     loggedIn: true,
     loginInFlight,
     profile,
     user,
+    ...(registrationInvite ? { registrationInvite } : {}),
     configPath,
     ...readVelaLoginAttemptSnapshot(),
   };
@@ -676,7 +740,7 @@ function readRawVelaCredentialRevision(
   // accounts whose only difference is the configured runtime credential.
   const fileProfile = hasEnvCredentials
     ? undefined
-    : readConfigFile()?.profiles?.[status.profile];
+    : readConfigFile(mergedEnv)?.profiles?.[status.profile];
   const credentialFingerprint = createHash('sha256')
     .update(
       hasEnvCredentials
@@ -752,6 +816,38 @@ export function readVelaControlApiContext(
   return context;
 }
 
+/** Resolve the CLI runtime identity without borrowing another profile's key. */
+export function readVelaRuntimeLinkContext(
+  env: NodeJS.ProcessEnv = process.env,
+  configuredEnv: Record<string, string> = {},
+): VelaRuntimeLinkContext | null {
+  const revision = readVelaCredentialRevision(env, configuredEnv);
+  if (expiredVelaCredentialRevisions.has(velaCredentialRevisionDigest(revision))) return null;
+  const mergedEnv = mergeVelaEnv(env, configuredEnv);
+  const profile = resolveAmrProfile(mergedEnv);
+  const envRuntimeKey = mergedEnv.VELA_RUNTIME_KEY?.trim();
+  const envLinkUrl = mergedEnv.VELA_LINK_URL?.trim();
+  const snapshot = envRuntimeKey && envLinkUrl ? null : readVelaProfileConfigSnapshot(env, configuredEnv);
+  const runtimeKey = envRuntimeKey || snapshot?.stored?.runtimeKey?.trim();
+  if (!runtimeKey) return null;
+  // These are the CLI's built-in Link profiles, used only when neither the
+  // explicit environment nor the selected saved profile provides an endpoint.
+  const defaultLinkUrls = {
+    prod: 'https://amr-link.open-design.ai',
+    test: 'https://vela-link.powerformer.net',
+    'feature-test': 'https://amr-feature-link.powerformer.net',
+    local: 'http://localhost:18081',
+  };
+  const linkUrl = envLinkUrl || snapshot?.stored?.linkUrl?.trim() || defaultLinkUrls[profile];
+  try {
+    const url = new URL(linkUrl);
+    if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password) return null;
+  } catch {
+    return null;
+  }
+  return { profile, linkUrl, runtimeKey };
+}
+
 function readRawVelaControlApiContext(
   env: NodeJS.ProcessEnv = process.env,
   configuredEnv: Record<string, string> = {},
@@ -790,18 +886,19 @@ export function readVelaApiContext(
 ): VelaApiContext {
   const mergedEnv = mergeVelaEnv(env, configuredEnv);
   return {
-    profile: snapshot.profile,
+    profile: readAmrEndpointBinding(mergedEnv)?.profile ?? snapshot.profile,
     apiUrl:
-      snapshot.stored?.apiUrl?.trim()
+      readAmrEndpointBinding(mergedEnv)?.apiUrl
       || mergedEnv.VELA_API_URL?.trim()
+      || snapshot.stored?.apiUrl?.trim()
       || 'https://amr-api.open-design.ai',
   };
 }
 
 export function forgetVelaLogin(env: NodeJS.ProcessEnv = process.env): void {
-  const file = amrConfigPath();
+  const file = amrConfigPath(env);
   if (!existsSync(file)) return;
-  const parsed = readConfigFile();
+  const parsed = readConfigFile(env, true);
   if (!parsed?.profiles) return;
   const profile = resolveAmrProfile(env);
   if (!Object.prototype.hasOwnProperty.call(parsed.profiles, profile)) return;
@@ -1298,7 +1395,7 @@ async function spawnVelaLoginAttempt(
     throw new Error('vela binary not found; install vela or configure VELA_BIN');
   }
   const env: NodeJS.ProcessEnv = {
-    ...spawnEnvForAgent('amr', baseEnv, configuredEnv),
+    ...spawnEnvForAgent('amr', baseEnv, configuredEnv, undefined, { allowAmrCredentialMismatch: true }),
     ...velaLoginAttributionEnv(deps.attribution),
     ...(deps.correlationEnv ?? {}),
     // The UUID is daemon-owned and written after configured/base env so a
@@ -1494,6 +1591,11 @@ export async function spawnVelaLoginWithFallback(
       ? { waitForActivation: deps.waitForActivation }
       : {}),
   };
+  // A lane's device login must persist its canonical API endpoint. The legacy
+  // loopback proxy would save its own URL in the CLI credential profile.
+  if (readAmrEndpointBinding(deps.baseEnv)) {
+    return spawnVelaLoginAttempt({ ...sharedSpawnDeps, attempt });
+  }
   const spawnProxy = async (): Promise<SpawnedVelaLogin> => {
     const current = currentVelaLoginAttempt(attempt);
     if (!current) throw new Error('vela login attempt is no longer active');

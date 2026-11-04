@@ -62,6 +62,7 @@ afterEach(() => {
 function mount(opts: {
   anchor: { top: number; height: number; left?: number; width?: number };
   clip: { top: number; bottom: number; left?: number; right?: number };
+  stablePlacement?: boolean;
   naturalHeight: number;
   naturalWidth?: number;
 }) {
@@ -101,7 +102,7 @@ function mount(opts: {
   };
 
   render(
-    <AnchoredMenuShell anchorId={ANCHOR_ID} wrapperClassName={WRAP_CLS} className={MENU_CLS} testId="m">
+    <AnchoredMenuShell stablePlacement={opts.stablePlacement} anchorId={ANCHOR_ID} wrapperClassName={WRAP_CLS} className={MENU_CLS} testId="m">
       <button type="button">row</button>
     </AnchoredMenuShell>,
   );
@@ -266,4 +267,43 @@ describe('横轴:限宽判据也必须取自然宽度', () => {
     expect(new Set(seen).size, `限宽在撤销和加回之间来回:${JSON.stringify(seen)}`).toBe(1);
     expect(seen[seen.length - 1], '根本没限宽').not.toBe('none');
   });
+});
+
+
+it('keeps the share panel on its chosen side while stop/resume content changes height', () => {
+  const geometry = {
+    anchor: { top: 489, height: 19 },
+    clip: { top: 289, bottom: 707 },
+    naturalHeight: 250,
+    stablePlacement: true,
+  };
+  const menu = mount(geometry);
+  sample(menu);
+  expect(menu.dataset.placement).toBe('above');
+  for (const height of [140, 250, 170, 280, 140]) {
+    geometry.naturalHeight = height;
+    sample(menu);
+    expect(menu.dataset.placement).toBe('above');
+  }
+  // Geometry changes must still be able to move the panel to the roomier side.
+  geometry.anchor.top = 310;
+  sample(menu);
+  expect(menu.dataset.placement).toBe('below');
+});
+
+it('limits growing share content instead of flipping a panel already opened below', () => {
+  const geometry = {
+    anchor: { top: 489, height: 19 },
+    clip: { top: 289, bottom: 707 },
+    naturalHeight: 140,
+    stablePlacement: true,
+  };
+  const menu = mount(geometry);
+  sample(menu);
+  expect(menu.dataset.placement).toBe('below');
+  geometry.naturalHeight = 300;
+  sample(menu);
+  expect(menu.dataset.placement).toBe('below');
+  expect(Number.parseFloat(menu.style.maxHeight)).toBe(185);
+  expect(menu.style.overflowY).toBe('auto');
 });

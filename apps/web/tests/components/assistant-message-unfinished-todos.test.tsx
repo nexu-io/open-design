@@ -76,7 +76,7 @@ describe('AssistantMessage unfinished todo state', () => {
     expect(screen.queryByText('Modern minimal')).toBeNull();
   });
 
-  it('shows the approved failure status instead of Done for empty API responses', () => {
+  it('no longer shows a turn-end status word for empty API responses (P0-24)', () => {
     render(
       <AssistantMessage
         projectKind="prototype"
@@ -94,10 +94,10 @@ describe('AssistantMessage unfinished todo state', () => {
       />,
     );
 
-    expect(screen.getByText('The task could not be completed')).toBeTruthy();
+    expect(screen.queryByText('The task could not be completed')).toBeNull();
     expect(screen.getByText(/provider ended the request/i)).toBeTruthy();
-    // 「Done」现在是执行记录壳头的状态词(D10:壳永远出现),但空回复的回合状态行使用产品批准的失败标题
-    expect(document.querySelector('[data-testid="assistant-label"]')?.textContent).toBe('The task could not be completed');
+    // P0-24 Q6:「任务未能完成」也随回合末尾状态行一起去掉,状态只在壳头说
+    expect(document.querySelector('[data-testid="assistant-label"]')).toBeNull();
     expect(screen.queryByText('empty_response')).toBeNull();
   });
 
@@ -148,7 +148,7 @@ describe('AssistantMessage unfinished todo state', () => {
     expect(screen.queryByText(/\$0\.0123/)).toBeNull();
   });
 
-  it('says on the turn-status row that this turn still owes work', () => {
+  it('no longer says at the turn end that this turn still owes work (P0-24)', () => {
     render(
       <AssistantMessage
         projectKind="prototype"
@@ -177,15 +177,9 @@ describe('AssistantMessage unfinished todo state', () => {
       />,
     );
 
-    /*
-     * 这一条原来断言三样东西都**不**出现,理由是「归那张常驻的 TodoCard 管」——
-     * 那张卡已经不在了(见 `chat-panel-feedback.md` 的 T7),于是「还欠着活」这件事
-     * 现在由**轮次状态行**自己说,〔继续未完成任务〕也挂在那一行上。
-     *
-     * 按钮要有回调才画得出来,所以这里只钉住那句话:出口本身在
-     * `tests/components/chat/todo-recall.test.tsx` 里验。
-     */
-    expect(screen.getByText('Task not finished yet')).toBeTruthy();
+    // P0-24 Q6:回合末尾的状态行已去掉,状态只在壳头说。
+    expect(screen.queryByText('Task not finished yet')).toBeNull();
+    expect(document.querySelector('[data-testid="assistant-label"]')).toBeNull();
   });
 
   /*
@@ -204,7 +198,8 @@ describe('AssistantMessage unfinished todo state', () => {
    *   ② 旧轮次不给**可点的出口** —— 〔继续剩余任务〕和「还剩几条」只属于最后一轮,
    *      翻历史时点它会把早已做完的旧账重新塞回去。
    */
-  it('lets an older Todo turn state its own outcome without duplicating or offering a stale exit', () => {
+  // P0-24 Q6:回合末尾不再有状态词,① 收紧为「一行都没有」。
+  it('an older Todo turn shows no turn-end status word and offers no stale exit (P0-24)', () => {
     render(
       <AssistantMessage
         projectKind="prototype"
@@ -224,14 +219,8 @@ describe('AssistantMessage unfinished todo state', () => {
       />,
     );
 
-    // ① 一行,只有一行
-    const labels = document.querySelectorAll('[data-testid="assistant-label"]');
-    expect(labels).toHaveLength(1);
-    expect(labels[0]?.textContent).toBe('Task not finished yet');
-    // 没跑完的那几档用 `<i class="dot">`,跑完才换成画绿勾的 `<svg class="dot">`。
-    // 旧轮次不许被这枚绿勾说成「已完成」。
-    // (壳头自己那句「Done」是另一回事 —— 它说的是进程跑完了,不是活干完了)
-    expect(labels[0]?.querySelector('svg.dot')).toBeNull();
+    // ① 页脚不再出状态词
+    expect(document.querySelectorAll('[data-testid="assistant-label"]')).toHaveLength(0);
 
     // ② 出口只属于最后一轮
     expect(screen.queryByText('1 task(s) remain')).toBeNull();

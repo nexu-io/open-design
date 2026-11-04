@@ -31,6 +31,7 @@ function formatPublishedDate(value: string, locale: Locale): string | null {
 }
 
 interface Props {
+  workspaceId?: string | null;
   /** No longer rendered: the footer that carried the desktop-notification
    *  settings link is gone (per product — the panel is the inbox and nothing
    *  else; the setting itself still lives in Settings → Notifications). Kept
@@ -64,6 +65,7 @@ interface Props {
 type SyncState = 'loading' | 'ready' | 'error';
 
 export function MessageCenter({
+  workspaceId,
   hideTrigger = false,
   returnFocusRef,
   open: controlledOpen,
@@ -372,6 +374,7 @@ export function MessageCenter({
         active={priorityAnnouncementActive}
         currentPlanId={priorityAnnouncementCurrentPlanId ?? 'unknown'}
         profile={priorityAnnouncementAmrProfile}
+        workspaceId={workspaceId}
         metricsConsent={priorityAnnouncementMetricsConsent}
         onDismiss={async () => {
           await markRead(priorityMessage.id, { requireAccount: true });

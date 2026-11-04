@@ -224,6 +224,37 @@ describe("HoverTouchpointOverlay interaction boundary", () => {
 			disconnect() {}
 		};
 	});
+	it("keeps internal blur destinations open while activeElement is temporarily BODY", async () => {
+		const { container } = render(createElement(HoverTouchpointOverlay, {
+			entry: content("opend.home.hover-entry"),
+			layer: content("opend.home.hover-layer"),
+			isAuthorized: () => true,
+		}));
+		const [entry, layer] = Array.from(container.querySelectorAll<HTMLElement>("opend-touchpoint"));
+		await waitFor(() => expect(entry).not.toHaveAttribute("hidden"));
+		const action = document.createElement("button");
+		layer!.appendChild(action);
+		// Replay the browser's focusout/microtask/focusin order without making
+		// jsdom synchronously finish the focus transfer before the microtask.
+		for (const [from, to] of [[entry!, action], [layer!, action], [layer!, entry!]]) {
+			fireEvent.focus(from!);
+			expect(document.activeElement).toBe(document.body);
+			await act(async () => {
+				fireEvent.blur(from!, { relatedTarget: to });
+				await Promise.resolve();
+			});
+			expect(entry).toHaveAttribute("aria-expanded", "true");
+			expect(layer!.parentElement).not.toHaveAttribute("hidden");
+		}
+		for (const relatedTarget of [document.body, null]) {
+			fireEvent.focus(entry!);
+			await act(async () => {
+				fireEvent.blur(layer!, { relatedTarget });
+				await Promise.resolve();
+			});
+			expect(layer!.parentElement).toHaveAttribute("hidden");
+		}
+	});
 	it("keeps default action sets stable and handles pointer focus before click without reopening after Escape", async () => {
 		const {container}=render(createElement(HoverTouchpointOverlay, {
 			entry:content("opend.home.hover-entry"),

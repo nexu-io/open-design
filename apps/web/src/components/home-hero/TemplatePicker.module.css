@@ -37,9 +37,9 @@
   color: var(--text);
 }
 
-.picker[data-type] { padding-inline: 12px; }
-.picker[data-type] :global(.home-hero__template-trigger) { cursor: default; gap: 8px; }
-.picker .switcher { gap: 7px; min-width: 0; }
+.picker[data-type] { padding-inline: 9.5px 12px; }
+.picker[data-type] :global(.home-hero__template-trigger) { gap: 8px; }
+.picker .switcher { gap: 4px; min-width: 0; }
 .picker .clear {
   position: relative;
   display: inline-flex;

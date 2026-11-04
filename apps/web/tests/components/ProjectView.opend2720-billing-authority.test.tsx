@@ -8,8 +8,8 @@
 //      → 弹出 `AmrOwnerTopUpDialog`「请联系团队所有者充值」,按钮只有 X 和
 //        「知道了」,**一个升级入口都没有**。他自己就是 owner。
 //   C  team-max-owner / 个人档 / max
-//      → 弹窗主 CTA 落 `billing=auto-recharge`(对),**卡上那颗「升级」落
-//        `billing=plan`**(错),两者跳去不同的地方。
+//      → 卡片入口曾错误落到 `billing=plan`。当前冻结 RUN-004 保留卡片的
+//        自动充值入口，同时隐藏 Max 弹窗里的购买快捷入口。
 //
 // 根因:daemon 两个端点对同一个工作区、同一个 member 给出互相矛盾的答案。
 // `GET /api/projects/:id/workspace-scope` 的上下文是
@@ -198,6 +198,9 @@ vi.mock('../../src/state/projects', async () => {
   );
   return {
     ...actual,
+    registerQueuedSubmission: vi.fn(async (projectId, submission) => ({
+      id: submission.id, projectId, conversationId: submission.conversationId, acceptedAt: submission.submittedAt,
+    })),
     createConversation: vi.fn(),
     listConversations: vi.fn(),
     listMessages: vi.fn(),
@@ -535,7 +538,7 @@ describe('OPEND-2720 项目页的付款入口读的是权威身份', () => {
   });
 
   // 矩阵 B 格。
-  it('团队 Max 所有者:出会员转化弹窗并跳自动充值,而不是「请联系团队所有者充值」', async () => {
+  it('团队 Max 所有者:按 RUN-004 隐藏弹窗购买快捷入口并保留独立卡片入口', async () => {
     workspaceScopeMocks.projectScope = {
       loading: false,
       scope: boundScope(TEAM_WORKSPACE, 'team', TEAM_SETTINGS_URL),
@@ -556,23 +559,18 @@ describe('OPEND-2720 项目页的付款入口读的是权威身份', () => {
     await waitFor(() => expect(screen.getByTestId('amr-balance-dialog')).toBeTruthy());
     expect(screen.queryByTestId('amr-balance-owner-dialog')).toBeNull();
 
-    // 弹窗的主 CTA 必须存在且落在自动充值 —— Max 所有者没有更高的套餐可买。
-    fireEvent.click(await screen.findByTestId('amr-balance-dialog-plans'));
-    expect(mockedWindowOpen).toHaveBeenCalledTimes(1);
-    const dialogUrl = openedUrl(0);
-    expect(dialogUrl).toContain('billing=auto-recharge');
-    expect(dialogUrl).toContain(`workspaceId=${TEAM_WORKSPACE}`);
-
-    // 卡上那颗必须落在同一处(见下面那条守卫的理由)。
+    // Current frozen RUN-004 supersedes the old same-destination rule:
+    // Max keeps its separate card/settings entry, without a dialog shortcut.
+    expect(screen.queryByTestId('amr-balance-dialog-plans')).toBeNull();
+    expect(mockedWindowOpen).not.toHaveBeenCalled();
     fireEvent.click(screen.getByTestId('upgrade-card-click'));
-    expect(mockedWindowOpen).toHaveBeenCalledTimes(2);
-    expect(billingDestination(openedUrl(1))).toBe(billingDestination(dialogUrl));
+    expect(mockedWindowOpen).toHaveBeenCalledTimes(1);
+    expect(openedUrl(0)).toContain('billing=auto-recharge');
+    expect(openedUrl(0)).toContain(`workspaceId=${TEAM_WORKSPACE}`);
   });
 
-  // 矩阵 C 格。源码自己把这称作缺陷:「卡和弹窗…两者跳去不同的地方是缺陷而不是
-  // 特性」(`runtime/amr-balance-branch.ts` 的 `amrBalanceDialogUpgradeIntent`)。
-  // 这条把那句话变成可执行的守卫。
-  it('个人 Max 所有者:卡上那颗和弹窗那颗落在同一处', async () => {
+  // 矩阵 C 格按当前 RUN-004 校验：Max 弹窗无购买快捷入口，卡片仍须带上正确空间。
+  it('个人 Max 所有者:卡片保持空间归属而弹窗无快捷购买入口', async () => {
     workspaceScopeMocks.projectScope = {
       loading: false,
       scope: boundScope(PERSONAL_WORKSPACE, 'personal', PERSONAL_SETTINGS_URL),
@@ -591,14 +589,12 @@ describe('OPEND-2720 项目页的付款入口读的是权威身份', () => {
     await waitFor(() => expect(screen.getByTestId('amr-balance-card-prop').textContent).toBe('0'));
     await waitFor(() => expect(screen.getByTestId('amr-balance-dialog')).toBeTruthy());
 
-    fireEvent.click(await screen.findByTestId('amr-balance-dialog-plans'));
-    const dialogUrl = openedUrl(0);
+    expect(screen.queryByTestId('amr-balance-dialog-plans')).toBeNull();
+    expect(mockedWindowOpen).not.toHaveBeenCalled();
     fireEvent.click(screen.getByTestId('upgrade-card-click'));
-    const cardUrl = openedUrl(1);
-
-    expect(billingDestination(cardUrl)).toBe(billingDestination(dialogUrl));
-    expect(cardUrl).toContain('billing=auto-recharge');
-    expect(cardUrl).toContain(`workspaceId=${PERSONAL_WORKSPACE}`);
+    expect(mockedWindowOpen).toHaveBeenCalledTimes(1);
+    expect(openedUrl(0)).toContain('billing=auto-recharge');
+    expect(openedUrl(0)).toContain(`workspaceId=${PERSONAL_WORKSPACE}`);
   });
 
   // 条件 1(调度方 2026-09-07):合出来的账单上下文里 `role` 可能是 owner。

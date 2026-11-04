@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { access, lstat, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve, sep } from "node:path";
 
+import { parseAmrEndpointBinding } from "@open-design/contracts";
+
 import {
   LAUNCHER_SCHEMA_VERSION,
   compareLauncherVersions,
@@ -304,6 +306,16 @@ async function resolvePayloadConfig(
   const packagedConfigPath = join(resourcesPath, "open-design-config.json");
   if (!(await pathExists(packagedConfigPath))) return null;
   const raw = await readJsonFile<RawPackagedConfig>(packagedConfigPath);
+  // An update must not replace the installed outer's environment identity.
+  const binding = parseAmrEndpointBinding(config.amrEndpointBinding);
+  const payloadBinding = parseAmrEndpointBinding(raw.amrEndpointBinding);
+  if (JSON.stringify(binding) !== JSON.stringify(payloadBinding)) {
+    if (binding) {
+      console.warn("[open-design launcher] skipping payload for a different AMR environment; using the bound installed application");
+      return null;
+    }
+    throw new Error("Launcher payload AMR endpoint binding differs from the installed application");
+  }
   const webOutputMode = raw.webOutputMode === "standalone" || raw.webOutputMode === "server"
     ? raw.webOutputMode
     : config.webOutputMode;

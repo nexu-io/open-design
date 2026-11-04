@@ -1,0 +1,213 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-motion-sky-water-tessellation",
+  "title": "Sky and Water",
+  "title_i18n": {
+    "en": "Sky and Water",
+    "id": "Langit dan Air",
+    "de": "Himmel und Wasser",
+    "zh-CN": "天空与水的版画循环",
+    "zh-TW": "天空與水",
+    "pt-BR": "Céu e Água",
+    "es-ES": "Cielo y agua",
+    "ru": "Небо и Вода",
+    "fa": "آسمان و آب",
+    "ar": "السماء والماء",
+    "ja": "空と水",
+    "ko": "하늘과 물",
+    "pl": "Niebo i woda",
+    "hu": "Ég és Víz",
+    "fr": "Ciel et eau",
+    "uk": "Небо і вода",
+    "tr": "Gökyüzü ve Su",
+    "th": "ท้องฟ้าและน้ำ",
+    "it": "Cielo e acqua"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-10-28T00:00:00Z",
+  "description": "An engraved flock and school of fish flow through a black-and-cream tessellation.",
+  "description_i18n": {
+    "en": "An engraved flock and school of fish flow through a black-and-cream tessellation.",
+    "id": "Kawanan ikan dan gerombolan ikan yang terukir mengalir melalui tesselasi hitam-krem.",
+    "de": "Eine gravierte Fischherde und ein Fischschwarm fließen durch ein schwarz-cremefarbenes Mosaik.",
+    "zh-CN": "鸟群与鱼群在黑白版画图案中连续运动，形成天空与水的正负形。",
+    "zh-TW": "雕刻的魚羣和魚羣在黑色和奶油色的鑲嵌圖案中游動。",
+    "pt-BR": "Um bando e um cardume de peixes gravados fluem através de um mosaico preto e creme.",
+    "es-ES": "Una bandada grabada y un banco de peces fluyen a través de un mosaico en negro y crema.",
+    "ru": "Выгравированная стая и косяк рыб струятся сквозь черно-кремовую мозаику.",
+    "fa": "گله حکاکی شده و دسته ای از ماهی ها از میان تسلیحات سیاه و کرمی جریان دارند.",
+    "ar": "يتدفق قطيع منقوش ومدرسة من الأسماك من خلال فسيفساء باللونين الأسود والكريمي.",
+    "ja": "彫刻された魚の群れと群れが、黒とクリーム色のモザイク模様の中を流れています。",
+    "ko": "새겨진 무리와 물고기 떼가 검은색과 크림색 테셀레이션을 통해 흐릅니다.",
+    "pl": "Grawerowane stado i ławica ryb przepływają przez czarno-kremową teselację.",
+    "hu": "Egy vésett halállomány és halraj áramlik át egy fekete-krémes tesszelláción.",
+    "fr": "Un troupeau gravé et un banc de poissons coulent à travers un pavage noir et crème.",
+    "uk": "Вигравірувана зграя та зграя риб протікають крізь чорно-кремову мозаїку.",
+    "tr": "Oyulmuş bir sürü ve balık sürüsü, siyah ve krem rengi bir mozaikten akıyor.",
+    "th": "ฝูงปลาแกะสลักและฝูงปลาไหลผ่านลวดลายสีดำครีม",
+    "it": "Uno stormo e un banco di pesci incisi scorrono attraverso una tassellazione nera e crema."
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io/open-design"
+  },
+  "homepage": "https://github.com/nexu-io/open-design",
+  "tags": [
+    "example",
+    "first-party",
+    "video",
+    "motion-design",
+    "motion",
+    "tessellation",
+    "engraving",
+    "nature"
+  ],
+  "od": {
+    "inputs": [
+      {
+        "name": "fishLine",
+        "type": "string",
+        "label": "Line carving fish",
+        "default": "assets/fish-line.png",
+        "label_i18n": {
+          "en": "Line carving fish",
+          "id": "Ikan ukiran garis",
+          "de": "Linie, die Fische schnitzt",
+          "zh-CN": "线刻鱼",
+          "zh-TW": "線雕魚",
+          "pt-BR": "Peixe esculpido em linha",
+          "es-ES": "Pescado tallado en línea",
+          "ru": "Вырезка рыбы леской",
+          "fa": "ماهی حکاکی خط",
+          "ar": "نحت الأسماك بالخط",
+          "ja": "ラインカービングフィッシュ",
+          "ko": "라인카빙 피쉬",
+          "pl": "Ryba rzeźbiąca linię",
+          "hu": "Vonal faragás hal",
+          "fr": "Poisson sculpté en ligne",
+          "uk": "Лінія різьблення риби",
+          "tr": "Çizgi oyma balık",
+          "th": "เส้นแกะสลักปลา",
+          "it": "Pesce che intaglia la lenza"
+        }
+      },
+      {
+        "name": "fishScale",
+        "type": "string",
+        "label": "scale fish",
+        "default": "assets/fish-scale.png",
+        "label_i18n": {
+          "en": "scale fish",
+          "id": "ikan skala",
+          "de": "Schuppenfisch",
+          "zh-CN": "鳞片鱼",
+          "zh-TW": "有鱗魚",
+          "pt-BR": "escama de peixe",
+          "es-ES": "pez escama",
+          "ru": "чешуйчатая рыба",
+          "fa": "فلس ماهی",
+          "ar": "الأسماك على نطاق واسع",
+          "ja": "鱗の魚",
+          "ko": "비늘 물고기",
+          "pl": "ryba łuska",
+          "hu": "pikkelyes hal",
+          "fr": "poisson écaille",
+          "uk": "луска риби",
+          "tr": "ölçekli balık",
+          "th": "ปลาเกล็ด",
+          "it": "pesce in scaglie"
+        }
+      },
+      {
+        "name": "fishFine",
+        "type": "string",
+        "label": "Thin-scaled fish",
+        "default": "assets/fish-fine.png",
+        "label_i18n": {
+          "en": "Thin-scaled fish",
+          "id": "Ikan bersisik tipis",
+          "de": "Dünnschuppiger Fisch",
+          "zh-CN": "细鳞鱼",
+          "zh-TW": "薄鱗魚",
+          "pt-BR": "Peixe de escamas finas",
+          "es-ES": "Pescado de escamas finas",
+          "ru": "Рыба с тонкой чешуей",
+          "fa": "ماهی فلس نازک",
+          "ar": "سمكة رقيقة الحجم",
+          "ja": "鱗の薄い魚",
+          "ko": "얇은 생선",
+          "pl": "Ryba o cienkiej łusce",
+          "hu": "Vékony pikkelyű hal",
+          "fr": "Poisson à écailles fines",
+          "uk": "Тонколуска риба",
+          "tr": "İnce ölçekli balık",
+          "th": "ปลาเกล็ดบาง",
+          "it": "Pesce a scaglie sottili"
+        }
+      }
+    ],
+    "useCase": {
+      "query": {
+        "en": "Create an engraved bird-and-fish loop using {{fishLine}}, {{fishScale}} and {{fishFine}} as the fish artwork.",
+        "id": "Buat ukiran lingkaran burung dan ikan menggunakan {{fishLine}}, {{fishScale}} dan {{fishFine}} sebagai karya seni ikan.",
+        "de": "Erstellen Sie eine gravierte Vogel-und-Fisch-Schleife mit {{fishLine}}, {{fishScale}} und {{fishFine}} als Fischmotiv.",
+        "zh-CN": "用 {{fishLine}}、{{fishScale}} 和 {{fishFine}} 作为鱼类图案，制作鸟鱼交错的版画循环动画。",
+        "zh-TW": "使用 {{fishLine}}、{{fishScale}} 和 {{fishFine}} 作爲魚藝術品，創建一個雕刻的鳥魚環。",
+        "pt-BR": "Crie um laço gravado de pássaros e peixes usando {{fishLine}}, {{fishScale}} e {{fishFine}} como arte de peixe.",
+        "es-ES": "Cree un bucle grabado de pájaros y peces utilizando {{fishLine}}, {{fishScale}} y {{fishFine}} como obra de arte del pez.",
+        "ru": "Создайте выгравированную петлю в виде птицы и рыбы, используя {{fishLine}}, {{fishScale}} и {{fishFine}} в качестве рисунка рыбы.",
+        "fa": "یک حلقه حکاکی شده پرنده و ماهی با استفاده از {{fishLine}}، {{fishScale}} و {{fishFine}} به عنوان اثر هنری ماهی ایجاد کنید.",
+        "ar": "أنشئ حلقة طائر وسمكة منقوشة باستخدام {{fishLine}} و{{fishScale}} و{{fishFine}} كعمل فني للأسماك.",
+        "ja": "魚のアートワークとして {{fishLine}}、{{fishScale}}、{{fishFine}} を使用して、彫刻された鳥と魚のループを作成します。",
+        "ko": "{{fishLine}}, {{fishScale}}, {{fishFine}}를 물고기 작품으로 사용하여 새겨진 새와 물고기 고리를 만듭니다.",
+        "pl": "Utwórz wygrawerowaną pętlę z ptakiem i rybą, używając {{fishLine}}, {{fishScale}} i {{fishFine}} jako grafiki rybnej.",
+        "hu": "Hozzon létre egy gravírozott madár-hal hurkot a {{fishLine}}, {{fishScale}} és {{fishFine}} számokkal halgrafikaként.",
+        "fr": "Créez une boucle gravée d'oiseaux et de poissons en utilisant {{fishLine}}, {{fishScale}} et {{fishFine}} comme illustration de poisson.",
+        "uk": "Створіть вигравірувану петлю з птахом і рибою, використовуючи {{fishLine}}, {{fishScale}} і {{fishFine}} як зображення риби.",
+        "tr": "Balık çizimi olarak {{fishLine}}, {{fishScale}} ve {{fishFine}}'ü kullanarak oyulmuş bir kuş ve balık döngüsü oluşturun.",
+        "th": "สร้างวงนกและปลาแกะสลักโดยใช้ {{fishLine}}, {{fishScale}} และ {{fishFine}} เป็นงานศิลปะเกี่ยวกับปลา",
+        "it": "Crea un anello inciso con uccelli e pesci utilizzando {{fishLine}}, {{fishScale}} e {{fishFine}} come disegno del pesce."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Sky and Water"
+        }
+      ]
+    },
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "poster": "./assets/cover.jpg"
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        },
+        {
+          "ref": "motion-design"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  },
+  "credits": [
+    {
+      "name": "@akella",
+      "url": "https://x.com/akella/status/2107764940954091531"
+    }
+  ]
+}

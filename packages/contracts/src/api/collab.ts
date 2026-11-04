@@ -400,6 +400,8 @@ export interface WorkspaceCollabContext {
   workspaceId: string;
   workspaceType: WorkspaceType;
   workspaceMemberId: string;
+  /** Active member count from the same authorized workspace snapshot; omitted when unknown. */
+  memberCount?: number;
   role: CollabMemberRole;
   memberStatus: WorkspaceMemberStatus;
   lifecycleState: WorkspaceLifecycleState;
@@ -453,6 +455,9 @@ export interface WorkspaceContextResponse {
 
 /** A workspace visible to the signed-in Vela identity. Mirrors B's directory item. */
 export interface WorkspaceDirectoryItem {
+  memberCount?: number;
+  /** Verified owner default supplied by the upstream account directory. */
+  isDefault?: boolean;
   workspaceId: string;
   workspaceName: string;
   workspaceIconKey?: string;
@@ -492,10 +497,9 @@ export interface WorkspaceActiveResponse {
   context: WorkspaceCollabContext;
 }
 
-// —— Derivation helpers — a verbatim mirror of B's vela
-// packages/shared/src/workspace-context.ts. Both the daemon's dev context stub
-// and the real B proxy derive permissions/seat summary through these, so C never
-// drifts from B's authorization rules. If B's helper changes, update here too.
+// —— Derivation helpers — local permission projection from verified B identity.
+// Invite entry is available to every active member; assigning admin remains
+// Owner-only and the upstream create endpoint retains final authorization.
 
 export function isWorkspaceLifecycleReadable(state: WorkspaceLifecycleState): boolean {
   return state !== 'deleted';
@@ -504,12 +508,10 @@ export function isWorkspaceLifecycleReadable(state: WorkspaceLifecycleState): bo
 /**
  * Whether a context can address the workspace resource hub.
  *
- * The hub keys every resource by a TEAM workspace: `teamId` is populated only
- * for `workspaceType === 'team'` (see the field's doc above), so a personal or
- * signed-out session has no id to push, snapshot, or redact under. Everything
- * built on the hub USED to be team-only by construction. That is still true of
- * team project SHARING, which needs teammates to share with — but no longer of
- * public single-file links: see {@link workspaceContextHasWorkspaceIdentity}.
+ * Use this narrower predicate for resource types that remain Team-only, such
+ * as team-owned plugins and design systems. Project sharing and public file
+ * links use {@link workspaceContextHasWorkspaceIdentity}: an active Personal
+ * workspace may have invited members and share projects with them.
  *
  * This is the ONE predicate both sides must agree on: the daemon refuses hub
  * writes when it is false, and the web UI must not render a hub-backed entry
@@ -536,10 +538,9 @@ export function workspaceContextHasTeamIdentity(
  * for a hub write is an id to publish under and a member id to own the result
  * with; the workspace TYPE is not part of it.
  *
- * Use this for surfaces that only need somewhere to put a resource — the public
- * single-file link is the one today. Use {@link workspaceContextHasTeamIdentity}
- * where the feature genuinely needs a TEAM, such as sharing a project with
- * teammates.
+ * Use this for project sharing and public single-file links. Use
+ * {@link workspaceContextHasTeamIdentity} for features still restricted to
+ * Team workspaces.
  *
  * Same rule as its sibling: the daemon refuses the write when this is false and
  * the web UI must not render the entry point when it is false. Deriving it twice
@@ -682,7 +683,7 @@ export function buildWorkspacePermissions(input: {
   return {
     canManageMembers: writable && (isOwner || isAdmin),
     canManageBilling: readable && isOwner,
-    canInviteMembers: writable && (isOwner || isAdmin),
+    canInviteMembers: writable,
     canManageAutoRecharge: writable && isOwner,
     canShareProjects: writable,
     canWriteSyncedFiles: writable,
@@ -702,13 +703,12 @@ export function buildWorkspacePermissions(input: {
  * without it can only produce a button that fails on arrival. That gate is
  * correct and this predicate keeps it exactly as strict.
  *
- * A PERSONAL workspace has no second member. The wallet is the signed-in
- * user's own, there is nobody to ask, and there is no one to protect the money
- * from. Asking a team-membership permission whether someone may pay for
- * themselves does not gate anything — it only deletes the person's own way to
- * pay. That is how an empty personal wallet ended up looking at a dialog that
- * said "upgrade to keep creating" under a single 「暂不需要」 button
- * (`run-error-catalog.md` §6.Y, reproduced on a real runtime 2026-09-07).
+ * A single-member Personal workspace may reach its own billing entrance even
+ * when a project-scope placeholder has no billing permission. An invited
+ * Member or Admin in a multi-member Personal workspace cannot spend the
+ * Owner's money: the authenticated directory's memberCount distinguishes
+ * that real member from the single-member placeholder. Older providers omit
+ * memberCount and retain the historical single-member fallback.
  *
  * This is the ONE predicate every billing entrance must agree on. The audience
  * split that decides WHICH dialog appears (`runtime/amr-balance-branch.ts`) and
@@ -723,10 +723,11 @@ export function buildWorkspacePermissions(input: {
  */
 export function canReachWorkspaceBillingEntrance(
   context: Pick<WorkspaceCollabContext, 'workspaceType'> & {
+    memberCount?: number;
     permissions?: Pick<WorkspacePermissions, 'canManageBilling'>;
   },
 ): boolean {
-  if (context.workspaceType !== 'team') return true;
+  if (context.workspaceType === 'personal' && (context.memberCount === undefined || context.memberCount <= 1)) return true;
   return context.permissions?.canManageBilling === true;
 }
 
@@ -760,7 +761,8 @@ export function canReachWorkspaceBillingEntrance(
  * owner" for the team owner themselves (§6.V / OPEND-2720, reproduced on a
  * real runtime 2026-09-07).
  *
- * So this adopts exactly one thing — the membership role — and only from an
+ * So this adopts billing-only directory facts — the membership role and
+ * member count — and only from an
  * authoritative context (`GET /api/workspace/context`) that names the very same
  * workspace AND the very same member. Permissions are re-derived through
  * {@link buildWorkspacePermissions} using the SCOPE's own lifecycle and member
@@ -793,20 +795,24 @@ export function workspaceBillingAuthorityContext(
 ): WorkspaceCollabContext | null {
   if (!scoped) return null;
   if (!authoritative) return scoped;
-  if (
-    !isSameWorkspacePrincipal(authoritative, scoped)
-    || authoritative.role === scoped.role
-  ) {
+  if (!isSameWorkspacePrincipal(authoritative, scoped)) {
     return scoped;
   }
+  const roleChanged = authoritative.role !== scoped.role;
+  const memberCountChanged = authoritative.memberCount !== undefined
+    && authoritative.memberCount !== scoped.memberCount;
+  if (!roleChanged && !memberCountChanged) return scoped;
   return {
     ...scoped,
-    role: authoritative.role,
-    permissions: buildWorkspacePermissions({
+    ...(authoritative.memberCount !== undefined ? { memberCount: authoritative.memberCount } : {}),
+    ...(roleChanged ? {
       role: authoritative.role,
-      lifecycleState: scoped.lifecycleState,
-      memberStatus: scoped.memberStatus,
-    }),
+      permissions: buildWorkspacePermissions({
+        role: authoritative.role,
+        lifecycleState: scoped.lifecycleState,
+        memberStatus: scoped.memberStatus,
+      }),
+    } : {}),
   };
 }
 
@@ -862,6 +868,14 @@ export interface WorkspaceBillingSnapshot {
     expiresAt: string | null;
     updatedAt: string | null;
   };
+  /** Original backend windows; absence means this producer has no window data. */
+  designPlanWindows?: Array<{
+    kind: '5h' | '7d';
+    windowStart: string | null;
+    resetsAt: string | null;
+    remainingCredits: string;
+    limitCredits: string;
+  }>;
   revisions: {
     billing: string;
     wallet: string;
@@ -1032,6 +1046,21 @@ export interface WorkspaceBillingResponse {
    * observed for the exact workspace/member in this response.
    */
   authoritativeWorkspaceRead?: WorkspaceBillingAuthoritativeRead;
+}
+
+/** Immediately expirable Link read; it does not reserve or authorize a request. */
+export type WorkspaceRequestConcurrencyHint = {
+  workspaceId: string;
+  workspaceMemberId: string;
+  observedAt: string;
+} & (
+  | { status: 'available' | 'full'; running: number; limit: number }
+  | { status: 'unknown'; running?: never; limit?: never }
+);
+
+export interface WorkspaceRequestConcurrencyResponse {
+  /** Absent/null includes old CLI or an unavailable read; never implies idle. */
+  requestConcurrencyHint?: WorkspaceRequestConcurrencyHint | null;
 }
 
 export interface WorkspaceBillingPreflight {

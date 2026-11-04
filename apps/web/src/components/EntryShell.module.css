@@ -11,3 +11,70 @@
 .projectListError p {
   margin: 0;
 }
+
+/* Member entry reference, user-confirmed 2026-10-20: its warm frame supersedes
+   the earlier white entry ground only on Home/project-list light surfaces.
+   Other entry views, project workbenches and dark themes keep their cascade. */
+:global(html[data-theme="light"]) .memberFrame {
+  background: #e5dfdc;
+}
+:global(html[data-theme="light"]) .memberFrame :global(.entry),
+:global(html[data-theme="light"]) .memberFrame :global(.entry-nav-rail),
+:global(html[data-theme="light"]) .memberFrame :global(.entry-nav-rail__panel) {
+  background: #e5dfdc;
+}
+:global(html[data-theme="light"]) .memberFrame :global(.entry-local-mode-tip) {
+  box-sizing: border-box;
+  min-height: 104px;
+}
+:global(html[data-theme="light"]) .memberFrame :global(.entry-main--scroll) {
+  --entry-content-surface: #fcfaf9;
+  background: #fcfaf9;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-radius: 16px;
+  margin: 0 12px 12px 0;
+  box-shadow: 0 1px 1px rgb(0 0 0 / 8%);
+}
+:global(html[data-theme="light"]) .memberFrame :global(.entry:not(.entry--rail-open) .entry-main--scroll) {
+  margin-left: 12px;
+}
+:global(html[data-theme="light"]) :global(.workspace-shell):has(.memberFrame) {
+  background: #e5dfdc;
+}
+:global(html[data-theme="light"]) :global(.workspace-shell):has(.memberFrame) :global(.workspace-tabs-chrome.app-chrome-header) {
+  background: #e5dfdc;
+}
+
+@media (prefers-color-scheme: light) {
+  :global(html:not([data-theme])) .memberFrame {
+    background: #e5dfdc;
+  }
+  :global(html:not([data-theme])) .memberFrame :global(.entry),
+  :global(html:not([data-theme])) .memberFrame :global(.entry-nav-rail),
+  :global(html:not([data-theme])) .memberFrame :global(.entry-nav-rail__panel) {
+    background: #e5dfdc;
+  }
+  :global(html:not([data-theme])) .memberFrame :global(.entry-local-mode-tip) {
+    box-sizing: border-box;
+    min-height: 104px;
+  }
+  :global(html:not([data-theme])) .memberFrame :global(.entry-main--scroll) {
+    --entry-content-surface: #fcfaf9;
+    background: #fcfaf9;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-radius: 16px;
+    margin: 0 12px 12px 0;
+    box-shadow: 0 1px 1px rgb(0 0 0 / 8%);
+  }
+  :global(html:not([data-theme])) .memberFrame :global(.entry:not(.entry--rail-open) .entry-main--scroll) {
+    margin-left: 12px;
+  }
+  :global(html:not([data-theme])) :global(.workspace-shell):has(.memberFrame) {
+    background: #e5dfdc;
+  }
+  :global(html:not([data-theme])) :global(.workspace-shell):has(.memberFrame) :global(.workspace-tabs-chrome.app-chrome-header) {
+    background: #e5dfdc;
+  }
+}

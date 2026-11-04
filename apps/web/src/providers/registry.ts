@@ -1,7 +1,7 @@
 import {
   PUBLIC_FILE_MANUAL_REVOKE_REQUIRED,
   SHARE_ENTRY_INDEX_CONFLICT,
-  workspaceContextHasTeamIdentity,
+  workspaceContextHasWorkspaceIdentity,
   type PublicFileManualRevokeRequiredData,
   type ProjectFilePublicShareResponse,
   type ShareUnpublishResponse,
@@ -703,7 +703,7 @@ async function materializeTeamDesignSystems(
   accountGeneration: number,
   options?: FetchDesignSystemsOptions,
 ): Promise<ReadonlySet<string>> {
-  if (!workspaceContext || !workspaceContextHasTeamIdentity(workspaceContext)) {
+  if (!workspaceContext || !workspaceContextHasWorkspaceIdentity(workspaceContext)) {
     return new Set();
   }
   if (options?.materializedTeamIds) {
@@ -2029,12 +2029,6 @@ export async function publishProjectFilePublic(
   return publicFileShareLinkFromPublish(await resp.json());
 }
 
-export async function fetchProjectFileSharePlan(projectId: string, fileName: string, workspaceContext?: WorkspaceCollabContext | null) {
-  const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(fileName)}/share-plan`, { method: 'POST', headers: workspaceContext ? workspaceProjectHeaders(workspaceContext) : undefined });
-  if (!resp.ok) throw new Error(`Share preflight failed (${resp.status})`);
-  return resp.json() as Promise<import('@open-design/contracts').SharePlanSummary>;
-}
-
 // Only this endpoint's known codes may reach diagnostic logs; arbitrary token-shaped
 // upstream text can still contain sensitive data. No response messages are logged.
 const PUBLIC_SHARE_STATE_ERROR_CODES = new Set([
@@ -2053,6 +2047,22 @@ export class PublicFileShareStateReadError extends Error {
     super(`Share state read failed: ${reason}${status ? ` (${status})` : ''}`);
     this.name = 'PublicFileShareStateReadError';
   }
+}
+
+/** Pure local comparison; never performs cloud authorization or publication. */
+export async function fetchProjectFilePublicShareFreshness(
+  projectId: string,
+  fileName: string,
+  workspaceContext: WorkspaceCollabContext | null,
+): Promise<import('@open-design/contracts').ShareContentFreshness> {
+  const response = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(fileName)}/publish-public?localOnly=true`,
+    { headers: workspaceContext ? workspaceProjectHeaders(workspaceContext) : {} },
+  );
+  if (!response.ok) return 'unknown';
+  const body: unknown = await response.json();
+  if (!body || typeof body !== 'object' || !('freshness' in body)) return 'unknown';
+  return body.freshness === 'current' || body.freshness === 'outdated' ? body.freshness : 'unknown';
 }
 
 export async function fetchProjectFilePublicShareState(
@@ -2133,9 +2143,12 @@ export async function unpublishProjectFilePublic(
         : typeof payload?.error === 'string'
           ? payload.error
           : payload?.message;
-    throw withDaemonFailure(new Error(errorMessage || `Unpublish failed (${resp.status})`), {
+    const rawCode = typeof payload?.error === 'object' ? payload.error.code : payload?.error;
+    const code = typeof rawCode === 'string' ? rawCode : undefined;
+    // An HTTP refusal is distinct from fetch rejecting without any response.
+    throw withDaemonFailure(new PublicFilePublishError(errorMessage || `Unpublish failed (${resp.status})`, resp.status, code), {
       failure: payload?.failure,
-      daemonErrorCode: typeof payload?.error === 'object' ? payload.error.code : payload?.error,
+      daemonErrorCode: rawCode,
     });
   }
   return (await resp.json()) as ShareUnpublishResponse;
@@ -2983,7 +2996,7 @@ export async function fetchPreviewComments(
       const remote = await fetch(`${url}/pull`, { method: 'POST', headers, signal: controller.signal });
       if (remote.ok) {
         const result = (await remote.json()) as import('@open-design/contracts').ProjectCommentPullResponse;
-        return result.comments;
+        if (Array.isArray(result.comments)) return result.comments;
       }
     } catch {
       // The existing local list stays usable when remote sync is unavailable
@@ -2992,14 +3005,11 @@ export async function fetchPreviewComments(
       clearTimeout(deadline);
     }
   }
-  try {
-    const resp = await fetch(url, { headers });
-    if (!resp.ok) return [];
-    const json = (await resp.json()) as { comments: PreviewComment[] };
-    return json.comments ?? [];
-  } catch {
-    return [];
-  }
+  const resp = await fetch(url, { headers });
+  if (!resp.ok) throw new Error(`comments ${resp.status}`);
+  const json = (await resp.json()) as { comments?: PreviewComment[] };
+  if (!Array.isArray(json.comments)) throw new Error('Invalid comment list response');
+  return json.comments;
 }
 
 // `workspaceContext`, when present, proves the caller's workspace membership
@@ -3393,7 +3403,7 @@ export async function uploadProjectFiles(
 export function projectRawUrl(
   projectId: string,
   filePath: string,
-  _workspaceContext?: WorkspaceCollabContext | null,
+  workspaceContext?: WorkspaceCollabContext | null,
 ): string {
   // Encode each path segment individually so a slash inside the file
   // path stays a path separator, not %2F.
@@ -3401,7 +3411,13 @@ export function projectRawUrl(
     .split('/')
     .map((seg) => encodeURIComponent(seg))
     .join('/');
-  return `/api/projects/${encodeURIComponent(projectId)}/raw/${safePath}`;
+  // iframe and image navigations cannot send Workspace headers. The daemon
+  // treats this exact identity pair as a claim and freshly verifies membership
+  // and the project's persisted binding before serving Team-owned bytes.
+  return workspaceResourceUrl(
+    `/api/projects/${encodeURIComponent(projectId)}/raw/${safePath}`,
+    workspaceContext,
+  );
 }
 
 export function designSystemStaticUrl(
@@ -3442,7 +3458,8 @@ export async function deleteProjectFile(
 ): Promise<boolean> {
   try {
     const resp = await fetch(
-      projectRawUrl(projectId, name, workspaceContext),
+      // This write can set headers, so keep its URL free of navigation scope.
+      projectRawUrl(projectId, name),
       {
         method: 'DELETE',
         ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),

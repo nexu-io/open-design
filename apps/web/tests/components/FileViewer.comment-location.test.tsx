@@ -119,3 +119,25 @@ it('scrolls a URL preview through its existing bridge and accepts only the curre
   await dispatch({ ...target, type: 'od:comment-active-target-update', position: { x: 20, y: 80, width: 200, height: 40 } });
   expect(screen.getByTestId('comment-active-pin')).toHaveStyle({ left: '20px', top: '80px' });
 });
+
+it.each([true, false])('OPEND-3869 keeps located and saved pins together through identity change (tagged=%s)', async tagged => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({})));
+  render(tree()); fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+  const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+  const post = vi.spyOn(frame.contentWindow!, 'postMessage');
+  const dispatch = async (data: object) => { await act(async () => {
+    window.dispatchEvent(new MessageEvent('message', {source:frame.contentWindow,data}));
+  }); };
+  await dispatch({type:'od:comment-targets',targets:[{...comment,domSelector:comment.selector}]});
+  fireEvent.click(screen.getByTestId('comment-side-item'));
+  const request = post.mock.calls.map(([value])=>value).filter(value=>value?.locate).at(-1);
+  const located = {...comment,elementId:'new-id',selector:'[data-od-id="new-id"]',domSelector:comment.selector,position:{x:320,y:400,width:200,height:40}};
+  await dispatch({...located,type:'od:comment-active-target-update',...(tagged ? {requestId:request.requestId} : {})});
+  const same = () => {
+    expect(screen.getByTestId('comment-active-pin')).toHaveStyle({left:'320px',top:'400px'});
+    expect(screen.getByTestId('comment-saved-marker-'+comment.elementId)).toHaveStyle({left:'320px',top:'400px'});
+  };
+  same();
+  await dispatch({type:'od:comment-targets',targets:[{...located,selector:'[data-od-id="new-id"]',domSelector:comment.selector}]});
+  same();
+});
