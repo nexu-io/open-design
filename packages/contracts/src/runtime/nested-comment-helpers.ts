@@ -4,6 +4,7 @@
  */
 export const NESTED_COMMENT_HELPERS = String.raw`
   var nestedCommentAnchors = new WeakMap(), nestedCommentDocuments = new WeakSet();
+  var nestedKeyboardDocuments = new WeakSet(), nestedKeyboardFrames = new WeakSet();
   function forwardCommentEscape(event) {
     if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing || event.repeat) return false;
     if (!(typeof active === 'function' ? active() : commentEnabled)) return false;
@@ -11,6 +12,33 @@ export const NESTED_COMMENT_HELPERS = String.raw`
     if (target && target.closest && target.closest('input, textarea, select, [contenteditable="true"], [role="menu"], [role="dialog"], dialog, [popover]')) return false;
     window.parent.postMessage({ type: 'od:comment-escape' }, '*');
     return true;
+  }
+  function observeNestedCommentDocuments(doc) {
+    doc = doc || document;
+    try {
+      if (nestedKeyboardDocuments.has(doc)) return;
+      nestedKeyboardDocuments.add(doc);
+      if (doc !== document) doc.addEventListener('keydown', forwardCommentEscape);
+      function registerFrame(frame) {
+        if (!nestedKeyboardFrames.has(frame)) {
+          nestedKeyboardFrames.add(frame);
+          frame.addEventListener('load', function() {
+            try { if (frame.contentDocument) observeNestedCommentDocuments(frame.contentDocument); } catch (_) {}
+          });
+        }
+        try { if (frame.contentDocument) observeNestedCommentDocuments(frame.contentDocument); } catch (_) {}
+      }
+      function registerSubtree(node) {
+        if (node.localName === 'iframe') registerFrame(node);
+        if (node.querySelectorAll) node.querySelectorAll('iframe').forEach(registerFrame);
+      }
+      if (typeof MutationObserver === 'function' && doc.documentElement) {
+        new MutationObserver(function(records) {
+          records.forEach(function(record) { record.addedNodes.forEach(registerSubtree); });
+        }).observe(doc.documentElement, { childList: true, subtree: true });
+      }
+      doc.querySelectorAll('iframe').forEach(registerFrame);
+    } catch (_) {}
   }
   // Keep the full target rect for anchor fractions; this separate rect describes
   // only the part painted through clipping ancestors in the same viewport.
@@ -61,7 +89,6 @@ export const NESTED_COMMENT_HELPERS = String.raw`
         if (!nestedCommentDocuments.has(doc) && typeof schedulePostActiveCommentTarget === 'function') {
           nestedCommentDocuments.add(doc);
           doc.addEventListener('scroll', schedulePostActiveCommentTarget, true);
-          doc.addEventListener('keydown', forwardCommentEscape);
           doc.defaultView.addEventListener('resize', schedulePostActiveCommentTarget);
         }
       }

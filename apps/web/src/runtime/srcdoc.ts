@@ -2935,6 +2935,7 @@ function meaningfulDomFallbackTarget(el) {
     schedulePostActiveCommentTarget();
     schedulePostPreviewScroll();
   }, true);
+  observeNestedCommentDocuments();
   var mo = new MutationObserver(schedulePostTargets);
   // childList only — NOT attributes/characterData. Re-walking every annotated
   // target on every attribute/text mutation made an animated artifact (inline

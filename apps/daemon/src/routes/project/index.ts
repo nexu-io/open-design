@@ -1529,6 +1529,7 @@ ${NESTED_COMMENT_HELPERS}
   document.addEventListener('scroll', function(){
     schedulePostActiveCommentTarget();
   }, true);
+  observeNestedCommentDocuments();
   var mo = new MutationObserver(schedulePostTargets);
   mo.observe(document.documentElement, { subtree: true, childList: true });
   ensureStyle();

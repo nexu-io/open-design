@@ -759,3 +759,35 @@ test('[P0] OPEND-4731 deleted comment target does not move to its neighbor', asy
     await detail.getByRole('button', { name: 'Close' }).click();
   }
 });
+
+
+test('[P0] outer comment Escape works in a previously unvisited readable child document', async ({ page }, info) => {
+    const child = '<html><body><button id="child-focus">Child focus target</button><input id="child-input"></body></html>';
+    const artifact = `<html><body style="padding:40px"><h1 data-od-id="outer-target">Outer saved comment</h1><img src="/qa-marker.svg" style="display:none"><iframe id="unvisited-child" width="500" height="240" srcdoc="${child.replace(/"/g, '&quot;')}"></iframe></body></html>`;
+    const { id, conversationId } = await seed(page, false, '', artifact);
+    const saved = await page.request.post(`/api/projects/${id}/conversations/${conversationId}/comments`, { data: {
+      target: { filePath: 'index.html', elementId: 'outer-target', selector: '[data-od-id="outer-target"]', label: 'h1', text: 'Outer saved comment', htmlHint: '<h1>', position: { x:40,y:40,width:300,height:50 } },
+      note: 'Outer comment with no nested anchor',
+    } });
+    expect(saved.ok(), await saved.text()).toBeTruthy();
+    await open(page, id);
+    await expect(page.getByTestId('artifact-preview-frame')).toHaveAttribute('data-od-render-mode', 'url-load');
+    await page.getByTestId('comment-panel-toggle').click();
+    await page.locator('.comment-side-collapse').click();
+    const opener = page.getByTestId('comment-side-collapsed-rail').getByRole('button', { name: /Outer comment with no nested anchor/ });
+    await opener.click();
+    await expect(page.getByTestId('comment-popover-detail')).toHaveText('Outer comment with no nested anchor');
+    const childFrame = page.frameLocator('[data-testid="artifact-preview-frame"]').frameLocator('#unvisited-child');
+    // Editable content retains Escape; no nested comment has ever been resolved.
+    await childFrame.locator('#child-input').focus();
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('comment-popover-detail')).toBeVisible();
+    await childFrame.locator('#child-focus').focus();
+    // Only readable child documents are in the preview bridge's authority.
+    expect(await page.frameLocator('[data-testid="artifact-preview-frame"]').locator('#unvisited-child').evaluate((frame: HTMLIFrameElement) => !!frame.contentDocument)).toBe(true);
+    await page.screenshot({ path: info.outputPath('outer-comment-child-focused.png') });
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('comment-popover')).toHaveCount(0);
+    await expect(opener).toBeFocused();
+    await page.screenshot({ path: info.outputPath('outer-comment-child-escape.png') });
+  });
