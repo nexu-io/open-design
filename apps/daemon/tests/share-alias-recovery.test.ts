@@ -92,7 +92,7 @@ it.each([
     async args => {
       uploadedContents.push(await readFile(join(args[3]!, 'index.html'), 'utf8'));
       return JSON.stringify({ id: `version-${++uploads}`, version: uploads });
-    }, undefined, { commands });
+    }, { commands });
   if (!fixture.sharePublishing) throw new Error('missing publisher');
   const generateId = vi.fn(() => '33333333-3333-4333-8333-333333333333');
   let reservations = fixture.sharePublishing.reservations;

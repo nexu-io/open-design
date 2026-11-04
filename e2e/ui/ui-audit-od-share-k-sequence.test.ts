@@ -7,7 +7,7 @@ import type { Page } from '@playwright/test';
 const output = resolve(import.meta.dirname, '../../.tmp/ui-audit/final-design-review/current');
 test.use({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, colorScheme: 'light', locale: 'zh-CN' });
 
-type CaptureId = 'K1' | 'K3' | 'K4' | 'K5';
+type CaptureId = 'K1' | 'K2' | 'K3' | 'K4' | 'K5';
 const html = '<!doctype html><html lang="zh-CN"><body><main><h1 data-od-id="k-audit-title">评论同步审计</h1><p data-od-id="k-audit-body">已有项目内容</p></main></body></html>';
 
 async function setupProject(page: Page, suffix: string) {
@@ -74,7 +74,7 @@ async function openShareMenu(page: Page, projectId: string) {
   return menu;
 }
 
-async function setPublicationProjection(page: Page, projectId: string, state: 'none' | 'active' | 'stopped', slug: string) {
+async function setPublicationProjection(page: Page, projectId: string, state: 'none' | 'active' | 'stopped', slug: string, freshness: 'fresh' | 'outdated' = 'fresh') {
   let publicationState = state;
   const url = `https://viewer.example.test/cloud/artifact/project/${slug}`;
   await page.route(`**/api/projects/${projectId}/share-state`, route => route.request().method() === 'GET'
@@ -83,8 +83,8 @@ async function setPublicationProjection(page: Page, projectId: string, state: 'n
   await page.route(`**/api/projects/${projectId}/files/index.html/public-share-state`, route => route.request().method() === 'GET'
     ? route.fulfill({ json: publicationState === 'none' ? { status: 'none' } : { status: publicationState, slug } })
     : route.fallback());
-  await page.route(`**/api/projects/${projectId}/files/index.html/publish-public`, route => route.request().method() === 'GET'
-    ? route.fulfill({ json: publicationState === 'active' ? { status: 'active', freshness: 'fresh', publication: { slug, url, fileName: 'index.html' } } : { status: publicationState } })
+  await page.route(`**/api/projects/${projectId}/files/index.html/publish-public*`, route => route.request().method() === 'GET'
+    ? route.fulfill({ json: publicationState === 'active' ? { status: 'active', freshness, publication: { slug, url, fileName: 'index.html' } } : { status: publicationState } })
     : route.fallback());
   return { url, slug, setState: (next: 'none' | 'active' | 'stopped') => { publicationState = next; } };
 }
@@ -96,7 +96,7 @@ test('Owner-K1 first publication syncs existing comments', async ({ page }) => {
   // K1: an actual local comment exists before publish; hold the external
   // publication response to capture the real upload/sync progress UI.
   const k1 = await setupProject(page, 'k1');
-  const k1Pub = await setPublicationProjection(page, k1.projectId, 'none', 'k1-existing-comment');
+  const k1Pub = await setPublicationProjection(page, k1.projectId, 'none', 'k1-existing-comment', 'outdated');
   await page.route(`**/api/projects/${k1.projectId}/comment-sync-state*`, route => route.request().method() === 'GET'
     ? route.fulfill({ json: { pending: 1, sessionMissing: false, lastError: null, shareStopped: false, backfill: { state: 'pending', filePath: 'index.html', publicationRevision: 'k1-revision', retryable: true, reopened: false, total: 1, synced: 0 } } })
     : route.fallback());
@@ -104,7 +104,7 @@ test('Owner-K1 first publication syncs existing comments', async ({ page }) => {
   let startedK1!: () => void;
   const k1Gate = new Promise<void>(resolve => { finishK1 = resolve; });
   const k1Started = new Promise<void>(resolve => { startedK1 = resolve; });
-  await page.route(`**/api/projects/${k1.projectId}/files/index.html/publish-public`, async route => {
+  await page.route(`**/api/projects/${k1.projectId}/files/index.html/publish-public*`, async route => {
     if (route.request().method() !== 'POST') return route.fallback();
     startedK1();
     await k1Gate;
@@ -119,14 +119,41 @@ test('Owner-K1 first publication syncs existing comments', async ({ page }) => {
   } finally {
     finishK1();
   }
-  // Target K1: the primary action itself becomes the sync progress bar; no URL row while syncing.
-  // The design's exact copy is "同步已有评论 · N 条" (N = the initial backfill batch
-  // size); this isolated project persisted one real comment, so N is 1.
   const k1Banner = k1Menu.getByLabel('同步已有评论 · 1 条');
   await expect(k1Banner).toBeVisible();
-  await expect(k1Menu.locator('.chrome-publish-url')).toHaveCount(0);
-  await capture(page, 'K1', k1.projectId, { state: 'publication-complete-existing-comments-syncing', existingLocalCommentCount: 1, commentText: '停用分享前已存在的项目评论', publicationUrl: k1Pub.url, commentSyncProjection: { pending: 1, backfill: { state: 'pending', reopened: false, retryable: true, total: 1, synced: 0 } }, renderedSyncStatus: await k1Banner.innerText(), visualGap: 'The first-publication branch now matches the design copy exactly, including the "同步已有评论 · N 条" count and the "关闭面板不会中断上传。" help line. The design shows “12条”; this isolated project has one real persisted comment, so N is 1 rather than 12 — the count is real and driven by the daemon-reported batch size, not a fixed mismatch.' });
+  await expect(k1Menu.locator('.chrome-publish-url')).toHaveText(k1Pub.url);
+  await expect(k1Menu.getByRole('button', { name: '复制链接' })).toBeEnabled();
+  await page.reload();
+  await openShareMenu(page, k1.projectId);
+  await expect(k1Menu.getByRole('button', { name: '更新链接' })).toBeEnabled();
+  await capture(page, 'K1', k1.projectId, { state: 'publication-complete-existing-comments-syncing', existingLocalCommentCount: 1, publicationUrl: k1Pub.url, renderedSyncStatus: await k1Banner.innerText(), visualGap: '用户已批准发布与评论同步解耦：链接、复制和更新保持可用；旧 K1 设计隐藏链接并以同步状态占据主操作。上传结束后不显示上传持续提示。' });
 
+});
+
+
+test('Owner-K2 comment retry leaves publication untouched', async ({ page }) => {
+  test.setTimeout(90_000);
+  const k2 = await setupProject(page, 'k2');
+  const publication = await setPublicationProjection(page, k2.projectId, 'active', 'k2-existing-link', 'outdated');
+  let publishes = 0, retries = 0;
+  await page.route(`**/api/projects/${k2.projectId}/files/index.html/publish-public*`, route => {
+    if (route.request().method() === 'GET') return route.fallback();
+    publishes++; return route.fulfill({ status: 500 });
+  });
+  await page.route(`**/api/projects/${k2.projectId}/comment-sync-state*`, route => {
+    if (route.request().method() === 'POST') { retries++; return route.fulfill({ json: { ok: true } }); }
+    return route.fulfill({ json: { pending: 0, sessionMissing: false, lastError: 'backfill_failed', shareStopped: false, backfill: { state: 'failed', filePath: 'index.html', publicationRevision: 'k2-revision', retryable: true, reopened: false, code: 'BACKFILL_ENQUEUE_FAILED' } } });
+  });
+  const menu = await openShareMenu(page, k2.projectId);
+  await expect(menu.locator('.chrome-publish-url')).toHaveText(publication.url);
+  await expect(menu.getByRole('button', { name: '复制链接' })).toBeEnabled();
+  await expect(menu.getByRole('button', { name: '更新链接' })).toBeEnabled();
+  const retry = menu.getByRole('button', { name: '重试' });
+  await expect(retry).toBeVisible();
+  await retry.click();
+  await expect.poll(() => retries).toBe(1);
+  expect(publishes).toBe(0);
+  await capture(page, 'K2', k2.projectId, { state: 'published-link-comment-enqueue-failed', publicationUrl: publication.url, persistedCommentCount: 1, retryRequests: retries, publicationRequests: publishes });
 });
 
 test('Owner-K3 stopped link retains comments and pauses sync', async ({ page }) => {
@@ -162,8 +189,8 @@ test('Owner-K4/K5 distinct comment-sync capture sequences', async ({ page }) => 
   const k4Resolved = await page.request.patch(`/api/projects/${k4.projectId}/conversations/${k4.conversationId}/comments/${k4.commentId}`, { data: { status: 'resolved' } });
   expect(k4Resolved.ok(), await k4Resolved.text()).toBeTruthy();
   expect((await k4Resolved.json() as { comment: { status: string } }).comment.status).toBe('resolved');
-  const k4Pub = await setPublicationProjection(page, k4.projectId, 'stopped', 'k4-existing-link');
-  await page.route(`**/api/projects/${k4.projectId}/files/index.html/publish-public`, route => {
+  const k4Pub = await setPublicationProjection(page, k4.projectId, 'stopped', 'k4-existing-link', 'outdated');
+  await page.route(`**/api/projects/${k4.projectId}/files/index.html/publish-public*`, route => {
     if (route.request().method() !== 'POST') return route.fallback();
     k4Pub.setState('active');
     return route.fulfill({ json: { status: 'published', receipt: { filePath: 'index.html', slug: k4Pub.slug, publishedAt: Date.now(), version: 1, versionId: 'ui-audit-v1', entryPath: 'index.html' }, url: k4Pub.url } });
@@ -178,11 +205,12 @@ test('Owner-K4/K5 distinct comment-sync capture sequences', async ({ page }) => 
   await page.reload();
   await openShareMenu(page, k4.projectId);
   await expect(k4Menu.getByRole('switch', { name: '链接访问' })).toHaveAttribute('aria-checked', 'true');
-  // Target K4: the primary button shows the busy sync state; no URL row while reconciling.
-  const k4Banner = k4Menu.getByRole('button', { name: /正在同步评论/ });
+  const k4Banner = k4Menu.getByLabel('正在同步评论…');
   await expect(k4Banner).toBeVisible();
-  await expect(k4Menu.locator('.chrome-publish-url')).toHaveCount(0);
-  await capture(page, 'K4', k4.projectId, { state: 'resumed-existing-publication-with-reconciliation-pending', publicationUrl: k4Pub.url, persistedCommentCount: 1, stoppedPeriodCommentChange: { commentId: k4.commentId, status: 'resolved' }, commentSyncProjection: { shareStopped: false, pending: 1, backfill: { state: 'pending', reopened: true, retryable: true } }, renderedSyncStatus: await k4Banner.innerText(), visualGap: 'Current reopened state uses the normal URL/copy controls plus a reconciliation banner. Target K4 shows “正在同步评论…” in the primary action control and no exposed completed link/copy row.' });
+  await expect(k4Menu.locator('.chrome-publish-url')).toHaveText(k4Pub.url);
+  await expect(k4Menu.getByRole('button', { name: '复制链接' })).toBeEnabled();
+  await expect(k4Menu.getByRole('button', { name: '更新链接' })).toBeEnabled();
+  await capture(page, 'K4', k4.projectId, { state: 'resumed-existing-publication-with-reconciliation-pending', publicationUrl: k4Pub.url, persistedCommentCount: 1, stoppedPeriodCommentChange: { commentId: k4.commentId, status: 'resolved' }, renderedSyncStatus: await k4Banner.innerText(), visualGap: '用户已批准发布与评论同步解耦：恢复链接后同步提示与可复制链接并存；旧 K4 设计隐藏链接并将同步放在主操作。' });
 
   // K5: actual stopped → resume UI action; service reports failed, retryable
   // reconciliation. The existing link stays visible and copy remains enabled.
@@ -191,14 +219,18 @@ test('Owner-K4/K5 distinct comment-sync capture sequences', async ({ page }) => 
   expect(k5Resolved.ok(), await k5Resolved.text()).toBeTruthy();
   expect((await k5Resolved.json() as { comment: { status: string } }).comment.status).toBe('resolved');
   const k5Pub = await setPublicationProjection(page, k5.projectId, 'stopped', 'k5-existing-link');
-  await page.route(`**/api/projects/${k5.projectId}/files/index.html/publish-public`, route => {
+  let k5Publishes = 0;
+  let k5Retries = 0;
+  await page.route(`**/api/projects/${k5.projectId}/files/index.html/publish-public*`, route => {
     if (route.request().method() !== 'POST') return route.fallback();
+    k5Publishes++;
     k5Pub.setState('active');
     return route.fulfill({ json: { status: 'published', receipt: { filePath: 'index.html', slug: k5Pub.slug, publishedAt: Date.now(), version: 1, versionId: 'ui-audit-v1', entryPath: 'index.html' }, url: k5Pub.url } });
   });
-  await page.route(`**/api/projects/${k5.projectId}/comment-sync-state*`, route => route.request().method() === 'GET'
-    ? route.fulfill({ json: { pending: 0, sessionMissing: false, lastError: 'backfill_failed', shareStopped: false, backfill: { state: 'failed', filePath: 'index.html', publicationRevision: 'k5-revision', retryable: true, reopened: true } } })
-    : route.fallback());
+  await page.route(`**/api/projects/${k5.projectId}/comment-sync-state*`, route => {
+    if (route.request().method() === 'POST') { k5Retries++; return route.fulfill({ json: { ok: true } }); }
+    return route.fulfill({ json: { pending: 0, sessionMissing: false, lastError: 'backfill_failed', shareStopped: false, backfill: { state: 'failed', filePath: 'index.html', publicationRevision: 'k5-revision', retryable: true, reopened: true } } });
+  });
   const k5Menu = await openShareMenu(page, k5.projectId);
   await k5Menu.getByRole('switch', { name: '链接访问' }).click();
   await expect(k5Menu.getByRole('switch', { name: '链接访问' })).toHaveAttribute('aria-checked', 'true');
@@ -213,5 +245,8 @@ test('Owner-K4/K5 distinct comment-sync capture sequences', async ({ page }) => 
   await expect(k5Banner).toHaveCSS('border-top-width', '0px');
   await expect(k5Banner).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(k5Menu.getByRole('button', { name: '复制链接' })).toBeEnabled();
+  await k5Banner.getByRole('button', { name: '重试' }).click();
+  await expect.poll(() => k5Retries).toBe(1);
+  expect(k5Publishes).toBe(1);
   await capture(page, 'K5', k5.projectId, { state: 'reopened-link-with-retryable-comment-backfill-failure', publicationUrl: k5Pub.url, linkUsable: true, persistedCommentCount: 1, stoppedPeriodCommentChange: { commentId: k5.commentId, status: 'resolved' }, commentSyncProjection: { shareStopped: false, backfill: { state: 'failed', reopened: true, retryable: true } }, renderedSyncStatus: await k5Banner.innerText(), visualGap: 'State semantics align (usable reopened URL, retryable unfinished reconciliation); copy differs from target: current UI adds “分享已发布” and “正在后台自动重试” text around its retry control.' });
 });

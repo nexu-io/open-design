@@ -239,6 +239,8 @@ export function htmlNeedsFocusGuard(source: string): boolean {
  */
 export function htmlNeedsPoweredPreview(source: string | null | undefined): boolean {
   if (!source) return false;
+  // Nested comment anchors require readable child documents on the isolated project origin.
+  if (/<iframe(?=[\s/>])|\bcreateElement\s*\(\s*["\']iframe["\']/i.test(source)) return true;
   // Web Storage stays in srcDoc: the host restores localStorage within the
   // workspace/member/project/file scope; sessionStorage remains document-local.
   // Hard requirement — SharedArrayBuffer only exists in a crossOriginIsolated

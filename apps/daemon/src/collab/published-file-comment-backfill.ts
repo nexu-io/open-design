@@ -9,6 +9,8 @@ import { createSqlitePublicFilePublicationStore, type PublicFilePublicationScope
 
 export interface PublishedFileCommentBackfillInput {
   scope: PublicFilePublicationScope;
+  /** Committed content receipt used only for independent comment admission. */
+  receipt?: { resourceId: string; versionId: string };
   publicationRevision: PublicFilePublicationRevision;
   /** Produced by the publisher's actual file mapping; never guessed here. */
   publicFilePath: string;
@@ -17,7 +19,7 @@ export interface PublishedFileCommentBackfillInput {
 }
 
 /**
- * Enqueue existing local comments in the publication transaction, never send.
+ * Enqueue existing local comments in one comment transaction, never send.
  * The user explicitly authorized all conversations of this ONE published file.
  * Publication identity and original authors remain independent: publishing a
  * file cannot turn an inbound web comment into a comment by its publisher.
@@ -26,7 +28,7 @@ export function enqueuePublishedFileComments(
   db: Database.Database,
   input: PublishedFileCommentBackfillInput,
 ): { enqueued: number; skippedInbound: number } {
-  if (!db.inTransaction) throw new Error('Publication backfill requires the publication transaction');
+  if (!db.inTransaction) throw new Error('Publication backfill requires a comment transaction');
   const { scope, publicationRevision, publicFilePath } = input;
   if (!scope.sourceFileId) throw new Error('COMMENT_FILE_SOURCE_REQUIRED');
   if (!publicFilePath || publicFilePath.startsWith('/') || publicFilePath.includes('\\')
@@ -43,7 +45,7 @@ export function enqueuePublishedFileComments(
   if (!current || !publicationRevision.token || current.token !== publicationRevision.token
     || current.slug !== publicationRevision.slug) throw new Error('Publication backfill witness is stale');
   // Public comments need the same internal conversation FK as Team comments.
-  // Establish it atomically with the publication, never by borrowing a user chat.
+  // Establish it atomically with the comment batch, never by borrowing a user chat.
   if (!ensureProjectCommentAnchorConversation(db, scope.projectId)) {
     throw new Error('Publication comment anchor unavailable');
   }
@@ -108,7 +110,7 @@ export function enqueuePublishedFileComments(
   carryPublishedCommentMutationsToRevision(db, scope, publicationRevision);
   recordCommentRelayPublicationMapping(db, scope, { ...publicationRevision, publicFilePath });
   // The queue writes above and this exact initial membership are one SQLite
-  // transaction: no published file can silently lack a backfill result.
+  // transaction: a prepared batch cannot silently lack its queued comments.
   recordPublishedCommentBackfill(db, { scope, publicationRevision, commentIds,
     ...(input.reopened !== undefined ? { reopened: input.reopened } : {}),
   });

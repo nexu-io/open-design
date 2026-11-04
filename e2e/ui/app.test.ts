@@ -359,132 +359,52 @@ test('[P0] sending preview comments opens the refreshed follow-up artifact', asy
   await expect(artifactPreview(page)).toBeVisible();
 
   const commentEntry = page.getByTestId('comment-panel-toggle');
+  const commentTool = page.getByTestId('board-mode-toggle');
   await expect(commentEntry).toHaveAttribute('aria-pressed', 'false');
-  for (const [property, value] of Object.entries({
-    height: '30px', 'min-width': '42px', padding: '0px 8px', gap: '5px',
-  })) {
-    await expect(commentEntry).toHaveCSS(property, value);
-  }
   await enterPreviewCommentMode(page);
+  await expect(commentTool).toHaveAttribute('aria-pressed', 'true');
   await expect(commentEntry).toHaveAttribute('aria-pressed', 'true');
-  await expect(commentEntry).toHaveClass(/active/);
   const sidePanel = page.getByTestId('comment-side-panel');
   await expect(sidePanel).toBeVisible();
   await expect(sidePanel.getByTestId('comment-side-item')).toHaveCount(0);
   await captureLane4CommentState(page, '06-panel-empty');
-  await captureLane4CommentState(page, '05-input-no-selection');
-
   await clickCommentTargetInPreview(page, '[data-od-id="hero-title"]');
-  await expect(page.getByTestId('comment-popover')).toBeVisible();
   const floatingComposer = page.getByTestId('comment-popover');
-  await page.setViewportSize({ width: 1600, height: 720 });
-  for (const [property, value] of Object.entries({
-    padding: '10px', 'border-radius': '8px',
-    'border-top-width': '1px', 'border-top-color': 'rgba(73, 73, 73, 0.18)',
-    'background-color': 'rgba(250, 250, 250, 0.66)', 'backdrop-filter': 'blur(28px) saturate(1.8)',
-    'box-shadow': 'rgba(28, 27, 26, 0.16) 0px 24px 60px 0px, rgba(28, 27, 26, 0.07) 0px 8px 16px 0px',
-  })) {
-    await expect(floatingComposer).toHaveCSS(property, value);
-  }
-  await expect(floatingComposer).toHaveCSS('width', '320px');
-  await expect(floatingComposer).toHaveCSS('gap', 'normal');
-  const composerTitle = floatingComposer.locator('.comment-popover-titlebar');
-  const composerBody = floatingComposer.locator('.comment-popover-body');
-  const composerActions = floatingComposer.locator('.comment-popover-actions');
-  await expect(composerTitle).toHaveCSS('margin', '-2px 0px 8px');
-  await expect(composerTitle).toHaveCSS('gap', '8px');
-  const titleLabel = composerTitle.locator('.comment-popover-title');
-  await expect(titleLabel).toHaveCSS('color', 'rgb(73, 73, 73)');
-  await expect(titleLabel).toHaveCSS('font-size', '12px');
-  await expect(titleLabel).toHaveCSS('font-weight', '600');
-  await expect(titleLabel).toHaveCSS('text-overflow', 'ellipsis');
-  await expect(titleLabel).toHaveCSS('white-space', 'nowrap');
-  await expect(titleLabel).toHaveText(longCommentTag);
-  await expect(titleLabel).toHaveAttribute('title', longCommentTag);
-  await expect.poll(() => titleLabel.evaluate(element => element.clientWidth > 0 && element.scrollWidth > element.clientWidth)).toBe(true);
-  await expect(composerTitle.getByRole('button', { name: 'Move comment box', exact: true })).toBeVisible();
-  await expect(composerTitle.getByTestId('comment-popover-view-all')).toBeVisible();
-  await expect(composerActions).toHaveCSS('margin-top', '8px');
-  await expect(composerActions).toHaveCSS('gap', '10px');
-  await expect(composerActions).toHaveCSS('flex-wrap', 'wrap');
-  await expect(floatingComposer.locator('.comment-popover-actions-end')).toHaveCSS('gap', '10px');
-  await expect(floatingComposer.locator('.comment-popover-actions-end')).toHaveCSS('flex-wrap', 'wrap');
-  const titleRect = await composerTitle.boundingBox();
-  const bodyRect = await composerBody.boundingBox();
-  const actionsRect = await composerActions.boundingBox();
-  expect(bodyRect!.y - (titleRect!.y + titleRect!.height)).toBeCloseTo(8, 0);
-  expect(actionsRect!.y - (bodyRect!.y + bodyRect!.height)).toBeCloseTo(8, 0);
-  const dragHandle = floatingComposer.getByRole('button', { name: 'Move comment box', exact: true });
-  const handleBounds = await dragHandle.boundingBox();
-  const beforeDrag = await floatingComposer.boundingBox();
-  expect(handleBounds).not.toBeNull();
-  expect(beforeDrag).not.toBeNull();
-  await page.mouse.move(handleBounds!.x + handleBounds!.width / 2, handleBounds!.y + handleBounds!.height / 2);
-  await page.mouse.down();
-  await expect(floatingComposer).toHaveClass(/comment-popover-dragging/);
-  await page.mouse.move(handleBounds!.x + handleBounds!.width / 2, handleBounds!.y + handleBounds!.height / 2 + 16, { steps: 4 });
-  await page.mouse.up();
-  await expect(floatingComposer).not.toHaveClass(/comment-popover-dragging/);
-  await expect.poll(async () => {
-    const bounds = await floatingComposer.boundingBox();
-    const delta = bounds === null ? -1 : Math.round(bounds.y - beforeDrag!.y);
-    return delta >= 0 && delta <= 16;
-  }).toBe(true);
-  await expect(titleLabel).toHaveText(await titleLabel.getAttribute('title') ?? '');
-  await test.info().attach('comment-composer-width-wide', { body: await page.screenshot(), contentType: 'image/png' });
-  await page.setViewportSize({ width: 1280, height: 720 });
-  await expect.poll(async () => {
-    const bounds = await floatingComposer.boundingBox();
-    return bounds !== null && bounds.width > 200 && bounds.width < 300;
-  }).toBe(true);
-  const compactCard = await floatingComposer.boundingBox();
-  expect(compactCard).not.toBeNull();
-  expect(compactCard!.width).toBeGreaterThan(200);
-  expect(compactCard!.x).toBeGreaterThanOrEqual(0);
-  expect(compactCard!.x + compactCard!.width).toBeLessThanOrEqual(1280);
   const note = floatingComposer.getByTestId('comment-popover-input');
-  for (const [property, value] of Object.entries({
-    padding: '8px 10px', 'border-radius': '4px',
-    'background-color': 'rgb(250, 250, 250)', color: 'rgb(73, 73, 73)',
-    'font-size': '14px', 'line-height': '17.5px', height: '112px', 'overflow-y': 'auto',
-  })) await expect(note).toHaveCSS(property, value);
-  await expect(note).not.toHaveAttribute('maxlength');
-  await test.info().attach('comment-composer-surface', { body: await page.screenshot(), contentType: 'image/png' });
+  await expect(floatingComposer).toBeVisible();
+  await expect(floatingComposer).toHaveAttribute('aria-label', `Comment: ${longCommentTag}`);
+  await expect(floatingComposer.locator('.comment-popover-titlebar, .comment-popover-title')).toHaveCount(0);
   await captureLane4CommentState(page, '05-input-element-selected');
-  // A floating sidebar covers the toolbar. With a composer open, hiding the
-  // sidebar preserves the selected comment tool, exposing its real hover state.
+  // Browsing is independent from the active comment creation tool.
   await sidePanel.getByRole('button', { name: 'Hide Comments', exact: true }).click();
   await expect(sidePanel).not.toBeVisible();
-  await expect(page.getByTestId('comment-popover')).toBeVisible();
-  await expect(commentEntry).toHaveAttribute('aria-pressed', 'true');
-  await commentEntry.hover();
-  await expect(commentEntry).toHaveClass(/active/);
-  await captureLane4CommentState(page, 'r-entry-selected-hover');
-  await page.getByTestId('comment-popover-view-all').click();
+  await expect(floatingComposer).toBeVisible();
+  await expect(commentTool).toHaveAttribute('aria-pressed', 'true');
+  await page.getByTestId('comment-side-collapsed-rail').getByRole('button', { name: 'Show Comments', exact: true }).click();
   await expect(sidePanel).toBeVisible();
-  for (const dismiss of ['escape', 'button'] as const) {
-    const imageName = `discard-${dismiss}.png`;
-    const removedImageName = `remove-${dismiss}.png`;
+  {
+    const imageName = 'discard-draft.png';
+    const removedImageName = 'remove-draft.png';
     const imageFiles = [removedImageName, imageName].map(name => ({
       name,
       mimeType: 'image/png',
       buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64'),
     }));
     await floatingComposer.locator('input[type="file"]').setInputFiles(imageFiles);
-    await expect(floatingComposer.locator('.comment-popover-image')).toHaveCount(2);
+    await expect(floatingComposer.locator('button img')).toHaveCount(2);
     const removedImage = floatingComposer.getByRole('button', { name: removedImageName, exact: true });
-    await floatingComposer.locator('.comment-popover-image').filter({ has: page.getByRole('button', { name: removedImageName, exact: true }) }).locator('.comment-popover-image-remove').click();
+    await floatingComposer.getByRole('button', { name: 'Remove last image', exact: true }).first().click();
     await expect(removedImage).toHaveCount(0);
-    await expect(floatingComposer.locator('.comment-popover-image')).toHaveCount(1);
+    await expect(floatingComposer.locator('button img')).toHaveCount(1);
     const imagePreview = floatingComposer.getByRole('button', { name: imageName, exact: true });
     await expect(imagePreview).toBeVisible();
     await expect(note).toHaveValue('');
-    await floatingComposer.locator('.comment-popover-image-remove').click();
-    await expect(floatingComposer.locator('.comment-popover-images')).toHaveCount(0);
+    await floatingComposer.getByRole('button', { name: 'Remove last image', exact: true }).click();
+    await expect(floatingComposer.locator('button img')).toHaveCount(0);
     await expect(page.getByTestId('comment-popover-save')).toBeDisabled();
     await expect(page.getByTestId('comment-add-send')).toBeDisabled();
     await floatingComposer.locator('input[type="file"]').setInputFiles(imageFiles.slice(1));
-    await expect(floatingComposer.locator('.comment-popover-image')).toHaveCount(1);
+    await expect(floatingComposer.locator('button img')).toHaveCount(1);
     await expect(imagePreview).toBeVisible();
     await expect(page.getByTestId('comment-popover-save')).toBeEnabled();
     await expect(page.getByTestId('comment-add-send')).toBeEnabled();
@@ -494,42 +414,36 @@ test('[P0] sending preview comments opens the refreshed follow-up artifact', asy
     await expect(imageDialog).toBeVisible();
     await expect(imageDialog).toHaveAttribute('aria-modal', 'true');
     await expect.poll(() => imageDialog.getByRole('img', { name: imageName, exact: true }).evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
-    if (dismiss === 'escape') await test.info().attach('comment-image-lightbox', { body: await page.screenshot(), contentType: 'image/png' });
+    await test.info().attach('comment-image-lightbox', { body: await page.screenshot(), contentType: 'image/png' });
     await imageDialog.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(imageDialog).toHaveCount(0);
     await expect(floatingComposer).toBeVisible();
     await expect(imagePreview).toBeVisible();
-    await note.fill(`Discard this ${dismiss} draft.`);
+    await note.fill('Discard this draft.');
     await expect(page.getByTestId('comment-popover-save')).toBeEnabled();
-    if (dismiss === 'escape') await note.press('Escape');
-    else await floatingComposer.getByRole('button', { name: 'Close', exact: true }).click();
+    // Creation has no titlebar close button; Escape discards the unsent draft.
+    await note.press('Escape');
     await expect(floatingComposer).toHaveCount(0);
     await expect(sidePanel.getByTestId('comment-side-item')).toHaveCount(0);
     await expect(page.getByTestId('comment-saved-marker-hero-title')).toHaveCount(0);
     await clickCommentTargetInPreview(page, '[data-od-id="hero-title"]');
     await expect(floatingComposer).toBeVisible();
     await expect(note).toHaveValue('');
-    await expect(floatingComposer.locator('.comment-popover-images')).toHaveCount(0);
+    await expect(floatingComposer.locator('button img')).toHaveCount(0);
     await expect(page.getByTestId('comment-popover-save')).toBeDisabled();
-    await expect(titleLabel).toHaveText(longCommentTag);
+    await expect(floatingComposer).toHaveAttribute('aria-label', `Comment: ${longCommentTag}`);
+    await expect(floatingComposer.locator('.comment-popover-titlebar, .comment-popover-title')).toHaveCount(0);
   }
-  // 22,000 CJK characters are 66,000 UTF-8 bytes: the byte limit belongs
-  // to the server, not a client character cap or preflight validation.
-  const oversizedDraft = '界'.repeat(22_000);
-  expect(Buffer.byteLength(oversizedDraft, 'utf8')).toBeGreaterThan(64 * 1024);
+  // The mainline limit counts graphemes and blocks both save and send.
+  const oversizedDraft = '界'.repeat(401);
   await note.fill(oversizedDraft);
   await expect(note).toHaveValue(oversizedDraft);
-  await expect(note).not.toHaveAttribute('maxlength');
-  await expect(floatingComposer.locator('.comment-popover-images')).toHaveCount(0);
-  await expect(page.getByTestId('comment-popover-save')).toBeEnabled();
-  await expect(page.getByTestId('comment-add-send')).toBeEnabled();
-  // Do not submit an over-limit payload in this client-only acceptance check.
-  await note.fill('');
+  await expect(floatingComposer.getByRole('alert')).toContainText(/401\s*\/\s*400/);
   await expect(page.getByTestId('comment-popover-save')).toBeDisabled();
-  await page.setViewportSize({ width: 1280, height: 480 });
-  await expect.poll(() => composerBody.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
-  await expect(composerBody).toHaveCSS('overflow-y', 'auto');
+  await expect(page.getByTestId('comment-add-send')).toBeDisabled();
+  await note.fill('');
   const saveComment = page.getByTestId('comment-popover-save');
+  await expect(saveComment).toBeDisabled();
   const multilineComment = 'Make the headline more specific.\nKeep the supporting copy concise.';
   await note.fill('Make the headline more specific.');
   // Collapse a full selection to its end before exercising native multiline
@@ -545,14 +459,6 @@ test('[P0] sending preview comments opens the refreshed follow-up artifact', asy
   await expect(sidePanel.getByTestId('comment-side-item')).toHaveCount(0);
   await expect(page.getByTestId('comment-saved-marker-hero-title')).toHaveCount(0);
   await expect(saveComment).toBeEnabled();
-  await expect.poll(async () => {
-    const bounds = await saveComment.boundingBox();
-    return bounds !== null && bounds.y >= 0 && bounds.y + bounds.height <= 480
-      && bounds.x >= 0 && bounds.x + bounds.width <= 1280;
-  }).toBe(true);
-  // Check bounds before actionability can scroll an offscreen footer into view.
-  await saveComment.click({ trial: true });
-  await test.info().attach('comment-composer-short', { body: await page.screenshot(), contentType: 'image/png' });
   const firstSaved = page.waitForResponse(response => {
     const path = new URL(response.url()).pathname;
     return response.request().method() === 'POST'
@@ -573,99 +479,40 @@ test('[P0] sending preview comments opens the refreshed follow-up artifact', asy
   await expect(sidePanel.getByTestId('comment-side-item').filter({ hasText: 'Make the headline more specific.' }).first()).toBeVisible();
   await page.getByTestId('comment-saved-marker-hero-title').getByRole('button').click();
   await expect(floatingComposer).toBeVisible();
-  await expect(note).toHaveValue(multilineComment);
-  await expect(note).not.toHaveAttribute('readonly');
-  await expect(saveComment).toBeDisabled();
-  await note.fill('This unsaved replacement must be discarded.');
-  await expect(saveComment).toBeEnabled();
-  await note.press('Escape');
+  await expect(floatingComposer.getByTestId('comment-popover-detail').locator('p')).toHaveText(multilineComment);
+  await expect(note).toHaveCount(0);
+  await expect(saveComment).toHaveCount(0);
+  await floatingComposer.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(floatingComposer).toHaveCount(0);
   await expect(sidePanel.getByTestId('comment-side-item')).toHaveCount(1);
-  await expect(sidePanel.getByTestId('comment-side-item')).toContainText('Make the headline more specific.');
-  await expect(sidePanel.getByTestId('comment-side-item')).not.toContainText('This unsaved replacement must be discarded.');
-  await page.getByTestId('comment-saved-marker-hero-title').getByRole('button').click();
-  await expect(note).toHaveValue(multilineComment);
-  await expect(saveComment).toBeDisabled();
-  const editedComment = `${multilineComment}\nPreserve the existing layout.`;
-  await note.fill(editedComment);
-  await expect(saveComment).toBeEnabled();
-  const editSaved = page.waitForResponse(response => {
-    const path = new URL(response.url()).pathname;
-    return response.request().method() === 'POST'
-      && path.startsWith(`/api/projects/${encodeURIComponent(projectId)}/conversations/`)
-      && path.endsWith('/comments');
-  });
-  await note.press('Enter');
-  const editSaveResponse = await editSaved;
-  expect(editSaveResponse.ok()).toBe(true);
-  expect((await editSaveResponse.json()).comment).toMatchObject({
-    id: originalComment.id,
-    note: editedComment,
-  });
-  await expect(floatingComposer).toHaveCount(0);
-  await expect(sidePanel.getByTestId('comment-side-item')).toHaveCount(1);
-  await expect(sidePanel.getByTestId('comment-side-item')).toContainText('Preserve the existing layout.');
-  await expect(page.getByTestId('comment-saved-marker-hero-title')).toHaveCount(1);
+
   const commentsReadBack = page.waitForResponse(response =>
-    response.request().method() === 'GET' && response.url() === editSaveResponse.url());
+    response.request().method() === 'GET' && response.url() === firstSaveResponse.url());
   await page.reload();
   const readBackResponse = await commentsReadBack;
   expect(readBackResponse.ok()).toBe(true);
   const persistedComments = (await readBackResponse.json()).comments;
   expect(persistedComments).toHaveLength(1);
-  expect(persistedComments[0]).toMatchObject({ id: originalComment.id, note: editedComment });
+  expect(persistedComments[0]).toMatchObject({ id: originalComment.id, note: multilineComment });
   await expectWorkspaceReady(page);
   await expect(artifactPreview(page)).toBeVisible();
-  await enterPreviewCommentMode(page);
+  // Reading saved feedback does not activate the creation tool.
+  await clickPreviewToolbarAction(page, 'comment-panel-toggle', /^Comments \(\d+\)$/);
   await expect(sidePanel).toBeVisible();
-  await expect(sidePanel.getByTestId('comment-side-item')).toHaveCount(1);
-  await expect(sidePanel.getByTestId('comment-side-item')).toContainText('Preserve the existing layout.');
-  await page.getByTestId('comment-saved-marker-hero-title').getByRole('button').click();
-  await expect(note).toHaveValue(editedComment);
-  await expect(saveComment).toBeDisabled();
-  await note.press('Escape');
+  await expect(commentTool).toHaveAttribute('aria-pressed', 'false');
+  const item = sidePanel.getByTestId('comment-side-item');
+  await expect(item).toHaveCount(1);
+  await expect(item).toContainText(multilineComment);
+  await item.click();
+  await expect(floatingComposer.getByTestId('comment-popover-detail').locator('p')).toHaveText(multilineComment);
+  await expect(note).toHaveCount(0);
+  await expect(saveComment).toHaveCount(0);
+  await floatingComposer.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(floatingComposer).toHaveCount(0);
   await captureLane4CommentState(page, '06-panel-populated');
-  await captureLane4CommentState(page, '06-author-self');
-  // Restore the reference skin while retaining the current comment behavior.
-  const floatHost = page.locator('.comment-float-host').filter({ has: sidePanel });
-  await expect(floatHost).toHaveCSS('width', '320px');
-  const header = sidePanel.locator('.comment-side-header');
-  await expect(header).toHaveCSS('padding', '0px 16px');
-  await expect(sidePanel.locator('.comment-side-title')).toHaveText('Comments');
-  const list = sidePanel.locator('.comment-side-list');
-  await expect(list).toHaveCSS('padding', '8px 12px');
-  await expect(list).toHaveCSS('gap', '6px');
-  const item = sidePanel.getByTestId('comment-side-item').first();
-  await expect(item).toHaveCSS('padding', '6px 10px 6px 8px');
-  await expect(item.locator('.comment-side-time')).toHaveCSS('font-size', '10.5px');
-  await expect(item.locator('.comment-side-avatar')).toHaveCSS('width', '20px');
-  await expect(item.locator('.comment-side-avatar')).toHaveCSS('height', '20px');
-  await expect(item.locator('.comment-side-avatar')).toHaveCSS('font-weight', '500');
-  const avatarSwatch = await item.locator('.comment-side-avatar').evaluate(element => {
-    const style = getComputedStyle(element);
-    return { background: style.backgroundColor, foreground: style.color };
-  });
-  const savedPin = page.locator('.comment-saved-pin');
-  await expect(savedPin).toHaveCount(1);
-  await expect(savedPin).toHaveCSS('width', '28px');
-  await expect(savedPin).toHaveCSS('height', '28px');
-  await expect(savedPin).toHaveCSS('background-color', avatarSwatch.background);
-  await expect(savedPin).toHaveCSS('color', avatarSwatch.foreground);
-  await expect
-    .poll(async () => {
-      const selectAll = sidePanel.getByRole('button', { name: /select all/i }).first();
-      if ((await selectAll.count()) === 0) return false;
-      await selectAll.evaluate((element: HTMLButtonElement) => element.click());
-      return (await page.getByTestId('comment-side-send-claude').count()) > 0;
-    })
-    .toBe(true);
-  await expect(page.getByTestId('comment-side-send-claude')).toBeVisible();
-  const selectbar = sidePanel.getByTestId('comment-side-selectbar');
-  await expect(selectbar).toHaveCSS('padding', '4px 14px 8px');
+  await sidePanel.getByRole('button', { name: /select all/i }).click();
   await expect(item.locator('.comment-side-check')).toHaveAttribute('aria-pressed', 'true');
-  const sendComments = sidePanel.getByTestId('comment-side-send-claude');
-  await expect(sendComments).toBeEnabled();
+  await expect(sidePanel.getByTestId('comment-side-send-claude')).toBeEnabled();
 
   const runRequest = page.waitForRequest(isCreateRunRequest);
   const runEvents = page.waitForResponse((response) => {
@@ -682,7 +529,7 @@ test('[P0] sending preview comments opens the refreshed follow-up artifact', asy
       filePath?: string;
     }>;
   };
-  expect(body.message).toContain(editedComment);
+  expect(body.message).toContain(multilineComment);
   expect(body.commentAttachments).toEqual([
     expect.objectContaining({
       elementId: 'hero-title',
@@ -1394,7 +1241,7 @@ async function clickCommentTargetInPreview(page: Page, selector: string) {
 
 async function enterPreviewCommentMode(page: Page) {
   await clickPreviewToolbarAction(page, 'board-mode-toggle', /^Comment$/);
-  await clickPreviewToolbarAction(page, 'comment-panel-toggle', /^Comments \(\d+\)$/);
+  await expect(page.getByTestId('comment-side-panel')).toBeVisible();
 }
 
 async function runCommentAttachmentFlow(

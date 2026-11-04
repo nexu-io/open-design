@@ -14,6 +14,14 @@ import { personalCommentRelayFilePaths } from '../src/collab/comment-relay-scope
 import { createCollabCloudService } from '../src/collab/collab-cloud-service.js';
 import { createVelaCliCollabClient } from '../src/collab/vela-cli-collab-client.js';
 
+function prepareComments(
+  db: ReturnType<typeof openDatabase>,
+  publications: ReturnType<typeof createSqlitePublicFilePublicationStore>,
+  subject: Parameters<typeof publications.listFacts>[0],
+) {
+  return publications.listFacts(subject).map(fact => db.transaction(() => enqueuePublishedFileComments(db, fact))());
+}
+
 let root: string | undefined;
 afterEach(() => { closeDatabase(); if (root) rmSync(root, { recursive: true, force: true }); root = undefined; });
 const scope = { sourceFileId: '11111111-1111-4111-8111-111111111111', resourceTeamId: 'workspace', ownerMemberId: 'owner', projectId: 'personal', filePath: 'pages/design.html' };
@@ -72,8 +80,9 @@ async function expectInbound(db: ReturnType<typeof openDatabase>) {
 it('first personal publication makes public user comments pullable into the shared internal anchor mechanism', async () => {
   const { db, publications } = setup();
   expect(getProjectCommentAnchorConversationId(db, scope.projectId)).toBeNull();
-  const record = createPublicFilePublicationRecorder(db, publications, enqueuePublishedFileComments);
+  const record = createPublicFilePublicationRecorder(db, publications);
   record(scope, publication, mapping);
+  prepareComments(db, publications, scope);
   // K1: no existing comments skips waiting/syncing without losing the link.
   expect(publications.get(scope)).toMatchObject(publication);
   expect(readPublishedCommentBackfill(db, { projectId: scope.projectId, workspaceId: scope.resourceTeamId,
@@ -83,6 +92,7 @@ it('first personal publication makes public user comments pullable into the shar
   await expectInbound(db);
   const anchor = getProjectCommentAnchorConversationId(db, scope.projectId);
   record(scope, publication, mapping);
+  prepareComments(db, publications, scope);
   expect(getProjectCommentAnchorConversationId(db, scope.projectId)).toBe(anchor);
 });
 it.each(['unpublished', 'stopped', 'deleted'] as const)('startup does not enroll an ineligible personal project: %s', scenario => {
@@ -94,13 +104,15 @@ it.each(['unpublished', 'stopped', 'deleted'] as const)('startup does not enroll
   expect(getProjectCommentAnchorConversationId(db, scope.projectId)).toBeNull();
   expect(listConversations(db, scope.projectId).map(row => row.id)).toEqual(['ordinary-chat']);
 });
-it('publication failure rolls back its newly created anchor together with the publication', () => {
+it('comment preparation failure rolls back its new anchor and preserves the successful publication', () => {
   const { db, publications } = setup();
   db.exec("CREATE TRIGGER reject_mapping BEFORE INSERT ON comment_relay_publication_mappings BEGIN SELECT RAISE(ABORT, 'mapping failed'); END");
-  const record = createPublicFilePublicationRecorder(db, publications, enqueuePublishedFileComments);
-  expect(() => record(scope, publication, mapping)).toThrow('mapping failed');
+  const record = createPublicFilePublicationRecorder(db, publications);
+  const revision = record(scope, publication, mapping);
+  expect(() => prepareComments(db, publications, scope)).toThrow('mapping failed');
   expect(getProjectCommentAnchorConversationId(db, scope.projectId)).toBeNull();
-  expect(publications.get(scope)).toBeNull();
+  expect(publications.get(scope)).toEqual(publication);
+  expect(publications.getRevision(scope)).toEqual(revision);
   expect(listConversations(db, scope.projectId).map(row => row.id)).toEqual(['ordinary-chat']);
 });
 it('startup repairs an already published personal project after reopen without replacing its publication or ordinary chat', async () => {

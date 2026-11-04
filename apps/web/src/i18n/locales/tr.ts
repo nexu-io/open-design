@@ -1,6 +1,9 @@
 import type { Dict } from '../types';
 
 export const tr: Dict = {
+  'chat.comments.deselectAll': 'Deselect all',
+  'fileViewer.commentSync.alignRetrying': 'Retrying…',
+  'fileViewer.commentSync.alignRetryPending': 'Syncing comments…',
   "workspaceInvite.deliveryPending": "Davetin iletimi bekleniyor. Daha sonra tekrar kontrol edin.",
   "workspaceInvite.deliveryFailed": "Davet iletilemedi. Tekrar deneyin.",
   "workspaceInvite.invalidResponse": "Davetin iletimi doğrulanamadı. Daha sonra tekrar deneyin.",
@@ -5601,4 +5604,16 @@ export const tr: Dict = {
   'comment.saveTargetMissing': 'The comment target no longer exists. Select an element again; your draft is kept.',
   'comment.savePreviewNotReady': 'The preview is refreshing. Your draft is kept; try saving again when it is ready.',
   'comment.anchorState.lost': 'bağlantı noktası kayboldu',
+  "comment.unknownAuthor": "Unknown author",
+  "comment.moreCount": "Show comments ({n})",
+  "comment.resizePanel": "Resize comments panel",
+  "comment.overLimit": "{count} characters over the limit. Shorten before sending.",
+  "comment.saveFailed": "Could not save comment. Try again.",
+  "comment.locationUnavailable": "Bu öğe bulunamıyor. Sayfa değişmiş olabilir.",
+  "comment.agentSubmitFailed": "Gönderim başarısız oldu. Lütfen tekrar deneyin.",
+  "comment.agentSubmitUnavailable": "Şu anda gönderilemiyor. Lütfen daha sonra tekrar deneyin.",
+  "comment.imageFailed": "Image unavailable",
+  "comment.moreActions": "More comment actions",
+  'fileViewer.commentSync.alignRetryFailed': 'Sync failed. Try again.',
+  'fileViewer.commentSync.alignRetrySucceeded': 'Comments synced',
 };

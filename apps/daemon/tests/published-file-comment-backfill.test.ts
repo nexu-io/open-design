@@ -19,6 +19,15 @@ import { recordPublishedCommentMutation, sourcePathForCurrentPublication } from 
 import { createCollabCloudService } from '../src/collab/collab-cloud-service.js';
 import { createVelaCliCollabClient } from '../src/collab/vela-cli-collab-client.js';
 import { commentRelayScope } from '../src/collab/comment-relay-scope.js';
+
+function prepareComments(
+  db: ReturnType<typeof openDatabase>,
+  publications: ReturnType<typeof createSqlitePublicFilePublicationStore>,
+  subject: Parameters<typeof publications.listFacts>[0],
+) {
+  return publications.listFacts(subject).map(fact => db.transaction(() => enqueuePublishedFileComments(db, fact))());
+}
+
 let root: string | undefined;
 afterEach(() => { closeDatabase(); if (root) rmSync(root, { recursive: true, force: true }); root = undefined; });
 function setup() {
@@ -60,13 +69,15 @@ it('includes only new-protocol comments on the current lifetime, never historica
 it('composes the real publisher recorder, planner mapping and durable queue across stable-alias updates', () => {
   const s = setup(); s.add('a'); s.add('b', 'b-p'); s.add('private', 'a-p', 'private.html');
   const mapping = createShareFileMapping([{ sourcePath: s.scope.filePath, file: 'index.html' }]);
-  const record = createPublicFilePublicationRecorder(s.db, s.publications, enqueuePublishedFileComments);
+  const record = createPublicFilePublicationRecorder(s.db, s.publications);
   const first = record(s.scope, s.publication, mapping);
+  prepareComments(s.db, s.publications, s.scope);
   const oldRows = s.outbox.listDue(Date.now());
   expect(oldRows.map(row => row.comment.id)).toEqual(['a', 'b']);
   expect(oldRows.every(row => row.publication?.token === first.token && row.publication.publicFilePath === 'index.html')).toBe(true);
   s.add('a', 'a-p');
   const second = record(s.scope, s.publication, mapping);
+  prepareComments(s.db, s.publications, s.scope);
   expect(second.slug).toBe(first.slug); expect(second.token).not.toBe(first.token);
   expect(s.outbox.isPublicationCurrent!(oldRows[0]!)).toBe(false);
   const currentRows = s.outbox.listDue(Date.now());
@@ -75,17 +86,19 @@ it('composes the real publisher recorder, planner mapping and durable queue acro
   expect(s.publications.get(s.scope)?.url).toBe(s.publication.url);
   expect(s.db.inTransaction).toBe(false);
 });
-it('real recorder restores previous publication, queue and mapping when a later comment enqueue fails', () => {
+it('comment preparation rolls back queue and mapping while retaining the latest successful publication', () => {
   const s = setup(); s.add('a');
-  const record = createPublicFilePublicationRecorder(s.db, s.publications, enqueuePublishedFileComments);
+  const record = createPublicFilePublicationRecorder(s.db, s.publications);
   const mapping = createShareFileMapping([{ sourcePath: s.scope.filePath, file: 'index.html' }]);
-  const previous = record(s.scope, s.publication, mapping);
+  record(s.scope, s.publication, mapping);
+  prepareComments(s.db, s.publications, s.scope);
   const oldRows = s.outbox.listDue(Date.now());
   const oldMapping = s.db.prepare('SELECT * FROM comment_relay_publication_mappings').all();
   s.add('b', 'b-p');
   s.db.exec("CREATE TRIGGER reject_second BEFORE INSERT ON comment_relay_outbox WHEN NEW.comment_id='b' BEGIN SELECT RAISE(ABORT,'queue failed'); END");
-  expect(() => record(s.scope, s.publication, mapping)).toThrow('queue failed');
-  expect(s.publications.getRevision(s.scope)).toEqual(previous);
+  const current = record(s.scope, s.publication, mapping);
+  expect(() => prepareComments(s.db, s.publications, s.scope)).toThrow('queue failed');
+  expect(s.publications.getRevision(s.scope)).toEqual(current);
   expect(s.outbox.listDue(Date.now())).toEqual(oldRows);
   expect(s.db.prepare('SELECT * FROM comment_relay_publication_mappings').all()).toEqual(oldMapping);
   expect(s.db.inTransaction).toBe(false);
@@ -94,7 +107,7 @@ it('real recorder refuses unmapped file without replacing previously durable sta
   const s = setup(); s.add('a'); s.publish();
   const revision = s.publications.getRevision(s.scope);
   const rows = s.outbox.listDue(Date.now());
-  const record = createPublicFilePublicationRecorder(s.db, s.publications, enqueuePublishedFileComments);
+  const record = createPublicFilePublicationRecorder(s.db, s.publications);
   const other = createShareFileMapping([{ sourcePath: 'other.html', file: 'index.html' }]);
   expect(() => record(s.scope, s.publication, other)).toThrow('SHARE_ENTRY_MAPPING_UNAVAILABLE');
   expect(s.publications.getRevision(s.scope)).toEqual(revision);
@@ -119,10 +132,11 @@ it.each(['active', 'stopped', 'republished-without-mapping', 'wrong-team', 'wron
 it('separates two aliases both packaged as index.html and never borrows the other after stop', () => {
   const s = setup(); s.publish();
   const otherScope = { ...s.scope, filePath: 'other.html' };
-  createPublicFilePublicationRecorder(s.db, s.publications, enqueuePublishedFileComments)(
+  createPublicFilePublicationRecorder(s.db, s.publications)(
     otherScope, { ...s.publication, slug: 'other-alias' },
     createShareFileMapping([{ sourcePath: otherScope.filePath, file: 'index.html' }]),
   );
+  prepareComments(s.db, s.publications, otherScope);
   const input = { resourceTeamId: s.scope.resourceTeamId, ownerMemberId: s.scope.ownerMemberId,
     projectId: s.scope.projectId, slug: s.publication.slug, publishedPath: 'index.html' };
   expect(sourcePathForCurrentPublication(s.db, input)).toBe(s.scope.filePath);
@@ -133,9 +147,10 @@ it('separates two aliases both packaged as index.html and never borrows the othe
 it('rejects an ambiguous persisted alias instead of picking a source file', () => {
   const s = setup(); s.publish();
   const otherScope = { ...s.scope, filePath: 'other.html' };
-  createPublicFilePublicationRecorder(s.db, s.publications, enqueuePublishedFileComments)(
+  createPublicFilePublicationRecorder(s.db, s.publications)(
     otherScope, s.publication, createShareFileMapping([{ sourcePath: otherScope.filePath, file: 'index.html' }]),
   );
+  prepareComments(s.db, s.publications, otherScope);
   expect(() => sourcePathForCurrentPublication(s.db, { resourceTeamId: s.scope.resourceTeamId,
     ownerMemberId: s.scope.ownerMemberId, projectId: s.scope.projectId,
     slug: s.publication.slug, publishedPath: 'index.html' })).toThrow('SHARE_COMMENT_MAPPING_AMBIGUOUS');
@@ -283,9 +298,10 @@ it.each(['normal', 'stop', 'republish', 'delete', 'switch', 'retry', 'stop-infli
       if (scenario === 'stop-inflight') s.publications.delete(s.scope);
       else if (scenario === 'republish-new-intents') {
         s.db.prepare("UPDATE preview_comments SET note='new publication content' WHERE id='a'").run();
-        createPublicFilePublicationRecorder(s.db, s.publications, enqueuePublishedFileComments)(
+        createPublicFilePublicationRecorder(s.db, s.publications)(
           s.scope, s.publication, createShareFileMapping([{ sourcePath: s.scope.filePath, file: 'index.html' }]),
         );
+        prepareComments(s.db, s.publications, s.scope);
       } else s.publications.set(s.scope, s.publication);
       release.resolve();
     }

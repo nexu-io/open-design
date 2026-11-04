@@ -1,6 +1,9 @@
 import type { Dict } from '../types';
 
 export const id: Dict = {
+  'chat.comments.deselectAll': 'Deselect all',
+  'fileViewer.commentSync.alignRetrying': 'Retrying…',
+  'fileViewer.commentSync.alignRetryPending': 'Syncing comments…',
   "workspaceInvite.deliveryPending": "Pengiriman undangan sedang berlangsung. Periksa lagi nanti.",
   "workspaceInvite.deliveryFailed": "Pengiriman undangan gagal. Coba lagi.",
   "workspaceInvite.invalidResponse": "Tidak dapat memastikan pengiriman undangan. Coba lagi nanti.",
@@ -5601,4 +5604,16 @@ export const id: Dict = {
   'comment.saveTargetMissing': 'The comment target no longer exists. Select an element again; your draft is kept.',
   'comment.savePreviewNotReady': 'The preview is refreshing. Your draft is kept; try saving again when it is ready.',
   'comment.anchorState.lost': 'jangkar hilang',
+  "comment.unknownAuthor": "Unknown author",
+  "comment.moreCount": "Show comments ({n})",
+  "comment.resizePanel": "Resize comments panel",
+  "comment.overLimit": "{count} characters over the limit. Shorten before sending.",
+  "comment.saveFailed": "Could not save comment. Try again.",
+  "comment.locationUnavailable": "Elemen ini tidak dapat ditemukan. Halaman mungkin telah berubah.",
+  "comment.agentSubmitFailed": "Gagal mengirim. Silakan coba lagi.",
+  "comment.agentSubmitUnavailable": "Saat ini tidak dapat mengirim. Silakan coba lagi nanti.",
+  "comment.imageFailed": "Image unavailable",
+  "comment.moreActions": "More comment actions",
+  'fileViewer.commentSync.alignRetryFailed': 'Sync failed. Try again.',
+  'fileViewer.commentSync.alignRetrySucceeded': 'Comments synced',
 };

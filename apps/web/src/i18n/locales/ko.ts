@@ -1,6 +1,9 @@
 import type { Dict } from '../types';
 
 export const ko: Dict = {
+  'chat.comments.deselectAll': 'Deselect all',
+  'fileViewer.commentSync.alignRetrying': 'Retrying…',
+  'fileViewer.commentSync.alignRetryPending': 'Syncing comments…',
   "workspaceInvite.deliveryPending": "초대 전달을 기다리는 중입니다. 잠시 후 확인하세요.",
   "workspaceInvite.deliveryFailed": "초대를 전달하지 못했습니다. 다시 시도하세요.",
   "workspaceInvite.invalidResponse": "초대 전달 여부를 확인할 수 없습니다. 나중에 다시 시도하세요.",
@@ -5601,4 +5604,16 @@ export const ko: Dict = {
   'comment.saveTargetMissing': 'The comment target no longer exists. Select an element again; your draft is kept.',
   'comment.savePreviewNotReady': 'The preview is refreshing. Your draft is kept; try saving again when it is ready.',
   'comment.anchorState.lost': '앵커를 찾을 수 없습니다',
+  "comment.unknownAuthor": "Unknown author",
+  "comment.moreCount": "Show comments ({n})",
+  "comment.resizePanel": "Resize comments panel",
+  "comment.overLimit": "{count} characters over the limit. Shorten before sending.",
+  "comment.saveFailed": "Could not save comment. Try again.",
+  "comment.locationUnavailable": "이 요소를 찾을 수 없습니다. 페이지가 변경되었을 수 있습니다.",
+  "comment.agentSubmitFailed": "제출하지 못했습니다. 다시 시도해 주세요.",
+  "comment.agentSubmitUnavailable": "지금은 제출할 수 없습니다. 잠시 후 다시 시도해 주세요.",
+  "comment.imageFailed": "Image unavailable",
+  "comment.moreActions": "More comment actions",
+  'fileViewer.commentSync.alignRetryFailed': 'Sync failed. Try again.',
+  'fileViewer.commentSync.alignRetrySucceeded': 'Comments synced',
 };

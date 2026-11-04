@@ -94,6 +94,6 @@ export async function verifyWorkspaceRequestContext(input: {
 
   return {
     ok: true,
-    context: workspaceContextFromDirectoryItem(membership, input.configuredEnv),
+    context: workspaceContextFromDirectoryItem(membership, input.configuredEnv, directory.authorKey),
   };
 }

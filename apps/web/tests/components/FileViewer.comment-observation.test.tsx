@@ -18,10 +18,18 @@ function comment(id: string): PreviewComment {
   };
 }
 beforeEach(() => {
+  const original = HTMLElement.prototype.getBoundingClientRect;
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    if (this.matches('.viewer-body, .comment-preview-canvas')) return new DOMRect(0, 0, 900, 700);
+    if (this.matches('.comment-saved-marker, .comment-active-pin')) {
+      return new DOMRect(Number.parseFloat(this.style.left), Number.parseFloat(this.style.top), 28, 28);
+    }
+    return original.call(this);
+  });
   measurement.track.mockReset();
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ deployments: [] })));
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('real saved-comment selection observer', () => {
   it.each(['disabled', 'enabled', 'throws', 'pending'] as const)(
@@ -57,45 +65,28 @@ describe('real saved-comment selection observer', () => {
     },
   );
 
-  it.each(['unchanged', 'edited', 'queued-notes', 'image'] as const)(
-    'observes only the actual unchanged saved-comment composer submission: %s', async kind => {
-      const send = vi.fn().mockResolvedValue({ status: 'rejected', commentIds: [] });
-      const saved = { ...comment('A'), ...(kind === 'queued-notes' ? { selectionKind: 'pod' as const } : {}) };
-      render(<FileViewer projectId="p" projectKind="prototype" file={file}
-        liveHtml="<html><body>Hello</body></html>" previewComments={[saved]}
-        onSendBoardCommentAttachments={send} />);
-      fireEvent.click(screen.getByTestId('comment-panel-toggle'));
-      fireEvent.click(screen.getByRole('button', { name: /Open comment for/ }));
-      const input = await screen.findByTestId('comment-popover-input');
-      if (kind === 'edited') fireEvent.change(input, { target: { value: 'changed private feedback' } });
-      if (kind === 'queued-notes') fireEvent.click(screen.getByTestId('comment-popover-add-note'));
-      const image = new File(['image'], 'fixture.png', { type: 'image/png' });
-      if (kind === 'image') {
-        vi.stubGlobal('URL', Object.assign(class extends URL {}, {
-          createObjectURL: () => 'blob:comment-observation', revokeObjectURL: vi.fn(),
-        }));
-        const upload = screen.getByTestId('comment-popover').querySelector('input[type="file"]');
-        if (!upload) throw new Error('missing real image attachment control');
-        fireEvent.change(upload, { target: { files: [image] } });
-      }
-      measurement.track.mockClear();
-      fireEvent.click(screen.getByTestId('comment-add-send'));
-      await waitFor(() => expect(send).toHaveBeenCalledOnce());
-      const submitted = send.mock.calls[0]?.[0];
-      if (kind === 'unchanged') expect(submitted).toEqual([
-        expect.objectContaining({ id: 'A', source: 'saved-comment', comment: 'private-A' }),
-      ]);
-      else {
-        expect(submitted).toEqual([expect.objectContaining({ source: 'board-batch' })]);
-        expect(submitted[0].id).not.toBe('A');
-        if (kind === 'edited') expect(submitted[0].comment).toBe('changed private feedback');
-        if (kind === 'image') expect(send.mock.calls[0]?.[1]).toEqual([image]);
-      }
-      const clicks = measurement.track.mock.calls.filter(([name, props]) => name === 'ui_click' && props.element === 'send_to_chat');
-      expect(clicks).toHaveLength(1);
-      if (kind === 'unchanged') expect(clicks[0]?.[1]).toMatchObject({ submitted_comment_ids: ['A'] });
-      else expect(clicks[0]?.[1]).not.toHaveProperty('submitted_comment_ids');
-      expect(screen.getByTestId('comment-popover-input')).toBeVisible();
-    },
-  );
+  it('sends the saved snapshot from a read-only detail without exposing editing controls', async () => {
+    const send = vi.fn().mockResolvedValue({ status: 'rejected', commentIds: [] });
+    render(<FileViewer projectId="p" projectKind="prototype" file={file}
+      liveHtml="<html><body>Hello</body></html>" previewComments={[comment('A')]}
+      onSendBoardCommentAttachments={send} />);
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    fireEvent.click(screen.getByTestId('comment-side-item'));
+    expect(await screen.findByTestId('comment-popover-detail')).toHaveTextContent('private-A');
+    expect(screen.queryByTestId('comment-popover-input')).toBeNull();
+    expect(screen.queryByTestId('comment-popover-save')).toBeNull();
+    expect(screen.queryByTestId('comment-popover-add-note')).toBeNull();
+    expect(screen.getByTestId('comment-popover').querySelector('input[type="file"]')).toBeNull();
+    measurement.track.mockClear();
+    fireEvent.click(screen.getByTestId('comment-add-send'));
+    await waitFor(() => expect(send).toHaveBeenCalledOnce());
+    expect(send.mock.calls[0]?.[0]).toEqual([
+      expect.objectContaining({ id: 'A', source: 'saved-comment', comment: 'private-A' }),
+    ]);
+    const clicks = measurement.track.mock.calls.filter(([name, props]) => name === 'ui_click' && props.element === 'send_to_chat');
+    expect(clicks).toHaveLength(1);
+    expect(clicks[0]?.[1]).toMatchObject({ submitted_comment_ids: ['A'] });
+    expect(JSON.stringify(clicks)).not.toContain('private-');
+    expect(screen.getByTestId('comment-popover-detail')).toBeVisible();
+  });
 });

@@ -1,6 +1,9 @@
 import type { Dict } from '../types';
 
 export const uk: Dict = {
+  'chat.comments.deselectAll': 'Deselect all',
+  'fileViewer.commentSync.alignRetrying': 'Retrying…',
+  'fileViewer.commentSync.alignRetryPending': 'Syncing comments…',
   "workspaceInvite.deliveryPending": "Доставка запрошення очікується. Перевірте пізніше.",
   "workspaceInvite.deliveryFailed": "Не вдалося доставити запрошення. Спробуйте ще раз.",
   "workspaceInvite.invalidResponse": "Не вдалося підтвердити доставку запрошення. Спробуйте пізніше.",
@@ -5601,4 +5604,16 @@ export const uk: Dict = {
   'comment.saveTargetMissing': 'The comment target no longer exists. Select an element again; your draft is kept.',
   'comment.savePreviewNotReady': 'The preview is refreshing. Your draft is kept; try saving again when it is ready.',
   'comment.anchorState.lost': 'якір втрачено',
+  "comment.unknownAuthor": "Unknown author",
+  "comment.moreCount": "Show comments ({n})",
+  "comment.resizePanel": "Resize comments panel",
+  "comment.overLimit": "{count} characters over the limit. Shorten before sending.",
+  "comment.saveFailed": "Could not save comment. Try again.",
+  "comment.locationUnavailable": "Не вдалося знайти цей елемент. Можливо, сторінка змінилася.",
+  "comment.agentSubmitFailed": "Не вдалося надіслати. Спробуйте ще раз.",
+  "comment.agentSubmitUnavailable": "Зараз надіслати неможливо. Спробуйте пізніше.",
+  "comment.imageFailed": "Image unavailable",
+  "comment.moreActions": "More comment actions",
+  'fileViewer.commentSync.alignRetryFailed': 'Sync failed. Try again.',
+  'fileViewer.commentSync.alignRetrySucceeded': 'Comments synced',
 };

@@ -366,6 +366,11 @@ describe('htmlNeedsFocusGuard', () => {
 });
 
 describe('htmlNeedsPoweredPreview', () => {
+  it('uses the isolated project origin for static and dynamically created nested frames', () => {
+    expect(htmlNeedsPoweredPreview('<iframe srcdoc="hello"></iframe>')).toBe(true);
+    expect(htmlNeedsPoweredPreview("document.createElement('iframe')")).toBe(true);
+    expect(htmlNeedsPoweredPreview('<iframe-placeholder>')).toBe(false);
+  });
   it('returns false for empty / null input', () => {
     expect(htmlNeedsPoweredPreview('')).toBe(false);
     expect(htmlNeedsPoweredPreview(null)).toBe(false);

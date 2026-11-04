@@ -293,25 +293,16 @@ export interface SharePlanExclusion {
 }
 
 /**
- * Total-bytes ceiling for one share (S15). Checked BEFORE the upload starts,
- * so the user is refused immediately rather than after a long transfer.
- *
- * NOTE: the 20 MB figure is carried over from the product spec and has no
- * source in code or in the decision ledger — it is an inherited constant, not
- * a measured limit. It is frozen here so the two ends agree, not because it
- * has been justified.
- */
-export const SHARE_MAX_TOTAL_BYTES = 20 * 1024 * 1024;
-
-/**
  * Summary of what a share WOULD contain, computed by the daemon's
- * `buildSharePlan` before any bytes move. Drives S2/S3/S7/S15/S16.
+ * `buildSharePlan` before any bytes move. Reports local content facts only;
+ * Vela decides publication authorization and capacity.
  */
 export interface SharePlanSummary {
   fileCount: number;
   totalBytes: number;
-  /** `totalBytes > SHARE_MAX_TOTAL_BYTES` — the S15 pre-upload refusal. */
-  exceedsSizeLimit: boolean;
+  /** @deprecated Older daemons supplied a local estimate. Current plans omit
+   * this field: Vela alone decides publication capacity during upload. */
+  exceedsSizeLimit?: boolean;
   /** S16. Empty array, never absent, so callers need no `?? []`. */
   exclusions: SharePlanExclusion[];
   /**
@@ -438,30 +429,7 @@ export function hasActiveShare(state: ProjectShareState | null | undefined): boo
  */
 export const SHARE_COMMENT_PAGE_LIMIT = 500;
 
-/**
- * Anti-abuse ceiling on a comment body, in BYTES. Not a product limit.
- *
- * The product decision is that comment length is not limited: no character
- * count, no disabled send button, no truncation, and no `maxLength` on the
- * input. A 4000-character cap was proposed and explicitly rejected, as was an
- * earlier 200-code-point one and a later 1–400 character one. This constant
- * exists only so a single request cannot be used to push unbounded bytes at
- * the server, which is a transport concern.
- *
- * The distinction is load-bearing, not pedantic:
- *
- * - It is measured in BYTES, not characters, because it is about payload size
- *   rather than anything a person types. Never render it as a character
- *   budget, and never derive a counter from it.
- * - Exceeding it is `PAYLOAD_TOO_LARGE`, not `INVALID_COMMENT`. It is not a
- *   validation rule about what a comment may say.
- * - The client must NOT pre-check it. The input stays uncapped; the server
- *   refuses the pathological case. A client-side check would reintroduce the
- *   exact "count and disable" behaviour the product ruled out.
- *
- * 64 KiB is roughly twenty thousand Chinese characters. Anything reaching it
- * is a script or a paste accident, not a person writing a comment.
- */
+/** Transport ceiling, independent of the 400-grapheme product limit. */
 export const SHARE_COMMENT_MAX_BYTES = 64 * 1024;
 
 /**
@@ -594,7 +562,7 @@ export interface ShareComment {
   /** Server-stamped alias version at insertion, not a viewer-supplied value. */
   anchoredVersion?: number;
   /** Optional normalized anchor geometry; never grants write authority. */
-  position?: { left: number; top: number; width: number; height: number; viewportWidth: number; viewportHeight: number };
+  position?: { left: number; top: number; width: number; height: number; viewportWidth: number; viewportHeight: number; anchor?: { u: number; v: number } };
   status: string;
   createdAt: number;
   updatedAt: number;
@@ -620,7 +588,7 @@ export interface ShareCommentCreateRequest {
   elementId: string;
   selector: string;
   htmlHint: string;
-  position?: { left: number; top: number; width: number; height: number; viewportWidth: number; viewportHeight: number };
+  position?: { left: number; top: number; width: number; height: number; viewportWidth: number; viewportHeight: number; anchor?: { u: number; v: number } };
 }
 
 /** Same shape as one list item — see {@link ShareComment}. */
@@ -1228,7 +1196,7 @@ export interface ShareBridgeViewportRect {
 
 /** Exact keys; render label as text, never markup. No identity is transported. */
 export interface ShareBridgePinDisplay {
-  /** 1–3 ASCII letters/digits/question marks; normally the public pin number. */
+  /** One bounded visible grapheme, or a legacy short ASCII pin token. */
   label: string;
   /** Integer index into the fixed shared 30-color palette, never a CSS value. */
   colorIndex: number;
@@ -1237,9 +1205,12 @@ export interface ShareBridgePinDisplay {
 /** host → frame. Turns the comment affordance on or off in the frame. */
 export interface ShareBridgeInitPayload { enabled: boolean }
 /** host → frame. Enters or leaves element-selection mode. */
-export interface ShareBridgeModePayload { enabled: boolean }
+export interface ShareBridgeModePayload { enabled: boolean; colorIndex?: number; label?: string }
+/** Relative element anchor. Presentation avoidance never changes this point. */
+export interface ShareBridgeAnchorPoint { u: number; v: number }
 /** host → frame. Asks the frame to find and highlight one anchored comment. */
 export interface ShareBridgeLocatePayload {
+  anchor?: ShareBridgeAnchorPoint;
   id: string;
   elementId: string;
   selector: string;
@@ -1271,9 +1242,10 @@ export interface ShareBridgePinsPayload {
     elementId: string;
     selector: string;
     display?: ShareBridgePinDisplay;
-    /** Old-publication comments never bind to same-named targets in a newer document. */
+    anchor?: ShareBridgeAnchorPoint;
+    /** Legacy request to suppress anchoring; accepted without drawing a pin. */
     forceGhost?: boolean;
-    /** Stored comment geometry, displayed only as untrusted layout fallback. */
+    /** Legacy stored geometry, accepted for wire compatibility and never drawn. */
     ghostPosition?: ShareBridgeViewportRect;
   }>;
 }
@@ -1282,6 +1254,7 @@ export interface ShareBridgePinsPayload {
 export interface ShareBridgeReadyPayload { }
 /** frame → host. The viewer picked an element to comment on. */
 export interface ShareBridgeTargetPayload {
+  anchor?: ShareBridgeAnchorPoint;
   elementId: string;
   selector: string;
   htmlHint: string;
@@ -1290,23 +1263,30 @@ export interface ShareBridgeTargetPayload {
 }
 /**
  * frame → host. A drawn pin was activated. Rect is the DRAWN PIN's bounds.
- * found describes the anchor, not whether the pin exists. For found=false,
- * rect must pass isShareBridgeFallbackRect: a visible pin remains activatable.
+ * found describes the anchor. Legacy found=false messages remain valid, but
+ * their rect is only a protocol placeholder and must not be drawn or located.
  */
 export interface ShareBridgePinPayload {
+  /** False when the true anchor is offscreen or excluded from the visible cluster. */
+  visible?: boolean;
   id: string;
   found: boolean;
   rect: ShareBridgeViewportRect;
 }
-/** frame → host. One locate answer; same anchor/fallback semantics as pin. */
-export interface ShareBridgeLocatedPayload extends ShareBridgePinPayload { }
+/** frame → host. A missing target uses found=false and visible=false; rect is a protocol placeholder. */
+export interface ShareBridgeLocatedPayload extends ShareBridgePinPayload {
+  /** Fresh element bounds for restoring a draft; never the displayed avatar. */
+  targetRect?: ShareBridgeViewportRect;
+}
 
 /**
  * frame → host. Updates ONLY an already selected target or pin on scroll,
  * resize or redraw; never selects, focuses, scrolls or submits by itself.
  * Target removal invalidates its selection with found=false/rect=null.
  * Pin removal from the supplied pin set REVOKES it instead of creating a
- * geometry message. An unmatched anchor in that set still has a fallback pin.
+ * geometry message. An unmatched anchor has no drawn pin. If a selected pin
+ * loses its target while remaining in the set, send found=false, visible=false
+ * with a valid placeholder rect so the host clears its old presentation.
  * Each variant has EXACT keys; no htmlHint or display data on updates.
  */
 export type ShareBridgeGeometryPayload =
@@ -1385,7 +1365,7 @@ export const SHARE_BRIDGE_LIMITS = {
   coordinateAbsMax: 1_000_000,
   /** Positive iframe viewport dimensions, in CSS pixels. */
   viewportMax: 32_768,
-  pinLabelMaxLength: 3,
+  pinLabelMaxLength: 64,
   paletteSize: 30,
   /** Items in one `share:pins` AND in a complete staged pin snapshot. */
   pinsMaxItems: 200,
@@ -1443,26 +1423,43 @@ export function isShareBridgeFallbackRect(value: unknown): value is ShareBridgeV
     && value.top + value.height <= value.viewportHeight;
 }
 
+export function isShareBridgeAnchorPoint(value: unknown): value is ShareBridgeAnchorPoint {
+  return shareBridgeExactRecord(value, ['u', 'v'])
+    && typeof value.u === 'number' && Number.isFinite(value.u) && value.u >= 0 && value.u <= 1
+    && typeof value.v === 'number' && Number.isFinite(value.v) && value.v >= 0 && value.v <= 1;
+}
+
+/** One bounded visible grapheme, or the legacy short ASCII pin token.
+ * Labels are rendered as textContent, never HTML. Keep controls, whitespace,
+ * markup and unbounded combining sequences out of the bridge. */
+function isShareBridgePinLabel(label: string): boolean {
+  if (/^[A-Za-z0-9?]{1,3}$/.test(label)) return true;
+  if (/[<>&]/u.test(label) || !/^[\p{L}\p{N}\p{P}\p{S}][\p{L}\p{N}\p{P}\p{S}\p{M}\u200d\u{E0020}-\u{E007F}]*$/u.test(label)) return false;
+  type Segmenter = new (locale: undefined, options: { granularity: 'grapheme' }) => {
+    segment(value: string): Iterable<{ segment: string }>;
+  };
+  const Segmenter = (Intl as typeof Intl & { Segmenter?: Segmenter }).Segmenter;
+  if (!Segmenter) return /^\p{L}$/u.test(label);
+  const parts = new Segmenter(undefined, { granularity: 'grapheme' }).segment(label)[Symbol.iterator]();
+  return parts.next().value?.segment === label && parts.next().done === true;
+}
+
 export function isShareBridgePinDisplay(value: unknown): value is ShareBridgePinDisplay {
   return shareBridgeExactRecord(value, ['label', 'colorIndex'])
     && typeof value.label === 'string' && value.label.length >= 1
     && value.label.length <= SHARE_BRIDGE_LIMITS.pinLabelMaxLength
-    // Short ASCII tokens, or exactly one letter so a CJK author's initial (林)
-    // can label their pin. Rendered with textContent; no markup, space or emoji.
-    && /^(?:[A-Za-z0-9?]{1,3}|\p{L})$/u.test(value.label)
+    && isShareBridgePinLabel(value.label)
     && typeof value.colorIndex === 'number' && Number.isInteger(value.colorIndex)
     && value.colorIndex >= 0 && value.colorIndex < SHARE_BRIDGE_LIMITS.paletteSize;
 }
 
 /**
- * Fallback placement is local to the runtime and never persisted as an anchor:
- * when no matched/usable anchor or prior visible pin position exists, allocate
- * a deterministic viewport-clamped fallback region ordered by the supplied pin
- * list, with pointer AND keyboard access to every missing pin (scroll/paging
- * when necessary). Never claim found=true for that region. Recompute visible
- * fallback bounds on resize/scroll; do not replay stale viewport coordinates.
- * A hidden/zero-size viewport defers geometry until it can be measured.
- * Do not silently discard an unmatched selector or an otherwise valid pin.
+ * Draw a pin only when its target is uniquely located and usable. Missing,
+ * inaccessible, ambiguous and forceGhost targets remain in the host comment
+ * list but have no canvas pin. For a missing locate, the compatible
+ * found=false, visible=false response carries a valid placeholder rect only
+ * for the existing wire schema; the host must not draw or locate that rect.
+ * Free-position pins with a real point retain their normal geometry.
  *
  * Ordering and revocation — the rules that make a stale message harmless.
  *
@@ -2203,6 +2200,7 @@ export interface CommentAlignAttachment {
  * whole pixels before comparing; sub-pixel drift is not an edit.
  */
 export interface CommentAlignBox {
+  anchor?: { u: number; v: number };
   x: number;
   y: number;
   width: number;

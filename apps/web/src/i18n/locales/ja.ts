@@ -1,6 +1,9 @@
 import type { Dict } from '../types';
 
 export const ja: Dict = {
+  'chat.comments.deselectAll': 'Deselect all',
+  'fileViewer.commentSync.alignRetrying': 'Retrying…',
+  'fileViewer.commentSync.alignRetryPending': 'Syncing comments…',
   "workspaceInvite.deliveryPending": "招待メールを送信中です。しばらくしてからご確認ください。",
   "workspaceInvite.deliveryFailed": "招待メールの送信に失敗しました。もう一度お試しください。",
   "workspaceInvite.invalidResponse": "招待の送信結果を確認できません。後でもう一度お試しください。",
@@ -5601,4 +5604,16 @@ export const ja: Dict = {
   'comment.saveTargetMissing': 'The comment target no longer exists. Select an element again; your draft is kept.',
   'comment.savePreviewNotReady': 'The preview is refreshing. Your draft is kept; try saving again when it is ready.',
   'comment.anchorState.lost': 'アンカーが失われました',
+  "comment.unknownAuthor": "Unknown author",
+  "comment.moreCount": "Show comments ({n})",
+  "comment.resizePanel": "Resize comments panel",
+  "comment.overLimit": "{count} characters over the limit. Shorten before sending.",
+  "comment.saveFailed": "Could not save comment. Try again.",
+  "comment.locationUnavailable": "この要素が見つかりません。ページが変更された可能性があります。",
+  "comment.agentSubmitFailed": "送信に失敗しました。もう一度お試しください。",
+  "comment.agentSubmitUnavailable": "現在送信できません。しばらくしてからもう一度お試しください。",
+  "comment.imageFailed": "Image unavailable",
+  "comment.moreActions": "More comment actions",
+  'fileViewer.commentSync.alignRetryFailed': 'Sync failed. Try again.',
+  'fileViewer.commentSync.alignRetrySucceeded': 'Comments synced',
 };

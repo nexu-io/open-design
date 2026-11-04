@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { useI18n } from '../../i18n';
-import { workspaceProjectHeaders } from '../../collab/workspace-identity';
+import { workspaceAccountScopedCacheKey, workspaceProjectHeaders } from '../../collab/workspace-identity';
 import { AmrLoginPill } from '../AmrLoginPill';
 import { Icon } from '../Icon';
 import { useCommentSyncState } from './useCommentSyncState';
@@ -41,14 +41,21 @@ export function CommentSyncBanner({ projectId, workspaceContext, filePath, inclu
   includeBackfill?: boolean;
   backfillOnly?: boolean;
 }) {
+  const scope = JSON.stringify([projectId, workspaceAccountScopedCacheKey(workspaceContext), filePath]);
+  const currentScope = useRef(scope);
+  currentScope.current = scope;
+  const [alignRetry, setAlignRetry] = useState<{ scope: string; status: 'pending' | 'failed' | 'succeeded' } | null>(null);
+  const alignStatus = alignRetry?.scope === scope ? alignRetry.status : null;
+  useEffect(() => {
+    if (alignStatus !== 'succeeded') return;
+    const timer = window.setTimeout(() => setAlignRetry(null), 1_500);
+    return () => window.clearTimeout(timer);
+  }, [alignStatus, scope]);
   const [retryError, setRetryError] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
   const [retrying, setRetrying] = useState(false);
   const { t } = useI18n();
   const state = useCommentSyncState(projectId, workspaceContext, { filePath, refreshToken });
-
-  if (!state) return null;
-  if (backfillOnly && (state.sessionMissing || state.shareStopped === true)) return null;
 
   const retryHeaders = workspaceContext ? workspaceProjectHeaders(workspaceContext) : undefined;
 
@@ -70,24 +77,59 @@ export function CommentSyncBanner({ projectId, workspaceContext, filePath, inclu
     }
   }
   async function retryAlign() {
-    if (!projectId || retrying) return;
-    setRetrying(true);
+    if (!projectId || alignStatus === 'pending') return;
+    const requestScope = scope;
+    setAlignRetry({ scope: requestScope, status: 'pending' });
     try {
-      await fetch(`/api/projects/${encodeURIComponent(projectId)}/comments/align`, {
+      const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/comments/align`, {
         method: 'POST', cache: 'no-store', headers: retryHeaders,
       });
+      if (!response.ok) throw new Error('Comment alignment retry failed');
+      const result: unknown = await response.json();
+      const status = result && typeof result === 'object' && 'state' in result ? result.state : undefined;
+      if (currentScope.current !== requestScope) return;
+      setAlignRetry({ scope: requestScope, status: status === 'aligned' ? 'succeeded' : 'failed' });
     } catch {
-      // No local guessing; let the next server read decide whether it remains divergent.
+      if (currentScope.current !== requestScope) return;
+      setAlignRetry({ scope: requestScope, status: 'failed' });
     } finally {
-      setRetrying(false);
-      setRefreshToken((token) => token + 1);
+      if (currentScope.current === requestScope) setRefreshToken((token) => token + 1);
     }
   }
 
+  const alignmentNotice = (
+    <div className={`${styles.banner} ${styles.alignment}`} role={alignStatus === 'failed' ? 'alert' : 'status'} aria-busy={alignStatus === 'pending'}>
+      <div className={styles.alignmentMessage}>
+        {alignStatus === 'pending' ? <span className={styles.alignmentSpinner} aria-hidden="true" />
+          : alignStatus === 'succeeded' ? <Icon name="check" size={15} />
+            : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <path d={alignStatus === 'failed' ? 'M12 7v6m0 4h.01' : 'M12 11v6m0-10h.01'} />
+            </svg>}
+        <p>{t(alignStatus === 'pending' ? 'fileViewer.commentSync.alignRetryPending'
+          : alignStatus === 'succeeded' ? 'fileViewer.commentSync.alignRetrySucceeded'
+            : alignStatus === 'failed' ? 'fileViewer.commentSync.alignRetryFailed' : 'fileViewer.commentSync.alignFailedBody')}</p>
+      </div>
+      {alignStatus !== 'succeeded' ? (
+        <button type="button" className={styles.alignmentRetry} onClick={() => void retryAlign()} disabled={alignStatus === 'pending'}>
+          {alignStatus !== 'pending' ? <RetryIcon /> : null}
+          {t(alignStatus === 'pending' ? 'fileViewer.commentSync.alignRetrying' : 'preview.retry')}
+        </button>
+      ) : null}
+    </div>
+  );
+  // The manual request owns its short-lived feedback while the existing status
+  // hook refreshes. Initial missing/unknown state still stays quiet.
+  if (!state) return !backfillOnly && alignStatus ? alignmentNotice : null;
+  if (backfillOnly && (state.sessionMissing || state.shareStopped === true)) return null;
+
   if (!backfillOnly && state.sessionMissing === true) {
     return (
-      <div className={styles.banner} role="status">
-        <p>{t('fileViewer.commentSync.sessionMissing')}</p>
+      <div className={includeBackfill ? styles.banner : `${styles.banner} ${styles.alignment}`} role="status">
+        <div className={styles.alignmentMessage}>
+          {!includeBackfill ? <Icon name="info" size={15} /> : null}
+          <p>{t('fileViewer.commentSync.sessionMissing')}</p>
+        </div>
         <AmrLoginPill className={styles.login} hideSignedOutStatus hideSignedInStatus showConsoleAction={false} />
       </div>
     );
@@ -95,29 +137,28 @@ export function CommentSyncBanner({ projectId, workspaceContext, filePath, inclu
 
   if (!backfillOnly && state.shareStopped === true) {
     return (
-      <div className={styles.banner} role="status">
-        <p>
-          {workspaceContext?.workspaceType === 'personal'
-            ? t('fileViewer.commentSync.shareStoppedPersonal')
-            : t('fileViewer.commentSync.shareStoppedTeam')}
-        </p>
+      <div className={includeBackfill ? styles.banner : `${styles.banner} ${styles.alignment}`} role="status">
+        <div className={styles.alignmentMessage}>
+          {!includeBackfill ? <Icon name="info" size={15} /> : null}
+          <p>
+            {workspaceContext?.workspaceType === 'personal'
+              ? t('fileViewer.commentSync.shareStoppedPersonal')
+              : t('fileViewer.commentSync.shareStoppedTeam')}
+          </p>
+        </div>
       </div>
     );
   }
 
   if (state.payloadTooLarge) {
-    return <ShareErrorRow message={t('fileViewer.commentSync.payloadTooLarge')} role="alert" />;
+    return includeBackfill
+      ? <ShareErrorRow message={t('fileViewer.commentSync.payloadTooLarge')} role="alert" />
+      : <div className={`${styles.banner} ${styles.alignment}`}><ShareErrorRow className={styles.neutral} message={t('fileViewer.commentSync.payloadTooLarge')} role="alert" /></div>;
   }
 
-  // Pending means the current publication's comments have not finished relay.
-  // K1 (first publish) and K4 (verified reopen) are both drawn by ShareTab's
-  // OWN primary button now — a progress bar for K1, a busy button for K4 —
-  // so a `backfillOnly` mount (ShareTab's) must not also stack this pill
-  // beneath it. A non-`backfillOnly` mount has no current production call
-  // site, but it is a tested, documented capability of this component (see
-  // CommentSyncBanner.test.tsx's "restored branches" — 2026 refactor: item 4
-  // kept this instead of deleting it as production-unreachable, since doing
-  // so would have broken that contract test) — keep it rendering here.
+  // ShareTab owns its separate comment-progress region. Its backfillOnly
+  // mount handles failure/retry here without duplicating that pending status.
+  // Keep the non-backfillOnly pending presentation for existing consumers.
   if (includeBackfill && state.backfill?.state === 'pending') {
     if (backfillOnly) return null;
     const pendingCopyKey = state.backfill.reopened === true
@@ -147,7 +188,9 @@ export function CommentSyncBanner({ projectId, workspaceContext, filePath, inclu
               ? 'fileViewer.commentSync.backfillReopenedRetryingBody'
               : 'fileViewer.commentSync.backfillReopenedTerminalBody')
             : (state.backfill.retryable
-              ? 'fileViewer.commentSync.backfillRetryingBody'
+              ? (state.backfill.code === 'BACKFILL_ENQUEUE_FAILED'
+                ? 'fileViewer.commentSync.backfillFailedBody'
+                : 'fileViewer.commentSync.backfillRetryingBody')
               : 'fileViewer.commentSync.backfillTerminalBody'))}
           action={state.backfill.retryable ? (
             <ShareButton
@@ -171,16 +214,8 @@ export function CommentSyncBanner({ projectId, workspaceContext, filePath, inclu
 
   // Absent or `unknown` align is "not checked" — neither a warning nor a
   // clean bill of health. Only `diverged` is actionable.
-  if (!backfillOnly && state.align?.state === 'diverged') {
-    return (
-      <div className={styles.banner} role="status">
-        <p>{t('fileViewer.commentSync.alignFailedBody')}</p>
-        <ShareButton variant="soft" dimDisabled onClick={() => void retryAlign()} disabled={retrying}>
-          <RetryIcon />
-          {t('preview.retry')}
-        </ShareButton>
-      </div>
-    );
+  if (!backfillOnly && (state.align?.state === 'diverged' || alignStatus)) {
+    return alignmentNotice;
   }
 
   return null;

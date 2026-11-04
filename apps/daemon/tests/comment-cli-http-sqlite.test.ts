@@ -12,6 +12,7 @@ import {
   buildWorkspacePermissions,
   buildWorkspaceSeatSummary,
   SHARE_COMMENT_MAX_BYTES,
+  type PreviewCommentResponse,
   type WorkspaceCollabContext,
 } from '@open-design/contracts';
 import {
@@ -152,6 +153,20 @@ afterEach(async () => {
 });
 
 describe('od comment CLI HTTP/SQLite route integration', () => {
+  it('round trips an element-local anchor through the real CLI, HTTP and SQLite', async () => {
+    const base = await startRouteServer();
+    const common = [...headers(OWNER), '--daemon-url', base, '--json'];
+    const position = { x: 10.25, y: 20.75, width: 100.5, height: 40.25, anchor: { u: 0.25125, v: 0.7625 } };
+    const created = await runCli(['comment', 'create', PROJECT, CONVERSATION,
+      '--target', JSON.stringify({ ...target, position }), '--prompt', 'anchored', ...common]);
+    expect(created.code).toBe(0);
+    const list = await runCli(['comment', 'list', PROJECT, CONVERSATION, ...common]);
+    expect(JSON.parse(list.stdout).comments[0].position).toEqual(position);
+    const invalid = await runCli(['comment', 'create', PROJECT, CONVERSATION,
+      '--target', JSON.stringify({ ...target, position: { ...position, anchor: { u: 2, v: 0 } } }), '--prompt', 'invalid', ...common]);
+    expect(invalid.code).not.toBe(0);
+  });
+
   it('persists the create/list/update/status/delete lifecycle through production CLI and comment routes', async () => {
     const base = await startRouteServer();
     const common = [...headers(OWNER), '--daemon-url', base, '--json'];
@@ -246,28 +261,69 @@ describe('od comment CLI HTTP/SQLite route integration', () => {
     expect(getProjectCommentReadState(db, PROJECT, otherScope)).toEqual({ projectId: PROJECT, lastReadAt: suppliedReadAt });
   });
 
-  it('passes long multibyte prompt files and stdin through the route into SQLite', async () => {
+  it('accepts 400 graphemes through prompt files and rejects 401 without overwriting SQLite', async () => {
     const base = await startRouteServer();
     const common = [...headers(OWNER), '--daemon-url', base, '--json'];
-    const fileNote = '评论内容'.repeat(1_500);
+    const fileNote = '👨‍👩‍👧‍👦'.repeat(400);
     const promptPath = join(tempRoot, 'long.txt');
     writeFileSync(promptPath, fileNote, 'utf8');
     const fromFile = await runCli(['comment', 'create', PROJECT, CONVERSATION, '--target', JSON.stringify(target), '--prompt-file', promptPath, ...common]);
     expect(fromFile.code).toBe(0);
     expect(getPreviewComment(db!, PROJECT, CONVERSATION, JSON.parse(fromFile.stdout).comment.id)?.note).toBe(fileNote);
 
-    const stdinNote = '第一行\n第二行评论\n第三行';
+    const createdId = JSON.parse(fromFile.stdout).comment.id;
+    writeFileSync(promptPath, fileNote + '字', 'utf8');
+    for (const args of [
+      ['create', PROJECT, CONVERSATION],
+      ['update', PROJECT, CONVERSATION, createdId],
+    ]) {
+      const rejected = await runCli(['comment', ...args, '--target', JSON.stringify(target), '--prompt-file', promptPath, ...common]);
+      expect(rejected.code).not.toBe(0);
+      expect(JSON.parse(rejected.stderr)).toMatchObject({ error: { code: 'COMMENT_TOO_LONG' } });
+      expect(listPreviewComments(db!, PROJECT, CONVERSATION)).toHaveLength(1);
+      expect(getPreviewComment(db!, PROJECT, CONVERSATION, createdId)?.note).toBe(fileNote);
+    }
+
+    const stdinNote = ' \r\n第一行\r\n第二行评论\r第三行\r ';
     const fromStdin = await runCliWithStdin(['comment', 'create', PROJECT, CONVERSATION, '--target', JSON.stringify(target), '--prompt-file', '-', ...common], stdinNote);
     expect(fromStdin.code).toBe(0);
-    expect(getPreviewComment(db!, PROJECT, CONVERSATION, JSON.parse(fromStdin.stdout).comment.id)?.note).toBe(stdinNote);
+    expect(getPreviewComment(db!, PROJECT, CONVERSATION, JSON.parse(fromStdin.stdout).comment.id)?.note).toBe('第一行\n第二行评论\n第三行');
+  });
+
+  it('normalizes newline content for both HTTP create and edit before SQLite persistence', async () => {
+    const base = await startRouteServer();
+    const url = `${base}/api/projects/${PROJECT}/conversations/${CONVERSATION}/comments`;
+    const send = (body: unknown) => fetch(url, { method: 'POST', headers: {
+      'Content-Type': 'application/json', 'x-od-workspace-id': WORKSPACE,
+      'x-od-workspace-member-id': OWNER,
+    }, body: JSON.stringify(body) });
+    const note = '👨‍👩‍👧‍👦'.repeat(199) + '\r\n' + '👨‍👩‍👧‍👦'.repeat(200);
+    const created = await send({ target, note: ' \r' + note + '\r ' });
+    expect(created.status).toBe(200);
+    const { comment } = await created.json() as PreviewCommentResponse;
+    expect(comment.note).toBe(note.replace(/\r\n?/g, '\n'));
+    expect(getPreviewComment(db!, PROJECT, CONVERSATION, comment.id)?.note).toBe(comment.note);
+    const edited = await send({ id: comment.id, target, note: ' first\rsecond\r\nthird ' });
+    expect(edited.status).toBe(200);
+    expect(getPreviewComment(db!, PROJECT, CONVERSATION, comment.id)?.note).toBe('first\nsecond\nthird');
+    const rejected = await send({ id: comment.id, target, note: note + '😀' });
+    expect(rejected.status).toBe(400);
+    expect(getPreviewComment(db!, PROJECT, CONVERSATION, comment.id)?.note).toBe('first\nsecond\nthird');
+    const imageOnly = await send({ target, note: ' \r\n\r ',
+      attachments: [{ path: 'image.png', name: 'image.png' }] });
+    expect(imageOnly.status).toBe(200);
+    const imageComment = (await imageOnly.json() as PreviewCommentResponse).comment;
+    expect(imageComment.note).toBe('');
+    expect(imageComment.attachments).toEqual([{ path: 'image.png', name: 'image.png' }]);
+    expect((await send({ target, note: ' \r\n\r ' })).status).toBe(400);
   });
 
   it('OPEND-3661 rejects a complete JSON body over 64 KiB before SQLite or relay writes', async () => {
     const base = await startRouteServer();
     const url = `${base}/api/projects/${PROJECT}/conversations/${CONVERSATION}/comments`;
-    const payload = { target, note: '中文😀\n' };
+    const payload = { target, note: '中文😀\n', padding: '' };
     const emptyBytes = Buffer.byteLength(JSON.stringify(payload));
-    payload.note += 'x'.repeat(SHARE_COMMENT_MAX_BYTES - emptyBytes);
+    payload.padding = 'x'.repeat(SHARE_COMMENT_MAX_BYTES - emptyBytes);
     const send = (body: string) => fetch(url, { method: 'POST', headers: {
       'Content-Type': 'application/json', 'x-od-workspace-id': WORKSPACE,
       'x-od-workspace-member-id': OWNER,
@@ -289,7 +345,9 @@ describe('od comment CLI HTTP/SQLite route integration', () => {
     const common = [...headers(OWNER), '--daemon-url', base, '--json'];
     const sizedNote = (extra: Record<string, unknown>, prefix: string) => {
       const overhead = Buffer.byteLength(JSON.stringify({ target, ...extra, note: prefix }));
-      return prefix + 'a'.repeat(SHARE_COMMENT_MAX_BYTES - overhead);
+      const remaining = SHARE_COMMENT_MAX_BYTES - overhead;
+      // Combining marks enlarge the byte payload without exceeding 400 graphemes.
+      return prefix + (remaining % 2 ? '\u20dd' : '') + '\u0301'.repeat((remaining - (remaining % 2 ? 3 : 0)) / 2);
     };
     const exactNote = sizedNote({}, '评论😀\n');
     // Updates include the persisted UUID in the request envelope.

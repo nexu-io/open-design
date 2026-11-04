@@ -1,3 +1,4 @@
+import { NESTED_COMMENT_HELPERS } from '@open-design/contracts';
 import { withCommentFileDeletion, type CommentFileDeletion } from '../../collab/comment-file-deletion.js';
 import { injectMotionSourcePlayer, isMotionVideoComposition, markMotionHostedPreview, MOTION_PREVIEW_OUTPUT_HEADER } from '@open-design/contracts/runtime/motion-source-player';
 import { createHash, randomUUID } from 'node:crypto';
@@ -813,6 +814,8 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
   if (window.__odUrlSelectionBridge) return;
   window.__odUrlSelectionBridge = true;
   var commentEnabled = false;
+  var commentObserved = false;
+  var commentShortcutEnabled = false;
   var mode = 'picker';
   var hoveredId = null;
   var drawing = false;
@@ -878,16 +881,21 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     var style = document.createElement('style');
     style.setAttribute('data-od-url-selection-style', '');
     style.textContent =
-      'html[data-od-comment-mode] body * { cursor: crosshair !important; }' +
+      'html[data-od-comment-mode] body * { cursor: var(--od-comment-cursor, crosshair) !important; }' +
       'html[data-od-comment-mode][data-od-comment-mode-kind="pod"] body * { cursor: cell !important; }' +
       'html[data-od-comment-mode] body iframe,html[data-od-comment-mode] body object,html[data-od-comment-mode] body embed { pointer-events: none !important; }';
     (document.head || document.documentElement).appendChild(style);
   }
-  function active(){ return commentEnabled; }
+  function active(){ return commentEnabled || commentObserved; }
 ${ANNOTATED_SELECTOR_HELPERS}
 ${COMMENT_IDENTITY_HELPERS}
+${NESTED_COMMENT_HELPERS}
   function domSelectorFor(el){
     if (!el || !el.tagName || el === document.documentElement || el === document.body) return null;
+    if (el.id) {
+      var stableSelector = '[id=' + JSON.stringify(el.id) + ']';
+      if (el.ownerDocument.querySelectorAll(stableSelector).length === 1) return stableSelector;
+    }
     var parts = [];
     var node = el;
     while (node && node !== document.documentElement && node !== document.body) {
@@ -968,6 +976,7 @@ ${COMMENT_IDENTITY_HELPERS}
     } catch (_) { return null; }
   }
   function targetFrom(el, allowDomFallback, clickedEl, clickPoint, validateForSave){
+    if (el && nestedCommentAnchors.has(el)) return nestedCommentPayload(el);
     var id = annotatedElementIdFor(el);
     var selector = annotatedSelectorFor(el, esc);
     if ((!clickedEl || clickedEl === el) && el && el.hasAttribute('data-od-comment-id')) {
@@ -987,11 +996,14 @@ ${COMMENT_IDENTITY_HELPERS}
     var rect = el.getBoundingClientRect();
     var tag = el.tagName ? el.tagName.toLowerCase() : 'element';
     var cls = typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\\s+/).slice(0, 2).join('.') : '';
-    var html = '';
-    try {
-      var match = (el.outerHTML || '').replace(/\\s+/g, ' ').match(/^<[^>]+>/);
-      html = match ? match[0] : '';
-    } catch (_) {}
+    // Do not serialize descendants or megabytes of iframe srcdoc just for a hint.
+    var html = '<' + tag;
+    for (var attr of el.attributes) {
+      if (attr.name === 'srcdoc') continue;
+      html += ' ' + attr.name + '="' + attr.value.slice(0, 160).replace(/"/g, '&quot;') + '"';
+      if (html.length >= 180) break;
+    }
+    html += '>';
     var payload = {
       type: 'od:comment-target',
       elementId: id,
@@ -999,11 +1011,13 @@ ${COMMENT_IDENTITY_HELPERS}
       domSelector: domSelectorFor(el),
       label: tag + cls,
       text: (el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160),
-      position: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) },
+      position: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+      visiblePosition: commentVisiblePosition(el, rect),
+      domIdUnique: el.id ? el.ownerDocument.querySelectorAll('[id=' + JSON.stringify(el.id) + ']').length === 1 : undefined,
       htmlHint: html.slice(0, 180),
       style: styleSnapshot(el)
     };
-    if (clickPoint) payload.hoverPoint = { x: Math.round(clickPoint.x), y: Math.round(clickPoint.y) };
+    if (clickPoint) payload.hoverPoint = { x: clickPoint.x, y: clickPoint.y };
     if (clickedEl && clickedEl !== el) {
       var clickedTag = clickedEl.tagName ? clickedEl.tagName.toLowerCase() : 'element';
       var clickedCls = typeof clickedEl.className === 'string' && clickedEl.className.trim() ? '.' + clickedEl.className.trim().split(/\\s+/).slice(0, 2).join('.') : '';
@@ -1026,6 +1040,10 @@ ${COMMENT_IDENTITY_HELPERS}
         items.push(item);
       }
     }
+    // Observation measures the explicitly opened saved target without enabling
+    // the picker or enumerating unrelated unannotated DOM nodes.
+    var savedTarget = activeSavedCommentTarget();
+    if (savedTarget && !seen[savedTarget.elementId]) items.push(savedTarget);
     return items;
   }
   function postTargets(){
@@ -1045,6 +1063,10 @@ ${COMMENT_IDENTITY_HELPERS}
     }, 120);
   }
   function findCommentTargetByIdentity(elementId, selector){
+    if (selector && String(selector).indexOf('[id=') === 0) {
+      try { var stableNodes = document.querySelectorAll(String(selector)); return stableNodes.length === 1 ? stableNodes[0] : null; } catch (_) { return null; }
+    }
+    if (isNestedCommentAnchor(elementId, selector)) return resolveNestedComment(elementId, selector);
     if (String(elementId || '').indexOf('cmt:') === 0 || commentSelectorClaimsIdentity(selector)) return strictCommentNode(elementId, selector);
     var el = null;
     if (selector) {
@@ -1058,18 +1080,32 @@ ${COMMENT_IDENTITY_HELPERS}
     }
     return el;
   }
+  function activeSavedCommentTarget(){
+    if (!activeCommentElementId) return null;
+    var el = findCommentTargetByIdentity(activeCommentElementId, activeCommentSelector);
+    if (!el) return null;
+    // A structural selector must not fall back to an annotation id reused by
+    // a different element. cmt and nested identities retain their strict resolver.
+    if (activeCommentSelector && activeCommentSelector.split('>')[0].trim() === 'body') {
+      try { if (!el.matches(activeCommentSelector)) return null; } catch (_) { return null; }
+    }
+    var payload = targetFrom(el, true, null, null, String(activeCommentElementId).indexOf('cmt:') === 0);
+    try { if (payload && activeCommentSelector && el.matches(activeCommentSelector)) payload.selector = activeCommentSelector; } catch (_) {}
+    return payload;
+  }
   function postActiveCommentTarget(){
     if (!active() || !activeCommentElementId) return;
-    var el = findCommentTargetByIdentity(activeCommentElementId, activeCommentSelector);
-    if (!el) return;
-    var payload = targetFrom(el, commentEnabled && mode === 'picker');
+    var payload = activeSavedCommentTarget();
     if (payload) window.parent.postMessage(Object.assign({}, payload, { type: 'od:comment-active-target-update' }), '*');
+    else if (isNestedCommentAnchor(activeCommentElementId, activeCommentSelector)) schedulePostTargets();
   }
   function schedulePostActiveCommentTarget(){
-    if (!active() || !activeCommentElementId || activeTargetPending) return;
+    if (!active() || activeTargetPending) return;
     activeTargetPending = true;
     window.requestAnimationFrame(function(){
       activeTargetPending = false;
+      // Pins and the open detail use one scroll measurement.
+      postTargets();
       postActiveCommentTarget();
     });
   }
@@ -1308,6 +1344,15 @@ ${COMMENT_IDENTITY_HELPERS}
       entries: entries
     };
   }
+  document.addEventListener('keydown', function(event){
+    if (forwardCommentEscape(event)) return;
+    if (event.defaultPrevented || !commentShortcutEnabled || event.key.toLowerCase() !== 'c' || event.ctrlKey || event.metaKey || event.altKey || event.repeat || event.isComposing || event.keyCode === 229) return;
+    var target = event.target;
+    if (target && target.closest && (target.isContentEditable || target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="menu"], [role="dialog"], dialog, [popover]'))) return;
+    event.preventDefault();
+    event.stopPropagation();
+    try { window.parent.postMessage({ type: 'od:comment-shortcut' }, '*'); } catch (_) {}
+  });
   window.addEventListener('message', function(ev){
     var data = ev && ev.data;
     if (!data || !data.type) return;
@@ -1325,10 +1370,14 @@ ${COMMENT_IDENTITY_HELPERS}
     }
     if (data.type === 'od:comment-mode') {
       commentEnabled = !!data.enabled;
+      commentObserved = !!data.observe;
+      commentShortcutEnabled = !!data.shortcutEnabled;
+      if (typeof data.cursor === 'string') document.documentElement.style.setProperty('--od-comment-cursor', data.cursor);
+      else document.documentElement.style.removeProperty('--od-comment-cursor');
       mode = data.mode === 'pod' ? 'pod' : 'picker';
       document.documentElement.toggleAttribute('data-od-comment-mode', commentEnabled);
       document.documentElement.setAttribute('data-od-comment-mode-kind', mode);
-      if (commentEnabled) setTimeout(postTargets, 0);
+      if (active()) setTimeout(postTargets, 0);
       else {
         hoveredId = null;
         activeCommentElementId = null;
@@ -1353,12 +1402,12 @@ ${COMMENT_IDENTITY_HELPERS}
     if (data.type === 'od:comment-active-target') {
       activeCommentElementId = data.elementId ? String(data.elementId) : null;
       activeCommentSelector = data.selector ? String(data.selector) : null;
-      if ((String(activeCommentElementId || '').indexOf('cmt:') === 0 || commentSelectorClaimsIdentity(activeCommentSelector)) && data.locate && typeof data.requestId === 'string') {
+      if (data.locate && typeof data.requestId === 'string') {
         var target = findCommentTargetByIdentity(activeCommentElementId, activeCommentSelector);
-        var payload = target && targetFrom(target, true);
-        if (payload) {
-          try { target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' }); } catch (_) {}
-          payload = targetFrom(target, true);
+        var payload = activeSavedCommentTarget();
+        if (payload || (target && nestedCommentPayload(target, true))) {
+          try { target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' }); scrollNestedComment(target); } catch (_) {}
+          payload = activeSavedCommentTarget();
         }
         window.parent.postMessage(payload
           ? Object.assign({}, payload, { type: 'od:comment-active-target-update', requestId: data.requestId })
@@ -1479,8 +1528,8 @@ ${COMMENT_IDENTITY_HELPERS}
   window.addEventListener('resize', schedulePostTargets);
   document.addEventListener('scroll', function(){
     schedulePostActiveCommentTarget();
-    schedulePostTargets();
   }, true);
+  observeNestedCommentDocuments();
   var mo = new MutationObserver(schedulePostTargets);
   mo.observe(document.documentElement, { subtree: true, childList: true });
   ensureStyle();
@@ -6310,6 +6359,8 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
   }
 
   function htmlHasPoweredPreviewSignal(source: string): boolean {
+    // Nested comment anchors require readable child documents on the isolated project origin.
+    if (/<iframe(?=[\s/>])|\bcreateElement\s*\(\s*["\']iframe["\']/i.test(source)) return true;
     if (/\b(?:local|session)Storage\b/.test(source)) return true;
     if (/\bSharedArrayBuffer\b/.test(source)) return true;
     if (/\bnew\s+(?:Worker|SharedWorker)\s*\(/.test(source)) return true;
@@ -7318,7 +7369,17 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         relPath,
         project?.metadata,
         () => setPoweredPreviewHeaders(res),
-        skipPoweredTransform ? undefined : async (file) => {
+        skipPoweredTransform ? (wantsUrlPreviewSelectionBridge(req.query.odPreviewBridge)
+          ? (file) => {
+            // Keep large artifacts streaming by default, but an explicitly requested
+            // comment bridge must still acknowledge readiness and resolve anchors.
+            let html = file.buffer.toString('utf8');
+            html = injectUrlPreviewBridge(html, 'selection');
+            if (wantsUrlPreviewScrollBridge(req.query.odPreviewBridge)) html = injectUrlPreviewBridge(html, 'scroll');
+            if (wantsUrlPreviewSnapshotBridge(req.query.odPreviewBridge)) html = injectUrlPreviewBridge(html, 'snapshot');
+            return html;
+          }
+          : undefined) : async (file) => {
           const transformed = await maybeResolveVitePreviewHtml({
             file,
             projectId,

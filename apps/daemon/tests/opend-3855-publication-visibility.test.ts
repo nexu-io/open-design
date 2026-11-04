@@ -69,7 +69,7 @@ it.each(['personal', 'team', 'personal-failure-retry', 'personal-association-fai
         expect(await readdir(staged)).not.toContain('private.html');
         expect(await readFile(join(staged, 'index.html'), 'utf8')).toContain('PUBLIC-v1');
         return JSON.stringify({ id: 'file-version', version: 1 });
-      }, enqueuePublishedFileComments, { cloud, commands, teamProject: async args => {
+      }, { cloud, commands, teamProject: async args => {
         rootCommands.push([...args]);
         if (args[1] === 'ensure-private') {
           expect(args).toEqual(['team-projects', 'ensure-private', 'p']);
@@ -149,6 +149,7 @@ it.each(['personal', 'team', 'personal-failure-retry', 'personal-association-fai
       expect.soft(getWorkspaceProjectByProjectId(db, 'p')).toMatchObject({ visibility, createdByWorkspaceMemberId: 'owner' });
       expect.soft(body.madeTeamVisible).toBeUndefined();
       expect.soft(rootCommands.filter(args => args[0] === 'resource' && args[1] === 'push').map(args => args.slice(0, 5))).toEqual([]);
+      for (const fact of store.listFacts(scope)) db.transaction(() => enqueuePublishedFileComments(db, fact))();
       expect.soft(queue.listDue(Date.now()).map(row => [row.comment.id, row.relayScope])).toEqual([
         ['public-comment', visibility === 'team' ? 'team' : 'personal'],
       ]);

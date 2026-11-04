@@ -57,7 +57,7 @@ describe('preview comment attachment helpers', () => {
 
     expect(target.text.length).toBeLessThanOrEqual(160);
     expect(target.htmlHint.length).toBeLessThanOrEqual(180);
-    expect(target.position).toEqual({ x: 10, y: 21, width: 300, height: 89 });
+    expect(target.position).toEqual({ x: 10.4, y: 20.5, width: 300.2, height: 88.8 });
     expect(target.style).toMatchObject({
       color: 'rgb(26, 25, 22)',
       fontSize: '13.5px',
@@ -547,6 +547,17 @@ describe('resolveCommentAnchor drift ladder', () => {
     );
     expect(res.state).toBe('stale');
     expect(res.snapshot?.elementId).toBe('path-2-9');
+  });
+
+  it('does not choose between equally scoring text matches when the old selector is absent', () => {
+    const snapshots = new Map([
+      ['a', snap({ elementId: 'a', selector: '#a', htmlHint: '<div>', text: 'Same text' })],
+      ['b', snap({ elementId: 'b', selector: '#b', htmlHint: '<div>', text: 'Same text' })],
+    ]);
+    const saved = comment({ elementId: 'gone', selector: '#gone', htmlHint: '<figure>', text: 'Same text', position: { x: 10, y: 20, width: 300, height: 80 } });
+    expect(resolveCommentAnchor(saved, snapshots).state).toBe('lost');
+    snapshots.delete('b');
+    expect(resolveCommentAnchor(saved, snapshots)).toMatchObject({ state: 'stale', snapshot: { elementId: 'a' } });
   });
 
   it('does not fuzzy-match on position alone without a content signal', () => {

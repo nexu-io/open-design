@@ -15,7 +15,7 @@ export interface SharePublicationCompletionInput {
   reopened?: boolean;
 }
 
-/** Persist local witnesses and both kinds of intent in one transaction, after
+/** Persist the publication witness and pending binding in one transaction, after
  * confirmed network publication. A failed pending write retains the receipt in
  * the response, but cannot promise an automatic binding retry.
  * All dependencies must use the same database; no callback performs network I/O.
@@ -27,7 +27,9 @@ export function createSharePublicationCompletion(
   retryAvailable = false,
 ) {
   const commit = db.transaction((input: SharePublicationCompletionInput): SharePublishResult => {
-    const revision = recordPublication(input.scope, input.publication, input.mapping, input.reopened === true);
+    const revision = recordPublication(input.scope, input.publication, input.mapping, input.reopened === true, {
+      resourceId: input.resourceId, versionId: input.result.receipt.versionId,
+    });
     if (input.result.status === 'published') return input.result;
     const pending = recordPendingShareBinding(outbox, { ...input.scope, resourceId: input.resourceId,
       publicationRevision: revision.token, receipt: input.result.receipt }, retryAvailable, true);

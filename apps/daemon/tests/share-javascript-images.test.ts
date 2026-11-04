@@ -179,7 +179,7 @@ it('3881 production publish HTTP sends all JS-only images in the exact resource 
     for (const image of ['bag', 'shoes', 'lipstick']) expect(await readFile(path.join(directory, `images/${image}.jpg`), 'utf8')).toBe(image);
     uploads++;
     return JSON.stringify({ id: 'version-js-images', version: 1 });
-  }, undefined, { commands });
+  }, { commands });
   const app = express(); app.use(express.json());
   app.use((req,_res,next)=>{req.headers['x-od-workspace-id'] ??= context.workspaceId;req.headers['x-od-workspace-member-id'] ??= context.workspaceMemberId;next();});
   registerCollabSyncRoutes(app, { collab: runtime, publicFilePublicationStore: store, ...publishing,

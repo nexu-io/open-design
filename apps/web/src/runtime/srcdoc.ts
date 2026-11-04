@@ -1,3 +1,4 @@
+import { NESTED_COMMENT_HELPERS } from '@open-design/contracts';
 import { buildPreviewStorageBridge } from './preview-storage';
 import { injectMotionSourcePlayer, markMotionHostedPreview } from '@open-design/contracts/runtime/motion-source-player';
 /**
@@ -1804,6 +1805,8 @@ function injectSelectionBridge(
   const runtimeStateGeneration = JSON.stringify(options.runtimeStateGeneration ?? '');
   const script = `<script data-od-selection-bridge>(function(){
   var commentEnabled = ${initialComment};
+  var commentObserved = false;
+  var commentShortcutEnabled = false;
   var inspectEnabled = ${initialInspect};
   var runtimeStateGeneration = ${runtimeStateGeneration};
   // Comment mode has two sub-tools (kept on the host side as boardTool):
@@ -1843,7 +1846,7 @@ function injectSelectionBridge(
   // semicolons (extra declarations), braces (close the rule), angle
   // brackets (close the <style> tag), and newlines (defense in depth).
   var UNSAFE_VALUE = /[;{}<>\\n\\r]/;
-  function active(){ return commentEnabled || inspectEnabled; }
+  function active(){ return commentEnabled || commentObserved || inspectEnabled; }
   function deckSlideIndexForPayload(){
     try {
       var state = window.__odDeckSlideState && window.__odDeckSlideState();
@@ -1986,8 +1989,13 @@ function injectSelectionBridge(
   }
 ${ANNOTATED_SELECTOR_HELPERS}
 ${COMMENT_IDENTITY_HELPERS}
+${NESTED_COMMENT_HELPERS}
   function domSelectorFor(el){
     if (!el || !el.tagName || el === document.documentElement || el === document.body) return null;
+    if (el.id) {
+      var stableSelector = '[id=' + JSON.stringify(el.id) + ']';
+      if (el.ownerDocument.querySelectorAll(stableSelector).length === 1) return stableSelector;
+    }
     var parts = [];
     var node = el;
     while (node && node !== document.documentElement && node !== document.body) {
@@ -2073,6 +2081,7 @@ function meaningfulDomFallbackTarget(el) {
     return id === 'path-0' && el && el.parentElement === document.body && el.id === 'root';
   }
   function targetFrom(el, allowDomFallback, clickedEl, clickPoint, validateForSave){
+    if (el && nestedCommentAnchors.has(el)) return nestedCommentPayload(el);
     var id = annotatedElementIdFor(el);
     var selector = annotatedSelectorFor(el, esc);
     if (!validateForSave && allowDomFallback && id && generatedRootAnnotation(el, id)) return null;
@@ -2099,7 +2108,7 @@ function meaningfulDomFallbackTarget(el) {
     var cls = typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\\s+/).slice(0,2).join('.') : '';
     var html = '';
     try { html = (el.outerHTML || '').replace(/\\s+/g, ' ').match(/^<[^>]+>/)?.[0] || ''; } catch (_) {}
-    var position = { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) };
+    var position = { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
     if (!elementVisibleForComment(el, position)) return null;
     var payload = {
       type: 'od:comment-target',
@@ -2109,13 +2118,15 @@ function meaningfulDomFallbackTarget(el) {
       label: tag + cls,
       text: (el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160),
       position: position,
+      visiblePosition: commentVisiblePosition(el, rect),
+      domIdUnique: el.id ? el.ownerDocument.querySelectorAll('[id=' + JSON.stringify(el.id) + ']').length === 1 : undefined,
       htmlHint: html.slice(0, 180),
       style: styleSnapshot(el)
     };
     var slideIndex = deckSlideIndexForPayload();
     if (typeof slideIndex === 'number') payload.slideIndex = slideIndex;
     if (clickPoint) {
-      payload.hoverPoint = { x: Math.round(clickPoint.x), y: Math.round(clickPoint.y) };
+      payload.hoverPoint = { x: clickPoint.x, y: clickPoint.y };
     }
     if (clickedEl && clickedEl !== el) {
       var clickedTag = clickedEl.tagName ? clickedEl.tagName.toLowerCase() : 'element';
@@ -2142,6 +2153,10 @@ function meaningfulDomFallbackTarget(el) {
         items.push(item);
       }
     }
+    // Observation measures the explicitly opened saved target without enabling
+    // the picker or enumerating unrelated unannotated DOM nodes.
+    var savedTarget = activeSavedCommentTarget();
+    if (savedTarget && !seen[savedTarget.elementId]) items.push(savedTarget);
     return items;
   }
   var postTargetsPending = false;
@@ -2201,6 +2216,10 @@ function meaningfulDomFallbackTarget(el) {
     window.parent.postMessage({ type: 'od:preview-scroll-request' }, '*');
   }
   function findCommentTargetByIdentity(elementId, selector){
+    if (selector && String(selector).indexOf('[id=') === 0) {
+      try { var stableNodes = document.querySelectorAll(String(selector)); return stableNodes.length === 1 ? stableNodes[0] : null; } catch (_) { return null; }
+    }
+    if (isNestedCommentAnchor(elementId, selector)) return resolveNestedComment(elementId, selector);
     if (String(elementId || '').indexOf('cmt:') === 0 || commentSelectorClaimsIdentity(selector)) return strictCommentNode(elementId, selector);
     var el = null;
     if (selector) {
@@ -2214,21 +2233,32 @@ function meaningfulDomFallbackTarget(el) {
     }
     return el;
   }
+  function activeSavedCommentTarget(){
+    if (!activeCommentElementId) return null;
+    var el = findCommentTargetByIdentity(activeCommentElementId, activeCommentSelector);
+    if (!el) return null;
+    // A structural selector must not fall back to an annotation id reused by
+    // a different element. cmt and nested identities retain their strict resolver.
+    if (activeCommentSelector && activeCommentSelector.split('>')[0].trim() === 'body') {
+      try { if (!el.matches(activeCommentSelector)) return null; } catch (_) { return null; }
+    }
+    var payload = targetFrom(el, true, null, null, String(activeCommentElementId).indexOf('cmt:') === 0);
+    try { if (payload && activeCommentSelector && el.matches(activeCommentSelector)) payload.selector = activeCommentSelector; } catch (_) {}
+    return payload;
+  }
   function postActiveCommentTarget(){
     if (!active() || !activeCommentElementId) return;
-    var el = findCommentTargetByIdentity(activeCommentElementId, activeCommentSelector);
-    if (!el) return;
-    var payload = targetFrom(el, commentEnabled && mode === 'picker' && !inspectEnabled, null, null, String(activeCommentElementId).indexOf('cmt:') === 0);
-    // Preserve the selector that actually found the saved target, even when
-    // source annotation gives that DOM node a newer attribute identity.
-    try { if (payload && activeCommentSelector && el.matches(activeCommentSelector)) payload.selector = activeCommentSelector; } catch (_) {}
+    var payload = activeSavedCommentTarget();
     if (payload) window.parent.postMessage(Object.assign({}, payload, { type: 'od:comment-active-target-update' }), '*');
+    else if (isNestedCommentAnchor(activeCommentElementId, activeCommentSelector)) schedulePostTargets();
   }
   function schedulePostActiveCommentTarget(){
-    if (!active() || !activeCommentElementId || postActiveTargetPending) return;
+    if (!active() || postActiveTargetPending) return;
     postActiveTargetPending = true;
     window.requestAnimationFrame(function(){
       postActiveTargetPending = false;
+      // Pins and the open detail use one scroll measurement.
+      postTargets();
       postActiveCommentTarget();
     });
   }
@@ -2624,6 +2654,15 @@ function meaningfulDomFallbackTarget(el) {
       }, '*');
     } catch (_) {}
   }
+  document.addEventListener('keydown', function(event){
+    if (forwardCommentEscape(event)) return;
+    if (event.defaultPrevented || !commentShortcutEnabled || event.key.toLowerCase() !== 'c' || event.ctrlKey || event.metaKey || event.altKey || event.repeat || event.isComposing || event.keyCode === 229) return;
+    var target = event.target;
+    if (target && target.closest && (target.isContentEditable || target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="menu"], [role="dialog"], dialog, [popover]'))) return;
+    event.preventDefault();
+    event.stopPropagation();
+    try { window.parent.postMessage({ type: 'od:comment-shortcut' }, '*'); } catch (_) {}
+  });
   window.addEventListener('message', function(ev){
     var data = ev && ev.data;
     if (!data || !data.type) return;
@@ -2653,6 +2692,10 @@ function meaningfulDomFallbackTarget(el) {
     }
     if (data.type === 'od:comment-mode') {
       commentEnabled = !!data.enabled;
+      commentObserved = !!data.observe;
+      commentShortcutEnabled = !!data.shortcutEnabled;
+      if (typeof data.cursor === 'string') document.documentElement.style.setProperty('--od-comment-cursor', data.cursor);
+      else document.documentElement.style.removeProperty('--od-comment-cursor');
       mode = data.mode === 'pod' ? 'pod' : 'picker';
       document.documentElement.toggleAttribute('data-od-comment-mode', commentEnabled);
       document.documentElement.setAttribute('data-od-comment-mode-kind', mode);
@@ -2700,8 +2743,8 @@ function meaningfulDomFallbackTarget(el) {
           try { if (!target.matches(activeCommentSelector)) target = null; } catch (_) { target = null; }
         }
         var payload = target && targetFrom(target, true, null, null, String(activeCommentElementId).indexOf('cmt:') === 0);
-        if (payload) {
-          try { target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' }); } catch (_) {}
+        if (payload || (target && nestedCommentPayload(target, true))) {
+          try { target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' }); scrollNestedComment(target); } catch (_) {}
           payload = targetFrom(target, true, null, null, String(activeCommentElementId).indexOf('cmt:') === 0);
           try { if (payload && activeCommentSelector && target.matches(activeCommentSelector)) payload.selector = activeCommentSelector; } catch (_) {}
         }
@@ -2890,9 +2933,9 @@ function meaningfulDomFallbackTarget(el) {
   window.addEventListener('resize', schedulePostTargets);
   document.addEventListener('scroll', function(){
     schedulePostActiveCommentTarget();
-    schedulePostTargets();
     schedulePostPreviewScroll();
   }, true);
+  observeNestedCommentDocuments();
   var mo = new MutationObserver(schedulePostTargets);
   // childList only — NOT attributes/characterData. Re-walking every annotated
   // target on every attribute/text mutation made an animated artifact (inline
@@ -2929,7 +2972,7 @@ function meaningfulDomFallbackTarget(el) {
   else setTimeout(postPreviewScroll, 0);
 })();</script>`;
   const style = `<style data-od-selection-bridge-style>
-html[data-od-comment-mode] body * { cursor: crosshair !important; }
+html[data-od-comment-mode] body * { cursor: var(--od-comment-cursor, crosshair) !important; }
 html[data-od-inspect-mode] body * { cursor: crosshair !important; }
 html[data-od-comment-mode][data-od-comment-mode-kind="pod"] body * { cursor: cell !important; }
 /* Nested iframes (e.g. shared device frames) consume clicks in their own browsing context.

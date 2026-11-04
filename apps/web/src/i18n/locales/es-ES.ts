@@ -1,6 +1,9 @@
 import type { Dict } from '../types';
 
 export const esES: Dict = {
+  'chat.comments.deselectAll': 'Deselect all',
+  'fileViewer.commentSync.alignRetrying': 'Retrying…',
+  'fileViewer.commentSync.alignRetryPending': 'Syncing comments…',
   "workspaceInvite.deliveryPending": "La entrega de la invitación está pendiente. Compruébalo más tarde.",
   "workspaceInvite.deliveryFailed": "No se ha podido entregar la invitación. Vuelve a intentarlo.",
   "workspaceInvite.invalidResponse": "No se ha podido confirmar la entrega. Vuelve a intentarlo más tarde.",
@@ -5601,4 +5604,16 @@ export const esES: Dict = {
   'chat.record.canceled': "Cancelado",
   'chat.record.pending': "Sin iniciar",
   'chat.record.unfinished': "Sin terminar",
+  "comment.unknownAuthor": "Unknown author",
+  "comment.moreCount": "Show comments ({n})",
+  "comment.resizePanel": "Resize comments panel",
+  "comment.overLimit": "{count} characters over the limit. Shorten before sending.",
+  "comment.saveFailed": "Could not save comment. Try again.",
+  "comment.locationUnavailable": "No se puede localizar este elemento. Es posible que la página haya cambiado.",
+  "comment.agentSubmitFailed": "No se pudo enviar. Inténtalo de nuevo.",
+  "comment.agentSubmitUnavailable": "No se puede enviar en este momento. Inténtalo de nuevo más tarde.",
+  "comment.imageFailed": "Image unavailable",
+  "comment.moreActions": "More comment actions",
+  'fileViewer.commentSync.alignRetryFailed': 'Sync failed. Try again.',
+  'fileViewer.commentSync.alignRetrySucceeded': 'Comments synced',
 };

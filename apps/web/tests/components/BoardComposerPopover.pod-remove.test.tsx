@@ -141,7 +141,7 @@ describe('BoardComposerPopover captured-component removal', () => {
     expect(Number.parseFloat(popover.style.left)).toBeGreaterThanOrEqual(14);
   });
 
-  it('disables the comment action for unchanged existing comments', () => {
+  it('keeps existing comments read-only even when a stale draft differs', () => {
     const onSaveComment = vi.fn();
     const { rerender } = render(
       <BoardComposerPopover
@@ -166,7 +166,7 @@ describe('BoardComposerPopover captured-component removal', () => {
       />,
     );
 
-    expect(screen.getByTestId('comment-popover-save').hasAttribute('disabled')).toBe(true);
+    expect(screen.queryByTestId('comment-popover-save')).toBeNull();
 
     rerender(
       <BoardComposerPopover
@@ -191,6 +191,8 @@ describe('BoardComposerPopover captured-component removal', () => {
       />,
     );
 
-    expect(screen.getByTestId('comment-popover-save').hasAttribute('disabled')).toBe(false);
+    expect(screen.queryByTestId('comment-popover-save')).toBeNull();
+    expect(screen.getByTestId('comment-popover-detail')).toHaveTextContent('区域放大');
+    expect(onSaveComment).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,9 @@
 import type { Dict } from '../types';
 
 export const th: Dict = {
+  'chat.comments.deselectAll': 'Deselect all',
+  'fileViewer.commentSync.alignRetrying': 'Retrying…',
+  'fileViewer.commentSync.alignRetryPending': 'Syncing comments…',
   "workspaceInvite.deliveryPending": "กำลังรอส่งคำเชิญ โปรดตรวจสอบอีกครั้งภายหลัง",
   "workspaceInvite.deliveryFailed": "ส่งคำเชิญไม่สำเร็จ โปรดลองอีกครั้ง",
   "workspaceInvite.invalidResponse": "ไม่สามารถยืนยันการส่งคำเชิญได้ โปรดลองอีกครั้งภายหลัง",
@@ -5601,4 +5604,16 @@ export const th: Dict = {
   'comment.saveTargetMissing': 'The comment target no longer exists. Select an element again; your draft is kept.',
   'comment.savePreviewNotReady': 'The preview is refreshing. Your draft is kept; try saving again when it is ready.',
   'comment.anchorState.lost': 'ไม่พบจุดยึด',
+  "comment.unknownAuthor": "Unknown author",
+  "comment.moreCount": "Show comments ({n})",
+  "comment.resizePanel": "Resize comments panel",
+  "comment.overLimit": "{count} characters over the limit. Shorten before sending.",
+  "comment.saveFailed": "Could not save comment. Try again.",
+  "comment.locationUnavailable": "ไม่พบองค์ประกอบนี้ หน้าเว็บอาจมีการเปลี่ยนแปลง",
+  "comment.agentSubmitFailed": "ส่งไม่สำเร็จ โปรดลองอีกครั้ง",
+  "comment.agentSubmitUnavailable": "ไม่สามารถส่งได้ในขณะนี้ โปรดลองอีกครั้งในภายหลัง",
+  "comment.imageFailed": "Image unavailable",
+  "comment.moreActions": "More comment actions",
+  'fileViewer.commentSync.alignRetryFailed': 'Sync failed. Try again.',
+  'fileViewer.commentSync.alignRetrySucceeded': 'Comments synced',
 };

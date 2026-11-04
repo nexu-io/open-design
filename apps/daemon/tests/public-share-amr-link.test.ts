@@ -182,7 +182,7 @@ async function startShareDaemon(options: { env?: NodeJS.ProcessEnv; amr?: Fixtur
   const store = createSqlitePublicFilePublicationStore(db);
   const runtime = createCollabRuntime({ workspaceContext: { current: async () => context } });
   const state = { offline: false, amr: options.amr };
-  const fixture = createPublicSharePublishingFixture(db, store, async () => JSON.stringify({ id: 'version-1', version: 1 }), undefined, {
+  const fixture = createPublicSharePublishingFixture(db, store, async () => JSON.stringify({ id: 'version-1', version: 1 }), {
     env: options.env ?? {}, amr: (projectId, s) => state.amr?.(projectId, s) ?? {}, failShareState: () => state.offline,
     ...(options.pending ? { pending: true } : {}),
   });

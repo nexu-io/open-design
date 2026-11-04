@@ -37,7 +37,7 @@ import {
 	createSqlitePublicFilePublicationStore,
 	migratePublicFilePublications,
 } from "../src/collab/public-file-publication-store.js";
-import { enqueuePublishedFileComments } from "../src/collab/published-file-comment-backfill.js";
+import { createPublishedCommentBackfillReconciler } from "../src/collab/published-comment-backfill-reconciler.js";
 import {
 	createCommentRelayOutboxStore,
 	commentRelayLocalBindingMatches,
@@ -208,7 +208,6 @@ it.each([false, true])(
 					db,
 					store,
 					runVelaResourceCommand,
-					enqueuePublishedFileComments,
 					{
 						commands: publicationCommands,
 						beforeStop: async () => {
@@ -222,7 +221,6 @@ it.each([false, true])(
 				recordPublicFilePublication: createPublicFilePublicationRecorder(
 					db,
 					store,
-					enqueuePublishedFileComments,
 				),
 				verifyWorkspaceRequest: async (req) =>
 					req.get("x-od-workspace-id") === "w" &&
@@ -298,24 +296,13 @@ it.each([false, true])(
 				},
 			);
 			const body = (await response.json()) as Record<string, unknown>;
-			expect(response.status).toBe(fail ? 502 : 200);
+			expect(response.status).toBe(200);
 			expect(db.inTransaction).toBe(false);
 			const commands = vi.mocked(runVelaResourceCommand).mock.calls;
 			expect(commands.map((call) => call[0][0])).toEqual(["push"]);
-			expect(publicationCommands.map((args) => args.slice(0, 2))).toEqual(
-				fail
-					? [
-							["team-projects", "register-resource"],
-					["resource", "push"],
-							["share", "publish"],
-							["share", "stop"],
-						]
-					: [
-							["team-projects", "register-resource"],
-					["resource", "push"],
-							["share", "publish"],
-						],
-			);
+			expect(publicationCommands.map((args) => args.slice(0, 2))).toEqual([
+                ["team-projects", "register-resource"], ["resource", "push"], ["share", "publish"],
+            ]);
 			expect(commands.every((call) => call[1] === "w")).toBe(true);
 			const scope = {
 				resourceTeamId: "w",
@@ -323,20 +310,22 @@ it.each([false, true])(
 				projectId: "p",
 				filePath: "pages/local.html",
 			};
-			if (fail) {
-				expect(body).toMatchObject({
-					error: "PUBLIC_FILE_PUBLISH_UNAVAILABLE",
-				});
-				expect(store.get(scope)).toBeNull();
-				expect(queue.count()).toBe(0);
-				expect(
-					db.prepare("SELECT * FROM comment_relay_publication_mappings").all(),
-				).toEqual([]);
-			} else {
-				expect(body).toMatchObject({
-					status: "published",
-					receipt: { slug: fixtureShareSlug },
-				});
+            expect(body).toMatchObject({ status: "published", receipt: { slug: fixtureShareSlug } });
+            expect(queue.count()).toBe(0);
+            const reconciler = createPublishedCommentBackfillReconciler(db, { listFacts: subject => store.listFacts(subject) });
+            await reconciler.prepare(scope);
+            if (fail) {
+                expect(queue.count()).toBe(0);
+                const failed = await (await fetch(`http://127.0.0.1:${address.port}/api/projects/p/comment-sync-state?filePath=pages%2Flocal.html`, { headers: { "x-od-workspace-id": "w", "x-od-workspace-member-id": "owner" } })).json();
+                expect(failed).toMatchObject({ backfill: { state: "failed", retryable: true, code: "BACKFILL_ENQUEUE_FAILED" } });
+                expect(store.get(scope)).toMatchObject({ slug: fixtureShareSlug });
+                db.exec("DROP TRIGGER fail_second");
+                await reconciler.prepare(scope, { retryFailed: true });
+                expect(publicationCommands.map(args => args.slice(0, 2))).toEqual([
+                    ["team-projects", "register-resource"], ["resource", "push"], ["share", "publish"],
+                ]);
+            }
+            {
 				const originalRows = queue.listDue(Date.now());
 				expect(originalRows.map((row) => row.comment.id)).toEqual([
 					"first",
@@ -526,6 +515,8 @@ it.each([false, true])(
 					status: "published",
 					receipt: body.receipt,
 				});
+				expect(queue.count()).toBe(0);
+                await reconciler.prepare(scope);
 				// Only the remotely verified stop→resume path may label this revision reopened.
 				expect(await readSync()).toMatchObject({ backfill: { state: "pending", reopened: true } });
 				expect(
@@ -614,6 +605,8 @@ it.each([false, true])(
 					["share", "stop"],
 					["share", "resume-existing"],
 				]);
+                expect(queue.count()).toBe(0);
+                await reconciler.prepare(scope);
 				rows = queue.listDue(Date.now());
 				revision = store.getRevision(scope);
 				expect(revision?.token).not.toBe(originalRows[0]?.publication?.token);

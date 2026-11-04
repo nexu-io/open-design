@@ -161,6 +161,16 @@ describe('CommentSyncBanner — restored branches', () => {
     expect(retry.className).not.toMatch(/softError/);
   });
 
+  it('offers explicit retry for enqueue failure without claiming an automatic retry is running', async () => {
+    renderBanner({ ...base, lastError: 'COMMENT_SYNC_DELIVERY_FAILED', backfill: {
+      state: 'failed', filePath: 'index.html', publicationRevision: 'r1', retryable: true,
+      reopened: false, code: 'BACKFILL_ENQUEUE_FAILED',
+    } });
+    await screen.findByText('已有评论暂未同步，访客暂时看不到');
+    expect(screen.queryByText(/正在自动重试/)).toBeNull();
+    expect(screen.getByRole('button', { name: '重试' })).toBeEnabled();
+  });
+
   it('keeps retry disabled while the POST is pending and reports a failed POST', async () => {
     let release!: (response: Response) => void;
     const post = new Promise<Response>(resolve => { release = resolve; });
@@ -232,4 +242,58 @@ it('shows a recoverable size error instead of claiming automatic retry', async (
   renderBanner({ ...base, pending: 1, payloadTooLarge: true });
   expect(await screen.findByRole('alert')).toHaveTextContent('请缩短或删除这些评论');
   expect(screen.queryByText(/正在自动重试/)).toBeNull();
+});
+
+it.each(['http', 'network', 'unknown', 'diverged'] as const)('reports an alignment %s failure in place and allows retry', async failure => {
+  fetchMock.mockImplementation(async (_input, init) => {
+    if (init?.method === 'POST') {
+      if (failure === 'http') return new Response(null, { status: 503 });
+      if (failure === 'network') throw new Error('offline');
+      return Response.json(failure === 'diverged' ? { state: 'diverged', latestSeq: 1 } : { state: 'unknown', reason: 'unavailable' });
+    }
+    return Response.json({ ...base, align: { state: 'diverged' } });
+  });
+  render(<I18nProvider initial="zh-CN"><CommentSyncBanner projectId="p" workspaceContext={personalContext} filePath="index.html" /></I18nProvider>);
+  const retry = await screen.findByRole('button', { name: '重试' });
+  await act(async () => { retry.click(); });
+  expect(await screen.findByRole('alert')).toHaveTextContent('同步失败，请重试。');
+  expect(screen.getByRole('button', { name: '重试' })).toBeEnabled();
+  expect(screen.queryByText('评论已同步')).toBeNull();
+});
+
+it('keeps pending feedback and shows a confirmed success briefly before returning to silence', async () => {
+  vi.useFakeTimers();
+  let resolve!: (value: Response) => void;
+  const pending = new Promise<Response>(done => { resolve = done; });
+  let aligned = false;
+  fetchMock.mockImplementation(async (_input, init) => init?.method === 'POST'
+    ? pending : Response.json({ ...base, align: { state: aligned ? 'aligned' : 'diverged' } }));
+  render(<I18nProvider initial="zh-CN"><CommentSyncBanner projectId="p" workspaceContext={personalContext} filePath="index.html" /></I18nProvider>);
+  await act(async () => {});
+  await act(async () => { screen.getByRole('button', { name: '重试' }).click(); });
+  expect(screen.getByText('正在同步评论…')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '重试中…' })).toBeDisabled();
+  aligned = true;
+  await act(async () => { resolve(Response.json({ state: 'aligned', latestSeq: 1 })); });
+  expect(screen.getByText('评论已同步')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '重试' })).toBeNull();
+  await act(async () => { await vi.advanceTimersByTimeAsync(1_499); });
+  expect(screen.getByText('评论已同步')).toBeInTheDocument();
+  await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+  expect(screen.queryByRole('status')).toBeNull();
+});
+
+it('does not let an old-file retry response replace the newly viewed file status', async () => {
+  let resolve!: (value: Response) => void;
+  const pending = new Promise<Response>(done => { resolve = done; });
+  fetchMock.mockImplementation(async (input, init) => init?.method === 'POST' ? pending
+    : Response.json({ ...base, align: { state: input.toString().includes('other.html') ? 'aligned' : 'diverged' } }));
+  const banner = (filePath: string) => <I18nProvider initial="zh-CN"><CommentSyncBanner projectId="p" workspaceContext={personalContext} filePath={filePath} /></I18nProvider>;
+  const view = render(banner('index.html'));
+  const retry = await screen.findByRole('button', { name: '重试' });
+  await act(async () => { retry.click(); });
+  view.rerender(banner('other.html'));
+  await act(async () => { resolve(Response.json({ state: 'diverged', latestSeq: 1 })); });
+  expect(screen.queryByRole('status')).toBeNull();
+  expect(screen.queryByRole('alert')).toBeNull();
 });

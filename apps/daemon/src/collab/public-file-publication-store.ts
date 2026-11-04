@@ -24,6 +24,19 @@ export interface PublicFilePublication {
 /** Internal operation witness; never included in the public publication DTO. */
 export interface PublicFilePublicationRevision { slug: string; token: string }
 
+export interface PublicFilePublicationReceipt { resourceId: string; versionId: string }
+
+export interface PublicFilePublicationFacts {
+  receipt?: PublicFilePublicationReceipt;
+  publicFilePath: string;
+  reopened: boolean;
+}
+
+export interface PublicFilePublicationFact extends PublicFilePublicationFacts {
+  scope: PublicFilePublicationScope;
+  publicationRevision: PublicFilePublicationRevision;
+}
+
 export interface PublicFilePublicationStore {
   getRevision(scope: PublicFilePublicationScope): PublicFilePublicationRevision | null;
   deleteIfRevisionMatches(scope: PublicFilePublicationScope, expected: PublicFilePublicationRevision): boolean;
@@ -31,6 +44,7 @@ export interface PublicFilePublicationStore {
   set(
     scope: PublicFilePublicationScope,
     publication: PublicFilePublication,
+    facts?: PublicFilePublicationFacts,
   ): void;
   delete(scope: PublicFilePublicationScope): void;
   /**
@@ -45,6 +59,13 @@ export interface PublicFilePublicationStore {
 
 /** Full store capability for consumers that enumerate project publications. */
 export interface ProjectPublicFilePublicationStore extends PublicFilePublicationStore {
+  /** Only confirmed mapped publications; legacy unmapped rows are not inferred. */
+  listFacts(subject: {
+    resourceTeamId: string;
+    ownerMemberId: string;
+    projectId: string;
+    filePath?: string;
+  }): ReadonlyArray<PublicFilePublicationFact>;
   /** Lists this principal's project with the most recent successful publish time in epoch ms. */
   listByProject(scope: {
     resourceTeamId: string;
@@ -153,6 +174,15 @@ export function migratePublicFilePublications(db: SqliteDb): void {
       ALTER TABLE public_file_publications_nullable RENAME TO public_file_publications;`);
     })();
   }
+  const factColumns = db.prepare('PRAGMA table_info(public_file_publications)').all() as Array<{ name: string }>;
+  for (const [name, definition] of [
+    ['source_file_id', 'TEXT'], ['public_file_path', 'TEXT'], ['reopened', 'INTEGER NOT NULL DEFAULT 0'],
+    ['resource_id', 'TEXT'], ['version_id', 'TEXT'],
+  ]) {
+    if (!factColumns.some(column => column.name === name)) {
+      db.exec(`ALTER TABLE public_file_publications ADD COLUMN ${name} ${definition}`);
+    }
+  }
 }
 
 function scopeKey(scope: PublicFilePublicationScope): string {
@@ -177,6 +207,7 @@ export function createInMemoryPublicFilePublicationStore(): StopQueuePublicFileP
     publication: PublicFilePublication;
     publishedAt: number;
     revision: string;
+    facts?: PublicFilePublicationFacts;
   }>();
   return {
     getRevision(scope) {
@@ -227,12 +258,25 @@ export function createInMemoryPublicFilePublicationStore(): StopQueuePublicFileP
         publishedAt: entry.publishedAt,
       }))
       .sort(comparePublicationFilePaths),
-    set: (scope, publication) => {
+    listFacts: (subject) => [...publications.values()]
+      .filter(entry => entry.scope.resourceTeamId === subject.resourceTeamId
+        && entry.scope.ownerMemberId === subject.ownerMemberId
+        && entry.scope.projectId === subject.projectId
+        && (subject.filePath === undefined || entry.scope.filePath === subject.filePath)
+        && entry.facts !== undefined)
+      .sort((a, b) => comparePublicationFilePaths(a.scope, b.scope))
+      .map(entry => ({ scope: { ...entry.scope },
+        publicationRevision: { slug: entry.publication.slug, token: entry.revision },
+        ...entry.facts!,
+        ...(entry.facts?.receipt ? { receipt: { ...entry.facts.receipt } } : {}),
+      })),
+    set: (scope, publication, facts) => {
       publications.set(scopeKey(scope), {
         scope: { ...scope },
         publication,
         publishedAt: Date.now(),
         revision: randomUUID(),
+        ...(facts ? { facts: { ...facts, ...(facts.receipt ? { receipt: { ...facts.receipt } } : {}) } } : {}),
       });
     },
     delete: (scope) => {
@@ -272,18 +316,27 @@ export function createSqlitePublicFilePublicationStore(
        AND owner_member_id = ?
        AND project_id = ?
   `);
+  const selectFacts = db.prepare(`SELECT file_path AS filePath, source_file_id AS sourceFileId,
+    slug, revision AS token, public_file_path AS publicFilePath, reopened, resource_id AS resourceId, version_id AS versionId
+    FROM public_file_publications
+    WHERE resource_team_id = ? AND owner_member_id = ? AND project_id = ?
+      AND (? IS NULL OR file_path = ?) AND public_file_path IS NOT NULL AND revision != ''`);
   const upsertRow = db.prepare(`
     INSERT INTO public_file_publications
       (resource_team_id, owner_member_id, project_id, file_path,
-       url, slug, file_name, created_at, updated_at, revision)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       url, slug, file_name, created_at, updated_at, revision, source_file_id, public_file_path, reopened, resource_id, version_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(resource_team_id, owner_member_id, project_id, file_path)
     DO UPDATE SET
       url = excluded.url,
       slug = excluded.slug,
       file_name = excluded.file_name,
       updated_at = excluded.updated_at,
-      revision = excluded.revision
+      revision = excluded.revision,
+      source_file_id = excluded.source_file_id,
+      public_file_path = excluded.public_file_path,
+      reopened = excluded.reopened,
+      resource_id = excluded.resource_id, version_id = excluded.version_id
   `);
   const updateLinkRow = db.prepare(`
     UPDATE public_file_publications SET url = ?
@@ -405,7 +458,22 @@ export function createSqlitePublicFilePublicationStore(
         publishedAt: row.publishedAt,
       })).sort(comparePublicationFilePaths);
     },
-    set(scope, publication) {
+    listFacts(subject) {
+      const rows = selectFacts.all(subject.resourceTeamId, subject.ownerMemberId, subject.projectId,
+        subject.filePath ?? null, subject.filePath ?? null) as Array<{
+          filePath: string; sourceFileId: string | null; slug: string; token: string;
+          publicFilePath: string; reopened: number; resourceId: string | null; versionId: string | null;
+        }>;
+      return rows.sort(comparePublicationFilePaths).map(row => ({
+        scope: { resourceTeamId: subject.resourceTeamId, ownerMemberId: subject.ownerMemberId,
+          projectId: subject.projectId, filePath: row.filePath,
+          ...(row.sourceFileId ? { sourceFileId: row.sourceFileId } : {}) },
+        publicationRevision: { slug: row.slug, token: row.token },
+        publicFilePath: row.publicFilePath, reopened: row.reopened === 1,
+        ...(row.resourceId && row.versionId ? { receipt: { resourceId: row.resourceId, versionId: row.versionId } } : {}),
+      }));
+    },
+    set(scope, publication, facts) {
       const timestamp = now();
       upsertRow.run(
         scope.resourceTeamId,
@@ -418,6 +486,10 @@ export function createSqlitePublicFilePublicationStore(
         timestamp,
         timestamp,
         randomUUID(),
+        scope.sourceFileId ?? null,
+        facts?.publicFilePath ?? null,
+        facts?.reopened === true ? 1 : 0,
+        facts?.receipt?.resourceId ?? null, facts?.receipt?.versionId ?? null,
       );
     },
     delete(scope) {

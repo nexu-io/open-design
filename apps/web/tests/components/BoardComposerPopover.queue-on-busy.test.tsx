@@ -56,7 +56,7 @@ describe('BoardComposerPopover queue on busy conversation', () => {
     );
 
     const send = screen.getByTestId('comment-add-send') as HTMLButtonElement;
-    expect(send.textContent).toBe('Queue');
+    expect(send.getAttribute('aria-label')).toBe('Queue');
     expect(send.disabled).toBe(false);
 
     fireEvent.click(send);
@@ -85,7 +85,7 @@ describe('BoardComposerPopover queue on busy conversation', () => {
     );
 
     const send = screen.getByTestId('comment-add-send') as HTMLButtonElement;
-    expect(send.textContent).toBe('Sending…');
+    expect(send.getAttribute('aria-label')).toBe('Sending…');
     expect(send.disabled).toBe(true);
   });
 });

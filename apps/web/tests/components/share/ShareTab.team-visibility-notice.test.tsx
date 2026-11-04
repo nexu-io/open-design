@@ -2,15 +2,20 @@
 import type { ComponentProps } from 'react';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { WorkspaceCollabContext } from '@open-design/contracts';
+import { buildWorkspacePermissions, buildWorkspaceSeatSummary, type WorkspaceCollabContext } from '@open-design/contracts';
 import { zhCN } from '../../../src/i18n/locales/zh-CN';
 import { ShareTab } from '../../../src/components/share/ShareTab';
 
 afterEach(cleanup);
 
 type Props = ComponentProps<typeof ShareTab>;
-const team = { workspaceId: 'w', teamId: 'w', workspaceMemberId: 'm', workspaceType: 'team' } as WorkspaceCollabContext;
-const personal = { workspaceId: 'w', workspaceMemberId: 'm', workspaceType: 'personal' } as WorkspaceCollabContext;
+const team: WorkspaceCollabContext = {
+  workspaceId: 'w', teamId: 'w', workspaceMemberId: 'm', workspaceType: 'team', role: 'owner',
+  memberStatus: 'active', lifecycleState: 'active', billingState: 'active', planId: null, providerMode: 'platform_credits',
+  seatSummary: buildWorkspaceSeatSummary({ seatLimit: 1, usedSeats: 1 }),
+  permissions: buildWorkspacePermissions({ role: 'owner', lifecycleState: 'active' }),
+};
+const personal: WorkspaceCollabContext = { ...team, workspaceType: 'personal' };
 function props(overrides: Partial<Props> = {}): Props {
   return {
     menuOrigin: 'artifact-card', workspaceContext: team, t: key => zhCN[key],

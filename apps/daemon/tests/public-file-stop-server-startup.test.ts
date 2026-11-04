@@ -13,13 +13,13 @@ it('runs the real shared SQLite queue consumer once after server startup, deferr
   const runs: ReturnType<typeof vi.fn<ReturnType<typeof createStartup>>>[] = [];
   const storeSpy = vi.spyOn(publications, 'createSqlitePublicFilePublicationStore').mockImplementation((...args) => {
     const store = createStore(...args);
-    store.enqueueStop(key);
     stores.push(store);
     return store;
   });
   const startupSpy = vi.spyOn(publications, 'createPublicFileStopStartup').mockImplementation((store, prepareStop, mutations) => {
     expect(prepareStop).toBe(prepare);
     expect(mutations).toEqual({ run: expect.any(Function), withMoves: expect.any(Function), captureReconciliation: expect.any(Function) });
+    store.enqueueStop(key);
     const run = vi.fn(createStartup(store, prepareStop, mutations));
     runs.push(run);
     return run;
@@ -27,18 +27,23 @@ it('runs the real shared SQLite queue consumer once after server startup, deferr
   let started: StartServerResult | undefined;
   try {
     started = await startServer({ port: 0, returnServer: true }) as StartServerResult;
-    expect(stores).toHaveLength(1);
-    expect(startupSpy).toHaveBeenCalledWith(stores[0], prepare, expect.objectContaining({ run: expect.any(Function) }));
+    expect(startupSpy).toHaveBeenCalledTimes(1);
+    const store = startupSpy.mock.calls[0]?.[0];
+    expect(stores).toContain(store);
+    expect(startupSpy).toHaveBeenCalledWith(store, prepare, expect.objectContaining({ run: expect.any(Function) }));
     expect(adapterSpy).toHaveBeenCalledWith(expect.objectContaining({ dataRoot: expect.any(String), configuredEnv: expect.any(Function) }));
     expect(runs).toHaveLength(1);
     const run = runs[0];
-    const store = stores[0];
     if (!run || !store) throw new Error("startup consumer was not registered");
     expect(run).toHaveBeenCalledTimes(1);
     const invocation = run.mock.results[0];
     if (!invocation || invocation.type !== "return") throw new Error("startup consumer did not return");
     expect(await invocation.value).toMatchObject({ deferred: 1, failed: 0, stopped: 0 });
-    expect(store.listStops()).toContainEqual({ ...key, failureCount: 1 });
+    // Independent comment readers may construct their own adapter; the stop
+    // consumer must still run exactly once against the same SQLite queue.
+    for (const reader of stores) {
+      expect(reader.listStops()).toContainEqual({ ...key, failureCount: 1 });
+    }
   } finally {
     await started?.shutdown();
     if (started) await new Promise<void>((resolve) => started!.server.close(() => resolve()));

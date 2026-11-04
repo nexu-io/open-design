@@ -219,9 +219,8 @@ export function ShareTab({
   const initialUnpublished = !filePublished && publicationStatus == null;
   const linkAccessChecked = filePublished || (initialUnpublished && prepublishLinkAccess);
   const shownConflict = publishConflict;
-  // K1/K4: while a comment backfill is pending, it replaces the primary
-  // action itself (progress bar or busy button) instead of stacking a
-  // second dark pill below a link the visitor can't fully trust yet.
+  // Comment progress is independent of the committed publication. Keep its
+  // link and update actions available while the comment batch is pending.
   // Only fetch once something is actually published — comment backfill is
   // meaningless before that, and firing this request during the unpublished
   // first-share flow performs unrelated network work.
@@ -291,7 +290,7 @@ export function ShareTab({
                         <p className={styles.publishHint} role="status"><Icon name="share-spinner" size={13} className="icon-spin" /> {t('common.loading')}</p>
                       ) : publicationQueryState === 'error' ? (
                         <><ShareErrorRow message={t('fileViewer.shareCheckFailed')} role="alert" />
-                        <ShareButton variant="primary" hoverLighten={false} onClick={retryPublicationQuery}><Icon name="refresh" size={14} /><span>{t('preview.retry')}</span></ShareButton></>
+                        <ShareButton variant="primary" hoverLighten={false} onClick={retryPublicationQuery}><Icon name="share-refresh-arrows" size={13} /><span>{t('preview.retry')}</span></ShareButton></>
                       ) : null}
                       {shownConflict ? (
                         <ShareConflictRow conflict={shownConflict} t={t} />
@@ -301,32 +300,10 @@ export function ShareTab({
                       {filePublished && publishRetry ? (
                         <ShareButton variant="primary" hoverLighten={false} disabled={!canMutatePublicShare || viewerOnly || publishing || streaming}
                           onClick={() => { void retryPublicShare?.(); }}>
-                          <Icon name="refresh" size={14} /><span>{t('preview.retry')}</span>
+                          <Icon name="share-refresh-arrows" size={13} /><span>{t('preview.retry')}</span>
                         </ShareButton>
                       ) : null}
                       {filePublished ? (
-                        backfillPending ? (
-                        <div className={styles.syncStatus} role="status">
-                          {backfillPending.reopened === true ? (
-                            <ShareButton variant="primary" hoverLighten={false} disabled aria-busy="true">
-                              <Icon name="share-spinner" size={13} strokeWidth={2} className="icon-spin" />
-                              <span>{t('fileViewer.commentSync.reopenSyncBusy')}</span>
-                            </ShareButton>
-                          ) : (
-                            <>
-                            <ShareProgressButton
-                              variant="sync"
-                              determinate={backfillProgress !== null}
-                              percent={backfillProgress ?? 0}
-                              label={backfillTotal !== null
-                                ? t('fileViewer.commentSync.backfillPendingCountBody', { count: backfillTotal })
-                                : t('fileViewer.commentSync.backfillPendingBody')}
-                            />
-                            <p className={styles.publishHint}>{t('fileViewer.publishingContinuesOnClose')}</p>
-                            </>
-                          )}
-                        </div>
-                        ) : (
                         <>
                         {publishedLinkUnavailable ? (
                           // Live publication without a Viewer address: no link to show or
@@ -371,7 +348,6 @@ export function ShareTab({
                           />
                         ) : null}
                         </>
-                        )
                       ) : (
                         <>
                         {publicationQueryState === 'success' && (publicationStatus !== 'stopped' || publishing) ? (
@@ -509,7 +485,7 @@ export function ShareTab({
                       {shareAccessFailureKey ? <>
                         <ShareErrorRow message={t(shareAccessFailureKey)} />
                         <ShareButton variant="primary" hoverLighten={false} disabled={shareAccessBusy || viewerOnly} onClick={retryWorkspaceShareAccess}>
-                          <Icon name="refresh" size={14} /><span>{t('preview.retry')}</span>
+                          <Icon name="share-refresh-arrows" size={13} /><span>{t('preview.retry')}</span>
                         </ShareButton>
                       </> : null}
                       </>
@@ -571,8 +547,24 @@ export function ShareTab({
                           ) : null}
                         </>
                       ) : null}
-                      {menuOrigin === 'toolbar' && filePublished ? (
-                        <CommentSyncBanner projectId={projectId} workspaceContext={workspaceContext} filePath={filePath} backfillOnly />
+                      {filePublished ? (
+                        <>
+                          {backfillPending ? (
+                            <div className={styles.syncStatus} role="status" aria-busy="true">
+                              <ShareProgressButton
+                                variant="sync"
+                                determinate={backfillProgress !== null}
+                                percent={backfillProgress ?? 0}
+                                label={backfillPending.reopened === true
+                                  ? t('fileViewer.commentSync.reopenSyncBusy')
+                                  : backfillTotal !== null
+                                    ? t('fileViewer.commentSync.backfillPendingCountBody', { count: backfillTotal })
+                                    : t('fileViewer.commentSync.backfillPendingBody')}
+                              />
+                            </div>
+                          ) : null}
+                          <CommentSyncBanner projectId={projectId} workspaceContext={workspaceContext} filePath={filePath} backfillOnly />
+                        </>
                       ) : null}
                       </div>
   );

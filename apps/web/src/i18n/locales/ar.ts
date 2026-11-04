@@ -1,6 +1,9 @@
 import type { Dict } from '../types';
 
 export const ar: Dict = {
+  'chat.comments.deselectAll': 'Deselect all',
+  'fileViewer.commentSync.alignRetrying': 'Retrying…',
+  'fileViewer.commentSync.alignRetryPending': 'Syncing comments…',
   "workspaceInvite.deliveryPending": "جارٍ إرسال الدعوة. يرجى التحقق لاحقًا.",
   "workspaceInvite.deliveryFailed": "فشل إرسال الدعوة. يرجى إعادة المحاولة.",
   "workspaceInvite.invalidResponse": "تعذر تأكيد إرسال الدعوة. يرجى المحاولة لاحقًا.",
@@ -5601,4 +5604,16 @@ export const ar: Dict = {
   'chat.record.canceled': "ملغى",
   'chat.record.pending': "لم يبدأ",
   'chat.record.unfinished': "لم يكتمل",
+  "comment.unknownAuthor": "Unknown author",
+  "comment.moreCount": "Show comments ({n})",
+  "comment.resizePanel": "Resize comments panel",
+  "comment.overLimit": "{count} characters over the limit. Shorten before sending.",
+  "comment.saveFailed": "Could not save comment. Try again.",
+  "comment.locationUnavailable": "تعذّر تحديد موقع هذا العنصر. ربما تغيّرت الصفحة.",
+  "comment.agentSubmitFailed": "فشل الإرسال. يُرجى المحاولة مجددًا.",
+  "comment.agentSubmitUnavailable": "يتعذّر الإرسال حاليًا. يُرجى المحاولة مجددًا لاحقًا.",
+  "comment.imageFailed": "Image unavailable",
+  "comment.moreActions": "More comment actions",
+  'fileViewer.commentSync.alignRetryFailed': 'Sync failed. Try again.',
+  'fileViewer.commentSync.alignRetrySucceeded': 'Comments synced',
 };

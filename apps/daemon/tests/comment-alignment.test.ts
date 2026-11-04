@@ -269,3 +269,14 @@ it('4046 fences scope changes during pinned CLI setup before spawning the transp
   expect(await alignment.check('p', context)).toEqual({ state: 'unknown', reason: 'snapshot_changed' });
   expect(transportCalls).toBe(0);
 });
+
+it('preserves the synced element-local anchor through SQLite and the alignment export', () => {
+  const db = setup();
+  const anchor = { u: 0.25125, v: 0.7625 };
+  const synced = { ...comments[0]!, authorKind: 'member' as const, status: 'open' as const, projectId: 'p', memberId: 'm', seq: 1,
+    position: { x: 10.25, y: 20.75, width: 100.5, height: 40.25, anchor } };
+  expect(mergeSyncedPreviewComment(db, 'p', 'local', synced)).toBe('changed');
+  expect(exportCommentAlignment(db, 'p', context)[0]?.position.anchor).toEqual(anchor);
+  const stored = db.prepare('SELECT position_json AS position FROM preview_comments WHERE id = ?').get(synced.id) as { position: string };
+  expect(JSON.parse(stored.position)).toEqual(synced.position);
+});

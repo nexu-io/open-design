@@ -7,7 +7,7 @@ import type {
   ProjectCommentReadRequest,
   WorkspaceCollabContext,
 } from '@open-design/contracts';
-import { SHARE_COMMENT_MAX_BYTES } from '@open-design/contracts';
+import { COMMENT_MAX_CHARACTERS, countCommentCharacters, SHARE_COMMENT_MAX_BYTES } from '@open-design/contracts';
 import { projectKindFromMetadataToTrackingOrLegacyDefault } from '@open-design/contracts/analytics';
 import type { RouteDeps } from '../../server-context.js';
 import type { BoundWorkspaceResourceMutationGate } from '../../collab/workspace-resource-mutation.js';
@@ -620,6 +620,11 @@ export function registerProjectCommentRoutes(app: Express, ctx: RegisterProjectC
       // route reject a pathological UTF-8 payload without creating a row.
       if (jsonBodyByteLength(req) > SHARE_COMMENT_MAX_BYTES) {
         return sendCommentPayloadTooLarge(res);
+      }
+      if (typeof body.note === 'string' && countCommentCharacters(body.note) > COMMENT_MAX_CHARACTERS) {
+        const message = `comment exceeds ${COMMENT_MAX_CHARACTERS} characters`;
+        if (ctx.sendApiError) return ctx.sendApiError(res, 400, 'COMMENT_TOO_LONG', message);
+        return res.status(400).json({ error: { code: 'COMMENT_TOO_LONG', message } });
       }
       const authorMemberId = await resolveCaller(req, workspaceContext);
       const requestedId = typeof body.id === 'string' && body.id.trim() ? body.id.trim() : '';

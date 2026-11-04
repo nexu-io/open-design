@@ -6684,12 +6684,6 @@ export function ProjectView({
         }
       }
       if (!commentConversationId) {
-        setProjectActionsToast({
-          message: t('project.previewCommentSaveFailedTitle'),
-          details: t('project.previewCommentSaveFailedDescription'),
-          tone: 'error',
-          ttlMs: 5000,
-        });
         return null;
       }
       // Upload any attached images first so the saved comment carries durable
@@ -6704,12 +6698,6 @@ export function ProjectView({
           projectRunWorkspaceContext,
         );
         if (result.uploaded.length !== images.length) {
-          setProjectActionsToast({
-            message: t('project.previewCommentSaveFailedTitle'),
-            details: t('project.previewCommentSaveFailedDescription'),
-            tone: 'error',
-            ttlMs: 5000,
-          });
           return null;
         }
         uploadedAttachments = result.uploaded.map((file) => ({ path: file.path, name: file.name }));
@@ -6730,15 +6718,7 @@ export function ProjectView({
         projectRunWorkspaceContext,
       );
       if (!saved) {
-        // Do not fail silently (recvq5BVsolIxi follow-up): a missing/expired
-        // workspace context 401s here with zero prior UI feedback, and the
-        // popover otherwise just closes as if the comment had saved.
-        setProjectActionsToast({
-          message: t('project.previewCommentSaveFailedTitle'),
-          details: t('project.previewCommentSaveFailedDescription'),
-          tone: 'error',
-          ttlMs: 5000,
-        });
+        // FileViewer retains the draft and shows the inline retry error.
         return null;
       }
       commitPreviewComments((current) => mergeSavedPreviewComment(current, saved));

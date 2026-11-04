@@ -1,6 +1,9 @@
 import type { Dict } from '../types';
 
 export const ptBR: Dict = {
+  'chat.comments.deselectAll': 'Deselect all',
+  'fileViewer.commentSync.alignRetrying': 'Retrying…',
+  'fileViewer.commentSync.alignRetryPending': 'Syncing comments…',
   "workspaceInvite.deliveryPending": "A entrega do convite está pendente. Verifique novamente em breve.",
   "workspaceInvite.deliveryFailed": "Não foi possível entregar o convite. Tente novamente.",
   "workspaceInvite.invalidResponse": "Não foi possível confirmar a entrega do convite. Tente novamente mais tarde.",
@@ -5601,4 +5604,16 @@ export const ptBR: Dict = {
   'comment.saveTargetMissing': 'The comment target no longer exists. Select an element again; your draft is kept.',
   'comment.savePreviewNotReady': 'The preview is refreshing. Your draft is kept; try saving again when it is ready.',
   'comment.anchorState.lost': 'âncora perdida',
+  "comment.unknownAuthor": "Unknown author",
+  "comment.moreCount": "Show comments ({n})",
+  "comment.resizePanel": "Resize comments panel",
+  "comment.overLimit": "{count} characters over the limit. Shorten before sending.",
+  "comment.saveFailed": "Could not save comment. Try again.",
+  "comment.locationUnavailable": "Não foi possível localizar este elemento. A página pode ter sido alterada.",
+  "comment.agentSubmitFailed": "Falha no envio. Tente novamente.",
+  "comment.agentSubmitUnavailable": "Não é possível enviar agora. Tente novamente mais tarde.",
+  "comment.imageFailed": "Image unavailable",
+  "comment.moreActions": "More comment actions",
+  'fileViewer.commentSync.alignRetryFailed': 'Sync failed. Try again.',
+  'fileViewer.commentSync.alignRetrySucceeded': 'Comments synced',
 };

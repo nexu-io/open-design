@@ -106,3 +106,18 @@ it('rejects a srcdoc generation change while its shell attributes stay unchanged
       type: 'od:comment-active-target-update', requestId: request.requestId } }));
   expect(await result).toBe('unavailable');
 });
+
+it('keeps the original subpixel element-local click when save remeasures a moved element', async () => {
+  const frame = document.createElement('iframe'); document.body.append(frame);
+  const post = vi.spyOn(frame.contentWindow!, 'postMessage');
+  const result = validateCommentSaveTarget(frame, { ...target, hoverPoint: { x: 25.125, y: 10.25 } });
+  const request = post.mock.calls[0]![0] as { requestId: string };
+  window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, data: {
+    ...target, position: { x: 200.5, y: 300.25, width: 200, height: 80 },
+    requestedSelector: target.selector, type: 'od:comment-active-target-update',
+    documentVersion: `url:${frame.src}`, requestId: request.requestId,
+  } }));
+  expect(await result).toMatchObject({
+    position: { anchor: { u: 0.25125, v: 0.25625 } }, hoverPoint: { x: 250.75, y: 320.75 },
+  });
+});

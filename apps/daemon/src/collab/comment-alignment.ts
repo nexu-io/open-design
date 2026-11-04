@@ -59,7 +59,7 @@ function captureCommentAlignment(db: Database.Database, projectId: string, conte
     selector: comment.selector, selectionKind: comment.selectionKind ?? 'element',
     label: comment.label ?? '', text: comment.text ?? '', htmlHint: comment.htmlHint ?? '',
     note: comment.note ?? '', status: comment.status ?? 'open',
-    position: { x: Math.round(comment.position.x), y: Math.round(comment.position.y),
+    position: { ...(comment.position.anchor ? { anchor: comment.position.anchor } : {}), x: Math.round(comment.position.x), y: Math.round(comment.position.y),
       width: Math.round(comment.position.width), height: Math.round(comment.position.height) },
     style: comment.style ?? null, memberCount: comment.memberCount ?? 0,
     slideIndex: comment.slideIndex ?? 0,
