@@ -1,3 +1,4 @@
+import { openExternalUrl } from "../providers/registry";
 import { compareRecentProjects } from '../lib/project-order';
 import { reportProjectFailure } from '../observability/experience-diagnostics';
 // Horizontal "Recent projects" rail for the Home view.

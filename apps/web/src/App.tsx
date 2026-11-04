@@ -990,6 +990,8 @@ export function App() {
 
 function AppInner() {
   const { t, locale } = useI18n();
+  const [amrWebOpenFailed, setAmrWebOpenFailed] = useState(false);
+  useEffect(() => { const listener = () => setAmrWebOpenFailed(true); window.addEventListener('amr-web-intent-error', listener); return () => window.removeEventListener('amr-web-intent-error', listener); }, []);
   const iframeKeepAlivePool = useIframeKeepAlivePool();
   const clientType = useMemo(() => detectClientType(), []);
   const hostPlatform = useMemo(() => getOpenDesignHost()?.client.platform, []);
@@ -1580,6 +1582,7 @@ function AppInner() {
     window.addEventListener('pagehide', onPageExit);
     return () => window.removeEventListener('pagehide', onPageExit);
   }, []);
+  const loginReturnRouteRef = useRef<Route | null>(null);
   const routeRef = useRef(route);
   routeRef.current = route;
   const settingsReturnTargetRef = useRef<SettingsReturnTarget | null>(null);
@@ -2409,6 +2412,7 @@ function AppInner() {
       && route.fileName === observedPublicShareLink.filePath) return;
     if (!cloudIdentityRejected) return;
     if (route.kind === 'home' && route.view === 'onboarding') return;
+    loginReturnRouteRef.current = route;
     navigate({ kind: 'home', view: 'onboarding' }, { replace: true });
   }, [
     amrLoginStatus,
@@ -5489,12 +5493,20 @@ function AppInner() {
 
   const handleCompleteOnboarding = useCallback(() => {
     const current = latestPersistedConfigRef.current;
-    if (current.onboardingCompleted) return;
-    const next: AppConfig = { ...current, onboardingCompleted: true };
-    latestPersistedConfigRef.current = next;
-    saveConfig(next);
-    void syncConfigToDaemon(next);
-    setConfig(next);
+    if (!current.onboardingCompleted) {
+      const next: AppConfig = { ...current, onboardingCompleted: true };
+      latestPersistedConfigRef.current = next;
+      saveConfig(next);
+      void syncConfigToDaemon(next);
+      setConfig(next);
+    }
+    const target = loginReturnRouteRef.current;
+    loginReturnRouteRef.current = null;
+    if (!target || !isAmrSessionAuthenticated(amrLoginStatusRef.current)) return false;
+    // Restore the location only. ProjectView re-resolves Workspace access
+    // before exposing its data; returning never submits the previous action.
+    navigate(target, { replace: true });
+    return true;
   }, []);
 
   // Cmd+, (mac) / Ctrl+, (win/linux) opens Settings. Capture phase so we
@@ -5662,6 +5674,7 @@ function AppInner() {
   }, []);
 
   const handleActiveCloudSignOut = useCallback(async () => {
+    loginReturnRouteRef.current = null;
     const next = resetExecutionConfigAfterSignOut(latestPersistedConfigRef.current);
     latestPersistedConfigRef.current = next;
     saveConfig(next);
@@ -6333,6 +6346,7 @@ function AppInner() {
         })}
       />
       <DeletedShareNotices state={deletedShares} />
+      {amrWebOpenFailed ? <Toast message={t('account.openFailed')} role="alert" tone="error" onDismiss={()=>setAmrWebOpenFailed(false)} /> : null}
       {workingDirError ? (
         <Toast
           message={workingDirError}

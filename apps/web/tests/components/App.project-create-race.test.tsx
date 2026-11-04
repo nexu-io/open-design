@@ -153,6 +153,7 @@ vi.mock('../../src/analytics/error-tracking', async (importOriginal) => ({
 
 vi.mock('../../src/components/EntryView', () => ({
   EntryView: ({
+    onCompleteOnboarding,
     onCreateProject,
     onCreatePluginShareProject,
     onDeleteProject,
@@ -166,6 +167,7 @@ vi.mock('../../src/components/EntryView', () => ({
     projects,
     projectsLoading,
   }: {
+    onCompleteOnboarding: () => boolean | void;
     onCreateProject: (input: unknown) => boolean | Promise<boolean>;
     onCreatePluginShareProject: (
       pluginId: string,
@@ -198,6 +200,7 @@ vi.mock('../../src/components/EntryView', () => ({
   }) => (
     <main>
       <div data-testid="entry-home-surface" />
+      <button onClick={() => onCompleteOnboarding()}>Complete sign-in</button>
       <div data-testid="amr-login-status">{String(amrLoggedIn)}</div>
       <div data-testid="entry-projects-loading">{String(Boolean(projectsLoading))}</div>
       <button
@@ -709,6 +712,11 @@ vi.mock('../../src/providers/registry', async () => {
     fetchDesignTemplates: vi.fn(),
     fetchPromptTemplates: vi.fn(),
     fetchSkills: vi.fn(),
+    openExternalUrl: async (url: string) => {
+      if (!vi.isMockFunction(window.open)) return actual.openExternalUrl(url);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      return true;
+    },
     replaceProjectWorkingDir: vi.fn(),
     uploadProjectFiles: vi.fn(),
   };
@@ -4234,6 +4242,33 @@ describe('App project creation routing', () => {
     await waitFor(() => {
       expect(screen.getByTestId('project-auth-continuation').textContent).toBe('none');
     });
+  });
+
+  it('returns to the original project location after reauthentication without starting a task', async () => {
+    mockedLoadConfig.mockReturnValue({ ...baseConfig, mode: 'daemon', agentId: 'amr', onboardingCompleted: true });
+    mockWorkspaceProjectList([{ ...existingProject, workspaceId: 'ws-1' }]);
+    let loginStatus: VelaLoginStatus = { loggedIn: true, profile: 'test', user: { id: 'account-a', email: 'a@example.com' }, configPath: '' };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const pathname = new URL(String(input), 'http://d.local').pathname;
+      return { ok: true, json: async () => pathname.endsWith('/workspace/directory')
+        ? workspaceDirectoryFixture([workspaceContext('ws-1', 'wm-1')])
+        : pathname.endsWith('/workspace/context') ? workspaceContextPayload('ws-1', 'wm-1')
+        : pathname.endsWith('/integrations/vela/status') ? loginStatus : {} } as Response;
+    }));
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Existing project' }));
+    await screen.findByTestId('project-view');
+    const original = window.location.pathname + window.location.search;
+    loginStatus = { ...loginStatus, loggedIn: false, user: null };
+    act(() => notifyAmrLoginStatusChanged());
+    await waitFor(() => expect(window.location.pathname).toBe('/onboarding'));
+    loginStatus = { ...loginStatus, loggedIn: true, user: { id: 'account-a', email: 'a@example.com' } };
+    act(() => notifyAmrLoginStatusChanged());
+    await waitFor(() => expect(screen.getByTestId('amr-login-status').textContent).toBe('true'));
+    fireEvent.click(screen.getByRole('button', { name: 'Complete sign-in' }));
+    await waitFor(() => expect(window.location.pathname + window.location.search).toBe(original));
+    await screen.findByTestId('project-view');
+    expect(mockedCreateProject).not.toHaveBeenCalled();
   });
 
   it('preserves an exact retry through Settings and returns to its project after sign-in', async () => {

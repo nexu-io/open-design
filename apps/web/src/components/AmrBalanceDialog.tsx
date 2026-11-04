@@ -1,3 +1,4 @@
+import { openExternalUrl } from "../providers/registry";
 import { useWorkspaceJourney } from '../analytics/use-workspace-journey';
 import { workspaceAnalyticsDimensions } from '../analytics/workspace';
 import { useEffect, useRef, useState } from 'react';
@@ -211,11 +212,8 @@ export function AmrBalanceDialog({
       resolvedDeviceId: getResolvedDeviceId(),
       installationId,
     });
-    window.open(
-      attributedAmrUrl(upgradeUrl, attribution, deviceId),
-      '_blank',
-      'noopener,noreferrer',
-    );
+    void openExternalUrl(
+      attributedAmrUrl(upgradeUrl, attribution, deviceId));
   };
   const benefits = [
     t(signedOut ? 'chat.amrBalanceGate.benefit1' : 'chat.amrConcurrencyGate.benefit1'),

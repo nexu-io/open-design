@@ -12,6 +12,11 @@ import { setRuntimeAmrConsoleOrigin } from '../../src/runtime/amr-guidance';
 import type { AppConfig } from '../../src/types';
 import { workspaceContextFixture, workspaceDirectoryFixture } from '../helpers/workspace-context';
 
+vi.mock('../../src/providers/registry', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/registry')>('../../src/providers/registry');
+  return { ...actual, openExternalUrl: async (url: string) => { window.open(url, '_blank', 'noopener,noreferrer'); return true; } };
+});
+
 const context = workspaceContextFixture({ workspaceId: 'odlocal-plus', workspaceMemberId: 'owner', role: 'owner', planId: 'team_plus' });
 const origin = 'http://127.0.0.1:52677';
 const status: VelaLoginStatus = { loggedIn: true, profile: 'local', consoleOrigin: origin, user: null, configPath: '' };

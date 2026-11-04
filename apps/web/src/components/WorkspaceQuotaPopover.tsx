@@ -1,3 +1,4 @@
+import { openExternalUrl } from '../providers/registry';
 import { useWorkspaceJourney } from '../analytics/use-workspace-journey';
 import { workspaceAnalyticsDimensions } from '../analytics/workspace';
 import { useEffect, useId, useRef } from 'react';
@@ -108,7 +109,7 @@ function SharedWorkspaceQuotaPopover({ view, context, profile, consoleOrigin, ba
   }
   function navigate(url: string, action: 'upgrade' | 'credits') {
     onNavigate?.(action);
-    window.open(url, '_blank', 'noopener,noreferrer');
+    void openExternalUrl(url);
   }
   function help(kind: 'plan' | 'metered') {
     const label = kind === 'plan'

@@ -105,7 +105,7 @@ export function CloudSignInTip({ sharePrompt = false, className, onLoginSuccess,
   // Login flow extracted to `useCloudSignIn` (2026 refactor: item 1/OD-2) so
   // `ShareSignInButton` can drive the same flow through a real button; this
   // component's own rendering/behavior below is unchanged.
-  const { state, status, begin, cancel } = useCloudSignIn({ onLoginSuccess });
+  const { state, status, begin, cancel, reopen } = useCloudSignIn({ onLoginSuccess });
   const signing = state === 'signing';
   const [compactEntry, setCompactEntry] = useState(false);
   useEffect(() => {
@@ -189,7 +189,7 @@ export function CloudSignInTip({ sharePrompt = false, className, onLoginSuccess,
                 href={status.activationUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                onClick={(event) => event.stopPropagation()}
+                onClick={(event) => { event.preventDefault(); event.stopPropagation(); void reopen(); }}
               >
                 {status.browserOpenFailed
                   ? t('settings.amrActivationOpen')

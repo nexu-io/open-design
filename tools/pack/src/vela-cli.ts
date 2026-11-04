@@ -205,6 +205,22 @@ async function validateBundledVelaCliBinary(
     );
   }
 
+  for (const [command, markers] of [
+    ["login", ["--completion-receipt"]],
+    ["logout", ["--expected-app-user-id", "--control-key-id", "--retry-pending", "--json"]],
+  ] as const) {
+    let result: VelaCliCommandResult;
+    try {
+      result = await runCommand(source, [command, "--help"]);
+    } catch (error) {
+      throw strictResolutionError(`bundled Vela CLI lacks ${command} session support`, error);
+    }
+    const help = `${result.stdout}\n${result.stderr}`;
+    if (!help.includes(`vela ${command}`) || markers.some(marker => !help.includes(marker))) {
+      throw strictResolutionError(`bundled Vela CLI lacks ${command} session support`);
+    }
+  }
+
   // Selected-file publication and explicit visibility moves must not silently
   // fall back to parent help on a CLI that predates the project policy API.
   for (const [command, positional] of [
