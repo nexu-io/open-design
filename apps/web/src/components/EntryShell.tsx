@@ -132,7 +132,7 @@ import {
   retryUnavailableAmrBalanceGate,
   type AmrBalanceGateScope,
 } from '../runtime/amr-balance-gate';
-import { cachedHomeAmrFundingBlock, checkAmrFundingFeedback, confirmHomeAmrFundingAvailable, invalidateAmrFundingFeedback, noteHomeAmrFundingBlockPresented, readSendTimeAmrFundingEvidence, recentHomeAmrFundingInsufficiency, retireHomeAmrFundingBlock, takeHomeAmrFundingFastBlock } from '../runtime/amr-funding-feedback';
+import { cachedHomeAmrFundingBlock, checkAmrFundingFeedback, invalidateAmrFundingFeedback, noteHomeAmrFundingBlockPresented, readSendTimeAmrFundingEvidence, recentHomeAmrFundingInsufficiency, retireHomeAmrFundingBlock } from '../runtime/amr-funding-feedback';
 import { ReferralNotice } from './ReferralNotice';
 import { HomeView, seedHomeComposerPrompt } from './HomeView';
 import { HomeInviteSurface, HomeInviteTrigger } from './HomeInviteSurface';
@@ -1631,7 +1631,6 @@ export function EntryShell({
       const showFundingBlock = async (
         snapshot: AmrWalletSnapshot,
         preflight: WorkspaceBillingPreflight | null,
-        sendEvidence?: Promise<{ kind: 'available' | 'insufficient' | 'unknown'; preflight: WorkspaceBillingPreflight | null }>,
       ): Promise<boolean> => {
         const identity = homeFundingIdentityRef.current;
         const accountGeneration = currentWorkspaceAccountGeneration();
@@ -1659,20 +1658,7 @@ export function EntryShell({
               if (identity !== homeFundingIdentityRef.current || accountGeneration !== currentWorkspaceAccountGeneration()) finish('dismiss');
             });
           };
-          if (sendEvidence) {
-            void sendEvidence.then((evidence) => {
-              if (!fundingIsCurrent()) return finish('dismiss');
-              // The pending same-click recovery updates the next attempt's
-              // cache; it never submits a dialog that was already dismissed.
-              if (evidence.kind === 'available' && evidence.preflight && scope) {
-                confirmHomeAmrFundingAvailable(scope, amrModelId ?? null, evidence.preflight);
-              } else {
-                refreshForNextSend();
-              }
-            });
-          } else {
-            refreshForNextSend();
-          }
+          refreshForNextSend();
         });
         onAmrBalanceGateBlockChange(null);
         if (!isSubmitCurrent() || decision === 'dismiss' || identity !== homeFundingIdentityRef.current
@@ -1719,36 +1705,23 @@ export function EntryShell({
         });
         return 'blocked' as const;
       }
-      const fastBlock = firstDecision.source === 'hint'
-        ? takeHomeAmrFundingFastBlock(scope, amrModelId ?? null) : null;
-      if (fastBlock && fundingEvidence) {
-        // Link has ruled out full for this click. A remembered, exact-member
-        // shortfall may paint once while fresh funds are still being checked.
-        // The next explicit click cannot replay this old negative.
-        if (!await showFundingBlock(fastBlock.snapshot, fastBlock.preflight, fundingEvidence)) return 'blocked' as const;
-      }
-      // Unknown is not proof of an available slot. Preserve the existing real
-      // Link request path and named-rejection fallback rather than inventing a
-      // client quota or blocking legitimate old CLI deployments.
-      // client VIEW-015/RUN-003: a current scoped Home draft must not create
-      // even an optimistic project while its funds remain unconfirmed. This is
-      // independent of the immediately expirable concurrency hint above. A
-      // recent insufficiency hint cannot block a new explicit click until this
-      // click's fresh read confirms it; funding may have recovered meanwhile.
+      // Only a fresh, scoped insufficiency can show the funding dialog. An
+      // unknown/unavailable hint leaves admission to Link; an older negative
+      // cache cannot turn that uncertainty into a refusal for this click.
       let cachedBlock: AmrWalletSnapshot | null = null;
       let fundingPreflight: WorkspaceBillingPreflight | null = null;
       if (scope) {
         const evidence = await fundingEvidence!;
         if (!fundingIsCurrent()) return 'blocked' as const;
-        if (evidence.kind === 'unknown' || !evidence.preflight) throw new Error(t('home.amrGateUnavailable'));
+        if ('authorizationDenied' in evidence && evidence.authorizationDenied) throw new Error(t('home.amrGateUnavailable'));
         fundingPreflight = evidence.preflight;
-        if (evidence.kind === 'insufficient') {
+        if (evidence.kind === 'insufficient' && evidence.preflight) {
           cachedBlock = {
             status: 'available', profile: amrProfile ?? 'default', user: null,
             balanceUsd: evidence.preflight.balanceUsd, updatedAt: evidence.preflight.generatedAt,
             fetchedAt: new Date().toISOString(), stale: false, source: 'daemon_cache',
           };
-        } else {
+        } else if (evidence.kind === 'available' && evidence.preflight) {
           retireHomeAmrFundingBlock(scope, amrModelId ?? null, evidence.preflight);
         }
       }
@@ -1756,8 +1729,8 @@ export function EntryShell({
         if (!await showFundingBlock(cachedBlock, fundingPreflight!)) return 'blocked' as const;
       }
     }
-    // A scoped AMR Home send reaches this point only after fresh funds proof;
-    // other local creation/legacy paths keep their existing handoff. Everything
+    // Confirmed shortfalls stay on Home; uncertain hints defer to Link's real
+    // admission through the existing project handoff. Everything
     // below runs behind that frame —
     // this shell is unmounted the moment the hand-off navigates, so nothing
     // after this line may rely on this instance's state or DOM. App owns the
