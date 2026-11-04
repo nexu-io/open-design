@@ -1891,6 +1891,7 @@ export const zhCN: Dict = {
   "routines.confirmDelete": "删除此自动化？过往运行记录及其项目将予以保留。",
   "routines.errorPickProject":
     "请选择要复用的项目，或切换为“每次运行新建项目”。",
+  "routines.errorAutomationMissing": "该自动化已不可用。",
   "routines.errorAgentEmptyOutput":
     "代理已完成运行但未产生任何输出。模型或提供商可能返回了空响应，请检查代理日志中的上游错误。",
   "entry.githubStarLabel": "Star",
@@ -4840,6 +4841,8 @@ export const zhCN: Dict = {
   "automations.templatesEmptyTitle": "此分类下还没有模板。",
   "automations.templatesEmptyBody": "换一个筛选条件，或从空白自动化开始。",
   "automations.useTemplate": "使用模板",
+  "automations.errorTitleRequired": "请为这个自动化添加标题。",
+  "automations.errorPromptRequired": "请为定时对话添加提示词。",
   "automations.promptPlaceholder":
     "告诉代理按此计划运行什么，或用 @ 提及上下文...",
   "automations.runHistoryLoading": "正在加载运行历史…",
