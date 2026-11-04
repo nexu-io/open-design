@@ -125,6 +125,7 @@ import type {
   TrackingRunRecoveryActionType,
 } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
+import { useWorkspaceContentView } from '../analytics/use-workspace-content-view';
 import { savedCommentIds } from '@open-design/contracts/analytics';
 import { observeAnalytics } from '../analytics/observe';
 import {
@@ -2508,6 +2509,13 @@ export function ProjectView({
     // answer (OPEND-2624).
     projectVisibility: projectWorkspaceVisibility(projectWorkspaceScopeState.scope),
     presenceFilePath: project?.metadata?.entryFile ?? null,
+  });
+  useWorkspaceContentView({
+    context: projectRunWorkspaceContext?.workspaceId === project.workspaceId ? projectRunWorkspaceContext : null,
+    pageName: 'project',
+    active: !projectReadsHeld && !projectCollab.materializationPending,
+    ready: !workspaceContextState.loading && !workspaceContextState.identityChangePending
+      && !workspaceContextState.failure && !projectWorkspaceScopeState.loading,
   });
   // A Team-bound placeholder is safe to render and comment around, but its
   // empty tree is never a writer authority. Reuse the established viewer-only

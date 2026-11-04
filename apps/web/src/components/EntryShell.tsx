@@ -37,6 +37,8 @@ import {
 } from '@open-design/contracts';
 import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import { useAnalytics } from '../analytics/provider';
+import { useWorkspaceContentView } from '../analytics/use-workspace-content-view';
+import { entryViewToTracking } from '../analytics/workspace';
 import {
   trackHomeNavClick,
   trackOnboardingClick,
@@ -2074,6 +2076,13 @@ export function EntryShell({
       workspaceId: completed.workspaceId, workspaceMemberId: completed.workspaceMemberId, count: completed.count, totalCount: completed.count,
     } }));
   }, [registrationSkipNotice, registrationInvite, view, workspaceContextState.loading, workspaceContextState.identityChangePending, amrAccountId, amrRegistrationStatus, railWorkspaceContext]);
+  useWorkspaceContentView({
+    context: railWorkspaceContext,
+    pageName: entryViewToTracking(view),
+    active: route.kind === 'home' && view !== 'onboarding' && !registrationInviteActive,
+    ready: !workspaceContextState.loading && !workspaceContextState.identityChangePending
+      && !workspaceContextState.failure && amrLoggedIn === true,
+  });
   if (registrationInvite) return registrationInvite;
 
   if (view === 'onboarding') {
