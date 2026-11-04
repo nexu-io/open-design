@@ -1314,6 +1314,15 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       return { ok: false };
     }
+    if (project.metadata?.deviceOnly === true) {
+      sendApiError(
+        res,
+        409,
+        'AMR_WORKSPACE_SCOPE_REQUIRED',
+        'Use a local agent for a project stored only on this device',
+      );
+      return { ok: false };
+    }
     const { getWorkspaceProjectByProjectId } = ctx.projectStore;
     const bindPersonal = db.transaction(() => {
       const existing = getWorkspaceProjectByProjectId(db, projectId);
