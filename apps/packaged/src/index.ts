@@ -33,7 +33,7 @@ import {
 } from "@open-design/desktop/main";
 import { releaseChannelFromNamespace, releaseChannelFromVersion } from "@open-design/release";
 import { join } from "node:path";
-import { app, dialog } from "electron";
+import { app, dialog, powerMonitor } from "electron";
 
 import { readPackagedConfig } from "./config.js";
 import {
@@ -81,6 +81,7 @@ import { startPackagedSidecars } from "./sidecars.js";
 import { classifyStartupFailure, reportLaunchEvent, reportStartupFailure, resolveStartupDistinctId } from "./startup-telemetry.js";
 import { resolvePackagedWindowTitle } from "./window-title.js";
 import { syncWindowsUninstallDisplayVersion } from "./windows-lifecycle.js";
+import { createPackagedMcpAutoLaunchPolicy, createPackagedQuitIntent } from "./mcp-auto-launch.js";
 
 let packagedLogger: PackagedDesktopLogger | null = null;
 let packagedStartupTiming: StartupTiming | null = null;
@@ -172,6 +173,18 @@ async function main(): Promise<void> {
   const namespace = convergedArgvStamp?.namespace ?? config.namespace;
   const namespaceConfig = namespace === config.namespace ? config : { ...config, namespace };
   const initialPaths = resolvePackagedNamespacePaths(namespaceConfig, namespace, process.env);
+  const initialMcpPolicy = createPackagedMcpAutoLaunchPolicy(initialPaths.dataRoot);
+  // Recheck in the application entry: another client may have queued a launch
+  // just before the user quit. Such a launch must not clear their intent.
+  if (headlessRequest.headless && headlessRequest.mcpInstallAgent == null && initialMcpPolicy.isSuspended()) {
+    app.exit(0);
+    return;
+  }
+  if (headlessRequest.mcpInstallAgent != null || (!headlessRequest.headless
+    && (convergedArgvStamp == null || isCurrentSidecarLauncher())
+    && afterQuit == null && delegated == null && handoffResume == null)) {
+    initialMcpPolicy.resume();
+  }
   const launchStamp: SidecarStamp = {
     app: APP_KEYS.DESKTOP,
     channel: convergedArgvStamp?.channel
@@ -263,6 +276,16 @@ async function main(): Promise<void> {
   }
   const activeConfig = launcherRuntime.config;
   const paths = launcherRuntime.paths;
+  const mcpPolicy = createPackagedMcpAutoLaunchPolicy(paths.dataRoot);
+  const quitIntent = createPackagedQuitIntent(() => {
+    try { mcpPolicy.suspend(); } catch (error) { console.error("failed to persist MCP user quit", error); }
+  });
+  // Install before startup awaits so quitting a cold, windowless runtime also
+  // persists intent. Delegating helpers have already exited above.
+  app.on("before-quit", () => quitIntent.userQuit());
+  app.on("browser-window-created", (_event, window) => {
+    window.on("session-end", () => quitIntent.systemExit());
+  });
   const mcpBootstrap = resolvePackagedMcpBootstrapLaunch({
     installedLaunchPath: launcherRuntime.installedLaunchPath,
     managed: isPackagedManagedLaunch(launcherRuntime),
@@ -335,10 +358,11 @@ async function main(): Promise<void> {
   applyPackagedUpdaterEnv(activeConfig.updateMetadataUrl);
   if (!claimPackagedSingleInstanceLock(app, (argv) => {
     secondInstanceHandoff.handle(findPackagedDeeplinkArg(argv));
-  })) {
+  }, () => quitIntent.beginShutdown())) {
     return;
   }
   await app.whenReady();
+  powerMonitor.on("shutdown", () => quitIntent.systemExit());
   const electronReadyAtMs = performance.now();
   packagedStartupTiming?.mark("electron_ready");
 
@@ -436,6 +460,8 @@ async function main(): Promise<void> {
     return await desktopHandle.invoke(action, input);
   };
   const launchDesktop = async (): Promise<DesktopMainHandle> => await runDesktopMain(runtime, {
+    onUserQuit: () => quitIntent.userQuit(),
+    onShutdownStarted: () => quitIntent.beginShutdown(),
     electronReadyAtMs,
     startupTiming: deferredHeadless ? null : packagedStartupTiming ?? undefined,
     splashWindow: splash?.window,
@@ -526,7 +552,7 @@ async function main(): Promise<void> {
           "Open Design could not open its window. Quit Open Design from the Dock and open it again.",
         );
       },
-      stopHeadless: async () => { await sidecars.close(); },
+      stopHeadless: async () => { quitIntent.beginShutdown(); await sidecars.close(); },
     })
     : null;
   let client!: SidecarClient<DesktopMainHandle>;
@@ -551,6 +577,7 @@ async function main(): Promise<void> {
       },
       status: (started) => started.status(),
       async stop(started) {
+        quitIntent.beginShutdown();
         await started.stop();
         desktopHandle = null;
       },
@@ -563,6 +590,8 @@ async function main(): Promise<void> {
       packagedLogger?.warn("failed to confirm packaged launcher runtime", { error });
     });
     watchUserDesktopIntent(app, () => {
+      if (quitIntent.isStopping()) return;
+      mcpPolicy.resume();
       void deferredDesktop.restore().catch(() => undefined);
     });
   }

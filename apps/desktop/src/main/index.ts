@@ -202,6 +202,10 @@ export type DesktopMainOptions = {
   /** Carries the packaged process origin and sidecar phases into desktop. */
   startupTiming?: StartupTiming | null;
   beforeShutdown?: (record?: (event: UpdateLifecycleObservation) => Promise<void>) => Promise<void>;
+  /** Synchronous user-intent persistence before any daemon teardown. */
+  onUserQuit?: () => void;
+  /** Marks programmatic teardown before Electron emits before-quit. */
+  onShutdownStarted?: () => void;
   /** Prevent packaged renderer traffic from reaching sidecars as they retire. */
   quiesceRendererTransport?: () => void | Promise<void>;
   onExternalShow?: () => void | Promise<void>;
@@ -917,6 +921,7 @@ async function runDesktopMainWithTiming(
   // Every quit entry point joins the same cleanup, including repeated updater
   // requests while sidecars are still draining.
   function shutdown(): Promise<void> {
+    options.onShutdownStarted?.();
     memorySampler.stop();
     startupTiming.finish("cancelled", "quit_before_ready");
     shutdownRequestCount += 1;
@@ -966,6 +971,11 @@ async function runDesktopMainWithTiming(
 
   function shutdownAndExit(): void {
     void shutdown().finally(() => process.exit(0));
+  }
+
+  function userQuitAndExit(): void {
+    if (shutdownPromise == null) options.onUserQuit?.();
+    shutdownAndExit();
   }
 
   async function invoke(action: string, messageInput: unknown): Promise<unknown> {
@@ -1066,7 +1076,8 @@ async function runDesktopMainWithTiming(
       markDesktopSessionRunning({ stateFilePath: sessionStatePath });
     },
     onUpdateMenuLabels: menuController.setUpdateLabels,
-    requestQuit: shutdownAndExit,
+    requestQuit: userQuitAndExit,
+    requestUpdateQuit: shutdownAndExit,
     onMainWindowReady: () => {
       startupTiming.mark("window_revealed");
       void recordIncomingUpdateLifecycle({ root: options.update?.installerObservationRoot, namespace: updater.config.namespace ?? "default", channel: updater.config.channel, version: updater.config.currentVersion }, { stage: "desktop_ready", outcome: "completed" });
@@ -1169,11 +1180,12 @@ async function runDesktopMainWithTiming(
   app.on("before-quit", (event) => {
     if (shutdownComplete) return;
     event.preventDefault();
+    if (shutdownPromise == null) options.onUserQuit?.();
     void shutdown().finally(() => process.exit(0));
   });
 
   app.on("window-all-closed", () => {
-    shutdownAndExit();
+    userQuitAndExit();
   });
 
   app.on("activate", () => {

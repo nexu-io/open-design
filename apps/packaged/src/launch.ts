@@ -133,8 +133,10 @@ export function applyPackagedElectronPathOverrides(
 export function claimPackagedSingleInstanceLock(
   electronApp: PackagedSingleInstanceApp,
   onSecondInstance: (argv: readonly string[]) => void,
+  onDuplicate?: () => void,
 ): boolean {
   if (!electronApp.requestSingleInstanceLock()) {
+    onDuplicate?.();
     electronApp.quit();
     return false;
   }

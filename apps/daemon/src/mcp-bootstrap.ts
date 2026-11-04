@@ -9,6 +9,7 @@ import {
 } from "@open-design/sidecar-proto";
 
 import { resolveDaemonUrl as resolveDaemonUrlDefault } from "./daemon-url.js";
+import { assertMcpNotUserQuit } from "./mcp-user-quit.js";
 
 const DEFAULT_BOOTSTRAP_TIMEOUT_MS = 60_000;
 const DEFAULT_BOOTSTRAP_POLL_MS = 250;
@@ -138,6 +139,7 @@ export async function ensureMcpDaemonUrl(
   const explicitDaemonUrl =
     (flagUrl != null && flagUrl.length > 0)
     || (env.OD_DAEMON_URL != null && env.OD_DAEMON_URL.length > 0);
+  if (!explicitDaemonUrl) await assertMcpNotUserQuit(env);
   // A managed registration finds the namespace's daemon in whichever mode owns
   // it, and never asks the OS to reopen an app that is already running.
   const managedDiscovery = explicitDaemonUrl ? null : parseManagedMcpDiscovery(env);
@@ -166,6 +168,7 @@ export async function ensureMcpDaemonUrl(
       });
   const daemonReachable =
     daemonUrl != null && await probeDaemon(daemonUrl);
+  if (!explicitDaemonUrl) await assertMcpNotUserQuit(env);
   const plan = planMcpDaemonBootstrap({
     daemonReachable,
     env,
@@ -178,10 +181,12 @@ export async function ensureMcpDaemonUrl(
     );
   }
 
+  if (!explicitDaemonUrl) await assertMcpNotUserQuit(env);
   await spawnBootstrap(plan);
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     await sleep(DEFAULT_BOOTSTRAP_POLL_MS);
+    if (!explicitDaemonUrl) await assertMcpNotUserQuit(env);
     daemonUrl = registeredBootstrapTarget
       ? await discoverTargetDaemonUrl(env, 300)
       : await resolveDaemonUrl({
@@ -190,7 +195,10 @@ export async function ensureMcpDaemonUrl(
           flagUrl: null,
           timeoutMs: 300,
         });
-    if (daemonUrl != null && await probeDaemon(daemonUrl)) return daemonUrl;
+    if (daemonUrl != null && await probeDaemon(daemonUrl)) {
+      if (!explicitDaemonUrl) await assertMcpNotUserQuit(env);
+      return daemonUrl;
+    }
   }
   throw new Error(
     `OpenDesign was launched headlessly but its daemon did not become ready within ${timeoutMs}ms.`,
@@ -229,6 +237,7 @@ async function ensureManagedMcpDaemonUrl(
   };
 
   const ready = await findDaemon(800);
+  await assertMcpNotUserQuit(env);
   if (ready != null) return ready;
   if (!await ownerRunning(800)) {
     const plan = planMcpDaemonBootstrap({ daemonReachable: false, env, explicitDaemonUrl: false });
@@ -237,6 +246,7 @@ async function ensureManagedMcpDaemonUrl(
         `The registered OpenDesign runtime is unavailable and cannot be launched (${plan.reason}).`,
       );
     }
+    await assertMcpNotUserQuit(env);
     await deps.spawnBootstrap(plan);
   }
   // An owner that is already running (starting, restoring, or restarting its
@@ -244,7 +254,9 @@ async function ensureManagedMcpDaemonUrl(
   const deadline = Date.now() + deps.timeoutMs;
   while (Date.now() < deadline) {
     await deps.sleep(DEFAULT_BOOTSTRAP_POLL_MS);
+    await assertMcpNotUserQuit(env);
     const url = await findDaemon(300);
+    await assertMcpNotUserQuit(env);
     if (url != null) return url;
   }
   throw new Error(

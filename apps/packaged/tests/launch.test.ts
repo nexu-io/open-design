@@ -169,10 +169,12 @@ describe("claimPackagedSingleInstanceLock", () => {
       requestSingleInstanceLock: vi.fn(() => false),
     };
 
-    expect(claimPackagedSingleInstanceLock(app, vi.fn())).toBe(false);
+    const onDuplicate = vi.fn();
+    expect(claimPackagedSingleInstanceLock(app, vi.fn(), onDuplicate)).toBe(false);
 
     expect(app.requestSingleInstanceLock).toHaveBeenCalledTimes(1);
     expect(app.quit).toHaveBeenCalledTimes(1);
+    expect(onDuplicate.mock.invocationCallOrder[0]).toBeLessThan(app.quit.mock.invocationCallOrder[0]!);
     expect(app.on).not.toHaveBeenCalled();
   });
 });

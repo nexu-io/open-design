@@ -459,6 +459,8 @@ export type DesktopRuntimeOptions = {
    */
   rendererLogPath?: string | null;
   requestQuit?: () => void;
+  /** Updater teardown preserves MCP crash/restart recovery. */
+  requestUpdateQuit?: () => void;
   onMainWindowReady?: () => void;
   /**
    * Optional pre-created splash window. The packaged entry creates the splash
@@ -2594,10 +2596,10 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     if (status.installResult == null) {
       return { ok: false, reason: "installer has not been opened" };
     }
-    if (options.requestQuit == null) {
+    if (options.requestUpdateQuit == null) {
       return { ok: false, reason: "desktop quit is not available" };
     }
-    setTimeout(() => options.requestQuit?.(), 0);
+    setTimeout(() => options.requestUpdateQuit?.(), 0);
     return { ok: true };
   });
   ipcMain.handle("od:update:set-menu-labels", async (event, rawLabels: unknown): Promise<OpenDesignHostActionResult> => {
