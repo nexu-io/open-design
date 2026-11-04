@@ -1,3 +1,4 @@
+import { ReferralEntry } from './ReferralEntry';
 import { openExternalUrl } from "../providers/registry";
 import { CodingPlanUsage } from './CodingPlanUsage';
 import { WorkspaceQuotaPopover } from './WorkspaceQuotaPopover';
@@ -2222,6 +2223,7 @@ export function EntryNavRail({
   // While collapsed the rail is visually hidden but its controls stay mounted;
   // mark it `inert` so they leave the tab order and pointer flow entirely.
   const railRef = useRef<HTMLElement | null>(null);
+  const referralCompact = useRailAutoCollapsed() || !open;
   useEffect(() => {
     const node = railRef.current;
     if (!node) return;
@@ -2278,6 +2280,7 @@ export function EntryNavRail({
   }, [railIdentity]);
 
   return (
+    <>
     <nav
       ref={railRef}
       className={`entry-nav-rail${open ? ' is-open' : ''}`}
@@ -2634,6 +2637,7 @@ export function EntryNavRail({
             the account module into. `display: contents` keeps the account
             dock itself a flex child of this group, so its own `order: 99` +
             `margin-top: auto` still push it below the nav items. */}
+        {isHome && !referralCompact ? <ReferralEntry /> : null}
         {context ? <div ref={setAccountHost} className="entry-nav-rail__account-host" /> : null}
       </div>
       {/* Signed in, the social links ride the account dock above the identity
@@ -2711,5 +2715,6 @@ export function EntryNavRail({
         priorityAnnouncementMetricsConsent={priorityAnnouncementMetricsConsent}
       />
     </nav>
+    </>
   );
 }
