@@ -65,6 +65,10 @@ async function postJson<T = unknown>(
   body?: unknown,
   headers: Record<string, string> = {},
 ): Promise<{ status: number; body: T }> {
+  if (url.endsWith('/api/integrations/vela/logout') && body === undefined) {
+    const current = await getJson<{user: {id: string} | null; credentialRevision: string}>(url.replace(/logout$/, 'status'));
+    body = {expectedAppUserId: current.body.user?.id ?? '', expectedCredentialRevision: current.body.credentialRevision};
+  }
   const init: RequestInit = {
     method: 'POST',
     headers: body === undefined ? headers : { 'Content-Type': 'application/json', ...headers },
@@ -285,6 +289,32 @@ afterEach(async () => {
       retryDelay: 50,
     });
   }
+});
+
+describe('POST /api/amr/web-intent', () => {
+  it.each([false, true])('checks credential content across the upstream request (changed=%s)', async (changed) => {
+    const previousOrigin = process.env.OD_VELA_WEB_URL;
+    process.env.OD_VELA_WEB_URL = 'http://localhost:5173';
+    const upstream = await startWalletApi((req, res) => {
+      expect(req.url).toBe('/api/v1/auth/intents');
+      expect(req.headers.authorization).toBe('Bearer ck-seeded-key');
+      if (changed) seedLogin('local', { apiUrl: upstream.url, controlKey: 'ck-replaced-key' });
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ intentId: 'intent-local' }));
+    });
+    seedLogin('local', { apiUrl: upstream.url });
+    try {
+      const result = await postJson(`${baseUrl}/api/amr/web-intent`, { target: '/dashboard' });
+      expect(result.status).toBe(changed ? 409 : 200);
+      expect(result.body).toEqual(changed
+        ? { error: 'account_changed' }
+        : { url: 'http://localhost:5173/login?intentId=intent-local' });
+    } finally {
+      if (previousOrigin === undefined) delete process.env.OD_VELA_WEB_URL;
+      else process.env.OD_VELA_WEB_URL = previousOrigin;
+      await upstream.close();
+    }
+  });
 });
 
 describe('GET /api/integrations/vela/wallet', () => {
@@ -1591,6 +1621,9 @@ describe('POST /api/integrations/vela/login', () => {
     const env = JSON.parse(readFileSync(dumpPath, 'utf8'));
     expect(env.OPEN_DESIGN_AMR_AUTH_ATTEMPT_ID).toBe(authAttemptId);
     expect(env.OPEN_DESIGN_AMR_AUTH_STAGE_FORMAT).toBeUndefined();
+    // No entry attribution (e.g. a retry) still marks the login as Open Design's.
+    expect(env.OPEN_DESIGN_AMR_ORIGIN).toBe('open_design');
+    expect(env.OPEN_DESIGN_AMR_ENTRY_ID).toBeUndefined();
     const status = await getJson<{
       authAttemptId?: string;
       authRoute?: string;
@@ -2024,6 +2057,20 @@ describe('POST /api/integrations/vela/login', () => {
       delete process.env.FAKE_VELA_LOGIN_FAIL;
       await new Promise<void>((resolve) => isolatedServer.close(() => resolve()));
     }
+  });
+
+  it('exposes the new activation link while existing credentials are still present', async () => {
+    seedLogin('local');
+    process.env.FAKE_VELA_LOGIN_DELAY_MS = '30000';
+    const login = await postJson(`${baseUrl}/api/integrations/vela/login`);
+    expect(login.status).toBe(202);
+    const during = await getJson<{ loginInFlight: boolean; activationUrl?: string; userCode?: string }>(
+      `${baseUrl}/api/integrations/vela/status`,
+    );
+    expect(during.body.loginInFlight).toBe(true);
+    expect(during.body.activationUrl).toContain('deviceId=fake-device');
+    expect(during.body.userCode).toBe('FAKE-CODE');
+    await postJson(`${baseUrl}/api/integrations/vela/login/cancel`);
   });
 
   it('surfaces and cancels a delayed login subprocess', async () => {
@@ -3282,6 +3329,15 @@ describe('Production touchpoint runtime proxy', () => {
 });
 
 describe('POST /api/integrations/vela/logout', () => {
+  it('requires the observed account and credential revision before sign-out', async () => {
+    seedLogin('local');
+    const missing = await postJson(`${baseUrl}/api/integrations/vela/logout`, {});
+    expect(missing.status).toBe(400);
+    const wrong = await postJson(`${baseUrl}/api/integrations/vela/logout`, {expectedAppUserId: 'other-user', expectedCredentialRevision: 'old-revision'});
+    expect(wrong.status).toBe(409);
+    expect(JSON.parse(readFileSync(configPath(), 'utf8')).profiles.local.runtimeKey).toBeTruthy();
+  });
+
   it('drops back to preset AMR models after file-backed logout invalidates the cached remote catalog', async () => {
     seedLogin('local');
 
@@ -3429,6 +3485,7 @@ describe('POST /api/integrations/vela/logout', () => {
           VELA_OPENCODE_BIN: '/tmp/opencode',
           OPEN_DESIGN_AMR_PROFILE: 'local',
           VELA_RUNTIME_KEY: 'rt-env-secret',
+          VELA_CONTROL_KEY: 'ck-env-secret',
           VELA_LINK_URL: 'https://openrouter.example/v1',
         },
       },
@@ -3453,6 +3510,7 @@ describe('POST /api/integrations/vela/logout', () => {
 
       const nextConfig = await readAppConfig(dataDir);
       expect(nextConfig.agentCliEnv?.amr?.VELA_RUNTIME_KEY).toBeUndefined();
+      expect(nextConfig.agentCliEnv?.amr?.VELA_CONTROL_KEY).toBeUndefined();
       expect(nextConfig.agentCliEnv?.amr?.VELA_LINK_URL).toBeUndefined();
 
       const nextAmrConfig = JSON.parse(readFileSync(configPath(), 'utf8'));

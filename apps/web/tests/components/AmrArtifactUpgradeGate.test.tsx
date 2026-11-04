@@ -9,6 +9,11 @@ import {
 } from '../../src/providers/daemon';
 import { requestAmrArtifactUpgrade } from '../../src/runtime/amr-artifact-upgrade';
 
+vi.mock('../../src/providers/registry', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/registry')>('../../src/providers/registry');
+  return { ...actual, openExternalUrl: async (url: string) => { window.open(url, '_blank', 'noopener,noreferrer'); return true; } };
+});
+
 type RuntimeAwareFinishedRunDetail = DaemonRunFinishedEventDetail & {
   agentId?: string;
 };

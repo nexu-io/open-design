@@ -131,6 +131,7 @@ vi.mock('../../src/providers/registry', async () => {
   );
   return {
     ...actual,
+    openExternalUrl: async (url: string) => { window.open(url, '_blank', 'noopener,noreferrer'); return true; },
     daemonIsLive: vi.fn(),
     fetchAgents: vi.fn(),
     fetchAppVersionInfo: vi.fn(),
