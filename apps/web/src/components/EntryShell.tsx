@@ -97,7 +97,11 @@ import { CenteredLoader } from './Loading';
 import { DesignsTab } from './DesignsTab';
 import { DesignSystemsTab } from './DesignSystemsTab';
 import { BrandsTab } from './BrandsTab';
-import { EntryNavRail, type EntryView as EntryViewKind } from './EntryNavRail';
+import {
+  EntryNavRail,
+  useRailAutoCollapsed,
+  type EntryView as EntryViewKind,
+} from './EntryNavRail';
 import {
   buildProjectSearchCatalog,
   ProjectSearchModal,
@@ -1340,6 +1344,32 @@ export function EntryShell({
   // home -> project -> home round trip (EntryShell unmounts on the project
   // route) and a reload, instead of snapping back to collapsed.
   const [railOpen, setRailOpen] = useState<boolean>(readStoredRailOpen);
+  // Below the comfortable split width the docked rail auto-collapses (its grid
+  // track is zeroed in entry-layout.css), so flipping `railOpen` there changed
+  // nothing on screen and the toggle looked dead on phones and narrow windows.
+  // There the toggle drives this transient overlay drawer instead. It is never
+  // persisted, so a narrow load never opens over the content by itself, and the
+  // docked preference survives untouched for when the window widens again.
+  const railAutoCollapsed = useRailAutoCollapsed();
+  const [railOverlayOpen, setRailOverlayOpen] = useState(false);
+  const railOverlayActive = railAutoCollapsed && railOverlayOpen;
+  const railVisible = railAutoCollapsed ? railOverlayOpen : railOpen;
+  const toggleRail = useCallback(() => {
+    if (railAutoCollapsed) setRailOverlayOpen((v) => !v);
+    else setRailOpen((v) => !v);
+  }, [railAutoCollapsed]);
+  const closeRailOverlay = useCallback(() => setRailOverlayOpen(false), []);
+  useEffect(() => {
+    if (!railAutoCollapsed) setRailOverlayOpen(false);
+  }, [railAutoCollapsed]);
+  useEffect(() => {
+    if (!railOverlayActive) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented) closeRailOverlay();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [railOverlayActive, closeRailOverlay]);
   const [projectSearchOpen, setProjectSearchOpen] = useState(false);
 
   // ⌘K / Ctrl+K opens the project search palette — same as clicking the rail
@@ -1374,28 +1404,29 @@ export function EntryShell({
         (event.key === 'b' || event.key === 'B')
       ) {
         event.preventDefault();
-        setRailOpen((v) => !v);
+        toggleRail();
       }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, []);
+  }, [toggleRail]);
   useEffect(() => {
     writeStoredRailOpen(railOpen);
-    // Broadcast the state so chrome outside this tree (the pinned Home tab's
-    // sidebar toggle) can mirror it via aria-expanded.
-    window.dispatchEvent(
-      new CustomEvent(ENTRY_RAIL_STATE_EVENT, { detail: { open: railOpen } }),
-    );
   }, [railOpen]);
+  useEffect(() => {
+    // Broadcast what is actually on screen so chrome outside this tree (the
+    // pinned Home tab's sidebar toggle) can mirror it via aria-expanded.
+    window.dispatchEvent(
+      new CustomEvent(ENTRY_RAIL_STATE_EVENT, { detail: { open: railVisible } }),
+    );
+  }, [railVisible]);
 
   // The pinned Home tab (WorkspaceTabsBar) carries a sidebar toggle; it lives
   // in a sibling tree, so the request arrives as a window event.
   useEffect(() => {
-    const onToggle = () => setRailOpen((v) => !v);
-    window.addEventListener(ENTRY_RAIL_TOGGLE_EVENT, onToggle);
-    return () => window.removeEventListener(ENTRY_RAIL_TOGGLE_EVENT, onToggle);
-  }, []);
+    window.addEventListener(ENTRY_RAIL_TOGGLE_EVENT, toggleRail);
+    return () => window.removeEventListener(ENTRY_RAIL_TOGGLE_EVENT, toggleRail);
+  }, [toggleRail]);
   // Same story for the search button, which sits in that chrome row beside the
   // rail toggle (per product: 搜索和收起跟 home icon 一起放在顶部) while the
   // palette it opens is owned here.
@@ -1456,6 +1487,8 @@ export function EntryShell({
         element: navElement,
       });
     }
+    // Picking a destination dismisses the narrow-window overlay drawer.
+    closeRailOverlay();
     navigate({ kind: 'home', view: next });
   }
 
@@ -2165,11 +2198,22 @@ export function EntryShell({
           onClose={() => setHomeConcurrencyBlock(null)} />
       ) : null}
       <div
-        className={`entry${railOpen ? ' entry--rail-open' : ''}`}
+        className={`entry${railOpen || railOverlayActive ? ' entry--rail-open' : ''}${
+          railOverlayActive ? ' entry--rail-overlay' : ''
+        }`}
         // The team/local shell is a labeled Manus-style rail, so widen the rail
         // track (the base 56px icon-rail clips the labels + team affordances).
         style={{ ['--entry-rail-width' as string]: '236px' }}
       >
+        {/* Click-catcher behind the narrow-window overlay drawer. Kept mounted
+            and toggled by `.entry--rail-overlay` so it can fade; Escape and the
+            rail toggle are the keyboard paths, so it stays out of the a11y tree. */}
+        <div
+          className="entry-rail-backdrop"
+          data-testid="entry-rail-backdrop"
+          aria-hidden
+          onClick={closeRailOverlay}
+        />
         <EntryNavRail
           view={view}
           onViewChange={changeView}
@@ -2181,8 +2225,11 @@ export function EntryShell({
             });
             openNewProject();
           }}
-          onOpenSearch={() => setProjectSearchOpen(true)}
-          open={railOpen}
+          onOpenSearch={() => {
+            closeRailOverlay();
+            setProjectSearchOpen(true);
+          }}
+          open={railVisible}
           inviteSlot={<HomeInviteTrigger signedOut={amrLoggedIn === false} context={railWorkspaceContext} />}
           topRightSlot={<>
             {topRightCampaignAudience || (homeCampaignHostsVisible && amrLoggedIn === true) ? (
