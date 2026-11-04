@@ -2646,7 +2646,6 @@ packages:
     cpu: [x64]
     os: [darwin]
 
-<<<<<<< HEAD
   '@powerformer/vela-cli-linux-arm64@0.1.8':
     resolution: {integrity: sha512-b1cG5lxA8aDARTceWotYLGGVOfwiL5RW4B0/JMCdNwYY/ZbWGOCtSqiTUwLel5pIR2+c538VfaYh822DPuwuNA==}
     cpu: [arm64]
@@ -2664,25 +2663,6 @@ packages:
 
   '@powerformer/vela-cli@0.1.8':
     resolution: {integrity: sha512-2iVHAl0CVXqwYMPEcsjWtkbg0xnjDgpXjD0lRGMuF8pnn8BdRzPr56rq1XUfj0VSng8xCuTK6gjnZqSnIcHRpg==}
-=======
-  '@powerformer/vela-cli-linux-arm64@0.1.9-test.1':
-    resolution: {integrity: sha512-Rffran3e9GeSdo9Ju0L2nCb8JoBCaXcVpACZx91deXeeePa2/2BTOrZrT77PTHJNXEMY4N2sEmFNDX0xvCVfag==}
-    cpu: [arm64]
-    os: [linux]
-
-  '@powerformer/vela-cli-linux-x64@0.1.9-test.1':
-    resolution: {integrity: sha512-EFcJLCaP5n1AF6G9eqIO8tPBUzroDuLGibaXSDqeIZEODpCYQvKcI5a4Zzp7flrdfki0JNK1d8//RYqXdaUVwg==}
-    cpu: [x64]
-    os: [linux]
-
-  '@powerformer/vela-cli-win32-x64@0.1.9-test.1':
-    resolution: {integrity: sha512-tiT9KDyPxfkx3tHVoZDl9M5lqqpHFaGIWN9uyth3Y21B0j/6cVlIgA79ULhMdrViSoQFDbq3tkOhikWqSO9tCg==}
-    cpu: [x64]
-    os: [win32]
-
-  '@powerformer/vela-cli@0.1.9-test.1':
-    resolution: {integrity: sha512-BGFXsT88coVqweqBkPK1eZv8j3s+HRRaGTwG4WrIW/Y3K9+OhDz8JQMw2ct7EBRpJeJFNiAPzdEI6KJSasaBrg==}
->>>>>>> e7a18df64d ([OPEND-3858] Integrate referral growth client and seats changes (#9200))
     hasBin: true
 
   '@preact/signals-core@1.14.2':
@@ -8502,7 +8482,6 @@ snapshots:
   '@powerformer/vela-cli-darwin-x64@0.1.8':
     optional: true
 
-<<<<<<< HEAD
   '@powerformer/vela-cli-linux-arm64@0.1.8':
     optional: true
 
@@ -8519,24 +8498,6 @@ snapshots:
       '@powerformer/vela-cli-linux-arm64': 0.1.8
       '@powerformer/vela-cli-linux-x64': 0.1.8
       '@powerformer/vela-cli-win32-x64': 0.1.8
-=======
-  '@powerformer/vela-cli-linux-arm64@0.1.9-test.1':
-    optional: true
-
-  '@powerformer/vela-cli-linux-x64@0.1.9-test.1':
-    optional: true
-
-  '@powerformer/vela-cli-win32-x64@0.1.9-test.1':
-    optional: true
-
-  '@powerformer/vela-cli@0.1.9-test.1':
-    optionalDependencies:
-      '@powerformer/vela-cli-darwin-arm64': 0.1.9-test.1
-      '@powerformer/vela-cli-darwin-x64': 0.1.9-test.1
-      '@powerformer/vela-cli-linux-arm64': 0.1.9-test.1
-      '@powerformer/vela-cli-linux-x64': 0.1.9-test.1
-      '@powerformer/vela-cli-win32-x64': 0.1.9-test.1
->>>>>>> e7a18df64d ([OPEND-3858] Integrate referral growth client and seats changes (#9200))
     optional: true
 
   '@preact/signals-core@1.14.2': {}

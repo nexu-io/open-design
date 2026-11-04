@@ -1,9 +1,4 @@
-<<<<<<< HEAD
-=======
 import { ReferralEntry } from './ReferralEntry';
-import { openExternalUrl } from "../providers/registry";
-import { CodingPlanUsage } from './CodingPlanUsage';
->>>>>>> e7a18df64d ([OPEND-3858] Integrate referral growth client and seats changes (#9200))
 import { WorkspaceQuotaPopover } from './WorkspaceQuotaPopover';
 import { workspaceQuotaView } from '../collab/workspace-quota-view';
 import planCardStyles from './PersonalPlanCard.module.css';
