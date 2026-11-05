@@ -283,7 +283,7 @@
 }
 
 /* ---- Capsule type row (replaces the fanned carousel) ------------------- */
-/* ONE line exactly as wide as the composer card below (820px — keep in sync
+/* ONE line exactly as wide as the composer card below (728px — keep in sync
    with .home-hero__composer-card), EVERY gap the same 8px (keep in sync
    with the component's PILL_GAP): fitting pills inline, then the pinned
    视频 pill + 全部 button; the remainder lives in the 全部 popover. */
@@ -291,7 +291,7 @@
   position: relative;
   display: flex;
   align-items: center;
-  /* The run rarely fills all 820px exactly, and the leftover used to pile up
+  /* The run rarely fills all 728px exactly, and the leftover used to pile up
      on the right — which read as the row hanging off the card's left edge
      (per product: 下边的选项和上边的输入框居中). Splitting it evenly parks the
      cluster on the card's own centre line. The fit computation measures
@@ -299,7 +299,7 @@
   justify-content: center;
   gap: 8px;
   width: 100%;
-  max-width: 820px;
+  max-width: 728px;
   /* 24px between the composer card above and the pills' own edge (per
      product): .home-hero's 6px flex gap and this row's 2px top padding both
      count toward it, so 16px lives here. */
@@ -531,7 +531,7 @@
      says to keep the two in sync, so a change here is always a change in both
      places. (The DOCKED bar is deliberately narrower; it sets its own cap at
      the foot of this file.) */
-  max-width: 820px;
+  max-width: 728px;
   display: flex;
   flex-direction: column;
   gap: var(--spacing-8);
@@ -4209,14 +4209,14 @@
   gap: 0;
   max-width: none;
 }
-/* Docked, the bar is narrower than Home's 820: Home's composer is the page's
+/* Docked, the bar is narrower than Home's 728: Home's composer is the page's
    subject and earns the full column, while this one sits over a gallery and at
    820 spanned nearly the whole content width — reading as a second, competing
    surface rather than something parked at the foot.
    Two widths, one per state: 480 while collapsed and 600 once there is
    something in it and the full control set is showing (600 was 700, pulled in
    per product: 展开后的宽度收一下 — this cap is the DOCK's alone, Home's card
-   above keeps its 820). The collapsed number lives with the rule that sets it,
+   above keeps its 728). The collapsed number lives with the rule that sets it,
    further down. */
 .home-hero--dock .home-hero__composer-card {
   max-width: 600px;
