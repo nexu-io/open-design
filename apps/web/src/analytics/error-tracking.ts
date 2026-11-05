@@ -1,3 +1,4 @@
+import { getOpenDesignHost } from '@open-design/host';
 import { reportExperienceEvent } from '../observability/experience-diagnostics';
 // Direct-fetch safety telemetry transport.
 //
@@ -40,6 +41,7 @@ import {
   parseClientMetricEvent,
   parseInputAggregationTrial,
   type InputAggregationTrial,
+  type ClientMetricProps,
   type AnalyticsClientType,
 } from '@open-design/contracts/analytics';
 import { isResolvedAppVersion } from './app-version';
@@ -138,7 +140,7 @@ let context: ExceptionTrackingContext | null = null;
 let installationDistinctId: string | null = null;
 const buffer: BufferedSafetyEvent[] = [];
 let installed = false;
-let inputAggregation: { instance: InputAggregation; destination: string } | null = null;
+let inputAggregation: { instance: InputAggregation; destination: string; originalSender: ReturnType<typeof inputAggregationSender>; unsubscribeShutdown?: () => void } | null = null;
 let retiringInputAggregation: Promise<void> = Promise.resolve();
 let inputAggregationTimer: ReturnType<typeof setInterval> | null = null;
 let flushInputCollector: (() => void) | null = null;
@@ -165,12 +167,18 @@ function ensureInputAggregation(): InputAggregation | null {
   const owner = `${scope}:${trial ? 'shadow' : 'local'}`;
   if (!inputAggregation || inputAggregation.destination !== owner) {
     if (inputAggregation) {
+      inputAggregation.unsubscribeShutdown?.();
       const previous = inputAggregation.instance;
       retiringInputAggregation = retiringInputAggregation.then(() => previous.setMode('paused')).then(() => previous.close());
     }
     const instance = new InputAggregation(inputAggregationSender(contextHost, key, local && !trial), retiringInputAggregation.then(() => openInputAggregationStore(scope)),
       { rawPassthrough: !!trial, mode: trial?.mode ?? 'shadow' });
-    inputAggregation = { instance, destination: owner };
+    inputAggregation = { instance, destination: owner, originalSender: inputAggregationSender(contextHost, key, false, true) };
+    inputAggregation.unsubscribeShutdown = getOpenDesignHost()?.inputTelemetry?.subscribeShutdown?.(async () => {
+      if (inputAggregation?.instance !== instance) return;
+      flushInputCollector?.();
+      await instance.prepareShutdown();
+    });
     void instance.tick();
     if (!inputAggregationTimer) {
       inputAggregationTimer = setInterval(() => {
@@ -276,6 +284,7 @@ export function clearExceptionTrackingContext(): void {
   context = null;
   installationDistinctId = null;
   if (inputAggregation) {
+    inputAggregation.unsubscribeShutdown?.();
     const previous = inputAggregation.instance;
     retiringInputAggregation = retiringInputAggregation.then(() => previous.setMode('paused')).then(() => previous.close());
   }
@@ -537,12 +546,11 @@ function dispatch(item: BufferedSafetyEvent): void {
     const aggregation = ensureInputAggregation();
     if (aggregation) {
       if (aggregation.passthrough) {
-        send();
+        const tagged = { ...metric, aggregation_page_id: aggregation.pageId } as ClientMetricProps<'client_input_responsiveness'>;
+        const originalSender = inputAggregation!.originalSender;
         if (aggregation.collectingEnabled) {
-          const trial = context.inputAggregation;
-          void aggregation.observe({ ...metric, aggregation_page_id: aggregation.pageId,
-            ...(trial ? { input_trial_id: trial.trial_id, input_trial_revision: trial.revision } : {}) });
-        }
+          void aggregation.observeWithPrimary(tagged, () => originalSender([{ event: 'client_input_responsiveness', properties: tagged }]));
+        } else void originalSender([{ event: 'client_input_responsiveness', properties: tagged }]);
         return;
       }
       // The durable outbox sends raw and summary events; never also dispatch the raw witness here.

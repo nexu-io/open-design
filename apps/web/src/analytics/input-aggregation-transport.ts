@@ -2,21 +2,22 @@ import { isInputAggregationDestination } from '@open-design/contracts/analytics'
 import type { InputTelemetryEvent } from './input-aggregation';
 
 /** Receipt acceptance is distinct from the later PostHog indexing reconciliation. */
-export function inputAggregationSender(host: string, key: string, local = false) {
+export function inputAggregationSender(host: string, key: string, local = false, single = false) {
   let retryAt = 0;
   return async (events: InputTelemetryEvent[]): Promise<boolean> => {
-    if (Date.now() < retryAt || !events.length) return false;
+    if (Date.now() < retryAt || !events.length || (single && events.length !== 1)) return false;
     if (!isInputAggregationDestination(host, key)
       && !(local && /^http:\/\/127\.0\.0\.1(?::[0-9]+)?\/?$/.test(host))) return false;
     if (!local && events.some(({ properties }) => !properties.device_id
       || !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(properties.event_id))) return false;
     try {
-      const body = JSON.stringify({ api_key: key, batch: events.map(({ event, properties }) => ({
+      const batch = events.map(({ event, properties }) => ({
         event, uuid: properties.event_id, distinct_id: properties.device_id, timestamp: properties.occurred_at,
         properties: { ...properties, distinct_id: properties.device_id, $insert_id: properties.event_id },
-      })) });
+      }));
+      const body = JSON.stringify({ api_key: key, ...(single ? batch[0] : { batch }) });
       if (new TextEncoder().encode(body).length > 48 * 1024) return false;
-      const response = await fetch(`${host.replace(/\/+$/, '')}/batch/`, {
+      const response = await fetch(`${host.replace(/\/+$/, '')}/${single ? 'i/v0/e' : 'batch'}/`, {
         method: 'POST', headers: { 'content-type': 'application/json' }, credentials: 'omit',
         redirect: 'error', keepalive: true, signal: AbortSignal.timeout(5000), body,
       });

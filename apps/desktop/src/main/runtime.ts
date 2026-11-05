@@ -3087,6 +3087,16 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         timer = null;
       }
       unsubscribeUpdater();
+      if (nativeEnabled && !window.isDestroyed()) await new Promise<void>(resolve => {
+        const nonce = randomUUID();
+        const finish = () => { clearTimeout(timeout); ipcMain.removeListener('od:input-telemetry:flushed', acknowledge); resolve(); };
+        const acknowledge = (event: Electron.IpcMainEvent, value: unknown) => {
+          if (value === nonce && event.sender === window.webContents && event.senderFrame === event.sender.mainFrame) finish();
+        };
+        const timeout = setTimeout(finish, 2000);
+        ipcMain.on('od:input-telemetry:flushed', acknowledge);
+        window.webContents.send('od:input-telemetry:flush', nonce);
+      });
       ipcMain.removeHandler('od:input-native-poc');
       await Promise.allSettled([...nativeStores.values()].map(store => store.close()));
       ipcMain.removeAllListeners("desktop-pet:set-visible");

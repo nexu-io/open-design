@@ -347,9 +347,22 @@ ipcRenderer.on(APP_CONFIG_CHANGED_IPC_CHANNEL, () => {
   window.dispatchEvent(new CustomEvent(APP_CONFIG_CHANGED_EVENT));
 });
 
+const inputShutdownListeners = new Set<() => Promise<void>>();
+if (process.argv.includes('--od-input-native-poc')) {
+  ipcRenderer.on('od:input-telemetry:flush', async (_event: unknown, nonce: unknown) => {
+    if (typeof nonce !== 'string') return;
+    await Promise.allSettled([...inputShutdownListeners].map(listener => Promise.resolve().then(listener)));
+    ipcRenderer.send('od:input-telemetry:flushed', nonce);
+  });
+}
+
 const hostBridge = {
   version: OPEN_DESIGN_HOST_VERSION,
   ...(process.argv.includes('--od-input-native-poc') ? { inputTelemetry: {
+    subscribeShutdown: (listener: () => Promise<void>): (() => void) => {
+      inputShutdownListeners.add(listener);
+      return () => { inputShutdownListeners.delete(listener); };
+    },
     read: (scope: string): Promise<[string, string][]> => ipcRenderer.invoke('od:input-native-poc', 'read', scope),
     write: (scope: string, put: [string, string][], drop: string[]): Promise<void> =>
       ipcRenderer.invoke('od:input-native-poc', 'write', scope, put, drop),

@@ -380,6 +380,7 @@ export type OpenDesignHostDownloadResult = {
 export type OpenDesignHostBridge = {
   /** Opt-in input telemetry storage. Asynchronous replies acknowledge durable transactions. */
   inputTelemetry?: {
+    subscribeShutdown?(listener: () => Promise<void>): () => void;
     read(scope: string): Promise<[string, string][]>;
     write(scope: string, put: [string, string][], drop: string[]): Promise<void>;
   };

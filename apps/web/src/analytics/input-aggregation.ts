@@ -34,6 +34,7 @@ export class InputAggregation {
   stopped: string | null = null;
   private collecting = new Map<string, Raw>();
   private rawPending: Raw[] = [];
+  private primaryInFlight = new Set<string>();
   private completed: string[] = [];
   private active = new Map<number, Summary>();
   private pending: Summary[] = [];
@@ -82,11 +83,28 @@ export class InputAggregation {
   ownsSource(id: string) { return this.collecting.has(id) || this.completed.includes(id); }
   observe(properties: Record<string, unknown>) { return this.checkpointSource(properties, true); }
 
+  /** Original delivery starts immediately; its immutable backup is saved independently. */
+  observeWithPrimary(properties: Record<string, unknown>, sendOriginal: () => Promise<boolean>) {
+    const id = String(properties.event_id);
+    this.primaryInFlight.add(id);
+    const saved = this.observe(properties);
+    let sent: Promise<boolean>;
+    try { sent = sendOriginal(); } catch { sent = Promise.resolve(false); }
+    return sent.catch(() => false).then(async accepted => {
+      await saved;
+      if (accepted) await this.update(async () => {
+        this.rawPending = this.rawPending.filter(raw => raw.event_id !== id);
+        await this.checkpoint();
+      });
+    }).finally(() => { this.primaryInFlight.delete(id); void this.drain(); });
+  }
+
   async checkpointSource(properties: Record<string, unknown>, final: boolean): Promise<Record<string, unknown> | null> {
+    const admitted = this.collectingEnabled;
     const result = await this.update(async () => {
       this.advance();
       const parsed = parseClientMetricEvent('client_input_responsiveness', properties) as Raw | null;
-      if (!this.collectingEnabled || !parsed || !['settings', 'search'].includes(parsed.area)
+      if (!admitted || this.stopped || !parsed || !['settings', 'search'].includes(parsed.area)
         || parsed.telemetry_capability !== 'supported' || Date.parse(parsed.occurred_at) > Date.now()) return null;
       const previous = this.collecting.get(parsed.event_id);
       const raw: Raw = { ...parsed, aggregation_page_id: previous?.aggregation_page_id ?? this.pageId };
@@ -110,7 +128,8 @@ export class InputAggregation {
     this.collecting.delete(raw.event_id);
     if (this.completed.includes(raw.event_id)) return;
     if (this.rawPending.length >= MAX_RAW || bytes(raw) > 8192) throw new Error('queue_limit');
-    if (!this.rawPassthrough) this.rawPending.push(Object.freeze({ ...raw }));
+    // Unfinalized shadow tails lack a confirmed original body; only finalized originals get replay backups.
+    if (!this.rawPassthrough || this.primaryInFlight.has(raw.event_id)) this.rawPending.push(Object.freeze({ ...raw }));
     this.completed.push(raw.event_id); this.completed = this.completed.slice(-2048);
     const at = Date.parse(raw.occurred_at);
     for (const period of [300_000, 600_000] as const) {
@@ -238,6 +257,15 @@ export class InputAggregation {
     });
     this.operation = next.then(() => undefined); return next;
   }
+  async prepareShutdown() {
+    this.closing = true;
+    await this.update(async () => {
+      try {
+        if (this.stopped !== 'storage_error') { this.freezeAll('pagehide'); this.urgent = true; await this.checkpoint(); }
+      } finally { this.closed = true; }
+    });
+    this.store?.close();
+  }
   async close() {
     this.closing = true;
     await this.draining;
@@ -254,7 +282,7 @@ export class InputAggregation {
   private async drainLoop() {
     while (!this.closed && this.mode !== 'paused' && this.stopped !== 'storage_error' && Date.now() >= this.retryAt) {
       const batch = await this.update(() => {
-        const events: InputTelemetryEvent[] = this.rawPending.map(properties => ({ event: 'client_input_responsiveness', properties }));
+        const events: InputTelemetryEvent[] = this.rawPending.filter(raw => !this.primaryInFlight.has(raw.event_id)).map(properties => ({ event: 'client_input_responsiveness', properties }));
         if (this.urgent || Date.now() >= this.nextSendAt) events.push(...this.pending.map(properties => ({ event: 'client_input_responsiveness_summary' as const, properties })));
         const selected: InputTelemetryEvent[] = [];
         for (const event of events) {
