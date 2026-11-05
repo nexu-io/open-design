@@ -232,6 +232,13 @@ OpenCode and byok-opencode locate their binary through `OPENCODE_BIN` (not
 `VELA_OPENCODE_BIN`). The Linux override forwards it, defaulting to
 `/usr/local/bin/opencode`; set it in `deploy/.env` if OpenCode lives elsewhere.
 
+Claude Code state with the host `~/.claude` mount: the Linux override mounts it
+read-only and puts a tmpfs on `/home/open-design`, so `claude` may warn
+`Claude configuration file not found` and its state is lost on container
+restart. To persist it, add an override with `environment:` set to
+`CLAUDE_CONFIG_DIR=/app/.od/claude-config` (a path on the data volume; an
+allow-listed daemon env var). Observed on a live container; defaults unchanged.
+
 If you install Codex inside an unprivileged Linux container and it fails while
 creating its `workspace-write` sandbox, opt into Codex's full-access mode for
 all Codex runs in that deployment:
