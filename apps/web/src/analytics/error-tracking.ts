@@ -207,7 +207,8 @@ function ensureInputAggregation(): InputAggregation | null {
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') { flushInputCollector?.(); void inputAggregation?.instance.flush('hidden'); }
       });
-      window.addEventListener('online', () => { flushInputCollector?.(); void inputAggregation?.instance.flush('recovery'); });
+      // A network flap retries saved facts without bypassing the hourly summary deadline.
+      window.addEventListener('online', () => { flushInputCollector?.(); void inputAggregation?.instance.tick(); });
     }
   }
   void inputAggregation.instance.setMode(trial?.mode ?? 'shadow');

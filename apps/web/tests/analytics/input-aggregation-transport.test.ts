@@ -23,6 +23,34 @@ function setup() {
   const events = () => fetch.mock.calls.flatMap(([, init]) => { const body = JSON.parse(init.body); return body.batch ?? [body]; }).filter(e => ['client_input_responsiveness', 'client_input_responsiveness_summary'].includes(e.event));
   return { fetch, events };
 }
+it('T07 online recovery retries raw while preserving the hourly summary deadline', async () => {
+  const { fetch, events } = setup();
+  const tracking = await import('../../src/analytics/error-tracking');
+  tracking.setExceptionTrackingContext(context);
+  try {
+    tracking.reportSafetyEvent('client_input_responsiveness', input);
+    tracking.reportSafetyEvent('client_input_responsiveness', { ...input, area: 'search' });
+    await vi.advanceTimersByTimeAsync(600_000);
+    const summaries = () => events().filter(e => e.event === 'client_input_responsiveness_summary');
+    window.dispatchEvent(new Event('online')); await vi.advanceTimersByTimeAsync(0);
+    expect(summaries()).toHaveLength(0);
+    fetch.mockRejectedValueOnce(new Error('offline'));
+    tracking.reportSafetyEvent('client_input_responsiveness', input);
+    await vi.advanceTimersByTimeAsync(0);
+    const failedRaw = events().at(-1)!;
+    window.dispatchEvent(new Event('online')); await vi.advanceTimersByTimeAsync(5000);
+    const retries = events().filter(e => e.properties.event_id === failedRaw.properties.event_id);
+    expect(retries).toHaveLength(2); expect(retries[1]).toEqual(retries[0]);
+    expect(summaries()).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(2_994_999);
+    window.dispatchEvent(new Event('online')); await vi.advanceTimersByTimeAsync(0);
+    expect(summaries()).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    for (const period of [300_000, 600_000]) {
+      expect(summaries().filter(e => e.properties.period_ms === period).reduce((n, e) => n + e.properties.input_attempt_count, 0)).toBe(6);
+    }
+  } finally { tracking.clearExceptionTrackingContext(); }
+});
 it('B08 the public entry retains raw facts and sends validated 5/10m summaries in hourly batches', async () => {
   const { fetch, events } = setup();
   const { reportSafetyEvent, setExceptionTrackingContext, clearExceptionTrackingContext } = await import('../../src/analytics/error-tracking');
