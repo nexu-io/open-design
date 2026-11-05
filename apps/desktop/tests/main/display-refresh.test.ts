@@ -23,7 +23,8 @@ function fixture(platform = 'darwin') {
   const notify = vi.fn();
   const dispose = attachDisplayRefresh({ platform, screen, powerMonitor,
     getWindows: () => [window], notify, setTimeout, clearTimeout });
-  return { screen, powerMonitor, window, notify, dispose };
+  const nativeResize = (next: typeof bounds) => { bounds = { ...next }; };
+  return { screen, powerMonitor, window, notify, dispose, nativeResize };
 }
 
 describe('macOS display refresh', () => {
@@ -85,6 +86,37 @@ describe('macOS display refresh', () => {
     f.powerMonitor.emit('resume');
     expect(() => vi.advanceTimersByTime(516)).not.toThrow();
     expect(f.window.setVibrancy).not.toHaveBeenCalled();
+    f.dispose();
+  });
+
+  it('keeps a native maximize that lands between the width pulse and restore', () => {
+    const f = fixture();
+    f.powerMonitor.emit('resume');
+    vi.advanceTimersByTime(500);
+    const maximized = { x: 0, y: 33, width: 1512, height: 847 };
+    f.nativeResize(maximized);
+    f.window.isMaximized.mockReturnValue(true);
+    f.window.emit('maximize');
+    vi.advanceTimersByTime(16);
+    expect(f.window.setBounds).toHaveBeenCalledOnce();
+    expect(f.window.getBounds()).toEqual(maximized);
+    expect(f.window.setVibrancy).toHaveBeenLastCalledWith('under-window');
+    expect(f.window.invalidateShadow).toHaveBeenCalledOnce();
+    expect(f.notify).toHaveBeenCalledOnce();
+    f.dispose();
+  });
+
+  it.each(['isFullScreen', 'none'] as const)('keeps bounds changed by the system during the pulse: %s', (state) => {
+    const f = fixture();
+    f.powerMonitor.emit('resume');
+    vi.advanceTimersByTime(500);
+    const next = { x: 10, y: 20, width: 900, height: 600 };
+    f.nativeResize(next);
+    if (state !== 'none') f.window[state].mockReturnValue(true);
+    vi.advanceTimersByTime(16);
+    expect(f.window.setBounds).toHaveBeenCalledOnce();
+    expect(f.window.getBounds()).toEqual(next);
+    expect(f.window.setVibrancy).toHaveBeenLastCalledWith('under-window');
     f.dispose();
   });
 

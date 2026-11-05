@@ -168,6 +168,8 @@ export type OpenDesignHostDisplayRefresh = {
   reasons: string[];
   scaleFactor: number;
   displayCount: number;
+  /** Page zoom of the notified window; absent from hosts that predate it. */
+  zoomFactor?: number;
 };
 
 export type OpenDesignHostAppearanceTheme =

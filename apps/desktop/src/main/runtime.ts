@@ -2284,7 +2284,10 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     getWindows: () => [window],
     notify: (_window, refresh) => {
       if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
-        window.webContents.send("od:appearance:display-refreshed", refresh);
+        window.webContents.send("od:appearance:display-refreshed", {
+          ...refresh,
+          zoomFactor: window.webContents.getZoomFactor(),
+        });
       }
     },
   });

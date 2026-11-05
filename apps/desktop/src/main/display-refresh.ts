@@ -23,6 +23,8 @@ export type DisplayRefreshWindow = EventSource & {
  * Restore after one frame interval (main has no requestAnimationFrame), then
  * invalidate the shadow. This is a preventive refresh, not proof of GPU recovery.
  * Maximized windows only cycle material so their zoom state is preserved.
+ * The restore only writes bounds the pulse still owns: a maximize, fullscreen
+ * or other resize that lands during the frame interval keeps its bounds.
  * Refreshes requested during a user gesture wait until it settles; a gesture
  * starting during the pulse restores it synchronously before macOS applies the
  * user's bounds. Only pass application
@@ -103,13 +105,20 @@ export function attachDisplayRefresh(input: {
       || window.isFullScreen()) return;
     const bounds = window.getBounds();
     const pulse = !window.isMaximized();
+    let pulsed: Bounds | undefined;
     let frame: ReturnType<typeof setTimeout> | undefined;
+    const owned = () => {
+      if (!pulsed || window.isMaximized() || window.isFullScreen()) return false;
+      const current = window.getBounds();
+      return current.x === pulsed.x && current.y === pulsed.y
+        && current.width === pulsed.width && current.height === pulsed.height;
+    };
     const restore = () => {
       if (frame !== undefined) cancel(frame);
       restores.delete(window);
       if (window.isDestroyed()) return;
       try {
-        if (pulse) window.setBounds(bounds, false);
+        if (owned()) window.setBounds(bounds, false);
       } finally {
         if (!window.isDestroyed()) window.setVibrancy("under-window");
       }
@@ -117,7 +126,11 @@ export function attachDisplayRefresh(input: {
     restores.set(window, restore);
     try {
       window.setVibrancy(null);
-      if (pulse) window.setBounds({ ...bounds, width: bounds.width + 1 }, false);
+      if (pulse) {
+        window.setBounds({ ...bounds, width: bounds.width + 1 }, false);
+        // Compare against what macOS applied, which may be constrained.
+        pulsed = window.getBounds();
+      }
       frame = later(() => {
         restore();
         if (disposed || window.isDestroyed()) return;

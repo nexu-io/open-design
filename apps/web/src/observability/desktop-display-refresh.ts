@@ -6,13 +6,16 @@ export function displayRefreshProperties(
   refresh: OpenDesignHostDisplayRefresh,
   renderer: { devicePixelRatio: number; reducedTransparency: boolean },
 ): ClientDisplayRefreshProps {
+  // Chromium reports DPR as display scale times page zoom; View → Zoom is not a scale anomaly.
+  const zoom = refresh.zoomFactor ?? 1;
   return {
     reasons: refresh.reasons,
     scale_factor: refresh.scaleFactor,
     display_count: refresh.displayCount,
     device_pixel_ratio: renderer.devicePixelRatio,
+    page_zoom: refresh.zoomFactor ?? null,
     reduced_transparency: renderer.reducedTransparency,
-    scale_mismatch: renderer.devicePixelRatio !== refresh.scaleFactor,
+    scale_mismatch: Math.abs(renderer.devicePixelRatio / zoom - refresh.scaleFactor) > 0.01,
   };
 }
 

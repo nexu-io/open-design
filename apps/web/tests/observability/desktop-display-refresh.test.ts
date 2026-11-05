@@ -8,9 +8,15 @@ describe('desktop display refresh analytics', () => {
   it.each([[1, true], [2, false], [1.5, true]])('compares renderer DPR %s with native scale', (devicePixelRatio, mismatch) => {
     expect(displayRefreshProperties(refresh, { devicePixelRatio, reducedTransparency: true })).toEqual({
       reasons: ['resume'], scale_factor: 2, display_count: 1,
-      device_pixel_ratio: devicePixelRatio, reduced_transparency: true, scale_mismatch: mismatch,
+      device_pixel_ratio: devicePixelRatio, page_zoom: null, reduced_transparency: true, scale_mismatch: mismatch,
     });
   });
+
+  it.each([[1, 2, false], [1.25, 2.5, false], [1.1, 2.2, false], [0.9, 1.8, false], [1.25, 2, true]])(
+    'normalizes page zoom %s before comparing DPR %s', (zoomFactor, devicePixelRatio, mismatch) => {
+      const props = displayRefreshProperties({ ...refresh, zoomFactor }, { devicePixelRatio, reducedTransparency: false });
+      expect(props).toMatchObject({ device_pixel_ratio: devicePixelRatio, page_zoom: zoomFactor, scale_mismatch: mismatch });
+    });
 
   it('subscribes to the host and sends only through the supplied consent-gated track', () => {
     let listener!: (value: OpenDesignHostDisplayRefresh) => void;
@@ -31,7 +37,7 @@ describe('desktop display refresh analytics', () => {
       listener(refresh);
       expect(track).toHaveBeenCalledExactlyOnceWith('client_display_refresh', {
         reasons: ['resume'], scale_factor: 2, display_count: 1,
-        device_pixel_ratio: 1, reduced_transparency: true, scale_mismatch: true,
+        device_pixel_ratio: 1, page_zoom: null, reduced_transparency: true, scale_mismatch: true,
       });
       expect(window.matchMedia).toHaveBeenCalledWith('(prefers-reduced-transparency: reduce)');
       expect(safetyTransport).not.toHaveBeenCalled();

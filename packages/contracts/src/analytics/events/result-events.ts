@@ -1498,6 +1498,9 @@ export interface ClientDisplayRefreshProps {
   scale_factor: number;
   display_count: number;
   device_pixel_ratio: number;
+  /** Page zoom; null when the desktop host does not report it. */
+  page_zoom: number | null;
   reduced_transparency: boolean;
+  /** Renderer DPR divided by page zoom differs from the native scale. */
   scale_mismatch: boolean;
 }
