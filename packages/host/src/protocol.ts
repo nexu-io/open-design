@@ -378,7 +378,7 @@ export type OpenDesignHostDownloadResult = {
 };
 
 export type OpenDesignHostBridge = {
-  /** Local-only input telemetry PoC. Asynchronous replies acknowledge durable transactions. */
+  /** Opt-in input telemetry storage. Asynchronous replies acknowledge durable transactions. */
   inputTelemetry?: {
     read(scope: string): Promise<[string, string][]>;
     write(scope: string, put: [string, string][], drop: string[]): Promise<void>;

@@ -66,6 +66,7 @@ const PACKAGED_CHILD_ENV_ALLOWLIST = [
   "no_proxy",
   "OD_ALLOWED_INTERNAL_HOSTS",
   "OD_JSON_IPC_TRACE",
+  "OD_TELEMETRY_ENV",
 ] as const;
 
 // The daemon owns the historical-outer compatibility handoff. Preserve the

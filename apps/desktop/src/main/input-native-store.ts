@@ -1,8 +1,9 @@
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { DatabaseSync } from 'node:sqlite';
-import { parseClientMetricEvent } from '@open-design/contracts/analytics';
+import { parseClientMetricEvent, isInputAggregationDestination } from '@open-design/contracts/analytics';
 
 export function nativeInputPocEnabled(packaged: boolean, env: NodeJS.ProcessEnv): boolean {
+  if (env.OD_INPUT_TRIAL_CAPABILITY === '1') return isInputAggregationDestination(env.POSTHOG_HOST ?? '', env.POSTHOG_KEY ?? '');
   return (!packaged || env.OD_INPUT_QA_BUNDLE === 'local-only') && env.OD_INPUT_NATIVE_POC === '1'
     && env.NEXT_PUBLIC_OD_INPUT_AGGREGATION_POC === '1' && env.POSTHOG_KEY === 'phc_local_poc_only'
     && /^http:\/\/127\.0\.0\.1(?::[0-9]+)?\/?$/.test(env.POSTHOG_HOST ?? '');
@@ -70,7 +71,8 @@ function validateChange(change: Change) {
       if (!value || value.version !== 2 || typeof value.identity !== 'string' || value.identity.length > 2048
         || !Number.isFinite(value.lastTime) || !Number.isFinite(value.nextSendAt)
         || !(value.stopped === null || typeof value.stopped === 'string')
-        || Object.keys(value).some(k => !['version', 'identity', 'lastTime', 'nextSendAt', 'stopped'].includes(k))) throw new Error('invalid native metadata');
+        || (value.rawPassthrough !== undefined && typeof value.rawPassthrough !== 'boolean')
+        || Object.keys(value).some(k => !['version', 'identity', 'lastTime', 'nextSendAt', 'stopped', 'rawPassthrough'].includes(k))) throw new Error('invalid native metadata');
     } else {
       const name = /^(active|pending):/.test(key) ? 'client_input_responsiveness_summary' : 'client_input_responsiveness';
       const parsed = parseClientMetricEvent(name, value);

@@ -123,3 +123,47 @@ it('T03 retains a committed prefix and avoids a second fallback fact after a dis
   expect(new Set(raw.map(e => e.properties.event_id)).size).toBe(1);
   tracking.clearExceptionTrackingContext();
 });
+
+it('T04 shadow failure never holds or replaces the original transport', async () => {
+  const { fetch, events } = local();
+  fetch.mockImplementation(async () => new Response('{"status":1}', { status: 200 }));
+  const tracking = await import('../../src/analytics/error-tracking');
+  const trial = { trial_id: 'input-01', revision: 'r1', mode: 'shadow' as const, host: context.host, project_key: 'phc_local_poc_only' };
+  tracking.setExceptionTrackingContext({ ...context, apiKey: trial.project_key, inputAggregation: trial });
+  storageFailure.next = true;
+  tracking.reportSafetyEvent('client_input_responsiveness', input);
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(fetch.mock.calls[0]![0]).toBe(context.host + '/i/v0/e/');
+  await vi.advanceTimersByTimeAsync(0);
+  tracking.reportSafetyEvent('client_input_responsiveness', { ...input, area: 'search' });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(events().filter(e => e.event === 'client_input_responsiveness')).toHaveLength(2);
+  expect(events().filter(e => e.event === 'client_input_responsiveness_summary')).toHaveLength(0);
+  expect(events().filter(e => e.event === 'client_input_responsiveness').every(e => e.properties.input_trial_id === trial.trial_id)).toBe(true);
+  tracking.clearExceptionTrackingContext(); await vi.advanceTimersByTimeAsync(0);
+});
+
+it('T05 pause and drain keep original events flowing, stop new aggregation and clear old pending facts', async () => {
+  const { fetch, events } = local();
+  fetch.mockImplementation(async () => new Response('{"status":1}', { status: 200 }));
+  const tracking = await import('../../src/analytics/error-tracking');
+  const trial = { trial_id: 'input-01', revision: 'r1', mode: 'shadow' as const, host: context.host, project_key: 'phc_local_poc_only' };
+  tracking.setExceptionTrackingContext({ ...context, apiKey: trial.project_key, inputAggregation: trial });
+  tracking.reportSafetyEvent('client_input_responsiveness', input);
+  await vi.advanceTimersByTimeAsync(0);
+  tracking.patchInputAggregationTrial({ ...trial, mode: 'paused', revision: 'r2' });
+  tracking.reportSafetyEvent('client_input_responsiveness', { ...input, area: 'search' });
+  await vi.advanceTimersByTimeAsync(600_000);
+  expect(events().filter(e => e.event === 'client_input_responsiveness')).toHaveLength(2);
+  expect(events().filter(e => e.event === 'client_input_responsiveness_summary')).toHaveLength(0);
+  tracking.patchInputAggregationTrial({ ...trial, mode: 'drain', revision: 'r3' });
+  await vi.advanceTimersByTimeAsync(0);
+  const summaries = events().filter(e => e.event === 'client_input_responsiveness_summary');
+  expect(summaries).toHaveLength(2); expect(summaries.every(e => e.properties.area === 'settings' && e.properties.input_attempt_count === 2)).toBe(true);
+  tracking.reportSafetyEvent('client_input_responsiveness', input); await vi.advanceTimersByTimeAsync(10_000);
+  expect(events().filter(e => e.event === 'client_input_responsiveness')).toHaveLength(3);
+  expect(events().filter(e => e.event === 'client_input_responsiveness_summary')).toHaveLength(2);
+  const status = events().filter(e => e.event === 'client_input_aggregation_status');
+  expect(status.length).toBeLessThanOrEqual(2);
+  tracking.clearExceptionTrackingContext(); await vi.advanceTimersByTimeAsync(0);
+});

@@ -35,6 +35,7 @@ import {
   OPEN_DESIGN_PLUGIN_ID,
 } from '../mcp-observability.js';
 import { startStockTelemetryCollector } from '../media/stock-telemetry.js';
+import { readInputAggregationTrial } from '../storage/input-aggregation-config.js';
 
 export interface DaemonTelemetry {
   analyticsService: ReturnType<typeof createAnalyticsService>;
@@ -201,6 +202,8 @@ export function registerTelemetryRoutes(app: Express, deps: RegisterTelemetryRou
         key: baseline.key,
         host: baseline.host,
         installationId,
+        inputAggregation: baseline.host && baseline.key && installationId
+          ? await readInputAggregationTrial(dataDir, baseline.host, baseline.key) : null,
       });
     } catch {
       res.json({
@@ -209,6 +212,7 @@ export function registerTelemetryRoutes(app: Express, deps: RegisterTelemetryRou
         key: baseline.key,
         host: baseline.host,
         installationId: null,
+        inputAggregation: null,
       });
     }
   });

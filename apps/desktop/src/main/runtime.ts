@@ -406,6 +406,7 @@ export type DesktopRuntime = {
 };
 
 export type DesktopRuntimeOptions = {
+  inputTelemetryTarget?: { host: string; key: string };
   telemetryContext?: { app_session_id: string; launch_attempt_id: string | null; app_version: string | null };
   // Per-process secret shared with the daemon at startup (over its
   // sidecar IPC) so the main process can mint HMAC tokens for the
@@ -2024,9 +2025,10 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   const preloadPath = options.preloadPath ?? join(dirname(fileURLToPath(import.meta.url)), "preload.cjs");
   applyDockIcon();
   const nativeStores = new Map<string, NativeInputStore>();
-  const nativeHost = process.env.POSTHOG_HOST ?? '';
-  const nativePrefix = `${nativeHost.replace(/\/+$/, '')}/i/v0/e/:phc_local_poc_only:`;
-  const nativeEnabled = nativeInputPocEnabled(app.isPackaged, process.env);
+  const nativeHost = options.inputTelemetryTarget?.host ?? process.env.POSTHOG_HOST ?? '';
+  const nativeKey = options.inputTelemetryTarget?.key ?? process.env.POSTHOG_KEY ?? '';
+  const nativePrefix = `${nativeHost.replace(/\/+$/, '')}/i/v0/e/:${nativeKey}:`;
+  const nativeEnabled = nativeInputPocEnabled(app.isPackaged, { ...process.env, POSTHOG_HOST: nativeHost, POSTHOG_KEY: nativeKey });
 
   // ipcMain.handle() registers a handler in an internal map that is *not*
   // surfaced via eventNames(); the previous `!eventNames().includes(...)`

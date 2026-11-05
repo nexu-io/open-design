@@ -10,13 +10,15 @@ interface Snapshot {
   version: 2; collecting: Raw[]; rawPending: Raw[]; completed: string[];
   active: Summary[]; pending: Summary[]; identity: string;
   lastTime: number; nextSendAt: number; stopped: string | null;
+  rawPassthrough?: boolean;
 }
 const HOUR = 3_600_000;
 const MAX_RAW = 1024, MAX_SUMMARIES = 512, MAX_SNAPSHOT_BYTES = 2 * 1024 * 1024;
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
 const maximum = (a: number | null, b: number | null) => a === null ? b : b === null ? a : Math.max(a, b);
 const identityOf = (raw: Raw) => JSON.stringify([raw.device_id, raw.app_session_id, raw.user_id, raw.app_version,
-  raw.client_version, raw.channel, raw.env, raw.client_type, raw.platform, raw.os_version, raw.arch, raw.capture_source]);
+  raw.client_version, raw.channel, raw.env, raw.client_type, raw.platform, raw.os_version, raw.arch, raw.capture_source,
+  raw.input_trial_id, raw.input_trial_revision]);
 
 export function localInputAggregationEnabled(flag: string | undefined, mode: string | undefined, host: string, qaBundle?: string, key?: string): boolean {
   if (flag !== '1' || (mode !== 'development' && !(qaBundle === 'local-only' && key === 'phc_local_poc_only'))) return false;
@@ -44,13 +46,39 @@ export class InputAggregation {
   private operation: Promise<void> = Promise.resolve();
   private closed = false;
   private savedState = '';
+  private mode: 'shadow' | 'drain' | 'paused' = 'shadow';
+  private retryAt = 0;
+  private failures = 0;
+  private rawPassthrough: boolean;
+  private closing = false;
+  private ready = false;
+  private counters = { committed_inputs: 0, accepted_events: 0, retry_count: 0 };
 
-  constructor(private send: (events: InputTelemetryEvent[]) => Promise<boolean>, store?: InputAggregationStore | Promise<InputAggregationStore>) {
-    if (store) this.operation = this.restore(store).catch(() => {
-      this.stopped = 'storage_error'; this.log('stopped', { reason: this.stopped });
+  constructor(private send: (events: InputTelemetryEvent[]) => Promise<boolean>, store?: InputAggregationStore | Promise<InputAggregationStore>,
+    options: { rawPassthrough?: boolean; mode?: 'shadow' | 'drain' | 'paused' } = {}) {
+    this.rawPassthrough = options.rawPassthrough === true;
+    this.mode = options.mode ?? 'shadow';
+    this.ready = !store;
+    if (store) this.operation = this.restore(store).catch(error => {
+      this.stopped = 'storage_error'; this.log('stopped', { reason: this.stopped, error: String(error) });
     });
   }
   get pendingCount() { return this.pending.length; }
+  get passthrough() { return this.rawPassthrough; }
+  get collectingEnabled() { return !this.closing && this.mode === 'shadow' && !this.stopped; }
+  diagnostics() {
+    const facts = [...this.collecting.values(), ...this.rawPending, ...this.active.values(), ...this.pending];
+    const oldest = facts.length ? Math.min(...facts.map(s => Date.parse(s.occurred_at))) : null;
+    return { ...this.counters, mode: this.mode, persistence_ready: this.ready, stopped_reason: this.stopped,
+      collecting_records: this.collecting.size, raw_pending: this.rawPending.length,
+      active_summaries: this.active.size, pending_summaries: this.pending.length,
+      oldest_pending_age_ms: oldest === null ? null : Math.max(0, Date.now() - oldest) };
+  }
+  async setMode(mode: 'shadow' | 'drain' | 'paused') {
+    if (mode === this.mode) return;
+    this.mode = mode;
+    if (mode === 'drain') await this.flush('recovery');
+  }
   ownsSource(id: string) { return this.collecting.has(id) || this.completed.includes(id); }
   observe(properties: Record<string, unknown>) { return this.checkpointSource(properties, true); }
 
@@ -58,7 +86,7 @@ export class InputAggregation {
     const result = await this.update(async () => {
       this.advance();
       const parsed = parseClientMetricEvent('client_input_responsiveness', properties) as Raw | null;
-      if (this.stopped || !parsed || !['settings', 'search'].includes(parsed.area)
+      if (!this.collectingEnabled || !parsed || !['settings', 'search'].includes(parsed.area)
         || parsed.telemetry_capability !== 'supported' || Date.parse(parsed.occurred_at) > Date.now()) return null;
       const previous = this.collecting.get(parsed.event_id);
       const raw: Raw = { ...parsed, aggregation_page_id: previous?.aggregation_page_id ?? this.pageId };
@@ -70,6 +98,7 @@ export class InputAggregation {
       this.collecting.set(raw.event_id, raw);
       if (final) this.finishSource(raw);
       await this.checkpoint();
+      this.counters.committed_inputs += Math.max(0, raw.input_attempt_count - (previous?.input_attempt_count ?? 0));
       this.log(final ? 'source_committed' : 'tail_committed', { source: raw });
       return raw;
     });
@@ -81,7 +110,7 @@ export class InputAggregation {
     this.collecting.delete(raw.event_id);
     if (this.completed.includes(raw.event_id)) return;
     if (this.rawPending.length >= MAX_RAW || bytes(raw) > 8192) throw new Error('queue_limit');
-    this.rawPending.push(Object.freeze({ ...raw }));
+    if (!this.rawPassthrough) this.rawPending.push(Object.freeze({ ...raw }));
     this.completed.push(raw.event_id); this.completed = this.completed.slice(-2048);
     const at = Date.parse(raw.occurred_at);
     for (const period of [300_000, 600_000] as const) {
@@ -145,7 +174,8 @@ export class InputAggregation {
   private snapshot(): Snapshot {
     return { version: 2, collecting: [...this.collecting.values()].map(s => ({ ...s })), rawPending: this.rawPending.map(s => ({ ...s })),
       completed: [...this.completed], active: [...this.active.values()].map(s => ({ ...s })), pending: this.pending.map(s => ({ ...s })),
-      identity: this.identity, lastTime: this.lastTime, nextSendAt: this.nextSendAt, stopped: this.stopped };
+      identity: this.identity, lastTime: this.lastTime, nextSendAt: this.nextSendAt, stopped: this.stopped,
+      rawPassthrough: this.rawPassthrough };
   }
   private load(snapshot: Snapshot) {
     this.collecting = new Map(snapshot.collecting.map(s => [s.event_id, s]));
@@ -153,11 +183,12 @@ export class InputAggregation {
     this.active = new Map(snapshot.active.map(s => [s.period_ms + (s.area === 'search' ? 1 : 0), s]));
     this.pending = snapshot.pending; this.identity = snapshot.identity;
     this.lastTime = snapshot.lastTime; this.nextSendAt = snapshot.nextSendAt; this.stopped = snapshot.stopped;
+    this.rawPassthrough = snapshot.rawPassthrough === true;
   }
   private async restore(storage: InputAggregationStore | Promise<InputAggregationStore>) {
     this.store = await storage;
     const saved = await this.store.read();
-    if (saved === undefined) { this.log('ready'); return; }
+    if (saved === undefined) { this.ready = true; this.log('ready'); return; }
     if (!saved || typeof saved !== 'object' || bytes(saved) > MAX_SNAPSHOT_BYTES) throw new Error('invalid snapshot');
     const state = saved as Partial<Snapshot>;
     if (Number(state.version) === 1) Object.assign(state, { version: 2, collecting: [], rawPending: [], completed: [], nextSendAt: Date.now() + HOUR });
@@ -178,9 +209,12 @@ export class InputAggregation {
     const pending = state.pending.map(s => parse('client_input_responsiveness_summary', s));
     const ids = [...collecting, ...rawPending, ...active, ...pending].map(s => s.event_id);
     if (new Set(ids).size !== ids.length || new Set(active.map(s => `${s.period_ms}:${s.area}`)).size !== active.length) throw new Error('duplicate stored id');
+    if (state.rawPassthrough !== undefined && typeof state.rawPassthrough !== 'boolean') throw new Error('invalid delivery mode');
+    const requestedPassthrough = this.rawPassthrough;
     this.load({ ...state, collecting, rawPending, active, pending } as Snapshot);
     this.freezeAll('recovery'); this.urgent = true;
-    await this.checkpoint(); this.log('restored', { raw_pending: this.rawPending.length, pending: this.pending.length });
+    this.rawPassthrough = requestedPassthrough;
+    await this.checkpoint(); this.ready = true; this.log('restored', { raw_pending: this.rawPending.length, pending: this.pending.length });
   }
   private async checkpoint() {
     if (this.collecting.size > 4 || this.rawPending.length + this.collecting.size > MAX_RAW
@@ -199,18 +233,26 @@ export class InputAggregation {
       catch (error) {
         this.load(before); this.urgent = urgent;
         this.stopped = error instanceof Error && ['queue_limit', 'counter_limit', 'invalid_source', 'invalid_summary'].includes(error.message) ? error.message : 'storage_error';
-        this.log('stopped', { reason: this.stopped }); return null;
+        this.log('stopped', { reason: this.stopped, error: String(error) }); return null;
       }
     });
     this.operation = next.then(() => undefined); return next;
   }
-  async close() { await this.operation; this.closed = true; this.store?.close(); }
-  private drain() {
-    if (!this.draining) this.draining = this.drainLoop().finally(() => { this.draining = null; });
+  async close() {
+    this.closing = true;
+    await this.draining;
+    await this.operation;
+    this.closed = true;
+    this.store?.close();
+  }
+  private async drain() {
+    // A flush can enqueue facts after an in-flight drain selected an empty batch.
+    while (this.draining) await this.draining;
+    this.draining = this.drainLoop().finally(() => { this.draining = null; });
     return this.draining;
   }
   private async drainLoop() {
-    while (!this.closed && this.stopped !== 'storage_error') {
+    while (!this.closed && this.mode !== 'paused' && this.stopped !== 'storage_error' && Date.now() >= this.retryAt) {
       const batch = await this.update(() => {
         const events: InputTelemetryEvent[] = this.rawPending.map(properties => ({ event: 'client_input_responsiveness', properties }));
         if (this.urgent || Date.now() >= this.nextSendAt) events.push(...this.pending.map(properties => ({ event: 'client_input_responsiveness_summary' as const, properties })));
@@ -229,7 +271,12 @@ export class InputAggregation {
         });
         break;
       }
-      if (!await this.send(batch).catch(() => false)) { this.log('retry', { event_ids: batch.map(e => e.properties.event_id) }); break; }
+      if (!await this.send(batch).catch(() => false)) {
+        this.counters.retry_count++;
+        this.retryAt = this.rawPassthrough ? Date.now() + Math.min(60_000, 5000 * 2 ** Math.min(this.failures++, 4)) : 0;
+        this.log('retry', { event_ids: batch.map(e => e.properties.event_id) }); break;
+      }
+      this.failures = 0; this.retryAt = 0;
       const removed = await this.update(async () => {
         const ids = new Set(batch.map(e => e.properties.event_id));
         this.rawPending = this.rawPending.filter(s => !ids.has(s.event_id));
@@ -237,6 +284,7 @@ export class InputAggregation {
         await this.checkpoint(); return true;
       });
       if (!removed) break;
+      this.counters.accepted_events += batch.length;
       this.log('accepted', { event_ids: batch.map(e => e.properties.event_id), events: batch.length });
     }
   }

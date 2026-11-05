@@ -38,12 +38,15 @@ import {
   buildClientTelemetryParams,
   isClientMetricEventName,
   parseClientMetricEvent,
+  parseInputAggregationTrial,
+  type InputAggregationTrial,
   type AnalyticsClientType,
 } from '@open-design/contracts/analytics';
 import { isResolvedAppVersion } from './app-version';
 import { scrubExceptionList, scrubFilePath } from './scrub';
 import { InputAggregation, localInputAggregationEnabled } from './input-aggregation';
 import { openInputAggregationStore } from './input-aggregation-store';
+import { inputAggregationSender } from './input-aggregation-transport';
 
 export type BrowserOsName =
   | 'Mac OS X'
@@ -110,6 +113,7 @@ interface ExceptionTrackingContext {
   arch?: string;
   /** Bootstrap had no installation id yet (fresh install, not opted out). */
   identityPending?: boolean;
+  inputAggregation?: InputAggregationTrial | null;
 }
 
 interface BufferedSafetyEvent {
@@ -135,8 +139,11 @@ let installationDistinctId: string | null = null;
 const buffer: BufferedSafetyEvent[] = [];
 let installed = false;
 let inputAggregation: { instance: InputAggregation; destination: string } | null = null;
+let retiringInputAggregation: Promise<void> = Promise.resolve();
 let inputAggregationTimer: ReturnType<typeof setInterval> | null = null;
 let flushInputCollector: (() => void) | null = null;
+let lastInputStatusAt = 0;
+let lastInputStatus = '';
 
 export function registerInputCollectorFlush(flush: () => void): () => void {
   flushInputCollector = flush;
@@ -144,32 +151,42 @@ export function registerInputCollectorFlush(flush: () => void): () => void {
 }
 
 function ensureInputAggregation(): InputAggregation | null {
-  if (typeof window === 'undefined' || window.location.pathname === '/desktop-pet' || !context || holdsMetricsForIdentity()
-    || !localInputAggregationEnabled(process.env.NEXT_PUBLIC_OD_INPUT_AGGREGATION_POC, process.env.NODE_ENV, context.host, process.env.NEXT_PUBLIC_OD_INPUT_QA_BUNDLE, context.apiKey)) return null;
+  if (typeof window === 'undefined' || window.location.pathname === '/desktop-pet' || !context || holdsMetricsForIdentity()) return null;
+  const trial = parseInputAggregationTrial(context.inputAggregation, context.host, context.apiKey);
+  const local = localInputAggregationEnabled(process.env.NEXT_PUBLIC_OD_INPUT_AGGREGATION_POC, process.env.NODE_ENV, context.host, process.env.NEXT_PUBLIC_OD_INPUT_QA_BUNDLE, context.apiKey);
+  if (!trial && (!local || inputAggregation?.instance.passthrough)) {
+    void inputAggregation?.instance.setMode('paused');
+    return null;
+  }
   const destination = `${context.host.replace(/\/+$/, '')}/i/v0/e/`;
   const contextHost = context.host.replace(/\/+$/, '');
   const key = context.apiKey;
   const scope = `${destination}:${key}:${context.distinctId}`;
-  if (!inputAggregation || inputAggregation.destination !== scope) {
+  const owner = `${scope}:${trial ? 'shadow' : 'local'}`;
+  if (!inputAggregation || inputAggregation.destination !== owner) {
     if (inputAggregation) {
       const previous = inputAggregation.instance;
-      void previous.flush('identity_change').finally(() => previous.close());
+      retiringInputAggregation = retiringInputAggregation.then(() => previous.setMode('paused')).then(() => previous.close());
     }
-    const instance = new InputAggregation(async (events) => {
-      try {
-        const response = await fetch(`${contextHost}/batch/`, { method: 'POST', headers: { 'content-type': 'application/json' },
-          credentials: 'omit', keepalive: true, signal: AbortSignal.timeout(5000),
-          body: JSON.stringify({ api_key: key, batch: events.map(({ event, properties }) => ({ event,
-            distinct_id: properties.device_id, timestamp: properties.occurred_at,
-            properties: { ...properties, distinct_id: properties.device_id, $insert_id: properties.event_id } })) }),
-        });
-        return response.ok;
-      } catch { return false; }
-    }, openInputAggregationStore(scope));
-    inputAggregation = { instance, destination: scope };
+    const instance = new InputAggregation(inputAggregationSender(contextHost, key, local && !trial), retiringInputAggregation.then(() => openInputAggregationStore(scope)),
+      { rawPassthrough: !!trial, mode: trial?.mode ?? 'shadow' });
+    inputAggregation = { instance, destination: owner };
     void instance.tick();
     if (!inputAggregationTimer) {
-      inputAggregationTimer = setInterval(() => { void inputAggregation?.instance.tick(); }, 5000);
+      inputAggregationTimer = setInterval(() => {
+        const instance = inputAggregation?.instance;
+        if (!instance) return;
+        void instance.tick().then(() => {
+          const trial = context && parseInputAggregationTrial(context.inputAggregation, context.host, context.apiKey);
+          if (!trial) return;
+          const status = instance.diagnostics();
+          const key = `${instance.pageId}:${trial.revision}:${status.mode}:${status.stopped_reason}:${status.persistence_ready}`;
+          if (Date.now() - lastInputStatusAt < 3_600_000 && key === lastInputStatus) return;
+          lastInputStatusAt = Date.now(); lastInputStatus = key;
+          reportSafetyEvent('client_input_aggregation_status', { metric_schema_version: 1, telemetry_capability: 'supported',
+            aggregation_page_id: instance.pageId, input_trial_id: trial.trial_id, input_trial_revision: trial.revision, ...status });
+        });
+      }, 5000);
       window.addEventListener('pagehide', () => { flushInputCollector?.(); void inputAggregation?.instance.flush('pagehide'); });
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') { flushInputCollector?.(); void inputAggregation?.instance.flush('hidden'); }
@@ -177,7 +194,18 @@ function ensureInputAggregation(): InputAggregation | null {
       window.addEventListener('online', () => { flushInputCollector?.(); void inputAggregation?.instance.flush('recovery'); });
     }
   }
+  void inputAggregation.instance.setMode(trial?.mode ?? 'shadow');
   return inputAggregation.instance;
+}
+
+/** A missing/invalid runtime configuration pauses only summaries; original safety events keep flowing. */
+export function patchInputAggregationTrial(value: unknown): void {
+  if (!context) return;
+  const next = parseInputAggregationTrial(value, context.host, context.apiKey);
+  if (JSON.stringify(next) === JSON.stringify(context.inputAggregation ?? null)) return;
+  flushInputCollector?.();
+  context = { ...context, inputAggregation: next };
+  ensureInputAggregation();
 }
 
 // Upper bound on how long stability metrics wait for the installation id. If
@@ -247,7 +275,10 @@ export function clearExceptionTrackingContext(): void {
   flushInputCollector?.();
   context = null;
   installationDistinctId = null;
-  if (inputAggregation) void inputAggregation.instance.close();
+  if (inputAggregation) {
+    const previous = inputAggregation.instance;
+    retiringInputAggregation = retiringInputAggregation.then(() => previous.setMode('paused')).then(() => previous.close());
+  }
   inputAggregation = null;
   if (identityHoldTimer !== null) { clearTimeout(identityHoldTimer); identityHoldTimer = null; }
 }
@@ -456,9 +487,16 @@ function telemetryParams(original: Record<string, unknown>, timestamp: string) {
 export function checkpointInputResponsiveness(properties: Record<string, unknown>, final: boolean): boolean {
   if (!['settings', 'search'].includes(String(properties.area))) return false;
   const aggregation = ensureInputAggregation();
-  if (!aggregation || aggregation.stopped || !context) return false;
-  const common = telemetryParams({ ...properties, $insert_id: properties.event_id }, new Date().toISOString());
-  const metric = parseClientMetricEvent('client_input_responsiveness', { ...properties, ...common });
+  if (!aggregation || !aggregation.collectingEnabled || !context) return false;
+  const trial = context.inputAggregation;
+  const tagged = trial ? { ...properties, aggregation_page_id: aggregation.pageId,
+    input_trial_id: trial.trial_id, input_trial_revision: trial.revision } : properties;
+  if (aggregation.passthrough && final) {
+    reportSafetyEvent('client_input_responsiveness', tagged);
+    return true;
+  }
+  const common = telemetryParams({ ...tagged, $insert_id: properties.event_id }, new Date().toISOString());
+  const metric = parseClientMetricEvent('client_input_responsiveness', { ...tagged, ...common });
   if (!metric) return false;
   const destination = `${context.host.replace(/\/+$/, '')}/i/v0/e/`, key = context.apiKey;
   void aggregation.checkpointSource(metric, final).then(saved => {
@@ -470,7 +508,10 @@ export function checkpointInputResponsiveness(properties: Record<string, unknown
 
 function dispatch(item: BufferedSafetyEvent): void {
   if (context == null) return;
-  const original = item.body.properties;
+  const trial = item.eventName === 'client_input_responsiveness'
+    ? parseInputAggregationTrial(context.inputAggregation, context.host, context.apiKey) : null;
+  const original = trial ? { ...item.body.properties, input_trial_id: trial.trial_id, input_trial_revision: trial.revision,
+    ...(inputAggregation ? { aggregation_page_id: inputAggregation.instance.pageId } : {}) } : item.body.properties;
   const common = telemetryParams(original, item.timestamp);
   const metric = isClientMetricEventName(item.eventName)
     ? parseClientMetricEvent(item.eventName, { ...original, ...common }) : null;
@@ -495,6 +536,15 @@ function dispatch(item: BufferedSafetyEvent): void {
   if (metric && item.eventName === 'client_input_responsiveness') {
     const aggregation = ensureInputAggregation();
     if (aggregation) {
+      if (aggregation.passthrough) {
+        send();
+        if (aggregation.collectingEnabled) {
+          const trial = context.inputAggregation;
+          void aggregation.observe({ ...metric, aggregation_page_id: aggregation.pageId,
+            ...(trial ? { input_trial_id: trial.trial_id, input_trial_revision: trial.revision } : {}) });
+        }
+        return;
+      }
       // The durable outbox sends raw and summary events; never also dispatch the raw witness here.
       void aggregation.observe(metric).then(saved => { if (!saved && !aggregation.ownsSource(common.event_id)) send(); });
       return;

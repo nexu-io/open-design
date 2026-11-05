@@ -28,3 +28,12 @@ it('N07 packaged QA requires every local-only gate and rejects production destin
   for (const host of ['https://us.i.posthog.com', 'http://127.0.0.1.evil.test', 'http://user@127.0.0.1', 'http://[::1]']) expect(nativeInputPocEnabled(true, { ...env, POSTHOG_HOST: host })).toBe(false);
   expect(nativeInputPocEnabled(true, { ...env, POSTHOG_KEY: 'phc_real' })).toBe(false);
 });
+
+it('N08 exposes trial storage only with an explicit capability and an approved bound target', () => {
+  const env = { OD_INPUT_TRIAL_CAPABILITY: '1', POSTHOG_KEY: 'phc_example', POSTHOG_HOST: 'https://us.i.posthog.com' };
+  expect(nativeInputPocEnabled(true, env)).toBe(true);
+  for (const patch of [{ OD_INPUT_TRIAL_CAPABILITY: '' }, { POSTHOG_HOST: 'http://us.i.posthog.com' },
+    { POSTHOG_KEY: 'phc_local_poc_only' }, { POSTHOG_HOST: 'https://us.i.posthog.com.evil.test' }]) {
+    expect(nativeInputPocEnabled(true, { ...env, ...patch })).toBe(false);
+  }
+});

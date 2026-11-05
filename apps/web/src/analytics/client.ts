@@ -16,6 +16,7 @@ import {
   clearExceptionTrackingContext,
   detectBrowserOsName,
   setExceptionTrackingContext,
+  patchInputAggregationTrial,
 } from './error-tracking';
 import { pinFirstSessionForCapture } from './identity';
 import { registerChatReplaySessionSource } from '../observability/chat-context';
@@ -206,6 +207,21 @@ function fetchAnalyticsConfigShared(): Promise<AnalyticsConfigResponse | null> {
 }
 
 let exceptionBootstrapPromise: Promise<void> | null = null;
+let inputTrialConfigTimer: ReturnType<typeof setInterval> | null = null;
+function watchInputTrialConfig(cfg: AnalyticsConfigResponse): void {
+  // No extra polling for ordinary clients. Missing config on an opted-in client pauses summaries.
+  if (!cfg.inputAggregation || inputTrialConfigTimer) return;
+  let refreshing = false;
+  inputTrialConfigTimer = setInterval(() => {
+    if (refreshing) return;
+    refreshing = true;
+    void fetch('/api/analytics/config', { signal: AbortSignal.timeout(5000), cache: 'no-store' })
+      .then(async res => res.ok ? await res.json() as AnalyticsConfigResponse : null).then(next => {
+      const sameTarget = next?.key === cfg.key && next?.host === cfg.host && next?.installationId === cfg.installationId;
+      patchInputAggregationTrial(sameTarget ? next?.inputAggregation : null);
+    }).catch(() => patchInputAggregationTrial(null)).finally(() => { refreshing = false; });
+  }, 30_000);
+}
 export function bootstrapExceptionTracking(context: AnalyticsContext): Promise<void> {
   if (exceptionBootstrapPromise) return exceptionBootstrapPromise;
   exceptionBootstrapPromise = (async () => {
@@ -236,7 +252,9 @@ export function bootstrapExceptionTracking(context: AnalyticsContext): Promise<v
         sessionId: context.sessionId,
         ...(hostStartupContext ? { appSessionId: hostStartupContext.app_session_id } : {}),
         telemetryEnv,
+        inputAggregation: cfg.inputAggregation ?? null,
       });
+      watchInputTrialConfig(cfg);
     } catch {
       // Network failure / endpoint unavailable — leave the buffer in
       // place so a future retry could still flush, but don't crash boot.
@@ -409,7 +427,9 @@ export async function getAnalyticsClient(
             appVersion: context.appVersion,
             sessionId: context.sessionId,
             telemetryEnv,
+            inputAggregation: cfg.inputAggregation ?? null,
           });
+          watchInputTrialConfig(cfg);
         },
       });
       client = posthog;

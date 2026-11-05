@@ -4,6 +4,26 @@ export interface InputAggregationStore {
   close(): void;
 }
 
+/** Copy, read back, then remove the source. A crash between steps is safe to retry. */
+export async function migrateInputAggregationStore(source: Pick<InputAggregationStore, 'read'> & { remove(): Promise<void> }, target: InputAggregationStore) {
+  let snapshot = await source.read();
+  if (snapshot === undefined) return;
+  if (snapshot && typeof snapshot === 'object' && (snapshot as { version?: number }).version === 1) {
+    snapshot = { ...snapshot, version: 2, collecting: [], rawPending: [], completed: [], nextSendAt: Date.now() + 3_600_000 };
+  }
+  const canonical = (value: unknown) => {
+    if (!value || typeof value !== 'object') throw new Error('invalid legacy input snapshot');
+    return JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item)
+      ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item);
+  };
+  const existing = await target.read();
+  // Never merge divergent stores: that can resurrect acknowledged facts or double-count a source.
+  if (existing !== undefined && canonical(existing) !== canonical(snapshot)) throw new Error('conflicting input stores');
+  if (existing === undefined) await target.write(snapshot);
+  if (canonical(await target.read()) !== canonical(snapshot)) throw new Error('input migration verification failed');
+  await source.remove();
+}
+
 /** Keep the same atomic snapshot semantics, but cross IPC with changed small records only. */
 export function nativeInputAggregationStore(scope: string, bridge: NonNullable<OpenDesignHostBridge['inputTelemetry']>, release: () => void): InputAggregationStore {
   // shortcut: Diffing still scans the full queue; use engine deltas if large-backlog CPU becomes material.
@@ -50,8 +70,6 @@ export async function openInputAggregationStore(scope: string): Promise<InputAgg
     }).catch(reject);
   });
   const native = getOpenDesignHost()?.inputTelemetry;
-  // shortcut: Trials use isolated profiles; migrate pending IndexedDB facts before enabling on existing profiles.
-  if (native) return nativeInputAggregationStore(scope, native, release);
   let db: IDBDatabase;
   try {
     db = await new Promise<IDBDatabase>((resolve, reject) => {
@@ -63,7 +81,7 @@ export async function openInputAggregationStore(scope: string): Promise<InputAgg
     });
   } catch (error) { release(); throw error; }
   db.onversionchange = () => { db.close(); release(); };
-  return {
+  const legacy: InputAggregationStore & { remove(): Promise<void> } = {
     read: () => new Promise((resolve, reject) => {
       const tx = db.transaction('snapshots', 'readonly');
       const request = tx.objectStore('snapshots').get(scope);
@@ -79,7 +97,19 @@ export async function openInputAggregationStore(scope: string): Promise<InputAgg
       tx.onerror = () => reject(tx.error);
     }),
     close: () => { db.close(); release(); },
+    remove: () => new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('snapshots', 'readwrite', { durability: 'strict' });
+      tx.objectStore('snapshots').delete(scope);
+      tx.oncomplete = () => resolve(); tx.onabort = tx.onerror = () => reject(tx.error);
+    }),
   };
+  if (!native) return legacy;
+  const target = nativeInputAggregationStore(scope, native, release);
+  try {
+    await migrateInputAggregationStore(legacy, target);
+    db.close();
+    return target;
+  } catch (error) { db.close(); release(); throw error; }
 }
 import { getOpenDesignHost, type OpenDesignHostBridge } from '@open-design/host';
 
