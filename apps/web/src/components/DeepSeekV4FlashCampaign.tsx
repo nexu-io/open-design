@@ -1,3 +1,4 @@
+import { lockWebModalScroll } from './modal-scroll-lock';
 import { useEffect, useId, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Dialog } from '@open-design/components';
@@ -182,12 +183,12 @@ export function DeepSeekV4FlashCampaign({
     if (!panel) return;
     const previouslyFocused =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const previousBodyOverflow = document.body.style.overflow;
+    const releaseScrollLock = lockWebModalScroll();
     panel.tabIndex = -1;
     panel.focus({ preventScroll: true });
-    document.body.style.overflow = 'hidden';
+
     return () => {
-      document.body.style.overflow = previousBodyOverflow;
+      releaseScrollLock();
       if (previouslyFocused?.isConnected) previouslyFocused.focus();
     };
   }, [analytics.track, audience, dialogId, modalOpen, paid]);

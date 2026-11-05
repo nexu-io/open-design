@@ -571,6 +571,16 @@ describe("DesignFilesPanel selection", () => {
 });
 
 describe("DesignFilesPanel page thumbnails", () => {
+  it.each(['fresh', 'cached'])("keeps %s motion video thumbnails under inactive host playback", async (sourceMode) => {
+    const source = '<!doctype html><html><head><meta name="od-motion-output" content="video"></head><body><main data-composition-id="main" data-duration="15" data-width="1920" data-height="1080"><audio src="sound.wav" data-duration="15"></audio></main></body></html>';
+    const motionFile = file({ name: `motion-${sourceMode}.html`, kind: 'html', mime: 'text/html', size: 16000, mtime: 1700000000000 });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(source, { status: 200 })));
+    if (sourceMode === 'cached') setHtmlSourceSnapshot({ authorizationScopeKey: 'local', projectId: 'test-project', fileName: motionFile.name, refreshKey: `${motionFile.mtime}:${motionFile.size}:0`, source });
+    const { container } = renderPanel([motionFile]);
+    await waitFor(() => {
+      expect(container.querySelector<HTMLIFrameElement>('.df-card-thumb iframe')?.srcdoc).toContain('window.__odMotionPreview=true');
+    });
+  });
   afterEach(() => cleanup());
 
   it("does not fetch or iframe large HTML files for the Design Files thumbnail", () => {

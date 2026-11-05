@@ -253,6 +253,33 @@ describe('compact home model list — a clicked model reaches the chip', () => {
     expect(rows[0]?.textContent).toContain(versionOf('deepseek-v4-flash'));
   });
 
+  it('exposes the full model name on hover for same-prefix long ids', () => {
+    // Same-prefix OpenRouter variants are indistinguishable once the row is
+    // ellipsised; hovering the row must name the exact model it would select.
+    const longPrefixAgent: AgentInfo = {
+      ...amrAgentAllEnabled,
+      models: [
+        {
+          id: 'openrouter/google/gemini-2.5-pro-preview-06-05',
+          label: 'openrouter/google/gemini-2.5-pro-preview-06-05',
+          enabled: true,
+          default: true,
+        },
+        {
+          id: 'openrouter/google/gemini-2.5-pro-preview-05-06',
+          label: 'openrouter/google/gemini-2.5-pro-preview-05-06',
+          enabled: true,
+        },
+      ],
+    };
+    render(<StatefulSwitcher agents={[longPrefixAgent]} />);
+    openSwitcher();
+
+    for (const model of longPrefixAgent.models ?? []) {
+      expect(compactRow(model.id).getAttribute('title')).toBe(model.label);
+    }
+  });
+
   it('writes nothing at all when a refused model is clicked', () => {
     // The refusal happens BEFORE the write, not after: without the gate the
     // click lands a locked model in the config (which `saveConfig` persists and

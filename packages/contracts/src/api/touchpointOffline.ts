@@ -101,9 +101,11 @@ export interface TouchpointSchedule {
 /**
  * Which activity a cached decision is for.
  *
- * All four are compared against a withdrawal receipt before anything is
- * deleted, so a receipt for a DIFFERENT activity can never take this one's
- * cache with it.
+ * The first three name the DELIVERY (activity, deployment, content version) and
+ * are what a withdrawal receipt is compared against before anything is
+ * deleted, so a receipt for a different delivery can never take this one's
+ * cache with it. `touchpointDecisionId` is the credential the delivery was
+ * last granted under; it rotates on renewal and is carried, not compared.
  */
 export interface TouchpointCachedIdentity {
 	activityId: string;
@@ -185,13 +187,22 @@ export function touchpointRevocationReceiptOf(body: unknown): TouchpointRevocati
 }
 
 /**
- * Whether a withdrawal receipt names the very activity a cached record holds.
+ * Whether a withdrawal receipt names the very delivery a cached record holds.
  *
- * Every field has to agree. A receipt that matches on activity but names
- * another deployment or another content version is about a different delivery
- * of that activity, and deleting on it would throw away a package that is still
- * authorized — the "an unmatched receipt must not delete someone else's
- * activity" rule, stated once, here, so both sides cannot drift.
+ * Activity, deployment and content version have to agree. A receipt that
+ * matches on activity but names another deployment or another content version
+ * is about a different delivery of that activity, and deleting on it would
+ * throw away a package that is still authorized — the "an unmatched receipt
+ * must not delete someone else's activity" rule, stated once, here, so both
+ * sides cannot drift.
+ *
+ * The decision credential is deliberately NOT compared. It rotates on every
+ * renewal of the same delivery (OPEND-3374), and the mounted UI keeps the
+ * credential it was first shown under, so the receipt the browser's
+ * `activeDecisionId` elicits routinely names an older credential than the one
+ * the cache last stored. Requiring it to agree would let a revoked delivery
+ * survive on disk under its newer credential and replay on the next offline
+ * start (OPEND-3436 AC6).
  */
 export const touchpointReceiptMatches = (
 	receipt: TouchpointRevocationReceipt,
@@ -199,8 +210,7 @@ export const touchpointReceiptMatches = (
 ): boolean =>
 	receipt.activityId === identity.activityId &&
 	receipt.deploymentId === identity.deploymentId &&
-	receipt.contentVersionId === identity.contentVersionId &&
-	receipt.touchpointDecisionId === identity.touchpointDecisionId;
+	receipt.contentVersionId === identity.contentVersionId;
 
 /**
  * Whether a 410 licenses destroying the cached package for the placement that

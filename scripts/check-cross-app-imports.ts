@@ -1,6 +1,7 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
-import ts from "typescript";
+import * as ts from "@typescript/native/unstable/ast";
+import { parseSource, forEachNativeSource } from "./lib/typescript/source.ts";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 
@@ -109,34 +110,13 @@ type CreateRequireBindings = {
   requireLikeIdentifiers: Set<string>;
 };
 
-function scriptKindForRepositoryPath(repositoryPath: string): ts.ScriptKind {
-  switch (path.extname(repositoryPath)) {
-    case ".js":
-      return ts.ScriptKind.JS;
-    case ".jsx":
-      return ts.ScriptKind.JSX;
-    case ".mjs":
-      return ts.ScriptKind.JS;
-    case ".cjs":
-      return ts.ScriptKind.JS;
-    case ".tsx":
-      return ts.ScriptKind.TSX;
-    case ".mts":
-      return ts.ScriptKind.TS;
-    case ".cts":
-      return ts.ScriptKind.TS;
-    default:
-      return ts.ScriptKind.TS;
-  }
-}
-
 function stringLiteralReference(node: ts.Node, sourceFile: ts.SourceFile): ImportSpecifierReference | null {
-  if (!ts.isStringLiteralLike(node)) return null;
+  if (!(ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))) return null;
   return { index: node.getStart(sourceFile), specifier: node.text };
 }
 
 function isNodeModuleSpecifier(node: ts.Node | undefined): boolean {
-  return node != null && ts.isStringLiteralLike(node) && (node.text === "node:module" || node.text === "module");
+  return node != null && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && (node.text === "node:module" || node.text === "module");
 }
 
 function isRequireNodeModuleCall(expression: ts.Expression): boolean {
@@ -169,42 +149,42 @@ function collectCreateRequireBindings(sourceFile: ts.SourceFile): CreateRequireB
       } else if (ts.isNamespaceImport(namedBindings)) {
         bindings.createRequireNamespaces.add(namedBindings.name.text);
       }
-    } else if (ts.isVariableDeclaration(node) && ts.isObjectBindingPattern(node.name)) {
+    } else if (ts.isVariableDeclaration(node) && node.name != null && ts.isObjectBindingPattern(node.name)) {
       if (node.initializer != null && isRequireNodeModuleCall(node.initializer)) {
         for (const element of node.name.elements) {
           const propertyName = element.propertyName != null && ts.isIdentifier(element.propertyName)
             ? element.propertyName.text
-            : ts.isIdentifier(element.name)
+            : element.name != null && ts.isIdentifier(element.name)
               ? element.name.text
               : null;
-          if (propertyName === "createRequire" && ts.isIdentifier(element.name)) {
+          if (propertyName === "createRequire" && element.name != null && ts.isIdentifier(element.name)) {
             bindings.createRequireIdentifiers.add(element.name.text);
           }
         }
       }
     } else if (
       ts.isVariableDeclaration(node) &&
-      ts.isIdentifier(node.name) &&
+      node.name != null && ts.isIdentifier(node.name) &&
       node.initializer != null &&
       isRequireNodeModuleCall(node.initializer)
     ) {
       bindings.createRequireNamespaces.add(node.name.text);
     }
 
-    ts.forEachChild(node, collectCreateRequireImports);
+    node.forEachChild(collectCreateRequireImports);
   };
 
   const collectRequireLikeIdentifiers = (node: ts.Node): void => {
     if (
       ts.isVariableDeclaration(node) &&
-      ts.isIdentifier(node.name) &&
+      node.name != null && ts.isIdentifier(node.name) &&
       node.initializer != null &&
       isCreateRequireCall(node.initializer, bindings)
     ) {
       bindings.requireLikeIdentifiers.add(node.name.text);
     }
 
-    ts.forEachChild(node, collectRequireLikeIdentifiers);
+    node.forEachChild(collectRequireLikeIdentifiers);
   };
 
   collectCreateRequireImports(sourceFile);
@@ -233,13 +213,7 @@ function isRequireResolveExpression(expression: ts.Expression, bindings: CreateR
 }
 
 function collectImportSpecifierReferences(repositoryPath: string, source: string): ImportSpecifierReference[] {
-  const sourceFile = ts.createSourceFile(
-    repositoryPath,
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    scriptKindForRepositoryPath(repositoryPath),
-  );
+  const sourceFile = parseSource(repositoryPath, source);
   const references: ImportSpecifierReference[] = [];
   const createRequireBindings = collectCreateRequireBindings(sourceFile);
 
@@ -274,7 +248,7 @@ function collectImportSpecifierReferences(repositoryPath: string, source: string
       }
     }
 
-    ts.forEachChild(node, visit);
+    node.forEachChild(visit);
   };
 
   visit(sourceFile);
@@ -288,13 +262,7 @@ export function collectCrossAppImportViolationsFromSource(
 ): CrossAppImportViolation[] {
   const violations: CrossAppImportViolation[] = [];
   const seen = new Set<string>();
-  const sourceFile = ts.createSourceFile(
-    repositoryPath,
-    source,
-    ts.ScriptTarget.Latest,
-    false,
-    scriptKindForRepositoryPath(repositoryPath),
-  );
+  const sourceFile = parseSource(repositoryPath, source);
 
   for (const reference of collectImportSpecifierReferences(repositoryPath, source)) {
     const dedupeKey = `${reference.index}\0${reference.specifier}`;
@@ -367,13 +335,18 @@ export async function checkCrossAppImports(): Promise<boolean> {
   const registry = await loadAppDirectoryRegistry();
   const violations: CrossAppImportViolation[] = [];
 
+  const sources = new Map<string, string>();
   for (const appDirectory of [...registry.packageNameByDirectory.keys()].sort()) {
     for (const fullPath of await collectAppSourceFiles(path.join(repoRoot, "apps", appDirectory))) {
       const repositoryPath = path.relative(repoRoot, fullPath).split(path.sep).join("/");
       const source = await readFile(fullPath, "utf8");
-      violations.push(...collectCrossAppImportViolationsFromSource(repositoryPath, source, registry));
+      sources.set(repositoryPath, source);
     }
   }
+
+  await forEachNativeSource(sources, (repositoryPath, source) => {
+    violations.push(...collectCrossAppImportViolationsFromSource(repositoryPath, source, registry));
+  });
 
   if (violations.length > 0) {
     console.error("Cross-app import boundary violations found:");

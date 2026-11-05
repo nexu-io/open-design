@@ -1,3 +1,4 @@
+import { orderProjectItems } from '../lib/project-order';
 import { reportProjectFailure } from '../observability/experience-diagnostics';
 import {
   type DragEvent,
@@ -22,15 +23,18 @@ import {
   type ProjectDisplayStatus,
   type TeamProject,
   type WorkspaceCollabContext,
-  workspaceContextHasTeamIdentity,
+  workspaceContextHasWorkspaceIdentity,
 } from '@open-design/contracts';
 import { Icon, type IconName } from './Icon';
 import {
+  hasAwaitingReplyTag,
   hasCompletionNotice,
+  ProjectAwaitingReplyTag,
   hasRunStatusGlyph,
   ProjectCompletionDot,
   ProjectFolderGlyph,
   ProjectRunStatusIcon,
+  STATUS_BALL_SIZE,
 } from './ProjectRunStatusIcon';
 import {
   ProjectHoverPreviewCard,
@@ -166,6 +170,9 @@ interface Props {
    * tab without exposing those tabs in another scope.
    */
   identityScopeKey?: string | null;
+  /** A witnessed public URL may remain on its exact file route after sign-out;
+   * the old account's tabs must still be discarded. */
+  preserveSignedOutShareRoute?: boolean;
   /**
    * Workspace headers for the per-project run lookups behind the dropdown's
    * status glyphs and the hover preview's cover read. Optional: without it the
@@ -796,7 +803,28 @@ function leadGlyphFor(
     return <ProjectFolderGlyph size={14} />;
   }
   return (
-    <ProjectRunStatusIcon status={status} size={14} label={t(STATUS_LABEL_KEYS[status])} />
+    <ProjectRunStatusIcon status={status} size={STATUS_BALL_SIZE} label={t(STATUS_LABEL_KEYS[status])} />
+  );
+}
+
+/**
+ * P0-24 推测项 A-09 (OPEND-4216): the visible 「需要你回复」 tag after the name,
+ * the same one the rail's rows draw.
+ */
+function awaitingReplyTagFor(
+  tab: WorkspaceChromeTab,
+  runStatusByProjectId: ReadonlyMap<string, ProjectDisplayStatus>,
+  t: ReturnType<typeof useT>,
+): ReactNode {
+  if (tab.kind !== 'project') return null;
+  const status = runStatusByProjectId.get(tab.projectId);
+  if (!status || !hasAwaitingReplyTag(status)) return null;
+  return (
+    <ProjectAwaitingReplyTag
+      className="workspace-tabs-dropdown__row-reply-tag"
+      label={t(STATUS_LABEL_KEYS[status])}
+      testId="workspace-tabs-dropdown-reply-tag"
+    />
   );
 }
 
@@ -860,6 +888,7 @@ export function WorkspaceTabsBar({
   activeProjectWorkspaceId,
   onboardingCompleted = false,
   identityScopeKey,
+  preserveSignedOutShareRoute = false,
   workspaceContext = null,
   onRenameProject,
   onDuplicateProject,
@@ -893,15 +922,6 @@ export function WorkspaceTabsBar({
   const [radialMenu, setRadialMenu] = useState<{ x: number; y: number } | null>(null);
   // Docked-mode white dropdown (project route): open state of its tab list.
   const [dockMenuOpen, setDockMenuOpen] = useState(false);
-  // Most-recently-activated tab ids, newest first — the dropdown lists tabs
-  // in this order (最近打开的在前). Session-local: falls back to strip order
-  // for tabs never activated since launch.
-  const tabMruRef = useRef<string[]>([]);
-  useEffect(() => {
-    const id = state.activeTabId;
-    if (!id) return;
-    tabMruRef.current = [id, ...tabMruRef.current.filter((x) => x !== id)].slice(0, 50);
-  }, [state.activeTabId]);
   const [radialHoverId, setRadialHoverId] = useState<string | null>(null);
   useEffect(() => {
     if (!radialMenu) setRadialHoverId(null);
@@ -1195,10 +1215,10 @@ export function WorkspaceTabsBar({
     };
   }, [dockActionsProjectId]);
 
-  // 转入团队空间 shows under the rail row menu's conditions: a team plane to
-  // move into AND the right to share. A personal workspace hides the item.
+  // 转入团队空间 follows the rail menu: an exact Workspace identity and the
+  // permission to share with its members are both required.
   const moveToTeamAvailable =
-    workspaceContextHasTeamIdentity(workspaceContext)
+    workspaceContextHasWorkspaceIdentity(workspaceContext)
     && workspaceContext?.permissions?.canShareProjects === true;
   // Shared / foreign rows are decided from the same evidence the rail uses —
   // the team hub's catalog — read once per dropdown open (coalesced and cached
@@ -1206,7 +1226,7 @@ export function WorkspaceTabsBar({
   // `useTeamProjects`, which would keep polling on the project route.
   const [teamCatalog, setTeamCatalog] = useState<readonly TeamProject[]>([]);
   useEffect(() => {
-    if (!dockMenuOpen || !workspaceContextHasTeamIdentity(workspaceContext) || !workspaceContext) {
+    if (!dockMenuOpen || !workspaceContextHasWorkspaceIdentity(workspaceContext) || !workspaceContext) {
       return undefined;
     }
     let cancelled = false;
@@ -1559,6 +1579,17 @@ export function WorkspaceTabsBar({
       setState(rehomed);
       return;
     }
+    // The anonymous scope can settle in multiple passes (account -> anon ->
+    // anonymous workspace). Keep only this witnessed public-link route while
+    // discarding every authenticated project tab on each pass.
+    if (nextAccountBucket === 'anon'
+      && preserveSignedOutShareRoute && route.kind === 'project') {
+      const anonymousTabs = freshHomeTabsState();
+      pendingScopeStateRef.current = { scopeKey: identityScopeKey, state: anonymousTabs };
+      pendingScopeRouteRef.current = null;
+      setState(anonymousTabs);
+      return;
+    }
 
     // Preserve the prior fail-closed authentication boundary: workspace
     // bouncing within one account is recoverable, but sign-out or an account
@@ -1583,6 +1614,7 @@ export function WorkspaceTabsBar({
     activeProjectWorkspaceId,
     identityScopeKey,
     onboardingActive,
+    preserveSignedOutShareRoute,
     persistedTabsStore,
     route,
   ]);
@@ -2101,17 +2133,13 @@ export function WorkspaceTabsBar({
       displayTabById.get(activeTab.id)
         ?? displayTabFor(activeTab, projectById, t, knownProjectNamesRef.current);
     const isEntryActive = activeTab.kind === 'entry';
-    // Most recently opened first. The active tab ranks first even before the
-    // MRU effect has run for it; never-activated tabs keep strip order after.
-    const mru = tabMruRef.current;
-    const mruRank = (tab: WorkspaceChromeTab): number => {
-      if (tab.id === state.activeTabId) return -1;
-      const index = mru.indexOf(tab.id);
-      return index === -1 ? Number.MAX_SAFE_INTEGER : index;
-    };
-    const projectTabs = state.tabs
-      .filter((tab) => tab.kind !== 'entry')
-      .sort((a, b) => mruRank(a) - mruRank(b));
+    const projectTabs = orderProjectItems(
+      state.tabs.filter((tab) => tab.kind !== 'entry'),
+      (tab) => tab.kind === 'project'
+        ? projectById.get(tab.projectId) ?? { id: tab.projectId }
+        : undefined,
+      activeTab.kind === 'project' ? activeTab.projectId : undefined,
+    );
     // The hovered row's project, if the ambient list actually carries it. A tab
     // can name a project this list has not loaded (deep link, other workspace);
     // that row simply previews nothing rather than showing an empty card.
@@ -2236,6 +2264,7 @@ export function WorkspaceTabsBar({
                         {leadGlyphFor(tab, display, runStatusByProjectId, t)}
                       </span>
                       <span className="workspace-tabs-dropdown__row-label">{display.title}</span>
+                      {awaitingReplyTagFor(tab, runStatusByProjectId, t)}
                       {completionNoticeFor(tab, runStatusByProjectId, t)}
                       {active ? (
                         <Icon name="check" size={14} className="workspace-tabs-dropdown__row-check" />
@@ -2684,6 +2713,8 @@ export function WorkspaceTabsBar({
       {deleteFlow.target && typeof document !== 'undefined' ? createPortal(
         <ProjectDeleteConfirmDialog
           projectName={deleteFlow.target.name}
+          activeShareCount={deleteFlow.activeShareCount}
+          shareReadStatus={deleteFlow.shareReadStatus}
           pending={deleteFlow.pending}
           failed={deleteFlow.failed}
           onCancel={deleteFlow.cancel}

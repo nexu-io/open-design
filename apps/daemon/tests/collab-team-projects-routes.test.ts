@@ -180,6 +180,9 @@ describe('GET /api/workspace/projects/team', () => {
           calls.push(workspaceId ?? '');
           return PROJECTS;
         },
+        ensurePrivate: async () => { throw new Error('list must not ensure'); },
+        setVisibility: async () => { throw new Error('list must not change policy'); },
+        getRegistration: async () => null,
         get: async () => null,
         upsert: async () => {},
         remove: async () => {},
@@ -282,14 +285,16 @@ describe('GET /api/workspace/projects/team', () => {
     expect(response.body).toEqual({ projects: [] });
   });
 
-  it('returns an empty list off-team without invoking Vela', async () => {
+  it('lists team projects for the verified personal-subscription workspace', async () => {
     const workspaceContext = personalContextProvider();
+    const list = vi.fn(async () => PROJECTS);
     const listTeamProjects = createTeamProjectsLister({
       env: { OD_WORKSPACE_CONTEXT_SOURCE: 'vela' },
       teamProjectCatalog: {
-        list: async () => {
-          throw new Error('catalog should not be read off-team');
-        },
+        list,
+        ensurePrivate: async () => { throw new Error('list must not ensure'); },
+        setVisibility: async () => { throw new Error('list must not change policy'); },
+        getRegistration: async () => null,
         get: async () => null,
         upsert: async () => {},
         remove: async () => {},
@@ -319,7 +324,7 @@ describe('GET /api/workspace/projects/team', () => {
       'x-od-workspace-member-id': 'wm-personal',
       'x-od-workspace-type': 'personal',
     });
-    expect(response.status).toBe(403);
-    expect(response.body).toMatchObject({ error: 'WORKSPACE_ACCESS_DENIED' });
+    expect(response).toEqual({ status: 200, body: { projects: PROJECTS } });
+    expect(list).toHaveBeenCalledExactlyOnceWith('personal-1');
   });
 });

@@ -12,6 +12,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Android mobile prototype</title>
   <style>
+    /* Native hidden remains authoritative over component flex/grid styles. */
+    [hidden]:not([hidden="until-found" i]) { display: none !important; }
+
     :root {
       --phone-screen-width: 412px;
       --phone-screen-height: 915px;
@@ -34,17 +37,17 @@
       padding: 32px;
       background:
         radial-gradient(circle at 50% 14%, rgba(255,255,255,.95), transparent 36%),
-        var(--phone-stage-bg);
+        var(--phone-stage-bg, #e8eaee);
       color: #191a1d;
       font-family: Roboto, "Noto Sans", system-ui, sans-serif;
     }
 
     .phone-frame {
       position: relative;
-      width: calc(var(--phone-screen-width) + var(--phone-bezel) * 2);
-      height: calc(var(--phone-screen-height) + var(--phone-bezel) * 2);
-      padding: var(--phone-bezel);
-      border-radius: var(--phone-outer-radius);
+      width: calc(var(--phone-screen-width, 412px) + var(--phone-bezel, 10px) * 2);
+      height: calc(var(--phone-screen-height, 915px) + var(--phone-bezel, 10px) * 2);
+      padding: var(--phone-bezel, 10px);
+      border-radius: var(--phone-outer-radius, 46px);
       background:
         linear-gradient(145deg, rgba(255,255,255,.2), transparent 18%),
         linear-gradient(155deg, #414348 0%, #23252a 44%, #0c0d10 100%);
@@ -82,11 +85,11 @@
 
     .phone-screen {
       position: relative;
-      width: var(--phone-screen-width);
-      height: var(--phone-screen-height);
+      width: var(--phone-screen-width, 412px);
+      height: var(--phone-screen-height, 915px);
       overflow: hidden;
-      border-radius: var(--phone-screen-radius);
-      background: var(--phone-screen-bg);
+      border-radius: var(--phone-screen-radius, 38px);
+      background: var(--phone-screen-bg, #f6f7f9);
       box-shadow: inset 0 0 0 1px rgba(255,255,255,.05);
     }
 
@@ -98,9 +101,9 @@
       overscroll-behavior: contain;
       -webkit-overflow-scrolling: touch;
       scrollbar-width: none;
-      padding-top: var(--phone-safe-top);
-      padding-bottom: var(--phone-safe-bottom);
-      background: var(--phone-screen-bg);
+      padding-top: var(--phone-safe-top, 52px);
+      padding-bottom: var(--phone-safe-bottom, 28px);
+      background: var(--phone-screen-bg, #f6f7f9);
     }
     .phone-content::-webkit-scrollbar { display: none; }
 
@@ -122,12 +125,12 @@
       position: absolute;
       z-index: 15;
       inset: 0 0 auto;
-      height: var(--phone-safe-top);
+      height: var(--phone-safe-top, 52px);
       display: grid;
       grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1fr);
       align-items: start;
       padding: 14px 19px 0;
-      color: var(--phone-system-fg);
+      color: var(--phone-system-fg, #17181a);
       pointer-events: none;
     }
     .status-time {
@@ -162,7 +165,7 @@
       height: 4px;
       transform: translateX(-50%);
       border-radius: 99px;
-      background: var(--phone-system-fg);
+      background: var(--phone-system-fg, #17181a);
       opacity: .86;
       pointer-events: none;
     }

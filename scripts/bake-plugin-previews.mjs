@@ -70,7 +70,10 @@ import { pathToFileURL } from 'node:url';
 //       in the URL hash, or web storage) reopened there after the reload — so
 //       24 of the official decks baked their agenda page as the poster instead
 //       of the cover (OPEND-2702). Bumped so every deck re-bakes.
-const BAKE_VERSION = 7;
+//   v8: return to the original preview URL after probing. A deck's hash-only
+//       replaceState resolves against the injected asset <base>, changing the
+//       pathname; reloading that URL baked the asset directory's 404 page.
+const BAKE_VERSION = 8;
 
 // ---- config ---------------------------------------------------------------
 const BASE_URL = process.env.BASE_URL || 'http://127.0.0.1:17579';
@@ -224,8 +227,9 @@ async function discoverIds() {
 // `od.preview.motion` ('scroll' | 'deck' | 'static'); we honor it first. When
 // absent, an `od.mode: deck` declaration is authoritative — vertically stacked
 // deck DOM must still be walked page-by-page, not recorded as one long scroll.
-// Everything else remains auto-detected. Returns id -> motion (missing => null).
-async function loadMotionMap() {
+// Everything else remains auto-detected. An opted-in GSAP preview can also
+// choose a still frame, so a long-running film never bakes its black end slate.
+async function loadPreviewOptions() {
   const map = {};
   try {
     const res = await fetch(`${BASE_URL}/api/plugins`);
@@ -234,13 +238,20 @@ async function loadMotionMap() {
     for (const it of items) {
       if (!it || typeof it !== 'object') continue;
       const id = it.id || it.slug;
-      const m = it.manifest?.od?.preview?.motion;
+      const preview = it.manifest?.od?.preview;
+      const m = preview?.motion;
       if (!id) continue;
+      const options = {};
       if (m === 'scroll' || m === 'deck' || m === 'static') {
-        map[id] = m;
+        options.motion = m;
       } else if (it.manifest?.od?.mode === 'deck') {
-        map[id] = 'deck';
+        options.motion = 'deck';
       }
+      if (typeof preview?.bakeStillAtSec === 'number'
+        && Number.isFinite(preview.bakeStillAtSec) && preview.bakeStillAtSec >= 0) {
+        options.bakeStillAtSec = preview.bakeStillAtSec;
+      }
+      if (Object.keys(options).length) map[id] = options;
     }
   } catch {}
   return map;
@@ -403,6 +414,18 @@ export function resetDeckEntryState() {
   return { hadHash, clearedStorage };
 }
 
+export async function resetDeckForCapture(page, previewUrl) {
+  await page.evaluate(resetDeckEntryState);
+  // Never reload page.url(): hash-routed templates can change its pathname
+  // through the injected <base>. Navigate back to the known entry instead.
+  const response = await page.goto(previewUrl,
+    { waitUntil: 'domcontentloaded', timeout: 25000 });
+  // Chromium may report the origin's 304 while rendering the cached HTML.
+  if (!response || (!response.ok() && response.status() !== 304)) {
+    throw new Error(`deck entry status ${response ? response.status() : 'none'}: ${previewUrl}`);
+  }
+}
+
 // Probe which input advances a fixed-viewport deck: press the arrow key, then
 // nudge the wheel, watching deckSignal for a real slide change. Returns 'arrow',
 // 'wheel', or null when nothing moves it (a single static screen). Advances the
@@ -472,11 +495,12 @@ async function cropDeckViewportToSlide(page, fallbackW, fallbackH) {
 }
 
 // ---- render + encode one plugin -------------------------------------------
-async function bakeOne(browser, id, hash, motion) {
+async function bakeOne(browser, id, hash, options) {
   const page = await browser.newPage();
   await page.setViewport({ width: RENDER_W, height: VIEW_H, deviceScaleFactor: 1 });
+  const previewUrl = `${BASE_URL}/api/plugins/${encodeURIComponent(id)}/preview`;
   try {
-    const res = await page.goto(`${BASE_URL}/api/plugins/${encodeURIComponent(id)}/preview`,
+    const res = await page.goto(previewUrl,
       { waitUntil: 'domcontentloaded', timeout: 25000 });
     if (!res || !res.ok()) { await page.close(); return { id, skipped: `status ${res ? res.status() : 'none'}` }; }
   } catch (e) { await page.close(); return { id, skipped: `load ${e.message}` }; }
@@ -484,7 +508,7 @@ async function bakeOne(browser, id, hash, motion) {
 
   // Capture mode: an explicit `od.preview.motion` declaration wins; otherwise
   // auto-detect.
-  let mode = motion;
+  let mode = options?.bakeStillAtSec != null ? 'static' : options?.motion;
   let deckDriver = null;
   if (mode === 'scroll' || mode === 'deck' || mode === 'static') {
     // Explicit declaration: a deck still needs its advancing input probed.
@@ -513,11 +537,15 @@ async function bakeOne(browser, id, hash, motion) {
   if (isDeck) {
     capW = DECK_W; capH = DECK_H;
     await page.setViewport({ width: capW, height: capH, deviceScaleFactor: 1 });
-    // The probe advanced the deck; the reload alone does not bring it back when
+    // The probe advanced the deck; navigation alone does not bring it back when
     // the deck remembers its slide (see resetDeckEntryState) — the poster is
     // the first captured frame, and it must be the cover.
-    try { await page.evaluate(resetDeckEntryState); } catch {}
-    try { await page.reload({ waitUntil: 'domcontentloaded', timeout: 25000 }); } catch {}
+    try {
+      await resetDeckForCapture(page, previewUrl);
+    } catch (error) {
+      await page.close();
+      return { id, skipped: `error deck entry reset: ${error.message}` };
+    }
     await sleep(1000);
   }
 
@@ -603,6 +631,28 @@ async function bakeOne(browser, id, hash, motion) {
   } catch {
     await page.close();
     return { id, skipped: 'preview readiness timeout' };
+  }
+
+  if (options?.bakeStillAtSec != null) {
+    // A chosen frame must be captured at the composition's native 16:9 size,
+    // after the page's own loading/font waits. Pause before seeking so the
+    // timeline cannot run on to its black end slate during the screencast.
+    capW = 1920; capH = 1080;
+    await page.setViewport({ width: capW, height: capH, deviceScaleFactor: 1 });
+    const sought = await page.evaluate((seconds) => {
+      const timeline = Object.values(window.__timelines ?? {})[0];
+      if (!timeline || typeof timeline.pause !== 'function'
+        || typeof timeline.time !== 'function') return false;
+      document.documentElement.classList.add('od-export');
+      timeline.pause();
+      timeline.time(seconds);
+      return Math.abs(timeline.time() - seconds) < 0.05;
+    }, options.bakeStillAtSec);
+    if (!sought) {
+      await page.close();
+      throw new Error(`could not seek ${id} to ${options.bakeStillAtSec}s for bake`);
+    }
+    await sleep(100);
   }
 
   if (isDeck) {
@@ -773,7 +823,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 const { default: puppeteer } = await import('puppeteer-core');
 mkdirSync(OUT, { recursive: true });
 const ids = await discoverIds();
-const motionMap = await loadMotionMap();
+const previewOptions = await loadPreviewOptions();
 console.log(`baking ${ids.length} plugin previews from ${BASE_URL} -> ${OUT} (concurrency ${CONCURRENCY})`);
 // Browser launch options, reused per worker below. NOT a single shared browser:
 // CDP screencast only follows the ACTIVE tab, so capturing a page in a shared
@@ -813,7 +863,9 @@ async function processOne(id, getBrowser) {
   let hash = null;
   try {
     const html = await (await fetch(`${BASE_URL}/api/plugins/${encodeURIComponent(id)}/preview`)).text();
-    hash = createHash('sha256').update(html).update(` ${BAKE_VERSION} ${motionMap[id] || ''}`).digest('hex').slice(0, 16);
+    const options = previewOptions[id];
+    const still = options?.bakeStillAtSec == null ? '' : ` still:${options.bakeStillAtSec}`;
+    hash = createHash('sha256').update(html).update(` ${BAKE_VERSION} ${options?.motion || ''}${still}`).digest('hex').slice(0, 16);
   } catch {}
   // No fingerprint -> no bake. Rendering anyway used to persist an entry with
   // `hash: null` and un-fingerprinted keys — metadata the reuse skip can never
@@ -840,7 +892,7 @@ async function processOne(id, getBrowser) {
     return;
   }
   let r;
-  try { r = await bakeOne(await getBrowser(), id, hash, motionMap[id]); } catch (e) { r = { id, skipped: `error ${e.message}` }; }
+  try { r = await bakeOne(await getBrowser(), id, hash, previewOptions[id]); } catch (e) { r = { id, skipped: `error ${e.message}` }; }
   if (r.skipped) {
     skip += 1;
     console.log(`  ~ ${id}: skip (${r.skipped})`);

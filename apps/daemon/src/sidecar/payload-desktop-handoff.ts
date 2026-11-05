@@ -42,6 +42,11 @@ const SIDECAR_ONLY_ENV_KEYS = [
   "OD_SIDECAR_IPC_PATH",
   "OD_SIDECAR_NAMESPACE",
   "OD_SIDECAR_SOURCE",
+  // Share Viewer debug override the packaged launcher forwarded to this
+  // daemon. The replacement desktop forwards its own launch override, if any;
+  // carrying this one over would make a one-off override sticky.
+  "OD_SHARE_VIEWER_URL",
+  "OD_SHARE_VIEWER_URLS",
   SIDECAR_ENV.TOOLS_DEV_PARENT_PID,
 ] as const;
 

@@ -134,8 +134,7 @@
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: var(--chat-text-strong);
-  color: var(--chat-bg);
+  background: transparent;
   cursor: pointer;
   transition: opacity var(--chat-dur-quick) var(--chat-ease-out);
 }
@@ -143,12 +142,9 @@
   opacity: 0.86;
 }
 .play svg {
-  width: 12px;
-  height: 12px;
-}
-/* 稿子 `.aud-b .ic-play { transform: translateX(1px) }` —— 三角形视觉重心偏左,右挪 1px 才居中 */
-.playGlyph {
-  transform: translateX(1px);
+  display: block;
+  width: 26px;
+  height: 26px;
 }
 
 /* 稿子 `.aud-x { width:26px; height:26px; border-radius: var(--radius-sm);

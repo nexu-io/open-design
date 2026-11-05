@@ -1,0 +1,213 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-motion-prompt-motion-gallery",
+  "title": "Prompt Motion Gallery",
+  "title_i18n": {
+    "en": "Prompt Motion Gallery",
+    "id": "Galeri Prompt Motion",
+    "de": "Prompt Motion Galerie",
+    "zh-CN": "Prompt Motion 作品浏览",
+    "zh-TW": "Prompt Motion 畫廊",
+    "pt-BR": "Prompt Motion Galeria",
+    "es-ES": "Prompt Motion Galería",
+    "ru": "Prompt Motion Галерея",
+    "fa": "Prompt Motion گالری",
+    "ar": "Prompt Motion معرض",
+    "ja": "Prompt Motion ギャラリー",
+    "ko": "Prompt Motion 갤러리",
+    "pl": "Prompt Motion Galeria",
+    "hu": "Prompt Motion Galéria",
+    "fr": "Prompt Motion Galerie",
+    "uk": "Prompt Motion Галерея",
+    "tr": "Prompt Motion Galeri",
+    "th": "Prompt Motion แกลลอรี่",
+    "it": "Galleria Prompt Motion"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-10-28T00:00:00Z",
+  "description": "Browse Prompt Motion and explore its morphing player and photo print demos.",
+  "description_i18n": {
+    "en": "Browse Prompt Motion and explore its morphing player and photo print demos.",
+    "id": "Jelajahi Prompt Motion dan jelajahi pemutar morphing dan demo cetak fotonya.",
+    "de": "Durchsuchen Sie Prompt Motion und entdecken Sie den Morphing-Player und die Fotodruck-Demos.",
+    "zh-CN": "浏览 Prompt Motion 作品墙，打开播放器变形与图片打印演示。",
+    "zh-TW": "瀏覽 Prompt Motion 並探索其變形播放器和照片打印演示。",
+    "pt-BR": "Navegue pelo Prompt Motion e explore seu player de transformação e demonstrações de impressão de fotos.",
+    "es-ES": "Explore Prompt Motion y explore su reproductor de transformación y demostraciones de impresión de fotografías.",
+    "ru": "Просмотрите Prompt Motion и изучите его демонстрационные версии проигрывателя морфинга и фотопечати.",
+    "fa": "Prompt Motion را مرور کنید و پخش کننده شکل‌گیری و نسخه‌های نمایشی چاپ عکس آن را کاوش کنید.",
+    "ar": "تصفح Prompt Motion واستكشف مشغل التحويل والعروض التوضيحية لطباعة الصور.",
+    "ja": "Prompt Motion を参照して、モーフィング プレーヤーと写真プリントのデモをご覧ください。",
+    "ko": "Prompt Motion을 찾아보고 모핑 플레이어와 사진 인쇄 데모를 살펴보세요.",
+    "pl": "Przeglądaj Prompt Motion i poznaj odtwarzacz morfingu oraz demonstracje drukowania zdjęć.",
+    "hu": "Böngésszen a Prompt Motion számon, és fedezze fel a lejátszót és a fotónyomtatási bemutatókat.",
+    "fr": "Parcourez Prompt Motion et explorez ses démos de lecteur de morphing et d'impression de photos.",
+    "uk": "Перегляньте Prompt Motion і вивчіть його демонстраційний програвач для морфінгу та друк фотографій.",
+    "tr": "Prompt Motion'ya göz atın ve geçiş oynatıcısını ve fotoğraf baskısı demolarını keşfedin.",
+    "th": "เรียกดู Prompt Motion และสำรวจโปรแกรมเล่น morphing และการสาธิตการพิมพ์ภาพถ่าย",
+    "it": "Sfoglia Prompt Motion ed esplora il suo lettore morphing e le demo della stampa fotografica."
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io/open-design"
+  },
+  "homepage": "https://github.com/nexu-io/open-design",
+  "tags": [
+    "example",
+    "first-party",
+    "video",
+    "motion-design",
+    "gallery",
+    "ui",
+    "morph",
+    "screen-recording"
+  ],
+  "od": {
+    "inputs": [
+      {
+        "name": "brand",
+        "type": "string",
+        "label": "Website name",
+        "default": "Prompt Motion",
+        "label_i18n": {
+          "en": "Website name",
+          "id": "Nama situs web",
+          "de": "Website-Name",
+          "zh-CN": "网站名称",
+          "zh-TW": "網站名稱",
+          "pt-BR": "Nome do site",
+          "es-ES": "Nombre del sitio web",
+          "ru": "Название сайта",
+          "fa": "نام وب سایت",
+          "ar": "اسم الموقع",
+          "ja": "ウェブサイト名",
+          "ko": "웹사이트 이름",
+          "pl": "Nazwa strony internetowej",
+          "hu": "Webhely neve",
+          "fr": "Nom du site Web",
+          "uk": "Назва сайту",
+          "tr": "Web sitesi adı",
+          "th": "ชื่อเว็บไซต์",
+          "it": "Nome del sito web"
+        }
+      },
+      {
+        "name": "headline",
+        "type": "string",
+        "label": "Page introduction",
+        "default": "A collection of motion videos made with Claude Opus 5.5, with the prompts and skills behind them.",
+        "label_i18n": {
+          "en": "Page introduction",
+          "id": "Pengenalan halaman",
+          "de": "Seiteneinleitung",
+          "zh-CN": "页面介绍",
+          "zh-TW": "頁面介紹",
+          "pt-BR": "Introdução da página",
+          "es-ES": "Introducción de la página",
+          "ru": "Введение страницы",
+          "fa": "معرفی صفحه",
+          "ar": "مقدمة الصفحة",
+          "ja": "ページ紹介",
+          "ko": "페이지 소개",
+          "pl": "Wprowadzenie strony",
+          "hu": "Oldal bemutatkozása",
+          "fr": "Présentation de la page",
+          "uk": "Вступ до сторінки",
+          "tr": "Sayfa tanıtımı",
+          "th": "แนะนำเพจ",
+          "it": "Introduzione alla pagina"
+        }
+      },
+      {
+        "name": "wordmark",
+        "type": "string",
+        "label": "Image application wordmark",
+        "default": "develop.",
+        "label_i18n": {
+          "en": "Image application wordmark",
+          "id": "Tanda kata aplikasi gambar",
+          "de": "Bildanwendungswortmarke",
+          "zh-CN": "图片应用字标",
+          "zh-TW": "圖像應用文字標記",
+          "pt-BR": "Marca nominativa do aplicativo de imagem",
+          "es-ES": "Marca denominativa de aplicación de imagen",
+          "ru": "Словесный знак приложения изображения",
+          "fa": "علامت کلمه برنامه تصویر",
+          "ar": "صورة نصية لتطبيق",
+          "ja": "画像アプリケーションのワードマーク",
+          "ko": "이미지 적용 워드마크",
+          "pl": "Znak słowny aplikacji obrazu",
+          "hu": "Képalkalmazás szójel",
+          "fr": "Mot-symbole de l'application d'image",
+          "uk": "Словесний знак програми зображення",
+          "tr": "Resim uygulaması kelime işareti",
+          "th": "เครื่องหมายคำแอปพลิเคชันรูปภาพ",
+          "it": "Marchio denominativo dell'applicazione immagine"
+        }
+      }
+    ],
+    "useCase": {
+      "query": {
+        "en": "Showcase {{brand}} with the introduction “{{headline}}” and a photo app called {{wordmark}}.",
+        "id": "Pamerkan {{brand}} dengan pengenalan “{{headline}}” dan aplikasi foto bernama {{wordmark}}.",
+        "de": "Präsentieren Sie {{brand}} mit der Einleitung „{{headline}}“ und einer Foto-App namens {{wordmark}}.",
+        "zh-CN": "为 {{brand}} 制作作品浏览演示，介绍为“{{headline}}”，图片应用字标为 {{wordmark}}。",
+        "zh-TW": "展示 {{brand}}，並介紹“{{headline}}”和一個名爲 {{wordmark}} 的照片應用程序。",
+        "pt-BR": "Vitrine {{brand}} com a introdução “{{headline}}” e um aplicativo de fotos chamado {{wordmark}}.",
+        "es-ES": "Muestra {{brand}} con la introducción “{{headline}}” y una aplicación de fotografía llamada {{wordmark}}.",
+        "ru": "Витрина {{brand}} с введением «{{headline}}» и приложением для фотографий под названием {{wordmark}}.",
+        "fa": "ویترین {{brand}} با مقدمه \"{{headline}}\" و یک برنامه عکس به نام {{wordmark}}.",
+        "ar": "عرض {{brand}} مع المقدمة \"{{headline}}\" وتطبيق الصور المسمى {{wordmark}}.",
+        "ja": "{{brand}} の紹介文「{{headline}}」と写真アプリ {{wordmark}} を紹介します。",
+        "ko": "'{{headline}}'이라는 소개와 함께 {{brand}}을 선보이고 {{wordmark}}라는 사진 앱을 선보입니다.",
+        "pl": "Prezentacja {{brand}} ze wstępem „{{headline}}” i aplikacją do zdjęć o nazwie {{wordmark}}.",
+        "hu": "{{brand}} kirakat a „{{headline}}” bevezetővel és a {{wordmark}} nevű fotóalkalmazással.",
+        "fr": "Présentez le {{brand}} avec l'introduction « {{headline}} » et une application photo appelée {{wordmark}}.",
+        "uk": "Покажіть номер {{brand}} із заголовком «{{headline}}» і додатком для фотографій під назвою {{wordmark}}.",
+        "tr": "\"{{headline}}\" tanıtımı ve {{wordmark}} adlı fotoğraf uygulamasıyla {{brand}}'yi sergileyin.",
+        "th": "Showcase {{brand}} พร้อมคำแนะนำ “{{headline}}” และแอปรูปภาพชื่อ {{wordmark}}",
+        "it": "Vetrina {{brand}} con l'introduzione \"{{headline}}\" e un'app fotografica chiamata {{wordmark}}."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Prompt Motion Gallery"
+        }
+      ]
+    },
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "poster": "./assets/cover.jpg"
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        },
+        {
+          "ref": "motion-design"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  },
+  "credits": [
+    {
+      "name": "@0xMovez 原参考视频",
+      "url": "https://x.com/0xMovez/status/2108170313557016623"
+    }
+  ]
+}

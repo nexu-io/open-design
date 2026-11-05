@@ -1663,13 +1663,33 @@ describe('brand routes', () => {
       skillsRoot,
       dataDir,
       db,
-      // The same production seam `server.ts` builds. Constructed with no
-      // membership-directory fetcher, which is
-      // `authorizeCreatedProjectWorkspace`'s documented local/dev
-      // compatibility configuration — so a verified header identity still
-      // binds here, while the resolver's verify-then-degrade contract is
-      // covered directly in `tests/collab/created-project-workspace.test.ts`.
-      resolveCreatedProjectHome: createCreatedProjectWorkspaceResolver({}),
+      // A scoped create must verify its exact membership before binding either
+      // the backing project or its draft design system.
+      resolveCreatedProjectHome: createCreatedProjectWorkspaceResolver({
+        fetchWorkspaceDirectory: async () => ({
+          ok: true,
+          items: [
+            {
+              workspaceId: 'ws-team-1',
+              workspaceName: 'Team 1',
+              workspaceType: 'team',
+              workspaceMemberId: 'member-owner',
+              role: 'member',
+              memberStatus: 'active',
+              lifecycleState: 'active',
+            },
+            {
+              workspaceId: 'ws-team-catalog',
+              workspaceName: 'Team Catalog',
+              workspaceType: 'team',
+              workspaceMemberId: 'member-catalog-owner',
+              role: 'owner',
+              memberStatus: 'active',
+              lifecycleState: 'active',
+            },
+          ],
+        }),
+      }),
       ...extraDeps,
     });
     const server = http.createServer(app);

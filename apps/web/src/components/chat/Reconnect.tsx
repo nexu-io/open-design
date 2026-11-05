@@ -53,6 +53,12 @@ export interface ReconnectProps {
    * 说「正在恢复网络连接」既不准确,又会把「线真的断了」这句话说漏。
    */
   reason?: ChatSelfHealReason;
+  /**
+   * 自动重跑的原因(只对 `agent-retry` 有意义)。`rate_limit` 时那一行说产品
+   * 《报错文案》S09a 那一格:「模型服务请求繁忙」+ 正文(OPEND-2849)。不传 = 原因
+   * 不是限流或不知道,照旧说「正在重试」。
+   */
+  retryCause?: 'rate_limit';
   /** 次数用尽:停止自动重连,交回给人(22-3)。 */
   exhausted?: boolean;
   /** 手动点击后的乐观反馈，尚不是传输层实际连接尝试。 */
@@ -75,6 +81,7 @@ export function Reconnect({
   exhausted = false,
   manualRetry = false,
   reason = 'transport',
+  retryCause,
   onReconnect,
   onShowDetail,
 }: ReconnectProps): ReactElement | null {
@@ -117,6 +124,7 @@ export function Reconnect({
    * 自动开始显示「1/2」,不用等谁想起来再改一次。传输层的 5 不受影响。
    */
   const showCount = max > 1;
+  const rateLimitedRetry = reason === 'agent-retry' && retryCause === 'rate_limit';
 
   return (
     <div className={styles.row} data-testid="chat-reconnect">
@@ -125,10 +133,23 @@ export function Reconnect({
       <span className={styles.copy}>
         <span className={styles.name}>
           <span className={record.shimmer}>
-            {t(reason === 'agent-retry' ? 'chat.edge.retrying' : 'chat.edge.reconnecting')}
+            {t(
+              reason === 'agent-retry'
+                ? rateLimitedRetry
+                  ? 'chat.edge.retryingRateLimitedTitle'
+                  : 'chat.edge.retrying'
+                : 'chat.edge.reconnecting',
+            )}
             {showCount ? <span className={styles.count}>{shown}/{max}</span> : null}
           </span>
         </span>
+        {rateLimitedRetry
+          ? (
+            <span className={styles.description}>
+              {t('chat.edge.retryingRateLimitedDescription')}
+            </span>
+          )
+          : null}
         {/* S29 正文只报实际计数；手动乐观反馈、agent 重跑及 offline 哨兵不报尝试。 */}
         {!manualRetry && reason !== 'agent-retry' && showCount
           ? (

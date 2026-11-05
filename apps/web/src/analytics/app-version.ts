@@ -20,5 +20,5 @@ export const APP_VERSION_PLACEHOLDER = '0.0.0';
 export function isResolvedAppVersion(version: string | null | undefined): boolean {
   if (version == null) return false;
   const trimmed = version.trim();
-  return trimmed.length > 0 && trimmed !== APP_VERSION_PLACEHOLDER;
+  return trimmed.length > 0 && trimmed !== APP_VERSION_PLACEHOLDER && trimmed !== 'unknown';
 }

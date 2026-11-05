@@ -19,11 +19,6 @@ const { getOpenDesignHostMock, verifiedDispose } = vi.hoisted(() => ({
 }));
 vi.mock("@open-design/host", () => ({ getOpenDesignHost: getOpenDesignHostMock }));
 vi.mock("../../src/providers/registry", () => ({ openExternalUrl: vi.fn(async () => true) }));
-vi.mock("../../src/components/HoverTouchpointOverlay", () => ({
-	HoverTouchpointOverlay: (props: { entry?: { id?: string } }) => (
-		<div data-testid="production-hover-overlay">{props.entry?.id}</div>
-	),
-}));
 vi.mock("../../src/components/touchpoint-component", async (importOriginal) => ({
 	...(await importOriginal<typeof import("../../src/components/touchpoint-component")>()),
 	verifyWebTouchpoint: vi.fn(async (entry: { id: string }) => ({
@@ -137,6 +132,7 @@ const router = (bodies: Record<string, unknown>) =>
 	});
 
 beforeEach(() => {
+	vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
 	vi.useFakeTimers({ shouldAdvanceTime: true });
 	vi.setSystemTime(new Date(T0));
 	getOpenDesignHostMock.mockReturnValue({ client: { type: "desktop", osLocale: "en-US" } });
@@ -212,7 +208,7 @@ describe("a cache-replayed activity keeps every production placement up", () => 
 		const fetchMock = router(bodies);
 		vi.stubGlobal("fetch", fetchMock);
 		render(<ProductionCampaignHover authenticated sessionSubject="account-a" />);
-		await screen.findByTestId("production-hover-overlay");
+		await screen.findByTestId("cms-hover-overlay-root");
 
 		fetchMock.mockImplementation(
 			router({
@@ -225,7 +221,7 @@ describe("a cache-replayed activity keeps every production placement up", () => 
 		});
 		const afterReplay = fetchMock.mock.calls.length;
 		await wellPastTheAuthorization();
-		expect(screen.getByTestId("production-hover-overlay")).toBeTruthy();
+		expect(screen.getByTestId("cms-hover-overlay-root")).toBeTruthy();
 		expect(fetchMock.mock.calls.length).toBe(afterReplay);
 	});
 
@@ -343,5 +339,47 @@ describe("a withdrawal reaches a screen only the daemon's cache is feeding", () 
 		// activity would sit here until `endsAt`.
 		expect(asked(fetchMock)).toBeGreaterThan(afterReplay);
 		await waitFor(() => expect(screen.queryByRole("dialog", { name: "Campaign" })).toBeNull());
+	});
+});
+
+
+// The receipt parser must agree with the daemon before any host can decide a
+// receipt is unrelated. An empty identity is unreadable and ends authority.
+describe.each([
+	{ name: "badge", Component: ProductionCampaignBadge, testId: "production-campaign-badge", placementKey: "opend.home.account-badge" },
+	{ name: "modal", Component: ProductionCampaignModal, testId: "campaign-custom-element", placementKey: "opend.home.campaign-modal" },
+	{ name: "hover", Component: ProductionCampaignHover, testId: "cms-hover-overlay-root", placementKey: "opend.home.hover-entry" },
+])("$name mounted Production receipt authority", ({ Component, testId, placementKey }) => {
+	it.each(["activityId", "deploymentId", "contentVersionId", "touchpointDecisionId", "all", "matching", "missing", "unrelated"] as const)("handles %s receipt without extending the lease", async (kind) => {
+		const fetchMock = router(Object.fromEntries([
+			placementKey,
+			...(placementKey === "opend.home.hover-entry" ? ["opend.home.hover-layer"] : []),
+		].map((key) => [key, live(key)])));
+		vi.stubGlobal("fetch", fetchMock);
+		render(<Component authenticated sessionSubject="account-a" />);
+		await screen.findByTestId(testId);
+		expect(document.querySelector("opend-touchpoint")).not.toBeNull();
+		const receipt = {
+			activityId: "activity-1", deploymentId: "deployment-1",
+			contentVersionId: `version-${placementKey}`, touchpointDecisionId: `decision-${placementKey}`,
+		};
+		for (const key of Object.keys(receipt) as Array<keyof typeof receipt>) {
+			if (kind === "all" || key === kind) receipt[key] = "";
+		}
+		if (kind === "unrelated") receipt.activityId = "other-activity";
+		fetchMock.mockImplementation((_input: RequestInfo | URL, init?: RequestInit) => Promise.resolve(
+			init?.method === "POST" ? json({}) : Response.json({
+				error: "production_runtime_revoked", receipt: kind === "missing" ? undefined : receipt,
+			}, { status: 410 }),
+		));
+		await act(async () => {
+			window.dispatchEvent(new Event("focus"));
+			await vi.advanceTimersByTimeAsync(0);
+		});
+		if (kind === "unrelated") expect(screen.getByTestId(testId)).toBeTruthy();
+		else {
+			expect(screen.queryByTestId(testId)).toBeNull();
+			expect(document.querySelector("opend-touchpoint")).toBeNull();
+		}
 	});
 });

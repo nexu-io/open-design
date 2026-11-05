@@ -5,6 +5,8 @@ import type {
   ProjectContentTransferState,
   ProjectVisibility,
   WorkspaceCollabContext,
+  OwnedProjectContentUpdate,
+  OwnedProjectContentUpdateRequest,
 } from '@open-design/contracts';
 import { resolveCollabSession } from './collab-session';
 import {
@@ -166,6 +168,10 @@ export function useWorkspaceContext(options: UseProjectCollabOptions = {}): Work
 }
 
 export interface ProjectCollab {
+  ownedContentUpdate?: OwnedProjectContentUpdate | null;
+  /** Local acceptance or daemon replacement is active; ownership is unchanged. */
+  contentUpdatePending?: boolean;
+  requestContentUpdate?: (request: OwnedProjectContentUpdateRequest) => Promise<OwnedProjectContentUpdate | null>;
   /** Whether collab (presence + sync) is active for this project + viewer. */
   enabled: boolean;
   /** The viewer's presence identity, when enabled. */
@@ -368,8 +374,17 @@ export function useProjectCollab(
   // unshared project is never read-only on this gate.
   const statusUnknown = decision.enabled && collab.syncState === null;
   const shared = collab.syncState !== 'local_only' && collab.syncState !== null;
-  const collabEnabled = decision.enabled && (statusUnknown || shared);
+  // A newly materialized owner device may retain a legacy local_only stamp.
+  // The daemon's scoped owner update is also authoritative shared-project evidence.
+  const collabEnabled = decision.enabled && (statusUnknown || shared || collab.ownedContentUpdate != null);
   const isOwner = collab.ownerMemberId != null && collab.ownerMemberId === context?.workspaceMemberId;
+  // Page-entry checking is distinct from member mirror polling. The daemon
+  // decides whether the owner needs confirmation or has a 24h authorization.
+  const requestContentUpdate = collab.requestContentUpdate;
+  useEffect(() => {
+    if (!decision.enabled || !isOwner || typeof requestContentUpdate !== 'function') return;
+    void requestContentUpdate({ action: 'check' }).catch(() => undefined);
+  }, [projectId, workspaceIdentity, decision.enabled, isOwner, requestContentUpdate]);
   // A project this browser tab created moments ago was not shared at create
   // time. Scope the signal to the exact Workspace identity used by the create
   // request so switching to a different Workspace with the same project id
@@ -492,6 +507,8 @@ export function useProjectCollab(
       options.initialMaterializationPending === true
       && collab.statusPollGeneration === 0
     );
+  const contentUpdatePending = collab.contentUpdatePending
+    || collab.ownedContentUpdate?.state === 'downloading';
   const writerAuthority = resolveProjectWriterAuthority({
     workspaceReadOnly,
     workspaceContextReadOnly,
@@ -501,7 +518,7 @@ export function useProjectCollab(
     knownOwnedByViewer,
     createdByViewerThisSession,
     daemonConfirmedPersonal,
-    materializationPending,
+    materializationPending: materializationPending || contentUpdatePending,
     syncState: collab.syncState,
   });
   // Positive non-owner evidence only — sticky UX (default-collapsed chat) must
@@ -635,6 +652,9 @@ export function useProjectCollab(
   });
 
   return {
+    ownedContentUpdate: collab.ownedContentUpdate ?? null,
+    contentUpdatePending,
+    requestContentUpdate: collab.requestContentUpdate,
     enabled: collabEnabled,
     member,
     present: collab.present,

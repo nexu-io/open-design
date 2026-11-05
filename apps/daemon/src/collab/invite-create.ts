@@ -24,6 +24,7 @@ function createInvitePath(workspaceId: string): string {
 
 export interface CreateWorkspaceInviteInput {
   email: string;
+  idempotencyKey?: string;
   role: WorkspaceInviteRole;
   /** The workspace the invite is scoped to (derived from the caller's context). */
   workspaceId: string;
@@ -38,6 +39,8 @@ export interface CreateWorkspaceInviteOptions {
   fetch?: typeof fetch;
   /** Injectable for tests; defaults to reading ~/.amr / env. */
   readSession?: typeof readVelaControlApiContext;
+  /** Settings-selected AMR account used by the authorizing workspace directory. */
+  configuredEnv?: Record<string, string>;
   timeoutMs?: number;
 }
 
@@ -62,7 +65,7 @@ export async function createWorkspaceInvite(
   const workspaceId = input.workspaceId.trim();
   if (!workspaceId) return { ok: false, status: 409, error: 'no_workspace' };
 
-  const session = readSession();
+  const session = readSession(process.env, options.configuredEnv ?? {});
   if (!session || !session.controlKey || !session.apiUrl) {
     return { ok: false, status: 401, error: 'no_session' };
   }
@@ -75,6 +78,7 @@ export async function createWorkspaceInvite(
       headers: {
         authorization: `Bearer ${session.controlKey}`,
         'content-type': 'application/json',
+        ...(input.idempotencyKey ? { 'Idempotency-Key': input.idempotencyKey } : {}),
       },
       body: JSON.stringify({ invitedEmail: email, role: input.role }),
       signal: controller.signal,
@@ -93,7 +97,7 @@ export async function createWorkspaceInvite(
       };
     }
     const body = (await response.json().catch(() => null)) as
-      | { inviteId?: unknown; id?: unknown }
+      | { inviteId?: unknown; id?: unknown; deliveryStatus?: unknown }
       | null;
     const inviteId =
       typeof body?.inviteId === 'string'
@@ -101,6 +105,18 @@ export async function createWorkspaceInvite(
         : typeof body?.id === 'string'
           ? body.id
           : '';
+    if (!inviteId.trim()) {
+      return { ok: false, status: 502, error: 'create_invalid_response' };
+    }
+    if (body?.deliveryStatus === 'pending') {
+      return { ok: false, status: 502, error: 'delivery_pending' };
+    }
+    if (body?.deliveryStatus === 'delivery_failed') {
+      return { ok: false, status: 502, error: 'delivery_failed' };
+    }
+    if (body?.deliveryStatus !== 'sent') {
+      return { ok: false, status: 502, error: 'create_invalid_response' };
+    }
     return { ok: true, inviteId };
   } catch {
     return { ok: false, status: 502, error: 'create_unreachable' };

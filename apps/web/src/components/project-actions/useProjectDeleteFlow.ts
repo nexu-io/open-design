@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import type { TrackingProjectCollectionPage } from '@open-design/contracts/analytics';
 
@@ -9,6 +9,8 @@ import {
   workspaceAnalyticsDimensions,
 } from '../../analytics/workspace';
 import type { Project } from '../../types';
+import { useProjectShareHistoryState } from '../share/useProjectShareHistory';
+import { currentWorkspaceAccountGeneration } from '../../collab/workspace-identity';
 
 /** Return `false` (or reject) when the daemon refused or the request failed;
  *  anything else means the project is gone. */
@@ -33,10 +35,17 @@ export function useProjectDeleteFlow(input: {
   const analytics = useAnalytics();
   const [target, setTarget] = useState<Project | null>(null);
   const [pending, setPending] = useState(false);
+  const inFlight = useRef(false);
   const [failed, setFailed] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const accountGeneration = currentWorkspaceAccountGeneration();
+  const { history, status } = useProjectShareHistoryState(target && workspaceContext ? target.id : undefined, workspaceContext, 'delete-confirmation');
+  const shareReadStatus = target && !workspaceContext ? 'error' : status;
+  const activeShareCount = history ? history.publications.filter(publication => publication.status === 'active').length : null;
 
   const request = useCallback((project: Project) => {
     setFailed(false);
+    setErrorMessage(null);
     setTarget(project);
   }, []);
 
@@ -44,13 +53,17 @@ export function useProjectDeleteFlow(input: {
     if (pending) return;
     setTarget(null);
     setFailed(false);
+    setErrorMessage(null);
   }, [pending]);
 
   const commit = useCallback(async () => {
-    if (!target || !onDelete || pending) return;
+    if (!target || !onDelete || pending || inFlight.current || shareReadStatus !== 'ready' || activeShareCount === null
+      || accountGeneration !== currentWorkspaceAccountGeneration()) return;
+    inFlight.current = true;
     const startedAt = performance.now();
     const workspaceDimensions = workspaceAnalyticsDimensions(workspaceContext);
     setFailed(false);
+    setErrorMessage(null);
     setPending(true);
     try {
       const result = await onDelete(target.id);
@@ -85,6 +98,7 @@ export function useProjectDeleteFlow(input: {
     } catch (err) {
       console.warn('[useProjectDeleteFlow] delete project failed:', err);
       setFailed(true);
+      setErrorMessage(err instanceof Error ? err.message : null);
       trackWorkspaceProjectActionResult(analytics.track, {
         page_name: analyticsPage,
         area: 'project_collection',
@@ -98,9 +112,10 @@ export function useProjectDeleteFlow(input: {
         ...workspaceDimensions,
       });
     } finally {
+      inFlight.current = false;
       setPending(false);
     }
-  }, [analytics.track, analyticsPage, onDelete, pending, target, workspaceContext]);
+  }, [activeShareCount, accountGeneration, analytics.track, analyticsPage, onDelete, pending, shareReadStatus, target, workspaceContext]);
 
-  return { target, pending, failed, request, cancel, commit };
+  return { target, pending, failed, errorMessage, activeShareCount, shareReadStatus, request, cancel, commit };
 }

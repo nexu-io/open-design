@@ -100,6 +100,54 @@ describe('OD Next frozen user-selected Skill package', () => {
     db.close();
   });
 
+  it.each(['JSON indentation', 'JSON key order', 'Base64 padding'] as const)(
+    'reads, renders and materializes the same frozen Skill after %s changes',
+    async (representation) => {
+      const skill = await fixtureSkill();
+      const frozen = await captureFrozenSkillPackage({ skillId: skill.id, catalog: [skill] });
+      const db = packageDb();
+      try {
+        insertFrozenSkillPackage(db, 'task-1', frozen);
+        let payload: string;
+        if (representation === 'JSON indentation') {
+          payload = JSON.stringify(frozen, null, 2);
+        } else if (representation === 'JSON key order') {
+          payload = JSON.stringify({
+            selections: frozen.selections,
+            schema: frozen.schema,
+            identity: frozen.identity,
+          });
+        } else {
+          const row = db.prepare(
+            'SELECT payload_json AS payload FROM strategy_task_frozen_skill_packages WHERE task_execution_id = ?',
+          ).get('task-1') as { payload: string };
+          const encoded = frozen.selections[0]!.files[0]!.bytesBase64;
+          const unpadded = encoded.replace(/=+$/, '');
+          expect(unpadded).not.toBe(encoded);
+          payload = row.payload.replace(JSON.stringify(encoded), JSON.stringify(unpadded));
+        }
+        db.prepare(
+          'UPDATE strategy_task_frozen_skill_packages SET payload_json = ? WHERE task_execution_id = ?',
+        ).run(payload, 'task-1');
+
+        const restarted = getFrozenSkillPackage(db, 'task-1');
+        expect(restarted.identity).toBe(frozen.identity);
+        expect(renderFrozenSkillRosterContext(restarted)).toBe(renderFrozenSkillRosterContext(frozen));
+        expect(resolveFrozenSkillBundleBodies(restarted)).toEqual(resolveFrozenSkillBundleBodies(frozen));
+        const cwd = await mkdtemp(path.join(os.tmpdir(), 'od-frozen-representation-'));
+        temporaryRoots.push(cwd);
+        const aliases = await materializeFrozenSkillPackage({ frozen: restarted, cwd });
+        expect(aliases).toHaveLength(1);
+        expect(await readFile(path.join(cwd, aliases[0]!, 'SKILL.md'), 'utf8'))
+          .toBe(frozen.selections[0]!.body);
+        expect(await readFile(path.join(cwd, aliases[0]!, 'references/guide.md'), 'utf8'))
+          .toBe('frozen guide\n');
+      } finally {
+        db.close();
+      }
+    },
+  );
+
   it('fails closed on persisted tampering, unknown Skills, and side-file symlinks', async () => {
     const skill = await fixtureSkill();
     const frozen = await captureFrozenSkillPackage({ skillId: skill.id, catalog: [skill] });

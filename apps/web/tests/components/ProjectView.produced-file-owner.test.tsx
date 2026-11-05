@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProjectView } from '../../src/components/ProjectView';
 import { streamViaDaemon, type DaemonStreamOptions } from '../../src/providers/daemon';
 import { I18nProvider } from '../../src/i18n';
+import { fetchProjectFiles } from '../../src/providers/registry';
 import { listMessages, saveMessage } from '../../src/state/projects';
 import type { AppConfig, ChatMessage, Project, ProjectFile } from '../../src/types';
 
@@ -27,6 +28,7 @@ vi.mock('../../src/providers/registry', async () => {
   );
   return {
     ...actual,
+    fetchProjectFiles: vi.fn(actual.fetchProjectFiles),
     fetchDesignSystem: vi.fn().mockResolvedValue(null),
     fetchProjectDesignSystemPackageAudit: vi.fn().mockResolvedValue(null),
     fetchLiveArtifacts: vi.fn().mockResolvedValue([]),
@@ -45,6 +47,9 @@ vi.mock('../../src/state/projects', async () => {
   );
   return {
     ...actual,
+  registerQueuedSubmission: vi.fn(async (projectId, submission) => ({
+    id: submission.id, projectId, conversationId: submission.conversationId, acceptedAt: submission.submittedAt,
+  })),
     createConversation: vi.fn(),
     listPlugins: vi.fn().mockResolvedValue([]),
     getTemplate: vi.fn().mockResolvedValue(null),
@@ -265,6 +270,7 @@ afterEach(() => {
   cleanup();
   resolveStream?.();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe('ProjectView run-produced file ownership (OPEND-2928)', () => {
@@ -302,6 +308,30 @@ describe('ProjectView run-produced file ownership (OPEND-2928)', () => {
 });
 
 const persistedArtifactHtml = '<!doctype html><html><head><title>Landing</title></head><body><main><h1>Landing page</h1><p>Generated design artifact with enough structure to persist.</p></main></body></html>';
+
+describe('ProjectView post-run file-list observation', () => {
+  it('attributes and opens an external image write even inside a previous forced-read burst', async () => {
+    const options = await startRun();
+    // Only the coalescer's monotonic clock is fixed. React and its deferred
+    // work retain the real event loop; there is no sleep or timing lottery.
+    vi.spyOn(performance, 'now').mockReturnValue(100);
+    await fetchProjectFiles(project.id, { fresh: true });
+    vi.mocked(fetchProjectFiles).mockClear();
+    files = [...files, {
+      name: 'generated.png', path: 'generated.png', kind: 'image',
+      mime: 'image/png', size: 24, mtime: Date.now(),
+    }];
+
+    await finishRun(options, ['generated.png']);
+
+    expect(fetchProjectFiles).toHaveBeenCalledWith(project.id, expect.objectContaining({
+      afterChange: true, requireAuthoritative: true,
+    }));
+    await waitFor(() => expect(screen.getByRole('tab', { name: /generated\.png/i }))
+      .toHaveAttribute('aria-selected', 'true'));
+    await expectAttribution(['generated.png']);
+  });
+});
 
 describe('ProjectView producer evidence compatibility (OPEND-2928)', () => {
   for (const tool of ['Bash', 'apply_patch'] as const) {

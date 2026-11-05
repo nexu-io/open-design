@@ -33,6 +33,7 @@ export const SIDECAR_SUPERVISED_CONTEXT_ENV = "OD_SIDECAR_SUPERVISED_CONTEXT";
 
 export type SupervisedSidecarContext = Readonly<{
   generationPid: number;
+  adoptedPid?: number;
   resources: unknown;
   stamp: SidecarStamp;
 }>;
@@ -85,11 +86,12 @@ export function serializeSupervisedSidecarContext(
   stampInput: SidecarStamp,
   generationPid: number,
   resources: unknown,
+  adoptedPid?: number,
 ): string {
   if (!Number.isSafeInteger(generationPid) || generationPid <= 0) {
     throw new Error("sidecar generation pid must be a positive safe integer");
   }
-  return JSON.stringify({ generationPid, resources, stamp: normalizeSidecarStamp(stampInput) });
+  return JSON.stringify({ generationPid, resources, stamp: normalizeSidecarStamp(stampInput), ...(adoptedPid == null ? {} : { adoptedPid }) });
 }
 
 export function readSupervisedSidecarContext(
@@ -113,6 +115,7 @@ export function readSupervisedSidecarContext(
   }
   return Object.freeze({
     generationPid,
+    ...(Number.isSafeInteger(context.adoptedPid) && Number(context.adoptedPid) > 1 ? { adoptedPid: Number(context.adoptedPid) } : {}),
     resources: context.resources,
     stamp: normalizeSidecarStamp(context.stamp),
   });
@@ -164,7 +167,13 @@ export function resolvePrivateIpcPath(stamp: SidecarStamp, platform: NodeJS.Plat
       })()
     : String(process.getuid?.() ?? process.env.USER ?? "unknown");
   const digest = createHash("sha256").update(`${principal}\n${sidecarStampKey(stamp)}`).digest("hex").slice(0, 32);
-  return platform === "win32"
-    ? `\\\\.\\pipe\\open-design-sidecar-${digest}`
-    : join(tmpdir(), `od-sidecar-${principal}`, `${digest}.sock`);
+  if (platform === "win32") return `\\\\.\\pipe\\open-design-sidecar-${digest}`;
+  const endpoint = join(tmpdir(), `od-sidecar-${principal}`, `${digest}.sock`);
+  // macOS sun_path allows 103 path bytes plus a null terminator.
+  return platform === 'darwin' && Buffer.byteLength(endpoint) > 103
+    ? join('/tmp', `od-sidecar-${principal}`, `${digest}.sock`)
+    : endpoint;
 }
+
+/** Internal supervisor relationship, never part of the five-field resource stamp. */
+export const SIDECAR_ADOPT_PARENT_ARG = "--od-supervisor-adopt-parent";

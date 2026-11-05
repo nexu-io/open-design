@@ -28,63 +28,62 @@ function labelFor(chipId: string): string {
 }
 
 describe('TemplatePicker', () => {
-  it('opens all categories and switches the committed template', () => {
+  it('opens the selected type dropdown and keeps the independent clear action', () => {
     const onPick = vi.fn();
-    render(
-      <TemplatePicker
-        templates={templates}
-        onPick={onPick}
-        activeChipId="deck"
-        labelFor={labelFor}
-      />,
-    );
+    const onClear = vi.fn();
+    render(<TemplatePicker templates={templates} onPick={onPick} onClear={onClear}
+      activeChipId="deck" labelFor={labelFor} />);
 
     expect(screen.getByTestId('home-hero-template-picker').className).toContain('has-selection');
-    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain(labelFor('deck'));
-
-    fireEvent.click(screen.getByTestId('home-hero-template-trigger').querySelector('button')!);
-    expect(screen.getAllByRole('option')).toHaveLength(templates.length);
+    fireEvent.click(screen.getByText(labelFor('deck')));
+    expect(screen.getByRole('listbox')).toBeTruthy();
     expect(screen.getByRole('option', { name: labelFor('deck') }).getAttribute('aria-selected')).toBe('true');
     fireEvent.click(screen.getByRole('option', { name: labelFor('prototype') }));
     expect(onPick).toHaveBeenCalledWith(chipById('prototype'));
-    expect(screen.queryByRole('listbox')).toBeNull();
-
+    expect(onClear).not.toHaveBeenCalled();
   });
 
   it('offers the dropdown before a type is selected', () => {
+    const onPick = vi.fn();
     render(
-      <TemplatePicker templates={templates} activeChipId={null} labelFor={labelFor} />,
+      <TemplatePicker templates={templates} activeChipId={null} onPick={onPick} labelFor={labelFor} />,
     );
 
     fireEvent.click(screen.getByTestId('home-hero-template-trigger').querySelector('button')!);
     expect(screen.getAllByRole('option')).toHaveLength(templates.length);
     expect(screen.getAllByRole('option').every((option) => option.getAttribute('aria-selected') === 'false')).toBe(true);
+    fireEvent.click(screen.getByRole('option', { name: labelFor('prototype') }));
+    expect(onPick).toHaveBeenCalledWith(chipById('prototype'));
+    expect(screen.queryByRole('listbox')).toBeNull();
   });
 
-  it('keeps the leading icon without a clear control', () => {
+  it('clears the selected type without opening its switch menu', () => {
+    const onClear = vi.fn();
     render(
       <TemplatePicker
         templates={templates}
         activeChipId="deck"
+        onClear={onClear}
         labelFor={labelFor}
       />,
     );
 
     fireEvent.mouseOver(screen.getByTestId('home-hero-template-picker'));
-    expect(screen.queryByTestId('home-hero-template-clear')).toBeNull();
-  });
-
-  it('does not reapply an already selected type', () => {
-    const onPick = vi.fn();
-    render(<TemplatePicker templates={templates} activeChipId="prototype" onPick={onPick} labelFor={labelFor} />);
-    fireEvent.click(screen.getByTestId('home-hero-template-trigger').querySelector('button')!);
-    fireEvent.click(screen.getByRole('option', { name: labelFor('prototype') }));
-    expect(onPick).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('home-hero-template-clear'));
+    expect(onClear).toHaveBeenCalledOnce();
     expect(screen.queryByRole('listbox')).toBeNull();
   });
 
+  it('does not clear a type while selection is disabled', () => {
+    const onClear = vi.fn();
+    render(<TemplatePicker templates={templates} activeChipId="prototype" onClear={onClear}
+      labelFor={labelFor} disabled />);
+    fireEvent.click(screen.getByTestId('home-hero-template-clear'));
+    expect(onClear).not.toHaveBeenCalled();
+  });
+
   it('dismisses on outside pointer down and restores focus on Escape', () => {
-    render(<TemplatePicker templates={templates} activeChipId="prototype" labelFor={labelFor} />);
+    render(<TemplatePicker templates={templates} activeChipId={null} labelFor={labelFor} />);
     const trigger = screen.getByTestId('home-hero-template-trigger').querySelector('button')!;
     fireEvent.click(trigger);
     fireEvent.pointerDown(document.body);
@@ -100,7 +99,7 @@ describe('TemplatePicker', () => {
       useLayoutEffect(() => {
         if (!disabled) screen.getByTestId('home-hero-template-trigger').querySelector('button')!.click();
       }, [disabled]);
-      return <TemplatePicker templates={templates} activeChipId="prototype" labelFor={labelFor} disabled={disabled} />;
+      return <TemplatePicker templates={templates} activeChipId={null} labelFor={labelFor} disabled={disabled} />;
     }
     const { rerender } = render(<ReadyPicker disabled />);
     rerender(<ReadyPicker disabled={false} />);
@@ -108,7 +107,7 @@ describe('TemplatePicker', () => {
   });
 
   it('closes an open menu when loading disables the picker', () => {
-    const props = { templates, activeChipId: 'prototype', labelFor };
+    const props = { templates, activeChipId: null, labelFor };
     const { rerender } = render(<TemplatePicker {...props} />);
     fireEvent.click(screen.getByTestId('home-hero-template-trigger').querySelector('button')!);
     expect(screen.getByRole('listbox')).toBeTruthy();
@@ -117,33 +116,19 @@ describe('TemplatePicker', () => {
     expect(screen.getByTestId('home-hero-template-trigger').querySelector('button')!.disabled).toBe(true);
   });
 
-  it('keeps a menu opened after a committed type change open', () => {
-    // On a loaded machine React commits a render and runs its passive effects
-    // in separate tasks, so a click can land on a trigger that already shows
-    // the new type before that commit's effects run. Opening the menu there is
-    // a fresh intent; the type change the user already saw must not close it.
-    // The layout effect below clicks at exactly that point: after the commit,
-    // before its passive effects.
-    function ClickAfterCommit({ activeChipId }: { activeChipId: string | null }) {
-      useLayoutEffect(() => {
-        if (activeChipId !== 'prototype') return;
-        screen.getByTestId('home-hero-template-trigger').querySelector('button')!.click();
-      }, [activeChipId]);
-      return null;
-    }
-    function Host({ activeChipId }: { activeChipId: string | null }) {
-      return (
-        <>
-          <TemplatePicker templates={templates} activeChipId={activeChipId} labelFor={labelFor} />
-          <ClickAfterCommit activeChipId={activeChipId} />
-        </>
-      );
-    }
-    const { rerender } = render(<Host activeChipId={null} />);
-    rerender(<Host activeChipId="prototype" />);
+  it('closes the picker when a type is committed and restores it after clearing', () => {
+    const { rerender } = render(<TemplatePicker templates={templates} activeChipId={null} labelFor={labelFor} />);
+    fireEvent.click(screen.getByTestId('home-hero-template-trigger').querySelector('button')!);
+    expect(screen.getByRole('listbox')).toBeTruthy();
 
-    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain(labelFor('prototype'));
-    expect(screen.queryByTestId('home-hero-template-menu')).not.toBeNull();
+    rerender(<TemplatePicker templates={templates} activeChipId="prototype" labelFor={labelFor} />);
+    expect(screen.queryByRole('listbox')).toBeNull();
+    fireEvent.click(screen.getByText(labelFor('prototype')));
+    expect(screen.getByRole('listbox')).toBeTruthy();
+
+    rerender(<TemplatePicker templates={templates} activeChipId={null} labelFor={labelFor} />);
+    fireEvent.click(screen.getByTestId('home-hero-template-trigger').querySelector('button')!);
+    expect(screen.getByRole('listbox')).toBeTruthy();
   });
 
   it('offers no clear when the host supplies no handler', () => {

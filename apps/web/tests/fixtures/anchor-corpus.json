@@ -1,0 +1,1146 @@
+{
+  "$schema": "anchor-corpus/v1",
+  "generatedFrom": "apps/web/src/comments.ts#resolveCommentAnchor",
+  "note": "Generated output — do not hand-edit. Re-run the generator and commit the diff. A change here means anchoring behaviour changed, which both ends must adopt together.",
+  "cases": [
+    {
+      "name": "exact-hit",
+      "why": "Element still present with a valid box — the ordinary case.",
+      "input": {
+        "comment": {
+          "id": "c1",
+          "projectId": "p1",
+          "conversationId": "conv1",
+          "filePath": "index.html",
+          "elementId": "el-1",
+          "selector": "[data-od-id=\"el-1\"]",
+          "label": "h1",
+          "text": "Hello world",
+          "htmlHint": "<h1 data-od-id=\"el-1\">",
+          "position": {
+            "x": 100,
+            "y": 100,
+            "width": 50,
+            "height": 20
+          },
+          "note": "a note",
+          "status": "open",
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "snapshots": [
+          {
+            "elementId": "el-1",
+            "filePath": "index.html",
+            "selector": "[data-od-id=\"el-1\"]",
+            "label": "h1",
+            "text": "Hello world",
+            "htmlHint": "<h1 data-od-id=\"el-1\">",
+            "position": {
+              "x": 100,
+              "y": 100,
+              "width": 50,
+              "height": 20
+            }
+          }
+        ]
+      },
+      "expected": {
+        "state": "anchored",
+        "snapshotElementId": "el-1",
+        "snapshotPosition": {
+          "x": 100,
+          "y": 100,
+          "width": 50,
+          "height": 20
+        }
+      }
+    },
+    {
+      "name": "exact-hit-other-file",
+      "why": "Same elementId in a DIFFERENT file must not count as an exact hit.",
+      "input": {
+        "comment": {
+          "id": "c1",
+          "projectId": "p1",
+          "conversationId": "conv1",
+          "filePath": "index.html",
+          "elementId": "el-1",
+          "selector": "[data-od-id=\"el-1\"]",
+          "label": "h1",
+          "text": "Hello world",
+          "htmlHint": "<h1 data-od-id=\"el-1\">",
+          "position": {
+            "x": 100,
+            "y": 100,
+            "width": 50,
+            "height": 20
+          },
+          "note": "a note",
+          "status": "open",
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "snapshots": [
+          {
+            "elementId": "el-1",
+            "filePath": "other.html",
+            "selector": "[data-od-id=\"el-1\"]",
+            "label": "h1",
+            "text": "Hello world",
+            "htmlHint": "<h1 data-od-id=\"el-1\">",
+            "position": {
+              "x": 100,
+              "y": 100,
+              "width": 50,
+              "height": 20
+            }
+          }
+        ]
+      },
+      "expected": {
+        "state": "lost",
+        "snapshotElementId": "el-1",
+        "snapshotPosition": {
+          "x": 100,
+          "y": 100,
+          "width": 50,
+          "height": 20
+        }
+      }
+    },
+    {
+      "name": "exact-hit-invalid-box",
+      "why": "Present but with a degenerate box: the exact branch is refused.",
+      "input": {
+        "comment": {
+          "id": "c1",
+          "projectId": "p1",
+          "conversationId": "conv1",
+          "filePath": "index.html",
+          "elementId": "el-1",
+          "selector": "[data-od-id=\"el-1\"]",
+          "label": "h1",
+          "text": "Hello world",
+          "htmlHint": "<h1 data-od-id=\"el-1\">",
+          "position": {
+            "x": 100,
+            "y": 100,
+            "width": 50,
+            "height": 20
+          },
+          "note": "a note",
+          "status": "open",
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "snapshots": [
+          {
+            "elementId": "el-1",
+            "filePath": "index.html",
+            "selector": "[data-od-id=\"el-1\"]",
+            "label": "h1",
+            "text": "Hello world",
+            "htmlHint": "<h1 data-od-id=\"el-1\">",
+            "position": {
+              "x": 0,
+              "y": 0,
+              "width": 0,
+              "height": 0
+            }
+          }
+        ]
+      },
+      "expected": {
+        "state": "lost",
+        "snapshotElementId": "el-1",
+        "snapshotPosition": {
+          "x": 100,
+          "y": 100,
+          "width": 50,
+          "height": 20
+        }
+      }
+    },
+    {
+      "name": "version-differs-reanchored",
+      "why": "Both versions known and unequal — the \"based on older vN\" badge.",
+      "input": {
+        "comment": {
+          "id": "c1",
+          "projectId": "p1",
+          "conversationId": "conv1",
+          "filePath": "index.html",
+          "elementId": "el-1",
+          "selector": "[data-od-id=\"el-1\"]",
+          "label": "h1",
+          "text": "Hello world",
+          "htmlHint": "<h1 data-od-id=\"el-1\">",
+          "position": {
+            "x": 100,
+            "y": 100,
+            "width": 50,
+            "height": 20
+          },
+          "note": "a note",
+          "status": "open",
+          "createdAt": 1,
+          "updatedAt": 1,
+          "anchoredVersion": 1
+        },
+        "snapshots": [
+          {
+            "elementId": "el-1",
+            "filePath": "index.html",
+            "selector": "[data-od-id=\"el-1\"]",
+            "label": "h1",
+            "text": "Hello world",
+            "htmlHint": "<h1 data-od-id=\"el-1\">",
+            "position": {
+              "x": 100,
+              "y": 100,
+              "width": 50,
+              "height": 20
+            }
+          }
+        ],
+        "currentVersion": 2
+      },
+      "expected": {
+        "state": "reanchored",
+        "snapshotElementId": "el-1",
+        "snapshotPosition": {
+          "x": 100,
+          "y": 100,
+          "width": 50,
+          "height": 20
+        }
+      }
+    },
+    {
+      "name": "version-equal-anchored",
+      "why": "Equal versions are not drift.",
+      "input": {
+        "comment": {
+          "id": "c1",
+          "projectId": "p1",
+          "conversationId": "conv1",
+          "filePath": "index.html",
+          "elementId": "el-1",
+          "selector": "[data-od-id=\"el-1\"]",
+          "label": "h1",
+          "text": "Hello world",
+          "htmlHint": "<h1 data-od-id=\"el-1\">",
+          "position": {
+            "x": 100,
+            "y": 100,
+            "width": 50,
+            "height": 20
+          },
+          "note": "a note",
+          "status": "open",
+          "createdAt": 1,
+          "updatedAt": 1,
+          "anchoredVersion": 2
+        },
+        "snapshots": [
+          {
+            "elementId": "el-1",
+            "filePath": "index.html",
+            "selector": "[data-od-id=\"el-1\"]",
+            "label": "h1",
+            "text": "Hello world",
+            "htmlHint": "<h1 data-od-id=\"el-1\">",
+            "position": {
+              "x": 100,
+              "y": 100,
+              "width": 50,
+              "height": 20
+            }
+          }
+        ],
+        "currentVersion": 2
+      },
+      "expected": {
+        "state": "anchored",
+        "snapshotElementId": "el-1",
+        "snapshotPosition": {
+          "x": 100,
+          "y": 100,
+          "width": 50,
+          "height": 20
+        }
+      }
+    },
+    {
+      "name": "version-missing-current-anchored",
+      "why": "Unknown current version cannot prove drift, so it must not claim it.",
+      "input": {
+        "comment": {
+          "id": "c1",
+          "projectId": "p1",
+          "conversationId": "conv1",
+          "filePath": "index.html",
+          "elementId": "el-1",
+          "selector": "[data-od-id=\"el-1\"]",
+          "label": "h1",
+          "text": "Hello world",
+          "htmlHint": "<h1 data-od-id=\"el-1\">",
+          "position": {
+            "x": 100,
+            "y": 100,
+            "width": 50,
+            "height": 20
+          },
+          "note": "a note",
+          "status": "open",
+          "createdAt": 1,
+          "updatedAt": 1,
+          "anchoredVersion": 1
+        },
+        "snapshots": [
+          {
+            "elementId": "el-1",
+            "filePath": "index.html",
+            "selector": "[data-od-id=\"el-1\"]",
+            "label": "h1",
+            "text": "Hello world",
+            "htmlHint": "<h1 data-od-id=\"el-1\">",
+            "position": {
+              "x": 100,
+              "y": 100,
+              "width": 50,
+              "height": 20
+            }
+          }
+        ]
+      },
+      "expected": {
+        "state": "anchored",
+        "snapshotElementId": "el-1",
+        "snapshotPosition": {
+          "x": 100,
+          "y": 100,
+          "width": 50,
+          "height": 20
+        }
+      }
+    },
+    {
+      "name": "version-missing-anchored-anchored",
+      "why": "A comment with no recorded version likewise cannot be shown as drifted.",
+      "input": {
+        "comment": {
+          "id": "c1",
+          "projectId": "p1",
+          "conversationId": "conv1",
+          "filePath": "index.html",
+          "elementId": "el-1",
+          "selector": "[data-od-id=\"el-1\"]",
+          "label": "h1",
+          "text": "Hello world",
+          "htmlHint": "<h1 data-od-id=\"el-1\">",
+          "position": {
+            "x": 100,
+            "y": 100,
+            "width": 50,
+            "height": 20
+          },
+          "note": "a note",
+          "status": "open",
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "snapshots": [
+          {
+            "elementId": "el-1",
+            "filePath": "index.html",
+            "selector": "[data-od-id=\"el-1\"]",
+            "label": "h1",
+            "text": "Hello world",
+            "htmlHint": "<h1 data-od-id=\"el-1\">",
+            "position": {
+              "x": 100,
+              "y": 100,
+              "width": 50,
+              "height": 20
+            }
+          }
+        ],
+        "currentVersion": 2
+      },
+      "expected": {
+        "state": "anchored",
+        "snapshotElementId": "el-1",
+        "snapshotPosition": {
+          "x": 100,
+          "y": 100,
+          "width": 50,
+          "height": 20
+        }
+      }
+    },
+    {
+      "name": "pin-prefix-no-snapshot",
+      "why": "A free-floating pin carries its own position and needs no element.",
+      "input": {
+        "comment": {
+          "id": "c1",
+          "projectId": "p1",
+          "conversationId": "conv1",
+          "filePath": "index.html",
+          "elementId": "pin-abc",
+          "selector": "[data-od-id=\"el-1\"]",
+          "label": "h1",
+          "text": "Hello world",
+          "htmlHint": "<h1 data-od-id=\"el-1\">",
+          "position": {
+            "x": 100,
+            "y": 100,
+            "width": 50,
+            "height": 20
+          },
+          "note": "a note",
+          "status": "open",
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "snapshots": []
+      },
+      "expected": {
+        "state": "anchored",
+        "snapshotElementId": "pin-abc",
+        "snapshotPosition": {
+          "x": 100,
+          "y": 100,
+          "width": 50,
+          "height": 20
+        }
+      }
+    },
+    {
+      "name": "pin-prefix-invalid-position",
+      "why": "A pin with a degenerate box falls through to the ladder below.",
+      "input": {
+        "comment": {
+          "id": "c1",
+          "projectId": "p1",
+          "conversationId": "conv1",
+          "filePath": "index.html",
+          "elementId": "pin-abc",
+          "selector": "[data-od-id=\"el-1\"]",
+          "label": "h1",
+          "text": "Hello world",
+          "htmlHint": "<h1 data-od-id=\"el-1\">",
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          },
+          "note": "a note",
+          "status": "open",
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "snapshots": []
+      },
+      "expected": {
+        "state": "lost",
+        "snapshotElementId": null,
+        "snapshotPosition": null
+      }
+    },
+    {
+      "name": "fuzzy-selector-only",
+      "why": "Selector match scores 4 on its own — comfortably over the threshold.",
+      "input": {
+        "comment": {
+          "id": "c1",
+          "projectId": "p1",
+          "conversationId": "conv1",
+          "filePath": "index.html",
+          "elementId": "gone",
+          "selector": "[data-od-id=\"el-1\"]",
+          "label": "h1",
+          "text": "Hello world",
+          "htmlHint": "<h1 data-od-id=\"el-1\">",
+          "position": {
+            "x": 100,
+            "y": 100,
+            "width": 50,
+            "height": 20
+          },
+          "note": "a note",
+          "status": "open",
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "snapshots": [
+          {
+            "elementId": "el-2",
+            "filePath": "index.html",
+            "selector": "[data-od-id=\"el-1\"]",
+            "label": "h1",
+            "text": "different",
+            "htmlHint": "different",
+            "position": {
+              "x": 3000,
+              "y": 3000,
+              "width": 50,
+              "height": 20
+            }
+          }
+        ]
+      },
+      "expected": {
+        "state": "stale",
+        "snapshotElementId": "el-2",
+        "snapshotPosition": {
+          "x": 3000,
+          "y": 3000,
+          "width": 50,
+          "height": 20
+        }
+      }
+    },
+    {
+      "name": "fuzzy-hint-only",
+      "why": "Html hint alone scores 3.",
+      "input": {
+        "comment": {
+          "id": "c1",
+          "projectId": "p1",
+          "conversationId": "conv1",
+          "filePath": "index.html",
+          "elementId": "gone",
+          "selector": "[data-od-id=\"el-1\"]",
+          "label": "h1",
+          "text": "Hello world",
+          "htmlHint": "<h1 data-od-id=\"el-1\">",
+          "position": {
+            "x": 100,
+            "y": 100,
+            "width": 50,
+            "height": 20
+          },
+          "note": "a note",
+          "status": "open",
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "snapshots": [
+          {
+            "elementId": "el-2",
+            "filePath": "index.html",
+            "selector": "different",
+            "label": "h1",
+            "text": "different",
+            "htmlHint": "<h1 data-od-id=\"el-1\">",
+            "position": {
+              "x": 3000,
+              "y": 3000,
+              "width": 50,
+              "height": 20
+            }
+          }
+        ]
+      },
+      "expected": {
+        "state": "stale",
+        "snapshotElementId": "el-2",
+        "snapshotPosition": {
+          "x": 3000,
+          "y": 3000,
+          "width": 50,
+          "height": 20
+        }
+      }
+    },
+    {
+      "name": "fuzzy-text-only-at-threshold",
+      "why": "Text alone scores exactly 2, and the gate is >= 2 — the boundary case.",
+      "input": {
+        "comment": {
+          "id": "c1",
+          "projectId": "p1",
+          "conversationId": "conv1",
+          "filePath": "index.html",
+          "elementId": "gone",
+          "selector": "[data-od-id=\"el-1\"]",
+          "label": "h1",
+          "text": "Hello world",
+          "htmlHint": "<h1 data-od-id=\"el-1\">",
+          "position": {
+            "x": 100,
+            "y": 100,
+            "width": 50,
+            "height": 20
+          },
+          "note": "a note",
+          "status": "open",
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "snapshots": [
+          {
+            "elementId": "el-2",
+            "filePath": "index.html",
+            "selector": "different",
+            "label": "h1",
+            "text": "Hello world",
+            "htmlHint": "different",
+            "position": {
+              "x": 3000,
+              "y": 3000,
+              "width": 50,
+              "height": 20
+            }
+          }
+        ]
+      },
+      "expected": {
+        "state": "stale",
+        "snapshotElementId": "el-2",
+        "snapshotPosition": {
+          "x": 3000,
+          "y": 3000,
+          "width": 50,
+          "height": 20
+        }
+      }
+    },
+    {
+      "name": "fuzzy-proximity-only-below-threshold",
+      "why": "Proximity maxes out at 1, so nearness ALONE can never re-anchor. A port that weights position more heavily silently reattaches comments to whatever is nearby.",
+      "input": {
+        "comment": {
+          "id": "c1",
+          "projectId": "p1",
+          "conversationId": "conv1",
+          "filePath": "index.html",
+          "elementId": "gone",
+          "selector": "[data-od-id=\"el-1\"]",
+          "label": "h1",
+          "text": "Hello world",
+          "htmlHint": "<h1 data-od-id=\"el-1\">",
+          "position": {
+            "x": 100,
+            "y": 100,
+            "width": 50,
+            "height": 20
+          },
+          "note": "a note",
+          "status": "open",
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "snapshots": [
+          {
+            "elementId": "el-2",
+            "filePath": "index.html",
+            "selector": "different",
+            "label": "h1",
+            "text": "different",
+            "htmlHint": "different",
+            "position": {
+              "x": 100,
+              "y": 100,
+              "width": 50,
+              "height": 20
+            }
+          }
+        ]
+      },
+      "expected": {
+        "state": "lost",
+        "snapshotElementId": "gone",
+        "snapshotPosition": {
+          "x": 100,
+          "y": 100,
+          "width": 50,
+          "height": 20
+        }
+      }
+    },
+    {
+      "name": "fuzzy-picks-highest-score",
+      "why": "Two candidates: the selector match must win over the text match.",
+      "input": {
+        "comment": {
+          "id": "c1",
+          "projectId": "p1",
+          "conversationId": "conv1",
+          "filePath": "index.html",
+          "elementId": "gone",
+          "selector": "[data-od-id=\"el-1\"]",
+          "label": "h1",
+          "text": "Hello world",
+          "htmlHint": "<h1 data-od-id=\"el-1\">",
+          "position": {
+            "x": 100,
+            "y": 100,
+            "width": 50,
+            "height": 20
+          },
+          "note": "a note",
+          "status": "open",
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "snapshots": [
+          {
+            "elementId": "el-text",
+            "filePath": "index.html",
+            "selector": "different",
+            "label": "h1",
+            "text": "Hello world",
+            "htmlHint": "different",
+            "position": {
+              "x": 3000,
+              "y": 3000,
+              "width": 50,
+              "height": 20
+            }
+          },
+          {
+            "elementId": "el-sel",
+            "filePath": "index.html",
+            "selector": "[data-od-id=\"el-1\"]",
+            "label": "h1",
+            "text": "different",
+            "htmlHint": "different",
+            "position": {
+              "x": 3000,
+              "y": 3000,
+              "width": 50,
+              "height": 20
+            }
+          }
+        ]
+      },
+      "expected": {
+        "state": "stale",
+        "snapshotElementId": "el-sel",
+        "snapshotPosition": {
+          "x": 3000,
+          "y": 3000,
+          "width": 50,
+          "height": 20
+        }
+      }
+    },
+    {
+      "name": "fuzzy-rejects-other-file",
+      "why": "filePath is a hard filter, not a score.",
+      "input": {
+        "comment": {
+          "id": "c1",
+          "projectId": "p1",
+          "conversationId": "conv1",
+          "filePath": "index.html",
+          "elementId": "gone",
+          "selector": "[data-od-id=\"el-1\"]",
+          "label": "h1",
+          "text": "Hello world",
+          "htmlHint": "<h1 data-od-id=\"el-1\">",
+          "position": {
+            "x": 100,
+            "y": 100,
+            "width": 50,
+            "height": 20
+          },
+          "note": "a note",
+          "status": "open",
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "snapshots": [
+          {
+            "elementId": "el-2",
+            "filePath": "other.html",
+            "selector": "[data-od-id=\"el-1\"]",
+            "label": "h1",
+            "text": "Hello world",
+            "htmlHint": "<h1 data-od-id=\"el-1\">",
+            "position": {
+              "x": 100,
+              "y": 100,
+              "width": 50,
+              "height": 20
+            }
+          }
+        ]
+      },
+      "expected": {
+        "state": "lost",
+        "snapshotElementId": "gone",
+        "snapshotPosition": {
+          "x": 100,
+          "y": 100,
+          "width": 50,
+          "height": 20
+        }
+      }
+    },
+    {
+      "name": "fuzzy-rejects-other-slide",
+      "why": "slideIndex is a hard filter; absent counts as -1 and must not equal 0.",
+      "input": {
+        "comment": {
+          "id": "c1",
+          "projectId": "p1",
+          "conversationId": "conv1",
+          "filePath": "index.html",
+          "elementId": "gone",
+          "selector": "[data-od-id=\"el-1\"]",
+          "label": "h1",
+          "text": "Hello world",
+          "htmlHint": "<h1 data-od-id=\"el-1\">",
+          "position": {
+            "x": 100,
+            "y": 100,
+            "width": 50,
+            "height": 20
+          },
+          "note": "a note",
+          "status": "open",
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "snapshots": [
+          {
+            "elementId": "el-2",
+            "filePath": "index.html",
+            "selector": "[data-od-id=\"el-1\"]",
+            "label": "h1",
+            "text": "Hello world",
+            "htmlHint": "<h1 data-od-id=\"el-1\">",
+            "position": {
+              "x": 100,
+              "y": 100,
+              "width": 50,
+              "height": 20
+            },
+            "slideIndex": 0
+          }
+        ]
+      },
+      "expected": {
+        "state": "lost",
+        "snapshotElementId": "gone",
+        "snapshotPosition": {
+          "x": 100,
+          "y": 100,
+          "width": 50,
+          "height": 20
+        }
+      }
+    },
+    {
+      "name": "fuzzy-matches-same-slide",
+      "why": "Same explicit slideIndex passes the filter.",
+      "input": {
+        "comment": {
+          "id": "c1",
+          "projectId": "p1",
+          "conversationId": "conv1",
+          "filePath": "index.html",
+          "elementId": "gone",
+          "selector": "[data-od-id=\"el-1\"]",
+          "label": "h1",
+          "text": "Hello world",
+          "htmlHint": "<h1 data-od-id=\"el-1\">",
+          "position": {
+            "x": 100,
+            "y": 100,
+            "width": 50,
+            "height": 20
+          },
+          "note": "a note",
+          "status": "open",
+          "createdAt": 1,
+          "updatedAt": 1,
+          "slideIndex": 3
+        },
+        "snapshots": [
+          {
+            "elementId": "el-2",
+            "filePath": "index.html",
+            "selector": "[data-od-id=\"el-1\"]",
+            "label": "h1",
+            "text": "Hello world",
+            "htmlHint": "<h1 data-od-id=\"el-1\">",
+            "position": {
+              "x": 100,
+              "y": 100,
+              "width": 50,
+              "height": 20
+            },
+            "slideIndex": 3
+          }
+        ]
+      },
+      "expected": {
+        "state": "stale",
+        "snapshotElementId": "el-2",
+        "snapshotPosition": {
+          "x": 100,
+          "y": 100,
+          "width": 50,
+          "height": 20
+        }
+      }
+    },
+    {
+      "name": "fuzzy-ignores-whitespace-differences",
+      "why": "Hint and text are normalized before comparison, so reformatted HTML still matches.",
+      "input": {
+        "comment": {
+          "id": "c1",
+          "projectId": "p1",
+          "conversationId": "conv1",
+          "filePath": "index.html",
+          "elementId": "gone",
+          "selector": "[data-od-id=\"el-1\"]",
+          "label": "h1",
+          "text": "Hello world",
+          "htmlHint": "<h1   data-od-id=\"el-1\">\n",
+          "position": {
+            "x": 100,
+            "y": 100,
+            "width": 50,
+            "height": 20
+          },
+          "note": "a note",
+          "status": "open",
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "snapshots": [
+          {
+            "elementId": "el-2",
+            "filePath": "index.html",
+            "selector": "different",
+            "label": "h1",
+            "text": "different",
+            "htmlHint": "<h1 data-od-id=\"el-1\">",
+            "position": {
+              "x": 3000,
+              "y": 3000,
+              "width": 50,
+              "height": 20
+            }
+          }
+        ]
+      },
+      "expected": {
+        "state": "stale",
+        "snapshotElementId": "el-2",
+        "snapshotPosition": {
+          "x": 3000,
+          "y": 3000,
+          "width": 50,
+          "height": 20
+        }
+      }
+    },
+    {
+      "name": "lost-with-last-good-position",
+      "why": "Nothing matches: the ghost pin sits at the stored last-good box, NOT at the creation-time position which may now point somewhere unrelated.",
+      "input": {
+        "comment": {
+          "id": "c1",
+          "projectId": "p1",
+          "conversationId": "conv1",
+          "filePath": "index.html",
+          "elementId": "gone",
+          "selector": "no-match",
+          "label": "h1",
+          "text": "no-match",
+          "htmlHint": "no-match",
+          "position": {
+            "x": 100,
+            "y": 100,
+            "width": 50,
+            "height": 20
+          },
+          "note": "a note",
+          "status": "open",
+          "createdAt": 1,
+          "updatedAt": 1,
+          "lastGoodPosition": {
+            "x": 500,
+            "y": 500,
+            "width": 10,
+            "height": 10
+          }
+        },
+        "snapshots": []
+      },
+      "expected": {
+        "state": "lost",
+        "snapshotElementId": "gone",
+        "snapshotPosition": {
+          "x": 500,
+          "y": 500,
+          "width": 10,
+          "height": 10
+        }
+      }
+    },
+    {
+      "name": "lost-falls-back-to-creation-position",
+      "why": "No stored last-good box: the creation position is the only anchor left.",
+      "input": {
+        "comment": {
+          "id": "c1",
+          "projectId": "p1",
+          "conversationId": "conv1",
+          "filePath": "index.html",
+          "elementId": "gone",
+          "selector": "no-match",
+          "label": "h1",
+          "text": "no-match",
+          "htmlHint": "no-match",
+          "position": {
+            "x": 100,
+            "y": 100,
+            "width": 50,
+            "height": 20
+          },
+          "note": "a note",
+          "status": "open",
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "snapshots": []
+      },
+      "expected": {
+        "state": "lost",
+        "snapshotElementId": "gone",
+        "snapshotPosition": {
+          "x": 100,
+          "y": 100,
+          "width": 50,
+          "height": 20
+        }
+      }
+    },
+    {
+      "name": "lost-with-no-position-at-all",
+      "why": "Nothing to draw: the only case that yields a null snapshot. A port that invents {0,0,0,0} here parks a pin in the corner of the page.",
+      "input": {
+        "comment": {
+          "id": "c1",
+          "projectId": "p1",
+          "conversationId": "conv1",
+          "filePath": "index.html",
+          "elementId": "gone",
+          "selector": "no-match",
+          "label": "h1",
+          "text": "no-match",
+          "htmlHint": "no-match",
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          },
+          "note": "a note",
+          "status": "open",
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "snapshots": []
+      },
+      "expected": {
+        "state": "lost",
+        "snapshotElementId": null,
+        "snapshotPosition": null
+      }
+    },
+    {
+      "name": "lost-prefers-last-good-over-creation",
+      "why": "Both present: last-good wins.",
+      "input": {
+        "comment": {
+          "id": "c1",
+          "projectId": "p1",
+          "conversationId": "conv1",
+          "filePath": "index.html",
+          "elementId": "gone",
+          "selector": "no-match",
+          "label": "h1",
+          "text": "no-match",
+          "htmlHint": "no-match",
+          "position": {
+            "x": 1,
+            "y": 1,
+            "width": 10,
+            "height": 10
+          },
+          "note": "a note",
+          "status": "open",
+          "createdAt": 1,
+          "updatedAt": 1,
+          "lastGoodPosition": {
+            "x": 900,
+            "y": 900,
+            "width": 10,
+            "height": 10
+          }
+        },
+        "snapshots": []
+      },
+      "expected": {
+        "state": "lost",
+        "snapshotElementId": "gone",
+        "snapshotPosition": {
+          "x": 900,
+          "y": 900,
+          "width": 10,
+          "height": 10
+        }
+      }
+    },
+    {
+      "name": "empty-snapshot-map",
+      "why": "First render before any snapshot has been reported.",
+      "input": {
+        "comment": {
+          "id": "c1",
+          "projectId": "p1",
+          "conversationId": "conv1",
+          "filePath": "index.html",
+          "elementId": "el-1",
+          "selector": "[data-od-id=\"el-1\"]",
+          "label": "h1",
+          "text": "Hello world",
+          "htmlHint": "<h1 data-od-id=\"el-1\">",
+          "position": {
+            "x": 100,
+            "y": 100,
+            "width": 50,
+            "height": 20
+          },
+          "note": "a note",
+          "status": "open",
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "snapshots": []
+      },
+      "expected": {
+        "state": "lost",
+        "snapshotElementId": "el-1",
+        "snapshotPosition": {
+          "x": 100,
+          "y": 100,
+          "width": 50,
+          "height": 20
+        }
+      }
+    }
+  ]
+}

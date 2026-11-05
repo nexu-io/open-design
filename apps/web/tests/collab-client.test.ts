@@ -70,6 +70,28 @@ afterEach(() => {
 });
 
 describe('CollabClient', () => {
+  it('keeps an explicit silenced offer open across status reads, but never shares it with a fresh client', async () => {
+    let latest = 4;
+    const makeUpdate = (state: string) => ({ state, latestVersion: latest, localVersion: 1, promptSuppressedUntil: PRESENCE_TEST_NOW + 86_400_000, updatedAt: PRESENCE_TEST_NOW });
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const manual = init?.method === 'POST';
+      const payload = manual ? { update: makeUpdate('confirmation_required') }
+        : { syncState: 'synced', ownedContentUpdate: makeUpdate('suppressed') };
+      return { ok: true, status: 200, json: async () => payload } as Response;
+    }) as typeof fetch;
+    const options = { projectId: 'p1', member: null, fetch: fetchImpl, workspaceContext: TEAM_CONTEXT };
+    const client = new CollabClient(options);
+    await client.requestContentUpdate({ action: 'check', manual: true });
+    await client.pollStatus();
+    expect(client.getSnapshot().ownedContentUpdate?.state).toBe('confirmation_required');
+    const reopened = new CollabClient(options);
+    await reopened.pollStatus();
+    expect(reopened.getSnapshot().ownedContentUpdate?.state).toBe('suppressed');
+    latest = 5;
+    await client.pollStatus();
+    expect(client.getSnapshot().ownedContentUpdate).toMatchObject({ state: 'suppressed', latestVersion: 5 });
+  });
+
   it('binds status and pull to the captured workspace identity', async () => {
     const { fetchImpl, calls } = makeFetch();
     const client = new CollabClient({

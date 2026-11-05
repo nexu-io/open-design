@@ -13,7 +13,7 @@
  * `styles/viewer/routines.css` 的 `.app .assistant-footer .assistant-stats`
  * (12px / `--text-muted`)是一条**覆盖**规则,压的是 `styles/viewer/composio.css`
  * 里的同名基规则。两条都活不了:`.assistant-footer` 这个壳**是**真在渲染的
- * (`AssistantMessage.tsx` / `ProjectCreationPendingView.tsx`,见下面的正面对照),
+ * (`AssistantMessage.tsx`,见下面的正面对照),
  * 可它里面从来没有挂过 `assistant-stats` 的孩子 —— 壳在、孩子不在,
  * 所以后代选择器永远配不上。
  *

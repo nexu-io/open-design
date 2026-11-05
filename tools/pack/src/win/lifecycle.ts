@@ -1,3 +1,5 @@
+import { writePackagedConfigWithBinding } from "../config/amr-endpoint-binding.js";
+
 import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
@@ -255,10 +257,10 @@ async function pinInstalledPackagedConfigNamespace(
     namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot,
   };
   const body = `${JSON.stringify(pinned, null, 2)}\n`;
-  await writeFile(installedConfigPath, body, "utf8");
+  await writePackagedConfigWithBinding(installedConfigPath, body);
   const launchConfigPath = join(config.roots.runtime.namespaceRoot, "runtime", "launch-open-design-config.json");
   await mkdir(dirname(launchConfigPath), { recursive: true });
-  await writeFile(launchConfigPath, body, "utf8");
+  await writePackagedConfigWithBinding(launchConfigPath, body);
   return { installedConfigPath, launchConfigPath };
 }
 

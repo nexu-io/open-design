@@ -11,6 +11,15 @@ import {
   resolveExclusiveSurface,
 } from '../../src/prompts/system.js';
 
+describe('comment identity host contract', () => {
+  it.each(['classic', 'slim'] as const)('carries the conditional edit rule in %s', (promptCoreVariant) => {
+    const prompt = composeSystemPrompt({ promptCoreVariant });
+    expect(prompt).toContain('Only when editing HTML that already contains data-od-comment-id');
+    expect(prompt).toContain('mint a fresh UUID for every copied or new node');
+    expect(prompt).toContain('never recycle a deleted identity');
+  });
+});
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '../../../..');
@@ -442,7 +451,7 @@ describe('composeSystemPrompt', () => {
         metadata: { kind: 'image', imageModel: 'vela/gpt-image-2' } as any,
       });
       expect(amrPrompt).toContain('Image model: `vela/gpt-image-2`');
-      expect(amrPrompt).toContain(
+      expect(amrPrompt).not.toContain(
         'Video model: `vela/doubao-seedance-2-0-260128`',
       );
       expect(amrPrompt).toContain('### OpenDesign Cloud media defaults');

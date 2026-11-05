@@ -213,7 +213,7 @@ function safeExternalCount(value: number | undefined): number {
 function taskBucket(aggregate: StrategyTaskObservationAggregateV1): TaskAnalyticsBucketV1 {
   const value = aggregate.root.taskType;
   return value === 'prototype' || value === 'ppt' || value === 'marketing' ||
-    value === 'hyperframes' || value === 'generic'
+    value === 'hyperframes' || value === 'motion-design' || value === 'generic'
     ? value
     : 'unknown';
 }

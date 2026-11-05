@@ -108,7 +108,6 @@ export interface ClaudeStreamHandlerOptions {
   onChildRuntimeFact?: (fact: ClaudeChildRuntimeFact) => void;
   onChildToolRuntimeFact?: (fact: ClaudeChildToolRuntimeFact) => void;
   childEvidenceNow?: () => number;
-  nativeBuildPackageBindings?: Readonly<Record<string, string>>;
   /** Consume forwarded Child frames only as native evidence, never as parent UI output. */
   suppressForwardedSubagentEvents?: boolean;
   /** 墙上时间。只用来给在途那一行盖一个不动的计时起点;测试注入。 */
@@ -128,9 +127,6 @@ export function createClaudeStreamHandler(
           ? { onToolFact: options.onChildToolRuntimeFact }
           : {}),
         ...(options.childEvidenceNow ? { now: options.childEvidenceNow } : {}),
-        ...(options.nativeBuildPackageBindings
-          ? { nativeBuildPackageBindings: options.nativeBuildPackageBindings }
-          : {}),
       })
     : null;
 

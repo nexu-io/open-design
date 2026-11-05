@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createCollabPublishWatcher } from '../src/collab/collab-publish-watcher.js';
 import { createCollabRuntime } from '../src/collab/runtime.js';
+import { withTeamProjectCatalog } from './team-project-registration-fixture.js';
 import {
   isUnmaterializedSharedPlaceholder,
   SHARED_PROJECT_PLACEHOLDER_METADATA_KEY,
@@ -137,7 +138,7 @@ describe('fresh-install shared-project placeholder must never publish (recvqzaDv
       role: 'owner',
       lifecycleState: 'active',
     };
-    const runtime = createCollabRuntime({
+    const runtime = createCollabRuntime(withTeamProjectCatalog({
       adapter: { publish },
       workspaceContext: {
         current: () =>
@@ -150,7 +151,7 @@ describe('fresh-install shared-project placeholder must never publish (recvqzaDv
       },
       canPublishProjectContent: (projectId) =>
         !isUnmaterializedSharedPlaceholder(store.get(projectId) ?? null),
-    });
+    }));
     runtime.rememberTeamShare('placeholder-project', principal);
     runtime.rememberTeamShare('real-project', principal);
 

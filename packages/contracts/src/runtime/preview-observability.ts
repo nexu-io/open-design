@@ -268,7 +268,21 @@ export function buildPreviewObservabilityBridge(): string {
     }
     return { message: text(String(value == null ? '' : value), 500) };
   }
+  var metricAttemptId = null;
+  var metricStartedAt = null;
+  var metricBlankAt = null;
+  var metricHadError = false;
+  var metricTerminalAttempt = null;
+  function sendMetricResult(attemptId, result){
+    if (metricTerminalAttempt === attemptId) return;
+    metricTerminalAttempt = attemptId;
+    try { window.parent.postMessage({ type: 'od:preview-metric-result', attemptId: attemptId, result: result }, '*'); } catch (_) {}
+  }
   function send(event, detail){
+    if (event === 'runtime_error' || event === 'unhandled_rejection' || event === 'console_error' || event === 'resource_error') {
+      metricHadError = true;
+      if (metricAttemptId && document.visibilityState === 'visible') sendMetricResult(metricAttemptId, 'error');
+    }
     if (sentCount >= MAX_EVENTS) return;
     detail = detail || {};
     var fingerprint = [event, detail.name || '', detail.message || '', detail.source_url || '', detail.stack || '', detail.resource_url || ''].join('|');
@@ -547,6 +561,26 @@ export function buildPreviewObservabilityBridge(): string {
     scheduleWhiteScreenCheckWhenEligible();
     scheduleDeckStageCheckWhenEligible();
   }
+  // Host requests carry an opaque attempt id so retained-frame replies cannot
+  // settle a later activation. Success requires actual visible paint evidence.
+  window.addEventListener('message', function(event){
+    var data = event && event.data;
+    if (event.source !== window.parent || !data || data.type !== 'od:preview-metric-probe'
+      || typeof data.attemptId !== 'string' || !/^[a-zA-Z0-9_.:-]{1,128}$/.test(data.attemptId)) return;
+    if (metricAttemptId !== data.attemptId) {
+      metricAttemptId = data.attemptId; metricStartedAt = performance.now(); metricBlankAt = null;
+    }
+    requestAnimationFrame(function(){
+      if (metricAttemptId !== data.attemptId || document.visibilityState !== 'visible' || document.readyState !== 'complete') return;
+      var result = null;
+      if (visiblePaintCount() > 0) result = 'success';
+      else if (metricHadError) result = 'error';
+      else if (metricBlankAt !== null && performance.now() - metricStartedAt >= WHITE_SCREEN_TIMEOUT + WHITE_SCREEN_CONFIRMATION_DELAY
+        && performance.now() - metricBlankAt >= WHITE_SCREEN_CONFIRMATION_DELAY) result = 'white_screen';
+      else if (metricBlankAt === null) metricBlankAt = performance.now();
+      if (result) sendMetricResult(data.attemptId, result);
+    });
+  });
   window.addEventListener('message', function(event){
     var data = event && event.data;
     if (!data || data.type !== HOST_STATE_TYPE || typeof data.active !== 'boolean') return;

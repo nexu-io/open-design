@@ -52,6 +52,7 @@ const entryViewCapture = vi.hoisted(() => ({
     options?: { throwOnError?: boolean; agentCliEnv?: AppConfig['agentCliEnv'] },
   ) => unknown),
   activeSignOut: null as null | (() => void | Promise<void>),
+  registrationActiveChange: null as null | ((active: boolean) => void),
 }));
 
 const settingsCapture = vi.hoisted(() => ({
@@ -83,6 +84,7 @@ vi.mock('../../src/components/EntryView', () => ({
     onCompleteOnboarding,
     onRefreshAgents,
     onSignedOut,
+    onRegistrationInviteActiveChange,
   }: {
     config: AppConfig;
     onAgentChange: (agentId: string) => void;
@@ -91,11 +93,13 @@ vi.mock('../../src/components/EntryView', () => ({
       options?: { throwOnError?: boolean; agentCliEnv?: AppConfig['agentCliEnv'] },
     ) => unknown;
     onSignedOut: () => void | Promise<void>;
+    onRegistrationInviteActiveChange?: (active: boolean) => void;
   }) => {
     entryViewCapture.firstAgentChange ??= onAgentChange;
     entryViewCapture.firstCompleteOnboarding ??= onCompleteOnboarding;
     entryViewCapture.firstRefreshAgents ??= onRefreshAgents;
     entryViewCapture.activeSignOut = onSignedOut;
+    entryViewCapture.registrationActiveChange = onRegistrationInviteActiveChange ?? null;
     return (
       <>
         <div data-testid="onboarding-completed">{String(config.onboardingCompleted)}</div>
@@ -106,6 +110,8 @@ vi.mock('../../src/components/EntryView', () => ({
     );
   },
 }));
+
+vi.mock('../../src/components/PrivacyConsentModal', () => ({ PrivacyConsentModal: () => <div data-testid="privacy-consent">Privacy consent</div> }));
 
 vi.mock('../../src/components/ProjectView', () => ({
   ProjectView: () => <div>Project view</div>,
@@ -261,6 +267,7 @@ describe('App onboarding completion persistence', () => {
     entryViewCapture.firstCompleteOnboarding = null;
     entryViewCapture.firstRefreshAgents = null;
     entryViewCapture.activeSignOut = null;
+    entryViewCapture.registrationActiveChange = null;
     settingsCapture.resetOnboarding = null;
     mockedDaemonIsLive.mockResolvedValue(true);
     mockedFetchAgentsStream.mockResolvedValue([]);
@@ -613,4 +620,13 @@ describe('App onboarding completion persistence', () => {
     expect(mockedFetchDaemonConfig).toHaveBeenCalledTimes(1);
     expect(await navigatedToOnboarding()).toBe(false);
   });
+  it('defers consent while the actual registration surface is active and restores disclosure after exit', async () => {
+    const config = returningUserConfig(); mockedLoadConfig.mockReturnValue(config);
+    mockedFetchDaemonConfig.mockResolvedValue(config); mockedSyncConfigToDaemon.mockResolvedValue(undefined);
+    render(<App />); await screen.findByTestId('privacy-consent');
+    expect(entryViewCapture.registrationActiveChange).toBeTypeOf('function');
+    act(() => entryViewCapture.registrationActiveChange?.(true)); expect(screen.queryByTestId('privacy-consent')).toBeNull();
+    act(() => entryViewCapture.registrationActiveChange?.(false)); expect(screen.getByTestId('privacy-consent')).toBeTruthy();
+  });
+
 });

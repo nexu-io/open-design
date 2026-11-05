@@ -91,6 +91,9 @@ function renderChat(opts: {
   onOpenSettings?: (section?: string) => void;
   onSwitchModel?: () => void;
   amrBalanceCardUsd?: number | null;
+  amrConcurrencyCardAudience?: 'owner' | 'member' | null;
+  amrConcurrencyCardEligible?: boolean;
+  onAmrConcurrencyUpgrade?: () => void;
   onSend?: (...args: unknown[]) => void;
 } = {}) {
   return render(
@@ -105,6 +108,9 @@ function renderChat(opts: {
       onStop={vi.fn()}
       onRetry={opts.onRetry ?? vi.fn()}
       amrBalanceCardUsd={opts.amrBalanceCardUsd ?? null}
+      amrConcurrencyCardAudience={opts.amrConcurrencyCardAudience ?? null}
+      amrConcurrencyCardEligible={opts.amrConcurrencyCardEligible}
+      onAmrConcurrencyUpgrade={opts.onAmrConcurrencyUpgrade}
       onOpenSettings={opts.onOpenSettings as never}
       onSwitchModel={opts.onSwitchModel}
       conversations={[
@@ -117,6 +123,62 @@ function renderChat(opts: {
     />,
   );
 }
+
+describe('ChatPane — frozen F12/F15 concurrency card', () => {
+  it.each(['owner', 'member'] as const)('%s gets the in-conversation concurrency card after a Link rejection', (audience) => {
+    const onUpgrade = vi.fn();
+    renderChat({
+      messages: [failedMessage({
+        code: 'AGENT_EXECUTION_FAILED',
+        failureDetail: 'membership_concurrency_limit',
+        detail: 'membership concurrency limit exceeded',
+      })],
+      amrConcurrencyCardAudience: audience,
+      onAmrConcurrencyUpgrade: onUpgrade,
+    });
+    const card = screen.getByTestId('chat-concurrency-card');
+    expect(card).toHaveTextContent('chat.amrConcurrencyCard.available');
+    expect(card).toHaveTextContent('chat.amrConcurrencyCard.full');
+    expect(card).toHaveTextContent(audience === 'owner'
+      ? 'chat.amrConcurrencyGate.title' : 'chat.amrConcurrencyGate.teamTitle');
+    expect(screen.queryByTestId('chat-run-error-card')).toBeNull();
+    fireEvent.click(card.querySelector('button')!);
+    expect(onUpgrade).toHaveBeenCalledOnce();
+  });
+
+  it('shows the same card for a send-before-run concurrency refusal', () => {
+    renderChat({ amrConcurrencyCardAudience: 'owner', onAmrConcurrencyUpgrade: vi.fn() });
+    expect(screen.getByTestId('chat-concurrency-card')).toBeTruthy();
+    expect(screen.queryByTestId('chat-run-error-card')).toBeNull();
+  });
+
+  it('recovers the concurrency card from a persisted failed run after reopening the conversation', () => {
+    renderChat({
+      messages: [failedMessage({
+        code: 'AGENT_EXECUTION_FAILED',
+        failureDetail: 'membership_concurrency_limit',
+        detail: 'membership concurrency limit exceeded',
+      })],
+      onAmrConcurrencyUpgrade: vi.fn(),
+    });
+    expect(screen.getByTestId('chat-concurrency-card')).toBeTruthy();
+    expect(screen.queryByTestId('chat-run-error-card')).toBeNull();
+  });
+
+  it('keeps generic manual recovery for a Max or unproven Owner instead of offering an upgrade', () => {
+    renderChat({
+      messages: [failedMessage({
+        code: 'AGENT_EXECUTION_FAILED',
+        failureDetail: 'membership_concurrency_limit',
+        detail: 'membership concurrency limit exceeded',
+      })],
+      amrConcurrencyCardEligible: false,
+      onAmrConcurrencyUpgrade: vi.fn(),
+    });
+    expect(screen.queryByTestId('chat-concurrency-card')).toBeNull();
+    expect(screen.getByTestId('chat-run-error-card')).toBeTruthy();
+  });
+});
 
 describe('ChatPane — 报错卡的常驻动作', () => {
   function expectSecondaryActionsShareOneShell(): void {

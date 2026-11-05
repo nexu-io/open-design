@@ -574,6 +574,8 @@ export function createOdNextTaskInputSnapshot(input: {
   taskConfiguration: OdNextTaskConfigurationV1;
   projectRoot: string;
   projectAttachments?: readonly string[];
+  /** Host-owned prior task inputs; validated against the same managed root. */
+  inheritedSnapshot?: OdNextTaskInputSnapshotDescriptor;
   uploadRoot: string;
   imagePaths?: readonly string[];
   commentCount?: number;
@@ -586,7 +588,10 @@ export function createOdNextTaskInputSnapshot(input: {
   afterReadSource?: (sourcePath: string) => void;
 }): OdNextTaskInputSnapshotDescriptor {
   const taskExecutionId = safeTaskId(input.taskExecutionId);
-  const sources: SnapshotSource[] = [
+  const inherited = input.inheritedSnapshot
+    ? loadOdNextTaskInputSnapshot(input.inheritedSnapshot, input.snapshotsRoot)
+    : null;
+  const sources: Array<SnapshotSource | (SnapshotFile & { content: Buffer })> = [
     ...(input.projectAttachments ?? []).map((sourcePath) => ({
       kind: 'file' as const,
       sourcePath,
@@ -597,9 +602,10 @@ export function createOdNextTaskInputSnapshot(input: {
       sourcePath,
       allowedRoot: input.uploadRoot,
     })),
+    ...(inherited?.files ?? []),
   ];
   const countCap = input.countCap ?? DEFAULT_OD_NEXT_ATTACHMENT_COUNT_CAP;
-  if (sources.length > countCap) {
+  if (sources.length - (inherited?.files.length ?? 0) > countCap) {
     throw new OdNextTaskInputSnapshotError('OD Next attachment count exceeds the task cap.', 'OD_NEXT_INPUT_SNAPSHOT_OVERSIZE');
   }
   const snapshotsRoot = path.resolve(input.snapshotsRoot);
@@ -649,10 +655,10 @@ export function createOdNextTaskInputSnapshot(input: {
       snapshotCleanupAllowed = true;
     }
     fs.mkdirSync(attachmentsDir, { recursive: false, mode: 0o700 });
-    sources.forEach((source, index) => {
+    sources.forEach((source) => {
       let bytes: Buffer;
       try {
-        bytes = readSourceWithoutFollowingSymlinks(
+        bytes = 'content' in source ? source.content : readSourceWithoutFollowingSymlinks(
           source,
           fileCap,
           input.beforeOpenSource,
@@ -664,15 +670,20 @@ export function createOdNextTaskInputSnapshot(input: {
           'OD Next attachment could not be read and frozen safely.',
         );
       }
+      const identity = sha256(bytes);
+      if ('content' in source && files.some(file => file.kind === source.kind && file.sha256 === identity)) return;
+      if (files.length >= countCap || bytes.length > fileCap) {
+        throw new OdNextTaskInputSnapshotError('OD Next inherited attachments exceed the task cap.', 'OD_NEXT_INPUT_SNAPSHOT_OVERSIZE');
+      }
       total += bytes.length;
       if (total > totalCap) {
         throw new OdNextTaskInputSnapshotError('OD Next attachments exceed the task byte cap.', 'OD_NEXT_INPUT_SNAPSHOT_OVERSIZE');
       }
-      const identity = sha256(bytes);
       const type = mediaTypeFromBytes(bytes);
       if (source.kind === 'image' && !type.mediaType.startsWith('image/')) {
         throw new OdNextTaskInputSnapshotError('OD Next image attachment bytes are not a supported image type.', 'OD_NEXT_INPUT_SNAPSHOT_TYPE_MISMATCH');
       }
+      const index = files.length;
       const id = `attachment-${String(index + 1).padStart(3, '0')}`;
       const relativePath = `attachments/${id}${type.extension}`;
       const destination = path.join(snapshotDir, relativePath);
@@ -688,7 +699,7 @@ export function createOdNextTaskInputSnapshot(input: {
         throw new OdNextTaskInputSnapshotError('OD Next frozen attachment failed digest verification.');
       }
       files.push({
-        ...(source.kind === 'file' ? { sourcePathHash: sha256(Buffer.from(path.relative(input.projectRoot, path.resolve(input.projectRoot, source.sourcePath)).replaceAll('\\', '/'))) } : {}),
+        ...('content' in source ? { sourcePathHash: source.sourcePathHash } : source.kind === 'file' ? { sourcePathHash: sha256(Buffer.from(path.relative(input.projectRoot, path.resolve(input.projectRoot, source.sourcePath)).replaceAll('\\', '/'))) } : {}),
         id,
         relativePath,
         kind: source.kind,
