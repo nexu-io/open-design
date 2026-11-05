@@ -106,9 +106,26 @@ describe('ProjectReferenceModal — a hidden selection cannot be confirmed', () 
       (onSelect.mock.calls[0]![0] as Array<{ project: Project }>).map((s) => s.project.id),
     ).toEqual(['beta']);
 
-    // Clearing the query brings the hidden auto-selection back into play.
+    // Clearing the query brings the hidden auto-selection back into play. Both
+    // rows are visible again and BOTH stay selected: Beta because we picked it,
+    // Alpha because hiding it only withdrew it from the submit and never
+    // dropped it from the selection. Alpha's own selected state is asserted,
+    // not merely its presence, since Beta alone would keep Confirm enabled.
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: '' } });
     await waitFor(() => expect(confirm.disabled).toBe(false));
     expect(screen.getByText('Alpha Studio')).toBeTruthy();
+    expect(
+      screen.getByRole('option', { name: /Alpha Studio/ }).getAttribute('aria-selected'),
+    ).toBe('true');
+    expect(
+      screen.getByRole('option', { name: /Beta Lab/ }).getAttribute('aria-selected'),
+    ).toBe('true');
+
+    // And the restored selection is what a second Confirm submits, in list order.
+    fireEvent.click(confirm);
+    await waitFor(() => expect(onSelect).toHaveBeenCalledTimes(2));
+    expect(
+      (onSelect.mock.calls[1]![0] as Array<{ project: Project }>).map((s) => s.project.id),
+    ).toEqual(['alpha', 'beta']);
   });
 });
