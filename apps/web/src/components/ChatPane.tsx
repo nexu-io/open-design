@@ -1,3 +1,5 @@
+import { openExternalUrl } from "../providers/registry";
+import { withTaskPresentation, newerTaskDisplay, type PresentedChatMessage } from '../runtime/chat/task-presentation';
 import { reportExperienceEvent } from '../observability/experience-diagnostics';
 import { conversationMetaLabel } from '../runtime/chat/conversation-time';
 export { conversationMetaLabel } from '../runtime/chat/conversation-time';
@@ -174,6 +176,7 @@ import {
 import {
   ChatComposer,
   type ChatComposerHandle,
+  type RejectedComposerSend,
   type ChatSendOutcome,
   type ChatSendMeta,
 } from './ChatComposer';
@@ -814,6 +817,12 @@ interface Props {
    * OPEND-2849)。宿主读不出时按 `owner` 说 —— 那是今天的默认身份。
    */
   amrBalanceAudience?: 'owner' | 'member';
+  /** Frozen r506 F12/F15 card for a refused Link request before a run exists. */
+  amrConcurrencyCardAudience?: 'owner' | 'member' | null;
+  /** Owner needs scoped proof of an upgrade path; members can contact the owner. */
+  amrConcurrencyCardEligible?: boolean;
+  /** Opens the matching F04/F06 explanation; it never resends the draft. */
+  onAmrConcurrencyUpgrade?: () => void;
   /**
    * **失败之后的那次钱包补查已经落地,而且没读出数字。**
    *
@@ -893,6 +902,8 @@ interface Props {
   // Bumped by the parent to push a draft into the composer (used by the
   // "Import repo" CTA). The nonce lets the same text fire more than once.
   composerDraftSignal?: { text: string; nonce: number };
+  rejectedComposerSend?: RejectedComposerSend;
+  onRejectedComposerSendRestored?: (nonce: string, restored: boolean) => void;
   // Optional pet wiring forwarded straight through to ChatComposer's
   // /pet button. When omitted the composer hides the button entirely.
   petConfig?: AppConfig['pet'];
@@ -1129,6 +1140,7 @@ export function foldStrategyTaskTurns(messages: ChatMessage[]): FoldedChatMessag
       // internal step, not the turn ending.
       runId: message.runId ?? head.runId,
       runStatus: message.runStatus ?? head.runStatus,
+      taskDisplay: newerTaskDisplay(head.taskDisplay, message.taskDisplay),
       // Completion belongs to the final physical Run, including false or
       // absent legacy values. Never inherit the planning Run's verdict.
       strategyTaskDelivered: message.strategyTaskDelivered,
@@ -1413,6 +1425,9 @@ export function ChatPane({
   amrBalanceCardUsd = null,
   amrBalanceCardAnchorMessageId = null,
   amrBalanceAudience = 'owner',
+  amrConcurrencyCardAudience = null,
+  amrConcurrencyCardEligible = true,
+  onAmrConcurrencyUpgrade,
   amrBalanceCardUnavailable = false,
   onAmrBalanceUpgrade,
   onOpenAmrSettings,
@@ -1436,6 +1451,8 @@ export function ChatPane({
   onCreateDesignSystemFromProject,
   createDesignSystemFromProjectBusy,
   composerDraftSignal,
+  rejectedComposerSend,
+  onRejectedComposerSendRestored,
   petConfig,
   onAdoptPet,
   onTogglePet,
@@ -1480,16 +1497,19 @@ export function ChatPane({
   const { workspaceContext } = useProjectCollabContext();
   const { t, locale } = useI18n();
   const analytics = useAnalytics();
+  const previousTaskPresentation = useRef<PresentedChatMessage[]>([]);
   const displayMessages = useMemo(
-    () => foldStrategyTaskTurns(
-      messages
-        .filter((message) => !shouldHideEmptyBrandAssistantMessage(message, projectMetadata))
-        // P0-24 N15 / Q7: a turn the browser only lost contact with is drawn
-        // as in progress until the run record decides it (see
-        // pending-disconnect) — also after the user left and came back, when
-        // the reconnect row is gone until recovery reattaches.
-        .map(projectTurnAwaitingRunRecord),
-    ),
+    () => {
+      const presented = withTaskPresentation(foldStrategyTaskTurns(
+        messages
+          .filter((message) => !shouldHideEmptyBrandAssistantMessage(message, projectMetadata))
+          // A lost stream has no Run verdict yet. Project it before task
+          // aggregation so the merged process does not freeze as failed.
+          .map(projectTurnAwaitingRunRecord),
+      ), previousTaskPresentation.current);
+      previousTaskPresentation.current = presented;
+      return presented;
+    },
     [messages, projectMetadata],
   );
   /**
@@ -2262,12 +2282,8 @@ export function ChatPane({
     }
     if (onConsumeAmrAuthRetryContinuation(amrAuthRetryContinuation)) {
       amrAuthRetrySignedOutWitnessRef.current = null;
-      onRetry(
-        retryAssistant,
-        retryAssistant.agentId === 'amr'
-          ? 'authorize_and_retry'
-          : 'switch_runtime_retry',
-      );
+      // Authentication restores the conversation, not execution permission.
+      // The user retries explicitly once the account and Workspace are ready.
     }
   }, [
     activeConversationId,
@@ -2505,6 +2521,12 @@ export function ChatPane({
   const displayErrorTitle = accessErrorCopy
     ? t(accessErrorCopy.titleKey)
     : t(runFailureUi?.titleKey ?? 'chat.runError.title.generic', runFailureCopyVars);
+  const frozenConcurrencyCardAudience = amrConcurrencyCardEligible
+    ? (amrConcurrencyCardAudience
+      ?? (!accessErrorCopy && displayError && retryAssistant?.agentId === 'amr'
+        && runFailureUi?.titleKey === 'chat.runError.title.membershipConcurrencyLimit'
+        ? amrBalanceAudience : null))
+    : null;
   /*
    * 这张顶层报错卡代表**哪一轮**。
    *
@@ -2540,11 +2562,8 @@ export function ChatPane({
       resolvedDeviceId: getResolvedDeviceId(),
       installationId: config?.installationId,
     });
-    window.open(
-      attributedAmrUrl(amrPlansUrlForProfile(amrProfile), attribution, deviceId),
-      '_blank',
-      'noopener,noreferrer',
-    );
+    void openExternalUrl(
+      attributedAmrUrl(amrPlansUrlForProfile(amrProfile), attribution, deviceId));
   }, [amrProfile, analytics.track, config?.installationId, config?.telemetry?.metrics]);
   const visibleRecoveryActionTypes = useMemo(() => {
     const actions: TrackingRunRecoveryActionType[] = [];
@@ -2804,6 +2823,16 @@ export function ChatPane({
     lastDraftSignalNonceRef.current = composerDraftSignal.nonce;
     composerRef.current?.setDraft(composerDraftSignal.text);
   }, [composerDraftSignal]);
+
+  const lastRejectedSendRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!rejectedComposerSend || lastRejectedSendRef.current === rejectedComposerSend.nonce) return;
+    lastRejectedSendRef.current = rejectedComposerSend.nonce;
+    const restored = composerRef.current?.restoreDraft({
+      ...rejectedComposerSend, quotes: rejectedComposerSend.meta?.quotes ?? [], onlyIfEmpty: true,
+    }) === true;
+    onRejectedComposerSendRestored?.(rejectedComposerSend.nonce, restored);
+  }, [rejectedComposerSend, onRejectedComposerSendRestored]);
 
   // Library "optimize design system" hand-off: when the user pushed selected
   // assets into this project's design system from the Library, pre-fill the
@@ -4554,7 +4583,10 @@ export function ChatPane({
                   }}
                   highlightedUserMessageId={chatRailHighlightedMessageId}
                 />
-                {displayError ? (
+                {frozenConcurrencyCardAudience ? (
+                  <UpgradeCard balanceUsd={0} concurrencyAudience={frozenConcurrencyCardAudience}
+                    onUpgrade={onAmrConcurrencyUpgrade} />
+                ) : displayError ? (
                   /*
                    * 报错卡(稿子组件 19)。终于接回产品 —— 之前 `RunErrorCard` 抽出来了
                    * 却只有验收陈列页在用,产品这一格仍是 `UserActionCard`:
@@ -5417,6 +5449,8 @@ function ChatRows({
     () => previousTodosByAssistantMessageId(messages),
     [messages],
   );
+  const taskRecordContext = useMemo(() => ({mediaTasksByRunId,previousTodosByMessageId}),
+    [mediaTasksByRunId,previousTodosByMessageId]);
   const assistantRoleByMessageId = useMemo(() => {
     const byMessageId = new Map<string, boolean>();
     let previousAssistantIdentity: string | null = null;
@@ -5474,6 +5508,8 @@ function ChatRows({
     const assistantRow = (
       <AssistantMessage
         message={m}
+        taskPresentation={(m as PresentedChatMessage).taskPresentation}
+        taskRecordContext={(m as PresentedChatMessage).taskPresentation?.owner ? taskRecordContext : undefined}
         streaming={messageStreaming}
         projectId={projectId}
         projectKind={projectKindForTracking}

@@ -1,7 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, rm, cp } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { resolveLauncherPaths } from "@open-design/launcher-proto";
 import { selectAppEntry, startLauncher } from "../src/index.js";
 vi.mock("../src/platforms/macos/dock-entry.js", () => ({ repairMacDockEntries: vi.fn(async () => ({status:"unchanged"})) }));
 vi.mock("../src/platforms/macos/launch-services.js", () => ({ refreshMacApplicationRegistration: vi.fn(async () => ({status:"skipped"})) }));
@@ -170,4 +171,80 @@ it.each(["legacy", "incompatible", "missing"] as const)("recovers from a %s sele
     if (failure !== "missing") expect(await readFile(manifestPath, "utf8")).toBe(manifest);
     expect((await boot(f)).running.version).toBe(host.running.version);
   }
+});
+
+const amrBinding = {
+  profile: "test", apiUrl: "https://api.example.test", linkUrl: "https://link.example.test",
+  webUrl: "https://web.example.test", credentialScope: "dock-integration",
+};
+async function setBinding(resources: string, binding: unknown) {
+  const path = join(resources, "open-design-config.json");
+  const config = JSON.parse(await readFile(path, "utf8"));
+  await writeFile(path, JSON.stringify({ ...config, amrEndpointBinding: binding }));
+}
+const bindingMismatches = [
+  { name: "bound outer with unbound payload", installed: amrBinding, payload: undefined },
+  { name: "unbound outer with bound payload", installed: undefined, payload: amrBinding },
+  { name: "different credential scope", installed: amrBinding, payload: { ...amrBinding, credentialScope: "other" } },
+  { name: "malformed payload binding", installed: amrBinding, payload: { ...amrBinding, apiUrl: "http://invalid.example.test" } },
+  { name: "different endpoint", installed: amrBinding, payload: { ...amrBinding, apiUrl: "https://other.example.test" } },
+];
+it.each(bindingMismatches)("rejects $name before staging validation or activation can change journals", async ({ installed, payload }) => {
+  const f = await fixture();
+  await setBinding(f.resources, installed);
+  const host = await boot(f);
+  await host.reportReady();
+  const next = await addPayload(f, "1.1.0");
+  await setBinding(next.resources, payload);
+  const runtime = await readFile(join(f.launcher, "runtime.json"), "utf8");
+  const paths = resolveLauncherPaths({ root: join(f.root, "data"), channel: "stable", namespace: "default" });
+  const staging = join(paths.stagingRoot, "candidate");
+  await mkdir(paths.stagingRoot, { recursive: true });
+  await cp(next.versionRoot, staging, { recursive: true });
+  await expect(host.validateCandidate("1.1.0", staging)).rejects.toThrow("AMR endpoint binding");
+  await expect(host.activateCandidate("1.1.0")).rejects.toThrow("AMR endpoint binding");
+  expect(await readFile(join(f.launcher, "runtime.json"), "utf8")).toBe(runtime);
+  await expect(readFile(join(f.launcher, "state", "attempt.json"))).rejects.toThrow();
+});
+it.each([false, true])("preserves the installed binding when adopting existing cached payloads (fallback=%s)", async compatibleFallback => {
+  const f = await fixture();
+  await setBinding(f.resources, amrBinding);
+  const fallback = await addPayload(f, "1.1.0");
+  if (compatibleFallback) await setBinding(fallback.resources, amrBinding);
+  const next = await addPayload(f, "1.2.0");
+  const bytes = await readFile(join(next.resources, "open-design-config.json"), "utf8");
+  await mkdir(join(f.launcher, "state"), { recursive: true });
+  const active = { version: "1.2.0", generation: 4 };
+  await writeFile(join(f.launcher, "runtime.json"), JSON.stringify({ schemaVersion: 1, channel: "stable", namespace: "default", active, lastSuccessful: { version: "1.1.0", generation: 3 } }));
+  const host = await boot(f);
+  expect(host.running.version).toBe(compatibleFallback ? "1.1.0" : "1.0.0");
+  expect(host.rolledBackFromVersion).toBe("1.2.0");
+  await host.reportReady();
+  expect(host.snapshot().active).toEqual(active);
+  expect(JSON.parse(await readFile(join(f.launcher, "state", "attempt.json"), "utf8"))).toMatchObject(active);
+  expect(await readFile(join(next.resources, "open-design-config.json"), "utf8")).toBe(bytes);
+  expect((await boot(f)).running.version).toBe(host.running.version);
+});
+it("loads a payload with an equivalent canonical AMR binding in the installed host", async () => {
+  const f = await fixture();
+  await setBinding(f.resources, amrBinding);
+  const initial = await boot(f);
+  await initial.reportReady();
+  const next = await addPayload(f, "1.1.0");
+  await setBinding(next.resources, { ...amrBinding, apiUrl: "https://API.example.test:443/" });
+  const active = await initial.activateCandidate("1.1.0");
+  const host = await boot(f, ["--od-launcher-delegated-version", "1.1.0", "--od-launcher-delegated-generation", String(active.active!.generation)]);
+  expect(host.running).toMatchObject({ source: "payload", resourcesPath: next.resources });
+  expect(host.installedAppPath).toBe(join(f.root, "Open Design.app"));
+  await host.reportReady();
+  expect(host.snapshot().lastSuccessful).toEqual(active.active);
+});
+
+it("rejects a malformed installed binding before claiming ownership or writing journals", async () => {
+  const f = await fixture();
+  await setBinding(f.resources, { ...amrBinding, credentialScope: "../invalid" });
+  await expect(boot(f)).rejects.toThrow("AMR endpoint binding");
+  expect(f.app.requestSingleInstanceLock).not.toHaveBeenCalled();
+  expect(f.published).toEqual([]);
+  await expect(readFile(join(f.launcher, "runtime.json"))).rejects.toThrow();
 });

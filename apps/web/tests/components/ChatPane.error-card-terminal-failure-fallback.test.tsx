@@ -271,6 +271,22 @@ describe('反向锚点:兜底不许铺到这三档上', () => {
     expect(screen.queryByTestId('chat-run-error-card')).toBeNull();
   });
 
+  it('keeps the aggregated process running while a disconnect awaits the Run record', () => {
+    const message: ChatMessage = {
+      ...failedRunWithNothingToSay(),
+      taskDisplay: { id: 'automatic-task', revision: 2, currentRunId: 'run-1',
+        runIds: ['plan-run', 'run-1'], state: 'running',
+        elapsedMs: 2_000, observedAt: Date.now(), ticking: true },
+      events: [{ kind: 'thinking', text: 'Checking layout' },
+        { kind: 'status', label: 'error', code: RECONNECT_OWNED_FAILURE_CODE }],
+    };
+    const view = renderChat(message);
+    const summary = view.container.querySelector('[data-testid="assistant-flow"] > details > summary');
+    expect(summary).toHaveTextContent('chat.record.running');
+    expect(summary).not.toHaveTextContent('chat.record.failed');
+    expect(screen.queryByTestId('chat-run-error-card')).toBeNull();
+  });
+
   /** 锚点 ③:跑成了的一轮当然不出卡。 */
   it('成功的一轮不出卡', () => {
     const message = {

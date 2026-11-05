@@ -215,6 +215,9 @@ vi.mock('../../src/state/projects', async () => {
   );
   return {
     ...actual,
+    registerQueuedSubmission: vi.fn(async (projectId, submission) => ({
+      id: submission.id, projectId, conversationId: submission.conversationId, acceptedAt: submission.submittedAt,
+    })),
     createConversation: vi.fn(),
     listConversations: vi.fn(),
     listMessages: vi.fn(),
@@ -563,7 +566,7 @@ describe('a Home auto-send identifies its caller before the project scope resolv
         String(input).includes(`/api/projects/${PROJECT_ID}/raw/index.html`),
       );
       expect(rawCall).toBeDefined();
-      expect(String(rawCall?.[0])).toBe(`/api/projects/${PROJECT_ID}/raw/index.html`);
+      expect(String(rawCall?.[0])).toBe(`/api/projects/${PROJECT_ID}/raw/index.html?workspaceId=${TEAM_WORKSPACE}&workspaceMemberId=${TEAM_MEMBER}`);
       expect(rawCall?.[1]).toEqual(expect.objectContaining({
         headers: expect.objectContaining({
           'x-od-workspace-id': TEAM_WORKSPACE,

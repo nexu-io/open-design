@@ -22,6 +22,29 @@ import type { TrackingAmrOpenCodeErrorPhase, TrackingAmrOpenCodeLastEventType, T
 import type { ConversationForkAnalyticsContext, TrackingFileVersionSource, TrackingPluginImportSource, TrackingSessionMode, TrackingSettingsArea } from './ui-click.js';
 // ---- Result events -------------------------------------------------------
 
+/**
+ * One replication attempt through `od media reference`. Answers the only
+ * questions the product needs about this feature: is anyone using it, and
+ * where does it stop working. No prompts, no file names, no frame content.
+ */
+export interface MotionReplicateResultProps {
+  page_name: 'studio';
+  area: 'motion_replication';
+  project_id: string;
+  run_id?: string;
+  /** `file` for an attached video, `url` for a pasted link. */
+  source_kind: 'file' | 'url';
+  result: 'success' | 'failed';
+  /** Present when the measurement succeeded. */
+  duration_sec?: number;
+  /** Present when the measurement succeeded. */
+  shot_count?: number;
+  /** Present when the measurement succeeded. */
+  has_audio?: boolean;
+  /** Present when it failed: the tool's own error code. */
+  failure_code?: string;
+}
+
 // Final outcome for the paid provider submission. Keep this envelope free of
 // prompts, response bodies, configured URLs, credentials, and output paths.
 export interface MediaGenerationResultProps {
@@ -390,6 +413,10 @@ export interface RunCreatedProps extends RunTaskLineageProps {
   project_id: string;
   conversation_id: string | null;
   run_id: string;
+  /** Daemon-authorized workspace pinned to this run, never the current UI selection. */
+  workspace_id?: string;
+  /** Positive safe integer from that workspace's authorized context; omitted when unknown. */
+  member_count?: number;
   project_kind: TrackingProjectKind | null;
   /** Frozen from project metadata at physical Run creation, independent of strategy. */
   project_intent?: TrackingProjectIntent;

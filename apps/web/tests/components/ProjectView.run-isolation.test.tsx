@@ -14,6 +14,7 @@ import type { SettingsSection } from '../../src/components/SettingsDialog';
 import type { ProjectWorkspaceScopeState } from '../../src/collab/useProjectWorkspaceScope';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import type { AmrAuthRetryContinuation } from '../../src/runtime/amr-auth-retry-continuation';
+import { invalidateAmrFundingFeedback } from '../../src/runtime/amr-funding-feedback';
 import type {
   AgentInfo,
   AppConfig,
@@ -267,6 +268,9 @@ vi.mock('../../src/router', () => ({
 
 vi.mock('../../src/state/projects', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/state/projects')>()),
+  registerQueuedSubmission: vi.fn(async (projectId, submission) => ({
+    id: submission.id, projectId, conversationId: submission.conversationId, acceptedAt: submission.submittedAt,
+  })),
   createConversation: (...args: unknown[]) => createConversation(...args),
   deleteConversation: vi.fn(),
   getTemplate: (...args: unknown[]) => getTemplate(...args),
@@ -2994,6 +2998,245 @@ describe('ProjectView conversation run isolation', () => {
 
     await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
     await waitFor(() => expect(screen.getByTestId('send-queued-0').textContent).toBe('hello from b'));
+  });
+
+  it.each(['available', 'insufficient'] as const)(
+    'does not auto-send a gateway-paused AMR queue after remount and funding recovery (%s on busy Send now)',
+    async (freshFunding) => {
+    conversationAMessages = [];
+    fetchPreviewComments.mockResolvedValue([previewComment]);
+    const amrAgents: AgentInfo[] = [{
+      id: 'amr', name: 'AMR', bin: 'amr', available: true,
+      models: [{ id: 'glm-5', label: 'GLM 5' }],
+    }];
+    const amrConfig = { ...config, agentId: 'amr' };
+    let firstRunError: ((error: Error) => void) | undefined;
+    streamViaDaemon.mockImplementation(async (input: unknown) => {
+      const options = input as {
+        handlers: { onError: (error: Error) => void };
+        onRunCreated?: (runId: string) => void;
+        onRunStatus?: (status: NonNullable<ChatMessage['runStatus']>) => void;
+      };
+      if (streamViaDaemon.mock.calls.length <= 2) {
+        firstRunError = options.handlers.onError;
+        options.onRunCreated?.(`run-${streamViaDaemon.mock.calls.length}`);
+        options.onRunStatus?.('running');
+      }
+    });
+
+    const firstRender = renderProjectView(amrConfig, project, amrAgents);
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+    fireEvent.click(screen.getByTestId('send-message'));
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('streaming'));
+
+    fireEvent.click(screen.getByTestId('attach-first-comment'));
+    await waitFor(() => expect(screen.getByTestId('attached-comment-count').textContent).toBe('1'));
+    fireEvent.click(screen.getByTestId('send-message-alt'));
+    await waitFor(() => expect(screen.getByTestId('send-queued-0').textContent).toBe('hello from c'));
+    expect(screen.getByTestId('queued-comment-count-0').textContent).toBe('1');
+    fireEvent.click(screen.getByTestId('send-message'));
+    await waitFor(() => expect(screen.getByTestId('send-queued-1').textContent).toBe('hello from b'));
+
+    const error = new Error('AMR Cloud reported insufficient balance') as Error & { code: string };
+    error.code = 'AMR_INSUFFICIENT_BALANCE';
+    await act(async () => { firstRunError?.(error); });
+    await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('idle'));
+    expect(streamViaDaemon).toHaveBeenCalledTimes(1);
+    const queuedBeforeRemount = window.localStorage.getItem('od:chat-queued-sends:project-1:v1');
+    expect(queuedBeforeRemount).toContain('hello from c');
+    expect(queuedBeforeRemount).toContain(previewComment.id);
+
+    firstRender.unmount();
+    // The wallet now has funds. A prior gateway refusal still cannot grant
+    // consent to run a different queued submission after a page reload.
+    const secondRender = renderProjectView(amrConfig, project, amrAgents);
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-queued-0').textContent).toBe('hello from c'));
+    expect(screen.getByTestId('send-queued-1').textContent).toBe('hello from b');
+    expect(streamViaDaemon).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('queued-comment-count-0').textContent).toBe('1');
+
+    fireEvent.click(screen.getByTestId('send-queued-0'));
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
+    expect(streamViaDaemon.mock.calls[1]?.[0]).toEqual(expect.objectContaining({
+      history: expect.arrayContaining([
+        expect.objectContaining({ role: 'user', content: 'hello from c' }),
+      ]),
+    }));
+    await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('streaming'));
+    await waitFor(() => expect(screen.getByTestId('send-queued-0').textContent).toBe('hello from b'));
+    const originalFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input), 'http://localhost');
+      if (url.pathname === '/api/workspace/billing/preflight') {
+        return Promise.resolve(new Response(JSON.stringify({ preflight: {
+          schemaVersion: 1,
+          workspaceId: 'workspace-personal',
+          workspaceMemberId: 'member-personal',
+          modelId: url.searchParams.get('modelId'),
+          generatedAt: new Date().toISOString(),
+          fundingCheck: freshFunding,
+          balanceUsd: freshFunding === 'available' ? '10.00' : '0',
+        } }), { status: 200, headers: { 'content-type': 'application/json' } }));
+      }
+      return originalFetch(input, init);
+    }));
+    fireEvent.click(screen.getByTestId('send-queued-0'));
+    if (freshFunding === 'insufficient') {
+      await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/workspace/billing/preflight?'),
+        expect.anything(),
+      ));
+      await waitFor(() => expect(screen.getByTestId('amr-balance-dialog')).toBeInTheDocument());
+      // RUN-003: rejecting the replacement must not cancel the task that was
+      // already running when the user requested this queued send.
+      expect(screen.getByTestId('streaming-state').textContent).toBe('streaming');
+      expect(streamViaDaemon).toHaveBeenCalledTimes(2);
+      expect((streamViaDaemon.mock.calls[1]?.[0] as { signal: AbortSignal }).signal.aborted).toBe(false);
+      expect(screen.getByTestId('send-queued-0').textContent).toBe('hello from b');
+      // The failed fresh check must revoke the one-item explicit start even
+      // before a reload, so unrelated state churn cannot re-send this item.
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+      expect(streamViaDaemon).toHaveBeenCalledTimes(2);
+      secondRender.unmount();
+      stubAuthoritativePersonalWorkspaceBalance('10.00');
+      renderProjectView(amrConfig, project, amrAgents);
+      await waitFor(() => expect(screen.getByTestId('send-queued-0').textContent).toBe('hello from b'));
+      expect(streamViaDaemon).toHaveBeenCalledTimes(2);
+      return;
+    }
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(3));
+    expect(streamViaDaemon.mock.calls[2]?.[0]).toEqual(expect.objectContaining({
+      history: expect.arrayContaining([
+        expect.objectContaining({ role: 'user', content: 'hello from b' }),
+      ]),
+    }));
+  });
+
+  it.each(['available', 'insufficient'] as const)(
+    'hides only the manually selected drain when the old run ends during its funding check, then settles %s', async (result) => {
+      const firstPrompt = 'explicitly selected manual item';
+      const secondPrompt = 'unselected manual item must stay queued';
+      window.localStorage.setItem('od:chat-queued-sends:project-1:v1', JSON.stringify([
+        { id: 'selected-manual', conversationId: 'conv-a', prompt: firstPrompt, attachments: [], commentAttachments: [], createdAt: 1, manualStartOnly: true },
+        { id: 'unselected-manual', conversationId: 'conv-a', prompt: secondPrompt, attachments: [], commentAttachments: [], createdAt: 2, manualStartOnly: true },
+      ]));
+      let finishRun!: () => void;
+      let runHandlers!: { onDone: () => void };
+      reattachDaemonRun.mockImplementation(async (input: unknown) => {
+        runHandlers = (input as { handlers: { onDone: () => void } }).handlers;
+        return new Promise<void>(resolve => { finishRun = resolve; });
+      });
+      const amrAgents: AgentInfo[] = [{ id: 'amr', name: 'AMR', bin: 'amr', available: true,
+        models: [{ id: 'glm-5', label: 'GLM 5' }] }];
+      renderProjectView({ ...config, agentId: 'amr' }, project, amrAgents);
+      await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('streaming'));
+      await waitFor(() => expect(screen.getByTestId('send-queued-0').textContent).toBe(firstPrompt));
+      const originalFetch = globalThis.fetch;
+      let finishFunding!: (response: Response) => void;
+      let finishDrainFunding!: () => void;
+      let requestedModelId: string | null = null;
+      let fundingReads = 0;
+      invalidateAmrFundingFeedback();
+      vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(String(input), 'http://localhost');
+        if (url.pathname === '/api/workspace/billing/preflight') {
+          fundingReads++;
+          requestedModelId = url.searchParams.get('modelId');
+          if (fundingReads === 1) return new Promise<Response>(resolve => { finishFunding = resolve; });
+          return new Promise<Response>(resolve => {
+            finishDrainFunding = () => resolve(new Response(JSON.stringify({ preflight: {
+              schemaVersion: 1, workspaceId: 'workspace-personal', workspaceMemberId: 'member-personal',
+              modelId: url.searchParams.get('modelId'), generatedAt: new Date().toISOString(),
+              fundingCheck: result, balanceUsd: result === 'available' ? '10.00' : '0',
+            } })));
+          });
+        }
+        return originalFetch(input, init);
+      }));
+      fireEvent.click(screen.getByTestId('send-queued-0'));
+      await waitFor(() => expect(finishFunding).toBeTypeOf('function'));
+      expect(streamViaDaemon).not.toHaveBeenCalled();
+      await act(async () => { runHandlers.onDone(); finishRun(); });
+      await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('idle'));
+      expect(streamViaDaemon).not.toHaveBeenCalled();
+      expect(screen.getByTestId('send-queued-0').textContent).toBe(firstPrompt);
+      await act(async () => finishFunding(new Response(JSON.stringify({ preflight: {
+        schemaVersion: 1, workspaceId: 'workspace-personal', workspaceMemberId: 'member-personal', modelId: requestedModelId,
+        generatedAt: new Date().toISOString(), fundingCheck: 'available', balanceUsd: '10.00',
+      } }))));
+      await waitFor(() => expect(finishDrainFunding, JSON.stringify({ fundingReads, requestedModelId, posts: streamViaDaemon.mock.calls.length, error: screen.getByTestId('chat-error').textContent })).toBeTypeOf('function'));
+      expect(screen.getByTestId('user-messages').textContent).toContain(firstPrompt);
+      // The actual drain started after the old run ended. Hide its card while
+      // keeping the durable payload; the unselected manual item never starts.
+      expect(screen.getByTestId('send-queued-0').textContent).toBe(secondPrompt);
+      expect(screen.queryByTestId('send-queued-1')).toBeNull();
+      expect(JSON.parse(window.localStorage.getItem('od:chat-queued-sends:project-1:v1') ?? '[]')).toHaveLength(2);
+      await act(async () => finishDrainFunding());
+      if (result === 'available') {
+        await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+        expect(streamViaDaemon.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
+          history: expect.arrayContaining([expect.objectContaining({ role: 'user', content: firstPrompt })]),
+        }));
+        await waitFor(() => expect(JSON.parse(window.localStorage.getItem('od:chat-queued-sends:project-1:v1') ?? '[]'))
+          .toEqual([expect.objectContaining({ id: 'unselected-manual', prompt: secondPrompt, manualStartOnly: true })]));
+        expect(screen.getByTestId('send-queued-0').textContent).toBe(secondPrompt);
+      } else {
+        await waitFor(() => expect(screen.getByTestId('send-queued-0').textContent).toBe(firstPrompt));
+        expect(screen.getByTestId('send-queued-1').textContent).toBe(secondPrompt);
+        expect(streamViaDaemon).not.toHaveBeenCalled();
+        expect(JSON.parse(window.localStorage.getItem('od:chat-queued-sends:project-1:v1') ?? '[]')).toEqual([
+          expect.objectContaining({ id: 'selected-manual', manualStartOnly: true }),
+          expect.objectContaining({ id: 'unselected-manual', manualStartOnly: true }),
+        ]);
+      }
+    },
+  );
+
+  it('pauses the original AMR queue when its gateway fails while another conversation is visible', async () => {
+    conversationAMessages = [];
+    const amrAgents: AgentInfo[] = [{
+      id: 'amr', name: 'AMR', bin: 'amr', available: true,
+      models: [{ id: 'glm-5', label: 'GLM 5' }],
+    }];
+    const amrConfig = { ...config, agentId: 'amr' };
+    let firstRunError: ((error: Error) => void) | undefined;
+    streamViaDaemon.mockImplementation(async (input: unknown) => {
+      const options = input as {
+        handlers: { onError: (error: Error) => void };
+        onRunCreated?: (runId: string) => void;
+        onRunStatus?: (status: NonNullable<ChatMessage['runStatus']>) => void;
+      };
+      if (streamViaDaemon.mock.calls.length === 1) {
+        firstRunError = options.handlers.onError;
+        options.onRunCreated?.('run-a-gateway-failure');
+        options.onRunStatus?.('running');
+      }
+    });
+
+    const firstRender = renderProjectView(amrConfig, project, amrAgents);
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+    fireEvent.click(screen.getByTestId('send-message'));
+    await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('streaming'));
+    fireEvent.click(screen.getByTestId('send-message-alt'));
+    await waitFor(() => expect(screen.getByTestId('send-queued-0').textContent).toBe('hello from c'));
+
+    fireEvent.click(screen.getByTestId('conversation-select-conv-b'));
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-b'));
+    await act(async () => { resolveConversationBMessages?.([]); });
+    const error = new Error('AMR Cloud reported insufficient balance') as Error & { code: string };
+    error.code = 'AMR_INSUFFICIENT_BALANCE';
+    await act(async () => { firstRunError?.(error); });
+    expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
+    expect(streamViaDaemon).toHaveBeenCalledTimes(1);
+
+    firstRender.unmount();
+    renderProjectView(amrConfig, project, amrAgents);
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-queued-0').textContent).toBe('hello from c'));
+    expect(streamViaDaemon).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
   });
 
   it('restores only one queued send for each stable request id', async () => {

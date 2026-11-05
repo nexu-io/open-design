@@ -88,6 +88,10 @@ async function startProjectStubServer(deleteResponse: unknown = { ok: true }, sh
         res.end(JSON.stringify({ ...JSON.parse(raw), status: 'stopped' }));
         return;
       }
+      if (captured.method === 'GET' && captured.url === '/api/projects/project-1/files/nested%2Findex.html/publish-public?localOnly=true') {
+        res.end(JSON.stringify({ freshness: 'outdated' }));
+        return;
+      }
       if (captured.method === 'GET' && captured.url === '/api/projects/project-1/share-state') {
         res.end(JSON.stringify({ projectId: 'project-1', bindingExists: false, hasEverShared: false, publications: [] }));
         return;
@@ -411,6 +415,17 @@ describe('od project CLI', () => {
     expect(JSON.parse(result.stdout)).toEqual({ projectId: 'project-1', bindingExists: false, hasEverShared: false, publications: [] });
     expect(stub.requests).toHaveLength(1);
     expect(stub.requests[0]).toMatchObject({ method: 'GET', url: '/api/projects/project-1/share-state', headers: { 'x-od-workspace-id': 'ws-1', 'x-od-workspace-member-id': 'member-1' } });
+  });
+  it('share status --local-only compares content through one local request', async () => {
+    stub = await startProjectStubServer();
+    const result = await runCli(['project', 'share', 'status', 'project-1', '--path', 'nested/index.html', '--local-only', '--workspace', 'ws-1', '--workspace-member', 'member-1', '--daemon-url', stub.baseUrl, '--json']);
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({ freshness: 'outdated' });
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]).toMatchObject({ method: 'GET', url: '/api/projects/project-1/files/nested%2Findex.html/publish-public?localOnly=true' });
+    const invalid = await runCli(['project', 'share', 'publish', 'project-1', '--path', 'nested/index.html', '--local-only', '--daemon-url', stub.baseUrl]);
+    expect(invalid.code).toBe(2);
+    expect(stub.requests).toHaveLength(1);
   });
   it('share preflight uses the same HTTP plan endpoint and returns its JSON DTO', async () => {
     stub = await startProjectStubServer();

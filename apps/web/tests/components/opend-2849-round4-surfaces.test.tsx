@@ -107,7 +107,7 @@ describe('S04 / S06 发送前弹窗', () => {
     for (const ownerName of ['Alice', null]) {
       zh(<AmrOwnerTopUpDialog inline onClose={() => {}} ownerName={ownerName} />);
       expect(screen.getByRole('heading', { level: 2 }).textContent).toBe('团队额度不足');
-      const body = screen.getByText('当前团队额度不足，请联系团队管理员充值或升级订阅。');
+      const body = screen.getByText('当前团队额度不足，请联系团队空间所有者充值或升级订阅。');
       expect(body).toBeTruthy();
       expect(screen.getByTestId('amr-balance-owner-dismiss')).toBeTruthy();
       cleanup();
@@ -134,7 +134,7 @@ describe('S15 运行中额度不足(升级卡归零那一档)', () => {
   it('无充值权限成员:团队标题 + 正文', () => {
     zh(<UpgradeCard balanceUsd={0} pausedAudience="member" onUpgrade={() => {}} />);
     expect(within(why()).getByText('团队额度不足，任务已暂停')).toBeTruthy();
-    expect(within(why()).getByText('当前团队额度不足，请联系团队管理员充值或升级订阅。')).toBeTruthy();
+    expect(within(why()).getByText('当前团队额度不足，请联系团队空间所有者充值或升级订阅。')).toBeTruthy();
   });
 
   it('余额偏低那一档不动', () => {

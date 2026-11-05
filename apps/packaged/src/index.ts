@@ -343,6 +343,9 @@ async function main(): Promise<void> {
     platform: process.platform,
   });
   applyPackagedElectronPathOverrides(paths);
+  // The shared beta feed can replace the entire outer with an unbound build.
+  // Use the existing updater gate for this fixed-environment dogfood package.
+  if (activeConfig.amrEndpointBinding) process.env.OD_UPDATE_ENABLED = "0";
   applyPackagedUpdaterEnv(activeConfig.updateMetadataUrl);
   let pendingDesktopIntent = false;
   let restoreDeferredDesktop: (() => void) | null = null;
@@ -392,6 +395,7 @@ const electronReadyAtMs = performance.now();
     launchContext: packagedStartupTiming?.context(),
     appVersion: activeConfig.appVersion,
     amrProfile: activeConfig.amrProfile,
+    amrEndpointBinding: activeConfig.amrEndpointBinding,
     daemonCliEntry: activeConfig.daemonCliEntry,
     daemonSidecarEntry: activeConfig.daemonSidecarEntry,
     electronNodeCommand: launcherRuntime.electronNodeCommand,
@@ -460,6 +464,7 @@ const electronReadyAtMs = performance.now();
   };
   const launchDesktop = async (): Promise<DesktopMainHandle> => await runDesktopMain(runtime, {
     electronReadyAtMs,
+    amrEndpointBinding: activeConfig.amrEndpointBinding,
     startupTiming: deferredHeadless ? null : packagedStartupTiming ?? undefined,
     splashWindow: splash?.window,
     splashStartedAt: splash?.startedAt,

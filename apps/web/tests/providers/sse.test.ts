@@ -44,9 +44,11 @@ describe('parseSseFrame', () => {
 describe('streamViaDaemon', () => {
   it('sends the latest user turn separately from the full CLI transcript', async () => {
     const handlers = createDaemonHandlers();
+    const onUserSubmissionAccepted = vi.fn();
+    const receipt = { id: 'submission-1', projectId: 'project-1', conversationId: 'conv-1', acceptedAt: 1234 };
     const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const url = String(input);
-      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1', userSubmission: receipt });
       if (url === '/api/runs/run-1/events') {
         return sseResponse('event: end\ndata: {"code":0,"status":"succeeded"}\n\n');
       }
@@ -57,6 +59,8 @@ describe('streamViaDaemon', () => {
     await streamViaDaemon({
       agentId: 'mock',
       userMessageId: '3',
+      submission: { id: 'submission-1', source: 'user' },
+      onUserSubmissionAccepted,
       history: [
         { id: '1', role: 'user', content: 'pre-consent brief' },
         { id: '2', role: 'assistant', content: 'draft response' },
@@ -74,6 +78,8 @@ describe('streamViaDaemon', () => {
     expect(body.message).toContain('post-consent revision');
     expect(body.currentPrompt).toBe('post-consent revision');
     expect(body.userMessageId).toBe('3');
+    expect(body.submission).toEqual({ id: 'submission-1', source: 'user' });
+    expect(onUserSubmissionAccepted).toHaveBeenCalledExactlyOnceWith(receipt);
     expect(body.skillIds).toEqual(['frontend-design', 'imagegen']);
   });
 

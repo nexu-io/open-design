@@ -1,3 +1,4 @@
+import { orderProjectItems } from '../lib/project-order';
 import { reportProjectFailure } from '../observability/experience-diagnostics';
 import {
   type DragEvent,
@@ -22,7 +23,7 @@ import {
   type ProjectDisplayStatus,
   type TeamProject,
   type WorkspaceCollabContext,
-  workspaceContextHasTeamIdentity,
+  workspaceContextHasWorkspaceIdentity,
 } from '@open-design/contracts';
 import { Icon, type IconName } from './Icon';
 import {
@@ -921,15 +922,6 @@ export function WorkspaceTabsBar({
   const [radialMenu, setRadialMenu] = useState<{ x: number; y: number } | null>(null);
   // Docked-mode white dropdown (project route): open state of its tab list.
   const [dockMenuOpen, setDockMenuOpen] = useState(false);
-  // Most-recently-activated tab ids, newest first — the dropdown lists tabs
-  // in this order (最近打开的在前). Session-local: falls back to strip order
-  // for tabs never activated since launch.
-  const tabMruRef = useRef<string[]>([]);
-  useEffect(() => {
-    const id = state.activeTabId;
-    if (!id) return;
-    tabMruRef.current = [id, ...tabMruRef.current.filter((x) => x !== id)].slice(0, 50);
-  }, [state.activeTabId]);
   const [radialHoverId, setRadialHoverId] = useState<string | null>(null);
   useEffect(() => {
     if (!radialMenu) setRadialHoverId(null);
@@ -1223,10 +1215,10 @@ export function WorkspaceTabsBar({
     };
   }, [dockActionsProjectId]);
 
-  // 转入团队空间 shows under the rail row menu's conditions: a team plane to
-  // move into AND the right to share. A personal workspace hides the item.
+  // 转入团队空间 follows the rail menu: an exact Workspace identity and the
+  // permission to share with its members are both required.
   const moveToTeamAvailable =
-    workspaceContextHasTeamIdentity(workspaceContext)
+    workspaceContextHasWorkspaceIdentity(workspaceContext)
     && workspaceContext?.permissions?.canShareProjects === true;
   // Shared / foreign rows are decided from the same evidence the rail uses —
   // the team hub's catalog — read once per dropdown open (coalesced and cached
@@ -1234,7 +1226,7 @@ export function WorkspaceTabsBar({
   // `useTeamProjects`, which would keep polling on the project route.
   const [teamCatalog, setTeamCatalog] = useState<readonly TeamProject[]>([]);
   useEffect(() => {
-    if (!dockMenuOpen || !workspaceContextHasTeamIdentity(workspaceContext) || !workspaceContext) {
+    if (!dockMenuOpen || !workspaceContextHasWorkspaceIdentity(workspaceContext) || !workspaceContext) {
       return undefined;
     }
     let cancelled = false;
@@ -2141,17 +2133,13 @@ export function WorkspaceTabsBar({
       displayTabById.get(activeTab.id)
         ?? displayTabFor(activeTab, projectById, t, knownProjectNamesRef.current);
     const isEntryActive = activeTab.kind === 'entry';
-    // Most recently opened first. The active tab ranks first even before the
-    // MRU effect has run for it; never-activated tabs keep strip order after.
-    const mru = tabMruRef.current;
-    const mruRank = (tab: WorkspaceChromeTab): number => {
-      if (tab.id === state.activeTabId) return -1;
-      const index = mru.indexOf(tab.id);
-      return index === -1 ? Number.MAX_SAFE_INTEGER : index;
-    };
-    const projectTabs = state.tabs
-      .filter((tab) => tab.kind !== 'entry')
-      .sort((a, b) => mruRank(a) - mruRank(b));
+    const projectTabs = orderProjectItems(
+      state.tabs.filter((tab) => tab.kind !== 'entry'),
+      (tab) => tab.kind === 'project'
+        ? projectById.get(tab.projectId) ?? { id: tab.projectId }
+        : undefined,
+      activeTab.kind === 'project' ? activeTab.projectId : undefined,
+    );
     // The hovered row's project, if the ambient list actually carries it. A tab
     // can name a project this list has not loaded (deep link, other workspace);
     // that row simply previews nothing rather than showing an empty card.

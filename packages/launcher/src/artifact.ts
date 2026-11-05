@@ -1,3 +1,4 @@
+import { parseAmrEndpointBinding, type AmrEndpointBinding } from "@open-design/contracts";
 import { lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -18,7 +19,8 @@ export function safePath(root: string, path: unknown): string {
   return result;
 }
 
-export function resolvePayload(paths: LauncherPaths, version: string, environment: LauncherHostEnvironment, artifactRoot?: string): { running: LauncherHostRunningCode; entry: string } {
+export function resolvePayload(paths: LauncherPaths, version: string, environment: LauncherHostEnvironment, options: { artifactRoot?: string; amrEndpointBinding?: AmrEndpointBinding } = {}): { running: LauncherHostRunningCode; entry: string } {
+  const { artifactRoot } = options;
   const versionPaths = resolveLauncherVersionPaths({ ...paths, version });
   const root = artifactRoot == null ? versionPaths.versionRoot : resolve(artifactRoot);
   if (root !== versionPaths.versionRoot &&
@@ -40,6 +42,12 @@ export function resolvePayload(paths: LauncherPaths, version: string, environmen
   if (!within(appRoot, main) || !within(realpathSync(appRoot), realpathSync(main)) ||
       !statSync(main).isFile() || !statSync(executablePath).isFile()) throw new Error("payload entry is incomplete");
   const config = JSON.parse(readFileSync(join(resourcesPath, "open-design-config.json"), "utf8"));
+  // Payload code reads its own config. It may only run with the installed
+  // application's environment identity, including an explicitly unbound outer.
+  const payloadBinding = parseAmrEndpointBinding(config.amrEndpointBinding);
+  if (JSON.stringify(options.amrEndpointBinding) !== JSON.stringify(payloadBinding)) {
+    throw new Error("Launcher payload AMR endpoint binding differs from the installed application");
+  }
   if (config.appVersion !== version) throw new Error("payload host metadata mismatch");
   validateLauncherHostEnvironment(config.launcherHost, environment);
   return { entry: pathToFileURL(main).href, running: { appRoot, resourcesPath, executablePath, source: "payload", version } };

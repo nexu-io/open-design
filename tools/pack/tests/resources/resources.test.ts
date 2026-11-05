@@ -118,6 +118,8 @@ async function velaCliCommandWithOptionalStageDir(
   _source: string,
   args: readonly string[],
 ): Promise<{ stderr: string; stdout: string }> {
+  if (args[0] === "login") return { stderr: "", stdout: "Usage: vela login [flags]\n --completion-receipt" };
+  if (args[0] === "logout") return { stderr: "", stdout: "Usage: vela logout [flags]\n --expected-app-user-id --control-key-id --retry-pending --json" };
   if (args[0] === "--version") {
     return { stderr: "", stdout: `${await pinnedVelaCliVersion()}\n` };
   }
@@ -172,6 +174,8 @@ async function matchingVelaCliCommand(
   _binary: string,
   args: readonly string[],
 ): Promise<{ stderr: string; stdout: string }> {
+  if (args[0] === "login") return { stderr: "", stdout: "Usage: vela login [flags]\n --completion-receipt" };
+  if (args[0] === "logout") return { stderr: "", stdout: "Usage: vela logout [flags]\n --expected-app-user-id --control-key-id --retry-pending --json" };
   if (args[0] === "--version") {
     return { stderr: "", stdout: `${await pinnedVelaCliVersion()}\n` };
   }
@@ -540,6 +544,22 @@ describe("copyOptionalVelaCliBinary", () => {
       }
     },
   );
+
+  it("rejects a strict build when the CLI lacks device login or logout support", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-vela-auth-"));
+    try {
+      const source = join(root, "vela");
+      await writeFile(source, "fixture");
+      for (const missing of ["login", "logout"]) {
+        await expect(copyOptionalVelaCliBinary({
+          env: { OPEN_DESIGN_VELA_CLI_BIN: source }, platform: "mac", requireBundled: true, resourceRoot: join(root, "out"),
+          runCommand: async (binary, args) => args[0] === missing
+            ? { stdout: `Usage: vela ${missing}`, stderr: "" }
+            : matchingVelaCliCommand(binary, args),
+        })).rejects.toThrow(new RegExp(`${missing} session support`));
+      }
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
 
   it("accepts a Vela CLI that exposes the coding plan preflight", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-vela-preflight-ok-"));

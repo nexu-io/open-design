@@ -1,3 +1,4 @@
+import { parseAmrEndpointBinding, type AmrEndpointBinding } from "@open-design/contracts";
 import {
   existsSync, mkdirSync, readFileSync, readdirSync, realpathSync,
   renameSync, rmSync, writeFileSync,
@@ -18,6 +19,7 @@ import type { LauncherPlatform } from "./platform.js";
 import type { LauncherEntry, LauncherEntryOptions } from "./types.js";
 
 type RawConfig = {
+  amrEndpointBinding?: AmrEndpointBinding;
   appVersion?: string;
   namespace?: string;
   namespaceBaseRoot?: string;
@@ -66,6 +68,7 @@ export async function startLauncher(
     return null;
   }
 
+  installation.config.amrEndpointBinding = parseAmrEndpointBinding(installation.config.amrEndpointBinding);
   validateLauncherHostEnvironment(installation.config.launcherHost, options.adapter.environment);
   const onSecondInstance = claimInstance(options.app, installation, argv);
   if (onSecondInstance == null) {
@@ -172,7 +175,7 @@ function loadOrAdoptInstallation(installation: Installation, environment: Launch
     const selected = selectLauncherRuntimeTarget({ runtime, attempted: attempt });
     if (selected.selected && compareLauncherVersions(selected.pointer.version, version) > 0) {
       try {
-        resolvePayload(paths, selected.pointer.version, environment);
+        resolvePayload(paths, selected.pointer.version, environment, { amrEndpointBinding: installation.config.amrEndpointBinding });
       } catch {
         // Complete adoption so selectApplication can record the failed target
         // and recover to compatible code without deleting the payload bytes.
@@ -181,7 +184,7 @@ function loadOrAdoptInstallation(installation: Installation, environment: Launch
     let lastSuccessful = baselinePointer;
     if (runtime.lastSuccessful != null && compareLauncherVersions(runtime.lastSuccessful.version, version) > 0) {
       try {
-        resolvePayload(paths, runtime.lastSuccessful.version, environment);
+        resolvePayload(paths, runtime.lastSuccessful.version, environment, { amrEndpointBinding: installation.config.amrEndpointBinding });
         lastSuccessful = runtime.lastSuccessful;
       } catch { /* Only a compatible fallback can run inside this host. */ }
     }
@@ -251,7 +254,7 @@ function selectApplication(
   let reason: LauncherHostSelection["reason"] = selected.selected && selected.reason !== "active-resume"
     ? selected.reason : "active";
   try {
-    payload = resolvePayload(paths, target.version, options.adapter.environment);
+    payload = resolvePayload(paths, target.version, options.adapter.environment, { amrEndpointBinding: installation.config.amrEndpointBinding });
   } catch {
     // Preserve failure evidence and recover inside the installed process even
     // when the selected payload is missing/corrupt before its code can run.
@@ -261,7 +264,7 @@ function selectApplication(
     reason = "last-successful";
     try {
       payload = compareLauncherVersions(target.version, version) > 0
-        ? resolvePayload(paths, target.version, options.adapter.environment) : null;
+        ? resolvePayload(paths, target.version, options.adapter.environment, { amrEndpointBinding: installation.config.amrEndpointBinding }) : null;
     } catch {
       target = baselinePointer;
       payload = null;
@@ -310,11 +313,11 @@ function createHostLifecycle(
       readinessConfirmed = true;
     },
     async validateCandidate(nextVersion, artifactRoot) {
-      resolvePayload(paths, normalizeLauncherVersion(nextVersion), options.adapter.environment, artifactRoot);
+      resolvePayload(paths, normalizeLauncherVersion(nextVersion), options.adapter.environment, { amrEndpointBinding: installation.config.amrEndpointBinding, artifactRoot });
     },
     async activateCandidate(nextVersion) {
       const normalized = normalizeLauncherVersion(nextVersion);
-      resolvePayload(paths, normalized, options.adapter.environment);
+      resolvePayload(paths, normalized, options.adapter.environment, { amrEndpointBinding: installation.config.amrEndpointBinding });
       const active = {
         version: normalized,
         generation: Math.max(runtime.active?.generation ?? 0, runtime.lastSuccessful?.generation ?? 0) + 1,

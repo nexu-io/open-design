@@ -3,10 +3,12 @@ import os from 'node:os';
 import path from 'node:path';
 
 import Database from 'better-sqlite3';
+import { buildWorkspacePermissions, buildWorkspaceSeatSummary, type WorkspaceCollabContext } from '@open-design/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { reconcileDurableRunTerminals } from '../../src/runtimes/run-terminal-reconciliation.js';
 import { createChatRunService } from '../../src/runtimes/runs.js';
+import { createRunAnalyticsLifecycle } from '../../src/services/run-analytics-lifecycle.js';
 
 describe('durable run terminal reconciliation', () => {
   let tmpDir: string;
@@ -31,6 +33,107 @@ describe('durable run terminal reconciliation', () => {
     vi.restoreAllMocks();
     db.close();
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it.each([7, undefined])('replays the frozen workspace snapshot and original terminal identity once (memberCount=%s)', async (memberCount) => {
+    const runs = createChatRunService({
+      createSseResponse: () => ({ send: vi.fn(), end: vi.fn(), cleanup: vi.fn() }),
+      createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }),
+      runsLogDir: tmpDir,
+    } as never);
+    const run = runs.create({
+      projectId: 'p1', conversationId: null, agentId: 'amr', clientRequestId: 'original-request',
+      workspaceScope: {
+        schemaVersion: 1, projectId: 'p1', workspaceId: 'workspace-a',
+        workspaceMemberId: 'project-creator', source: 'persisted_project_binding',
+      },
+    });
+    let resolveCreated: () => void = () => {};
+    const created = new Promise<void>((resolve) => { resolveCreated = resolve; });
+    let resolveCheckpoint: () => void = () => {};
+    const checkpoint = new Promise<void>((resolve) => { resolveCheckpoint = resolve; });
+    let createdInsertId = '';
+    const resolveExact = vi.fn(async () => ({
+      workspaceId: 'workspace-a', workspaceMemberId: 'actual-caller',
+      memberStatus: 'active', lifecycleState: 'active',
+      workspaceType: 'team', role: 'member', billingState: 'active', planId: 'team',
+      providerMode: 'platform_credits',
+      seatSummary: buildWorkspaceSeatSummary({ seatLimit: 0, usedSeats: 0 }),
+      permissions: buildWorkspacePermissions({ role: 'member', lifecycleState: 'active' }),
+      ...(memberCount !== undefined ? { memberCount } : {}),
+    } satisfies WorkspaceCollabContext));
+    const lifecycle = createRunAnalyticsLifecycle({
+      db,
+      design: {
+        runs: {
+          ...runs,
+          finalizeAnalyticsDelivery: (currentRun: Parameters<typeof runs.finalizeAnalyticsDelivery>[0], result: Parameters<typeof runs.finalizeAnalyticsDelivery>[1]) => {
+            runs.finalizeAnalyticsDelivery(currentRun, result);
+            resolveCheckpoint();
+          },
+        } as never,
+        analytics: {
+          capture: (args) => {
+            if (args.eventName === 'run_created') {
+              createdInsertId = args.insertId;
+              resolveCreated();
+              return { status: 'queued', acknowledgement: 'local_buffer', errorType: null };
+            }
+            return { status: 'failed', acknowledgement: 'none', errorType: 'enqueue_failed' };
+          },
+        },
+        getAppVersion: () => '0.0.0-test',
+      },
+      paths: { PROJECTS_DIR: tmpDir, RUNTIME_DATA_DIR: tmpDir },
+      agents: { detectAgents: async () => [] },
+      telemetry: {
+        reportRunCompletionTelemetryFallback: () => {},
+        resolveRunProjectKindForAnalytics: () => null,
+        runArtifactBaselines: { take: () => undefined },
+        runRetryEventsForAnalytics: () => [],
+      },
+      workspaceContext: { resolveExact },
+    });
+    lifecycle.install({
+      run: run as never,
+      body: { analyticsHints: { taskExecutionId: 'task-original', initialRunId: run.id, taskRunIndex: 2, sourceRunId: 'source-run' } },
+      requestAnalyticsContext: { deviceId: 'device-original', sessionId: 'session-original', clientType: 'web', locale: 'en', requestId: 'http-original' },
+    });
+    await created;
+    runs.finish(run, 'succeeded', 0, null);
+    await checkpoint;
+    const statePath = path.join(tmpDir, run.id, 'state.json');
+    const stored = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    expect(stored.analyticsRecovery).toMatchObject({
+      insertId: createdInsertId,
+      context: { requestId: 'http-original' },
+      properties: { workspace_id: 'workspace-a', run_id: run.id, task_execution_id: 'task-original', source_run_id: 'source-run', result: 'success' },
+    });
+    expect(stored.analyticsRecovery).not.toHaveProperty('completedAt');
+    expect(stored.analyticsRecovery.properties).not.toHaveProperty('credit_type');
+    if (memberCount === undefined) expect(stored.analyticsRecovery.properties).not.toHaveProperty('member_count');
+    else expect(stored.analyticsRecovery.properties.member_count).toBe(memberCount);
+
+    const capture = vi.fn(async (_args: { properties: Record<string, unknown> }) => ({ status: 'queued', acknowledgement: 'local_buffer', errorType: null }));
+    const options = {
+      analytics: { capture }, db, runsLogDir: tmpDir,
+      reportLangfuse: vi.fn(async () => ({ langfuse_expected: false, langfuse_delivery_status: 'not_expected' as const })),
+    };
+    expect((await reconcileDurableRunTerminals(options)).analyticsReplayed).toBe(1);
+    expect(capture).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      eventName: 'run_finished', insertId: `${createdInsertId}-finish`,
+      context: expect.objectContaining({ requestId: 'http-original' }),
+      properties: expect.objectContaining({
+        workspace_id: 'workspace-a', run_id: run.id, task_execution_id: 'task-original',
+        initial_run_id: run.id, task_run_index: 2, source_run_id: 'source-run', result: 'success',
+      }),
+    }));
+    const replayedProperties = capture.mock.calls[0]?.[0]?.properties;
+    if (memberCount === undefined) expect(replayedProperties).not.toHaveProperty('member_count');
+    else expect(replayedProperties?.member_count).toBe(memberCount);
+    expect((await reconcileDurableRunTerminals(options)).analyticsReplayed).toBe(0);
+    expect(capture).toHaveBeenCalledOnce();
+    expect(resolveExact).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'workspace-a' });
   });
 
   it('keeps the app version that started an interrupted run after a newer daemon restarts', async () => {

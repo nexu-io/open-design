@@ -198,9 +198,12 @@ export interface CompletionFeedbackActivationResult {
 export function armCompletionFeedbackOnFirstGesture(
   config: NotificationsConfig,
   onResult: (result: CompletionFeedbackActivationResult) => void,
+  permissionAlreadyHandled = false,
 ): () => void {
   if (typeof window === 'undefined') return () => undefined;
   let armed = true;
+  let permissionRequested = permissionAlreadyHandled;
+  let preparationTimer: number | null = null;
   function dispose() {
     if (!armed) return;
     armed = false;
@@ -208,8 +211,26 @@ export function armCompletionFeedbackOnFirstGesture(
   }
   function activate() {
     if (!armed) return;
-    dispose();
-    if (config.soundEnabled) prepareCompletionSound();
+    // AudioContext construction can stall the first Send click. The browser
+    // retains this real user activation briefly, so let the send feedback
+    // paint first while also supporting a backgrounded window (no rAF).
+    // A rejected/background-throttled resume is retried on the next real
+    // Send gesture; permission is still requested at most once.
+    if (config.soundEnabled && ctx?.state === 'suspended') {
+      // A later trusted Send can retry a browser-rejected resume immediately.
+      // Constructing a new context is the expensive operation deferred below.
+      void ctx.resume().catch(() => undefined);
+    } else if (config.soundEnabled && !ctx) {
+      // If a background tab throttled the previous timer, a later real Send
+      // gets a new attempt instead of remaining stuck behind that old timer.
+      if (preparationTimer !== null) window.clearTimeout(preparationTimer);
+      preparationTimer = window.setTimeout(() => {
+        preparationTimer = null;
+        prepareCompletionSound();
+      }, 300);
+    }
+    if (permissionRequested) return;
+    permissionRequested = true;
     if (!config.desktopEnabled) {
       onResult({ desktopPermission: null });
       return;
