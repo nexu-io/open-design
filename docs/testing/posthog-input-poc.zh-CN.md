@@ -1,112 +1,116 @@
-# PostHog 设置与搜索输入统计：本地 PoC 验收
+# PostHog 成本优化试点：设置/搜索输入统计验收
 
-此改动交付本地实验能力，不授权发布。原始记录保留，5/10 分钟汇总分别核对；
-汇总每小时尝试批量发送，退出和恢复可提前收尾。不能承诺任意时刻强杀零丢失。
+目标是在不减少用户覆盖的前提下验证汇总是否能降低事件成本。本PR先保留原始，
+额外形成5/10分钟汇总并每小时批量发送，验证准确性、故障恢复和客户端开销；不合并、不发布。
+第一轮会增加事件，只有后续获批替换部分原始后才可能降本。
 
-- [独立交付文档、测试包、26 条用例和证据](https://powerformer.feishu.cn/docx/Hk1UdgaL6om0qaxH0u4cwhYWnYd)
+- [主文档：方案、自测、发版前6项工作](https://powerformer.feishu.cn/wiki/NTlywJroYiURBAk4xuqcUaYXnCV)
+- [独立评估：线上回收、比较基线和快照时点](https://powerformer.feishu.cn/docx/El67dX79GoTSgoxMbLIcU7FKn0f)
+- [执行表与D+1/D+3/D+7 Agent Prompts](https://powerformer.feishu.cn/sheets/Fh33sGvdphAVdYtHGxCcEZtPnwb)
 - [Plane OPEND-4684](https://plane.powerformer.net/open-design/browse/OPEND-4684/)
-- [GitHub PoC 交付范围 #9296](https://github.com/nexu-io/open-design/issues/9296)
 
-## 实现边界
+## 公共层改什么
 
-| 位置 | 实现 | 边界 |
+| 位置 | 行为 | 约束 |
 | --- | --- | --- |
-| 公共输入观察器与上报入口 | 保存累计尾段，统一原始记录与汇总补发 | 设置/搜索业务组件不修改，不采集输入文本 |
-| 本地队列与汇总 | 同一原始窗口生成 5/10 分钟摘要，按稳定 ID 重试、确认后移除 | 两套汇总分别核对，不相加；允许网络重传 |
-| Desktop / Host | 异步 IPC 到 SQLite 工作线程，提前开队列并预热校验 | COMMIT 才算已保存；输入不等待磁盘 |
-| mac 打包 | 单独物化工作线程，构建缓存区分 QA 编译标志 | 私有测试包，不修改正式发布配置 |
+| 公共输入观察器 | 设置/搜索累计尾段后台保存；原始和汇总有同一数据依据 | 业务组件不改，不采集输入内容；业务输入不等待磁盘 |
+| 公共队列 | 先持久化不可变原始，再立即发送原始；汇总按小时发，隐藏/退出/恢复可提前收尾 | 原始仍走`/i/v0/e/`，汇总走`/batch/`；重试保持UUID、身份、时间和正文 |
+| Desktop/Host | 异步IPC到SQLite工作线程；正常退出先让公共层保存尾段，再关存储 | COMMIT才算已保存；退出等待有2秒上限，不等网络 |
+| 目标及控制 | 本机daemon提供显式试点配置；默认关闭 | HTTPS PostHog Cloud US/EU目标校验；测试专用假Key的loopback例外 |
+| 存储迁移 | 原IDB先复制到原生，读回一致后删源；冲突保留两边 | 回旧版前先兼容drain；旧版不能被假定自动读新库 |
 
-原生持久化仅在 `OD_INPUT_NATIVE_POC=1`、
-`NEXT_PUBLIC_OD_INPUT_AGGREGATION_POC=1`、
-`POSTHOG_KEY=phc_local_poc_only` 和 HTTP `127.0.0.1` 目标下启用。
-安装版另外要求 `OD_INPUT_QA_BUNDLE=local-only`，Web 构建需要
-`NEXT_PUBLIC_OD_INPUT_QA_BUNDLE=local-only`。普通发布及真实目标不启用本 PoC。
-`OD_INPUT_PREWARM_POC=0` 供同机关闭预热作对照。
+这是现有公共层内部模块，不是新独立SDK或包。无新增依赖、业务组件、CI工作流。
+持久化和汇总共用队列；持久化/容量失败会停止新增试点并报告状态。普通原始路径仍保留回退，
+但不能把存储错误或提交前被强杀的输入承诺为可靠保存。
 
-这是现有公共层中的内部模块，不是新增对外 SDK。夹具源文件在测试包 `src/` 中，
-使用已有 sidecar 生命周期原语和项目共享 `browser-lock.sh`；不把临时打包脚本、
-App、第三方 node_modules、测试配置或原始运行日志提交进产品仓库。
-数据隔离遵循[根 AGENTS 的 Daemon data directory contract](../../AGENTS.md#daemon-data-directory-contract)，
-由夹具传入独立配置；不要使用日常客户端配置测试或切换存储后端。
+## 怎么启用与暂停
 
-## 测试同学怎样运行
+标准发布默认不启用。原生能力需进程显式`OD_INPUT_TRIAL_CAPABILITY=1`，并且配置目的地合法。
+聚合还需daemon实际数据根内的`input-aggregation-trial.json`，字段如下（不在文档放真实Key）：
 
-下载交付文档内 `PostHog-QA-Mac-arm64-20261104.zip`，完整解压到可写目录。
-仅支持 macOS Apple Silicon，运行不需要代码仓库、系统 Node、Python 或另装浏览器。
-先读包内 `先读我.md`。
+```json
+{
+  "trial_id": "qa-opend-4684-example",
+  "revision": "r1",
+  "mode": "shadow",
+  "host": "https://us.i.posthog.com",
+  "project_key": "phc_REPLACE_WITH_APPROVED_PROJECT_KEY"
+}
+```
 
-1. 双击 `安装测试包.command`，安装到当前用户的 Applications；同名包会拒绝覆盖。
-2. 双击 `开始自测.command`，约一分钟，预期设置 23 + 搜索 33，原始/5分/10分各 56。
-3. 按下面入口和包内 26 条用例继续执行，用空表独立填结果。
-4. 回收当轮完整 `runs` 目录；失败后另建新一轮，不覆盖失败证据、不清队列凑通过。
+目标必须与当前analytics host/key完全一致。数据路径遵循[根AGENTS数据根契约](../../AGENTS.md#daemon-data-directory-contract)，
+从已解析的daemon数据根传入，不猜测或复用日常客户端目录。
+
+| 模式 | 原始 | 新聚合 | 已有队列 |
+| --- | --- | --- | --- |
+| shadow | 保存后立即发 | 开 | 正常发送 |
+| paused | 原有公共路径继续 | 停 | 保留、暂停发送 |
+| drain | 原有公共路径继续 | 停 | 兼容版本继续清偿 |
+
+已启用的客户端约30秒重读配置；配置缺失/非法会暂停。启动时无配置的客户端不额外轮询，
+首次启用需重启。它不是公司远程灰度开关。回退前先drain并确认队列为空；否则保留原库并指定兼容版本处理，不能清库后称成功。
+旧的全假Key/loopback本地编译开关仍可用于旧夹具；真实目标验收使用上述显式能力和配置，不依赖旧QA专用App包装。
+
+## 测试从标准PR安装包开始
+
+研发用仓库现有`pnpm tools-pack mac build --to app`构建验收版本，并交付匹配源码SHA、构建日志、运行文件哈希与便携夹具。
+本轮代码冻结为`03c3838ce3db670765b148a0fc3aed0c037823fa`、安装版`0.25.1-preview.4`；后续文档提交不能被写成重新打包。
+测试包/夹具入口见主文档最新章节；旧`20261104`包只作历史证据。
+
+夹具使用已安装App自带Node和Chromium，含固定版本playwright-core，不需要系统Node、Python或另装浏览器。
+解压到可写目录后：
+
+```bash
+bash configure-app.sh '/实际位置/Open Design Preview.app'
+bash launch.sh pilot "$PWD/runs/自测-001"
+```
+
+configure核359个运行文件，记录当前机器路径。结果目录必须新建；保留失败证据，不改哈希绕过校验。
+夹具源码和运行包作为独立验收附件，不把App、第三方依赖、密钥或原始运行日志提交产品仓库。
+实际进程由现有sidecar生命周期原语隔离和关闭，遵守共享browser-lock队列，不批量按名称杀进程。
 
 | 入口 | 内容 | 判定 |
 | --- | --- | --- |
-| 开始自测.command | 正常重启、模拟断网恢复、稳定 ID 核对 | quick-result.json 的 PASS 只覆盖这些场景 |
-| 强杀和重试验证.command | 预热关闭/开启各 19 场景，共 38；含确认丢失、尾段、渲染崩溃 | 缺失报告 FAIL_COMPLETENESS，不能用其他 PASS 抵消 |
-| 写锁边界验证.command | 阻塞 SQLite 写入时看输入返回；未提交就强杀 | 当前 FAIL_KNOWN_GAP 是已知缺口，不是预期通过 |
-| 性能对照.command | 关闭/开启预热交错各 3 轮，记录输入、CPU、内存和磁盘 | 只输出量测，性能门槛需另行确认 |
-| 启动手工测试.command | 中文输入法、真实小时定时及人工边界 | REQUIRES_REVIEW；回车收尾；最长 85 分钟 |
+| pilot | 正常、空重启、断网、确认丢失、配额、暂停与清偿 | 70次可信输入；原始70，5/10分钟各66，另4次在暂停/清偿时只发原始 |
+| kill | 保存后的原始及不足30秒尾段强杀恢复；持锁不等盘；提交前强杀 | 已保存必须恢复；提交前窗口单列已知缺口，不算硬完整性通过 |
+| migration | IDB待发复制到原生，读回后删源 | 同6次输入，原始/5/10分钟各6，不重复累计 |
+| rollback | 留待发→缺配置重启→原始继续→paused→兼容drain | 待发ID保留且最终清空；不冒充旧二进制降级验收 |
+| performance | IDB与原生交错各2轮，空闲/输入/断网/恢复 | 输入延迟、CPU、内存、磁盘及提交耗时，门槛另确认 |
+| hour | 实等1小时；第1/6分钟各设置20、搜索20 | 原始/5/10分钟各80；首条汇总不早于保存的deadline |
 
-真实一小时用例 QA-04：运行 70 分钟，第 1、6 分钟分别设置 20/搜索 20，之后不输入。
-发送期限前不要退出、回车、手动 flush 或调整系统时钟。原始记录及时发送，5/10 分钟
-两套汇总在小时期限发送且各累计 80。回车本身会收尾发送，必须看回车前的请求时间线。
-快速自测不替代本用例。
+执行方式为`bash launch.sh <入口> <全新结果目录>`。小时用例约65分钟，发送期限前不退出、隐藏、手动flush或改时钟。
+快速用例、退出触发发送、模拟定时器都不能替代真实小时。
 
-App 为 ad-hoc 本地签名、未 Apple 公证，首次系统允许步骤见交付文档；
-受公司设备策略限制时记 BLOCKED，不关闭全局系统防护。自动测试隐藏窗口避免抢焦点，
-手工入口显示窗口。共享浏览器锁排队时等待，不删锁，不按进程名称批量强杀日常客户端。
+远端接收仅由研发带单独批准的目标文件执行。当前复验使用现有OpenDesign420348，
+`env=test`及`qa-opend-4684-*`设备隔离，真实事件按UUID/身份/时间/数值逐条比对；
+需排除这些QA记录后再做业务分析。HTTP确认与目标查询可见分别验收，不修改项目规则。
 
-## 研发确定性检查
+## 工程检查
 
-使用项目要求的 Node 24、pnpm 和已安装的依赖。只跑定向测试，不跑全量 Web/Daemon 套件。
+使用Node24、Corepack固定pnpm。只跑定向检查，不跑本机全量Web/Daemon套件：
 
 ```bash
 pnpm --filter @open-design/desktop build
-pnpm --filter @open-design/web exec vitest run -c vitest.config.ts --maxWorkers=2 tests/analytics/input-aggregation.test.ts tests/analytics/input-aggregation-hourly.test.ts tests/analytics/input-aggregation-transport.test.ts tests/analytics/input-native-store.test.ts tests/analytics/error-tracking.test.ts tests/observability/chat-interaction.test.ts
+pnpm --filter @open-design/web exec vitest run -c vitest.config.ts --maxWorkers=2 tests/analytics/input-aggregation.test.ts tests/analytics/input-aggregation-hourly.test.ts tests/analytics/input-aggregation-transport.test.ts tests/analytics/input-native-store.test.ts tests/analytics/input-trial-delivery.test.ts tests/analytics/input-trial-config.test.ts tests/analytics/error-tracking.test.ts tests/observability/chat-interaction.test.ts
 pnpm --filter @open-design/desktop exec vitest run -c vitest.config.ts tests/main/input-native-store.test.ts tests/main/input-prewarm.test.ts tests/main/preload-host-boundary.test.ts tests/main/invite-deeplink-protocol-registration.test.ts
-pnpm --filter @open-design/contracts exec vitest run tests/analytics-client-metrics.test.ts
+pnpm --filter @open-design/contracts exec vitest run tests/analytics-client-metrics.test.ts tests/analytics-input-trial.test.ts
+pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts tests/storage/input-aggregation-config.test.ts
 pnpm --filter @open-design/tools-pack exec vitest run tests/workspace-build.test.ts tests/prebundle/macos.test.ts
 pnpm typecheck
 pnpm guard
 git diff --check
 ```
 
-验证证据附件中的 `developer-material/self-test.sh` 会执行以上命令，并记录
-`commands.tsv`、原始日志、HEAD、源码快照/哈希和 `result.json`。证据目录必须是新的。
-最终 PR 的同提交检查和远端 CI 状态见 PR 描述，不能沿用旧 HEAD 的 PASS。
+准确命令、原始日志、源码冻结点与校验值随证据交付。PR描述记录当前CI，不沿用旧HEAD的PASS。
 
-## 已完成的安装包验证及范围
+## 证据和仍须人工验收的边界
 
-2026-11-04，M5 Pro / 48GiB / macOS 26.5；安装包 `0.25.1-preview.1`。
-基线 `5a0c47777975ddb91d09c1c16b423a3ef74bf572` 加 22 文件 PoC 快照，
-对应产品实现提交 `cdd55a8794`；PR 另同步主干并增加本文。
-旧安装包没有重新打包成同步主干后的整棵 PR，不能视作 PR 完整安装版验收。
+每轮保留独立可信输入见证、本地COMMIT、HTTP请求/确认、PostHog查询结果，三套分别按稳定ID对账。
+最大值取max，可加字段求和；不能通过三套一起少采后相等来证明无损，也不能恢复逐键P95。
+本地日志/数据库只证明对应已保存的事实，不能证明所有物理按键都进入了公共观察器。
 
-| 检查 | 实测 | 范围 |
-| --- | --- | --- |
-| 安装与便携 | 安装启动、移到中文/空格目录、仅系统 PATH、最终 ZIP 解压后均可跑快速自测 | 同一台机器；另一台独立 QA 未执行 |
-| 快速对账 | 设置 23 + 搜索 33，原始/5分/10分分别 56 | 包含正常重启、模拟断网恢复 |
-| 故障 | 38 个定向场景，含准备输入共 80 次，恢复 80 | 两组首键均 6/6，不是任意强杀零丢失证明 |
-| 写锁响应 | 输入约 13.4ms 返回后仍持锁 200ms，释放后能补齐 | 输入调用往返时间，不是屏幕真实呈现延迟 |
-| 未提交强杀 | 1 次输入恢复 0 次 | FAIL_KNOWN_GAP，完整性要求未满足 |
-| 性能 | 6 轮 3180 次对齐，3120 次进入量测；CPU 校准比值约 1.003 | 未判性能达标；一轮空闲辅助进程退出，不能当完整空闲统计 |
-| 原包工程检查 | 136 项定向测试，8 组检查通过 | 不替代手工和正式链路验收 |
-
-原包 SHA256：`e05b78e6f8b1c565c3c144c57800faabb1bf3fca51919c04a7e663db9760c6c8`。
-数字对账见各轮 `reconciliation.json`，总览见 `comparison.json`，故障收据与 SQLite
-均保留在证据附件内。重复网络收据必须按稳定 ID 去重，再累加次数并核对最大值；
-还要与独立可信输入见证核对，不能仅凭原始和汇总相等判断没丢。
-
-## 不满足准出的项目
-
-- SQLite 提交前强杀仍丢；异步保存无法靠提前初始化保证任意时刻完整。
-- 旧 IndexedDB 待发记录迁移/回退未实现，不使用旧日常配置切换后端或停止原始记录。
-- 正常退出出现 `stopped/storage_error`，本轮恢复对账无缺失，原因仍待定位。
-- 当前包真实一小时、中文输入法、低配硬件、睡眠及长离线等独立验收待执行。
-- 正式转发、PostHog 入库和去重、看板迁移、真实费用收益未验证。
-- 性能采样包含实际桌面 PID 的子孙服务，不与旧开发版进程树口径直接比较。
-
-研发修复后用新版本、新目录复验失败场景及关键恢复、数字守恒和性能。
-QA 回收设备/版本、用例号、期望/实际次数、收据、日志、数据库和缺陷号。
-任何必测 FAIL、BLOCKED 或未确认的性能门槛，都不能改写成上线通过。
+- 异步提交前强杀仍可能丢，不宣称任意时刻零丢失，也不是线上丢失率。
+- 上限为1024原始、512汇总、2MiB；满或存储错误不会自动清空旧事实，但不证明无限离线完整。
+- 主机默认配置真实接收已小量验收，不等同于所有线上版本、代理或转发部署都验收。
+- 中文输入法/粘贴、独立QA、低配硬件、睡眠与长离线、旧二进制降级、业务看板和实际账单收益须另有证据。
+- 没有随机灰度或AB基建。线上启用前需确认范围、负责人、性能和迟到门槛，冻结D0前7天基线；本PR不授权合并上线。
