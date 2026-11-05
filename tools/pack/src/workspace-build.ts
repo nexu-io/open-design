@@ -73,7 +73,6 @@ export function workspaceBuildNodeOptions(inherited: string | undefined): string
 }
 
 export type WorkspaceBuildCacheKeyInputs = {
-  inputAggregationQaFlags?: { collection: string; bundle: string };
   buildCommands: unknown;
   node: string;
   nodeVersion: string;
@@ -142,7 +141,6 @@ export async function createWorkspaceBuildCacheKey(config: ToolPackConfig): Prom
   const nodeId = `${config.platform}.workspace-build`;
 
   return createWorkspaceBuildCacheKeyFromInputs({
-    inputAggregationQaFlags: { collection: process.env.NEXT_PUBLIC_OD_INPUT_AGGREGATION_POC ?? "", bundle: process.env.NEXT_PUBLIC_OD_INPUT_QA_BUNDLE ?? "" },
     buildCommands: WORKSPACE_BUILD_COMMANDS,
     node: nodeId,
     nodeVersion: process.version,

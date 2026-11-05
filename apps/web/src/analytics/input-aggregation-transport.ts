@@ -7,13 +7,12 @@ export function inputTelemetryCapture({ event, properties }: InputTelemetryEvent
 }
 
 /** Receipt acceptance is distinct from the later PostHog indexing reconciliation. */
-export function inputAggregationSender(host: string, key: string, local = false, single = false) {
+export function inputAggregationSender(host: string, key: string, single = false) {
   let retryAt = 0;
   return async (events: InputTelemetryEvent[]): Promise<boolean> => {
     if (Date.now() < retryAt || !events.length || (single && events.length !== 1)) return false;
-    if (!isInputAggregationDestination(host, key)
-      && !(local && /^http:\/\/127\.0\.0\.1(?::[0-9]+)?\/?$/.test(host))) return false;
-    if (!local && events.some(({ properties }) => !properties.device_id
+    if (!isInputAggregationDestination(host, key)) return false;
+    if (events.some(({ properties }) => !properties.device_id
       || !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(properties.event_id))) return false;
     try {
       const batch = events.map(inputTelemetryCapture);
@@ -30,9 +29,7 @@ export function inputAggregationSender(host: string, key: string, local = false,
         if (Number.isFinite(at)) retryAt = Math.max(retryAt, at);
       }
       if (!response.ok) return false;
-      // The old local receiver returns an empty 200. Real ingestion must acknowledge its JSON contract.
       const text = await response.text();
-      if (local && text === '') return true;
       const receipt: unknown = JSON.parse(text);
       if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt)) return false;
       const result = receipt as Record<string, unknown>;

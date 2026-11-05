@@ -20,14 +20,6 @@ const identityOf = (raw: Raw) => JSON.stringify([raw.device_id, raw.app_session_
   raw.client_version, raw.channel, raw.env, raw.client_type, raw.platform, raw.os_version, raw.arch, raw.capture_source,
   raw.input_trial_id, raw.input_trial_revision]);
 
-export function localInputAggregationEnabled(flag: string | undefined, mode: string | undefined, host: string, qaBundle?: string, key?: string): boolean {
-  if (flag !== '1' || (mode !== 'development' && !(qaBundle === 'local-only' && key === 'phc_local_poc_only'))) return false;
-  try {
-    const url = new URL(host);
-    return url.protocol === 'http:' && url.hostname === '127.0.0.1' && !url.username && !url.password;
-  } catch { return false; }
-}
-
 /** A single transaction owns the collector tail, raw outbox and both summary periods. */
 export class InputAggregation {
   readonly pageId = crypto.randomUUID();
@@ -66,7 +58,6 @@ export class InputAggregation {
     });
   }
   get pendingCount() { return this.pending.length; }
-  get passthrough() { return this.rawPassthrough; }
   get collectingEnabled() { return !this.closing && this.mode === 'shadow' && !this.stopped; }
   diagnostics() {
     const facts = [...this.collecting.values(), ...this.rawPending, ...this.active.values(), ...this.pending];

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { ToolPackCache } from "@/cache/index.js";
 import type { ToolPackConfig } from "@/config/index.js";
@@ -575,18 +575,4 @@ describe("createWorkspaceBuildCacheKey", () => {
     expect(createWorkspaceBuildCacheKeyFromInputs({ ...inputs, nodeVersion: "v24.0.1" })).not.toBe(baseline);
     expect(createWorkspaceBuildCacheKeyFromInputs({ ...inputs, schemaVersion: inputs.schemaVersion + 1 })).not.toBe(baseline);
   });
-});
-
-it('private telemetry browser flags invalidate the workspace build cache', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'od-qa-build-key-'));
-  try {
-    await writeWorkspace(root);
-    const config = createConfig(root, join(root, '.cache'));
-    vi.stubEnv('NEXT_PUBLIC_OD_INPUT_AGGREGATION_POC', ''); vi.stubEnv('NEXT_PUBLIC_OD_INPUT_QA_BUNDLE', '');
-    const base = await createWorkspaceBuildCacheKey(config);
-    vi.stubEnv('NEXT_PUBLIC_OD_INPUT_AGGREGATION_POC', '1');
-    const collecting = await createWorkspaceBuildCacheKey(config); expect(collecting).not.toBe(base);
-    vi.stubEnv('NEXT_PUBLIC_OD_INPUT_QA_BUNDLE', 'local-only');
-    expect(await createWorkspaceBuildCacheKey(config)).not.toBe(collecting);
-  } finally { vi.unstubAllEnvs(); await rm(root, { recursive: true, force: true }); }
 });

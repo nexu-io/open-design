@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { InputAggregation, localInputAggregationEnabled, type InputTelemetryEvent } from '../../src/analytics/input-aggregation';
+import { InputAggregation, type InputTelemetryEvent } from '../../src/analytics/input-aggregation';
 const start = Date.parse('2026-11-04T00:00:00Z');
 const raw = (patch: Record<string, unknown> = {}) => ({
   event_schema_version: 4, metric_schema_version: 1, event_id: 'raw-1',
@@ -71,11 +71,6 @@ it('B06 clock rollback stops new shadow collection and keeps previously committe
   vi.setSystemTime(start - 1); await a.tick(); expect(a.stopped).toBe('clock_rollback');
   await new InputAggregation(send, store).tick();
   expect(await a.observe(raw({ event_id: 'raw-2' }))).toBeNull();
-});
-it('B07 remains disabled for production, remote destinations, lookalike hosts and absent flags', () => {
-  expect(localInputAggregationEnabled('1', 'development', 'http://127.0.0.1:43190')).toBe(true);
-  for (const [flag, env, host] of [['', 'development', 'http://127.0.0.1'], ['1', 'production', 'http://127.0.0.1'],
-    ['1', 'development', 'https://us.i.posthog.com'], ['1', 'development', 'https://127.0.0.1.evil.test']] as const) expect(localInputAggregationEnabled(flag, env, host)).toBe(false);
 });
 it('D01 restores raw facts and both active summary periods without another user input', async () => {
   const { a, store, send, summaries } = setup(); send.mockResolvedValue(false);
@@ -175,15 +170,4 @@ it('H05 bounds a prolonged offline raw outbox without deleting already committed
   const { a, send } = setup(); send.mockResolvedValue(false);
   for (let i = 0; i < 1025; i++) await a.observe(raw({ event_id: `raw-${i}` }));
   expect(a.stopped).toBe('queue_limit');
-});
-
-it('Q01 only the explicit QA build and fake key admit production-mode local collection', () => {
-  expect(localInputAggregationEnabled('1', 'production', 'http://127.0.0.1:43190', 'local-only', 'phc_local_poc_only')).toBe(true);
-  for (const [flag, host, bundle, key] of [
-    ['', 'http://127.0.0.1', 'local-only', 'phc_local_poc_only'],
-    ['1', 'http://127.0.0.1', '', 'phc_local_poc_only'],
-    ['1', 'http://127.0.0.1', 'local-only', 'phc_real'],
-    ['1', 'https://us.i.posthog.com', 'local-only', 'phc_local_poc_only'],
-    ['1', 'http://127.0.0.1.evil.test', 'local-only', 'phc_local_poc_only'],
-  ] as const) expect(localInputAggregationEnabled(flag, 'production', host, bundle, key)).toBe(false);
 });

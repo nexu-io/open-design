@@ -101,7 +101,7 @@ it('migration leaves the original untouched after a failed native write', async 
 it('uses the same immutable event envelope for original single capture and batch replay', async () => {
   const fetch = vi.fn().mockImplementation(async () => new Response('{"status":"Ok"}')); vi.stubGlobal('fetch', fetch);
   const events = [{ event: 'client_input_responsiveness', properties: raw() }] as InputTelemetryEvent[];
-  expect(await inputAggregationSender('https://us.i.posthog.com', 'phc_example', false, true)(events)).toBe(true);
+  expect(await inputAggregationSender('https://us.i.posthog.com', 'phc_example', true)(events)).toBe(true);
   expect(await inputAggregationSender('https://us.i.posthog.com', 'phc_example')(events)).toBe(true);
   const original = JSON.parse(fetch.mock.calls[0]![1].body), batch = JSON.parse(fetch.mock.calls[1]![1].body);
   delete original.api_key;

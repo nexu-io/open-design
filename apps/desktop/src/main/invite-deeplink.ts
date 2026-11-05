@@ -72,7 +72,7 @@ export function dispatchInviteDeeplink(url: string | null): void {
  */
 export function registerInviteDeeplink(deps: InviteDeeplinkDeps): void {
   const registration = planProtocolClientRegistration({
-    isPackaged: app?.isPackaged === true && process.env.OD_INPUT_QA_BUNDLE !== 'local-only',
+    isPackaged: app?.isPackaged === true,
     platform: process.platform,
     protocolClientPath: deps.protocolClientPath,
   });

@@ -2,7 +2,21 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { expect, it } from 'vitest';
-import { NativeInputStore } from '../../src/main/input-native-store.js';
+import { NativeInputStore, nativeInputTelemetryEnabled } from '../../src/main/input-native-store.js';
+
+it('native persistence requires an explicit capability and a bound approved target', () => {
+  const env = { OD_INPUT_TRIAL_CAPABILITY: '1', POSTHOG_KEY: 'phc_example', POSTHOG_HOST: 'https://us.i.posthog.com' };
+  expect(nativeInputTelemetryEnabled(env)).toBe(true);
+  for (const patch of [{ OD_INPUT_TRIAL_CAPABILITY: '' }, { POSTHOG_KEY: '' },
+    { POSTHOG_HOST: 'http://us.i.posthog.com' }, { POSTHOG_HOST: 'https://us.i.posthog.com.evil.test' }]) {
+    expect(nativeInputTelemetryEnabled({ ...env, ...patch })).toBe(false);
+  }
+});
+
+it('retired QA environment flags cannot activate native persistence', () => {
+  expect(nativeInputTelemetryEnabled({ OD_INPUT_QA_BUNDLE: 'local-only', OD_INPUT_NATIVE_POC: '1',
+    NEXT_PUBLIC_OD_INPUT_AGGREGATION_POC: '1', POSTHOG_KEY: 'phc_local_poc_only', POSTHOG_HOST: 'http://127.0.0.1:43190' })).toBe(false);
+});
 
 it('N03 commits small records atomically and retains them after worker restart', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'od-input-store-'));

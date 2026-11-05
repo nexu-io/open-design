@@ -35,7 +35,7 @@ import type {
 } from "@open-design/host";
 
 import { renderDeckSlides } from "./deck-capture.js";
-import { NativeInputStore, nativeInputPocEnabled } from "./input-native-store.js";
+import { NativeInputStore, nativeInputTelemetryEnabled } from "./input-native-store.js";
 import { renderDeterministicFrames } from "./frame-capture.js";
 import { openFirstPartyMailto } from "./mailto-open.js";
 import { openValidatedDirectory } from "./open-path.js";
@@ -2028,7 +2028,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   const nativeHost = options.inputTelemetryTarget?.host ?? process.env.POSTHOG_HOST ?? '';
   const nativeKey = options.inputTelemetryTarget?.key ?? process.env.POSTHOG_KEY ?? '';
   const nativePrefix = `${nativeHost.replace(/\/+$/, '')}/i/v0/e/:${nativeKey}:`;
-  const nativeEnabled = nativeInputPocEnabled(app.isPackaged, { ...process.env, POSTHOG_HOST: nativeHost, POSTHOG_KEY: nativeKey });
+  const nativeEnabled = nativeInputTelemetryEnabled({ ...process.env, POSTHOG_HOST: nativeHost, POSTHOG_KEY: nativeKey });
 
   // ipcMain.handle() registers a handler in an internal map that is *not*
   // surfaced via eventNames(); the previous `!eventNames().includes(...)`
@@ -2273,7 +2273,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     autoHideMenuBar: true,
     ...MAC_WINDOW_CHROME,
     webPreferences: {
-      additionalArguments: [...(osLocaleAdditionalArguments(options.osLocale) ?? []), ...(nativeEnabled ? ['--od-input-native-poc'] : [])],
+      additionalArguments: [...(osLocaleAdditionalArguments(options.osLocale) ?? []), ...(nativeEnabled ? ['--od-input-telemetry'] : [])],
       backgroundThrottling: false,
       contextIsolation: true,
       nodeIntegration: false,
@@ -2283,10 +2283,6 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     },
     width: 1280,
   });
-  if (nativeEnabled && process.env.OD_INPUT_QA_AUTOMATION === '1') {
-    window.setFocusable(false);
-    window.on('show', () => window.hide());
-  }
   installWindowChromeCssHook(window);
   showWindowButtons(window);
   attachDownloadSaveAsDialog(window);
@@ -2483,13 +2479,13 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       throw new Error("host IPC is only available to the main OpenDesign window");
     }
   };
-  ipcMain.removeHandler('od:input-native-poc');
-  ipcMain.handle('od:input-native-poc', async (event, op: unknown, scope: unknown, put: unknown, drop: unknown) => {
+  ipcMain.removeHandler('od:input-telemetry');
+  ipcMain.handle('od:input-telemetry', async (event, op: unknown, scope: unknown, put: unknown, drop: unknown) => {
     requireMainWindowSender(event);
     if (!nativeEnabled || event.senderFrame !== event.sender.mainFrame || !currentUrl
       || new URL(event.senderFrame.url).origin !== new URL(currentUrl).origin
       || typeof scope !== 'string' || !scope.startsWith(nativePrefix) || scope.length > 512
-      || !['read', 'write'].includes(String(op))) throw new Error('native input PoC unavailable');
+      || !['read', 'write'].includes(String(op))) throw new Error('native input telemetry unavailable');
     let store = nativeStores.get(scope);
     if (!store) {
       if (nativeStores.size >= 4) throw new Error('native input scope limit');
@@ -3097,7 +3093,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         ipcMain.on('od:input-telemetry:flushed', acknowledge);
         window.webContents.send('od:input-telemetry:flush', nonce);
       });
-      ipcMain.removeHandler('od:input-native-poc');
+      ipcMain.removeHandler('od:input-telemetry');
       await Promise.allSettled([...nativeStores.values()].map(store => store.close()));
       ipcMain.removeAllListeners("desktop-pet:set-visible");
       ipcMain.removeAllListeners("od:appearance:set-theme");

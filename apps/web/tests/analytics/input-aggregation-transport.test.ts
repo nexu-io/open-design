@@ -15,17 +15,16 @@ afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals()
 const input = { metric_schema_version: 1, telemetry_capability: 'supported', area: 'settings', window_ms: 30_000,
   input_attempt_count: 2, qualified_sample_count: 0, over_500ms_count: 0,
   max_input_to_presentation_ms: null, max_queue_delay_ms: null, sample_floor_ms: 16, content: 'private' };
-const context = { apiKey: 'local-only', host: 'http://127.0.0.1:43190', distinctId: 'install', clientType: 'desktop' as const,
-  osName: 'Mac OS X' as const, appVersion: '0.25.1', appSessionId: 'session', telemetryEnv: 'test' };
-function local() {
+const context = { apiKey: 'phc_local_poc_only', host: 'http://127.0.0.1:43190', distinctId: 'install', clientType: 'desktop' as const,
+  osName: 'Mac OS X' as const, appVersion: '0.25.1', appSessionId: 'session', telemetryEnv: 'test', inputAggregation: { trial_id: 'input-01', revision: 'r1', mode: 'shadow' as const, host: 'http://127.0.0.1:43190', project_key: 'phc_local_poc_only' } };
+function setup() {
   vi.resetModules(); vi.useFakeTimers(); vi.setSystemTime(Date.parse('2026-11-04T00:00:00Z'));
-  vi.stubEnv('NODE_ENV', 'development'); vi.stubEnv('NEXT_PUBLIC_OD_INPUT_AGGREGATION_POC', '1');
-  const fetch = vi.fn().mockResolvedValue(new Response('', { status: 200 })); vi.stubGlobal('fetch', fetch);
-  const events = () => fetch.mock.calls.flatMap(([, init]) => { const body = JSON.parse(init.body); return body.batch ?? [body]; });
+  const fetch = vi.fn().mockImplementation(async () => new Response('{"status":1}', { status: 200 })); vi.stubGlobal('fetch', fetch);
+  const events = () => fetch.mock.calls.flatMap(([, init]) => { const body = JSON.parse(init.body); return body.batch ?? [body]; }).filter(e => ['client_input_responsiveness', 'client_input_responsiveness_summary'].includes(e.event));
   return { fetch, events };
 }
 it('B08 the public entry retains raw facts and sends validated 5/10m summaries in hourly batches', async () => {
-  const { fetch, events } = local();
+  const { fetch, events } = setup();
   const { reportSafetyEvent, setExceptionTrackingContext, clearExceptionTrackingContext } = await import('../../src/analytics/error-tracking');
   setExceptionTrackingContext(context);
   reportSafetyEvent('client_input_responsiveness', input);
@@ -37,7 +36,7 @@ it('B08 the public entry retains raw facts and sends validated 5/10m summaries i
   await vi.advanceTimersByTimeAsync(3_000_000);
   const summaries = events().filter(p => p.event === 'client_input_responsiveness_summary');
   expect(summaries).toHaveLength(4);
-  expect(fetch.mock.calls.some(([, init]) => JSON.parse(init.body).batch.length === 4)).toBe(true);
+  expect(fetch.mock.calls.some(([, init]) => JSON.parse(init.body).batch?.length === 4)).toBe(true);
   for (const payload of events()) {
     expect(payload.properties).not.toHaveProperty('content');
     expect(payload.properties.$insert_id).toBe(payload.properties.event_id);
@@ -46,7 +45,7 @@ it('B08 the public entry retains raw facts and sends validated 5/10m summaries i
   clearExceptionTrackingContext();
 });
 it('T01 the real shared collector saves trusted sub-30s attempts, flushes on hide and recovers raw without new input', async () => {
-  const { fetch, events } = local();
+  const { fetch, events } = setup();
   vi.spyOn(performance, 'now').mockImplementation(() => Date.now() - Date.parse('2026-11-04T00:00:00Z'));
   let visibility: DocumentVisibilityState = 'visible';
   vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibility);
@@ -66,7 +65,7 @@ it('T01 the real shared collector saves trusted sub-30s attempts, flushes on hid
   expect(tail.collecting[0]!.input_attempt_count).toBe(2); expect(fetch).not.toHaveBeenCalled();
   fetch.mockRejectedValue(new Error('offline')); visibility = 'hidden'; document.dispatchEvent(new Event('visibilitychange'));
   await vi.advanceTimersByTimeAsync(0); stop(); tracking.clearExceptionTrackingContext(); await vi.advanceTimersByTimeAsync(0);
-  fetch.mockResolvedValue(new Response('', { status: 200 })); tracking.setExceptionTrackingContext(context);
+  fetch.mockImplementation(async () => new Response('{"status":1}', { status: 200 })); tracking.setExceptionTrackingContext(context);
   await vi.advanceTimersByTimeAsync(0);
   const raw = events().filter(e => e.event === 'client_input_responsiveness');
   expect(new Set(raw.map(e => e.properties.event_id))).toEqual(new Set([tail.collecting[0]!.event_id]));
@@ -74,13 +73,14 @@ it('T01 the real shared collector saves trusted sub-30s attempts, flushes on hid
   const summaries = events().filter(e => e.event === 'client_input_responsiveness_summary');
   expect(new Set(summaries.map(e => e.properties.event_id)).size).toBe(2);
   for (const summary of summaries) expect(summaries.filter(e => e.properties.event_id === summary.properties.event_id).every(e => JSON.stringify(e) === JSON.stringify(summary))).toBe(true);
-  const count = fetch.mock.calls.length;
+  const accepted = new Map(events().map(e => [e.properties.event_id, JSON.stringify(e)]));
   tracking.clearExceptionTrackingContext(); await vi.advanceTimersByTimeAsync(0); tracking.setExceptionTrackingContext(context); await vi.advanceTimersByTimeAsync(10_000);
-  expect(fetch).toHaveBeenCalledTimes(count); tracking.clearExceptionTrackingContext();
+  for (const event of events()) expect(JSON.stringify(event)).toBe(accepted.get(event.properties.event_id));
+  expect(new Set(events().map(e => e.properties.event_id)).size).toBe(accepted.size); tracking.clearExceptionTrackingContext();
 });
 
 it('T02 preserves the installation-identity hold when the first identity arrives mid-input-window', async () => {
-  const { events } = local();
+  const { events } = setup();
   vi.spyOn(performance, 'now').mockImplementation(() => Date.now() - Date.parse('2026-11-04T00:00:00Z'));
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
   vi.stubGlobal('PerformanceObserver', class { static supportedEntryTypes = ['event']; observe() {} disconnect() {} });
@@ -103,7 +103,7 @@ it('T02 preserves the installation-identity hold when the first identity arrives
 });
 
 it('T03 retains a committed prefix and avoids a second fallback fact after a disk-write failure', async () => {
-  const { events } = local();
+  const { events } = setup();
   vi.spyOn(performance, 'now').mockImplementation(() => Date.now() - Date.parse('2026-11-04T00:00:00Z'));
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
   vi.stubGlobal('PerformanceObserver', class { static supportedEntryTypes = ['event']; observe() {} disconnect() {} });
@@ -126,7 +126,7 @@ it('T03 retains a committed prefix and avoids a second fallback fact after a dis
 });
 
 it('T04 shadow storage failure falls back to original raw without waiting for summaries', async () => {
-  const { fetch, events } = local();
+  const { fetch, events } = setup();
   fetch.mockImplementation(async () => new Response('{"status":1}', { status: 200 }));
   const tracking = await import('../../src/analytics/error-tracking');
   const trial = { trial_id: 'input-01', revision: 'r1', mode: 'shadow' as const, host: context.host, project_key: 'phc_local_poc_only' };
@@ -145,7 +145,7 @@ it('T04 shadow storage failure falls back to original raw without waiting for su
 });
 
 it('T05 pause and drain keep original events flowing, stop new aggregation and clear old pending facts', async () => {
-  const { fetch, events } = local();
+  const { fetch, events } = setup();
   fetch.mockImplementation(async () => new Response('{"status":1}', { status: 200 }));
   const tracking = await import('../../src/analytics/error-tracking');
   const trial = { trial_id: 'input-01', revision: 'r1', mode: 'shadow' as const, host: context.host, project_key: 'phc_local_poc_only' };
@@ -171,7 +171,7 @@ it('T05 pause and drain keep original events flowing, stop new aggregation and c
 
 
 it('T06 an ambiguous storage acknowledgement keeps fallback and recovered raw the same UUID and body', async () => {
-  const { fetch, events } = local();
+  const { fetch, events } = setup();
   fetch.mockImplementation(async () => new Response('{"status":1}', { status: 200 }));
   const tracking = await import('../../src/analytics/error-tracking');
   const trial = { trial_id: 'input-01', revision: 'r1', mode: 'shadow' as const, host: context.host, project_key: 'phc_local_poc_only' };
@@ -186,4 +186,18 @@ it('T06 an ambiguous storage acknowledgement keeps fallback and recovered raw th
   expect(raws[0].uuid).toBe(raws[0].properties.event_id);
   expect(raws[0]).toEqual(raws[1]);
   tracking.clearExceptionTrackingContext(); await vi.advanceTimersByTimeAsync(0);
+});
+
+it('retired build flags do not enable collection without a runtime trial', async () => {
+  const { events } = setup();
+  vi.stubEnv('NEXT_PUBLIC_OD_INPUT_AGGREGATION_POC', '1');
+  vi.stubEnv('NEXT_PUBLIC_OD_INPUT_QA_BUNDLE', 'local-only');
+  const tracking = await import('../../src/analytics/error-tracking');
+  tracking.setExceptionTrackingContext({ ...context, inputAggregation: undefined });
+  tracking.reportSafetyEvent('client_input_responsiveness', input);
+  await vi.advanceTimersByTimeAsync(3_600_000);
+  expect(events()).toHaveLength(1);
+  expect(events()[0].event).toBe('client_input_responsiveness');
+  expect(snapshots.size).toBe(0);
+  tracking.clearExceptionTrackingContext();
 });

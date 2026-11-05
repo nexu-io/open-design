@@ -52,7 +52,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  vi.unstubAllEnvs();
   Object.defineProperty(process, "platform", { configurable: true, value: realPlatform });
 });
 
@@ -87,10 +86,4 @@ describe("registerInviteDeeplink protocol-client registration", () => {
     await registerOn("darwin", false);
     expect(electron.on).toHaveBeenCalledWith("second-instance", expect.any(Function));
   });
-});
-
-it('keeps the ordinary protocol handler when the private telemetry QA bundle runs', async () => {
-  vi.stubEnv('OD_INPUT_QA_BUNDLE', 'local-only');
-  await registerOn('darwin', true);
-  expect(electron.setAsDefaultProtocolClient).not.toHaveBeenCalled();
 });

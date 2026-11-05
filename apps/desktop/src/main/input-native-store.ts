@@ -2,11 +2,9 @@ import { Worker, isMainThread, parentPort, workerData } from 'node:worker_thread
 import { DatabaseSync } from 'node:sqlite';
 import { parseClientMetricEvent, isInputAggregationDestination } from '@open-design/contracts/analytics';
 
-export function nativeInputPocEnabled(packaged: boolean, env: NodeJS.ProcessEnv): boolean {
-  if (env.OD_INPUT_TRIAL_CAPABILITY === '1') return isInputAggregationDestination(env.POSTHOG_HOST ?? '', env.POSTHOG_KEY ?? '');
-  return (!packaged || env.OD_INPUT_QA_BUNDLE === 'local-only') && env.OD_INPUT_NATIVE_POC === '1'
-    && env.NEXT_PUBLIC_OD_INPUT_AGGREGATION_POC === '1' && env.POSTHOG_KEY === 'phc_local_poc_only'
-    && /^http:\/\/127\.0\.0\.1(?::[0-9]+)?\/?$/.test(env.POSTHOG_HOST ?? '');
+export function nativeInputTelemetryEnabled(env: NodeJS.ProcessEnv): boolean {
+  return env.OD_INPUT_TRIAL_CAPABILITY === '1'
+    && isInputAggregationDestination(env.POSTHOG_HOST ?? '', env.POSTHOG_KEY ?? '');
 }
 
 type Change = { put: [string, string][]; drop: string[] };
@@ -23,7 +21,7 @@ export class NativeInputStore {
   private requests = new Map<number, { resolve(value: unknown): void; reject(error: Error): void; timer: NodeJS.Timeout }>();
   constructor(filename: string) {
     const workerFile = import.meta.url.endsWith('.ts') ? './input-native-store.ts' : './input-native-store.js';
-    this.worker = new Worker(new URL(workerFile, import.meta.url), { workerData: { filename, prewarm: process.env.OD_INPUT_PREWARM_POC !== '0' }, execArgv: [] });
+    this.worker = new Worker(new URL(workerFile, import.meta.url), { workerData: { filename }, execArgv: [] });
     this.worker.on('message', (reply: { id: number; value?: unknown; error?: string }) => {
       const pending = this.requests.get(reply.id);
       if (!pending) return;
@@ -93,7 +91,7 @@ if (!isMainThread) {
   const upsert = db.prepare('INSERT INTO records VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value');
   const remove = db.prepare('DELETE FROM records WHERE key=?');
   // Compile the input validators off the UI thread before the first real record; no facts are written.
-  if (workerData.prewarm) {
+  {
     const raw = { event_schema_version: 4, metric_schema_version: 1, event_id: '__prepare_raw__',
       device_id: '__prepare__', app_session_id: '__prepare__', client_type: 'desktop',
       capture_source: 'web/input-aggregation', env: 'development', channel: 'development',
