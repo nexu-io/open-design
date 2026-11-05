@@ -228,6 +228,10 @@ the CLI is baked into a custom image layer or mounted from the host per the
 section above; it is independent of Vela/AMR, which remains unavailable
 unless the Vela CLI is installed and authenticated separately.
 
+OpenCode and byok-opencode locate their binary through `OPENCODE_BIN` (not
+`VELA_OPENCODE_BIN`). The Linux override forwards it, defaulting to
+`/usr/local/bin/opencode`; set it in `deploy/.env` if OpenCode lives elsewhere.
+
 If you install Codex inside an unprivileged Linux container and it fails while
 creating its `workspace-write` sandbox, opt into Codex's full-access mode for
 all Codex runs in that deployment:

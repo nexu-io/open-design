@@ -42,6 +42,8 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       CODEX_API_KEY: ${CODEX_API_KEY:-}
+      # OpenCode / byok-opencode read OPENCODE_BIN (not VELA_OPENCODE_BIN).
+      OPENCODE_BIN: ${OPENCODE_BIN:-/usr/local/bin/opencode}
     volumes:
       - ${HOME}/.local/bin:/mnt/host-local-bin:ro
       - ${HOME}/.opencode/bin:/mnt/host-opencode:ro
