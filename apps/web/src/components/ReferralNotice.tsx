@@ -7,6 +7,7 @@ import {
 	type WorkspaceBillingResponse,
 	type WorkspaceCollabContext,
 } from "@open-design/contracts";
+import { useReferralAnalytics } from "../analytics/referral";
 import { useI18n } from "../i18n";
 import {
 	amrConsoleUrlForProfile,
@@ -127,18 +128,29 @@ export function ReferralNotice({
 	const kind = referralNoticeKind(data, exhausted, serverNow);
 	const key = `${profile}:${accountId}:${kind}`;
 	const hidden = wasDismissed(key);
-	if (!active || !accountId || !kind || kind === "pending") return null;
+	const visible = active && accountId && kind && kind !== "pending";
+	const analytics = useReferralAnalytics<HTMLElement>(
+		"client_home",
+		visible && !hidden ? key : null,
+		kind && kind !== "pending" ? kind : undefined,
+	);
+	if (!visible) return null;
 	const open = async () => {
 		if (opening) return;
+		analytics.click(kind === "exhausted" ? "invite" : "subscribe");
 		setOpening(true);
 		setFailed(false);
 		try {
 			if (kind === "exhausted") {
-                const accepted = await openReferralActivity(profile, () => currentScope.current === scopeKey);
-                if (!accepted && currentScope.current === scopeKey) setFailed(true);
-                return;
-            }
-            const url = new URL(amrConsoleUrlForProfile(profile, consoleOrigin));
+				const accepted = await openReferralActivity(
+					profile,
+					"client_home",
+					() => currentScope.current === scopeKey,
+				);
+				if (!accepted && currentScope.current === scopeKey) setFailed(true);
+				return;
+			}
+			const url = new URL(amrConsoleUrlForProfile(profile, consoleOrigin));
 			url.searchParams.set("source", "open_design");
 			url.searchParams.set("billing", AMR_CONSOLE_UPGRADE_INTENT);
 			const accepted = await openExternalUrl(url.toString());
@@ -152,6 +164,7 @@ export function ReferralNotice({
 	return (
 		<div className={styles.slot}>
 			<section
+				ref={analytics.ref}
 				className={`${styles.notice} ${hidden ? styles.dismissed : ""}`}
 				aria-hidden={hidden || undefined}
 				aria-label={t("referral.notice.label")}
@@ -188,6 +201,7 @@ export function ReferralNotice({
 					className={styles.close}
 					aria-label={t("referral.notice.dismiss")}
 					onClick={() => {
+						analytics.click("close");
 						dismissNotice(key);
 						render((value) => value + 1);
 					}}

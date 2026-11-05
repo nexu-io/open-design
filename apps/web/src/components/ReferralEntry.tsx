@@ -1,5 +1,6 @@
 import { parseReferralSummary } from '@open-design/contracts';
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useReferralAnalytics } from '../analytics/referral';
 import { useI18n } from '../i18n';
 import { openReferralActivity } from '../runtime/referral-navigation';
 import { getReferralEntryCopy } from './referral-entry-copy';
@@ -42,13 +43,15 @@ export function ReferralEntry({ compact = false }: { compact?: boolean }) {
   const currentScope = useRef(scopeKey);
   currentScope.current = scopeKey;
   useEffect(() => setFailed(false), [scopeKey, active]);
+  const analytics = useReferralAnalytics<HTMLButtonElement>('client_entry', active && !compact ? scopeKey : null);
   if (!active || compact) return null;
   const [title, subtitle] = getReferralEntryCopy(locale);
   const open = async () => {
+    analytics.click('invite');
     try {
-      const accepted = await openReferralActivity(profile, () => currentScope.current === scopeKey);
+      const accepted = await openReferralActivity(profile, 'client_entry', () => currentScope.current === scopeKey);
       if (currentScope.current === scopeKey) setFailed(!accepted);
     } catch { if (currentScope.current === scopeKey) setFailed(true); }
   };
-  return <div className={styles.slot}><button type="button" className={styles.card} data-testid="referral-entry" aria-label={`${title} — ${subtitle}`} title={`${title} — ${subtitle}`} onClick={() => void open()}><span className={styles.art} aria-hidden="true" /><span className={styles.copy}><strong>{title}</strong><span>{subtitle}</span></span></button>{failed ? <span role="alert">{t('referral.notice.openFailed')}</span> : null}</div>;
+  return <div className={styles.slot}><button ref={analytics.ref} type="button" className={styles.card} data-testid="referral-entry" aria-label={`${title} — ${subtitle}`} title={`${title} — ${subtitle}`} onClick={() => void open()}><span className={styles.art} aria-hidden="true" /><span className={styles.copy}><strong>{title}</strong><span>{subtitle}</span></span></button>{failed ? <span role="alert">{t('referral.notice.openFailed')}</span> : null}</div>;
 }
