@@ -5,6 +5,8 @@ import { getReferralEntryCopy } from '../../src/components/referral-entry-copy';
 import { I18nProvider, LOCALES } from '../../src/i18n';
 import { ReferralEntry, ReferralEntryProvider } from '../../src/components/ReferralEntry';
 
+const track = vi.hoisted(() => vi.fn());
+vi.mock('../../src/analytics/provider', () => ({ useAnalytics: () => ({ track }) }));
 const open = vi.hoisted(() => vi.fn(async () => true));
 vi.mock('../../src/providers/registry', () => ({ openExternalUrl: open }));
 vi.mock('../../src/runtime/amr-guidance', () => ({ amrReferralUrlForProfile: (_profile: string, id: string) => `https://example.test/cloud/reset?source=open_design&campaign=x&expectedAppUserId=${id}` }));
@@ -16,7 +18,10 @@ it('shows an active campaign and opens the current environment activity page', a
   globalThis.fetch = vi.fn(async (url: unknown) => Response.json(String(url).endsWith('referral-account') ? { appUserId: 'account-a' } : summary)) as typeof fetch;
   render(<I18nProvider initial="zh-CN"><ReferralEntryProvider accountId="a" profile="test"><ReferralEntry /></ReferralEntryProvider></I18nProvider>);
   fireEvent.click(await screen.findByTestId('referral-entry'));
-  await waitFor(() => expect(open).toHaveBeenCalledWith('https://example.test/cloud/reset?source=open_design&campaign=x&expectedAppUserId=account-a'));
+  expect(track).toHaveBeenCalledWith('ui_click', expect.objectContaining({
+    area: 'referral_entry', element: 'invite', entry_source: 'client_entry',
+  }));
+  await waitFor(() => expect(open).toHaveBeenCalledWith('https://example.test/cloud/reset?source=open_design&campaign=x&expectedAppUserId=account-a&entry_source=client_entry'));
 });
 
 it('hides the entry when the activity is ended or the account changes before a new response', async () => {
