@@ -1,3 +1,4 @@
+import { readLauncherHost } from "@open-design/launcher-proto";
 import type { AmrEndpointBinding } from "@open-design/contracts";
 import { recordIncomingUpdateStageResults, recordIncomingUpdateLifecycle, type UpdateLifecycleObservation } from "./update-lifecycle-observations.js";
 export { recordIncomingUpdateLifecycle, type UpdateLifecycleObservation } from "./update-lifecycle-observations.js";
@@ -904,9 +905,12 @@ async function runDesktopMainWithTiming(
 
   async function desktopStatusSnapshot(activeDesktop: DesktopRuntime | null): Promise<DesktopStatusSnapshot> {
     const update = await snapshotUpdateForStatus();
+    // A launcher-hosted payload reports its logical payload identity,
+    // not the installed outer it physically runs on.
+    const executablePath = readLauncherHost()?.running.executablePath ?? process.execPath;
     if (activeDesktop == null) {
       return {
-        executablePath: process.execPath,
+        executablePath,
         capabilities: { frameRenderer: true },
         pid: process.pid,
         state: "idle",
@@ -917,7 +921,7 @@ async function runDesktopMainWithTiming(
       };
     }
     return {
-      executablePath: process.execPath,
+      executablePath,
       ...activeDesktop.status(),
       capabilities: { frameRenderer: true },
       ...update,

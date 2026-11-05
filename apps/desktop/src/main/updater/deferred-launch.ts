@@ -3,6 +3,7 @@ import { chmod, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
+  readLauncherHost,
   buildLauncherAfterQuitArgs,
   buildLauncherDelegatedArgs,
 } from "@open-design/launcher-proto";
@@ -270,6 +271,17 @@ export async function launchPayloadAppAfterQuit(
   input: DeferredAppLaunchInput,
   deps: { now: () => Date; spawnDetached: SpawnInstallerHelper },
 ): Promise<DeferredLaunchResult> {
+  // A hosting launcher owns relaunch: the next version runs in the SAME
+  // installed bundle, reopened through LaunchServices after this process exits.
+  const host = readLauncherHost();
+  if (host != null) {
+    try {
+      await host.requestRelaunch();
+      return {};
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : String(error) };
+    }
+  }
   try {
     const child = deps.spawnDetached(
       input.launchPath,
