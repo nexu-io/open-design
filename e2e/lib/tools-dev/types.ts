@@ -1,4 +1,5 @@
 export type ToolsDevAppStatus = {
+  bundler?: string;
   pid?: number;
   state?: string;
   title?: string | null;
