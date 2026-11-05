@@ -41,13 +41,14 @@ import {
   parseClientMetricEvent,
   parseInputAggregationTrial,
   type InputAggregationTrial,
+  type ClientMetricProps,
   type AnalyticsClientType,
 } from '@open-design/contracts/analytics';
 import { isResolvedAppVersion } from './app-version';
 import { scrubExceptionList, scrubFilePath } from './scrub';
 import { InputAggregation, localInputAggregationEnabled } from './input-aggregation';
 import { openInputAggregationStore } from './input-aggregation-store';
-import { inputAggregationSender } from './input-aggregation-transport';
+import { inputAggregationSender, inputTelemetryCapture } from './input-aggregation-transport';
 
 export type BrowserOsName =
   | 'Mac OS X'
@@ -506,8 +507,8 @@ export function checkpointInputResponsiveness(properties: Record<string, unknown
   const aggregation = ensureInputAggregation();
   if (!aggregation || !aggregation.collectingEnabled || !context) return false;
   const trial = context.inputAggregation;
-  const tagged = trial ? { ...properties, aggregation_page_id: aggregation.pageId,
-    input_trial_id: trial.trial_id, input_trial_revision: trial.revision } : properties;
+  const tagged = { ...properties, aggregation_page_id: aggregation.pageId,
+    ...(trial ? { input_trial_id: trial.trial_id, input_trial_revision: trial.revision } : {}) };
   if (aggregation.passthrough && final) {
     reportSafetyEvent('client_input_responsiveness', tagged);
     return true;
@@ -517,8 +518,8 @@ export function checkpointInputResponsiveness(properties: Record<string, unknown
   if (!metric) return false;
   const destination = `${context.host.replace(/\/+$/, '')}/i/v0/e/`, key = context.apiKey;
   void aggregation.checkpointSource(metric, final).then(saved => {
-    if (!saved && final && !aggregation.ownsSource(common.event_id)) sendSafetyPayload(destination, { api_key: key, event: 'client_input_responsiveness',
-      distinct_id: common.device_id, timestamp: common.occurred_at, properties: { ...metric, $insert_id: common.event_id } });
+    if (!saved && final && !aggregation.ownsSource(common.event_id)) sendSafetyPayload(destination, { api_key: key, ...inputTelemetryCapture({ event: 'client_input_responsiveness',
+      properties: metric as ClientMetricProps<'client_input_responsiveness'> }) });
   });
   return true;
 }
@@ -554,7 +555,11 @@ function dispatch(item: BufferedSafetyEvent): void {
     const aggregation = ensureInputAggregation();
     if (aggregation) {
       // The durable outbox sends raw and summary events; never also dispatch the raw witness here.
-      void aggregation.observe(metric).then(saved => { if (!saved && !aggregation.ownsSource(common.event_id)) send(); });
+      const source = parseClientMetricEvent('client_input_responsiveness', { ...metric, aggregation_page_id: aggregation.pageId }) as ClientMetricProps<'client_input_responsiveness'>;
+      void aggregation.observe(source).then(saved => {
+        if (!saved && !aggregation.ownsSource(common.event_id)) sendSafetyPayload(destination, { api_key: payload.api_key,
+          ...inputTelemetryCapture({ event: 'client_input_responsiveness', properties: source }) });
+      });
       return;
     }
   }

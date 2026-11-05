@@ -1,6 +1,11 @@
 import { isInputAggregationDestination } from '@open-design/contracts/analytics';
 import type { InputTelemetryEvent } from './input-aggregation';
 
+export function inputTelemetryCapture({ event, properties }: InputTelemetryEvent) {
+  return { event, uuid: properties.event_id, distinct_id: properties.device_id, timestamp: properties.occurred_at,
+    properties: { ...properties, distinct_id: properties.device_id, $insert_id: properties.event_id } };
+}
+
 /** Receipt acceptance is distinct from the later PostHog indexing reconciliation. */
 export function inputAggregationSender(host: string, key: string, local = false, single = false) {
   let retryAt = 0;
@@ -11,10 +16,7 @@ export function inputAggregationSender(host: string, key: string, local = false,
     if (!local && events.some(({ properties }) => !properties.device_id
       || !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(properties.event_id))) return false;
     try {
-      const batch = events.map(({ event, properties }) => ({
-        event, uuid: properties.event_id, distinct_id: properties.device_id, timestamp: properties.occurred_at,
-        properties: { ...properties, distinct_id: properties.device_id, $insert_id: properties.event_id },
-      }));
+      const batch = events.map(inputTelemetryCapture);
       const body = JSON.stringify({ api_key: key, ...(single ? batch[0] : { batch }) });
       if (new TextEncoder().encode(body).length > 48 * 1024) return false;
       const response = await fetch(`${host.replace(/\/+$/, '')}/${single ? 'i/v0/e' : 'batch'}/`, {

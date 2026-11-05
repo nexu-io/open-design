@@ -1,16 +1,17 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from 'vitest';
 const snapshots = vi.hoisted(() => new Map<string, unknown>());
-const storageFailure = vi.hoisted(() => ({ next: false }));
+const storageFailure = vi.hoisted(() => ({ next: false, afterCommit: false }));
 vi.mock('../../src/analytics/input-aggregation-store', () => ({
   openInputAggregationStore: async (scope: string) => ({
     read: async () => snapshots.get(scope), write: async (next: unknown) => {
       if (storageFailure.next) { storageFailure.next = false; throw new Error('disk unavailable'); }
       snapshots.set(scope, JSON.parse(JSON.stringify(next)));
+      if (storageFailure.afterCommit) { storageFailure.afterCommit = false; throw new Error('commit acknowledgement lost'); }
     }, close() {},
   }),
 }));
-afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.restoreAllMocks(); vi.resetModules(); snapshots.clear(); storageFailure.next = false; });
+afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.restoreAllMocks(); vi.resetModules(); snapshots.clear(); storageFailure.next = false; storageFailure.afterCommit = false; });
 const input = { metric_schema_version: 1, telemetry_capability: 'supported', area: 'settings', window_ms: 30_000,
   input_attempt_count: 2, qualified_sample_count: 0, over_500ms_count: 0,
   max_input_to_presentation_ms: null, max_queue_delay_ms: null, sample_floor_ms: 16, content: 'private' };
@@ -165,5 +166,24 @@ it('T05 pause and drain keep original events flowing, stop new aggregation and c
   expect(events().filter(e => e.event === 'client_input_responsiveness_summary')).toHaveLength(2);
   const status = events().filter(e => e.event === 'client_input_aggregation_status');
   expect(status.length).toBeLessThanOrEqual(2);
+  tracking.clearExceptionTrackingContext(); await vi.advanceTimersByTimeAsync(0);
+});
+
+
+it('T06 an ambiguous storage acknowledgement keeps fallback and recovered raw the same UUID and body', async () => {
+  const { fetch, events } = local();
+  fetch.mockImplementation(async () => new Response('{"status":1}', { status: 200 }));
+  const tracking = await import('../../src/analytics/error-tracking');
+  const trial = { trial_id: 'input-01', revision: 'r1', mode: 'shadow' as const, host: context.host, project_key: 'phc_local_poc_only' };
+  const ctx = { ...context, apiKey: trial.project_key, inputAggregation: trial };
+  tracking.setExceptionTrackingContext(ctx); await vi.advanceTimersByTimeAsync(0); storageFailure.afterCommit = true;
+  tracking.reportSafetyEvent('client_input_responsiveness', input);
+  await vi.advanceTimersByTimeAsync(0);
+  tracking.clearExceptionTrackingContext(); await vi.advanceTimersByTimeAsync(0);
+  tracking.setExceptionTrackingContext(ctx); await vi.advanceTimersByTimeAsync(0);
+  const raws = events().filter(e => e.event === 'client_input_responsiveness').map(({ api_key, ...event }) => event);
+  expect(raws).toHaveLength(2);
+  expect(raws[0].uuid).toBe(raws[0].properties.event_id);
+  expect(raws[0]).toEqual(raws[1]);
   tracking.clearExceptionTrackingContext(); await vi.advanceTimersByTimeAsync(0);
 });
