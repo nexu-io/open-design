@@ -48,47 +48,44 @@ it('H02 sends raw immediately, retains completed 5/10m summaries until the real 
 });
 
 
-it('H03 sends the original before disk resolves, retaining an immutable backup until its receipt', async () => {
+
+it('H03 background durability does not block the caller and sends only after commit', async () => {
   vi.useFakeTimers(); vi.setSystemTime(start);
-  const store = disk(), replay = vi.fn().mockResolvedValue(true);
-  let release!: () => void, acknowledge!: (ok: boolean) => void;
+  const store = disk(), send = vi.fn().mockResolvedValue(true);
+  let release!: () => void;
   const opening = new Promise<typeof store>(resolve => { release = () => resolve(store); });
-  const primary = vi.fn(() => new Promise<boolean>(resolve => { acknowledge = resolve; }));
-  const a = new InputAggregation(replay, opening, { rawPassthrough: true });
-  const sent = a.observeWithPrimary(raw(), primary);
-  expect(primary).toHaveBeenCalledTimes(1); expect(store.write).not.toHaveBeenCalled();
-  release(); await vi.advanceTimersByTimeAsync(0);
-  expect((await store.read() as { rawPending: unknown[] }).rawPending).toHaveLength(1);
-  expect(replay).not.toHaveBeenCalled();
-  acknowledge(true); await sent; await a.tick();
-  expect((await store.read() as { rawPending: unknown[] }).rawPending).toHaveLength(0);
-  expect(replay).not.toHaveBeenCalled();
+  const a = new InputAggregation(send, opening);
+  const saved = a.observe(raw());
+  expect(send).not.toHaveBeenCalled(); expect(store.write).not.toHaveBeenCalled();
+  release(); await saved; await a.tick();
+  expect(send).toHaveBeenCalledTimes(1);
 });
 
-it('H04 shutdown saves finalized offline raw and tails without waiting for the network; restart replays once', async () => {
+it('H04 shutdown saves an unfinished tail without waiting for a pending network request; restart recovers once', async () => {
   vi.useFakeTimers(); vi.setSystemTime(start);
-  const store = disk(), replay = vi.fn().mockResolvedValue(true);
+  const store = disk(), send = vi.fn().mockResolvedValue(true);
   let acknowledge!: (ok: boolean) => void;
-  const a = new InputAggregation(replay, store, { rawPassthrough: true });
-  const sent = a.observeWithPrimary(raw(), () => new Promise(resolve => { acknowledge = resolve; }));
+  send.mockImplementation(() => new Promise(resolve => { acknowledge = resolve; }));
+  const a = new InputAggregation(send, store);
+  await a.observe(raw()); await vi.advanceTimersByTimeAsync(0);
+  await a.checkpointSource(raw({ event_id: 'tail-2' }), false);
   await a.prepareShutdown();
   expect(store.close).toHaveBeenCalledTimes(1);
   const saved = await store.read() as { rawPending: unknown[]; pending: unknown[] };
-  expect(saved.rawPending).toHaveLength(1); expect(saved.pending).toHaveLength(2);
-  const frozen = structuredClone(saved.rawPending[0]);
-  acknowledge(false); await sent;
-  const restart = new InputAggregation(replay, store, { rawPassthrough: true }); await restart.tick();
-  const events = replay.mock.calls.flatMap(([batch]) => batch);
-  expect(events).toHaveLength(3);
-  expect(events.find(e => e.event === 'client_input_responsiveness').properties).toEqual(frozen);
-  await new InputAggregation(replay, store, { rawPassthrough: true }).tick();
-  expect(replay.mock.calls.flatMap(([batch]) => batch)).toHaveLength(3);
+  expect(saved.rawPending).toHaveLength(2); expect(saved.pending).toHaveLength(2);
+  acknowledge(false); send.mockResolvedValue(true);
+  const restart = new InputAggregation(send, store); await restart.tick();
+  const replay = send.mock.calls.at(-1)![0];
+  expect(replay).toHaveLength(4);
+  expect(replay.filter((e: InputTelemetryEvent) => e.event === 'client_input_responsiveness').map((e: InputTelemetryEvent) => e.properties)).toEqual(saved.rawPending);
+  const count = send.mock.calls.length;
+  await new InputAggregation(send, store).tick(); expect(send).toHaveBeenCalledTimes(count);
 });
 
 it('H05 mode change does not discard a finalized source admitted before the asynchronous save', async () => {
   vi.useFakeTimers(); vi.setSystemTime(start);
-  const store = disk(), a = new InputAggregation(async () => false, store, { rawPassthrough: true });
-  const admitted = a.observeWithPrimary(raw(), async () => false);
+  const store = disk(), a = new InputAggregation(async () => false, store);
+  const admitted = a.observe(raw());
   await a.setMode('paused'); await admitted;
   expect((await store.read() as { rawPending: unknown[] }).rawPending).toHaveLength(1);
 });

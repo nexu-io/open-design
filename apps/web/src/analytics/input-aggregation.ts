@@ -34,7 +34,6 @@ export class InputAggregation {
   stopped: string | null = null;
   private collecting = new Map<string, Raw>();
   private rawPending: Raw[] = [];
-  private primaryInFlight = new Set<string>();
   private completed: string[] = [];
   private active = new Map<number, Summary>();
   private pending: Summary[] = [];
@@ -51,13 +50,15 @@ export class InputAggregation {
   private retryAt = 0;
   private failures = 0;
   private rawPassthrough: boolean;
+  private retryBackoff: boolean;
   private closing = false;
   private ready = false;
   private counters = { committed_inputs: 0, accepted_events: 0, retry_count: 0 };
 
   constructor(private send: (events: InputTelemetryEvent[]) => Promise<boolean>, store?: InputAggregationStore | Promise<InputAggregationStore>,
-    options: { rawPassthrough?: boolean; mode?: 'shadow' | 'drain' | 'paused' } = {}) {
+    options: { rawPassthrough?: boolean; retryBackoff?: boolean; mode?: 'shadow' | 'drain' | 'paused' } = {}) {
     this.rawPassthrough = options.rawPassthrough === true;
+    this.retryBackoff = options.retryBackoff === true || this.rawPassthrough;
     this.mode = options.mode ?? 'shadow';
     this.ready = !store;
     if (store) this.operation = this.restore(store).catch(error => {
@@ -82,22 +83,6 @@ export class InputAggregation {
   }
   ownsSource(id: string) { return this.collecting.has(id) || this.completed.includes(id); }
   observe(properties: Record<string, unknown>) { return this.checkpointSource(properties, true); }
-
-  /** Original delivery starts immediately; its immutable backup is saved independently. */
-  observeWithPrimary(properties: Record<string, unknown>, sendOriginal: () => Promise<boolean>) {
-    const id = String(properties.event_id);
-    this.primaryInFlight.add(id);
-    const saved = this.observe(properties);
-    let sent: Promise<boolean>;
-    try { sent = sendOriginal(); } catch { sent = Promise.resolve(false); }
-    return sent.catch(() => false).then(async accepted => {
-      await saved;
-      if (accepted) await this.update(async () => {
-        this.rawPending = this.rawPending.filter(raw => raw.event_id !== id);
-        await this.checkpoint();
-      });
-    }).finally(() => { this.primaryInFlight.delete(id); void this.drain(); });
-  }
 
   async checkpointSource(properties: Record<string, unknown>, final: boolean): Promise<Record<string, unknown> | null> {
     const admitted = this.collectingEnabled;
@@ -128,8 +113,7 @@ export class InputAggregation {
     this.collecting.delete(raw.event_id);
     if (this.completed.includes(raw.event_id)) return;
     if (this.rawPending.length >= MAX_RAW || bytes(raw) > 8192) throw new Error('queue_limit');
-    // Unfinalized shadow tails lack a confirmed original body; only finalized originals get replay backups.
-    if (!this.rawPassthrough || this.primaryInFlight.has(raw.event_id)) this.rawPending.push(Object.freeze({ ...raw }));
+    if (!this.rawPassthrough) this.rawPending.push(Object.freeze({ ...raw }));
     this.completed.push(raw.event_id); this.completed = this.completed.slice(-2048);
     const at = Date.parse(raw.occurred_at);
     for (const period of [300_000, 600_000] as const) {
@@ -282,7 +266,7 @@ export class InputAggregation {
   private async drainLoop() {
     while (!this.closed && this.mode !== 'paused' && this.stopped !== 'storage_error' && Date.now() >= this.retryAt) {
       const batch = await this.update(() => {
-        const events: InputTelemetryEvent[] = this.rawPending.filter(raw => !this.primaryInFlight.has(raw.event_id)).map(properties => ({ event: 'client_input_responsiveness', properties }));
+        const events: InputTelemetryEvent[] = this.rawPending.map(properties => ({ event: 'client_input_responsiveness', properties }));
         if (this.urgent || Date.now() >= this.nextSendAt) events.push(...this.pending.map(properties => ({ event: 'client_input_responsiveness_summary' as const, properties })));
         const selected: InputTelemetryEvent[] = [];
         for (const event of events) {
@@ -301,7 +285,7 @@ export class InputAggregation {
       }
       if (!await this.send(batch).catch(() => false)) {
         this.counters.retry_count++;
-        this.retryAt = this.rawPassthrough ? Date.now() + Math.min(60_000, 5000 * 2 ** Math.min(this.failures++, 4)) : 0;
+        this.retryAt = this.retryBackoff ? Date.now() + Math.min(60_000, 5000 * 2 ** Math.min(this.failures++, 4)) : 0;
         this.log('retry', { event_ids: batch.map(e => e.properties.event_id) }); break;
       }
       this.failures = 0; this.retryAt = 0;

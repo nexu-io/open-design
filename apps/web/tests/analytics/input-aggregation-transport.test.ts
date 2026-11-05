@@ -124,7 +124,7 @@ it('T03 retains a committed prefix and avoids a second fallback fact after a dis
   tracking.clearExceptionTrackingContext();
 });
 
-it('T04 shadow failure never holds or replaces the original transport', async () => {
+it('T04 shadow storage failure falls back to original raw without waiting for summaries', async () => {
   const { fetch, events } = local();
   fetch.mockImplementation(async () => new Response('{"status":1}', { status: 200 }));
   const tracking = await import('../../src/analytics/error-tracking');
@@ -132,9 +132,9 @@ it('T04 shadow failure never holds or replaces the original transport', async ()
   tracking.setExceptionTrackingContext({ ...context, apiKey: trial.project_key, inputAggregation: trial });
   storageFailure.next = true;
   tracking.reportSafetyEvent('client_input_responsiveness', input);
+  await vi.advanceTimersByTimeAsync(0);
   expect(fetch).toHaveBeenCalledTimes(1);
   expect(fetch.mock.calls[0]![0]).toBe(context.host + '/i/v0/e/');
-  await vi.advanceTimersByTimeAsync(0);
   tracking.reportSafetyEvent('client_input_responsiveness', { ...input, area: 'search' });
   await vi.advanceTimersByTimeAsync(0);
   expect(events().filter(e => e.event === 'client_input_responsiveness')).toHaveLength(2);

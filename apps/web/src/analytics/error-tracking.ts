@@ -41,7 +41,6 @@ import {
   parseClientMetricEvent,
   parseInputAggregationTrial,
   type InputAggregationTrial,
-  type ClientMetricProps,
   type AnalyticsClientType,
 } from '@open-design/contracts/analytics';
 import { isResolvedAppVersion } from './app-version';
@@ -140,7 +139,7 @@ let context: ExceptionTrackingContext | null = null;
 let installationDistinctId: string | null = null;
 const buffer: BufferedSafetyEvent[] = [];
 let installed = false;
-let inputAggregation: { instance: InputAggregation; destination: string; originalSender: ReturnType<typeof inputAggregationSender>; unsubscribeShutdown?: () => void } | null = null;
+let inputAggregation: { instance: InputAggregation; destination: string; trial: boolean; unsubscribeShutdown?: () => void } | null = null;
 let retiringInputAggregation: Promise<void> = Promise.resolve();
 let inputAggregationTimer: ReturnType<typeof setInterval> | null = null;
 let flushInputCollector: (() => void) | null = null;
@@ -156,7 +155,7 @@ function ensureInputAggregation(): InputAggregation | null {
   if (typeof window === 'undefined' || window.location.pathname === '/desktop-pet' || !context || holdsMetricsForIdentity()) return null;
   const trial = parseInputAggregationTrial(context.inputAggregation, context.host, context.apiKey);
   const local = localInputAggregationEnabled(process.env.NEXT_PUBLIC_OD_INPUT_AGGREGATION_POC, process.env.NODE_ENV, context.host, process.env.NEXT_PUBLIC_OD_INPUT_QA_BUNDLE, context.apiKey);
-  if (!trial && (!local || inputAggregation?.instance.passthrough)) {
+  if (!trial && (!local || inputAggregation?.trial)) {
     void inputAggregation?.instance.setMode('paused');
     return null;
   }
@@ -171,9 +170,18 @@ function ensureInputAggregation(): InputAggregation | null {
       const previous = inputAggregation.instance;
       retiringInputAggregation = retiringInputAggregation.then(() => previous.setMode('paused')).then(() => previous.close());
     }
-    const instance = new InputAggregation(inputAggregationSender(contextHost, key, local && !trial), retiringInputAggregation.then(() => openInputAggregationStore(scope)),
-      { rawPassthrough: !!trial, mode: trial?.mode ?? 'shadow' });
-    inputAggregation = { instance, destination: owner, originalSender: inputAggregationSender(contextHost, key, false, true) };
+    const summaries = inputAggregationSender(contextHost, key, local && !trial);
+    const originals = inputAggregationSender(contextHost, key, false, true);
+    const send = trial ? async (events: Parameters<typeof summaries>[0]) => {
+      for (const event of events.filter(e => e.event === 'client_input_responsiveness')) {
+        if (!await originals([event])) return false;
+      }
+      const batch = events.filter(e => e.event === 'client_input_responsiveness_summary');
+      return !batch.length || await summaries(batch);
+    } : summaries;
+    const instance = new InputAggregation(send, retiringInputAggregation.then(() => openInputAggregationStore(scope)),
+      { retryBackoff: !!trial, mode: trial?.mode ?? 'shadow' });
+    inputAggregation = { instance, destination: owner, trial: !!trial };
     inputAggregation.unsubscribeShutdown = getOpenDesignHost()?.inputTelemetry?.subscribeShutdown?.(async () => {
       if (inputAggregation?.instance !== instance) return;
       flushInputCollector?.();
@@ -545,14 +553,6 @@ function dispatch(item: BufferedSafetyEvent): void {
   if (metric && item.eventName === 'client_input_responsiveness') {
     const aggregation = ensureInputAggregation();
     if (aggregation) {
-      if (aggregation.passthrough) {
-        const tagged = { ...metric, aggregation_page_id: aggregation.pageId } as ClientMetricProps<'client_input_responsiveness'>;
-        const originalSender = inputAggregation!.originalSender;
-        if (aggregation.collectingEnabled) {
-          void aggregation.observeWithPrimary(tagged, () => originalSender([{ event: 'client_input_responsiveness', properties: tagged }]));
-        } else void originalSender([{ event: 'client_input_responsiveness', properties: tagged }]);
-        return;
-      }
       // The durable outbox sends raw and summary events; never also dispatch the raw witness here.
       void aggregation.observe(metric).then(saved => { if (!saved && !aggregation.ownsSource(common.event_id)) send(); });
       return;
