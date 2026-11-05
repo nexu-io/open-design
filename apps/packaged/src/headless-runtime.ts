@@ -233,6 +233,7 @@ export async function runPackagedHeadless(
       await startPackagedSidecars(runtime, paths, {
         appVersion: activeConfig.appVersion,
         amrProfile: activeConfig.amrProfile,
+        amrEndpointBinding: activeConfig.amrEndpointBinding,
         daemonCliEntry: activeConfig.daemonCliEntry,
         daemonSidecarEntry: activeConfig.daemonSidecarEntry,
         electronNodeCommand: launcherRuntime.electronNodeCommand,

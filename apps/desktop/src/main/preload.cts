@@ -395,6 +395,9 @@ const hostBridge = {
     setVisible: (visible: boolean): void =>
       ipcRenderer.send('desktop-pet:set-visible', Boolean(visible)),
   },
+  window: {
+    show: (): void => ipcRenderer.send('od:window:show'),
+  },
   updater,
 } satisfies OpenDesignHostBridge;
 

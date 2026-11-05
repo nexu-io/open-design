@@ -766,6 +766,192 @@ describe('WorkspaceBillingRuntimeCoordinator', () => {
     runtime.dispose();
   });
 
+  it('refreshes only the exact interested quota projection before the healthy realtime TTL without changing money clocks', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const otherMember = { ...KEY_A, workspaceMemberId: 'member-other' };
+    const refreshed = deferred<VelaWorkspaceBillingProjection>();
+    const calls: string[] = [];
+    const clocks = {
+      billing: { epoch: 'billing-fixed', counter: '1' },
+      wallet: { epoch: 'wallet-fixed', counter: '1' },
+    };
+    const quotaProjection = (remainingCredits: string) => {
+      const result = projection(KEY_A.workspaceId, KEY_A.workspaceMemberId, '9.00', '1', '1', 'team_plus', clocks);
+      result.snapshot!.designPlanWindows = [{
+        kind: '7d', windowStart: null, resetsAt: null, remainingCredits, limitCredits: '100',
+      }];
+      return result;
+    };
+    const runtime = createWorkspaceBillingRuntimeCoordinator({
+      fetchProjection: async (key) => {
+        calls.push(`${key.workspaceId}:${key.workspaceMemberId}`);
+        if (key.workspaceId !== KEY_A.workspaceId || key.workspaceMemberId !== KEY_A.workspaceMemberId) {
+          return projection(key.workspaceId, key.workspaceMemberId, '7.00');
+        }
+        return calls.filter((value) => value === 'workspace-a:member-a').length === 1
+          ? quotaProjection('100')
+          : refreshed.promise;
+      },
+    });
+    try {
+      await runtime.read(KEY_A);
+      await runtime.read(KEY_B);
+      await runtime.read(otherMember);
+      runtime.setRealtimeHealthy(KEY_A.workspaceId, true);
+      runtime.setRealtimeHealthy(KEY_B.workspaceId, true);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect((await runtime.read(KEY_A)).projection.snapshot?.designPlanWindows?.[0]?.remainingCredits).toBe('100');
+      expect(calls).toHaveLength(3);
+      runtime.invalidateCodingPlanUsage(KEY_A);
+      const read = runtime.read(KEY_A);
+      await Promise.resolve();
+      expect(calls).toEqual([
+        'workspace-a:member-a', 'workspace-b:member-b', 'workspace-a:member-other', 'workspace-a:member-a',
+      ]);
+      refreshed.resolve(quotaProjection('98'));
+      await expect(read).resolves.toMatchObject({
+        projection: { snapshot: {
+          designPlanWindows: [{ remainingCredits: '98' }],
+          revisionClocks: clocks,
+          wallet: { balanceUsd: '9.00' },
+        } },
+        state: { status: 'fresh', reason: 'coding-plan-usage-changed', sourceGapDetected: false },
+      });
+      // Quota invalidation must leave the existing wallet/subscription fences
+      // intact: their already-observed event frames are still duplicates.
+      runtime.invalidate({ domain: 'wallet', ...KEY_A, revisionClock: clocks.wallet });
+      runtime.invalidate({ domain: 'subscription', workspaceId: KEY_A.workspaceId, revisionClock: clocks.billing });
+      await runtime.read(KEY_A);
+      expect(calls.filter((value) => value === 'workspace-a:member-a')).toHaveLength(2);
+      expect((await runtime.read(KEY_B)).projection.workspaceBalance?.balanceUsd).toBe('7.00');
+      expect((await runtime.read(otherMember)).projection.workspaceBalance?.balanceUsd).toBe('7.00');
+    } finally {
+      runtime.dispose();
+    }
+  });
+
+  it('coalesces quota and wallet display bursts in fixed five-second leading/trailing windows', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    let wallet = '1';
+    const fetchProjection = vi.fn(async () => projection(KEY_A.workspaceId, KEY_A.workspaceMemberId, wallet, '1', wallet));
+    const runtime = createWorkspaceBillingRuntimeCoordinator({ displayEventRefreshIntervalMs: 5_000, fetchProjection });
+    try {
+      await runtime.read(KEY_A);
+      runtime.setRealtimeHealthy(KEY_A.workspaceId, true);
+      runtime.invalidateCodingPlanUsage(KEY_A);
+      await runtime.read(KEY_A);
+      expect(fetchProjection).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(1_000);
+      for (let revision = 2; revision <= 200; revision++) {
+        wallet = String(revision);
+        runtime.invalidateCodingPlanUsage(KEY_A);
+        runtime.invalidate({ domain: 'wallet', ...KEY_A, revision: wallet });
+      }
+      await runtime.read(KEY_A);
+      expect(fetchProjection).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(3_999);
+      expect(fetchProjection).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(1);
+      expect((await runtime.read(KEY_A)).projection.workspaceBalance?.balanceUsd).toBe('200');
+      expect(fetchProjection).toHaveBeenCalledTimes(3);
+      // Continuing traffic must refresh at the fixed next window, rather than
+      // pushing the deadline back forever as a debounce would.
+      for (let second = 1; second <= 5; second++) {
+        await vi.advanceTimersByTimeAsync(1_000);
+        wallet = String(200 + second);
+        runtime.invalidateCodingPlanUsage(KEY_A);
+      }
+      expect(fetchProjection).toHaveBeenCalledTimes(4);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect((await runtime.read(KEY_A)).projection.workspaceBalance?.balanceUsd).toBe('205');
+      expect(fetchProjection).toHaveBeenCalledTimes(5);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(fetchProjection).toHaveBeenCalledTimes(5);
+    } finally {
+      runtime.dispose();
+    }
+  });
+
+  it('joins an in-flight trailing display catch-up instead of returning the previous projection or starting another read', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const catchUp = deferred<VelaWorkspaceBillingProjection>();
+    let reads = 0;
+    const fetchProjection = vi.fn(async () => {
+      reads += 1;
+      return reads < 3
+        ? projection(KEY_A.workspaceId, KEY_A.workspaceMemberId, '100')
+        : catchUp.promise;
+    });
+    const runtime = createWorkspaceBillingRuntimeCoordinator({ displayEventRefreshIntervalMs: 5_000, fetchProjection });
+    try {
+      await runtime.read(KEY_A);
+      runtime.invalidateCodingPlanUsage(KEY_A);
+      await runtime.read(KEY_A);
+      await vi.advanceTimersByTimeAsync(1_000);
+      runtime.invalidateCodingPlanUsage(KEY_A);
+      await vi.advanceTimersByTimeAsync(4_000);
+      expect(fetchProjection).toHaveBeenCalledTimes(3);
+      let settled = false;
+      const read = runtime.read(KEY_A).then((result) => { settled = true; return result; });
+      await Promise.resolve();
+      expect(settled).toBe(false);
+      catchUp.resolve(projection(KEY_A.workspaceId, KEY_A.workspaceMemberId, '98'));
+      await expect(read).resolves.toMatchObject({ projection: { workspaceBalance: { balanceUsd: '98' } } });
+      expect(fetchProjection).toHaveBeenCalledTimes(3);
+    } finally {
+      runtime.dispose();
+    }
+  });
+
+  it.each(['authoritative', 'subscription', 'reconnect'] as const)('does not delay %s reads behind a pending display refresh', async (bypass) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    let revision = '1';
+    const fetchProjection = vi.fn(async () => projection(KEY_A.workspaceId, KEY_A.workspaceMemberId, revision, revision, revision));
+    const runtime = createWorkspaceBillingRuntimeCoordinator({ displayEventRefreshIntervalMs: 5_000, fetchProjection });
+    try {
+      await runtime.read(KEY_A);
+      runtime.setRealtimeHealthy(KEY_A.workspaceId, true);
+      runtime.invalidateCodingPlanUsage(KEY_A);
+      await runtime.read(KEY_A);
+      await vi.advanceTimersByTimeAsync(1_000);
+      revision = '2';
+      runtime.invalidateCodingPlanUsage(KEY_A);
+      if (bypass === 'subscription') runtime.invalidate({ domain: 'subscription', workspaceId: KEY_A.workspaceId, revision });
+      if (bypass === 'reconnect') runtime.reconnect(KEY_A.workspaceId);
+      const result = await runtime.read(KEY_A, { requireFresh: bypass === 'authoritative' });
+      expect(result.projection.workspaceBalance?.balanceUsd).toBe('2');
+      expect(fetchProjection).toHaveBeenCalledTimes(3);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(fetchProjection).toHaveBeenCalledTimes(3);
+    } finally {
+      runtime.dispose();
+    }
+  });
+
+  it.each(['dispose', 'resetIdentity', 'revokeWorkspace'] as const)('cancels pending display refreshes on %s', async (stop) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const fetchProjection = vi.fn(async () => projection(KEY_A.workspaceId, KEY_A.workspaceMemberId, '1'));
+    const runtime = createWorkspaceBillingRuntimeCoordinator({ displayEventRefreshIntervalMs: 5_000, fetchProjection });
+    try {
+      await runtime.read(KEY_A);
+      runtime.invalidateCodingPlanUsage(KEY_A);
+      await runtime.read(KEY_A);
+      await vi.advanceTimersByTimeAsync(1_000);
+      runtime.invalidateCodingPlanUsage(KEY_A);
+      if (stop === 'revokeWorkspace') runtime.revokeWorkspace(KEY_A.workspaceId);
+      else runtime[stop]();
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(fetchProjection).toHaveBeenCalledTimes(2);
+    } finally {
+      runtime.dispose();
+    }
+  });
+
   it('forces an authoritative catch-up after reconnect', async () => {
     let balance = '1.00';
     let calls = 0;

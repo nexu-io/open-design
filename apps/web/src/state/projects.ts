@@ -1,3 +1,4 @@
+import type { QueuedSubmissionRequest, UserSubmissionReceipt } from "@open-design/contracts";
 // Project / conversation / message / tab persistence — backed by the
 // daemon's SQLite store. All writes round-trip through HTTP so projects
 // stay coherent across multiple browser tabs and across restarts.
@@ -12,6 +13,7 @@ import { BackoffController, type BackoffOptions } from '../lib/backoff';
 import { markProjectCreatedByViewer } from '../collab/useProjectCollab';
 import {
   API_ERROR_CODES,
+  MESSAGES_STREAM_CONTENT_TYPE,
   isSameWorkspacePrincipal,
   type ApiErrorCode,
   type ProjectDeleteShareResidual,
@@ -44,6 +46,7 @@ import type {
   WorkspaceProjectsResponse,
 } from '@open-design/contracts';
 import { randomUUID } from '../utils/uuid';
+import { readMessageStream } from './read-message-stream';
 import { markProjectDisplaySnapshotsDirty } from './project-display-cache';
 import {
   workspaceIdentityCacheKey,
@@ -52,6 +55,7 @@ import {
 } from '../collab/workspace-identity';
 import {
   currentWorkspaceAccountGeneration,
+  resolveBoundProjectWorkspaceContext,
   currentWorkspaceContextRequestToken,
 } from '../collab/useWorkspaceContext';
 import type { WorkspaceResourceReadIdentity } from '../collab/workspace-identity';
@@ -454,6 +458,12 @@ export async function bootstrapProjectRoute(
           return { kind: 'forbidden' };
         }
       } else if (context) {
+        // Local scope describes the persisted creator, not the signed-in
+        // account's current membership. Resolve the exact caller before any
+        // project content read; a removed workspace must never fall back to
+        // its cached creator or to the ambient workspace.
+        const caller = await resolveBoundProjectWorkspaceContext(context.workspaceId);
+        if (!caller) return { kind: 'forbidden' };
         // Headerless scope is discovery only. Once it names the exact persisted
         // Workspace/member pair, prove that claim through the ordinary
         // fail-closed authorization lane before trusting it as ProjectView's
@@ -463,7 +473,7 @@ export async function bootstrapProjectRoute(
           `/api/projects/${encodeURIComponent(projectId)}/workspace-scope`,
           {
             cache: 'no-store',
-            headers: workspaceProjectHeaders(context),
+            headers: workspaceProjectHeaders(caller),
           },
         );
         if (!exactScopeResponse.ok) {
@@ -477,8 +487,8 @@ export async function bootstrapProjectRoute(
           !exactBody.scope
           || exactBody.scope.projectId !== projectId
           || !exactContext
-          || exactBody.scope.workspaceId !== context.workspaceId
-          || workspaceIdentityCacheKey(exactContext) !== workspaceIdentityCacheKey(context)
+          || exactBody.scope.workspaceId !== caller.workspaceId
+          || !isSameWorkspacePrincipal(exactContext, caller)
         ) {
           return { kind: 'forbidden' };
         }
@@ -557,8 +567,7 @@ export async function bootstrapFirstOpenTeamProjectRoute(
 ): Promise<FirstOpenTeamProjectBootstrapResult> {
   const { exactContext } = options;
   if (
-    exactContext.workspaceType !== 'team'
-    || exactContext.memberStatus !== 'active'
+    exactContext.memberStatus !== 'active'
     || exactContext.lifecycleState !== 'active'
   ) {
     return { kind: 'not-found' };
@@ -598,8 +607,9 @@ export async function bootstrapFirstOpenTeamProjectRoute(
   if (bootstrap.kind === 'forbidden') return { kind: 'unavailable' };
   if (bootstrap.kind !== 'found') return bootstrap;
   if (
-    bootstrap.scope.kind !== 'team'
-    || bootstrap.scope.context?.workspaceType !== 'team'
+    bootstrap.scope.kind === 'unbound'
+    || bootstrap.scope.visibility !== 'team'
+    || bootstrap.scope.context?.workspaceType !== exactContext.workspaceType
     // Same question, same answer as the re-confirmation above: does this local
     // binding belong to the exact principal that authorized the bootstrap? The
     // daemon's scope placeholder role is not evidence about that, and letting it
@@ -1093,6 +1103,22 @@ type ProjectPatch = Omit<Partial<Project>, 'pendingPrompt' | 'customInstructions
   customInstructions?: string | null;
 };
 
+/** Idempotent registration; a failed response leaves the saved queue item retryable. */
+export async function registerQueuedSubmission(
+  projectId: string, submission: QueuedSubmissionRequest, workspaceContext?: WorkspaceCollabContext | null,
+): Promise<UserSubmissionReceipt | null> {
+  try {
+    const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/submissions`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json',
+        ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}) },
+      body: JSON.stringify(submission),
+    });
+    if (!resp.ok) return null;
+    const result = await resp.json() as { userSubmission: UserSubmissionReceipt };
+    return result.userSubmission;
+  } catch { return null; }
+}
+
 export async function patchProject(
   id: string,
   patch: ProjectPatch,
@@ -1470,16 +1496,18 @@ export async function listMessages(
   conversationId: string,
   workspaceContext?: WorkspaceCollabContext | null,
   signal?: AbortSignal,
+  onProgress?: () => void,
 ): Promise<ChatMessage[]> {
   try {
     const resp = await fetch(
       `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`,
-      workspaceContext || signal
-        ? {
-            ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
-            ...(signal ? { signal } : {}),
-          }
-        : undefined,
+      {
+        headers: {
+          Accept: MESSAGES_STREAM_CONTENT_TYPE,
+          ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+        },
+        ...(signal ? { signal } : {}),
+      },
     );
     if (!resp.ok) {
       const failure = await readProjectMessageListError(resp);
@@ -1489,6 +1517,9 @@ export async function listMessages(
         failure.code,
         failure.retryable,
       );
+    }
+    if (resp.headers.get('content-type')?.split(';')[0]?.trim() === MESSAGES_STREAM_CONTENT_TYPE) {
+      return await readMessageStream(resp, signal, onProgress);
     }
     const json = (await resp.json()) as { messages: ChatMessage[] };
     return json.messages ?? [];

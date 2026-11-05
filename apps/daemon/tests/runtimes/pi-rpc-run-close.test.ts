@@ -60,15 +60,15 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
   if (mode === 'cancel') return;
   if (mode === 'error') W({ type: 'message_update', assistantMessageEvent: { type: 'error', reason: 'Native Pi fixture failure' } });
   W({ type: 'agent_end' });
-  if (mode === 'nonzero') process.exit(143);
+  // Exercise a natural failure during the grace period, after the turn ends.
+  if (mode === 'nonzero') setTimeout(() => process.exit(143), 80);
 });
 `, 'utf8');
     await chmod(bin, 0o755);
-    // Wide grace window so the fixture's own exit(143) is always observed
-    // before the daemon's SIGTERM fallback: at 10ms a loaded CI runner can
-    // deliver the SIGTERM before the child's exit event drains the loop, and
-    // the close classifier then reads our shutdown instead of the nonzero exit.
-    process.env.PI_GRACEFUL_SHUTDOWN_MS = '500';
+    // Natural failure must arrive during the production grace period. The
+    // test-only fast shutdown belongs to the cases that exercise host teardown.
+    if (mode === 'nonzero') delete process.env.PI_GRACEFUL_SHUTDOWN_MS;
+    else process.env.PI_GRACEFUL_SHUTDOWN_MS = '10';
     started = await startServer({ port: 0, returnServer: true }) as StartedServer;
     const config = await fetch(`${started.url}/api/app-config`, {
       method: 'PUT', headers: { 'content-type': 'application/json' },

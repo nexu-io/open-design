@@ -706,3 +706,83 @@ describe('safety identity on a fresh install (OPEND-4220)', () => {
     expect((lastFetchedBody().properties as Record<string, unknown>).device_id).toBe('anon-bootstrap');
   });
 });
+
+describe('first-session metric hold until the installation id exists (OPEND-4220 retest 2)', () => {
+  const base = { apiKey: 'phc_test', host: 'https://ingest.invalid', appVersion: '1.2.3', sessionId: 'session-1', telemetryEnv: 'test' };
+  const metricBodies = () => fetchMock.mock.calls
+    .map(([, init]) => JSON.parse((init as RequestInit).body as string) as { event: string; distinct_id: string; properties: Record<string, unknown> })
+    .filter((body) => body.event.startsWith('client_') && body.event !== 'client_boot_timing');
+  const pendingContext = () => setProductionExceptionTrackingContext({
+    clientType: 'desktop', osName: 'Mac OS X', ...base, distinctId: 'anon-bootstrap', identityPending: true,
+  });
+
+  it('holds metrics emitted before the id and sends them under the installation id', () => {
+    pendingContext();
+    reportClientMetricEvent('client_process_memory_sample', {
+      metric_schema_version: 1, telemetry_capability: 'supported', process_role: 'renderer',
+      process_instance_id: 'p-1', uptime_ms: 1, rss_bytes: 1, heap_used_bytes: null, external_bytes: null,
+      sampled_at: '2026-10-22T00:00:00.000Z', sampling_interval_ms: 60_000, event_id: 'early-1',
+    });
+    expect(metricBodies()).toHaveLength(0);
+    patchExceptionTrackingDistinctId('install-1');
+    const sent = metricBodies();
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.distinct_id).toBe('install-1');
+    expect(sent[0]!.properties.device_id).toBe('install-1');
+  });
+
+  it('keeps holding when a later re-bridge omits the identity flag (packaged retest)', () => {
+    pendingContext();
+    // posthog-js init re-bridges the context without identityPending.
+    setProductionExceptionTrackingContext({ clientType: 'desktop', osName: 'Mac OS X', ...base, distinctId: 'anon-bootstrap' });
+    reportClientMetricEvent('client_process_memory_sample', {
+      metric_schema_version: 1, telemetry_capability: 'supported', process_role: 'renderer',
+      process_instance_id: 'p-1', uptime_ms: 1, rss_bytes: 1, heap_used_bytes: null, external_bytes: null,
+      sampled_at: '2026-10-22T00:00:00.000Z', sampling_interval_ms: 60_000, event_id: 'early-rebridge',
+    });
+    expect(metricBodies()).toHaveLength(0);
+    patchExceptionTrackingDistinctId('install-1');
+    expect(metricBodies().map((body) => body.properties.device_id)).toEqual(['install-1']);
+  });
+
+  it('holds legacy safety events such as client_boot_timing too (packaged retest)', () => {
+    pendingContext();
+    reportSafetyEvent('client_boot_timing', { duration_ms: 1 });
+    expect(fetchMock).not.toHaveBeenCalled();
+    patchExceptionTrackingDistinctId('install-1');
+    expect((lastFetchedBody().properties as Record<string, unknown>).device_id).toBe('install-1');
+  });
+
+  it('still sends exceptions immediately while metrics are held', () => {
+    pendingContext();
+    reportHandledException(new Error('boom'));
+    expect(fetchMock.mock.calls.map(([, init]) => JSON.parse((init as RequestInit).body as string).event)).toContain('$exception');
+  });
+
+  it('releases held metrics under the bootstrap id if the installation id never arrives', () => {
+    vi.useFakeTimers();
+    try {
+      pendingContext();
+      reportClientMetricEvent('client_process_memory_sample', {
+        metric_schema_version: 1, telemetry_capability: 'supported', process_role: 'renderer',
+        process_instance_id: 'p-1', uptime_ms: 1, rss_bytes: 1, heap_used_bytes: null, external_bytes: null,
+        sampled_at: '2026-10-22T00:00:00.000Z', sampling_interval_ms: 60_000, event_id: 'early-2',
+      });
+      expect(metricBodies()).toHaveLength(0);
+      vi.advanceTimersByTime(60_000);
+      const sent = metricBodies();
+      expect(sent).toHaveLength(1);
+      expect(sent[0]!.properties.device_id).toBe('anon-bootstrap');
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('does not hold when bootstrap already has the installation id', () => {
+    setProductionExceptionTrackingContext({ clientType: 'desktop', osName: 'Mac OS X', ...base, distinctId: 'install-1', identityPending: false });
+    reportClientMetricEvent('client_process_memory_sample', {
+      metric_schema_version: 1, telemetry_capability: 'supported', process_role: 'renderer',
+      process_instance_id: 'p-1', uptime_ms: 1, rss_bytes: 1, heap_used_bytes: null, external_bytes: null,
+      sampled_at: '2026-10-22T00:00:00.000Z', sampling_interval_ms: 60_000, event_id: 'warm-1',
+    });
+    expect(metricBodies()).toHaveLength(1);
+  });
+});

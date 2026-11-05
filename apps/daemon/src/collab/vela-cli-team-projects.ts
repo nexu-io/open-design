@@ -158,6 +158,19 @@ export function createVelaCliTeamProjectCatalog(
     const payload = stdout.trim()
       ? JSON.parse(stdout.trim()) as TeamProjectsListWire
       : {};
+    // The CLI command is workspace-scoped, but its response is still an
+    // untrusted transport boundary. In particular a Personal workspace may
+    // now use this catalog, so an active Team selection must never lend its
+    // rows to the Personal caller if a CLI build ignores the explicit scope.
+    if (payload.workspaceId !== undefined && payload.workspaceId !== resolvedWorkspaceId) {
+      throw new Error('incomplete team project catalog: workspace mismatch');
+    }
+    if (Array.isArray(payload.projects) && payload.projects.some((row) => {
+      const workspace = recordObject(row)?.workspaceId;
+      return workspace !== undefined && workspace !== resolvedWorkspaceId;
+    })) {
+      throw new Error('incomplete team project catalog: workspace mismatch');
+    }
     return Array.isArray(payload.projects)
       ? payload.projects.map(toTeamProject).filter((project): project is TeamProject => project != null)
       : [];
@@ -210,6 +223,9 @@ export function createVelaCliTeamProjectCatalog(
           projectId,
           '--json',
         ], resolvedWorkspaceId);
+        if (payload.workspaceId !== undefined && payload.workspaceId !== resolvedWorkspaceId) {
+          throw new Error('incomplete team project catalog: workspace mismatch');
+        }
         return toTeamProject(payload);
       } catch (error) {
         if (isAuthoritativeTeamProjectNotFound(error)) return null;

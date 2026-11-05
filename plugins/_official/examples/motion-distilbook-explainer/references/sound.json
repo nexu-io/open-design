@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "music": {
+    "role": "bed",
+    "description": "明亮轻快的电子配乐，轻打击与合成器短音。",
+    "bpm": null,
+    "beatConfidence": "none",
+    "cutOnBeat": false,
+    "sections": [
+      {
+        "scene": "hook",
+        "energy": "high"
+      },
+      {
+        "scene": "intro",
+        "energy": "high"
+      },
+      {
+        "scene": "add",
+        "energy": "high"
+      },
+      {
+        "scene": "edit",
+        "energy": "high"
+      },
+      {
+        "scene": "draw",
+        "energy": "high"
+      },
+      {
+        "scene": "speed",
+        "energy": "high"
+      },
+      {
+        "scene": "styles",
+        "energy": "high"
+      },
+      {
+        "scene": "formats",
+        "energy": "high"
+      },
+      {
+        "scene": "languages",
+        "energy": "high"
+      },
+      {
+        "scene": "branding",
+        "energy": "high"
+      },
+      {
+        "scene": "close",
+        "energy": "high"
+      }
+    ]
+  },
+  "effects": [],
+  "effectsPer10s": 0,
+  "voice": {
+    "present": true
+  },
+  "captions": {
+    "position": "bottom",
+    "grouping": "phrase",
+    "highlight": "active-word",
+    "box": "none",
+    "case": "as-is",
+    "font": {
+      "role": "body",
+      "weight": "bold",
+      "size": "medium"
+    }
+  },
+  "demoTrack": {
+    "file": "assets/soundtrack.mp3",
+    "origin": "reference"
+  }
+}

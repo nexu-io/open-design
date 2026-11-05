@@ -558,9 +558,9 @@ describe('HomeView prompt handoff', () => {
     await waitFor(() => {
       expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(true);
     });
-    // The arrow never flashes a busy treatment; the disabled lock is the whole
-    // in-flight state.
-    expect(screen.getByTestId('home-hero-submit').getAttribute('aria-busy')).toBe('false');
+    expect(screen.getByTestId('home-hero-submit')).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByTestId('home-hero-submit')).toHaveAttribute('aria-label', 'Sending…');
+    expect(screen.getByTestId('home-hero-submit').querySelector('svg')).toHaveClass('icon-spin');
     expect(homeHeroPromptValue()).toBe('Create an image of a quiet reading room.');
 
     await act(async () => {
@@ -573,6 +573,9 @@ describe('HomeView prompt handoff', () => {
     );
     expect(homeHeroPromptValue()).toBe('Create an image of a quiet reading room.');
     expect(screen.getByTestId('home-hero-submit').getAttribute('aria-busy')).toBe('false');
+    expect(screen.getByTestId('home-hero-submit')).toBeEnabled();
+    expect(screen.getByTestId('home-hero-submit')).toHaveAttribute('aria-label', 'Run');
+    expect(screen.getByTestId('home-hero-submit').querySelector('svg')).not.toHaveClass('icon-spin');
   });
 
   it('leaves a fresh Home unselected without applying a plugin or changing the draft', async () => {

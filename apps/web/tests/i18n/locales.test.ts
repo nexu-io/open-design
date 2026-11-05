@@ -36,6 +36,17 @@ function explicitLocaleKeys(locale: Locale): string[] {
 }
 
 describe('i18n locales', () => {
+  it('localizes the home invitation entry and member tooltip in every language', async () => {
+    const keys = ['homeInvite.banner', 'homeInvite.invite', 'homeInvite.dismiss', 'homeInvite.sent', 'workspaceInvite.teamPlanBody'] as const;
+    for (const locale of LOCALES) {
+      const dict = await loadDict(locale);
+      for (const key of keys) {
+        expect(dict[key], `${locale}.${key}`).toBeTruthy();
+        expect(placeholders(dict[key]), `${locale}.${key} placeholders`).toEqual(placeholders(en[key]));
+        if (locale !== 'en') expect(dict[key], `${locale}.${key}`).not.toBe(en[key]);
+      }
+    }
+  });
   it('resolves the initial locale from browser language preferences', () => {
     expect(resolveSystemLocale(['zh-Hans-CN', 'en-US'])).toBe('zh-CN');
     expect(resolveSystemLocale(['zh-Hant-HK', 'en-US'])).toBe('zh-TW');
@@ -514,4 +525,17 @@ describe('i18n locales', () => {
       }
     }
   });
+});
+
+it('localizes every reset-card notice state and preserves placeholders', async () => {
+  const keys = ['label', 'registered', 'pending', 'pendingAt', 'exhausted', 'remaining', 'invite', 'subscribe', 'dismiss', 'openFailed'] as const;
+  for (const locale of LOCALES) {
+    const dict = await loadDict(locale);
+    for (const suffix of keys) {
+      const key = `referral.notice.${suffix}` as keyof Dict;
+      expect(dict[key], `${locale} ${key}`).toBeTruthy();
+      expect(placeholders(dict[key]), `${locale} ${key}`).toEqual(placeholders(en[key]));
+      if (locale !== 'en') expect(dict[key], `${locale} ${key}`).not.toBe(en[key]);
+    }
+  }
 });

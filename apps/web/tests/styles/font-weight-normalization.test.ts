@@ -34,6 +34,16 @@ const pendingNormalization = new Set([
   'apps/web/src/components/chat/primitives/record.module.css',
   'apps/web/src/styles/chat.css',
   'apps/web/src/styles/viewer/composio.css',
+  // shortcut: these D4 dialog and invitation styles use 400 in the current
+  // visual design; normalize after their design review, with screenshot checks.
+  'apps/web/src/components/AmrBalanceDialog.module.css',
+  'apps/web/src/components/AmrConcurrencyDialog.module.css',
+  'apps/web/src/components/CloudSignInTip.module.css',
+  'apps/web/src/components/HomeInviteSurface.module.css',
+  'apps/web/src/components/InviteDialog.module.css',
+  // The frozen shared quota popover retains the delivered 400-weight balance
+  // and window copy; a global ladder change must not restyle that surface.
+  'apps/web/src/components/WorkspaceQuotaPopover.module.css',
 ]);
 
 function cssFiles(root: string): string[] {

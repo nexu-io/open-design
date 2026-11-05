@@ -161,6 +161,28 @@ describe('GoPlanSunsetDialog', () => {
     );
   });
 
+  it('opens the test profile plans view for the supplied workspace', () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    render(
+      <I18nProvider initial="zh-CN">
+        <GoPlanSunsetDialog
+          active
+          profile="test"
+          workspaceId="workspace-announcement"
+          onDismiss={vi.fn(async () => undefined)}
+        />
+      </I18nProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '查看其他订阅' }));
+
+    expect(open).toHaveBeenCalledWith(
+      expect.stringContaining('https://open-design.powerformer.net/cloud/dashboard?workspaceId=workspace-announcement&source=open_design&billing=plan&'),
+      '_blank',
+      'noopener,noreferrer',
+    );
+  });
+
   it('opens the test profile dashboard for the plan action', () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     renderDialog(vi.fn(async () => undefined), 'zh-CN', 'test');
@@ -175,4 +197,9 @@ describe('GoPlanSunsetDialog', () => {
       'noopener,noreferrer',
     );
   });
+});
+
+vi.mock('../../src/providers/registry', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/registry')>('../../src/providers/registry');
+  return { ...actual, openExternalUrl: async (url: string) => { window.open(url, '_blank', 'noopener,noreferrer'); return true; } };
 });

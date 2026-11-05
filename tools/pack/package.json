@@ -15,6 +15,7 @@
   "dependencies": {
     "@electron/notarize": "3.1.1",
     "@electron/rebuild": "4.0.4",
+    "@open-design/contracts": "workspace:*",
     "@open-design/launcher-proto": "workspace:*",
     "@open-design/platform": "workspace:*",
     "@open-design/release": "workspace:*",
@@ -22,10 +23,11 @@
     "@open-design/sidecar-proto": "workspace:*",
     "cac": "6.7.14",
     "electron-builder": "26.8.1",
-    "resedit": "1.7.2"
+    "resedit": "1.7.2",
+    "@open-design/launcher": "workspace:*"
   },
   "optionalDependencies": {
-    "@powerformer/vela-cli": "0.1.7"
+    "@powerformer/vela-cli": "0.1.9-test.1"
   },
   "devDependencies": {
     "@typescript/native": "npm:typescript@7.0.2",

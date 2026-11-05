@@ -50,6 +50,10 @@ async function startCollabStubServer(): Promise<StubServer> {
       });
       res.setHeader('content-type', 'application/json');
       const { method, url } = { method: req.method ?? '', url: req.url ?? '' };
+      if (method === 'GET' && url.startsWith('/api/workspace/billing/request-concurrency?')) {
+        res.end(JSON.stringify({ requestConcurrencyHint: { workspaceId: 'personal-1', workspaceMemberId: 'member', observedAt: new Date().toISOString(), status: 'full', running: 10, limit: 10 } }));
+        return;
+      }
       if (method === 'GET' && url.startsWith('/api/workspace/billing/preflight?')) {
         res.end(JSON.stringify({ preflight: { workspaceId: 'personal-1', modelId: 'model/a+b', fundingCheck: 'insufficient' } }));
         return;
@@ -136,6 +140,15 @@ async function runCli(args: string[]): Promise<{ stdout: string; stderr: string;
 }
 
 describe('od collab CLI', () => {
+  it('reads request concurrency through the same daemon endpoint as Home', async () => {
+    stub = await startCollabStubServer();
+    const result = await runCli(['workspace', 'billing', 'request-concurrency', '--workspace', 'personal-1', '--json', '--daemon-url', stub.baseUrl]);
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({ requestConcurrencyHint: { status: 'full', running: 10, limit: 10 } });
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]?.url).toBe('/api/workspace/billing/request-concurrency?workspaceId=personal-1');
+  });
+
   it('reads independent funding feedback through the same endpoint as the UI', async () => {
     stub = await startCollabStubServer();
     const result = await runCli([
