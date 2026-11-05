@@ -39,6 +39,7 @@ import { startStockTelemetryCollector } from '../media/stock-telemetry.js';
 import { readInputAggregationTrial } from '../storage/input-aggregation-config.js';
 import { createInputCheckpointStore } from '../storage/input-checkpoint.js';
 import { requireLocalDaemonRequest } from '../http/local-daemon-request.js';
+import { jsonBodyByteLength } from '../http/json-body-size.js';
 
 export interface DaemonTelemetry {
   analyticsService: ReturnType<typeof createAnalyticsService>;
@@ -157,6 +158,7 @@ export function registerTelemetryRoutes(app: Express, deps: RegisterTelemetryRou
   let inputCheckpoints: ReturnType<typeof createInputCheckpointStore> | undefined;
   app.post('/api/analytics/input-checkpoint', requireLocalDaemonRequest, express.json({ limit: '3mb' }), async (req, res) => {
     try {
+      if (jsonBodyByteLength(req) > 3 * 1024 * 1024) { res.status(413).json({ ok: false }); return; }
       const target = readPublicConfigResponse();
       const config = await deps.readAppConfig(dataDir);
       const trial = target.host && target.key && config.installationId

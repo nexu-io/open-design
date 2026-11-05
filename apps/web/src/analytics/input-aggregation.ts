@@ -1,4 +1,5 @@
 import { parseClientMetricEvent, type ClientMetricProps } from '@open-design/contracts/analytics';
+import { BackoffController } from '../lib/backoff';
 import type { InputAggregationStore } from './input-aggregation-store';
 
 type Raw = ClientMetricProps<'client_input_responsiveness'>;
@@ -40,7 +41,7 @@ export class InputAggregation {
   private savedState = '';
   private mode: 'shadow' | 'drain' | 'paused' = 'shadow';
   private retryAt = 0;
-  private failures = 0;
+  private backoff = new BackoffController({ initialMs: 5000, maxMs: 60_000, jitter: false });
   private rawPassthrough: boolean;
   private retryBackoff: boolean;
   private closing = false;
@@ -276,10 +277,10 @@ export class InputAggregation {
       }
       if (!await this.send(batch).catch(() => false)) {
         this.counters.retry_count++;
-        this.retryAt = this.retryBackoff ? Date.now() + Math.min(60_000, 5000 * 2 ** Math.min(this.failures++, 4)) : 0;
+        this.retryAt = this.retryBackoff ? Date.now() + this.backoff.nextDelay() : 0;
         this.log('retry', { event_ids: batch.map(e => e.properties.event_id) }); break;
       }
-      this.failures = 0; this.retryAt = 0;
+      this.backoff.reset(); this.retryAt = 0;
       const removed = await this.update(async () => {
         const ids = new Set(batch.map(e => e.properties.event_id));
         this.rawPending = this.rawPending.filter(s => !ids.has(s.event_id));

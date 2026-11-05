@@ -81,7 +81,7 @@ it('strips undeclared metric fields and rejects non-trial areas without committi
 it('real HTTP checkpoint route requires a matching trial and installation, returns only committed state', async () => {
   const { registerTelemetryRoutes } = await import('../../src/routes/telemetry.js');
   const dir = await mkdtemp(join(tmpdir(), 'input-checkpoint-http-')); const db = new Database(':memory:');
-  const app = express(); const config = { installationId: 'device' };
+  const app = express(); app.use(express.json({ limit: '4mb' })); const config = { installationId: 'device' };
   const telemetry = registerTelemetryRoutes(app, { dataDir: dir, db, readAppConfig: async () => config, writeAppConfig: async () => config });
   const server = app.listen(0, '127.0.0.1'); await new Promise<void>(resolve => server.once('listening', resolve));
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/analytics/input-checkpoint`;
@@ -91,6 +91,7 @@ it('real HTTP checkpoint route requires a matching trial and installation, retur
     expect((await request({ op: 'read' })).status).toBe(403);
     const file = join(dir, 'input-aggregation-trial.json');
     await writeFile(file, JSON.stringify({ trial_id: 'input-01', revision: 'r1', mode: 'shadow', host: 'https://us.i.posthog.com', project_key: 'phc_test' }));
+    expect((await request({ op: 'write', padding: 'x'.repeat(3 * 1024 * 1024) })).status).toBe(413);
     expect((await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'https://external.invalid' },
       body: JSON.stringify({ scope, op: 'read' }) })).status).toBe(403);
     expect((await request({ op: 'read', scope: scope + '-other' })).status).toBe(403);
