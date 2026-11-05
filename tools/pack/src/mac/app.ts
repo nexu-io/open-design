@@ -69,12 +69,6 @@ async function buildPrebundledStandaloneRuntime(
     `--outfile=${paths.packagedMainPrebundlePath}`,
     `--metafile=${paths.packagedMainPrebundleMetaPath}`,
   ]);
-  // Worker entry must stay separate when the desktop main is bundled.
-  await runEsbuild(config, [
-    join(config.workspaceRoot, "apps", "desktop", "dist", "main", "input-native-store.js"),
-    "--bundle", "--platform=node", "--format=esm", `--target=${MAC_PREBUNDLE_ESBUILD_TARGET}`,
-    `--outfile=${join(paths.assembledPrebundledRoot, "input-native-store.js")}`,
-  ]);
   await assertMacPrebundleMetafile({
     metafilePath: paths.packagedMainPrebundleMetaPath,
     policyName: "packagedMain",

@@ -363,9 +363,6 @@ const hostBridge = {
       inputShutdownListeners.add(listener);
       return () => { inputShutdownListeners.delete(listener); };
     },
-    read: (scope: string): Promise<[string, string][]> => ipcRenderer.invoke('od:input-telemetry', 'read', scope),
-    write: (scope: string, put: [string, string][], drop: string[]): Promise<void> =>
-      ipcRenderer.invoke('od:input-telemetry', 'write', scope, put, drop),
   } } : {}),
   startup: {
     context: () => ipcRenderer.invoke('od:startup:context'),

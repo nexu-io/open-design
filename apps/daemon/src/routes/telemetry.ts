@@ -1,5 +1,6 @@
 import { observeUpdateLifecycleStages } from '../migration/update-apply-observations.js';
 import express, { type Express } from 'express';
+import type Database from 'better-sqlite3';
 import { SIDECAR_DEFAULTS } from '@open-design/sidecar-proto';
 import { randomUUID } from 'node:crypto';
 import {
@@ -36,6 +37,7 @@ import {
 } from '../mcp-observability.js';
 import { startStockTelemetryCollector } from '../media/stock-telemetry.js';
 import { readInputAggregationTrial } from '../storage/input-aggregation-config.js';
+import { createInputCheckpointStore } from '../storage/input-checkpoint.js';
 
 export interface DaemonTelemetry {
   analyticsService: ReturnType<typeof createAnalyticsService>;
@@ -60,6 +62,7 @@ export interface DaemonTelemetry {
 
 export interface RegisterTelemetryRoutesDeps {
   dataDir: string;
+  db?: Database.Database;
   namespace?: string;
   readAppConfig: typeof readAppConfig;
   writeAppConfig: typeof writeAppConfig;
@@ -150,6 +153,25 @@ export async function resolveTrustedMcpEventContext(
 
 export function registerTelemetryRoutes(app: Express, deps: RegisterTelemetryRoutesDeps): DaemonTelemetry {
   const { dataDir } = deps;
+  let inputCheckpoints: ReturnType<typeof createInputCheckpointStore> | undefined;
+  app.post('/api/analytics/input-checkpoint', express.json({ limit: '3mb' }), async (req, res) => {
+    try {
+      const target = readPublicConfigResponse();
+      const config = await deps.readAppConfig(dataDir);
+      const trial = target.host && target.key && config.installationId
+        ? await readInputAggregationTrial(dataDir, target.host, target.key) : null;
+      const scope = target.host && target.key && config.installationId
+        ? `${target.host.replace(/\/+$/, '')}/i/v0/e/:${target.key}:${config.installationId}` : null;
+      if (!deps.db || !trial || !scope || req.body?.scope !== scope) { res.status(403).json({ ok: false }); return; }
+      if (!['read', 'write'].includes(req.body?.op)) { res.status(400).json({ ok: false }); return; }
+      inputCheckpoints ??= createInputCheckpointStore(deps.db);
+      if (req.body.op === 'read') res.json({ ok: true, records: inputCheckpoints.read(scope), revision: inputCheckpoints.revision(scope) });
+      else {
+        const revision = inputCheckpoints.write(scope, req.body.put, req.body.drop, req.body.revision);
+        res.json({ ok: true, revision });
+      }
+    } catch { res.status(503).json({ ok: false }); }
+  });
   const analyticsService = createAnalyticsService({ dataDir });
   let cachedAppVersion: AppVersionInfo | null = null;
   // Launch denominators must carry the same installation identity as their

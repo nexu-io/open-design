@@ -24,8 +24,8 @@ export async function migrateInputAggregationStore(source: Pick<InputAggregation
   await source.remove();
 }
 
-/** Keep the same atomic snapshot semantics, but cross IPC with changed small records only. */
-export function nativeInputAggregationStore(scope: string, bridge: NonNullable<OpenDesignHostBridge['inputTelemetry']>, release: () => void): InputAggregationStore {
+/** Preserve atomic snapshots while sending changed small records through the daemon API. */
+export function inputRecordStore(scope: string, bridge: { read(scope: string): Promise<[string, string][]>; write(scope: string, put: [string, string][], drop: string[]): Promise<void> }, release: () => void): InputAggregationStore {
   // shortcut: Diffing still scans the full queue; use engine deltas if large-backlog CPU becomes material.
   let saved = new Map<string, string>();
   const records = (snapshot: unknown) => {
@@ -69,7 +69,6 @@ export async function openInputAggregationStore(scope: string): Promise<InputAgg
       resolve(); await lifetime;
     }).catch(reject);
   });
-  const native = getOpenDesignHost()?.inputTelemetry;
   let db: IDBDatabase;
   try {
     db = await new Promise<IDBDatabase>((resolve, reject) => {
@@ -103,13 +102,36 @@ export async function openInputAggregationStore(scope: string): Promise<InputAgg
       tx.oncomplete = () => resolve(); tx.onabort = tx.onerror = () => reject(tx.error);
     }),
   };
-  if (!native) return legacy;
-  const target = nativeInputAggregationStore(scope, native, release);
+  const target = daemonInputAggregationStore(scope, release);
   try {
     await migrateInputAggregationStore(legacy, target);
     db.close();
     return target;
   } catch (error) { db.close(); release(); throw error; }
 }
-import { getOpenDesignHost, type OpenDesignHostBridge } from '@open-design/host';
 
+/** Use the existing same-origin daemon transport; acknowledgement follows its transaction. */
+export function daemonInputAggregationStore(scope: string, release: () => void): InputAggregationStore {
+  let revision = 0;
+  const request = async (body: Record<string, unknown>) => {
+    const response = await fetch('/api/analytics/input-checkpoint', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, scope }),
+      signal: AbortSignal.timeout(10_000), cache: 'no-store' });
+    const receipt = response.ok ? await response.json() : null;
+    if (receipt?.ok !== true || !Number.isSafeInteger(receipt.revision) || receipt.revision < 0) throw new Error('input checkpoint unavailable');
+    return receipt;
+  };
+  return inputRecordStore(scope, {
+    read: async () => {
+      const receipt = await request({ op: 'read' }); const { records } = receipt;
+      if (!Array.isArray(records) || records.some(row => !Array.isArray(row) || row.length !== 2 || row.some(value => typeof value !== 'string'))) throw new Error('invalid input checkpoint');
+      revision = receipt.revision;
+      return records as [string, string][];
+    },
+    write: async (_scope, put, drop) => {
+      const receipt = await request({ op: 'write', put, drop, revision });
+      if (receipt.revision !== revision + 1) throw new Error('invalid input checkpoint revision');
+      revision = receipt.revision;
+    },
+  }, release);
+}

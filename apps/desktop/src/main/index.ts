@@ -44,7 +44,7 @@ import {
   type SidecarRuntimeContext,
 } from "@open-design/sidecar";
 
-import { createDesktopRuntime, type DesktopRuntime, type DesktopRuntimeOptions } from "./runtime.js";
+import { createDesktopRuntime, type DesktopRuntime } from "./runtime.js";
 import { dispatchInviteDeeplink, registerInviteDeeplink } from "./invite-deeplink.js";
 import { focusDesktopForDeeplink } from "./deeplink-focus.js";
 import { setUpDesktopCrashReporter, writeDesktopGpuInfo } from "./crash-diagnostics.js";
@@ -199,7 +199,6 @@ export function applyLoopbackConnectionLimitSwitch(electronApp: Electron.App): v
 }
 
 export type DesktopMainOptions = {
-  inputTelemetryTarget?: DesktopRuntimeOptions['inputTelemetryTarget'];
   /** Immutable endpoint binding supplied by the packaged runtime. */
   amrEndpointBinding?: AmrEndpointBinding;
   electronReadyAtMs?: number;
@@ -1054,7 +1053,6 @@ async function runDesktopMainWithTiming(
   console.info("[open-design desktop] creating desktop runtime");
   startupTiming.mark("window_creating");
   desktop = await createDesktopRuntime({
-    inputTelemetryTarget: options.inputTelemetryTarget,
     desktopAuthSecret,
     telemetryContext: { ...startupTiming.context(), launch_attempt_id: options.startupTiming === null ? null : startupTiming.context().launch_attempt_id, app_version: options.update?.currentVersion ?? app.getVersion() },
     discoverUrl: options.discoverWebUrl,

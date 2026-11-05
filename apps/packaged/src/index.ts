@@ -436,8 +436,6 @@ async function main(): Promise<void> {
     return await desktopHandle.invoke(action, input);
   };
   const launchDesktop = async (): Promise<DesktopMainHandle> => await runDesktopMain(runtime, {
-    ...(activeConfig.posthogHost && activeConfig.posthogKey
-      ? { inputTelemetryTarget: { host: activeConfig.posthogHost, key: activeConfig.posthogKey } } : {}),
     electronReadyAtMs,
     amrEndpointBinding: activeConfig.amrEndpointBinding,
     startupTiming: deferredHeadless ? null : packagedStartupTiming ?? undefined,
