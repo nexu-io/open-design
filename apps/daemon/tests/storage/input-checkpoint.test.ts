@@ -91,6 +91,8 @@ it('real HTTP checkpoint route requires a matching trial and installation, retur
     expect((await request({ op: 'read' })).status).toBe(403);
     const file = join(dir, 'input-aggregation-trial.json');
     await writeFile(file, JSON.stringify({ trial_id: 'input-01', revision: 'r1', mode: 'shadow', host: 'https://us.i.posthog.com', project_key: 'phc_test' }));
+    expect((await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'https://external.invalid' },
+      body: JSON.stringify({ scope, op: 'read' }) })).status).toBe(403);
     expect((await request({ op: 'read', scope: scope + '-other' })).status).toBe(403);
     expect((await request({ op: 'erase' })).status).toBe(400);
     expect(await (await request({ op: 'write', put: initial(), drop: [], revision: 0 })).json()).toEqual({ ok: true, revision: 1 });

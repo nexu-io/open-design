@@ -69,16 +69,20 @@ export async function openInputAggregationStore(scope: string): Promise<InputAgg
       resolve(); await lifetime;
     }).catch(reject);
   });
-  let db: IDBDatabase;
+  let opened: IDBDatabase | null;
   try {
-    db = await new Promise<IDBDatabase>((resolve, reject) => {
+    opened = await new Promise<IDBDatabase | null>((resolve, reject) => {
+      let absent = false;
       const request = indexedDB.open('od-input-aggregation-poc', 1);
-      request.onupgradeneeded = () => { request.result.createObjectStore('snapshots'); };
-      request.onerror = () => reject(request.error);
+      // Probe legacy data without creating a second store on new installations.
+      request.onupgradeneeded = () => { absent = true; request.transaction?.abort(); };
+      request.onerror = () => { if (absent) resolve(null); else reject(request.error); };
       request.onsuccess = () => resolve(request.result);
       request.onblocked = () => reject(new Error('aggregation database blocked'));
     });
   } catch (error) { release(); throw error; }
+  const db = opened;
+  if (!db) return daemonInputAggregationStore(scope, release);
   db.onversionchange = () => { db.close(); release(); };
   const legacy: InputAggregationStore & { remove(): Promise<void> } = {
     read: () => new Promise((resolve, reject) => {

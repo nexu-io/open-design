@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { daemonInputAggregationStore, inputRecordStore } from '../../src/analytics/input-aggregation-store';
+import { daemonInputAggregationStore, inputRecordStore, openInputAggregationStore } from '../../src/analytics/input-aggregation-store';
 
 const state = () => ({ version: 2, identity: 'local', lastTime: 1, nextSendAt: 3600001, stopped: null,
   completed: Array.from({ length: 1000 }, (_, i) => `old-${i}`), rawPending: [], active: [], pending: [],
@@ -23,6 +23,20 @@ it('N01 writes only changed records, and reconstructs the complete state after r
   await store.write({ ...next, rawPending: next.collecting, collecting: [] });
   expect((await reopened.read() as any).collecting).toEqual([]);
   expect((await reopened.read() as any).rawPending).toHaveLength(1);
+});
+
+it('does not create a second IndexedDB store on a fresh installation', async () => {
+  const abort = vi.fn(); const request: any = { transaction: { abort }, error: new Error('aborted probe') };
+  vi.stubGlobal('navigator', { locks: { request: async (_name: string, _options: unknown, callback: (lock: object) => Promise<void>) => callback({}) } });
+  vi.stubGlobal('indexedDB', { open: () => {
+    queueMicrotask(() => { request.onupgradeneeded(); request.onerror(); }); return request;
+  } });
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('{"ok":true,"records":[],"revision":0}')));
+  try {
+    const store = await openInputAggregationStore('scope');
+    expect(abort).toHaveBeenCalledTimes(1);
+    expect(await store.read()).toBeUndefined(); store.close();
+  } finally { vi.unstubAllGlobals(); }
 });
 
 it('N02 failed commits preserve the previous diff baseline, so the same patch retries', async () => {

@@ -38,6 +38,7 @@ import {
 import { startStockTelemetryCollector } from '../media/stock-telemetry.js';
 import { readInputAggregationTrial } from '../storage/input-aggregation-config.js';
 import { createInputCheckpointStore } from '../storage/input-checkpoint.js';
+import { requireLocalDaemonRequest } from '../http/local-daemon-request.js';
 
 export interface DaemonTelemetry {
   analyticsService: ReturnType<typeof createAnalyticsService>;
@@ -154,7 +155,7 @@ export async function resolveTrustedMcpEventContext(
 export function registerTelemetryRoutes(app: Express, deps: RegisterTelemetryRoutesDeps): DaemonTelemetry {
   const { dataDir } = deps;
   let inputCheckpoints: ReturnType<typeof createInputCheckpointStore> | undefined;
-  app.post('/api/analytics/input-checkpoint', express.json({ limit: '3mb' }), async (req, res) => {
+  app.post('/api/analytics/input-checkpoint', requireLocalDaemonRequest, express.json({ limit: '3mb' }), async (req, res) => {
     try {
       const target = readPublicConfigResponse();
       const config = await deps.readAppConfig(dataDir);
