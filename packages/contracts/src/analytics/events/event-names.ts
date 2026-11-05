@@ -64,6 +64,7 @@ export type AnalyticsEventName =
   | 'workspace_invite_result'
   | 'workspace_project_action_result'
   | 'workspace_shared_project_open_result'
+  | 'workspace_funding_recovery_result'
   | 'workspace_resource_action_result'
   | 'project_comment_create_result'
   | 'project_comment_send_result'

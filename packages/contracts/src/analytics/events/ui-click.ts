@@ -967,6 +967,9 @@ export interface RunRecoveryActionClickProps {
 }
 
 export interface AmrEntryClickProps {
+  project_key?: string;
+  conversation_id?: string;
+  workspace_member_id?: string;
   block_id?: string;
   workspace_key?: string;
   reason?: 'credit_exhausted' | 'concurrency_limit';

@@ -336,7 +336,7 @@ function runFinishedStorageProperties(
   }
 }
 
-type RunWorkspaceAnalytics = Pick<RunCreatedProps, 'workspace_id' | 'member_count'>;
+type RunWorkspaceAnalytics = Pick<RunCreatedProps, 'workspace_id' | 'workspace_member_id' | 'member_count'>;
 
 function validMemberCount(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
@@ -358,6 +358,9 @@ async function workspaceAnalyticsForRun(
     if (typeof properties.workspace_id !== 'string' || !properties.workspace_id.trim()) return {};
     return {
       workspace_id: properties.workspace_id,
+      ...(typeof properties.workspace_member_id === 'string' && properties.workspace_member_id.trim()
+        ? { workspace_member_id: properties.workspace_member_id }
+        : {}),
       ...(validMemberCount(properties.member_count)
         ? { member_count: properties.member_count }
         : {}),
@@ -387,6 +390,7 @@ async function workspaceAnalyticsForRun(
     || context.lifecycleState === 'deleted') return {};
   return {
     workspace_id: workspaceId,
+    workspace_member_id: context.workspaceMemberId,
     ...(validMemberCount(context.memberCount)
       ? { member_count: context.memberCount }
       : {}),
