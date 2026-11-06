@@ -564,7 +564,12 @@ export function attachAcpSession({
     if (finished) return;
     // Emit pending tools as errored before terminal state so deferred
     // tool_use pairs are not lost on timeout / process death / RPC error.
-    flushOpenAcpTools(true);
+    // (#9268: best-effort — a throwing send must not abort the failure path.)
+    try {
+      flushOpenAcpTools(true);
+    } catch (err) {
+      console.error('[acp] flushOpenAcpTools threw during failWithPayload:', err);
+    }
     finished = true;
     fatal = true;
     clearStageTimer();
@@ -575,7 +580,11 @@ export function attachAcpSession({
     } catch {
       // Fall back to direct-child termination below.
     }
-    send('error', payload);
+    try {
+      send('error', payload);
+    } catch (err) {
+      console.error('[acp] error send threw during failWithPayload:', err);
+    }
     if (!terminalOwnedByCaller && !child.killed) child.kill('SIGTERM');
   };
 
@@ -604,7 +613,12 @@ export function attachAcpSession({
     if (finished) return;
     // Emit pending tools as errored before terminal state so deferred
     // tool_use pairs are not lost on timeout / process death / RPC error.
-    flushOpenAcpTools(true);
+    // (#9268: best-effort — a throwing send must not abort the failure path.)
+    try {
+      flushOpenAcpTools(true);
+    } catch (err) {
+      console.error('[acp] flushOpenAcpTools threw during fail:', err);
+    }
     finished = true;
     fatal = true;
     clearStageTimer();
@@ -618,22 +632,26 @@ export function attachAcpSession({
     const useModelUnavailable =
       modelUnavailableErrorCode &&
       (options.forceModelUnavailable || isModelUnavailableError(message));
-    send(
-      'error',
-      useModelUnavailable
-        ? amrModelUnavailablePayload(message)
-        : options.details === undefined && options.retryable === undefined
-          ? { message }
-          : {
-              message,
-              error: {
-                code: 'AGENT_EXECUTION_FAILED',
+    try {
+      send(
+        'error',
+        useModelUnavailable
+          ? amrModelUnavailablePayload(message)
+          : options.details === undefined && options.retryable === undefined
+            ? { message }
+            : {
                 message,
-                retryable: options.retryable ?? false,
-                ...(options.details === undefined ? {} : { details: options.details }),
+                error: {
+                  code: 'AGENT_EXECUTION_FAILED',
+                  message,
+                  retryable: options.retryable ?? false,
+                  ...(options.details === undefined ? {} : { details: options.details }),
+                },
               },
-            },
-    );
+      );
+    } catch (err) {
+      console.error('[acp] error send threw during fail:', err);
+    }
     if (!terminalOwnedByCaller && !child.killed) child.kill('SIGTERM');
   };
 
@@ -958,16 +976,23 @@ export function attachAcpSession({
     onPromptComplete?.();
     // Flush any tools still open when the prompt completes so traces stay
     // complete (one tool_use + tool_result per id).
-    flushOpenAcpTools();
-    const flushedText = prepareCompletionText();
-    noteToolCallTextSuppression('tool_call_xml_flush');
-    if (flushedText) {
-      emitVisibleTextDelta(flushedText);
+    // (#9268: best-effort — a throwing send must not skip the guaranteed
+    // teardown below: stdin.end, the SIGTERM fallback timer, the terminal
+    // callback. Losing them reports success while the agent tree stays alive.)
+    try {
+      flushOpenAcpTools();
+      const flushedText = prepareCompletionText();
+      noteToolCallTextSuppression('tool_call_xml_flush');
+      if (flushedText) {
+        emitVisibleTextDelta(flushedText);
+      }
+      noteArtifactTextSuppression('artifact_flush');
+      emitToolCallTextSuppressionSummary();
+      emitArtifactTextSuppressionSummary();
+      emitUsageIfPresent(usageSource);
+    } catch (err) {
+      console.error('[acp] cleanup emits threw during finishCleanPrompt:', err);
     }
-    noteArtifactTextSuppression('artifact_flush');
-    emitToolCallTextSuppressionSummary();
-    emitArtifactTextSuppressionSummary();
-    emitUsageIfPresent(usageSource);
     clearStageTimer();
     stdin.end();
     let terminalOwnedByCaller = false;
@@ -1459,7 +1484,13 @@ export function attachAcpSession({
       // pending non-think tools flips emittedConcreteToolEvent so we take
       // finishCleanPrompt instead of acp_no_visible_output (which would re-flush
       // them as isError via fail()). Think-only open tools do not flip the flag.
-      flushOpenAcpTools();
+      // (#9268: best-effort — a throwing send here must not skip the guaranteed
+      // teardown in finishCleanPrompt below.)
+      try {
+        flushOpenAcpTools();
+      } catch (err) {
+        console.error('[acp] flushOpenAcpTools threw before AMR classification:', err);
+      }
       const usage = formatUsage(result.usage);
       // Prepare buffered text without notifying observers. Publish it only
       // inside finishCleanPrompt's existing finished/re-entry protection.
