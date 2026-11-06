@@ -6,6 +6,7 @@ import type { Locator, Page, Request } from '@playwright/test';
 import { automatedUiScenarios } from '@/playwright/resources';
 import type { UiScenario } from '@/playwright/resources';
 import { T } from '@/timeouts';
+import { motionPreviewHtml, motionPreviewTimeline } from '../resources/motion-preview.ts';
 import {
   PREVIEW_WHITE_SCREEN_CONFIRMATION_MS,
   PREVIEW_WHITE_SCREEN_TIMEOUT_MS,
@@ -1119,6 +1120,73 @@ test('[P0] @critical storage-backed HTML keeps project state isolated across pre
     }));
   }, projectIds[1]);
   expect(blockedRoutes.map((route) => route.readable)).toEqual([false, false]);
+});
+
+test('[P1] @merge-extra Motion preview reloads failed dependencies after losing its scope', async ({ page }, testInfo) => {
+  await routeMockAgents(page);
+  await page.clock.install();
+  const projectId = await createProjectViaApi(page, 'Motion preview recovery');
+  await seedProjectFile(page, projectId, 'timeline.js', motionPreviewTimeline);
+  await seedHtmlArtifact(page, projectId, 'motion.html', motionPreviewHtml);
+
+  const retiredBase = `/api/projects/${projectId}/preview/lost-motion-scope/`;
+  let failedDependencies = 0;
+  let renewals = 0;
+  let recoveredDependencies = 0;
+  let replacementMinted = false;
+  page.on('response', (response) => {
+    if (new URL(response.url()).pathname === `/api/projects/${projectId}/preview-url` && response.ok()) {
+      replacementMinted = true;
+    }
+  });
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname;
+    if (path === `${retiredBase}renew`) renewals += 1;
+    if (!path.endsWith('/timeline.js')) return;
+    if (path === `${retiredBase}timeline.js`) failedDependencies += 1;
+    else if (path.startsWith(`/api/projects/${projectId}/preview/`)) recoveredDependencies += 1;
+  });
+  // Serve the real daemon response through interception so Chromium's
+  // loopback permission prompt does not gate an opaque iframe in CI.
+  await page.route(`**/api/projects/${projectId}/preview/**/timeline.js`, async (route) => {
+    await route.fulfill({ response: await route.fetch() });
+  });
+  // Model a document retained across daemon restart: its scope is no longer
+  // registered. Subsequent mint, renewal, asset reads and reload use real APIs.
+  await page.route(`**/api/projects/${projectId}/raw/motion.html?*`, async (route) => {
+    const response = await route.fetch();
+    let body = await response.text();
+    if (!replacementMinted && route.request().resourceType() === 'document') {
+      body = body.replace(/var initialScope = (\{[^;]+\});/, (_match, json: string) => {
+        const scope = JSON.parse(json) as { href: string; expiresAt: number };
+        scope.href = retiredBase;
+        return `var initialScope = ${JSON.stringify(scope)};`;
+      });
+      body = body.replace(/<base href="[^"]+" data-od-project-preview-base>/,
+        `<base href="${retiredBase}" data-od-project-preview-base>`);
+    }
+    await route.fulfill({ response, body });
+  });
+
+  await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
+  await openDesignFile(page, 'motion.html');
+  const preview = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  await expect.poll(() => failedDependencies, { message: 'Initial scope must fail the timeline request' }).toBeGreaterThan(0);
+  const initialSrc = await page.getByTestId('artifact-preview-frame').getAttribute('src');
+  await expect(preview.locator('#scene')).toBeEmpty();
+  await testInfo.attach('motion-before-recovery', { body: await page.screenshot(), contentType: 'image/png' });
+  await page.clock.fastForward(55 * 60_000 + 1_000);
+  await expect.poll(() => renewals, { message: 'Host must attempt to renew the lost scope', timeout: 15_000 }).toBeGreaterThan(0);
+  await expect.poll(() => replacementMinted, { message: 'Host must mint a replacement scope' }).toBe(true);
+  await expect(page.getByTestId('artifact-preview-frame')).not.toHaveAttribute('src', initialSrc!);
+  await expect.poll(() => recoveredDependencies, { message: 'Recovered document must request the timeline' }).toBeGreaterThan(0);
+  await expect(preview.locator('#scene')).toHaveText('Motion preview recovered', { timeout: 20_000 });
+  expect(recoveredDependencies).toBeGreaterThan(0);
+  await expect.poll(() => preview.locator('html').evaluate(() => Boolean(
+    (window as unknown as { __odMotionPlayer?: unknown }).__odMotionPlayer,
+  ))).toBe(true);
+  await testInfo.attach('motion-after-recovery', { body: await page.screenshot(), contentType: 'image/png' });
 });
 
 test('[P0] @critical white-screen monitoring recovers layout stalls and confirms persistent blanks', async ({ page }) => {
