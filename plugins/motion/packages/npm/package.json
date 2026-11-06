@@ -1,0 +1,17 @@
+{
+  "name": "@openmotion/installer",
+  "version": "0.6.2-local.1",
+  "private": true,
+  "description": "Local-only OpenMotion MCP and Skills installer for Codex, Claude Code, DeepSeek Harness and WorkBuddy",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "bin": {
+    "openmotion": "scripts/npm-installer.mjs"
+  },
+  "files": [
+    "scripts/",
+    "README.md"
+  ]
+}

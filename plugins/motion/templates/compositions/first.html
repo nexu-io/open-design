@@ -1,0 +1,20 @@
+<template>
+  <style>
+    #first-root{position:absolute;inset:0;font-family:Inter,sans-serif;overflow:hidden}
+    #first-bg{position:absolute;inset:0;background:#111713}
+    #first-copy{position:absolute;inset:0;padding:88px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center}
+    #first-label{color:#b4da91;font-size:22px;letter-spacing:6px;margin-bottom:32px}
+    #first-title{color:#f2f5ed;font-size:100px;line-height:1.02;letter-spacing:-5px;margin:0}
+    #first-note{color:#afbaae;font-size:27px;margin-top:38px}
+  </style>
+  <div id="first-root" data-composition-id="first" data-width="1280" data-height="720" data-duration="3">
+    <div id="first-bg"></div>
+    <div id="first-copy"><div id="first-label">MOTION / 01</div><h1 id="first-title">Make it<br>move.</h1><p id="first-note">One idea. Every frame.</p></div>
+  </div>
+  <script>
+    const tl = gsap.timeline({ paused: true });
+    tl.fromTo('#first-title', { opacity: 0, y: 60 }, { opacity: 1, y: 0, duration: 0.7, ease: 'power3.out' }, 0);
+    window.__timelines = window.__timelines || {};
+    window.__timelines.first = tl;
+  </script>
+</template>

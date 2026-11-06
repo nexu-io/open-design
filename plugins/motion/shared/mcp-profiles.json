@@ -1,0 +1,20 @@
+{
+  "legacy": {
+    "tools": null,
+    "instructions": null
+  },
+  "phase1": {
+    "tools": [
+      "motion_create_project",
+      "motion_open_preview",
+      "motion_import_assets",
+      "motion_get_project",
+      "motion_edit_project",
+      "motion_export_request",
+      "motion_list_versions",
+      "motion_restore_version",
+      "motion_export_cancel"
+    ],
+    "instructions": "Use only the tools returned by tools/list. Follow the installed phase-one production skills. Read the selected project and current content version before editing. Save native source through motion_edit_project; preview and export perform their required checks internally. Use motion_list_versions to find project snapshots and motion_restore_version to restore one as a new version while retaining later history. A transport cancellation does not prove a background export stopped. Report actual export state and accessible results; technical validation does not replace visual, audio and player review. Never guess a project from another conversation. Read skills locally or with resources/list and resources/read (motion://workflow/production/start, or the selected specialist); engine authoring guidance is motion://engine/SKILL.md and relative Markdown references under motion://engine/. For new work create explicitly; motion_open_preview never silently creates a project. All mutations require a stable requestId; edits require projectId, expectedRevision and expectedVersionId. Query export progress through motion_get_project with projectId and exportJobId. Project list and version list are five per page; follow nextCursor."
+  }
+}

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Timeline virtualization QA fixture</title>
+    <style>
+      html,
+      body {
+        width: 1920px;
+        height: 1080px;
+        margin: 0;
+        overflow: hidden;
+        background: #0a0a0b;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      data-hf-id="hf-biny"
+      id="timeline-virtualization-anchor"
+      class="clip"
+      data-composition-id="timeline-virtualization"
+      data-width="1920"
+      data-height="1080"
+      data-start="0"
+      data-duration="60"
+      data-fps="30"
+      data-track-index="0"
+      style="position: absolute; inset: 0"
+    ></div>
+    <script>
+      window.__timelines = window.__timelines || {};
+      window.__timelines["timeline-virtualization"] = {
+        pause() {},
+        seek() {},
+      };
+    </script>
+  </body>
+</html>

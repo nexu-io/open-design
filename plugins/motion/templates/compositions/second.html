@@ -1,0 +1,20 @@
+<template>
+  <style>
+    #second-root{position:absolute;inset:0;font-family:Inter,sans-serif;overflow:hidden}
+    #second-bg{position:absolute;inset:0;background:#d3e7ae}
+    #second-copy{position:absolute;inset:0;padding:88px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center}
+    #second-label{color:#203021;font-size:22px;letter-spacing:6px;margin-bottom:32px}
+    #second-title{color:#203021;font-size:100px;line-height:1.02;letter-spacing:-5px;margin:0}
+    #second-note{color:#4e6046;font-size:27px;margin-top:38px}
+  </style>
+  <div id="second-root" data-composition-id="second" data-width="1280" data-height="720" data-duration="3">
+    <div id="second-bg"></div>
+    <div id="second-copy"><div id="second-label">MOTION / 02</div><h1 id="second-title">Your next<br>great story.</h1><p id="second-note">Start here.</p></div>
+  </div>
+  <script>
+    const tl = gsap.timeline({ paused: true });
+    tl.fromTo('#second-title', { opacity: 0, y: 60 }, { opacity: 1, y: 0, duration: 0.7, ease: 'power3.out' }, 0);
+    window.__timelines = window.__timelines || {};
+    window.__timelines.second = tl;
+  </script>
+</template>

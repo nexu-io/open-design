@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Design Panel QA Fixture</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      body,
+      html {
+        margin: 0;
+        padding: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #101418;
+        font-family: Arial, Helvetica, sans-serif;
+        color: #f0f0f0;
+      }
+      #design-panel-qa {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+      }
+      .zone {
+        position: absolute;
+        width: 560px;
+        height: 300px;
+        border: 2px dashed #3a4652;
+        padding: 12px;
+        box-sizing: border-box;
+      }
+      #qa-headline {
+        font-size: 48px;
+        margin: 0;
+        color: #ffd166;
+      }
+      #qa-multi span {
+        display: block;
+      }
+      .qa-line-a {
+        font-size: 32px;
+        color: #06d6a0;
+      }
+      .qa-line-b {
+        font-size: 24px;
+        font-weight: 700;
+        color: #ef476f;
+      }
+      #qa-tween-box,
+      #qa-keyframe-box {
+        width: 120px;
+        height: 120px;
+        background: #118ab2;
+        border-radius: 8px;
+      }
+      #qa-keyframe-box {
+        background: #9b5de5;
+      }
+      #qa-shape {
+        width: 200px;
+        height: 140px;
+        background: #ff9f1c;
+        border-radius: 16px;
+      }
+      #qa-caption-host span {
+        display: inline-block;
+        font-size: 28px;
+        margin-right: 10px;
+        color: #cdeafe;
+      }
+      #qa-video {
+        position: absolute;
+        left: 1330px;
+        top: 380px;
+        width: 320px;
+        height: 180px;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="design-panel-qa"
+      data-composition-id="design-panel-qa"
+      data-width="1920"
+      data-height="1080"
+      data-start="0"
+      data-duration="6"
+      data-fps="30"
+    >
+      <!-- media: framework-owned playback, direct child of composition root -->
+      <video
+        id="qa-video"
+        class="clip"
+        data-hf-id="qa-video"
+        data-start="0"
+        data-duration="2"
+        data-track-index="7"
+        data-volume="0.5"
+        src="assets/test.mp4"
+        muted
+        playsinline
+      ></video>
+
+      <!-- plain static text -->
+      <div
+        id="qa-zone-headline"
+        class="clip zone"
+        data-hf-id="qa-zone-headline"
+        data-start="0"
+        data-duration="6"
+        data-track-index="1"
+        style="left: 40px; top: 40px"
+      >
+        <h1 id="qa-headline" data-hf-id="qa-headline">Static Headline</h1>
+      </div>
+
+      <!-- multi-text-field element: parent with styled child spans -->
+      <div
+        id="qa-zone-multi"
+        class="clip zone"
+        data-hf-id="qa-zone-multi"
+        data-start="0"
+        data-duration="6"
+        data-track-index="2"
+        style="left: 680px; top: 40px"
+      >
+        <div id="qa-multi" data-hf-id="qa-multi">
+          <span class="qa-line-a">First styled line</span>
+          <span class="qa-line-b">Second styled line</span>
+        </div>
+      </div>
+
+      <!-- GSAP-tweened element -->
+      <div
+        id="qa-zone-tween"
+        class="clip zone"
+        data-hf-id="qa-zone-tween"
+        data-start="0"
+        data-duration="6"
+        data-track-index="3"
+        style="left: 40px; top: 380px"
+      >
+        <div id="qa-tween-box" data-hf-id="qa-tween-box"></div>
+      </div>
+
+      <!-- keyframed element -->
+      <div
+        id="qa-zone-keyframe"
+        class="clip zone"
+        data-hf-id="qa-zone-keyframe"
+        data-start="0"
+        data-duration="6"
+        data-track-index="4"
+        style="left: 680px; top: 380px"
+      >
+        <div id="qa-keyframe-box" data-hf-id="qa-keyframe-box"></div>
+      </div>
+
+      <!-- image -->
+      <div
+        id="qa-zone-image"
+        class="clip zone"
+        data-hf-id="qa-zone-image"
+        data-start="0"
+        data-duration="6"
+        data-track-index="5"
+        style="left: 40px; top: 720px"
+      >
+        <img
+          id="qa-image"
+          data-hf-id="qa-image"
+          width="240"
+          height="180"
+          alt="QA test pattern"
+          src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNDAiIGhlaWdodD0iMTgwIj48cmVjdCB3aWR0aD0iMjQwIiBoZWlnaHQ9IjE4MCIgZmlsbD0iIzJhOWQ4ZiIvPjxjaXJjbGUgY3g9IjEyMCIgY3k9IjkwIiByPSI2MCIgZmlsbD0iI2U5YzQ2YSIvPjwvc3ZnPg=="
+        />
+      </div>
+
+      <!-- plain shape -->
+      <div
+        id="qa-zone-shape"
+        class="clip zone"
+        data-hf-id="qa-zone-shape"
+        data-start="0"
+        data-duration="6"
+        data-track-index="6"
+        style="left: 680px; top: 720px"
+      >
+        <div id="qa-shape" data-hf-id="qa-shape"></div>
+      </div>
+
+      <!-- runtime-generated caption-like spans (no static hf-ids on the words) -->
+      <div
+        id="qa-zone-captions"
+        class="clip zone"
+        data-hf-id="qa-zone-captions"
+        data-start="0"
+        data-duration="6"
+        data-track-index="8"
+        style="left: 1320px; top: 720px"
+      >
+        <div id="qa-caption-host" data-hf-id="qa-caption-host"></div>
+      </div>
+
+      <!-- sub-composition host + editable child -->
+      <div
+        id="qa-sub-layer"
+        class="clip"
+        data-hf-id="qa-sub-layer"
+        data-composition-id="qa-sub"
+        data-composition-src="compositions/qa-sub.html"
+        data-start="0"
+        data-duration="6"
+        data-track-index="9"
+        style="position: absolute; left: 1320px; top: 40px; width: 560px; height: 300px"
+      ></div>
+    </div>
+
+    <script>
+      // Runtime-generated caption words: deterministic, built synchronously at load.
+      (function () {
+        const host = document.getElementById("qa-caption-host");
+        for (const word of ["Generated", "caption", "words", "here"]) {
+          const span = document.createElement("span");
+          span.textContent = word;
+          host.appendChild(span);
+        }
+      })();
+
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      tl.to("#qa-tween-box", { x: 300, rotation: 90, duration: 2, ease: "power1.inOut" }, 0);
+      tl.to(
+        "#qa-zone-keyframe",
+        {
+          keyframes: [
+            { x: 0, y: 0, duration: 1 },
+            { x: 250, y: 40, duration: 1 },
+            { x: 0, y: 0, duration: 1 },
+          ],
+        },
+        0,
+      );
+      window.__timelines["design-panel-qa"] = tl;
+    </script>
+  </body>
+</html>

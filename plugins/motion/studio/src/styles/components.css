@@ -1,0 +1,1182 @@
+/* Rules for Studio's components, for any page that renders them. Reads the tokens in
+ * theme.css. The app shell (body, #root, preflight) stays in studio.css. */
+
+.hf-color-grading-number::-webkit-outer-spin-button,
+.hf-color-grading-number::-webkit-inner-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.hf-color-grading-number {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.hf-color-grading-range {
+  height: 1.5rem;
+  cursor: default;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+
+.hf-color-grading-range:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.hf-color-grading-range::-webkit-slider-runnable-track {
+  height: 1.25rem;
+  border: 0;
+  background: transparent;
+}
+
+.hf-color-grading-range::-webkit-slider-thumb {
+  width: 0.625rem;
+  height: 1rem;
+  margin-top: 0.125rem;
+  border: 0;
+  border-radius: 999px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: #ffffff;
+  box-shadow:
+    0 0 0 2px #0c0c0e,
+    0 1px 4px rgba(0, 0, 0, 0.55);
+  cursor: default;
+}
+
+.hf-color-grading-range::-moz-range-track {
+  height: 1.25rem;
+  border: 0;
+  background: transparent;
+}
+
+.hf-color-grading-range::-moz-range-thumb {
+  width: 0.625rem;
+  height: 1rem;
+  border: 0;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow:
+    0 0 0 2px #0c0c0e,
+    0 1px 4px rgba(0, 0, 0, 0.55);
+  cursor: default;
+}
+
+.hf-color-grading-range:focus-visible {
+  outline: none;
+}
+
+.hf-color-grading-range:focus-visible::-webkit-slider-thumb {
+  box-shadow:
+    0 0 0 2px #0c0c0e,
+    0 0 0 4px rgba(60, 230, 172, 0.22),
+    0 1px 4px rgba(0, 0, 0, 0.55);
+}
+
+.hf-color-grading-range:focus-visible::-moz-range-thumb {
+  box-shadow:
+    0 0 0 2px #0c0c0e,
+    0 0 0 4px rgba(60, 230, 172, 0.22),
+    0 1px 4px rgba(0, 0, 0, 0.55);
+}
+
+.hf-preview-volume-range {
+  height: 1.5rem;
+  cursor: pointer;
+  appearance: none;
+  background: transparent;
+}
+
+.hf-preview-volume-range:disabled {
+  opacity: 0.3;
+}
+
+.hf-preview-volume-range::-webkit-slider-runnable-track {
+  height: 2px;
+  background: transparent;
+}
+
+.hf-preview-volume-range::-webkit-slider-thumb {
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-top: -3px;
+  border: 0;
+  border-radius: 999px;
+  appearance: none;
+  background: #ffffff;
+  box-shadow:
+    0 0 0 2px #0a0a0a,
+    0 1px 3px rgba(0, 0, 0, 0.5);
+  cursor: grab;
+}
+
+.hf-preview-volume-range::-webkit-slider-thumb:active {
+  cursor: grabbing;
+}
+
+.hf-preview-volume-range::-moz-range-track,
+.hf-preview-volume-range::-moz-range-progress {
+  height: 2px;
+  border: 0;
+  background: transparent;
+}
+
+.hf-preview-volume-range::-moz-range-thumb {
+  width: 0.5rem;
+  height: 0.5rem;
+  border: 0;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow:
+    0 0 0 2px #0a0a0a,
+    0 1px 3px rgba(0, 0, 0, 0.5);
+  cursor: grab;
+}
+
+.hf-preview-volume-range::-moz-range-thumb:active {
+  cursor: grabbing;
+}
+
+.hf-preview-volume-range:focus-visible {
+  outline: none;
+}
+
+.hf-preview-volume-range:focus-visible::-webkit-slider-thumb,
+.hf-preview-volume-range:focus-visible::-moz-range-thumb {
+  box-shadow:
+    0 0 0 2px #0a0a0a,
+    0 0 0 4px rgba(60, 230, 172, 0.4),
+    0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.timeline-clip {
+  background-color: var(--clip-bg);
+  border: 1px solid var(--clip-border);
+  border-radius: var(--timeline-clip-radius);
+  box-shadow:
+    inset 0 1px 0 var(--timeline-clip-highlight),
+    var(--timeline-clip-shadow);
+}
+
+.timeline-clip:not(.is-audio) {
+  border-width: 0;
+}
+
+.timeline-clip__content {
+  border-radius: inherit;
+}
+
+.timeline-clip:not(.is-audio) .timeline-clip__content {
+  top: var(--timeline-clip-band-height);
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.timeline-clip::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  border-radius: inherit;
+  background: var(--timeline-clip-chip-text);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.timeline-clip.is-hovered::after {
+  opacity: 0.1;
+}
+
+.timeline-transition {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 30;
+}
+
+.timeline-transition__zone {
+  position: absolute;
+  left: calc(var(--timeline-transition-zone-width) / -2);
+  top: -21px;
+  width: var(--timeline-transition-zone-width);
+  height: 42px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--timeline-transition-zone);
+  filter: blur(2.5px);
+  opacity: 0.95;
+}
+
+.timeline-transition__image {
+  position: absolute;
+  inset: -4px;
+  background-position: center;
+  background-size: cover;
+}
+
+.timeline-transition__image--out {
+  mask-image: linear-gradient(90deg, black 0%, transparent 100%);
+}
+
+.timeline-transition__image--in {
+  mask-image: linear-gradient(90deg, transparent 0%, black 100%);
+}
+
+.timeline-transition__badge {
+  position: absolute;
+  left: -14px;
+  top: -14px;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--timeline-transition-badge-ink) 22%, transparent);
+  border-radius: 999px;
+  background: var(--timeline-transition-badge);
+  box-shadow: 0 2px 5px var(--timeline-playhead-shadow);
+}
+
+.timeline-transition__badge svg {
+  width: 17px;
+  height: 17px;
+}
+.timeline-transition__frame,
+.timeline-transition__frame--out,
+.timeline-transition__frame--in {
+  fill: none;
+  stroke: var(--timeline-transition-badge-ink);
+  stroke-width: 1.5;
+}
+.timeline-transition__intersection {
+  fill: var(--timeline-transition-badge-ink);
+  opacity: 0.7;
+}
+
+.timeline-clip::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--clip-bg-active);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.timeline-clip[data-active] {
+  border-color: var(--clip-border-active);
+}
+
+.timeline-clip[data-active]::before {
+  opacity: 1;
+}
+
+/* Audio clips read as a distinct kind — a persistent violet tint vs the teal-
+   accented visual clips — so the audio zone at the bottom is visually separate
+   at a glance (the timeline's kinds: visual on top, audio below). */
+.timeline-clip.is-audio {
+  background-color: var(--timeline-clip-audio-bg);
+  border-color: var(--timeline-clip-audio-border);
+  border-radius: var(--timeline-clip-audio-radius);
+}
+
+.timeline-fade-tab {
+  position: absolute;
+  border-radius: 2px;
+  background: var(--timeline-fade-dot);
+  box-shadow:
+    0 0 0 1px var(--timeline-fade-dot-ring),
+    0 1px 3px var(--timeline-fade-dot-ring);
+  transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.timeline-fade-handle:hover .timeline-fade-tab,
+.timeline-fade-handle[data-dragging] .timeline-fade-tab {
+  transform: scaleY(1.2);
+}
+
+.timeline-fade-handle:focus-visible .timeline-fade-tab {
+  outline: 2px solid var(--timeline-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timeline-fade-tab {
+    transition: none;
+  }
+}
+
+/* A video's sound strip is too short for the peak readout: only the mark stays, on a chip clear of the clip's
+   rounded corner and above the waveform canvas layer (z 10), below the fade handles (z 30). */
+.audible-video-wave [data-peak-text] {
+  display: none;
+}
+
+[data-peak-badge] {
+  z-index: 20;
+}
+
+.audible-video-wave [data-peak-badge] {
+  top: 50%;
+  bottom: auto;
+  right: var(--timeline-clip-radius);
+  translate: 0 -50%;
+  padding: 1px 3px;
+  border-radius: 3px;
+  background: var(--timeline-clip-chip-audio-bg);
+}
+
+.timeline-clip.is-audio.is-hovered {
+  background-color: var(--timeline-clip-audio-bg-hover);
+}
+
+.timeline-clip.is-audio.is-dragging {
+  box-shadow:
+    inset 0 0 0 999px var(--timeline-clip-audio-bg-dragging),
+    0 8px 24px var(--timeline-clip-shadow-dragging);
+}
+
+/* Mute greys the pill in place. Hot path: no transition. */
+.timeline-clip.is-audio[data-clip-hidden="true"],
+.timeline-clip.is-audio[data-audio-muted="true"] {
+  background-color: var(--timeline-clip-audio-muted-bg);
+  transition: none;
+}
+
+.timeline-clip.is-hovered {
+  background-color: var(--clip-bg-hover);
+}
+
+.timeline-clip[data-active].is-hovered {
+  border-color: var(--clip-border-hover);
+}
+
+.timeline-clip.is-selected,
+.timeline-clip[data-active].is-selected {
+  outline: 1px solid var(--timeline-clip-selection);
+  outline-offset: 0;
+}
+
+.timeline-clip.is-dragging {
+  /* Veil is a shadow, not background-color, so drop does not fade the hover fill. */
+  box-shadow:
+    inset 0 0 0 999px var(--clip-bg-dragging),
+    0 8px 24px var(--timeline-clip-shadow-dragging);
+}
+
+.timeline-clip__label {
+  position: absolute;
+  top: 5px;
+  left: 6px;
+  width: fit-content;
+  max-width: calc(100% - 22px);
+  overflow: hidden;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--timeline-clip-chip-bg);
+  color: var(--timeline-clip-chip-text);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 16px;
+  pointer-events: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timeline-clip:not(.is-audio) .timeline-clip__label {
+  display: flex;
+  z-index: auto;
+  top: 0;
+  left: 0;
+  width: 100%;
+  max-width: 100%;
+  height: var(--timeline-clip-band-height);
+  overflow: visible;
+  padding: 0 min(6px, 25%);
+  border-radius: inherit;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  background: var(--timeline-clip-band-bg);
+  font-weight: 600;
+  line-height: var(--timeline-clip-band-height);
+}
+
+.timeline-clip:not(.is-audio) .timeline-clip__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timeline-clip:not(.is-audio) .timeline-clip__label [data-testid="clip-badges"] {
+  position: static;
+  flex-shrink: 0;
+  max-width: 100%;
+  margin-top: 2px;
+}
+
+/* Link groups share a label colour on the border and the name chip. */
+.timeline-clip[data-link-color] {
+  border-color: var(--clip-link-color);
+}
+
+.timeline-clip[data-link-color] .timeline-clip__label {
+  box-shadow: inset 3px 0 0 var(--clip-link-color);
+  padding-left: min(8px, 25%);
+}
+
+.timeline-clip.is-audio .timeline-clip__label {
+  top: 11px;
+  left: 9px;
+  z-index: 11;
+  background: var(--timeline-clip-chip-audio-bg);
+}
+
+.timeline-clip__timecode {
+  position: absolute;
+  bottom: 6px;
+  left: 12px;
+  right: 16px;
+  overflow: hidden;
+  color: var(--timeline-tick-text);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .timeline-clip {
+    transition: background-color var(--timeline-clip-hover-duration) ease-out;
+  }
+
+  .timeline-clip::after {
+    transition: opacity var(--timeline-clip-hover-duration) ease-out;
+  }
+
+  .timeline-clip__handle-bar {
+    transition: opacity 120ms ease-out;
+  }
+}
+
+/* CodeMirror overrides */
+.cm-editor {
+  height: 100%;
+  font-size: 13px;
+}
+
+.cm-editor .cm-scroller {
+  font-family: var(--font-mono);
+}
+
+.cm-editor.cm-focused {
+  outline: none;
+}
+
+/*
+ * HyperFrames brand loader. Shared by preview overlays that need a calm,
+ * branded loading state instead of a generic spinner.
+ */
+.hf-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  width: min(34rem, 100%);
+  padding: 1.5rem;
+  box-sizing: border-box;
+  text-align: center;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+}
+
+.hf-frame {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  min-height: 12rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.52);
+}
+
+.hf-loader-mark-frame {
+  display: grid;
+  place-items: center;
+  overflow: visible;
+  transform-origin: 50% 50%;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+}
+
+.hf-loader-mark {
+  display: block;
+  overflow: visible;
+  filter: drop-shadow(0 0 7px rgba(79, 219, 94, 0.2));
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+}
+
+.hf-loader-title {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--hf-heading, #f4f4f5);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hf-loader-detail {
+  max-width: 32rem;
+  min-height: 2.5rem;
+  overflow: hidden;
+  color: var(--hf-text-secondary, rgba(244, 244, 245, 0.68));
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.hf-loader-mono {
+  width: min(36rem, 100%);
+  min-height: 1.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--hf-text-tertiary, rgba(244, 244, 245, 0.46));
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.hf-loader-progress {
+  width: min(18rem, 72vw);
+  height: 0.375rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+@keyframes hf-thumb-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.hf-loader-progress__fill {
+  width: 100%;
+  height: 100%;
+  transform: scaleX(0);
+  transform-origin: left center;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #06e3fa, #4fdb5e);
+  transition: transform 160ms ease;
+}
+
+/* The caret of a text edited in place (InlineTextCaret): lit half the time, like the system caret */
+.hf-inline-text-caret {
+  animation: hf-inline-text-caret-blink 1.06s step-end infinite;
+}
+
+@keyframes hf-inline-text-caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hf-inline-text-caret {
+    animation: none;
+  }
+}
+
+/* Toast enter/exit (StudioToast) */
+@keyframes hf-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes hf-toast-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.hf-toast-enter {
+  animation: hf-toast-in 160ms ease-out;
+}
+
+.hf-toast-exit {
+  animation: hf-toast-out 160ms ease-in forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hf-toast-enter,
+  .hf-toast-exit {
+    animation: none;
+  }
+  .hf-toast-exit {
+    opacity: 0;
+  }
+}
+
+/* Overlay/backdrop entrance — the heaviest visual changes shouldn't pop in */
+@keyframes hf-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.hf-backdrop-in {
+  animation: hf-backdrop-in 150ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hf-backdrop-in {
+    animation: none;
+  }
+}
+
+/* Flat inspector group header/body entrance (FlatGroupHeader) */
+@keyframes hf-flat-group-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hf-flat-group-enter {
+  animation: hf-flat-group-in 120ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hf-flat-group-enter {
+    animation: none;
+  }
+}
+
+/* Preset shelf: the hovered row, and the wave that says it is being heard.
+ *
+ * Hovering a preset auditions it on the running audio, which is invisible — the
+ * panel looks identical whether the audition is playing or the pointer just
+ * happens to be resting there. The bars are that feedback: they run only while a
+ * preset is actually sounding, so they are a readout of the audio rather than a
+ * hover decoration. */
+.hf-fx-preset-item {
+  position: relative;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hf-fx-preset-item {
+    transition:
+      background-color 120ms ease,
+      color 120ms ease;
+  }
+}
+
+.hf-fx-preset-item:hover,
+.hf-fx-preset-item:focus-visible {
+  /* The accent at low alpha rather than a grey: the row is lit by the thing that
+     is playing, and it should read as the same event as the bars. */
+  background-color: rgba(60, 230, 172, 0.12);
+}
+
+.hf-fx-preset-wave {
+  position: absolute;
+  top: 50%;
+  right: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 0.75rem;
+  transform: translateY(-50%);
+  opacity: 0;
+  transition: opacity 120ms ease;
+  pointer-events: none;
+}
+
+.hf-fx-preset-item:hover .hf-fx-preset-wave,
+.hf-fx-preset-item:focus-visible .hf-fx-preset-wave {
+  opacity: 1;
+}
+
+.hf-fx-preset-wave span {
+  width: 2px;
+  height: 100%;
+  border-radius: 1px;
+  background: #3ce6ac;
+  transform: scaleY(0.25);
+  transform-origin: center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hf-fx-preset-wave span {
+    animation: hf-fx-preset-wave 900ms ease-in-out infinite;
+  }
+  /* Staggered so it reads as a waveform travelling rather than four bars
+     pumping in unison, which reads as a loading spinner. */
+  .hf-fx-preset-wave span:nth-child(2) {
+    animation-delay: 150ms;
+  }
+  .hf-fx-preset-wave span:nth-child(3) {
+    animation-delay: 300ms;
+  }
+  .hf-fx-preset-wave span:nth-child(4) {
+    animation-delay: 450ms;
+  }
+}
+
+/* Still visible without motion — it is telling the author something is
+   playing, and that fact does not go away because the bars hold still. */
+@media (prefers-reduced-motion: reduce) {
+  .hf-fx-preset-wave span {
+    transform: scaleY(0.7);
+  }
+}
+
+/* Receipt-driven WebMCP Topology Lens. Every animation is one-shot Studio
+   chrome; none of these nodes enter the composition iframe or rendered output. */
+.hf-topology-contour {
+  border: 1px solid rgba(60, 230, 172, 0.62);
+  box-shadow:
+    0 0 0 1px rgba(6, 227, 250, 0.08),
+    inset 0 0 18px rgba(60, 230, 172, 0.035);
+}
+
+.hf-topology-field::before,
+.hf-topology-contour::before,
+.hf-topology-target::before {
+  content: attr(data-topology-node);
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  z-index: 2;
+  padding: 1px 3px;
+  border-radius: 2px;
+  background: rgba(5, 15, 12, 0.86);
+  color: rgb(90, 247, 193);
+  font:
+    600 7px/1.3 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    monospace;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+}
+
+.hf-topology-field {
+  z-index: 0;
+  border: 1px solid rgba(60, 230, 172, 0.28);
+  background: linear-gradient(
+    90deg,
+    rgba(60, 230, 172, 0.025),
+    rgba(60, 230, 172, 0.1) 68%,
+    rgba(6, 227, 250, 0.06)
+  );
+  box-shadow: inset 0 0 28px rgba(60, 230, 172, 0.05);
+}
+
+.hf-topology-target {
+  border: 1px solid rgba(60, 230, 172, 0.82);
+  box-shadow:
+    0 0 0 1px rgba(60, 230, 172, 0.14),
+    0 0 18px rgba(6, 227, 250, 0.09);
+}
+
+.hf-topology-scan {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(60, 230, 172, 0.16) 55%,
+    rgba(230, 255, 247, 0.9)
+  );
+  clip-path: polygon(0 0, 100% 0, 72% 100%, 0 100%);
+}
+
+.hf-topology-seal {
+  filter: drop-shadow(0 0 6px rgba(60, 230, 172, 0.36));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hf-topology-contour {
+    animation: hf-topology-reveal 176ms cubic-bezier(0.77, 0, 0.175, 1) both;
+  }
+
+  .hf-topology-field[data-topology-phase="acquiring"] {
+    animation: hf-topology-reveal 240ms cubic-bezier(0.77, 0, 0.175, 1) both;
+  }
+
+  .hf-topology-scan {
+    animation: hf-topology-scan 224ms cubic-bezier(0.77, 0, 0.175, 1) both;
+  }
+
+  .hf-topology-target[data-topology-phase="acquiring"] {
+    animation: hf-topology-localize 224ms cubic-bezier(0.23, 1, 0.32, 1) 72ms both;
+  }
+
+  .hf-topology-target[data-topology-phase="localizing"] {
+    animation: hf-topology-localize 176ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  }
+
+  .hf-topology-target[data-topology-phase="sealing"] {
+    animation: hf-topology-localize 144ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  }
+
+  .hf-topology-seal {
+    animation: hf-topology-seal 224ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  }
+
+  .hf-topology-seal path:first-of-type {
+    animation: hf-topology-seal-left 224ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  }
+
+  .hf-topology-seal path:nth-of-type(2) {
+    animation: hf-topology-seal-right 224ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  }
+}
+
+@keyframes hf-topology-reveal {
+  from {
+    opacity: 0;
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0);
+  }
+}
+
+@keyframes hf-topology-scan {
+  from {
+    opacity: 0;
+    transform: translate3d(-100%, 0, 0);
+  }
+  16% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(400%, 0, 0);
+  }
+}
+
+@keyframes hf-topology-localize {
+  from {
+    opacity: 0;
+    transform: scaleX(0.76);
+  }
+  to {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes hf-topology-seal {
+  from {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes hf-topology-seal-left {
+  from {
+    transform: translate3d(-9px, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes hf-topology-seal-right {
+  from {
+    transform: translate3d(9px, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hf-topology-contour,
+  .hf-topology-field,
+  .hf-topology-target,
+  .hf-topology-seal,
+  .hf-topology-seal path {
+    animation: none;
+    transform: none;
+  }
+}
+
+@keyframes hf-fx-preset-wave {
+  0%,
+  100% {
+    transform: scaleY(0.25);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+/* Framey on the header's "Install the desktop app" (OpenInDesktopButton.tsx): a pulse as the page opens, a wiggle
+ * on hover, a flight towards the app while it opens. The eye follows the pointer from script. */
+@keyframes hf-framey-wiggle {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-14deg);
+  }
+  60% {
+    transform: rotate(10deg);
+  }
+}
+
+@keyframes hf-framey-fly {
+  70% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(48px, -28px) rotate(25deg) scale(0.6);
+    opacity: 0;
+  }
+}
+
+@keyframes hf-framey-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-accent) 45%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 8px transparent;
+  }
+}
+
+.hf-framey-trigger {
+  animation: hf-framey-pulse 1.6s ease-out 3;
+}
+
+.hf-framey {
+  transform-origin: 30% 30%;
+}
+
+.hf-framey-eye {
+  transition: transform 80ms linear;
+}
+
+.hf-framey-trigger:hover .hf-framey {
+  animation: hf-framey-wiggle 0.5s ease-in-out;
+}
+
+.hf-framey-trigger[data-opening] .hf-framey {
+  animation: hf-framey-fly 0.9s ease-in forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hf-framey-trigger,
+  .hf-framey-trigger:hover .hf-framey,
+  .hf-framey-trigger[data-opening] .hf-framey {
+    animation: none;
+  }
+  .hf-framey-eye {
+    transition: none;
+  }
+}
+
+/* Framey's moods, timed as the desktop app times them: it breathes and blinks, its eyes circle while it waits,
+ * it hops once when the app turns up, flies while a project hands over, and shakes when that fails. */
+.hf-framey-mood .hf-framey-body {
+  transform-box: fill-box;
+  transform-origin: 50% 60%;
+  animation: hf-framey-breath 3.27s ease-in-out infinite;
+}
+
+.hf-framey-mood .hf-framey-lid,
+.hf-framey-mood .hf-framey-whole {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+}
+
+.hf-framey-mood .hf-framey-whole {
+  transform-origin: 50% 100%;
+}
+
+.hf-framey-mood:is([data-mood="idle"], [data-mood="found"]) .hf-framey-lid {
+  animation: hf-framey-blink 4.6s infinite;
+}
+
+.hf-framey-mood[data-mood="found"] .hf-framey-whole {
+  animation: hf-framey-hop 1.8s cubic-bezier(0.2, 0.8, 0.2, 1) 2;
+}
+
+.hf-framey-mood[data-mood="opening"] .hf-framey-whole {
+  animation: hf-framey-handoff 2.4s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+}
+
+.hf-framey-mood[data-mood="error"] .hf-framey-whole {
+  animation: hf-framey-shake 0.6s ease-in-out 1;
+}
+
+.hf-framey-orbit {
+  animation: hf-framey-orbit 1.4s linear infinite;
+}
+
+@keyframes hf-framey-breath {
+  50% {
+    transform: scale(1.018);
+  }
+}
+
+@keyframes hf-framey-blink {
+  0%,
+  93%,
+  100% {
+    transform: scaleY(1);
+  }
+  95.5% {
+    transform: scaleY(0.12);
+  }
+}
+
+@keyframes hf-framey-hop {
+  0%,
+  40%,
+  100% {
+    transform: translateY(0);
+  }
+  20% {
+    transform: translateY(-7px);
+  }
+}
+
+@keyframes hf-framey-orbit {
+  0%,
+  100% {
+    transform: translate(3px, 0);
+  }
+  25% {
+    transform: translate(0, 3px);
+  }
+  50% {
+    transform: translate(-3px, 0);
+  }
+  75% {
+    transform: translate(0, -3px);
+  }
+}
+
+@keyframes hf-framey-handoff {
+  0% {
+    transform: none;
+  }
+  45%,
+  60% {
+    transform: translate(14px, -4px) rotate(10deg);
+    opacity: 1;
+  }
+  80% {
+    transform: translate(30px, -8px) rotate(12deg);
+    opacity: 0;
+  }
+  81% {
+    transform: translate(-10px, 0);
+    opacity: 0;
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@keyframes hf-framey-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-3px);
+  }
+  40% {
+    transform: translateX(3px);
+  }
+  60% {
+    transform: translateX(-2px);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+}
+
+/* The desktop-app guide card: a label or step that changes settles in; a finished step's tick pops in. */
+.hf-guide-swap {
+  animation: hf-guide-swap 180ms var(--ease-out-quint);
+}
+
+.hf-guide-tick {
+  animation: hf-guide-tick 300ms var(--ease-out-quint);
+}
+
+@keyframes hf-guide-swap {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+    filter: blur(2px);
+  }
+}
+
+@keyframes hf-guide-tick {
+  from {
+    opacity: 0;
+    transform: scale(0.3);
+    filter: blur(3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hf-framey-mood .hf-framey-body,
+  .hf-framey-mood .hf-framey-lid,
+  .hf-framey-mood .hf-framey-whole,
+  .hf-framey-orbit,
+  .hf-guide-swap,
+  .hf-guide-tick {
+    animation: none;
+  }
+}

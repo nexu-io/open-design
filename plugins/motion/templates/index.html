@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Motion · First story</title>
+  <script src="assets/gsap.min.js"></script>
+  <style>body{margin:0}#main{position:relative;width:1280px;height:720px;overflow:hidden}</style>
+</head>
+<body>
+  <div id="main" data-composition-id="main" data-start="0" data-duration="6" data-width="1280" data-height="720" data-fps="30">
+    <div id="first" class="clip" data-composition-id="first" data-composition-src="compositions/first.html" data-start="0" data-duration="3" data-track-index="0" data-width="1280" data-height="720"></div>
+    <div id="second" class="clip" data-composition-id="second" data-composition-src="compositions/second.html" data-start="3" data-duration="3" data-track-index="0" data-width="1280" data-height="720"></div>
+  </div>
+  <script>
+    window.__timelines = window.__timelines || {};
+    window.__timelines.main = gsap.timeline({ paused: true });
+  </script>
+</body>
+</html>

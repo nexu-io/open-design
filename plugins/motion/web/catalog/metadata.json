@@ -1,0 +1,5732 @@
+{
+  "version": 1,
+  "syncedAt": "2026-11-03T15:53:53.207Z",
+  "source": {
+    "url": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/manifest.json",
+    "sha256": "6d7e7fc3b5b358fd90c22e7851ea350a3b2c675dfdf73601548d082662c137c1",
+    "lastModified": "Mon, 02 Nov 2026 16:01:58 GMT"
+  },
+  "entries": [
+    {
+      "id": "hf-moment-M1000",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1000/clip.mp4",
+      "sourceUrl": "https://x.com/Vintage_god/status/2106817967967056165",
+      "authorName": "Vintage",
+      "role": "hook",
+      "mechanics": [
+        "stagger",
+        "kinetic_type",
+        "hard_cut",
+        "counter"
+      ],
+      "platform": "X",
+      "views": 33801
+    },
+    {
+      "id": "hf-moment-M1001",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1001/clip.mp4",
+      "sourceUrl": "https://x.com/Vintage_god/status/2106817967967056165",
+      "authorName": "Vintage",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "camera_push",
+        "icon_pop",
+        "hard_cut"
+      ],
+      "platform": "X",
+      "views": 33801
+    },
+    {
+      "id": "hf-moment-M1002",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1002/clip.mp4",
+      "sourceUrl": "https://x.com/Vintage_god/status/2106817967967056165",
+      "authorName": "Vintage",
+      "role": "proof",
+      "mechanics": [
+        "kinetic_type",
+        "counter",
+        "mask_reveal",
+        "hard_cut"
+      ],
+      "platform": "X",
+      "views": 33801
+    },
+    {
+      "id": "hf-moment-M1003",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1003/clip.mp4",
+      "sourceUrl": "https://x.com/Vintage_god/status/2106817967967056165",
+      "authorName": "Vintage",
+      "role": "turn",
+      "mechanics": [
+        "logo_reveal",
+        "camera_push",
+        "ui_transition",
+        "kinetic_type"
+      ],
+      "platform": "X",
+      "views": 33801
+    },
+    {
+      "id": "hf-moment-M1004",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1004/clip.mp4",
+      "sourceUrl": "https://x.com/Vintage_god/status/2106817967967056165",
+      "authorName": "Vintage",
+      "role": "proof",
+      "mechanics": [
+        "scroll",
+        "mask_reveal",
+        "kinetic_type",
+        "hard_cut"
+      ],
+      "platform": "X",
+      "views": 33801
+    },
+    {
+      "id": "hf-moment-M1005",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1005/clip.mp4",
+      "sourceUrl": "https://x.com/Vintage_god/status/2106817967967056165",
+      "authorName": "Vintage",
+      "role": "proof",
+      "mechanics": [
+        "kinetic_type",
+        "stagger",
+        "scale_down",
+        "whip_pan"
+      ],
+      "platform": "X",
+      "views": 33801
+    },
+    {
+      "id": "hf-moment-M1006",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1006/clip.mp4",
+      "sourceUrl": "https://x.com/Vintage_god/status/2106817967967056165",
+      "authorName": "Vintage",
+      "role": "proof",
+      "mechanics": [
+        "kinetic_type",
+        "camera_push",
+        "pop_in",
+        "counter"
+      ],
+      "platform": "X",
+      "views": 33801
+    },
+    {
+      "id": "hf-moment-M1007",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1007/clip.mp4",
+      "sourceUrl": "https://x.com/Vintage_god/status/2106817967967056165",
+      "authorName": "Vintage",
+      "role": "proof",
+      "mechanics": [
+        "orbit",
+        "match_cut",
+        "typewriter",
+        "toggle_flip"
+      ],
+      "platform": "X",
+      "views": 33801
+    },
+    {
+      "id": "hf-moment-M1008",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1008/clip.mp4",
+      "sourceUrl": "https://x.com/Vintage_god/status/2106817967967056165",
+      "authorName": "Vintage",
+      "role": "proof",
+      "mechanics": [
+        "typewriter",
+        "ui_transition",
+        "scroll",
+        "badge_pop"
+      ],
+      "platform": "X",
+      "views": 33801
+    },
+    {
+      "id": "hf-moment-M1009",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1009/clip.mp4",
+      "sourceUrl": "https://x.com/Vintage_god/status/2106817967967056165",
+      "authorName": "Vintage",
+      "role": "proof",
+      "mechanics": [
+        "fly_through",
+        "line_draw",
+        "toggle_flip",
+        "kinetic_type"
+      ],
+      "platform": "X",
+      "views": 33801
+    },
+    {
+      "id": "hf-moment-M1010",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1010/clip.mp4",
+      "sourceUrl": "https://x.com/Vintage_god/status/2106817967967056165",
+      "authorName": "Vintage",
+      "role": "proof",
+      "mechanics": [
+        "kinetic_type",
+        "camera_pull",
+        "hard_cut",
+        "gradient_bloom"
+      ],
+      "platform": "X",
+      "views": 33801
+    },
+    {
+      "id": "hf-moment-M1011",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1011/clip.mp4",
+      "sourceUrl": "https://x.com/Vintage_god/status/2106817967967056165",
+      "authorName": "Vintage",
+      "role": "turn",
+      "mechanics": [
+        "typewriter",
+        "stagger",
+        "color_step",
+        "camera_pull"
+      ],
+      "platform": "X",
+      "views": 33801
+    },
+    {
+      "id": "hf-moment-M1012",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1012/clip.mp4",
+      "sourceUrl": "https://x.com/Vintage_god/status/2106817967967056165",
+      "authorName": "Vintage",
+      "role": "turn",
+      "mechanics": [
+        "typewriter",
+        "particle_dissolve",
+        "slide_in",
+        "gradient_fill"
+      ],
+      "platform": "X",
+      "views": 33801
+    },
+    {
+      "id": "hf-moment-M1013",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1013/clip.mp4",
+      "sourceUrl": "https://x.com/az_andrian/status/2104495114534133847",
+      "authorName": "Andrian",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "hard_cut",
+        "stagger",
+        "camera_push"
+      ],
+      "platform": "X",
+      "views": 57126
+    },
+    {
+      "id": "hf-moment-M1014",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1014/clip.mp4",
+      "sourceUrl": "https://x.com/az_andrian/status/2104495114534133847",
+      "authorName": "Andrian",
+      "role": "cta",
+      "mechanics": [
+        "kinetic_type",
+        "counter",
+        "hard_cut",
+        "mask_reveal"
+      ],
+      "platform": "X",
+      "views": 57126
+    },
+    {
+      "id": "hf-moment-M1015",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1015/clip.mp4",
+      "sourceUrl": "https://x.com/LordyVisuals/status/2106827488152461461",
+      "authorName": "Lordy Visuals",
+      "role": "hook",
+      "mechanics": [
+        "cursor_click",
+        "mask_reveal",
+        "ui_transition",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 1921
+    },
+    {
+      "id": "hf-moment-M1016",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1016/clip.mp4",
+      "sourceUrl": "https://x.com/0xEbaad/status/2107167503977955688",
+      "authorName": "ebaad",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "brush_slash",
+        "hard_cut",
+        "glyph_dropout"
+      ],
+      "platform": "X",
+      "views": 3538
+    },
+    {
+      "id": "hf-moment-M1017",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1017/clip.mp4",
+      "sourceUrl": "https://x.com/0xEbaad/status/2107167503977955688",
+      "authorName": "ebaad",
+      "role": "proof",
+      "mechanics": [
+        "counter",
+        "whip_pan",
+        "mask_reveal",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 3538
+    },
+    {
+      "id": "hf-moment-M1018",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1018/clip.mp4",
+      "sourceUrl": "https://x.com/0xEbaad/status/2107167503977955688",
+      "authorName": "ebaad",
+      "role": "turn",
+      "mechanics": [
+        "ui_transition",
+        "whip_zoom",
+        "typewriter",
+        "mask_reveal"
+      ],
+      "platform": "X",
+      "views": 3538
+    },
+    {
+      "id": "hf-moment-M1019",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1019/clip.mp4",
+      "sourceUrl": "https://x.com/0xEbaad/status/2107167503977955688",
+      "authorName": "ebaad",
+      "role": "turn",
+      "mechanics": [
+        "logo_reveal",
+        "orbit",
+        "stagger",
+        "strip_wipe"
+      ],
+      "platform": "X",
+      "views": 3538
+    },
+    {
+      "id": "hf-moment-M1020",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1020/clip.mp4",
+      "sourceUrl": "https://x.com/0xEbaad/status/2107167503977955688",
+      "authorName": "ebaad",
+      "role": "proof",
+      "mechanics": [
+        "counter",
+        "stagger",
+        "motion_blur",
+        "carousel_scroll"
+      ],
+      "platform": "X",
+      "views": 3538
+    },
+    {
+      "id": "hf-moment-M1021",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1021/clip.mp4",
+      "sourceUrl": "https://x.com/uxmiles/status/2104962333936353601",
+      "authorName": "Miles",
+      "role": "hook",
+      "mechanics": [
+        "camera_pan",
+        "counter",
+        "squash_stretch",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 1783003
+    },
+    {
+      "id": "hf-moment-M1022",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1022/clip.mp4",
+      "sourceUrl": "https://x.com/uxmiles/status/2104962333936353601",
+      "authorName": "Miles",
+      "role": "turn",
+      "mechanics": [
+        "squash_stretch",
+        "camera_zoom",
+        "counter",
+        "motion_blur"
+      ],
+      "platform": "X",
+      "views": 1783003
+    },
+    {
+      "id": "hf-moment-M1023",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1023/clip.mp4",
+      "sourceUrl": "https://x.com/ky__zo/status/2107630504359203324",
+      "authorName": "kyzo",
+      "role": "hook",
+      "mechanics": [
+        "hard_cut",
+        "kinetic_type",
+        "morph",
+        "scale_settle"
+      ],
+      "platform": "X",
+      "views": 460300
+    },
+    {
+      "id": "hf-moment-M1024",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1024/clip.mp4",
+      "sourceUrl": "https://x.com/ky__zo/status/2107630504359203324",
+      "authorName": "kyzo",
+      "role": "hook",
+      "mechanics": [
+        "stagger",
+        "morph",
+        "kinetic_type",
+        "camera_push"
+      ],
+      "platform": "X",
+      "views": 460300
+    },
+    {
+      "id": "hf-moment-M1025",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1025/clip.mp4",
+      "sourceUrl": "https://x.com/ky__zo/status/2107630504359203324",
+      "authorName": "kyzo",
+      "role": "turn",
+      "mechanics": [
+        "ui_transition",
+        "state_swap",
+        "fade_in",
+        "key_press"
+      ],
+      "platform": "X",
+      "views": 460300
+    },
+    {
+      "id": "hf-moment-M1026",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1026/clip.mp4",
+      "sourceUrl": "https://x.com/ky__zo/status/2107630504359203324",
+      "authorName": "kyzo",
+      "role": "proof",
+      "mechanics": [
+        "key_press",
+        "state_swap",
+        "camera_push",
+        "typewriter"
+      ],
+      "platform": "X",
+      "views": 460300
+    },
+    {
+      "id": "hf-moment-M1027",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1027/clip.mp4",
+      "sourceUrl": "https://x.com/ky__zo/status/2107630504359203324",
+      "authorName": "kyzo",
+      "role": "proof",
+      "mechanics": [
+        "kinetic_type",
+        "match_cut",
+        "motion_path",
+        "state_swap"
+      ],
+      "platform": "X",
+      "views": 460300
+    },
+    {
+      "id": "hf-moment-M1028",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1028/clip.mp4",
+      "sourceUrl": "https://x.com/ky__zo/status/2107630504359203324",
+      "authorName": "kyzo",
+      "role": "proof",
+      "mechanics": [
+        "camera_push",
+        "overshoot",
+        "tap_ripple",
+        "kinetic_type"
+      ],
+      "platform": "X",
+      "views": 460300
+    },
+    {
+      "id": "hf-moment-M1029",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1029/clip.mp4",
+      "sourceUrl": "https://x.com/ky__zo/status/2107630504359203324",
+      "authorName": "kyzo",
+      "role": "cta",
+      "mechanics": [
+        "crossfade",
+        "hard_cut",
+        "stagger",
+        "character_animation"
+      ],
+      "platform": "X",
+      "views": 460300
+    },
+    {
+      "id": "hf-moment-M1030",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1030/clip.mp4",
+      "sourceUrl": "https://x.com/jordanarchivess/status/2107536262894915762",
+      "authorName": "Jordan Watkins",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "color_flash",
+        "glitch_mosaic",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 446959
+    },
+    {
+      "id": "hf-moment-M1031",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1031/clip.mp4",
+      "sourceUrl": "https://x.com/jordanarchivess/status/2107536262894915762",
+      "authorName": "Jordan Watkins",
+      "role": "turn",
+      "mechanics": [
+        "focus_pull",
+        "kinetic_type",
+        "flash_cut",
+        "orbit_ring"
+      ],
+      "platform": "X",
+      "views": 446959
+    },
+    {
+      "id": "hf-moment-M1032",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1032/clip.mp4",
+      "sourceUrl": "https://x.com/jordanarchivess/status/2107536262894915762",
+      "authorName": "Jordan Watkins",
+      "role": "proof",
+      "mechanics": [
+        "kinetic_type",
+        "block_caret",
+        "flash_cut",
+        "ink_mask"
+      ],
+      "platform": "X",
+      "views": 446959
+    },
+    {
+      "id": "hf-moment-M1033",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1033/clip.mp4",
+      "sourceUrl": "https://x.com/jordanarchivess/status/2107536262894915762",
+      "authorName": "Jordan Watkins",
+      "role": "cta",
+      "mechanics": [
+        "kinetic_type",
+        "iris_transition",
+        "perspective_pop",
+        "zoom_lockup"
+      ],
+      "platform": "X",
+      "views": 446959
+    },
+    {
+      "id": "hf-moment-M1034",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1034/clip.mp4",
+      "sourceUrl": "https://x.com/Vintage_god/status/2106817967967056165",
+      "authorName": "Vintage",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "camera_pull",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 33801
+    },
+    {
+      "id": "hf-moment-M1035",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1035/clip.mp4",
+      "sourceUrl": "https://x.com/Vintage_god/status/2106817967967056165",
+      "authorName": "Vintage",
+      "role": "turn",
+      "mechanics": [
+        "counter",
+        "ui_transition",
+        "kinetic_type",
+        "camera_push"
+      ],
+      "platform": "X",
+      "views": 33801
+    },
+    {
+      "id": "hf-moment-M1036",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1036/clip.mp4",
+      "sourceUrl": "https://x.com/Vintage_god/status/2106817967967056165",
+      "authorName": "Vintage",
+      "role": "proof",
+      "mechanics": [
+        "ui_transition",
+        "whip_pan",
+        "stagger",
+        "glow_trace"
+      ],
+      "platform": "X",
+      "views": 33801
+    },
+    {
+      "id": "hf-moment-M1037",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1037/clip.mp4",
+      "sourceUrl": "https://x.com/Vintage_god/status/2106817967967056165",
+      "authorName": "Vintage",
+      "role": "proof",
+      "mechanics": [
+        "3d_swing",
+        "glow_trace",
+        "kinetic_type",
+        "hard_cut"
+      ],
+      "platform": "X",
+      "views": 33801
+    },
+    {
+      "id": "hf-moment-M1038",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1038/clip.mp4",
+      "sourceUrl": "https://x.com/Vintage_god/status/2106817967967056165",
+      "authorName": "Vintage",
+      "role": "turn",
+      "mechanics": [
+        "kinetic_type",
+        "toggle_flip",
+        "camera_push",
+        "hard_cut"
+      ],
+      "platform": "X",
+      "views": 33801
+    },
+    {
+      "id": "hf-moment-M1039",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1039/clip.mp4",
+      "sourceUrl": "https://x.com/Vintage_god/status/2106817967967056165",
+      "authorName": "Vintage",
+      "role": "cta",
+      "mechanics": [
+        "scale_down",
+        "glow_swirl",
+        "stagger",
+        "fade_out"
+      ],
+      "platform": "X",
+      "views": 33801
+    },
+    {
+      "id": "hf-moment-M1040",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1040/clip.mp4",
+      "sourceUrl": "https://x.com/chetaslua/status/2105757136219504862",
+      "authorName": "Chetaslua",
+      "role": "proof",
+      "mechanics": [
+        "camera_pan",
+        "mask_reveal",
+        "zoom_punch",
+        "wireframe_gap"
+      ],
+      "platform": "X",
+      "views": 686503
+    },
+    {
+      "id": "hf-moment-M1041",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1041/clip.mp4",
+      "sourceUrl": "https://x.com/bfl_ai/status/2105734605621825738",
+      "authorName": "Black Forest Labs",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "stagger",
+        "hard_cut",
+        "orbit_motion"
+      ],
+      "platform": "X",
+      "views": 475528
+    },
+    {
+      "id": "hf-moment-M1042",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1042/clip.mp4",
+      "sourceUrl": "https://x.com/bfl_ai/status/2105734605621825738",
+      "authorName": "Black Forest Labs",
+      "role": "proof",
+      "mechanics": [
+        "perspective_swing",
+        "stagger",
+        "kinetic_type",
+        "scale_up"
+      ],
+      "platform": "X",
+      "views": 475528
+    },
+    {
+      "id": "hf-moment-M1043",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1043/clip.mp4",
+      "sourceUrl": "https://x.com/bfl_ai/status/2105734605621825738",
+      "authorName": "Black Forest Labs",
+      "role": "proof",
+      "mechanics": [
+        "camera_push",
+        "typewriter",
+        "hard_cut",
+        "pixel_block_reveal"
+      ],
+      "platform": "X",
+      "views": 475528
+    },
+    {
+      "id": "hf-moment-M1044",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1044/clip.mp4",
+      "sourceUrl": "https://x.com/bfl_ai/status/2105734605621825738",
+      "authorName": "Black Forest Labs",
+      "role": "proof",
+      "mechanics": [
+        "kinetic_type",
+        "camera_push",
+        "whip_smear",
+        "scale_up"
+      ],
+      "platform": "X",
+      "views": 475528
+    },
+    {
+      "id": "hf-moment-M1045",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1045/clip.mp4",
+      "sourceUrl": "https://x.com/bfl_ai/status/2105734605621825738",
+      "authorName": "Black Forest Labs",
+      "role": "turn",
+      "mechanics": [
+        "hard_cut",
+        "stack_build",
+        "letter_reveal",
+        "scale_snap"
+      ],
+      "platform": "X",
+      "views": 475528
+    },
+    {
+      "id": "hf-moment-M1046",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1046/clip.mp4",
+      "sourceUrl": "https://x.com/bfl_ai/status/2105734605621825738",
+      "authorName": "Black Forest Labs",
+      "role": "proof",
+      "mechanics": [
+        "stack_build",
+        "crossfade_type",
+        "camera_push",
+        "slide_exit"
+      ],
+      "platform": "X",
+      "views": 475528
+    },
+    {
+      "id": "hf-moment-M1047",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1047/clip.mp4",
+      "sourceUrl": "https://x.com/bfl_ai/status/2105734605621825738",
+      "authorName": "Black Forest Labs",
+      "role": "proof",
+      "mechanics": [
+        "typewriter",
+        "hard_cut",
+        "3d_flyout",
+        "camera_pan"
+      ],
+      "platform": "X",
+      "views": 475528
+    },
+    {
+      "id": "hf-moment-M1048",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1048/clip.mp4",
+      "sourceUrl": "https://x.com/bfl_ai/status/2105734605621825738",
+      "authorName": "Black Forest Labs",
+      "role": "proof",
+      "mechanics": [
+        "wipe_reveal",
+        "hard_cut",
+        "glyph_roll",
+        "ui_overlay"
+      ],
+      "platform": "X",
+      "views": 475528
+    },
+    {
+      "id": "hf-moment-M1049",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1049/clip.mp4",
+      "sourceUrl": "https://x.com/bfl_ai/status/2105734605621825738",
+      "authorName": "Black Forest Labs",
+      "role": "proof",
+      "mechanics": [
+        "hard_cut",
+        "multi_direction_drift",
+        "kinetic_type",
+        "camera_push"
+      ],
+      "platform": "X",
+      "views": 475528
+    },
+    {
+      "id": "hf-moment-M1050",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1050/clip.mp4",
+      "sourceUrl": "https://x.com/bfl_ai/status/2105734605621825738",
+      "authorName": "Black Forest Labs",
+      "role": "cta",
+      "mechanics": [
+        "burst_scatter",
+        "scale_down",
+        "hard_cut",
+        "logo_slide_reveal"
+      ],
+      "platform": "X",
+      "views": 475528
+    },
+    {
+      "id": "hf-moment-M1051",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1051/clip.mp4",
+      "sourceUrl": "https://x.com/xadisingh/status/2107108577051844783",
+      "authorName": "Adi Singh",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "mask_reveal",
+        "hard_cut_montage",
+        "glitch_tiles"
+      ],
+      "platform": "X",
+      "views": 45271
+    },
+    {
+      "id": "hf-moment-M1052",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1052/clip.mp4",
+      "sourceUrl": "https://x.com/xadisingh/status/2107108577051844783",
+      "authorName": "Adi Singh",
+      "role": "proof",
+      "mechanics": [
+        "typing",
+        "camera_pull_back",
+        "wipe_reveal",
+        "counter"
+      ],
+      "platform": "X",
+      "views": 45271
+    },
+    {
+      "id": "hf-moment-M1053",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1053/clip.mp4",
+      "sourceUrl": "https://x.com/xadisingh/status/2107108577051844783",
+      "authorName": "Adi Singh",
+      "role": "turn",
+      "mechanics": [
+        "camera_push",
+        "counter",
+        "notification_drop",
+        "mosaic_wipe"
+      ],
+      "platform": "X",
+      "views": 45271
+    },
+    {
+      "id": "hf-moment-M1054",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1054/clip.mp4",
+      "sourceUrl": "https://x.com/xadisingh/status/2107108577051844783",
+      "authorName": "Adi Singh",
+      "role": "proof",
+      "mechanics": [
+        "hard_cut",
+        "typing",
+        "cell_mask_reveal",
+        "ease_out_flight"
+      ],
+      "platform": "X",
+      "views": 45271
+    },
+    {
+      "id": "hf-moment-M1055",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1055/clip.mp4",
+      "sourceUrl": "https://x.com/xadisingh/status/2107108577051844783",
+      "authorName": "Adi Singh",
+      "role": "turn",
+      "mechanics": [
+        "mosaic_wipe",
+        "stagger",
+        "camera_push",
+        "kinetic_type"
+      ],
+      "platform": "X",
+      "views": 45271
+    },
+    {
+      "id": "hf-moment-M1056",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1056/clip.mp4",
+      "sourceUrl": "https://x.com/xadisingh/status/2107108577051844783",
+      "authorName": "Adi Singh",
+      "role": "cta",
+      "mechanics": [
+        "mosaic_wipe",
+        "pixel_resolve",
+        "kinetic_type",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 45271
+    },
+    {
+      "id": "hf-moment-M1057",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1057/clip.mp4",
+      "sourceUrl": "https://x.com/shapelayer/status/2109217693757059168",
+      "authorName": "Leon Fucak",
+      "role": "hook",
+      "mechanics": [
+        "camera_push",
+        "kinetic_type",
+        "stagger",
+        "seamless_loop"
+      ],
+      "platform": "X",
+      "views": 11530
+    },
+    {
+      "id": "hf-moment-M1058",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1058/clip.mp4",
+      "sourceUrl": "https://x.com/bot/status/2107949161878606089",
+      "authorName": "Grok Bot",
+      "role": "hook",
+      "mechanics": [
+        "ui_transition",
+        "stagger",
+        "hard_cut",
+        "scroll_feed"
+      ],
+      "platform": "X",
+      "views": 5680781
+    },
+    {
+      "id": "hf-moment-M1059",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1059/clip.mp4",
+      "sourceUrl": "https://x.com/bot/status/2107949161878606089",
+      "authorName": "Grok Bot",
+      "role": "proof",
+      "mechanics": [
+        "kinetic_type",
+        "word_swap",
+        "ease_out_slide"
+      ],
+      "platform": "X",
+      "views": 5680781
+    },
+    {
+      "id": "hf-moment-M1060",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1060/clip.mp4",
+      "sourceUrl": "https://x.com/motionimo/status/2107415088747471217",
+      "authorName": "Motionimo",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "hard_cut_glitch",
+        "pip_slide",
+        "pixel_quantize"
+      ],
+      "platform": "X",
+      "views": 14052
+    },
+    {
+      "id": "hf-moment-M1061",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1061/clip.mp4",
+      "sourceUrl": "https://x.com/motionimo/status/2107415088747471217",
+      "authorName": "Motionimo",
+      "role": "turn",
+      "mechanics": [
+        "kinetic_type",
+        "directional_smear",
+        "hard_cut",
+        "camera_push"
+      ],
+      "platform": "X",
+      "views": 14052
+    },
+    {
+      "id": "hf-moment-M1062",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1062/clip.mp4",
+      "sourceUrl": "https://x.com/motionimo/status/2108722907803160872",
+      "authorName": "Motionimo",
+      "role": "hook",
+      "mechanics": [
+        "shape_morph",
+        "hard_cut",
+        "stepped_counter",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 2755
+    },
+    {
+      "id": "hf-moment-M1063",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1063/clip.mp4",
+      "sourceUrl": "https://x.com/motionimo/status/2108722907803160872",
+      "authorName": "Motionimo",
+      "role": "proof",
+      "mechanics": [
+        "glyph_dissolve",
+        "stepped_counter",
+        "stagger",
+        "hard_cut"
+      ],
+      "platform": "X",
+      "views": 2755
+    },
+    {
+      "id": "hf-moment-M1064",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1064/clip.mp4",
+      "sourceUrl": "https://x.com/motionimo/status/2108722907803160872",
+      "authorName": "Motionimo",
+      "role": "proof",
+      "mechanics": [
+        "kinetic_type",
+        "color_flash_decay",
+        "hard_cut",
+        "camera_push"
+      ],
+      "platform": "X",
+      "views": 2755
+    },
+    {
+      "id": "hf-moment-M1065",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1065/clip.mp4",
+      "sourceUrl": "https://x.com/motionimo/status/2108722907803160872",
+      "authorName": "Motionimo",
+      "role": "proof",
+      "mechanics": [
+        "hard_cut",
+        "stepped_replacement",
+        "scale_pulse",
+        "mask_reveal"
+      ],
+      "platform": "X",
+      "views": 2755
+    },
+    {
+      "id": "hf-moment-M1066",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1066/clip.mp4",
+      "sourceUrl": "https://x.com/motionimo/status/2108722907803160872",
+      "authorName": "Motionimo",
+      "role": "turn",
+      "mechanics": [
+        "mask_reveal",
+        "hard_cut",
+        "camera_pull",
+        "ui_transition"
+      ],
+      "platform": "X",
+      "views": 2755
+    },
+    {
+      "id": "hf-moment-M1067",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1067/clip.mp4",
+      "sourceUrl": "https://x.com/motionimo/status/2108722907803160872",
+      "authorName": "Motionimo",
+      "role": "cta",
+      "mechanics": [
+        "orbit",
+        "color_cut",
+        "whip_slide",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 2755
+    },
+    {
+      "id": "hf-moment-M1068",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1068/clip.mp4",
+      "sourceUrl": "https://x.com/askOkara/status/2105202449162350808",
+      "authorName": "Okara",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "camera_push",
+        "stagger",
+        "mask_reveal"
+      ],
+      "platform": "X",
+      "views": 540525
+    },
+    {
+      "id": "hf-moment-M1069",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1069/clip.mp4",
+      "sourceUrl": "https://x.com/askOkara/status/2105202449162350808",
+      "authorName": "Okara",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "mask_reveal",
+        "scale_pop",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 540525
+    },
+    {
+      "id": "hf-moment-M1070",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1070/clip.mp4",
+      "sourceUrl": "https://x.com/askOkara/status/2105202449162350808",
+      "authorName": "Okara",
+      "role": "proof",
+      "mechanics": [
+        "kinetic_type",
+        "camera_push",
+        "ui_transition",
+        "cursor_click"
+      ],
+      "platform": "X",
+      "views": 540525
+    },
+    {
+      "id": "hf-moment-M1071",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1071/clip.mp4",
+      "sourceUrl": "https://x.com/askOkara/status/2105202449162350808",
+      "authorName": "Okara",
+      "role": "proof",
+      "mechanics": [
+        "ui_transition",
+        "camera_pan",
+        "stagger",
+        "kinetic_type"
+      ],
+      "platform": "X",
+      "views": 540525
+    },
+    {
+      "id": "hf-moment-M1072",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1072/clip.mp4",
+      "sourceUrl": "https://x.com/askOkara/status/2105202449162350808",
+      "authorName": "Okara",
+      "role": "turn",
+      "mechanics": [
+        "kinetic_type",
+        "stagger",
+        "whip_pan",
+        "camera_push"
+      ],
+      "platform": "X",
+      "views": 540525
+    },
+    {
+      "id": "hf-moment-M1073",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1073/clip.mp4",
+      "sourceUrl": "https://x.com/askOkara/status/2105202449162350808",
+      "authorName": "Okara",
+      "role": "proof",
+      "mechanics": [
+        "3d_flip",
+        "scale_pop",
+        "stagger",
+        "kinetic_type"
+      ],
+      "platform": "X",
+      "views": 540525
+    },
+    {
+      "id": "hf-moment-M1074",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1074/clip.mp4",
+      "sourceUrl": "https://x.com/askOkara/status/2105202449162350808",
+      "authorName": "Okara",
+      "role": "turn",
+      "mechanics": [
+        "stagger",
+        "whip_pan",
+        "path_draw",
+        "camera_push"
+      ],
+      "platform": "X",
+      "views": 540525
+    },
+    {
+      "id": "hf-moment-M1075",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1075/clip.mp4",
+      "sourceUrl": "https://x.com/askOkara/status/2105202449162350808",
+      "authorName": "Okara",
+      "role": "proof",
+      "mechanics": [
+        "kinetic_type",
+        "camera_push",
+        "ui_transition",
+        "cursor_click"
+      ],
+      "platform": "X",
+      "views": 540525
+    },
+    {
+      "id": "hf-moment-M1076",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1076/clip.mp4",
+      "sourceUrl": "https://x.com/askOkara/status/2105202449162350808",
+      "authorName": "Okara",
+      "role": "proof",
+      "mechanics": [
+        "stagger",
+        "scroll_stack",
+        "kinetic_type",
+        "cursor_click"
+      ],
+      "platform": "X",
+      "views": 540525
+    },
+    {
+      "id": "hf-moment-M1077",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1077/clip.mp4",
+      "sourceUrl": "https://x.com/askOkara/status/2105202449162350808",
+      "authorName": "Okara",
+      "role": "turn",
+      "mechanics": [
+        "kinetic_type",
+        "orbit",
+        "ui_transition",
+        "mask_reveal"
+      ],
+      "platform": "X",
+      "views": 540525
+    },
+    {
+      "id": "hf-moment-M1078",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1078/clip.mp4",
+      "sourceUrl": "https://x.com/askOkara/status/2105202449162350808",
+      "authorName": "Okara",
+      "role": "cta",
+      "mechanics": [
+        "mask_reveal",
+        "stagger",
+        "scale_pop",
+        "press_pulse"
+      ],
+      "platform": "X",
+      "views": 540525
+    },
+    {
+      "id": "hf-moment-M1079",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1079/clip.mp4",
+      "sourceUrl": "https://x.com/OneKeyHQ/status/2108560486098944441",
+      "authorName": "OneKey",
+      "role": "hook",
+      "mechanics": [
+        "camera_pull_back",
+        "scale_reveal",
+        "opacity_ramp",
+        "stepped_cadence"
+      ],
+      "platform": "X",
+      "views": 46279
+    },
+    {
+      "id": "hf-moment-M1080",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1080/clip.mp4",
+      "sourceUrl": "https://x.com/OneKeyHQ/status/2108560486098944441",
+      "authorName": "OneKey",
+      "role": "proof",
+      "mechanics": [
+        "exploded_view_collapse",
+        "light_pulse_travel",
+        "fly_in",
+        "stepped_cadence"
+      ],
+      "platform": "X",
+      "views": 46279
+    },
+    {
+      "id": "hf-moment-M1081",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1081/clip.mp4",
+      "sourceUrl": "https://x.com/OneKeyHQ/status/2108560486098944441",
+      "authorName": "OneKey",
+      "role": "turn",
+      "mechanics": [
+        "hard_cut",
+        "ripple_distortion",
+        "text_sheen",
+        "opacity_fade"
+      ],
+      "platform": "X",
+      "views": 46279
+    },
+    {
+      "id": "hf-moment-M1082",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1082/clip.mp4",
+      "sourceUrl": "https://x.com/OneKeyHQ/status/2108560486098944441",
+      "authorName": "OneKey",
+      "role": "proof",
+      "mechanics": [
+        "camera_orbit",
+        "object_flip",
+        "occlusion_reveal",
+        "stepped_holds"
+      ],
+      "platform": "X",
+      "views": 46279
+    },
+    {
+      "id": "hf-moment-M1083",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1083/clip.mp4",
+      "sourceUrl": "https://x.com/OneKeyHQ/status/2108560486098944441",
+      "authorName": "OneKey",
+      "role": "turn",
+      "mechanics": [
+        "rigid_turn",
+        "light_sweep",
+        "scale_down_entrance",
+        "hard_cut"
+      ],
+      "platform": "X",
+      "views": 46279
+    },
+    {
+      "id": "hf-moment-M1084",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1084/clip.mp4",
+      "sourceUrl": "https://x.com/OneKeyHQ/status/2108560486098944441",
+      "authorName": "OneKey",
+      "role": "cta",
+      "mechanics": [
+        "hard_cut",
+        "texture_mask",
+        "material_loop"
+      ],
+      "platform": "X",
+      "views": 46279
+    },
+    {
+      "id": "hf-moment-M1085",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1085/clip.mp4",
+      "sourceUrl": "https://x.com/OneKeyHQ/status/2108560486098944441",
+      "authorName": "OneKey",
+      "role": "cta",
+      "mechanics": [
+        "gradient_wipe",
+        "stepped_cadence",
+        "hard_cut"
+      ],
+      "platform": "X",
+      "views": 46279
+    },
+    {
+      "id": "hf-moment-M1086",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1086/clip.mp4",
+      "sourceUrl": "https://x.com/motionimo/status/2103703350017433670",
+      "authorName": "Motionimo",
+      "role": "hook",
+      "mechanics": [
+        "stagger",
+        "hard_cut",
+        "color_step",
+        "orbit"
+      ],
+      "platform": "X",
+      "views": 5806
+    },
+    {
+      "id": "hf-moment-M1087",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1087/clip.mp4",
+      "sourceUrl": "https://x.com/motionimo/status/2103703350017433670",
+      "authorName": "Motionimo",
+      "role": "proof",
+      "mechanics": [
+        "scale_pop",
+        "stagger",
+        "glyph_reveal",
+        "hard_cut"
+      ],
+      "platform": "X",
+      "views": 5806
+    },
+    {
+      "id": "hf-moment-M1088",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1088/clip.mp4",
+      "sourceUrl": "https://x.com/motionimo/status/2103703350017433670",
+      "authorName": "Motionimo",
+      "role": "proof",
+      "mechanics": [
+        "counter",
+        "camera_push",
+        "ui_transition",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 5806
+    },
+    {
+      "id": "hf-moment-M1089",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1089/clip.mp4",
+      "sourceUrl": "https://x.com/motionimo/status/2103703350017433670",
+      "authorName": "Motionimo",
+      "role": "turn",
+      "mechanics": [
+        "color_step",
+        "parallax",
+        "camera_tilt",
+        "palette_swap"
+      ],
+      "platform": "X",
+      "views": 5806
+    },
+    {
+      "id": "hf-moment-M1090",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1090/clip.mp4",
+      "sourceUrl": "https://x.com/motionimo/status/2103703350017433670",
+      "authorName": "Motionimo",
+      "role": "proof",
+      "mechanics": [
+        "scale_pop",
+        "camera_push",
+        "hard_cut",
+        "scroll_reveal"
+      ],
+      "platform": "X",
+      "views": 5806
+    },
+    {
+      "id": "hf-moment-M1091",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1091/clip.mp4",
+      "sourceUrl": "https://x.com/motionimo/status/2103703350017433670",
+      "authorName": "Motionimo",
+      "role": "proof",
+      "mechanics": [
+        "hard_cut",
+        "split_panel",
+        "kinetic_type",
+        "yaw_turn"
+      ],
+      "platform": "X",
+      "views": 5806
+    },
+    {
+      "id": "hf-moment-M1092",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1092/clip.mp4",
+      "sourceUrl": "https://x.com/motionimo/status/2103703350017433670",
+      "authorName": "Motionimo",
+      "role": "cta",
+      "mechanics": [
+        "mask_reveal",
+        "scale_shrink",
+        "rotation_settle",
+        "horizontal_squeeze"
+      ],
+      "platform": "X",
+      "views": 5806
+    },
+    {
+      "id": "hf-moment-M1093",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1093/clip.mp4",
+      "sourceUrl": "https://x.com/motionimo/status/2108588367642263849",
+      "authorName": "Motionimo",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "counter",
+        "mask_reveal",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 5705
+    },
+    {
+      "id": "hf-moment-M1094",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1094/clip.mp4",
+      "sourceUrl": "https://x.com/motionimo/status/2108588367642263849",
+      "authorName": "Motionimo",
+      "role": "turn",
+      "mechanics": [
+        "kinetic_type",
+        "camera_push",
+        "hard_cut",
+        "whip_pan"
+      ],
+      "platform": "X",
+      "views": 5705
+    },
+    {
+      "id": "hf-moment-M1095",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1095/clip.mp4",
+      "sourceUrl": "https://x.com/motionimo/status/2108588367642263849",
+      "authorName": "Motionimo",
+      "role": "proof",
+      "mechanics": [
+        "mask_reveal",
+        "counter",
+        "camera_push",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 5705
+    },
+    {
+      "id": "hf-moment-M1096",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1096/clip.mp4",
+      "sourceUrl": "https://x.com/motionimo/status/2108588367642263849",
+      "authorName": "Motionimo",
+      "role": "proof",
+      "mechanics": [
+        "camera_push",
+        "cursor_drag",
+        "counter",
+        "kinetic_type"
+      ],
+      "platform": "X",
+      "views": 5705
+    },
+    {
+      "id": "hf-moment-M1097",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1097/clip.mp4",
+      "sourceUrl": "https://x.com/motionimo/status/2108588367642263849",
+      "authorName": "Motionimo",
+      "role": "proof",
+      "mechanics": [
+        "camera_push",
+        "ui_transition",
+        "counter",
+        "kinetic_type"
+      ],
+      "platform": "X",
+      "views": 5705
+    },
+    {
+      "id": "hf-moment-M1098",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1098/clip.mp4",
+      "sourceUrl": "https://x.com/motionimo/status/2108588367642263849",
+      "authorName": "Motionimo",
+      "role": "turn",
+      "mechanics": [
+        "kinetic_type",
+        "ui_transition",
+        "light_sweep",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 5705
+    },
+    {
+      "id": "hf-moment-M1099",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1099/clip.mp4",
+      "sourceUrl": "https://x.com/motionimo/status/2108588367642263849",
+      "authorName": "Motionimo",
+      "role": "cta",
+      "mechanics": [
+        "mask_reveal",
+        "light_sweep",
+        "stagger",
+        "kinetic_type"
+      ],
+      "platform": "X",
+      "views": 5705
+    },
+    {
+      "id": "hf-moment-M1100",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1100/clip.mp4",
+      "sourceUrl": "https://x.com/mattgapp/status/2107942692034683326",
+      "authorName": "Matt Gapp",
+      "role": "hook",
+      "mechanics": [
+        "stepped_dab_reveal",
+        "mask_reveal",
+        "on_twos_animation",
+        "stepped_gate_swing"
+      ],
+      "platform": "X",
+      "views": 56171
+    },
+    {
+      "id": "hf-moment-M1101",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1101/clip.mp4",
+      "sourceUrl": "https://x.com/mattgapp/status/2107942692034683326",
+      "authorName": "Matt Gapp",
+      "role": "proof",
+      "mechanics": [
+        "camera_push",
+        "crowd_stagger",
+        "particle_coin_burst",
+        "mask_reveal"
+      ],
+      "platform": "X",
+      "views": 56171
+    },
+    {
+      "id": "hf-moment-M1102",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1102/clip.mp4",
+      "sourceUrl": "https://x.com/mattgapp/status/2107942692034683326",
+      "authorName": "Matt Gapp",
+      "role": "turn",
+      "mechanics": [
+        "stepped_wipe",
+        "ink_build_reveal",
+        "arc_leap",
+        "ribbon_mask_reveal"
+      ],
+      "platform": "X",
+      "views": 56171
+    },
+    {
+      "id": "hf-moment-M1103",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1103/clip.mp4",
+      "sourceUrl": "https://x.com/mattgapp/status/2107942692034683326",
+      "authorName": "Matt Gapp",
+      "role": "proof",
+      "mechanics": [
+        "ragged_brush_wipe",
+        "strike_through",
+        "mask_reveal",
+        "pose_snap"
+      ],
+      "platform": "X",
+      "views": 56171
+    },
+    {
+      "id": "hf-moment-M1104",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1104/clip.mp4",
+      "sourceUrl": "https://x.com/mattgapp/status/2107942692034683326",
+      "authorName": "Matt Gapp",
+      "role": "cta",
+      "mechanics": [
+        "ragged_brush_wipe",
+        "ink_build_reveal",
+        "mask_reveal",
+        "pop_overshoot"
+      ],
+      "platform": "X",
+      "views": 56171
+    },
+    {
+      "id": "hf-moment-M1105",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1105/clip.mp4",
+      "sourceUrl": "https://x.com/ImagineArt_X/status/2102072389295309089",
+      "authorName": "ImagineArt",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "stagger",
+        "motion_blur_smear",
+        "hard_cut"
+      ],
+      "platform": "X",
+      "views": 10247
+    },
+    {
+      "id": "hf-moment-M1106",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1106/clip.mp4",
+      "sourceUrl": "https://x.com/ImagineArt_X/status/2102072389295309089",
+      "authorName": "ImagineArt",
+      "role": "proof",
+      "mechanics": [
+        "typewriter_type",
+        "hard_swap",
+        "cursor_click",
+        "hard_cut"
+      ],
+      "platform": "X",
+      "views": 10247
+    },
+    {
+      "id": "hf-moment-M1107",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1107/clip.mp4",
+      "sourceUrl": "https://x.com/ImagineArt_X/status/2102072389295309089",
+      "authorName": "ImagineArt",
+      "role": "proof",
+      "mechanics": [
+        "camera_push",
+        "cursor_click",
+        "drag_and_drop",
+        "mask_reveal"
+      ],
+      "platform": "X",
+      "views": 10247
+    },
+    {
+      "id": "hf-moment-M1108",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1108/clip.mp4",
+      "sourceUrl": "https://x.com/ImagineArt_X/status/2102072389295309089",
+      "authorName": "ImagineArt",
+      "role": "cta",
+      "mechanics": [
+        "hard_cut",
+        "kinetic_type",
+        "badge_pop",
+        "camera_push"
+      ],
+      "platform": "X",
+      "views": 10247
+    },
+    {
+      "id": "hf-moment-M1109",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1109/clip.mp4",
+      "sourceUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/manifest.json",
+      "role": "turn",
+      "mechanics": [
+        "camera_push",
+        "wipe_reveal",
+        "flash_cut",
+        "whip_pan"
+      ]
+    },
+    {
+      "id": "hf-moment-M1110",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1110/clip.mp4",
+      "sourceUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/manifest.json",
+      "role": "proof",
+      "mechanics": [
+        "ui_transition",
+        "scroll",
+        "crossfade",
+        "focus_ring_slide"
+      ]
+    },
+    {
+      "id": "hf-moment-M1111",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1111/clip.mp4",
+      "sourceUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/manifest.json",
+      "role": "turn",
+      "mechanics": [
+        "zoom_blur",
+        "silhouette_flash",
+        "callout_leaders",
+        "scale_settle"
+      ]
+    },
+    {
+      "id": "hf-moment-M1112",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1112/clip.mp4",
+      "sourceUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/manifest.json",
+      "role": "proof",
+      "mechanics": [
+        "drop_in",
+        "carousel_swipe",
+        "collapse_merge",
+        "tap_marker"
+      ]
+    },
+    {
+      "id": "hf-moment-M1113",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1113/clip.mp4",
+      "sourceUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/manifest.json",
+      "role": "cta",
+      "mechanics": [
+        "camera_pull",
+        "radial_burst",
+        "scale_slam",
+        "color_wash"
+      ]
+    },
+    {
+      "id": "hf-moment-M1114",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1114/clip.mp4",
+      "sourceUrl": "https://x.com/rajzmotion/status/2109273645654888831",
+      "authorName": "Rajz",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "pixel_wipe",
+        "stagger",
+        "corner_marks"
+      ],
+      "platform": "X",
+      "views": 31147
+    },
+    {
+      "id": "hf-moment-M1115",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1115/clip.mp4",
+      "sourceUrl": "https://x.com/rajzmotion/status/2109273645654888831",
+      "authorName": "Rajz",
+      "role": "hook",
+      "mechanics": [
+        "mask_reveal",
+        "stagger",
+        "hard_cut",
+        "camera_push"
+      ],
+      "platform": "X",
+      "views": 31147
+    },
+    {
+      "id": "hf-moment-M1116",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1116/clip.mp4",
+      "sourceUrl": "https://x.com/rajzmotion/status/2109273645654888831",
+      "authorName": "Rajz",
+      "role": "proof",
+      "mechanics": [
+        "typewriter",
+        "hard_cut_zoom",
+        "caret_follow",
+        "ui_transition"
+      ],
+      "platform": "X",
+      "views": 31147
+    },
+    {
+      "id": "hf-moment-M1117",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1117/clip.mp4",
+      "sourceUrl": "https://x.com/rajzmotion/status/2109273645654888831",
+      "authorName": "Rajz",
+      "role": "proof",
+      "mechanics": [
+        "color_sweep",
+        "stepped_scroll",
+        "halftone_dot_resolve",
+        "hard_cut"
+      ],
+      "platform": "X",
+      "views": 31147
+    },
+    {
+      "id": "hf-moment-M1118",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1118/clip.mp4",
+      "sourceUrl": "https://x.com/rajzmotion/status/2109273645654888831",
+      "authorName": "Rajz",
+      "role": "turn",
+      "mechanics": [
+        "card_deck_stack",
+        "whip_pan",
+        "image_flicker",
+        "kinetic_type"
+      ],
+      "platform": "X",
+      "views": 31147
+    },
+    {
+      "id": "hf-moment-M1119",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1119/clip.mp4",
+      "sourceUrl": "https://x.com/rajzmotion/status/2109273645654888831",
+      "authorName": "Rajz",
+      "role": "cta",
+      "mechanics": [
+        "kinetic_type",
+        "snap_handles",
+        "3d_unfold",
+        "ui_transition"
+      ],
+      "platform": "X",
+      "views": 31147
+    },
+    {
+      "id": "hf-moment-M1120",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1120/clip.mp4",
+      "sourceUrl": "https://x.com/devteamdrew/status/2102436464323661880",
+      "authorName": "DreW",
+      "role": "proof",
+      "mechanics": [
+        "iris_wipe",
+        "hard_cut_montage",
+        "flash_frame",
+        "whip_pan"
+      ],
+      "platform": "X",
+      "views": 1823563
+    },
+    {
+      "id": "hf-moment-M1121",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1121/clip.mp4",
+      "sourceUrl": "https://x.com/devteamdrew/status/2102436464323661880",
+      "authorName": "DreW",
+      "role": "proof",
+      "mechanics": [
+        "morph",
+        "iris_wipe",
+        "scale_pop",
+        "particle_scatter"
+      ],
+      "platform": "X",
+      "views": 1823563
+    },
+    {
+      "id": "hf-moment-M1122",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1122/clip.mp4",
+      "sourceUrl": "https://x.com/devteamdrew/status/2102436464323661880",
+      "authorName": "DreW",
+      "role": "turn",
+      "mechanics": [
+        "implosion_snap",
+        "flash_frame",
+        "exponential_zoom",
+        "motion_trail"
+      ],
+      "platform": "X",
+      "views": 1823563
+    },
+    {
+      "id": "hf-moment-M1123",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1123/clip.mp4",
+      "sourceUrl": "https://www.tiktok.com/@nardeater/video/7692989974932753695",
+      "role": "cta",
+      "mechanics": [
+        "stagger",
+        "kinetic_type",
+        "mask_reveal",
+        "button_shine"
+      ],
+      "platform": "TikTok",
+      "views": 110200
+    },
+    {
+      "id": "hf-moment-M1124",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1124/clip.mp4",
+      "sourceUrl": "https://x.com/chetaslua/status/2105757136219504862",
+      "authorName": "Chetaslua",
+      "role": "proof",
+      "mechanics": [
+        "mask_reveal",
+        "zoom_punch",
+        "counter",
+        "type_on"
+      ],
+      "platform": "X",
+      "views": 686503
+    },
+    {
+      "id": "hf-moment-M1125",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1125/clip.mp4",
+      "sourceUrl": "https://x.com/chetaslua/status/2105757136219504862",
+      "authorName": "Chetaslua",
+      "role": "turn",
+      "mechanics": [
+        "camera_pan",
+        "camera_tilt",
+        "mask_reveal",
+        "camera_pull"
+      ],
+      "platform": "X",
+      "views": 686503
+    },
+    {
+      "id": "hf-moment-M1126",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1126/clip.mp4",
+      "sourceUrl": "https://x.com/chetaslua/status/2105757136219504862",
+      "authorName": "Chetaslua",
+      "role": "cta",
+      "mechanics": [
+        "camera_pull",
+        "stagger",
+        "fade_in",
+        "overshoot_settle"
+      ],
+      "platform": "X",
+      "views": 686503
+    },
+    {
+      "id": "hf-moment-M1127",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1127/clip.mp4",
+      "sourceUrl": "https://x.com/Vintage_god/status/2106817967967056165",
+      "authorName": "Vintage",
+      "role": "turn",
+      "mechanics": [
+        "whip_zoom",
+        "kinetic_type",
+        "mask_reveal",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 33801
+    },
+    {
+      "id": "hf-moment-M1128",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1128/clip.mp4",
+      "sourceUrl": "https://x.com/Vintage_god/status/2106817967967056165",
+      "authorName": "Vintage",
+      "role": "proof",
+      "mechanics": [
+        "counter",
+        "stagger",
+        "kinetic_type",
+        "waveform"
+      ],
+      "platform": "X",
+      "views": 33801
+    },
+    {
+      "id": "hf-moment-M1129",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1129/clip.mp4",
+      "sourceUrl": "https://x.com/ankush_motion/status/2106444826539606152",
+      "authorName": "Ankush",
+      "role": "turn",
+      "mechanics": [
+        "mask_reveal",
+        "camera_push",
+        "kinetic_type",
+        "scroll_stagger"
+      ],
+      "platform": "X",
+      "views": 5813
+    },
+    {
+      "id": "hf-moment-M1130",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1130/clip.mp4",
+      "sourceUrl": "https://x.com/GoogleAI/status/2024154215182926027",
+      "authorName": "Google AI",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "3d_tilt",
+        "ring_contract",
+        "curtain_wipe"
+      ],
+      "platform": "X",
+      "views": 3208534
+    },
+    {
+      "id": "hf-moment-M1131",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1131/clip.mp4",
+      "sourceUrl": "https://x.com/GoogleAI/status/2024154215182926027",
+      "authorName": "Google AI",
+      "role": "hook",
+      "mechanics": [
+        "hard_cut",
+        "scale_down",
+        "focus_pull",
+        "mask_reveal"
+      ],
+      "platform": "X",
+      "views": 3208534
+    },
+    {
+      "id": "hf-moment-M1132",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1132/clip.mp4",
+      "sourceUrl": "https://x.com/GoogleAI/status/2024154215182926027",
+      "authorName": "Google AI",
+      "role": "proof",
+      "mechanics": [
+        "kinetic_type",
+        "per_letter_spring",
+        "perspective_planes",
+        "scrolling_columns"
+      ],
+      "platform": "X",
+      "views": 3208534
+    },
+    {
+      "id": "hf-moment-M1133",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1133/clip.mp4",
+      "sourceUrl": "https://x.com/GoogleAI/status/2024154215182926027",
+      "authorName": "Google AI",
+      "role": "proof",
+      "mechanics": [
+        "text_on_path",
+        "pop_stack",
+        "zoom_through",
+        "glyph_ribbon"
+      ],
+      "platform": "X",
+      "views": 3208534
+    },
+    {
+      "id": "hf-moment-M1134",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1134/clip.mp4",
+      "sourceUrl": "https://x.com/GoogleAI/status/2024154215182926027",
+      "authorName": "Google AI",
+      "role": "turn",
+      "mechanics": [
+        "scale_from_point",
+        "conveyor_drift",
+        "punch_in",
+        "spread_fade"
+      ],
+      "platform": "X",
+      "views": 3208534
+    },
+    {
+      "id": "hf-moment-M1135",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1135/clip.mp4",
+      "sourceUrl": "https://x.com/GoogleAI/status/2024154215182926027",
+      "authorName": "Google AI",
+      "role": "proof",
+      "mechanics": [
+        "conveyor_drift",
+        "isolation_focus",
+        "scale_from_point",
+        "color_wipe"
+      ],
+      "platform": "X",
+      "views": 3208534
+    },
+    {
+      "id": "hf-moment-M1136",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1136/clip.mp4",
+      "sourceUrl": "https://x.com/GoogleAI/status/2024154215182926027",
+      "authorName": "Google AI",
+      "role": "proof",
+      "mechanics": [
+        "slot_reel_scroll",
+        "card_pop",
+        "3d_tilt",
+        "cylinder_text_wrap"
+      ],
+      "platform": "X",
+      "views": 3208534
+    },
+    {
+      "id": "hf-moment-M1137",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1137/clip.mp4",
+      "sourceUrl": "https://x.com/GoogleAI/status/2024154215182926027",
+      "authorName": "Google AI",
+      "role": "turn",
+      "mechanics": [
+        "cylinder_roll",
+        "typewriter",
+        "scatter_fly_in",
+        "motion_smear"
+      ],
+      "platform": "X",
+      "views": 3208534
+    },
+    {
+      "id": "hf-moment-M1138",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1138/clip.mp4",
+      "sourceUrl": "https://x.com/GoogleAI/status/2024154215182926027",
+      "authorName": "Google AI",
+      "role": "proof",
+      "mechanics": [
+        "typewriter",
+        "hard_cut",
+        "stagger",
+        "sine_wave"
+      ],
+      "platform": "X",
+      "views": 3208534
+    },
+    {
+      "id": "hf-moment-M1139",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1139/clip.mp4",
+      "sourceUrl": "https://x.com/GoogleAI/status/2024154215182926027",
+      "authorName": "Google AI",
+      "role": "proof",
+      "mechanics": [
+        "focus_pull",
+        "isometric_fan",
+        "mask_reveal",
+        "perspective_tilt"
+      ],
+      "platform": "X",
+      "views": 3208534
+    },
+    {
+      "id": "hf-moment-M1140",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1140/clip.mp4",
+      "sourceUrl": "https://x.com/GoogleAI/status/2024154215182926027",
+      "authorName": "Google AI",
+      "role": "turn",
+      "mechanics": [
+        "camera_push",
+        "punch_zoom",
+        "hard_cut",
+        "focus_pull"
+      ],
+      "platform": "X",
+      "views": 3208534
+    },
+    {
+      "id": "hf-moment-M1141",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1141/clip.mp4",
+      "sourceUrl": "https://x.com/GoogleAI/status/2024154215182926027",
+      "authorName": "Google AI",
+      "role": "cta",
+      "mechanics": [
+        "focus_pull",
+        "stagger",
+        "horizontal_drift",
+        "motion_smear"
+      ],
+      "platform": "X",
+      "views": 3208534
+    },
+    {
+      "id": "hf-moment-M1142",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1142/clip.mp4",
+      "sourceUrl": "https://x.com/figma/status/2001715747505233980",
+      "authorName": "Figma",
+      "role": "hook",
+      "mechanics": [
+        "jump_cut_montage",
+        "depth_layered_type",
+        "camera_pull_back",
+        "whip_pan"
+      ],
+      "platform": "X",
+      "views": 35988362
+    },
+    {
+      "id": "hf-moment-M1143",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1143/clip.mp4",
+      "sourceUrl": "https://x.com/figma/status/2001715747505233980",
+      "authorName": "Figma",
+      "role": "proof",
+      "mechanics": [
+        "hard_cut_montage",
+        "counter",
+        "ui_drag_reflow",
+        "focus_blur_zoom"
+      ],
+      "platform": "X",
+      "views": 35988362
+    },
+    {
+      "id": "hf-moment-M1144",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1144/clip.mp4",
+      "sourceUrl": "https://x.com/figma/status/2001715747505233980",
+      "authorName": "Figma",
+      "role": "proof",
+      "mechanics": [
+        "snap_down_scale",
+        "stepped_zoom",
+        "smear_pan",
+        "hard_cut_montage"
+      ],
+      "platform": "X",
+      "views": 35988362
+    },
+    {
+      "id": "hf-moment-M1145",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1145/clip.mp4",
+      "sourceUrl": "https://x.com/figma/status/2001715747505233980",
+      "authorName": "Figma",
+      "role": "proof",
+      "mechanics": [
+        "circular_wipe",
+        "zoom_settle",
+        "one_frame_style_swap",
+        "cursor_hop"
+      ],
+      "platform": "X",
+      "views": 35988362
+    },
+    {
+      "id": "hf-moment-M1146",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1146/clip.mp4",
+      "sourceUrl": "https://x.com/figma/status/2001715747505233980",
+      "authorName": "Figma",
+      "role": "turn",
+      "mechanics": [
+        "stepped_ui_build",
+        "zoom_tunnel",
+        "scale_pop",
+        "motion_blur"
+      ],
+      "platform": "X",
+      "views": 35988362
+    },
+    {
+      "id": "hf-moment-M1147",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1147/clip.mp4",
+      "sourceUrl": "https://x.com/figma/status/2001715747505233980",
+      "authorName": "Figma",
+      "role": "cta",
+      "mechanics": [
+        "anchored_word_cuts",
+        "sticker_burst",
+        "stepped_snap_assembly",
+        "cut_to_black"
+      ],
+      "platform": "X",
+      "views": 35988362
+    },
+    {
+      "id": "hf-moment-M1148",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1148/clip.mp4",
+      "sourceUrl": "https://x.com/SpaceXAI/status/2072342803787702422",
+      "authorName": "SpaceX Super Intelligence",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "mask_reveal",
+        "carousel_scroll",
+        "squash_rebound"
+      ],
+      "platform": "X",
+      "views": 33097892
+    },
+    {
+      "id": "hf-moment-M1149",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1149/clip.mp4",
+      "sourceUrl": "https://x.com/SpaceXAI/status/2072342803787702422",
+      "authorName": "SpaceX Super Intelligence",
+      "role": "proof",
+      "mechanics": [
+        "ui_transition",
+        "typing",
+        "camera_push",
+        "mask_reveal"
+      ],
+      "platform": "X",
+      "views": 33097892
+    },
+    {
+      "id": "hf-moment-M1150",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1150/clip.mp4",
+      "sourceUrl": "https://x.com/SpaceXAI/status/2072342803787702422",
+      "authorName": "SpaceX Super Intelligence",
+      "role": "turn",
+      "mechanics": [
+        "orb_morph",
+        "ring_burst",
+        "focus_wipe",
+        "slide_transition"
+      ],
+      "platform": "X",
+      "views": 33097892
+    },
+    {
+      "id": "hf-moment-M1151",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1151/clip.mp4",
+      "sourceUrl": "https://x.com/SpaceXAI/status/2072342803787702422",
+      "authorName": "SpaceX Super Intelligence",
+      "role": "proof",
+      "mechanics": [
+        "counter",
+        "waveform_split",
+        "progress_fill",
+        "curved_path_flyin"
+      ],
+      "platform": "X",
+      "views": 33097892
+    },
+    {
+      "id": "hf-moment-M1152",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1152/clip.mp4",
+      "sourceUrl": "https://x.com/SpaceXAI/status/2072342803787702422",
+      "authorName": "SpaceX Super Intelligence",
+      "role": "proof",
+      "mechanics": [
+        "rise_in_stagger",
+        "zoom_step",
+        "whip_pan",
+        "typing"
+      ],
+      "platform": "X",
+      "views": 33097892
+    },
+    {
+      "id": "hf-moment-M1153",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1153/clip.mp4",
+      "sourceUrl": "https://x.com/SpaceXAI/status/2072342803787702422",
+      "authorName": "SpaceX Super Intelligence",
+      "role": "proof",
+      "mechanics": [
+        "stagger",
+        "typing",
+        "color_pulse",
+        "rolling_columns"
+      ],
+      "platform": "X",
+      "views": 33097892
+    },
+    {
+      "id": "hf-moment-M1154",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1154/clip.mp4",
+      "sourceUrl": "https://x.com/SpaceXAI/status/2072342803787702422",
+      "authorName": "SpaceX Super Intelligence",
+      "role": "cta",
+      "mechanics": [
+        "glyph_pop",
+        "backspace",
+        "typing",
+        "mask_reveal"
+      ],
+      "platform": "X",
+      "views": 33097892
+    },
+    {
+      "id": "hf-moment-M1155",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1155/clip.mp4",
+      "sourceUrl": "https://x.com/anduriltech/status/2016233946607141290",
+      "authorName": "Anduril Industries",
+      "role": "hook",
+      "mechanics": [
+        "glitch_wipe",
+        "modular_build",
+        "text_decode",
+        "guide_box_resize"
+      ],
+      "platform": "X",
+      "views": 7664513
+    },
+    {
+      "id": "hf-moment-M1156",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1156/clip.mp4",
+      "sourceUrl": "https://x.com/anduriltech/status/2016233946607141290",
+      "authorName": "Anduril Industries",
+      "role": "proof",
+      "mechanics": [
+        "camera_push",
+        "exponential_scale",
+        "flash_frame",
+        "fly_through"
+      ],
+      "platform": "X",
+      "views": 7664513
+    },
+    {
+      "id": "hf-moment-M1157",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1157/clip.mp4",
+      "sourceUrl": "https://x.com/fulcrum_inc/status/2105416317834817871",
+      "authorName": "Fulcrum",
+      "role": "hook",
+      "mechanics": [
+        "ink_bloom",
+        "typewriter_text",
+        "staggered_fade",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 4778602
+    },
+    {
+      "id": "hf-moment-M1158",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1158/clip.mp4",
+      "sourceUrl": "https://x.com/fulcrum_inc/status/2105416317834817871",
+      "authorName": "Fulcrum",
+      "role": "turn",
+      "mechanics": [
+        "metaball_morph",
+        "typewriter_text",
+        "blur_reveal",
+        "shape_settle"
+      ],
+      "platform": "X",
+      "views": 4778602
+    },
+    {
+      "id": "hf-moment-M1159",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1159/clip.mp4",
+      "sourceUrl": "https://x.com/fulcrum_inc/status/2105416317834817871",
+      "authorName": "Fulcrum",
+      "role": "proof",
+      "mechanics": [
+        "shape_morph",
+        "typewriter_text",
+        "thought_bubble_reveal",
+        "dissolve"
+      ],
+      "platform": "X",
+      "views": 4778602
+    },
+    {
+      "id": "hf-moment-M1160",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1160/clip.mp4",
+      "sourceUrl": "https://x.com/framer/status/2066939366568804508",
+      "authorName": "Framer",
+      "role": "hook",
+      "mechanics": [
+        "camera_swing",
+        "light_sweep",
+        "hard_cut",
+        "camera_pull_back"
+      ],
+      "platform": "X",
+      "views": 2872333
+    },
+    {
+      "id": "hf-moment-M1161",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1161/clip.mp4",
+      "sourceUrl": "https://x.com/framer/status/2066939366568804508",
+      "authorName": "Framer",
+      "role": "turn",
+      "mechanics": [
+        "3d_rotation",
+        "specular_sweep",
+        "hard_cut",
+        "outline_tracer"
+      ],
+      "platform": "X",
+      "views": 2872333
+    },
+    {
+      "id": "hf-moment-M1162",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1162/clip.mp4",
+      "sourceUrl": "https://x.com/framer/status/2066939366568804508",
+      "authorName": "Framer",
+      "role": "proof",
+      "mechanics": [
+        "stagger",
+        "hard_cut",
+        "cursor_glide",
+        "text_swap"
+      ],
+      "platform": "X",
+      "views": 2872333
+    },
+    {
+      "id": "hf-moment-M1163",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1163/clip.mp4",
+      "sourceUrl": "https://x.com/framer/status/2066939366568804508",
+      "authorName": "Framer",
+      "role": "proof",
+      "mechanics": [
+        "typing",
+        "cursor_glide",
+        "camera_push",
+        "text_swap"
+      ],
+      "platform": "X",
+      "views": 2872333
+    },
+    {
+      "id": "hf-moment-M1164",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1164/clip.mp4",
+      "sourceUrl": "https://x.com/framer/status/2066939366568804508",
+      "authorName": "Framer",
+      "role": "proof",
+      "mechanics": [
+        "typing",
+        "shimmer",
+        "code_scroll",
+        "frame_morph"
+      ],
+      "platform": "X",
+      "views": 2872333
+    },
+    {
+      "id": "hf-moment-M1165",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1165/clip.mp4",
+      "sourceUrl": "https://x.com/framer/status/2066939366568804508",
+      "authorName": "Framer",
+      "role": "proof",
+      "mechanics": [
+        "hard_cut",
+        "camera_pull_back",
+        "cursor_trail",
+        "title_swap"
+      ],
+      "platform": "X",
+      "views": 2872333
+    },
+    {
+      "id": "hf-moment-M1166",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1166/clip.mp4",
+      "sourceUrl": "https://x.com/framer/status/2066939366568804508",
+      "authorName": "Framer",
+      "role": "turn",
+      "mechanics": [
+        "kinetic_type",
+        "stagger",
+        "scale_settle",
+        "light_flare"
+      ],
+      "platform": "X",
+      "views": 2872333
+    },
+    {
+      "id": "hf-moment-M1167",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1167/clip.mp4",
+      "sourceUrl": "https://x.com/framer/status/2066939366568804508",
+      "authorName": "Framer",
+      "role": "turn",
+      "mechanics": [
+        "kinetic_type",
+        "stagger",
+        "roll_up_exit",
+        "cgi_footage"
+      ],
+      "platform": "X",
+      "views": 2872333
+    },
+    {
+      "id": "hf-moment-M1168",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1168/clip.mp4",
+      "sourceUrl": "https://x.com/framer/status/2066939366568804508",
+      "authorName": "Framer",
+      "role": "turn",
+      "mechanics": [
+        "kinetic_type",
+        "stagger",
+        "rise_in",
+        "cgi_footage"
+      ],
+      "platform": "X",
+      "views": 2872333
+    },
+    {
+      "id": "hf-moment-M1169",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1169/clip.mp4",
+      "sourceUrl": "https://x.com/framer/status/2066939366568804508",
+      "authorName": "Framer",
+      "role": "cta",
+      "mechanics": [
+        "typing",
+        "light_burst",
+        "staggered_fold",
+        "perspective_swing"
+      ],
+      "platform": "X",
+      "views": 2872333
+    },
+    {
+      "id": "hf-moment-M1170",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1170/clip.mp4",
+      "sourceUrl": "https://x.com/figma/status/2094835173691179022",
+      "authorName": "Figma",
+      "role": "hook",
+      "mechanics": [
+        "camera_push",
+        "cursor_lens_distortion",
+        "zoom_pullback",
+        "shader_drift"
+      ],
+      "platform": "X",
+      "views": 2662883
+    },
+    {
+      "id": "hf-moment-M1171",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1171/clip.mp4",
+      "sourceUrl": "https://x.com/figma/status/2094835173691179022",
+      "authorName": "Figma",
+      "role": "proof",
+      "mechanics": [
+        "hard_cut",
+        "slider_scrub",
+        "layout_snap",
+        "stepped_counter"
+      ],
+      "platform": "X",
+      "views": 2662883
+    },
+    {
+      "id": "hf-moment-M1172",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1172/clip.mp4",
+      "sourceUrl": "https://x.com/figma/status/2094835173691179022",
+      "authorName": "Figma",
+      "role": "cta",
+      "mechanics": [
+        "kinetic_type",
+        "word_stagger",
+        "hard_cut",
+        "stepped_logo_assembly"
+      ],
+      "platform": "X",
+      "views": 2662883
+    },
+    {
+      "id": "hf-moment-M1173",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1173/clip.mp4",
+      "sourceUrl": "https://x.com/chat/status/2102442240354165057",
+      "authorName": "XChat",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "mask_reveal",
+        "stagger",
+        "counter"
+      ],
+      "platform": "X",
+      "views": 2867676
+    },
+    {
+      "id": "hf-moment-M1174",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1174/clip.mp4",
+      "sourceUrl": "https://x.com/chat/status/2102442240354165057",
+      "authorName": "XChat",
+      "role": "proof",
+      "mechanics": [
+        "camera_push",
+        "ui_transition",
+        "kinetic_type",
+        "counter"
+      ],
+      "platform": "X",
+      "views": 2867676
+    },
+    {
+      "id": "hf-moment-M1175",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1175/clip.mp4",
+      "sourceUrl": "https://x.com/chat/status/2102442240354165057",
+      "authorName": "XChat",
+      "role": "proof",
+      "mechanics": [
+        "mask_reveal",
+        "camera_push",
+        "ui_transition",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 2867676
+    },
+    {
+      "id": "hf-moment-M1176",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1176/clip.mp4",
+      "sourceUrl": "https://x.com/chat/status/2102442240354165057",
+      "authorName": "XChat",
+      "role": "turn",
+      "mechanics": [
+        "mask_reveal",
+        "scale_unfold",
+        "orbit_path",
+        "camera_push"
+      ],
+      "platform": "X",
+      "views": 2867676
+    },
+    {
+      "id": "hf-moment-M1177",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1177/clip.mp4",
+      "sourceUrl": "https://x.com/chat/status/2102442240354165057",
+      "authorName": "XChat",
+      "role": "cta",
+      "mechanics": [
+        "mask_reveal",
+        "camera_push",
+        "alpha_ramp"
+      ],
+      "platform": "X",
+      "views": 2867676
+    },
+    {
+      "id": "hf-moment-M1178",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1178/clip.mp4",
+      "sourceUrl": "https://x.com/bot/status/2107949161878606089",
+      "authorName": "Grok Bot",
+      "role": "cta",
+      "mechanics": [
+        "scale_pulse",
+        "mask_reveal",
+        "logo_lockup",
+        "ease_out_slide"
+      ],
+      "platform": "X",
+      "views": 5680781
+    },
+    {
+      "id": "hf-moment-M1184",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1184/clip.mp4",
+      "sourceUrl": "https://x.com/shcallaway/status/2110038490859855990",
+      "authorName": "Sherwood",
+      "role": "hook",
+      "mechanics": [
+        "hard_cut",
+        "shockwave_ellipse",
+        "counter",
+        "tick_ring_fill"
+      ],
+      "platform": "X",
+      "views": 630648
+    },
+    {
+      "id": "hf-moment-M1185",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1185/clip.mp4",
+      "sourceUrl": "https://x.com/shcallaway/status/2110038490859855990",
+      "authorName": "Sherwood",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "glyph_step_reveal",
+        "card_flip",
+        "ui_transition"
+      ],
+      "platform": "X",
+      "views": 630648
+    },
+    {
+      "id": "hf-moment-M1186",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1186/clip.mp4",
+      "sourceUrl": "https://x.com/shcallaway/status/2110038490859855990",
+      "authorName": "Sherwood",
+      "role": "turn",
+      "mechanics": [
+        "kinetic_type",
+        "letter_flash",
+        "rotoscope_layering",
+        "type_on"
+      ],
+      "platform": "X",
+      "views": 630648
+    },
+    {
+      "id": "hf-moment-M1187",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1187/clip.mp4",
+      "sourceUrl": "https://x.com/shcallaway/status/2110038490859855990",
+      "authorName": "Sherwood",
+      "role": "proof",
+      "mechanics": [
+        "glitch_wipe",
+        "camera_push",
+        "stagger",
+        "ui_transition"
+      ],
+      "platform": "X",
+      "views": 630648
+    },
+    {
+      "id": "hf-moment-M1188",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1188/clip.mp4",
+      "sourceUrl": "https://x.com/shcallaway/status/2110038490859855990",
+      "authorName": "Sherwood",
+      "role": "proof",
+      "mechanics": [
+        "scramble_decode",
+        "letter_flicker",
+        "camera_pull_back",
+        "lens_glint"
+      ],
+      "platform": "X",
+      "views": 630648
+    },
+    {
+      "id": "hf-moment-M1189",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1189/clip.mp4",
+      "sourceUrl": "https://x.com/shcallaway/status/2110038490859855990",
+      "authorName": "Sherwood",
+      "role": "proof",
+      "mechanics": [
+        "scramble_decode",
+        "orbit_text",
+        "hard_cut",
+        "chart_build"
+      ],
+      "platform": "X",
+      "views": 630648
+    },
+    {
+      "id": "hf-moment-M1190",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1190/clip.mp4",
+      "sourceUrl": "https://x.com/shcallaway/status/2110038490859855990",
+      "authorName": "Sherwood",
+      "role": "proof",
+      "mechanics": [
+        "whip_pan",
+        "docking_transition",
+        "stagger",
+        "camera_pull_back"
+      ],
+      "platform": "X",
+      "views": 630648
+    },
+    {
+      "id": "hf-moment-M1191",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1191/clip.mp4",
+      "sourceUrl": "https://x.com/shcallaway/status/2110038490859855990",
+      "authorName": "Sherwood",
+      "role": "turn",
+      "mechanics": [
+        "stepped_wipe",
+        "ticker_scroll",
+        "flash_frames",
+        "rotoscope_layering"
+      ],
+      "platform": "X",
+      "views": 630648
+    },
+    {
+      "id": "hf-moment-M1192",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1192/clip.mp4",
+      "sourceUrl": "https://x.com/shcallaway/status/2110038490859855990",
+      "authorName": "Sherwood",
+      "role": "turn",
+      "mechanics": [
+        "counter",
+        "coin_flip_stagger",
+        "camera_pull_back",
+        "letter_flicker"
+      ],
+      "platform": "X",
+      "views": 630648
+    },
+    {
+      "id": "hf-moment-M1193",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1193/clip.mp4",
+      "sourceUrl": "https://x.com/shcallaway/status/2110038490859855990",
+      "authorName": "Sherwood",
+      "role": "proof",
+      "mechanics": [
+        "stagger",
+        "stepped_motion",
+        "camera_push",
+        "logo_lift"
+      ],
+      "platform": "X",
+      "views": 630648
+    },
+    {
+      "id": "hf-moment-M1194",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1194/clip.mp4",
+      "sourceUrl": "https://x.com/bflycomputer/status/2082496873655648632",
+      "authorName": "Butterfly",
+      "role": "hook",
+      "mechanics": [
+        "hard_cut",
+        "stagger",
+        "grid_build",
+        "color_flash"
+      ],
+      "platform": "X",
+      "views": 955519
+    },
+    {
+      "id": "hf-moment-M1195",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1195/clip.mp4",
+      "sourceUrl": "https://x.com/bflycomputer/status/2082496873655648632",
+      "authorName": "Butterfly",
+      "role": "proof",
+      "mechanics": [
+        "stagger",
+        "hard_cut",
+        "palette_swap",
+        "footage_overlay"
+      ],
+      "platform": "X",
+      "views": 955519
+    },
+    {
+      "id": "hf-moment-M1196",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1196/clip.mp4",
+      "sourceUrl": "https://x.com/bflycomputer/status/2082496873655648632",
+      "authorName": "Butterfly",
+      "role": "proof",
+      "mechanics": [
+        "stagger",
+        "hard_cut",
+        "ground_cut",
+        "footage_overlay"
+      ],
+      "platform": "X",
+      "views": 955519
+    },
+    {
+      "id": "hf-moment-M1197",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1197/clip.mp4",
+      "sourceUrl": "https://x.com/bflycomputer/status/2082496873655648632",
+      "authorName": "Butterfly",
+      "role": "cta",
+      "mechanics": [
+        "hard_cut",
+        "grid_build",
+        "ground_cut",
+        "icon_flip"
+      ],
+      "platform": "X",
+      "views": 955519
+    },
+    {
+      "id": "hf-moment-M1198",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1198/clip.mp4",
+      "sourceUrl": "https://x.com/anything/status/2090539079888674849",
+      "authorName": "Anything",
+      "role": "hook",
+      "mechanics": [
+        "mask_reveal",
+        "stagger",
+        "color_develop",
+        "slide_exit"
+      ],
+      "platform": "X",
+      "views": 1209373
+    },
+    {
+      "id": "hf-moment-M1199",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1199/clip.mp4",
+      "sourceUrl": "https://x.com/anything/status/2090539079888674849",
+      "authorName": "Anything",
+      "role": "proof",
+      "mechanics": [
+        "logo_spin",
+        "hard_cut",
+        "ui_cascade",
+        "perspective_tilt"
+      ],
+      "platform": "X",
+      "views": 1209373
+    },
+    {
+      "id": "hf-moment-M1200",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1200/clip.mp4",
+      "sourceUrl": "https://x.com/anything/status/2090539079888674849",
+      "authorName": "Anything",
+      "role": "turn",
+      "mechanics": [
+        "kinetic_type",
+        "hard_cut",
+        "parallax_strips",
+        "stepped_typing"
+      ],
+      "platform": "X",
+      "views": 1209373
+    },
+    {
+      "id": "hf-moment-M1201",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1201/clip.mp4",
+      "sourceUrl": "https://x.com/anything/status/2090539079888674849",
+      "authorName": "Anything",
+      "role": "cta",
+      "mechanics": [
+        "kinetic_type",
+        "converge",
+        "letter_typing",
+        "cross_dissolve"
+      ],
+      "platform": "X",
+      "views": 1209373
+    },
+    {
+      "id": "hf-moment-M1202",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1202/clip.mp4",
+      "sourceUrl": "https://x.com/FactoryAI/status/2066588050617249904",
+      "authorName": "Factory",
+      "role": "hook",
+      "mechanics": [
+        "hard_cut_strobe",
+        "palette_swap",
+        "glyph_scramble",
+        "image_cycle"
+      ],
+      "platform": "X",
+      "views": 1079868
+    },
+    {
+      "id": "hf-moment-M1203",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1203/clip.mp4",
+      "sourceUrl": "https://x.com/FactoryAI/status/2066588050617249904",
+      "authorName": "Factory",
+      "role": "hook",
+      "mechanics": [
+        "hard_cut_montage",
+        "typewriter_reveal",
+        "palette_flash",
+        "rotating_emblem"
+      ],
+      "platform": "X",
+      "views": 1079868
+    },
+    {
+      "id": "hf-moment-M1204",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1204/clip.mp4",
+      "sourceUrl": "https://x.com/figma/status/1920168282751185360",
+      "authorName": "Figma",
+      "role": "hook",
+      "mechanics": [
+        "stagger",
+        "stop_motion_redraw",
+        "hard_cut",
+        "stepped_scale"
+      ],
+      "platform": "X",
+      "views": 352227
+    },
+    {
+      "id": "hf-moment-M1205",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1205/clip.mp4",
+      "sourceUrl": "https://x.com/figma/status/1920168282751185360",
+      "authorName": "Figma",
+      "role": "proof",
+      "mechanics": [
+        "ui_transition",
+        "stroke_reveal",
+        "hard_cut",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 352227
+    },
+    {
+      "id": "hf-moment-M1206",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1206/clip.mp4",
+      "sourceUrl": "https://x.com/figma/status/1920168282751185360",
+      "authorName": "Figma",
+      "role": "turn",
+      "mechanics": [
+        "stop_motion_replacement",
+        "radial_burst",
+        "stepped_scroll",
+        "layered_parallax"
+      ],
+      "platform": "X",
+      "views": 352227
+    },
+    {
+      "id": "hf-moment-M1207",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1207/clip.mp4",
+      "sourceUrl": "https://x.com/figma/status/1920168282751185360",
+      "authorName": "Figma",
+      "role": "cta",
+      "mechanics": [
+        "converge",
+        "texture_swap",
+        "hard_cut",
+        "stepped_scale"
+      ],
+      "platform": "X",
+      "views": 352227
+    },
+    {
+      "id": "hf-moment-M1208",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1208/clip.mp4",
+      "sourceUrl": "https://x.com/aidotcom/status/2020664043590090820",
+      "authorName": "ai.com",
+      "role": "hook",
+      "mechanics": [
+        "hard_cut",
+        "light_trail",
+        "scale_depth",
+        "lens_flare"
+      ],
+      "platform": "X",
+      "views": 1239867
+    },
+    {
+      "id": "hf-moment-M1209",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1209/clip.mp4",
+      "sourceUrl": "https://x.com/aidotcom/status/2020664043590090820",
+      "authorName": "ai.com",
+      "role": "turn",
+      "mechanics": [
+        "light_trail",
+        "flare_burst",
+        "line_draw",
+        "mask_reveal"
+      ],
+      "platform": "X",
+      "views": 1239867
+    },
+    {
+      "id": "hf-moment-M1210",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1210/clip.mp4",
+      "sourceUrl": "https://x.com/harvey/status/2089722668761432349",
+      "authorName": "Harvey",
+      "role": "hook",
+      "mechanics": [
+        "stroke_trim",
+        "stepped_zoom",
+        "hard_cut",
+        "wipe_on"
+      ],
+      "platform": "X",
+      "views": 248443
+    },
+    {
+      "id": "hf-moment-M1211",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1211/clip.mp4",
+      "sourceUrl": "https://x.com/harvey/status/2089722668761432349",
+      "authorName": "Harvey",
+      "role": "turn",
+      "mechanics": [
+        "type_on",
+        "wipe_reveal",
+        "camera_pullback",
+        "hard_cut"
+      ],
+      "platform": "X",
+      "views": 248443
+    },
+    {
+      "id": "hf-moment-M1212",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1212/clip.mp4",
+      "sourceUrl": "https://x.com/harvey/status/2089722668761432349",
+      "authorName": "Harvey",
+      "role": "proof",
+      "mechanics": [
+        "cursor_click",
+        "gradient_wipe",
+        "hard_swap",
+        "ease_out_scale"
+      ],
+      "platform": "X",
+      "views": 248443
+    },
+    {
+      "id": "hf-moment-M1213",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1213/clip.mp4",
+      "sourceUrl": "https://x.com/harvey/status/2089722668761432349",
+      "authorName": "Harvey",
+      "role": "cta",
+      "mechanics": [
+        "camera_pullback",
+        "radial_split",
+        "light_wedge_reveal",
+        "on_twos"
+      ],
+      "platform": "X",
+      "views": 248443
+    },
+    {
+      "id": "hf-moment-M1214",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1214/clip.mp4",
+      "sourceUrl": "https://x.com/nikitabier/status/2047747631624183889",
+      "authorName": "Nikita Bier",
+      "role": "hook",
+      "mechanics": [
+        "camera_push",
+        "mask_reveal",
+        "ui_transition",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 1942641
+    },
+    {
+      "id": "hf-moment-M1215",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1215/clip.mp4",
+      "sourceUrl": "https://x.com/nikitabier/status/2047747631624183889",
+      "authorName": "Nikita Bier",
+      "role": "proof",
+      "mechanics": [
+        "stagger",
+        "ui_transition",
+        "mask_reveal",
+        "camera_push"
+      ],
+      "platform": "X",
+      "views": 1942641
+    },
+    {
+      "id": "hf-moment-M1216",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1216/clip.mp4",
+      "sourceUrl": "https://x.com/nikitabier/status/2047747631624183889",
+      "authorName": "Nikita Bier",
+      "role": "turn",
+      "mechanics": [
+        "stagger",
+        "kinetic_type",
+        "camera_push",
+        "mask_reveal"
+      ],
+      "platform": "X",
+      "views": 1942641
+    },
+    {
+      "id": "hf-moment-M1217",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1217/clip.mp4",
+      "sourceUrl": "https://x.com/nikitabier/status/2047747631624183889",
+      "authorName": "Nikita Bier",
+      "role": "cta",
+      "mechanics": [
+        "kinetic_type",
+        "mask_reveal",
+        "ui_transition",
+        "camera_push"
+      ],
+      "platform": "X",
+      "views": 1942641
+    },
+    {
+      "id": "hf-moment-M1218",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1218/clip.mp4",
+      "sourceUrl": "https://x.com/linear/status/2079233260161323371",
+      "authorName": "Linear",
+      "role": "hook",
+      "mechanics": [
+        "light_sweep",
+        "hard_cut",
+        "camera_pan",
+        "node_activation"
+      ],
+      "platform": "X",
+      "views": 620541
+    },
+    {
+      "id": "hf-moment-M1219",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1219/clip.mp4",
+      "sourceUrl": "https://x.com/linear/status/2079233260161323371",
+      "authorName": "Linear",
+      "role": "proof",
+      "mechanics": [
+        "light_sweep",
+        "rack_focus",
+        "camera_glide",
+        "hard_cut"
+      ],
+      "platform": "X",
+      "views": 620541
+    },
+    {
+      "id": "hf-moment-M1220",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1220/clip.mp4",
+      "sourceUrl": "https://x.com/linear/status/2079233260161323371",
+      "authorName": "Linear",
+      "role": "turn",
+      "mechanics": [
+        "camera_pullback",
+        "camera_roll",
+        "light_sweep",
+        "opacity_fade"
+      ],
+      "platform": "X",
+      "views": 620541
+    },
+    {
+      "id": "hf-moment-M1221",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1221/clip.mp4",
+      "sourceUrl": "https://x.com/davidhaz/status/2110656515996832231",
+      "authorName": "David Haz",
+      "role": "hook",
+      "mechanics": [
+        "hard_cut",
+        "kinetic_type",
+        "glitch_transition",
+        "motion_blur_smear"
+      ],
+      "platform": "X",
+      "views": 70900
+    },
+    {
+      "id": "hf-moment-M1222",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1222/clip.mp4",
+      "sourceUrl": "https://x.com/davidhaz/status/2110656515996832231",
+      "authorName": "David Haz",
+      "role": "proof",
+      "mechanics": [
+        "caption_roll",
+        "cross_dissolve",
+        "perspective_scroll",
+        "hard_cut"
+      ],
+      "platform": "X",
+      "views": 70900
+    },
+    {
+      "id": "hf-moment-M1223",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1223/clip.mp4",
+      "sourceUrl": "https://x.com/davidhaz/status/2110656515996832231",
+      "authorName": "David Haz",
+      "role": "cta",
+      "mechanics": [
+        "glitch_transition",
+        "rgb_split_pulse",
+        "slow_scale",
+        "scanline_texture"
+      ],
+      "platform": "X",
+      "views": 70900
+    },
+    {
+      "id": "hf-moment-M1224",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1224/clip.mp4",
+      "sourceUrl": "https://x.com/mert/status/1983581242755879376",
+      "authorName": "mert",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "glitch_slice",
+        "shape_morph",
+        "hard_cut"
+      ],
+      "platform": "X",
+      "views": 664998
+    },
+    {
+      "id": "hf-moment-M1225",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1225/clip.mp4",
+      "sourceUrl": "https://x.com/mert/status/1983581242755879376",
+      "authorName": "mert",
+      "role": "proof",
+      "mechanics": [
+        "ui_state_swap",
+        "kinetic_type",
+        "camera_push",
+        "crt_glitch"
+      ],
+      "platform": "X",
+      "views": 664998
+    },
+    {
+      "id": "hf-moment-M1226",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1226/clip.mp4",
+      "sourceUrl": "https://x.com/vercel/status/2092999180780556643",
+      "authorName": "Vercel",
+      "role": "hook",
+      "mechanics": [
+        "cursor_driven_light",
+        "shape_morph",
+        "hard_cut",
+        "theme_swap"
+      ],
+      "platform": "X",
+      "views": 925629
+    },
+    {
+      "id": "hf-moment-M1227",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1227/clip.mp4",
+      "sourceUrl": "https://x.com/vercel/status/2092999180780556643",
+      "authorName": "Vercel",
+      "role": "proof",
+      "mechanics": [
+        "cursor_driven_light",
+        "color_shift",
+        "hard_cut",
+        "fast_sweep"
+      ],
+      "platform": "X",
+      "views": 925629
+    },
+    {
+      "id": "hf-moment-M1228",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1228/clip.mp4",
+      "sourceUrl": "https://x.com/anything/status/2090539079888674849",
+      "authorName": "Anything",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "stagger",
+        "orbit",
+        "logo_pop"
+      ],
+      "platform": "X",
+      "views": 1209373
+    },
+    {
+      "id": "hf-moment-M1229",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1229/clip.mp4",
+      "sourceUrl": "https://x.com/figma/status/1920168282751185360",
+      "authorName": "Figma",
+      "role": "proof",
+      "mechanics": [
+        "cursor_drag",
+        "slider_scrub",
+        "progressive_blur",
+        "stepped_zoom"
+      ],
+      "platform": "X",
+      "views": 352227
+    },
+    {
+      "id": "hf-moment-M1230",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1230/clip.mp4",
+      "sourceUrl": "https://x.com/aibek_design/status/1957856991608512898",
+      "authorName": "Aibek Yegemberdin",
+      "role": "hook",
+      "mechanics": [
+        "hard_cut_montage",
+        "camera_pan",
+        "kinetic_type",
+        "cursor_drag"
+      ],
+      "platform": "X",
+      "views": 905761
+    },
+    {
+      "id": "hf-moment-M1231",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1231/clip.mp4",
+      "sourceUrl": "https://x.com/kitlangton/status/2103884479710523586",
+      "authorName": "Kit Langton",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "morph_chain",
+        "squash_bounce",
+        "camera_push"
+      ],
+      "platform": "X",
+      "views": 909706
+    },
+    {
+      "id": "hf-moment-M1232",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1232/clip.mp4",
+      "sourceUrl": "https://x.com/HeyGen/status/2069463762009276818",
+      "authorName": "HeyGen",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "mask_reveal",
+        "hard_cut",
+        "caption_fade"
+      ],
+      "platform": "X",
+      "views": 810314
+    },
+    {
+      "id": "hf-moment-M1233",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1233/clip.mp4",
+      "sourceUrl": "https://x.com/HeyGen/status/2069463762009276818",
+      "authorName": "HeyGen",
+      "role": "proof",
+      "mechanics": [
+        "camera_pull",
+        "playhead_fill",
+        "counter",
+        "label_pop"
+      ],
+      "platform": "X",
+      "views": 810314
+    },
+    {
+      "id": "hf-moment-M1234",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1234/clip.mp4",
+      "sourceUrl": "https://x.com/Replit/status/2053891504989753817",
+      "authorName": "Replit ⠕",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "shape_morph",
+        "hard_scale_cut",
+        "fly_through"
+      ],
+      "platform": "X",
+      "views": 709850
+    },
+    {
+      "id": "hf-moment-M1235",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1235/clip.mp4",
+      "sourceUrl": "https://x.com/Replit/status/2053891504989753817",
+      "authorName": "Replit ⠕",
+      "role": "proof",
+      "mechanics": [
+        "shape_morph",
+        "cursor_click",
+        "camera_push",
+        "typing"
+      ],
+      "platform": "X",
+      "views": 709850
+    },
+    {
+      "id": "hf-moment-M1236",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1236/clip.mp4",
+      "sourceUrl": "https://x.com/vral/status/2079267940021477864",
+      "authorName": "Veeral Patel",
+      "role": "hook",
+      "mechanics": [
+        "stagger",
+        "kinetic_type",
+        "ui_transition",
+        "camera_push"
+      ],
+      "platform": "X",
+      "views": 890028
+    },
+    {
+      "id": "hf-moment-M1237",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1237/clip.mp4",
+      "sourceUrl": "https://x.com/BNBCHAIN/status/2094757311080444274",
+      "authorName": "BNB Chain",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "stagger",
+        "coin_spin",
+        "counter"
+      ],
+      "platform": "X",
+      "views": 831405
+    },
+    {
+      "id": "hf-moment-M1238",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1238/clip.mp4",
+      "sourceUrl": "https://x.com/BNBCHAIN/status/2094757311080444274",
+      "authorName": "BNB Chain",
+      "role": "proof",
+      "mechanics": [
+        "hard_cut_swap",
+        "counter",
+        "stagger",
+        "slide_exit"
+      ],
+      "platform": "X",
+      "views": 831405
+    },
+    {
+      "id": "hf-moment-M1239",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1239/clip.mp4",
+      "sourceUrl": "https://x.com/harvey/status/2089722668761432349",
+      "authorName": "Harvey",
+      "role": "hook",
+      "mechanics": [
+        "stop_motion_on_twos",
+        "scale_converge",
+        "extrude_3d",
+        "hard_cut"
+      ],
+      "platform": "X",
+      "views": 248443
+    },
+    {
+      "id": "hf-moment-M1240",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1240/clip.mp4",
+      "sourceUrl": "https://x.com/harvey/status/2089722668761432349",
+      "authorName": "Harvey",
+      "role": "proof",
+      "mechanics": [
+        "stepped_scale",
+        "fold_morph",
+        "rise_settle",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 248443
+    },
+    {
+      "id": "hf-moment-M1241",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1241/clip.mp4",
+      "sourceUrl": "https://x.com/nikitabier/status/2047747631624183889",
+      "authorName": "Nikita Bier",
+      "role": "proof",
+      "mechanics": [
+        "camera_push",
+        "kinetic_type",
+        "ui_transition",
+        "mask_reveal"
+      ],
+      "platform": "X",
+      "views": 1942641
+    },
+    {
+      "id": "hf-moment-M1242",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1242/clip.mp4",
+      "sourceUrl": "https://x.com/suno/status/2097714273942163823",
+      "authorName": "Suno",
+      "role": "hook",
+      "mechanics": [
+        "split_reveal",
+        "ui_transition",
+        "focus_pull",
+        "scale_from_center"
+      ],
+      "platform": "X",
+      "views": 999287
+    },
+    {
+      "id": "hf-moment-M1243",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1243/clip.mp4",
+      "sourceUrl": "https://x.com/suno/status/2097714273942163823",
+      "authorName": "Suno",
+      "role": "proof",
+      "mechanics": [
+        "drag_and_drop",
+        "typewriter",
+        "hard_cut",
+        "glow_sweep"
+      ],
+      "platform": "X",
+      "views": 999287
+    },
+    {
+      "id": "hf-moment-M1244",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1244/clip.mp4",
+      "sourceUrl": "https://x.com/p0/status/1986479181912539471",
+      "authorName": "Parallel Web Systems",
+      "role": "hook",
+      "mechanics": [
+        "typewriter_text",
+        "hard_cut_pop",
+        "stagger",
+        "glyph_matrix_flicker"
+      ],
+      "platform": "X",
+      "views": 670437
+    },
+    {
+      "id": "hf-moment-M1245",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1245/clip.mp4",
+      "sourceUrl": "https://x.com/p0/status/1986479181912539471",
+      "authorName": "Parallel Web Systems",
+      "role": "proof",
+      "mechanics": [
+        "typewriter_text",
+        "particle_gather",
+        "stepped_scale",
+        "column_fill"
+      ],
+      "platform": "X",
+      "views": 670437
+    },
+    {
+      "id": "hf-moment-M1246",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1246/clip.mp4",
+      "sourceUrl": "https://x.com/linear/status/2079233260161323371",
+      "authorName": "Linear",
+      "role": "proof",
+      "mechanics": [
+        "light_sweep",
+        "rack_focus",
+        "node_activation",
+        "hard_cut"
+      ],
+      "platform": "X",
+      "views": 620541
+    },
+    {
+      "id": "hf-moment-M1247",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1247/clip.mp4",
+      "sourceUrl": "https://x.com/ElevenLabs/status/2069111326987673761",
+      "authorName": "ElevenLabs",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "mask_reveal",
+        "scale_from_seed",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 886290
+    },
+    {
+      "id": "hf-moment-M1248",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1248/clip.mp4",
+      "sourceUrl": "https://x.com/ElevenLabs/status/2069111326987673761",
+      "authorName": "ElevenLabs",
+      "role": "proof",
+      "mechanics": [
+        "mask_reveal",
+        "stagger",
+        "hard_cut",
+        "dim_stack"
+      ],
+      "platform": "X",
+      "views": 886290
+    },
+    {
+      "id": "hf-moment-M1249",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1249/clip.mp4",
+      "sourceUrl": "https://x.com/davidhaz/status/2110656515996832231",
+      "authorName": "David Haz",
+      "role": "proof",
+      "mechanics": [
+        "caption_roll",
+        "color_wipe",
+        "perspective_drift",
+        "rgb_fringe"
+      ],
+      "platform": "X",
+      "views": 70900
+    },
+    {
+      "id": "hf-moment-M1250",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1250/clip.mp4",
+      "sourceUrl": "https://x.com/okx/status/2071885466916270467",
+      "authorName": "OKX",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "hard_cut",
+        "glitch_burst",
+        "hud_flash"
+      ],
+      "platform": "X",
+      "views": 828460
+    },
+    {
+      "id": "hf-moment-M1251",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1251/clip.mp4",
+      "sourceUrl": "https://x.com/relume_ai/status/2092344512207048726",
+      "authorName": "Relume",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "stagger",
+        "cursor_drag",
+        "camera_push"
+      ],
+      "platform": "X",
+      "views": 757398
+    },
+    {
+      "id": "hf-moment-M1252",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1252/clip.mp4",
+      "sourceUrl": "https://x.com/relume_ai/status/2092344512207048726",
+      "authorName": "Relume",
+      "role": "proof",
+      "mechanics": [
+        "ui_transition",
+        "camera_push",
+        "cursor_drag",
+        "hard_cut"
+      ],
+      "platform": "X",
+      "views": 757398
+    },
+    {
+      "id": "hf-moment-M1253",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1253/clip.mp4",
+      "sourceUrl": "https://x.com/base/status/2059305907385704529",
+      "authorName": "Base",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "stagger",
+        "squash_stretch",
+        "camera_push"
+      ],
+      "platform": "X",
+      "views": 1016313
+    },
+    {
+      "id": "hf-moment-M1254",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1254/clip.mp4",
+      "sourceUrl": "https://x.com/nikitabier/status/2047747631624183889",
+      "authorName": "Nikita Bier",
+      "role": "proof",
+      "mechanics": [
+        "kinetic_type",
+        "ui_transition",
+        "camera_push",
+        "mask_reveal"
+      ],
+      "platform": "X",
+      "views": 1942641
+    },
+    {
+      "id": "hf-moment-M1255",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1255/clip.mp4",
+      "sourceUrl": "https://x.com/figma/status/1920168282751185360",
+      "authorName": "Figma",
+      "role": "proof",
+      "mechanics": [
+        "shape_replacement",
+        "marching_hatch",
+        "anchor_nodes",
+        "stepped_slide"
+      ],
+      "platform": "X",
+      "views": 352227
+    },
+    {
+      "id": "hf-moment-M1256",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1256/clip.mp4",
+      "sourceUrl": "https://x.com/harvey/status/2089722668761432349",
+      "authorName": "Harvey",
+      "role": "proof",
+      "mechanics": [
+        "stepped_scale",
+        "slide_converge",
+        "hard_morph",
+        "line_stagger"
+      ],
+      "platform": "X",
+      "views": 248443
+    },
+    {
+      "id": "hf-moment-M1257",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1257/clip.mp4",
+      "sourceUrl": "https://x.com/anything/status/2090539079888674849",
+      "authorName": "Anything",
+      "role": "proof",
+      "mechanics": [
+        "wheel_rotation",
+        "hard_cut",
+        "ui_transition",
+        "stepped_typing"
+      ],
+      "platform": "X",
+      "views": 1209373
+    },
+    {
+      "id": "hf-moment-M1258",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1258/clip.mp4",
+      "sourceUrl": "https://x.com/linear/status/2079233260161323371",
+      "authorName": "Linear",
+      "role": "proof",
+      "mechanics": [
+        "light_sweep",
+        "rack_focus",
+        "camera_drift",
+        "hard_cut"
+      ],
+      "platform": "X",
+      "views": 620541
+    },
+    {
+      "id": "hf-moment-M1259",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1259/clip.mp4",
+      "sourceUrl": "https://x.com/base/status/2059305907385704529",
+      "authorName": "Base",
+      "role": "proof",
+      "mechanics": [
+        "pixel_flicker",
+        "typewriter",
+        "camera_pull",
+        "hard_cut"
+      ],
+      "platform": "X",
+      "views": 1016313
+    },
+    {
+      "id": "hf-moment-M1260",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1260/clip.mp4",
+      "sourceUrl": "https://x.com/suno/status/2097714273942163823",
+      "authorName": "Suno",
+      "role": "turn",
+      "mechanics": [
+        "toggle_slide",
+        "hard_cut",
+        "drag_and_drop",
+        "press_squeeze"
+      ],
+      "platform": "X",
+      "views": 999287
+    },
+    {
+      "id": "hf-moment-M1261",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1261/clip.mp4",
+      "sourceUrl": "https://x.com/vercel/status/2092999180780556643",
+      "authorName": "Vercel",
+      "role": "proof",
+      "mechanics": [
+        "stagger",
+        "hard_cut",
+        "stroke_trace",
+        "counter"
+      ],
+      "platform": "X",
+      "views": 925629
+    },
+    {
+      "id": "hf-moment-M1262",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1262/clip.mp4",
+      "sourceUrl": "https://x.com/aibek_design/status/1957856991608512898",
+      "authorName": "Aibek Yegemberdin",
+      "role": "cta",
+      "mechanics": [
+        "word_stagger_rise",
+        "scale_reveal",
+        "color_crossfade",
+        "letter_stagger"
+      ],
+      "platform": "X",
+      "views": 905761
+    },
+    {
+      "id": "hf-moment-M1263",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1263/clip.mp4",
+      "sourceUrl": "https://x.com/vral/status/2079267940021477864",
+      "authorName": "Veeral Patel",
+      "role": "cta",
+      "mechanics": [
+        "kinetic_type",
+        "ui_transition",
+        "mask_reveal"
+      ],
+      "platform": "X",
+      "views": 890028
+    },
+    {
+      "id": "hf-moment-M1264",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1264/clip.mp4",
+      "sourceUrl": "https://x.com/ElevenLabs/status/2069111326987673761",
+      "authorName": "ElevenLabs",
+      "role": "turn",
+      "mechanics": [
+        "counter",
+        "color_ramp",
+        "whip_pan",
+        "crop_reveal"
+      ],
+      "platform": "X",
+      "views": 886290
+    },
+    {
+      "id": "hf-moment-M1265",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1265/clip.mp4",
+      "sourceUrl": "https://x.com/okx/status/2071885466916270467",
+      "authorName": "OKX",
+      "role": "cta",
+      "mechanics": [
+        "kinetic_type",
+        "cursor_blink",
+        "color_inversion",
+        "hard_cut"
+      ],
+      "platform": "X",
+      "views": 828460
+    },
+    {
+      "id": "hf-moment-M1266",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1266/clip.mp4",
+      "sourceUrl": "https://x.com/HeyGen/status/2069463762009276818",
+      "authorName": "HeyGen",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "mask_reveal",
+        "hard_cut",
+        "slide_exit"
+      ],
+      "platform": "X",
+      "views": 810314
+    },
+    {
+      "id": "hf-moment-M1267",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1267/clip.mp4",
+      "sourceUrl": "https://x.com/BNBCHAIN/status/2094757311080444274",
+      "authorName": "BNB Chain",
+      "role": "turn",
+      "mechanics": [
+        "typewriter",
+        "caret_blink",
+        "camera_pan",
+        "color_crossfade"
+      ],
+      "platform": "X",
+      "views": 831405
+    },
+    {
+      "id": "hf-moment-M1268",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1268/clip.mp4",
+      "sourceUrl": "https://x.com/relume_ai/status/2092344512207048726",
+      "authorName": "Relume",
+      "role": "turn",
+      "mechanics": [
+        "path_trail",
+        "camera_whip",
+        "kinetic_type",
+        "scale_grow"
+      ],
+      "platform": "X",
+      "views": 757398
+    },
+    {
+      "id": "hf-moment-M1269",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1269/clip.mp4",
+      "sourceUrl": "https://x.com/Replit/status/2053891504989753817",
+      "authorName": "Replit ⠕",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "counter",
+        "scale_grow",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 709850
+    },
+    {
+      "id": "hf-moment-M1270",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1270/clip.mp4",
+      "sourceUrl": "https://x.com/p0/status/1986479181912539471",
+      "authorName": "Parallel Web Systems",
+      "role": "turn",
+      "mechanics": [
+        "typewriter_text",
+        "stagger",
+        "color_highlight",
+        "callout_circle"
+      ],
+      "platform": "X",
+      "views": 670437
+    },
+    {
+      "id": "hf-moment-M1271",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1271/clip.mp4",
+      "sourceUrl": "https://x.com/kitlangton/status/2103884479710523586",
+      "authorName": "Kit Langton",
+      "role": "proof",
+      "mechanics": [
+        "block_sweep",
+        "stamp_slam",
+        "vhs_rewind",
+        "kinetic_type"
+      ],
+      "platform": "X",
+      "views": 909706
+    },
+    {
+      "id": "hf-moment-M1272",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1272/clip.mp4",
+      "sourceUrl": "https://x.com/Lovable/status/2053874566460752191",
+      "authorName": "Lovable",
+      "role": "proof",
+      "mechanics": [
+        "typing",
+        "cursor_press",
+        "stagger",
+        "glow_bloom"
+      ],
+      "platform": "X",
+      "views": 407083
+    },
+    {
+      "id": "hf-moment-M1273",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1273/clip.mp4",
+      "sourceUrl": "https://x.com/bot/status/2090852881373311369",
+      "authorName": "Grok Bot",
+      "role": "hook",
+      "mechanics": [
+        "stagger",
+        "camera_pull_back",
+        "hard_cut_reveal",
+        "kinetic_type"
+      ],
+      "platform": "X",
+      "views": 26159102
+    },
+    {
+      "id": "hf-moment-M1274",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1274/clip.mp4",
+      "sourceUrl": "https://x.com/ideogram_ai/status/2062202208700313872",
+      "authorName": "Ideogram",
+      "role": "cta",
+      "mechanics": [
+        "kinetic_type",
+        "scale_step",
+        "logo_reveal",
+        "stroke_draw"
+      ],
+      "platform": "X",
+      "views": 2246633
+    },
+    {
+      "id": "hf-moment-M1275",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1275/clip.mp4",
+      "sourceUrl": "https://x.com/OpenAI/status/2084352161404920316",
+      "authorName": "OpenAI",
+      "role": "cta",
+      "mechanics": [
+        "color_step",
+        "hard_cut",
+        "kinetic_type",
+        "logo_unfold"
+      ],
+      "platform": "X",
+      "views": 1815883
+    },
+    {
+      "id": "hf-moment-M1276",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1276/clip.mp4",
+      "sourceUrl": "https://x.com/hyojun_at/status/2069497198879048131",
+      "authorName": "jun",
+      "role": "hook",
+      "mechanics": [
+        "camera_push",
+        "kinetic_type",
+        "ui_transition",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 1701886
+    },
+    {
+      "id": "hf-moment-M1277",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1277/clip.mp4",
+      "sourceUrl": "https://x.com/rincidium/status/1995946528343818656",
+      "authorName": "Ray",
+      "role": "cta",
+      "mechanics": [
+        "kinetic_type",
+        "scale_down",
+        "blur_exit",
+        "hard_cut"
+      ],
+      "platform": "X",
+      "views": 1503428
+    },
+    {
+      "id": "hf-moment-M1278",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1278/clip.mp4",
+      "sourceUrl": "https://x.com/davidhdev/status/2080224101432447094",
+      "authorName": "David Haz",
+      "role": "hook",
+      "mechanics": [
+        "gradient_shimmer",
+        "hard_cut_background",
+        "white_flash",
+        "scale_snap"
+      ],
+      "platform": "X",
+      "views": 1426583
+    },
+    {
+      "id": "hf-moment-M1279",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1279/clip.mp4",
+      "sourceUrl": "https://x.com/ChatGPT/status/2095597502368284748",
+      "authorName": "ChatGPT",
+      "role": "turn",
+      "mechanics": [
+        "particle_dissolve",
+        "stagger",
+        "opacity_fade",
+        "slow_rotation"
+      ],
+      "platform": "X",
+      "views": 1824563
+    },
+    {
+      "id": "hf-moment-M1280",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1280/clip.mp4",
+      "sourceUrl": "https://x.com/lightreelai/status/2100600825307423095",
+      "authorName": "Lightreel AI",
+      "role": "cta",
+      "mechanics": [
+        "color_strobe",
+        "static_title",
+        "hard_cut"
+      ],
+      "platform": "X",
+      "views": 1344112
+    },
+    {
+      "id": "hf-moment-M1281",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1281/clip.mp4",
+      "sourceUrl": "https://x.com/usewonder/status/2044099145997402272",
+      "authorName": "Wonder",
+      "role": "hook",
+      "mechanics": [
+        "cursor_drag",
+        "typewriter_steps",
+        "camera_push",
+        "background_sweep"
+      ],
+      "platform": "X",
+      "views": 1287893
+    },
+    {
+      "id": "hf-moment-M1282",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1282/clip.mp4",
+      "sourceUrl": "https://x.com/NousResearch/status/2097403926072987986",
+      "authorName": "Nous Research",
+      "role": "turn",
+      "mechanics": [
+        "diagonal_mask_erase",
+        "branch_erosion",
+        "mesh_morph",
+        "beam_ignition"
+      ],
+      "platform": "X",
+      "views": 653394
+    },
+    {
+      "id": "hf-moment-M1283",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1283/clip.mp4",
+      "sourceUrl": "https://x.com/Truffievfx/status/2103850308850139217",
+      "authorName": "Truffie",
+      "role": "turn",
+      "mechanics": [
+        "focus_pull",
+        "strike_through",
+        "scale_zoom",
+        "cursor_click"
+      ],
+      "platform": "X",
+      "views": 646669
+    },
+    {
+      "id": "hf-moment-M1284",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1284/clip.mp4",
+      "sourceUrl": "https://x.com/harvey/status/2089722668761432349",
+      "authorName": "Harvey",
+      "role": "turn",
+      "mechanics": [
+        "kinetic_type",
+        "mask_reveal",
+        "hard_cut",
+        "ink_fill"
+      ],
+      "platform": "X",
+      "views": 248443
+    },
+    {
+      "id": "hf-moment-M1285",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1285/clip.mp4",
+      "sourceUrl": "https://x.com/base/status/2059305907385704529",
+      "authorName": "Base",
+      "role": "proof",
+      "mechanics": [
+        "pixel_flicker",
+        "path_draw",
+        "hard_cut",
+        "color_step"
+      ],
+      "platform": "X",
+      "views": 1016313
+    },
+    {
+      "id": "hf-moment-M1286",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1286/clip.mp4",
+      "sourceUrl": "https://x.com/suno/status/2097714273942163823",
+      "authorName": "Suno",
+      "role": "proof",
+      "mechanics": [
+        "carousel",
+        "text_swap",
+        "stagger",
+        "toggle_slide"
+      ],
+      "platform": "X",
+      "views": 999287
+    },
+    {
+      "id": "hf-moment-M1287",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1287/clip.mp4",
+      "sourceUrl": "https://x.com/vercel/status/2092999180780556643",
+      "authorName": "Vercel",
+      "role": "proof",
+      "mechanics": [
+        "stroke_trace",
+        "light_accumulation",
+        "hard_cut",
+        "lagged_follow"
+      ],
+      "platform": "X",
+      "views": 925629
+    },
+    {
+      "id": "hf-moment-M1288",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1288/clip.mp4",
+      "sourceUrl": "https://x.com/aibek_design/status/1957856991608512898",
+      "authorName": "Aibek Yegemberdin",
+      "role": "turn",
+      "mechanics": [
+        "per_glyph_ripple",
+        "blur_dissolve",
+        "stagger",
+        "camera_push"
+      ],
+      "platform": "X",
+      "views": 905761
+    },
+    {
+      "id": "hf-moment-M1289",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1289/clip.mp4",
+      "sourceUrl": "https://x.com/ElevenLabs/status/2069111326987673761",
+      "authorName": "ElevenLabs",
+      "role": "cta",
+      "mechanics": [
+        "crop_mask",
+        "kinetic_type",
+        "text_roll",
+        "shimmer"
+      ],
+      "platform": "X",
+      "views": 886290
+    },
+    {
+      "id": "hf-moment-M1290",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1290/clip.mp4",
+      "sourceUrl": "https://x.com/okx/status/2071885466916270467",
+      "authorName": "OKX",
+      "role": "proof",
+      "mechanics": [
+        "kinetic_type",
+        "whip_pan",
+        "parallax",
+        "progress_fill"
+      ],
+      "platform": "X",
+      "views": 828460
+    },
+    {
+      "id": "hf-moment-M1291",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1291/clip.mp4",
+      "sourceUrl": "https://x.com/HeyGen/status/2069463762009276818",
+      "authorName": "HeyGen",
+      "role": "cta",
+      "mechanics": [
+        "blur_slide",
+        "cursor_click",
+        "squash_stretch",
+        "wipe_reveal"
+      ],
+      "platform": "X",
+      "views": 810314
+    },
+    {
+      "id": "hf-moment-M1292",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1292/clip.mp4",
+      "sourceUrl": "https://x.com/BNBCHAIN/status/2094757311080444274",
+      "authorName": "BNB Chain",
+      "role": "cta",
+      "mechanics": [
+        "logo_reveal",
+        "3d_spin",
+        "slide_in",
+        "color_crossfade"
+      ],
+      "platform": "X",
+      "views": 831405
+    },
+    {
+      "id": "hf-moment-M1293",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1293/clip.mp4",
+      "sourceUrl": "https://x.com/relume_ai/status/2092344512207048726",
+      "authorName": "Relume",
+      "role": "cta",
+      "mechanics": [
+        "scale_grow",
+        "hard_cut",
+        "stagger",
+        "slide"
+      ],
+      "platform": "X",
+      "views": 757398
+    },
+    {
+      "id": "hf-moment-M1294",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1294/clip.mp4",
+      "sourceUrl": "https://x.com/Replit/status/2053891504989753817",
+      "authorName": "Replit ⠕",
+      "role": "cta",
+      "mechanics": [
+        "shape_morph",
+        "kinetic_type",
+        "whip_pan",
+        "color_wash"
+      ],
+      "platform": "X",
+      "views": 709850
+    },
+    {
+      "id": "hf-moment-M1295",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1295/clip.mp4",
+      "sourceUrl": "https://x.com/p0/status/1986479181912539471",
+      "authorName": "Parallel Web Systems",
+      "role": "turn",
+      "mechanics": [
+        "stagger",
+        "typewriter_text",
+        "texture_pop",
+        "hard_cut"
+      ],
+      "platform": "X",
+      "views": 670437
+    },
+    {
+      "id": "hf-moment-M1296",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1296/clip.mp4",
+      "sourceUrl": "https://x.com/kitlangton/status/2103884479710523586",
+      "authorName": "Kit Langton",
+      "role": "turn",
+      "mechanics": [
+        "camera_pull",
+        "glyph_morph",
+        "connector_draw",
+        "orbit"
+      ],
+      "platform": "X",
+      "views": 909706
+    },
+    {
+      "id": "hf-moment-M1297",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1297/clip.mp4",
+      "sourceUrl": "https://x.com/Lovable/status/2053874566460752191",
+      "authorName": "Lovable",
+      "role": "proof",
+      "mechanics": [
+        "typing",
+        "stagger",
+        "hard_cut",
+        "cursor_press"
+      ],
+      "platform": "X",
+      "views": 407083
+    },
+    {
+      "id": "hf-moment-M1298",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1298/clip.mp4",
+      "sourceUrl": "https://x.com/bot/status/2090852881373311369",
+      "authorName": "Grok Bot",
+      "role": "cta",
+      "mechanics": [
+        "scale_pulse",
+        "mask_reveal",
+        "slide_settle",
+        "hard_cut_reveal"
+      ],
+      "platform": "X",
+      "views": 26159102
+    },
+    {
+      "id": "hf-moment-M1299",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1299/clip.mp4",
+      "sourceUrl": "https://x.com/figma/status/2069827742800253230",
+      "authorName": "Figma",
+      "role": "turn",
+      "mechanics": [
+        "digit_reel",
+        "sheet_slide",
+        "hard_cut",
+        "line_fade"
+      ],
+      "platform": "X",
+      "views": 6727580
+    },
+    {
+      "id": "hf-moment-M1300",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1300/clip.mp4",
+      "sourceUrl": "https://x.com/anything/status/1999217043493756948",
+      "authorName": "Anything",
+      "role": "hook",
+      "mechanics": [
+        "crt_power_on",
+        "typewriter_text",
+        "stagger",
+        "hard_cut"
+      ],
+      "platform": "X",
+      "views": 2174846
+    },
+    {
+      "id": "hf-moment-M1301",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1301/clip.mp4",
+      "sourceUrl": "https://x.com/ideogram_ai/status/2062202208700313872",
+      "authorName": "Ideogram",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "hard_cut",
+        "stagger",
+        "slow_pan"
+      ],
+      "platform": "X",
+      "views": 2246633
+    },
+    {
+      "id": "hf-moment-M1302",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1302/clip.mp4",
+      "sourceUrl": "https://x.com/OpenAI/status/2084352161404920316",
+      "authorName": "OpenAI",
+      "role": "hook",
+      "mechanics": [
+        "stagger",
+        "kinetic_type",
+        "scale_overshoot",
+        "hard_cut_cascade"
+      ],
+      "platform": "X",
+      "views": 1815883
+    },
+    {
+      "id": "hf-moment-M1303",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1303/clip.mp4",
+      "sourceUrl": "https://x.com/hyojun_at/status/2069497198879048131",
+      "authorName": "jun",
+      "role": "hook",
+      "mechanics": [
+        "ui_transition",
+        "stagger",
+        "kinetic_type"
+      ],
+      "platform": "X",
+      "views": 1701886
+    },
+    {
+      "id": "hf-moment-M1304",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1304/clip.mp4",
+      "sourceUrl": "https://x.com/rincidium/status/1995946528343818656",
+      "authorName": "Ray",
+      "role": "proof",
+      "mechanics": [
+        "word_step",
+        "camera_push",
+        "wheel_select",
+        "blur_to_sharp"
+      ],
+      "platform": "X",
+      "views": 1503428
+    },
+    {
+      "id": "hf-moment-M1305",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1305/clip.mp4",
+      "sourceUrl": "https://x.com/davidhdev/status/2080224101432447094",
+      "authorName": "David Haz",
+      "role": "turn",
+      "mechanics": [
+        "slider_drag",
+        "stepped_counter",
+        "particle_wake",
+        "zoom_smear"
+      ],
+      "platform": "X",
+      "views": 1426583
+    },
+    {
+      "id": "hf-moment-M1306",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1306/clip.mp4",
+      "sourceUrl": "https://x.com/usewonder/status/2044099145997402272",
+      "authorName": "Wonder",
+      "role": "cta",
+      "mechanics": [
+        "pop_spring",
+        "squash_stretch",
+        "stroke_draw",
+        "word_stagger"
+      ],
+      "platform": "X",
+      "views": 1287893
+    },
+    {
+      "id": "hf-moment-M1307",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1307/clip.mp4",
+      "sourceUrl": "https://x.com/NousResearch/status/2097403926072987986",
+      "authorName": "Nous Research",
+      "role": "proof",
+      "mechanics": [
+        "mask_reveal",
+        "centre_band_decode",
+        "diagonal_light_sweep",
+        "glyph_dropout"
+      ],
+      "platform": "X",
+      "views": 653394
+    },
+    {
+      "id": "hf-moment-M1308",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1308/clip.mp4",
+      "sourceUrl": "https://x.com/Truffievfx/status/2103850308850139217",
+      "authorName": "Truffie",
+      "role": "cta",
+      "mechanics": [
+        "trim_path",
+        "stagger",
+        "spring_pop",
+        "slow_scale"
+      ],
+      "platform": "X",
+      "views": 646669
+    },
+    {
+      "id": "hf-moment-M1309",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1309/clip.mp4",
+      "sourceUrl": "https://x.com/anvisha/status/2077086289954771038",
+      "authorName": "Anvisha",
+      "role": "cta",
+      "mechanics": [
+        "stepped_motion",
+        "burst_transition",
+        "scale_pop",
+        "cursor_click"
+      ],
+      "platform": "X",
+      "views": 449665
+    },
+    {
+      "id": "hf-moment-M1310",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1310/clip.mp4",
+      "sourceUrl": "https://x.com/ilyamiskov/status/2095655279820001767",
+      "authorName": "Ilya Miskov",
+      "role": "turn",
+      "mechanics": [
+        "shape_morph",
+        "radial_fan",
+        "edge_on_turn",
+        "kinetic_type"
+      ],
+      "platform": "X",
+      "views": 429533
+    },
+    {
+      "id": "hf-moment-M1311",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1311/clip.mp4",
+      "sourceUrl": "https://x.com/suno/status/2097714273942163823",
+      "authorName": "Suno",
+      "role": "proof",
+      "mechanics": [
+        "press_squeeze",
+        "hard_cut",
+        "scatter_exit",
+        "echo_bloom"
+      ],
+      "platform": "X",
+      "views": 999287
+    },
+    {
+      "id": "hf-moment-M1312",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1312/clip.mp4",
+      "sourceUrl": "https://x.com/vercel/status/2092999180780556643",
+      "authorName": "Vercel",
+      "role": "proof",
+      "mechanics": [
+        "toggle_crossfade",
+        "click_ring",
+        "morph",
+        "cursor_change"
+      ],
+      "platform": "X",
+      "views": 925629
+    },
+    {
+      "id": "hf-moment-M1313",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M1313/clip.mp4",
+      "sourceUrl": "https://x.com/aibek_design/status/1957856991608512898",
+      "authorName": "Aibek Yegemberdin",
+      "role": "proof",
+      "mechanics": [
+        "slide_transition",
+        "ui_state_step",
+        "soft_wipe_reveal",
+        "zoom_out"
+      ],
+      "platform": "X",
+      "views": 905761
+    },
+    {
+      "id": "hf-moment-M913",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M913/clip.mp4",
+      "sourceUrl": "https://x.com/OpusClip/status/2086850403715674284",
+      "authorName": "OpusClip",
+      "role": "proof",
+      "mechanics": [
+        "ui_transition",
+        "stagger",
+        "camera_push"
+      ],
+      "platform": "X",
+      "views": 1080646
+    },
+    {
+      "id": "hf-moment-M914",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M914/clip.mp4",
+      "sourceUrl": "https://x.com/OpusClip/status/2086850403715674284",
+      "authorName": "OpusClip",
+      "role": "proof",
+      "mechanics": [
+        "text_morph",
+        "stagger",
+        "camera_push"
+      ],
+      "platform": "X",
+      "views": 1080646
+    },
+    {
+      "id": "hf-moment-M916",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M916/clip.mp4",
+      "sourceUrl": "https://x.com/arcads_ai/status/2084611105528115415",
+      "authorName": "arcads AI",
+      "role": "turn",
+      "mechanics": [
+        "ui_transition",
+        "camera_push",
+        "mask_reveal"
+      ],
+      "platform": "X",
+      "views": 650619
+    },
+    {
+      "id": "hf-moment-M917",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M917/clip.mp4",
+      "sourceUrl": "https://x.com/arcads_ai/status/2084611105528115415",
+      "authorName": "arcads AI",
+      "role": "proof",
+      "mechanics": [
+        "layout_motion",
+        "camera_push",
+        "footage"
+      ],
+      "platform": "X",
+      "views": 650619
+    },
+    {
+      "id": "hf-moment-M918",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M918/clip.mp4",
+      "sourceUrl": "https://x.com/arcads_ai/status/2084611105528115415",
+      "authorName": "arcads AI",
+      "role": "proof",
+      "mechanics": [
+        "cursor_click",
+        "ui_transition",
+        "layout_motion"
+      ],
+      "platform": "X",
+      "views": 650619
+    },
+    {
+      "id": "hf-moment-M919",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M919/clip.mp4",
+      "sourceUrl": "https://x.com/arcads_ai/status/2084611105528115415",
+      "authorName": "arcads AI",
+      "role": "proof",
+      "mechanics": [
+        "typewriter",
+        "cursor_click",
+        "camera_push"
+      ],
+      "platform": "X",
+      "views": 650619
+    },
+    {
+      "id": "hf-moment-M920",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M920/clip.mp4",
+      "sourceUrl": "https://x.com/arcads_ai/status/2084611105528115415",
+      "authorName": "arcads AI",
+      "role": "cta",
+      "mechanics": [
+        "typewriter",
+        "text_morph",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 650619
+    },
+    {
+      "id": "hf-moment-M921",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M921/clip.mp4",
+      "sourceUrl": "https://x.com/fomo/status/2091608389956637054",
+      "authorName": "fomo",
+      "role": "hook",
+      "mechanics": [
+        "text_morph",
+        "stagger",
+        "typewriter"
+      ],
+      "platform": "X",
+      "views": 81241
+    },
+    {
+      "id": "hf-moment-M922",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M922/clip.mp4",
+      "sourceUrl": "https://x.com/fomo/status/2091608389956637054",
+      "authorName": "fomo",
+      "role": "proof",
+      "mechanics": [
+        "ui_transition",
+        "mask_reveal",
+        "camera_push"
+      ],
+      "platform": "X",
+      "views": 81241
+    },
+    {
+      "id": "hf-moment-M923",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M923/clip.mp4",
+      "sourceUrl": "https://x.com/fomo/status/2091608389956637054",
+      "authorName": "fomo",
+      "role": "proof",
+      "mechanics": [
+        "layout_motion",
+        "camera_push",
+        "counter"
+      ],
+      "platform": "X",
+      "views": 81241
+    },
+    {
+      "id": "hf-moment-M924",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M924/clip.mp4",
+      "sourceUrl": "https://x.com/fomo/status/2091608389956637054",
+      "authorName": "fomo",
+      "role": "proof",
+      "mechanics": [
+        "lockup",
+        "ui_transition",
+        "camera_push"
+      ],
+      "platform": "X",
+      "views": 81241
+    },
+    {
+      "id": "hf-moment-M925",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M925/clip.mp4",
+      "sourceUrl": "https://x.com/thednyx/status/2088144255311081528",
+      "authorName": "dnyxstudios",
+      "role": "hook",
+      "mechanics": [
+        "layout_motion",
+        "stagger",
+        "line_drawing"
+      ],
+      "platform": "X",
+      "views": 9679
+    },
+    {
+      "id": "hf-moment-M926",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M926/clip.mp4",
+      "sourceUrl": "https://x.com/thednyx/status/2088144255311081528",
+      "authorName": "dnyxstudios",
+      "role": "turn",
+      "mechanics": [
+        "mask_reveal",
+        "layout_motion",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 9679
+    },
+    {
+      "id": "hf-moment-M927",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M927/clip.mp4",
+      "sourceUrl": "https://x.com/thednyx/status/2088144255311081528",
+      "authorName": "dnyxstudios",
+      "role": "proof",
+      "mechanics": [
+        "ui_transition",
+        "mask_reveal",
+        "particles"
+      ],
+      "platform": "X",
+      "views": 9679
+    },
+    {
+      "id": "hf-moment-M928",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M928/clip.mp4",
+      "sourceUrl": "https://x.com/thednyx/status/2088144255311081528",
+      "authorName": "dnyxstudios",
+      "role": "proof",
+      "mechanics": [
+        "ui_transition",
+        "typewriter",
+        "camera_push"
+      ],
+      "platform": "X",
+      "views": 9679
+    },
+    {
+      "id": "hf-moment-M929",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M929/clip.mp4",
+      "sourceUrl": "https://x.com/thednyx/status/2088144255311081528",
+      "authorName": "dnyxstudios",
+      "role": "cta",
+      "mechanics": [
+        "mask_reveal",
+        "stagger",
+        "text_morph"
+      ],
+      "platform": "X",
+      "views": 9679
+    },
+    {
+      "id": "hf-moment-M930",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M930/clip.mp4",
+      "sourceUrl": "https://x.com/thednyx/status/2088869485688102999",
+      "authorName": "dnyxstudios",
+      "role": "hook",
+      "mechanics": [
+        "mask_reveal",
+        "stagger",
+        "particles"
+      ],
+      "platform": "X",
+      "views": 4749
+    },
+    {
+      "id": "hf-moment-M931",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M931/clip.mp4",
+      "sourceUrl": "https://x.com/thednyx/status/2088869485688102999",
+      "authorName": "dnyxstudios",
+      "role": "proof",
+      "mechanics": [
+        "ui_transition",
+        "camera_push",
+        "typewriter"
+      ],
+      "platform": "X",
+      "views": 4749
+    },
+    {
+      "id": "hf-moment-M932",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M932/clip.mp4",
+      "sourceUrl": "https://x.com/thednyx/status/2088869485688102999",
+      "authorName": "dnyxstudios",
+      "role": "cta",
+      "mechanics": [
+        "logo_reveal",
+        "mask_reveal",
+        "particles"
+      ],
+      "platform": "X",
+      "views": 4749
+    },
+    {
+      "id": "hf-moment-M933",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M933/clip.mp4",
+      "sourceUrl": "https://x.com/ClaudeDevs/status/2091953609185657251",
+      "authorName": "ClaudeDevs",
+      "role": "hook",
+      "mechanics": [
+        "cursor_click",
+        "stagger",
+        "ui_transition"
+      ],
+      "platform": "X",
+      "views": 621925
+    },
+    {
+      "id": "hf-moment-M934",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M934/clip.mp4",
+      "sourceUrl": "https://x.com/ClaudeDevs/status/2091953609185657251",
+      "authorName": "ClaudeDevs",
+      "role": "turn",
+      "mechanics": [
+        "stagger",
+        "mask_reveal",
+        "layout_motion"
+      ],
+      "platform": "X",
+      "views": 621925
+    },
+    {
+      "id": "hf-moment-M935",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M935/clip.mp4",
+      "sourceUrl": "https://x.com/ClaudeDevs/status/2091953609185657251",
+      "authorName": "ClaudeDevs",
+      "role": "proof",
+      "mechanics": [
+        "text_morph",
+        "layout_motion",
+        "camera_push"
+      ],
+      "platform": "X",
+      "views": 621925
+    },
+    {
+      "id": "hf-moment-M936",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M936/clip.mp4",
+      "sourceUrl": "https://x.com/buffetdesigns/status/2091173375964229919",
+      "authorName": "Buffet",
+      "role": "hook",
+      "mechanics": [
+        "stagger",
+        "mask_reveal",
+        "counter"
+      ],
+      "platform": "X",
+      "views": 8979
+    },
+    {
+      "id": "hf-moment-M937",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M937/clip.mp4",
+      "sourceUrl": "https://x.com/buffetdesigns/status/2091173375964229919",
+      "authorName": "Buffet",
+      "role": "hook",
+      "mechanics": [
+        "stagger",
+        "typewriter",
+        "text_morph"
+      ],
+      "platform": "X",
+      "views": 8979
+    },
+    {
+      "id": "hf-moment-M938",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M938/clip.mp4",
+      "sourceUrl": "https://x.com/buffetdesigns/status/2091173375964229919",
+      "authorName": "Buffet",
+      "role": "turn",
+      "mechanics": [
+        "stagger",
+        "particles",
+        "text_morph"
+      ],
+      "platform": "X",
+      "views": 8979
+    },
+    {
+      "id": "hf-moment-M939",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M939/clip.mp4",
+      "sourceUrl": "https://x.com/buffetdesigns/status/2091173375964229919",
+      "authorName": "Buffet",
+      "role": "proof",
+      "mechanics": [
+        "layout_motion",
+        "ui_transition",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 8979
+    },
+    {
+      "id": "hf-moment-M940",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M940/clip.mp4",
+      "sourceUrl": "https://x.com/buffetdesigns/status/2091173375964229919",
+      "authorName": "Buffet",
+      "role": "proof",
+      "mechanics": [
+        "layout_motion",
+        "stagger",
+        "ui_transition"
+      ],
+      "platform": "X",
+      "views": 8979
+    },
+    {
+      "id": "hf-moment-M941",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M941/clip.mp4",
+      "sourceUrl": "https://x.com/gvofeyii/status/2092692314141364694",
+      "authorName": "Feyi",
+      "role": "hook",
+      "mechanics": [
+        "layout_motion",
+        "stagger",
+        "logo_reveal"
+      ],
+      "platform": "X",
+      "views": 36558
+    },
+    {
+      "id": "hf-moment-M942",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M942/clip.mp4",
+      "sourceUrl": "https://x.com/gvofeyii/status/2092692314141364694",
+      "authorName": "Feyi",
+      "role": "proof",
+      "mechanics": [
+        "typewriter",
+        "cursor_click",
+        "ui_transition"
+      ],
+      "platform": "X",
+      "views": 36558
+    },
+    {
+      "id": "hf-moment-M943",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M943/clip.mp4",
+      "sourceUrl": "https://x.com/gvofeyii/status/2092692314141364694",
+      "authorName": "Feyi",
+      "role": "proof",
+      "mechanics": [
+        "ui_transition",
+        "cursor_click",
+        "layout_motion"
+      ],
+      "platform": "X",
+      "views": 36558
+    },
+    {
+      "id": "hf-moment-M944",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M944/clip.mp4",
+      "sourceUrl": "https://x.com/gvofeyii/status/2092692314141364694",
+      "authorName": "Feyi",
+      "role": "proof",
+      "mechanics": [
+        "camera_push",
+        "ui_transition",
+        "layout_motion"
+      ],
+      "platform": "X",
+      "views": 36558
+    },
+    {
+      "id": "hf-moment-M945",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M945/clip.mp4",
+      "sourceUrl": "https://x.com/ericciarla/status/2093375835679977570",
+      "authorName": "Eric Ciarla",
+      "role": "proof",
+      "mechanics": [
+        "particles",
+        "mask_reveal",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 355162
+    },
+    {
+      "id": "hf-moment-M946",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M946/clip.mp4",
+      "sourceUrl": "https://x.com/ericciarla/status/2093375835679977570",
+      "authorName": "Eric Ciarla",
+      "role": "cta",
+      "mechanics": [
+        "layout_motion",
+        "mask_reveal",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 355162
+    },
+    {
+      "id": "hf-moment-M947",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M947/clip.mp4",
+      "sourceUrl": "https://x.com/washukumar531/status/2093743732071776708",
+      "authorName": "Rocky",
+      "role": "hook",
+      "mechanics": [
+        "stagger",
+        "text_morph",
+        "typewriter"
+      ],
+      "platform": "X",
+      "views": 91624
+    },
+    {
+      "id": "hf-moment-M948",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M948/clip.mp4",
+      "sourceUrl": "https://x.com/washukumar531/status/2093743732071776708",
+      "authorName": "Rocky",
+      "role": "proof",
+      "mechanics": [
+        "camera_push",
+        "logo_reveal",
+        "text_morph"
+      ],
+      "platform": "X",
+      "views": 91624
+    },
+    {
+      "id": "hf-moment-M949",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M949/clip.mp4",
+      "sourceUrl": "https://x.com/washukumar531/status/2093743732071776708",
+      "authorName": "Rocky",
+      "role": "cta",
+      "mechanics": [
+        "typewriter",
+        "lockup",
+        "layout_motion"
+      ],
+      "platform": "X",
+      "views": 91624
+    },
+    {
+      "id": "hf-moment-M953",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M953/clip.mp4",
+      "sourceUrl": "https://x.com/shapelayer/status/2070884943199150467",
+      "authorName": "Leon Fucak",
+      "role": "hook",
+      "mechanics": [
+        "stagger",
+        "typewriter",
+        "cursor_click"
+      ],
+      "platform": "X",
+      "views": 41513
+    },
+    {
+      "id": "hf-moment-M954",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M954/clip.mp4",
+      "sourceUrl": "https://x.com/shapelayer/status/2070884943199150467",
+      "authorName": "Leon Fucak",
+      "role": "turn",
+      "mechanics": [
+        "text_morph",
+        "layout_motion",
+        "counter"
+      ],
+      "platform": "X",
+      "views": 41513
+    },
+    {
+      "id": "hf-moment-M955",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M955/clip.mp4",
+      "sourceUrl": "https://x.com/shapelayer/status/2070884943199150467",
+      "authorName": "Leon Fucak",
+      "role": "proof",
+      "mechanics": [
+        "counter",
+        "ui_transition",
+        "layout_motion"
+      ],
+      "platform": "X",
+      "views": 41513
+    },
+    {
+      "id": "hf-moment-M956",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M956/clip.mp4",
+      "sourceUrl": "https://x.com/shapelayer/status/2070884943199150467",
+      "authorName": "Leon Fucak",
+      "role": "proof",
+      "mechanics": [
+        "camera_push",
+        "layout_motion",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 41513
+    },
+    {
+      "id": "hf-moment-M957",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M957/clip.mp4",
+      "sourceUrl": "https://x.com/shapelayer/status/2070884943199150467",
+      "authorName": "Leon Fucak",
+      "role": "turn",
+      "mechanics": [
+        "camera_push",
+        "stagger",
+        "ui_transition"
+      ],
+      "platform": "X",
+      "views": 41513
+    },
+    {
+      "id": "hf-moment-M958",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M958/clip.mp4",
+      "sourceUrl": "https://x.com/shapelayer/status/2070884943199150467",
+      "authorName": "Leon Fucak",
+      "role": "proof",
+      "mechanics": [
+        "ui_transition",
+        "text_morph",
+        "particles"
+      ],
+      "platform": "X",
+      "views": 41513
+    },
+    {
+      "id": "hf-moment-M959",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M959/clip.mp4",
+      "sourceUrl": "https://x.com/shapelayer/status/2070884943199150467",
+      "authorName": "Leon Fucak",
+      "role": "cta",
+      "mechanics": [
+        "cursor_click",
+        "mask_reveal",
+        "logo_reveal"
+      ],
+      "platform": "X",
+      "views": 41513
+    },
+    {
+      "id": "hf-moment-M962",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M962/clip.mp4",
+      "sourceUrl": "https://x.com/_adishj/status/2087948347625861184",
+      "authorName": "Adish Jain ☕️",
+      "role": "hook",
+      "mechanics": [
+        "mask_reveal",
+        "line_drawing",
+        "typewriter"
+      ],
+      "platform": "X",
+      "views": 144878
+    },
+    {
+      "id": "hf-moment-M963",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M963/clip.mp4",
+      "sourceUrl": "https://x.com/_adishj/status/2087948347625861184",
+      "authorName": "Adish Jain ☕️",
+      "role": "proof",
+      "mechanics": [
+        "stagger",
+        "particles",
+        "layout_motion"
+      ],
+      "platform": "X",
+      "views": 144878
+    },
+    {
+      "id": "hf-moment-M964",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M964/clip.mp4",
+      "sourceUrl": "https://x.com/byshubh_/status/2085774336003280897",
+      "authorName": "Shubh",
+      "role": "hook",
+      "mechanics": [
+        "layout_motion",
+        "stagger",
+        "particles"
+      ],
+      "platform": "X",
+      "views": 14358
+    },
+    {
+      "id": "hf-moment-M965",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M965/clip.mp4",
+      "sourceUrl": "https://x.com/byshubh_/status/2085774336003280897",
+      "authorName": "Shubh",
+      "role": "turn",
+      "mechanics": [
+        "logo_reveal",
+        "lockup",
+        "mask_reveal"
+      ],
+      "platform": "X",
+      "views": 14358
+    },
+    {
+      "id": "hf-moment-M966",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M966/clip.mp4",
+      "sourceUrl": "https://x.com/byshubh_/status/2085774336003280897",
+      "authorName": "Shubh",
+      "role": "turn",
+      "mechanics": [
+        "stagger",
+        "particles",
+        "layout_motion"
+      ],
+      "platform": "X",
+      "views": 14358
+    },
+    {
+      "id": "hf-moment-M967",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M967/clip.mp4",
+      "sourceUrl": "https://x.com/zaroai_/status/2070084796378747316",
+      "authorName": "Zaro.ai",
+      "role": "hook",
+      "mechanics": [
+        "text_morph",
+        "stagger",
+        "layout_motion"
+      ],
+      "platform": "X",
+      "views": 7474924
+    },
+    {
+      "id": "hf-moment-M968",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M968/clip.mp4",
+      "sourceUrl": "https://x.com/zaroai_/status/2070084796378747316",
+      "authorName": "Zaro.ai",
+      "role": "turn",
+      "mechanics": [
+        "typewriter",
+        "camera_push",
+        "logo_reveal"
+      ],
+      "platform": "X",
+      "views": 7474924
+    },
+    {
+      "id": "hf-moment-M969",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M969/clip.mp4",
+      "sourceUrl": "https://x.com/zaroai_/status/2070084796378747316",
+      "authorName": "Zaro.ai",
+      "role": "proof",
+      "mechanics": [
+        "typewriter",
+        "layout_motion",
+        "camera_push"
+      ],
+      "platform": "X",
+      "views": 7474924
+    },
+    {
+      "id": "hf-moment-M973",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M973/clip.mp4",
+      "sourceUrl": "https://x.com/xingbugengming/status/2094728698444587038",
+      "authorName": "小奇说",
+      "role": "hook",
+      "mechanics": [
+        "lockup",
+        "text_morph",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 308888
+    },
+    {
+      "id": "hf-moment-M974",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M974/clip.mp4",
+      "sourceUrl": "https://x.com/xingbugengming/status/2094728698444587038",
+      "authorName": "小奇说",
+      "role": "proof",
+      "mechanics": [
+        "ui_transition",
+        "camera_push",
+        "mask_reveal"
+      ],
+      "platform": "X",
+      "views": 308888
+    },
+    {
+      "id": "hf-moment-M975",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M975/clip.mp4",
+      "sourceUrl": "https://www.youtube.com/watch?v=GrtumcQkzsk",
+      "authorName": "ObiN Studio",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "glyph_scramble",
+        "hard_cut",
+        "scale_pulse"
+      ],
+      "platform": "YouTube",
+      "views": 43600
+    },
+    {
+      "id": "hf-moment-M976",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M976/clip.mp4",
+      "sourceUrl": "https://www.youtube.com/watch?v=GrtumcQkzsk",
+      "authorName": "ObiN Studio",
+      "role": "hook",
+      "mechanics": [
+        "scale_slam",
+        "crossfade",
+        "camera_pullback",
+        "stroke_draw"
+      ],
+      "platform": "YouTube",
+      "views": 43600
+    },
+    {
+      "id": "hf-moment-M977",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M977/clip.mp4",
+      "sourceUrl": "https://www.youtube.com/watch?v=GrtumcQkzsk",
+      "authorName": "ObiN Studio",
+      "role": "proof",
+      "mechanics": [
+        "word_pop",
+        "morph",
+        "mask_reveal",
+        "stagger"
+      ],
+      "platform": "YouTube",
+      "views": 43600
+    },
+    {
+      "id": "hf-moment-M978",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M978/clip.mp4",
+      "sourceUrl": "https://www.youtube.com/watch?v=GrtumcQkzsk",
+      "authorName": "ObiN Studio",
+      "role": "proof",
+      "mechanics": [
+        "light_sweep",
+        "cursor_click",
+        "whip_pan",
+        "stagger"
+      ],
+      "platform": "YouTube",
+      "views": 43600
+    },
+    {
+      "id": "hf-moment-M979",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M979/clip.mp4",
+      "sourceUrl": "https://www.youtube.com/watch?v=GrtumcQkzsk",
+      "authorName": "ObiN Studio",
+      "role": "proof",
+      "mechanics": [
+        "button_press",
+        "hard_cut",
+        "mask_reveal",
+        "camera_push"
+      ],
+      "platform": "YouTube",
+      "views": 43600
+    },
+    {
+      "id": "hf-moment-M980",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M980/clip.mp4",
+      "sourceUrl": "https://www.youtube.com/watch?v=GrtumcQkzsk",
+      "authorName": "ObiN Studio",
+      "role": "turn",
+      "mechanics": [
+        "typewriter",
+        "hard_cut",
+        "light_scan",
+        "stagger"
+      ],
+      "platform": "YouTube",
+      "views": 43600
+    },
+    {
+      "id": "hf-moment-M981",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M981/clip.mp4",
+      "sourceUrl": "https://www.youtube.com/watch?v=GrtumcQkzsk",
+      "authorName": "ObiN Studio",
+      "role": "proof",
+      "mechanics": [
+        "typewriter",
+        "text_stream",
+        "ui_transition",
+        "line_wipe"
+      ],
+      "platform": "YouTube",
+      "views": 43600
+    },
+    {
+      "id": "hf-moment-M982",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M982/clip.mp4",
+      "sourceUrl": "https://www.youtube.com/watch?v=GrtumcQkzsk",
+      "authorName": "ObiN Studio",
+      "role": "proof",
+      "mechanics": [
+        "stroke_draw",
+        "morph",
+        "menu_scroll",
+        "check_draw"
+      ],
+      "platform": "YouTube",
+      "views": 43600
+    },
+    {
+      "id": "hf-moment-M983",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M983/clip.mp4",
+      "sourceUrl": "https://www.youtube.com/watch?v=GrtumcQkzsk",
+      "authorName": "ObiN Studio",
+      "role": "turn",
+      "mechanics": [
+        "marquee",
+        "light_sweep",
+        "hard_cut",
+        "spring_stack"
+      ],
+      "platform": "YouTube",
+      "views": 43600
+    },
+    {
+      "id": "hf-moment-M984",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M984/clip.mp4",
+      "sourceUrl": "https://www.youtube.com/watch?v=GrtumcQkzsk",
+      "authorName": "ObiN Studio",
+      "role": "cta",
+      "mechanics": [
+        "light_scan",
+        "hard_cut",
+        "mask_reveal",
+        "slow_zoom"
+      ],
+      "platform": "YouTube",
+      "views": 43600
+    },
+    {
+      "id": "hf-moment-M985",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M985/clip.mp4",
+      "sourceUrl": "https://www.instagram.com/reel/DWUAfqRDCT2/",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "hard_cut",
+        "motion_smear",
+        "camera_spin"
+      ],
+      "platform": "Instagram",
+      "views": 18242
+    },
+    {
+      "id": "hf-moment-M986",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M986/clip.mp4",
+      "sourceUrl": "https://www.instagram.com/reel/DWUAfqRDCT2/",
+      "role": "turn",
+      "mechanics": [
+        "ui_transition",
+        "word_stagger",
+        "camera_push",
+        "motion_smear"
+      ],
+      "platform": "Instagram",
+      "views": 18242
+    },
+    {
+      "id": "hf-moment-M987",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M987/clip.mp4",
+      "sourceUrl": "https://www.instagram.com/reel/DWUAfqRDCT2/",
+      "role": "cta",
+      "mechanics": [
+        "stagger",
+        "whip_transition",
+        "camera_zoom_out",
+        "mask_reveal"
+      ],
+      "platform": "Instagram",
+      "views": 18242
+    },
+    {
+      "id": "hf-moment-M988",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M988/clip.mp4",
+      "sourceUrl": "https://x.com/LordyVisuals/status/2106827488152461461",
+      "authorName": "Lordy Visuals",
+      "role": "turn",
+      "mechanics": [
+        "kinetic_type",
+        "stutter_echo",
+        "hard_cut_swap",
+        "block_wipe"
+      ],
+      "platform": "X",
+      "views": 1921
+    },
+    {
+      "id": "hf-moment-M989",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M989/clip.mp4",
+      "sourceUrl": "https://x.com/ankush_motion/status/2106444826539606152",
+      "authorName": "Ankush",
+      "role": "hook",
+      "mechanics": [
+        "path_animation",
+        "ui_transition",
+        "depth_reorder",
+        "defocus_blur"
+      ],
+      "platform": "X",
+      "views": 5813
+    },
+    {
+      "id": "hf-moment-M990",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M990/clip.mp4",
+      "sourceUrl": "https://x.com/ankush_motion/status/2106444826539606152",
+      "authorName": "Ankush",
+      "role": "proof",
+      "mechanics": [
+        "whip_pan",
+        "halftone_burst",
+        "typewriter_text",
+        "stagger"
+      ],
+      "platform": "X",
+      "views": 5813
+    },
+    {
+      "id": "hf-moment-M991",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M991/clip.mp4",
+      "sourceUrl": "https://x.com/ankush_motion/status/2106444826539606152",
+      "authorName": "Ankush",
+      "role": "cta",
+      "mechanics": [
+        "ui_morph",
+        "cursor_click",
+        "mask_reveal",
+        "logo_lockup"
+      ],
+      "platform": "X",
+      "views": 5813
+    },
+    {
+      "id": "hf-moment-M992",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M992/clip.mp4",
+      "sourceUrl": "https://x.com/devteamdrew/status/2102436464323661880",
+      "authorName": "DreW",
+      "role": "hook",
+      "mechanics": [
+        "stepped_animation",
+        "acoustic_rings",
+        "camera_push",
+        "mask_reveal"
+      ],
+      "platform": "X",
+      "views": 1823563
+    },
+    {
+      "id": "hf-moment-M993",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M993/clip.mp4",
+      "sourceUrl": "https://x.com/devteamdrew/status/2102436464323661880",
+      "authorName": "DreW",
+      "role": "cta",
+      "mechanics": [
+        "infinite_zoom",
+        "mask_reveal",
+        "flash_frame",
+        "stepped_animation"
+      ],
+      "platform": "X",
+      "views": 1823563
+    },
+    {
+      "id": "hf-moment-M994",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M994/clip.mp4",
+      "sourceUrl": "https://www.tiktok.com/@nardeater/video/7692989974932753695",
+      "role": "hook",
+      "mechanics": [
+        "kinetic_type",
+        "mask_reveal",
+        "camera_push",
+        "counter"
+      ],
+      "platform": "TikTok",
+      "views": 110200
+    },
+    {
+      "id": "hf-moment-M995",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M995/clip.mp4",
+      "sourceUrl": "https://www.tiktok.com/@nardeater/video/7692989974932753695",
+      "role": "proof",
+      "mechanics": [
+        "whip_pan",
+        "ui_transition",
+        "stagger",
+        "counter"
+      ],
+      "platform": "TikTok",
+      "views": 110200
+    },
+    {
+      "id": "hf-moment-M996",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M996/clip.mp4",
+      "sourceUrl": "https://www.tiktok.com/@nardeater/video/7692989974932753695",
+      "role": "proof",
+      "mechanics": [
+        "camera_push",
+        "whip_pan",
+        "ui_transition",
+        "flash_cut"
+      ],
+      "platform": "TikTok",
+      "views": 110200
+    },
+    {
+      "id": "hf-moment-M997",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M997/clip.mp4",
+      "sourceUrl": "https://www.tiktok.com/@nardeater/video/7692989974932753695",
+      "role": "turn",
+      "mechanics": [
+        "kinetic_type",
+        "mask_reveal",
+        "camera_push",
+        "match_cut"
+      ],
+      "platform": "TikTok",
+      "views": 110200
+    },
+    {
+      "id": "hf-moment-M998",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M998/clip.mp4",
+      "sourceUrl": "https://x.com/chetaslua/status/2105757136219504862",
+      "authorName": "Chetaslua",
+      "role": "hook",
+      "mechanics": [
+        "camera_push",
+        "mask_reveal",
+        "camera_pan",
+        "zoom_punch"
+      ],
+      "platform": "X",
+      "views": 686503
+    },
+    {
+      "id": "hf-moment-M999",
+      "videoUrl": "https://static.heygen.ai/hyperframes-oss/desktop/moments/v5/M999/clip.mp4",
+      "sourceUrl": "https://x.com/chetaslua/status/2105757136219504862",
+      "authorName": "Chetaslua",
+      "role": "proof",
+      "mechanics": [
+        "camera_pan",
+        "mask_reveal",
+        "zoom_punch",
+        "pose_snap"
+      ],
+      "platform": "X",
+      "views": 686503
+    }
+  ]
+}

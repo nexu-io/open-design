@@ -1,0 +1,35 @@
+<template id="qa-sub-template">
+  <div
+    id="qa-sub-root"
+    data-composition-id="qa-sub"
+    data-width="560"
+    data-height="300"
+    data-start="0"
+    data-duration="6"
+  >
+    <style>
+      #qa-sub-root {
+        position: relative;
+        width: 560px;
+        height: 300px;
+        background: #1d2733;
+        overflow: hidden;
+      }
+      #qa-sub-title {
+        font-size: 36px;
+        margin: 20px;
+        color: #8ecae6;
+        font-family: Arial, Helvetica, sans-serif;
+      }
+    </style>
+    <div id="qa-sub-clip" class="clip" data-hf-id="qa-sub-clip" data-start="0" data-duration="6">
+      <h2 id="qa-sub-title" data-hf-id="qa-sub-title">Sub-composition child</h2>
+    </div>
+    <script>
+      window.__timelines = window.__timelines || {};
+      window.__timelines["qa-sub"] = gsap
+        .timeline({ paused: true })
+        .to("#qa-sub-title", { opacity: 0.7, duration: 1 }, 0);
+    </script>
+  </div>
+</template>

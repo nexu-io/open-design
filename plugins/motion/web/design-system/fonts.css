@@ -1,0 +1,15 @@
+/* Redistributable local fonts; license notices travel with the font files. */
+@font-face {
+  font-family: 'Albert Sans';
+  src: url('./fonts/AlbertSans-VariableFont_wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  src: url('./fonts/IBMPlexMono-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}

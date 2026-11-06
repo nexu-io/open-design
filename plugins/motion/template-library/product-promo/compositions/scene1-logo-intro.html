@@ -1,0 +1,190 @@
+<template id="scene1-logo-intro-template">
+  <div
+    data-composition-id="scene1-logo-intro"
+    data-width="1920"
+    data-height="1080"
+    data-duration="1.5"
+  >
+    <div class="canvas">
+      <!-- Logo Container -->
+      <div class="logo-container">
+        <svg viewBox="0 0 160 240" width="160" height="240">
+          <!-- Figma Logo Pieces -->
+          <!-- Top-left: Red (F24E1E) -->
+          <path
+            class="logo-piece logo-tl"
+            d="M 0 40 C 0 17.9 17.9 0 40 0 L 80 0 L 80 80 L 40 80 C 17.9 80 0 62.1 0 40 Z"
+            fill="#F24E1E"
+          />
+          <!-- Top-right: Purple (A259FF) -->
+          <path
+            class="logo-piece logo-tr"
+            d="M 80 0 L 120 0 C 142.1 0 160 17.9 160 40 C 160 62.1 142.1 80 120 80 L 80 80 L 80 0 Z"
+            fill="#A259FF"
+          />
+          <!-- Middle-left: Pink (FF7262) -->
+          <path
+            class="logo-piece logo-ml"
+            d="M 0 120 C 0 97.9 17.9 80 40 80 L 80 80 L 80 160 L 40 160 C 17.9 160 0 142.1 0 120 Z"
+            fill="#FF7262"
+          />
+          <!-- Middle-right: Blue (1ABCFE) -->
+          <circle class="logo-piece logo-mr" cx="120" cy="120" r="40" fill="#1ABCFE" />
+          <!-- Bottom-left: Green (0ACF83) -->
+          <path
+            class="logo-piece logo-bl"
+            d="M 0 200 C 0 177.9 17.9 160 40 160 L 80 160 L 80 200 C 80 222.1 62.1 240 40 240 C 17.9 240 0 222.1 0 200 Z"
+            fill="#0ACF83"
+          />
+        </svg>
+      </div>
+
+      <!-- Expanding Ring -->
+      <div class="ring-container">
+        <svg viewBox="0 0 400 400" width="400" height="400">
+          <circle
+            class="ring"
+            cx="200"
+            cy="200"
+            r="80"
+            fill="none"
+            stroke="#FFFFFF"
+            stroke-width="4"
+          />
+        </svg>
+      </div>
+    </div>
+
+    <style>
+      [data-composition-id="scene1-logo-intro"] .canvas {
+        width: 1920px;
+        height: 1080px;
+        background-color: #0a0a0f;
+        position: relative;
+        overflow: hidden;
+      }
+
+      [data-composition-id="scene1-logo-intro"] .logo-container {
+        position: absolute;
+        left: 880px; /* Center X: 960 - 80 */
+        top: 420px; /* Center Y: 540 - 120 */
+        width: 160px;
+        height: 240px;
+        transform-origin: center center;
+      }
+
+      [data-composition-id="scene1-logo-intro"] .ring-container {
+        position: absolute;
+        left: 760px; /* 960 - 200 */
+        top: 340px; /* 540 - 200 */
+        width: 400px;
+        height: 400px;
+        pointer-events: none;
+      }
+
+      [data-composition-id="scene1-logo-intro"] .ring {
+        transform-origin: center center;
+        opacity: 0;
+      }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        const tl = gsap.timeline({ paused: true });
+
+        const pieces = {
+          tl: '[data-composition-id="scene1-logo-intro"] .logo-tl',
+          tr: '[data-composition-id="scene1-logo-intro"] .logo-tr',
+          ml: '[data-composition-id="scene1-logo-intro"] .logo-ml',
+          mr: '[data-composition-id="scene1-logo-intro"] .logo-mr',
+          bl: '[data-composition-id="scene1-logo-intro"] .logo-bl',
+        };
+
+        const ring = '[data-composition-id="scene1-logo-intro"] .ring';
+        const logoContainer = '[data-composition-id="scene1-logo-intro"] .logo-container';
+
+        // Initial positions: Corners of the screen
+        // Viewport is 1920x1080. Center is 960, 540.
+        // logo-container is at 880, 420.
+
+        tl.set(pieces.tl, { x: -960, y: -540 });
+        tl.set(pieces.tr, { x: 960, y: -540 });
+        tl.set(pieces.ml, { x: -960, y: 0 });
+        tl.set(pieces.mr, { x: 960, y: 0 });
+        tl.set(pieces.bl, { x: -960, y: 540 });
+
+        // 1. Converge to center with 3-frame stagger (approx 0.05s at 60fps)
+        // 2. Collide with slight bounce (overshoot 1.1x)
+        const convergeDuration = 0.6;
+        const stagger = 0.05;
+
+        const pieceArray = [pieces.tl, pieces.tr, pieces.ml, pieces.mr, pieces.bl];
+
+        pieceArray.forEach((piece, i) => {
+          tl.to(
+            piece,
+            {
+              x: 0,
+              y: 0,
+              duration: convergeDuration,
+              ease: "back.out(1.1)",
+            },
+            i * stagger,
+          );
+        });
+
+        // 3. On collision (approx at 0.6 + 4*0.05 = 0.8s), white ring expands
+        const collisionTime = convergeDuration + (pieceArray.length - 1) * stagger;
+
+        tl.fromTo(
+          ring,
+          { scale: 0.2, opacity: 1 },
+          {
+            scale: 2.5,
+            opacity: 0,
+            duration: 0.4,
+            ease: "power2.out",
+          },
+          collisionTime,
+        );
+
+        // 4. Logo pulses slightly
+        tl.to(
+          logoContainer,
+          {
+            scale: 1.05,
+            duration: 0.15,
+            ease: "power2.out",
+          },
+          collisionTime,
+        );
+
+        tl.to(
+          logoContainer,
+          {
+            scale: 1,
+            duration: 0.15,
+            ease: "power2.in",
+          },
+          collisionTime + 0.15,
+        );
+
+        // 5. Scale down to 0
+        tl.to(
+          logoContainer,
+          {
+            scale: 0,
+            duration: 0.3,
+            ease: "expo.in",
+            delay: 0.1,
+          },
+          collisionTime + 0.3,
+        );
+
+        window.__timelines = window.__timelines || {};
+        window.__timelines["scene1-logo-intro"] = tl;
+      })();
+    </script>
+  </div>
+</template>

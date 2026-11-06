@@ -1,0 +1,14 @@
+.DS_Store
+dist/
+__pycache__/
+*.py[cod]
+.venv/
+node_modules/
+.env
+.env.*
+!.env.example
+*.log
+.tools/
+.motion-data/
+.artifacts/
+studio/build/

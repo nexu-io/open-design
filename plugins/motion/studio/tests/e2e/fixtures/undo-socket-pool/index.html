@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+  </head>
+  <body>
+    <!-- Eight paused videos: each pins one of Chrome's six sockets for this host while it sits buffered. -->
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="20"
+      data-width="1920"
+      data-height="1080"
+      data-no-timeline
+    >
+      <div
+        id="target"
+        class="clip"
+        data-start="0"
+        data-duration="20"
+        data-track-index="0"
+        style="
+          position: absolute;
+          left: 800px;
+          top: 100px;
+          width: 240px;
+          height: 160px;
+          background: #f0c020;
+        "
+      ></div>
+      <video
+        id="v1"
+        class="clip"
+        src="assets/v1.mp4"
+        muted
+        playsinline
+        data-start="0"
+        data-duration="20"
+        data-track-index="1"
+        style="position: absolute; left: 0px; top: 600px; width: 480px; height: 240px"
+      ></video>
+      <video
+        id="v2"
+        class="clip"
+        src="assets/v2.mp4"
+        muted
+        playsinline
+        data-start="0"
+        data-duration="20"
+        data-track-index="2"
+        style="position: absolute; left: 480px; top: 600px; width: 480px; height: 240px"
+      ></video>
+      <video
+        id="v3"
+        class="clip"
+        src="assets/v3.mp4"
+        muted
+        playsinline
+        data-start="0"
+        data-duration="20"
+        data-track-index="3"
+        style="position: absolute; left: 960px; top: 600px; width: 480px; height: 240px"
+      ></video>
+      <video
+        id="v4"
+        class="clip"
+        src="assets/v4.mp4"
+        muted
+        playsinline
+        data-start="0"
+        data-duration="20"
+        data-track-index="4"
+        style="position: absolute; left: 1440px; top: 600px; width: 480px; height: 240px"
+      ></video>
+      <video
+        id="v5"
+        class="clip"
+        src="assets/v5.mp4"
+        muted
+        playsinline
+        data-start="0"
+        data-duration="20"
+        data-track-index="5"
+        style="position: absolute; left: 0px; top: 840px; width: 480px; height: 240px"
+      ></video>
+      <video
+        id="v6"
+        class="clip"
+        src="assets/v6.mp4"
+        muted
+        playsinline
+        data-start="0"
+        data-duration="20"
+        data-track-index="6"
+        style="position: absolute; left: 480px; top: 840px; width: 480px; height: 240px"
+      ></video>
+      <video
+        id="v7"
+        class="clip"
+        src="assets/v7.mp4"
+        muted
+        playsinline
+        data-start="0"
+        data-duration="20"
+        data-track-index="7"
+        style="position: absolute; left: 960px; top: 840px; width: 480px; height: 240px"
+      ></video>
+      <video
+        id="v8"
+        class="clip"
+        src="assets/v8.mp4"
+        muted
+        playsinline
+        data-start="0"
+        data-duration="20"
+        data-track-index="8"
+        style="position: absolute; left: 1440px; top: 840px; width: 480px; height: 240px"
+      ></video>
+    </div>
+  </body>
+</html>

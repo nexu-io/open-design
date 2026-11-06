@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.2"/>
+    </filter>
+    <g id="cursor-arrow">
+      <path d="M0 0 L 16 16 L 9.5 16 L 6.5 23 L 6.5 16 L 0 16 Z" fill="white" stroke="#000" stroke-width="1.5" stroke-linejoin="round" filter="url(#shadow)"/>
+    </g>
+  </defs>
+
+  <rect width="1920" height="1080" fill="#f0f0f0" />
+
+  <g id="cursor-designer" transform="translate(600, 500)">
+    <use href="#cursor-arrow" x="0" y="0"/>
+    <rect x="16" y="20" width="90" height="24" rx="4" fill="#A259FF"/>
+    <text x="61" y="36" font-family="Inter, sans-serif" font-size="12" fill="white" text-anchor="middle" font-weight="bold">Designer</text>
+  </g>
+
+  <g id="cursor-engineer" transform="translate(900, 400)">
+    <use href="#cursor-arrow" x="0" y="0"/>
+    <rect x="16" y="20" width="90" height="24" rx="4" fill="#1ABCFE"/>
+    <text x="61" y="36" font-family="Inter, sans-serif" font-size="12" fill="white" text-anchor="middle" font-weight="bold">Engineer</text>
+  </g>
+
+  <g id="cursor-pm" transform="translate(1200, 600)">
+    <use href="#cursor-arrow" x="0" y="0"/>
+    <rect x="16" y="20" width="50" height="24" rx="4" fill="#F24E1E"/>
+    <text x="41" y="36" font-family="Inter, sans-serif" font-size="12" fill="white" text-anchor="middle" font-weight="bold">PM</text>
+  </g>
+</svg>

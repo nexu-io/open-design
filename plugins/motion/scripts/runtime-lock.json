@@ -1,0 +1,55 @@
+{
+  "node": "26.11.1",
+  "chromium": "156.0.8078.47",
+  "ffmpeg": "9.0.2",
+  "hyperframes": "0.9.7",
+  "targets": {
+    "mac-arm64": {
+      "platform": "darwin",
+      "arch": "arm64",
+      "minimumOS": "26.0",
+      "node": {
+        "url": "https://nodejs.org/dist/v26.11.1/node-v26.11.1-darwin-arm64.tar.gz",
+        "sha256": "d916511b55965e91be7a88e17f88d895b6793ceaba3e6c9b194aefe51c2c65ac",
+        "directory": "node-v26.11.1-darwin-arm64"
+      },
+      "browser": {
+        "url": "https://storage.googleapis.com/chrome-for-testing-public/156.0.8078.47/mac-arm64/chrome-headless-shell-mac-arm64.zip",
+        "sha256": "2fd1c09a3e1ebde9e69e6aba92f1dd3f21ad247b55d9bf66e39213ff4205436d",
+        "executable": "chrome-headless-shell-mac-arm64/chrome-headless-shell"
+      },
+      "ffmpeg": {
+        "url": "https://ffmpeg.martin-riedl.de/download/macos/arm64/1789931890_9.0.2/ffmpeg.zip",
+        "filename": "ffmpeg-9.0.2-mac-arm64.zip",
+        "sha256": "c8ed4c4e6978a03c485edbfe4e0a5dc2380f8a30bba5150531b31b094492d924",
+        "executable": "ffmpeg"
+      },
+      "ffprobe": {
+        "url": "https://ffmpeg.martin-riedl.de/download/macos/arm64/1789931890_9.0.2/ffprobe.zip",
+        "filename": "ffprobe-9.0.2-mac-arm64.zip",
+        "sha256": "fcbe839537485eaee7a7a8bc5cbc0f90d53617e80943e8a5b2e31cb851197ea6",
+        "executable": "ffprobe"
+      }
+    },
+    "win-x64": {
+      "platform": "win32",
+      "arch": "x64",
+      "minimumOS": "Windows 11",
+      "node": {
+        "url": "https://nodejs.org/dist/v26.11.1/node-v26.11.1-win-x64.zip",
+        "sha256": "97f36a8a9684ff0d3e35758b4610fef5b628a5880e96f2ccc11240e5daf9934e",
+        "directory": "node-v26.11.1-win-x64"
+      },
+      "browser": {
+        "url": "https://storage.googleapis.com/chrome-for-testing-public/156.0.8078.47/win64/chrome-headless-shell-win64.zip",
+        "sha256": "e0af9b23f8051cca4f37ca49cd425e8055701bfc0383c198d67f8d5cc5884249",
+        "executable": "chrome-headless-shell-win64/chrome-headless-shell.exe"
+      },
+      "media": {
+        "url": "https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-essentials_build.zip",
+        "sha256": "60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba",
+        "directory": "ffmpeg-9.0.2-essentials_build"
+      }
+    }
+  }
+}

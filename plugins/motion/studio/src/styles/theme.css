@@ -1,0 +1,474 @@
+/* Studio's design tokens, the one place a design value is decided. Tailwind emits
+ * each as a utility and a CSS custom property; `@theme static` keeps unused
+ * tokens in `:root` so plain CSS and canvas code can still read them. */
+
+@theme static {
+  /* ---------------------------------------------------------------- colour */
+
+  /* Graphite. Each colour is `light-dark(light, dark)`, resolved where it is painted, so the
+   * colour-scheme decides: Studio is dark, `data-theme="paper"` makes it light, and the player
+   * keeps a dark scheme in both. Text clears 4.5:1 and icons 3:1 on every surface below. */
+
+  /* Surfaces: the app shell first, menus and popovers last. */
+  --color-bg-0: light-dark(oklch(0.955 0.005 70), oklch(0.235 0.007 70));
+  --color-bg-1: var(--color-bg-0);
+  --color-bg-2: var(--color-surface);
+  --color-input: light-dark(oklch(1 0 70), oklch(0.25 0.007 70));
+  --color-surface: light-dark(oklch(0.987 0.005 70), oklch(0.265 0.007 70));
+  --color-surface-alt: var(--color-surface);
+  /* Menus, popovers and tooltips. */
+  --color-raised: light-dark(oklch(1 0 70), oklch(0.295 0.007 70));
+
+  /* States, washes of the brightest text so they work on any surface. `on` is a toggle that is on. */
+  --color-hover: light-dark(
+    color-mix(in oklab, var(--color-text-0) 5.5%, transparent),
+    color-mix(in oklab, var(--color-text-0) 7.5%, transparent)
+  );
+  --color-press: light-dark(
+    color-mix(in oklab, var(--color-text-0) 9.5%, transparent),
+    color-mix(in oklab, var(--color-text-0) 13%, transparent)
+  );
+  --color-on: light-dark(
+    color-mix(in oklab, var(--color-accent) 13%, transparent),
+    color-mix(in oklab, var(--color-accent) 16%, transparent)
+  );
+  --color-on-hover: light-dark(
+    color-mix(in oklab, var(--color-accent) 22%, transparent),
+    color-mix(in oklab, var(--color-accent) 27%, transparent)
+  );
+
+  /* Separators. */
+  --color-border: light-dark(
+    color-mix(in oklab, var(--color-text-0) 8%, transparent),
+    color-mix(in oklab, var(--color-text-0) 7.5%, transparent)
+  );
+  --color-hairline: var(--color-border);
+  --color-border-strong: light-dark(
+    color-mix(in oklab, var(--color-text-0) 15%, transparent),
+    color-mix(in oklab, var(--color-text-0) 14%, transparent)
+  );
+  --color-border-input: var(--color-border-strong);
+
+  /* Text: primary, secondary, muted (4.5:1), and off (3:1, disabled controls only). */
+  --color-text-0: light-dark(oklch(0.205 0.003 70), oklch(0.965 0.004 70));
+  --color-text-1: var(--color-text-0);
+  --color-text-body: var(--color-text-0);
+  --color-text-2: light-dark(oklch(0.403 0.003 70), oklch(0.908 0.004 70));
+  --color-text-3: var(--color-text-2);
+  --color-text-muted: light-dark(oklch(0.503 0.003 70), oklch(0.777 0.004 70));
+  --color-text-4: var(--color-text-muted);
+  --color-text-5: var(--color-text-muted);
+  --color-text-off: light-dark(oklch(0.597 0.003 70), oklch(0.67 0.004 70));
+
+  /* Roles. Selection and playhead are reserved and differ from the accent so a
+   * selected clip, the playhead and an accented control stay tellable apart.
+   * `accent-ink` is accent text on a surface; `on-accent` is text on an accent fill. */
+  --color-accent: light-dark(oklch(0.536 0.114 164), oklch(0.82 0.159 164));
+  --color-accent-hover: light-dark(oklch(0.486 0.103 164), oklch(0.87 0.159 164));
+  --color-on-accent: light-dark(oklch(1 0 0), oklch(0.2 0.043 164));
+  --color-accent-ink: light-dark(oklch(0.45 0.096 164), oklch(0.827 0.159 164));
+  --color-ring: var(--color-accent-ink);
+  --color-selection: light-dark(oklch(0.5 0.13 240), #4ba3d2);
+  --color-playhead: var(--color-text-0);
+  --color-danger: oklch(0.56 0.19 25);
+  --color-danger-ink: light-dark(oklch(0.45 0.17 25), oklch(0.791 0.12 25));
+  --color-warning-ink: light-dark(oklch(0.5 0.12 70), oklch(82.8% 0.189 84.429));
+  --color-on-danger: oklch(1 0 0);
+  --color-media: light-dark(oklch(0.5 0.1 215), #00e3ff);
+  --color-container: light-dark(oklch(0.55 0.13 70), #f5a623);
+
+  /* Code editor syntax: One Light and One Dark hues, held at 4.5:1 on a line, the active line and a selection on it. */
+  --color-code-keyword: light-dark(oklch(0.509 0.211 329), oklch(0.829 0.164 318));
+  --color-code-name: light-dark(oklch(0.504 0.179 28), oklch(0.856 0.145 17));
+  --color-code-function: light-dark(oklch(0.492 0.193 263), oklch(0.805 0.121 245));
+  --color-code-constant: light-dark(oklch(0.495 0.13 50), oklch(0.815 0.11 50));
+  --color-code-type: light-dark(oklch(0.48 0.12 92), oklch(0.805 0.1 92));
+  --color-code-operator: light-dark(oklch(0.471 0.127 237), oklch(0.793 0.092 206));
+  --color-code-comment: light-dark(oklch(0.48 0.009 279), oklch(0.806 0.03 262));
+  --color-code-string: light-dark(oklch(0.468 0.142 143), oklch(0.793 0.11 133));
+
+  /* The two stops of the HeyGen brand gradient, worn by the header logo. Fixed brand values
+   * rather than roles, so they are not reachable as a background or text colour by mistake. */
+  --color-brand-gradient-from: #06e3fa;
+  --color-brand-gradient-to: #4fdb5e;
+
+  /* The timeline's own surfaces and inks, named so a host can theme the timeline alone. */
+  --timeline-shell-bg: var(--color-surface);
+  --timeline-shell-border: var(--color-border);
+  --timeline-ruler-border: color-mix(in oklab, var(--color-text-0) 16%, transparent);
+  --timeline-row-bg: light-dark(oklch(0.997 0.002 70), oklch(0.275 0.007 70));
+  --timeline-row-border: color-mix(in oklab, var(--color-text-0) 6%, transparent);
+  --timeline-gutter-bg: light-dark(oklch(0.967 0.005 70), oklch(0.253 0.007 70));
+  --timeline-gutter-border: color-mix(in oklab, var(--color-text-0) 10%, transparent);
+  --timeline-text-primary: var(--color-text-0);
+  --timeline-text-secondary: var(--color-text-2);
+  --timeline-tick-text: var(--color-text-2);
+  --timeline-tick-major: color-mix(in oklab, var(--color-text-0) 10%, transparent);
+  --timeline-tick-minor: color-mix(in oklab, var(--color-text-0) 6%, transparent);
+  --timeline-clip-bg: light-dark(
+    color-mix(in oklab, var(--color-text-0) 12%, transparent),
+    color-mix(in oklab, var(--color-text-0) 13%, transparent)
+  );
+  --timeline-clip-label-active: light-dark(#0b3d2c, rgba(232, 255, 247, 0.95));
+  --timeline-clip-label-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  /* Audio clips are a solid fill that carries white ink in both themes. */
+  --timeline-clip-audio-bg: oklch(0.45 0.12 300);
+  --timeline-clip-audio-border: oklch(0.37 0.12 300);
+  --timeline-clip-audio-bg-hover: oklch(0.49 0.12 300);
+  --timeline-clip-audio-bg-dragging: oklch(0.42 0.12 300 / 0.96);
+  --timeline-clip-audio-muted-bg: rgb(72, 74, 78);
+  --timeline-clip-selection: light-dark(#0f766e, rgba(255, 255, 255, 0.85));
+  --timeline-clip-selection-highlight: rgb(255 255 255 / 0.55);
+  --timeline-clip-radius: 12px;
+  --timeline-clip-band-height: 15px;
+  --timeline-clip-band-bg: rgb(12 12 14);
+  --timeline-clip-hover-duration: 60ms;
+  --timeline-clip-audio-radius: var(--timeline-clip-radius);
+  --timeline-clip-highlight: rgb(255 255 255 / 0.08);
+  --timeline-clip-shadow: 0 2px 6px rgb(0 0 0 / 0.3);
+  --timeline-clip-chip-bg: rgba(15, 22, 18, 0.73);
+  --timeline-clip-chip-audio-bg: rgba(25, 16, 38, 0.7);
+  --timeline-clip-chip-text: #ffffff;
+  --timeline-shortcut-bg: color-mix(in oklab, var(--color-raised) 94%, transparent);
+  /* Composition and text clips draw their frame as it is, like video filmstrips; a host may dim them. */
+  --timeline-composition-thumbnail-opacity: 1;
+  --timeline-composition-thumbnail-blend: normal;
+  --timeline-thumbnail-shimmer: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.02) 0%,
+    rgba(255, 255, 255, 0.05) 50%,
+    rgba(255, 255, 255, 0.02) 100%
+  );
+  --timeline-thumbnail-label-gradient: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.85) 0%,
+    rgba(0, 0, 0, 0.4) 60%,
+    transparent 100%
+  );
+  --timeline-thumbnail-label-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+  /* A text clip's strip behind its live words: dark for light text, light for dark text. */
+  --timeline-text-clip-dark-bg: #1c2028;
+  --timeline-text-clip-light-bg: #e9e6df;
+  --timeline-waveform-bar-rgb: 245, 237, 255;
+  --timeline-waveform-muted-rgb: 236, 238, 242;
+  --timeline-waveform-baseline-rgb: 226, 216, 238;
+  --timeline-waveform-error: repeating-linear-gradient(
+    90deg,
+    rgba(245, 237, 255, 0.35) 0 2px,
+    transparent 2px 5px
+  );
+  --timeline-waveform-label-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  --timeline-clip-bg-active: color-mix(in oklab, var(--color-accent) 20%, transparent);
+  --timeline-clip-bg-hover: light-dark(
+    color-mix(in oklab, var(--color-text-0) 26%, transparent),
+    color-mix(in oklab, var(--color-text-0) 16%, transparent)
+  );
+  --timeline-clip-bg-dragging: color-mix(in oklab, var(--color-raised) 96%, transparent);
+  --timeline-clip-border: light-dark(
+    color-mix(in oklab, var(--color-text-0) 40%, transparent),
+    color-mix(in oklab, var(--color-text-0) 30%, transparent)
+  );
+  --timeline-clip-border-hover: color-mix(in oklab, var(--color-accent) 75%, transparent);
+  --timeline-clip-border-active: light-dark(
+    color-mix(in oklab, var(--color-accent) 90%, transparent),
+    color-mix(in oklab, var(--color-accent) 55%, transparent)
+  );
+  --timeline-handle: var(--color-text-0);
+  /* Audio clip fades: the shaded wedge over the faded gain, and the corner dots. */
+  --timeline-fade-shade: rgba(0, 0, 0, 0.38);
+  --timeline-fade-dot: #fff;
+  --timeline-fade-dot-ring: rgba(0, 0, 0, 0.55);
+  --timeline-resize-seam: color-mix(in oklab, var(--color-text-0) 12%, transparent);
+  --timeline-resize-active: color-mix(in oklab, var(--color-text-0) 24%, transparent);
+  --timeline-track-clip-fill: color-mix(in oklab, var(--color-text-0) 8%, transparent);
+  --timeline-track-clip-active: color-mix(in oklab, var(--color-accent) 20%, transparent);
+  --timeline-track-label: var(--color-text-muted);
+  --timeline-border-strong: color-mix(in oklab, var(--color-text-0) 20%, transparent);
+  --timeline-group-member-tint: color-mix(in oklab, var(--color-text-0) 3.5%, transparent);
+  --timeline-overlay-text: var(--color-text-2);
+  --timeline-accent: var(--color-accent);
+  --timeline-accent-soft: color-mix(in oklab, var(--color-accent) 18%, transparent);
+  --timeline-accent-faint: color-mix(in oklab, var(--color-accent) 5.5%, transparent);
+  --timeline-accent-fill: color-mix(in oklab, var(--color-accent) 10%, transparent);
+  --timeline-accent-glow: color-mix(in oklab, var(--color-accent) 50%, transparent);
+  --timeline-accent-border: color-mix(in oklab, var(--color-accent) 70%, transparent);
+  --timeline-accent-rail: color-mix(in oklab, var(--color-accent) 35%, transparent);
+  --timeline-accent-hover: var(--color-on-hover);
+  --timeline-accent-button-bg: var(--color-on);
+  --timeline-danger: color-mix(in oklab, var(--color-danger) 70%, transparent);
+  --timeline-info-bg: rgba(59, 130, 246, 0.12);
+  --timeline-info-border: rgba(59, 130, 246, 0.4);
+  --timeline-dialog-bg: var(--color-raised);
+  --timeline-diamond-bg: var(--color-raised);
+  --timeline-diamond-border: color-mix(in oklab, var(--color-text-0) 14%, transparent);
+  --timeline-text-solid: var(--color-text-0);
+  --timeline-text-faint: var(--color-text-off);
+  --timeline-text-dim: var(--color-text-muted);
+  --timeline-text-soft: var(--color-text-2);
+  --timeline-text-bright: var(--color-text-2);
+  --timeline-snap-guide: color-mix(in oklab, var(--color-text-0) 60%, transparent);
+  --timeline-overlay-bg: light-dark(oklch(1 0 70 / 0.9), rgba(0, 0, 0, 0.8));
+  --timeline-overlay-bg-strong: light-dark(oklch(1 0 70 / 0.95), rgba(0, 0, 0, 0.85));
+  --timeline-input-bg: light-dark(
+    color-mix(in oklab, var(--color-text-0) 5%, transparent),
+    rgba(0, 0, 0, 0.3)
+  );
+  --timeline-automation-rail: color-mix(in oklab, var(--color-text-0) 8%, transparent);
+  --timeline-automation-point-muted: light-dark(
+    color-mix(in oklab, var(--color-text-0) 30%, transparent),
+    rgba(0, 0, 0, 0.5)
+  );
+  --timeline-diamond-muted: var(--color-text-muted);
+  --timeline-beat: rgb(34, 197, 94);
+  --timeline-clip-shadow-dragging: light-dark(
+    color-mix(in oklab, var(--color-text-0) 16%, transparent),
+    rgba(0, 0, 0, 0.4)
+  );
+  --timeline-playhead-glow: color-mix(in oklab, var(--color-accent) 14%, transparent);
+  --timeline-playhead-shadow: light-dark(
+    color-mix(in oklab, var(--color-text-0) 20%, transparent),
+    rgba(0, 0, 0, 0.55)
+  );
+  --timeline-transition-zone: light-dark(
+    color-mix(in oklab, var(--color-text-0) 12%, transparent),
+    color-mix(in oklab, var(--color-text-0) 20%, transparent)
+  );
+  --timeline-transition-badge: light-dark(#ffffff, rgba(237, 244, 239, 0.98));
+  --timeline-transition-badge-ink: rgba(36, 56, 45, 0.96);
+
+  /* -------------------------------------------------------------- geometry */
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+
+  /* The one radius every push-button wears, named by its role so a button does
+   * not have to know which step of the scale it sits on. */
+  --radius-button: var(--radius-md);
+
+  /* Control heights: 24, 28 and 32 px. `--spacing-*` gives `h-ctl`, `min-h-ctl`
+   * and friends. */
+  --spacing-ctl-sm: 24px;
+  --spacing-ctl: 28px;
+  --spacing-ctl-lg: 32px;
+
+  /* ------------------------------------------------------------------ type */
+
+  /* Dense UI type sizes named by pixel value. `step` avoids a clash with
+   * Tailwind's own `--text-*` scale, whose `xs`, `sm` and `lg` are unchanged. */
+  --text-step-7: 7px;
+  --text-step-8: 8px;
+  --text-step-9: 9px;
+  --text-step-10: 10px;
+  --text-step-11: 11px;
+  --text-step-12: 12px;
+  --text-step-13: 13px;
+  --text-step-14: 14px;
+  --text-step-15: 15px;
+  --text-step-16: 16px;
+  --text-step-17: 17px;
+  --text-step-18: 18px;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", "IBM Plex Mono", "SF Mono", "Fira Code", monospace;
+
+  /* ---------------------------------------------------------------- shadow */
+
+  /* Floating chrome: a drop shadow plus a hairline ring that defines the edge. */
+  --shadow-menu:
+    0 8px 24px light-dark(rgb(0 0 0 / 0.12), rgb(0 0 0 / 0.45)),
+    0 0 0 1px light-dark(rgb(0 0 0 / 0.07), rgb(0 0 0 / 0.4));
+  --shadow-popover:
+    0 16px 40px light-dark(rgb(0 0 0 / 0.14), rgb(0 0 0 / 0.55)),
+    0 0 0 1px light-dark(rgb(0 0 0 / 0.07), rgb(0 0 0 / 0.45));
+
+  /* The primary button reads as a raised key rather than a floating panel: a tight
+   * contact shadow, a soft ambient one, and an inner top highlight. */
+  --shadow-btn-primary:
+    0 1px 2px rgb(0 0 0 / 0.6), 0 2px 6px rgb(0 0 0 / 0.35), inset 0 1px 0 rgb(255 255 255 / 0.65);
+
+  /* ---------------------------------------------------------------- motion */
+
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out-expo: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out-circ: cubic-bezier(0.77, 0, 0.175, 1);
+
+  /* The curve for a small state change (hover, press, focus), named by role so
+   * a control does not have to pick one. The other two stay for motion that is
+   * meant to be noticed. */
+  --ease-standard: var(--ease-out-quint);
+
+  /* Durations have no Tailwind namespace, so these are plain variables paired
+   * with the `@utility` rules at the bottom of this file. All are at or under
+   * 200 ms. */
+  --duration-focus: 100ms;
+  --duration-press: 120ms;
+  --duration-hover: 150ms;
+  --duration-expand: 160ms;
+  /* Menus, popovers, and dropdowns. Open is ease-out; close is shorter and ease-in. */
+  --duration-open: 120ms;
+  --duration-close: 90ms;
+  /* Tooltips use the same enter shape on a shorter open. */
+  --duration-tooltip: 100ms;
+  /* Visible on the first frame. Never enter from scale 0 or opacity 0. */
+  --popup-enter-opacity: 0.8;
+  --popup-enter-scale: 0.97;
+
+  /* ------------------------------------------------------------------ icon */
+
+  /* Read by `readIconTokens` and handed to Phosphor's `IconContext`. */
+  --icon-size: 16px;
+  --icon-weight: regular;
+
+  /* ------------------------------------------------- deprecated: old names */
+
+  /* The `studio.*` and `panel.*` scales, aliases of the tokens above so existing
+   * markup keeps working during the sweep. U12 removes them from Studio's
+   * source; the published JS preset keeps them one more major. */
+  --color-studio-bg: var(--color-bg-0);
+  --color-studio-surface: var(--color-surface-alt);
+  --color-studio-border: var(--color-border-strong);
+  --color-studio-text: var(--color-text-body);
+  --color-studio-muted: var(--color-text-muted);
+  --color-studio-accent: var(--color-accent);
+  --color-panel-bg: var(--color-bg-1);
+  --color-panel-bg-inset: var(--color-bg-2);
+  --color-panel-input: var(--color-input);
+  --color-panel-surface: var(--color-surface);
+  --color-panel-hover: var(--color-hover);
+  --color-panel-border: var(--color-border);
+  --color-panel-border-input: var(--color-border-input);
+  --color-panel-hairline: var(--color-hairline);
+  --color-panel-text-0: var(--color-text-0);
+  --color-panel-text-1: var(--color-text-1);
+  --color-panel-text-2: var(--color-text-2);
+  --color-panel-text-3: var(--color-text-3);
+  --color-panel-text-4: var(--color-text-4);
+  --color-panel-text-5: var(--color-text-5);
+  --color-panel-bg-soft: var(--color-bg-2);
+  --color-panel-bg-2: var(--color-bg-2);
+  --color-panel-accent: var(--color-accent);
+  --color-panel-danger: var(--color-danger);
+  --color-panel-media: var(--color-media);
+  --color-panel-container: var(--color-container);
+
+  /* Dock panels are cards on the shell. The card owns the only border; its tab
+   * strip sits below the card body and the shown tab is a fill in the body colour. */
+  --panel-shell-bg: var(--color-bg-1);
+  --panel-card-bg: var(--color-surface);
+  --panel-card-border: var(--color-border-strong);
+  --panel-strip-bg: var(--color-bg-0);
+  --panel-tab-bg-hover: var(--color-hover);
+
+  /* Names Studio's markup invented that no config ever defined, so the classes
+   * compiled to nothing. Aliased to the token that was meant, rather than
+   * given values of their own, so there is still one source per decision.
+   * U12 rewrites the call sites and deletes these. */
+  --color-surface-hover: var(--color-hover);
+  --color-accent-red: var(--color-danger);
+  --text-2xs: var(--text-step-10);
+
+  /* ------------------------------------------- deprecated: Tailwind palette */
+
+  /* Stock colours markup still names, so `--color-*: initial` does not blank them. U12 deletes
+   * this block. The neutral scale is Graphite's roles by the job each step does in markup (light
+   * steps text, dark steps surfaces and lines); the rest are verbatim Tailwind 4.3.3 defaults. */
+  --color-amber-50: oklch(98.7% 0.022 95.277);
+  --color-amber-100: oklch(96.2% 0.059 95.617);
+  --color-amber-200: oklch(92.4% 0.12 95.746);
+  --color-amber-300: oklch(87.9% 0.169 91.605);
+  --color-amber-400: oklch(82.8% 0.189 84.429);
+  --color-amber-500: oklch(76.9% 0.188 70.08);
+  --color-amber-900: oklch(41.4% 0.112 45.904);
+  --color-amber-950: oklch(27.9% 0.077 45.635);
+  --color-black: #000;
+  --color-blue-400: oklch(70.7% 0.165 254.624);
+  --color-blue-500: oklch(62.3% 0.214 259.815);
+  --color-cyan-400: oklch(78.9% 0.154 211.53);
+  --color-cyan-500: oklch(71.5% 0.143 215.221);
+  --color-emerald-300: oklch(84.5% 0.143 164.978);
+  --color-emerald-400: oklch(76.5% 0.177 163.223);
+  --color-emerald-500: oklch(69.6% 0.17 162.48);
+  --color-emerald-600: oklch(59.6% 0.145 163.225);
+  --color-emerald-700: oklch(50.8% 0.118 165.612);
+  --color-green-400: oklch(79.2% 0.209 151.711);
+  --color-green-500: oklch(72.3% 0.219 149.579);
+  --color-green-600: oklch(62.7% 0.194 149.214);
+  --color-neutral-50: var(--color-text-0);
+  --color-neutral-100: var(--color-text-0);
+  --color-neutral-200: var(--color-text-0);
+  --color-neutral-300: var(--color-text-2);
+  --color-neutral-400: var(--color-text-2);
+  --color-neutral-500: var(--color-text-muted);
+  --color-neutral-600: var(--color-text-muted);
+  --color-neutral-700: var(--color-border-strong);
+  --color-neutral-800: var(--color-border);
+  --color-neutral-900: var(--color-surface);
+  --color-neutral-950: var(--color-bg-0);
+  --color-orange-300: oklch(83.7% 0.128 66.29);
+  --color-orange-400: oklch(75% 0.183 55.934);
+  --color-pink-400: oklch(71.8% 0.202 349.761);
+  --color-pink-500: oklch(65.6% 0.241 354.308);
+  --color-purple-200: oklch(90.2% 0.063 306.703);
+  --color-purple-300: oklch(82.7% 0.119 306.383);
+  --color-purple-400: oklch(71.4% 0.203 305.504);
+  --color-purple-500: oklch(62.7% 0.265 303.9);
+  --color-purple-900: oklch(38.1% 0.176 304.987);
+  --color-red-100: oklch(93.6% 0.032 17.717);
+  --color-red-200: oklch(88.5% 0.062 18.334);
+  --color-red-300: oklch(80.8% 0.114 19.571);
+  --color-red-400: oklch(70.4% 0.191 22.216);
+  --color-red-500: oklch(63.7% 0.237 25.331);
+  --color-red-600: oklch(57.7% 0.245 27.325);
+  --color-red-700: oklch(50.5% 0.213 27.518);
+  --color-red-800: oklch(44.4% 0.177 26.899);
+  --color-red-900: oklch(39.6% 0.141 25.723);
+  --color-red-950: oklch(25.8% 0.092 26.042);
+  --color-rose-400: oklch(71.2% 0.194 13.428);
+  --color-rose-500: oklch(64.5% 0.246 16.439);
+  --color-sky-200: oklch(90.1% 0.058 230.902);
+  --color-sky-300: oklch(82.8% 0.111 230.318);
+  --color-sky-400: oklch(74.6% 0.16 232.661);
+  --color-sky-500: oklch(68.5% 0.169 237.323);
+  --color-sky-700: oklch(50% 0.134 242.749);
+  --color-sky-900: oklch(39.1% 0.09 240.876);
+  --color-sky-950: oklch(29.3% 0.066 243.157);
+  --color-violet-400: oklch(70.2% 0.183 293.541);
+  --color-violet-500: oklch(60.6% 0.25 292.717);
+  --color-white: #fff;
+  /* Framey, the desktop app's cursor mascot (hyperframes-internal packages/nib): the same in both themes. */
+  --color-framey: #3ce6ac;
+  --color-framey-ink: #16121a;
+}
+
+/* The colour-scheme picks each token's light or dark half: dark unless the document element
+ * has data-theme="paper". Base layer, so a host's own colour-scheme wins. */
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+  :root:where([data-theme="paper"]) {
+    color-scheme: light;
+  }
+}
+:root[data-theme="paper"] {
+  --timeline-clip-label-shadow: none;
+  --timeline-clip-shadow: 0 2px 6px rgb(0 0 0 / 0.12);
+  --timeline-thumbnail-shimmer: linear-gradient(
+    90deg,
+    rgba(24, 24, 27, 0.02) 0%,
+    rgba(24, 24, 27, 0.05) 50%,
+    rgba(24, 24, 27, 0.02) 100%
+  );
+}
+
+/* Motion durations as utilities, since Tailwind has no `--duration-*`
+ * namespace. Each one zeroes itself under `prefers-reduced-motion`, so a
+ * caller cannot forget the reduced-motion case. */
+
+@utility duration-* {
+  transition-duration: --value(--duration-*);
+  @media (prefers-reduced-motion: reduce) {
+    transition-duration: 0ms;
+  }
+}

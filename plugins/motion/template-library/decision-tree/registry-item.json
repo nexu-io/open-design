@@ -1,0 +1,24 @@
+{
+  "$schema": "https://hyperframes.heygen.com/schema/registry-item.json",
+  "name": "decision-tree",
+  "type": "hyperframes:example",
+  "title": "Decision Tree",
+  "description": "Animated flowchart with branching paths",
+  "dimensions": {
+    "width": 1920,
+    "height": 1080
+  },
+  "duration": 10,
+  "files": [
+    {
+      "path": "compositions/decision_tree.html",
+      "target": "compositions/decision_tree.html",
+      "type": "hyperframes:composition"
+    },
+    {
+      "path": "index.html",
+      "target": "index.html",
+      "type": "hyperframes:composition"
+    }
+  ]
+}

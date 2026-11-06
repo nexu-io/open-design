@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "motion": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["--experimental-strip-types", "mcp.ts"],
+      "cwd": ".",
+      "env_vars": ["MOTION_DATA_DIR", "PORT", "FFMPEG_PATH", "FFPROBE_PATH", "HYPERFRAMES_FFMPEG_PATH", "HYPERFRAMES_FFPROBE_PATH", "HYPERFRAMES_BROWSER_PATH"]
+    }
+  }
+}

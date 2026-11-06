@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Composition Reliability Fixture</title>
+    <style>
+      html,
+      body {
+        width: 1280px;
+        height: 720px;
+        margin: 0;
+        overflow: hidden;
+        background: #11151c;
+        color: white;
+        font-family: Arial, sans-serif;
+      }
+      #composition-reliability {
+        position: relative;
+        width: 1280px;
+        height: 720px;
+        overflow: hidden;
+      }
+      .composition-host {
+        position: absolute;
+        width: 480px;
+        height: 220px;
+      }
+      #title-host-a {
+        left: 48px;
+        top: 48px;
+      }
+      #title-host-b {
+        left: 600px;
+        top: 48px;
+      }
+      #nested-host {
+        left: 48px;
+        top: 330px;
+      }
+      .collision-shape {
+        position: absolute;
+        top: 580px;
+        width: 220px;
+        height: 90px;
+        border-radius: 18px;
+      }
+      #collision-a {
+        left: 600px;
+        background: #7357ff;
+      }
+      #collision-b {
+        left: 740px;
+        background: #ff5c7a;
+      }
+      #layer-overlap {
+        left: 880px;
+        background: rgba(42, 211, 162, 0.75);
+      }
+    </style>
+  </head>
+  <body>
+    <main
+      id="composition-reliability"
+      data-composition-id="composition-reliability"
+      data-width="1280"
+      data-height="720"
+      data-start="0"
+      data-duration="12"
+      data-fps="30"
+      data-no-timeline
+    >
+      <div
+        id="title-host-a"
+        class="clip composition-host"
+        data-hf-id="title-host-a"
+        data-composition-id="title-card-a"
+        data-composition-src="compositions/title-card.html"
+        data-start="0"
+        data-duration="4"
+        data-track-index="0"
+      ></div>
+      <div
+        id="title-host-b"
+        class="clip composition-host"
+        data-hf-id="title-host-b"
+        data-composition-id="title-card-b"
+        data-composition-src="compositions/title-card.html"
+        data-start="4"
+        data-duration="4"
+        data-track-index="0"
+      ></div>
+      <div
+        id="nested-host"
+        class="clip composition-host"
+        data-hf-id="nested-host"
+        data-composition-id="nested-shell-host"
+        data-composition-src="compositions/nested-shell.html"
+        data-start="2"
+        data-duration="6"
+        data-track-index="1"
+      ></div>
+      <div
+        id="collision-a"
+        class="clip collision-shape"
+        data-hf-id="collision-a"
+        data-start="1"
+        data-duration="2"
+        data-track-index="2"
+      ></div>
+      <div
+        id="collision-b"
+        class="clip collision-shape"
+        data-hf-id="collision-b"
+        data-start="3"
+        data-duration="4"
+        data-track-index="2"
+      ></div>
+      <div
+        id="layer-overlap"
+        class="clip collision-shape"
+        data-hf-id="layer-overlap"
+        data-start="3"
+        data-duration="4"
+        data-track-index="3"
+      ></div>
+    </main>
+  </body>
+</html>

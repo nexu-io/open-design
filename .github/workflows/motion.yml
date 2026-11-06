@@ -1,0 +1,98 @@
+name: Motion standalone checks
+
+# Motion has an independent npm lockfile and release contract; this workflow
+# validates that distribution without changing OD's application merge gate.
+on:
+  pull_request:
+    paths:
+      - 'plugins/motion/**'
+      - '.github/workflows/motion.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'plugins/motion/**'
+      - '.github/workflows/motion.yml'
+  workflow_dispatch:
+    inputs:
+      format:
+        description: 'Build npm lightweight artifacts or complete ZIP backups'
+        type: choice
+        options: [npm, full]
+        default: npm
+      publish:
+        description: 'Publication is disabled during migration; leave unchecked'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: motion-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  standalone:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+        working-directory: plugins/motion
+    env:
+      HYPERFRAMES_BROWSER_PATH: /usr/bin/chromium
+      HYPERFRAMES_FFMPEG_PATH: /usr/bin/ffmpeg
+      HYPERFRAMES_FFPROBE_PATH: /usr/bin/ffprobe
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+      - name: Setup pinned Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '26.11.1'
+          cache: npm
+          cache-dependency-path: plugins/motion/package-lock.json
+      - name: Install rendering test tools
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends zip unzip chromium ffmpeg fonts-noto-core
+      - name: Validate manual package selection
+        env:
+          PACKAGE_FORMAT: ${{ inputs.format || 'npm' }}
+          PUBLISH: ${{ inputs.publish || false }}
+        run: |
+          if [ "$PUBLISH" = true ]; then echo 'Motion publishing is disabled during migration.' >&2; exit 1; fi
+          case "$PACKAGE_FORMAT" in
+            npm|full) ;;
+            *) echo 'Unknown package format' >&2; exit 1 ;;
+          esac
+      - name: Install locked Motion dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Check and build Studio
+        run: |
+          npm run check
+          npm run typecheck:studio
+          npm run build:studio
+      - name: Validate standalone installation and packaging
+        run: node --experimental-strip-types --test tests/npm-installer.test.ts tests/npm-package.test.ts tests/test-package.test.ts tests/source-install.test.ts tests/bootstrap.test.ts tests/mcp-registry.test.ts tests/phase1.test.ts tests/adapters.test.ts tests/package.test.ts tests/recreate-measure.test.ts tests/workflow.test.ts tests/catalog.test.ts tests/extension-boundary.test.ts
+      - name: Studio regression
+        run: npm run test:studio -- --maxWorkers=2
+      - name: Build phase-one ZIP and exercise all nine tools
+        run: |
+          npm run package:phase1
+          archive="$PWD/dist/motion-$(node -p "require('./package.json').version")-phase1.zip"
+          node tests/phase1-package.mjs "$archive" "$PWD/.artifacts/phase1-package-e2e"
+      - name: Build immutable standalone artifacts
+        env:
+          PACKAGE_FORMAT: ${{ inputs.format || 'npm' }}
+        run: |
+          version=$(node scripts/test-package.mjs version "$GITHUB_RUN_NUMBER" "${GITHUB_RUN_ATTEMPT:-1}")
+          if [ "$PACKAGE_FORMAT" = npm ]; then
+            node scripts/package-npm.mjs "dist/$version" "$version"
+          else
+            for target in mac-arm64 win-x64; do
+              node scripts/test-package.mjs prepare "$target"
+              node scripts/test-package.mjs build "$target" "$version"
+            done
+          fi
+      - name: Record validation scope
+        run: |
+          echo 'Motion standalone artifacts were built and checked; no package or release was published.' >> "$GITHUB_STEP_SUMMARY"

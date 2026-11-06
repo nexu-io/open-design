@@ -4,6 +4,8 @@ This directory owns OpenDesign plugin content and plugin authoring material.
 
 ## Boundaries
 
+- `plugins/motion/` is the independently distributed Motion runtime imported from its original repository. Keep its own npm manifest/lockfile and package-scoped lifecycle; it is not an OD pnpm workspace package or an automatically bundled catalog entry. Its migration/build boundary is documented in `motion/docs/repository-migration.md`.
+
 - `plugins/_official/` contains bundled first-party plugins. The daemon boot walker scans only this subtree and registers it as `source_kind='bundled'`.
 - `plugins/spec/` is the portable plugin specification and authoring kit. It is documentation, starter material, and example source for contributors and external agents; it must not be treated as an installed first-party catalog.
 - Keep runnable plugin examples portable: every example should have a `SKILL.md`; add `open-design.json` only as the OD sidecar.

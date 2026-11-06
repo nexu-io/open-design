@@ -1,0 +1,6 @@
+/* Studio's own app clears Tailwind's stock palette so only Studio tokens are
+ * reachable from markup. Kept out of theme.css so a host importing the tokens
+ * keeps its own colours. Must be imported before theme.css. */
+@theme static {
+  --color-*: initial;
+}

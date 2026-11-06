@@ -4,6 +4,8 @@ Language: English | [简体中文](README.zh-CN.md)
 
 This directory has two different jobs:
 
+- `motion/` - independently built Motion application, editor, MCP and Skills source. See its [migration and build guide](motion/docs/repository-migration.md). It is not auto-registered by the bundled-plugin walker.
+
 - `_official/` - first-party plugins bundled with OpenDesign. The daemon scans this tree at startup and registers these plugins as official.
 - `community/` - community plugin source folders. These are installable plugins, but they are not preinstalled unless a registry entry points at them and the user installs one.
 - `registry/` - default registry source manifests (`open-design-marketplace.json`) for official and community catalogs. These feed the Plugins Available/Sources UI.

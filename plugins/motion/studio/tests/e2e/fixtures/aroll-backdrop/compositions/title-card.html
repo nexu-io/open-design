@@ -1,0 +1,33 @@
+<template>
+  <div
+    id="title-card-root"
+    data-composition-id="title-card"
+    data-width="1080"
+    data-height="240"
+    data-start="0"
+    data-duration="5"
+  >
+    <style>
+      #title-card-root {
+        position: absolute;
+        inset: 0;
+        font-family: Arial, sans-serif;
+      }
+      #title-card-label {
+        position: absolute;
+        left: 60px;
+        top: 80px;
+        margin: 0;
+        font-size: 56px;
+        color: #fff;
+      }
+    </style>
+    <h2 id="title-card-label">Chapter one</h2>
+    <script>
+      window.__timelines = window.__timelines || {};
+      window.__timelines["title-card"] = gsap
+        .timeline({ paused: true })
+        .from("#title-card-label", { x: -200, opacity: 0, duration: 0.6 }, 0);
+    </script>
+  </div>
+</template>

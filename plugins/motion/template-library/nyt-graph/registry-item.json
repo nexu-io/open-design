@@ -1,0 +1,24 @@
+{
+  "$schema": "https://hyperframes.heygen.com/schema/registry-item.json",
+  "name": "nyt-graph",
+  "type": "hyperframes:example",
+  "title": "NYT Graph",
+  "description": "Animated data chart in print editorial style",
+  "dimensions": {
+    "width": 1920,
+    "height": 1080
+  },
+  "duration": 15,
+  "files": [
+    {
+      "path": "compositions/nyt-chart.html",
+      "target": "compositions/nyt-chart.html",
+      "type": "hyperframes:composition"
+    },
+    {
+      "path": "index.html",
+      "target": "index.html",
+      "type": "hyperframes:composition"
+    }
+  ]
+}

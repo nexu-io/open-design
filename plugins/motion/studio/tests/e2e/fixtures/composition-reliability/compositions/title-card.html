@@ -1,0 +1,41 @@
+<template id="title-card-template">
+  <section
+    id="title-card-root"
+    data-composition-id="title-card"
+    data-width="480"
+    data-height="220"
+    data-start="0"
+    data-duration="4"
+    data-no-timeline
+  >
+    <style>
+      #title-card-root {
+        box-sizing: border-box;
+        width: 480px;
+        height: 220px;
+        padding: 32px;
+        overflow: hidden;
+        background: #202736;
+        font-family: Arial, sans-serif;
+      }
+      .hl-block {
+        width: 100%;
+      }
+      .hl-mask {
+        overflow: hidden;
+        background: transparent;
+      }
+      .hl-text {
+        margin: 0;
+        color: #f4f7ff;
+        font-size: 52px;
+        line-height: 1.05;
+      }
+    </style>
+    <div class="hl-block" data-hf-id="title-block">
+      <div class="hl-mask" data-hf-id="title-mask">
+        <h1 class="hl-text" data-hf-id="title-text">Reliable compositions</h1>
+      </div>
+    </div>
+  </section>
+</template>

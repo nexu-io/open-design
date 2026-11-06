@@ -68,6 +68,31 @@ const residualSkippedDirectories = new Set([
 ]);
 
 const residualAllowedExactPaths = new Set([
+  // Imported Motion Node entrypoints and browser assets keep their standalone
+  // npm/runtime contract; new project-owned helpers remain TypeScript-first.
+  "plugins/motion/scripts/bundle/bootstrap.mjs",
+  "plugins/motion/scripts/bundle/configure-plugin.mjs",
+  "plugins/motion/scripts/check-installed-mcp.mjs",
+  "plugins/motion/scripts/npm-hosts.mjs",
+  "plugins/motion/scripts/npm-installer.mjs",
+  "plugins/motion/scripts/npm-runtime.mjs",
+  "plugins/motion/scripts/package-npm.mjs",
+  "plugins/motion/scripts/resolve-installed.mjs",
+  "plugins/motion/scripts/runtime-assets.mjs",
+  "plugins/motion/scripts/smoke-npm-package.mjs",
+  "plugins/motion/scripts/smoke-test-package.mjs",
+  "plugins/motion/scripts/test-package.mjs",
+  "plugins/motion/shared/owned-studio.mjs",
+  "plugins/motion/skills/motion-recreate/scripts/measure_frame.mjs",
+  "plugins/motion/studio/src/shims/canvasBrowserStub.js",
+  "plugins/motion/studio/src/styles/tailwind-preset.shared.js",
+  "plugins/motion/tests/phase1-package.mjs",
+  "plugins/motion/tests/shared-editor-client.mjs",
+  "plugins/motion/tests/shared-editor-crash.mjs",
+  "plugins/motion/tests/shared-editor-legacy.mjs",
+  "plugins/motion/tests/shared-editor-media.mjs",
+  "plugins/motion/web/design-system/catalog.js",
+  "plugins/motion/web/design-system/theme.js",
   // esbuild config entrypoints are executed directly by Node before package
   // dist output exists.
   "packages/agui-adapter/esbuild.config.mjs",
@@ -153,6 +178,11 @@ const residualAllowedExactPaths = new Set([
 ]);
 
 const residualAllowedPathPrefixes = [
+  // Imported HyperFrames E2E fixtures and Vite-generated Motion editor output.
+  "plugins/motion/studio/tests/e2e/",
+  "plugins/motion/studio/build/",
+  // Verified native tool downloads used by standalone package assembly (git-ignored).
+  "plugins/motion/.artifacts/test-runtime/",
   "apps/daemon/dist/",
   "apps/web/.next/",
   "apps/web/out/",
