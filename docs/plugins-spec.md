@@ -479,6 +479,10 @@ od marketplace add https://.../open-design-marketplace.json
 
 GitHub install path uses `https://codeload.github.com/owner/repo/tar.gz/<ref>`, no git binary required, with path-traversal guards and a configurable size cap.
 
+When the source names a subfolder (`github:owner/repo/path/to/subfolder`), the installer walks that folder through the `api.github.com` contents API rather than downloading a tarball, because the repository can be far larger than the size cap. Each file is fetched from its advertised `download_url`; when that host (`raw.githubusercontent.com`) is unreachable — it resolves to a blackhole address on some networks — the same path is re-fetched from the contents API with `Accept: application/vnd.github.raw`, on the host that just served the listing. The fallback runs before any byte is written, so the size cap and the recorded content digest do not depend on which host served the bytes.
+
+Install failures name the first candidate's error (the actionable one) and append the last as `(fallback: …)`, followed by every URL that was tried.
+
 ## 8. The Apply pipeline
 
 The plugin system exposes two apply surfaces; both call the same daemon endpoint and receive the same `ApplyResult`. In v1, **apply is pure by default**: it reads the manifest, templates the query, and returns context chips, inputs, asset refs, and MCP specs; it does not write the project cwd, copy assets, write `.mcp.json`, or start any process. Side effects happen later in `POST /api/projects` or `POST /api/runs`, after the same trust/capability gate runs.
