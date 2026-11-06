@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * FROZEN CONTRACT for the brand engine. Every engine module imports its types
  * and the css-var helpers from here, so the independently-built modules

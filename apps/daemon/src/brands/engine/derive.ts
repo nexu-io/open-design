@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * derive.ts — the heart of the engine.
  *
@@ -198,16 +197,11 @@ function toEven(n: number): number {
  * brand-framework guidance ("以你忠实移植的算法输出为准") we keep the algorithmic
  * output as the single source of truth.
  */
-function fontSizeLadder(base: number): number[] {
-  const out: number[] = [];
-  for (let i = 0; i < 10; i++) {
-    if (i === 1) {
-      out.push(base);
-    } else {
-      out.push(toEven(base * Math.E ** ((i - 1) / 5)));
-    }
-  }
-  return out;
+type FontSizeLadder = [number, number, number, number, number, number, number, number, number, number];
+
+function fontSizeLadder(base: number): FontSizeLadder {
+  const step = (i: number): number => (i === 1 ? base : toEven(base * Math.E ** ((i - 1) / 5)));
+  return [step(0), step(1), step(2), step(3), step(4), step(5), step(6), step(7), step(8), step(9)];
 }
 
 /** Round a duration in seconds to a tidy "0.2s"-style string. */

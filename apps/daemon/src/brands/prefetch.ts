@@ -1,4 +1,3 @@
-// @ts-nocheck
 import fs from "node:fs";
 import path from "node:path";
 import { harvestFonts, type FontFile } from "./fonts.js";
@@ -110,7 +109,7 @@ async function fetchText(
      *  not an error. */
     allowHttpError?: boolean;
     /** Caller cancellation (user Stop) layered onto the per-fetch timeout. */
-    signal?: AbortSignal;
+    signal?: AbortSignal | undefined;
   },
 ): Promise<{ text: string; finalUrl: string; contentType: string; ok: boolean } | null> {
   try {
@@ -313,7 +312,7 @@ export function normalizeColor(raw: string): string | null {
   const v = raw.trim().toLowerCase();
   const hex = /^#([0-9a-f]{3,8})$/.exec(v);
   if (hex) {
-    let h = hex[1];
+    let h = hex[1] ?? "";
     if (h.length === 3 || h.length === 4) {
       h = h.slice(0, 3).split("").map((c) => c + c).join("");
     } else if (h.length === 8) {
@@ -386,7 +385,7 @@ function colorSourceForMatch(css: string, index: number): string | undefined {
 }
 
 function mergeColorCandidates(...groups: ColorCandidate[][]): ColorCandidate[] {
-  const counts = new Map<string, { count: number; sources: Set<string>; extreme?: boolean }>();
+  const counts = new Map<string, { count: number; sources: Set<string>; extreme?: boolean | undefined }>();
   for (const group of groups) {
     for (const candidate of group) {
       const existing = counts.get(candidate.hex) ?? { count: 0, sources: new Set<string>() };
@@ -406,7 +405,7 @@ function hasHighSignalColorSource(candidate: ColorCandidate): boolean {
 }
 
 function sortColorCandidates(
-  counts: Map<string, { count: number; sources: Set<string>; extreme?: boolean }>,
+  counts: Map<string, { count: number; sources: Set<string>; extreme?: boolean | undefined }>,
 ): ColorCandidate[] {
   const all = [...counts.entries()]
     .map(([hex, value]): ColorCandidate => {
@@ -496,7 +495,7 @@ export function extractFonts(css: string): { fonts: FontCandidate[]; fontFaceFam
   const counts = new Map<string, number>();
   for (const m of css.matchAll(/font-family\s*:\s*([^;}{!]+)/gi)) {
     // First non-generic family in the stack is the intended face.
-    for (const partRaw of m[1].split(",")) {
+    for (const partRaw of (m[1] ?? "").split(",")) {
       const part = decodeEntities(partRaw).trim().replace(/^["']|["']$/g, "").trim();
       if (!part || part.startsWith("var(")) continue;
       if (part.includes('&quot') || /placeholder$/i.test(part)) continue;
@@ -508,7 +507,7 @@ export function extractFonts(css: string): { fonts: FontCandidate[]; fontFaceFam
   }
   const fontFace = new Set<string>();
   for (const m of css.matchAll(/@font-face\s*{[^}]*font-family\s*:\s*["']?([^;"'}]+)/gi)) {
-    const family = decodeEntities(m[1]).trim().replace(/^["']|["']$/g, "").trim();
+    const family = decodeEntities(m[1] ?? "").trim().replace(/^["']|["']$/g, "").trim();
     if (!family || /placeholder$/i.test(family) || isIconFontFamily(family)) continue;
     fontFace.add(family);
   }
@@ -526,7 +525,7 @@ export function extractFonts(css: string): { fonts: FontCandidate[]; fontFaceFam
 function matchAll1(html: string, re: RegExp): string[] {
   const out: string[] = [];
   for (const m of html.matchAll(re)) {
-    const t = stripTags(m[1]).trim();
+    const t = stripTags(m[1] ?? "").trim();
     if (t) out.push(t);
   }
   return out;
@@ -549,8 +548,8 @@ function extFor(contentType: string, url: string): string {
   if (contentType.includes("webp")) return ".webp";
   if (contentType.includes("gif")) return ".gif";
   if (contentType.includes("icon") || contentType.includes("ico")) return ".ico";
-  const m = /\.(svg|png|jpe?g|webp|gif|ico)(?:[?#]|$)/i.exec(url);
-  return m ? `.${m[1].toLowerCase()}` : ".png";
+  const ext = /\.(svg|png|jpe?g|webp|gif|ico)(?:[?#]|$)/i.exec(url)?.[1];
+  return ext ? `.${ext.toLowerCase()}` : ".png";
 }
 
 /** Width/height of a PNG buffer (IHDR), or null when it isn't a PNG. */
@@ -651,10 +650,10 @@ function extractNavLinks(html: string, baseUrl: string): Array<{ label: string; 
   const out: Array<{ label: string; url: string }> = [];
   const scope = /<nav[\s\S]{0,12000}?<\/nav>/i.exec(html)?.[0] ?? html.slice(0, 30000);
   for (const m of scope.matchAll(/<a[^>]+href=["']([^"'#]+)["'][^>]*>([\s\S]{0,200}?)<\/a>/gi)) {
-    const label = stripTags(m[2]);
+    const label = stripTags(m[2] ?? "");
     if (!label || label.length > 40) continue;
     try {
-      out.push({ label, url: new URL(decodeEntities(m[1]), baseUrl).href });
+      out.push({ label, url: new URL(decodeEntities(m[1] ?? ""), baseUrl).href });
     } catch {
       /* skip */
     }
@@ -813,7 +812,7 @@ interface HarvestFromHtmlOptions {
   cssSeed?: string;
   onProgress?: PrefetchProgress;
   /** Caller cancellation (user Stop) threaded into the harvest's sub-fetches. */
-  signal?: AbortSignal;
+  signal?: AbortSignal | undefined;
 }
 
 /** Turn page HTML (+ optional seed CSS) into a PrefetchResult: harvest colors,
@@ -848,9 +847,9 @@ async function harvestFromHtml(
     onProgress("css");
     const cssChunks: string[] = [];
     if (opts.cssSeed && opts.cssSeed.trim()) cssChunks.push(opts.cssSeed);
-    for (const m of html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)) cssChunks.push(m[1]);
+    for (const m of html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)) cssChunks.push(m[1] ?? '');
     for (const m of html.matchAll(/<([a-z][\w:-]*)([^>]{0,2000}?)\sstyle=["']([^"']{1,2000})["'][^>]*>/gi)) {
-      cssChunks.push(`${inlineStyleSelector(m[1], m[2] ?? '')}{${m[3]};}`);
+      cssChunks.push(`${inlineStyleSelector(m[1] ?? '', m[2] ?? '')}{${m[3] ?? ''};}`);
     }
 
     const cssLinks: string[] = [];
