@@ -25,6 +25,7 @@ import {
 } from "@open-design/sidecar";
 import {
   recordIncomingUpdateLifecycle,
+  registerDesktopAuthWithDaemon,
   applyLoopbackConnectionLimitSwitch,
   applyOsLocaleSwitch,
   createSplashWindow,
@@ -488,19 +489,7 @@ const electronReadyAtMs = performance.now();
     async discoverDaemonUrl() {
       return sidecars.daemon.url;
     },
-    registerDesktopAuth: async (secret) => {
-      try {
-        const result = await client.invoke<{ accepted: true }>(
-          APP_KEYS.DAEMON,
-          "register-desktop-auth",
-          { secret: secret.toString("base64") },
-          { timeoutMs: 800 },
-        );
-        return result.accepted === true;
-      } catch {
-        return false;
-      }
-    },
+    registerDesktopAuth: (secret) => registerDesktopAuthWithDaemon(client, secret),
     windowTitle: resolvePackagedWindowTitle(activeConfig),
     inviteProtocolClientPath:
       process.platform === "win32" ? launcherRuntime.installedLaunchPath : null,
