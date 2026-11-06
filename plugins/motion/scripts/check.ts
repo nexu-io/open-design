@@ -9,6 +9,21 @@ import { checkDesign } from './design-check.ts';
 import { getWorkflow, workflowRegistry, phase1WorkflowNames } from '../shared/workflow.ts';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
+
+// Hosts parse SKILL.md frontmatter as YAML, so a plain value containing ": " or " #"
+// is a parse error there even though a line-based regex accepts it.
+export function assertSkillFrontmatterYaml(frontmatter: string, skill: string) {
+  for (const line of frontmatter.split('\n')) {
+    if (!line.trim() || /^\s/.test(line)) continue;
+    const field = line.match(/^([A-Za-z_][\w-]*):(?: (.*))?$/);
+    assert.ok(field, `${skill} frontmatter line is not a YAML key: ${line}`);
+    const value = (field[2] ?? '').trim();
+    if (!value || /^[>|][+-]?$/.test(value) || /^'[^']*'$|^"(?:[^"\\]|\\.)*"$/.test(value)) continue;
+    assert.ok(!/^[-?:,[\]{}#&*!|>'"%@`]/.test(value) && !/: | #|:$/.test(value),
+      `${skill} frontmatter ${field[1]} is not a valid plain YAML value; use a folded block (>-) or quotes`);
+  }
+}
+
 export async function check() {
   const manifest = JSON.parse(await readFile(path.join(root, '.codex-plugin/plugin.json'), 'utf8'));
   const marketplace = JSON.parse(await readFile(path.join(root, 'marketplace.example.json'), 'utf8'));
@@ -40,6 +55,7 @@ export async function check() {
     assert.ok(frontmatter, `Missing skill frontmatter: ${entry.name}`);
     assert.match(frontmatter, /^name: [a-z0-9-]+$/m);
     assert.match(frontmatter, /^description: .+$/m);
+    assertSkillFrontmatterYaml(frontmatter, entry.name);
     assert.equal(document.match(/^name: (.+)$/m)?.[1], entry.name);
   }
   for (const [workflow, definition] of Object.entries(workflowRegistry)) {

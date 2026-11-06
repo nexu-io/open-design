@@ -32,7 +32,14 @@ export const workflowRegistry = {
     },
   },
   template: { status: 'ready', sections: { start: 'skills/template-to-video/SKILL.md' } },
-  recreate: { status: 'placeholder', sections: { start: 'skills/motion-recreate/SKILL.md' } },
+  recreate: {
+    status: 'ready',
+    sections: {
+      start: 'skills/motion-recreate/SKILL.md',
+      rebuild: 'skills/motion-recreate/references/rebuild.md',
+      verification: 'skills/motion-recreate/references/verify.md',
+    },
+  },
   'video-to-template': {
     status: 'ready',
     sections: {

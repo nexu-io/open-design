@@ -91,7 +91,7 @@ test('bundled runtime adapters preserve the Node preload and launch with a minim
     await cp(process.execPath, node);
     await mkdir(path.join(runtime, 'docs'));
     for (const name of ['AGENTS.md', 'CLAUDE.md']) await writeFile(path.join(runtime, name), '# Fixture');
-    for (const filename of ['scripts/export-adapters.ts', 'scripts/package.ts', 'shared/entry.ts', 'shared/integration.ts', 'shared/workflow.ts', 'web/design-system/icons.svg']) {
+    for (const filename of ['scripts/export-adapters.ts', 'scripts/package.ts', 'scripts/distribution.ts', 'shared/entry.ts', 'shared/integration.ts', 'shared/workflow.ts', 'web/design-system/icons.svg']) {
       await mkdir(path.dirname(path.join(runtime, filename)), { recursive: true });
       await cp(path.join(source, filename), path.join(runtime, filename));
     }

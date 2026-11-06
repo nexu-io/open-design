@@ -6,5 +6,4 @@ IBMPlexMono-Regular.ttf
 Copyright IBM Corp. 2017.
 SIL Open Font License 1.1; see IBM-Plex-Mono-OFL.txt.
 
-Copied from personal-video-agent/apps/web/public/fonts on 2026-11-03.
 These fonts are served locally. No remote font service is used.

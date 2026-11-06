@@ -1,6 +1,6 @@
 # Model Router / Gateway
 
-更新：2026-11-04。关联需求：[REQ-20261104-005](product/changes.md#req-20261104-005模型网关与时间轴素材生成)。
+更新：2026-11-04。关联需求：[变更记录](product/changes.md)。
 
 本文维护当前能力、接口和运行限制。跨模块的产品目标、对象归属、D1–D11 设计取舍、时间轴交互和扩展准入条件见 [素材生成设计与架构决策](product/media-generation-design.md)，整体分层见 [产品架构](product/architecture.md#职责分层与依赖方向)。
 
@@ -125,7 +125,7 @@ Studio 与 MCP 复用 `ModelGateway` 业务层及工作区文件，但不要求�
 
 ## 验证与依据
 
-服务端测试见 `tests/gateway.test.ts`；Studio 流程测试见 `studio/src/motion/MediaGateway.test.tsx`。本轮真实验收记录见 [模型网关验收](model-gateway-acceptance.md)。云接口的协议测试使用受控响应；未配置云 Key 时不能将这些测试称为付费生图/生视频/语音的真实验证。
+服务端测试见 `tests/gateway.test.ts`；Studio 流程测试见 `studio/src/motion/MediaGateway.test.tsx`。真实账户调用与导出应在隔离工程中独立验收。云接口的协议测试使用受控响应；未配置云 Key 时不能将这些测试称为付费生图/生视频/语音的真实验证。
 
 实现参考：本地 Codex Canvas 的能力目录与 Agent 检测分层，以及 [Codex Slides agents](https://github.com/nexu-io/codex-slides/blob/master/src/lib/agents.ts) / [image adapter](https://github.com/nexu-io/codex-slides/blob/master/src/lib/codex-image.ts) 的能力入口；本项目选用本机 CLI，不复制其中的 OAuth 私有接口方案。UI 参考用户提供的 Hyperframes Studio 截图，并复用仓库内 Hyperframes 0.9.7 的原生素材/时间轴逻辑。
 

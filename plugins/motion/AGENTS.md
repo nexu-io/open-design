@@ -6,7 +6,7 @@ This module lives at `plugins/motion/` in the OpenDesign repository. Follow the 
 
 `docs/` 是仓库内持续维护的产品知识库。所有贡献者与 Agent 都应在交付需求时同步沉淀产品理解；代码、聊天记录或 PR 描述不能代替产品文档。
 
-开始仓库需求前，先读 [文档入口与维护流程](docs/README.md)、[产品架构](docs/product/architecture.md) 和该需求涉及的专题。涉及目标用户、购买决策或商业化时，还要读 [人群与 SAP 目标画像](docs/product/audience-and-sap.md)、[商业化策略](docs/product/commercialization.md)。
+开始仓库需求前，先读 [文档入口与维护流程](docs/README.md)、[产品架构](docs/product/architecture.md) 和该需求涉及的专题。公开文档仅维护使用说明、技术契约和可复现验证。
 
 每次需求交付（功能、体验优化、修复、重构、接入或文档建设）都必须：
 
@@ -22,7 +22,7 @@ This module lives at `plugins/motion/` in the OpenDesign repository. Follow the 
 
 ## Video production entry points
 
-Use [motion-production](skills/motion-production/SKILL.md) to select one route when a video task has not already selected a specialist. Original creation or major creative revision uses motion-director; editable template use/adaptation uses template-to-video; reference-video reconstruction uses motion-recreate, which remains an explicit placeholder with existing-tool fallback. A requested reusable template folder/ZIP from a video uses the separate video-to-template entry.
+Use [motion-production](skills/motion-production/SKILL.md) to select one route when a video task has not already selected a specialist. Original creation or major creative revision uses motion-director; editable template use/adaptation uses template-to-video; reference-video reconstruction uses motion-recreate (read the user's material, ask at most once, rebuild in an editor project with the nine phase-one Tools, deliver the film, a comparison and the editable project; its rebuild rules and measurer ship inside the Skill). A requested reusable template folder/ZIP from a video uses the separate video-to-template entry.
 
 A directly selected specialist reads shared context and continues; do not bounce back to the production start. Small edits, audio-only changes, review-only and export-only requests resume their affected scope. Keep existing decisions and locked content. Repository development and documentation do not trigger video production.
 
@@ -31,4 +31,4 @@ Phase one exposes exactly nine motion_ Tools, defined in [the contract](docs/mcp
 
 ## Template production and reuse
 
-`template-to-video` implements the default template route and reuses shared context/edit and managed-project revision protection. Unchanged requests can deliver the template's existing preview; edited content or missing previews use the appropriate render/verification path. `video-to-template` separately produces a portable reusable template from a video; it does not replace ordinary video recreation. Visual acceptance belongs to the user. Repository work does not invoke production Skills.
+`template-to-video` implements the default template route and reuses shared context/edit and managed-project revision protection. Unchanged requests can deliver the template's existing preview; edited content or missing previews use the appropriate render/verification path. `video-to-template` separately produces a portable reusable template from a video; it does not replace ordinary video recreation, which motion-recreate handles. Visual acceptance belongs to the user. Repository work does not invoke production Skills.

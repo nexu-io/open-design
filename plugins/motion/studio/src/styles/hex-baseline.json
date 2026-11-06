@@ -45,7 +45,6 @@
     "studio/src/player/components/PlayerControls.tsx": 1,
     "studio/src/player/components/SpeedMenu.tsx": 2,
     "studio/src/styles/components.css": 48,
-    "studio/src/telemetry/client.ts": 1,
     "studio/src/webmcp/webmcpTestUtils.ts": 1
   }
 }

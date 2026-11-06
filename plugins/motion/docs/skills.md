@@ -12,7 +12,7 @@
 | motion-director | 原创、大幅重编、动作脚本与创作审片 | v1.4.4；七份质量参考与 v1.4 一致 |
 | template-to-video | 已有模板原样出片、源码适配与内容替换 | 已接入默认 template 路线，共用修改与 revision 规范 |
 | video-to-template | 把视频制作成可复用模板文件夹 / ZIP | 独立模板生产入口，不代替普通视频复刻 |
-| motion-recreate | 从视频链接或文件重建动作、节奏与结构 | 职责占位，沿用现有工具 |
+| motion-recreate | 从视频链接或文件重建动作、节奏与结构，做成用户自己的片 | 已实现；重建、测量参考与 `scripts/measure_frame.mjs` 在本 Skill 目录内，只用一期 9 个工具 |
 | reference-video | 旧引用的原生编写兼容入口 | 通用正文迁入共享 native，非复刻专业实现 |
 
 各入口正文先说明职责与目标：production 负责范围和交付统筹，director 从产品事实、受众与传播目的判断动态表达，template-to-video 负责既有模板出片与内容适配，recreate 根据实际参考重建并核对差距；reference-video 继续承担兼容引导。director v1.4.4 将导演视角与成功标准前置，随后确定范围、读取工程规范并进入创作流程。角色定位不增加固定风格或新的专业能力，也不代表多个独立 Agent。
@@ -32,7 +32,7 @@ MCP 工具说明和领域执行位于 `mcp-tools.ts`；`mcp.ts` 保留初始化�
 | production（默认） | start、context、intake、templates、native、production、verification、edit、portable |
 | director | start、actions、craft、phrases、decisions、sound、review、examples |
 | template（实际 template-to-video） | start |
-| recreate（占位） | start |
+| recreate | start、rebuild、verification |
 | video-to-template | start、measure、rebuild、project、verification、sources |
 
 ```json

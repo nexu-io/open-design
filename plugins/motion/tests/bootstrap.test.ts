@@ -21,7 +21,7 @@ async function fixture(run: (context: { directory: string; destination: string; 
     await copyFile(path.join(root, 'scripts/install-motion.command'), path.join(source, 'scripts/install-motion.command'));
     await copyFile(path.join(root, 'marketplace.example.json'), path.join(source, 'marketplace.example.json'));
     const commands = {
-      git: 'echo "git $*" >> "$MOTION_TEST_LOG"\n[ "${MOTION_TEST_DOWNLOAD_FAIL:-0}" = 0 ] || exit 8\nfor destination; do :; done\nmkdir -p "$destination"\ncp -R "$MOTION_TEST_SOURCE/." "$destination/"',
+      git: 'echo "git $*" >> "$MOTION_TEST_LOG"\n[ "${MOTION_TEST_DOWNLOAD_FAIL:-0}" = 0 ] || exit 8\n[ "$1" = clone ] || exit 0\nfor destination; do :; done\nmkdir -p "$destination/plugins/motion"\ncp -R "$MOTION_TEST_SOURCE/." "$destination/plugins/motion/"',
       npm: 'echo "npm $*" >> "$MOTION_TEST_LOG"\nif [ "$1" = ci ]; then [ "${MOTION_TEST_DEPENDENCY_FAIL:-0}" = 0 ] || exit 9; fi\nif [ "$*" = "run build:studio" ]; then [ "${MOTION_TEST_BUILD_FAIL:-0}" = 0 ] || exit 9; mkdir -p studio/build; touch studio/build/index.html; fi',
       codex: 'echo "codex $*" >> "$MOTION_TEST_LOG"\n[ "${MOTION_TEST_OLD_CODEX:-0}" = 0 ] || exit 10',
       node: 'case "${1:-}" in\n  */check-installed-mcp.mjs) echo "MCP check" >> "$MOTION_TEST_LOG"; exit "${MOTION_TEST_MCP_FAIL:-0}" ;;\nesac\nexec "$MOTION_TEST_NODE" "$@"',
@@ -39,9 +39,9 @@ test('remote entry point builds a fresh checkout before registering and checking
   await fixture(async ({ destination, log, env }) => {
     const result = spawnSync('bash', [path.join(root, 'install.sh')], { env, encoding: 'utf8' });
     assert.equal(result.status, 0, result.stderr);
-    await access(path.join(destination, 'studio/build/index.html'));
+    await access(path.join(destination, 'plugins/motion/studio/build/index.html'));
     const commands = await readFile(log, 'utf8');
-    assert.match(commands, /git clone --depth 1 --branch test-ref -- https:\/\/code\.powerformer\.net\/core\/open-motion\.git/);
+    assert.match(commands, /git clone --depth 1 --filter=blob:none --sparse --branch test-ref -- https:\/\/github\.com\/nexu-io\/open-design\.git/);
     assert.ok(commands.indexOf('npm ci --include=dev') < commands.indexOf('npm run build:studio'));
     assert.ok(commands.indexOf('npm run build:studio') < commands.indexOf('codex plugin marketplace add'));
     assert.match(commands, /codex plugin add motion@motion-local\ncodex plugin list --marketplace motion-local\nMCP check/);

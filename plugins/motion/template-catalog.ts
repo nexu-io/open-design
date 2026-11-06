@@ -42,7 +42,7 @@ export function templateRecipe(template: GalleryTemplate) {
 - 参考画幅：${template.ratio || '读取素材或源码确认'}
 - 描述：${template.description || template.subtitle}
 ${template.previewUrl ? '- 参考视频：' + template.previewUrl + '\n' : ''}${template.posterUrl ? '- 参考封面：' + template.posterUrl + '\n' : ''}${template.sourceUrl ? '- 原始来源 / 源码清单：' + template.sourceUrl + '\n' : ''}
-通过安装的专业 Skill 或 resources/read motion://workflow/${template.kind === 'reference' ? 'recreate' : 'template'}/start，读取对应入口及共享 context；template / recreate 当前是职责占位，不代表成熟算法。沿用已选 ID 与本次范围，不返回 production/start 重做选路。先核对项目与已完成操作；原生编写前读取固定引擎指南 motion://engine/SKILL.md 与共享 native / production 规范。
+通过安装的专业 Skill 或 resources/read motion://workflow/${template.kind === 'reference' ? 'recreate' : 'template'}/start，读取对应入口及共享 context；template 接入 template-to-video，recreate 接入参考视频复刻流程（先读用户资料、最多问一次、在编辑器工程中重建并按数字测量核对）。沿用已选 ID 与本次范围，不返回 production/start 重做选路。先核对项目与已完成操作；原生编写前读取固定引擎指南 motion://engine/SKILL.md 与共享 native / production 规范。
 复刻完成后由宿主打开完整 previewUrl，保留默认 embed=1 及工程路由，仅展示编辑器；需要回到完整会话时使用 sessionUrl。
 
 ${template.kind === 'builtin'

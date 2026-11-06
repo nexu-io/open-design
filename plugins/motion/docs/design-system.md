@@ -1,8 +1,8 @@
 # OpenDesign UI v1
 
-从 `~/.superset/projects/personal-video-agent` 的 OpenDesign TV 设计体系提取，2026-11-03。编辑器样式沿用 `cosmic-spur-b7e30202` 参考工作区；接入内容与结构对齐 personal-video-agent 的 `integration-hub.tsx` 和 `connect.css`。设计变量、字体和基础控件可独立复用；编辑器与接入弹框由本仓库的 React 前端实现。
+界面变量与基础控件位于 `web/design-system/`，编辑器与接入弹框由本仓库的 React 前端实现。界面样式与影片作品样式相互隔离。
 
-源工程参考文件：`apps/web/design-system/{tokens.json,base.css,controls.css,fonts.css}`、`docs/design-system.md` 与 `docs/screenshots/opendesign-editor.jpg`。当前展示品牌统一为 OpenDesign；共享图标为本项目自绘的 24 单位线性 SVG。产品流程见 [产品架构](product/architecture.md)。
+共享图标为本项目自绘的 24 单位线性 SVG。产品流程见 [产品架构](product/architecture.md)。
 
 ## 视觉规范
 

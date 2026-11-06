@@ -1,6 +1,6 @@
 # 会话、模式与 Artifact Viewer 技术架构
 
-更新：2026-11-05。需求与产品行为见 [会话与 Artifact 浏览器](project-workspace.md) 和 [REQ-20261104-007](product/changes.md#req-20261104-007opendesign-通用会话motion-模式与-artifact-浏览器)。本文描述当前代码的扩展边界；一期只实现 Motion，不把网页原型等后续模式写成已上线功能。
+更新：2026-11-05。需求与产品行为见 [会话与 Artifact 浏览器](project-workspace.md) 和 [变更记录](product/changes.md)。本文描述当前代码的扩展边界；一期只实现 Motion，不把网页原型等后续模式写成已上线功能。
 
 ## 一套领域模型，多种调用入口
 

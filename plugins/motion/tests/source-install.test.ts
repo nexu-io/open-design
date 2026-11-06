@@ -5,6 +5,23 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
+
+test('public Motion sources contain no company endpoints, workstation paths or embedded upstream ingest keys', async () => {
+  const root = fileURLToPath(new URL('../', import.meta.url));
+  const files = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', '.'], { cwd: root, encoding: 'utf8' }).split('\0').filter(Boolean);
+  for (const file of files) {
+    if (!/\.(?:md|txt|ts|tsx|js|mjs|json|yml|yaml|html|css|sh|ps1|command)$/.test(file)) continue;
+    let content: string;
+    try { content = await readFile(path.join(root, file), 'utf8'); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue; throw error; }
+    // Report the filename only: an accidentally introduced secret must not reach CI logs.
+    assert(!/https?:\/\/[^\s/]*(?:powerformer\.(?:net|com)|powerformer\.feishu\.cn)(?:[/:]|$)/i.test(content), 'Company endpoint in ' + file);
+    assert(!/phc_[A-Za-z0-9]{20,}/.test(content), 'Embedded upstream ingest identifier in ' + file);
+    const users = [...content.matchAll(/\/Users\/([\w.-]+)\//g)].map(match => match[1]);
+    assert(users.every(name => ['me', 'a', 'someone'].includes(name)), 'Workstation path in ' + file);
+  }
+});
 
 test('source installation sparse-checks out Motion and invokes the nested installer', { skip: process.platform === 'win32' }, async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'motion source install '));

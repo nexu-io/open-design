@@ -1,4 +1,4 @@
-/* Integration hub structure from personal-video-agent, using the shared OpenMotion UI tokens. */
+/* Integration hub uses the shared OpenMotion UI tokens. */
 .connect-page {
   min-height: 100%;
   background: var(--motion-raised);

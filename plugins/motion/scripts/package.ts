@@ -1,8 +1,8 @@
 import { isMain } from '../shared/entry.ts';
-import { readFile, mkdir, readdir } from 'node:fs/promises';
+import { readFile, mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { phase1Skills } from '../shared/workflow.ts';
+import { distributionFiles } from './distribution.ts';
 
 // ZIP "store" format, so packaging has no runtime dependencies.
 function crc32(data: Buffer) {
@@ -41,17 +41,7 @@ async function main() {
   const { check } = await import('./check.ts');
   await check();
   const manifest = JSON.parse(await readFile(path.join(root, '.codex-plugin/plugin.json'), 'utf8'));
-  const files: string[] = ['.codex-plugin/plugin.json', '.mcp.json', 'server.ts', 'browser.ts', 'workspace.ts', 'mcp.ts', 'mcp-tools.ts', 'editor-runtime.ts', 'phase1.ts', 'phase1-versions.ts', 'preview.ts', 'hyperframes.ts', 'template-library.ts', 'template-catalog.ts', 'editor-server.ts', 'package.json', 'package-lock.json', 'README.md', 'AGENTS.md', 'CLAUDE.md', 'marketplace.example.json'];
-  async function walk(directory: string) {
-    for (const entry of await readdir(path.join(root, directory), { withFileTypes: true })) {
-      if (entry.name.startsWith('.') || entry.name === 'node_modules' || entry.name.endsWith('.map')) continue;
-      const file = directory + '/' + entry.name;
-      if (profile === 'phase1' && directory === 'skills' && !phase1Skills.includes(entry.name)) continue;
-      if (entry.isDirectory()) await walk(file);
-      else if (entry.isFile()) files.push(file);
-    }
-  }
-  for (const directory of ['web', 'shared', 'gateway', 'skills', 'scripts', 'tests', 'docs', 'templates', 'template-library', 'studio']) await walk(directory);
+  const files = await distributionFiles(profile);
   const entries = await Promise.all(files.sort().map(async file => ({ name: manifest.name + '/' + file,
     data: file === 'shared/mcp-release.json' ? Buffer.from(JSON.stringify({ profile }, null, 2) + '\n') : await readFile(path.join(root, file)) })));
   await mkdir(path.join(root, 'dist'), { recursive: true });

@@ -107,4 +107,4 @@ sequenceDiagram
 | UI/MCP 同时多文件写入的完整事务、多个 Studio/并行导出 | 未实现 |
 | 长时间压力、自动升级、旧数据自动迁移、正式安装包目标机验收 | 未验证 |
 
-运行本项目检查使用 `npm test`、`npm run check`、`npm run typecheck:studio`、`npm run test:studio`。真实 Chrome 相关检查必须经过团队 browser-lock 的 lane 和 real 锁；新增故障脚本 `tests/shared-editor-crash.mjs` 和媒体脚本 `tests/shared-editor-media.mjs` 也遵守该要求。验收结论只覆盖实际执行命令，详见[本次验收](shared-editor-acceptance.md)。
+运行本项目检查使用 `npm test`、`npm run check`、`npm run typecheck:studio`、`npm run test:studio`。真实 Chrome 相关检查必须经过团队 browser-lock 的 lane 和 real 锁；新增故障脚本 `tests/shared-editor-crash.mjs` 和媒体脚本 `tests/shared-editor-media.mjs` 也遵守该要求。验收结论只覆盖实际执行命令，实际结果以当前提交的测试及 CI 为准。

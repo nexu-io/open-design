@@ -85,7 +85,7 @@ npm test
 npm run package:plugin
 ```
 
-生产页面使用 `studio/build/`，前端修改后重新构建并刷新。该目录不提交；插件 ZIP 包含构建产物、源码、测试素材和许可证，不包含个人工程、依赖目录或 sourcemap。
+生产页面使用 `studio/build/`，前端修改后重新构建并刷新。该目录不提交；插件 ZIP 包含运行时源码、构建产物、使用文档和许可证，不包含个人工程、依赖目录或 sourcemap。
 
 `test:studio` 启用完整上游单元与 DOM 测试。迁移适配只涉及包路径、独立仓库样式入口、Happy DOM 21 的 iframe 开关、异步弹层收尾，以及由 jsdom 验证的 WebKit 文本填色。原版 Chrome bench 和 E2E 文件保留，`*.browser.test.ts` 不属于该单元命令。
 

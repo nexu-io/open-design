@@ -30,7 +30,7 @@ test('default production preserves legacy calls while template reuse and video-t
   assert.equal(manufacturing.status, 'ready');
   const recreate = await callTool('motion_get_workflow', { workflow: 'recreate' });
   assert.equal(recreate.documentId, 'skills/motion-recreate/SKILL.md');
-  assert.equal(recreate.status, 'placeholder');
+  assert.equal(recreate.status, 'ready');
   await assert.rejects(readFile(new URL('../skills/motion-template/SKILL.md', import.meta.url)), /ENOENT/);
   assert.ok(!tools.some(tool => tool.name === 'motion_save_template'));
   assert.ok(tools.some(tool => tool.name === 'motion_compare_video'));

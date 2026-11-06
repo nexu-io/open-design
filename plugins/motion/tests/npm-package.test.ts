@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { checkReleaseLocks, packageNpm } from '../scripts/package-npm.mjs';
@@ -28,6 +28,8 @@ test('release packaging rejects floating npm versions, lock drift, unpinned nati
 test('beta npm artifacts carry one immutable version, both lock identities and no bundled native runtime', { timeout: 60_000 }, async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'motion-npm-pack-'));
   const before = await readFile('package.json', 'utf8');
+  const unapproved = ['docs/private-sentinel.md', 'scripts/private-sentinel.mjs', 'private-sentinel.ts'];
+  for (const file of unapproved) await writeFile(file, 'must not ship');
   try {
     const version = '0.6.2-beta.999001.1', output = path.join(directory, 'build');
     const built = await packageNpm(output, version), release = await json(built.manifest);
@@ -39,6 +41,7 @@ test('beta npm artifacts carry one immutable version, both lock identities and n
     const application = path.join(directory, 'app'), installer = path.join(directory, 'installer');
     await extractArchive(built.application, application); await extractArchive(built.installer, installer);
     assert.equal((await json(path.join(application, 'package.json'))).version, version);
+    assert.equal((await json(path.join(application, '.codex-plugin/plugin.json'))).version, version);
     assert.equal((await json(path.join(application, 'package-lock.json'))).packages[''].version, version);
     assert.equal((await json(path.join(installer, 'package/package.json'))).version, version);
     assert.equal((await json(path.join(installer, 'package/package.json'))).private, true);
@@ -48,10 +51,22 @@ test('beta npm artifacts carry one immutable version, both lock identities and n
     const entries = await runFile('tar', ['-tf', built.application]);
     assert(!/\/(node_modules|runtime)\//.test(entries));
     assert(entries.includes('skills/motion-production/SKILL.md'));
+    for (const file of unapproved) assert(!entries.includes(file), 'Unapproved file shipped: ' + file);
+    assert(!/\/(tests|src)\//.test(entries), 'Development sources and fixtures must not ship');
+    assert(entries.includes('skills/motion-recreate/scripts/measure_frame.mjs'));
+    assert(entries.includes('skills/motion-recreate/references/verify.md'));
+    assert(entries.includes('studio/build/index.html'));
+    assert(entries.includes('shared/editor-launch.pl'), 'macOS shared editor launcher must ship');
+    assert(!entries.split('\n').some(file => file.split('/').some(part => part.startsWith('._'))), 'Do not distribute macOS file metadata');
+    assert(entries.includes('template-library/NOTICE.md'));
+    assert(!entries.includes('studio/build/index.html.map'));
     await assert.rejects(packageNpm(output, version), /immutable/);
     await assert.rejects(packageNpm(path.join(directory, 'invalid'), 'latest'), /unique beta/);
     assert.equal(await readFile('package.json', 'utf8'), before, 'Packaging must not bump the checkout');
-  } finally { await rm(directory, { recursive: true, force: true }); }
+  } finally {
+    for (const file of unapproved) await rm(file, { force: true });
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('the actual dispatch validation permits unpublished npm and backup ZIP, and rejects npm publication', async () => {

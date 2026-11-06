@@ -92,7 +92,7 @@ test('HTTP catalog, local posters and copied guides resolve the exact selected t
         assert.ok(guide.includes(template.title));
         const expectedRoute = template.kind === 'reference' ? 'recreate' : 'template';
         assert.ok(guide.includes(`motion://workflow/${expectedRoute}/start`));
-        assert.deepEqual(readTemplate(id).workflowGuide, { workflow: expectedRoute, section: 'start', status: expectedRoute === 'template' ? 'ready' : 'placeholder' });
+        assert.deepEqual(readTemplate(id).workflowGuide, { workflow: expectedRoute, section: 'start', status: 'ready' });
         assert.match(guide, /本次用户明确要求成片或导出/);
         if (template.kind !== 'builtin') {
           assert.match(guide, /motion_edit_project/); assert.doesNotMatch(prompt, /motion_apply_template/);
@@ -125,7 +125,7 @@ test('internal legacy compatibility reads the selected reference and uses the na
     assert.equal(replies[2].result.structuredContent.items[0].id, templateId);
     assert.equal(replies[3].result.structuredContent.sourceUrl, getTemplate(templateId).sourceUrl);
     assert.match(replies[3].result.structuredContent.instructions, /motion_edit_project/);
-    assert.deepEqual(replies[3].result.structuredContent.workflowGuide, { workflow: 'recreate', section: 'start', status: 'placeholder' });
+    assert.deepEqual(replies[3].result.structuredContent.workflowGuide, { workflow: 'recreate', section: 'start', status: 'ready' });
     assert.doesNotMatch(replies[3].result.structuredContent.instructions, /motion_import_project|motion.json/);
     assert.notEqual(replies[4].result.structuredContent.revision, initial.revision);
     assert.equal(replies[5].result.isError, true);

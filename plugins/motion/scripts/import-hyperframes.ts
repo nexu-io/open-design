@@ -5,8 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 // Import the complete checked-in snapshot, never a hand-picked replacement list.
 const source = process.argv[2];
-if (!source) throw new Error('Usage: node scripts/import-hyperframes.ts /path/to/personal-video-agent');
-const sourceRoot = path.resolve(source, 'apps/web/public/home');
+if (!source) throw new Error('Usage: node scripts/import-hyperframes.ts /path/to/catalog-snapshot');
+const sourceRoot = path.resolve(source);
 const target = fileURLToPath(new URL('../web/catalog/', import.meta.url));
 const raw = await readFile(path.join(sourceRoot, 'hyperframes.json'));
 const catalog = JSON.parse(raw.toString());
@@ -22,5 +22,5 @@ for (const frame of frames.frames) {
 }
 await writeFile(path.join(target, 'hyperframes.json'), raw);
 await writeFile(path.join(target, 'template-frames.json'), JSON.stringify(frames, null, 2) + '\n');
-await writeFile(path.join(target, 'provenance.json'), JSON.stringify({ source: 'personal-video-agent/apps/web/public/home/hyperframes.json', sha256: createHash('sha256').update(raw).digest('hex'), entries: catalog.entries.length, syncedAt: catalog.syncedAt, sources: catalog.sources, posters: frames.frames.length }, null, 2) + '\n');
+await writeFile(path.join(target, 'provenance.json'), JSON.stringify({ source: 'HyperFrames public registry and HeyGen Moments snapshot', sha256: createHash('sha256').update(raw).digest('hex'), entries: catalog.entries.length, syncedAt: catalog.syncedAt, sources: catalog.sources, posters: frames.frames.length }, null, 2) + '\n');
 console.log(`Imported all ${catalog.entries.length} Hyperframes entries and ${frames.frames.length} matching local posters.`);

@@ -1,6 +1,6 @@
 # OpenDesign 会话与 Artifact 浏览器
 
-更新：2026-11-05。对应需求：[REQ-20261104-007](product/changes.md#req-20261104-007opendesign-通用会话motion-模式与-artifact-浏览器)。本次取代 [REQ-20261104-006](product/changes.md#req-20261104-006首页共享会话列表与独立剪辑工程) 的「会话等于工程」模型；旧实现的选择理由和验证保留在历史条目中。
+当前模型以通用会话与独立 Artifact 组织创作；会话与视频工程分别持久化。
 
 ## 用户问题与产品关系
 

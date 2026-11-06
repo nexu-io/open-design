@@ -5,7 +5,7 @@ description: Turn a supplied Motion video file or link into a reusable editable 
 
 # Motion reference → editable project
 
-This is the separate video-to-template production entry, selected for a requested reusable template. Read [shared context](../motion-production/references/context.md) for the current scope and reuse available bodies without returning to the router. MCP-only clients read this same file with `motion_get_workflow({"workflow":"video-to-template","section":"start"})`; follow supporting references only when needed. Revisions to an existing template draft use the [shared edit workflow](../motion-production/references/edit.md). A request to recreate a finished video without a reusable-template deliverable stays with [motion-recreate](../motion-recreate/SKILL.md), whose specialist implementation remains pending.
+This is the separate video-to-template production entry, selected for a requested reusable template. Read [shared context](../motion-production/references/context.md) for the current scope and reuse available bodies without returning to the router. MCP-only clients read this same file with `motion_get_workflow({"workflow":"video-to-template","section":"start"})`; follow supporting references only when needed. Revisions to an existing template draft use the [shared edit workflow](../motion-production/references/edit.md). A request to recreate a finished video without a reusable-template deliverable stays with [motion-recreate](../motion-recreate/SKILL.md).
 
 Deliver the requested reusable template as a native HyperFrames project with local assets and an actual preview. Phase one covers Motion graphics. Preserve supplied sound when relevant; do not introduce live-action, voice, music or multimodal generation services to complete this workflow.
 
@@ -28,6 +28,8 @@ Work from start to finish without asking questions. Where the reference is ambig
 Choose source and component boundaries through shared behavior. Objects sharing geometry, state, layout or motion can form one SVG, Canvas, Three.js scene or native composition. Independent contributions can stay separate. There is no requirement for one HTML clip per object, one composition per cut, one tween per move or a fixed number of poses.
 
 Keep content the user will change easy to locate: wording, brand, images, named objects and their motion. Use meaningful source names. Declare the common edits as root variables so the Studio Variables panel shows them; variables are useful shortcuts, not an editing whitelist. HTML/CSS/JS remains authoritative.
+
+When replaceable text uses distinctive lettering (a pixel, stencil, wide or hand-built wordmark), make any new word settable in that same style: the closest available face of the same kind, or lettering built so other words can be set with it. Vectorising only the reference's own word leaves every later edit in a plain fallback font.
 
 Use code for controlled text, geometry and motion; use supplied/cropped photos, logos, screenshots and textures as appropriate local assets. Choose 2D, perspective layers or real 3D according to the observed behavior and needed edits, not the number of perspective shots. Distinguish editable text from artwork that requires an asset replacement.
 

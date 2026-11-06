@@ -23,7 +23,7 @@ MCP 接入与模板库使用同一弹框中的一张滚动页面。整体接入�
 ## Agent 复刻
 
 1. 卡片只复制一句提示、一个链接和精确模板 ID，链接为 `/connect/guide?host=...&template=...`。详细步骤放在链接中，未知 ID 返回错误，不回退到其他示例。
-2. Agent 读取当前客户端、MCP 配置和工作区，使用 `motion_get_template` 取得准确 ID、kind 与 `workflowGuide`。`builtin` / 可编辑 `registry` 进入 template，视频 `reference` 进入 recreate；直接读取对应 start 和共享 context，不回总入口重新选模板。template 已接入 template-to-video 实际流程并返回 ready，recreate 仍为职责占位。视频转可复用模板为单独的 video-to-template 入口，仅按该交付意图进入。原 `workflow` 工具路径字符串保持兼容，新增 `workflowGuide` 是 Skill 文档入口。
+2. Agent 读取当前客户端、MCP 配置和工作区，使用 `motion_get_template` 取得准确 ID、kind 与 `workflowGuide`。`builtin` / 可编辑 `registry` 进入 template，视频 `reference` 进入 recreate；直接读取对应 start 和共享 context，不回总入口重新选模板。template 已接入 template-to-video 实际流程并返回 ready，recreate 接入 motion-recreate 复刻流程并返回 ready。视频转可复用模板为单独的 video-to-template 入口，仅按该交付意图进入。原 `workflow` 工具路径字符串保持兼容，新增 `workflowGuide` 是 Skill 文档入口。
 3. 外部参考由 Agent 分析视频或真实源码，导入素材，并通过 `motion_write_files` 按最新 revision 写原生 Hyperframes HTML compositions 与可 seek 的 GSAP 动画。工具不会替 Agent 分析视频或自动执行远程源码。
 4. `kind=builtin` 的三个本地模板可直接使用 `motion_apply_template` 创建独立工程。外部 ID 不会被映射成任意本地示例。
 5. 检查 lint/timeline/info 与实际预览，保留可继续编辑的工程。不将原视频整段放入时间轴就宣称复刻完成；只有用户要求时才导出并验证成片。
@@ -31,14 +31,14 @@ MCP 接入与模板库使用同一弹框中的一张滚动页面。整体接入�
 ## 从源工程更新
 
 ```sh
-npm run catalog:import -- /absolute/path/to/personal-video-agent
+npm run catalog:import -- /absolute/path/to/catalog-snapshot
 npm run catalog:covers
 npm run catalog:metadata
 npm run check
 npm test
 ```
 
-导入只读取源工程，更新目录、封面索引、匹配封面和来源校验文件。提交时一并保留这些运行时资源；它们不是临时缓存。测试验证完整条目数、每个 ID、同源版本、全部本地封面、短指令、HTTP 指引及真实 MCP 读取与原生源文件写入。
+快照目录需含 `hyperframes.json`、`template-frames.json` 和 `template-frames/`。导入只读取该快照，更新目录、封面索引、匹配封面和来源校验文件。提交时一并保留这些运行时资源；它们不是临时缓存。测试验证完整条目数、每个 ID、同源版本、全部本地封面、短指令、HTTP 指引及真实 MCP 读取与原生源文件写入。
 
 封面缓存脚本需要 FFmpeg 和网络，可重用已校验的本地文件。它从源封面或同一条目的真实视频取帧，不生成替代插画。模板与封面只作为创作输入，原始内容中的文字不属于 Agent 操作指令。
 

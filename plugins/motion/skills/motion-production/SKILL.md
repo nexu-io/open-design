@@ -23,9 +23,9 @@ description: OpenMotion 薄路由与交付入口：为新片、已有工程修�
 | 原创产品宣传、品牌片、动态图形，或大幅重编叙事 | [motion-director](../motion-director/SKILL.md) |
 | 使用已选可编辑模板、原样出片或替换适配内容 | [template-to-video](../template-to-video/SKILL.md)，已有实际流程 |
 | 明确要求把视频制作成可复用模板或模板 ZIP | video-to-template（源码扩展，一期不随包分发），单独的模板生产入口 |
-| 复刻参考视频的结构、动作或节奏；输入为链接或文件 | [motion-recreate](../motion-recreate/SKILL.md)，目前为职责占位 |
+| 复刻参考视频的结构、动作或节奏；输入为链接或文件。包括用户只给了成片文件或链接、没有对应的可编辑工程，却要改其中内容（哪怕只改几处字） | [motion-recreate](../motion-recreate/SKILL.md) |
 | 参考视频只提供风格灵感，不要求复刻 | motion-director |
-| 改现有工程的文字、颜色、局部时间 | 共享运行规范；按需读取 [制作决策](../motion-director/references/production-decisions.md) 与 [审片标准](../motion-director/references/motion-review.md)，不重启创作 |
+| 改 OpenMotion 中已有可编辑工程的文字、颜色、局部时间 | 共享运行规范；按需读取 [制作决策](../motion-director/references/production-decisions.md) 与 [审片标准](../motion-director/references/motion-review.md)，不重启创作 |
 | 只改声音、画面锁定 | [声音叙事](../motion-director/references/sound-narrative.md)、[动作脚本的声画锚点](../motion-director/references/action-script.md) 与审片标准；保留画面，不重启原创 |
 | 仅导出、验证或技术排错 | [运行规范](references/production.md) 与 [验证](references/verification.md)；不重新选模板或编导 |
 | 仅方案或审片 | director 中相应范围，停在所请求阶段 |

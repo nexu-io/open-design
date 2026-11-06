@@ -72,7 +72,7 @@ jobs:
           npm run typecheck:studio
           npm run build:studio
       - name: Validate standalone installation and packaging
-        run: node --experimental-strip-types --test tests/npm-installer.test.ts tests/npm-package.test.ts tests/test-package.test.ts tests/source-install.test.ts tests/mcp-registry.test.ts tests/phase1.test.ts tests/adapters.test.ts
+        run: node --experimental-strip-types --test tests/npm-installer.test.ts tests/npm-package.test.ts tests/test-package.test.ts tests/source-install.test.ts tests/bootstrap.test.ts tests/mcp-registry.test.ts tests/phase1.test.ts tests/adapters.test.ts tests/package.test.ts tests/recreate-measure.test.ts tests/workflow.test.ts tests/catalog.test.ts tests/extension-boundary.test.ts
       - name: Studio regression
         run: npm run test:studio -- --maxWorkers=2
       - name: Build phase-one ZIP and exercise all nine tools

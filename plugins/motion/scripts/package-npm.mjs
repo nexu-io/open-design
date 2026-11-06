@@ -5,7 +5,7 @@ import { nativeComponents, runFile, sha256, writeAtomic, writeJSON } from './run
 import assert from 'node:assert/strict';
 import { PUPPETEER_REVISIONS } from 'puppeteer-core';
 import { releaseProfile } from '../shared/mcp-registry.ts';
-import { phase1Skills } from '../shared/workflow.ts';
+import { distributionFiles } from './distribution.ts';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 export function checkReleaseLocks(pkg, lockfile, runtime) {
@@ -45,17 +45,11 @@ export async function packageNpm(output = path.join(root, 'dist/npm-local'), ver
   try {
     const application = path.join(temporary, 'application'), installer = path.join(temporary, 'installer');
     await mkdir(application); await mkdir(path.join(installer, 'scripts'), { recursive: true });
-    const topFiles = (await readdir(root)).filter(name => name.endsWith('.ts'));
-    for (const name of [...topFiles, 'package.json', 'package-lock.json', 'README.md', 'AGENTS.md', 'CLAUDE.md', 'web', 'shared', 'gateway', 'skills', 'docs', 'templates', 'template-library']) {
-      await cp(path.join(root, name), path.join(application, name), { recursive: true, filter: source => !source.endsWith('.map') && path.basename(source) !== 'node_modules' });
-    }
-    if (releaseProfile === 'phase1') for (const name of await readdir(path.join(application, 'skills'))) {
-      if (!phase1Skills.includes(name)) await rm(path.join(application, 'skills', name), { recursive: true, force: true });
+    for (const name of await distributionFiles(releaseProfile)) {
+      await mkdir(path.dirname(path.join(application, name)), { recursive: true });
+      await cp(path.join(root, name), path.join(application, name));
     }
     const skills = (await readdir(path.join(application, 'skills'))).sort();
-    for (const name of ['build', 'public']) await cp(path.join(root, 'studio', name), path.join(application, 'studio', name), { recursive: true, filter: source => !source.endsWith('.map') });
-    await mkdir(path.join(application, 'scripts'));
-    for (const name of ['runtime-assets.mjs', 'npm-runtime.mjs', 'runtime-lock.json', 'verify-export.ts']) await cp(path.join(root, 'scripts', name), path.join(application, 'scripts', name));
     for (const name of ['runtime-assets.mjs', 'npm-runtime.mjs', 'npm-hosts.mjs', 'npm-installer.mjs']) await cp(path.join(root, 'scripts', name), path.join(installer, 'scripts', name));
     await chmod(path.join(installer, 'scripts/npm-installer.mjs'), 0o755);
     const installerPkg = JSON.parse(await readFile(path.join(root, 'packages/npm/package.json'), 'utf8'));
@@ -67,9 +61,12 @@ export async function packageNpm(output = path.join(root, 'dist/npm-local'), ver
       pkg.version = version; lockfile.version = version; lockfile.packages[''].version = version;
       await writeJSON(path.join(application, 'package.json'), pkg);
       await writeJSON(path.join(application, 'package-lock.json'), lockfile);
+      const plugin = JSON.parse(await readFile(path.join(application, '.codex-plugin/plugin.json'), 'utf8'));
+      plugin.version = version;
+      await writeJSON(path.join(application, '.codex-plugin/plugin.json'), plugin);
     }
     const archive = path.join(output, `openmotion-application-${pkg.version}.tar.gz`);
-    await runFile(process.platform === 'win32' ? path.join(process.env.SystemRoot, 'System32/tar.exe') : 'tar', ['-czf', archive, '-C', application, '.']);
+    await runFile(process.platform === 'win32' ? path.join(process.env.SystemRoot, 'System32/tar.exe') : 'tar', ['-czf', archive, '-C', application, '.'], { env: { ...process.env, COPYFILE_DISABLE: '1' } });
     const npm = process.env.npm_execpath || path.join(path.dirname(process.execPath), process.platform === 'win32' ? 'node_modules/npm/bin/npm-cli.js' : '../lib/node_modules/npm/bin/npm-cli.js');
     const packed = JSON.parse(await runFile(process.execPath, [npm, 'pack', '--json', '--ignore-scripts', '--pack-destination', output], { cwd: installer }))[0];
     const installerFile = path.join(output, packed.filename);

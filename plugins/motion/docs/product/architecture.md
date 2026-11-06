@@ -2,11 +2,11 @@
 
 本文描述 `plugins/motion/` 内的独立 Motion 运行时；它与 OD 主应用的会话、账号和部署整合尚未包含在本次源码迁移中。参见[迁移边界](../repository-migration.md)。
 
-更新：2026-11-05。实现基线：0.6.2；状态：下文标记为“当前”的能力已在仓库实现。目标人群与商业化的待验证部分分别见 [画像](audience-and-sap.md) 和 [策略](commercialization.md)。
+更新：2026-11-05。实现基线：0.6.2；状态：下文标记为“当前”的能力已在仓库实现。公开范围为本机创作、编辑、MCP 和独立安装分发。
 
 ## 产品定位与目标
 
-OpenDesign 的底层组织是通用 Agent 会话：会话拥有模式、需求与多个 Artifact，模式选择模板目录和 skill，Artifact Viewer 负责打开可编辑产物。完整与嵌入视图使用同一产物；`embed=1` 可只显示 Viewer，供 Codex 等宿主打开。当前一期只有 Motion 模式，制作与导出仍使用原生 Hyperframes。其他模式是已确认方向，未作为可执行模式上线。此前 OpenMotion 的品牌与「会话等于工程」决策由 [REQ-20261104-007](changes.md#req-20261104-007opendesign-通用会话motion-模式与-artifact-浏览器) 取代。
+OpenDesign 的底层组织是通用 Agent 会话：会话拥有模式、需求与多个 Artifact，模式选择模板目录和 skill，Artifact Viewer 负责打开可编辑产物。完整与嵌入视图使用同一产物；`embed=1` 可只显示 Viewer，供 Codex 等宿主打开。当前一期只有 Motion 模式，制作与导出仍使用原生 Hyperframes。其他模式是已确认方向，未作为可执行模式上线。此前 OpenMotion 的品牌与「会话等于工程」决策由 [变更记录](changes.md) 取代。
 
 会话的 Agent 推理与工具编排由用户已有的 MCP 客户端执行；本地网页保存需求、接收调用方写回的真实回复、管理产物与继续编辑，不包含内置聊天 Agent 运行器。自有 Agent、Codex 和其他 MCP 客户端共用先创建会话、后生成产物的生命周期。
 
@@ -37,7 +37,7 @@ Model Gateway 是共用的素材生成服务，可由 Motion Viewer 或 MCP 调�
 1. 用户在首页切到 Motion 模式，选择 Motion 模板并提交需求创建会话；也可直接新建空白创作，或打开左侧已有会话。内置模板复制为该会话的工程，外部参考由 Agent 制作。
 2. 需要 Agent 时选择 Codex、Claude Code、DeepSeek Harness 或通用 stdio 客户端。接入配置绑定当前工作区；Agent 验证工具和数据目录，读取当前工程与制作规范。 安装后先介绍能力、邀请并等待选择；接受首次体验即确认 `product-promo` 示例内容、独立 20 秒工程、MP4 导出及右侧可编辑页面。Agent 不再问素材/模板/导出确认，实际打开宿主面板，等待并验证成片，最终回复交付 MP4 与简短说明。宿主没有面板能力时明确提供链接作为降级，不能冒称已打开；实际行为按客户端验证。
 3. 用户在会话补充需求并复制给外部 Agent。Agent 用 `design_get_session` 读取模式、模板和产物，按已确定的薄路由选择专业入口或直接进入已选路线；编辑前校验产物归属，必要时用 `design_open_artifact` 切换。
-4. Skill 组织采用已确定的薄路由：泛化请求由 production 按意图选择原创、可编辑模板适配或视频参考复刻，明确专业任务直接进入对应入口；画廊指令按精确 ID 的 kind 分流。复用共享上下文与已完成操作，局部修改/声音/导出只进入相关阶段，不重复选路。模板路线接入已有 template-to-video，普通视频复刻仍为职责占位；明确要求把视频沉淀为可复用模板时单独进入 video-to-template。 Agent 读取指引与精确模板详情，形成 brief/分镜或沿用已授权的模板默认内容。
+4. Skill 组织采用已确定的薄路由：泛化请求由 production 按意图选择原创、可编辑模板适配或视频参考复刻，明确专业任务直接进入对应入口；画廊指令按精确 ID 的 kind 分流。复用共享上下文与已完成操作，局部修改/声音/导出只进入相关阶段，不重复选路。模板路线接入已有 template-to-video，普通视频复刻由 motion-recreate 实现；明确要求把视频沉淀为可复用模板时单独进入 video-to-template。 Agent 读取指引与精确模板详情，形成 brief/分镜或沿用已授权的模板默认内容。
 5. Agent 导入素材或通过 Model Gateway 生成图片/视频/音频，完成后写入原生工程。用户在右侧浏览器 Tab 的 Motion Artifact Viewer 预览与编辑，可从空时间轴、素材面板或时间轴选区生成并放入指定时段；选中图片可交给 Codex 参考修改，确认后只替换素材引用并保留原生撤销。也可新增同会话的另一个工程，关闭浏览器继续会话、收起会话沉浸浏览。发生 revision 冲突时重新读取并合并。 按共享 context 补齐缺少的正文并先返回模型再执行；修改按共享 edit 核对保持项、相邻关系与后续延续。
 6. 完成画面、文案、声音检查后，按用户要求导出固定 revision 的快照，等待真实产物并验证。
 
@@ -67,7 +67,7 @@ Model Gateway 是共用的素材生成服务，可由 Motion Viewer 或 MCP 调�
 6. **原生保存链是编辑边界。** Studio 修改保留文件队列、写入前校验与历史；Agent 文件工具遵守 revision。两者仍可能并发冲突，当前没有跨进程、多文件、供应商请求共同参与的事务。
 7. **验证证据有范围。** 安装检测、协议测试、单机实际调用、工程检查、成片解码、视觉和播放器检查分别记录；任何一项成功都不能代替其余项，更不能证明用户留存或付费意愿。
 
-多模态模块的对象、交互、关键取舍、故障语义和扩展准入条件详见 [素材生成设计与架构决策](media-generation-design.md)。这份设计文档解释理由，[模型网关](../model-gateway.md) 维护当前接口与运行限制，[验收记录](../model-gateway-acceptance.md) 保留具体实测结果。
+多模态模块的对象、交互、关键取舍、故障语义和扩展准入条件详见 [素材生成设计与架构决策](media-generation-design.md)。这份设计文档解释理由，[模型网关](../model-gateway.md) 维护当前接口与运行限制，验收应按当前提交独立执行。
 
 ## 能力与模块
 
@@ -93,7 +93,7 @@ Model Gateway 是共用的素材生成服务，可由 Motion Viewer 或 MCP 调�
 | 产品服务与代理 | `server.ts`、`editor-server.ts` | 通用会话 API `/design-api/`、兼容 `/motion-api/`，原生 API `/api/` |
 | 引擎与生命周期 | `hyperframes.ts`、`preview.ts`、`editor-runtime.ts`、`shared/owned-studio.mjs` | 锁定 Hyperframes；macOS 共享后台与 Studio 守卫，校验身份/版本/目录并管理崩溃清理 |
 | 导出与质量验证 | `server.ts`、`scripts/verify-export.ts`、制作 skills | 独立快照、后台渲染、技术验证；视觉审阅另行完成 |
-| Skill 路由与文档读取 | `skills/`、`shared/workflow.ts`、`mcp.ts` | production 薄路由 + director + 实际 template-to-video + recreate 占位 + 独立 video-to-template；24 份文档含共享 edit，具有 canonical ID/哈希/引用映射，按需读取，不自动执行或强制编排；见 [调用契约](../skills.md) |
+| Skill 路由与文档读取 | `skills/`、`shared/workflow.ts`、`mcp.ts` | production 薄路由 + director + 实际 template-to-video + motion-recreate 复刻流程 + 独立 video-to-template；26 份文档含共享 edit，具有 canonical ID/哈希/引用映射，按需读取，不自动执行或强制编排；见 [调用契约](../skills.md) |
 | 动态叙事指导 | `skills/motion-director/` | v1.4.4 明确导演视角与目标，前置创作判断职责；沿用原创路线与七份 v1.4 质量参考，模板/复刻按需复用；效果边界见 [说明](../motion-director.md) |
 
 源码位置的详细映射见 [编辑器开发指南](../editor-fork.md)，引擎适配见 [Hyperframes 集成](../hyperframes.md)。
@@ -173,14 +173,14 @@ flowchart LR
 
 ## 演进约束
 
-内部测试分发按 mac-arm64 / win-x64 准备固定原生依赖。Linux 默认构建一份唯一 beta 的 npm 轻量安装器、应用归档和依赖校验清单，原生工具在用户机器首次需要时下载；完整 ZIP 通过 format=full 保留备用。两种格式仍在目标系统验收；内部测试 Release 可明确标识 Mac 待验收，不能将产包成功写成两个平台均可用。镜像站单独同步，不负责构建。工程保留在包外，测试渠道不隐含正式发行或旧系统兼容。见 [测试包说明](../test-packages.md)。
+本地测试包按 mac-arm64 / win-x64 准备固定公开原生依赖。npm 为默认轻量格式，完整 ZIP 为备用；平台安装和真实出片必须独立验收。工程保留在包外，当前 CI 只构建与校验，不上传或发布。见 [测试包说明](../test-packages.md)。
 
-已确认方向是继续支持多 Agent 接入、可编辑工程与一个工作区内的发现/制作闭环。团队品牌资产、托管渲染、批量生产、云端协作等属于 [商业化候选方案](commercialization.md)，尚无交付日期或上线承诺。
+已确认方向是继续支持多 Agent 接入、可编辑工程与一个工作区内的发现/制作闭环。
 
 任何演进都需要说明新增的人群和价值、影响的数据/API/工程格式、成本与可靠性变化，以及与现有工作流的兼容方式。重要选择和被替代的方案进入 [需求与决策记录](changes.md)。
 
 通用会话 API、模式工厂、Viewer 注册与嵌入参数的技术细节见 [会话技术架构](../session-architecture.md)。
 
-## William 效果扩展边界
+## 视频转模板与模板出片扩展边界
 
 本分支的两条 Skill 是按需使用的扩展，不覆盖上述团队通用流程、模板目录或编辑器。工程直接交付、直接读取；旧自定义本机入库接口退出默认服务。可选比较工具仅输出诊断证据，视觉由用户验收。插件名、安装、数据目录和端口沿用团队底座，详见 [扩展范围](../motion-extension-scope.md)。

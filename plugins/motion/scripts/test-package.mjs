@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { releaseProfile } from '../shared/mcp-registry.ts';
+import { distributionFiles } from './distribution.ts';
 
 export const root = fileURLToPath(new URL('../', import.meta.url));
 // Git Bash tar interprets C: as a remote host; use Windows' native archive tool.
@@ -71,23 +72,14 @@ export async function build(target, version, profile = releaseProfile) {
   assert(/^\d+\.\d+\.\d+-beta\.\d+\.\d+$/.test(version), 'Only uniquely numbered beta packages are supported');
   const { mcpRegistry } = await import('../mcp.ts');
   const registry = mcpRegistry(profile);
-  const { phase1Skills } = await import('../shared/workflow.ts');
   const directory = path.join(root, 'dist', version), name = `OpenMotion-Codex-${version}-${target}`;
   const stage = path.join(directory, name), runtime = path.join(root, '.artifacts', 'test-runtime', target, 'runtime');
   await mkdir(directory, { recursive: true }); await mkdir(stage);
-  const sourceFiles = await new Promise((resolve, reject) => {
-    const child = spawn('git', ['ls-files', '-z'], { cwd: root }); let output = '';
-    child.stdout.on('data', chunk => { output += chunk; }); child.once('error', reject);
-    child.once('exit', code => code === 0 ? resolve(output.split('\0').filter(Boolean)) : reject(new Error('git ls-files failed')));
-  });
-  const rootFiles = new Set(['package.json', 'package-lock.json', 'README.md', 'AGENTS.md', 'CLAUDE.md']);
-  for (const file of sourceFiles) {
-    if (profile === 'phase1' && file.startsWith('skills/') && !phase1Skills.includes(file.split('/')[1])) continue;
-    if (!(rootFiles.has(file) || /^[^/]+\.ts$/.test(file) || /^(\.codex-plugin|shared|web|gateway|skills|docs|templates|template-library)\//.test(file) || /^studio\/[^/]+\.json$/.test(file) || /^scripts\/(?:(verify-export|export-adapters|package)\.ts|(npm-runtime|runtime-assets)\.mjs|runtime-lock\.json)$/.test(file))) continue;
-    await mkdir(path.dirname(path.join(stage, file)), { recursive: true }); await cp(path.join(root, file), path.join(stage, file));
+  for (const file of await distributionFiles(profile)) {
+    await mkdir(path.dirname(path.join(stage, file)), { recursive: true });
+    await cp(path.join(root, file), path.join(stage, file));
   }
   await writeFile(path.join(stage, 'shared/mcp-release.json'), JSON.stringify({ profile }, null, 2) + '\n');
-  await cp(path.join(root, 'studio/build'), path.join(stage, 'studio/build'), { recursive: true });
   await cp(runtime, path.join(stage, 'runtime'), { recursive: true, verbatimSymlinks: true });
   for (const file of ['package.json', 'package-lock.json', '.codex-plugin/plugin.json']) {
     const filename = path.join(stage, file), json = JSON.parse(await readFile(filename, 'utf8'));
@@ -107,7 +99,7 @@ export async function build(target, version, profile = releaseProfile) {
   Object.assign(mcp.mcpServers.motion, info.platform === 'win32' ? { command: 'cmd.exe', args: ['/d', '/s', '/c', 'scripts\\run-mcp.cmd'] } : { command: '/bin/sh', args: ['scripts/run-mcp.sh'] });
   await writeFile(path.join(stage, '.mcp.json'), JSON.stringify(mcp, null, 2) + '\n');
   const catalog = JSON.parse(await readFile(path.join(root, 'marketplace.example.json'), 'utf8'));
-  catalog.name = 'openmotion-test'; catalog.interface.displayName = 'OpenMotion internal test packages';
+  catalog.name = 'openmotion-test'; catalog.interface.displayName = 'OpenMotion test packages';
   catalog.plugins[0].source.path = './plugin';
   for (const item of ['.codex-plugin', 'skills', 'docs', 'README.md', 'AGENTS.md', 'CLAUDE.md']) await cp(path.join(stage, item), path.join(stage, 'plugin', item), { recursive: true });
   await writeFile(path.join(stage, 'plugin/.mcp.json'), JSON.stringify({ mcpServers: {} }) + '\n');

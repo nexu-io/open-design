@@ -94,7 +94,7 @@ test('every workflow document and linked reference is reachable over MCP with ca
     }
     assert.equal(returned.get('skills/template-to-video/SKILL.md').status, 'ready');
     assert.equal(returned.get('skills/template-to-video/SKILL.md').workflow, 'template');
-    assert.equal(returned.get('skills/motion-recreate/SKILL.md').status, 'placeholder');
+    assert.equal(returned.get('skills/motion-recreate/SKILL.md').status, 'ready');
     for (const route of workflows) {
       assert.ok(returned.get(workflowRegistry[route as keyof typeof workflowRegistry].sections.start).references.some((reference: { documentId: string }) =>
         reference.documentId === 'skills/motion-production/references/edit.md'), `${route} must expose the shared edit workflow`);

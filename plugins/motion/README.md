@@ -29,11 +29,11 @@ MCP 打开预览、创建产物、应用/复刻模板时，`previewUrl` 默认�
 
 选中时间轴片段、Shift 拖选时段或在未选片段时点击标尺，会弹出素材操作栏。选中图片可直接「修改图片」，由本地 Codex 以原图为参考生成候选；确认替换后保留原片段时长、动画与样式，并可撤销。图片修改支持工程内 PNG/JPEG/WebP（20 MB 以内）；视频、音乐和语音目前支持生成。
 
-Studio 与 MCP 共用这套模型和任务服务。云 Key 的填写不等于已验证权限/额度；调用使用用户自有账户，失败不会自动重试或换到另一付费供应商。Key 仅保存在本地独立配置中，不返回给前端/MCP，也不随工程导出。可使用环境变量 `ATLASCLOUD_API_KEY` / `FAL_KEY`。本地 Codex 需要已登录、支持 `--ephemeral` 且开启 `image_generation`；不会复制 Codex 登录 token。详细说明见 [模型网关](docs/model-gateway.md) 与 [验收记录](docs/model-gateway-acceptance.md)。
+Studio 与 MCP 共用这套模型和任务服务。云 Key 的填写不等于已验证权限/额度；调用使用用户自有账户，失败不会自动重试或换到另一付费供应商。Key 仅保存在本地独立配置中，不返回给前端/MCP，也不随工程导出。可使用环境变量 `ATLASCLOUD_API_KEY` / `FAL_KEY`。本地 Codex 需要已登录、支持 `--ephemeral` 且开启 `image_generation`；不会复制 Codex 登录 token。详细说明见 [模型网关](docs/model-gateway.md) 与 可复现测试。
 
 ## 一期 MCP 发布范围
 
-[一期 9 Tool 契约与实现范围](docs/mcp-phase1-tools.md)（[飞书文档](https://powerformer.feishu.cn/docx/VQpWdcZjpogiKgxhkzfcOAUUn2c)）固定公开名称、输入返回、内容版本与裁剪边界。源码和默认构建均为 phase1，仅暴露 9 项；`npm run package:phase1` 导出一期插件 ZIP。已补齐契约适配，复用现有 Studio/渲染器，四个随包 Skill 的调用指引同步迁移。内部 legacy 实现保留供兼容回归。
+[一期 9 Tool 契约与实现范围](docs/mcp-phase1-tools.md)固定公开名称、输入返回、内容版本与裁剪边界。源码和默认构建均为 phase1，仅暴露 9 项；`npm run package:phase1` 导出一期插件 ZIP。已补齐契约适配，复用现有 Studio/渲染器，四个随包 Skill 的调用指引同步迁移。内部 legacy 实现保留供兼容回归。
 
 ## 产品与文档
 
@@ -44,13 +44,11 @@ OpenDesign 围绕已有 Agent 用户的产品演示、参考复刻、动态图�
 | 文档 | 内容 |
 | --- | --- |
 | [产品架构](docs/product/architecture.md) | 定位、核心流程、能力边界、模块与数据关系、成功标准 |
-| [共享编辑器](docs/shared-editor.md) / [验收记录](docs/shared-editor-acceptance.md) | 多个 MCP 连接共用后台、工程选择、目录兼容与崩溃恢复 |
+| [共享编辑器](docs/shared-editor.md) | 多个 MCP 连接共用后台、工程选择、目录兼容与崩溃恢复 |
 | [网页浏览器](docs/browser-runtime.md) | Chromium 隔离、实际导航与输入、资源释放、运行配置和当前限制 |
 | [会话与 Viewer 技术架构](docs/session-architecture.md) | 共用生命周期、模式/模板/skill、HTTP/MCP、Codex 嵌入、扩展点与设计取舍 |
 | [素材生成设计与架构决策](docs/product/media-generation-design.md) | 为什么共享网关、先生成再采用；选区交互、关键取舍、故障与扩展约束 |
-| [模型网关](docs/model-gateway.md) / [验收记录](docs/model-gateway-acceptance.md) | 当前配置与 API/MCP 合约、运行限制、真实验证及未验证范围 |
-| [人群与 SAP 目标画像](docs/product/audience-and-sap.md) | 目标角色、任务、痛点、购买决策与待验证证据 |
-| [商业化策略](docs/product/commercialization.md) | 当前商业边界、候选服务、获客与复用、成本及验证顺序 |
+| [模型网关](docs/model-gateway.md) | 当前配置与 API/MCP 合约、运行限制、真实验证及未验证范围 |
 | [需求与决策记录](docs/product/changes.md) | 每次需求的选择理由、产品影响、验证证据和后续事项 |
 
 文档区分当前能力、已确认方向、待验证假设和候选方案。画像与商业化内容会随新需求和真实证据持续修订。
@@ -145,7 +143,7 @@ npm run dev
 
 ## Agent 工具
 
-仓库 Agent 从 [AGENTS.md](AGENTS.md) 进入，Claude Code 同时读取 [CLAUDE.md](CLAUDE.md)。[motion-production](skills/motion-production/SKILL.md) 负责范围与路线：原创/大幅重编进入 [motion-director v1.4.4](skills/motion-director/SKILL.md)，已有模板出片或适配进入 [template-to-video](skills/template-to-video/SKILL.md)，参考视频复刻进入仍为职责占位的 motion-recreate。明确要求视频转可复用模板或 ZIP 时，单独进入 [video-to-template](skills/video-to-template/SKILL.md)。已有内容的修改统一复用 [edit 流程](skills/motion-production/references/edit.md)，核对保持项及后续延续；首次补读的结果须先返回模型，再执行依赖操作。
+仓库 Agent 从 [AGENTS.md](AGENTS.md) 进入，Claude Code 同时读取 [CLAUDE.md](CLAUDE.md)。[motion-production](skills/motion-production/SKILL.md) 负责范围与路线：原创/大幅重编进入 [motion-director v1.4.4](skills/motion-director/SKILL.md)，已有模板出片或适配进入 [template-to-video](skills/template-to-video/SKILL.md)，参考视频复刻进入 [motion-recreate](skills/motion-recreate/SKILL.md)（先读工作区资料、最多问一次，用一期 9 个工具在编辑器工程里重建，交付成片、原片对照和可编辑工程；重建规则与测量脚本随该 Skill 一起分发）。明确要求视频转可复用模板或 ZIP 时，单独进入 [video-to-template](skills/video-to-template/SKILL.md)。已有内容的修改统一复用 [edit 流程](skills/motion-production/references/edit.md)，核对保持项及后续延续；首次补读的结果须先返回模型，再执行依赖操作。
 
 仅有 MCP 时通过 resources/list 与 resources/read 读取 `motion://workflow/production/start`；已选专业入口直接读对应路线，无需重新选路。固定引擎指南为 `motion://engine/SKILL.md`。详见 [Skill 路由](docs/skills.md)。一期仅包含 production/director/template/recreate 四个 Skill 入口，其他兼容/独立扩展保留源码。
 
@@ -208,7 +206,7 @@ node --experimental-strip-types scripts/verify-export.ts /absolute/path/final.mp
 
 ## 视频转模板与模板出片
 
-视频转模板入口仅在要求可复用模板时使用，要求原样重建尽量匹配参考画面、构图、运动和节奏；素材与源码保持可编辑。原样使用模板时直接交付模板里的 `preview.mp4`，不重新渲染、不比对。制作模板时只检查 ZIP 解压到别处能独立渲染，不缺文件、字体和素材，帧率、帧数、时长和预览一致；不做逐帧像素比对，不为肉眼看不出的差异返工。具体规范见 [模板制作验证](skills/video-to-template/references/verify.md)。视频转模板时不向用户提问，由 Agent 自行选择最贴近原片的方案并记录在模板内唯一的说明文件 `TEMPLATE.md`；常用修改声明为变量，在 Studio Variables 面板修改；交付回复只给预览、模板、原片对照、能改什么和与原片的差异，技术检查写在 `TEMPLATE.md`；用模板生成视频时，缺少品牌、产品、价格、图片等只有用户能提供的内容，或要求有明显歧义时，Agent 会一次性提问。video-to-template 不承接普通视频复刻或直接混入修改要求；普通复刻仍走 motion-recreate 占位，已有模板的修改由 template-to-video 处理。
+视频转模板入口仅在要求可复用模板时使用，要求原样重建尽量匹配参考画面、构图、运动和节奏；素材与源码保持可编辑。原样使用模板时直接交付模板里的 `preview.mp4`，不重新渲染、不比对。制作模板时只检查 ZIP 解压到别处能独立渲染，不缺文件、字体和素材，帧率、帧数、时长和预览一致；不做逐帧像素比对，不为肉眼看不出的差异返工。具体规范见 [模板制作验证](skills/video-to-template/references/verify.md)。视频转模板时不向用户提问，由 Agent 自行选择最贴近原片的方案并记录在模板内唯一的说明文件 `TEMPLATE.md`；常用修改声明为变量，在 Studio Variables 面板修改；交付回复只给预览、模板、原片对照、能改什么和与原片的差异，技术检查写在 `TEMPLATE.md`；用模板生成视频时，缺少品牌、产品、价格、图片等只有用户能提供的内容，或要求有明显歧义时，Agent 会一次性提问。video-to-template 不承接普通视频复刻或直接混入修改要求；用参考视频（自己的或看中的）做用户自己的片由 motion-recreate 负责，已有模板的修改由 template-to-video 处理。
 
 ## 多 Agent 薄适配器
 
@@ -230,7 +228,7 @@ npm run package:plugin
 
 `npm run dev` 先构建编辑器再启动服务；只改前端后可运行 `npm run build:studio` 并刷新页面。`npm run test:studio` 运行上游单元/DOM 回归与宿主集成测试；`npm run typecheck:studio` 检查前端类型；`npm run design:check` 检查主题变量与对比度。`check` 校验清单、版本、锁定依赖、技能入口、服务 TypeScript 语法及设计规范。测试覆盖原生源文件共享、并发 revision、路径隔离、旧工程迁移、Studio 编辑数据快照、真实 stdio MCP、原生 Studio HTTP 接口、完整目录与同源版本、封面筛选、短指令与参数化指南、三个官方模板的打开/编辑/切换/保留和带音轨的真实 MP4 渲染。没有 FFmpeg 或 Chrome 的机器会跳过渲染集成测试；PR CI 的 phase1-package-e2e 独立任务安装 Chromium、FFmpeg/ffprobe，重新构建并隔离安装真实ZIP，自动跑全部9个Tool；依赖缺失或测试失败直接标红，日志与MP4证据保留14天。合并阻断须同时启用main的必需状态检查，配置与边界见[测试覆盖](docs/mcp-phase1-tools.md#测试代码与ci范围)。
 
-打包产物为 `dist/motion-0.6.2-phase1.zip`，包含编辑器源码与构建产物、设计系统与字体许可、原生模板、完整目录与已校验封面、技能、lockfile、AGENTS.md、CLAUDE.md 和产品文档，排除个人媒体、草稿、node_modules 和原生程序。`bash scripts/install-motion.command` 可注册并安装本地插件，并按 Codex 实际解析的启动配置验证 MCP 握手；它不会重启 Codex。代码改动和打包不会自动替换用户已安装的插件版本。
+打包产物为 `dist/motion-0.6.2-phase1.zip`，包含运行时源码与编辑器构建产物、设计系统与字体许可、原生模板、目录与封面、技能、lockfile 和允许分发的使用文档，排除个人媒体、草稿、node_modules 和原生程序。`bash scripts/install-motion.command` 可注册并安装本地插件，并按 Codex 实际解析的启动配置验证 MCP 握手；它不会重启 Codex。代码改动和打包不会自动替换用户已安装的插件版本。
 
 主要实现：`hyperframes.ts` 管理锁定的上游 CLI 与 Studio 进程；`workspace.ts` 管理原生文件、迁移和快照；`server.ts` 提供薄壳与后台任务；`mcp.ts` 向 Agent 暴露工具；`template-library.ts` 创建官方模板的可编辑副本，`template-catalog.ts` 提供完整参考目录及热度；`editor-server.ts` 提供自有编辑器资源并流式转发原生 API；`studio/src/motion/` 是我们的界面入口，`web/design-system/` 是共享设计规范。`shared/legacy.ts` 仅用于读取旧版工程。
 

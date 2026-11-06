@@ -31,7 +31,7 @@ test('public runtime downloads never attach repository credentials and reject HT
       assert.equal(options.headers?.Authorization, undefined);
       return new Response(bytes);
     });
-    await download({ url: 'https://code.powerformer.net/runtime.zip', sha256: sum }, filename);
+    await download({ url: 'https://origin.example.invalid/runtime.zip', sha256: sum }, filename);
     assert.equal(await readFile(filename, 'utf8'), bytes);
     t.mock.method(globalThis, 'fetch', async () => new Response(null, { status: 302, headers: { location: 'http://example.invalid/runtime.zip' } }));
     await assert.rejects(download({ url: 'https://example.invalid/runtime.zip', sha256: 'a'.repeat(64) }, filename), /HTTPS/);
@@ -51,7 +51,7 @@ test('runtime sources require a pinned checksum and cannot replace earlier cache
     assert.equal(await readFile(filename, 'utf8'), 'keep previous cache');
     for (const target of Object.values(lock.targets)) for (const key of ['node', ...nativeComponents(target)]) {
       assert.match(target[key].sha256, /^[a-f0-9]{64}$/); assert.equal(new URL(target[key].url).protocol, 'https:');
-      assert.notEqual(new URL(target[key].url).hostname, 'code.powerformer.net');
+      assert(['nodejs.org', 'storage.googleapis.com', 'ffmpeg.martin-riedl.de', 'github.com'].includes(new URL(target[key].url).hostname), 'Runtime sources must be public upstream hosts');
       assert(!target[key].url.includes('/latest/'), 'Use an immutable public version URL');
     }
   } finally { await rm(dir, { recursive: true, force: true }); }
