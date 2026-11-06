@@ -16,7 +16,6 @@ import {
   subscribeWorkspaceTabsDock,
 } from './workspaceTabsDock';
 import { useT } from '../i18n';
-import { middleClickHandlers } from '../lib/middle-click';
 import { scrollMovesAnchor } from '../lib/scroll-moves-anchor';
 import { buildPath, navigate, type EntryHomeView, type Route } from '../router';
 import type { Project } from '../types';
@@ -2244,10 +2243,6 @@ export function WorkspaceTabsBar({
                         setDockMenuOpen(false);
                         openTab(tab);
                       }}
-                      {...middleClickHandlers(() => {
-                        clearPreview();
-                        closeTab(tab.id);
-                      })}
                       /* Focus previews too, so the card is not mouse-only:
                          arrowing/tabbing the list shows the same picture. An
                          open ⋮ menu outranks the hover (it took the preview's
@@ -2518,7 +2513,6 @@ export function WorkspaceTabsBar({
               data-workspace-tab-id={tab.id}
               role="tab"
               aria-selected={active}
-              {...(isPinned ? undefined : middleClickHandlers(() => closeTab(tab.id)))}
               draggable={!isPinned && state.tabs.length > 1}
               onDragStart={(event) => handleTabDragStart(tab.id, event)}
               onDragEnd={handleTabDragEnd}
