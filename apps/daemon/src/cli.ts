@@ -35,6 +35,12 @@ import {
 import { resolveMcpWorkspaceContext } from './mcp-workspace-context.js';
 import { parseStockSearchRequest, type StockSearchResponse } from '@open-design/contracts';
 
+// Harness scrubs ambient credentials and forwards the run token through its
+// managed DSH_* overlay. Restore the existing wrapper contract at the CLI edge.
+if (!process.env.OD_TOOL_TOKEN && process.env.DSH_SHELL === '1' && process.env.DSH_OD_TOOL_TOKEN) {
+  process.env.OD_TOOL_TOKEN = process.env.DSH_OD_TOOL_TOKEN;
+}
+
 const argv = process.argv.slice(2);
 
 const RESUME_CONTINUE_PROMPT =

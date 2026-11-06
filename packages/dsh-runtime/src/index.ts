@@ -17,6 +17,7 @@ import {
 } from '@deepseek-ai/dsh-llm';
 import { SessionId, type SessionEvent, type TurnEndReason } from '@deepseek-ai/dsh-session';
 import type {} from '@deepseek-ai/dsh-cmdline';
+import type {} from '@deepseek-ai/dsh-shell-env';
 import {
   CAPABILITIES,
   identityFrame,
@@ -34,6 +35,7 @@ export const inject = [
   'llm',
   'sessions',
   'sessionPersistence',
+  'shellEnv',
 ];
 
 const PLUGIN_VERSION = '0.1.0';
@@ -457,6 +459,16 @@ export function apply(ctx: Context): void {
     exit(0);
     return;
   }
+  ctx.shellEnv.register({
+    name: 'open-design-tool-token',
+    variables: {
+      DSH_OD_TOOL_TOKEN: { description: 'Run-scoped bearer token for OpenDesign tool wrappers.' },
+    },
+    resolve: () => {
+      const token = process.env.OD_TOOL_TOKEN;
+      return token ? { DSH_OD_TOOL_TOKEN: token } : {};
+    },
+  });
   void ctx.get('loader')?.await().then(async () => {
     if (startup.mode === 'models') {
       writeFrame(process.stdout, modelsFrame(await listModelCatalog(ctx)));
