@@ -3,6 +3,11 @@ import path from 'node:path';
 
 import { assertDeckLayoutSafe } from '../qa/deck-layout.js';
 import { injectFontFaces, readFontManifest, type FontFile } from './fonts.js';
+import {
+  applyBrandOverrides,
+  brandOverridesPreviewDecorator,
+  readBrandOverrides,
+} from './overrides.js';
 import { readBrand, resolveBrandFile, writeBrand } from './store.js';
 import { sanitizeSeedOverrides } from './schema.js';
 import {
@@ -50,6 +55,7 @@ function reassembleWithSeed(
   brand: Brand,
   seed: SeedToken,
   fontFiles: FontFile[],
+  decorateArtifactPreview?: (html: string, kind: AssetKind) => string,
 ): BrandSystem {
   const themes: Record<ThemeAlgorithm, DesignTokens> = {
     default: deriveTokens(seed, 'default'),
@@ -93,7 +99,10 @@ function reassembleWithSeed(
   }
   files['index.html'] = withFonts(
     renderArtifactGallery(brand, themes.default, {
-      decorate: (html) => injectFontFaces(html, fontFiles, '../fonts/'),
+      decorate: (html, kind) => {
+        const withFontFaces = injectFontFaces(html, fontFiles, '../fonts/');
+        return decorateArtifactPreview ? decorateArtifactPreview(withFontFaces, kind) : withFontFaces;
+      },
     }),
     1,
   );
@@ -137,17 +146,33 @@ export async function rebuildSystem(
   }
 
   const overrides = sanitizeSeedOverrides(brand.seed);
+  // Authored overrides are an input like brand.json: read them before anything
+  // is written so an invalid override fails the rebuild instead of half-applying.
+  const authored = readBrandOverrides(brandRoot(brandsRoot, id));
+  const decorateArtifactPreview = brandOverridesPreviewDecorator(authored);
   const fontFiles = readFontManifest(brandRoot(brandsRoot, id));
-  let system = buildBrandSystem(brand, { fontFiles });
+  let system = buildBrandSystem(brand, {
+    fontFiles,
+    ...(decorateArtifactPreview ? { decorateArtifactPreview } : {}),
+  });
   if (overrides) {
-    system = reassembleWithSeed(system, brand, { ...system.seed, ...overrides }, fontFiles);
+    system = reassembleWithSeed(
+      system,
+      brand,
+      { ...system.seed, ...overrides },
+      fontFiles,
+      decorateArtifactPreview,
+    );
   }
 
   // Layout-validation guard: the deck lays content on fixed-size 16:9 slides,
   // so a regressed template can clip / truncate / overflow brand copy. Block
   // the rebuild before anything is written when the no-clip invariants fail.
+  // It guards the generated template; an authored deck override is the
+  // author's own page.
   const deckHtml = system.files['artifacts/deck.html'];
   if (deckHtml) assertDeckLayoutSafe(deckHtml);
+  system = applyBrandOverrides(system, authored);
 
   const outDir = brandSystemDir(brandsRoot, id);
   fs.rmSync(outDir, { recursive: true, force: true });
