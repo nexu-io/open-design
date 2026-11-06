@@ -101,7 +101,7 @@ function SharedWorkspaceQuotaPopover({ view, context, profile, consoleOrigin, ba
     const hours = Math.floor((minutes % 1_440) / 60);
     const rest = minutes % 60;
     const time = days
-      ? `${t('billing.codingPlanPeriodDays', { count: days })}${hours ? ` ${t('billing.codingPlanPeriodHours', { count: hours })}` : ''}`
+      ? `${t('billing.codingPlanPeriodDays', { count: days })}${hours ? ` ${t('billing.codingPlanPeriodHours', { count: hours })}` : ''}${rest ? ` ${t('workspaceQuota.periodMinutes', { count: rest })}` : ''}`
       : hours
         ? `${t('billing.codingPlanPeriodHours', { count: hours })}${rest ? ` ${t('workspaceQuota.periodMinutes', { count: rest })}` : ''}`
         : t('workspaceQuota.periodMinutes', { count: rest });
