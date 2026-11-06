@@ -519,6 +519,8 @@ type ProjectChatSendMeta = ChatSendMeta & {
   composerOwnedDraft?: true;
   /** Only Home auto-send owns the original Home input and initial request. */
   initialHomeSend?: true;
+  /** Continue the visible placeholder's clock on the first send only. Not queued. */
+  homeHandoffStartedAt?: number;
   /** Stable task lineage for retries, resumes and clarification answers. */
   taskAnalytics?: ChatTaskExecutionAnalytics;
   /** Explicit daemon-issued OD Next continuation handle. */
@@ -9270,7 +9272,7 @@ export function ProjectView({
        * OPEND-2615 那个症状。两件事必须绑在一起。
        */
       setChatSeed(null);
-      const startedAt = Date.now();
+      const startedAt = (meta?.initialHomeSend ? meta.homeHandoffStartedAt : undefined) ?? Date.now();
       const previousConversation = conversationsRef.current.find(
         (conversation) => conversation.id === runConversationId,
       );
@@ -14369,6 +14371,7 @@ export function ProjectView({
     selectedAssistantIdentity,
     creationHandoffMessageIds,
   );
+  const homeHandoffStartedAt = creationHandoffMessages.find((message) => message.role === 'assistant')?.startedAt;
   const creationHandoffTurnShown = optimisticFirstTurn !== null && messages.length === 0;
   const chatPaneConversationKey =
     activeConversationId
@@ -14535,6 +14538,7 @@ export function ProjectView({
         ...(context ? { context } : {}),
         ...homeAutoSendIdentity(project.id),
         initialHomeSend: true,
+        homeHandoffStartedAt,
         acceptDurableQueue: true,
         // Only reuse Home's decision for the exact persisted project scope.
         // A workspace/member mismatch falls through to handleSend's normal gate.
@@ -14582,6 +14586,7 @@ export function ProjectView({
     projectRunHasBillableAmrPrincipal,
     projectRunBillingContext,
     projectRunPreflightContext,
+    homeHandoffStartedAt,
     handleSend,
   ]);
 
@@ -15846,6 +15851,7 @@ function stripQueueOnlyFromMeta(
     // 草稿,而队列里那条反而被扔掉。见 `composerOwnedDraft` 的说明。
     composerOwnedDraft: _composerOwnedDraft,
     initialHomeSend: _initialHomeSend,
+    homeHandoffStartedAt: _homeHandoffStartedAt,
     ...rest
   } = meta as ProjectChatSendMeta;
   return Object.keys(rest).length > 0 ? rest : undefined;
