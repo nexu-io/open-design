@@ -227,6 +227,23 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     ],
   },
   {
+    label: 'Requesty',
+    protocol: 'openai',
+    baseUrl: 'https://router.requesty.ai/v1',
+    preferredModels: [
+      'anthropic/claude-sonnet-4-5',
+      'anthropic/claude-sonnet-5',
+      'openai/gpt-5.4',
+      'google/gemini-2.5-flash',
+      'openai/gpt-4o-mini',
+      'deepseek/deepseek-chat',
+    ],
+    apiKeyConsoleLink: {
+      host: 'app.requesty.ai',
+      url: 'https://app.requesty.ai/api-keys',
+    },
+  },
+  {
     label: 'Azure OpenAI',
     protocol: 'azure',
     baseUrl: '',
@@ -542,6 +559,7 @@ const BYOK_PROVIDER_PRESET_SPECS = [
   { id: 'stepfun', title: 'StepFun', providerLabel: 'StepFun' },
   { id: 'deepseek', title: 'DeepSeek', providerLabel: 'DeepSeek — OpenAI' },
   { id: 'openrouter', title: 'OpenRouter', providerLabel: 'OpenRouter' },
+  { id: 'requesty', title: 'Requesty', providerLabel: 'Requesty' },
   { id: 'mistral', title: 'Mistral AI', providerLabel: 'Mistral AI' },
   { id: 'xai', title: 'xAI', providerLabel: 'xAI' },
   { id: 'together', title: 'Together AI', providerLabel: 'Together AI' },
