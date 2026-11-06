@@ -2820,7 +2820,7 @@ function openNativeFolderDialog() {
       );
     } else if (platform === 'win32') {
       const command = buildWindowsFolderDialogCommand();
-      execFile(command.command, command.args, { timeout: 120_000 }, (err, stdout) => {
+      execFile(command.command, command.args, { timeout: 120_000, windowsHide: true }, (err, stdout) => {
         resolve(parseFolderDialogStdout(err, stdout));
       });
     } else {

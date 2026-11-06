@@ -108,7 +108,7 @@ export const extractVideoFirstFrameWithFfmpeg: ChatArtifactVideoFrameExtractor =
         '4',
         input.outputPath,
       ],
-      { stdio: ['ignore', 'ignore', 'pipe'] },
+      { stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true },
     );
     let stderr = '';
     child.stderr.on('data', (chunk: Buffer) => {

@@ -36,6 +36,7 @@ describe("explicit Windows snapshot budget", () => {
       })]);
       expect(observed).toBe("rejected");
       expect(state.calls[0]?.command).toBe("powershell.exe");
+      expect(state.calls[0]?.options.windowsHide).toBe(true);
       expect(state.child?.exitCode !== null || state.child?.signalCode !== null).toBe(true);
     } finally {
       clearTimeout(watchdog);
@@ -51,5 +52,6 @@ describe("explicit Windows snapshot budget", () => {
     state.mode = "success";
     expect(await captureProcessSnapshot()).toEqual([{ pid: 80, ppid: 1, command: "owned", startedAtMs: 1234 }]);
     expect(state.calls[0]?.options.timeout).toBeUndefined();
+    expect(state.calls[0]?.options.windowsHide).toBe(true);
   });
 });
