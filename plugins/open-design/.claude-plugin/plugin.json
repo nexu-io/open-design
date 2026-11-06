@@ -2,6 +2,6 @@
   "name": "open-design",
   "displayName": "OpenDesign",
   "version": "1.0.0",
-  "description": "Local-first design app · 139 skills + 150 DESIGN.md systems · exposes projects/files/preview tools to your coding agent over stdio MCP. Requires the `od` daemon on PATH.",
+  "description": "Local-first design app · 139 skills + 150 DESIGN.md systems · exposes projects/files/preview tools to your coding agent over stdio MCP. Requires the `od` daemon on PATH. Connects to http://127.0.0.1:7456 (the `od` default port); set OD_DAEMON_URL to use another daemon, such as one started by tools-dev.",
   "mcpServers": "./.mcp.json"
 }
