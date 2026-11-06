@@ -107,6 +107,7 @@ export async function buildDeckRenderInput(
 export interface SlideImage {
   buffer: Buffer;
   jpeg: boolean;
+  notes?: string;
 }
 
 /**
