@@ -316,7 +316,7 @@ details.kit-acc[open] .kit-acc-icon{transform:rotate(45deg)}
 
 // ─────────────────────────── avatar / stat / divider ────────────────────────
 
-/** Initials avatar — up to two initials on a primary-tinted disc. */
+/** Initials avatar — up to two initials on the primary-color disc. */
 export function avatar(opts: { name: string; size?: Size }): string {
   const px: Record<Size, string> = {
     sm: varRef("controlHeightSM"),
@@ -338,7 +338,7 @@ export function avatar(opts: { name: string; size?: Size }): string {
     "width:" + px[size],
     "height:" + px[size],
     "border-radius:50%",
-    "background:" + varRef("colorPrimaryBg"),
+    "background:" + varRef("colorPrimary"),
     "color:" + varRef("colorPrimaryText"),
     "font-family:" + varRef("fontFamily"),
     "font-size:" + varRef("fontSizeSM"),
