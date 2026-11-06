@@ -6,8 +6,11 @@
  * PATH — npm/pnpm/bun/cargo/deno/go/pyenv prefixes, version-manager shims
  * (asdf, volta, mise, nvm, fnm), and per-version Node install roots. Pure path
  * assembly plus best-effort directory probing; no process, command, or proxy
- * concerns.
+ * concerns — with one deliberate exception: the Windows `.npmrc` npm-prefix
+ * fallback, which shells out to `npm config get prefix` only when reading the
+ * real process environment (never for caller-supplied env maps).
  */
+import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
@@ -104,6 +107,33 @@ export function wellKnownUserToolchainBins(
       if (process.platform === "win32") {
         dirs.push(npmPrefix);
       }
+    }
+  } else if (process.platform === "win32" && env === process.env) {
+    // Windows: GUI-launched daemons usually lack NPM_CONFIG_PREFIX /
+    // npm_config_prefix (npm-internal vars are not inherited by Electron
+    // child processes), so the env-driven block above no-ops. Fall back to
+    // reading the user's actual npm configuration so a custom prefix from
+    // .npmrc is still detected — this is the `.npmrc` tier of npm's own
+    // resolution order (env > .npmrc > default). Guarded on
+    // `env === process.env` so caller-supplied env maps (tests, sandboxed
+    // detection runs) stay deterministic and never shell out.
+    try {
+      const npmPrefix = execFileSync("npm", ["config", "get", "prefix"], {
+        encoding: "utf8",
+        timeout: 3_000,
+        windowsHide: true,
+      }).trim();
+      if (npmPrefix.length > 0) {
+        // Same two entries as the env-driven block above: <prefix>/bin for
+        // cross-platform parity, plus the prefix root because Windows npm
+        // installs global binaries directly into the prefix (no /bin
+        // subdirectory).
+        dirs.push(join(npmPrefix, "bin"));
+        dirs.push(npmPrefix);
+      }
+    } catch {
+      // npm missing from PATH or failed — conventional/default locations
+      // below still apply.
     }
   }
   // Windows: %APPDATA%\npm is npm's default global prefix. NPM_CONFIG_PREFIX /
