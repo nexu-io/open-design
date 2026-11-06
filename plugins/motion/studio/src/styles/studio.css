@@ -1,0 +1,57 @@
+@import "tailwindcss" source(none);
+@import "./palette-reset.css";
+@import "./theme.css";
+@import "./components.css";
+
+/* Explicit sources: Studio's own TypeScript and its shell HTML. Automatic
+ * detection would walk up to the repo root and scan `data/projects`, gitignored user content. */
+@source "../**/*.{ts,tsx}";
+@source "../../index.html";
+
+/* Tailwind v4 preflight no longer gives enabled buttons a pointer cursor. */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+[data-theme-reveal]::view-transition-old(root),
+[data-theme-reveal]::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--color-bg-0);
+  color: var(--color-text-body);
+  font-family: var(--font-sans);
+  overflow: hidden;
+}
+
+#root {
+  width: 100vw;
+  /*
+   * 100vh on iOS Safari measures the LARGEST viewport (toolbars hidden) and
+   * stays fixed at that value, so when the toolbar is visible the bottom of
+   * the layout sits *under* it and anything at flex-end — the player
+   * controls row, notably — becomes untappable. `100dvh` follows the
+   * dynamic viewport, shrinking when the toolbar is shown so the bottom of
+   * #root lines up with the bottom of the visible area. Fallback to 100vh
+   * keeps older browsers (pre-Safari 15.4 / Firefox 101 / Chrome 108) on
+   * the existing behaviour.
+   */
+  height: 100vh;
+  height: 100dvh;
+  /*
+   * Nothing may overflow #root. Dockview parks hidden panel overlays below
+   * the dock, which made the document ~2x the viewport tall; body's
+   * overflow:hidden only blocks user scrolling, so scrollIntoView, focus()
+   * and find-in-page still scrolled the viewport and cut off the header
+   * (repro: select a clip, open the Grade group). `clip`, not `hidden`,
+   * which is itself programmatically scrollable.
+   */
+  overflow: clip;
+}

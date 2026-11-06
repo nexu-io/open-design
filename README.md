@@ -27,6 +27,8 @@
 
 ## What is OpenDesign
 
+Motion source, standalone MCP/Skills installation, and npm/ZIP build instructions are in [`plugins/motion/`](plugins/motion/README.md). Motion retains its own locked dependencies and can be installed without the OpenDesign desktop app.
+
 OpenDesign is **the 1st collaborative AI design agent workspace**. Start with a brief, then use your coding agent or OpenDesign Cloud to create a prototype that follows your design system. Share it with your team for feedback, and let your agent refine it in the same project.
 
 That workflow is open and extensible. OpenDesign is licensed under Apache 2.0 and gives teams skills, design templates, design systems, and plugins they can inspect and adapt to their own process.

@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>A-roll under a script-hidden backdrop</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+    <style>
+      html,
+      body {
+        width: 1080px;
+        height: 1920px;
+        margin: 0;
+        overflow: hidden;
+        background: #000;
+      }
+      #film {
+        position: relative;
+        width: 1080px;
+        height: 1920px;
+        overflow: hidden;
+      }
+      #aroll {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        z-index: 1;
+      }
+      #plate {
+        position: absolute;
+        inset: 0;
+        background: #0b0b0f;
+        z-index: 2;
+        visibility: hidden;
+      }
+      .card {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 1080px;
+        height: 240px;
+        z-index: 3;
+      }
+      #caption {
+        position: absolute;
+        left: 60px;
+        right: 60px;
+        bottom: 160px;
+        z-index: 4;
+        margin: 0;
+        font:
+          700 64px Arial,
+          sans-serif;
+        color: #fff;
+        text-align: center;
+        text-shadow: 0 4px 12px #000;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="film"
+      data-composition-id="aroll-film"
+      data-width="1080"
+      data-height="1920"
+      data-start="0"
+      data-duration="10"
+      data-fps="30"
+    >
+      <video
+        id="aroll"
+        class="clip"
+        src="assets/aroll.mp4"
+        loop
+        muted
+        playsinline
+        data-start="0"
+        data-duration="10"
+        data-track-index="0"
+      ></video>
+      <!-- Untimed full-frame backdrop above the A-roll; the script shows it from 6 s to 8 s only. -->
+      <div id="plate"></div>
+      <div
+        id="title-card"
+        class="card"
+        data-composition-id="title-card"
+        data-composition-src="compositions/title-card.html"
+        data-start="0"
+        data-duration="5"
+        data-track-index="1"
+      ></div>
+      <div
+        id="outro-card"
+        class="card"
+        data-composition-id="outro-card"
+        data-composition-src="compositions/outro-card.html"
+        data-start="5"
+        data-duration="5"
+        data-track-index="1"
+      ></div>
+      <p id="caption" class="clip" data-start="0" data-duration="10" data-track-index="2">
+        Captions stay above the backdrop
+      </p>
+    </div>
+    <script>
+      const plate = document.getElementById("plate");
+      const frame = { t: 0 };
+      const tl = gsap.timeline({ paused: true });
+      tl.to(frame, {
+        t: 10,
+        duration: 10,
+        ease: "none",
+        modifiers: {
+          t: (t) => {
+            plate.style.visibility = t >= 6 && t < 8 ? "visible" : "hidden";
+            return t;
+          },
+        },
+      });
+      tl.fromTo("#caption", { y: 40 }, { y: 0, duration: 0.5 }, 0);
+      window.__timelines = window.__timelines || {};
+      window.__timelines["aroll-film"] = tl;
+    </script>
+  </body>
+</html>

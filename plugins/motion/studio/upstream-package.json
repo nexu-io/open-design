@@ -1,0 +1,141 @@
+{
+  "name": "@hyperframes/studio",
+  "version": "0.9.7",
+  "description": "",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/heygen-com/hyperframes",
+    "directory": "packages/studio"
+  },
+  "files": [
+    "src",
+    "dist"
+  ],
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "browser": "./src/index.ts",
+      "bun": "./src/index.ts",
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    },
+    "./ui": {
+      "browser": "./src/ui.ts",
+      "bun": "./src/ui.ts",
+      "import": "./src/ui.ts",
+      "types": "./src/ui.ts"
+    },
+    "./player": {
+      "browser": "./src/playerEntry.ts",
+      "bun": "./src/playerEntry.ts",
+      "import": "./src/playerEntry.ts",
+      "types": "./src/playerEntry.ts"
+    },
+    "./tailwind-preset": {
+      "bun": "./src/styles/tailwind-preset.ts",
+      "import": "./src/styles/tailwind-preset.ts",
+      "types": "./src/styles/tailwind-preset.ts"
+    },
+    "./theme.css": "./src/styles/theme.css",
+    "./components.css": "./src/styles/components.css",
+    "./styles.css": "./src/styles/studio.css",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "import": "./dist/index.js",
+        "types": "./dist/index.d.ts"
+      },
+      "./ui": {
+        "import": "./dist/ui.js",
+        "types": "./dist/ui.d.ts"
+      },
+      "./player": {
+        "import": "./dist/player.js",
+        "types": "./dist/player.d.ts"
+      },
+      "./tailwind-preset": {
+        "import": "./dist/styles/tailwind-preset.js",
+        "types": "./dist/styles/tailwind-preset.d.ts"
+      },
+      "./theme.css": "./src/styles/theme.css",
+      "./components.css": "./src/styles/components.css",
+      "./styles.css": "./dist/styles.css",
+      "./package.json": "./package.json"
+    },
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts"
+  },
+  "scripts": {
+    "dev": "bun --bun ./node_modules/.bin/vite --host 127.0.0.1",
+    "build": "vite build && tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:edit-accuracy": "bun tests/e2e/edit-accuracy/run.mjs",
+    "test:edit-accuracy:timings": "node tests/e2e/edit-accuracy/timings.mjs",
+    "test:filmstrip-controls": "node tests/e2e/filmstrip-controls.mjs",
+    "test:webmcp-edit-loop": "node tests/e2e/webmcp-edit-loop.mjs",
+    "test:thumbnail-save": "node tests/e2e/thumbnail-save.mjs",
+    "bench:timeline-bulk-actions": "node tests/e2e/timeline-bulk-actions.mjs",
+    "test:timeline-virtualization": "TIMELINE_ROW_VIRTUALIZATION=on TIMELINE_ELEMENT_COUNT=50000 node tests/e2e/timeline-virtualization.mjs",
+    "test:watch": "vitest",
+    "test:colors:browser": "node tests/e2e/native-css-colors.mjs",
+    "test:motion-path-home:browser": "node tests/e2e/motion-path-home.mjs",
+    "report:sdk-cutover": "bun src/utils/sdkCutoverPolicy.report.ts",
+    "test:timeline-default": "bun run test:timeline-virtualization"
+  },
+  "dependencies": {
+    "@base-ui/react": "1.7.0",
+    "@codemirror/autocomplete": "^6.20.1",
+    "@codemirror/commands": "^6.10.3",
+    "@codemirror/lang-css": "^6.3.1",
+    "@codemirror/lang-html": "^6.4.9",
+    "@codemirror/lang-javascript": "^6.2.2",
+    "@codemirror/lang-markdown": "^6.3.4",
+    "@codemirror/language": "^6.12.2",
+    "@codemirror/search": "^6.6.0",
+    "@codemirror/state": "^6.6.0",
+    "@codemirror/view": "6.40.0",
+    "@hyperframes/core": "workspace:*",
+    "@hyperframes/parsers": "workspace:*",
+    "@hyperframes/player": "workspace:*",
+    "@hyperframes/sdk": "workspace:*",
+    "@hyperframes/shader-transitions": "workspace:*",
+    "@hyperframes/studio-server": "workspace:*",
+    "@lezer/highlight": "^1.2.3",
+    "@mcp-b/global": "^5.0.1",
+    "@phosphor-icons/react": "^2.1.10",
+    "@tanstack/react-virtual": "^3.14.13",
+    "acorn": "^8.17.0",
+    "cn": "0.2.4",
+    "dockview-react": "8.3.1",
+    "gsap": "^3.13.0",
+    "mediabunny": "^1.45.3"
+  },
+  "devDependencies": {
+    "@hyperframes/producer": "workspace:*",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "19",
+    "@types/react-dom": "19",
+    "@vitejs/plugin-react": "^4.0.0",
+    "chokidar": "^4.0.3",
+    "esbuild": "^0.28.2",
+    "fake-indexeddb": "^6.2.5",
+    "puppeteer-core": "^25.2.1",
+    "tailwindcss": "^4.3.3",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vite": "^6.4.2",
+    "vitest": "^4.1.11",
+    "zustand": "^5.0.0"
+  },
+  "peerDependencies": {
+    "react": "19",
+    "react-dom": "19",
+    "zustand": "^4.0.0 || ^5.0.0"
+  }
+}

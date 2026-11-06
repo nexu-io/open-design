@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN" data-motion-ui data-motion-studio>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#ededed" />
+    <title>OpenDesign · 创作工作区</title>
+    <script>
+      // Studio owns theme persistence; the product stylesheet maps its tokens.
+      try {
+        if (JSON.parse(localStorage.getItem("hf-studio-ui-preferences") || "{}").theme !== "dark")
+          document.documentElement.dataset.theme = "paper";
+      } catch (e) {
+        document.documentElement.dataset.theme = "paper";
+      }
+    </script>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/web/design-system/tokens.css" />
+    <link rel="stylesheet" href="/web/design-system/fonts.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

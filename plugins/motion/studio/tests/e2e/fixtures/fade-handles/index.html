@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+  </head>
+  <body>
+    <!-- A 0.1 s sound clip with fades: narrower than two fade handle hit boxes at the default zoom. -->
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="6"
+      data-width="1920"
+      data-height="1080"
+      data-no-timeline
+    >
+      <audio
+        id="narrow-tone"
+        class="clip"
+        src="assets/tone.wav"
+        data-start="1"
+        data-duration="0.1"
+        data-track-index="0"
+        data-fade-in="0.03"
+        data-fade-out="0.03"
+      ></audio>
+    </div>
+  </body>
+</html>

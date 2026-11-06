@@ -1,0 +1,195 @@
+{
+  "version": 1,
+  "frames": [
+    {
+      "id": "hf-block-aurora",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/aurora.mp4",
+      "poster": "/web/catalog/template-frames/b8ddd316c23634c4a4107ed0.jpg"
+    },
+    {
+      "id": "hf-block-blob",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/blob.mp4",
+      "poster": "/web/catalog/template-frames/aa187254435dfc7515dd2432.jpg"
+    },
+    {
+      "id": "hf-block-chrome-orb",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/chrome-orb.mp4",
+      "poster": "/web/catalog/template-frames/d8b4a32535185345edc0ad95.jpg"
+    },
+    {
+      "id": "hf-block-code-snippet-apple-terminal-pro",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/code-snippet-apple-terminal-pro.mp4",
+      "poster": "/web/catalog/template-frames/5b1886bfddf65da2558b2743.jpg"
+    },
+    {
+      "id": "hf-block-color-wheel",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/color-wheel.mp4",
+      "poster": "/web/catalog/template-frames/958b0b0bd5822969add9ed65.jpg"
+    },
+    {
+      "id": "hf-block-falling-lines",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/falling-lines.mp4",
+      "poster": "/web/catalog/template-frames/5f9a4c1b158ca22f2f0328ad.jpg"
+    },
+    {
+      "id": "hf-block-flowing-gradient",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/flowing-gradient.mp4",
+      "poster": "/web/catalog/template-frames/92b8135208cd6c43b26a159a.jpg"
+    },
+    {
+      "id": "hf-block-fractal-noise",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/fractal-noise.mp4",
+      "poster": "/web/catalog/template-frames/7fcb7da81ee094dd7d8566e2.jpg"
+    },
+    {
+      "id": "hf-block-frost",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/frost.mp4",
+      "poster": "/web/catalog/template-frames/a2f490d60dede79cab587cd3.jpg"
+    },
+    {
+      "id": "hf-block-gabor-noise",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/gabor-noise.mp4",
+      "poster": "/web/catalog/template-frames/780cb9023a63f02176f59fb0.jpg"
+    },
+    {
+      "id": "hf-block-godrays",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/godrays.mp4",
+      "poster": "/web/catalog/template-frames/a715d9fa532ae31854f91353.jpg"
+    },
+    {
+      "id": "hf-block-goo",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/goo.mp4",
+      "poster": "/web/catalog/template-frames/768f4589ea4e9857588270a0.jpg"
+    },
+    {
+      "id": "hf-block-heatmap",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/heatmap.mp4",
+      "poster": "/web/catalog/template-frames/0fd5d7a145565e6df5665bf1.jpg"
+    },
+    {
+      "id": "hf-block-hologram",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/hologram.mp4",
+      "poster": "/web/catalog/template-frames/2fbdf97d22ce8ffd7f127af0.jpg"
+    },
+    {
+      "id": "hf-block-holographic",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/holographic.mp4",
+      "poster": "/web/catalog/template-frames/5d7c6b5b1673112acd2865dd.jpg"
+    },
+    {
+      "id": "hf-block-lens-flare",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/lens-flare.mp4",
+      "poster": "/web/catalog/template-frames/02ef8805082e94a65e89f64a.jpg"
+    },
+    {
+      "id": "hf-block-light-edge",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/light-edge.mp4",
+      "poster": "/web/catalog/template-frames/5924148bbe8ee3739deecd8c.jpg"
+    },
+    {
+      "id": "hf-block-liquid-metal",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/liquid-metal.mp4",
+      "poster": "/web/catalog/template-frames/405f6b1486d720a6a929d904.jpg"
+    },
+    {
+      "id": "hf-block-marble",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/marble.mp4",
+      "poster": "/web/catalog/template-frames/668ff05d378c2c0ae3d0c7a7.jpg"
+    },
+    {
+      "id": "hf-block-mesh-gradient",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/mesh-gradient.mp4",
+      "poster": "/web/catalog/template-frames/fa85be0630c15e0a3e3d0ccd.jpg"
+    },
+    {
+      "id": "hf-block-nebula",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/nebula.mp4",
+      "poster": "/web/catalog/template-frames/7876540072eb5b21d2890cf6.jpg"
+    },
+    {
+      "id": "hf-block-obsidian",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/obsidian.mp4",
+      "poster": "/web/catalog/template-frames/b269296ee7d59469b53ba31b.jpg"
+    },
+    {
+      "id": "hf-block-plasma",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/plasma.mp4",
+      "poster": "/web/catalog/template-frames/3b7c28a558a30b749895f041.jpg"
+    },
+    {
+      "id": "hf-block-plastic",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/plastic.mp4",
+      "poster": "/web/catalog/template-frames/6e7d2d066f298d8779fb767d.jpg"
+    },
+    {
+      "id": "hf-block-prism",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/prism.mp4",
+      "poster": "/web/catalog/template-frames/11e9464452343f5469fe9745.jpg"
+    },
+    {
+      "id": "hf-block-ripples",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/ripples.mp4",
+      "poster": "/web/catalog/template-frames/784fdd3e132d2c19d9632f80.jpg"
+    },
+    {
+      "id": "hf-block-sine-wave",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/sine-wave.mp4",
+      "poster": "/web/catalog/template-frames/c060e8d2ec31d7249d2a4260.jpg"
+    },
+    {
+      "id": "hf-block-spiral",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/spiral.mp4",
+      "poster": "/web/catalog/template-frames/0c675f7d3a0de5602efa04ba.jpg"
+    },
+    {
+      "id": "hf-block-strands",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/strands.mp4",
+      "poster": "/web/catalog/template-frames/597262f059cea2ad133bf8dd.jpg"
+    },
+    {
+      "id": "hf-block-stripes",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/stripes.mp4",
+      "poster": "/web/catalog/template-frames/795e76aa90a398c660bdb44e.jpg"
+    },
+    {
+      "id": "hf-block-sun-burst",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/sun-burst.mp4",
+      "poster": "/web/catalog/template-frames/ba8dc266bc60e8ce032e65b0.jpg"
+    },
+    {
+      "id": "hf-block-swirl",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/swirl.mp4",
+      "poster": "/web/catalog/template-frames/cb222942aba3fa175c72ad72.jpg"
+    },
+    {
+      "id": "hf-block-thin-film",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/thin-film.mp4",
+      "poster": "/web/catalog/template-frames/89b169e2755adc6bf85c9b96.jpg"
+    },
+    {
+      "id": "hf-block-voronoi",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/voronoi.mp4",
+      "poster": "/web/catalog/template-frames/f219ea5962cc1ad27bfa1412.jpg"
+    },
+    {
+      "id": "hf-block-water",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/water.mp4",
+      "poster": "/web/catalog/template-frames/0fd57823c31cc875ef128303.jpg"
+    },
+    {
+      "id": "hf-block-waveform",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/waveform.mp4",
+      "poster": "/web/catalog/template-frames/332f288579e722b5cea74df8.jpg"
+    },
+    {
+      "id": "hf-block-worley-noise",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/worley-noise.mp4",
+      "poster": "/web/catalog/template-frames/63fbebc238feef7f91d849f0.jpg"
+    },
+    {
+      "id": "hf-component-morph-text",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/components/morph-text.mp4",
+      "poster": "/web/catalog/template-frames/f8fdc014b86db558d6e438a6.jpg"
+    }
+  ]
+}

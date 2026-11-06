@@ -1,5 +1,7 @@
 # OpenDesign 插件
 
+`motion/` 保存可独立构建和安装的 Motion 应用、编辑器、MCP 与 Skills。参见[迁移与构建说明](motion/docs/repository-migration.md)；它不由内置插件扫描器自动注册。
+
 语言：[English](README.md) | 简体中文
 
 这个目录有两类职责：

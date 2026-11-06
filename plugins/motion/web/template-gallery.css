@@ -1,0 +1,116 @@
+/* Personal video agent's MCP gallery proportions, inside the editor's dialog. */
+.connection-dialog { width: min(1360px, calc(100vw - 48px)); height: calc(100dvh - 48px); }
+.connection-dialog-bar { gap: var(--motion-space-16); }
+.connection-dialog-bar h2 { white-space: nowrap; }
+.connection-dialog-tools { margin-left: auto; display: flex; align-items: center; gap: var(--motion-space-12); min-width: 0; }
+.connection-search { width: 260px; height: var(--motion-space-32); font-size: var(--motion-text-sm); }
+.connect-header { min-height: 88px; padding: var(--motion-space-20) var(--motion-space-40); }
+.connect-main { max-width: 1280px; margin: 0 auto; padding: 0 var(--motion-space-40); }
+#template-tabs > button[aria-selected="true"] { color: var(--motion-strong); box-shadow: inset 0 -1px var(--motion-strong); }
+#template-panel { min-height: 200px; }
+#catalog-error { display: flex; justify-content: space-between; align-items: center; gap: var(--motion-space-12); margin-bottom: var(--motion-space-20); }
+.connect-template-media { position: relative; isolation: isolate; aspect-ratio: 16 / 10; }
+.connect-template-media > img, .connect-template-media > video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.connect-template-media > canvas { z-index: 0; }
+.connect-template-cover { z-index: 2; }
+.connect-preview-hint { z-index: 3; }
+.home-template-duration { position: absolute; z-index: 1; top: var(--motion-space-8); left: var(--motion-space-8); display: inline-flex; align-items: center; gap: var(--motion-space-4); border-radius: var(--motion-radius-sm); padding: var(--motion-space-2) var(--motion-space-6); background: var(--motion-panel); color: var(--motion-strong); font-size: var(--motion-text-xs); line-height: var(--motion-leading-body); box-shadow: var(--motion-shadow-xs); }
+.home-template-duration .ui-icon { width: 10px; height: 10px; }
+.home-template-no-preview { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; padding: var(--motion-space-24); gap: var(--motion-space-12); color: var(--motion-muted); text-align: left; overflow: hidden; }
+.home-template-no-preview > span, .home-template-no-preview > small { font-size: var(--motion-text-xs); color: var(--motion-dim); }
+.home-template-no-preview > strong { color: var(--motion-strong); font-size: var(--motion-text-heading); line-height: var(--motion-leading-tight); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.home-template-no-preview > p { font-size: var(--motion-text-sm); line-height: var(--motion-leading-prose); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.connect-template-more { flex-direction: column; gap: var(--motion-space-12); }
+.connect-template-more > span { font-size: var(--motion-text-xs); color: var(--motion-dim); }
+.connect-template-card-footer { flex-wrap: nowrap; }
+.connect-template-card-footer > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.connect-template-card-footer > button { flex-shrink: 0; }
+.connect-preview-dialog { width: min(960px, calc(100vw - 48px)); }
+.connect-preview-dialog--portrait { width: min(640px, calc(100vw - 48px)); }
+.connect-preview-stage { height: auto; min-height: 180px; max-height: 60dvh; background: var(--motion-inset); }
+.connect-preview-stage > video, .connect-preview-stage > img { display: block; max-width: 100%; max-height: 60dvh; width: 100%; height: auto; object-fit: contain; }
+.connect-preview-stage > canvas { height: min(52dvh, 460px); width: auto; }
+.connect-preview-stage > .home-template-no-preview { min-height: 240px; }
+#preview-variants-field { margin-block: var(--motion-space-16); }
+#preview-variants { width: 100%; min-width: 0; }
+.connect-template-instructions { margin-top: var(--motion-space-16); color: var(--motion-muted); font-size: var(--motion-text-sm); }
+.connect-template-instructions summary { cursor: pointer; }
+#preview-prompt { white-space: pre-wrap; overflow-wrap: anywhere; padding: var(--motion-space-16); margin-top: var(--motion-space-12); border: 1px solid var(--motion-border); border-radius: var(--motion-radius-sm); background: var(--motion-inset); line-height: var(--motion-leading-prose); }
+#preview-source { margin-top: var(--motion-space-12); overflow-wrap: anywhere; }
+#preview-copy-hint { margin-right: auto; align-self: center; color: var(--motion-muted); font-size: var(--motion-text-sm); }
+@media (max-width: 960px) {
+  .connection-search { width: 200px; }
+  .connect-main { margin-inline: var(--motion-space-12); padding-inline: var(--motion-space-24); }
+}
+@media (max-width: 640px) {
+  .connection-dialog { width: calc(100vw - 16px); height: calc(100dvh - 16px); }
+  .connection-dialog-bar { flex-wrap: wrap; padding-inline: var(--motion-space-12); gap: var(--motion-space-8); }
+  .connection-dialog-tools { order: 2; width: 100%; }.connection-search { flex: 1; width: auto; min-width: 0; }
+  #close-connections { margin-left: auto; }.connect-header { padding: var(--motion-space-16); min-height: 72px; }
+  .connect-main { margin-inline: var(--motion-space-8); padding-inline: var(--motion-space-16); }
+  .connect-template-toolbar { align-items: flex-start; }.connect-template-toolbar .ui-tabs { overflow-x: auto; width: 100%; }
+  .connect-template-toolbar > button { margin-bottom: var(--motion-space-8); }
+  .connect-template-card-footer { flex-wrap: wrap; }
+  .connect-preview-dialog { width: calc(100vw - 24px); padding: var(--motion-space-16); }
+  .connect-preview-actions { gap: var(--motion-space-8); }#preview-copy-hint { width: 100%; }
+}
+
+.connection-dialog, .connect-subdialog { margin: auto; }
+.connection-dialog .brand-mark { width: 32px; height: 32px; display: grid; place-items: center; border-radius: var(--motion-radius-sm); background: var(--motion-action); color: var(--motion-on-action); }
+.connection-dialog .connect-template-info p { margin-top: var(--motion-space-8); }
+/* Video-first inspiration cards and a focused, large-format video lightbox. */
+.connect-template-grid { gap: var(--motion-space-28) var(--motion-space-24); }
+.connect-template-card { border: 0; background: transparent; box-shadow: none; overflow: visible; border-radius: 0; }
+.connect-template-card:hover { box-shadow: none; transform: none; border-color: transparent; }
+.connect-template-media { aspect-ratio: 16 / 9; border-radius: var(--motion-radius-lg); border: 1px solid var(--motion-border); background: var(--motion-inset); }
+.connect-template-info { padding: var(--motion-space-12) 0 0; }
+.connect-template-title { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--motion-text-md); line-height: var(--motion-leading-body); }
+.connect-template-heading { display: flex; align-items: center; gap: var(--motion-space-8); }
+.connect-template-heading .connect-template-title { flex: 1; min-width: 0; }
+.connect-template-category { flex-shrink: 0; padding: var(--motion-space-2) var(--motion-space-8); border-radius: var(--motion-radius-pill); background: var(--motion-hover); color: var(--motion-muted); font-size: var(--motion-text-xs); white-space: nowrap; }
+.connect-template-card-footer { margin-top: var(--motion-space-6); gap: var(--motion-space-8); }
+.connect-template-source-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--motion-space-4) var(--motion-space-8); min-width: 0; }
+.connect-template-author { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.connect-template-views { flex-shrink: 0; color: var(--motion-muted); text-decoration: none; white-space: nowrap; font-size: var(--motion-text-sm); font-variant-numeric: tabular-nums; }
+.connect-template-views:hover { text-decoration: underline; text-underline-offset: 3px; }
+.connect-template-source { display: inline-flex; align-items: center; gap: var(--motion-space-4); min-width: 0; color: var(--motion-muted); text-decoration: none; font-size: var(--motion-text-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.connect-template-source:hover { text-decoration: underline; text-underline-offset: 3px; }
+.connect-template-source .ui-icon { width: 12px; height: 12px; flex-shrink: 0; }
+.connect-remix-button { border-radius: var(--motion-radius-pill); border: 0; background: var(--motion-panel); color: var(--motion-text); }
+.connect-remix-button:hover { background: var(--motion-hover); }
+.home-template-duration { left: auto; right: var(--motion-space-8); border-radius: var(--motion-radius-pill); }
+.connect-preview-hint { width: 42px; height: 42px; border-radius: 50%; font-size: 0; padding: 0; justify-content: center; }
+.connect-preview-hint .ui-icon { width: 18px; height: 18px; }
+.connect-preview-dialog { width: min(1120px, calc(100vw - 96px)); max-height: calc(100dvh - 80px); padding: 0; background: transparent; border: 0; box-shadow: none; color: var(--motion-overlay-ink); }
+.connect-preview-dialog--portrait { width: min(640px, calc(100vw - 80px)); }
+.connect-preview-dialog::backdrop { background: var(--motion-video-overlay); backdrop-filter: blur(6px); }
+.connect-preview-close { position: fixed; top: var(--motion-space-20); right: var(--motion-space-20); border-radius: 50%; background: var(--motion-video-overlay); color: var(--motion-overlay-ink); z-index: 2; }
+.connect-preview-stage { border-radius: var(--motion-radius-lg); min-height: 0; max-height: 70dvh; background: var(--motion-video-overlay); }
+.connect-preview-stage > video, .connect-preview-stage > img { max-height: 70dvh; object-fit: contain; }
+.connect-preview-footer { display: flex; justify-content: space-between; gap: var(--motion-space-24); align-items: center; padding-top: var(--motion-space-16); }
+.connect-preview-caption { min-width: 0; }.connect-preview-caption h2 { font-size: var(--motion-text-md); line-height: var(--motion-leading-body); }
+#preview-source { margin-top: var(--motion-space-4); }#preview-source .connect-template-source { color: var(--motion-overlay-ink); opacity: .8; }
+#preview-source .connect-template-views { color: var(--motion-overlay-ink); opacity: .8; }
+#preview-detail { color: var(--motion-overlay-ink); opacity: .65; font-size: var(--motion-text-xs); margin-top: var(--motion-space-4); }
+.connect-preview-actions { flex-wrap: nowrap; flex-shrink: 0; margin: 0; }
+.connect-preview-actions > .ui-button { border-radius: var(--motion-radius-pill); }
+.connect-preview-variants { display: flex; align-items: center; gap: var(--motion-space-12); font-size: var(--motion-text-sm); }.connect-preview-variants label { white-space: nowrap; }
+.connect-template-instructions { color: var(--motion-overlay-ink); opacity: .85; font-size: var(--motion-text-xs); }
+#preview-prompt { color: var(--motion-text); }
+@media (max-width: 640px) {
+  .connect-template-grid { gap: var(--motion-space-24); }
+  .connect-preview-dialog { width: calc(100vw - 32px); }.connect-preview-footer { flex-wrap: wrap; gap: var(--motion-space-12); }
+  .connect-preview-actions { width: 100%; }.connect-preview-caption { width: 100%; }
+  .connect-preview-variants { flex-direction: column; align-items: flex-start; }
+}
+.connection-dialog { font: var(--motion-weight-regular) var(--motion-text-body)/var(--motion-leading-body) var(--motion-font-sans); }
+.connection-dialog [hidden] { display: none !important; }
+.connection-dialog :where(h1, h2, h3, p) { margin: 0; }
+.connection-dialog :where(button, input, textarea, select) { font-family: inherit; }
+.connect-templates { padding-block: var(--motion-space-32); }
+.connect-templates .connect-section-heading { text-align: left; margin-bottom: var(--motion-space-20); }
+.connect-templates .connect-section-heading .connect-kicker { display: none; }
+.connect-templates .connect-section-heading h2 { margin: 0 0 var(--motion-space-8); font-size: var(--motion-text-title); }
+.connect-templates .connect-section-heading p { font-size: var(--motion-text-sm); }
+.connect-preview-dialog .connect-preview-caption h2 { color: var(--motion-overlay-ink); }
+.connect-preview-actions > #copy-preview-template { background: var(--motion-overlay-ink); color: var(--motion-video-ink); border-color: transparent; }

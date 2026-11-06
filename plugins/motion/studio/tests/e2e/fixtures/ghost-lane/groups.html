@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Grouped track drop fixture</title>
+  </head>
+  <body>
+    <main
+      id="root"
+      data-composition-id="root"
+      data-no-timeline
+      data-width="1280"
+      data-height="720"
+      data-duration="4"
+    >
+      <audio
+        id="group-first"
+        class="clip"
+        data-label="First group member"
+        data-start="0"
+        data-duration="2"
+        data-track-index="0"
+        data-audio-group="Voices"
+      ></audio>
+      <audio
+        id="outside"
+        class="clip"
+        data-label="Outside group"
+        data-start="0"
+        data-duration="3"
+        data-track-index="1"
+      ></audio>
+      <audio
+        id="group-last"
+        class="clip"
+        data-label="Last group member"
+        data-start="3"
+        data-duration="1"
+        data-track-index="2"
+        data-audio-group="Voices"
+      ></audio>
+    </main>
+  </body>
+</html>

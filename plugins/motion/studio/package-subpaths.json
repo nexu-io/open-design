@@ -1,0 +1,53 @@
+{
+  "package": "@hyperframes/studio",
+  "subpaths": {
+    ".": {
+      "source": "./src/index.ts",
+      "runtime": "./dist/index.js",
+      "types": "./dist/index.d.ts",
+      "environments": ["browser"]
+    },
+    "./ui": {
+      "source": "./src/ui.ts",
+      "runtime": "./dist/ui.js",
+      "types": "./dist/ui.d.ts",
+      "environments": ["browser"]
+    },
+    "./player": {
+      "source": "./src/playerEntry.ts",
+      "runtime": "./dist/player.js",
+      "types": "./dist/player.d.ts",
+      "environments": ["browser"]
+    },
+    "./tailwind-preset": {
+      "source": "./src/styles/tailwind-preset.ts",
+      "runtime": "./dist/styles/tailwind-preset.js",
+      "types": "./dist/styles/tailwind-preset.d.ts",
+      "environments": ["bun", "node"]
+    },
+    "./theme.css": {
+      "source": "./src/styles/theme.css",
+      "runtime": "./src/styles/theme.css",
+      "types": null,
+      "environments": ["browser"]
+    },
+    "./components.css": {
+      "source": "./src/styles/components.css",
+      "runtime": "./src/styles/components.css",
+      "types": null,
+      "environments": ["browser"]
+    },
+    "./styles.css": {
+      "source": "./src/styles/studio.css",
+      "runtime": "./dist/styles.css",
+      "types": null,
+      "environments": ["browser"]
+    },
+    "./package.json": {
+      "source": "./package.json",
+      "runtime": "./package.json",
+      "types": null,
+      "environments": ["browser", "bun", "node"]
+    }
+  }
+}

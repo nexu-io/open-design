@@ -1,0 +1,4 @@
+interface:
+  display_name: "Motion Director"
+  short_description: "设计动态叙事、动作编排与镜头衔接，审查真实成片并减少逐页展示感"
+  default_prompt: "使用 $motion-director 根据产品资料原创制作或大幅改编有明确动态表达的视频，先验证关键动作与衔接，再完成成片。"

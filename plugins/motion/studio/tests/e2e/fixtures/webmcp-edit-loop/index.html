@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>WebMCP edit-loop fixture</title>
+    <style>
+      html,
+      body {
+        width: 960px;
+        height: 540px;
+        margin: 0;
+        overflow: hidden;
+        background: #0b0f17;
+        color: #f7fafc;
+        font-family: Arial, sans-serif;
+      }
+      #webmcp-edit-loop {
+        position: relative;
+        width: 960px;
+        height: 540px;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 50% 10%, rgba(103, 232, 183, 0.12), transparent 40%), #0b0f17;
+      }
+      .card-host {
+        position: absolute;
+        top: 120px;
+        width: 380px;
+        height: 300px;
+      }
+      #left-host {
+        left: 60px;
+      }
+      #right-host {
+        left: 520px;
+      }
+    </style>
+  </head>
+  <body>
+    <main
+      id="webmcp-edit-loop"
+      data-composition-id="webmcp-edit-loop"
+      data-width="960"
+      data-height="540"
+      data-start="0"
+      data-duration="5"
+      data-fps="30"
+      data-no-timeline
+    >
+      <div
+        id="left-host"
+        class="clip card-host"
+        data-hf-id="left-host"
+        data-composition-id="left-card-host"
+        data-composition-src="compositions/left-card.html"
+        data-start="0"
+        data-duration="5"
+        data-track-index="0"
+      ></div>
+      <div
+        id="right-host"
+        class="clip card-host"
+        data-hf-id="right-host"
+        data-composition-id="right-card-host"
+        data-composition-src="compositions/right-card.html"
+        data-start="0"
+        data-duration="5"
+        data-track-index="1"
+      ></div>
+    </main>
+  </body>
+</html>

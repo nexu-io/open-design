@@ -1,0 +1,205 @@
+@import "dockview-react/dist/styles/dockview.css";
+
+.dv-shell:has(.hf-dock) {
+  /* dockview's runtime stylesheet pins `color-scheme: dark` on its theme class, which sits on
+   * the shell around the dock. */
+  color-scheme: inherit;
+}
+
+.hf-dock {
+  --dv-group-view-background-color: var(--panel-card-bg);
+  --dv-tabs-and-actions-container-background-color: var(--panel-strip-bg);
+  --dv-tabs-and-actions-container-height: 36px;
+  --dv-icon-hover-background-color: var(--color-hover);
+  --dv-tabs-container-scrollbar-color: var(--color-text-muted);
+  /* The fill paints the shown tab, so every tab state is transparent. */
+  --dv-activegroup-visiblepanel-tab-background-color: transparent;
+  --dv-activegroup-hiddenpanel-tab-background-color: transparent;
+  --dv-inactivegroup-visiblepanel-tab-background-color: transparent;
+  --dv-inactivegroup-hiddenpanel-tab-background-color: transparent;
+  --dv-activegroup-visiblepanel-tab-color: var(--color-text-1);
+  --dv-activegroup-hiddenpanel-tab-color: var(--color-text-2);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--color-text-1);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--color-text-2);
+  --dv-tab-divider-color: transparent;
+  --dv-tab-margin: 0;
+  --dv-separator-border: transparent;
+  --dv-paneview-header-border-color: transparent;
+  --dv-sash-color: transparent;
+  --dv-active-sash-color: var(--color-panel-accent);
+  --dv-drag-over-background-color: color-mix(in srgb, var(--color-panel-accent) 12%, transparent);
+  --dv-drag-over-border-color: var(--color-panel-accent);
+  --dv-tab-font-size: 12.5px;
+  --dv-tabs-and-actions-container-font-size: 12.5px;
+  background-color: var(--panel-shell-bg);
+}
+
+.hf-dock .dv-sash:focus-visible {
+  background-color: var(--dv-active-sash-color);
+  outline: none;
+}
+
+.hf-dock .dv-dockview {
+  background-color: var(--panel-shell-bg);
+}
+
+/* Cards on the shell: 3px around each group's view makes a 6px gutter. The card owns the only border. */
+.hf-dock .dv-view:has(> .dv-groupview) {
+  box-sizing: border-box;
+  padding: 3px;
+}
+
+.hf-dock .dv-groupview {
+  border: 1px solid var(--panel-card-border);
+  border-radius: 10px;
+}
+
+.hf-dock .dv-tabs-and-actions-container {
+  align-items: flex-end;
+  padding: 6px 0 0 4px;
+}
+
+.hf-dock .dv-scrollable {
+  height: 30px;
+  min-width: 0;
+}
+
+/* dockview's own scrollbar lane; the strip scrolls by wheel and keeps the shown tab in view. */
+.hf-dock .dv-scrollbar {
+  display: none;
+}
+
+.hf-dock .dv-tabs-container {
+  --hf-fade-start: 0px;
+  --hf-fade-end: 0px;
+}
+
+/* A mask adds a compositor render pass; only a strip that is actually clipped needs one. */
+.hf-dock .dv-tabs-container[data-clipped] {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black var(--hf-fade-start),
+    black calc(100% - var(--hf-fade-end)),
+    transparent
+  );
+}
+
+.hf-dock .dv-tabs-container[data-clipped~="start"] {
+  --hf-fade-start: 12px;
+}
+
+.hf-dock .dv-tabs-container[data-clipped~="end"] {
+  --hf-fade-end: 12px;
+}
+
+.hf-dock .dv-tab {
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 6px;
+  border-radius: 6px 6px 0 0;
+  white-space: nowrap;
+}
+
+/* dockview's own state rule paints tabs from these variables, so hover sets them. */
+.hf-dock .dv-tab.dv-inactive-tab:hover {
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--panel-tab-bg-hover);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--panel-tab-bg-hover);
+  --dv-activegroup-hiddenpanel-tab-color: var(--color-text-1);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--color-text-1);
+}
+
+.hf-dock .dv-tab:focus-visible {
+  outline: 1.5px solid var(--color-accent);
+  outline-offset: -1.5px;
+}
+
+.hf-dock .dv-tab:focus-visible::after,
+.hf-dock .dv-tab:has(:focus-visible)::after {
+  outline: none !important;
+}
+
+.hf-dock-tab-fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 30px;
+  border-radius: 6px 6px 0 0;
+  background-color: var(--panel-card-bg);
+  pointer-events: none;
+}
+
+.hf-dock-tab-fill[data-ready] {
+  transition:
+    transform 140ms ease-out,
+    width 140ms ease-out;
+}
+
+/* Fills dockview's tab part, so the label and icon centre in the tab's full height. */
+.hf-dock-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 100%;
+}
+
+.hf-dock .dv-inactive-tab .hf-dock-tab-icon,
+.hf-dock .dv-inactive-tab .hf-dock-tab-close {
+  display: none;
+}
+
+.hf-dock-tab-icon {
+  flex: none;
+  animation: hf-dock-tab-icon-in 80ms ease-out;
+}
+
+@keyframes hf-dock-tab-icon-in {
+  from {
+    opacity: 0;
+    transform: translateX(-2px);
+  }
+}
+
+/* Takes its space whenever the tab is shown, so hover never moves the label. */
+.hf-dock-tab-close {
+  display: flex;
+  opacity: 0;
+}
+
+.dv-tab:hover .hf-dock-tab-close,
+.dv-tab:focus-visible .hf-dock-tab-close {
+  opacity: 1;
+}
+
+/* Sized by the actions it draws, so a strip without them gives its tabs the whole width. */
+.hf-dock .dv-right-actions-container {
+  flex: none;
+  align-self: flex-start;
+}
+
+.hf-dock-strip-actions {
+  display: flex;
+  margin-right: 4px;
+  opacity: 0;
+}
+
+.dv-groupview:hover .hf-dock-strip-actions {
+  opacity: 0.8;
+}
+
+.hf-dock-strip-actions:hover,
+.hf-dock-strip-actions:focus-within {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hf-dock-tab-fill[data-ready] {
+    transition: none;
+  }
+
+  .hf-dock-tab-icon {
+    animation: none;
+  }
+}

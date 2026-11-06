@@ -1,0 +1,12 @@
+{
+  "name": "motion",
+  "version": "0.6.2",
+  "description": "OpenDesign — an Agent workspace with Motion templates, editable artifacts and MCP collaboration.",
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "requires_local_executor": true,
+  "interface": {
+    "displayName": "OpenDesign",
+    "shortDescription": "需求、分镜、模板选择到原生动画制作与成片校验"
+  }
+}

@@ -1,0 +1,17 @@
+name: Upload native ZIP unchanged
+description: Keep a prebuilt ZIP intact in the existing Forgejo Actions artifact store.
+inputs:
+  path:
+    required: true
+    description: Path to one prebuilt ZIP
+  retention:
+    default: '90'
+    description: Artifact retention in days
+outputs:
+  artifact-id:
+    description: Forgejo artifact ID
+  sha256:
+    description: SHA256 of the unchanged ZIP
+runs:
+  using: node20
+  main: upload.mjs

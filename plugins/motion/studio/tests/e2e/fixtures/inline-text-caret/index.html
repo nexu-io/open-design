@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <style>
+      body {
+        margin: 0;
+        background: #0b0b0b;
+        color: #fafafa;
+        font-family: sans-serif;
+      }
+      #title {
+        position: absolute;
+        left: 160px;
+        top: 160px;
+        margin: 0;
+        font-size: 160px;
+        line-height: 1.1;
+      }
+      #mixed {
+        position: absolute;
+        left: 1200px;
+        top: 160px;
+        margin: 0;
+        font-size: 96px;
+      }
+      #body {
+        position: absolute;
+        left: 160px;
+        top: 520px;
+        width: 900px;
+        margin: 0;
+        font-size: 72px;
+        line-height: 1.2;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- A one-line title, a title ending in bold, and a paragraph that wraps onto three lines, each edited in place -->
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="6"
+      data-width="1920"
+      data-height="1080"
+      data-no-timeline
+    >
+      <h1 id="title" class="clip" data-start="0" data-duration="6" data-track-index="0">Title</h1>
+      <h2 id="mixed" class="clip" data-start="0" data-duration="6" data-track-index="2">
+        Go <strong>bold</strong>
+      </h2>
+      <p id="body" class="clip" data-start="0" data-duration="6" data-track-index="1">
+        The quick brown fox jumps over the lazy dog and keeps on running far away
+      </p>
+    </div>
+  </body>
+</html>
