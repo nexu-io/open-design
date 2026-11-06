@@ -494,6 +494,62 @@ process.exit(0);
     );
   });
 
+  it('names the rejected path when OpenCode auto-denies a tool call and the run ends without output', async () => {
+    const conversationId = `conv-${randomUUID()}`;
+    // Production shape (0.26.1 BYOK OpenCode): a headless run has no approval
+    // UI, OpenCode answers the out-of-allowlist read with its fixed denial text,
+    // and the model ends the turn without writing anything. This used to be
+    // reported as an empty provider response.
+    const rejectedPath = '/Applications/Open Design.app/Contents/Resources/open-design/plugins/_official/scenarios/od-next-strategy/assets/task-profiles/prototype.md';
+
+    await withFakeAgent(
+      'opencode',
+      `
+console.log(JSON.stringify({ type: 'step_start', sessionID: 'opencode-permission-session' }));
+console.log(JSON.stringify({
+  type: 'tool_use',
+  sessionID: 'opencode-permission-session',
+  part: {
+    tool: 'read',
+    callID: 'call-read-denied',
+    state: {
+      status: 'error',
+      input: { filePath: ${JSON.stringify(rejectedPath)} },
+      error: 'The user rejected permission to use this specific tool call.',
+    },
+  },
+}));
+console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 0 } } }));
+process.exit(0);
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentId: 'opencode', conversationId, message: 'build the prototype' }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('"status":"failed"');
+        expect(body).toContain('task-profiles/prototype.md');
+        expect(body).not.toContain('Agent completed without producing any output');
+
+        const runsResponse = await fetch(
+          `${baseUrl}/api/runs?conversationId=${encodeURIComponent(conversationId)}`,
+        );
+        const runsBody = (await runsResponse.json()) as {
+          runs: Array<{ status: string; failureCategory?: string | null; failureDetail?: string | null }>;
+        };
+        expect(runsBody.runs[0]).toMatchObject({
+          status: 'failed',
+          failureCategory: 'tool_error',
+          failureDetail: 'tool_permission_rejected',
+        });
+      },
+    );
+  });
+
   /*
    * 「问完就交棒」的一整条链路,从假 CLI 的字节一路到 run 的终态。
    *
