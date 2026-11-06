@@ -311,6 +311,7 @@ describe('DELETE conversation cancels its active runs (#5468)', () => {
 
       const anchorPath = `${app.base}/api/projects/p1/conversations/${anchor!.conversationId}`;
       for (const request of [
+        fetch(anchorPath),
         fetch(anchorPath, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: '{}' }),
         fetch(anchorPath, { method: 'DELETE' }),
         fetch(`${anchorPath}/messages`),

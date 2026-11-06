@@ -124,6 +124,16 @@ function successResponse(request: RequestRecord, res: http.ServerResponse): void
     sendJson(res, 200, { conversations: [] });
     return;
   }
+  if (/\/conversations\/[^/]+$/.test(request.url) && request.method === 'GET') {
+    sendJson(res, 200, {
+      conversation: {
+        id: 'conversation-1',
+        projectId: projectIdForRequest(request),
+        sessionMode: 'design',
+      },
+    });
+    return;
+  }
   if (/\/applied-plugins$/.test(request.url)) {
     sendJson(res, 200, { snapshots: [] });
     return;
@@ -264,6 +274,18 @@ const commandFixtures: CommandFixture[] = [
     requests: (projectId) => [`GET /api/projects/${projectId}/conversations`],
   },
   {
+    label: 'conversation info',
+    args: (projectId) => [
+      'conversation',
+      'info',
+      'conversation-1',
+      '--project',
+      projectId,
+      '--json',
+    ],
+    requests: (projectId) => [`GET /api/projects/${projectId}/conversations/conversation-1`],
+  },
+  {
     label: 'chat new',
     args: (projectId) => ['chat', 'new', '--project', projectId, '--json'],
     requests: (projectId) => [`POST /api/projects/${projectId}/conversations`],
@@ -386,6 +408,7 @@ const commandFixtures: CommandFixture[] = [
 
 const readFixtures = commandFixtures.filter((fixture) => [
   'conversation list',
+  'conversation info',
   'project plugin snapshots list',
   'plugin candidates list',
 ].includes(fixture.label));
