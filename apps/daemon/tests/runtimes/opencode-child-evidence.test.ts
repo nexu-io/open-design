@@ -807,12 +807,14 @@ describe('native OpenCode child evidence', () => {
     const load = createOpenCodeSanitizedExportLoader({
       launchPath: '/opt/open-design/opencode',
       env: { XDG_DATA_HOME: '/run/od/share' },
+      // 2.x advertises `--auto` without `--variant`.
+      capabilities: { autoApprove: true },
     });
 
     await expect(load('ses_child_synthetic')).resolves.toMatchObject({
       info: { id: 'ses_child_synthetic', parentID: 'ses_root_synthetic' },
     });
-    // OpenCode 2.x serves this as `session export`; 1.x as `export`.
+    // A 2.x capability map selects `session export` without probing `export`.
     expect(execAgentFileMock).toHaveBeenCalledWith(
       '/opt/open-design/opencode',
       ['session', 'export', 'ses_child_synthetic', '--sanitize'],
@@ -835,6 +837,33 @@ describe('native OpenCode child evidence', () => {
       candidates: [candidate!],
       loadSanitizedExport: load,
     })).resolves.toEqual([]);
+  });
+
+  it('selects the isolated 1.x export shape from capabilities without probing session export', async () => {
+    const data = fixture();
+    execAgentFileMock.mockResolvedValue({
+      stdout: JSON.stringify(data.sanitizedChildExport),
+      stderr: '',
+    });
+    const load = createOpenCodeSanitizedExportLoader({
+      launchPath: '/opt/open-design/opencode',
+      env: { XDG_DATA_HOME: '/run/od/share' },
+      // OpenCode 1.18.18 advertises both `--auto` and `--variant`; `--variant`
+      // is the discriminator that keeps this on the 1.x export shape.
+      capabilities: { autoApprove: true, variantFlag: true },
+    });
+
+    await expect(load('ses_child_synthetic')).resolves.toMatchObject({
+      info: { id: 'ses_child_synthetic', parentID: 'ses_root_synthetic' },
+    });
+    // A confirmed 1.x line must not pay for the 2.x `session export` shape,
+    // which 1.18.18 rejects.
+    expect(execAgentFileMock).toHaveBeenCalledTimes(1);
+    expect(execAgentFileMock).toHaveBeenCalledWith(
+      '/opt/open-design/opencode',
+      ['export', 'ses_child_synthetic', '--sanitize', '--pure'],
+      expect.anything(),
+    );
   });
 
   it('falls back to the isolated 1.x export shape when the CLI does not know session export', async () => {

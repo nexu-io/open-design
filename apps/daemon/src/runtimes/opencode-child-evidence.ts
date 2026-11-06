@@ -12,7 +12,12 @@ import {
   type SafeChildPromptInput,
 } from '../prompt-telemetry.js';
 import { execAgentFile } from './invocation.js';
-import { OPENCODE_PURE_FLAG } from './opencode-permissions.js';
+import {
+  OPENCODE_PURE_FLAG,
+  classifyOpenCodeCliLine,
+  type OpenCodeCliLine,
+} from './opencode-permissions.js';
+import type { RuntimeCapabilityMap } from './types.js';
 
 export const OPENCODE_CHILD_EVIDENCE_ADAPTER_VERSION =
   'od-opencode-child-evidence/v1' as const;
@@ -405,6 +410,35 @@ function rejectsUnknownFlag(err: unknown, flag: string): boolean {
 }
 
 /**
+ * The export invocation shapes for one CLI line. Selecting the line from the
+ * `run --help` capability map avoids paying for a shape the executable does
+ * not have. An unresolved probe keeps the tolerant 2.x-then-1.x order.
+ */
+function openCodeExportAttempts(
+  childSessionId: string,
+  cliLine: OpenCodeCliLine,
+): Attempt[] {
+  const twoXArgv = ['session', 'export', childSessionId, '--sanitize'];
+  const oneXIsolated: Attempt = {
+    argv: ['export', childSessionId, '--sanitize', '--pure'],
+    mayRetry: (err) => rejectsUnknownFlag(err, OPENCODE_PURE_FLAG),
+  };
+  const oneXBare: Attempt = {
+    argv: ['export', childSessionId, '--sanitize'],
+  };
+  if (cliLine === '2x') return [{ argv: twoXArgv }];
+  if (cliLine === '1x') return [oneXIsolated, oneXBare];
+  return [
+    {
+      argv: twoXArgv,
+      mayRetry: (err) => rejectsUnknownInvocationShape(err),
+    },
+    oneXIsolated,
+    oneXBare,
+  ];
+}
+
+/**
  * Read one child session through the sanitized export, the only OpenCode
  * surface that emits a child transcript together with the `parentID` the
  * two-sided verification needs, and with transcript and file bytes already
@@ -412,8 +446,9 @@ function rejectsUnknownFlag(err: unknown, flag: string): boolean {
  *
  * OpenCode 1.x serves this as `opencode export <id> --sanitize --pure`;
  * OpenCode 2.x moved it to `opencode session export <id> --sanitize` with no
- * `--pure` flag (verified on 2.0.24). Try the 2.x shape first, then fall back
- * to the 1.x shapes so one loader serves both lines.
+ * `--pure` flag (verified on 2.0.24). The `run --help` capability map selects
+ * the shape so a 1.x run never pays for a rejected `session export` probe.
+ * Callers without a resolved map keep the tolerant 2.x-then-1.x order.
  *
  * `--pure` (1.x only) keeps a user-installed OpenCode plugin from executing
  * inside the evidence path, and `execAgentFile` supplies a neutral working
@@ -425,6 +460,11 @@ function rejectsUnknownFlag(err: unknown, flag: string): boolean {
 export function createOpenCodeSanitizedExportLoader(input: {
   launchPath: string;
   env: NodeJS.ProcessEnv;
+  /**
+   * The resolved `run --help` capability map for this exact executable.
+   * `null`/`undefined` keeps the tolerant probe order.
+   */
+  capabilities?: RuntimeCapabilityMap | null;
   timeoutMs?: number;
   maxBytes?: number;
 }): (childSessionId: string) => Promise<unknown> {
@@ -437,29 +477,10 @@ export function createOpenCodeSanitizedExportLoader(input: {
       timeout: input.timeoutMs ?? OPENCODE_CHILD_EXPORT_TIMEOUT_MS,
       maxBuffer: input.maxBytes ?? OPENCODE_CHILD_EXPORT_MAX_BYTES,
     };
-    // Each attempt carries its own retry predicate, because the reasons to
-    // move on differ per shape:
-    //
-    //   1. `session export`  — 2.x. Move on when the CLI does not know this
-    //      subcommand at all (1.x).
-    //   2. `export ... --pure` — 1.x, isolated. Move on ONLY when the CLI
-    //      says it does not know `--pure`; any other failure is a real answer
-    //      about the session and must surface.
-    //   3. `export ...` — bare legacy command, last resort, so a plugin-capable
-    //      path is never reached while an isolated one is still available.
-    const attempts: Attempt[] = [
-      {
-        argv: ['session', 'export', childSessionId, '--sanitize'],
-        mayRetry: (err) => rejectsUnknownInvocationShape(err),
-      },
-      {
-        argv: ['export', childSessionId, '--sanitize', '--pure'],
-        mayRetry: (err) => rejectsUnknownFlag(err, OPENCODE_PURE_FLAG),
-      },
-      {
-        argv: ['export', childSessionId, '--sanitize'],
-      },
-    ];
+    const attempts = openCodeExportAttempts(
+      childSessionId,
+      classifyOpenCodeCliLine(input.capabilities),
+    );
     let lastError: unknown = null;
     for (const attempt of attempts) {
       try {

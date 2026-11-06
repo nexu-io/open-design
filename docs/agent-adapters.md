@@ -305,12 +305,16 @@ authentication, and the boundary between REST and MCP.
   `modelID`, `variants[].id`), the only 2.x surface that advertises variants.
   Variant metadata previously surfaced for a model is retained when the new
   catalog omits it, so an existing choice is not dropped silently.
-- Child evidence reads `opencode session export <id> --sanitize` (2.x) first,
-  then `opencode export <id> --sanitize --pure` (1.x). The bare
+- Child evidence selects the export shape from the same `run --help`
+  capability map that chooses the argv shape: 2.x uses
+  `opencode session export <id> --sanitize`; 1.x uses
+  `opencode export <id> --sanitize --pure`. The bare
   `opencode export <id> --sanitize` is the last resort and is reached only when
   the CLI reports that `--pure` itself is unrecognized, so a user-installed
   plugin never runs inside the evidence path while an isolated shape is
-  available.
+  available. The shape comes from the advertised capabilities rather than a
+  failed invocation's wording; an unresolved probe keeps the tolerant
+  2.x-then-1.x order.
 - The adapter parses structured JSON events, and captures OpenCode's
   `sessionID`. Follow-up turns continue the native session with
   `-s <session-id>`.
