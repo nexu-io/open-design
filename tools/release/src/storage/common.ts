@@ -59,6 +59,7 @@ export function contentType(name: string): string {
   if (name.endsWith(".zip")) return "application/zip";
   if (name.endsWith(".exe")) return "application/vnd.microsoft.portable-executable";
   if (name.endsWith(".AppImage")) return "application/octet-stream";
+  if (name.endsWith(".deb")) return "application/vnd.debian.binary-package";
   if (name.endsWith(".sha256")) return "text/plain; charset=utf-8";
   if (name.endsWith(".yml") || name.endsWith(".yaml")) return "application/x-yaml; charset=utf-8";
   if (name.endsWith(".json")) return "application/json; charset=utf-8";
