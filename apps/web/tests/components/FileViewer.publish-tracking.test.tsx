@@ -334,8 +334,8 @@ describe('publish flow analytics', () => {
     });
   });
 
-  it('S10 keeps the link and retry action without claiming a clipboard failure when stopping fails', async () => {
-    const fetchMock = stubFetch({ unpublishStatus: 500 });
+  it.each([500, 503])('S10 keeps the link and deliberate retry after an explicit HTTP %s stop failure', async status => {
+    const fetchMock = stubFetch({ unpublishStatus: status });
     fireEvent.click(await openPublishPanel());
     const stop = await screen.findByRole('switch', { name: UNPUBLISH_ROW });
     fireEvent.click(stop);

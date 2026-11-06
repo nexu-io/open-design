@@ -34,16 +34,13 @@ function setup(options: { history?: PreviewComment[]; currentPrepared?: boolean;
   let mtime = 1;
   let filesRefreshKey = 0;
   const currentSource = () => editedSource ?? (options.currentPrepared ? prepared : original);
-  let delayedPlan = false;
-  let releasePlan!: () => void;
-  const plan = new Promise<void>(resolve => { releasePlan = resolve; });
   const writes = vi.fn();
   const saveComment = vi.fn();
   const sendComments = vi.fn().mockResolvedValue({ status: 'rejected', commentIds: [] });
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const path = new URL(url, 'http://localhost').pathname;
-    if (path.endsWith('/share-plan')) { if (delayedPlan) await plan; return Response.json({ blockers: [], exceedsSizeLimit: false }); }
+    if (path.endsWith('/share-plan')) throw new Error('Client preflight must not run');
     if (init?.method === 'POST') writes(path);
     if (path.endsWith('/raw/index.html') || path.endsWith('/files/index.html')) return new Response(currentSource());
     if (path.endsWith('/share-state')) return Response.json({ hasEverShared: Boolean(options.activePublication), bindingExists: Boolean(options.activePublication), publications: [] });
@@ -62,7 +59,7 @@ function setup(options: { history?: PreviewComment[]; currentPrepared?: boolean;
   const tree = () => <CollabProvider value={collab}><FileViewer projectId={projectId} projectKind="prototype" isDeck={options.srcdoc} liveHtml={options.srcdoc ? currentSource() : undefined} filesRefreshKey={filesRefreshKey} file={{ name: 'index.html', path: 'index.html', type: 'file', kind: 'html', mime: 'text/html', size: 100, mtime }} previewComments={options.history?.map(comment => ({ ...comment, projectId }))} onSendBoardCommentAttachments={sendComments} onSavePreviewComment={saveComment} /></CollabProvider>;
   const view = render(tree());
   const saveB = () => { editedSource = prepared.replace('Target', 'Edited B'); mtime++; view.rerender(tree()); };
-  return { writes, saveComment, sendComments, fetcher, saveB, refreshFiles: () => { filesRefreshKey++; saveB(); }, delayPlan: () => { delayedPlan = true; }, releasePlan };
+  return { writes, saveComment, sendComments, fetcher, saveB, refreshFiles: () => { filesRefreshKey++; saveB(); } };
 }
 async function acknowledge() {
   const frame = await screen.findByTestId('artifact-preview-frame') as HTMLIFrameElement;
@@ -72,6 +69,17 @@ async function acknowledge() {
   });
   return frame;
 }
+async function acknowledgeSrcDoc() {
+  const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+  const post = vi.spyOn(frame.contentWindow!, 'postMessage');
+  fireEvent.load(frame);
+  const probe = post.mock.calls.find(([message]) => message.type === 'od:srcdoc-transport-ready-probe')?.[0];
+  expect(probe).toBeDefined();
+  await act(async () => window.dispatchEvent(new MessageEvent('message', {
+    source: frame.contentWindow,
+    data: { type: 'od:srcdoc-transport-activated', generation: probe.generation, probeId: probe.probeId, bodyComplete: true },
+  })));
+}
 async function selectLegacy(override: Partial<typeof target> = {}) {
   const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
   Object.defineProperty(frame, 'clientHeight', { configurable: true, value: 800 });
@@ -80,14 +88,13 @@ async function selectLegacy(override: Partial<typeof target> = {}) {
   return frame;
 }
 afterEach(() => { cleanup(); invalidateHtmlSourceSnapshotProject(currentProjectId); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
-it.each(['comment-draft', 'manual-edit'] as const)('delayed first publication ignores comment drafts but refuses manual editing (%s)', async change => {
-  const { writes, delayPlan, releasePlan } = setup({ currentPrepared: true });
+it.each(['comment-draft', 'manual-edit'] as const)('first publication ignores comment drafts and manual editing (%s)', async change => {
+  const { writes } = setup({ currentPrepared: true });
   await acknowledge();
   fireEvent.click(screen.getByTestId('comment-panel-toggle'));
-  delayPlan();
   fireEvent.click(await screen.findByRole('button', { name: /^share$/i }));
   const generate = await screen.findByRole('menuitem', { name: 'Generate and copy link' });
-  await waitFor(() => expect(generate).toBeEnabled()); fireEvent.click(generate);
+  await waitFor(() => expect(generate).toBeEnabled());
   if (change === 'comment-draft') {
     await selectLegacy();
     fireEvent.change(await screen.findByTestId('probe-draft'), { target: { value: 'New unsaved comment' } });
@@ -95,11 +102,11 @@ it.each(['comment-draft', 'manual-edit'] as const)('delayed first publication ig
     fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
     await waitFor(() => expect(screen.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true'));
   }
-  await act(async () => releasePlan());
-  expect(writes.mock.calls.filter(call => String(call[0]).endsWith('/publish-public'))).toHaveLength(change === 'comment-draft' ? 1 : 0);
+  await act(async () => fireEvent.click(generate));
+  expect(writes.mock.calls.filter(call => String(call[0]).endsWith('/publish-public'))).toHaveLength(1);
   if (change === 'comment-draft') expect(screen.getByTestId('probe-draft')).toHaveValue('New unsaved comment');
 });
-it.each(['pending', 'comment-draft', 'manual-edit', 'ready'] as const)('static Update from current %s requires settled edits but not a comment preview witness', async state => {
+it.each(['pending', 'comment-draft', 'manual-edit', 'ready'] as const)('static Update from current %s ignores editor state and comment preview readiness', async state => {
   const route = setup({ activePublication: true, currentPrepared: true });
   await waitFor(() => expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).src).toContain('index.html'));
   if (state !== 'pending') {
@@ -113,12 +120,13 @@ it.each(['pending', 'comment-draft', 'manual-edit', 'ready'] as const)('static U
   if (state === 'manual-edit') {
     fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
     await waitFor(() => expect(screen.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true'));
+    await acknowledgeSrcDoc();
   }
   fireEvent.click(await screen.findByRole('button', { name: /^share$/i }));
   const update = await screen.findByRole('button', { name: /update link/i });
   await waitFor(() => expect(update).toBeEnabled());
   await act(async () => fireEvent.click(update));
-  expect(route.writes.mock.calls.filter(call => String(call[0]).endsWith('/publish-public'))).toHaveLength(state !== 'manual-edit' ? 1 : 0);
+  expect(route.writes.mock.calls.filter(call => String(call[0]).endsWith('/publish-public'))).toHaveLength(1);
   if (state === 'comment-draft') expect(screen.getByTestId('probe-draft')).toHaveValue('Already unsettled before Update');
   if (state === 'manual-edit') expect(screen.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
 });
@@ -301,4 +309,31 @@ it.each(['save', 'send'] as const)('keeps file-level comment %s independent of D
   await act(async () => fireEvent.click(screen.getByTestId(action === 'save' ? 'probe-save' : 'probe-send')));
   expect(action === 'save' ? route.saveComment : route.sendComments).toHaveBeenCalledTimes(1);
   expect(post.mock.calls.some(([message]) => message?.validateForSave)).toBe(false);
+});
+
+it('OPEND-4574 allows publication while leaving unsaved manual text intact', async () => {
+  const route = setup({ activePublication: true, currentPrepared: true });
+  await acknowledge();
+  fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+  await waitFor(() => expect(screen.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true'));
+  await acknowledgeSrcDoc();
+  const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+  await act(async () => window.dispatchEvent(new MessageEvent('message', {
+    source: frame.contentWindow,
+    data: { type: 'od-edit-select', target: {
+      id: 'tool', kind: 'text', label: 'Target', tagName: 'h2', className: '', text: 'Target',
+      rect: { x: 24, y: 24, width: 160, height: 48 }, fields: { text: 'Target' },
+      attributes: { 'data-od-id': 'tool' }, styles: {}, isLayoutContainer: false,
+      outerHtml: '<h2 data-od-id="tool">Target</h2>',
+    } },
+  })));
+  const input = await screen.findByLabelText('Text');
+  fireEvent.change(input, { target: { value: 'Unsaved edit' } });
+  fireEvent.click(await screen.findByRole('button', { name: /^share$/i }));
+  const update = await screen.findByRole('button', { name: /update link/i });
+  await waitFor(() => expect(update).toBeEnabled());
+  await act(async () => fireEvent.click(update));
+  expect(route.writes.mock.calls.filter(call => String(call[0]).endsWith('/publish-public'))).toHaveLength(1);
+  expect(input).toHaveValue('Unsaved edit');
+  expect(document.querySelector('.chrome-unified-panel--share')?.textContent).not.toMatch(/Finish or cancel unsaved edits/i);
 });

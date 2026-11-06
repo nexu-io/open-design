@@ -158,12 +158,12 @@ describe('OPEND-2592 · 多轮会话的轮次交界', () => {
     expect(answered).toBeLessThan(order.indexOf('壳:第二轮'));
   });
 
-  it('半 B:两个「已完成」不许连续堆叠 —— 中间隔着那条用户记录', () => {
+  it('半 B:两个已结束的壳头(P0-24 起写「用时」)不许连续堆叠 —— 中间隔着那条用户记录', () => {
     const { container } = renderTurn();
-    // 先证真有两个「已完成」壳头,否则「不相邻」是一句空话
+    // 先证真有两个已结束的壳头(「用时」),否则「不相邻」是一句空话
     const heads = [...container.querySelectorAll('.assistant-flow > details > summary')]
       .map((el) => el.textContent ?? '')
-      .filter((tx) => tx.includes('已完成'));
+      .filter((tx) => tx.includes('用时'));
     expect(heads).toHaveLength(2);
 
     const order = flowOrder(container);

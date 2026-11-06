@@ -238,7 +238,7 @@ describe('Z11a · ShareTab 搬动前的 DOM 基线', () => {
 
 describe('OPEND-3796 share error explanations', () => {
   it.each([
-    ['network', 'Connection failed or timed out. Check the network and share status before retrying.'],
+    ['network', 'The share result could not be confirmed. Check its status before publishing again.'],
     ['session_setup', 'Local sharing preparation failed. Check the client configuration.'],
     ['invalid_receipt', 'The share result could not be confirmed. Check its status before publishing again.'],
     ['unknown', 'The share result could not be confirmed. Check its status before publishing again.'],
@@ -549,7 +549,7 @@ describe('S12 · HTML share menu', () => {
     expect(fetchMock.mock.calls.some(([url, init]) => String(url).includes('publish-public') && init?.method === 'POST')).toBe(false);
   });
 
-  it('S1-T2: team scope requires confirmation, commits exact move once, and rolls back a failed return', async () => {
+  it.each(['team', 'personal'] as const)('S1-T2: %s workspace scope requires confirmation, commits exact move once, and rolls back a failed return', async (workspaceType) => {
     window.localStorage.removeItem('od.projects.moveConfirmSkip');
     const fetchMock = stubFetch();
     const fallback = fetchMock.getMockImplementation();
@@ -568,7 +568,7 @@ describe('S12 · HTML share menu', () => {
       }
       return fallback!(input, init);
     });
-    renderViewer(teamContext());
+    renderViewer({ ...teamContext(), workspaceType, teamId: workspaceType === 'team' ? 'team-workspace-a' : undefined });
     fireEvent.click(toolbarAction('Share'));
     const privateTrigger = await screen.findByRole('button', { name: 'Only me' });
     const chooseTeam = () => {

@@ -12,6 +12,8 @@ export interface PreviewCommentSnapshot {
   filePath: string;
   elementId: string;
   selector: string;
+  /** Current structural selector from the same DOM observation. */
+  domSelector?: string;
   label: string;
   text: string;
   position: { x: number; y: number; width: number; height: number };

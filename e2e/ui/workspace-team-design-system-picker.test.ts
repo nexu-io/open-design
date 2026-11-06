@@ -478,8 +478,8 @@ async function expectSharedLogo(
     complete: true,
     width: 320,
     height: 160,
-    workspaceId: sharedResource ? WORKSPACE_ID : null,
-    workspaceMemberId: sharedResource?.memberId ?? null,
+    workspaceId: WORKSPACE_ID,
+    workspaceMemberId: sharedResource?.memberId ?? OWNER.memberId,
   });
   if (sharedResource) {
     const source = new URL((await logo.getAttribute('src'))!, 'http://localhost');
@@ -522,8 +522,8 @@ async function expectProjectSharedLogo(
     const matches = image?.complete === true
       && image.width === 320
       && image.height === 160
-      && image.workspaceId === null
-      && image.workspaceMemberId === null;
+      && image.workspaceId === WORKSPACE_ID
+      && image.workspaceMemberId === OWNER.memberId;
     if (!matches) {
       matchingSince = 0;
       return 0;

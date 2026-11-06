@@ -1,3 +1,5 @@
+import { openExternalUrl } from "../providers/registry";
+import { lockWebModalScroll } from './modal-scroll-lock';
 import { useEffect, useId, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Dialog, VisuallyHidden } from '@open-design/components';
@@ -15,6 +17,7 @@ import styles from './AmrArtifactUpgradeDialog.module.css';
 
 interface Props {
   profile: string | null;
+  workspaceId?: string | null;
   metricsConsent: boolean;
   installationId: string | null | undefined;
   onClose: () => void;
@@ -65,6 +68,7 @@ function twoDigits(value: number): string {
 
 export function AmrArtifactUpgradeDialog({
   profile,
+  workspaceId,
   metricsConsent,
   installationId,
   onClose,
@@ -77,6 +81,8 @@ export function AmrArtifactUpgradeDialog({
   const descriptionId = useId();
   const [offerCountdown, setOfferCountdown] = useState<OfferCountdown | null>(null);
 
+  useEffect(() => lockWebModalScroll(), []);
+
   useEffect(() => {
     const updateCountdown = () => setOfferCountdown(recurringOfferCountdown(Date.now()));
     updateCountdown();
@@ -87,60 +93,6 @@ export function AmrArtifactUpgradeDialog({
       document.removeEventListener('visibilitychange', updateCountdown);
     };
   }, []);
-
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-    const panel = document.getElementById(dialogId);
-    const backdrop = panel?.parentElement;
-    if (!panel || !backdrop) return;
-
-    const previouslyFocused =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const previousBodyOverflow = document.body.style.overflow;
-    const inertSiblings = Array.from(document.body.children).filter(
-      (element) => element !== backdrop && !element.hasAttribute('inert'),
-    );
-    for (const element of inertSiblings) element.setAttribute('inert', '');
-    document.body.style.overflow = 'hidden';
-
-    panel.tabIndex = -1;
-    panel.focus({ preventScroll: true });
-    const handleTab = (event: KeyboardEvent) => {
-      if (event.key !== 'Tab') return;
-      const focusable = Array.from(panel.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      )).filter(
-        (element) => !element.hasAttribute('hidden') && element.getAttribute('aria-hidden') !== 'true',
-      );
-      if (focusable.length === 0) {
-        event.preventDefault();
-        return;
-      }
-      const first = focusable[0]!;
-      const last = focusable[focusable.length - 1]!;
-      const active = document.activeElement;
-      if (active === panel) {
-        event.preventDefault();
-        (event.shiftKey ? last : first).focus();
-        return;
-      }
-      if (event.shiftKey && (active === first || !panel.contains(active))) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && (active === last || !panel.contains(active))) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener('keydown', handleTab);
-
-    return () => {
-      document.removeEventListener('keydown', handleTab);
-      for (const element of inertSiblings) element.removeAttribute('inert');
-      document.body.style.overflow = previousBodyOverflow;
-      if (previouslyFocused?.isConnected) previouslyFocused.focus();
-    };
-  }, [dialogId]);
 
   const openPlans = () => {
     const attribution = recordAmrEntry(
@@ -154,11 +106,8 @@ export function AmrArtifactUpgradeDialog({
       resolvedDeviceId: getResolvedDeviceId(),
       installationId,
     });
-    window.open(
-      attributedAmrUrl(amrPlansUrlForProfile(profile), attribution, deviceId),
-      '_blank',
-      'noopener,noreferrer',
-    );
+    void openExternalUrl(
+      attributedAmrUrl(amrPlansUrlForProfile(profile, workspaceId), attribution, deviceId));
     onClose();
   };
 
@@ -172,6 +121,7 @@ export function AmrArtifactUpgradeDialog({
 
   const dialog = (
     <Dialog
+      inertBackground
       id={dialogId}
       role="dialog"
       ariaLabelledBy={titleId}

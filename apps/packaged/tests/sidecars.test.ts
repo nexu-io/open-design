@@ -1283,15 +1283,15 @@ describe('ready daemon exit supervision', () => {
     expect(report).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ exit_code: code, signal, reason, intentional: false,
       occurred_at: expect.any(String) }));
   });
-  it('classifies a supervisor exit of 128 + SIGKILL as killed (OPEND-4221)', async () => {
+  it.each([137, 134, 143])('keeps a numeric supervisor exit %s a crash, not a signal (OPEND-4256)', async (code) => {
     const child = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null });
     const report = vi.fn(async () => {});
     const observer = observeDaemonExit(child, report);
     observer.markReady();
-    child.emit('exit', 137, null);
+    child.emit('exit', code, null);
     await observer.flush();
-    expect(report).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ exit_code: 137, signal: 'SIGKILL',
-      reason: 'killed', intentional: false }));
+    expect(report).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ exit_code: code, signal: null,
+      reason: 'crash', intentional: false }));
   });
   it('marks intentional teardown before the signal arrives', async () => {
     const child = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null });

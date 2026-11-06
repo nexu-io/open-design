@@ -62,7 +62,8 @@ beforeAll(() => {
 });
 
 const PROJECT_ID = 'c7e3b234-2fb3-4f6e-8aae-a3a00697c476';
-const raw = (name: string) => `/api/projects/${PROJECT_ID}/raw/${name}`;
+const scoped = (url: string) => `${url}?workspaceId=workspace-a&workspaceMemberId=member-a`;
+const raw = (name: string) => `/api/projects/${PROJECT_ID}/raw/${name}?workspaceId=workspace-a&workspaceMemberId=member-a`;
 
 const HTML_SHOT = '/api/projects/p1/chat-artifact-snapshots/snap-html-1/thumbnail';
 const IMAGE_SHOT = '/api/projects/p1/chat-artifact-snapshots/snap-img-1/content';
@@ -184,7 +185,7 @@ describe('HTML 产物卡 · 有当轮快照', () => {
     await waitFor(() => expect(mediaOf('landing.html')).not.toBeNull());
     const shot = mediaOf('landing.html')!;
     expect(shot.tagName).toBe('IMG');
-    expect(shot.getAttribute('src')).toBe(HTML_SHOT);
+    expect(shot.getAttribute('src')).toBe(scoped(HTML_SHOT));
     expect(
       cardOf('landing.html').querySelector('iframe'),
       '有当轮快照还挂着活 iframe:历史卡会跟着工作区最新版本漂移',
@@ -282,7 +283,7 @@ describe('图片产物卡 · 有当轮快照', () => {
 
     const img = mediaOf('hero.png')!;
     expect(img.tagName).toBe('IMG');
-    expect(img.getAttribute('src')).toBe(IMAGE_SHOT);
+    expect(img.getAttribute('src')).toBe(scoped(IMAGE_SHOT));
     // 竖图仍然完整显示,不被 16:10 的框裁掉上下(OPEND-2547)。
     expect(img.getAttribute('data-preview-fit')).toBe('contain');
   });
@@ -312,7 +313,7 @@ describe('图片产物卡 · 有当轮快照', () => {
     renderPanel([fileOpEntry('hero.png')], { artifactRefs: [imageRef()] });
 
     const link = screen.getByTestId('artifact-card-export-hero.png');
-    expect(link.getAttribute('href')).toBe(IMAGE_SHOT);
+    expect(link.getAttribute('href')).toBe(scoped(IMAGE_SHOT));
     expect(link.getAttribute('download')).toBe('hero.png');
   });
 
@@ -321,14 +322,14 @@ describe('图片产物卡 · 有当轮快照', () => {
     const { unmount } = renderPanel([fileOpEntry('hero.png')], {
       artifactRefs: [imageRef()],
     });
-    expect(mediaOf('hero.png')!.getAttribute('src')).toBe(IMAGE_SHOT);
+    expect(mediaOf('hero.png')!.getAttribute('src')).toBe(scoped(IMAGE_SHOT));
     unmount();
 
     const later = '/api/projects/p1/chat-artifact-snapshots/snap-img-2/content';
     renderPanel([fileOpEntry('hero.png')], {
       artifactRefs: [imageRef({ snapshotId: 'snap-img-2', snapshotUrl: later })],
     });
-    expect(mediaOf('hero.png')!.getAttribute('src')).toBe(later);
+    expect(mediaOf('hero.png')!.getAttribute('src')).toBe(scoped(later));
   });
 });
 
@@ -377,7 +378,7 @@ describe('视频产物卡 · 当轮首帧', () => {
      */
     expect(media.tagName).toBe('VIDEO');
     // 卡面:当轮那一帧。文件被下一轮覆盖也不跟着变 —— 这就是冻结。
-    expect(media.getAttribute('poster')).toBe(VIDEO_SHOT);
+    expect(media.getAttribute('poster')).toBe(scoped(VIDEO_SHOT));
     // 点击 / 播放:仍然是工作区最新那一份(和 HTML、图片同一条规则)。
     expect(media.getAttribute('src')).toBe(raw('clip.mp4'));
   });
@@ -387,14 +388,14 @@ describe('视频产物卡 · 当轮首帧', () => {
     const { unmount } = renderPanel([fileOpEntry('clip.mp4')], {
       artifactRefs: [videoRef()],
     });
-    expect(mediaOf('clip.mp4')!.getAttribute('poster')).toBe(VIDEO_SHOT);
+    expect(mediaOf('clip.mp4')!.getAttribute('poster')).toBe(scoped(VIDEO_SHOT));
     unmount();
 
     const later = '/api/projects/p1/chat-artifact-snapshots/snap-vid-2/thumbnail';
     renderPanel([fileOpEntry('clip.mp4')], {
       artifactRefs: [videoRef({ snapshotId: 'snap-vid-2', thumbnailUrl: later })],
     });
-    expect(mediaOf('clip.mp4')!.getAttribute('poster')).toBe(later);
+    expect(mediaOf('clip.mp4')!.getAttribute('poster')).toBe(scoped(later));
   });
 
   it('没有当轮首帧时回落成今天的行为,不出占位、不写失败文案', () => {
@@ -428,8 +429,8 @@ describe('refs 与卡片的配对', () => {
     });
 
     await waitFor(() => expect(mediaOf('landing.html')).not.toBeNull());
-    expect(mediaOf('landing.html')!.getAttribute('src')).toBe(HTML_SHOT);
-    expect(mediaOf('hero.png')!.getAttribute('src')).toBe(IMAGE_SHOT);
+    expect(mediaOf('landing.html')!.getAttribute('src')).toBe(scoped(HTML_SHOT));
+    expect(mediaOf('hero.png')!.getAttribute('src')).toBe(scoped(IMAGE_SHOT));
 
     fireEvent.click(screen.getByTestId('artifact-card-open-landing.html'));
     fireEvent.click(screen.getByTestId('artifact-card-open-hero.png'));
@@ -470,8 +471,64 @@ describe('ArtifactCards 直接接收快照字段', () => {
       </CollabProvider>,
     );
 
-    expect(mediaOf('deck.html')!.getAttribute('src')).toBe(HTML_SHOT);
+    expect(mediaOf('deck.html')!.getAttribute('src')).toBe(scoped(HTML_SHOT));
     expect(cardOf('deck.html').querySelector('iframe')).toBeNull();
-    expect(mediaOf('poster.png')!.getAttribute('src')).toBe(IMAGE_SHOT);
+    expect(mediaOf('poster.png')!.getAttribute('src')).toBe(scoped(IMAGE_SHOT));
+  });
+});
+
+describe('OPEND-4486 snapshot workspace identity', () => {
+  const items = [
+    { name: 'deck.html', kind: 'html' as const, coverUrl: HTML_SHOT },
+    { name: 'hero.png', kind: 'image' as const, snapshotUrl: IMAGE_SHOT },
+    { name: 'clip.mp4', kind: 'video' as const, coverUrl: VIDEO_SHOT },
+  ];
+
+  it.each(['owner', 'member'] as const)('scopes snapshot reads for the project %s', (role) => {
+    const value = projectCollabValue();
+    value.workspaceContext = workspaceContextFixture({
+      workspaceId: 'workspace-a', workspaceMemberId: `${role}-a`, role,
+    });
+    const view = () => (
+      <CollabProvider value={value}>
+        <ArtifactCards items={items} projectId={PROJECT_ID} />
+      </CollabProvider>
+    );
+    const verify = () => {
+      expect(mediaOf('deck.html')!.getAttribute('src'))
+        .toBe(`${HTML_SHOT}?workspaceId=workspace-a&workspaceMemberId=${role}-a`);
+      expect(mediaOf('hero.png')!.getAttribute('src'))
+        .toBe(`${IMAGE_SHOT}?workspaceId=workspace-a&workspaceMemberId=${role}-a`);
+      expect(screen.getByTestId('artifact-card-export-hero.png').getAttribute('href'))
+        .toBe(`${IMAGE_SHOT}?workspaceId=workspace-a&workspaceMemberId=${role}-a`);
+      expect(mediaOf('clip.mp4')!.getAttribute('poster'))
+        .toBe(`${VIDEO_SHOT}?workspaceId=workspace-a&workspaceMemberId=${role}-a`);
+    };
+    const { unmount } = render(view());
+    verify();
+    unmount();
+    render(view());
+    verify();
+  });
+
+  it('retries a failed cover when project workspace identity becomes available', () => {
+    stubHeadProbeAsReachable();
+    const view = (ready: boolean) => (
+      <CollabProvider value={{ ...projectCollabValue(), workspaceContext: ready
+        ? workspaceContextFixture({ workspaceId: 'workspace-a', workspaceMemberId: 'member-a' })
+        : null }}>
+        <ArtifactCards items={items} projectId={PROJECT_ID} />
+      </CollabProvider>
+    );
+    const { rerender } = render(view(false));
+    expect(mediaOf('hero.png')!.getAttribute('src')).toBe(IMAGE_SHOT);
+    fireEvent.error(mediaOf('deck.html')!);
+    expect(mediaOf('deck.html')).toBeNull();
+
+    rerender(view(true));
+
+    expect(mediaOf('deck.html')!.getAttribute('src')).toBe(scoped(HTML_SHOT));
+    expect(mediaOf('hero.png')!.getAttribute('src')).toBe(scoped(IMAGE_SHOT));
+    expect(mediaOf('clip.mp4')!.getAttribute('poster')).toBe(scoped(VIDEO_SHOT));
   });
 });

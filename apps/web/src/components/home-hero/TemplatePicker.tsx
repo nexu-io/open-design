@@ -1,4 +1,4 @@
-// Selected creation type can be cleared; the unselected dock offers a picker.
+// The creation type keeps its dropdown and an independent clear action.
 import { useEffect, useId, useRef, useState } from 'react';
 import { Button } from '@open-design/components';
 import type { HomeHeroChip } from './chips';
@@ -82,7 +82,13 @@ export function TemplatePicker({
             <Icon name={active.icon} size={18} className={styles.typeGlyph} />
             <Icon name="close" size={18} className={styles.clearGlyph} />
           </Button> : <Icon name={active.icon} size={18} />}
-          <span className="home-hero__footer-select-label">{valueLabel}</span>
+          <button type="button" ref={triggerRef} className={styles.switcher}
+            aria-label={t('homeHero.templatePicker.label')} aria-haspopup="listbox"
+            aria-expanded={open} aria-controls={open ? menuId : undefined} disabled={disabled}
+            onClick={() => setOpen((value) => !value)}>
+            <span className="home-hero__footer-select-label">{valueLabel}</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="6 6 12 12" fill="currentColor" aria-hidden="true"><path d="M12 15.0006L7.75732 10.758L9.17154 9.34375L12 12.1722L14.8284 9.34375L16.2426 10.758L12 15.0006Z" /></svg>
+          </button>
         </> : <button type="button" ref={triggerRef} className={styles.switcher}
           aria-label={t('homeHero.templatePicker.label')} aria-haspopup="listbox"
           aria-expanded={open} aria-controls={open ? menuId : undefined} disabled={disabled}
@@ -91,7 +97,7 @@ export function TemplatePicker({
           <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="6 6 12 12" fill="currentColor" aria-hidden="true"><path d="M12 15.0006L7.75732 10.758L9.17154 9.34375L12 12.1722L14.8284 9.34375L16.2426 10.758L12 15.0006Z" /></svg>
         </button>}
       </div>
-      {open && !active ? <div id={menuId} role="listbox" aria-label={t('homeHero.templatePicker.label')}
+      {open ? <div id={menuId} role="listbox" aria-label={t('homeHero.templatePicker.label')}
         className="home-hero__footer-select-menu" data-testid="home-hero-template-menu">
         {templates.map((chip) => <button key={chip.id} type="button" role="option" data-chip={chip.id}
           aria-selected={chip.id === activeChipId}
