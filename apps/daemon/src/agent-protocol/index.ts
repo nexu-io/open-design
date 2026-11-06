@@ -9,6 +9,8 @@ export {
   buildAcpSessionNewParams,
   normalizeModels,
   detectAcpModels,
+  acpProbeCwd,
+  clearAcpModelCache,
   attachAcpSession,
 } from './acp/index.js';
 export { mapPiRpcEvent, attachPiRpcSession, parsePiModels } from './pi-rpc/index.js';
