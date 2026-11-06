@@ -211,9 +211,9 @@ describe('ToolRow 这一层:pending 是「没回来过」,running 才是「此�
     expect(fold().open).toBe(true);
   });
 
-  it('失败那一档和 running 无关 —— 报错原文是这时候唯一要读的东西(稿子 :1018 带 open)', () => {
-    render(show(<ToolRow row={row({ pending: false, failed: true, terminal: 'ELIFECYCLE  Command failed.' })} />));
-    expect(fold().open, '失败照旧默认摊开,轮次停没停都一样').toBe(true);
+  it.each([false, true])('失败默认收起,不受整轮 running=%s 影响', (running) => {
+    render(show(<ToolRow running={running} row={row({ pending: false, failed: true, terminal: 'ELIFECYCLE  Command failed.' })} />));
+    expect(fold().open, '失败不再自动摊开,错误按需查看').toBe(false);
   });
 
   it('rawTitle 那一支同一条规矩', () => {
