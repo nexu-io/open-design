@@ -1915,6 +1915,33 @@ describe('ProjectView mounted from a Home send before the create answers (OPEND-
     });
   });
 
+  it('keeps the optimistic turn\'s start when the auto-sent turn takes over its rows', async () => {
+    // The header clock reads `startedAt`. Re-stamping it when the real turn
+    // replaces the optimistic one moved the start later, so the clock went
+    // 0s → 1.0s → (blank) → 0s on a Home send.
+    const prompt = 'Draft the onboarding flow';
+    const view = renderProjectView(project('p-new', prompt), vi.fn(), { creationHandoff: pendingHandoff });
+    await waitFor(() => expect(latestChatPaneProps().messages?.length).toBe(2));
+    const optimisticStart = latestChatPaneProps().messages?.[1]?.startedAt;
+    expect(typeof optimisticStart).toBe('number');
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+    window.sessionStorage.setItem('od:auto-send-first:p-new', '1');
+    view.rerender(projectViewElement(project('p-new', prompt), vi.fn(), {
+      creationHandoff: { ...pendingHandoff, persisted: true },
+    }));
+
+    await waitFor(() => {
+      expect(mockedSaveMessage.mock.calls.some(([, , message]) => message.role === 'user')).toBe(true);
+    });
+    const savedUser = mockedSaveMessage.mock.calls.find(([, , message]) => message.role === 'user')?.[2];
+    expect(savedUser?.createdAt).toBe(optimisticStart);
+    const assistant = latestChatPaneProps().messages?.find((message) => message.role === 'assistant');
+    expect(assistant?.startedAt).toBe(optimisticStart);
+  });
+
   it('starts reading once the create answers, in the same pane, keyed by the seed conversation', async () => {
     const view = renderProjectView(project('p-new'), vi.fn(), { creationHandoff: pendingHandoff });
     await waitFor(() => expect(chatPaneMounts.count).toBe(1));
