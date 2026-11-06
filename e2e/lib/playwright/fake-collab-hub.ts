@@ -876,6 +876,9 @@ async function handleResourceCommand(input: {
         type: 'project-content-changed',
         workspaceId: input.workspaceId,
         projectId,
+        // AMR names the resource whose version moved; a project can own
+        // several (root + single-file shares), each with its own counter.
+        resourceId,
         version,
       });
     } else {
