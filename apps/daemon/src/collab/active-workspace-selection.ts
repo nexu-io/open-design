@@ -2,8 +2,23 @@ import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 
+import { resolveWorkspaceSelectionIdentity } from './workspace-selection-identity.js';
+
 interface ActiveWorkspaceSelectionFile {
   workspaceId?: unknown;
+  /**
+   * The identity stamp that chose `workspaceId`. Absent in records written
+   * before this field existed; see {@link readAttributedSelection}.
+   */
+  identity?: unknown;
+}
+
+export interface ActiveWorkspaceSelectionStoreOptions {
+  /**
+   * Identity that owns reads and writes of the selection. Defaults to the
+   * account + AMR environment currently configured for this process.
+   */
+  identity?: () => string;
 }
 
 export interface ActiveWorkspaceSelectionStore {
@@ -53,27 +68,73 @@ export function resolveAuthorizedActiveTeamWorkspaceSnapshot(
   };
 }
 
+/** A selection as it sits on disk: an id plus the identity that chose it. */
+interface AttributedSelection {
+  workspaceId: string | null;
+  identity: string | null;
+}
+
+const NO_SELECTION: AttributedSelection = { workspaceId: null, identity: null };
+
+/**
+ * Parse the on-disk record without deciding whether it is usable.
+ *
+ * A record whose `identity` is missing or not a string is an unattributed
+ * legacy record: it may well have been written by the identity reading it, but
+ * it cannot say so. `identity: null` marks that, and every read then treats it
+ * as belonging to nobody.
+ */
+function readAttributedSelection(filePath: string): AttributedSelection {
+  let parsed: ActiveWorkspaceSelectionFile;
+  try {
+    parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as ActiveWorkspaceSelectionFile;
+  } catch {
+    return NO_SELECTION;
+  }
+  const workspaceId = typeof parsed.workspaceId === 'string' && parsed.workspaceId.trim()
+    ? parsed.workspaceId.trim()
+    : null;
+  if (!workspaceId) return NO_SELECTION;
+  const identity = typeof parsed.identity === 'string' && parsed.identity.trim()
+    ? parsed.identity.trim()
+    : null;
+  return { workspaceId, identity };
+}
+
 export function createActiveWorkspaceSelectionStore(
   dataDir: string,
+  options: ActiveWorkspaceSelectionStoreOptions = {},
 ): ActiveWorkspaceSelectionStore {
   const filePath = path.join(dataDir, 'workspace-selection.json');
-  let cached: string | null | undefined;
+  const currentIdentity = options.identity
+    ?? (() => resolveWorkspaceSelectionIdentity());
+  let cached: AttributedSelection | undefined;
   let generation = 0;
   let mutationTail = Promise.resolve();
   const listeners = new Set<(workspaceId: string | null) => void>();
 
+  /**
+   * The selection this process may act on: the stored id, but only while the
+   * identity reading it is the identity that wrote it.
+   *
+   * The identity is re-derived on every read rather than captured once, because
+   * it changes underneath a running daemon — `OPEN_DESIGN_AMR_PROFILE` moves
+   * between environments and a fresh `vela login` rewrites the account. A
+   * mismatch reads as "no selection", which is exactly the state the
+   * directory-driven bootstrap in `resolveCurrent` already handles: it picks a
+   * default from the membership list that the CURRENT credential returned, and
+   * rebinds the file to the current identity on its way through. Announcing the
+   * foreign id instead is what makes Vela answer `403 missing_principal` to
+   * every request until someone re-picks a workspace by hand.
+   *
+   * A foreign record is left on disk rather than unlinked here: reads are
+   * synchronous and unlinking belongs on the serialized mutation queue, and an
+   * inert record costs nothing because the next write overwrites it.
+   */
   const read = (): string | null => {
-    if (cached !== undefined) return cached;
-    try {
-      const raw = fs.readFileSync(filePath, 'utf8');
-      const parsed = JSON.parse(raw) as ActiveWorkspaceSelectionFile;
-      cached = typeof parsed.workspaceId === 'string' && parsed.workspaceId.trim()
-        ? parsed.workspaceId.trim()
-        : null;
-    } catch {
-      cached = null;
-    }
-    return cached;
+    if (cached === undefined) cached = readAttributedSelection(filePath);
+    if (!cached.workspaceId || !cached.identity) return null;
+    return cached.identity === currentIdentity() ? cached.workspaceId : null;
   };
 
   const notify = (workspaceId: string | null) => {
@@ -95,13 +156,17 @@ export function createActiveWorkspaceSelectionStore(
     return result;
   };
 
-  const persist = async (workspaceId: string) => {
+  /**
+   * Write the id together with the identity choosing it, so a later read can
+   * tell whether this record is still its own.
+   */
+  const persist = async (workspaceId: string, identity: string) => {
     await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
     const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
     try {
       await fs.promises.writeFile(
         tempPath,
-        JSON.stringify({ workspaceId }, null, 2),
+        JSON.stringify({ workspaceId, identity }, null, 2),
         'utf8',
       );
       await fs.promises.rename(tempPath, filePath);
@@ -111,10 +176,16 @@ export function createActiveWorkspaceSelectionStore(
     }
   };
 
-  const commit = (workspaceId: string) => {
-    cached = workspaceId;
+  const commit = (workspaceId: string, identity: string) => {
+    cached = { workspaceId, identity };
     generation += 1;
     notify(workspaceId);
+  };
+
+  const forget = () => {
+    cached = NO_SELECTION;
+    generation += 1;
+    notify(null);
   };
 
   return {
@@ -126,16 +197,15 @@ export function createActiveWorkspaceSelectionStore(
       const next = workspaceId.trim();
       if (!next) throw new Error('workspaceId is required');
       await enqueueMutation(async () => {
-        await persist(next);
-        commit(next);
+        const identity = currentIdentity();
+        await persist(next, identity);
+        commit(next, identity);
       });
     },
     async clear() {
       await enqueueMutation(async () => {
         await fs.promises.rm(filePath, { force: true });
-        cached = null;
-        generation += 1;
-        notify(null);
+        forget();
       });
     },
     async clearIf(workspaceId: string) {
@@ -144,9 +214,7 @@ export function createActiveWorkspaceSelectionStore(
       return enqueueMutation(async () => {
         if (read() !== expected) return false;
         await fs.promises.rm(filePath, { force: true });
-        cached = null;
-        generation += 1;
-        notify(null);
+        forget();
         return true;
       });
     },
@@ -156,8 +224,9 @@ export function createActiveWorkspaceSelectionStore(
       if (!next) throw new Error('workspaceId is required');
       await enqueueMutation(async () => {
         if (read() !== expected) return;
-        await persist(next);
-        commit(next);
+        const identity = currentIdentity();
+        await persist(next, identity);
+        commit(next, identity);
       });
 
       // A user switch can queue while the conditional write is in flight.
