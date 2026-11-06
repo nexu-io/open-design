@@ -23,6 +23,7 @@ vi.mock('../../src/collab/workspace-events', () => ({
 }));
 
 vi.mock('../../src/providers/registry', () => ({
+  openExternalUrl: async (url: string) => { window.open(url, '_blank', 'noopener,noreferrer'); return true; },
   fetchProjectFiles: vi.fn(async () => []),
   fetchProjectFileText: vi.fn(async () => null),
   projectFileUrl: (projectId: string, fileName: string) =>

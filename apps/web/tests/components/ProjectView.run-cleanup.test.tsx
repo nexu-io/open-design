@@ -176,6 +176,9 @@ vi.mock('../../src/state/projects', () => ({
   loadTabs: (...args: unknown[]) => loadTabs(...args),
   patchConversation: (...args: unknown[]) => patchConversation(...args),
   patchProject: (...args: unknown[]) => patchProject(...args),
+  registerQueuedSubmission: vi.fn(async (projectId, submission) => ({
+    id: submission.id, projectId, conversationId: submission.conversationId, acceptedAt: submission.submittedAt,
+  })),
   saveMessage: (...args: unknown[]) => saveMessage(...args),
   saveTabs: (...args: unknown[]) => saveTabs(...args),
   cacheTabsLocally: (_projectId: string, state: unknown) => state,
@@ -1620,7 +1623,7 @@ describe('ProjectView daemon cleanup', () => {
     expect(streamViaDaemon).toHaveBeenCalledTimes(1);
   });
 
-  it('audits design-system workspace output after first auto-send and seeds a bounded repair prompt', async () => {
+  it('OPEND-4047 audits design-system workspace output after first auto-send and seeds a bounded repair prompt', async () => {
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
     listMessages.mockResolvedValue([]);
     fetchPreviewComments.mockResolvedValue([]);
@@ -1643,12 +1646,18 @@ describe('ProjectView daemon cleanup', () => {
       }],
       warnings: [],
     });
+    const onTouchProject = vi.fn();
     let streamCallCount = 0;
     streamViaDaemon.mockImplementation(async (options: {
       handlers: { onDone: () => void };
       onRunCreated?: (runId: string) => void;
+      submission?: { source: string };
+      onUserSubmissionAccepted?: (receipt: { id: string; projectId: string; conversationId: string; acceptedAt: number }) => void;
     }) => {
       streamCallCount += 1;
+      if (options.submission?.source === 'user') options.onUserSubmissionAccepted?.({
+        id: 'first', projectId: 'project-ds', conversationId: 'conv-1', acceptedAt: 1000,
+      });
       options.onRunCreated?.(`run-ds-${streamCallCount}`);
       if (streamCallCount === 1) {
         options.handlers.onDone();
@@ -1686,7 +1695,7 @@ describe('ProjectView daemon cleanup', () => {
         onOpenSettings={() => {}}
         onBack={() => {}}
         onClearPendingPrompt={() => {}}
-        onTouchProject={() => {}}
+        onTouchProject={onTouchProject}
         onProjectChange={() => {}}
         onProjectsRefresh={() => {}}
       />,
@@ -1705,6 +1714,10 @@ describe('ProjectView daemon cleanup', () => {
       );
       expect(repairSeed).toBeTruthy();
     });
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
+    expect(streamViaDaemon.mock.calls[1]![0].submission.source).toBe('system');
+    expect(onTouchProject).toHaveBeenCalledTimes(1);
+    expect(onTouchProject).toHaveBeenCalledWith(1000);
     expect(saveMessage.mock.calls.some((call) =>
       call[2]?.role === 'assistant'
       && call[2]?.events?.some((event: { kind?: string; label?: string; detail?: string }) =>

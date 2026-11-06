@@ -164,6 +164,7 @@ export interface ChatRequest {
   userMessageId?: string | null;
   assistantMessageId?: string | null;
   clientRequestId?: string | null;
+  submission?: RunSubmission;
   skillId?: string | null;
   // Per-turn skill ids picked via the composer's @-mention popover. The
   // daemon concatenates each skill's body into the system prompt for
@@ -508,7 +509,25 @@ export interface ChatRunFeedbackResponse {
   status: 'accepted' | 'skipped_consent' | 'skipped_no_sink';
 }
 
+/** One accepted human submission, independent of physical run retries/execution. */
+export interface UserSubmissionReceipt {
+  id: string;
+  projectId: string;
+  conversationId: string;
+  acceptedAt: number;
+}
+export interface RunSubmission {
+  id: string;
+  source: 'user' | 'system' | 'queue';
+}
+export interface QueuedSubmissionRequest {
+  id: string;
+  conversationId: string;
+  submittedAt: number;
+}
+
 export interface ChatRunCreateResponse {
+  userSubmission?: UserSubmissionReceipt;
   runId: string;
   /** Present only when this physical Run belongs to a strategy task chain. */
   taskExecutionId?: string;

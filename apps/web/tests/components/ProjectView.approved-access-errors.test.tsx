@@ -101,6 +101,9 @@ vi.mock('../../src/providers/registry', async (importOriginal) => ({
 }));
 vi.mock('../../src/state/projects', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/state/projects')>()),
+  registerQueuedSubmission: vi.fn(async (projectId, submission) => ({
+    id: submission.id, projectId, conversationId: submission.conversationId, acceptedAt: submission.submittedAt,
+  })),
   // Both listMessages and listConversations remain real, including HTTP
   // classification. A failed list must be tested before a conversation exists.
   createConversation: vi.fn(async () => conversation), deleteConversation: vi.fn(),

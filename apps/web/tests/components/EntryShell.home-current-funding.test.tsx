@@ -14,6 +14,11 @@ import type { AgentInfo, AppConfig } from '../../src/types';
 
 const concurrencyAnalytics = vi.hoisted(() => ({ track: vi.fn() }));
 beforeEach(() => concurrencyAnalytics.track.mockClear());
+vi.mock('../../src/providers/registry', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/registry')>('../../src/providers/registry');
+  return { ...actual, openExternalUrl: async (url: string) => { window.open(url, '_blank', 'noopener,noreferrer'); return true; } };
+});
+
 vi.mock('../../src/analytics/provider', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/analytics/provider')>();
   return { ...actual, useAnalytics: () => ({ ...actual.useAnalytics(), track: concurrencyAnalytics.track }) };

@@ -145,7 +145,7 @@ export function HomeInviteSurface({ accountId, context, active, signedOut = fals
   if (!signedOut && (!context || context.memberStatus !== 'active'
     || context.lifecycleState !== 'active' || !context.permissions.canInviteMembers)) return null;
   const banner = active && storageKey && dismissal !== storageKey ? (
-    <div ref={bannerRef} className={styles.banner} role="region" aria-label={t('homeInvite.invite')}>
+    <div ref={bannerRef} className={styles.banner} data-home-invite-row role="region" aria-label={t('homeInvite.invite')}>
       <span className={styles.copy}>{t('homeInvite.banner')}</span>
       <Button variant="ghost" className={styles.invite} disabled={signInState === 'signing'} onClick={() => { setEntryFrom('home_banner'); bannerJourney.click('invite_teammates'); signedOut ? requestSignIn() : setOpen(true); }}>{t(signInState === 'signing' ? 'settings.amrSigningIn' : 'homeInvite.invite')}</Button>
       <Button variant="ghost" className={styles.close} aria-label={t('homeInvite.dismiss')} onClick={dismiss}><svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"><path d="m4.5 4.5 7 7m0-7-7 7" /></svg></Button>
@@ -153,7 +153,7 @@ export function HomeInviteSurface({ accountId, context, active, signedOut = fals
   ) : null;
   return (
     <>
-      {banner ?? (active ? <div className={styles.bannerSpace} data-dismissed={dismissal === storageKey ? "true" : undefined} aria-hidden="true" /> : null)}
+      {banner ?? (active ? <div className={styles.bannerSpace} data-home-invite-row data-dismissed={dismissal === storageKey ? "true" : undefined} aria-hidden="true" /> : null)}
       {signedOut && signInState === 'error' ? <p role="alert">{t('settings.amrLoginErrorCompact')}</p> : null}
       {signedOut && signInState === 'signing' ? <div role="status">{signInStatus?.activationUrl ? <a href={signInStatus.activationUrl} target="_blank" rel="noopener noreferrer">{t('settings.amrActivationOpen')}</a> : null}<Button onClick={() => void cancel()}>{t('settings.amrCancelSignIn')}</Button></div> : null}
       {sent ? <Toast key={sentGeneration} className={styles.toast} message={t('homeInvite.sent', { n: sent })} tone="success" placement="top" portalToBody ttlMs={4000} onDismiss={() => setSent(0)} /> : null}

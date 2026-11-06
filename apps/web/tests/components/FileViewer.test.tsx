@@ -7059,11 +7059,10 @@ describe('FileViewer SVG artifacts', () => {
     // missing — is back for a personal workspace.
     expect(await screen.findByText('Generate and copy link')).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /Generate and copy link/i })).toBeTruthy();
-    // "Share project in workspace" is TEAM project sharing, which a personal
-    // workspace has no team to receive — see the dedicated test below
-    // (recvq5bM78HWCE) for the card's own gating.
+    // The retired section label stays absent; project visibility is available
+    // in a personal workspace through the same selector as a team workspace.
     expect(screen.queryByText('Share project in workspace')).toBeNull();
-    expect(screen.queryByText('Visibility in workspace')).toBeNull();
+    expect(screen.getByText('Visibility in workspace')).toBeVisible();
   });
 
   // recvq56lzckGtE: publishing a file from a real team workspace 403'd against
@@ -7273,8 +7272,8 @@ describe('FileViewer SVG artifacts', () => {
     expect(writes).toEqual([]);
   });
 
-  // Scope help is persistent content in the HTML share panel. It remains
-  // team-gated; unlike provider tooltips it needs no focus or hover.
+  // Scope help is persistent content in the HTML share panel and needs no
+  // focus or hover.
   it('shows workspace-access help inline without a focus or hover prerequisite', async () => {
     const context = teamWorkspaceContext();
     stubFetchWithWorkspaceContext(context);
@@ -7296,13 +7295,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.queryByTestId('workspace-access-help')).toBeNull();
   });
 
-  // recvq5bM78HWCE: the "在工作空间中分享项目" card rendered for a personal
-  // workspace with no gate at all, so clicking its access toggle called
-  // `moveWorkspaceProject({ visibility: 'team' })`, which the daemon's
-  // `teamShareRefusalFor` always refuses outside a team workspace — the click
-  // silently failed. The public single-file publish card right above it is
-  // unaffected (that one IS meant to work for a personal workspace).
-  it('hides the team-only workspace-share card for a personal workspace', async () => {
+  it('offers workspace visibility choices to a personal workspace', async () => {
     const context: WorkspaceCollabContext = {
       ...teamWorkspaceContext(),
       workspaceType: 'personal',
@@ -7321,14 +7314,17 @@ describe('FileViewer SVG artifacts', () => {
     expect(await screen.findByRole('menu')).toBeTruthy();
     await screen.findByText('Generate and copy link');
     expect(screen.queryByText('Share project in workspace')).toBeNull();
-    expect(screen.queryByText('Visibility in workspace')).toBeNull();
+    expect(screen.getByText('Visibility in workspace')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Only me' }));
+    expect(screen.getByRole('option', { name: 'Only me' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('option', { name: 'Workspace members' })).toBeEnabled();
   });
 
   // recvqgif6Xa7Wb: product ruled the "no team to share with yet" bridge card
   // (added for recvqae3pK5hyx/recvq6W8GX8NaH) out entirely — it was never a
   // designed surface, just a stopgap to avoid a blank tab. A personal
-  // workspace that can already publish must show ONLY the publish card, with
-  // no team-CTA card and no create-team link underneath it.
+  // workspace that can already publish needs no team-CTA card or create-team
+  // link underneath it.
   it('does not show a create-team CTA for a personal workspace that can already publish', async () => {
     const context: WorkspaceCollabContext = {
       ...teamWorkspaceContext(),
@@ -11146,10 +11142,10 @@ describe('FileViewer tweaks toolbar', () => {
     });
     const comments = [comment('one', 101), comment('two', 102), comment('three', 103)];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input).endsWith('/comments/read')) {
+      if (String(input).includes('/comments/read')) {
         return new Response(JSON.stringify(init?.method === 'PUT'
-          ? { projectId: 'project-1', lastReadAt: 103 }
-          : { projectId: 'project-1', lastReadAt: 100 }), { headers: { 'Content-Type': 'application/json' } });
+          ? { projectId: 'project-1', filePath: 'preview.html', seenCommentIds: ['one','two','three'] }
+          : { projectId: 'project-1', filePath: 'preview.html', seenCommentIds: [] }), { headers: { 'Content-Type': 'application/json' } });
       }
       return new Response('{}', { headers: { 'Content-Type': 'application/json' } });
     });
@@ -11173,9 +11169,9 @@ describe('FileViewer tweaks toolbar', () => {
     });
     const readRequests = vi.fn();
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (!String(input).endsWith('/comments/read')) return new Response('{}');
+      if (!String(input).includes('/comments/read')) return new Response('{}');
       if (init?.method === 'PUT') readRequests();
-      return new Response(JSON.stringify({ projectId: 'project-1', lastReadAt: init?.method === 'PUT' ? 200 : 100 }), {
+      return new Response(JSON.stringify({ projectId: 'project-1', filePath: 'preview.html', seenCommentIds: init?.method === 'PUT' ? JSON.parse(String(init.body)).commentIds : [] }), {
         headers: { 'Content-Type': 'application/json' },
       });
     }));
@@ -11233,12 +11229,12 @@ describe('FileViewer tweaks toolbar', () => {
     const own: PreviewComment = {
       id: 'own', projectId: 'project-1', conversationId: 'conversation-1', filePath: 'preview.html', elementId: 'own', selector: '[data-od-id="own"]', label: 'own', text: '', htmlHint: '', position: { x: 0, y: 0, width: 1, height: 1 }, note: 'own', status: 'open', createdAt: 102, updatedAt: 102, authorMemberId: 'wm-1',
     };
-    const readFetch = vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('/comments/read')
-      ? new Response(JSON.stringify({ projectId: 'project-1', lastReadAt: 101 }), { headers: { 'Content-Type': 'application/json' } })
+    const readFetch = vi.fn(async (input: RequestInfo | URL) => String(input).includes('/comments/read')
+      ? new Response(JSON.stringify({ projectId: 'project-1', filePath: 'preview.html', seenCommentIds: ['boundary'] }), { headers: { 'Content-Type': 'application/json' } })
       : new Response('{}', { headers: { 'Content-Type': 'application/json' } }));
     vi.stubGlobal('fetch', readFetch);
     renderWithProjectWorkspace(<FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()} liveHtml="<html><body /></html>" previewComments={[own, { ...own, id: 'boundary', authorMemberId: 'wm-other', createdAt: 101, updatedAt: 101 }]} />, teamWorkspaceContext());
-    await waitFor(() => expect(readFetch.mock.calls.some(([input]) => String(input).endsWith('/comments/read'))).toBe(true));
+    await waitFor(() => expect(readFetch.mock.calls.some(([input]) => String(input).includes('/comments/read'))).toBe(true));
     await act(async () => { await Promise.resolve(); });
     expect(screen.queryByTestId('comment-unread-dot')).toBeNull();
   });
@@ -11247,12 +11243,12 @@ describe('FileViewer tweaks toolbar', () => {
     const firstRead = deferredResponse();
     let readWrites = 0;
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (!String(input).endsWith('/comments/read')) return new Response('{}');
+      if (!String(input).includes('/comments/read')) return new Response('{}');
       if (init?.method === 'PUT') {
         readWrites++;
-        return readWrites === 1 ? firstRead.promise : new Response(JSON.stringify({ projectId: 'project-1', lastReadAt: 103 }), { headers: { 'Content-Type': 'application/json' } });
+        return readWrites === 1 ? firstRead.promise : new Response(JSON.stringify({ projectId: 'project-1', filePath: 'preview.html', seenCommentIds: ['external'] }), { headers: { 'Content-Type': 'application/json' } });
       }
-      return new Response(JSON.stringify({ projectId: 'project-1', lastReadAt: 100 }), { headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ projectId: 'project-1', filePath: 'preview.html', seenCommentIds: [] }), { headers: { 'Content-Type': 'application/json' } });
     }));
     const external: PreviewComment = {
       id: 'external', projectId: 'project-1', conversationId: 'conversation-1', filePath: 'preview.html', elementId: 'external', selector: '[data-od-id="external"]', label: 'external', text: '', htmlHint: '', position: { x: 0, y: 0, width: 1, height: 1 }, note: 'external', status: 'open', createdAt: 103, updatedAt: 103,

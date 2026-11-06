@@ -268,6 +268,9 @@ vi.mock('../../src/router', () => ({
 
 vi.mock('../../src/state/projects', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/state/projects')>()),
+  registerQueuedSubmission: vi.fn(async (projectId, submission) => ({
+    id: submission.id, projectId, conversationId: submission.conversationId, acceptedAt: submission.submittedAt,
+  })),
   createConversation: (...args: unknown[]) => createConversation(...args),
   deleteConversation: vi.fn(),
   getTemplate: (...args: unknown[]) => getTemplate(...args),

@@ -179,6 +179,7 @@ vi.mock('../../src/providers/registry', async () => {
   );
   return {
     ...actual,
+    openExternalUrl: async (url: string) => { window.open(url, '_blank', 'noopener,noreferrer'); return true; },
     deletePreviewComment: vi.fn(),
     fetchDesignSystem: vi.fn(),
     fetchLiveArtifacts: vi.fn().mockResolvedValue([]),
@@ -198,6 +199,9 @@ vi.mock('../../src/state/projects', async () => {
   );
   return {
     ...actual,
+    registerQueuedSubmission: vi.fn(async (projectId, submission) => ({
+      id: submission.id, projectId, conversationId: submission.conversationId, acceptedAt: submission.submittedAt,
+    })),
     createConversation: vi.fn(),
     listConversations: vi.fn(),
     listMessages: vi.fn(),

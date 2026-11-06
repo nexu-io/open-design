@@ -245,6 +245,7 @@
       "properties": {
         "name":        { "type": "string", "minLength": 1 },
         "label":       { "type": "string" },
+        "label_i18n":  { "type": "object", "additionalProperties": { "type": "string" } },
         "type":        { "type": "string", "enum": ["string", "text", "select", "number", "boolean", "file"] },
         "required":    { "type": "boolean" },
         "options":     { "type": "array", "items": { "type": "string" } },

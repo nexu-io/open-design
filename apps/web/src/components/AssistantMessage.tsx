@@ -565,6 +565,7 @@ function AssistantMessageImpl({
     owner: true, display: taskDisplayWithDeliveryState(message.taskDisplay, [message]), messages: [message],
   } : undefined);
   const task = presentedTask && presentedTask.display.runIds.length > 1 ? presentedTask : undefined;
+  const taskOwnsRunGrouping = task !== undefined;
   const automaticPredecessor = !!task && message.runId !== task.display.currentRunId;
   const taskFoldPreference = useRef<boolean | undefined>(undefined);
   const { nowMs, lastEventAtMs } = useTickingNow(streaming || !!task?.display.ticking, task?.display.currentRunId ?? message.runId);
@@ -584,6 +585,9 @@ function AssistantMessageImpl({
   const nextTurn = useMemo(() => {
     const turn = buildTurnBlocks({
       events: displayEvents,
+      // Match TaskExecutionRecord's block boundaries when deciding which prose
+      // stays outside it, so planning is not duplicated and final replies stay visible.
+      preserveRunBoundaries: taskOwnsRunGrouping,
       ...(mediaTasks.length ? { mediaTasks } : {}),
       runStatus: turnRunStatus,
       // 只在本轮清单里出现过的条目上取值(`build-turn-blocks` 的 `previous.has`),
@@ -615,7 +619,7 @@ function AssistantMessageImpl({
     };
     // `message.endedAt` 从 undefined 变成时刻**就在轮次终止那一刻** —— 不进依赖的话
     // 兜底耗时会停在「还没有终点」的那一版,壳头刚收起时秒数是空的。
-  }, [displayEvents, turnRunStatus, nowMs, previousTodos, runStartedAt, message.endedAt, streaming, lastEventAtMs, mediaTasks]);
+  }, [displayEvents, turnRunStatus, nowMs, previousTodos, runStartedAt, message.endedAt, streaming, lastEventAtMs, mediaTasks, taskOwnsRunGrouping]);
   /**
    * 执行记录里**真的有东西**。
    *

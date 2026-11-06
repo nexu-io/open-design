@@ -1,3 +1,4 @@
+import { ReferralEntryProvider } from './components/ReferralEntry';
 import { WorkspaceRemovalBoundary } from './components/WorkspaceRemovalBoundary';
 import { homeAutoSendIdentity, type HomeRequestConcurrencyRejection } from './runtime/home-auto-send-identity';
 import { AmrConcurrencyDialog } from './components/AmrConcurrencyDialog';
@@ -480,13 +481,19 @@ function clearStaleAmrModelChoiceOnProfileChange(
  * the user to choose an execution path again.
  */
 export function resetExecutionConfigAfterSignOut(config: AppConfig): AppConfig {
+  const selectedAmrProfile = config.agentCliEnv?.[AMR_AGENT_ID]?.[AMR_PROFILE_ENV_KEY];
   return {
     ...config,
     onboardingCompleted: false,
     mode: DEFAULT_CONFIG.mode,
     agentId: null,
     agentModels: {},
-    agentCliEnv: {},
+    // The selected backend is an app preference, while the other CLI env
+    // entries can contain account credentials. Keep the backend when signing
+    // out so the next account login starts in the same environment.
+    agentCliEnv: typeof selectedAmrProfile === 'string' && selectedAmrProfile.trim()
+      ? { [AMR_AGENT_ID]: { [AMR_PROFILE_ENV_KEY]: selectedAmrProfile } }
+      : {},
     agentCliEnvIntent: {},
   };
 }
@@ -989,6 +996,8 @@ export function App() {
 
 function AppInner() {
   const { t, locale } = useI18n();
+  const [amrWebOpenFailed, setAmrWebOpenFailed] = useState(false);
+  useEffect(() => { const listener = () => setAmrWebOpenFailed(true); window.addEventListener('amr-web-intent-error', listener); return () => window.removeEventListener('amr-web-intent-error', listener); }, []);
   const iframeKeepAlivePool = useIframeKeepAlivePool();
   const clientType = useMemo(() => detectClientType(), []);
   const hostPlatform = useMemo(() => getOpenDesignHost()?.client.platform, []);
@@ -1497,6 +1506,9 @@ function AppInner() {
   }
   const locallyDeletedProjectIdsRef = useRef<Map<string, number>>(new Map());
   const projectListMutationVersionRef = useRef(0);
+  const pendingProjectRecencyRef = useRef(new Map<string, {
+    sentAt: number;
+  }>());
   const projectRenameStatesRef = useRef<Map<string, QueuedProjectRenameState>>(new Map());
   const pendingProjectNameProjectionsRef = useRef<Map<string, PendingProjectNameProjection>>(
     new Map(),
@@ -1576,6 +1588,7 @@ function AppInner() {
     window.addEventListener('pagehide', onPageExit);
     return () => window.removeEventListener('pagehide', onPageExit);
   }, []);
+  const loginReturnRouteRef = useRef<Route | null>(null);
   const routeRef = useRef(route);
   routeRef.current = route;
   const settingsReturnTargetRef = useRef<SettingsReturnTarget | null>(null);
@@ -1815,6 +1828,15 @@ function AppInner() {
         request.scopeKey,
         project.id,
       ]);
+      const recency = pendingProjectRecencyRef.current.get(key);
+      if (recency) {
+        if ((project.lastUserQueryAt ?? 0) >= recency.sentAt) {
+          // Retire only when the read observes this durable acceptance or a newer one.
+          pendingProjectRecencyRef.current.delete(key);
+        } else {
+          project = { ...project, lastUserQueryAt: Math.max(project.lastUserQueryAt ?? 0, recency.sentAt) };
+        }
+      }
       const pending = pendingProjectNameProjectionsRef.current.get(key);
       if (!pending) return project;
       if (
@@ -2292,21 +2314,20 @@ function AppInner() {
       if (
         cancelled ||
         amrPollGenerationRef.current !== pollGeneration ||
-        amrCatalogScopeRef.current.identity !== issuedIdentity ||
-        !result
+        amrCatalogScopeRef.current.identity !== issuedIdentity
       ) {
         return;
       }
       // A forced refresh first yields the generic preset while the scoped
       // remote list runs. Keep the last-good selected-scope catalog visible.
-      if (Array.isArray(result.models) && result.models.length > 0
+      if (result && Array.isArray(result.models) && result.models.length > 0
         && !(result.source === 'preset' && amrModelsRef.current?.source === 'remote')) {
         amrModelsRef.current = result;
         setAgents((current) => mergeAmrModelsIntoAgents(current, result, amrCatalogScopeRef.current.scoped));
       }
       const shouldPollRefresh =
-        result.refreshing &&
-        !result.remoteError &&
+        // Transport failures can recover without another login or scope change.
+        (!result || (result.refreshing && !result.remoteError)) &&
         refreshPolls < maxRefreshPolls;
       if (shouldPollRefresh) {
         refreshPolls += 1;
@@ -2397,6 +2418,7 @@ function AppInner() {
       && route.fileName === observedPublicShareLink.filePath) return;
     if (!cloudIdentityRejected) return;
     if (route.kind === 'home' && route.view === 'onboarding') return;
+    loginReturnRouteRef.current = route;
     navigate({ kind: 'home', view: 'onboarding' }, { replace: true });
   }, [
     amrLoginStatus,
@@ -3288,6 +3310,10 @@ function AppInner() {
       agentCliEnv?: AppConfig['agentCliEnv'];
       zcodeAppPath?: AppConfig['zcodeAppPath'];
     }) => {
+      // A native menu selection returns focus to the renderer while this
+      // explicit refresh is running. Count it toward the focus throttle so
+      // the same transition does not start a second agent scan.
+      agentFocusRefreshLastRunRef.current = Date.now();
       const hasAgentCliEnvOption =
         options && Object.prototype.hasOwnProperty.call(options, 'agentCliEnv');
       const hasZcodeAppPathOption =
@@ -3306,7 +3332,20 @@ function AppInner() {
               : {}),
         });
         latestPersistedConfigRef.current = nextConfig;
-        amrModelsRef.current = null;
+        // Settings sends the current environment even for an unchanged rescan.
+        // Keep its verified catalog; real scoped identity changes also clear it
+        // during render and restart the corresponding model read.
+        const amrEnvironmentChanged = JSON.stringify(current.agentCliEnv?.amr ?? {})
+          !== JSON.stringify(nextConfig.agentCliEnv?.amr ?? {});
+        if (amrEnvironmentChanged) {
+          amrModelsRef.current = null;
+        } else if (amrCatalogScopeRef.current.scoped && (
+          amrModelsRef.current?.source !== 'remote' || amrModelsRef.current.models.length === 0
+        )) {
+          // Clear a prior remote error for this exact scope once, then follow
+          // its background refresh. Automatic agent probes omit agentCliEnv.
+          queueAmrModelRefresh(amrCatalogScopeRef.current.identity);
+        }
         saveConfig(nextConfig);
         setConfig(nextConfig);
         await syncConfigToDaemon(nextConfig);
@@ -3344,7 +3383,7 @@ function AppInner() {
         return [];
       }
     },
-    [beginAgentStreamRequest, isCurrentAgentStreamRequest],
+    [beginAgentStreamRequest, isCurrentAgentStreamRequest, queueAmrModelRefresh],
   );
 
   useEffect(() => {
@@ -4720,24 +4759,36 @@ function AppInner() {
     void patchProject(projectId, { pendingPrompt: null }, mutationContext);
   }, [route]);
 
-  const handleTouchProject = useCallback(() => {
+  // Capture the sending principal at render time, never at a delayed completion.
+  const recencyContext = projectRouteWorkspaceContextRef.current ?? workspaceContextRef.current;
+  const recencyGeneration = currentWorkspaceAccountGeneration();
+  const handleTouchProject = useCallback((sentAt = Date.now()) => {
+    if (recencyGeneration !== currentWorkspaceAccountGeneration()) return;
     const projectId = route.kind === 'project' ? route.projectId : null;
     if (!projectId) return;
-    const updatedAt = Date.now();
-    setProjects((curr) =>
-      curr.map((p) => (p.id === projectId ? { ...p, updatedAt } : p)),
-    );
-    const mutationContext = workspaceContextRef.current;
+    const mutationContext = recencyContext;
+    const key = JSON.stringify([
+      currentWorkspaceAccountGeneration(), projectListScopeKey(mutationContext), projectId,
+    ]);
+    const pending: { sentAt: number } = {
+      sentAt: Math.max(pendingProjectRecencyRef.current.get(key)?.sentAt ?? 0, sentAt),
+    };
+    pendingProjectRecencyRef.current.set(key, pending);
+    projectListMutationVersionRef.current += 1;
+    const recordSend = (project: Project): Project => project.id === projectId
+      ? { ...project, lastUserQueryAt: Math.max(project.lastUserQueryAt ?? 0, sentAt) }
+      : project;
+    setProjects((curr) => curr.map(recordSend));
     if (mutationContext) {
       patchProjectDisplaySnapshots({
         accountGeneration: currentWorkspaceAccountGeneration(),
         context: mutationContext,
-        patch: (cachedProjects) => cachedProjects.map((project) =>
-          project.id === projectId ? { ...project, updatedAt } : project),
+        patch: (cachedProjects) => cachedProjects.map(recordSend),
       });
     }
-    void patchProject(projectId, { updatedAt }, mutationContext);
-  }, [route]);
+    if (mutationContext) invalidateWorkspaceProjectLists(mutationContext, recencyGeneration);
+    // Keep this durable receipt projected until a list observes the same or newer time.
+  }, [route, recencyContext, recencyGeneration]);
 
   const handleProjectChange = useCallback((updated: Project) => {
     // ProjectView is pinned to the opened project's persisted Workspace, which
@@ -4772,7 +4823,7 @@ function AppInner() {
     if (routeSnapshotMatches) {
       routeProjectSnapshotRef.current = {
         ...routeSnapshot,
-        project: updated,
+        project: { ...updated, lastUserQueryAt: Math.max(routeSnapshot.project.lastUserQueryAt ?? 0, updated.lastUserQueryAt ?? 0) || null },
       };
       setRouteProjectSnapshotRevision((current) => current + 1);
     }
@@ -4788,14 +4839,16 @@ function AppInner() {
       ) {
         iframeKeepAlivePool.evictProject(updated.id, { includeActive: true });
       }
-      return curr.map((p) => (p.id === updated.id ? updated : p));
+      return curr.map((p) => (p.id === updated.id
+        ? { ...updated, lastUserQueryAt: Math.max(p.lastUserQueryAt ?? 0, updated.lastUserQueryAt ?? 0) || null } : p));
     });
     if (projectContext) {
       patchProjectDisplaySnapshots({
         accountGeneration,
         context: projectContext,
         patch: (cachedProjects) => cachedProjects.map((project) =>
-          project.id === updated.id ? { ...project, ...updated } : project),
+          project.id === updated.id ? { ...project, ...updated,
+            lastUserQueryAt: Math.max(project.lastUserQueryAt ?? 0, updated.lastUserQueryAt ?? 0) || null } : project),
       });
     }
   }, [iframeKeepAlivePool]);
@@ -5220,6 +5273,9 @@ function AppInner() {
         && openingWitness.accountGeneration === accountGeneration
           ? openingWitness.context
           : null;
+      // A refresh has no card witness. Let its scoped catalog supply the
+      // binding before probing a Team project without request authority.
+      if (!exactOpenContext && (projectsLoading || workspaceContextLoading)) return;
       const bootstrap = await bootstrapProjectRoute(projectId, {
         accountGeneration,
         exactContext: exactOpenContext,
@@ -5382,6 +5438,7 @@ function AppInner() {
     currentProjectListScope,
     activeAccountGeneration,
     projectsLoading,
+    workspaceContextLoading,
     daemonLive,
     deepLinkRetryRevision,
     beginProjectListRequest,
@@ -5462,12 +5519,20 @@ function AppInner() {
 
   const handleCompleteOnboarding = useCallback(() => {
     const current = latestPersistedConfigRef.current;
-    if (current.onboardingCompleted) return;
-    const next: AppConfig = { ...current, onboardingCompleted: true };
-    latestPersistedConfigRef.current = next;
-    saveConfig(next);
-    void syncConfigToDaemon(next);
-    setConfig(next);
+    if (!current.onboardingCompleted) {
+      const next: AppConfig = { ...current, onboardingCompleted: true };
+      latestPersistedConfigRef.current = next;
+      saveConfig(next);
+      void syncConfigToDaemon(next);
+      setConfig(next);
+    }
+    const target = loginReturnRouteRef.current;
+    loginReturnRouteRef.current = null;
+    if (!target || !isAmrSessionAuthenticated(amrLoginStatusRef.current)) return false;
+    // Restore the location only. ProjectView re-resolves Workspace access
+    // before exposing its data; returning never submits the previous action.
+    navigate(target, { replace: true });
+    return true;
   }, []);
 
   // Cmd+, (mac) / Ctrl+, (win/linux) opens Settings. Capture phase so we
@@ -5635,6 +5700,7 @@ function AppInner() {
   }, []);
 
   const handleActiveCloudSignOut = useCallback(async () => {
+    loginReturnRouteRef.current = null;
     const next = resetExecutionConfigAfterSignOut(latestPersistedConfigRef.current);
     latestPersistedConfigRef.current = next;
     saveConfig(next);
@@ -6155,7 +6221,7 @@ function AppInner() {
     );
   }
   return (
-    <>
+    <ReferralEntryProvider accountId={isAmrSessionAuthenticated(amrLoginStatus) ? amrLoginStatus?.user?.id ?? amrLoginStatus?.credentialRevision ?? null : null} profile={amrLoginStatus?.profile ?? null}>
       <div
         className={`workspace-shell workspace-shell--${clientType}`}
         data-client-type={clientType}
@@ -6306,6 +6372,7 @@ function AppInner() {
         })}
       />
       <DeletedShareNotices state={deletedShares} />
+      {amrWebOpenFailed ? <Toast message={t('account.openFailed')} role="alert" tone="error" onDismiss={()=>setAmrWebOpenFailed(false)} /> : null}
       {workingDirError ? (
         <Toast
           message={workingDirError}
@@ -6376,7 +6443,7 @@ function AppInner() {
       </motion.div>
       ) : null}
       </AnimatePresence>
-    </>
+    </ReferralEntryProvider>
   );
 }
 

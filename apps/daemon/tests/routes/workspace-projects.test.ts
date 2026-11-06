@@ -124,6 +124,76 @@ describe('workspace project routes', () => {
     return project;
   }
 
+  it('round-trips send recency through project detail and workspace lists without touching updatedAt', async () => {
+    const projectId = `project-recency-${Date.now()}`;
+    const member = 'recency-owner';
+    await createProjectInWorkspace(projectId, 'Recency', member);
+    const read = () => fetch(`${baseUrl}/api/projects/${projectId}`, { headers: headers(member) });
+    const before = await (await read()).json() as import('@open-design/contracts').ProjectResponse;
+    const conversations = await (await fetch(`${baseUrl}/api/projects/${projectId}/conversations`, {
+      headers: headers(member),
+    })).json() as { conversations: Array<{ id: string }> };
+    const response = await fetch(`${baseUrl}/api/projects/${projectId}/submissions`, {
+      method: 'POST', headers: headers(member),
+      body: JSON.stringify({ id: `submission-${projectId}`, conversationId: conversations.conversations[0]!.id, submittedAt: 100 }),
+    });
+    expect(response.status).toBe(200);
+    const denied = await fetch(`${baseUrl}/api/projects/${projectId}/submissions`, {
+      method: 'POST', headers: workspaceHeaders(`${workspaceId}-wrong`, member),
+      body: JSON.stringify({ id: `denied-${projectId}`, conversationId: conversations.conversations[0]!.id, submittedAt: 200 }),
+    });
+    expect(denied.status).toBe(403);
+    const updated = await (await read()).json() as import('@open-design/contracts').ProjectResponse;
+    expect(updated.project).toMatchObject({
+      lastUserQueryAt: 100, updatedAt: before.project.updatedAt,
+    });
+    const body = await list(member, '?view=all');
+    expect(body.projects.find(item => item.id === projectId)?.project.lastUserQueryAt).toBe(100);
+    await fetch(`${baseUrl}/api/projects/${projectId}`, {
+      method: 'PATCH', headers: headers(member), body: JSON.stringify({ name: 'Renamed' }),
+    });
+    const renamed = await (await read()).json() as import('@open-design/contracts').ProjectResponse;
+    expect(renamed.project.lastUserQueryAt).toBe(100);
+  });
+
+  it('normalizes future queue timestamps and keeps the first receipt on replay', async () => {
+    const projectId = `queue-clock-${Date.now()}`;
+    const member = 'queue-clock-owner';
+    await createProjectInWorkspace(projectId, 'Queue clock', member);
+    const conversations = await (await fetch(`${baseUrl}/api/projects/${projectId}/conversations`, {
+      headers: headers(member),
+    })).json() as { conversations: Array<{ id: string }> };
+    const conversationId = conversations.conversations[0]!.id;
+    const register = (id: string, submittedAt: unknown) => fetch(`${baseUrl}/api/projects/${projectId}/submissions`, {
+      method: 'POST', headers: headers(member),
+      body: JSON.stringify({ id, conversationId, submittedAt }),
+    });
+    const read = async () => (await (await fetch(`${baseUrl}/api/projects/${projectId}`, {
+      headers: headers(member),
+    })).json() as import('@open-design/contracts').ProjectResponse).project;
+    const before = Date.now();
+    const future = before + 60_000;
+    const response = await register(`future-${projectId}`, future);
+    expect(response.status).toBe(200);
+    const { userSubmission } = await response.json() as { userSubmission: import('@open-design/contracts').UserSubmissionReceipt };
+    expect(userSubmission.acceptedAt).toBeGreaterThanOrEqual(before);
+    expect(userSubmission.acceptedAt).toBeLessThanOrEqual(Date.now());
+    expect((await read()).lastUserQueryAt).toBe(userSubmission.acceptedAt);
+    // A later retry/drain must reuse the normalized time, even if its clock changes.
+    const replay = await register(`future-${projectId}`, future + 60_000);
+    expect(replay.status).toBe(200);
+    expect(await replay.json()).toEqual({ userSubmission });
+    const past = before - 60_000;
+    const slow = await register(`slow-${projectId}`, past);
+    expect(slow.status).toBe(200);
+    expect(await slow.json()).toMatchObject({ userSubmission: { acceptedAt: past } });
+    expect((await read()).lastUserQueryAt).toBe(userSubmission.acceptedAt);
+    for (const invalid of [-1, 1.5, '123', null, Number.MAX_SAFE_INTEGER + 1]) {
+      expect((await register(`invalid-${projectId}`, invalid)).status).toBe(400);
+    }
+    expect((await read()).lastUserQueryAt).toBe(userSubmission.acceptedAt);
+  });
+
   it('rejects a project list when the route Workspace conflicts with the explicit request scope', async () => {
     const suffix = Date.now();
     const workspaceA = `${workspaceId}-route-a-${suffix}`;

@@ -4,6 +4,7 @@ import type {
   OpenDesignHostBridge,
   OpenDesignHostActionResult,
   OpenDesignHostDownloadResult,
+  OpenDesignHostDisplayRefresh,
   OpenDesignHostBrowserClearDataOptions,
   OpenDesignHostCaptureOptions,
   OpenDesignHostCaptureResult,
@@ -360,6 +361,11 @@ const hostBridge = {
     ...(osLocale !== undefined ? { osLocale } : {}),
   },
   appearance: {
+    subscribeDisplayRefresh: (listener: (refresh: OpenDesignHostDisplayRefresh) => void): (() => void) => {
+      const handler = (_event: unknown, refresh: OpenDesignHostDisplayRefresh): void => listener(refresh);
+      ipcRenderer.on('od:appearance:display-refreshed', handler);
+      return () => { ipcRenderer.removeListener('od:appearance:display-refreshed', handler); };
+    },
     // Pin the native window appearance (macOS vibrancy glass material) to the
     // app theme. Fire-and-forget: the main process validates the value.
     setTheme: (theme: 'light' | 'dark' | 'system'): void =>

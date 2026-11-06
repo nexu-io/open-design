@@ -1,3 +1,4 @@
+import { openExternalUrl } from "../providers/registry";
 import { homeAutoSendIdentity, stableIdentityDigest, type HomeRequestConcurrencyRejection } from '../runtime/home-auto-send-identity';
 import { withLiveArtifactDeliveries } from '../runtime/live-artifact-delivery';
 import { readAmrRequestConcurrency } from '../runtime/amr-request-concurrency';
@@ -124,6 +125,7 @@ import type {
   TrackingRunRecoveryActionType,
 } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
+import { useWorkspaceContentView } from '../analytics/use-workspace-content-view';
 import { savedCommentIds } from '@open-design/contracts/analytics';
 import { observeAnalytics } from '../analytics/observe';
 import {
@@ -263,6 +265,7 @@ import {
   loadTabs,
   patchConversation,
   patchProject,
+  registerQueuedSubmission,
   ProjectConversationsHttpError,
   saveMessage,
   startGeneratedPluginShareTask,
@@ -485,6 +488,8 @@ type ProjectChatSendMeta = ChatSendMeta & {
    *  lives in the queue item, so a pre-run block (e.g. the AMR balance gate)
    *  must NOT re-queue it — only pause further drains. */
   queueDrain?: boolean;
+  systemSubmission?: boolean;
+  queuedSubmissionId?: string;
   /** The OpenDesign Cloud balance gate already ran for this exact send at
    *  the home submit (with any soft warning answered there); skip re-gating
    *  so the user is never double-prompted for one task. */
@@ -515,6 +520,8 @@ type ProjectChatSendMeta = ChatSendMeta & {
   composerOwnedDraft?: true;
   /** Only Home auto-send owns the original Home input and initial request. */
   initialHomeSend?: true;
+  /** Continue the visible placeholder's clock on the first send only. Not queued. */
+  homeHandoffStartedAt?: number;
   /** Stable task lineage for retries, resumes and clarification answers. */
   taskAnalytics?: ChatTaskExecutionAnalytics;
   /** Explicit daemon-issued OD Next continuation handle. */
@@ -980,7 +987,7 @@ interface Props {
   onOpenPetSettings?: () => void;
   onBack: () => void;
   onClearPendingPrompt: () => void;
-  onTouchProject: () => void;
+  onTouchProject: (sentAt?: number) => void;
   onProjectChange: (next: Project) => void;
   /** Rename fences from the era of the inline title rename in the chat card.
    *  The card no longer renders a title (OPEND-3128: the project is named once,
@@ -2505,6 +2512,13 @@ export function ProjectView({
     projectVisibility: projectWorkspaceVisibility(projectWorkspaceScopeState.scope),
     presenceFilePath: project?.metadata?.entryFile ?? null,
   });
+  useWorkspaceContentView({
+    context: projectRunWorkspaceContext?.workspaceId === project.workspaceId ? projectRunWorkspaceContext : null,
+    pageName: 'project',
+    active: !projectReadsHeld && !projectCollab.materializationPending,
+    ready: !workspaceContextState.loading && !workspaceContextState.identityChangePending
+      && !workspaceContextState.failure && !projectWorkspaceScopeState.loading,
+  });
   // A Team-bound placeholder is safe to render and comment around, but its
   // empty tree is never a writer authority. Reuse the established viewer-only
   // gates for content/run/project mutations until the daemon's own status poll
@@ -2758,6 +2772,14 @@ export function ProjectView({
   // attach the runId to.
   const [messagesInitialized, setMessagesInitialized] = useState(false);
   const [previewComments, setPreviewComments] = useState<PreviewComment[]>([]);
+  const [previewCommentsState, setPreviewCommentsState] = useState<'loading' | 'error' | 'success'>('loading');
+  const previewCommentsIdentityRef = useRef('');
+  const previewCommentsReadSeq = useRef(0);
+  const currentCommentsIdentity = `${project.id}\u0000${activeConversationId}\u0000${projectRunAuthorityKey}`;
+  const currentCommentsIdentityRef = useRef(currentCommentsIdentity);
+  currentCommentsIdentityRef.current = currentCommentsIdentity;
+  const visiblePreviewComments = previewCommentsIdentityRef.current === currentCommentsIdentity ? previewComments : [];
+  const visiblePreviewCommentsState = previewCommentsIdentityRef.current === currentCommentsIdentity ? previewCommentsState : 'loading';
   // Every local comment commit invalidates older in-flight list reads. The
   // initial read and the SSE/poll refresher use the same generation as a
   // commit witness, so a slow response can never resurrect a locally deleted
@@ -3311,11 +3333,8 @@ export function ProjectView({
       resolvedDeviceId: getResolvedDeviceId(),
       installationId: config.installationId,
     });
-    window.open(
-      attributedAmrUrl(url, attribution, deviceId),
-      '_blank',
-      'noopener,noreferrer',
-    );
+    void openExternalUrl(
+      attributedAmrUrl(url, attribution, deviceId));
   }, [
     amrBalanceCardProfile,
     config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE,
@@ -4316,6 +4335,9 @@ export function ProjectView({
   // conversation switches.
   useEffect(() => {
     if (!activeConversationId) {
+      ++previewCommentsReadSeq.current;
+      previewCommentsIdentityRef.current = '';
+      setPreviewCommentsState('loading');
       setMessages([]);
       setMessagesInitialized(false);
       commitPreviewComments([]);
@@ -4394,7 +4416,15 @@ export function ProjectView({
       setArtifact(null);
       savedArtifactRef.current = null;
     }
+    const commentIdentity = `${project.id}\u0000${activeConversationId}\u0000${projectRunAuthorityKey}`;
+    if (previewCommentsIdentityRef.current !== commentIdentity) {
+      previewCommentsIdentityRef.current = commentIdentity;
+      commitPreviewComments([]);
+      setAttachedComments([]);
+    }
+    setPreviewCommentsState('loading');
     const commentsGeneration = previewCommentsGenerationRef.current;
+    const commentsReadSeq = ++previewCommentsReadSeq.current;
     if (!reloadingCurrentConversation && !preservingLiveConversation && !preservingLoadedTranscript) {
       messagesConversationIdRef.current = null;
       messagesAuthorityKeyRef.current = null;
@@ -4412,11 +4442,11 @@ export function ProjectView({
           activeConversationId,
           requestWorkspaceContext,
         ).then((comments) => {
-          if (cancelled || previewCommentsGenerationRef.current !== commentsGeneration) return;
-          setPreviewComments((current) => reconcilePreviewComments(current, comments));
+          if (cancelled || previewCommentsReadSeq.current !== commentsReadSeq) return;
+          setPreviewCommentsState('success');
+          if (previewCommentsGenerationRef.current === commentsGeneration) setPreviewComments((current) => reconcilePreviewComments(current, comments));
         }).catch(() => {
-          if (cancelled || previewCommentsGenerationRef.current !== commentsGeneration) return;
-          if (!reloadingCurrentConversation) setPreviewComments([]);
+          if (!cancelled && previewCommentsReadSeq.current === commentsReadSeq) setPreviewCommentsState('error');
         });
         const list = await loadConversationTranscript(
           project.id,
@@ -6562,26 +6592,32 @@ export function ProjectView({
   // do not suppress it.
   const [runPreviewCommentsRead] = useState(createSingleflightRunner);
   const readPreviewCommentsOnce = useCallback(async () => {
-    if (!activeConversationId) return;
+    // A queued trailing read can outlive the project/conversation that queued it.
+    if (!activeConversationId || currentCommentsIdentityRef.current !== currentCommentsIdentity) return;
     const commentsGeneration = ++previewCommentsGenerationRef.current;
-    const next = await fetchPreviewComments(
-      project.id,
-      activeConversationId,
-      projectRunWorkspaceContext,
-      true,
-    );
-    if (previewCommentsGenerationRef.current !== commentsGeneration) return;
-    // Unchanged comments keep their objects and an unchanged list keeps its
-    // array, so a refresh that found nothing new does not re-render.
-    setPreviewComments((current) => reconcilePreviewComments(current, next));
-    setAttachedComments((current) => reconcileAttachedComments(current, next));
-  }, [project.id, activeConversationId, projectRunWorkspaceContext]);
+    const commentsReadSeq = ++previewCommentsReadSeq.current;
+    // Poll/SSE refreshes keep the committed list visible and eligible for
+    // acknowledgement. Only an unconfirmed identity needs the loading gate.
+    setPreviewCommentsState(current => current === 'success' ? current : 'loading');
+    try {
+      const next = await fetchPreviewComments(project.id, activeConversationId, projectRunWorkspaceContext, true);
+      if (currentCommentsIdentityRef.current !== currentCommentsIdentity
+        || previewCommentsReadSeq.current !== commentsReadSeq) return;
+      setPreviewCommentsState('success');
+      if (previewCommentsGenerationRef.current !== commentsGeneration) return;
+      setPreviewComments((current) => reconcilePreviewComments(current, next));
+      setAttachedComments((current) => reconcileAttachedComments(current, next));
+    } catch {
+      if (currentCommentsIdentityRef.current === currentCommentsIdentity
+        && previewCommentsReadSeq.current === commentsReadSeq) setPreviewCommentsState('error');
+    }
+  }, [project.id, activeConversationId, projectRunWorkspaceContext, currentCommentsIdentity]);
   const refreshPreviewComments = useCallback(
     () => runPreviewCommentsRead(
-      `${project.id}\u0000${activeConversationId ?? ''}`,
+      currentCommentsIdentity,
       readPreviewCommentsOnce,
     ),
-    [runPreviewCommentsRead, project.id, activeConversationId, readPreviewCommentsOnce],
+    [runPreviewCommentsRead, currentCommentsIdentity, readPreviewCommentsOnce],
   );
 
   // Expose the latest refresher to the SSE handler (defined earlier) so a
@@ -8801,8 +8837,14 @@ export function ProjectView({
     }
     const next = [...queuedChatSendsRef.current, item];
     commitQueuedChatSends(next);
+    if (item.meta?.systemSubmission) return true;
+    const ownerGeneration = currentWorkspaceAccountGeneration();
+    void registerQueuedSubmission(project.id, { id: item.id, conversationId: item.conversationId,
+      submittedAt: item.createdAt }, projectRunWorkspaceContext).then((receipt) => {
+      if (receipt && currentWorkspaceAccountGeneration() === ownerGeneration) onTouchProject(receipt.acceptedAt);
+    });
     return true;
-  }, [commitQueuedChatSends]);
+  }, [commitQueuedChatSends, onTouchProject, project.id, projectRunWorkspaceContext]);
 
   const removeQueuedChatSend = useCallback((id: string) => {
     const next = queuedChatSendsRef.current.filter((item) => item.id !== id);
@@ -9238,7 +9280,7 @@ export function ProjectView({
        * OPEND-2615 那个症状。两件事必须绑在一起。
        */
       setChatSeed(null);
-      const startedAt = Date.now();
+      const startedAt = (meta?.initialHomeSend ? meta.homeHandoffStartedAt : undefined) ?? Date.now();
       const previousConversation = conversationsRef.current.find(
         (conversation) => conversation.id === runConversationId,
       );
@@ -9701,11 +9743,17 @@ export function ProjectView({
         });
         recordFirstLoopStep(analytics.track, 'prompt_sent', project.id);
       }
+      if (sendAccountGeneration !== currentWorkspaceAccountGeneration()) {
+        retractPaintedTurn();
+        return false;
+      }
       activeCompletionNotificationRunsRef.current.add(assistantId);
       updateConversationLatestRun(config.mode === 'daemon' ? 'running' : 'queued');
       setArtifact(null);
       savedArtifactRef.current = null;
-      onTouchProject();
+      // Queued sends already recorded their send time when they entered the
+      // queue. A manual retry is a new user action; replaying a queue is not.
+      // Sorting advances only from a server acceptance receipt.
       if (!retryTarget) {
         // A send whose id was decided from its occupancy (an inline question
         // form's answer) claims that row once: the daemon keeps whichever
@@ -11035,6 +11083,11 @@ export function ProjectView({
           userMessageId: userMsg.id,
           assistantMessageId: assistantId,
           clientRequestId,
+          submission: { id: meta?.queuedSubmissionId ?? clientRequestId,
+            source: meta?.systemSubmission ? 'system' : meta?.queueDrain ? 'queue' : 'user' },
+          onUserSubmissionAccepted: (receipt) => {
+            if (currentWorkspaceAccountGeneration() === sendAccountGeneration) onTouchProject(receipt.acceptedAt);
+          },
           skillId: project.skillId ?? null,
           skillIds: Array.isArray(meta?.skillIds) ? meta.skillIds : [],
           context: runContext,
@@ -11286,6 +11339,11 @@ export function ProjectView({
           userMessageId: userMsg.id,
           assistantMessageId: assistantId,
           clientRequestId,
+          submission: { id: meta?.queuedSubmissionId ?? clientRequestId,
+            source: meta?.systemSubmission ? 'system' : meta?.queueDrain ? 'queue' : 'user' },
+          onUserSubmissionAccepted: (receipt) => {
+            if (currentWorkspaceAccountGeneration() === sendAccountGeneration) onTouchProject(receipt.acceptedAt);
+          },
           skillId: project.skillId ?? null,
           skillIds: Array.isArray(meta?.skillIds) ? meta.skillIds : [],
           context: runContext,
@@ -11692,11 +11750,21 @@ export function ProjectView({
   const startQueuedChatSend = useCallback(async (item: QueuedChatSend): Promise<boolean> => {
     let started = false;
     try {
+      if (!item.meta?.systemSubmission) {
+        const queueAccountGeneration = currentWorkspaceAccountGeneration();
+        const receipt = await registerQueuedSubmission(project.id, { id: item.id,
+          conversationId: item.conversationId, submittedAt: item.createdAt }, projectRunWorkspaceContext);
+        if (!mountedRef.current || queueAccountGeneration !== currentWorkspaceAccountGeneration()) return false;
+        if (!receipt) {
+          releaseCommentsOfSendWithoutRun(item);
+          return false;
+        }
+      }
       started = await handleSend(
         item.prompt,
         item.attachments,
         item.commentAttachments,
-        { ...(item.meta ?? {}), queueDrain: true },
+        { ...(item.meta ?? {}), queueDrain: true, queuedSubmissionId: item.id },
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -12083,7 +12151,7 @@ export function ProjectView({
     const repairText = autoAuditRepairSeed.value.trim();
     setAutoAuditRepairSeed(null);
     if (!repairText) return;
-    void handleSend(repairText, [], []);
+    void handleSend(repairText, [], [], { systemSubmission: true });
   }, [
     activeConversationId,
     autoAuditRepairSeed,
@@ -14311,6 +14379,7 @@ export function ProjectView({
     selectedAssistantIdentity,
     creationHandoffMessageIds,
   );
+  const homeHandoffStartedAt = creationHandoffMessages.find((message) => message.role === 'assistant')?.startedAt;
   const creationHandoffTurnShown = optimisticFirstTurn !== null && messages.length === 0;
   const chatPaneConversationKey =
     activeConversationId
@@ -14477,6 +14546,7 @@ export function ProjectView({
         ...(context ? { context } : {}),
         ...homeAutoSendIdentity(project.id),
         initialHomeSend: true,
+        homeHandoffStartedAt,
         acceptDurableQueue: true,
         // Only reuse Home's decision for the exact persisted project scope.
         // A workspace/member mismatch falls through to handleSend's normal gate.
@@ -14524,6 +14594,7 @@ export function ProjectView({
     projectRunHasBillableAmrPrincipal,
     projectRunBillingContext,
     projectRunPreflightContext,
+    homeHandoffStartedAt,
     handleSend,
   ]);
 
@@ -14748,7 +14819,7 @@ export function ProjectView({
               projectResolvedDir={projectDetail.resolvedDir}
               skills={skills}
               onEnsureProject={handleEnsureProject}
-              previewComments={previewComments}
+              previewComments={visiblePreviewComments}
               attachedComments={attachedComments}
               onAttachComment={attachPreviewComment}
               onDetachComment={detachPreviewComment}
@@ -15124,7 +15195,9 @@ export function ProjectView({
           designSystemActivityEvents={designSystemActivityEvents}
           tabsState={openTabsState}
           onTabsStateChange={persistTabsState}
-          previewComments={previewComments}
+          previewComments={visiblePreviewComments}
+          previewCommentsState={visiblePreviewCommentsState}
+          onRetryPreviewComments={refreshPreviewComments}
           onSavePreviewComment={savePreviewComment}
           onRemovePreviewComment={removePreviewComment}
           onReorderPreviewComment={reorderPreviewComment}
@@ -15167,6 +15240,7 @@ export function ProjectView({
             />
           ) : null}
           chatConfig={config}
+          onTouchProject={onTouchProject}
           chatAgentsById={agentsById}
           handoffAgents={agents}
           handoffArtifactId={headerArtifact.artifact_id}
@@ -15260,6 +15334,8 @@ export function ProjectView({
       {amrBalanceGateBlock?.dialog === 'upgrade' ? (
         <AmrBalanceDialog
           reason={amrBalanceGateBlock.reason}
+          projectId={project.id}
+          conversationId={amrBalanceGateBlock.conversationId}
           stage={amrBalanceGateBlock.stage}
           manualSendOnRecovery={amrBalanceGateBlock.reason === 'insufficient'}
           modelId={amrBalanceGateBlock.modelId}
@@ -15785,6 +15861,7 @@ function stripQueueOnlyFromMeta(
     // 草稿,而队列里那条反而被扔掉。见 `composerOwnedDraft` 的说明。
     composerOwnedDraft: _composerOwnedDraft,
     initialHomeSend: _initialHomeSend,
+    homeHandoffStartedAt: _homeHandoffStartedAt,
     ...rest
   } = meta as ProjectChatSendMeta;
   return Object.keys(rest).length > 0 ? rest : undefined;

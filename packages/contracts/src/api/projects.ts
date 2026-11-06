@@ -347,6 +347,8 @@ export interface Project {
   designSystemId: string | null;
   createdAt: number;
   updatedAt: number;
+  /** Latest accepted user send (including queued sends); independent of content activity. */
+  lastUserQueryAt?: number | null;
   status?: ProjectStatusInfo;
   pendingPrompt?: string;
   metadata?: ProjectMetadata;

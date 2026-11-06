@@ -4,9 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-import { LAUNCHER_SCHEMA_VERSION } from "@open-design/launcher-proto";
+import { LAUNCHER_SCHEMA_VERSION, validateLauncherApplicationArtifact } from "@open-design/launcher-proto";
 import { describe, expect, it } from "vitest";
 
+import { buildLauncherHostEnvironment } from "@/launcher/artifacts.js";
 import type { ToolPackConfig } from "@/config/index.js";
 import { resolveMacInstallIdentity } from "@/mac/identity.js";
 import {
@@ -145,4 +146,11 @@ describe("tools-pack mac launcher payload archives", () => {
       await rm(root, { force: true, recursive: true });
     }
   });
+});
+
+it.each([true,false])("describes the exact macOS entry for prebundled=%s while retaining legacy entries",prebundled=>{
+  const manifest=buildMacLauncherPayloadManifest({channel:"beta",namespace:"test",version:"1.1.0-beta.1",executableName:"Open Design Beta",publicAppBundleName:"Open Design Beta.app",electronVersion:"41.3.0",arch:"arm64",prebundled});
+  const environment=buildLauncherHostEnvironment({platform:"darwin",arch:"arm64",electronVersion:"41.3.0"});
+  expect(validateLauncherApplicationArtifact(manifest.host,environment).entry).toBe(prebundled ? "payload/Open Design Beta.app/Contents/Resources/app/prebundled/packaged-main.mjs" : "payload/Open Design Beta.app/Contents/Resources/app/node_modules/@open-design/packaged/dist/index.mjs");
+  expect(manifest.entry).toEqual({cwd:"payload/Open Design Beta.app",executable:"payload/Open Design Beta.app/Contents/MacOS/Open Design Beta"});
 });

@@ -15,6 +15,42 @@ async function pauseSuccessTimer(page: Page) {
   await page.clock.pauseAt(new Date('2026-10-20T03:00:01Z'));
 }
 
+test('[P1] registration invitation sentences wrap and remain centered in every language', async ({ page }, testInfo) => {
+  await start(page);
+  const panel = page.locator('div[role=region] > section').filter({ has: page.locator('input[type=email]') });
+  const language = panel.locator('footer select');
+  const heading = panel.locator('header h2');
+  const description = panel.locator('header + p');
+  for (const size of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(size);
+    for (const locale of ['en', 'id', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu', 'fr', 'uk', 'tr', 'th', 'it']) {
+      await language.selectOption(locale);
+      if (locale !== 'en') {
+        await expect(heading).not.toHaveText('Invite colleagues for free. Design together.');
+      }
+      if (locale === 'ja' || locale === 'ar') {
+        const copy = locale === 'ja'
+          ? { send: '招待を送信', add: 'メンバーを追加', skip: '今はスキップ', role: '役割' }
+          : { send: 'إرسال الدعوات', add: 'إضافة عضو', skip: 'التخطي الآن', role: 'الدور' };
+        for (const name of Object.values(copy)) {
+          await expect(panel.getByRole('button', { name, exact: true })).toBeVisible();
+        }
+      }
+      await expect(heading).toHaveCSS('text-align', 'center');
+      await expect(description).toHaveCSS('text-align', 'center');
+      await expect(heading.locator('span')).toHaveCount(locale.startsWith('zh') ? 1 : 2);
+      await expect(description.locator('span')).toHaveCount(locale.startsWith('zh') ? 2 : 3);
+      for (const text of [heading, description]) {
+        const bounds = await text.evaluate(element => ({ scroll: element.scrollWidth, width: element.clientWidth }));
+        expect(bounds.scroll, `${locale} text at ${size.width}px`).toBeLessThanOrEqual(bounds.width);
+      }
+      if (['en', 'zh-CN', 'ar', 'ja'].includes(locale)) {
+        await testInfo.attach(`invite-${locale}-${size.width}`, { body: await page.screenshot(), contentType: 'image/png' });
+      }
+    }
+  }
+});
+
 test('[P1] B01 only the new-registration signal enters the real invitation host', async ({ page }) => {
   const host = await start(page);
   await expect(host.form.getByRole('heading')).toHaveText('免费邀请同事，一起做设计');

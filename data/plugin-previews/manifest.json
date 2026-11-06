@@ -932,13 +932,6 @@
       "holdMs": 1267,
       "hash": "69e332de613dce3d"
     },
-    "example-webgl-depth-gallery": {
-      "video": "example-webgl-depth-gallery/7d480c131bb4697a/preview.mp4",
-      "poster": "example-webgl-depth-gallery/7d480c131bb4697a/poster.jpg",
-      "durationMs": 1267,
-      "holdMs": 1267,
-      "hash": "7d480c131bb4697a"
-    },
     "example-mockup-device-3d": {
       "video": "example-mockup-device-3d/f18bc197a821f80a/preview.mp4",
       "poster": "example-mockup-device-3d/f18bc197a821f80a/poster.jpg",

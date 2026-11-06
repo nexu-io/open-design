@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 
 import type { EntryIndexConflictDetails } from '@open-design/contracts';
 import { useShareScopeKeyboard } from './useShareScopeKeyboard';
 import { ShareButton } from './ShareButton';
-import { shareEntryPresentation, workspaceContextHasTeamIdentity, type ShareContentFreshness, type WorkspaceCollabContext } from '@open-design/contracts';
+import { shareEntryPresentation, workspaceContextHasWorkspaceIdentity, type ShareContentFreshness, type WorkspaceCollabContext } from '@open-design/contracts';
 import type { PublicFilePublishFailureKey } from '../../collab/public-file-publish';
 import type { useT } from '../../i18n';
 import { RemixIcon } from '../RemixIcon';
@@ -291,7 +291,7 @@ export function ShareTab({
                         <p className={styles.publishHint} role="status"><Icon name="share-spinner" size={13} className="icon-spin" /> {t('common.loading')}</p>
                       ) : publicationQueryState === 'error' ? (
                         <><ShareErrorRow message={t('fileViewer.shareCheckFailed')} role="alert" />
-                        <ShareButton variant="primary" hoverLighten={false} onClick={retryPublicationQuery}><Icon name="share-refresh-arrows" size={13} /><span>{t('preview.retry')}</span></ShareButton></>
+                        <ShareButton variant="primary" hoverLighten={false} onClick={retryPublicationQuery}><Icon name="refresh" size={14} /><span>{t('preview.retry')}</span></ShareButton></>
                       ) : null}
                       {shownConflict ? (
                         <ShareConflictRow conflict={shownConflict} t={t} />
@@ -301,7 +301,7 @@ export function ShareTab({
                       {filePublished && publishRetry ? (
                         <ShareButton variant="primary" hoverLighten={false} disabled={!canMutatePublicShare || viewerOnly || publishing || streaming}
                           onClick={() => { void retryPublicShare?.(); }}>
-                          <Icon name="share-refresh-arrows" size={13} /><span>{t('preview.retry')}</span>
+                          <Icon name="refresh" size={14} /><span>{t('preview.retry')}</span>
                         </ShareButton>
                       ) : null}
                       {filePublished ? (
@@ -391,7 +391,7 @@ export function ShareTab({
                           {publishing ? (
                             <Icon name="share-spinner" size={13} strokeWidth={2} className="icon-spin" />
                           ) : publishRetry ? (
-                            <Icon name="share-refresh-arrows" size={13} strokeWidth={1.8} />
+                            <Icon name="refresh" size={14} />
                           ) : (
                             <Icon name="share-upload-arrow" size={13} strokeWidth={1.8} />
                           )}
@@ -434,9 +434,8 @@ export function ShareTab({
                             onLoginSuccess={canResumeUpdateAfterLogin ? onUpdateLoginSuccess : onSignInSuccess} />
                         </div>
                       )}
-                      {/* Team-only, same as ReactComponentViewer's copy of this card above —
-                          see the comment there (recvq5bM78HWCE). */}
-                      {workspaceContextHasTeamIdentity(workspaceContext) ? (
+                      {/* Project visibility uses the same workspace identity as the project menus. */}
+                      {workspaceContextHasWorkspaceIdentity(workspaceContext) ? (
                       <>
                       <div className={styles.scopeHeading}>
                         <div className={styles.scopeRow}>
@@ -510,7 +509,7 @@ export function ShareTab({
                       {shareAccessFailureKey ? <>
                         <ShareErrorRow message={t(shareAccessFailureKey)} />
                         <ShareButton variant="primary" hoverLighten={false} disabled={shareAccessBusy || viewerOnly} onClick={retryWorkspaceShareAccess}>
-                          <Icon name="share-refresh-arrows" size={13} /><span>{t('preview.retry')}</span>
+                          <Icon name="refresh" size={14} /><span>{t('preview.retry')}</span>
                         </ShareButton>
                       </> : null}
                       </>

@@ -185,6 +185,9 @@ vi.mock('../../src/providers/registry', async (importOriginal) => ({
 
 vi.mock('../../src/state/projects', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/state/projects')>()),
+  registerQueuedSubmission: vi.fn(async (projectId, submission) => ({
+    id: submission.id, projectId, conversationId: submission.conversationId, acceptedAt: submission.submittedAt,
+  })),
   createConversation: (...args: unknown[]) => createConversation(...args),
   deleteConversation: vi.fn(),
   listConversations: (...args: unknown[]) => listConversations(...args),
@@ -252,7 +255,7 @@ const agents = [
   { id: 'amr', name: 'OpenDesign Cloud', available: true, models: [] },
 ] as unknown as AgentInfo[];
 
-function renderProjectView(config: AppConfig = cloudConfig) {
+function renderProjectView(config: AppConfig = cloudConfig, onTouchProject = vi.fn()) {
   return render(
     <ProjectView
       project={project}
@@ -270,7 +273,7 @@ function renderProjectView(config: AppConfig = cloudConfig) {
       onOpenSettings={vi.fn()}
       onBack={vi.fn()}
       onClearPendingPrompt={vi.fn()}
-      onTouchProject={vi.fn()}
+      onTouchProject={onTouchProject}
       onProjectChange={vi.fn()}
       onProjectsRefresh={vi.fn()}
     />,
@@ -423,14 +426,33 @@ describe('strategy retry through ProjectView and the real ChatPane', () => {
     expect(conversationMessages[2]?.runStatus).toBe('failed');
   });
 
-  it('still sends one ordinary single-run retry through the same real button', async () => {
+  it('still sends one ordinary single-run retry and records the new user action time', async () => {
     conversationMessages = [originalUser, {
       ...productionAssistant, strategyTaskExecutionId: undefined, strategyTaskRunIndex: undefined,
     }];
-    renderProjectView();
+    const onTouchProject = vi.fn();
+    renderProjectView(cloudConfig, onTouchProject);
+    expect(onTouchProject).not.toHaveBeenCalled();
     await clickRetry();
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
     expectOriginalDispatch(originalUser);
+    expect(onTouchProject).not.toHaveBeenCalled();
+    const request = streamViaDaemon.mock.calls[0]![0] as DaemonStreamOptions;
+    await act(async () => request.onUserSubmissionAccepted?.({ id: 'retry',
+      projectId: 'p', conversationId: 'c', acceptedAt: Date.now() }));
+    expect(onTouchProject).toHaveBeenCalledTimes(1);
+    expect(onTouchProject.mock.calls[0]?.[0]).toBeGreaterThan(originalUser.createdAt!);
+    expect(conversationMessages[0]).toEqual(originalUser);
+  });
+
+  it('OPEND-4042 does not record a retry rejected before Run acceptance', async () => {
+    const touch = vi.fn();
+    renderProjectView(cloudConfig, touch);
+    await clickRetry();
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    const request = streamViaDaemon.mock.calls[0]![0] as DaemonStreamOptions;
+    await act(async () => request.handlers.onError(new Error('FORBIDDEN')));
+    expect(touch).not.toHaveBeenCalled();
   });
 
   it.each(['request', 'production'] as const)(

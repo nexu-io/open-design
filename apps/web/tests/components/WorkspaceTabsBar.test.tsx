@@ -1950,6 +1950,33 @@ describe('WorkspaceTabsBar dock dropdown run status', () => {
     dock.remove();
   });
 
+  it('pins the current project but orders the other tabs by user sends rather than visits', async () => {
+    render(<WorkspaceTabsBar
+      route={{ ...projectRoute, projectId: projectGamma.id }}
+      projects={[
+        { ...project, lastUserQueryAt: 5 },
+        { ...projectBeta, lastUserQueryAt: 10 },
+        { ...projectGamma, lastUserQueryAt: 20 },
+      ]}
+    />);
+    act(() => { openWorkspaceTab({ ...projectRoute, projectId: projectBeta.id }); });
+    act(() => { openWorkspaceTab({ ...projectRoute }); });
+    fireEvent.click(await screen.findByTestId('workspace-tabs-dropdown-trigger'));
+    const names = () => within(screen.getByRole('listbox')).getAllByRole('option')
+      .map(row => row.textContent);
+    expect(names()).toEqual([
+      expect.stringContaining('Project Alpha'),
+      expect.stringContaining('Project Gamma'),
+      expect.stringContaining('Project Beta'),
+    ]);
+    act(() => { openWorkspaceTab({ ...projectRoute, projectId: projectBeta.id }); });
+    expect(names()).toEqual([
+      expect.stringContaining('Project Beta'),
+      expect.stringContaining('Project Gamma'),
+      expect.stringContaining('Project Alpha'),
+    ]);
+  });
+
   it('marks a finished project with the still blue ball and spends it when the row opens it', async () => {
     // P0-24 design reply (2026-10-26): the new-result mark is a static blue ball
     // in the lead slot, announced as the finished status — no folder, no

@@ -1,3 +1,4 @@
+import type { QueuedSubmissionRequest, UserSubmissionReceipt } from "@open-design/contracts";
 // Project / conversation / message / tab persistence — backed by the
 // daemon's SQLite store. All writes round-trip through HTTP so projects
 // stay coherent across multiple browser tabs and across restarts.
@@ -816,6 +817,15 @@ export async function createProject(
         // read-only window; another Workspace with the same project id must not
         // inherit the signal.
         markProjectCreatedByViewer(created.project.id, input.workspaceContext ?? null);
+        // Returning Home immediately must not replay the pre-create list from
+        // the GET coalescer's one-second window (including in-flight reads).
+        if (input.workspaceContext) {
+          invalidateWorkspaceProjectLists(
+            input.workspaceContext,
+            currentWorkspaceAccountGeneration(),
+          );
+        }
+        evictCoalescedGet('local-projects');
         return created;
       }
       if (await isDaemonProxyConnectionFailure(resp)) {
@@ -1101,6 +1111,22 @@ type ProjectPatch = Omit<Partial<Project>, 'pendingPrompt' | 'customInstructions
   pendingPrompt?: Project['pendingPrompt'] | null;
   customInstructions?: string | null;
 };
+
+/** Idempotent registration; a failed response leaves the saved queue item retryable. */
+export async function registerQueuedSubmission(
+  projectId: string, submission: QueuedSubmissionRequest, workspaceContext?: WorkspaceCollabContext | null,
+): Promise<UserSubmissionReceipt | null> {
+  try {
+    const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/submissions`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json',
+        ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}) },
+      body: JSON.stringify(submission),
+    });
+    if (!resp.ok) return null;
+    const result = await resp.json() as { userSubmission: UserSubmissionReceipt };
+    return result.userSubmission;
+  } catch { return null; }
+}
 
 export async function patchProject(
   id: string,

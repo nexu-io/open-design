@@ -1,3 +1,5 @@
+import { openExternalUrl } from "../providers/registry";
+import { lockWebModalScroll } from './modal-scroll-lock';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Dialog } from '@open-design/components';
@@ -42,6 +44,11 @@ export function GoPlanSunsetDialog({
   const dialogId = useId();
   const titleId = useId();
   const descriptionId = useId();
+
+  useEffect(() => {
+    if (!active) return;
+    return lockWebModalScroll();
+  }, [active]);
 
   useEffect(() => {
     if (!active) {
@@ -104,11 +111,8 @@ export function GoPlanSunsetDialog({
         conversionSource: 'go_plan_sunset_modal',
       },
     );
-    window.open(
-      attributedAmrUrl(amrPlansUrlForProfile(profile, workspaceId), attribution),
-      '_blank',
-      'noopener,noreferrer',
-    );
+    void openExternalUrl(
+      attributedAmrUrl(amrPlansUrlForProfile(profile, workspaceId), attribution));
   };
 
   if (!active || typeof document === 'undefined') return null;

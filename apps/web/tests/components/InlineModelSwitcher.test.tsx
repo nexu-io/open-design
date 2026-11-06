@@ -16,6 +16,19 @@ import { workspaceDirectoryFixture } from '../helpers/workspace-context';
 
 const analyticsMocks = vi.hoisted(() => ({ track: vi.fn() }));
 
+vi.mock('../../src/providers/registry', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/registry')>('../../src/providers/registry');
+  return {
+    ...actual,
+    // Locked-model tests assert the billing URL at window.open; the account-intent test uses the real route.
+    openExternalUrl: async (url: string) => {
+      if (!vi.isMockFunction(window.open)) return actual.openExternalUrl(url);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      return true;
+    },
+  };
+});
+
 vi.mock('../../src/analytics/provider', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/analytics/provider')>();
   return {
@@ -620,11 +633,20 @@ describe('InlineModelSwitcher AMR row', () => {
     expect(within(popover).queryByText('$0.10')).toBeNull();
   });
 
-  it('routes inline upgrades through the signed-in AMR profile', async () => {
-    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+  it('routes inline upgrades through the daemon account intent with billing attribution', async () => {
+    let requestedUrl = '';
+    let openedUrl = '';
     const workspaceContext = personalWorkspaceContext();
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = input.toString();
+      if (url === '/api/amr/web-intent') {
+        requestedUrl = JSON.parse(String(init?.body)).target;
+        return new Response(JSON.stringify({ url: 'https://open-design.powerformer.net/login?intentId=test-intent' }));
+      }
+      if (url === '/api/system/open-external') {
+        openedUrl = JSON.parse(String(init?.body)).url;
+        return new Response(JSON.stringify({ ok: true }));
+      }
       if (url === '/api/integrations/vela/status') {
         return new Response(
           JSON.stringify({
@@ -660,19 +682,14 @@ describe('InlineModelSwitcher AMR row', () => {
     await within(popover).findByText('$42.00');
     fireEvent.click(await screen.findByTestId('inline-model-switcher-account-upgrade'));
 
-    const [url, target, features] = openSpy.mock.calls[0] ?? [];
-    const parsed = new URL(String(url));
-    // The point of this case is the PROFILE: a signed-in test-profile account
-    // must not be handed a production upgrade link. While the plans URL ignored
-    // its profile argument this assertion read the prod host (T54).
-    expect(parsed.origin).toBe('https://open-design.powerformer.net');
-    expect(parsed.pathname).toBe('/cloud/dashboard');
+    await waitFor(() => expect(openedUrl).toBe('https://open-design.powerformer.net/login?intentId=test-intent'));
+    const parsed = new URL(requestedUrl, 'https://open-design.powerformer.net');
+    expect(requestedUrl.startsWith('/dashboard?')).toBe(true);
+    expect(parsed.pathname).toBe('/dashboard');
     expect(parsed.searchParams.get('billing')).toBe('plan');
     expect(parsed.searchParams.get('workspaceId')).toBe('ws-personal');
     expect(parsed.searchParams.get('od_entry_source')).toBe('inline_amr_upgrade');
     expect(parsed.searchParams.get('od_device_id')).toBe('od-install-abc');
-    expect(target).toBe('_blank');
-    expect(features).toBe('noopener,noreferrer');
   });
 
   // recvqfYKutwWlQ: a team member's plan tier can be upgradeable while the

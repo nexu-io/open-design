@@ -741,6 +741,7 @@ test('[P0] full team keeps free local invitation available across entry points',
       return null;
     }) as typeof window.open;
   });
+  await stubInviteExternalOpen(page);
   await wireWorkspaceMocks(page, TEAM_FULL, [TEAM_FULL]);
   await page.route('**/api/workspace/projects/team', async (route) => {
     await route.fulfill({
@@ -786,6 +787,7 @@ test('[P1] seat updates keep the free local invite flow available without reload
       return null;
     }) as typeof window.open;
   });
+  await stubInviteExternalOpen(page);
   const workspaceMocks = await wireWorkspaceMocks(page, TEAM_FULL, [TEAM_FULL]);
   await gotoHome(page);
   await ensureRailOpen(page);
@@ -2067,6 +2069,20 @@ async function openAccountMenu(page: Page): Promise<void> {
   // on an ordinary failure here).
   await page.getByTestId('entry-top-right-credits').hover({ timeout: T.medium });
   await expect(page.getByTestId('entry-nav-credits-row')).toBeVisible({ timeout: 1_000 });
+}
+
+async function stubInviteExternalOpen(page: Page): Promise<void> {
+  await page.route('**/api/amr/web-intent', async (route) => {
+    const { target } = route.request().postDataJSON() as { target: string };
+    await route.fulfill({ json: { url: `http://localhost:5173${target}` } });
+  });
+  await page.route('**/api/system/open-external', async (route) => {
+    const { url } = route.request().postDataJSON() as { url: string };
+    await page.evaluate((href) => {
+      (window as Window & { __workspaceInviteUrls?: string[] }).__workspaceInviteUrls?.push(href);
+    }, url);
+    await route.fulfill({ json: { ok: true } });
+  });
 }
 
 async function inviteUrls(page: Page): Promise<string[]> {

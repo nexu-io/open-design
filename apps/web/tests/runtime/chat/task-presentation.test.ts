@@ -73,6 +73,25 @@ it('keeps a formal conclusion outside the record when the same Run continues wit
   expect(taskRecordParts([message]).some(part => 'text' in part && part.text.includes('confirm'))).toBe(false);
 });
 
+it.each([true, false])('preserves chronological planning and production blocks (planning done: %s)', explicitDone => {
+  const message: ChatMessage = { id: 'folded', role: 'assistant', runId: 'answer-run', runStatus: 'succeeded',
+    strategyTaskExecutionId: 'task', strategyTaskPrefixEventCount: 3, content: '', events: [
+      {kind: 'done_key', key: 'aaaaaaaaaaaaaaaa', runStartedAt: 1000, runEndedAt: 6000},
+      {kind: 'thinking', text: 'Planning'},
+      {kind: 'text', text: `${explicitDone ? '<od-done key="aaaaaaaaaaaaaaaa"/>' : ''}Plan ready.`},
+      {kind: 'done_key', key: 'bbbbbbbbbbbbbbbb', runStartedAt: 10_000, runEndedAt: 15_000},
+      {kind: 'tool_use', id: 'write', name: 'Write', input: {file_path: 'index.html'}},
+      {kind: 'text', text: '<od-done key="bbbbbbbbbbbbbbbb"/>Final result.'},
+    ] };
+  const parts = taskRecordParts([message]);
+  expect(parts.map(part => 'text' in part ? part.text : part.shell.items.map(item =>
+    item.kind === 'text' ? item.text : item.kind === 'tool' ? item.id : item.kind))).toEqual([
+    ['Planning'], 'Plan ready.', ['write'],
+  ]);
+  const shells = parts.flatMap(part => 'shell' in part ? [part.shell] : []);
+  expect(shells.map(shell => shell.elapsedMs)).toEqual([5000, 5000]);
+});
+
 it.each(['no_result', 'delivery_failed'] as const)('keeps the Run verdict independent of %s in the aggregated process', resultDeliveryState => {
   const message: ChatMessage = { id: 'result', role: 'assistant', runId: 'answer-run', runStatus: 'succeeded',
     taskDisplay: { ...projection, state: 'completed', ticking: false },

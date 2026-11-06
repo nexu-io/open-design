@@ -921,6 +921,7 @@ export function buildTurnBlocks(input: BuildTurnInput): TurnBlock[] {
          */
         const continued = started
           && MERGE_AUTO_CONTINUED_RUNS
+          && !input.preserveRunBoundaries
           && event.afterUserReply !== true
           && continueRun();
         // 前一个 run 一个字都没产出时没有壳可收,但密钥仍要换 —— 不换的话

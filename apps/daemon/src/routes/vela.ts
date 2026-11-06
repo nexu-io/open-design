@@ -1,12 +1,16 @@
+import { createVelaWebIntent } from '../integrations/vela-web-intent.js';
 import type { Express, Request, Response } from 'express';
 import type {
   TestRuntimeAcceptanceRequest,
   TestRuntimeContextRequest,
 } from '@open-design/contracts/api/touchpointTestRuntime';
+import { registerVelaReferralRoutes } from './vela-referral.js';
+
 import { createHash, randomUUID } from 'node:crypto';
 import dns from 'node:dns';
 import http from 'node:http';
 import https from 'node:https';
+import { isDeepStrictEqual } from 'node:util';
 import zlib from 'node:zlib';
 
 import {
@@ -24,6 +28,7 @@ import {
 } from '../mcp-observability.js';
 import {
   cancelVelaLogin,
+  isVelaLoginInFlight,
   forgetVelaLogin,
   mergeVelaEnv,
   mirrorAmrEntryAnalytics,
@@ -41,6 +46,8 @@ import {
   readVelaCredentialRevision,
   readVelaControlApiContext,
   readVelaLoginStatus,
+  readVelaLogoutTarget,
+  hasPendingVelaRevocations,
   resolveVelaConsoleOrigin,
   readVelaLoginAttemptSnapshot,
   setVelaLiveAccount,
@@ -53,6 +60,7 @@ import {
   clearVelaWalletSnapshotCache,
   velaWalletSnapshotReader,
 } from '../integrations/vela-wallet.js';
+import { runVelaCommand } from '../integrations/vela-command.js';
 import { amrModelLoadingCache } from '../runtimes/amr-model-cache.js';
 import type { VerifiedWorkspaceRequestContextResult } from '../collab/request-workspace-context.js';
 import { buildAmrModelCacheKey } from '../runtimes/amr-model-probe.js';
@@ -1098,6 +1106,24 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
     },
   };
   const { readAppConfig } = deps.appConfig;
+  app.post('/api/amr/web-intent', async (req, res) => {
+    try {
+      const config = await readAppConfig(RUNTIME_DATA_DIR);
+      const configuredEnv = agentCliEnvForAgent(config.agentCliEnv, 'amr');
+      const context = readVelaControlApiContext(env, configuredEnv);
+      const consoleOrigin = resolveVelaConsoleOrigin(env, configuredEnv);
+      if (!context || !consoleOrigin) { res.status(401).json({error:'amr_login_required'}); return; }
+      if (typeof req.body?.target !== 'string') { res.status(400).json({error:'invalid_target'}); return; }
+      const revision = readVelaCredentialRevision(env, configuredEnv);
+      const result = await createVelaWebIntent({...context,consoleOrigin,target:req.body.target});
+      if (!isDeepStrictEqual(readVelaCredentialRevision(env, configuredEnv), revision)) { res.status(409).json({error:'account_changed'}); return; }
+      res.json(result);
+    } catch (error) {
+      const code = error instanceof Error ? error.message : 'amr_web_intent_unavailable';
+      res.status(code === 'invalid_target' ? 400 : code === 'amr_login_required' ? 401 : 502).json({error:code});
+    }
+  });
+
   const getPublicBaseUrl = deps.http.getPublicBaseUrl ?? ((req: Request) => {
     const proto = req.protocol || 'http';
     const host = req.get('host');
@@ -1228,10 +1254,22 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
     }
   });
 
+  let pendingRevocationRetry: Promise<void> | null = null;
+  let lastRevocationRetryAt = 0;
+  function retrySavedRevocations(configuredEnv: Record<string, string>): void {
+    if (pendingRevocationRetry || !hasPendingVelaRevocations() || Date.now() - lastRevocationRetryAt < 30_000) return;
+    lastRevocationRetryAt = Date.now();
+    pendingRevocationRetry = runVelaCommand(['logout', '--retry-pending', '--json'], {env, configuredEnv, timeoutMs: 10_000})
+      .then(() => undefined)
+      .catch(() => undefined)
+      .finally(() => { pendingRevocationRetry = null; });
+  }
+
   app.get('/api/integrations/vela/status', async (_req, res) => {
     try {
       const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
       const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
+      retrySavedRevocations(configuredEnv);
       onCredentialStateObserved();
       const amrDef = getAgentDef('amr');
       const amrLaunch = amrDef ? resolveAgentLaunch(amrDef, configuredEnv) : null;
@@ -1334,6 +1372,11 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }
+  });
+
+  registerVelaReferralRoutes(app, async () => {
+    const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+    return readVelaControlApiContext(env, agentCliEnvForAgent(appConfig.agentCliEnv, 'amr'));
   });
 
   app.all('/api/integrations/vela/api-proxy/*splat', proxyAmrApiRequest);
@@ -1503,6 +1546,15 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
         // attempt supervisor keeps watching after this route returns and owns
         // a single non-overlapping proxy retry on a later pre-activation exit.
         waitForActivation: true,
+        acceptCredentials: () => {
+          const mergedEnv = mergeVelaEnv(env, configuredEnv);
+          const target = readVelaLogoutTarget(mergedEnv);
+          if (!target?.controlKeyId || !readVelaControlApiContext(env, configuredEnv, true) || mergedEnv.VELA_RUNTIME_KEY?.trim() || mergedEnv.VELA_CONTROL_KEY?.trim()) throw new Error('saved_credentials_not_active');
+          clearVelaAuthorizationState();
+          clearAllVelaLiveAccounts();
+          clearVelaWalletSnapshotCache();
+          onCredentialStateObserved();
+        },
       });
       const snapshot = readVelaLoginAttemptSnapshot();
       res.status(202).json({
@@ -1611,21 +1663,44 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
     res.status(202).json(result);
   });
 
-  app.post('/api/integrations/vela/logout', async (_req, res) => {
+  app.post('/api/integrations/vela/logout', async (req, res) => {
     try {
       const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
       const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
-      forgetVelaLogin(mergeVelaEnv(env, configuredEnv));
+      const mergedEnv = mergeVelaEnv(env, configuredEnv);
+      const status = readVelaLoginStatus(mergedEnv);
+      const expectedAppUserId = req.body?.expectedAppUserId;
+      const expectedCredentialRevision = req.body?.expectedCredentialRevision;
+      if (typeof expectedAppUserId !== 'string' || typeof expectedCredentialRevision !== 'string') {
+        res.status(400).json({error: 'logout_target_required'}); return;
+      }
+      if ((status.user?.id ?? '') !== expectedAppUserId || status.credentialRevision !== expectedCredentialRevision) {
+        res.status(409).json({error: 'logout_target_changed'}); return;
+      }
+      if (isVelaLoginInFlight()) { res.status(409).json({error: 'login_in_progress'}); return; }
+      const target = status.user ? readVelaLogoutTarget(mergedEnv) : null;
+      let revocationPending = false;
+      const legacyCredentialNotRevoked = Boolean((target && !target.controlKeyId) || (!target && status.loggedIn));
+      if (target?.controlKeyId) {
+        const output = await runVelaCommand(['logout', '--json', '--expected-app-user-id', target.appUserId, '--control-key-id', target.controlKeyId], {env, configuredEnv, timeoutMs: 10_000});
+        const result = JSON.parse(output) as {ok?: boolean; revocationPending?: boolean};
+        if (result.ok !== true) throw new Error('client_logout_not_confirmed');
+        revocationPending = result.revocationPending === true;
+      } else {
+        forgetVelaLogin(mergedEnv);
+      }
       clearVelaAuthorizationState();
       // Drop any cached plan/balance so the next login can't surface this
       // (now signed-out) account's billing data.
       clearAllVelaLiveAccounts();
       clearVelaWalletSnapshotCache();
       delete env.VELA_RUNTIME_KEY;
+      delete env.VELA_CONTROL_KEY;
       delete env.VELA_LINK_URL;
       const agentCliEnv = { ...(appConfig.agentCliEnv ?? {}) };
       const amrEnv = stripAmrEndpointOverrides({ ...(agentCliEnv.amr ?? {}) });
       delete amrEnv.VELA_RUNTIME_KEY;
+      delete amrEnv.VELA_CONTROL_KEY;
       delete amrEnv.VELA_LINK_URL;
       if (Object.keys(amrEnv).length > 0) {
         agentCliEnv.amr = amrEnv;
@@ -1634,7 +1709,7 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
       }
       await writeAppConfig(RUNTIME_DATA_DIR, { agentCliEnv });
       onCredentialStateObserved();
-      res.json({ ok: true });
+      res.json({ ok: true, revocationPending, legacyCredentialNotRevoked });
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }

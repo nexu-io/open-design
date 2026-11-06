@@ -236,7 +236,7 @@ describe('反向对照 · 产品行为原样', () => {
     const card = cardOf('deck.html');
     const img = card.querySelector<HTMLImageElement>('img.artifact-card-media');
     expect(img, '有 coverUrl 就该是静态截图 <img>').not.toBeNull();
-    expect(img!.getAttribute('src')).toBe(COVER);
+    expect(img!.getAttribute('src')).toBe(`${COVER}?workspaceId=workspace-a&workspaceMemberId=member-a`);
     expect(card.querySelector('iframe')).toBeNull();
   });
 

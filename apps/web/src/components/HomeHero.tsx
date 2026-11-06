@@ -1,3 +1,4 @@
+import referralNoticeStyles from './ReferralNotice.module.css';
 // Lovart-style centered hero for the entry Home view.
 //
 // The prompt textarea is the canonical creation surface: the user
@@ -65,6 +66,7 @@ import {
   type InlineMentionEntity,
 } from '../utils/inlineMentions';
 import { useI18n, useT } from '../i18n';
+import { localizePluginInputLabel } from '../i18n/plugin-content';
 import { localizeHomePresetTitle, localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 import {
   examplePresetSeedPrompt,
@@ -262,6 +264,7 @@ interface Props {
    * itself does — @mentions, staged files, the working-directory row, submit —
    * is identical between the two; only the page furniture around it differs.
    */
+  referralNotice?: ReactNode;
   variant?: 'page' | 'dock';
   /**
    * Dock only: bump this to fold the bar back to its collapsed default. The
@@ -430,6 +433,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onStartBlankProject,
     executionSwitcher,
     recommendationSlot,
+    referralNotice,
     variant = 'page',
     collapseSignal,
   },
@@ -1556,7 +1560,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         isDock && ((carouselActive && !composerFocused) || forcedCollapsed) ? 'true' : undefined
       }
     >
-      {isDock ? null : inviteSurface}
+      {isDock ? null : referralNotice}
+      {isDock ? null : <div className={referralNoticeStyles.inviteSurface} data-home-invite-surface>{inviteSurface}</div>}
       {/* Hero header: one plain question. The animated pixel-scan wordmark that
           used to stand here is gone (per product) — the headline carries the
           moment instead, with no motion behind it. */}
@@ -3147,7 +3152,10 @@ function FooterInputOption({
   onChange: (value: unknown) => void;
   t: ReturnType<typeof useT>;
 }) {
-  const label = footerInputLabel(field, t);
+  const { locale } = useI18n();
+  const label = field.label_i18n
+    ? localizePluginInputLabel(locale, field)
+    : footerInputLabel(field, t);
   if (field.name === 'speakerNotes') {
     const checked = footerSpeakerNotesEnabled(value);
     return (

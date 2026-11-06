@@ -1,3 +1,5 @@
+import type { AmrLogoutRequest, AmrLogoutResponse } from "@open-design/contracts";
+import type { RunSubmission, UserSubmissionReceipt } from "@open-design/contracts";
 /**
  * Daemon provider — fetch-based SSE client for /api/runs. The daemon can
  * emit three event streams depending on the agent's streamFormat:
@@ -476,6 +478,8 @@ function daemonAnsweredWithError(bodyText: string): boolean {
 }
 
 export interface DaemonStreamOptions {
+  submission?: RunSubmission;
+  onUserSubmissionAccepted?: (receipt: UserSubmissionReceipt) => void;
   agentId: string;
   history: ChatMessage[];
   /** Legacy field accepted by older tests/callers. Daemon-owned prompt composition ignores it. */
@@ -987,6 +991,8 @@ export async function streamViaDaemon({
   userMessageId,
   assistantMessageId,
   clientRequestId,
+  submission,
+  onUserSubmissionAccepted,
   skillId,
   skillIds,
   designSystemId,
@@ -1036,6 +1042,7 @@ export async function streamViaDaemon({
     userMessageId: userMessageId ?? null,
     assistantMessageId: assistantMessageId ?? null,
     clientRequestId: clientRequestId ?? null,
+    submission,
     skillId: skillId ?? null,
     skillIds: Array.isArray(skillIds) ? skillIds : [],
     designSystemId: designSystemId ?? null,
@@ -1105,6 +1112,7 @@ export async function streamViaDaemon({
 
     const created = (await createResp.json()) as ChatRunCreateResponse;
     const runId = created.runId;
+    if (created.userSubmission) onUserSubmissionAccepted?.(created.userSubmission);
     if (created.strategyTask) onRunCreated?.(runId, created.strategyTask);
     else onRunCreated?.(runId);
     // Start the stuck-run watchdog. trackRunProgress is called inside the
@@ -1296,6 +1304,7 @@ export interface VelaLiveAccount {
 }
 
 export interface VelaLoginStatus {
+  loginError?: string;
   /** One-time AMR new-registration claim persisted by the CLI. */
   registrationInvite?: { accountId: string; deviceAuthorizationId: string };
   loggedIn: boolean;
@@ -1536,12 +1545,13 @@ export async function cancelVelaLogin(
   }
 }
 
-export async function velaLogout(): Promise<{ ok: boolean }> {
+export async function velaLogout(target: AmrLogoutRequest): Promise<Omit<Partial<AmrLogoutResponse>, "ok"> & {ok:boolean;status:number}> {
   try {
-    const resp = await fetch('/api/integrations/vela/logout', { method: 'POST' });
-    return { ok: resp.ok };
+    const resp = await fetch('/api/integrations/vela/logout', { method: 'POST', headers: {'Content-Type':'application/json'}, body:JSON.stringify(target) });
+    const body = await resp.json().catch(()=>null) as AmrLogoutResponse | null;
+    return { ...body, ok: resp.ok, status:resp.status };
   } catch {
-    return { ok: false };
+    return { ok: false, status:0 };
   }
 }
 

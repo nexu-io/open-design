@@ -1,3 +1,5 @@
+import { openExternalUrl } from "../providers/registry";
+import { compareRecentProjects } from '../lib/project-order';
 import { reportProjectFailure } from '../observability/experience-diagnostics';
 // Horizontal "Recent projects" rail for the Home view.
 //
@@ -509,7 +511,7 @@ export function RecentProjectsStrip({
     () => [...projects].sort((a, b) => {
       if (sort === 'updatedAsc') return a.updatedAt - b.updatedAt;
       if (sort === 'nameAsc') return a.name.localeCompare(b.name);
-      return b.updatedAt - a.updatedAt;
+      return compareRecentProjects(a, b);
     }),
     [projects, sort],
   );
@@ -1562,6 +1564,7 @@ export function RecentProjectsStrip({
                   const trackSharedOpenResult = (opened: boolean) => {
                     if (!shared && space !== 'team') return;
                     trackWorkspaceSharedProjectOpenResult(analytics.track, {
+                      project_key: project.id,
                       page_name: analyticsPage,
                       area: 'project_collection',
                       result: opened ? 'success' : 'failed',

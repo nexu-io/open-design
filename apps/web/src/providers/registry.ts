@@ -1,3 +1,4 @@
+import { prepareAmrWebUrl } from "./amr-web-intent";
 import {
   PUBLIC_FILE_MANUAL_REVOKE_REQUIRED,
   SHARE_ENTRY_INDEX_CONFLICT,
@@ -1452,8 +1453,11 @@ function popupBlockedMessage(): string {
 }
 
 export async function openExternalUrl(url: string): Promise<boolean> {
-  const bridgedUrl = await bridgeFirstPartyUrl(url);
-  const targetUrl = bridgedUrl ?? url;
+  let accountUrl: string;
+  try { accountUrl = await prepareAmrWebUrl(url); }
+  catch { window.dispatchEvent(new Event('amr-web-intent-error')); return false; }
+  const bridgedUrl = await bridgeFirstPartyUrl(accountUrl);
+  const targetUrl = bridgedUrl ?? accountUrl;
   if (isOpenDesignHostAvailable()) {
     const opened = await openHostExternalUrl(targetUrl);
     if (opened.ok) return true;
@@ -3001,7 +3005,7 @@ export async function fetchPreviewComments(
       const remote = await fetch(`${url}/pull`, { method: 'POST', headers, signal: controller.signal });
       if (remote.ok) {
         const result = (await remote.json()) as import('@open-design/contracts').ProjectCommentPullResponse;
-        return result.comments;
+        if (Array.isArray(result.comments)) return result.comments;
       }
     } catch {
       // The existing local list stays usable when remote sync is unavailable
@@ -3010,14 +3014,11 @@ export async function fetchPreviewComments(
       clearTimeout(deadline);
     }
   }
-  try {
-    const resp = await fetch(url, { headers });
-    if (!resp.ok) return [];
-    const json = (await resp.json()) as { comments: PreviewComment[] };
-    return json.comments ?? [];
-  } catch {
-    return [];
-  }
+  const resp = await fetch(url, { headers });
+  if (!resp.ok) throw new Error(`comments ${resp.status}`);
+  const json = (await resp.json()) as { comments?: PreviewComment[] };
+  if (!Array.isArray(json.comments)) throw new Error('Invalid comment list response');
+  return json.comments;
 }
 
 // `workspaceContext`, when present, proves the caller's workspace membership
