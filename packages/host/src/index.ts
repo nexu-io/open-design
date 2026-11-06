@@ -39,6 +39,7 @@ export type {
   OpenDesignHostPreviewNavigationFailure,
   OpenDesignHostPreviewNavigationFailureListener,
   OpenDesignHostAppearanceTheme,
+  OpenDesignHostDisplayRefresh,
   OpenDesignHostBrowserClearDataOptions,
   OpenDesignHostUpdaterAction,
   OpenDesignHostUpdaterState,
