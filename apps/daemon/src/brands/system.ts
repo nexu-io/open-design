@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -16,7 +17,6 @@ import {
   tokensToCssVars,
   tokensToJson,
   tokensToThemeJson,
-  writeBrandSystem,
   type BrandSystem,
   type DesignTokens,
   type SeedToken,
@@ -121,11 +121,97 @@ console.log(\`Copied design tokens to \${destination}\`);
 `;
 }
 
+
+/** Ledger of what the generator last wrote: `system-relative path -> sha256`. */
+const SYSTEM_LEDGER = '.generated.json';
+
+function systemLedgerPath(outDir: string): string {
+  return path.join(outDir, SYSTEM_LEDGER);
+}
+
+function readSystemLedger(outDir: string): Record<string, string> {
+  try {
+    const parsed: unknown = JSON.parse(fs.readFileSync(systemLedgerPath(outDir), 'utf8'));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    const ledger: Record<string, string> = {};
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof value === 'string') ledger[key] = value;
+    }
+    return ledger;
+  } catch {
+    return {};
+  }
+}
+
+function contentHash(content: string): string {
+  return createHash('sha256').update(content).digest('hex');
+}
+
+/**
+ * Writes the generated tree without destroying work done on it: a file whose
+ * current content still matches the hash recorded when it was generated is
+ * regenerated, anything else is kept and reported. A file with no ledger entry
+ * predates the ledger, so its provenance is unknown: it is kept whenever it
+ * differs from what this run would write, never silently replaced.
+ */
+function writeBrandSystemPreserving(
+  system: BrandSystem,
+  outDir: string,
+  ledger: Record<string, string>,
+): { written: string[]; kept: string[] } {
+  fs.mkdirSync(outDir, { recursive: true });
+  const written: string[] = [];
+  const kept: string[] = [];
+  const nextLedger: Record<string, string> = {};
+
+  for (const [rel, content] of Object.entries(system.files)) {
+    const isB64 = rel.endsWith('.b64');
+    const targetRel = isB64 ? rel.slice(0, -4) : rel;
+    const abs = path.join(outDir, targetRel);
+    const previousHash = ledger[targetRel];
+    const untracked = typeof previousHash !== 'string';
+    let current: string | null = null;
+    try {
+      current = isB64 ? fs.readFileSync(abs).toString('base64') : fs.readFileSync(abs, 'utf8');
+    } catch {
+      current = null;
+    }
+    const editedSinceGeneration =
+      current !== null &&
+      (untracked ? contentHash(current) !== contentHash(content) : contentHash(current) !== previousHash);
+    if (editedSinceGeneration) {
+      kept.push(targetRel);
+      if (!untracked) nextLedger[targetRel] = previousHash;
+      continue;
+    }
+
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    if (isB64) fs.writeFileSync(abs, Buffer.from(content, 'base64'));
+    else fs.writeFileSync(abs, content, 'utf8');
+    nextLedger[targetRel] = contentHash(content);
+    written.push(abs);
+  }
+
+  // Drop only files this generator wrote and the new build no longer produces.
+  for (const [rel, hash] of Object.entries(ledger)) {
+    if (rel in nextLedger) continue;
+    const abs = path.join(outDir, rel);
+    try {
+      if (contentHash(fs.readFileSync(abs, 'utf8')) === hash) fs.rmSync(abs, { force: true });
+    } catch {
+      // absent or unreadable: nothing to remove
+    }
+  }
+
+  fs.writeFileSync(systemLedgerPath(outDir), `${JSON.stringify(nextLedger, null, 2)}\n`, 'utf8');
+  return { written: written.sort(), kept };
+}
+
 export async function rebuildSystem(
   brandsRoot: string,
   id: string,
   seedOverrides?: Partial<SeedToken>,
-): Promise<{ themes: string[]; files: string[] }> {
+): Promise<{ themes: string[]; files: string[]; kept: string[] }> {
   const brand = readBrand(brandsRoot, id) as Brand | null;
   if (!brand) throw new Error(`brand.json not found for brand "${id}"`);
 
@@ -150,12 +236,11 @@ export async function rebuildSystem(
   if (deckHtml) assertDeckLayoutSafe(deckHtml);
 
   const outDir = brandSystemDir(brandsRoot, id);
-  fs.rmSync(outDir, { recursive: true, force: true });
-  fs.mkdirSync(outDir, { recursive: true });
-  const written = writeBrandSystem(system, outDir);
+  const { written, kept } = writeBrandSystemPreserving(system, outDir, readSystemLedger(outDir));
   return {
     themes: Object.keys(system.themes),
     files: written.map((abs) => path.relative(outDir, abs)).sort(),
+    kept,
   };
 }
 
