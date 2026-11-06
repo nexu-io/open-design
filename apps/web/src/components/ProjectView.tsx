@@ -7498,6 +7498,11 @@ export function ProjectView({
             if (turnArtifacts.focused && !userTookOverPreviewRef.current) {
               requestOpenTurnArtifacts(turnArtifacts.open, turnArtifacts.focused);
             }
+            if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen);
+            const nextFileNames = new Set(nextFiles.map((f) => f.name));
+            const confirmedDeletions = [...beforeFileNames].filter(
+              (name) => !nextFileNames.has(name),
+            ).length;
             const deliveryOutcome = resolveDesignDeliveryOutcome({
               sessionMode: message.sessionMode,
               runStatus: 'succeeded',
@@ -7506,6 +7511,7 @@ export function ProjectView({
               producedFileCount: produced.length,
               traceObjectFileCount: traceObjectFiles.length,
               artifactCount: status.artifactCount,
+              confirmedDeletions,
               persistenceSucceeded: artifactPersistenceSucceeded,
               persistenceFailed: artifactPersistenceError !== undefined,
             });
@@ -8040,6 +8046,10 @@ export function ProjectView({
                 }
                 const deliveryContent = needsFullReplay ? replayedContent : message.content;
                 const deliveryEvents = needsFullReplay ? replayedEvents : message.events;
+                const deliveryNextFileNames = new Set(nextFiles.map((f) => f.name));
+                const deliveryConfirmedDeletions = [...beforeFileNames].filter(
+                  (name) => !deliveryNextFileNames.has(name),
+                ).length;
                 const deliveryOutcome = resolveDesignDeliveryOutcome({
                   sessionMode: message.sessionMode,
                   runStatus: 'succeeded',
@@ -8048,6 +8058,7 @@ export function ProjectView({
                   producedFileCount: produced.length,
                   traceObjectFileCount: traceObjectFiles.length,
                   artifactCount: daemonArtifactCount,
+                  confirmedDeletions: deliveryConfirmedDeletions,
                   persistenceSucceeded: artifactPersistenceSucceeded,
                   persistenceFailed: artifactPersistenceError !== undefined,
                 });
@@ -10559,6 +10570,10 @@ export function ProjectView({
                 producedFiles: produced,
                 traceObjectFiles,
               };
+              const deliveryNextFileNames = new Set(nextFiles.map((f) => f.name));
+              const deliveryConfirmedDeletions = [...beforeFileNames].filter(
+                (name) => !deliveryNextFileNames.has(name),
+              ).length;
               const deliveryOutcome = resolveDesignDeliveryOutcome({
                 sessionMode: deliveryCandidate.sessionMode,
                 runStatus: deliveryCandidate.runStatus,
@@ -10567,6 +10582,7 @@ export function ProjectView({
                 producedFileCount: produced.length,
                 traceObjectFileCount: traceObjectFiles.length,
                 artifactCount: daemonArtifactCount,
+                confirmedDeletions: deliveryConfirmedDeletions,
                 persistenceSucceeded: artifactPersistenceSucceeded,
                 persistenceFailed: artifactPersistenceError !== undefined,
               });
