@@ -154,11 +154,12 @@ const PPTX_SLIDE_WIDTH_IN = 13.333;
  * image per slide. The slide aspect ratio follows the deck's authored size
  * (`opts.aspect` = width/height); falls back to 16:9. The slides are
  * pixel-perfect images (not editable text), the "exactly what you see" export
- * mode. Returns the .pptx bytes.
+ * mode. `opts.notes` (aligned with `images`) fills each slide's speaker notes.
+ * Returns the .pptx bytes.
  */
 export async function buildScreenshotPptx(
   images: SlideImage[],
-  opts: { title?: string; aspect?: number } = {},
+  opts: { title?: string; aspect?: number; notes?: readonly unknown[] } = {},
 ): Promise<Buffer> {
   if (images.length === 0) throw new Error('no slides to export');
   const pptx = new PptxGenJS();
@@ -173,7 +174,7 @@ export async function buildScreenshotPptx(
   pptx.author = 'OpenDesign';
   if (opts.title) pptx.title = opts.title;
   pptx.subject = 'Screenshot-based PPTX';
-  for (const img of images) {
+  images.forEach((img, index) => {
     const slide = pptx.addSlide();
     slide.addImage({
       data: `data:image/${img.jpeg ? 'jpeg' : 'png'};base64,${img.buffer.toString('base64')}`,
@@ -182,7 +183,10 @@ export async function buildScreenshotPptx(
       w: '100%',
       h: '100%',
     });
-  }
+    // The notes come from the desktop renderer's response, so keep only strings.
+    const note = opts.notes?.[index];
+    if (typeof note === 'string' && note.trim()) slide.addNotes(note);
+  });
   const out = await pptx.write({ outputType: 'nodebuffer' });
   return Buffer.isBuffer(out) ? out : Buffer.from(out as ArrayBuffer);
 }
