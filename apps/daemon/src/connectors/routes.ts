@@ -55,7 +55,10 @@ export interface RegisterConnectorRoutesOptions {
   sendApiError: ConnectorApiErrorSender;
   projectsRoot?: string;
   authorizeToolRequest?: (req: Request, res: Response, operation: string) => ToolTokenGrant | null;
-  requireLocalDaemonRequest?: RequestHandler;
+  // Required: these routes own OAuth credentials under the daemon data root,
+  // so the local-daemon gate is part of the route contract rather than an
+  // optional extra. Production passes the daemon's real gate.
+  requireLocalDaemonRequest: RequestHandler;
   composio?: {
     clearDiscoveryCache: () => void;
   };
@@ -553,7 +556,18 @@ function renderConnectorConnectedHtml(connectorId: string): string {
 
 export function registerConnectorRoutes(app: Express, options: RegisterConnectorRoutesOptions): void {
   const service = options.service ?? connectorService;
-  const requireLocalDaemonRequest: RequestHandler = options.requireLocalDaemonRequest ?? ((_req, _res, next) => next());
+  // Fail closed. The mutating connector routes own OAuth credentials, so a
+  // caller that omits the gate must be denied rather than handed the handler.
+  const requireLocalDaemonRequest: RequestHandler =
+    options.requireLocalDaemonRequest
+    ?? ((_req: Request, res: Response) => {
+      options.sendApiError(
+        res,
+        403,
+        'FORBIDDEN',
+        'connector routes require a local daemon request gate',
+      );
+    });
 
   app.get('/api/connectors', async (_req: Request, res: Response) => {
     try {
