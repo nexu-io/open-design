@@ -43,4 +43,32 @@ describe('apiProtocols table consistency', () => {
     expect(atlasCloudProvider?.preferredModels).toContain('qwen/qwen3.5-flash');
     expect(atlasCloudProvider?.preferredModels).toContain('deepseek-ai/deepseek-v4-flash');
   });
+
+  it('keeps the DeepSeek presets wired to the DeepSeek console link', () => {
+    const deepseekOpenAi = KNOWN_PROVIDERS.find(
+      (provider) =>
+        provider.protocol === 'openai' &&
+        provider.baseUrl === 'https://api.deepseek.com',
+    );
+    expect(deepseekOpenAi).toMatchObject({
+      label: 'DeepSeek — OpenAI',
+      apiKeyConsoleLink: {
+        host: 'platform.deepseek.com',
+        url: 'https://platform.deepseek.com/api_keys',
+      },
+    });
+
+    const deepseekAnthropic = KNOWN_PROVIDERS.find(
+      (provider) =>
+        provider.protocol === 'anthropic' &&
+        provider.baseUrl === 'https://api.deepseek.com/anthropic',
+    );
+    expect(deepseekAnthropic).toMatchObject({
+      label: 'DeepSeek — Anthropic',
+      apiKeyConsoleLink: {
+        host: 'platform.deepseek.com',
+        url: 'https://platform.deepseek.com/api_keys',
+      },
+    });
+  });
 });
