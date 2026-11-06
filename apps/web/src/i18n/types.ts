@@ -2182,6 +2182,7 @@ export interface Dict {
   'routines.status.canceled': string;
   'routines.confirmDelete': string;
   'routines.errorPickProject': string;
+  'routines.errorAutomationMissing': string;
   'routines.errorAgentEmptyOutput': string;
   // Automations tab (TasksView)
   'automations.eyebrow': string;
@@ -2227,6 +2228,8 @@ export interface Dict {
   'automations.runHistoryEmpty': string;
   'automations.runHistoryTitle': string;
   'automations.runHistoryLatest': string;
+  'automations.errorTitleRequired': string;
+  'automations.errorPromptRequired': string;
   'automations.promptPlaceholder': string;
   'automations.crystallize': string;
   'automations.crystallizing': string;
