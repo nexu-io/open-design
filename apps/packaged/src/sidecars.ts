@@ -272,6 +272,12 @@ const DAEMON_MIGRATION_STATUS_TIMEOUT_MS = 30 * 60 * 1000;
 const STATUS_POLL_INITIAL_MS = 150;
 const STATUS_POLL_MAX_MS = 1500;
 
+// Directory name (under the namespace cache root) that holds each sidecar
+// child's V8 compile cache. Kept per-app because the daemon and web children
+// are separate Node processes with disjoint module graphs, so sharing one
+// directory would let them evict each other's entries.
+const NODE_COMPILE_CACHE_DIRNAME = "node-compile-cache";
+
 // Baseline status wait budget by platform, before the daemon-only legacy
 // migration override. win32 gets the wider AV-scan headroom, linux gets the
 // same headroom for AppImage FUSE cold starts; darwin gets the same headroom
@@ -613,6 +619,50 @@ export function resolvePackagedChildBaseEnv(
     : mergeProxyAwareEnv(process.platform, forwardedEnv);
 }
 
+/**
+ * Point a sidecar child at a persistent V8 compile cache.
+ *
+ * Both children run large esbuild-prebundled ESM graphs, and Node re-parses and
+ * re-compiles that graph on every launch. `NODE_COMPILE_CACHE` lets the child
+ * reuse the previous run's compilation output, so the win compounds across
+ * launches and is paid once per app version.
+ *
+ * The directory lives under the namespace `cacheRoot` (already created by the
+ * launch path) rather than a cwd-relative or Electron `userData` path, keeping
+ * it namespace-scoped and port-independent per the packaged path contract.
+ * It is per-app so the daemon and web graphs cannot evict each other.
+ *
+ * An explicit inherited `NODE_COMPILE_CACHE` wins: it is forwarded into the
+ * child env verbatim, so an operator or a local run can redirect or disable the
+ * cache without patching code. Forwarding is required rather than passive
+ * inheritance because packaged children do not receive the outer environment —
+ * `resolvePackagedChildBaseEnv` forwards an allowlist only, and the `childEnv`
+ * spread below is the child's entire environment.
+ *
+ * Node keys the cache by its own version and the source file contents, so a
+ * runtime upgrade, an app update, or an edited bundle all miss automatically
+ * instead of serving stale compilations.
+ */
+export function resolveNodeCompileCacheEnv(
+  paths: Pick<PackagedNamespacePaths, "cacheRoot">,
+  app: string,
+  env: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const inherited = env.NODE_COMPILE_CACHE;
+  const disableSwitch = env.NODE_DISABLE_COMPILE_CACHE;
+  if (inherited != null && inherited.length > 0) {
+    return disableSwitch != null && disableSwitch.length > 0
+      ? { NODE_COMPILE_CACHE: inherited, NODE_DISABLE_COMPILE_CACHE: disableSwitch }
+      : { NODE_COMPILE_CACHE: inherited };
+  }
+  // An explicit operator disable opts the child out of our cache entirely, so
+  // no directory is provisioned for it and spawning creates nothing.
+  if (disableSwitch != null && disableSwitch.length > 0) {
+    return { NODE_DISABLE_COMPILE_CACHE: disableSwitch };
+  }
+  return { NODE_COMPILE_CACHE: join(paths.cacheRoot, NODE_COMPILE_CACHE_DIRNAME, app) };
+}
+
 function createPackagedDaemonManagedPathEnv(
   paths: PackagedNamespacePaths,
 ): PackagedDaemonManagedPathEnv {
@@ -784,6 +834,13 @@ async function spawnSidecarChild(options: {
   const logPath = logPathFor(options.paths, options.app);
   const logHandle = await openLog(logPath);
   await retireExistingSidecar(stamp, logPath);
+  const compileCacheEnv = resolveNodeCompileCacheEnv(options.paths, options.app);
+  if (compileCacheEnv.NODE_COMPILE_CACHE != null) {
+    // Node creates the cache directory on demand, but doing it here keeps the
+    // first launch from paying a directory-creation race inside the child's
+    // startup path, where it would land on the critical boot sequence.
+    await mkdir(compileCacheEnv.NODE_COMPILE_CACHE, { recursive: true });
+  }
   const usesElectronAsNode = options.nodeCommand == null;
   const command = options.nodeCommand
     ?? options.electronNodeCommand
@@ -798,6 +855,7 @@ async function spawnSidecarChild(options: {
       ...options.env,
       NODE_ENV: "production",
       PATH: resolvePackagedPathEnv(),
+      ...compileCacheEnv,
       ...(usesElectronAsNode ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
   };
   const generation = await spawnSidecar({
