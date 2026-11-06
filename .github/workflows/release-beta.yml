@@ -504,7 +504,7 @@ jobs:
     name: Build beta mac_arm64
     needs: metadata
     if: ${{ inputs.enable_mac_arm64 }}
-    runs-on: macos-14
+    runs-on: macos-15
     outputs:
       mac_arm64_url: ${{ steps.mac_arm64_platform_outputs.outputs.dmg_url }}
       smoke_result: ${{ steps.mac_arm64_smoke.outcome }}
