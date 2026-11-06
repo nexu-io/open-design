@@ -1,0 +1,17 @@
+{
+  "id": "image-event-poster",
+  "surface": "image",
+  "title": "Bright Event Poster",
+  "summary": "A high-energy event poster with exact information hierarchy, oversized typography, and tactile print character.",
+  "category": "Events",
+  "tags": ["event", "poster", "typography", "print", "bright"],
+  "model": "vela/gpt-image-2",
+  "aspect": "4:5",
+  "prompt": "Create a flat 4:5 nightlife event poster using only these exact text strings: 'AFTER DARK', '23 AUG', 'SHANGHAI', and 'DOORS 22:00'. Build the composition on luminous butter-yellow uncoated paper. Make AFTER DARK enormous, condensed, saturated electric-cobalt typography that nearly touches the edges. Drive one vivid coral-pink diagonal burst through the title and place one dynamic adult dancer as a bright cyan halftone cutout crossing the burst. Set 23 AUG and SHANGHAI as the clear second-level information; set DOORS 22:00 as a compact third-level label. Add a few acid-lime and orange registration marks. Make it feel physically screen-printed: visible paper fibers, uneven ink density, a fold line, one staple or tape trace, and slight color misregistration. Preserve generous light areas so the result feels bright, not nocturnal or muddy. Keep all text exact, large, and readable. No extra words, logos, sponsors, QR codes, mockup, frame, glossy 3D type, dark dominant field, generic gradient, neon glow, illegible microtext, or decorative clutter. Output only the finished poster.",
+  "source": {
+    "repo": "nexu-io/open-design",
+    "license": "Apache-2.0",
+    "author": "OpenDesign",
+    "url": "https://github.com/nexu-io/open-design"
+  }
+}

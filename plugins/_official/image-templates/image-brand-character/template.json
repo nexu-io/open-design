@@ -1,0 +1,17 @@
+{
+  "id": "image-brand-character",
+  "surface": "image",
+  "title": "Streetwear Brand Character Sheet",
+  "summary": "A bright mascot system that locks one distinctive character across hero art, six poses, expressions, and palette chips.",
+  "category": "Brand Design",
+  "tags": ["character", "mascot", "brand", "streetwear", "identity"],
+  "model": "vela/gpt-image-2",
+  "aspect": "3:2",
+  "prompt": "Create a bright landscape 3:2 brand character sheet using only these exact text strings: 'BYTE' and 'CHARACTER SYSTEM'. BYTE is a hand-drawn streetwear sticker character: a black cat-rabbit hybrid with an off-white face patch, asymmetric ears with the left ear upright and the right ear bent, acid-lime eyes, a cobalt puffer vest, charcoal cargo pants, white chunky sneakers, and exactly one silver carabiner attached at the hip. Lock this identity in every drawing. Layout: one large energetic hero pose on the left; six smaller full-body pose cards on the right in a precise 2-by-3 grid showing run, crouch, wave, carry, sit, and jump; four expression icons along the bottom; and five clean palette chips. Use a bright off-white paper board, huge tangerine BYTE typography, small cobalt CHARACTER SYSTEM type, pose cards in pale sky blue, butter yellow, and mint, one hot-pink rule, and cobalt registration marks. Illustration should feel authored with confident black ink, slight line wobble, dry marker overlap, subtle screen-print grain, and imperfect cut-sticker edges. Keep anatomy, ear asymmetry, face patch, outfit, shoes, and exactly one carabiner consistent in every panel. No extra text, logo, watermark, black or gray background, glossy 3D toy render, kawaii default, added accessories, changed clothing, duplicate limbs, inconsistent face, random symbols, or gibberish labels. Output only the finished character sheet.",
+  "source": {
+    "repo": "nexu-io/open-design",
+    "license": "Apache-2.0",
+    "author": "OpenDesign",
+    "url": "https://github.com/nexu-io/open-design"
+  }
+}
