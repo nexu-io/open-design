@@ -416,6 +416,49 @@ describe('agent-driven brand extraction engine', () => {
     expect(brand.colors.find((color) => color.role === 'accent-secondary')?.hex).toBe('#0e9f77');
   });
 
+  it('does not register stock framework colors as the brand when the site has its own', () => {
+    const laravelStarter = {
+      ...programmaticPrefetchResult('https://laravel-site.test/'),
+      colors: [
+        { hex: '#3097d1', count: 48, sources: ['prop:background-color selector:.btn-primary', 'prop:color selector:a'] },
+        { hex: '#2ab27b', count: 14, sources: ['prop:background-color selector:.btn-success'] },
+        { hex: '#bf5329', count: 12, sources: ['prop:background-color selector:.btn-danger'] },
+        { hex: '#636b6f', count: 20, sources: ['prop:color selector:body'] },
+        { hex: '#e4572e', count: 5, sources: ['prop:background-color selector:.site-header'] },
+        { hex: '#ffffff', count: 40, extreme: true, sources: ['prop:background-color selector:body'] },
+      ],
+    };
+    const laravel = brandFromMaterial(laravelStarter, 'https://laravel-site.test/');
+    expect(laravel.colors.find((color) => color.role === 'accent')?.hex).toBe('#e4572e');
+    expect(laravel.colors.find((color) => color.role === 'accent-secondary')).toBeUndefined();
+
+    const bootstrap5 = brandFromMaterial({
+      ...programmaticPrefetchResult('https://bootstrap-site.test/'),
+      colors: [
+        { hex: '#0d6efd', count: 30, sources: ['css-var:--bs-primary', 'css-var:--bs-link-color'] },
+        { hex: '#dc3545', count: 12, sources: ['css-var:--bs-danger'] },
+        { hex: '#7a3cff', count: 3, sources: ['css-var:--brand'] },
+        { hex: '#ffffff', count: 40, extreme: true, sources: ['css-var:--bs-body-bg'] },
+      ],
+    }, 'https://bootstrap-site.test/');
+    expect(bootstrap5.colors.find((color) => color.role === 'accent')?.hex).toBe('#7a3cff');
+  });
+
+  it('keeps a stock framework color when the page measures no other chromatic color', () => {
+    const brand = brandFromMaterial({
+      ...programmaticPrefetchResult('https://stock-laravel.test/'),
+      colors: [
+        { hex: '#3097d1', count: 48, sources: ['prop:background-color selector:.btn-primary'] },
+        { hex: '#2ab27b', count: 14, sources: ['prop:background-color selector:.btn-success'] },
+        { hex: '#636b6f', count: 20, sources: ['prop:color selector:body'] },
+        { hex: '#ffffff', count: 40, extreme: true },
+      ],
+    }, 'https://stock-laravel.test/');
+
+    expect(brand.colors.find((color) => color.role === 'accent')?.hex).toBe('#3097d1');
+    expect(brand.colors.find((color) => color.role === 'accent-secondary')?.hex).toBe('#2ab27b');
+  });
+
   it('startBrandExtraction reserves the brand and seeds a live brand.html tab', async () => {
     const db = openDatabase(tempDir, { dataDir: tempDir });
 
