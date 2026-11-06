@@ -43,6 +43,13 @@ export class DiagnosticOutbox {
       .run(randomUUID(), key, now, summary);
     return this.db.prepare('SELECT * FROM incidents WHERE sourceId = ?').get(key) as DiagnosticIncident;
   }
+  /** The daemon's own incident for a run; client-reported incidents are not run evidence. */
+  runIncident(runId: string): string | undefined {
+    const row = this.db.prepare(`SELECT id FROM incidents WHERE state != 'discarded'
+      AND json_extract(summary, '$.runId') = ? AND json_extract(summary, '$.sourceId') NOT LIKE 'client:%'
+      ORDER BY createdAt LIMIT 1`).get(runId) as { id: string } | undefined;
+    return row?.id;
+  }
   get(id: string): DiagnosticIncident | undefined {
     return this.db.prepare('SELECT * FROM incidents WHERE id = ?').get(id) as DiagnosticIncident | undefined;
   }
