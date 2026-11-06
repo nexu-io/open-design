@@ -1901,9 +1901,16 @@ function parsePrintReadyPdfOptions(value: unknown): PrintReadyPdfOptions {
 
 // Parses the optional renderer-supplied capture clip into an Electron
 // Rectangle. Returns undefined (capture the full page) when the payload is
-// missing, not an object, or carries an invalid clip; valid clips are
-// rounded and clamped so x/y stay >= 0 and width/height stay >= 1.
-function parseCaptureClip(value: unknown): Electron.Rectangle | undefined {
+// missing, not an object, or carries an invalid clip; valid clips are scaled
+// from CSS viewport pixels to DIP page coordinates via the renderer's active
+// zoom factor (Cmd+Plus / Cmd+Minus changes `getBoundingClientRect()` CSS px
+// inversely with `webContents.getZoomFactor()`, while `capturePage` always
+// expects unzoomed DIP coordinates), then rounded and clamped so x/y stay >= 0
+// and width/height stay >= 1.
+export function parseCaptureClip(
+  value: unknown,
+  zoomFactor = 1,
+): Electron.Rectangle | undefined {
   if (value == null || typeof value !== "object" || Array.isArray(value)) return undefined;
   const clip = (value as { clip?: unknown }).clip;
   if (clip == null || typeof clip !== "object" || Array.isArray(clip)) return undefined;
@@ -1921,11 +1928,15 @@ function parseCaptureClip(value: unknown): Electron.Rectangle | undefined {
   ) {
     return undefined;
   }
+  const scale =
+    typeof zoomFactor === "number" && Number.isFinite(zoomFactor) && zoomFactor > 0
+      ? zoomFactor
+      : 1;
   return {
-    x: Math.max(0, Math.round(x)),
-    y: Math.max(0, Math.round(y)),
-    width: Math.max(1, Math.round(width)),
-    height: Math.max(1, Math.round(height)),
+    x: Math.max(0, Math.round(x * scale)),
+    y: Math.max(0, Math.round(y * scale)),
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
   };
 }
 
@@ -2660,7 +2671,11 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       return { ok: false, reason: 'capture sender not allowed' };
     }
     try {
-      const clip = parseCaptureClip(rawOptions);
+      const zoomFactor =
+        typeof window.webContents.getZoomFactor === 'function'
+          ? window.webContents.getZoomFactor()
+          : 1;
+      const clip = parseCaptureClip(rawOptions, zoomFactor);
       const image = clip
         ? await window.webContents.capturePage(clip)
         : await window.webContents.capturePage();
