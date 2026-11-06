@@ -40,6 +40,12 @@ Read these files before editing:
 5. Add `examples/`, `preview/`, `assets/`, or `references/` only when they materially help the agent produce better results.
 6. Add `evals/evals.json` when the plugin has enough behavior to regress.
 7. If publishing externally, prepare registry-safe README sections for skills.sh, ClawHub, and canonical GitHub source.
+8. For an HTML-backed visual artifact, ship the real sample as `example.html`
+   and declare `od.preview.type: "html"` with `entry: "./example.html"`. Keep
+   `od.useCase.exampleOutputs` and `od.context.assets` aligned with that file.
+   A poster image may be secondary, but it must not replace the HTML preview.
+   When `template.json` carries `referenceHtml`, materialize the sample from
+   that source (or the same deterministic generator) and keep them in sync.
 
 ## Quality Bar
 
@@ -51,6 +57,9 @@ The plugin is not done until:
 - The declared atoms are known first-party atoms or clearly marked future work.
 - The declared capabilities are the minimum needed.
 - Visual plugins include a preview or concrete example output.
+- HTML-backed previews load from the declared entry as `200 text/html`; a
+  preview-baker `skip (status 404)` is a failure for that plugin, even when the
+  overall bake job remains green.
 - Share, deploy, connector, and network plugins require explicit confirmation before externally visible actions.
 
 ## Validation Commands

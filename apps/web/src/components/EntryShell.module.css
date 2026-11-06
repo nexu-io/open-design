@@ -1,0 +1,50 @@
+.projectListError {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 280px;
+  gap: 16px;
+  text-align: center;
+}
+
+.projectListError p {
+  margin: 0;
+}
+
+/* Inherit the shared shell and rail materials so macOS vibrancy stays visible. */
+:global(html[data-theme="light"]) .memberFrame :global(.entry-local-mode-tip) {
+  box-sizing: border-box;
+  min-height: 104px;
+}
+:global(html[data-theme="light"]) .memberFrame :global(.entry-main--scroll) {
+  --entry-content-surface: #fcfaf9;
+  background: #fcfaf9;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-radius: 16px;
+  margin: 0 12px 12px 0;
+  box-shadow: 0 1px 1px rgb(0 0 0 / 8%);
+}
+:global(html[data-theme="light"]) .memberFrame :global(.entry:not(.entry--rail-open) .entry-main--scroll) {
+  margin-left: 12px;
+}
+
+@media (prefers-color-scheme: light) {
+  :global(html:not([data-theme])) .memberFrame :global(.entry-local-mode-tip) {
+    box-sizing: border-box;
+    min-height: 104px;
+  }
+  :global(html:not([data-theme])) .memberFrame :global(.entry-main--scroll) {
+    --entry-content-surface: #fcfaf9;
+    background: #fcfaf9;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-radius: 16px;
+    margin: 0 12px 12px 0;
+    box-shadow: 0 1px 1px rgb(0 0 0 / 8%);
+  }
+  :global(html:not([data-theme])) .memberFrame :global(.entry:not(.entry--rail-open) .entry-main--scroll) {
+    margin-left: 12px;
+  }
+}

@@ -12,12 +12,21 @@ describe('renderResearchCommandContract', () => {
     expect(prompt).toContain(
       'the first tool action must be the research command with this canonical query',
     );
+    // The failure clause was rewritten by `705eb053a9` under OPEND-2577: the
+    // stderr and the provider's name are host detail the user never asked for,
+    // while the fact that these results did not come from the research command
+    // is still owed to them, because they asked for a search.
+    //
+    // These are literal-text checks only. The rule this sentence encodes is
+    // guarded semantically -- and kept in lockstep with the copy in
+    // `apps/web/src/components/ChatComposer.tsx`, which reaches the model in
+    // the same turn -- by `e2e/tests/w90-search-failure-narration-parity.test.ts`.
     expect(prompt).toContain(
-      'If the OD command fails because Tavily is not configured or unavailable',
+      'keep the stderr / exit status in the tool trace and daemon logs',
     );
-    expect(prompt).toContain(
-      'use your own search capability as fallback and label the fallback clearly',
-    );
+    expect(prompt).toContain('use your own search capability as fallback');
+    expect(prompt).toContain('Label the fallback clearly in your answer');
+    expect(prompt).not.toContain('Tavily');
     expect(prompt).toContain('The command prints exactly one JSON object on stdout');
     expect(prompt).toContain('write a reusable Markdown report into the project files');
     expect(prompt).toContain('research/<safe-query-slug>.md');

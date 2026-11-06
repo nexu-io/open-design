@@ -1,4 +1,9 @@
+import { recentProjectFixedStageDeckHtml } from '../../resources/recent-project-fixed-stage-deck.ts';
 import { playwrightUiScenarios } from '../../resources/playwright.ts';
+
+export function fixedStageDeckFixtureHtml(): string {
+  return recentProjectFixedStageDeckHtml;
+}
 
 export type ScenarioKind = 'prototype' | 'deck' | 'hyperframes' | 'image' | 'audio' | 'template' | 'workspace';
 
@@ -34,6 +39,7 @@ export interface UiScenario {
     | 'conversation-delete-recovery'
     | 'question-form-single-selection'
     | 'question-form-submit-persistence'
+    | 'question-form-single-answer'
     | 'generation-does-not-create-extra-file'
     | 'comment-attachment-flow'
     | 'deck-pagination-next-prev-correctness'

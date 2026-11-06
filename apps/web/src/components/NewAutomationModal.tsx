@@ -2,6 +2,7 @@
 // user-facing model is a scheduled agent conversation that can start in a new
 // project or append a new conversation to an existing project.
 
+import { lockWebModalScroll } from './modal-scroll-lock';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import type {
@@ -344,10 +345,9 @@ export function NewAutomationModal({
 
   useEffect(() => {
     if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const releaseScrollLock = lockWebModalScroll();
     return () => {
-      document.body.style.overflow = prev;
+      releaseScrollLock();
     };
   }, [open]);
 

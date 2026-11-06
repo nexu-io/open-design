@@ -31,6 +31,8 @@ beforeEach(() => {
     apiKey: 'phc_test',
     host: 'https://us.i.posthog.com',
     distinctId: 'white-screen-test',
+    clientType: 'web',
+    osName: 'Mac OS X',
   });
   vi.useFakeTimers({ shouldAdvanceTime: false });
   document.body.innerHTML = '';

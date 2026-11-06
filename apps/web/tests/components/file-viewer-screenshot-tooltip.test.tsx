@@ -50,7 +50,18 @@ describe('FileViewer screenshot tooltip guard', () => {
     vi.unstubAllGlobals();
   });
 
-  it('clears the hover tooltip before the host compositor capture grabs the frame', async () => {
+  /*
+   * W129 note: this used to assert the tooltip node was GONE from the DOM,
+   * because TooltipLayer unmounted its portal on hide. It no longer does —
+   * the bubble stays mounted so the design's opacity transition
+   * (`729fa43ce7:docs/design/chat-panel/src/components.css:2707`) has something
+   * to run on. What actually protects the capture is unchanged in substance and
+   * is what this test now pins: by the time the compositor grabs the frame the
+   * bubble must PAINT NOTHING. Activation dismissal is deliberately instant
+   * (`visibility: hidden`, no fade) precisely because a 100ms fade would still
+   * be ~24% opaque two frames in, and that would print into the screenshot.
+   */
+  it('leaves the hover tooltip unpainted before the host compositor capture grabs the frame', async () => {
     captureHostIframeSnapshotMock.mockResolvedValue({
       dataUrl: 'data:image/png;base64,ok',
       w: 800,
@@ -84,9 +95,18 @@ describe('FileViewer screenshot tooltip guard', () => {
       </>,
     );
 
+    const bubble = () => {
+      const node = document.body.querySelector('.od-tooltip-layer');
+      if (!(node instanceof HTMLElement)) throw new Error('TooltipLayer never rendered a bubble');
+      return node;
+    };
+
     const button = screen.getByTestId('edit-screenshot-to-chat-button');
     fireEvent.pointerOver(button);
-    expect(document.body.querySelector('.od-tooltip-layer')).not.toBeNull();
+    // Probe that the guard can see something: the bubble is genuinely painted
+    // while hovered, so the assertion after the capture is not vacuous.
+    expect(bubble().style.visibility).toBe('visible');
+    expect(bubble().style.opacity).toBe('1');
 
     fireEvent.click(button);
     await Promise.resolve();
@@ -101,7 +121,10 @@ describe('FileViewer screenshot tooltip guard', () => {
     await waitFor(() => {
       expect(captureHostIframeSnapshotMock).toHaveBeenCalled();
     });
-    // By the time the frame is captured, the tooltip is gone from the DOM.
-    expect(document.body.querySelector('.od-tooltip-layer')).toBeNull();
+    // By the time the frame is captured, the tooltip paints nothing: hidden
+    // outright (not mid-fade) and out of the accessibility tree with it.
+    expect(bubble().style.visibility).toBe('hidden');
+    expect(bubble().style.opacity).toBe('0');
+    expect(bubble().getAttribute('aria-hidden')).toBe('true');
   });
 });

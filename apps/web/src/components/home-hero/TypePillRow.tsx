@@ -1,25 +1,20 @@
-// Capsule type row — the pill replacement for the fanned type carousel
-// (per product: all 10 top-level creation types use capsules). ONE line exactly as wide as the
-// composer card below it, EVERY gap identical (8px): the pills that fit
-// render inline, then the All button, and the remaining ordered suffix folds
-// into the 全部 popover. Fit is computed against an invisible
-// probe row that always lays out the full set at natural size, so showing /
-// hiding pills can never feed back into its own measurement. Selection
-// state stays with the caller via `onPick`.
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+// Unselected Home entry: three fixed types, with all remaining types in More.
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { Button } from '@open-design/components';
 import type { HomeHeroChip } from './chips';
+import { HOME_TYPE_ROW_IDS, HOME_TYPE_ROW_MORE_IDS } from './chips';
 import { Icon } from '../Icon';
 import { useT } from '../../i18n';
+import { smoothScrollTo } from '../../utils/smoothScrollToTop';
+import styles from './TypePillRow.module.css';
 
-// Hard cap matching the fixed Home information architecture.
-const MAX_PILLS = 10;
-
-// Must match .home-hero__type-pills-wrap's CSS gap.
-const PILL_GAP = 8;
+const MENU_LIST_HEIGHT = 205; // Four 42px rows, four 4px gaps and half a row.
+const VIEWPORT_GUTTER = 16;
+const KEYBOARD_SCROLL_MS = 120;
+const PAGE_REVEAL_MS = 200;
 
 interface Props {
   chips: HomeHeroChip[];
-  /** Currently selected chip id (null → nothing selected yet). */
   activeChipId: string | null;
   disabled?: boolean;
   labelFor: (chipId: string) => string;
@@ -28,150 +23,161 @@ interface Props {
 
 export function TypePillRow({ chips, activeChipId, disabled, labelFor, onPick }: Props) {
   const t = useT();
-  const wrapRef = useRef<HTMLDivElement | null>(null);
-  const probeRef = useRef<HTMLDivElement | null>(null);
-  const tailRef = useRef<HTMLDivElement | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const pendingFocusRef = useRef<'first' | 'last' | null>(null);
+  const cancelScrollRef = useRef<(() => void) | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
-  const flowing = chips.slice(0, MAX_PILLS);
-  const measurementSignature = [
-    ...flowing.map((chip) => `${chip.id}:${labelFor(chip.id)}`),
-    `more:${t('common.all')}`,
-  ].join('\0');
-  // How many flowing pills render inline; the rest go to the 全部 popover.
-  const [fitCount, setFitCount] = useState(flowing.length);
+  const menuId = useId();
+  const byId = (ids: readonly string[]) => ids
+    .map((id) => chips.find((chip) => chip.id === id))
+    .filter((chip): chip is HomeHeroChip => Boolean(chip));
+  const inlineChips = byId(HOME_TYPE_ROW_IDS);
+  const moreChips = byId(HOME_TYPE_ROW_MORE_IDS);
 
   useLayoutEffect(() => {
-    const wrap = wrapRef.current;
-    const probe = probeRef.current;
-    const tail = tailRef.current;
-    if (!wrap || !probe || !tail) return undefined;
-    const measure = () => {
-      // jsdom (unit tests) lays out nothing — keep every pill "fitting"
-      // there rather than collapsing the row to zero.
-      if (wrap.clientWidth === 0) {
-        setFitCount(flowing.length);
-        return;
+    if (!moreOpen) return;
+    let cancelReveal: (() => void) | undefined;
+    const revealMenu = () => {
+      const menu = menuRef.current;
+      if (!menu) return;
+      // The Home surface scrolls inside the shell, not on window. The menu's
+      // overflow provides the extra scroll range without moving the composer
+      // through a layout change or placing the menu over it.
+      let scrollport = menu.parentElement;
+      while (scrollport && !/^(auto|scroll)$/.test(getComputedStyle(scrollport).overflowY)) {
+        scrollport = scrollport.parentElement;
       }
-      // The tail (pinned pills + 全部 trigger) is part of the visible row, so
-      // its width — including its own leading gap — is reserved up front.
-      const available = wrap.clientWidth - tail.offsetWidth - PILL_GAP;
-      let used = 0;
-      let count = 0;
-      for (const el of probe.children) {
-        const width = (el as HTMLElement).offsetWidth;
-        const next = used + (count > 0 ? PILL_GAP : 0) + width;
-        if (next > available) break;
-        used = next;
-        count += 1;
+      scrollport ??= document.scrollingElement as HTMLElement | null;
+      if (!scrollport) return;
+      cancelReveal?.();
+      const bottom = scrollport === document.scrollingElement
+        ? window.innerHeight
+        : Math.min(window.innerHeight,
+          scrollport.getBoundingClientRect().top + scrollport.clientTop + scrollport.clientHeight);
+      const delta = menu.getBoundingClientRect().bottom + VIEWPORT_GUTTER - bottom;
+      if (delta > 0) {
+        const target = Math.min(scrollport.scrollHeight - scrollport.clientHeight, scrollport.scrollTop + delta);
+        if (target > scrollport.scrollTop) cancelReveal = smoothScrollTo(scrollport, target, PAGE_REVEAL_MS);
       }
-      setFitCount((prev) => (prev === count ? prev : count));
     };
-    measure();
-    // jsdom has no ResizeObserver; the initial measure above still ran.
-    if (typeof ResizeObserver === 'undefined') return undefined;
-    const observer = new ResizeObserver(measure);
-    observer.observe(wrap);
-    observer.observe(tail);
-    for (const child of probe.children) observer.observe(child);
-    return () => observer.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flowing.length, measurementSignature]);
-
-  // Dismiss the popover on outside press / Escape.
-  useEffect(() => {
-    if (!moreOpen) return undefined;
-    const onPointer = (event: MouseEvent) => {
-      if (wrapRef.current?.contains(event.target as Node)) return;
-      setMoreOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setMoreOpen(false);
-    };
-    document.addEventListener('mousedown', onPointer);
-    document.addEventListener('keydown', onKey);
+    revealMenu();
+    window.addEventListener('resize', revealMenu);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(revealMenu);
+    if (rootRef.current) observer?.observe(rootRef.current);
+    if (triggerRef.current) observer?.observe(triggerRef.current);
     return () => {
-      document.removeEventListener('mousedown', onPointer);
-      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', revealMenu);
+      observer?.disconnect();
+      cancelReveal?.();
+    };
+  }, [moreOpen, moreChips.length]);
+
+  function focusItem(item: HTMLButtonElement | undefined) {
+    const list = listRef.current;
+    if (!item || !list) return;
+    cancelScrollRef.current?.();
+    cancelScrollRef.current = null;
+    // Native focus scrolling may center off-screen items and jump several
+    // rows. Keep the page still and reveal only the clipped part of this row.
+    item.focus({ preventScroll: true });
+    const itemRect = item.getBoundingClientRect();
+    const top = list.getBoundingClientRect().top + list.clientTop;
+    const bottom = top + list.clientHeight;
+    const delta = itemRect.top < top ? itemRect.top - top
+      : itemRect.bottom > bottom ? itemRect.bottom - bottom : 0;
+    if (delta !== 0) {
+      const target = Math.max(0, Math.min(list.scrollHeight - list.clientHeight, list.scrollTop + delta));
+      cancelScrollRef.current = smoothScrollTo(list, target, KEYBOARD_SCROLL_MS);
+    }
+  }
+
+  function focusMenuItem(edge: 'first' | 'last') {
+    const items = listRef.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)');
+    focusItem(items?.[edge === 'first' ? 0 : items.length - 1]);
+  }
+
+  useLayoutEffect(() => {
+    if (moreOpen && pendingFocusRef.current) focusMenuItem(pendingFocusRef.current);
+    pendingFocusRef.current = null;
+    return () => {
+      cancelScrollRef.current?.();
+      cancelScrollRef.current = null;
     };
   }, [moreOpen]);
 
-  if (flowing.length === 0) return null;
+  useEffect(() => {
+    if (!moreOpen) return;
+    const dismiss = (event: PointerEvent) => {
+      if (event.target instanceof Node && !rootRef.current?.contains(event.target)) setMoreOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { setMoreOpen(false); triggerRef.current?.focus(); }
+    };
+    document.addEventListener('pointerdown', dismiss);
+    document.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('pointerdown', dismiss);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [moreOpen]);
+  if (disabled && moreOpen) setMoreOpen(false);
 
-  const inlineChips = flowing.slice(0, fitCount);
-  const hiddenChips = flowing.slice(fitCount);
-
-  const pillButton = (chip: HomeHeroChip, inPopover: boolean) => {
-    const isActive = chip.id === activeChipId;
-    return (
-      <button
-        key={chip.id}
-        type="button"
-        role="option"
-        aria-selected={isActive}
-        className={`home-hero__type-pill${isActive ? ' is-active' : ''}`}
-        disabled={disabled}
-        data-testid={`home-hero-type-pill-${chip.id}${inPopover ? '-more' : ''}`}
-        onClick={() => {
-          setMoreOpen(false);
-          if (chip.id !== activeChipId) onPick(chip);
-        }}
-      >
-        <Icon name={chip.icon} size={14} />
-        <span>{labelFor(chip.id)}</span>
-      </button>
-    );
-  };
+  const pill = (chip: HomeHeroChip, inMenu = false) => (
+    <Button key={chip.id}
+      className={inMenu ? styles.menuItem : styles.pill}
+      role={inMenu ? 'option' : undefined}
+      aria-selected={inMenu ? chip.id === activeChipId : undefined}
+      disabled={disabled}
+      data-chip={chip.id}
+      data-testid={`home-hero-type-pill-${chip.id}${inMenu ? '-more' : ''}`}
+      onClick={() => { setMoreOpen(false); if (chip.id !== activeChipId) onPick(chip); }}>
+      <span className={styles.icon}><Icon name={chip.icon} size={18} /></span>
+      <span>{labelFor(chip.id)}</span>
+    </Button>
+  );
 
   return (
-    <div
-      className="home-hero__type-pills-wrap"
-      ref={wrapRef}
-      role="listbox"
-      aria-label="type"
-      data-testid="home-hero-type-pills"
-    >
-      {inlineChips.map((chip) => pillButton(chip, false))}
-      {/* Tail: the 全部 trigger is one measured unit so the fit computation
-          reserves its width. The trigger is ALWAYS mounted —
-          geometry that came and went with the overflow set would oscillate
-          the measurement at boundary widths. */}
-      <div className="home-hero__type-pills-tail" ref={tailRef}>
-        <div className="home-hero__type-pills-more">
-          <button
-            type="button"
-            className={`home-hero__type-pill home-hero__type-pills-more-btn${moreOpen ? ' is-open' : ''}`}
-            aria-haspopup="true"
-            aria-expanded={moreOpen}
-            disabled={disabled}
-            data-testid="home-hero-type-pills-more"
-            onClick={() => setMoreOpen((v) => !v)}
-          >
-            <span>{t('common.all')}</span>
-            <Icon name="chevron-down" size={14} />
-          </button>
-          {moreOpen ? (
-            <div
-              className="home-hero__type-pills-popover"
-              role="listbox"
-              aria-label={t('common.all')}
-              data-testid="home-hero-type-pills-popover"
-            >
-              {(hiddenChips.length > 0 ? hiddenChips : flowing).map((chip) =>
-                pillButton(chip, true),
-              )}
-            </div>
-          ) : null}
-        </div>
-      </div>
-      {/* Invisible probe: the FULL flowing set at natural size, used only to
-          measure pill widths — never interactive, never painted. */}
-      <div className="home-hero__type-pills-probe" ref={probeRef} aria-hidden>
-        {flowing.map((chip) => (
-          <span key={chip.id} className="home-hero__type-pill">
-            <Icon name={chip.icon} size={14} />
-            <span>{labelFor(chip.id)}</span>
-          </span>
-        ))}
+    <div ref={rootRef} className={styles.row} role="group"
+      aria-label={t('homeHero.templatePicker.label')} data-testid="home-hero-type-pills">
+      {inlineChips.map((chip) => pill(chip))}
+      <div className={styles.moreAnchor}>
+        <Button ref={triggerRef} className={`${styles.pill} ${styles.more}`}
+          aria-haspopup="listbox" aria-expanded={moreOpen}
+          aria-controls={moreOpen ? menuId : undefined} disabled={disabled}
+          data-testid="home-hero-type-pills-more"
+          onKeyDown={(event) => {
+            if (disabled || !['ArrowDown', 'ArrowUp'].includes(event.key)) return;
+            event.preventDefault();
+            const edge = event.key === 'ArrowDown' ? 'first' : 'last';
+            if (moreOpen) focusMenuItem(edge);
+            else {
+              pendingFocusRef.current = edge;
+              setMoreOpen(true);
+            }
+          }}
+          onClick={(event) => {
+            pendingFocusRef.current = !moreOpen && event.detail === 0 ? 'first' : null;
+            setMoreOpen((value) => !value);
+          }}>
+          {t('homeHero.subTypeMore')}<Icon name="chevron-down" size={14} />
+        </Button>
+        {moreOpen ? <div ref={menuRef} className={styles.menu} data-side="bottom" data-testid="home-hero-type-pills-popover">
+          <div ref={listRef} id={menuId} className={styles.menuList} role="listbox"
+            style={{ maxHeight: MENU_LIST_HEIGHT }}
+            aria-label={t('homeHero.subTypeMore')}
+            onKeyDown={(event) => {
+              if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+              event.preventDefault();
+              const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button'));
+              const index = items.indexOf(document.activeElement as HTMLButtonElement);
+              const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
+                : Math.max(0, Math.min(items.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)));
+              if (items[next] !== document.activeElement) focusItem(items[next]);
+            }}>{moreChips.map((chip) => pill(chip, true))}</div>
+        </div> : null}
       </div>
     </div>
   );

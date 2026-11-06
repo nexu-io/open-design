@@ -97,7 +97,7 @@ export interface MemorySuggestion {
 // hooks while memory stays on:
 //   - chatExtractionEnabled — sediment new facts from chat turns (existing).
 //   - profileEnabled        — inject the structured profile into the prompt.
-//   - rewriteEnabled        — PRE: expand a short query into a task-brief card.
+//   - rewriteEnabled        — gate the applied-memory chip in the prompt.
 //   - verifyEnabled         — POST: self-verify against rules + emit scorecard.
 export interface MemoryHookFlags {
   profileEnabled: boolean;
@@ -278,6 +278,8 @@ export interface ExtractMemoryRequest {
   assistantMessage?: string;
   projectId?: string | null;
   conversationId?: string | null;
+  /** Stable sending draft identity, available before a daemon run exists. */
+  assistantMessageId?: string;
   /** BYOK chat config snapshot. The web app sends this with every
    *  BYOK / API-mode extraction call so the daemon can run LLM
    *  extraction against the *current* chat provider/key/baseUrl/
@@ -451,9 +453,20 @@ export type MemoryExtractionSkipReason =
   | 'empty-message'
   | 'no-match';
 
+/** Explicit producing chat identity; absent for legacy/non-chat extraction. */
+export interface MemoryExtractionOrigin {
+  projectId: string;
+  conversationId: string;
+  /** Only present when assigned by the daemon's actual run. */
+  runId?: string;
+  /** Sending draft for HTTP extraction; native runs use their physical row. */
+  assistantMessageId?: string;
+}
+
 export interface MemoryExtractionRecord {
   /** Stable id for the attempt. UUID-ish; safe to use as a React key. */
   id: string;
+  extractionOrigin?: MemoryExtractionOrigin;
   /** Which extractor wrote this record. Optional for backwards compat
    *  with daemons that predate the heuristic surfacing — the UI treats
    *  a missing kind as `'llm'` since that was the only writer. */
@@ -519,19 +532,17 @@ export interface DeleteMemoryExtractionResponse {
 // updates collapses into a single visible row.
 export interface MemoryExtractionEvent extends MemoryExtractionRecord {}
 
-// ----- Annotation → rule-proposal distillation ----------------------------
+// ----- Annotation → rule draft distillation -------------------------------
 //
 // THREAD 1. The in-canvas/in-deck annotation surfaces (comments, highlights,
 // inspect-selection marks, visual marks) feed a distillation pipeline that
 // turns a batch of annotations + their target context into candidate
-// `rule` memories. The output is a list of `RuleProposalDraft`s — the SAME
-// payload shape as the `<od-card type="rule-proposal">` the agent already
-// emits — surfaced through the existing Keep gate before anything is written.
-// Distillation NEVER writes a rule on its own; the user must Keep a proposal,
-// which routes through the existing `POST /api/memory` (`type: 'rule'`) path.
+// `rule` memories. The output is a list of `RuleProposalDraft`s, compatible
+// with historical rule-proposal payloads. Distillation NEVER writes a rule
+// on its own; saving requires a separate explicit `POST /api/memory`
+// (`type: 'rule'`) request.
 
-/** A proposed verified rule. Mirrors the `OdCardRuleProposal` payload so the
- *  same RuleProposalCard can render distilled proposals and agent-emitted ones. */
+/** A proposed verified rule, compatible with historical `OdCardRuleProposal` payloads. */
 export interface RuleProposalDraft {
   /** Short display name for the rule. */
   name: string;

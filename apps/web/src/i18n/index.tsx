@@ -199,6 +199,16 @@ interface ProviderProps {
 
 const RTL_LOCALES: Locale[] = ['ar', 'fa'];
 
+/**
+ * Whether a locale lays out right-to-left. Exported because direction also
+ * flips side-anchored UI (the nav rail moves to the right edge, so its
+ * tooltips have to open toward the left) and those callers must not
+ * re-declare the locale list.
+ */
+export function isRtlLocale(locale: Locale): boolean {
+  return RTL_LOCALES.includes(locale);
+}
+
 export function I18nProvider({ initial, children }: ProviderProps) {
   const [locale, setLocaleState] = useState<Locale>(() => initial ?? detectInitialLocale());
 
@@ -207,7 +217,7 @@ export function I18nProvider({ initial, children }: ProviderProps) {
   // having to set it itself.
   useEffect(() => {
     if (typeof document !== 'undefined') {
-      const dir = RTL_LOCALES.includes(locale) ? 'rtl' : 'ltr';
+      const dir = isRtlLocale(locale) ? 'rtl' : 'ltr';
       document.documentElement.setAttribute('lang', locale);
       document.documentElement.setAttribute('dir', dir);
     }

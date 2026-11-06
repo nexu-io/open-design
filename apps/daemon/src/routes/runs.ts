@@ -5,12 +5,14 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   defaultScenarioPluginIdForProjectMetadata,
+  InstalledPluginRecordSchema,
   RUN_RESULT_PACKAGE_SCHEMA,
   type AppliedPluginSnapshot,
   type ArtifactManifest,
   type ByokChatProviderConfig,
   type ChatRunStatus,
   type ChatRunStatusResponse,
+  type InstalledPluginRecord,
   type ProjectMetadata as ContractProjectMetadata,
   type RunResultPackageResponse,
 } from '@open-design/contracts';
@@ -18,6 +20,7 @@ import {
   buildRunCreatedV4Aliases,
   buildRunFinishedV4Aliases,
   deriveConfigureGlobals,
+  harnessAnalyticsFromRolloutDecision,
   modelIdForTracking,
   sessionModeToTracking,
   type TrackingDesignSystemSource,
@@ -32,11 +35,13 @@ import type { AnalyticsContext } from '../analytics.js';
 import { spawnEnvForAgent } from '../agents.js';
 import { agentCliEnvForAgent, readAppConfig } from '../app-config.js';
 import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
+import { validateLocalDaemonRequest } from '../http/local-daemon-request.js';
 import {
   workspaceResourceContextFromRequest,
   type BoundWorkspaceResourceMutationGate,
   type WorkspaceResourceAccessInput,
 } from '../collab/workspace-resource-mutation.js';
+import type { RunNoticeLog } from '../runtimes/run-notices.js';
 import {
   codexSessionIdFromRunEvents,
   readCodexRolloutFirstCall,
@@ -47,12 +52,20 @@ import {
   getFirstProjectConversation,
   getConversation,
   getProject,
+  listConversationsAwaitingInput,
+  listProjectsAwaitingInput,
   normalizeConversationSessionMode,
+  acceptProjectUserSubmission,
+  getProjectUserSubmission,
   updateProject,
   upsertMessage,
 } from '../db.js';
 import { readVelaLoginStatus } from '../integrations/vela.js';
-import { getDetectedRuntimeVersions } from '../runtimes/detection.js';
+import {
+  ensureDetectedRuntimeVersions,
+  getDetectedRuntimeVersions,
+} from '../runtimes/detection.js';
+import { mintRunDoneKey } from '../runtimes/run-done-key.js';
 import {
   deriveLangfuseDeliveryState,
   readTelemetrySinkConfig,
@@ -66,10 +79,58 @@ import {
   validatePluginWorkflowId,
 } from '../mcp-observability.js';
 import {
+  createInternalRunCreationService,
+  type InternalRunCreateInput,
+  type InternalRunCreationService,
+} from '../services/internal-run-service.js';
+import {
+  projectStrategyTask,
+} from '../strategies/od-next/automatic-simple-production.js';
+import {
+  cancelStrategyTaskExecution,
+  createStrategyTaskExecution,
+  getStrategyTaskExecutionByRunId,
+  InvalidStrategyTaskRecordError,
+  type StrategyTaskExecutionRecord,
+  StrategyTaskTransitionConflictError,
+} from '../strategies/task-store.js';
+import {
+  prepareStrategyIntake,
+} from '../strategies/od-next/coordinator.js';
+import type { FrozenSkillPackageV1 } from '../strategies/od-next/frozen-skill-package.js';
+import { InvalidFrozenSkillPackageError } from '../strategies/od-next/frozen-skill-package.js';
+import type { ResolvedExamplePluginRecord } from '../strategies/od-next/example-skill-source.js';
+import { captureOdNextSessionSkillPackage } from '../strategies/od-next/session-skill-package.js';
+import { resolveSkillCatalogScope } from '../skill-catalog-scope.js';
+import type { SkillInfo } from '../skills.js';
+import {
+  buildOdNextTaskConfigurationV1,
+  createOdNextTaskInputSnapshot,
+  OdNextTaskInputSnapshotError,
+  removeOdNextTaskInputSnapshotBestEffort,
+  type OdNextTaskInputSnapshotDescriptor,
+} from '../strategies/od-next/task-input-snapshot.js';
+import {
+  evaluateOdNextRollout,
+  readOdNextRolloutPolicy,
+  type OdNextRolloutDecision,
+} from '../strategies/od-next/rollout.js';
+import { odNextRolloutAnalyticsProperties } from '../strategies/od-next/rollout-analytics.js';
+import {
   buildConnectorProbe,
+  automaticScenarioTaskProfile,
   getInstalledPlugin,
+  readVerifiedProjectScenarioBinding,
+  readVerifiedProjectStrategyBinding,
+  resolvePluginFolder,
   resolvePluginSnapshot,
+  type ResolveSnapshotResult,
 } from '../plugins/index.js';
+import { getSnapshot, linkSnapshotToRun } from '../plugins/snapshots.js';
+import {
+  digestExampleSkillManifest,
+  readVerifiedProjectExampleBinding,
+} from '../plugins/example-binding.js';
 import {
   assertSandboxProjectRootAvailable,
   isSafeId,
@@ -97,6 +158,7 @@ import {
   type RunArtifactBaseline,
 } from '../run-artifact-fs.js';
 import {
+  projectDeliverableValidation,
   validateRunDeliverable,
   type RunDeliverableValidationResult,
 } from '../run-deliverable-validation.js';
@@ -117,8 +179,15 @@ import {
   BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
 } from '../runtimes/byok-opencode.js';
 import { resolveChatRunInactivityTimeoutMs } from '../runtimes/chat-run-lifecycle.js';
+import {
+  runtimeAcceptsMidTurnInput,
+  type RunSteeringRefusal,
+} from '../runtimes/run-steering.js';
 import { runMessageEventPersistenceAnalytics } from '../runtimes/chat-run-messages.js';
-import { TERMINAL_RUN_STATUSES } from '../runtimes/runs.js';
+import {
+  isLegacyHydratedRunWithoutAppliedSnapshot,
+  TERMINAL_RUN_STATUSES,
+} from '../runtimes/runs.js';
 import {
   deriveActivationMilestones,
   runAskedUserQuestion,
@@ -134,7 +203,29 @@ import {
   runFilesWrittenForRun,
   runPreviewModuleCountForRun,
 } from '../runtimes/run-lifecycle-analytics.js';
-import { normalizeCommentAttachments } from '../runtimes/chat-prompt-inputs.js';
+import {
+  normalizeCommentAttachments,
+  UPLOAD_DIR,
+} from '../runtimes/chat-prompt-inputs.js';
+import { createRunAnalyticsLifecycle } from '../services/run-analytics-lifecycle.js';
+import {
+  runTouchedArtifactPaths,
+  validateChatProjectDeliverable,
+  toJsonRecord,
+  toProjectRecord,
+  validateChatRunDeliverable,
+  type ChatRun,
+  type JsonRecord,
+  type RunArtifactBaselines,
+  type RunCreatedFallbackInput,
+  type RunProjectKindInput,
+  type RunRetryAnalyticsEvent,
+  type ProjectMetadata,
+  type ProjectRecord,
+  type RunEventRecord,
+  type SseClient,
+} from '../runtimes/chat-run-records.js';
+import { holdsConversation, resolveStrategyHandoff, strategyHandoffTranscript, StrategyHandoffError } from '../strategies/od-next/task-handoff.js';
 
 // Keep in sync with the web uploader's `looksLikeImage` (apps/web registry):
 // omit-pin seeds must classify the same extensions as `image` so reload chips
@@ -151,10 +242,8 @@ const SEEDED_USER_IMAGE_EXTS = new Set([
 ]);
 
 type SqliteDb = Database.Database;
-type JsonRecord = Record<string, unknown>;
 type ApiRequest = Request<Record<string, string>, unknown, JsonRecord>;
 type ApiResponse = Response<unknown>;
-type ProjectMetadata = (Partial<ContractProjectMetadata> & JsonRecord) | null | undefined;
 type AgentCliEnv = Parameters<typeof agentCliEnvForAgent>[0];
 type RunDeliveryTarget = 'managed-project' | 'external-project' | 'none';
 type SeededCommentAttachment = ReturnType<typeof normalizeCommentAttachments>[number] & {
@@ -199,7 +288,20 @@ function withSeededSlideIndex(
  * path strings; persisted messages store `{ path, name, kind, order }` so the
  * UI can reload chips and annotation context after a headless omit-pin seed.
  */
-function seededUserMessageAttachmentFields(meta: JsonRecord): {
+function seededAttachmentSize(projectRoot: string | null | undefined, attachmentPath: string): number | undefined {
+  if (!projectRoot) return undefined;
+  try {
+    const absolute = path.resolve(projectRoot, attachmentPath);
+    const relative = path.relative(path.resolve(projectRoot), absolute);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) return undefined;
+    const stat = fs.statSync(absolute);
+    return stat.isFile() ? stat.size : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function seededUserMessageAttachmentFields(meta: JsonRecord, projectRoot?: string | null): {
   attachments?: Array<{ path: string; name: string; kind: 'image' | 'file'; order: number }>;
   commentAttachments?: SeededCommentAttachment[];
 } {
@@ -209,10 +311,12 @@ function seededUserMessageAttachmentFields(meta: JsonRecord): {
         .map((attachmentPath, index) => {
           const name = path.basename(attachmentPath) || attachmentPath;
           const ext = path.extname(name).toLowerCase();
+          const size = seededAttachmentSize(projectRoot, attachmentPath);
           return {
             path: attachmentPath,
             name,
             kind: SEEDED_USER_IMAGE_EXTS.has(ext) ? ('image' as const) : ('file' as const),
+            ...(size === undefined ? {} : { size }),
             order: index,
           };
         })
@@ -259,124 +363,14 @@ function seededUserMessageTurnMetadataFields(
   };
 }
 
-interface ProjectRecord {
-  id: string;
-  name: string;
-  createdAt?: number;
-  updatedAt?: number;
-  designSystemId?: string | null;
-  metadata?: ProjectMetadata;
-  appliedPluginSnapshotId?: string | null;
-}
-
-interface RunEventRecord
-  extends RunEventForAnalyticsObservability,
-    RunEventForDiagnostics,
-    RunEventForFailureClassification {
-  id: number;
-  event: string;
-  data: unknown;
-  timestamp?: number;
-}
-
-interface SseClient {
-  send(event: string, data: unknown, id?: number): void;
-  end(): void;
-  cleanup?(): void;
-}
-
-interface ChatRun {
-  id: string;
-  projectId: string | null;
-  conversationId: string | null;
-  assistantMessageId: string | null;
-  clientRequestId?: string | null;
-  requestFingerprint?: string | null;
-  agentId: string | null;
-  workspaceScope?: RunWorkspaceScope | null;
-  model?: string | null;
-  status: ChatRunStatus;
-  createdAt: number;
-  updatedAt: number;
-  cancelRequested?: boolean;
-  cancelOrigin?: ChatRunStatusResponse['cancelOrigin'];
-  terminalTrigger?: ChatRunStatusResponse['terminalTrigger'];
-  exitCode?: number | null;
-  signal?: string | null;
-  error?: string | null;
-  errorCode?: string | null;
-  failureAction?: string | null;
-  projectMetadata?: ProjectMetadata;
-  appliedPluginSnapshotId?: string | null;
-  pluginId?: string | null;
-  clientType?: 'desktop' | 'web' | 'external_mcp';
-  sessionMode?: string | null;
-  context?: Record<string, unknown> | null;
-  events: RunEventRecord[];
-  clients: Set<SseClient>;
-  analyticsContext?: AnalyticsContext;
-  analyticsRecovery?: { context?: AnalyticsContext } | null;
-  externalPluginAnalytics?: Record<string, unknown> | null;
-  manualResumeAttemptCount?: number;
-  rechargeWaitDurationMs?: number;
-  artifactOriginStatus?:
-    | 'matched'
-    | 'missing_version'
-    | 'digest_mismatch'
-    | 'invalid_origin'
-    | 'unknown';
-  artifactVersionId?: string;
-  deliverableValid?: boolean;
-  deliverableValidation?: ChatRunStatusResponse['deliverableValidation'];
-  deliverableEntryFile?: string;
-  deliverableArtifactKind?: ChatRunStatusResponse['deliverableArtifactKind'];
-  analyticsTelemetry?: RunTelemetryTimestamps;
-  resolvedModelId?: string | null;
-  preflightAgentCliVersion?: string | null;
-  // E-lite root-cause telemetry read at run_finished. `stdinBackpressure`: the
-  // prompt write to child stdin was queued (pipe buffer full). `lastAgentActivityAt`:
-  // the inactivity-watchdog clock, used to derive `last_progress_age_ms`.
-  stdinBackpressure?: boolean;
-  lastAgentActivityAt?: number;
-  retryAttemptCount?: number;
-  retryFinalResult?: string;
-  retrySuppressedReason?: string;
-  retryOriginalFailure?: {
-    failure_category?: string;
-    failure_detail?: string;
-    failure_stage?: string;
-    retryable?: boolean;
-    user_action?: string;
-  };
-  artifactOutcome?: {
-    artifactCount: number;
-    artifactsCreated?: number;
-    artifactsModified?: number;
-    designSystemCreated: boolean;
-    previewModuleCount: number;
-    filesWritten?: number;
-    diff?: RunArtifactDiff;
-  };
-  artifactPaths?: string[];
-  designSystemId?: string | null;
-  designSystemRequestedId?: string | null;
-  designSystemSelectionSource?: string | null;
-  designSystemDigest?: string | null;
-  promptCache?: {
-    stablePromptHash?: string;
-    hit?: boolean;
-    missReason?: string | null;
-    changedSections?: string[] | null;
-  };
-}
-
-interface RunCreateMeta extends JsonRecord {
+interface RunCreateMeta extends InternalRunCreateInput, JsonRecord {
   projectId?: string;
   conversationId?: string;
   userMessageId?: string;
   assistantMessageId?: string;
   clientRequestId?: string;
   requestFingerprint?: string;
+  strategyRolloutDecision?: OdNextRolloutDecision;
   agentId?: string;
   pluginId?: string;
   appliedPluginSnapshotId?: string;
@@ -384,6 +378,45 @@ interface RunCreateMeta extends JsonRecord {
   currentPrompt?: string;
   projectMetadata?: ProjectMetadata;
   workspaceScope?: RunWorkspaceScope | null;
+  odNextTaskInputSnapshot?: OdNextTaskInputSnapshotDescriptor | null;
+}
+
+/**
+ * Invariant: a conversation runs at most one design-system enrichment
+ * ("AI Optimize") pass at a time.
+ *
+ * The enrichment turn is a hidden, seeded prompt that refines the SAME
+ * registered design system in place, so two concurrent passes bill twice and
+ * race on identical files. Incident 2026-07-28: one double-triggered UI
+ * affordance created two enrichment runs 383 ms apart in one conversation and
+ * both were billed. Ordinary chat turns are deliberately NOT gated here — the
+ * web composer already queues them while the conversation is busy, and a
+ * "send now" interrupt may legitimately overlap the run it is cancelling.
+ *
+ * Returns the non-terminal run that already owns the conversation's
+ * enrichment pass, or null when the request may proceed.
+ */
+function activeRunBlockingDesignSystemEnrichment(
+  runs: Pick<ChatRunService, 'list'>,
+  input: {
+    conversationId: unknown;
+    analyticsHints: unknown;
+    /** The optimistically created run for this request; it never blocks itself. */
+    excludeRunId?: string | null;
+  },
+): ChatRun | null {
+  const hints = input.analyticsHints;
+  const isEnrichment =
+    hints !== null
+    && typeof hints === 'object'
+    && !Array.isArray(hints)
+    && (hints as Record<string, unknown>).dsEnrichment === true;
+  if (!isEnrichment) return null;
+  if (typeof input.conversationId !== 'string' || !input.conversationId) return null;
+  const active = runs
+    .list({ conversationId: input.conversationId, status: 'active' })
+    .filter((run) => run.id !== input.excludeRunId);
+  return active[0] ?? null;
 }
 
 interface RunListFilters {
@@ -405,13 +438,28 @@ interface ChatRunService {
   statusBody(run: ChatRun): ChatRunStatusResponse;
   stream(run: ChatRun, req: Request, res: Response): void;
   start(run: ChatRun, starter: () => Promise<unknown>): ChatRun;
+  fail(run: ChatRun, code: string, message: string): void;
   wait(run: ChatRun): Promise<ChatRunStatusResponse>;
   cancel(
     run: ChatRun,
     origin?: NonNullable<ChatRunStatusResponse['cancelOrigin']>,
   ): Promise<ChatRunStatusResponse>;
+  /**
+   * B11 「引导对话」: deliver one more user message into the turn that is still
+   * running. `runtimeAccepts` is the caller's `runtimeAcceptsMidTurnInput`
+   * verdict for the run's agent def — the runs service owns no agent registry.
+   */
+  steer(
+    run: ChatRun,
+    text: string,
+    runtimeAccepts: boolean,
+  ):
+    | { ok: true; backpressure: boolean }
+    | { ok: false; refusal: RunSteeringRefusal };
   /** Undo an optimistically-created run (e.g. a failed ownership claim). */
   drop(run: ChatRun): void;
+  /** Persist daemon-owned state assigned during an atomic claim hook. */
+  persistState(run: ChatRun): void;
   isTerminal(status: ChatRunStatus): boolean;
   emit?(run: ChatRun, event: string, data: unknown): RunEventRecord;
   setAnalyticsRecovery?(run: ChatRun, recovery: {
@@ -442,19 +490,23 @@ interface RunRoutesDesignService {
   getAppVersion(): string;
 }
 
+/**
+ * The Skill catalogue a run resolves user-selected Skills from. Same listing
+ * the system-prompt composer reads, scoped through
+ * `resolveSkillCatalogScope`, so a Skill admitted on one surface is
+ * resolvable on the other.
+ */
+interface RunRoutesSkillCatalogService {
+  listAllSkillLikeEntries: (options?: {
+    workspaceId?: string | null;
+    workspaceMemberId?: string | null;
+  }) => Promise<readonly SkillInfo[]>;
+}
+
 interface ProjectFileEntry {
   name: string;
   artifactKind?: string | null;
   artifactManifest?: ArtifactManifest | JsonRecord | null;
-}
-
-interface RunRetryAnalyticsEvent {
-  event: string;
-  data: Record<string, unknown>;
-}
-
-interface RunArtifactBaselines {
-  take(runId: string): RunArtifactBaseline | undefined;
 }
 
 interface SseResponse {
@@ -463,20 +515,71 @@ interface SseResponse {
   cleanup?(): void;
 }
 
-interface RunCreatedFallbackInput {
-  analyticsContext: AnalyticsContext | null;
-  run: ChatRun;
-  status: string;
+class AutomaticOdNextPreparationError extends Error {
+  readonly preparationCause: unknown;
+
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause));
+    this.name = 'AutomaticOdNextPreparationError';
+    this.preparationCause = cause;
+  }
 }
 
-interface RunProjectKindInput {
-  hintProjectKind: string | null;
-  projectMetadata?: ProjectMetadata;
+type SuccessfulRunSnapshotResolution = Omit<
+  Extract<ResolveSnapshotResult, { ok: true }>,
+  'created'
+> & {
+  created?: boolean;
+  status?: number;
+};
+
+function removeProvisionalAutomaticSnapshot(
+  db: SqliteDb,
+  resolution: SuccessfulRunSnapshotResolution | null,
+): boolean {
+  if (
+    resolution?.created !== true
+    || resolution.snapshot.pluginId !== 'od-next-strategy'
+  ) return false;
+  const deleted = db.prepare(`
+    DELETE FROM applied_plugin_snapshots
+     WHERE id = ?
+       AND plugin_id = 'od-next-strategy'
+       AND run_id IS NULL
+       AND NOT EXISTS (
+         SELECT 1 FROM projects
+          WHERE applied_plugin_snapshot_id = applied_plugin_snapshots.id
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM conversations
+          WHERE applied_plugin_snapshot_id = applied_plugin_snapshots.id
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM strategy_task_executions
+          WHERE snapshot_id = applied_plugin_snapshots.id
+       )
+  `).run(resolution.snapshotId);
+  return deleted.changes === 1;
+}
+
+function automaticOdNextFallbackDecision(
+  decision: OdNextRolloutDecision,
+  reasonCode: string,
+): OdNextRolloutDecision {
+  return {
+    ...decision,
+    decisionClass: 'observe',
+    effectiveMode: 'observe',
+    eligible: false,
+    reasonCodes: [reasonCode, ...decision.reasonCodes.filter((reason) => reason !== reasonCode)],
+    primaryReasonCode: reasonCode,
+  };
 }
 
 export interface RegisterRunRoutesDeps {
   db: SqliteDb;
   design: RunRoutesDesignService;
+  resources: RunRoutesSkillCatalogService;
   http: {
     createSseResponse: (res: Response) => SseResponse;
     sendApiError: (
@@ -488,6 +591,7 @@ export interface RegisterRunRoutesDeps {
     ) => Response<unknown> | void;
   };
   paths: {
+    BUNDLED_PLUGINS_DIR?: string;
     PROJECTS_DIR: string;
     RUNTIME_DATA_DIR: string;
   };
@@ -497,6 +601,13 @@ export interface RegisterRunRoutesDeps {
   };
   chat: {
     startChatRun: (meta: RunCreateMeta, run: ChatRun) => Promise<unknown>;
+    prepareOdNextInitialPromptBundle?: (input: {
+      meta: RunCreateMeta;
+      frozenSkillPackage: FrozenSkillPackageV1;
+      taskInputSnapshot: OdNextTaskInputSnapshotDescriptor;
+    }) => Promise<{
+      text: string;
+    }>;
   };
   lifecycle: {
     isDaemonShuttingDown: () => boolean;
@@ -522,6 +633,15 @@ export interface RegisterRunRoutesDeps {
     }) => Promise<Parameters<typeof resolvePluginSnapshot>[0]['registry']>;
     renderPluginBriefTemplate: (template: string, inputs?: Record<string, unknown>) => string;
     /**
+     * Exact local catalogue lookup, the same one `/api/plugins/:id/apply-local`
+     * and project create use. Run start re-resolves a project's example
+     * binding through it instead of trusting the stored path.
+     */
+    getLocalPluginBySource?: (
+      id: string,
+      source: string,
+    ) => Promise<ResolvedExamplePluginRecord | null>;
+    /**
      * Fail-closed request-scoped plugin lookup. The catalog API and the run
      * API must use the same Workspace/member visibility rules; otherwise a
      * caller can bypass a hidden Personal plugin by posting its id directly
@@ -534,6 +654,7 @@ export interface RegisterRunRoutesDeps {
     ) => Promise<boolean>;
   };
   telemetry: {
+    taskTelemetryForRun?: (runId: string) => ChatRunStatusResponse['taskTelemetry'];
     reportRunCompletionTelemetryFallback: (input: RunCreatedFallbackInput) => void;
     resolveRunProjectKindForAnalytics: (input: RunProjectKindInput) => string | null;
     runArtifactBaselines: RunArtifactBaselines;
@@ -556,6 +677,13 @@ export interface RegisterRunRoutesDeps {
       run: ChatRun,
     ) => void;
   };
+  /**
+   * Process-owned physical Run seam. The composition root supplies one shared
+   * instance so non-HTTP coordinators can reuse the exact create/claim/start
+   * path. Route-only fixtures may omit it and receive an equivalent local
+   * instance around their injected run registry.
+   */
+  internalRuns?: InternalRunCreationService<RunCreateMeta, ChatRun>;
   /**
    * Workspace-identity gate for POST /api/runs and POST /api/chat — this
    * file's two "create a run" entry points. Until this fix both had ZERO
@@ -610,15 +738,22 @@ export interface RegisterRunRoutesDeps {
   amrWorkspaceScope?: {
     isSignedIn: () => boolean | Promise<boolean>;
   };
+  /** Global run notices (P0-24 N10); omitted in fixtures that do not exercise them. */
+  runNotices?: RunNoticeLog;
 }
 
-type TerminalRunStatus = RunStatusForAnalytics & {
-  status: string;
-  error?: string | null;
-  errorCode?: string | null;
-  exitCode?: number | null;
-  signal?: string | null;
-};
+/**
+ * A response that swallows the authorizer's error body. The notice feed asks
+ * the project gate a yes/no question per notice; a denial must hide that one
+ * notice, not answer the whole request with the denial.
+ */
+const SILENT_RESPONSE = {
+  status() { return this; },
+  json() { return this; },
+  setHeader() { return this; },
+  send() { return this; },
+  end() { return this; },
+} as unknown as ApiResponse;
 
 const AGUI_NATIVE_EVENT_KINDS: ReadonlySet<OdNativeEvent['kind']> = new Set([
   'message_chunk',
@@ -634,63 +769,6 @@ const AGUI_NATIVE_EVENT_KINDS: ReadonlySet<OdNativeEvent['kind']> = new Set([
   'genui_state_synced',
 ]);
 
-function toJsonRecord(value: unknown): JsonRecord {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as JsonRecord
-    : {};
-}
-
-function toProjectRecord(value: unknown): ProjectRecord | null {
-  if (!value || typeof value !== 'object') return null;
-  const record = value as JsonRecord;
-  return typeof record.id === 'string'
-    ? value as ProjectRecord
-    : null;
-}
-
-async function validateChatRunDeliverable(input: {
-  db: SqliteDb;
-  projectsRoot: string;
-  run: ChatRun;
-  runStatus: ChatRunStatus;
-  artifactCount: number;
-  touchedPaths?: string[];
-}): Promise<RunDeliverableValidationResult> {
-  const project = input.run.projectId
-    ? toProjectRecord(getProject(input.db, input.run.projectId))
-    : null;
-  return validateRunDeliverable({
-    projectsRoot: input.projectsRoot,
-    projectId: input.run.projectId,
-    projectMetadata:
-      project?.metadata ?? input.run.projectMetadata ?? null,
-    runStatus: input.runStatus,
-    artifactCount: input.artifactCount,
-    ...(input.touchedPaths ? { touchedPaths: input.touchedPaths } : {}),
-  });
-}
-
-function runTouchedArtifactPaths(run: ChatRun): string[] | undefined {
-  const diff = (
-    run.artifactOutcome as
-      | { diff?: { touchedPaths?: unknown } }
-      | undefined
-  )?.diff;
-  return Array.isArray(diff?.touchedPaths)
-    ? diff.touchedPaths.filter(
-        (value): value is string => typeof value === 'string' && value.length > 0,
-      )
-    : undefined;
-}
-
-function isProjectEnrichableDesignSystem(project: ProjectRecord): boolean {
-  if (typeof project.designSystemId === 'string' && project.designSystemId.length > 0) {
-    return true;
-  }
-  const metadata = project.metadata;
-  return metadata?.importedFrom === 'brand-extraction' || metadata?.importedFrom === 'design-system';
-}
-
 function toProjectFiles(value: unknown): ProjectFileEntry[] {
   return Array.isArray(value)
     ? value.filter((item): item is ProjectFileEntry =>
@@ -702,14 +780,21 @@ function toProjectFiles(value: unknown): ProjectFileEntry[] {
 // Intents the scenario-plugin fallback resolver is allowed to see. Mirrors the
 // `ProjectMetadata['intent']` contract union so an unknown/legacy string in a
 // stored project row never gets cast into the union.
-const SCENARIO_PROJECT_INTENTS: readonly NonNullable<ContractProjectMetadata['intent']>[] = [
-  'live-artifact',
-  'web-clone',
-  'document',
-];
+const SCENARIO_PROJECT_INTENTS: Record<NonNullable<ContractProjectMetadata['intent']>, true> = {
+  'live-artifact': true,
+  'web-clone': true,
+  document: true,
+  'webgl-experience': true,
+  'worker-visualizer': true,
+  marketing: true,
+  hyperframes: true,
+  'motion-design': true,
+};
 
 function toScenarioProjectIntent(value: unknown): ContractProjectMetadata['intent'] | undefined {
-  return SCENARIO_PROJECT_INTENTS.find((intent) => intent === value);
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(SCENARIO_PROJECT_INTENTS, value)
+    ? value as NonNullable<ContractProjectMetadata['intent']>
+    : undefined;
 }
 
 function toScenarioProjectMetadata(
@@ -725,63 +810,6 @@ function toScenarioProjectMetadata(
 
 type DesignSystemSelectionSource = 'request' | 'plugin' | 'project' | 'app-default' | 'none';
 
-function normalizedDesignSystemId(value: unknown): string | null {
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
-}
-
-function resolveEffectiveDesignSystemSelection({
-  requestDesignSystemId,
-  pluginDesignSystemId,
-  projectDesignSystemId,
-  appDefaultDesignSystemId,
-  disabledDesignSystemIds,
-  allowAppDefault = true,
-}: {
-  requestDesignSystemId?: unknown;
-  pluginDesignSystemId?: unknown;
-  projectDesignSystemId?: unknown;
-  appDefaultDesignSystemId?: unknown;
-  disabledDesignSystemIds?: unknown;
-  allowAppDefault?: boolean;
-}): { id: string | null; source: DesignSystemSelectionSource } {
-  const requestId = normalizedDesignSystemId(requestDesignSystemId);
-  if (requestId) return { id: requestId, source: 'request' };
-
-  const pluginId = normalizedDesignSystemId(pluginDesignSystemId);
-  if (pluginId) return { id: pluginId, source: 'plugin' };
-
-  const disabledIds = Array.isArray(disabledDesignSystemIds)
-    ? disabledDesignSystemIds.map(normalizedDesignSystemId).filter(
-        (value): value is string => value !== null,
-      )
-    : [];
-  const projectId = normalizedDesignSystemId(projectDesignSystemId);
-  if (projectId && !disabledIds.includes(projectId)) {
-    return { id: projectId, source: 'project' };
-  }
-
-  if (allowAppDefault) {
-    const appDefaultId = normalizedDesignSystemId(appDefaultDesignSystemId);
-    if (appDefaultId) return { id: appDefaultId, source: 'app-default' };
-  }
-
-  return { id: null, source: 'none' };
-}
-
-function designSystemIdFromPluginSnapshot(snapshot: unknown): string | null {
-  const items = (snapshot as { resolvedContext?: { items?: unknown } } | null | undefined)
-    ?.resolvedContext?.items;
-  if (!Array.isArray(items)) return null;
-  const designSystemItems = items.filter(
-    (item): item is { kind: string; id?: unknown; primary?: unknown } =>
-      item !== null &&
-      typeof item === 'object' &&
-      (item as { kind?: unknown }).kind === 'design-system',
-  );
-  const primary = designSystemItems.find((item) => item.primary === true);
-  return normalizedDesignSystemId(primary?.id ?? designSystemItems[0]?.id);
-}
-
 function routeParamId(req: ApiRequest): string | null {
   return typeof req.params.id === 'string' && req.params.id.length > 0
     ? req.params.id
@@ -796,6 +824,7 @@ function withoutSensitiveRunInput(body: JsonRecord): JsonRecord {
   delete sanitized.rechargeResumeCapability;
   // Workspace scope is a server-issued authorization fact, not a request option.
   delete sanitized.workspaceScope;
+  delete sanitized.odNextTaskInputSnapshot;
   return sanitized;
 }
 
@@ -895,12 +924,52 @@ function toOdNativeEvent(record: RunEventRecord): OdNativeEvent | null {
   return { kind: record.event, ...toJsonRecord(record.data) } as OdNativeEvent;
 }
 
+export function sendStructuredRunCreateFailure(
+  res: ApiResponse,
+  sendApiError: RegisterRunRoutesDeps['http']['sendApiError'],
+  error: unknown,
+  requestId: string = randomUUID(),
+): Response<unknown> | void {
+  const rawCode = (error as NodeJS.ErrnoException)?.code;
+  const code = typeof rawCode === 'string' && /^[A-Z0-9_]+$/.test(rawCode)
+    ? rawCode
+    : 'UNKNOWN';
+  console.error(`[runs] preparation failed request=${requestId} code=${code}`);
+  return sendApiError(
+    res,
+    500,
+    'INTERNAL_ERROR',
+    'Run preparation failed.',
+    { requestId },
+  );
+}
+
+export function registerRunCreateRoute(
+  app: Express,
+  handleRunCreate: (req: ApiRequest, res: ApiResponse) => Promise<unknown>,
+  sendApiError: RegisterRunRoutesDeps['http']['sendApiError'],
+): void {
+  app.post('/api/runs', async (req: ApiRequest, res: ApiResponse) => {
+    try {
+      return await handleRunCreate(req, res);
+    } catch (error) {
+      if (res.headersSent) throw error;
+      return sendStructuredRunCreateFailure(res, sendApiError, error);
+    }
+  });
+}
+
 export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
   const { db, design } = ctx;
   const { createSseResponse, sendApiError } = ctx.http;
-  const { PROJECTS_DIR, RUNTIME_DATA_DIR } = ctx.paths;
+  const { BUNDLED_PLUGINS_DIR, PROJECTS_DIR, RUNTIME_DATA_DIR } = ctx.paths;
+  const taskInputSnapshotsRoot = path.join(RUNTIME_DATA_DIR, 'od-next-task-inputs');
   const { detectAgents, getAgentDef } = ctx.agents;
   const { startChatRun } = ctx.chat;
+  const prepareOdNextInitialPromptBundle = ctx.chat.prepareOdNextInitialPromptBundle
+    ?? (async () => {
+      throw new Error('OD Next Prompt Bundle preparation service is unavailable.');
+    });
   const {
     connectorService,
     detectSkillPluginCandidateOnRunSuccess,
@@ -918,6 +987,143 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     pinAssistantMessageOnRunCreate,
     reconcileAssistantMessageOnRunEnd,
   } = ctx.messages;
+  const internalRuns = ctx.internalRuns ?? createInternalRunCreationService({
+    runs: design.runs,
+    claimAssistantMessage: (run, options) =>
+      pinAssistantMessageOnRunCreate(db, run, options),
+    analyticsLifecycle: createRunAnalyticsLifecycle({
+      db,
+      design,
+      paths: { PROJECTS_DIR, RUNTIME_DATA_DIR },
+      agents: { detectAgents },
+      telemetry: ctx.telemetry,
+    }),
+  });
+  const runMatchesTaskImmutableOwner = (
+    run: ChatRun,
+    task: StrategyTaskExecutionRecord,
+  ): boolean => Boolean(
+    run.odNextTaskInputSnapshot
+    && run.odNextTaskInputSnapshot.taskExecutionId === task.taskExecutionId
+    && run.odNextTaskInputSnapshot.manifestSha256
+      === task.frozenInputIdentity.taskInputManifestSha256
+    && run.projectId === task.projectId
+    && run.conversationId === task.conversationId
+    && run.agentId === task.selectedAgentId
+  );
+  const strategyTaskForRun = (
+    run: ChatRun,
+    allowLegacyReadProjection = false,
+  ): StrategyTaskExecutionRecord | null => {
+    const task = getStrategyTaskExecutionByRunId(db, run.id);
+    if (!task && run.odNextTaskInputSnapshot) {
+      throw new InvalidStrategyTaskRecordError(
+        'OD Next Run retains an immutable input owner but has no persisted task mapping.',
+      );
+    }
+    if (
+      task
+      && (
+        !runMatchesTaskImmutableOwner(run, task)
+        || (
+          run.appliedPluginSnapshotId !== task.snapshotId
+          && !(allowLegacyReadProjection && isLegacyHydratedRunWithoutAppliedSnapshot(run))
+        )
+      )
+    ) {
+      throw new InvalidStrategyTaskRecordError(
+        'OD Next Run and immutable input owner do not match the persisted task scope.',
+      );
+    }
+    return task;
+  };
+  const statusWithStrategyTask = (run: ChatRun): ChatRunStatusResponse => {
+    let projectedSnapshotId: string | undefined;
+    try {
+      const strategyTask = strategyTaskForRun(run, true);
+      const projection = strategyTask ? projectStrategyTask(strategyTask, run.id, db) : null;
+      if (projection) run.strategyTask = projection;
+      if (strategyTask && isLegacyHydratedRunWithoutAppliedSnapshot(run)) {
+        projectedSnapshotId = strategyTask.snapshotId;
+      }
+    } catch (error) {
+      if (
+        !(error instanceof InvalidFrozenSkillPackageError)
+        && !(error instanceof InvalidStrategyTaskRecordError)
+      ) throw error;
+      delete run.strategyTask;
+      if (!['succeeded', 'failed', 'canceled'].includes(run.status)) {
+        design.runs.fail(
+          run,
+          error instanceof InvalidFrozenSkillPackageError
+            ? 'OD_NEXT_SKILL_SNAPSHOT_INVALID'
+            : 'OD_NEXT_TASK_STATE_INVALID',
+          error.message,
+        );
+      }
+    }
+    const status = design.runs.statusBody(run);
+    const taskTelemetry = status.strategyTask ? ctx.telemetry.taskTelemetryForRun?.(run.id) : undefined;
+    if (taskTelemetry) status.taskTelemetry = taskTelemetry;
+    // A read can derive display identity from the validated task, but must not
+    // stamp the source Run and bypass clarification's linked-snapshot witness.
+    return projectedSnapshotId
+      ? { ...status, appliedPluginSnapshotId: projectedSnapshotId }
+      : status;
+  };
+
+  /**
+   * The presentation-side deliverable answer, resolved only when a strategy
+   * task settled `blocked`.
+   *
+   * A blocked verdict says the protocol could not record the step. It does NOT
+   * say the user lost anything, and those two got conflated because one
+   * predicate answered both: `deliverableValid` asks "did THIS run write it",
+   * which is `false` for the most ordinary shape of the failure — a turn that
+   * checks already-finished work and correctly changes nothing. The client
+   * needs the other answer to decide whether a refusal is worth a red card.
+   *
+   * Fails open to `{}` rather than throwing: a project scan that cannot run
+   * must not take the whole status read down with it, and an absent field
+   * leaves the client on its previous behaviour.
+   */
+  const projectDeliverableForBlockedStrategyTask = async (
+    run: ChatRun,
+    status: ChatRunStatusResponse,
+  ): Promise<Partial<ChatRunStatusResponse>> => {
+    if (status.strategyTask?.terminal !== true) return {};
+    if (status.strategyTask.outcome !== 'blocked') return {};
+    try {
+      const resolved = await validateChatProjectDeliverable({
+        db,
+        projectsRoot: PROJECTS_DIR,
+        run,
+      });
+      const validation = projectDeliverableValidation(resolved.validation);
+      // The moment a red card is about to be withheld over a finished
+      // deliverable. Logged server-side so it lands in the daemon log and the
+      // diagnostics export: suppressing a failure the user cannot act on is
+      // right, suppressing it invisibly is not.
+      console.info('[od-next-task] blocked task deliverable probe', {
+        runId: run.id,
+        projectId: run.projectId ?? null,
+        reasonCodes: status.strategyTask?.blockedContext?.reasonCodes ?? [],
+        projectDeliverableValid: resolved.valid,
+        projectDeliverableValidation: resolved.validation,
+        ...(resolved.entryFile ? { entryFile: resolved.entryFile } : {}),
+      });
+      return {
+        projectDeliverableValid: resolved.valid,
+        ...(validation ? { projectDeliverableValidation: validation } : {}),
+      };
+    } catch (error) {
+      console.warn('[od-next-task] project deliverable probe failed', {
+        runId: run.id,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+      return {};
+    }
+  };
 
   /** Authorize every bound run mutation before plugin or snapshot resolution. */
   async function authorizeRunProjectBeforePluginResolution(
@@ -1203,11 +1409,16 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     }
   }
 
-  app.post('/api/runs', async (req: ApiRequest, res: ApiResponse) => {
+  const handleRunCreate = async (req: ApiRequest, res: ApiResponse, stream = false) => {
     if (ctx.lifecycle.isDaemonShuttingDown()) {
       return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
     }
     const requestBody = toJsonRecord(req.body);
+    const submission = requestBody.submission as { id?: unknown; source?: unknown } | undefined;
+    if (submission !== undefined && (!submission || typeof submission.id !== 'string'
+      || !isSafeId(submission.id) || !['user', 'system', 'queue'].includes(String(submission.source)))) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'invalid submission');
+    }
     const requestAnalyticsContext = readAnalyticsContext(req);
     const mediaExecution = parseMediaExecutionPolicyInput(requestBody.mediaExecution);
     if (!mediaExecution.ok) {
@@ -1225,7 +1436,9 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
       );
     }
-    // Reject a client-supplied conversationId that is missing a projectId or
+    // Legacy streaming chat also supports unpersisted conversations without pins.
+    // Preserve that path while rejecting mismatched existing ownership on both routes.
+    // For /api/runs, reject a client-supplied conversationId missing a projectId or
     // not owned by that projectId before plugin snapshot resolve (which links
     // the snapshot to the conversation and would FK-fail / 500) and before
     // omit-pin mint/seed (which would return 202 with an unpersisted
@@ -1233,10 +1446,12 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     if (typeof requestBody.conversationId === 'string' && requestBody.conversationId) {
       const requestConversation = getConversation(db, requestBody.conversationId);
       if (
-        !requestConversation ||
-        typeof requestBody.projectId !== 'string' ||
-        !requestBody.projectId ||
-        requestConversation.projectId !== requestBody.projectId
+        (!stream && (
+          !requestConversation || typeof requestBody.projectId !== 'string' || !requestBody.projectId
+        )) ||
+        (!requestConversation && (requestBody.assistantMessageId || requestBody.userMessageId)) ||
+        (requestConversation && typeof requestBody.projectId === 'string'
+          && requestBody.projectId && requestConversation.projectId !== requestBody.projectId)
       ) {
         return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
       }
@@ -1250,6 +1465,55 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       );
       if (!authorization.ok) return;
       authorizedBoundMutation = authorization.authorizedBoundMutation;
+    }
+    const previousSubmission = submission ? getProjectUserSubmission(db, submission.id as string) : undefined;
+    // Resolve ownership before plugin resolution, which can persist bindings.
+    // Project-only retries use the same default-conversation rule as the run.
+    const submissionConversationId = typeof requestBody.conversationId === 'string' && requestBody.conversationId
+      ? requestBody.conversationId
+      : !stream && typeof requestBody.projectId === 'string' && requestBody.projectId
+        ? getFirstProjectConversation(db, requestBody.projectId)?.id
+        : undefined;
+    if (previousSubmission && (previousSubmission.projectId !== requestBody.projectId
+      || previousSubmission.conversationId !== submissionConversationId)) {
+      return sendApiError(res, 409, 'IDEMPOTENCY_CONFLICT', 'submission belongs to another conversation');
+    }
+    if (submission?.source === 'queue' && !previousSubmission) {
+      return sendApiError(res, 409, 'BAD_REQUEST', 'queued submission must be registered before execution');
+    }
+
+    // Keep enrichment's specific recovery response ahead of generic task handoff.
+    // Same-request retries still reach the idempotent claim below.
+    const enrichmentRun = activeRunBlockingDesignSystemEnrichment(design.runs, {
+      conversationId: requestBody.conversationId, analyticsHints: requestBody.analyticsHints,
+    });
+    if (enrichmentRun && !(typeof requestBody.clientRequestId === 'string'
+      && enrichmentRun.clientRequestId === requestBody.clientRequestId)) {
+      return sendApiError(res, 409, 'DESIGN_SYSTEM_ENRICHMENT_IN_PROGRESS',
+        'a design-system enrichment run is already active for this conversation', {
+          details: { kind: 'design_system_enrichment_in_progress', runId: enrichmentRun.id,
+            conversationId: enrichmentRun.conversationId ?? '' },
+        });
+    }
+    let previousStrategyTask: StrategyTaskExecutionRecord | null = null;
+    try {
+      previousStrategyTask = resolveStrategyHandoff(db, requestBody, design.runs.list({
+        projectId: typeof requestBody.projectId === 'string' ? requestBody.projectId : undefined,
+        conversationId: typeof requestBody.conversationId === 'string' ? requestBody.conversationId : undefined,
+      }));
+    } catch (error) {
+      if (error instanceof StrategyHandoffError) return sendApiError(res, error.status, error.code, error.message);
+      if (error instanceof InvalidStrategyTaskRecordError || error instanceof InvalidFrozenSkillPackageError) {
+        return sendApiError(res, 409, error instanceof InvalidFrozenSkillPackageError
+          ? 'OD_NEXT_SKILL_SNAPSHOT_INVALID' : 'OD_NEXT_TASK_STATE_INVALID', error.message);
+      }
+      throw error;
+    }
+    if (previousStrategyTask) {
+      requestBody.priorTranscript = strategyHandoffTranscript(db, previousStrategyTask);
+      delete requestBody.taskExecutionId;
+      delete requestBody.appliedPluginSnapshotId;
+      delete requestBody.pluginId;
     }
     let effectiveAgentId =
       typeof requestBody.agentId === 'string' && requestBody.agentId
@@ -1286,31 +1550,267 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       if (!prepared.ok) return;
       preparedWorkspaceScope = prepared.workspaceScope;
     }
-    let resolvedSnapshot = null;
-    if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
-      const explicitPlugin =
-        requestBody.pluginId || requestBody.appliedPluginSnapshotId;
+    let resolvedSnapshot: SuccessfulRunSnapshotResolution | null = null;
+    let strategyRolloutDecision: OdNextRolloutDecision | null = null;
+    let resolveAutomaticOrdinaryFallback: (() => ResolveSnapshotResult) | null = null;
+    let automaticOrdinaryFallbackPluginId: string | null = null;
+    let automaticSnapshotPreparationError: Error | null = null;
+    let idempotentStrategyRetry = null;
+    try {
+      idempotentStrategyRetry = typeof requestBody.clientRequestId === 'string'
+        && requestBody.clientRequestId
+        ? design.runs.list({
+            projectId: typeof requestBody.projectId === 'string'
+              ? requestBody.projectId
+              : undefined,
+            conversationId: typeof requestBody.conversationId === 'string'
+              ? requestBody.conversationId
+              : undefined,
+          }).find((candidate) => (
+            candidate.clientRequestId === requestBody.clientRequestId
+            && Boolean(strategyTaskForRun(candidate))
+          )) ?? null
+        : null;
+    } catch (error) {
+      if (
+        error instanceof InvalidFrozenSkillPackageError
+        || error instanceof InvalidStrategyTaskRecordError
+      ) {
+        return sendApiError(
+          res,
+          409,
+          error instanceof InvalidFrozenSkillPackageError
+            ? 'OD_NEXT_SKILL_SNAPSHOT_INVALID'
+            : 'OD_NEXT_TASK_STATE_INVALID',
+          error.message,
+        );
+      }
+      throw error;
+    }
+    if (idempotentStrategyRetry?.appliedPluginSnapshotId) {
+      const retrySnapshot = getSnapshot(db, idempotentStrategyRetry.appliedPluginSnapshotId);
+      if (retrySnapshot) {
+        resolvedSnapshot = {
+          ok: true,
+          status: 200,
+          snapshotId: retrySnapshot.snapshotId,
+          snapshot: retrySnapshot,
+          created: false,
+        };
+      }
+    } else if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
       let runResolveBody: JsonRecord = requestBody;
-      if (!explicitPlugin) {
-        const projectRow = toProjectRecord(getProject(db, requestBody.projectId));
+      let synthesizedAutomaticDefault = false;
+      const rolloutProject = toProjectRecord(getProject(db, requestBody.projectId));
+      const snapshotConversationId =
+        typeof requestBody.conversationId === 'string' && requestBody.conversationId
+          ? getConversation(db, requestBody.conversationId)?.id ?? null
+          : getFirstProjectConversation(db, requestBody.projectId)?.id ?? null;
+      const defaultPluginId = defaultScenarioPluginIdForProjectMetadata(
+        toScenarioProjectMetadata(rolloutProject?.metadata),
+      );
+      const suppliedSnapshotWasNamed = typeof requestBody.appliedPluginSnapshotId === 'string'
+        && requestBody.appliedPluginSnapshotId.trim().length > 0;
+      const suppliedPluginWasNamed = typeof requestBody.pluginId === 'string'
+        && requestBody.pluginId.trim().length > 0;
+      const projectHasExplicitPin = !previousStrategyTask && Boolean(rolloutProject?.appliedPluginSnapshotId);
+      const verifiedScenarioBinding = rolloutProject
+        ? readVerifiedProjectScenarioBinding(db, {
+            projectId: rolloutProject.id,
+            appliedPluginSnapshotId: rolloutProject.appliedPluginSnapshotId,
+            metadata: rolloutProject.metadata as ContractProjectMetadata,
+          })
+        : null;
+      const verifiedStrategyBinding = readVerifiedProjectStrategyBinding(
+        rolloutProject?.metadata as ContractProjectMetadata | null | undefined,
+      );
+      const verifiedExampleBinding = readVerifiedProjectExampleBinding(
+        rolloutProject?.metadata as ContractProjectMetadata | null | undefined,
+      );
+      let selectedExamplePlugin: InstalledPluginRecord | null = null;
+      if (verifiedExampleBinding) {
+        try {
+          const candidate = await ctx.plugins.getLocalPluginBySource?.(
+            verifiedExampleBinding.pluginId,
+            verifiedExampleBinding.pluginSource,
+          );
+          const parsed = InstalledPluginRecordSchema.safeParse(candidate);
+          if (
+            !parsed.success
+            || parsed.data.id !== verifiedExampleBinding.pluginId
+            || parsed.data.source !== verifiedExampleBinding.pluginSource
+            || await digestExampleSkillManifest(parsed.data.fsPath)
+              !== verifiedExampleBinding.manifestSourceDigest
+          ) {
+            throw new Error('the bound example no longer resolves to its frozen identity');
+          }
+          selectedExamplePlugin = parsed.data;
+        } catch (error) {
+          console.warn(
+            `[plugins] selected example ${verifiedExampleBinding.pluginId} is unavailable for ordinary fallback: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+      }
+      const projectPinIsAutomaticDefault = Boolean(
+        projectHasExplicitPin
+        && verifiedScenarioBinding?.provenance === 'automatic_default'
+        && verifiedScenarioBinding.pluginId === defaultPluginId,
+      );
+      const suppressAutomaticDefaultPinFallback = Boolean(
+        projectPinIsAutomaticDefault
+        && verifiedExampleBinding
+        && !selectedExamplePlugin,
+      );
+      const suppliedContextPluginWasNamed = Boolean(
+        Array.isArray((rolloutProject?.metadata as ContractProjectMetadata | undefined)?.contextPlugins)
+        && (rolloutProject?.metadata as ContractProjectMetadata).contextPlugins!.length > 0
+      );
+      const officialTypeEntry = Boolean(defaultPluginId
+        && getInstalledPlugin(db, defaultPluginId)?.sourceKind === 'bundled'
+        && verifiedScenarioBinding?.pluginId === defaultPluginId
+        && (!suppliedPluginWasNamed || requestBody.pluginId === defaultPluginId)
+        && (!suppliedSnapshotWasNamed || requestBody.appliedPluginSnapshotId === rolloutProject?.appliedPluginSnapshotId));
+      const officialTemplateEntry = Boolean(selectedExamplePlugin?.sourceKind === 'bundled'
+        && verifiedExampleBinding
+        && (!suppliedPluginWasNamed || requestBody.pluginId === selectedExamplePlugin.id)
+        && (!suppliedSnapshotWasNamed || requestBody.appliedPluginSnapshotId === rolloutProject?.appliedPluginSnapshotId));
+      const explicitExecutablePlugin = !officialTypeEntry && !officialTemplateEntry && Boolean(
+        suppliedSnapshotWasNamed
+        || suppliedPluginWasNamed
+        || (projectHasExplicitPin && !projectPinIsAutomaticDefault)
+      );
+      // A named Skill is deliberately absent here. Naming one — the composer's
+      // @-mention, `od run --skill`, a Skill persisted on the project — refines
+      // the task; it does not claim the route away from a task type OD Next
+      // already owns. An admitted strategy carries the Skill in
+      // `session_skills/user_selected_skills` (see
+      // `captureOdNextSessionSkillPackage`), where the strategy's conflict
+      // order already ranks a user-selected Skill above its own. A context
+      // plugin still claims authority: that is an executable surface the
+      // strategy has no slot for.
+      const explicitUserPlugin = Boolean(
+        explicitExecutablePlugin
+        || suppliedContextPluginWasNamed
+      );
+      // Subsequent requests use the current policy, including older conversations.
+      // In-flight physical runs and idempotent retries keep their frozen bundle.
+      const rolloutAppConfig = await readAppConfig(RUNTIME_DATA_DIR);
+      const rolloutPolicy = readOdNextRolloutPolicy(process.env, rolloutAppConfig);
+      const rolloutTaskType = !explicitUserPlugin ? 'discovery' as const : null;
+      const routeApplicability = explicitUserPlugin
+        ? 'explicit_user' as const
+        : rolloutTaskType && snapshotConversationId
+          ? 'eligible' as const
+          : 'not_applicable' as const;
+      const rolloutMayObserve = routeApplicability === 'eligible'
+        && rolloutPolicy.requestedMode !== 'off'
+        && rolloutPolicy.contentEnabled
+        && rolloutPolicy.behaviorEnabled;
+      const rolloutFolder = rolloutMayObserve && BUNDLED_PLUGINS_DIR
+        ? path.join(BUNDLED_PLUGINS_DIR, 'scenarios', 'od-next-strategy')
+        : null;
+      let automaticAdmissionPreparationFailed = false;
+      let rolloutResolved: Awaited<ReturnType<typeof resolvePluginFolder>> | null = null;
+      if (rolloutFolder) {
+        try {
+          rolloutResolved = await resolvePluginFolder({
+            folder: rolloutFolder,
+            folderId: 'od-next-strategy',
+            sourceKind: 'bundled',
+            source: rolloutFolder,
+            trust: 'bundled',
+          });
+        } catch (error) {
+          automaticAdmissionPreparationFailed = true;
+          console.warn('[od-next-rollout] automatic strategy package preparation failed; using ordinary default', error);
+        }
+      }
+      const rolloutPlugin = rolloutResolved?.ok ? rolloutResolved.record : null;
+      let rolloutVersions: Awaited<ReturnType<typeof ensureDetectedRuntimeVersions>> | null = null;
+      if (routeApplicability === 'eligible' && rolloutPlugin) {
+        try {
+          if (effectiveAgentId) {
+            const agentCliEnv = agentCliEnvForAgent(
+              (rolloutAppConfig as { agentCliEnv?: AgentCliEnv }).agentCliEnv,
+              effectiveAgentId,
+            );
+            rolloutVersions = await ensureDetectedRuntimeVersions(effectiveAgentId, agentCliEnv);
+          }
+        } catch (error) {
+          automaticAdmissionPreparationFailed = true;
+          console.warn('[od-next-rollout] runtime detection failed; using ordinary default', error);
+        }
+      }
+      strategyRolloutDecision = evaluateOdNextRollout({
+        policy: rolloutPolicy,
+        assignmentIdentity: `${requestBody.projectId}:${snapshotConversationId ?? ''}`,
+        taskType: rolloutTaskType,
+        agentId: effectiveAgentId,
+        agentVersion: rolloutVersions?.agentCliVersion ?? null,
+        sourceKind: rolloutPlugin?.sourceKind ?? null,
+        routeApplicability,
+      });
+      if (
+        automaticAdmissionPreparationFailed
+        && strategyRolloutDecision.effectiveMode === 'active'
+      ) {
+        strategyRolloutDecision = automaticOdNextFallbackDecision(
+          strategyRolloutDecision,
+          'od_next_rollout_prestart_preparation_failed',
+        );
+      }
+      console.info('[od-next-rollout]', {
+        decisionClass: strategyRolloutDecision.decisionClass,
+        requestedMode: strategyRolloutDecision.requestedMode,
+        effectiveMode: strategyRolloutDecision.effectiveMode,
+        taskType: strategyRolloutDecision.taskType,
+        agentId: effectiveAgentId,
+        agentVersion: rolloutVersions?.agentCliVersion ?? null,
+        sourceKind: rolloutPlugin?.sourceKind ?? null,
+        assignmentClass: strategyRolloutDecision.eligible ? 'included' : 'not_included',
+        primaryReasonCode: strategyRolloutDecision.primaryReasonCode,
+      });
+      if (!explicitExecutablePlugin) {
+        const projectRow = rolloutProject;
         const hasPin =
           typeof projectRow?.appliedPluginSnapshotId === 'string'
           && projectRow.appliedPluginSnapshotId.length > 0;
-        if (!hasPin) {
-          const fallbackPluginId = defaultScenarioPluginIdForProjectMetadata(
-            toScenarioProjectMetadata(projectRow?.metadata),
-          );
-          if (fallbackPluginId && getInstalledPlugin(db, fallbackPluginId)) {
+        if (strategyRolloutDecision?.effectiveMode === 'active') {
+          runResolveBody = {
+            ...requestBody,
+            pluginId: 'od-next-strategy',
+            appliedPluginSnapshotId: undefined,
+          };
+        } else if (!hasPin || (projectPinIsAutomaticDefault && selectedExamplePlugin)) {
+          // An official example card is the user's concrete choice inside this
+          // task type. When OD Next is not active, execute that exact example
+          // on the ordinary route instead of silently substituting the
+          // project-kind default (for decks, the unrelated simple-deck/COO
+          // template). A stale/unavailable binding deliberately yields no
+          // plugin rather than a different template.
+          const fallbackPluginId = selectedExamplePlugin?.id
+            ?? (verifiedExampleBinding ? null : defaultPluginId);
+          if (
+            fallbackPluginId
+            && (selectedExamplePlugin || getInstalledPlugin(db, fallbackPluginId))
+          ) {
             runResolveBody = { ...requestBody, pluginId: fallbackPluginId };
+            synthesizedAutomaticDefault = !selectedExamplePlugin;
           }
         }
       }
+      const activatingStrategy = strategyRolloutDecision?.effectiveMode === 'active'
+        && runResolveBody.pluginId === 'od-next-strategy'
+        && rolloutPlugin;
       // Authorize the final plugin id, not only the literal request field.
       // Project-kind fallback may synthesize a pluginId, and it must not gain
       // a bypass around the same scoped catalog resolver.
       if (
         typeof runResolveBody.pluginId === 'string'
         && runResolveBody.pluginId.length > 0
+        && !activatingStrategy
         && ctx.plugins.authorizePluginRequest
         && !await ctx.plugins.authorizePluginRequest(
           req,
@@ -1338,22 +1838,88 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       } catch (err) {
         return res.status(500).json({ error: String(err) });
       }
+      if (!explicitUserPlugin && strategyRolloutDecision?.effectiveMode === 'active') {
+        automaticOrdinaryFallbackPluginId = selectedExamplePlugin?.id
+          ?? (verifiedExampleBinding ? null : defaultPluginId);
+        const fallbackBody = (
+          !projectHasExplicitPin
+          || (projectPinIsAutomaticDefault && selectedExamplePlugin)
+        )
+          && automaticOrdinaryFallbackPluginId
+          && (selectedExamplePlugin || getInstalledPlugin(db, automaticOrdinaryFallbackPluginId))
+          ? { ...requestBody, pluginId: automaticOrdinaryFallbackPluginId }
+          : requestBody;
+        resolveAutomaticOrdinaryFallback = () => resolvePluginSnapshot({
+          db,
+          body: fallbackBody,
+          projectId: requestBody.projectId as string,
+          conversationId: snapshotConversationId,
+          registry: registryView,
+          connectorProbe: buildConnectorProbe(connectorService),
+          requireSnapshotProjectMatch: true,
+          allowProjectPinFallback: !suppressAutomaticDefaultPinFallback,
+          ...(selectedExamplePlugin ? { plugin: selectedExamplePlugin } : {}),
+          ...(selectedExamplePlugin ? { runScopedActivation: true } : {}),
+          ...(!selectedExamplePlugin && defaultPluginId
+            ? {
+                projectBinding: {
+                  provenance: 'automatic_default' as const,
+                  taskProfile: verifiedScenarioBinding?.taskProfile
+                    ?? automaticScenarioTaskProfile({
+                      metadata: rolloutProject?.metadata as ContractProjectMetadata,
+                      pluginId: defaultPluginId,
+                    }),
+                },
+              }
+            : {}),
+        });
+      }
       const resolved = resolvePluginSnapshot({
         db,
         body: runResolveBody,
         projectId: requestBody.projectId,
-        conversationId: typeof requestBody.conversationId === 'string'
-          ? requestBody.conversationId
-          : null,
+        conversationId: snapshotConversationId,
         registry: registryView,
         connectorProbe: buildConnectorProbe(connectorService),
         requireSnapshotProjectMatch: true,
+        allowProjectPinFallback: !suppressAutomaticDefaultPinFallback,
+        ...(selectedExamplePlugin ? { plugin: selectedExamplePlugin } : {}),
+        ...(selectedExamplePlugin && runResolveBody.pluginId === selectedExamplePlugin.id
+          ? { runScopedActivation: true }
+          : {}),
+        ...(!activatingStrategy && !explicitExecutablePlugin
+          && (projectPinIsAutomaticDefault || synthesizedAutomaticDefault)
+          && defaultPluginId
+          ? {
+              projectBinding: {
+                provenance: 'automatic_default' as const,
+                taskProfile: verifiedScenarioBinding?.taskProfile
+                  ?? automaticScenarioTaskProfile({
+                    metadata: rolloutProject?.metadata as ContractProjectMetadata,
+                    pluginId: defaultPluginId,
+                  }),
+              },
+            }
+          : {}),
+        ...(activatingStrategy && strategyRolloutDecision?.taskType
+          ? {
+              internalStrategyActivation: {
+                taskType: strategyRolloutDecision.taskType,
+                plugin: rolloutPlugin,
+              },
+            }
+          : {}),
       });
       if (resolved && !resolved.ok) {
-        if (!explicitPlugin) {
+        if (!explicitExecutablePlugin) {
           console.warn(
             `[plugins] default-scenario fallback skipped for run on project ${requestBody.projectId}: ${resolved.body?.error?.code ?? 'unknown'}`,
           );
+          if (strategyRolloutDecision?.effectiveMode === 'active') {
+            automaticSnapshotPreparationError = new Error(
+              `OD Next snapshot preparation failed: ${resolved.body?.error?.code ?? 'unknown'}`,
+            );
+          }
         } else {
           return res.status(resolved.status).json(resolved.body);
         }
@@ -1369,6 +1935,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       // Always replace any untrusted request field, including with null for an
       // unbound project.
       workspaceScope: preparedWorkspaceScope,
+      ...(strategyRolloutDecision ? { strategyRolloutDecision } : {}),
     };
     if (resolvedSnapshot?.ok) {
       meta.appliedPluginSnapshotId = resolvedSnapshot.snapshotId;
@@ -1380,6 +1947,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         ).trim();
         if (renderedQuery.length > 0) meta.message = renderedQuery;
       }
+    } else if (idempotentStrategyRetry?.strategyRolloutDecision) {
+      // Same skipped-evaluation shape as the continuation above. A retry is the
+      // same logical request, so it reports the decision that request already
+      // made rather than making a fresh one.
+      meta.strategyRolloutDecision = idempotentStrategyRetry.strategyRolloutDecision;
     }
     let runProject: ProjectRecord | null = null;
     if (typeof meta.projectId === 'string' && meta.projectId) {
@@ -1508,6 +2080,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     // earliest conversation so the run has a chat home.
     let conversationFallbackBound = false;
     if (
+      !stream &&
       typeof meta.projectId === 'string' &&
       meta.projectId &&
       (typeof meta.conversationId !== 'string' || !meta.conversationId)
@@ -1532,7 +2105,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     // Require a string projectId so omit-pin never seeds without owning-project
     // context. Must run before omit-pin mint/seed so a missing conversation
     // never yields a 202 with an assistantMessageId that was never persisted.
-    if (typeof meta.conversationId === 'string' && meta.conversationId) {
+    if (!stream && typeof meta.conversationId === 'string' && meta.conversationId) {
       if (
         !conversationSession ||
         typeof meta.projectId !== 'string' ||
@@ -1541,6 +2114,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       ) {
         return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
       }
+    }
+    // Compare against the actual binding, including the project-only fallback.
+    // Replaying an accepted request may still omit conversationId on the wire.
+    if (previousSubmission && previousSubmission.conversationId !== meta.conversationId) {
+      return sendApiError(res, 409, 'IDEMPOTENCY_CONFLICT', 'submission belongs to another conversation');
     }
     // Resolve session mode before omit-pin seed so the user turn stores the
     // same mode the run will use (matches web PUT /messages persistence).
@@ -1676,6 +2254,8 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     if (
       typeof meta.conversationId === 'string' &&
       meta.conversationId &&
+      conversationSession &&
+      typeof meta.projectId === 'string' && meta.projectId &&
       (clientUserMessageId || missingClientPin || conversationFallbackBound)
     ) {
       if (missingClientPin) {
@@ -1691,7 +2271,10 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       // message is still seedable when attachment metadata is present so
       // chips/annotations survive reload for omit-pin clients that leave
       // currentPrompt unset.
-      const seededAttachments = seededUserMessageAttachmentFields(meta);
+      const projectRoot = runProject && meta.projectId
+        ? resolveProjectDir(PROJECTS_DIR, meta.projectId, runProject.metadata)
+        : null;
+      const seededAttachments = seededUserMessageAttachmentFields(meta, projectRoot);
       const hasSeedableAttachmentMetadata =
         (seededAttachments.attachments?.length ?? 0) > 0 ||
         (seededAttachments.commentAttachments?.length ?? 0) > 0;
@@ -1717,9 +2300,19 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         };
       }
     }
-    const seedRunUserMessage = () => {
-      if (!runUserSeed) return;
+    const seedRunUserMessage = (candidate: { id: string }) => {
+      const blockingRun = activeRunBlockingDesignSystemEnrichment(design.runs, {
+        conversationId: meta.conversationId, analyticsHints: meta.analyticsHints, excludeRunId: candidate.id,
+      });
+      if (blockingRun) throw new StrategyHandoffError(409, 'DESIGN_SYSTEM_ENRICHMENT_IN_PROGRESS',
+        'a design-system enrichment run is already active for this conversation');
       const now = Date.now();
+      if (submission?.source !== 'system' && typeof meta.projectId === 'string'
+        && typeof meta.conversationId === 'string') {
+        acceptProjectUserSubmission(db, { id: typeof submission?.id === 'string' ? submission.id : clientUserMessageId ?? `run-${candidate.id}`,
+          projectId: meta.projectId, conversationId: meta.conversationId, acceptedAt: now });
+      }
+      if (!runUserSeed) return;
       upsertMessage(db, runUserSeed.conversationId, {
         id: runUserSeed.id,
         role: 'user',
@@ -1741,16 +2334,398 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         updateProject(db, meta.projectId, {});
       }
     };
-    const isRunActiveForAssistantClaim = (runId: string): boolean => {
-      const existingRun = design.runs.get(runId);
-      return Boolean(existingRun && !TERMINAL_RUN_STATUSES.has(existingRun.status));
+    const fallbackAutomaticBeforeStart = async (error: unknown): Promise<boolean> => {
+      if (previousStrategyTask) {
+        sendApiError(res, 409, 'STRATEGY_HANDOFF_PREPARATION_FAILED',
+          error instanceof Error ? error.message : 'Could not prepare the current strategy.');
+        return false;
+      }
+      if (
+        !strategyRolloutDecision
+        || strategyRolloutDecision.effectiveMode !== 'active'
+        || !resolveAutomaticOrdinaryFallback
+      ) return false;
+      const provisionalSnapshot = resolvedSnapshot;
+      if (provisionalSnapshot?.created === true) {
+        if (!removeProvisionalAutomaticSnapshot(db, provisionalSnapshot)) {
+          throw new Error(
+            'Automatic strategy snapshot became referenced before Run claim; refusing fallback cleanup.',
+          );
+        }
+        resolvedSnapshot = null;
+      }
+      if (
+        automaticOrdinaryFallbackPluginId
+        && ctx.plugins.authorizePluginRequest
+        && !await ctx.plugins.authorizePluginRequest(
+          req,
+          res,
+          automaticOrdinaryFallbackPluginId,
+        )
+      ) return false;
+
+      const fallbackResolved = resolveAutomaticOrdinaryFallback();
+      if (fallbackResolved && !fallbackResolved.ok) {
+        console.warn(
+          `[od-next-rollout] ordinary fallback snapshot unavailable for project ${String(meta.projectId)}: ${fallbackResolved.body.error.code}`,
+        );
+        resolvedSnapshot = null;
+      } else {
+        resolvedSnapshot = fallbackResolved;
+      }
+      strategyRolloutDecision = automaticOdNextFallbackDecision(
+        strategyRolloutDecision,
+        'od_next_rollout_prestart_preparation_failed',
+      );
+      meta.strategyRolloutDecision = strategyRolloutDecision;
+      delete meta.runtimeCapabilitySnapshot;
+      delete meta.odNextTaskInputSnapshot;
+      delete meta.appliedPluginSnapshotId;
+      delete meta.pluginId;
+      if (typeof requestBody.message === 'string') {
+        meta.message = requestBody.message;
+      } else {
+        delete meta.message;
+      }
+      if (resolvedSnapshot?.ok) {
+        meta.appliedPluginSnapshotId = resolvedSnapshot.snapshotId;
+        meta.pluginId = resolvedSnapshot.snapshot.pluginId;
+        if (typeof meta.message !== 'string' || meta.message.trim().length === 0) {
+          const renderedQuery = renderPluginBriefTemplate(
+            resolvedSnapshot.snapshot.query ?? '',
+            resolvedSnapshot.snapshot.inputs,
+          ).trim();
+          if (renderedQuery.length > 0) meta.message = renderedQuery;
+        }
+      }
+      if (runUserSeed) {
+        runUserSeed.turnMetadata = seededUserMessageTurnMetadataFields(
+          meta,
+          resolvedSnapshot?.ok ? resolvedSnapshot.snapshot : null,
+        );
+      }
+      const fallbackFingerprintMeta = { ...meta };
+      delete fallbackFingerprintMeta.strategyRolloutDecision;
+      delete fallbackFingerprintMeta.runtimeCapabilitySnapshot;
+      meta.requestFingerprint = runRequestFingerprint(
+        fallbackFingerprintMeta,
+        resolvedSnapshot?.ok ? resolvedSnapshot.snapshot : null,
+      );
+      console.warn(
+        `[od-next-rollout] automatic preparation failed before Run claim; using ordinary default: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return true;
     };
-    meta.requestFingerprint = runRequestFingerprint(
-      meta,
-      resolvedSnapshot?.ok ? resolvedSnapshot.snapshot : null,
-    );
-    const creation = design.runs.createOrReuse(meta);
-    if (creation.kind === 'conflict') {
+    if (
+      automaticSnapshotPreparationError
+      && !await fallbackAutomaticBeforeStart(automaticSnapshotPreparationError)
+    ) return;
+    let frozenSkillPackage: FrozenSkillPackageV1 | undefined;
+    if (
+      !idempotentStrategyRetry
+      && strategyRolloutDecision?.effectiveMode === 'active'
+    ) {
+      // Everything the session selected inside this task type — an @-mentioned
+      // Skill, an official example card — is frozen into one package here and
+      // read back as `session_skills/user_selected_skills`. A task with no
+      // selection still persists the empty package, which is what keeps
+      // restart/continuation identity deterministic.
+      const runProjectMetadata =
+        runProject?.metadata as ContractProjectMetadata | null | undefined;
+      frozenSkillPackage = await captureOdNextSessionSkillPackage({
+        metadata: runProjectMetadata,
+        getLocalPluginBySource: ctx.plugins.getLocalPluginBySource,
+        selection: {
+          // Mirror the ordinary route's own resolution order
+          // (`composeDaemonSystemPrompt`): the request's Skill, else the one
+          // persisted on the project, plus this turn's @-mentions.
+          skillId: typeof requestBody.skillId === 'string' && requestBody.skillId
+            ? requestBody.skillId
+            : runProject?.skillId,
+          skillIds: requestBody.skillIds,
+        },
+        listSkillCatalog: () => ctx.resources.listAllSkillLikeEntries(
+          resolveSkillCatalogScope({
+            metadata: runProjectMetadata,
+            workspaceBinding: typeof requestBody.projectId === 'string' && requestBody.projectId
+              ? ctx.projectStore?.getWorkspaceProjectByProjectId(db, requestBody.projectId)
+              : null,
+          }) ?? undefined,
+        ),
+      });
+    }
+    const fingerprintSnapshot = resolvedSnapshot?.ok
+        ? resolvedSnapshot.snapshot
+        : null;
+    if (previousStrategyTask) {
+      meta.analyticsHints = { ...(meta.analyticsHints ?? {}),
+        continuedFromTaskExecutionId: previousStrategyTask.taskExecutionId,
+        continuedFromRunId: previousStrategyTask.latestRunId };
+    }
+    const fingerprintMeta = { ...meta };
+    delete fingerprintMeta.strategyRolloutDecision;
+    delete fingerprintMeta.runtimeCapabilitySnapshot;
+    meta.requestFingerprint = runRequestFingerprint(fingerprintMeta, fingerprintSnapshot);
+    if (
+      !idempotentStrategyRetry
+      && strategyRolloutDecision?.effectiveMode === 'active'
+    ) {
+      // The initial Bundle is frozen before the physical Run exists. Mint the
+      // daemon-owned key now so the exact prompt and the Run parser share the
+      // same nonce without putting it in the idempotency fingerprint.
+      meta.doneKey = mintRunDoneKey();
+    }
+    let createdTaskInputSnapshot: OdNextTaskInputSnapshotDescriptor | null = null;
+    let preparedPromptBundleText: string | null = null;
+    if (
+      !idempotentStrategyRetry
+      && strategyRolloutDecision?.effectiveMode === 'active'
+    ) {
+      const taskType = strategyRolloutDecision.taskType;
+      if (!taskType || !meta.agentId) {
+        return sendApiError(
+          res,
+          400,
+          'OD_NEXT_INPUT_SNAPSHOT_INVALID',
+          'OD Next task inputs require a resolved task type and selected agent.',
+        );
+      }
+      // This snapshot is prepared before the SQLite claim so prompt assembly
+      // never runs inside the claim transaction. Use an attempt-unique owner:
+      // a daemon crash can leave an orphaned immutable directory, but a retry
+      // must never collide with that orphan. Concurrent duplicate requests
+      // likewise prepare independently; the losing claim removes its own
+      // provisional snapshot below.
+      const taskExecutionId = `odnext_${randomUUID().replaceAll('-', '')}`;
+      try {
+        const projectRoot = resolveProjectDir(
+          PROJECTS_DIR,
+          meta.projectId!,
+          runProject?.metadata,
+        );
+        const contextValue = requestBody.context
+          && typeof requestBody.context === 'object'
+          && !Array.isArray(requestBody.context)
+            ? requestBody.context as Record<string, unknown>
+            : {};
+        const mcpIds = Array.isArray(contextValue.mcpServerIds)
+          ? contextValue.mcpServerIds.filter((value) => typeof value === 'string')
+          : [];
+        const runToolServers = toolBundle.bundle
+          && typeof toolBundle.bundle === 'object'
+          && Array.isArray((toolBundle.bundle as { mcpServers?: unknown }).mcpServers)
+            ? (toolBundle.bundle as { mcpServers: unknown[] }).mcpServers
+            : [];
+        const taskConfiguration = buildOdNextTaskConfigurationV1({
+          taskType,
+          locale: meta.locale,
+          selectedAgentId: meta.agentId,
+          sessionMode: meta.sessionMode,
+          model: meta.model,
+          reasoning: meta.reasoning,
+          serviceTier: meta.serviceTier,
+          mediaExecution: mediaExecution.policy,
+          route: 'full_plan',
+          mode: 'unresolved',
+        });
+        createdTaskInputSnapshot = createOdNextTaskInputSnapshot({
+          snapshotsRoot: taskInputSnapshotsRoot,
+          ...(previousStrategyTask ? { inheritedSnapshot: {
+            taskExecutionId: previousStrategyTask.taskExecutionId,
+            snapshotDir: path.join(taskInputSnapshotsRoot, previousStrategyTask.taskExecutionId),
+            manifestSha256: previousStrategyTask.frozenInputIdentity.taskInputManifestSha256,
+          } } : {}),
+          taskExecutionId,
+          taskConfiguration,
+          projectRoot,
+          projectAttachments: Array.isArray(requestBody.attachments)
+            ? requestBody.attachments.filter(
+                (value): value is string => typeof value === 'string' && value.length > 0,
+              )
+            : [],
+          uploadRoot: UPLOAD_DIR,
+          imagePaths: Array.isArray(requestBody.imagePaths)
+            ? requestBody.imagePaths.filter(
+                (value): value is string => typeof value === 'string' && value.length > 0,
+              )
+            : [],
+          commentCount: Array.isArray(requestBody.commentAttachments)
+            ? requestBody.commentAttachments.length
+            : 0,
+          linkedDirectoryCount: Array.isArray(runProject?.metadata?.linkedDirs)
+            ? runProject.metadata.linkedDirs.length
+            : 0,
+          mcpServerCount: mcpIds.length + runToolServers.length,
+        });
+        meta.odNextTaskInputSnapshot = createdTaskInputSnapshot;
+        const preparedPrompt = await prepareOdNextInitialPromptBundle({
+          meta,
+          frozenSkillPackage: frozenSkillPackage!,
+          taskInputSnapshot: createdTaskInputSnapshot,
+        });
+        preparedPromptBundleText = preparedPrompt.text;
+      } catch (error) {
+        removeOdNextTaskInputSnapshotBestEffort(
+          createdTaskInputSnapshot,
+          taskInputSnapshotsRoot,
+          'initial-bundle',
+        );
+        createdTaskInputSnapshot = null;
+        preparedPromptBundleText = null;
+        frozenSkillPackage = undefined;
+        if (!await fallbackAutomaticBeforeStart(error)) return;
+      }
+    }
+    let preparedRun;
+    try {
+      preparedRun = internalRuns.prepare({
+        meta,
+        ...(((meta.projectId && meta.conversationId) || strategyRolloutDecision?.effectiveMode === 'active')
+          ? {
+              beforeClaimCommit: (candidate) => {
+                if (previousStrategyTask) {
+                  // Prompt preparation awaits I/O. Recheck at the atomic claim so
+                  // two follow-ups cannot both start from the same idle conversation.
+                  const active = design.runs.list({ projectId: previousStrategyTask.projectId,
+                    conversationId: previousStrategyTask.conversationId }).find(run =>
+                    run.id !== candidate.id && holdsConversation(run));
+                  if (active) throw new StrategyHandoffError(409, 'RUN_IN_PROGRESS', 'a run is still active in this conversation');
+                }
+                if (createdTaskInputSnapshot) {
+                  candidate.odNextTaskInputSnapshot = createdTaskInputSnapshot;
+                  // `createOrReuse` persisted the optimistic Run before the
+                  // claim hook ran. Persist the daemon-owned descriptor now,
+                  // while the frozen bytes already exist and before the
+                  // assistant/task claim can commit, so daemon restart never
+                  // falls back to mutable request paths.
+                  design.runs.persistState(candidate);
+                }
+                seedRunUserMessage(candidate);
+                if (
+                  strategyRolloutDecision?.effectiveMode === 'active'
+                  && resolvedSnapshot?.ok
+                  && resolvedSnapshot.snapshot.strategy
+                ) {
+                  try {
+                    const initialTaskInputSnapshot = createdTaskInputSnapshot;
+                    const taskExecutionId = initialTaskInputSnapshot?.taskExecutionId;
+                    if (!taskExecutionId || !preparedPromptBundleText || !frozenSkillPackage) {
+                      throw new OdNextTaskInputSnapshotError(
+                        'OD Next immutable inputs and Prompt Bundle were not prepared before claim.',
+                      );
+                    }
+                    createStrategyTaskExecution(db, {
+                      taskExecutionId,
+                      projectId: candidate.projectId!,
+                      conversationId: candidate.conversationId!,
+                      snapshotId: resolvedSnapshot.snapshotId,
+                      selectedAgentId: candidate.agentId!,
+                      initialRunId: candidate.id,
+                      sessionMode: meta.sessionMode === 'chat' || meta.sessionMode === 'plan' ? meta.sessionMode : 'design',
+                      frozenSkillPackage,
+                      promptBundleText: preparedPromptBundleText,
+                      ...(previousStrategyTask ? { continuedFromTaskExecutionId: previousStrategyTask.taskExecutionId } : {}),
+                      taskInputManifestSha256: initialTaskInputSnapshot.manifestSha256,
+                    });
+                    // The route stays unlocked through the request turn so the
+                    // main Agent can choose Direct Edit or Full Plan from the
+                    // request itself (product spec 3.1). The daemon cannot make
+                    // that call here: four of the five eligibility facts depend
+                    // on reading what the user asked for, which only happens
+                    // once the Bundle reaches the Agent.
+                    const preparedStrategy = prepareStrategyIntake(db, {
+                      taskExecutionId,
+                      intake: {
+                        inputRefs: [{ id: 'request', accessible: true }],
+                        selectedAgentAvailable: true,
+                        taskProfileAvailable: true,
+                        dependencies: [],
+                      },
+                    });
+                    if (!preparedStrategy.ok) {
+                      throw new Error(
+                        `OD Next rollout preflight blocked: ${preparedStrategy.reasonCodes.join(',')}`,
+                      );
+                    }
+                  } catch (error) {
+                    throw new AutomaticOdNextPreparationError(error);
+                  }
+                }
+              },
+            }
+          : {}),
+        resume: {
+          requested: requestBody.resume === true,
+          canResume: (candidate) =>
+            candidate.status === 'failed'
+            && candidate.agentId === 'amr'
+            && (
+              candidate.failureAction === 'recharge'
+              || candidate.errorCode === 'AMR_INSUFFICIENT_BALANCE'
+            ),
+        },
+      });
+    } catch (error) {
+      removeOdNextTaskInputSnapshotBestEffort(
+        createdTaskInputSnapshot,
+        taskInputSnapshotsRoot,
+        'run-claim',
+      );
+      createdTaskInputSnapshot = null;
+      if (error instanceof AutomaticOdNextPreparationError) {
+        preparedPromptBundleText = null;
+        frozenSkillPackage = undefined;
+        if (!await fallbackAutomaticBeforeStart(error.preparationCause)) return;
+        preparedRun = internalRuns.prepare({
+          meta,
+          beforeClaimCommit: (candidate) => seedRunUserMessage(candidate),
+          resume: {
+            requested: requestBody.resume === true,
+            canResume: (candidate) =>
+              candidate.status === 'failed'
+              && candidate.agentId === 'amr'
+              && (
+                candidate.failureAction === 'recharge'
+                || candidate.errorCode === 'AMR_INSUFFICIENT_BALANCE'
+              ),
+          },
+        });
+      } else {
+        if (error instanceof StrategyHandoffError) return sendApiError(res, error.status, error.code, error.message);
+        if (error instanceof OdNextTaskInputSnapshotError) {
+          return sendApiError(res, 400, error.code, error.message);
+        }
+        if (error instanceof InvalidStrategyTaskRecordError) {
+          return sendApiError(res, 409, 'OD_NEXT_TASK_STATE_INVALID', error.message);
+        }
+        if (previousStrategyTask) {
+          return sendApiError(
+            res,
+            409,
+            'STRATEGY_TASK_TRANSITION_CONFLICT',
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+        throw error;
+      }
+    }
+    if (preparedRun.kind !== 'ready') {
+      removeOdNextTaskInputSnapshotBestEffort(
+        createdTaskInputSnapshot,
+        taskInputSnapshotsRoot,
+        'non-ready',
+      );
+      if (
+        resolvedSnapshot?.created === true
+        && resolvedSnapshot.snapshot.pluginId === 'od-next-strategy'
+        && !removeProvisionalAutomaticSnapshot(db, resolvedSnapshot)
+      ) {
+        console.warn(
+          `[od-next-rollout] retained referenced strategy snapshot ${resolvedSnapshot.snapshotId} after non-ready Run preparation`,
+        );
+      }
+    }
+    if (preparedRun.kind === 'idempotency_conflict') {
       return sendApiError(
         res,
         409,
@@ -1758,105 +2733,74 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         'clientRequestId is already associated with a different logical run request',
       );
     }
-    const run = creation.run;
+    const run = preparedRun.run;
     const analyticsAttributionMismatch =
-      creation.kind === 'reused'
+      (preparedRun.kind !== 'ready' || preparedRun.creationKind === 'reused')
       && externalPluginAttributionMismatch(
         run.externalPluginAnalytics,
         meta.analyticsHints,
       );
-    let resumed = false;
-    if (creation.kind === 'reused') {
-      const resumeRequested = requestBody.resume === true;
-      const rechargeFailure =
-        run.status === 'failed'
-        && run.agentId === 'amr'
-        && (
-          run.failureAction === 'recharge'
-          || run.errorCode === 'AMR_INSUFFICIENT_BALANCE'
-        );
-      if (!resumeRequested) {
-        return res.status(202).json({
-          runId: run.id,
-          conversationId: run.conversationId ?? null,
-          assistantMessageId: run.assistantMessageId ?? null,
-          clientRequestId: run.clientRequestId ?? null,
-          reused: true,
-          resumed: false,
-          ...(analyticsAttributionMismatch
-            ? { analyticsAttributionMismatch: true }
-            : {}),
-          ...(run.appliedPluginSnapshotId
-            ? { appliedPluginSnapshotId: run.appliedPluginSnapshotId }
-            : {}),
-          ...(run.pluginId ? { pluginId: run.pluginId } : {}),
-        });
-      }
-      if (!rechargeFailure) {
-        return sendApiError(
-          res,
-          409,
-          'RUN_NOT_RECHARGE_RESUMABLE',
-          'Only a failed OpenDesign Cloud run waiting for recharge can be resumed with the same request',
-        );
-      }
-      // Claim BEFORE arming the restart. On a conflict the reused run stays
-      // terminal + resumable (never dropped) and the request is rejected —
-      // the claim writes the post-restart `queued` intent so the message row
-      // does not stay terminal while the run is being resumed (#6418).
-      const resumeClaim = pinAssistantMessageOnRunCreate(db, run, {
-        status: 'queued',
-        isRunActive: isRunActiveForAssistantClaim,
-      });
-      if (!resumeClaim.ok) {
-        return sendApiError(
-          res,
-          409,
-          'RUN_IN_PROGRESS',
-          'assistantMessageId is already bound to an active run',
-        );
-      }
-      if (!design.runs.prepareRestart(run)) {
-        return sendApiError(
-          res,
-          409,
-          'RUN_NOT_RECHARGE_RESUMABLE',
-          'Only a failed OpenDesign Cloud run waiting for recharge can be resumed with the same request',
-        );
-      }
-      resumed = true;
-    }
-    // Atomic ownership claim runs BEFORE any message seeding: a rejected run
-    // never leaves an orphan user turn (nettee on #6418). Only a freshly
-    // created run is dropped on failure — a resumed loser is the client's own
-    // idempotent run and must survive.
-    if (creation.kind === 'created') {
-      let claimed: { ok: boolean; reason?: 'active' | 'scope' };
+    const submissionId = typeof submission?.id === 'string' ? submission.id : clientUserMessageId ?? `run-${run.id}`;
+    const acceptedSubmission = () => submission?.source === 'system'
+      ? undefined : getProjectUserSubmission(db, submissionId);
+    if (preparedRun.kind === 'reused') {
+      let strategyTask;
       try {
-        const claimOptions = runUserSeed
-          ? {
-              beforeClaimCommit: () => {
-                seedRunUserMessage();
-              },
-              isRunActive: isRunActiveForAssistantClaim,
-            }
-          : { isRunActive: isRunActiveForAssistantClaim };
-        claimed = pinAssistantMessageOnRunCreate(db, run, claimOptions);
-      } catch (err) {
-        // Never let an unclaimed run start.
-        design.runs.drop(run);
-        throw err;
+        const task = strategyTaskForRun(run);
+        strategyTask = task ? projectStrategyTask(task, run.id, db) : null;
+      } catch (error) {
+        if (
+          error instanceof InvalidFrozenSkillPackageError
+          || error instanceof InvalidStrategyTaskRecordError
+        ) {
+          return sendApiError(
+            res,
+            409,
+            error instanceof InvalidFrozenSkillPackageError
+              ? 'OD_NEXT_SKILL_SNAPSHOT_INVALID'
+              : 'OD_NEXT_TASK_STATE_INVALID',
+            error.message,
+          );
+        }
+        throw error;
       }
-      if (!claimed.ok) {
-        design.runs.drop(run);
-        return sendApiError(
-          res,
-          409,
-          'RUN_IN_PROGRESS',
-          'assistantMessageId is already bound to an active run',
-        );
-      }
+      if (stream) { design.runs.stream(run, req, res); return; }
+      return res.status(202).json({
+        userSubmission: acceptedSubmission(),
+        runId: run.id,
+        conversationId: run.conversationId ?? null,
+        assistantMessageId: run.assistantMessageId ?? null,
+        clientRequestId: run.clientRequestId ?? null,
+        reused: true,
+        resumed: false,
+        ...(analyticsAttributionMismatch
+          ? { analyticsAttributionMismatch: true }
+          : {}),
+        ...(run.appliedPluginSnapshotId
+          ? { appliedPluginSnapshotId: run.appliedPluginSnapshotId }
+          : {}),
+        ...(run.pluginId ? { pluginId: run.pluginId } : {}),
+        ...(strategyTask ? { taskExecutionId: strategyTask.taskExecutionId } : {}),
+        ...(strategyTask ? { strategyTask } : {}),
+      });
     }
+    if (preparedRun.kind === 'resume_not_allowed') {
+      return sendApiError(
+        res,
+        409,
+        'RUN_NOT_RECHARGE_RESUMABLE',
+        'Only a failed OpenDesign Cloud run waiting for recharge can be resumed with the same request',
+      );
+    }
+    if (preparedRun.kind === 'assistant_claim_conflict') {
+      return sendApiError(
+        res,
+        409,
+        'RUN_IN_PROGRESS',
+        'assistantMessageId is already bound to an active run',
+      );
+    }
+    const resumed = preparedRun.resumed;
     const declaredClient = String(req.get('x-od-client') ?? '').toLowerCase();
     if (requestAnalyticsContext?.clientType === 'external_mcp') {
       run.clientType = 'external_mcp';
@@ -1868,31 +2812,68 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     }
     if (resolvedSnapshot?.ok) {
       try {
-        const { linkSnapshotToRun } = await import('../plugins/snapshots.js');
-        linkSnapshotToRun(db, resolvedSnapshot.snapshotId, run.id);
+        linkSnapshotToRun(
+          db,
+          resolvedSnapshot!.snapshotId,
+          run.id,
+        );
       } catch {
         // Linking is best-effort here; in-memory run still carries the id.
       }
     }
+    let strategyTask;
+    try {
+      const task = strategyTaskForRun(run);
+      strategyTask = task ? projectStrategyTask(task, run.id, db) : null;
+    } catch (error) {
+      if (
+        !(error instanceof InvalidFrozenSkillPackageError)
+        && !(error instanceof InvalidStrategyTaskRecordError)
+      ) throw error;
+      design.runs.fail(
+        run,
+        error instanceof InvalidFrozenSkillPackageError
+          ? 'OD_NEXT_SKILL_SNAPSHOT_INVALID'
+          : 'OD_NEXT_TASK_STATE_INVALID',
+        error.message,
+      );
+      if (stream) { design.runs.stream(run, req, res); return; }
+      return res.status(202).json({
+        userSubmission: acceptedSubmission(),
+        runId: run.id,
+        conversationId: run.conversationId ?? null,
+        assistantMessageId: run.assistantMessageId ?? null,
+        clientRequestId: run.clientRequestId ?? null,
+        reused: false,
+        resumed: false,
+      });
+    }
+    if (strategyTask) run.strategyTask = strategyTask;
     const body = {
+      userSubmission: acceptedSubmission(),
       runId: run.id,
       conversationId: run.conversationId ?? null,
       assistantMessageId: run.assistantMessageId ?? null,
       clientRequestId: run.clientRequestId ?? null,
-      reused: creation.kind === 'reused',
+      reused: preparedRun.creationKind === 'reused',
       resumed,
       ...(analyticsAttributionMismatch
         ? { analyticsAttributionMismatch: true }
         : {}),
-      ...(resolvedSnapshot?.ok
-        ? {
-            appliedPluginSnapshotId: resolvedSnapshot.snapshotId,
-            pluginId: resolvedSnapshot.snapshot.pluginId,
-          }
+      ...(run.appliedPluginSnapshotId
+        ? { appliedPluginSnapshotId: run.appliedPluginSnapshotId }
         : {}),
+      ...(run.pluginId ? { pluginId: run.pluginId } : {}),
+      ...(strategyTask ? { taskExecutionId: strategyTask.taskExecutionId } : {}),
+      ...(strategyTask ? { strategyTask } : {}),
     };
-    res.status(202).json(body);
-    if (!resumed && resolvedSnapshot?.ok && resolvedSnapshot.snapshot.pipeline) {
+    if (stream) design.runs.stream(run, req, res);
+    else res.status(202).json(body);
+    if (
+      !resumed
+      && resolvedSnapshot?.ok
+      && resolvedSnapshot.snapshot.pipeline
+    ) {
       firePipelineForRun({
         run,
         snapshot: resolvedSnapshot.snapshot,
@@ -1916,843 +2897,90 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         ? { byokProvider: requestBody.byokProvider }
         : {}),
     };
-    design.runs.start(run, () => startChatRun(executionMeta, run));
+    internalRuns.start(
+      run,
+      {
+        body: requestBody,
+        requestAnalyticsContext,
+        snapshot: resolvedSnapshot,
+        // The decision this request evaluated, not the one stamped on the Run:
+        // an idempotent retry reuses a Run that already carries an earlier
+        // decision, and `run_created`'s rollout dimensions have always
+        // described the request. See `harnessAnalyticsFromRolloutDecision`,
+        // which deliberately reads the Run instead.
+        rolloutDecision: strategyRolloutDecision,
+        creationKind: preparedRun.creationKind,
+        resumed,
+        attributionMismatch: analyticsAttributionMismatch,
+      },
+      () => startChatRun(executionMeta, run),
+    );
+  };
 
-    const reqBody = requestBody;
-    const analyticsHints =
-      (reqBody as { analyticsHints?: Record<string, unknown> | null }).analyticsHints
-        && typeof (reqBody as { analyticsHints?: unknown }).analyticsHints === 'object'
-        ? ((reqBody as { analyticsHints?: Record<string, unknown> }).analyticsHints ?? {})
-        : {};
-    // Marks the AI-optimize (deep enrichment) run so completion can flag the DS
-    // ai_refined even when analytics is unavailable or disabled.
-    const hintDsEnrichment = analyticsHints.dsEnrichment === true;
-    const requestProjectId = typeof reqBody.projectId === 'string' ? reqBody.projectId : null;
-    if (hintDsEnrichment && requestProjectId) {
-      design.runs.wait(run).then((status: TerminalRunStatus) => {
-        if (runResultFromStatus(status.status) !== 'success') return;
-        try {
-          const enrichedProject = toProjectRecord(getProject(db, requestProjectId));
-          if (enrichedProject && isProjectEnrichableDesignSystem(enrichedProject)) {
-            updateProject(db, requestProjectId, {
-              metadata: {
-                ...(enrichedProject.metadata ?? {}),
-                enrichmentStatus: 'ai_refined',
-                enrichmentCompletedAt: Date.now(),
-              },
-            });
-          }
-        } catch {
-          // Best-effort flag; do not fail run completion if metadata refresh fails.
-        }
-      }).catch(() => {});
-    }
+  registerRunCreateRoute(app, handleRunCreate, sendApiError);
 
-    const recoveredAnalyticsContext =
-      run.analyticsRecovery
-      && typeof run.analyticsRecovery === 'object'
-      && (run.analyticsRecovery as { context?: unknown }).context
-      && typeof (run.analyticsRecovery as { context?: unknown }).context === 'object'
-        ? ((run.analyticsRecovery as { context: AnalyticsContext }).context)
-        : null;
-    // Source/identity is first-write immutable for a logical run. A retry or
-    // recharge resume cannot relabel a prior ordinary request as Plugin (or
-    // vice versa) by changing analytics-only headers.
-    const analyticsContext =
-      run.analyticsContext
-      ?? recoveredAnalyticsContext
-      ?? requestAnalyticsContext;
-    if (!run.analyticsContext && analyticsContext) {
-      run.analyticsContext = analyticsContext;
+  // Restart-safety probe for the desktop updater. `GET /api/runs` refuses an
+  // unscoped listing once any run belongs to a Workspace-bound project, so a
+  // host-level caller could never learn whether it is safe to restart. This
+  // route answers only that question: it is loopback-only (peer, Host and
+  // Origin, which also defeats DNS rebinding) and returns a bare count — no
+  // run, project or conversation ids — so it cannot enumerate Workspace runs.
+  // Registered before `/api/runs/:id` so the path is not read as a run id.
+  app.get('/api/runs/active-count', (req: ApiRequest, res: ApiResponse) => {
+    const local = validateLocalDaemonRequest(req);
+    if (!local.ok) {
+      return sendApiError(res, 403, 'FORBIDDEN', local.message, { details: local.details });
     }
-    design.runs.wait(run).then((status: { status: string }) => {
-      reportRunCompletionTelemetryFallback({
-        analyticsContext: analyticsContext ?? null,
-        run,
-        status: status.status,
-      });
-    }).catch(() => {});
-    if (analyticsContext) {
-      const runInsertId = newInsertId();
-      const appCfgForAnalytics = await readAppConfig(RUNTIME_DATA_DIR).catch(
-        () => ({} as Record<string, unknown>),
-      );
-      const detectedAgentsForAnalytics = await detectAgents(
-        toJsonRecord((appCfgForAnalytics as { agentCliEnv?: unknown }).agentCliEnv),
-      ).catch((): Array<{ id: string; available: boolean }> => []);
-      const velaStatusForAnalytics = (() => {
-        try {
-          const configuredAmrEnv = agentCliEnvForAgent(
-            (appCfgForAnalytics as { agentCliEnv?: AgentCliEnv }).agentCliEnv,
-            'amr',
-          );
-          return readVelaLoginStatus(process.env, configuredAmrEnv);
-        } catch {
-          return null;
-        }
-      })();
-      const configureGlobals = deriveConfigureGlobals({
-        mode: 'daemon',
-        agentId: typeof reqBody.agentId === 'string' ? reqBody.agentId : null,
-        agents: detectedAgentsForAnalytics,
-        amrAuthorized: velaStatusForAnalytics?.loggedIn === true,
-      });
-      const promptText =
-        typeof reqBody.currentPrompt === 'string'
-          ? reqBody.currentPrompt
-          : typeof reqBody.message === 'string'
-            ? reqBody.message
-            : '';
-      const userQueryTokens = promptText.length > 0
-        ? Math.ceil(promptText.length / 4)
-        : 0;
-      const hintEntryFrom = typeof analyticsHints.entryFrom === 'string'
-        ? analyticsHints.entryFrom
-        : undefined;
-      const hintProjectKind = typeof analyticsHints.projectKind === 'string'
-        ? analyticsHints.projectKind
-        : null;
-      const hintTurnIndex = typeof analyticsHints.turnIndex === 'number'
-        ? analyticsHints.turnIndex
-        : undefined;
-      const hintIsFirstRun = typeof analyticsHints.isFirstRun === 'boolean'
-        ? analyticsHints.isFirstRun
-        : undefined;
-      const hintHasExistingArtifact = typeof analyticsHints.hasExistingArtifact === 'boolean'
-        ? analyticsHints.hasExistingArtifact
-        : undefined;
-      const hintProjectTurnIndex = typeof analyticsHints.projectTurnIndex === 'number'
-        ? analyticsHints.projectTurnIndex
-        : undefined;
-      const taskExecutionId = typeof analyticsHints.taskExecutionId === 'string'
-        && analyticsHints.taskExecutionId.length > 0
-        ? analyticsHints.taskExecutionId
-        : run.clientRequestId ?? run.id;
-      const initialRunId = typeof analyticsHints.initialRunId === 'string'
-        && analyticsHints.initialRunId.length > 0
-        ? analyticsHints.initialRunId
-        : run.id;
-      const taskRunIndex = typeof analyticsHints.taskRunIndex === 'number'
-        && Number.isInteger(analyticsHints.taskRunIndex)
-        && analyticsHints.taskRunIndex >= 0
-        ? analyticsHints.taskRunIndex
-        : 0;
-      const recoveryActionTypes: ReadonlySet<TrackingRunRecoveryActionType> = new Set([
-        'manual_retry',
-        'resume_run',
-        'authorize_and_retry',
-        'switch_model_retry',
-        'switch_runtime_retry',
-        'question_answer',
-      ]);
-      const recoveryActionType = typeof analyticsHints.recoveryActionType === 'string'
-        && recoveryActionTypes.has(
-          analyticsHints.recoveryActionType as TrackingRunRecoveryActionType,
-        )
-        ? analyticsHints.recoveryActionType as TrackingRunRecoveryActionType
-        : undefined;
-      const taskLineage: RunTaskLineageProps = {
-        task_execution_id: taskExecutionId,
-        initial_run_id: initialRunId,
-        task_run_index: taskRunIndex,
-        ...(typeof analyticsHints.sourceRunId === 'string' && analyticsHints.sourceRunId.length > 0
-          ? { source_run_id: analyticsHints.sourceRunId }
-          : {}),
-        ...(recoveryActionType ? { recovery_action_type: recoveryActionType } : {}),
-        ...(typeof analyticsHints.recoveryActionInstanceId === 'string'
-          && analyticsHints.recoveryActionInstanceId.length > 0
-          ? { recovery_action_instance_id: analyticsHints.recoveryActionInstanceId }
-          : {}),
-      };
-      const conversationTurnIndex = run.conversationId
-        ? conversationTurnIndexForRun(db, run.conversationId, run.id)
-        : null;
-      const sessionDimensionProps = {
-        ...(hintTurnIndex !== undefined ? { turn_index: hintTurnIndex } : {}),
-        ...(hintIsFirstRun !== undefined ? { is_first_run: hintIsFirstRun } : {}),
-        ...(hintProjectTurnIndex !== undefined
-          ? { project_turn_index: hintProjectTurnIndex }
-          : {}),
-        ...(conversationTurnIndex !== null
-          ? { conversation_turn_index: conversationTurnIndex }
-          : {}),
-        ...(hintHasExistingArtifact !== undefined
-          ? { has_existing_artifact: hintHasExistingArtifact }
-          : {}),
-      };
-      const runProjectForAnalytics = requestProjectId
-        ? toProjectRecord(getProject(db, requestProjectId))
-        : null;
-      const analyticsDesignSystemSelection = resolveEffectiveDesignSystemSelection({
-        requestDesignSystemId: reqBody.designSystemId,
-        pluginDesignSystemId: resolvedSnapshot?.ok
-          ? designSystemIdFromPluginSnapshot(resolvedSnapshot.snapshot)
-          : null,
-        projectDesignSystemId: runProjectForAnalytics?.designSystemId,
-        appDefaultDesignSystemId: (appCfgForAnalytics as { designSystemId?: unknown }).designSystemId,
-        disabledDesignSystemIds: (appCfgForAnalytics as { disabledDesignSystems?: unknown }).disabledDesignSystems,
-        allowAppDefault: runProjectForAnalytics === null,
-      });
-      const runProjectKind = resolveRunProjectKindForAnalytics({
-        hintProjectKind,
-        projectMetadata: runProjectForAnalytics?.metadata,
-      });
-      const dsRunContext =
-        analyticsHints.designSystemRunContext
-          && typeof analyticsHints.designSystemRunContext === 'object'
-          ? (analyticsHints.designSystemRunContext as Record<string, unknown>)
-          : {};
-      const isDesignSystemRun =
-        runProjectKind === 'design_system'
-        || hintEntryFrom === 'design_system_create'
-        || hintEntryFrom === 'onboarding_design_system'
-        || hintEntryFrom === 'regenerate_from_review';
-      const reqContext =
-        reqBody.context && typeof reqBody.context === 'object'
-          ? (reqBody.context as Record<string, unknown>)
-          : {};
-      const runMcpServerIds = Array.isArray(reqContext.mcpServerIds)
-        ? (reqContext.mcpServerIds as unknown[]).filter(
-            (id): id is string => typeof id === 'string',
-          )
-        : [];
-      const runTurnSkillIds = Array.isArray(reqBody.skillIds)
-        ? (reqBody.skillIds as unknown[]).filter(
-            (id): id is string => typeof id === 'string',
-          )
-        : [];
-      const runSkillIds = [
-        ...new Set(
-          [reqBody.skillId, ...runTurnSkillIds].filter(
-            (id): id is string => typeof id === 'string' && id.length > 0,
-          ),
-        ),
-      ];
-      // Map the internal DS selection source -> the wire `design_system_source`
-      // enum (previously hard-wired to unknown/not_applicable). And derive
-      // official-vs-custom from the id shape (`user:<id>` => custom). See the
-      // design-system tracking spec §3.5 (U3/U4).
-      const dsSelectedId = analyticsDesignSystemSelection.id;
-      const designSystemSourceForRun: TrackingDesignSystemSource = (() => {
-        switch (analyticsDesignSystemSelection.source) {
-          case 'request':
-            return 'user_selected';
-          case 'plugin':
-            return 'template_inherited';
-          case 'project':
-            return 'project_saved';
-          case 'app-default':
-            return 'default';
-          case 'none':
-          default:
-            return dsSelectedId ? 'unknown' : 'not_applicable';
-        }
-      })();
-      const designSystemKindForRun: TrackingDesignSystemKind | undefined = dsSelectedId
-        ? dsSelectedId.startsWith('user:')
-          ? 'custom'
-          : 'official'
-        : undefined;
-      const designSystemSlugForRun =
-        dsSelectedId && !dsSelectedId.startsWith('user:') ? dsSelectedId : undefined;
-      // E1 (tracking spec §3.4): a DS-project run that edits an EXISTING design
-      // system carries which surface drove it. comment/mark ride their own
-      // entry_from; everything else editing an existing DS is the chat surface.
-      // First-generation runs (no existing artifact) get no edit_surface.
-      const editSurfaceForRun: TrackingDesignSystemEditSurface | undefined =
-        runProjectKind === 'design_system' && hintHasExistingArtifact === true
-          ? hintEntryFrom === 'comment'
-            ? 'comment'
-            : hintEntryFrom === 'mark'
-              ? 'mark'
-              : 'chat'
-          : undefined;
-      const baseProps: Record<string, unknown> = {
-        page_name: isDesignSystemRun ? 'design_system_project' : 'chat_panel',
-        area: isDesignSystemRun ? 'design_system_generation' : 'chat_composer',
-        ...configureGlobals,
-        runtime_type: runtimeTypeForRunAnalytics({
-          derived: configureGlobals.runtime_type,
-          hint: analyticsHints.runtimeType,
-        }),
-        ...amrUserIdForRunAnalytics(velaStatusForAnalytics),
-        project_id: requestProjectId,
-        conversation_id:
-          typeof reqBody.conversationId === 'string' ? reqBody.conversationId : null,
-        run_id: run.id,
-        project_kind: runProjectKind,
-        ...(hintEntryFrom ? { entry_from: hintEntryFrom } : {}),
-        ...sessionDimensionProps,
-        design_system_id: dsSelectedId ?? undefined,
-        design_system_selection_source: analyticsDesignSystemSelection.source,
-        design_system_source: designSystemSourceForRun,
-        ...(designSystemKindForRun ? { design_system_kind: designSystemKindForRun } : {}),
-        ...(designSystemSlugForRun ? { design_system_slug: designSystemSlugForRun } : {}),
-        ...(editSurfaceForRun ? { edit_surface: editSurfaceForRun } : {}),
-        ...(isDesignSystemRun ? {
-          ds_source_origin: typeof dsRunContext.origin === 'string'
-            ? dsRunContext.origin
-            : undefined,
-          source_count: typeof dsRunContext.sourceCount === 'number'
-            ? dsRunContext.sourceCount
-            : undefined,
-          has_brand_description: typeof dsRunContext.hasBrandDescription === 'boolean'
-            ? dsRunContext.hasBrandDescription
-            : undefined,
-          brand_description_length_bucket:
-            typeof dsRunContext.brandDescriptionLengthBucket === 'string'
-              ? dsRunContext.brandDescriptionLengthBucket
-              : undefined,
-          github_repo_count: typeof dsRunContext.githubRepoCount === 'number'
-            ? dsRunContext.githubRepoCount
-            : undefined,
-          local_folder_count: typeof dsRunContext.localFolderCount === 'number'
-            ? dsRunContext.localFolderCount
-            : undefined,
-          fig_file_count: typeof dsRunContext.figFileCount === 'number'
-            ? dsRunContext.figFileCount
-            : undefined,
-          asset_file_count: typeof dsRunContext.assetFileCount === 'number'
-            ? dsRunContext.assetFileCount
-            : undefined,
-        } : {}),
-        has_attachment: Array.isArray(reqBody.attachments)
-          ? (reqBody.attachments as unknown[]).length > 0
-          : false,
-        user_query_tokens: userQueryTokens,
-        model_id: modelIdForTracking(
-          typeof reqBody.model === 'string' ? reqBody.model : null,
-        ),
-        agent_provider_id: agentProviderIdForRunAnalytics({
-          agentId: reqBody.agentId,
-          byokProvider: reqBody.byokProvider,
-        }),
-        skill_id: typeof reqBody.skillId === 'string' ? reqBody.skillId : null,
-        ...(!isDesignSystemRun && typeof reqBody.sessionMode === 'string'
-          ? { session_mode: sessionModeToTracking(reqBody.sessionMode) }
-          : {}),
-        plugin_id: resolvedSnapshot?.ok
-          ? resolvedSnapshot.snapshot.pluginId
-          : typeof reqBody.pluginId === 'string'
-            ? reqBody.pluginId
-            : null,
-        mcp_ids: runMcpServerIds,
-        mcp_id: runMcpServerIds[0] ?? null,
-        skill_ids: runSkillIds,
-        token_count_source: userQueryTokens > 0 ? 'estimated' : 'unknown',
-        ...(run.externalPluginAnalytics
-          ? {
-              entry_surface:
-                run.externalPluginAnalytics.entrySurface,
-              host_product:
-                run.externalPluginAnalytics.hostProduct,
-              external_plugin_id:
-                run.externalPluginAnalytics.externalPluginId,
-              external_plugin_version:
-                run.externalPluginAnalytics.externalPluginVersion,
-              distribution_mechanism:
-                run.externalPluginAnalytics.distributionMechanism,
-              publisher_class:
-                run.externalPluginAnalytics.publisherClass,
-              attribution_quality:
-                run.externalPluginAnalytics.attributionQuality,
-              plugin_workflow_id:
-                run.externalPluginAnalytics.pluginWorkflowId,
-              logical_request_digest:
-                run.externalPluginAnalytics.logicalRequestDigest,
-              logical_request_digest_version:
-                run.externalPluginAnalytics.logicalRequestDigestVersion,
-              brief_state:
-                run.externalPluginAnalytics.briefState,
-              generation_slo_window_ms:
-                run.externalPluginAnalytics.generationSloWindowMs,
-              deduplicated: creation.kind === 'reused',
-              resume: resumed,
-              attempt_count: (run.manualResumeAttemptCount ?? 0) + 1,
-              recharge_wait_duration_ms:
-                run.rechargeWaitDurationMs ?? 0,
-              ...(analyticsAttributionMismatch
-                ? { source_metadata_mismatch: true }
-                : {}),
-            }
-          : {}),
-      };
-      Object.assign(baseProps, buildRunCreatedV4Aliases(baseProps, taskLineage));
-      design.runs.setAnalyticsRecovery?.(run, {
-        context: analyticsContext,
-        properties: baseProps,
-        insertId: runInsertId,
-      });
-      design.analytics.capture({
-        eventName: 'run_created',
-        context: analyticsContext,
-        appVersion: design.getAppVersion(),
-        properties: baseProps,
-        insertId: runInsertId,
-      });
-      design.runs.wait(run).then(async (status: TerminalRunStatus) => {
-        const appCfgAtFinish = await readAppConfig(RUNTIME_DATA_DIR).catch(
-          () => ({} as Record<string, unknown>),
-        );
-        const langfuseDeliveryForAnalytics = deriveLangfuseDeliveryState(
-          (appCfgAtFinish as { telemetry?: Record<string, unknown> }).telemetry ?? {},
-          readTelemetrySinkConfig(),
-        );
-        const result = runResultFromStatus(status.status);
-        const errorCode = deriveRunErrorCode(status);
-        // C14/C15: AI-optimize (enrichment) run settled. Emit the dedicated
-        // result event; the success metadata flag runs outside this analytics gate.
-        if (hintDsEnrichment && analyticsContext) {
-          design.analytics.capture({
-            eventName: 'design_system_enrich_result',
-            context: analyticsContext,
-            appVersion: design.getAppVersion(),
-            properties: {
-              page_name: 'design_system_project',
-              area: 'design_system_enrich',
-              result,
-              design_system_id: dsSelectedId ?? undefined,
-              project_id: requestProjectId,
-              run_id: run.id,
-              ...(errorCode ? { error_code: errorCode } : {}),
-              duration_ms: Math.max(0, Date.now() - run.createdAt),
-            },
-            insertId: newInsertId(),
-          });
-        }
-        const failure = classifyRunFailure({
-          result,
-          status,
-          ...(errorCode ? { errorCode } : {}),
-          agentId: run.agentId,
-          cancelOrigin: run.cancelOrigin ?? null,
-          terminalTrigger: run.terminalTrigger ?? null,
-          events: run.events,
-        });
-        const usageAnalytics = scanRunEventsForUsageAnalytics(
-          run.events,
-          reqBody.model,
-          userQueryTokens,
-        );
-        // Whether this run is a non-first turn in its conversation — i.e. a
-        // prior completed assistant turn exists (excluding this run's own
-        // placeholder). The session-reuse cache win only applies to follow-up
-        // turns, so slicing `first_call_cache_hit_ratio` by this flag is the
-        // baseline-vs-optimized comparison. Mirrors server.ts hasPriorAssistantTurn.
-        const isFollowupTurn = run.conversationId
-          ? Boolean(
-              db
-                .prepare(
-                  `SELECT 1 FROM messages
-                     WHERE conversation_id = ?
-                       AND role = 'assistant'
-                       AND COALESCE(content, '') <> ''
-                       AND id <> COALESCE(?, '')
-                     LIMIT 1`,
-                )
-                .get(run.conversationId, run.assistantMessageId ?? ''),
-            )
-          : false;
-        // Resolve the turn's first-call usage (cache-hit of the OPENING model
-        // call — the signal session reuse moves). Every coding agent except
-        // codex reports per-call usage on the stream, so the forward-scanned
-        // first usage event IS the opening call. codex reports only a single
-        // cumulative `turn.completed` usage on the stream, so its first stream
-        // event is the whole-session aggregate; its real per-call number lives
-        // in the rollout `last_token_usage`, read here best-effort.
-        const firstCallUsage = await (async (): Promise<{
-          first_call_input_tokens?: number;
-          first_call_input_tokens_effective?: number;
-          first_call_cache_read_input_tokens?: number;
-          first_call_cache_creation_input_tokens?: number;
-          first_call_cache_hit_ratio?: number;
-        } | null> => {
-          if (run.agentId === 'codex') {
-            // Best-effort: a throw anywhere here (env resolution, rollout read)
-            // must degrade to "no codex first-call fields", never bubble to the
-            // outer run_finished .catch and drop the whole completion event.
-            try {
-              const sessionId = codexSessionIdFromRunEvents(run.events);
-              const codexHome = spawnEnvForAgent(
-                'codex',
-                { ...process.env, OD_DATA_DIR: RUNTIME_DATA_DIR },
-                agentCliEnvForAgent(
-                  (appCfgAtFinish as { agentCliEnv?: AgentCliEnv }).agentCliEnv,
-                  'codex',
-                ),
-              ).CODEX_HOME;
-              const codexUsage = await readCodexRolloutFirstCall({ codexHome, sessionId });
-              return codexUsage
-                ? {
-                    ...codexUsage,
-                    first_call_input_tokens_effective:
-                      codexUsage.first_call_input_tokens,
-                  }
-                : null;
-            } catch {
-              return null;
-            }
-          }
-          if (usageAnalytics.first_call_input_tokens === undefined) return null;
-          return {
-            first_call_input_tokens: usageAnalytics.first_call_input_tokens,
-            ...(usageAnalytics.first_call_input_tokens_effective !== undefined
-              ? {
-                  first_call_input_tokens_effective:
-                    usageAnalytics.first_call_input_tokens_effective,
-                }
-              : {}),
-            ...(usageAnalytics.first_call_cache_read_input_tokens !== undefined
-              ? {
-                  first_call_cache_read_input_tokens:
-                    usageAnalytics.first_call_cache_read_input_tokens,
-                }
-              : {}),
-            ...(usageAnalytics.first_call_cache_creation_input_tokens !== undefined
-              ? {
-                  first_call_cache_creation_input_tokens:
-                    usageAnalytics.first_call_cache_creation_input_tokens,
-                }
-              : {}),
-            ...(usageAnalytics.first_call_cache_hit_ratio !== undefined
-              ? { first_call_cache_hit_ratio: usageAnalytics.first_call_cache_hit_ratio }
-              : {}),
-          };
-        })();
-        const analyticsCapturedAt = Date.now();
-        const timingAnalytics = summarizeRunTimingAnalytics({
-          runCreatedAt: run.createdAt,
-          runUpdatedAt: run.updatedAt,
-          analyticsCapturedAt,
-        ...(run.analyticsTelemetry ? { telemetry: run.analyticsTelemetry } : {}),
-          events: run.events,
-        });
-        const toolAnalytics = summarizeToolAnalytics(run.events);
-        const toolStreamArtifactCount = (): number => runArtifactCountForRun(run);
-        const toolStreamDesignSystemCreated = (): boolean =>
-          runDesignSystemCreatedForRun(run);
-        const toolStreamPreviewModuleCount = (): number =>
-          runPreviewModuleCountForRun(run);
-        const toolStreamFilesWritten = (): number => runFilesWrittenForRun(run);
-        let artifactCount: number;
-        let artifactsCreated: number | undefined;
-        let artifactsModified: number | undefined;
-        let designSystemCreated: boolean;
-        let previewModuleCount: number;
-        let filesWritten: number | undefined;
-        let artifactDiff: RunArtifactDiff | undefined;
-        const artifactOutcome = run.artifactOutcome;
-        if (artifactOutcome) {
-          artifactCount = artifactOutcome.artifactCount;
-          artifactsCreated = artifactOutcome.artifactsCreated;
-          artifactsModified = artifactOutcome.artifactsModified;
-          designSystemCreated = artifactOutcome.designSystemCreated;
-          previewModuleCount = artifactOutcome.previewModuleCount;
-          filesWritten = artifactOutcome.filesWritten;
-          artifactDiff = artifactOutcome.diff;
-        } else {
-          const artifactBaseline = runArtifactBaselines.take(run.id);
-          if (artifactBaseline && !artifactBaseline.contended) {
-            let diff: ReturnType<typeof diffRunArtifacts> | null = null;
-            try {
-              diff = diffRunArtifacts(
-                artifactBaseline.before,
-                snapshotProjectArtifacts(artifactBaseline.cwd),
-              );
-            } catch {
-              diff = null;
-            }
-            if (diff) {
-              artifactDiff = diff;
-              artifactCount = diff.touched;
-              artifactsCreated = diff.created;
-              artifactsModified = diff.modified;
-              designSystemCreated = diff.designSystemCreated;
-              previewModuleCount = diff.previewModuleCount;
-              filesWritten = diff.filesWritten;
-            } else {
-              artifactCount = toolStreamArtifactCount();
-              designSystemCreated = toolStreamDesignSystemCreated();
-              previewModuleCount = toolStreamPreviewModuleCount();
-              filesWritten = toolStreamFilesWritten();
-            }
-          } else {
-            artifactCount = toolStreamArtifactCount();
-            designSystemCreated = toolStreamDesignSystemCreated();
-            previewModuleCount = toolStreamPreviewModuleCount();
-            filesWritten = toolStreamFilesWritten();
-          }
-        }
-        const touchedArtifactPaths = runTouchedArtifactPaths(run);
-        const deliverable = run.externalPluginAnalytics
-          ? await validateChatRunDeliverable({
-              db,
-              projectsRoot: PROJECTS_DIR,
-              run,
-              runStatus: run.status,
-              artifactCount,
-              ...(touchedArtifactPaths
-                ? { touchedPaths: touchedArtifactPaths }
-                : {}),
-            })
-          : null;
-        if (deliverable) {
-          design.runs.setDeliverableValidation?.(run, deliverable);
-        }
-        const activationMilestones = deriveActivationMilestones({
-          result,
-          artifactCount,
-          designSystemCreated,
-          isDesignSystemRun,
-          capturedAtIso: new Date(analyticsCapturedAt).toISOString(),
-        });
-        const diagnosticsAnalytics = summarizeRunDiagnosticsForAnalytics({
-          events: run.events,
-          exitCode: status.exitCode ?? null,
-          signal: status.signal ?? null,
-          cancelRequested: !!run.cancelRequested,
-          firstTokenSeen: Boolean(run.analyticsTelemetry?.firstTokenAt),
-          artifactWriteSeen: artifactCount > 0 || designSystemCreated || previewModuleCount > 0,
-        });
-        const finishedModelId = hasExplicitRequestedModelForAnalytics(reqBody.model)
-          ? modelIdForTracking(reqBody.model)
-          : modelIdForTracking(
-              usageAnalytics.agent_reported_model ?? run.resolvedModelId,
-            );
-        const runtimeVersions = getDetectedRuntimeVersions(run.agentId);
-        const agentCliVersion =
-          run.preflightAgentCliVersion ?? runtimeVersions?.agentCliVersion;
-        for (const [index, retryEvent] of runRetryEventsForAnalytics(run.events).entries()) {
-          design.analytics.capture({
-            eventName: retryEvent.event,
-            context: analyticsContext,
-            appVersion: design.getAppVersion(),
-            properties: retryEvent.data,
-            insertId: `${runInsertId}-${retryEvent.event}-${index}`,
-          });
-        }
-        const clarificationRequested = runAskedUserQuestion(run.events);
-        const interactionMode = typeof reqBody.sessionMode === 'string'
-          ? sessionModeToTracking(reqBody.sessionMode)
-          : undefined;
-        const primaryArtifactChange = artifactDiff
-          ? primaryArtifactChangeForRun({
-              diff: artifactDiff,
-              projectKind: runProjectKind,
-              hadExistingArtifacts: hintHasExistingArtifact === true,
-              ...(interactionMode ? { interactionMode } : {}),
-              clarificationRequested,
-            })
-          : undefined;
-        const supportingAssetFilesChanged = artifactDiff
-          ? supportingAssetFilesChangedForRun(artifactDiff, runProjectKind)
-          : undefined;
-        const finishedProperties: Record<string, unknown> = {
-            ...baseProps,
-            design_system_id: run.designSystemId ?? undefined,
-            design_system_digest: run.designSystemDigest ?? undefined,
-            design_system_selection_source: run.designSystemSelectionSource ?? 'none',
-            stable_prompt_hash: run.promptCache?.stablePromptHash,
-            stable_prompt_cache_hit: run.promptCache?.hit,
-            stable_prompt_cache_miss_reason: run.promptCache?.missReason,
-            // Which stable-prefix input drifted, for miss_reason
-            // 'stable-prompt-changed' only. `unattributed` means the prefix
-            // moved but no tracked section did — a coverage gap in
-            // prompts/stable-sections.ts, not a cause.
-            stable_prompt_changed_sections: run.promptCache?.changedSections ?? undefined,
-            area: isDesignSystemRun ? 'design_system_generation' : 'chat_panel',
-            result,
-            ...(activationMilestones ? { $set_once: activationMilestones } : {}),
-            model_id: finishedModelId,
-            artifact_count: artifactCount,
-            ...(run.externalPluginAnalytics
-              ? {
-                  deliverable_valid: deliverable?.valid === true,
-                  deliverable_validation:
-                    deliverable?.valid === true ? 'valid' : 'invalid',
-                  artifact_origin_status:
-                    run.artifactOriginStatus ?? 'missing_version',
-                  ...(run.artifactVersionId
-                    ? { artifact_version_id: run.artifactVersionId }
-                    : {}),
-                  resume: (run.manualResumeAttemptCount ?? 0) > 0,
-                  attempt_count: (run.manualResumeAttemptCount ?? 0) + 1,
-                  recharge_wait_duration_ms:
-                    run.rechargeWaitDurationMs ?? 0,
-                }
-              : {}),
-            ...(artifactsCreated !== undefined ? { artifacts_created: artifactsCreated } : {}),
-            ...(artifactsModified !== undefined ? { artifacts_modified: artifactsModified } : {}),
-            ...(filesWritten !== undefined ? { files_written_count: filesWritten } : {}),
-            asked_user_question: clarificationRequested,
-            retry_attempt_count: run.retryAttemptCount ?? 0,
-            retry_final_result: run.retryFinalResult ?? 'not_attempted',
-            ...(agentCliVersion
-              ? { agent_cli_version: agentCliVersion }
-              : {}),
-            ...(runtimeVersions?.runtimeCompanionName
-              ? { runtime_companion_name: runtimeVersions.runtimeCompanionName }
-              : {}),
-            ...(runtimeVersions?.runtimeCompanionVersion
-              ? { runtime_companion_version: runtimeVersions.runtimeCompanionVersion }
-              : {}),
-            ...(run.retryOriginalFailure?.failure_category
-              ? {
-                  retry_original_failure_category:
-                    run.retryOriginalFailure.failure_category,
-                }
-              : {}),
-            ...(run.retryOriginalFailure?.failure_detail
-              ? {
-                  retry_original_failure_detail:
-                    run.retryOriginalFailure.failure_detail,
-                }
-              : {}),
-            ...(run.retryOriginalFailure?.failure_stage
-              ? {
-                  retry_original_failure_stage:
-                    run.retryOriginalFailure.failure_stage,
-                }
-              : {}),
-            ...(run.retrySuppressedReason
-              ? { retry_suppressed_reason: run.retrySuppressedReason }
-              : {}),
-            ...(isDesignSystemRun ? {
-              design_system_created: designSystemCreated,
-              preview_module_count: previewModuleCount,
-              missing_font_count: 0,
-            } : {}),
-            ...timingAnalytics,
-            ...diagnosticsAnalytics,
-            // E-lite: `approval_requested`/`tool_result_sent` ride in via
-            // `...diagnosticsAnalytics`; these two come off the run object.
-            stdin_backpressure: run.stdinBackpressure === true,
-            ...(typeof run.lastAgentActivityAt === 'number'
-              ? { last_progress_age_ms: Math.max(0, analyticsCapturedAt - run.lastAgentActivityAt) }
-              : {}),
-            langfuse_trace_id: run.id,
-            ...langfuseDeliveryForAnalytics,
-            ...(errorCode ? { error_code: errorCode } : {}),
-            ...(failure ?? {}),
-            ...(usageAnalytics.input_tokens !== undefined
-              ? { input_tokens: usageAnalytics.input_tokens }
-              : {}),
-            ...(usageAnalytics.input_tokens_provider !== undefined
-              ? { input_tokens_provider: usageAnalytics.input_tokens_provider }
-              : {}),
-            ...(usageAnalytics.input_tokens_effective !== undefined
-              ? { input_tokens_effective: usageAnalytics.input_tokens_effective }
-              : {}),
-            ...(usageAnalytics.output_tokens !== undefined
-              ? { output_tokens: usageAnalytics.output_tokens }
-              : {}),
-            ...(usageAnalytics.total_tokens !== undefined
-              ? { total_tokens: usageAnalytics.total_tokens }
-              : {}),
-            ...(usageAnalytics.thought_tokens !== undefined
-              ? { thought_tokens: usageAnalytics.thought_tokens }
-              : {}),
-            ...(usageAnalytics.cache_read_input_tokens !== undefined
-              ? { cache_read_input_tokens: usageAnalytics.cache_read_input_tokens }
-              : {}),
-            ...(usageAnalytics.cache_creation_input_tokens !== undefined
-              ? {
-                  cache_creation_input_tokens:
-                    usageAnalytics.cache_creation_input_tokens,
-                }
-              : {}),
-            ...(usageAnalytics.uncached_input_tokens !== undefined
-              ? { uncached_input_tokens: usageAnalytics.uncached_input_tokens }
-              : {}),
-            ...(usageAnalytics.estimated_context_tokens !== undefined
-              ? { estimated_context_tokens: usageAnalytics.estimated_context_tokens }
-              : {}),
-            ...(usageAnalytics.cache_hit_ratio !== undefined
-              ? { cache_hit_ratio: usageAnalytics.cache_hit_ratio }
-              : {}),
-            // First-call cache-hit of the turn's opening model call (per-call
-            // usage for claude/opencode/codebuddy/pi from the stream; codex from
-            // its rollout). Sliced by is_followup_turn, this isolates the
-            // session-reuse cache win on non-first turns.
-            ...(firstCallUsage ?? {}),
-            is_followup_turn: isFollowupTurn,
-            cache_token_source: usageAnalytics.cache_token_source,
-            // Prefer provider scan over run_created baseProps (`estimated`).
-            token_count_source: usageAnalytics.token_count_source,
-            tool_error_count: toolAnalytics.tool_error_count,
-            tool_name_count: toolAnalytics.tool_name_count,
-            tool_names: toolAnalytics.tool_names_csv,
-            ...runMessageEventPersistenceAnalytics(run),
-          };
-        Object.assign(
-          finishedProperties,
-          buildRunFinishedV4Aliases(finishedProperties, taskLineage, {
-            inputAccountingMode: usageAnalytics.input_accounting_mode,
-            ...(firstCallUsage
-              ? {
-                  firstModelCall: {
-                    ...(firstCallUsage.first_call_input_tokens !== undefined
-                      ? { provider_input_tokens: firstCallUsage.first_call_input_tokens }
-                      : {}),
-                    ...(firstCallUsage.first_call_input_tokens_effective !== undefined
-                      ? { effective_input_tokens: firstCallUsage.first_call_input_tokens_effective }
-                      : {}),
-                    ...(firstCallUsage.first_call_cache_read_input_tokens !== undefined
-                      ? { cache_read_tokens: firstCallUsage.first_call_cache_read_input_tokens }
-                      : {}),
-                    ...(firstCallUsage.first_call_cache_creation_input_tokens !== undefined
-                      ? { cache_write_tokens: firstCallUsage.first_call_cache_creation_input_tokens }
-                      : {}),
-                  },
-                }
-              : {}),
-            ...(primaryArtifactChange
-              ? { primaryArtifactChange }
-              : {}),
-            ...(artifactDiff
-              ? {
-                  artifactFiles: {
-                    changed_file_count: artifactDiff.contentTouched,
-                    created_file_count: artifactDiff.contentCreated,
-                    modified_file_count: artifactDiff.contentModified,
-                    ...(supportingAssetFilesChanged !== undefined
-                      ? {
-                          supporting_asset_files_changed_count:
-                            supportingAssetFilesChanged,
-                        }
-                      : {}),
-                  },
-                }
-              : {}),
-            ...(isDesignSystemRun
-              ? {
-                  designSystemChangeType: designSystemCreated
-                    ? hintHasExistingArtifact === true ? 'modified' : 'created'
-                    : 'none',
-                }
-              : {}),
-          }),
-        );
-        // Refresh local recovery snapshot so crash recovery matches PostHog
-        // `run_finished` (usage/timing/tools), not only run_created baseProps.
-        // Keep the base insertId here: reconcileDurableRunTerminals appends
-        // `-finish` when replaying. Storing `${runInsertId}-finish` would
-        // produce `…-finish-finish` and can duplicate PostHog events.
-        design.runs.setAnalyticsRecovery?.(run, {
-          context: analyticsContext,
-          properties: finishedProperties,
-          insertId: runInsertId,
-        });
-        await Promise.resolve(design.analytics.capture({
-          eventName: 'run_finished',
-          context: analyticsContext,
-          appVersion: design.getAppVersion(),
-          properties: finishedProperties,
-          insertId: `${runInsertId}-finish`,
-        }));
-        design.runs.markAnalyticsCompleted?.(run);
-      }).catch(() => {});
+    const activeRunCount = design.runs.list({ status: 'active' }).length;
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ activeRunCount });
+  });
+
+  /*
+   * P0-24 推测项 A-06 (N10): the notices the desktop client turns into
+   * system notifications. Permission takes the most conservative reading:
+   *
+   *  · a project with no Workspace binding (pre-Workspace local) is visible;
+   *  · a bound project is visible only when the caller's asserted Workspace
+   *    identity passes the same read gate the project's own routes use — so a
+   *    Team project's notice reaches only a client currently in that Team,
+   *    and a member whose access was revoked locally sees nothing;
+   *  · a caller with no identity at all (headerless CLI) sees no bound
+   *    project; `od run notices --workspace … --workspace-member …` asserts one.
+   *
+   * Notices carry no reply text, so the worst a wrong grant could reveal is a
+   * project name and that a turn ended. The response is loopback-only.
+   */
+  app.get('/api/run-notices', async (req: ApiRequest, res: ApiResponse) => {
+    // Same loopback / DNS-rebinding guard as the active-count probe: the feed
+    // names projects, so a foreign page must not read it through the browser.
+    const local = validateLocalDaemonRequest(req);
+    if (!local.ok) {
+      return sendApiError(res, 403, 'FORBIDDEN', local.message, { details: local.details });
     }
+    res.setHeader('Cache-Control', 'no-store');
+    const afterRaw = typeof req.query?.after === 'string' ? Number(req.query.after) : 0;
+    const after = Number.isFinite(afterRaw) && afterRaw > 0 ? Math.floor(afterRaw) : 0;
+    if (!ctx.runNotices) {
+      return res.json({ epoch: 'unavailable', latestSeq: 0, notices: [] });
+    }
+    const requestContext = workspaceResourceContextFromRequest(req);
+    const body = await ctx.runNotices.read(after, async (notice) => {
+      const binding = ctx.projectStore?.getWorkspaceProjectByProjectId(db, notice.projectId);
+      if (!binding) return true;
+      if (requestContext === null || !ctx.authorizeProjectRequest) return false;
+      try {
+        return await ctx.authorizeProjectRequest(
+          req,
+          SILENT_RESPONSE,
+          notice.projectId,
+          { mode: 'read' },
+        );
+      } catch {
+        return false;
+      }
+    });
+    res.json(body);
   });
 
   app.get('/api/runs', async (req: ApiRequest, res: ApiResponse) => {
@@ -2803,7 +3031,39 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         'projectId is required when listing Workspace-bound runs',
       );
     }
-    const body = { runs: visibleRuns.map(design.runs.statusBody) };
+    // `ChatRunStatus` cannot say "waiting on the user": the run that asked the
+    // question reports `succeeded` and exits, while the project stays blocked.
+    // Clients rendering a per-project status off this feed would show such a
+    // project as finished, so ship the awaiting-input set alongside — the same
+    // one `GET /api/projects` composes `awaiting_input` from.
+    //
+    // Intersected with the projects `visibleRuns` already reveals: the query
+    // itself is unscoped, and returning it raw would leak the ids of projects
+    // this caller is not authorized to see.
+    const visibleProjectIds = new Set(
+      visibleRuns
+        .map((run) => run.projectId)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0),
+    );
+    const awaitingInputProjectIds = visibleProjectIds.size
+      ? [...listProjectsAwaitingInput(db)].filter((id) => visibleProjectIds.has(id))
+      : [];
+    // Per conversation too: a project shows "needs your reply" only when the
+    // conversation that most recently started a Run is the one waiting
+    // (P0-24). Same visibility rule — only conversations the runs expose.
+    const visibleConversationIds = new Set(
+      visibleRuns
+        .map((run) => run.conversationId)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0),
+    );
+    const awaitingInputConversationIds = visibleConversationIds.size
+      ? [...listConversationsAwaitingInput(db)].filter((id) => visibleConversationIds.has(id))
+      : [];
+    const body = {
+      runs: visibleRuns.map(statusWithStrategyTask),
+      awaitingInputProjectIds,
+      awaitingInputConversationIds,
+    };
     res.json(body);
   });
 
@@ -2852,10 +3112,24 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
   app.get('/api/runs/:id/result-package', async (req: ApiRequest, res: ApiResponse) => {
     const runId = routeParamId(req);
     if (!runId) return sendApiError(res, 400, 'BAD_REQUEST', 'run id missing');
-    const run = design.runs.get(runId);
-    if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
+    const requestedRun = design.runs.get(runId);
+    let task;
+    try {
+      task = getStrategyTaskExecutionByRunId(db, runId);
+    } catch (error) {
+      if (error instanceof InvalidStrategyTaskRecordError) {
+        return sendApiError(res, 409, 'OD_NEXT_TASK_STATE_INVALID', error.message);
+      }
+      if (error instanceof InvalidFrozenSkillPackageError) {
+        return sendApiError(res, 409, 'OD_NEXT_SKILL_SNAPSHOT_INVALID', error.message);
+      }
+      throw error;
+    }
+    const resultRunId = task?.terminalRunId ?? task?.latestRunId ?? runId;
+    const run = design.runs.get(resultRunId);
+    if (!requestedRun || !run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
     if (!await authorizeRunProject(req, res, run, { mode: 'read' })) return;
-    const status = design.runs.statusBody(run);
+    const status = statusWithStrategyTask(run);
     const project = run.projectId ? toProjectRecord(getProject(db, run.projectId)) : null;
     let files: ProjectFileEntry[] = [];
     if (project) {
@@ -2917,6 +3191,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         ...(status.error !== undefined ? { error: status.error } : {}),
         ...(status.errorCode !== undefined ? { errorCode: status.errorCode } : {}),
       },
+      ...(status.strategyTask ? { strategyTask: status.strategyTask } : {}),
       workspace: status.workspace ?? {
         storage: { kind: 'od-owned', baseDir: null },
         provenance: null,
@@ -2942,16 +3217,28 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     const run = design.runs.get(runId);
     if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
     if (!await authorizeRunProject(req, res, run, { mode: 'read' })) return;
-    const status = design.runs.statusBody(run);
+    const status = statusWithStrategyTask(run);
     if (!design.runs.isTerminal(run.status)) {
       res.json(status);
       return;
     }
+    // A blocked strategy verdict is the one place the client has to know
+    // whether the USER still has the deliverable, which is a different question
+    // from whether THIS run produced it (`deliverableValid`). A "继续" turn that
+    // verifies finished work and correctly rewrites nothing answers `false` to
+    // the second and `true` to the first, and the second answer is the one that
+    // used to decide whether a red failure card appeared over a finished deck.
+    // Computed only for that case so an ordinary status read costs no extra
+    // project scan.
+    const projectDeliverable = await projectDeliverableForBlockedStrategyTask(
+      run,
+      status,
+    );
     if (
       typeof status.deliverableValid === 'boolean'
       && typeof status.deliverableValidation === 'string'
     ) {
-      res.json(status);
+      res.json({ ...status, ...projectDeliverable });
       return;
     }
     const touchedArtifactPaths = runTouchedArtifactPaths(run);
@@ -2969,6 +3256,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     design.runs.setDeliverableValidation?.(run, deliverable);
     res.json({
       ...status,
+      ...projectDeliverable,
       deliverableValid: deliverable.valid,
       deliverableValidation: deliverable.validation,
       ...(deliverable.entryFile
@@ -3060,217 +3348,157 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       run,
       { mode: 'write', capability: 'writeFiles' },
     )) return;
-    const status = await design.runs.cancel(run, 'user_stop');
-    const body = { ok: true, run: status };
+    let task;
+    try {
+      task = getStrategyTaskExecutionByRunId(db, runId);
+    } catch (error) {
+      if (error instanceof InvalidStrategyTaskRecordError) {
+        return sendApiError(res, 409, 'OD_NEXT_TASK_STATE_INVALID', error.message);
+      }
+      if (error instanceof InvalidFrozenSkillPackageError) {
+        return sendApiError(res, 409, 'OD_NEXT_SKILL_SNAPSHOT_INVALID', error.message);
+      }
+      throw error;
+    }
+    const activeRun = task?.activeRunId ? design.runs.get(task.activeRunId) : null;
+    let cancelRun = activeRun ?? run;
+    let taskForCancel = task;
+    if (taskForCancel && !['completed', 'blocked', 'canceled'].includes(taskForCancel.outcome)) {
+      let canceled = null;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const physicalRunId = taskForCancel.activeRunId ?? cancelRun.id;
+        try {
+          canceled = cancelStrategyTaskExecution(db, {
+            taskExecutionId: taskForCancel.taskExecutionId,
+            expectedRevision: taskForCancel.revision,
+          });
+          cancelRun = design.runs.get(physicalRunId) ?? cancelRun;
+          break;
+        } catch (error) {
+          if (!(error instanceof StrategyTaskTransitionConflictError)) throw error;
+          const latest = getStrategyTaskExecutionByRunId(db, cancelRun.id)
+            ?? getStrategyTaskExecutionByRunId(db, runId);
+          if (!latest) throw error;
+          taskForCancel = latest;
+          if (['completed', 'blocked', 'canceled'].includes(latest.outcome)) {
+            canceled = latest;
+            break;
+          }
+        }
+      }
+      if (!canceled || !['completed', 'blocked', 'canceled'].includes(canceled.outcome)) {
+        return sendApiError(
+          res,
+          409,
+          'STRATEGY_TASK_CANCEL_CONFLICT',
+          'strategy task changed while cancellation was being applied',
+        );
+      }
+      cancelRun.strategyTask = projectStrategyTask(canceled, cancelRun.id, db);
+    }
+    // Logical CAS wins before physical finish: the emitted end frame therefore
+    // carries the terminal task projection and can never advertise a running
+    // task after the cancel response already succeeded.
+    await design.runs.cancel(cancelRun, 'user_stop');
+    const body = { ok: true, run: statusWithStrategyTask(cancelRun) };
     res.json(body);
   });
 
-  app.post('/api/chat', async (req: ApiRequest, res: ApiResponse) => {
-    if (ctx.lifecycle.isDaemonShuttingDown()) {
-      return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
-    }
+  // B11 「引导对话」 — steer the turn that is ALREADY running.
+  //
+  // The sibling `/cancel` above is the interrupt path: it stops the turn and
+  // the caller re-sends. This one is the opposite — the turn keeps everything
+  // it has done and one more `user` frame goes down the child's still-open
+  // stdin, so the model reads the correction mid-flight. Admissibility is
+  // decided once, in `classifyRunSteering`; this route only translates the
+  // verdict into HTTP and makes the delivered message durable.
+  app.post('/api/runs/:id/steer', async (req: ApiRequest, res: ApiResponse) => {
+    const runId = routeParamId(req);
+    if (!runId) return sendApiError(res, 400, 'BAD_REQUEST', 'run id missing');
+    const run = design.runs.get(runId);
+    if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
+    if (!await authorizeRunProject(
+      req,
+      res,
+      run,
+      { mode: 'write', capability: 'writeFiles' },
+    )) return;
     const requestBody = toJsonRecord(req.body);
-    const mediaExecution = parseMediaExecutionPolicyInput(requestBody.mediaExecution);
-    if (!mediaExecution.ok) {
-      return sendApiError(res, 400, 'BAD_REQUEST', mediaExecution.message);
-    }
-    const toolBundle = parseRunToolBundleForRequest(requestBody.toolBundle);
-    if (!toolBundle.ok) {
-      return sendApiError(res, 400, 'BAD_REQUEST', toolBundle.message);
-    }
-    let chatProject: ProjectRecord | null = null;
-    if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
-      try {
-        chatProject = toProjectRecord(getProject(db, requestBody.projectId));
-        assertSandboxProjectRootAvailable(chatProject?.metadata);
-      } catch (err) {
-        if (err instanceof SandboxImportedProjectError) {
-          return sendApiError(res, 400, 'BAD_REQUEST', err.message);
-        }
-        throw err;
-      }
-    }
-    const toolBundleSupport = validateRunToolBundleForAgent(
-      toolBundle.bundle,
-      typeof requestBody.agentId === 'string' ? getAgentDef(requestBody.agentId) : null,
-      {
-        deliveryTarget: runToolBundleDeliveryTargetForProject(
-          requestBody.projectId,
-          chatProject?.metadata,
-        ),
-      },
-    );
-    if (!toolBundleSupport.ok) {
-      return sendApiError(res, 400, 'BAD_REQUEST', toolBundleSupport.message);
-    }
-    // A chat run may only attach to a conversation owned by its own project.
-    // Without this guard, pairing projectId=A with a conversationId owned by
-    // project B runs in A's cwd but pins messages and the native session under
-    // B — corrupting B's history and resume identity. Mirror the ownership
-    // check the sibling routes already enforce (handoff.ts, terminal.ts).
-    if (typeof requestBody.projectId === 'string' && requestBody.projectId &&
-        typeof requestBody.conversationId === 'string' && requestBody.conversationId) {
-      const chatConversation = getConversation(db, requestBody.conversationId);
-      if (chatConversation && chatConversation.projectId !== requestBody.projectId) {
-        return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
-      }
-    }
-    let authorizedBoundMutation = false;
-    if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
-      const authorization = await authorizeRunProjectBeforePluginResolution(
-        req,
-        res,
-        requestBody.projectId,
-      );
-      if (!authorization.ok) return;
-      authorizedBoundMutation = authorization.authorizedBoundMutation;
-    }
-    if (!hasCompleteByokOpenCodeConfig(requestBody)) {
+    const rawText = typeof requestBody.text === 'string' ? requestBody.text : '';
+    const text = rawText.trim();
+    if (!text) {
       return sendApiError(
         res,
         400,
-        'VALIDATION_FAILED',
-        BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
+        'BAD_REQUEST',
+        'text is required and must be a non-empty string',
       );
     }
-    const meta: RunCreateMeta = {
-      ...withoutSensitiveRunInput(requestBody),
-      mediaExecution: mediaExecution.policy,
-      toolBundle: toolBundle.bundle,
-      ...(chatProject?.metadata ? { projectMetadata: chatProject.metadata } : {}),
-      workspaceScope: null,
-    };
-    // Mirror the POST /api/runs ownership check: the assistantMessageId must
-    // reference an assistant message in THIS conversation, or the run mutates a
-    // row it does not own via the id-only writers (#6418 review).
-    const chatAssistantMessageId =
-      typeof meta.assistantMessageId === 'string' && meta.assistantMessageId
-        ? meta.assistantMessageId
-        : null;
-    if (chatAssistantMessageId) {
-      // Without a resolvable conversation there is nothing to validate the
-      // assistantMessageId against — the run would mutate a row it does not
-      // own via the id-only writers (nettee on #6418).
-      if (typeof meta.conversationId !== 'string' || !meta.conversationId) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'assistantMessageId requires a conversation');
-      }
-      const chatConversation = getConversation(db, meta.conversationId);
-      if (
-        !chatConversation
-        || (
-          typeof meta.projectId === 'string'
-          && meta.projectId
-          && chatConversation.projectId !== meta.projectId
-        )
-      ) {
-        return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
-      }
-      const existingAssistantPin = db
-        .prepare(
-          `SELECT role, conversation_id AS conversationId, run_id AS runId, run_status AS runStatus FROM messages WHERE id = ?`,
-        )
-        .get(chatAssistantMessageId) as
-        | { role?: unknown; conversationId?: unknown; runId?: unknown; runStatus?: unknown }
-        | undefined;
-      if (existingAssistantPin && existingAssistantPin.role !== 'assistant') {
+    const runtimeAccepts = runtimeAcceptsMidTurnInput(
+      typeof run.agentId === 'string' ? getAgentDef(run.agentId) : null,
+    );
+    const outcome = design.runs.steer(run, text, runtimeAccepts);
+    if (!outcome.ok) {
+      // Two distinct codes on purpose: `UNSUPPORTED` is permanent for this
+      // agent (the caller should stop offering the affordance), the closed
+      // ones mean "this turn is past taking input — send it as a new turn".
+      if (outcome.refusal === 'runtime_unsupported') {
         return sendApiError(
           res,
           409,
-          'INVALID_ASSISTANT_MESSAGE',
-          'assistantMessageId must reference an assistant message',
+          'RUN_STEERING_UNSUPPORTED',
+          `agent ${run.agentId ?? 'unknown'} cannot take a mid-turn message: `
+          + 'its stdin is closed together with the opening prompt',
+          { retryable: false, details: { refusal: outcome.refusal } },
         );
       }
-      if (
-        existingAssistantPin
-        && existingAssistantPin.conversationId !== meta.conversationId
-      ) {
-        return sendApiError(
-          res,
-          409,
-          'IDEMPOTENCY_CONFLICT',
-          'assistantMessageId belongs to a different conversation',
-        );
-      }
-    }
-    if (typeof meta.projectId === 'string' && meta.projectId) {
-      const preparedWorkspaceScope =
-        await prepareRunWorkspaceScope(
-          req,
-          res,
-          meta.projectId,
-          meta.agentId,
-          authorizedBoundMutation,
-        );
-      if (!preparedWorkspaceScope.ok) return;
-      meta.workspaceScope = preparedWorkspaceScope.workspaceScope;
-    }
-    if (
-      typeof requestBody.pluginId === 'string'
-      && requestBody.pluginId.length > 0
-      && ctx.plugins.authorizePluginRequest
-      && !await ctx.plugins.authorizePluginRequest(
-        req,
-        res,
-        requestBody.pluginId,
-      )
-    ) return;
-    if (
-      typeof meta.projectId === 'string'
-      && meta.projectId
-      && !requestedSnapshotBelongsToProject(
-        res,
-        meta.projectId,
-        meta.appliedPluginSnapshotId,
-      )
-    ) return;
-    meta.requestFingerprint = runRequestFingerprint(meta);
-    const creation = design.runs.createOrReuse(meta);
-    if (creation.kind === 'conflict') {
       return sendApiError(
         res,
         409,
-        'IDEMPOTENCY_CONFLICT',
-        'clientRequestId is already associated with a different logical run request',
+        'RUN_STEERING_CLOSED',
+        outcome.refusal === 'run_terminal'
+          ? 'run already finished; send the message as a new turn'
+          : 'the turn already ended and stopped reading input; send the message as a new turn',
+        { retryable: false, details: { refusal: outcome.refusal } },
       );
     }
-    const run = creation.run;
-    if (creation.kind === 'reused') {
-      design.runs.stream(run, req, res);
-      return;
+    // Durability. Without this row the user reloads and their own words are
+    // gone — the model acted on something the transcript never recorded. It is
+    // written only AFTER a successful delivery, so a refused steer leaves no
+    // trace, and it goes in as `role: 'user'` because that is who wrote it:
+    // any other role would misattribute it, and the next turn's flattened
+    // transcript would drop the instruction the model was actually given.
+    // Position is append-only, so it lands after the assistant turn it steered
+    // — which is exactly when the user said it.
+    const messageId = randomUUID();
+    if (run.conversationId) {
+      const conversationId = run.conversationId;
+      db.transaction(() => {
+        const now = Date.now();
+        upsertMessage(db, conversationId, {
+          id: messageId,
+          role: 'user',
+          content: text,
+          startedAt: now,
+          endedAt: now,
+        });
+        if (typeof run.projectId === 'string' && run.projectId) {
+          updateProject(db, run.projectId, {});
+          acceptProjectUserSubmission(db, { id: `steer-${messageId}`, projectId: run.projectId,
+            conversationId, acceptedAt: now });
+        }
+      })();
     }
-    const isRunActiveForAssistantClaim = (runId: string): boolean => {
-      const existingRun = design.runs.get(runId);
-      return Boolean(existingRun && !TERMINAL_RUN_STATUSES.has(existingRun.status));
-    };
-    // Atomic ownership claim (#6418): a created run must acquire the assistant
-    // message before streaming — otherwise drop the run and reject.
-    let claimed: { ok: boolean; reason?: 'active' | 'scope' };
-    try {
-      claimed = pinAssistantMessageOnRunCreate(db, run, {
-        isRunActive: isRunActiveForAssistantClaim,
-      });
-    } catch (err) {
-      design.runs.drop(run);
-      throw err;
-    }
-    if (!claimed.ok) {
-      design.runs.drop(run);
-      return sendApiError(
-        res,
-        409,
-        'RUN_IN_PROGRESS',
-        'assistantMessageId is already bound to an active run',
-      );
-    }
-    design.runs.stream(run, req, res);
-    reconcileAssistantMessageOnRunEnd(db, design.runs, run);
-    const executionMeta: RunCreateMeta = {
-      ...meta,
-      ...(requestBody.byokProvider !== undefined
-        ? { byokProvider: requestBody.byokProvider }
-        : {}),
-    };
-    design.runs.start(run, () => startChatRun(executionMeta, run));
+    res.json({
+      ok: true,
+      delivered: true,
+      messageId,
+      run: design.runs.statusBody(run),
+    });
+  });
+
+  app.post('/api/chat', async (req: ApiRequest, res: ApiResponse) => {
+    await handleRunCreate(req, res, true);
   });
 }
 

@@ -1,7 +1,6 @@
 /* Update-ready indicator: a round brand-green rocket button shown as its own
-   top-right cluster control for signed-in users, with the rail footer retained
-   as the signed-out fallback. The state behind it is the real updater's
-   `shouldShowControl`.
+   top-right cluster control for signed-in and signed-out users. The state
+   behind it is the real updater's `shouldShowControl`.
 
    There is deliberately no progress ring here: the indicator only exists once
    the installer has finished downloading, so any percentage it drew would be

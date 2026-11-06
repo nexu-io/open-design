@@ -97,6 +97,8 @@ describe("od media generate structured daemon failures", () => {
         code: "MEDIA_EXECUTION_DISABLED",
         message: "media generation is disabled for this run",
         retryable: false,
+        // A dispatch that never produced a task still answers "so what now?".
+        nextStep: "unsupported",
       },
     });
     expect(result.stderr).not.toContain("internalPath");
@@ -120,6 +122,7 @@ describe("od media generate structured daemon failures", () => {
         code: "provider_error",
         message: LARGE_ERROR_MESSAGE,
         retryable: true,
+        nextStep: "retry-later",
       },
     });
   });
@@ -135,6 +138,8 @@ describe("od media generate structured daemon failures", () => {
       error: {
         code: "MEDIA_DISPATCH_FAILED",
         message: "media dispatcher failed before generation started",
+        // We could not name a cause; it is ours, not the user's.
+        nextStep: "contact-support",
       },
     });
     expect(result.stderr).not.toContain("secret-value");
@@ -152,6 +157,7 @@ describe("od media generate structured daemon failures", () => {
       error: {
         code: "MEDIA_DISPATCHER_UNREACHABLE",
         message: "local media dispatcher could not be reached",
+        nextStep: "retry-later",
       },
     });
     expect(result.stderr).not.toContain(baseUrl);

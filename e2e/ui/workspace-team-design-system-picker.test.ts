@@ -203,9 +203,23 @@ test('[P0] Team design systems catch up missed shares, updates, and retractions'
     const memberCard = memberPage.getByTestId(`design-system-card-${designSystemId}`);
     await expect(memberCard).toBeVisible({ timeout: T.xlong });
     await memberCard.click();
+    // The shared snapshot is self-contained; its private backing project is
+    // not the authority for a teammate's brand manifest or logo bytes.
+    const sharedBrand = await memberPage.request.get(
+      `/api/design-systems/${encodeURIComponent(designSystemId!)}/static?path=brand.json`,
+      { headers: workspaceHeaders(MEMBER), timeout: T.long },
+    );
+    expect(sharedBrand.ok(), await sharedBrand.text()).toBeTruthy();
+    expect(await sharedBrand.json()).toMatchObject({ logo: { primary: 'assets/logo.svg' } });
+    const sharedLogo = await memberPage.request.get(
+      `/api/design-systems/${encodeURIComponent(designSystemId!)}/static?path=assets%2Flogo.svg`,
+      { headers: workspaceHeaders(MEMBER), timeout: T.long },
+    );
+    expect(sharedLogo.ok(), await sharedLogo.text()).toBeTruthy();
     await expectSharedLogo(
       memberPage.getByTestId(`design-system-detail-${designSystemId}`),
       'Shared Product Language',
+      { id: designSystemId!, memberId: MEMBER.memberId },
     );
     await gotoHome(memberPage);
     await ensureRailOpen(memberPage);
@@ -447,6 +461,7 @@ async function writeLogoProjectFile(
 async function expectSharedLogo(
   container: ReturnType<Page['getByTestId']>,
   alt: string,
+  sharedResource?: { id: string; memberId: string },
 ): Promise<void> {
   const logo = container.getByTestId('design-kit-logo-section').getByRole('img', { name: alt });
   await expect(logo).toBeVisible({ timeout: T.xlong });
@@ -463,9 +478,14 @@ async function expectSharedLogo(
     complete: true,
     width: 320,
     height: 160,
-    workspaceId: null,
-    workspaceMemberId: null,
+    workspaceId: WORKSPACE_ID,
+    workspaceMemberId: sharedResource?.memberId ?? OWNER.memberId,
   });
+  if (sharedResource) {
+    const source = new URL((await logo.getAttribute('src'))!, 'http://localhost');
+    expect(source.pathname).toBe(`/api/design-systems/${encodeURIComponent(sharedResource.id)}/static`);
+    expect(source.searchParams.get('path')).toBe('assets/logo.svg');
+  }
 }
 
 async function expectProjectSharedLogo(
@@ -498,12 +518,12 @@ async function expectProjectSharedLogo(
       height: element.naturalHeight,
       workspaceId: new URL(element.src).searchParams.get('workspaceId'),
       workspaceMemberId: new URL(element.src).searchParams.get('workspaceMemberId'),
-    }), { timeout: T.short }).catch(() => null);
+    }), undefined, { timeout: T.short }).catch(() => null);
     const matches = image?.complete === true
       && image.width === 320
       && image.height === 160
-      && image.workspaceId === null
-      && image.workspaceMemberId === null;
+      && image.workspaceId === WORKSPACE_ID
+      && image.workspaceMemberId === OWNER.memberId;
     if (!matches) {
       matchingSince = 0;
       return 0;

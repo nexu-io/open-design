@@ -119,6 +119,8 @@ export interface WorkspaceTeamResourcesChangedSsePayload {
 /** Seat count / entitlement / role / lifecycle in the workspace context changed. */
 export interface WorkspaceContextChangedSsePayload {
   type: 'workspace-context-changed';
+  /** Only a verified exact-member terminal upstream revocation may set this. */
+  memberRemoval?: { workspaceId: string; workspaceMemberId: string; reason: 'member-removed' };
   at?: number;
 }
 
@@ -166,6 +168,16 @@ export interface WorkspaceWalletBalanceChangedSsePayload {
   at?: number;
 }
 
+/** Quota consumption changed even when the wallet balance stayed unchanged. */
+export interface WorkspaceCodingPlanUsageChangedSsePayload {
+  type: 'coding-plan-usage-changed';
+  workspaceId: string;
+  workspaceMemberId: string;
+  /** Durable upstream event cursor, independent of wallet/subscription revisions. */
+  eventId: string;
+  at?: number;
+}
+
 /**
  * Workspace-scoped invalidation events carried on `/api/workspace/events`.
  * The EventSource URL carries an exact Workspace/member pair and the daemon
@@ -183,7 +195,8 @@ export type WorkspaceInvalidationSsePayload =
   | WorkspaceDirectoryChangedSsePayload
   | WorkspaceBillingChangedSsePayload
   | WorkspaceBillingSubscriptionChangedSsePayload
-  | WorkspaceWalletBalanceChangedSsePayload;
+  | WorkspaceWalletBalanceChangedSsePayload
+  | WorkspaceCodingPlanUsageChangedSsePayload;
 
 /** The SSE `event:` names for the workspace-scoped invalidations. */
 export const WORKSPACE_INVALIDATION_EVENTS = [
@@ -196,6 +209,7 @@ export const WORKSPACE_INVALIDATION_EVENTS = [
   'billing-changed',
   'billing-subscription-changed',
   'wallet-balance-changed',
+  'coding-plan-usage-changed',
 ] as const;
 
 export type WorkspaceInvalidationEventName =

@@ -2,6 +2,7 @@ import { expect, test } from '@/playwright/suite';
 import {
   fulfillAgentsRoute,
   routeSuccessfulRuns,
+  suppressWhatsNew,
 } from '@/playwright/mock-factory';
 import { mockAmrPersonalWorkspace } from '@/playwright/amr';
 import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
@@ -13,6 +14,22 @@ const STORAGE_KEY = 'open-design:config';
 test.describe.configure({ timeout: T.xlong });
 
 test.beforeEach(async ({ page }) => {
+  /*
+   * 版本更新弹窗会**盖住整条顶部 chrome**,而这条用例要从那里点开新建项目。
+   *
+   * 它不是一直如此:共享 `Dialog` 的遮罩原来是 `z-index: 100`,压不过
+   * `.workspace-tabs-chrome`(120),于是弹窗开着也照样点得到侧栏开关 ——
+   * 这条用例一直在**借那个缺陷**过关。`8d0b542d0a`(产品裁决 2026-09-07「那都修掉」)
+   * 把 `packages/components/src/dialog.module.css` 的 `.backdrop` 抬到 1500,
+   * 遮罩终于兑现了「我后面的东西都失效」这句承诺,这条用例随之卡死在
+   * `ensureRailOpen` 的那次点击上(`timeout: 0`,一直等到整条用例超时)。
+   *
+   * 处置和其余 17 个走 `applyStandardMocks` 的 UI 文件一致:把这条**与本用例无关**
+   * 的发版公告挡在外面。本用例考的是「空流不许假装完成」:原来是显示批准的失败标题而不是
+   * Done;P0-24 产品 Q6 起空回复按正常结束,回合末尾整行删除(含「任务未能完成」),
+   * 于是改为:既不出 Done,也不出失败标题和「运行失败」正文。
+   */
+  await suppressWhatsNew(page);
   await page.route('**/api/integrations/vela/status*', async (route) => {
     await route.fulfill({
       json: {
@@ -77,7 +94,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('[P0] @critical API empty stream shows No output instead of Done', async ({ page }) => {
+test('[P0] @critical API empty stream ends without a failure title or Done', async ({ page }) => {
   const runRequests = await routeSuccessfulRuns(page, { runIdPrefix: 'api-empty-response-run' });
 
   await gotoEntryHome(page);
@@ -86,8 +103,14 @@ test('[P0] @critical API empty stream shows No output instead of Done', async ({
   await sendPrompt(page, 'Create a login page');
 
   await runRequests.expectCount(1);
-  await expect(page.locator('.assistant-label', { hasText: 'No output' })).toBeVisible();
-  await expect(page.getByText(/provider ended the request/i).first()).toBeVisible();
+  // The turn did settle: the assistant row exists and is no longer streaming.
+  // P0-24 Q6 dropped the visible empty_response note, so settling is read off
+  // the footer's live state rather than a marker …
+  await expect(page.locator('.msg.assistant').first()).toBeVisible();
+  await expect(page.locator('[data-testid="assistant-footer"][data-streaming="true"]')).toHaveCount(0, { timeout: 15_000 });
+  // … and nothing reads as a failure or as a completion (P0-24 Q6).
+  await expect(page.locator('.assistant-label', { hasText: 'The task could not be completed' })).toHaveCount(0);
+  await expect(page.getByText('This task failed to run. Please retry. If it fails again, please contact support.', { exact: true })).toHaveCount(0);
   await expect(page.locator('.assistant-label', { hasText: 'Done' })).toHaveCount(0);
 });
 

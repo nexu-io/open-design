@@ -69,6 +69,7 @@ export function createMediaTaskStore(
     const task: LiveMediaTask = {
       id: row.id,
       projectId: row.projectId,
+      runId: row.runId,
       status: row.status,
       surface: row.surface,
       model: row.model,
@@ -109,6 +110,7 @@ export function createMediaTaskStore(
     const insert: MediaTaskInsert = {
       id: taskId,
       projectId,
+      ...(task.runId !== undefined ? { runId: task.runId } : {}),
       status: task.status,
       progress: task.progress,
       file: task.file,
@@ -124,6 +126,7 @@ export function createMediaTaskStore(
 
   function persistMediaTask(task: LiveMediaTask): void {
     const patch: MediaTaskPatch = {
+      ...(task.runId !== undefined ? { runId: task.runId } : {}),
       status: task.status,
       progress: task.progress,
       file: task.file,

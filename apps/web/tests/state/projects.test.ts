@@ -15,7 +15,9 @@ import {
   getProjectDetail,
   importClaudeDesignZip,
   importFolderProject,
+  deleteTemplate,
   invalidateWorkspaceProjectLists,
+  listTemplates,
   installGeneratedPluginFolder,
   installPluginSource,
   listPlugins,
@@ -106,6 +108,27 @@ describe('listMessages', () => {
       message: 'workspace context is required',
     });
   });
+
+  it('cancels a transcript HTTP read without dropping its workspace identity', async () => {
+    const controller = new AbortController();
+    const context = personalWorkspaceContext();
+    let requestSignal: AbortSignal | null | undefined;
+    const fetchMock = vi.fn<typeof fetch>(async (_input, init) => {
+      requestSignal = init?.signal;
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const pending = listMessages('project-1', 'conversation-1', context, controller.signal);
+    expect(fetchMock.mock.calls[0]?.[1]?.headers).toMatchObject({
+      'x-od-workspace-id': context.workspaceId,
+      'x-od-workspace-member-id': context.workspaceMemberId,
+    });
+    expect(requestSignal).toBe(controller.signal);
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: 'ProjectMessageListError' });
+  });
 });
 
 describe('createProject local plugin identity', () => {
@@ -139,6 +162,39 @@ describe('createProject local plugin identity', () => {
       pluginId: 'shared-plugin-id',
       pluginSource: 'team:plugin:workspace-a:shared-plugin-id',
     });
+  });
+
+  it('preserves an automatic OD Next task profile without synthesizing plugin fields', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => Response.json({
+      project: {
+        id: 'project-automatic-strategy',
+        name: 'Automatic strategy project',
+        skillId: null,
+        designSystemId: null,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      conversationId: 'conversation-1',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await createProject({
+      name: 'Automatic strategy project',
+      skillId: null,
+      designSystemId: null,
+      metadata: { kind: 'prototype' },
+      automaticStrategyTaskProfile: 'prototype',
+    });
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(body).toMatchObject({
+      automaticStrategyTaskProfile: 'prototype',
+      metadata: { kind: 'prototype' },
+    });
+    expect(body).not.toHaveProperty('pluginId');
+    expect(body).not.toHaveProperty('pluginSource');
+    expect(body).not.toHaveProperty('appliedPluginSnapshotId');
+    expect(body).not.toHaveProperty('pluginInputs');
   });
 
   it('preserves selected local resource catalogue scopes without adding Workspace headers', async () => {
@@ -748,8 +804,41 @@ describe('listProjects', () => {
 
 describe('createProject', () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
+
+  it.each(['personal', 'team', 'local'] as const)(
+    'returns the new project on an immediate Home read in %s scope (OPEND-4687)',
+    async (scope) => {
+      vi.useFakeTimers({ toFake: ['performance', 'setTimeout', 'clearTimeout'] });
+      const contexts = {
+        local: null,
+        personal: personalWorkspaceContext(),
+        team: teamWorkspaceContext(),
+      };
+      const workspaceContext = contexts[scope];
+      const project = { id: 'new-project', name: 'Home task' };
+      let persisted = false;
+      vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (_input, init) => {
+        if (init?.method === 'POST') {
+          persisted = true;
+          return Response.json({ project, conversationId: 'conversation-1' });
+        }
+        const row = workspaceContext ? { project, workspaceId: workspaceContext.workspaceId } : project;
+        return Response.json({ projects: persisted ? [row] : [] });
+      }));
+
+      // Home's recent list is still inside the one-second coalescing window
+      // when the project route confirms creation and the user returns Home.
+      await expect(listProjects({ workspaceContext, workspaceView: 'recent' })).resolves.toEqual([]);
+      await createProject({ name: project.name, skillId: null, designSystemId: null, workspaceContext });
+      await expect(listProjects({ workspaceContext, workspaceView: 'all' }))
+        .resolves.toMatchObject([project]);
+      await expect(listProjects({ workspaceContext, workspaceView: 'recent' }))
+        .resolves.toMatchObject([project]);
+    },
+  );
 
   it('preserves daemon validation messages from non-2xx create responses', async () => {
     const fetchMock = vi.fn<typeof fetch>(async () => new Response(
@@ -2340,6 +2429,84 @@ describe('deleteProject local caches', () => {
   });
 });
 
+describe('saved project tabs cache', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each([
+    { tabs: ['restore-me.png'], active: '__design_files__' },
+    { tabs: [], active: null },
+  ])('restores a legacy local selection as saved state: $active', async (selection) => {
+    const projectId = `restore-local-${selection.active ?? 'empty'}`;
+    const store = new Map<string, string>([[
+      `open-design:project-tabs:v1:${projectId}`,
+      JSON.stringify({ ...selection, updatedAt: 2 }),
+    ]]);
+    vi.stubGlobal('window', {
+      localStorage: {
+        getItem: (key: string) => store.get(key) ?? null,
+        setItem: (key: string, value: string) => store.set(key, value),
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => Response.json({
+      tabs: [], active: null, hasSavedState: false,
+    })));
+
+    await expect(loadTabs(projectId, null, { reconcileNewerCacheToDaemon: false }))
+      .resolves.toEqual({ ...selection, updatedAt: 2, hasSavedState: true });
+  });
+
+  it('marks an immediate local selection as saved before the debounced daemon write', () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal('window', {
+      localStorage: {
+        getItem: (key: string) => store.get(key) ?? null,
+        setItem: (key: string, value: string) => store.set(key, value),
+      },
+    });
+
+    const saved = cacheTabsLocally('immediate-local-selection', {
+      tabs: ['restore-me.png'], active: '__design_files__',
+    });
+
+    expect(saved).toMatchObject({ active: '__design_files__', hasSavedState: true });
+    expect(JSON.parse([...store.values()][0]!)).toEqual(saved);
+  });
+
+  it('keeps an existing cached empty selection saved when the daemon is unavailable', async () => {
+    vi.stubGlobal('window', { localStorage: { getItem: () => JSON.stringify({
+      tabs: [], active: null, updatedAt: 2,
+    }) } });
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockRejectedValue(new Error('offline')));
+
+    await expect(loadTabs('offline-empty-selection'))
+      .resolves.toEqual({ tabs: [], active: null, updatedAt: 2, hasSavedState: true });
+  });
+
+  it('does not let an older local selection outrank a newer daemon selection', async () => {
+    vi.stubGlobal('window', { localStorage: { getItem: () => JSON.stringify({
+      tabs: [], active: null, updatedAt: 2,
+    }) } });
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => Response.json({
+      tabs: ['new.html'], active: 'new.html', hasSavedState: true, updatedAt: 3,
+    })));
+
+    await expect(loadTabs('newer-daemon-selection')).resolves.toEqual({
+      tabs: ['new.html'], active: 'new.html', hasSavedState: true, updatedAt: 3,
+    });
+  });
+
+  it('keeps an absent local and daemon selection unsaved for first-file auto-open', async () => {
+    vi.stubGlobal('window', { localStorage: { getItem: () => null } });
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => Response.json({
+      tabs: [], active: null, hasSavedState: false,
+    })));
+
+    await expect(loadTabs('never-saved-selection')).resolves.toEqual({ tabs: [], active: null });
+  });
+});
+
 describe('read-only project tabs cache', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -2390,5 +2557,128 @@ describe('read-only project tabs cache', () => {
     expect(loaded.active).toBe('local.html');
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[1]?.method).toBeUndefined();
+  });
+});
+
+describe('listTemplates request coalescing', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function deferred<T>() {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((done) => { resolve = done; });
+    return { promise, resolve };
+  }
+
+  it('collapses concurrent template-list reads into a single request', async () => {
+    // Same launch-burst shape as the design-system catalog: App's one-shot
+    // bootstrap and the home-route effect both want the list on the same pass,
+    // and both must keep their own read — one settles the entry view, the other
+    // exists to pick up a template saved inside a project. On the wire they are
+    // one request, and on a cold Home load they land together.
+    const gate = deferred<Response>();
+    let reads = 0;
+    vi.stubGlobal('fetch', vi.fn(() => {
+      reads += 1;
+      return gate.promise;
+    }));
+
+    const inFlight = [listTemplates(), listTemplates(), listTemplates()];
+    await vi.waitFor(() => expect(reads).toBeGreaterThan(0));
+    expect(reads).toBe(1);
+
+    gate.resolve(new Response(
+      JSON.stringify({ templates: [{ id: 'tpl-1', name: 'Landing page' }] }),
+      { status: 200 },
+    ));
+    for (const read of inFlight) {
+      await expect(read).resolves.toEqual([
+        expect.objectContaining({ id: 'tpl-1' }),
+      ]);
+    }
+  });
+
+  it('re-reads the template list for a call issued after the previous settled', async () => {
+    // Single-flight only, never a shared settled answer: returning Home re-reads
+    // precisely so a template saved inside a project shows up, and the save
+    // handler awaits its own refresh. A cached list would hand both of them the
+    // list they were fired to replace.
+    let reads = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      reads += 1;
+      return new Response(
+        JSON.stringify({ templates: reads > 1 ? [{ id: 'tpl-new', name: 'Saved' }] : [] }),
+        { status: 200 },
+      );
+    }));
+
+    await expect(listTemplates()).resolves.toEqual([]);
+    await expect(listTemplates()).resolves.toEqual([
+      expect.objectContaining({ id: 'tpl-new' }),
+    ]);
+    expect(reads).toBe(2);
+  });
+
+  it('starts a fresh template read when a mutation lands mid-flight', async () => {
+    // Review catch. `ttl = 0` stops settled-result reuse but not in-flight
+    // joining, and the post-mutation refresh is exactly the caller that must
+    // never join: `handleDeleteTemplate` awaits `deleteTemplate` and then calls
+    // `refreshTemplates`. The daemon answers `/api/templates` from a synchronous
+    // `listTemplates(db)` snapshot, so a GET issued before the DELETE returns
+    // the row that was just deleted — and joining it would leave the deleted
+    // template on screen until something else happened to refetch.
+    const pending = deferred<Response>();
+    const urls: string[] = [];
+    let templateRows = [{ id: 'tpl-doomed', name: 'Doomed' }];
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      urls.push(`${init?.method ?? 'GET'} ${url}`);
+      if ((init?.method ?? 'GET') === 'DELETE') {
+        templateRows = [];
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
+      // The first GET is issued before the delete and answers the pre-delete
+      // snapshot; it stays pending across the mutation.
+      if (urls.filter((u) => u.startsWith('GET')).length === 1) return pending.promise;
+      return Promise.resolve(new Response(
+        JSON.stringify({ templates: templateRows }),
+        { status: 200 },
+      ));
+    }));
+
+    const inFlightBeforeMutation = listTemplates();
+    await expect(deleteTemplate('tpl-doomed')).resolves.toBe(true);
+
+    const afterMutation = listTemplates();
+    // Release the pre-delete GET. If the refresh joined it, it now resolves to
+    // the stale row instead of issuing its own read.
+    pending.resolve(new Response(
+      JSON.stringify({ templates: [{ id: 'tpl-doomed', name: 'Doomed' }] }),
+      { status: 200 },
+    ));
+
+    await expect(afterMutation).resolves.toEqual([]);
+    await expect(inFlightBeforeMutation).resolves.toEqual([
+      expect.objectContaining({ id: 'tpl-doomed' }),
+    ]);
+  });
+
+  it('lets the next caller retry instead of joining a failed read', async () => {
+    // Failures are never cached: a transient 500 must not leave the entry view
+    // with an empty template list until something else happens to refetch.
+    let reads = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      reads += 1;
+      return reads === 1
+        ? new Response('nope', { status: 500 })
+        : new Response(JSON.stringify({ templates: [{ id: 'tpl-2', name: 'Deck' }] }), { status: 200 });
+    }));
+
+    await expect(listTemplates()).resolves.toEqual([]);
+    await expect(listTemplates()).resolves.toEqual([
+      expect.objectContaining({ id: 'tpl-2' }),
+    ]);
+    expect(reads).toBe(2);
   });
 });

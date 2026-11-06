@@ -186,6 +186,8 @@ describe('tools-dev sandbox mode smoke', () => {
       },
       {
         env: {
+          // The sandbox fixture emits generic artifacts without strategy state.
+          OD_NEXT_STRATEGY_ROLLOUT: 'off',
           OD_E2E_SANDBOX_CAPTURE_PATH: capturePath,
           OD_SANDBOX_MODE: '1',
         },

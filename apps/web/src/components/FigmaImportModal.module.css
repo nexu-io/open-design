@@ -6,7 +6,7 @@
   align-items: center;
   justify-content: center;
   padding: 32px;
-  background: rgba(17, 24, 39, 0.55);
+  background: var(--scrim-tint);
   -webkit-backdrop-filter: var(--scrim-backdrop);
   backdrop-filter: var(--scrim-backdrop);
 }
@@ -49,8 +49,15 @@
   justify-content: center;
   width: 34px;
   height: 34px;
+  /* The global `button` rule in styles/primitives.css sets `padding: 0 16px`,
+     which on a 34px border-box square leaves 2px of content width — the ×
+     (a shrinkable flex item) collapsed to 0 and the button rendered as an
+     empty box. */
+  padding: 0;
   border: 1px solid var(--border);
-  border-radius: var(--radius-large, 8px);
+  /* Pill (per product: every button in this modal is fully rounded) — on a
+     34px square that reads as a circle. */
+  border-radius: var(--radius-pill);
   background: var(--bg-elevated);
   color: var(--text);
   cursor: pointer;
@@ -72,13 +79,15 @@
   margin: 14px 16px 0;
   padding: 4px;
   background: var(--bg-subtle);
-  border-radius: 12px;
+  /* The track follows its options' pill so the selected thumb doesn't sit in
+     a rounded-rect groove. */
+  border-radius: var(--radius-pill);
 }
 .tab {
   flex: 1 1 0;
   padding: 7px 12px;
   border: none;
-  border-radius: var(--radius-large, 8px);
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--text-muted);
   font-size: 13px;
@@ -165,6 +174,12 @@
 /* --- notes -------------------------------------------------------------- */
 .notes {
   margin: 0 16px;
+  /* The global `input, textarea` rule in styles/primitives.css sets
+     `width: 100%`; with the 16px side margins that is 32px wider than the
+     modal, and `.modal { overflow: hidden }` clipped the right edge. As a
+     stretched flex item the field already fills the column, so hand the width
+     back to the layout. */
+  width: auto;
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-large, 8px);
@@ -193,6 +208,13 @@
   gap: 10px;
   padding: 16px;
   flex: 0 0 auto;
+}
+/* Cancel / Import & build are the shared `Button` primitive, whose radius is
+   owned by packages/components. Reach it through the element rather than
+   editing the primitive: the pill is this modal's call (per product), not a
+   change every button in the app should inherit. */
+.foot button {
+  border-radius: var(--radius-pill);
 }
 .spin {
   animation: figmaImportSpin 700ms linear infinite;

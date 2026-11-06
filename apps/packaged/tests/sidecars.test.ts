@@ -15,22 +15,28 @@
  * @see apps/daemon/src/legacy-data-migrator.ts
  * @see https://github.com/nexu-io/open-design/issues/710
  */
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { EventEmitter } from 'node:events';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, posix } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createJsonIpcServer, resolveAppIpcPath } from '@open-design/sidecar';
-import { APP_KEYS, OPEN_DESIGN_SIDECAR_CONTRACT } from '@open-design/sidecar-proto';
+import type { SidecarStamp } from '@open-design/sidecar';
+import { APP_KEYS } from '@open-design/sidecar-proto';
 
 import {
+  observeDaemonExit,
   buildPackagedDaemonSpawnEnv,
+  closeManagedChild,
   createPackagedSidecarSpawnOptions,
   createRestartPolicy,
   createWebSidecarSupervisor,
   openLog,
+  packagedChildStamp,
   registerPackagedWebUrl,
+  retireExistingSidecar,
   resolveDaemonStatusTimeoutMs,
   resolvePackagedChildBaseEnv,
   resolvePackagedElectronNodeCommand,
@@ -42,6 +48,69 @@ import type { PackagedNamespacePaths } from '../src/paths.js';
 function slashPath(value: string): string {
   return value.replaceAll('\\', '/');
 }
+
+function testStamp(app: "daemon" | "web" = APP_KEYS.DAEMON): SidecarStamp {
+  return { app, channel: "stable", mode: "runtime", namespace: "test", source: "packaged" };
+}
+
+describe('packaged sidecar shutdown', () => {
+  it('rejects surviving generation processes and always closes the log handle', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'od-sidecar-close-'));
+    const logPath = join(root, 'latest.log');
+    const closeLog = vi.fn(async () => undefined);
+    const observe = vi.fn(async () => undefined);
+    const stop = vi.fn(async () => ({
+      alreadyStopped: false,
+      forcedPids: [42],
+      gracefulAccepted: false,
+      matchedPids: [42],
+      remainingPids: [42],
+      stoppedPids: [],
+    }));
+    const child = Object.assign(new EventEmitter(), {
+      exitCode: null,
+      pid: 42,
+      signalCode: null,
+    });
+
+    try {
+      await expect(closeManagedChild({
+        app: APP_KEYS.DAEMON,
+        child,
+        generation: { stop },
+        logHandle: { close: closeLog },
+        logPath,
+        stamp: testStamp(),
+      } as unknown as Parameters<typeof closeManagedChild>[0], observe)).rejects.toThrow(
+        'failed to stop packaged daemon sidecar processes: 42',
+      );
+      expect(closeLog).toHaveBeenCalledOnce();
+      expect(observe).toHaveBeenCalledWith({ stage: 'cleanup_daemon', outcome: 'failed', duration_ms: expect.any(Number), forced_process_count: 1, remaining_process_count: 1 });
+      expect(readFileSync(logPath, 'utf8')).toContain('shutdown requested');
+      expect(readFileSync(logPath, 'utf8')).not.toContain('exited app=daemon');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('packaged child stamps', () => {
+  it.each(['runtime', 'headless'] as const)(
+    'propagates the owning %s mode to daemon and web children',
+    (mode) => {
+      const runtime = {
+        app: APP_KEYS.DESKTOP,
+        base: '/runtime',
+        mode,
+        namespace: 'test',
+        source: 'packaged',
+      } as const;
+
+      expect(packagedChildStamp(APP_KEYS.DAEMON, 'stable', runtime).mode).toBe(mode);
+      expect(packagedChildStamp(APP_KEYS.WEB, 'stable', runtime).mode).toBe(mode);
+    },
+  );
+});
 
 describe('resolveDaemonStatusTimeoutMs', () => {
   it('uses the 35-second baseline budget on platforms without a known slow-cold-start class', () => {
@@ -111,41 +180,103 @@ describe('resolveDaemonStatusTimeoutMs', () => {
 
 describe('packaged web URL registration', () => {
   it('registers the current dynamic web URL with the daemon sidecar and supports a later port', async () => {
-    const namespace = `web-url-${process.pid}-${Date.now()}`;
-    const daemonIpc = resolveAppIpcPath({
-      app: APP_KEYS.DAEMON,
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-      namespace,
-    });
     const received: unknown[] = [];
-    const server = await createJsonIpcServer({
-      socketPath: daemonIpc,
-      handler: async (message) => {
-        received.push(message);
-        return { accepted: true };
-      },
-    });
+    const invoke = async (...args: unknown[]) => {
+      received.push(args);
+      return { accepted: true };
+    };
+    const daemonStamp = testStamp();
+    await registerPackagedWebUrl(daemonStamp, 'http://127.0.0.1:64248', invoke as never);
+    await registerPackagedWebUrl(daemonStamp, 'http://127.0.0.1:53421', invoke as never);
+    expect(received).toEqual([
+      [daemonStamp, 'register-web-url', { url: 'http://127.0.0.1:64248' }, { timeoutMs: 1200 }],
+      [daemonStamp, 'register-web-url', { url: 'http://127.0.0.1:53421' }, { timeoutMs: 1200 }],
+    ]);
+  });
+});
 
+describe('packaged stale sidecar retirement', () => {
+  const stopped = (overrides: Partial<{
+    matchedPids: number[];
+    remainingPids: number[];
+    staleEndpointRemoved: boolean;
+  }> = {}) => ({
+    alreadyStopped: false,
+    forcedPids: [],
+    gracefulAccepted: false,
+    matchedPids: overrides.matchedPids ?? [4321],
+    remainingPids: overrides.remainingPids ?? [],
+    staleEndpointRemoved: overrides.staleEndpointRemoved ?? false,
+    stoppedPids: overrides.matchedPids ?? [4321],
+  });
+
+  async function withLog(run: (logPath: string) => Promise<void>): Promise<void> {
+    const root = mkdtempSync(join(tmpdir(), 'od-packaged-retire-'));
     try {
-      await registerPackagedWebUrl(daemonIpc, 'http://127.0.0.1:64248');
-      await registerPackagedWebUrl(daemonIpc, 'http://127.0.0.1:53421');
-      expect(received).toEqual([
-        {
-          input: { url: 'http://127.0.0.1:64248' },
-          type: 'register-web-url',
-        },
-        {
-          input: { url: 'http://127.0.0.1:53421' },
-          type: 'register-web-url',
-        },
-      ]);
+      await run(join(root, 'latest.log'));
     } finally {
-      await server.close();
+      rmSync(root, { recursive: true, force: true });
     }
+  }
+
+  it('delegates a clean first boot to the sidecar lifecycle atomic', async () => {
+    await withLog(async (logPath) => {
+      const stop = vi.fn(async () => ({ ...stopped({ matchedPids: [] }), alreadyStopped: true }));
+      await expect(retireExistingSidecar(testStamp(), logPath, {
+        stop,
+      })).resolves.toBeUndefined();
+      expect(stop).toHaveBeenCalledOnce();
+    });
+  });
+
+  it('retires an unresponsive daemon through the sidecar lifecycle atomic', async () => {
+    await withLog(async (logPath) => {
+      const stop = vi.fn(async () => stopped());
+      await expect(retireExistingSidecar(testStamp(), logPath, {
+        stop,
+      })).resolves.toBeUndefined();
+      expect(stop).toHaveBeenCalledOnce();
+    });
+  });
+
+  it('retires an unresponsive web generation through the same lifecycle atomic', async () => {
+    await withLog(async (logPath) => {
+      const stop = vi.fn(async () => stopped());
+      await expect(retireExistingSidecar(testStamp(APP_KEYS.WEB), logPath, {
+        stop,
+      })).resolves.toBeUndefined();
+      expect(stop).toHaveBeenCalledOnce();
+    });
+  });
+
+  it('allows recovery when the lifecycle atomic removes only a stale endpoint', async () => {
+    await withLog(async (logPath) => {
+      await expect(retireExistingSidecar(testStamp(APP_KEYS.WEB), logPath, {
+        stop: async () => stopped({ matchedPids: [], staleEndpointRemoved: true }),
+      })).resolves.toBeUndefined();
+    });
+  });
+
+  it('does not relaunch after a healthy generation fails to stop', async () => {
+    await withLog(async (logPath) => {
+      await expect(retireExistingSidecar(testStamp(APP_KEYS.WEB), logPath, {
+        stop: async () => stopped({ remainingPids: [4321] }),
+      })).rejects.toThrow('generation remains: 4321');
+    });
   });
 });
 
 describe('packaged child Vite+ environment forwarding', () => {
+  it('forwards JSON IPC tracing without forwarding unrelated variables', () => {
+    const env = resolvePackagedChildBaseEnv({
+      OD_JSON_IPC_TRACE: '1',
+      RANDOM_INTERNAL_FLAG: 'drop-me',
+    });
+
+    expect(env.OD_JSON_IPC_TRACE).toBe('1');
+    expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
+  });
+
   it('forwards CODEX_HOME so isolated and managed Codex installs never fall back to another user config', () => {
     const env = resolvePackagedChildBaseEnv({
       CODEX_HOME: '/tmp/isolated-codex-home',
@@ -407,12 +538,10 @@ describe('buildPackagedDaemonSpawnEnv', () => {
     return {
       cacheRoot: '/tmp/od-pkg/cache',
       dataRoot: '/tmp/od-pkg/data',
-      desktopIdentityPath: '/tmp/od-pkg/runtime/desktop-root.json',
       desktopLogPath: '/tmp/od-pkg/logs/desktop/latest.log',
       desktopLogsRoot: '/tmp/od-pkg/logs/desktop',
       electronSessionDataRoot: '/tmp/od-pkg/user-data/session',
       electronUserDataRoot: '/tmp/od-pkg/user-data',
-      headlessIdentityPath: '/tmp/od-pkg/runtime/headless-root.json',
       installationRoot: '/tmp/od-pkg/..',
       installerObservationRoot: '/tmp/od-pkg/data/observations/installer',
       logsRoot: '/tmp/od-pkg/logs',
@@ -420,9 +549,17 @@ describe('buildPackagedDaemonSpawnEnv', () => {
       resourceRoot: '/tmp/od-pkg/resources',
       runtimeRoot: '/tmp/od-pkg/runtime',
       updateRoot: '/tmp/od-pkg/updates',
-      webIdentityPath: '/tmp/od-pkg/runtime/web-root.json',
     };
   }
+
+
+it('passes the original desktop attempt/session to the daemon before it starts', () => {
+  const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+    appVersion: '1.0.0-beta.1', daemonCliEntry: null, requireDesktopAuth: true,
+    launchContext: { app_session_id: 'session-1', launch_attempt_id: 'attempt-1' },
+  });
+  expect(env).toMatchObject({ OD_APP_SESSION_ID: 'session-1', OD_LAUNCH_ATTEMPT_ID: 'attempt-1', OD_APP_VERSION: '1.0.0-beta.1' });
+});
 
   it('uses the namespace runtime root for child processes without reading cwd', () => {
     const cwd = vi.spyOn(process, 'cwd').mockImplementation(() => {
@@ -777,7 +914,7 @@ describe('waitForStatus child-exit fast-fail', () => {
 
     const startedAt = Date.now();
     const promise = waitForStatus<{ url: string | null }>(
-      ipcPath,
+      { label: 'daemon', read: async () => { throw new Error(`missing ${ipcPath}`); } },
       (status) => status.url != null,
       30 * 60 * 1000,
       { child, logPath },
@@ -820,7 +957,7 @@ describe('waitForStatus child-exit fast-fail', () => {
     let captured: unknown;
     try {
       await waitForStatus<{ url: string | null }>(
-        '/tmp/od-test-no-such-ipc-pre-' + Date.now(),
+        { label: 'daemon', read: async () => { throw new Error('missing'); } },
         (status) => status.url != null,
         30 * 60 * 1000,
         { child, logPath: '/tmp/od-test-daemon.log' },
@@ -836,42 +973,18 @@ describe('waitForStatus child-exit fast-fail', () => {
     expect(elapsed).toBeLessThan(2_000);
   });
 
-  it('does not accept ready status from a stale IPC endpoint owned by a different pid', async () => {
+  it('does not interpret a business status pid as the generation root pid', async () => {
     const child = fakeChild();
     child.pid = 5678;
-    const ipcPath = resolveAppIpcPath({
-      app: APP_KEYS.WEB,
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-      namespace: `stale-ipc-${process.pid}-${Date.now()}`,
-    });
-    const server = await createJsonIpcServer({
-      socketPath: ipcPath,
-      handler: async () => ({
-        pid: 1234,
-        state: 'running',
-        updatedAt: new Date().toISOString(),
-        url: 'http://127.0.0.1:1234',
-      }),
-    });
-
-    try {
-      let captured: unknown;
-      try {
-        await waitForStatus<{ pid?: number | null; url: string | null }>(
-          ipcPath,
-          (status) => status.url != null,
-          250,
-          { child, logPath: join(tmpdir(), 'od-test-web.log') },
-        );
-      } catch (err) {
-        captured = err;
-      }
-
-      expect(captured).toBeInstanceOf(Error);
-      expect((captured as Error).message).toContain('sidecar status pid 1234 did not match spawned pid 5678');
-    } finally {
-      await server.close();
-    }
+    await expect(waitForStatus<{ pid: number; url: string | null }>(
+      {
+        label: 'web',
+        read: async () => ({ pid: 1234, url: 'http://127.0.0.1:1234' }),
+      },
+      (status) => status.url != null,
+      250,
+      { child, logPath: join(tmpdir(), 'od-test-web.log') },
+    )).resolves.toEqual({ pid: 1234, url: 'http://127.0.0.1:1234' });
   });
 });
 
@@ -1155,4 +1268,78 @@ describe('packaged sidecar log rotation', () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+});
+
+
+describe('ready daemon exit supervision', () => {
+  it.each([[null, 'SIGKILL', 'killed'], [null, 'SIGTERM', 'killed'], [7, null, 'crash'], [0, null, 'clean-exit']] as const)('observes runtime code=%s signal=%s once', async (code, signal, reason) => {
+    const child = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null });
+    const report = vi.fn(async () => {});
+    const observer = observeDaemonExit(child, report);
+    expect(observer.markReady()).toBe(true);
+    child.emit('exit', code, signal);
+    child.emit('exit', code, signal);
+    await observer.flush();
+    expect(report).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ exit_code: code, signal, reason, intentional: false,
+      occurred_at: expect.any(String) }));
+  });
+  it.each([137, 134, 143])('keeps a numeric supervisor exit %s a crash, not a signal (OPEND-4256)', async (code) => {
+    const child = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null });
+    const report = vi.fn(async () => {});
+    const observer = observeDaemonExit(child, report);
+    observer.markReady();
+    child.emit('exit', code, null);
+    await observer.flush();
+    expect(report).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ exit_code: code, signal: null,
+      reason: 'crash', intentional: false }));
+  });
+  it('marks intentional teardown before the signal arrives', async () => {
+    const child = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null });
+    const report = vi.fn(async () => {});
+    const observer = observeDaemonExit(child, report);
+    observer.markReady(); observer.beginShutdown(); child.emit('exit', null, 'SIGKILL');
+    await observer.flush();
+    expect(report).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ intentional: true, reason: 'clean-exit' }));
+  });
+  it('leaves startup deaths to startup reporting and refuses stale ready status', async () => {
+    const child = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null });
+    const report = vi.fn(async () => {});
+    const observer = observeDaemonExit(child, report);
+    child.emit('exit', null, 'SIGKILL');
+    expect(observer.markReady()).toBe(false);
+    await observer.flush(); expect(report).not.toHaveBeenCalled();
+  });
+});
+
+
+it.skipIf(process.platform === 'win32')('observes a real running child killed with SIGKILL exactly once', async () => {
+  const child = spawn(process.execPath, ['-e', "process.stdout.write('ready'); setInterval(() => {}, 1000)"]);
+  const report = vi.fn(async () => {});
+  const observer = observeDaemonExit(child, report);
+  try {
+    await once(child.stdout!, 'data');
+    observer.markReady();
+    const exited = once(child, 'exit');
+    child.kill('SIGKILL');
+    await exited; await observer.flush();
+    expect(report).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ reason: 'killed', signal: 'SIGKILL', exit_code: null }));
+  } finally { child.kill('SIGKILL'); }
+});
+
+
+it('marks forced shutdown and closes without waiting for an unresolved observation', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'od-intentional-close-'));
+  const child = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null });
+  const report = vi.fn(() => new Promise<void>(() => {}));
+  const observer = observeDaemonExit(child, report); observer.markReady();
+  try {
+    await closeManagedChild({ app: APP_KEYS.DAEMON, child, daemonExitObserver: observer,
+      logHandle: { close: async () => {} }, logPath: join(root, 'latest.log'), stamp: testStamp(),
+      generation: { stop: async () => {
+        child.emit('exit', null, 'SIGKILL');
+        return { forcedPids: [42], remainingPids: [] };
+      } },
+    } as unknown as Parameters<typeof closeManagedChild>[0]);
+    expect(report).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ reason: 'clean-exit', intentional: true }));
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });

@@ -1,4 +1,8 @@
 import type { ChatSessionMode } from '@open-design/contracts';
+import {
+  containsQuestionFormAsk,
+  containsUnrenderableQuestionForm,
+} from '../artifacts/question-form';
 import type { AgentEvent, ChatMessage } from '../types';
 import { hasFileMutationToolUse } from './file-ops';
 import { unfinishedTodosFromEvents } from './todos';
@@ -25,22 +29,27 @@ export interface DesignDeliveryInput {
 }
 
 /**
- * Delivery failures retain the agent-process `succeeded` status, but they are
- * terminal user-facing failures and must follow the same retry path as a
- * failed process run.
+ * Whether a turn failed, as the user is told it did: only when the run itself
+ * ended in error (P0-24). A delivery outcome (`no_result` / `delivery_failed`)
+ * describes the artifact, not the run — whether files were produced, saved or
+ * usable never changes the turn's status, so it no longer earns the failure
+ * card or its retry path.
  */
 export function isRetryableAssistantTerminalFailure(
-  message: Pick<ChatMessage, 'runStatus' | 'resultDeliveryState'>,
+  message: Pick<ChatMessage, 'runStatus'>,
 ): boolean {
-  return (
-    message.runStatus === 'failed' ||
-    message.resultDeliveryState === 'no_result' ||
-    message.resultDeliveryState === 'delivery_failed'
-  );
+  return message.runStatus === 'failed';
 }
 
+/**
+ * A bare open-tag scan is not enough: a turn that needed no clarification can
+ * narrate its decision straight into a `<question-form>` tag, and treating
+ * that prose as an ask latches the turn to `awaiting_input` no matter what it
+ * delivered. Share the form protocol's own body precondition instead of
+ * growing a second regex here.
+ */
 function asksForUserInput(content: string): boolean {
-  return /<(?:question-form|ask-question)\b/i.test(content);
+  return containsQuestionFormAsk(content);
 }
 
 function isIntermediateDesignTurn(
@@ -92,6 +101,7 @@ export function resolveDesignDeliveryOutcome(
     return 'delivered';
   }
   if (input.persistenceFailed) return 'delivery_failed';
+  if (containsUnrenderableQuestionForm(input.content)) return 'no_result';
   if (!hasFileMutationToolUse(input.events) && input.content.trim().length > 0) {
     return 'report_only';
   }

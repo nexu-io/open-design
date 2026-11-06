@@ -21,6 +21,9 @@ import { readFileSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
+import type { OdNextRolloutMode } from '@open-design/contracts';
+
+import { amrSettingsBindingConflict, stripAmrEndpointOverrides } from './integrations/amr-endpoint-binding.js';
 import { expandHomePrefix } from './home-expansion.js';
 
 import {
@@ -123,6 +126,12 @@ export interface AppConfigPrefs {
   customInstructions?: string | null;
   projectLocations?: ProjectLocationPrefs[];
   defaultProjectLocationId?: string | null;
+  // Whether this installation runs the OD Next design strategy. Absent and
+  // null both mean "unconfigured", which resolves to `active` — OD Next is the
+  // default route and this key is how an installation opts out of it.
+  // `OD_NEXT_STRATEGY_ROLLOUT` outranks this when set; see
+  // readOdNextRolloutPolicy.
+  odNextStrategyMode?: OdNextRolloutMode | null;
   // Most-recently-used local working directories the user granted the agent
   // read access to from the Home composer. Become a project's
   // `metadata.linkedDirs` (read-only `--add-dir` awareness, no Design Files
@@ -152,6 +161,7 @@ const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'customInstructions',
   'projectLocations',
   'defaultProjectLocationId',
+  'odNextStrategyMode',
   'recentLinkedDirs',
 ] as const);
 
@@ -215,8 +225,13 @@ const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ['kimi', new Set(['KIMI_BIN'])],
   ['kiro', new Set(['KIRO_BIN'])],
   ['kilo', new Set(['KILO_BIN'])],
-  ['opencode', new Set(['OPENCODE_BIN'])],
-  ['pi', new Set(['PI_BIN'])],
+  ['opencode', new Set(['OPENCODE_BIN', 'TMPDIR', 'TMP', 'TEMP'])],
+  // PI_CODING_AGENT_DIR is pi's own config-directory override (default
+  // `~/.pi/agent`), the same contract CLAUDE_CONFIG_DIR and CODEX_HOME carry
+  // for their CLIs. Without it here, a user isolating pi's config had the key
+  // dropped on every save and no way to keep it but a wrapper script that sets
+  // the variable and is pointed at by PI_BIN (issue #8093).
+  ['pi', new Set(['PI_BIN', 'PI_CODING_AGENT_DIR'])],
   ['qoder', new Set(['QODER_BIN'])],
   ['qwen', new Set(['QWEN_BIN'])],
   ['trae-cli', new Set(['TRAE_CLI_BIN'])],
@@ -646,6 +661,23 @@ function applyConfigValue(
     }
     return;
   }
+  if (key === 'odNextStrategyMode') {
+    // Reached with a non-mode value only on the READ path — a truncated file, a
+    // hand edit, a value written by some other version. It must not take the
+    // daemon down, and it must not read as unconfigured either: see
+    // OD_NEXT_MODE_WHEN_CONFIG_UNREADABLE. `null` is different and stays a
+    // delete, because clearing the key IS the deliberate way back to the
+    // default. The WRITE path never reaches here with a bad value —
+    // `assertWritableControlValues` refuses it first.
+    if (value === 'off' || value === 'observe' || value === 'active') {
+      target[key] = value;
+    } else if (value === null || value === undefined) {
+      delete target[key];
+    } else {
+      target[key] = OD_NEXT_MODE_WHEN_CONFIG_UNREADABLE;
+    }
+    return;
+  }
   if (key === 'recentLinkedDirs') {
     if (Array.isArray(value)) {
       // Keep non-empty strings, trim, de-dupe preserving most-recent-first
@@ -670,6 +702,12 @@ function applyConfigValue(
     return;
   }
 }
+
+/** Legacy field normalization retained for config compatibility.
+ * OD Next rollout ignores this retired Labs preference, including normalized off.
+ * Operator environment controls remain the supported rollout override.
+ */
+const OD_NEXT_MODE_WHEN_CONFIG_UNREADABLE = 'off' as const;
 
 function filterAllowedKeys(obj: Record<string, unknown>): AppConfigPrefs {
   const result: Record<string, unknown> = Object.create(null);
@@ -701,8 +739,54 @@ function applyTelemetryDefaults(prefs: AppConfigPrefs): AppConfigPrefs {
   return prefs;
 }
 
+export type MetricsConsentRead = {
+  status: 'missing' | 'available' | 'unavailable';
+  metrics: boolean;
+};
+
+/** Unlike general config hydration, consent must distinguish a fresh install
+ * from damaged/unreadable saved preferences. Never recover a lost opt-out by
+ * silently defaulting a corrupt file to an empty config. */
+export async function readMetricsConsent(dataDir: string): Promise<MetricsConsentRead> {
+  try {
+    const raw: unknown = JSON.parse(await readFile(configFile(dataDir), 'utf8'));
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      return { status: 'unavailable', metrics: false };
+    }
+    const telemetry = (raw as Record<string, unknown>).telemetry;
+    if (telemetry !== undefined) {
+      if (!telemetry || typeof telemetry !== 'object' || Array.isArray(telemetry)) {
+        return { status: 'unavailable', metrics: false };
+      }
+      const metrics = (telemetry as Record<string, unknown>).metrics;
+      if (typeof metrics !== 'boolean') return { status: 'unavailable', metrics: false };
+      return { status: 'available', metrics };
+    }
+    return { status: 'available', metrics: applyTelemetryDefaults({}).telemetry?.metrics === true };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { status: 'missing', metrics: applyTelemetryDefaults({}).telemetry?.metrics === true };
+    }
+    return { status: 'unavailable', metrics: false };
+  }
+}
+
+/** A fixed package binding owns endpoints and credentials. Do not round-trip
+ * stale CLI overrides from older installs back through the web config writer.
+ * This is a read projection only; explicit conflicting writes still fail. */
+function projectBoundAmrConfig(prefs: AppConfigPrefs): AppConfigPrefs {
+  const amr = prefs.agentCliEnv?.amr;
+  if (!amr) return prefs;
+  const effective = stripAmrEndpointOverrides(amr);
+  if (Object.keys(effective).length === Object.keys(amr).length) return prefs;
+  const agentCliEnv = { ...prefs.agentCliEnv };
+  if (Object.keys(effective).length > 0) agentCliEnv.amr = effective;
+  else delete agentCliEnv.amr;
+  return normalizeAgentCliEnvPrefs({ ...prefs, agentCliEnv });
+}
+
 export async function readAppConfig(dataDir: string): Promise<AppConfigPrefs> {
-  const base = await readAppConfigFileOnly(dataDir);
+  const base = projectBoundAmrConfig(await readAppConfigFileOnly(dataDir));
   // Channel-root installation file is the new authoritative source for the
   // identity bits that must survive a namespace-scoped data-dir wipe. It
   // lives outside `<namespace>/data/` so a reinstall of the same channel
@@ -741,7 +825,7 @@ export async function readAppConfig(dataDir: string): Promise<AppConfigPrefs> {
 // legacy→channel-root migration *write*, which is a side effect rather than
 // part of the read result.
 export function readAppConfigSync(dataDir: string): AppConfigPrefs {
-  const base = readAppConfigFileOnlySync(dataDir);
+  const base = projectBoundAmrConfig(readAppConfigFileOnlySync(dataDir));
   const installation = readInstallationFileSync(resolveInstallationDir(dataDir));
   if (
     typeof installation.installationId === 'string' &&
@@ -795,6 +879,31 @@ async function readAppConfigFileOnly(dataDir: string): Promise<AppConfigPrefs> {
 // Serialize concurrent writes to the same dataDir so the read-modify-write
 // cycle doesn't lose updates when two PUT requests overlap.
 const writeLocks = new Map<string, Promise<unknown>>();
+const configObservers = new Map<string, Set<() => void>>();
+export function observeAppConfig(dataDir: string, observer: () => void): () => void {
+  const observers = configObservers.get(dataDir) ?? new Set<() => void>();
+  observers.add(observer); configObservers.set(dataDir, observers);
+  return () => { observers.delete(observer); if (!observers.size) configObservers.delete(dataDir); };
+}
+
+/** Automatic content upload must fail closed on corrupt preferences instead of applying defaults. */
+export function automaticDiagnosticsConsent(dataDir: string): boolean {
+  try {
+    const raw: unknown = JSON.parse(readFileSync(configFile(dataDir), 'utf8'));
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
+    const telemetry = (raw as Record<string, unknown>).telemetry;
+    if (telemetry !== undefined && (telemetry === null || typeof telemetry !== 'object' || Array.isArray(telemetry))) return false;
+    if (telemetry !== undefined) {
+      const value = telemetry as Record<string, unknown>;
+      return value.metrics === true && value.content === true;
+    }
+    const prefs = applyTelemetryDefaults(filterAllowedKeys(raw as Record<string, unknown>));
+    return prefs.telemetry?.metrics === true && prefs.telemetry?.content === true;
+  } catch (error) {
+    // A new installation has the same defaults as the existing telemetry settings.
+    return (error as NodeJS.ErrnoException).code === 'ENOENT';
+  }
+}
 
 export async function writeAppConfig(
   dataDir: string,
@@ -810,10 +919,38 @@ export async function writeAppConfig(
   }
 }
 
+/** Thrown by `writeAppConfig` when a control key is handed a value it cannot mean. */
+export class InvalidAppConfigValueError extends Error {
+  readonly code = 'INVALID_APP_CONFIG_VALUE';
+
+  constructor(public readonly key: string, message: string) {
+    super(message);
+    this.name = 'InvalidAppConfigValueError';
+  }
+}
+
+/** Keep the legacy stored-value contract for older callers. The current rollout
+ * ignores this user preference; only an engineering environment override can
+ * change the new active default. Invalid legacy writes still fail explicitly.
+ */
+function assertWritableControlValues(partial: Record<string, unknown>): void {
+  if (!Object.prototype.hasOwnProperty.call(partial, 'odNextStrategyMode')) return;
+  const value = partial.odNextStrategyMode;
+  if (value === null || value === 'off' || value === 'observe' || value === 'active') return;
+  throw new InvalidAppConfigValueError(
+    'odNextStrategyMode',
+    'odNextStrategyMode must be one of "off", "observe", "active", or null',
+  );
+}
+
 async function doWrite(
   dataDir: string,
   partial: Record<string, unknown>,
 ): Promise<AppConfigPrefs> {
+  assertWritableControlValues(partial);
+  if (amrSettingsBindingConflict(partial.agentCliEnv)) {
+    throw new InvalidAppConfigValueError('agentCliEnv', 'AMR environment binding cannot be overridden by CLI settings');
+  }
   const existing = await readAppConfig(dataDir);
   const next: Record<string, unknown> = { ...existing };
   for (const key of Object.keys(partial)) {
@@ -830,6 +967,9 @@ async function doWrite(
   const tmp = file + '.' + randomBytes(4).toString('hex') + '.tmp';
   await writeFile(tmp, JSON.stringify(normalizedNextWithoutRetiredAgents, null, 2), 'utf8');
   await rename(tmp, file);
+  for (const observer of configObservers.get(dataDir) ?? []) {
+    try { observer(); } catch { /* preference persistence must not depend on background consumers */ }
+  }
   const installationIdWasExplicitlyReset = Object.prototype.hasOwnProperty.call(partial, 'installationId')
     && (partial.installationId == null || (
       typeof existing.installationId === 'string'

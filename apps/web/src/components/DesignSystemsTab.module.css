@@ -200,7 +200,7 @@
   background: var(--bg-subtle);
   color: var(--text-muted);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   font-family: inherit;
   cursor: pointer;
   transition: border-color var(--dur-quick) var(--ease-out),
@@ -281,7 +281,7 @@
   background: transparent;
   color: var(--text-muted);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   font-family: inherit;
   cursor: pointer;
   transition: background-color var(--dur-quick) var(--ease-out),
@@ -409,7 +409,7 @@
   color: var(--text);
   font-family: inherit;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   text-align: left;
   cursor: pointer;
 }
@@ -742,7 +742,7 @@
   background: var(--bg-panel);
   color: var(--text-muted);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   font-family: inherit;
   cursor: pointer;
   transition: border-color var(--dur-quick) var(--ease-out),
@@ -1588,7 +1588,7 @@
   padding: 6px 12px;
   border-radius: var(--radius-sm);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .teamActionButton {
@@ -1615,7 +1615,7 @@
   padding: 5px 10px;
   border-radius: var(--radius-sm);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-muted);
 }
 
@@ -1648,7 +1648,7 @@
   background: var(--bg-subtle);
   color: var(--text-muted);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   font-family: inherit;
   cursor: pointer;
   transition: border-color var(--dur-quick) var(--ease-out),

@@ -1,35 +1,9 @@
 // @vitest-environment node
 
-// `reconcileUnboundProjectBeforeMutation` (apps/daemon/src/routes/project/index.ts)
-// may claim a project this daemon has never bound to ANY workspace into the
-// current mutating request's workspace (recvqbhor3pai2, "复制的项目再次复制").
-// The mutation gate now treats a resource no workspace has claimed the same
-// whether the caller identifies itself or omits headers: it remains outside the
-// workspace isolation regime. The reconciliation helper still owns the separate
-// persistence decision described below.
-//
-// Workspace headers are not authentication credentials at this daemon-local
-// boundary. A complete pair selects local namespace/authorship attribution; it
-// does not synchronously consult Vela. The resolver therefore has two outcomes
-// and no daemon-global fallback:
-//
-//   1. complete identity asserted -> claim that exact local scope
-//   2. nothing asserted           -> write nothing
-//
-// Case 3 deliberately remains unbound. This helper runs immediately before
-// `enforceWorkspaceResourceMutation`, whose HEADERLESS branch reads
-// `getWorkspaceResourceByResourceId` and answers 401 WORKSPACE_CONTEXT_REQUIRED
-// as soon as ANY row exists. Claiming on a headerless request would therefore
-// turn today's working headerless duplicate into a 401 — a new failure on a path
-// that works now. Pinned below.
-//
-// Assertions primarily target the persisted binding returned by
-// `GET /api/projects/:id/workspace-scope` and prove that remote availability
-// never changes the local attribution result.
-//
-// Runs with `OD_WORKSPACE_CONTEXT_SOURCE=vela` so the membership authority is
-// live, seeded only through the daemon's real vela integration against a
-// temporary server-level mock. No source-level backdoor.
+// An unbound project is attributed only after the exact claimed membership is
+// verified. Unknown pairs and authority outages must leave it unbound; a tab's
+// active selection is never a fallback. Headerless local requests remain
+// unbound and usable. The real daemon/SQLite paths are exercised below.
 
 import { createServer, type Server } from 'node:http';
 import { randomUUID } from 'node:crypto';
@@ -46,12 +20,10 @@ type ProjectWorkspaceScope = {
   projectId: string;
   workspaceId: string | null;
   visibility?: 'personal' | 'team';
+  context?: { workspaceMemberId: string } | null;
 };
 
 type CreatedProject = { conversationId: string; project: { id: string } };
-type WorkspaceProjectsBody = {
-  projects: Array<{ id: string; createdByWorkspaceMemberId: string | null }>;
-};
 
 /** An active membership the mock directory really lists. */
 const MEMBER = {
@@ -193,9 +165,9 @@ afterAll(async () => {
   ]);
 });
 
-describe('reconciling an unbound project uses explicit local attribution', () => {
+describe('reconciling an unbound project requires verified attribution', () => {
   test(
-    'a complete workspace/member pair becomes the claim through either entry point',
+    'unverified pairs leave projects unbound through both copy entry points',
     { timeout: 300_000 },
     async () => {
       const suite = await createSmokeSuite('collab-reconcile-forged-claim');
@@ -213,12 +185,12 @@ describe('reconciling an unbound project uses explicit local attribution', () =>
             await mutate(webUrl, duplicatePath(viaDuplicate), workspaceHeaders(FOREIGN), {
               name: 'Explicitly attributed duplicate',
             }),
-            'local attribution must not depend on directory membership',
-          ).toBe(200);
+            'an unverified pair must not claim local data',
+          ).toBe(403);
 
           const duplicateScope = await readScope(webUrl, viaDuplicate);
-          expect(duplicateScope.workspaceId).toBe(FOREIGN.workspaceId);
-          expect(duplicateScope.kind).toBe('personal');
+          expect(duplicateScope.workspaceId).toBeNull();
+          expect(duplicateScope.kind).toBe('unbound');
 
           // --- CASE 2: design-system copy, the other reachable entry point.
           const viaCopy = await createUnboundProject(webUrl, 'Reconcile via ds copy');
@@ -228,14 +200,13 @@ describe('reconciling an unbound project uses explicit local attribution', () =>
             await mutate(webUrl, designSystemCopyPath(viaCopy), workspaceHeaders(FOREIGN), {
               name: 'Explicitly attributed copy',
             }),
-          ).toBe(200);
+          ).toBe(403);
 
           const copyScope = await readScope(webUrl, viaCopy);
-          expect(copyScope.workspaceId).toBe(FOREIGN.workspaceId);
-          expect(copyScope.kind).toBe('personal');
+          expect(copyScope.workspaceId).toBeNull();
+          expect(copyScope.kind).toBe('unbound');
 
-          // --- CASE 3: a pair also present in the directory has identical local
-          // attribution semantics.
+          // --- CASE 3: a verified pair can persist its exact local attribution.
           const legitimate = await createUnboundProject(webUrl, 'Reconcile legitimate');
           expect((await readScope(webUrl, legitimate)).kind).toBe('unbound');
 
@@ -255,14 +226,9 @@ describe('reconciling an unbound project uses explicit local attribution', () =>
           expect(legitimateScope.kind).toBe('personal');
           expect(legitimateScope.workspaceId).toBe(MEMBER.workspaceId);
 
-          // Authorship is persisted from the complete explicit pair.
-          const listed = await requestJson<WorkspaceProjectsBody>(
-            webUrl,
-            `/api/workspaces/${encodeURIComponent(MEMBER.workspaceId)}/projects`,
-            { headers: workspaceHeaders(MEMBER) },
-          );
-          const claimed = listed.projects.find((project) => project.id === legitimate);
-          expect(claimed?.createdByWorkspaceMemberId).toBe(MEMBER.workspaceMemberId);
+          // The scope endpoint derives this member from the persisted row,
+          // without introducing the unrelated remote team-project catalog.
+          expect(legitimateScope.context?.workspaceMemberId).toBe(MEMBER.workspaceMemberId);
 
           // --- CASE 4: a request that asserts NOTHING must leave the binding
           // alone, and must keep working. This helper's headerless branch is only
@@ -299,7 +265,7 @@ describe('reconciling an unbound project uses explicit local attribution', () =>
   );
 
   test(
-    'an explicit request scope outranks a validated navigation switch',
+    'neither an unverified request nor a navigation switch can claim an orphan',
     { timeout: 300_000 },
     async () => {
       const suite = await createSmokeSuite('collab-reconcile-selection-isolation');
@@ -331,12 +297,12 @@ describe('reconciling an unbound project uses explicit local attribution', () =>
           });
 
           const after = await readScope(webUrl, orphan);
-          expect(after.workspaceId).toBe(FOREIGN.workspaceId);
+          expect(after.workspaceId).toBeNull();
           expect(
             after.workspaceId,
             'nor may the tab selection be written onto a pre-existing orphan',
           ).not.toBe(MEMBER.workspaceId);
-          expect(after.kind).toBe('personal');
+          expect(after.kind).toBe('unbound');
         },
         {
           env: {
@@ -351,7 +317,7 @@ describe('reconciling an unbound project uses explicit local attribution', () =>
   );
 
   test(
-    'an unreadable membership authority does not block local attribution',
+    'unreadable membership authority leaves a project unbound',
     { timeout: 300_000 },
     async () => {
       const suite = await createSmokeSuite('collab-reconcile-authority-down');
@@ -361,15 +327,14 @@ describe('reconciling an unbound project uses explicit local attribution', () =>
           const project = await createUnboundProject(webUrl, 'Reconcile authority down');
           expect((await readScope(webUrl, project)).kind).toBe('unbound');
 
-          // The asserted pair is written locally even though the directory is
-          // down; cloud operations will authorize separately when attempted.
-          await mutate(webUrl, duplicatePath(project), workspaceHeaders(MEMBER), {
+          // An unavailable authority cannot supply a new binding witness.
+          expect(await mutate(webUrl, duplicatePath(project), workspaceHeaders(MEMBER), {
             name: 'Duplicate during outage',
-          });
+          })).toBe(503);
 
           const scope = await readScope(webUrl, project);
-          expect(scope.workspaceId).toBe(MEMBER.workspaceId);
-          expect(scope.kind).toBe('personal');
+          expect(scope.workspaceId).toBeNull();
+          expect(scope.kind).toBe('unbound');
         },
         {
           env: {

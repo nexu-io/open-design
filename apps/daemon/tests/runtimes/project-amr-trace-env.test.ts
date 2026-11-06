@@ -49,6 +49,26 @@ function projectDb(input: {
 }
 
 describe('openDesignAmrTraceEnvForRun', () => {
+  it('pins the creator member with the Workspace and does not follow later project rebinding', () => {
+    const db = projectDb({
+      projectId: 'project-a',
+      workspaceId: 'workspace-a',
+      memberId: 'member-a',
+    });
+    const scope = pinRunWorkspaceScopeForProject(db, 'project-a');
+    db.prepare(`UPDATE workspace_projects
+      SET workspace_id = ?, created_by_workspace_member_id = ?
+      WHERE project_id = ?`).run('workspace-b', 'member-b', 'project-a');
+    expect(scope).toMatchObject({
+      workspaceId: 'workspace-a',
+      workspaceMemberId: 'member-a',
+    });
+    expect(pinRunWorkspaceScopeForProject(db, 'project-a')).toMatchObject({
+      workspaceId: 'workspace-b',
+      workspaceMemberId: 'member-b',
+    });
+  });
+
   it('does not resolve project scope for a non-AMR runtime', async () => {
     const db = projectDb({
       projectId: 'project-a',

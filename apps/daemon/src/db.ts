@@ -1,3 +1,4 @@
+import { pendingCommentFileRetirements } from './collab/comment-file-retirements.js';
 // SQLite-backed persistence for projects, conversations, messages, and the
 // per-project set of open workspace tabs. The on-disk project folder under
 // .od/projects/<id>/ is still the single owner of the user's actual files
@@ -9,22 +10,59 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import type {
+  ChatMessage,
   CollabCloudComment,
+  OdNextDevicePlatformV1,
+  PreviewComment,
+  PreviewCommentAttachment,
   ProjectBrowserWorkspaceTab,
   ProjectTabsState,
 } from '@open-design/contracts';
-import { eventsEndedWithUnfinishedWork } from '@open-design/contracts';
+import {
+  eventsEndedWithUnfinishedWork,
+  isTodoWriteToolName,
+  latestTodoWriteInputFromEvents,
+  stripArtifactFocusMarkers,
+  stripDoneMarkers,
+  stripNextStepMarkers,
+  asPreviewCommentAnchorState,
+} from '@open-design/contracts';
+import { parseCommentFileState } from './collab/comment-file-facts.js';
 import { migrateCollabSyncSnapshots } from './collab/sync-snapshot-store.js';
 import { migrateCommentRelayOutbox } from './collab/comment-relay-outbox.js';
 import { migratePublicFilePublications } from './collab/public-file-publication-store.js';
+import { migrateCommentInboundStore } from './collab/comment-inbound-store.js';
+import { migrateOwnedContentSync } from './collab/owned-content-store.js';
+import { migrateAmrTerminalReportOutbox } from './storage/amr-terminal-report-outbox.js';
 import {
   collapseWorkspaceProjectHomes,
   type WorkspaceProjectHomeRow,
 } from './collab/workspace-project-home.js';
+import { scrubDsmlToolProtocolTail } from './artifacts/text-suppression.js';
+import {
+  listMessageArtifactRows,
+  migrateChatArtifacts,
+  replaceMessageArtifacts,
+} from './chat-artifacts/store.js';
+import {
+  projectChatArtifactRefs,
+  projectConversationChatArtifactRefs,
+} from './chat-artifacts/refs.js';
+import type { ChatArtifactRef } from './chat-artifacts/types.js';
 import { migrateCritique } from './critique/persistence.js';
 import { migrateMediaTasks } from './media/tasks.js';
 import { migrateLibrary } from './library-store.js';
 import { migratePlugins } from './plugins/persistence.js';
+import { migrateProjectScenarioBindings } from './plugins/scenario-binding.js';
+import { emittedRenderableQuestionForm } from './question-form-detect.js';
+import {
+  RUN_EVENT_JSON_BUDGET_BYTES,
+  boundPersistedAgentEvent,
+  boundPersistedAgentEvents,
+  serializeRunEventsForStorage,
+} from './runtimes/run-event-payload-budget.js';
+import { migrateStrategyTaskStore } from './strategies/task-store.js';
+import { observeRead } from './services/daemon-health.js';
 
 type SqliteDb = Database.Database;
 type DbRow = Record<string, any>;
@@ -86,6 +124,7 @@ function migrate(db: SqliteDb): void {
       resource_state TEXT NOT NULL CHECK (resource_state IN ('active', 'frozen', 'deleted')),
       created_by_workspace_member_id TEXT,
       updated_by_workspace_member_id TEXT,
+      transferred_from_workspace_member_id TEXT,
       resource_hub_resource_id TEXT,
       cloud_tombstoned_at INTEGER,
       sync_state TEXT,
@@ -196,6 +235,9 @@ function migrate(db: SqliteDb): void {
       model           TEXT,
       cwd             TEXT,
       last_message_id TEXT,
+      -- Last provider-reported effective input usage for this exact session.
+      -- Observability only: never used to admit, reject, compact, or roll over.
+      last_input_tokens INTEGER,
       updated_at      INTEGER NOT NULL,
       PRIMARY KEY (conversation_id, agent_id),
       FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
@@ -244,6 +286,14 @@ function migrate(db: SqliteDb): void {
 
     CREATE INDEX IF NOT EXISTS idx_message_event_batches_message
       ON message_event_batches(message_id, id);
+
+    -- One row per one-time data maintenance pass that has run to completion
+    -- (e.g. the heal of run events stored before the payload budget existed),
+    -- so a finished pass is not re-scanned on every daemon start.
+    CREATE TABLE IF NOT EXISTS daemon_maintenance_passes (
+      name TEXT PRIMARY KEY,
+      completed_at INTEGER NOT NULL
+    );
 
     CREATE TABLE IF NOT EXISTS preview_comments (
       id TEXT PRIMARY KEY,
@@ -374,6 +424,34 @@ function migrate(db: SqliteDb): void {
   if (!cols.some((c: DbRow) => c.name === 'custom_instructions')) {
     db.exec(`ALTER TABLE projects ADD COLUMN custom_instructions TEXT`);
   }
+  const needsRecencyColumn = !cols.some((c: DbRow) => c.name === 'last_user_query_at');
+  const hasSubmissions = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='project_user_submissions'").get();
+  if (needsRecencyColumn || !hasSubmissions) {
+    db.transaction(() => {
+      if (needsRecencyColumn) db.exec('ALTER TABLE projects ADD COLUMN last_user_query_at INTEGER');
+      db.exec(`CREATE TABLE IF NOT EXISTS project_user_submissions (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        accepted_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS project_user_submissions_project ON project_user_submissions(project_id, accepted_at);
+      UPDATE projects SET last_user_query_at = (
+        SELECT MAX(sent_at) FROM (
+          SELECT m.created_at AS sent_at FROM conversations c JOIN messages m ON m.conversation_id = c.id
+          WHERE c.project_id = projects.id AND m.role = 'user'
+            AND m.id NOT GLOB 'routine-user-*' AND m.id NOT GLOB 'orbit-user-*'
+          UNION ALL SELECT accepted_at FROM project_user_submissions WHERE project_id = projects.id
+          UNION ALL SELECT projects.last_user_query_at
+          WHERE projects.last_user_query_at > COALESCE((
+            SELECT MAX(m.created_at) FROM conversations c JOIN messages m ON m.conversation_id = c.id
+            WHERE c.project_id = projects.id AND m.role = 'user'
+              AND (m.id GLOB 'routine-user-*' OR m.id GLOB 'orbit-user-*')
+          ), 0)
+        )
+      );`);
+    })();
+  }
   const workspaceProjectCols = db.prepare(`PRAGMA table_info(workspace_projects)`).all() as DbRow[];
   if (!workspaceProjectCols.some((c: DbRow) => c.name === 'resource_hub_resource_id')) {
     db.exec(`ALTER TABLE workspace_projects ADD COLUMN resource_hub_resource_id TEXT`);
@@ -389,6 +467,9 @@ function migrate(db: SqliteDb): void {
     db.exec(
       `ALTER TABLE workspace_projects ADD COLUMN metadata_refresh_pending INTEGER NOT NULL DEFAULT 0`,
     );
+  }
+  if (!migratedWorkspaceProjectCols.some((c: DbRow) => c.name === 'transferred_from_workspace_member_id')) {
+    db.exec(`ALTER TABLE workspace_projects ADD COLUMN transferred_from_workspace_member_id TEXT`);
   }
   const conversationCols = db.prepare(`PRAGMA table_info(conversations)`).all() as DbRow[];
   if (!conversationCols.some((c: DbRow) => c.name === 'session_mode')) {
@@ -442,6 +523,21 @@ function migrate(db: SqliteDb): void {
   }
   if (!messageCols.some((c: DbRow) => c.name === 'telemetry_finalized_at')) {
     db.exec(`ALTER TABLE messages ADD COLUMN telemetry_finalized_at INTEGER`);
+  }
+  // Fork divider (delivered design, cell 38): the marker that says "this turn
+  // was forked, and here is the title the new conversation inherited". It has
+  // to be a stored column, not a client-side flag — the divider is only
+  // honest if it is still there after a reload.
+  if (!messageCols.some((c: DbRow) => c.name === 'forked_into_json')) {
+    db.exec(`ALTER TABLE messages ADD COLUMN forked_into_json TEXT`);
+  }
+  // Who stopped this turn (delivered design, cell 81). `runStatus: 'canceled'`
+  // alone cannot tell a user's Stop from a daemon shutdown / project cleanup,
+  // so the pause line would lie after a daemon restart. The origin has to be a
+  // stored column for the same reason the fork divider is: the line is only
+  // honest if it still says the same thing after a reload.
+  if (!messageCols.some((c: DbRow) => c.name === 'cancel_origin')) {
+    db.exec(`ALTER TABLE messages ADD COLUMN cancel_origin TEXT`);
   }
   const routineRunCols = db.prepare(`PRAGMA table_info(routine_runs)`).all() as DbRow[];
   if (!routineRunCols.some((c: DbRow) => c.name === 'error_code')) {
@@ -505,6 +601,67 @@ function migrate(db: SqliteDb): void {
     db.exec(`ALTER TABLE preview_comments ADD COLUMN sort_key REAL`);
   }
   backfillPreviewCommentPinSeqAndSortKey(db);
+  // Author-union columns for share-page comments (an account with no team
+  // membership). They MUST be added here, after the two table-rebuild
+  // migrations above — migratePreviewCommentsSlideKey and
+  // migratePreviewCommentsAllowMultiplePerElement are CREATE + INSERT SELECT
+  // + DROP against an EXPLICIT column list, so a column added before them is
+  // silently dropped when an older database upgrades, taking its data with
+  // it. Two comments in this file already warn about that; this is the third
+  // set of columns to obey it.
+  //
+  // All nullable with no default: a comment written by a workspace member
+  // leaves every one of them NULL and is read exactly as it is today.
+  const previewCommentAuthorCols = db
+    .prepare(`PRAGMA table_info(preview_comments)`)
+    .all() as DbRow[];
+  if (!previewCommentAuthorCols.some((c: DbRow) => c.name === 'author_kind')) {
+    db.exec(`ALTER TABLE preview_comments ADD COLUMN author_kind TEXT`);
+  }
+  if (!previewCommentAuthorCols.some((c: DbRow) => c.name === 'author_app_user_id')) {
+    db.exec(`ALTER TABLE preview_comments ADD COLUMN author_app_user_id TEXT`);
+  }
+  if (!previewCommentAuthorCols.some((c: DbRow) => c.name === 'author_display_name')) {
+    db.exec(`ALTER TABLE preview_comments ADD COLUMN author_display_name TEXT`);
+  }
+  if (!previewCommentAuthorCols.some((c: DbRow) => c.name === 'author_key')) {
+    db.exec(`ALTER TABLE preview_comments ADD COLUMN author_key TEXT`);
+  }
+  // The highest collab-cloud revision `seq` this row's synced state already
+  // reflects (see mergeSyncedPreviewComment). It is the sync ordering key, not
+  // a display number: `pin_seq` keeps the create's seq for pin labels and must
+  // never be read as a revision cursor. NULL = unknown (a local-only row, or a
+  // row synced before this column existed). Added after the table rebuilds
+  // above for the same reason as the author columns.
+  if (!previewCommentAuthorCols.some((c: DbRow) => c.name === 'cloud_revision_seq')) {
+    db.exec(`ALTER TABLE preview_comments ADD COLUMN cloud_revision_seq INTEGER`);
+  }
+  // The seq space `cloud_revision_seq` was counted in (relay team + stream
+  // epoch). A seq from another stream is not comparable to it.
+  if (!previewCommentAuthorCols.some((c: DbRow) => c.name === 'cloud_revision_stream')) {
+    db.exec(`ALTER TABLE preview_comments ADD COLUMN cloud_revision_stream TEXT`);
+  }
+  if (!previewCommentAuthorCols.some((c: DbRow) => c.name === 'source_file_id')) {
+    db.exec('ALTER TABLE preview_comments ADD COLUMN source_file_id TEXT');
+  }
+  // Read markers are project-scoped; the viewer filters its current file.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS project_comment_read_state (
+      project_id TEXT NOT NULL,
+      viewer_scope TEXT NOT NULL,
+      last_read_at INTEGER NOT NULL,
+      PRIMARY KEY (project_id, viewer_scope),
+      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+  `);
+
+  db.exec(`CREATE TABLE IF NOT EXISTS project_comment_seen (
+    project_id TEXT NOT NULL, viewer_scope TEXT NOT NULL, comment_id TEXT NOT NULL,
+    PRIMARY KEY(project_id, viewer_scope, comment_id),
+    FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    FOREIGN KEY(comment_id) REFERENCES preview_comments(id) ON DELETE CASCADE
+  )`);
+
   const deploymentCols = db.prepare(`PRAGMA table_info(deployments)`).all() as DbRow[];
   if (!deploymentCols.some((c: DbRow) => c.name === 'status')) {
     db.exec(`ALTER TABLE deployments ADD COLUMN status TEXT NOT NULL DEFAULT 'ready'`);
@@ -550,6 +707,9 @@ function migrate(db: SqliteDb): void {
   if (agentSessionCols.length > 0 && !agentSessionCols.some((c: DbRow) => c.name === 'last_message_id')) {
     db.exec(`ALTER TABLE agent_sessions ADD COLUMN last_message_id TEXT`);
   }
+  if (agentSessionCols.length > 0 && !agentSessionCols.some((c: DbRow) => c.name === 'last_input_tokens')) {
+    db.exec(`ALTER TABLE agent_sessions ADD COLUMN last_input_tokens INTEGER`);
+  }
   const tabsStateCols = db.prepare(`PRAGMA table_info(tabs_state)`).all() as DbRow[];
   if (tabsStateCols.length > 0 && !tabsStateCols.some((c: DbRow) => c.name === 'state_json')) {
     db.exec(`ALTER TABLE tabs_state ADD COLUMN state_json TEXT`);
@@ -558,9 +718,15 @@ function migrate(db: SqliteDb): void {
   migrateMediaTasks(db);
   migrateLibrary(db);
   migratePlugins(db);
+  migrateProjectScenarioBindings(db);
+  migrateStrategyTaskStore(db);
+  migrateChatArtifacts(db);
   migrateCollabSyncSnapshots(db);
   migrateCommentRelayOutbox(db);
+  migrateAmrTerminalReportOutbox(db);
   migratePublicFilePublications(db);
+  migrateCommentInboundStore(db);
+  migrateOwnedContentSync(db);
 }
 
 /**
@@ -1003,6 +1169,7 @@ const PROJECT_COLS = `id, name, skill_id AS skillId,
   metadata_json AS metadataJson,
   applied_plugin_snapshot_id AS appliedPluginSnapshotId,
   custom_instructions AS customInstructions,
+  last_user_query_at AS lastUserQueryAt,
   created_at AS createdAt,
   updated_at AS updatedAt`;
 
@@ -1035,6 +1202,7 @@ export function listUnboundProjects(db: SqliteDb) {
               p.metadata_json AS metadataJson,
               p.applied_plugin_snapshot_id AS appliedPluginSnapshotId,
               p.custom_instructions AS customInstructions,
+              p.last_user_query_at AS lastUserQueryAt,
               p.created_at AS createdAt,
               p.updated_at AS updatedAt
          FROM projects p
@@ -1055,6 +1223,7 @@ export function getWorkspaceProject(db: SqliteDb, workspaceId: string, projectId
               resource_state AS resourceState,
               created_by_workspace_member_id AS createdByWorkspaceMemberId,
               updated_by_workspace_member_id AS updatedByWorkspaceMemberId,
+              transferred_from_workspace_member_id AS transferredFromWorkspaceMemberId,
               resource_hub_resource_id AS resourceHubResourceId,
               cloud_tombstoned_at AS cloudTombstonedAt,
               sync_state AS syncState,
@@ -1078,6 +1247,7 @@ export function listWorkspaceProjects(db: SqliteDb, workspaceId: string) {
               p.metadata_json AS metadataJson,
               p.applied_plugin_snapshot_id AS appliedPluginSnapshotId,
               p.custom_instructions AS customInstructions,
+              p.last_user_query_at AS lastUserQueryAt,
               p.created_at AS createdAt,
               p.updated_at AS updatedAt,
               wp.project_id AS workspaceProjectId,
@@ -1165,6 +1335,7 @@ export function getWorkspaceProjectByProjectId(db: SqliteDb, projectId: string) 
               resource_state AS resourceState,
               created_by_workspace_member_id AS createdByWorkspaceMemberId,
               updated_by_workspace_member_id AS updatedByWorkspaceMemberId,
+              transferred_from_workspace_member_id AS transferredFromWorkspaceMemberId,
               resource_hub_resource_id AS resourceHubResourceId,
               cloud_tombstoned_at AS cloudTombstonedAt,
               sync_state AS syncState,
@@ -1183,9 +1354,10 @@ export function getWorkspaceProjectByProjectId(db: SqliteDb, projectId: string) 
  *
  * A project's `updated_at` answers exactly one question for the UI — when did a
  * person last change this project's conversations, files, or name? The project
- * card renders it as one relative time and the list sorts by it, folding the
- * project row and its `workspace_projects` binding together with
- * `MAX(p.updated_at, wp.updated_at)` (see `listWorkspaceProjects` below and
+ * card renders it as one relative time, independent of `last_user_query_at`
+ * used for recent-project ordering. Content activity folds the project row
+ * and its workspace binding together with `MAX(p.updated_at, wp.updated_at)`
+ * (see `listWorkspaceProjects` below and
  * `normalizeWorkspaceProjectRow` in routes/project/index.ts). So BOTH rows have
  * to answer it, and only a local action may answer it with `Date.now()`.
  *
@@ -1618,29 +1790,51 @@ export function deleteWorkspaceResourceByResourceId(
   ).run(resourceType, resourceId);
 }
 
+/**
+ * Each project's latest run status, for `GET /api/projects`.
+ *
+ * The latest run row per project is chosen in SQLite, so the listing never
+ * loads any run's event log just to order rows; only a winning `succeeded` row
+ * is then inspected, through {@link completenessEventsOfMessage}.
+ */
 export function listLatestProjectRunStatuses(db: SqliteDb) {
+  // Low-frequency, historically the largest read (full-history events before
+  // #8170): always leave an in-flight marker so an OOM inside it is attributable.
+  return observeRead('project_run_statuses', () => listLatestProjectRunStatusesUnobserved(db), {
+    mark: 'always',
+    rows: (result) => result.size,
+  });
+}
+
+function listLatestProjectRunStatusesUnobserved(db: SqliteDb) {
   const rows = db
     .prepare(
-      `SELECT c.project_id AS projectId,
-              m.run_id AS runId,
-              m.run_status AS status,
-              m.events_json AS eventsJson,
-              COALESCE(m.ended_at, m.started_at, m.created_at) AS updatedAt
-         FROM messages m
-         JOIN conversations c ON c.id = m.conversation_id
-        WHERE m.run_status IS NOT NULL
-        ORDER BY updatedAt DESC`,
+      `SELECT projectId, messageId, runId, status, updatedAt
+         FROM (
+           SELECT c.project_id AS projectId,
+                  m.id AS messageId,
+                  m.run_id AS runId,
+                  m.run_status AS status,
+                  COALESCE(m.ended_at, m.started_at, m.created_at) AS updatedAt,
+                  ROW_NUMBER() OVER (
+                    PARTITION BY c.project_id
+                    ORDER BY COALESCE(m.ended_at, m.started_at, m.created_at) DESC
+                  ) AS rn
+             FROM messages m
+             JOIN conversations c ON c.id = m.conversation_id
+            WHERE m.run_status IS NOT NULL
+         )
+        WHERE rn = 1`,
     )
     .all() as DbRow[];
   const latestByProject = new Map<string, DbRow>();
+  const completenessEvents = completenessEventsStatement(db);
   for (const row of rows) {
-    if (!latestByProject.has(row.projectId)) {
-      latestByProject.set(row.projectId, {
-        value: projectDisplayStatusForRunRow(row.status, row.eventsJson),
-        updatedAt: Number(row.updatedAt),
-        runId: row.runId ?? undefined,
-      });
-    }
+    latestByProject.set(row.projectId, {
+      value: projectDisplayStatusForRunRow(completenessEvents, row.status, String(row.messageId)),
+      updatedAt: Number(row.updatedAt),
+      runId: row.runId ?? undefined,
+    });
   }
   return latestByProject;
 }
@@ -1651,11 +1845,65 @@ export function listLatestProjectRunStatuses(db: SqliteDb) {
 // is not actually done (#1247 / #1060). Derived from the same events the chat
 // footer reads, so the two surfaces cannot disagree, and it survives reload
 // because the events were persisted per-event as the run streamed.
-function projectDisplayStatusForRunRow(status: unknown, eventsJson: unknown) {
+function projectDisplayStatusForRunRow(
+  completenessEvents: Database.Statement,
+  status: unknown,
+  messageId: string,
+) {
   const normalized = normalizeProjectRunStatus(status);
   if (normalized !== 'succeeded') return normalized;
-  const events = parseJsonOrUndef(eventsJson);
+  const events = completenessEventsOfMessage(completenessEvents, messageId);
   return eventsEndedWithUnfinishedWork(events) ? 'incomplete' : normalized;
+}
+
+/**
+ * The persisted events of one message that `eventsEndedWithUnfinishedWork`
+ * can read, in order — and nothing else.
+ *
+ * Invariant: that predicate's verdict depends only on `usage` (stop reason),
+ * `done_key`, `text` (done conclusion, question form) and TodoWrite-shaped
+ * `tool_use` events; every other event — raw lines, tool results, statuses,
+ * thinking — is skipped by it. So the verdict over this subset is the verdict
+ * over the whole log, and selecting the subset inside SQLite keeps a run's tool
+ * payloads out of JS entirely. The tool-name filter is a superset of
+ * `isTodoWriteToolName` (every name it accepts contains `todo` or is
+ * `update_plan`); the predicate itself still decides exactly.
+ */
+function completenessEventsStatement(db: SqliteDb): Database.Statement {
+  return db.prepare(
+    `SELECT event.value AS value
+       FROM messages AS m,
+            json_each(
+              CASE
+                WHEN json_valid(m.events_json) AND json_type(m.events_json) = 'array'
+                  THEN m.events_json
+                ELSE '[]'
+              END
+            ) AS event
+      WHERE m.id = ?
+        AND event.type = 'object'
+        AND (
+          json_extract(event.value, '$.kind') IN ('usage', 'done_key', 'text')
+          OR (
+            json_extract(event.value, '$.kind') = 'tool_use'
+            AND (
+              lower(json_extract(event.value, '$.name')) LIKE '%todo%'
+              OR lower(json_extract(event.value, '$.name')) = 'update_plan'
+            )
+          )
+        )
+      ORDER BY CAST(event.key AS INTEGER)`,
+  );
+}
+
+function completenessEventsOfMessage(statement: Database.Statement, messageId: string): unknown[] {
+  const rows = statement.all(messageId) as Array<{ value: string }>;
+  const events: unknown[] = [];
+  for (const row of rows) {
+    const event = parseJsonOrUndef(row.value);
+    if (event !== undefined) events.push(event);
+  }
+  return events;
 }
 
 export function listLatestConversationRunStatuses(db: SqliteDb) {
@@ -1737,79 +1985,125 @@ export function listLatestRunStatuses(db: SqliteDb) {
   return latestByRun;
 }
 
+/**
+ * Cheap SQL prefilter for the awaiting-input latch.
+ *
+ * Only a prefilter: every renderable form necessarily contains one of these
+ * substrings, so the predicate is a strict superset of the real answer and
+ * cannot drop a genuine form. `ask-question` is an accepted alias for
+ * `question-form` (UI parser + daemon detector), so an alias-form turn must be
+ * a candidate too. The authoritative test is `emittedRenderableQuestionForm`,
+ * applied to the candidate content in JS.
+ */
+const AWAITING_INPUT_MARKER_PREFILTER = `(
+                LOWER(m.content) LIKE '%<question-form%'
+                OR LOWER(m.content) LIKE '%<ask-question%'
+              )`;
+
+interface AwaitingInputCandidate {
+  partitionKey: string;
+  conversationId: string;
+  createdAt: number;
+  position: number;
+  content: string;
+}
+
+type AwaitingInputWinner = Omit<AwaitingInputCandidate, 'partitionKey' | 'content'>;
+
+/**
+ * Which partitions are still waiting on an answer to a form the user can see?
+ *
+ * The invariant this preserves, unchanged from the single-statement query it
+ * replaces: within each partition take the NEWEST form-bearing assistant
+ * message (`created_at DESC, position DESC`), then report the partition only if
+ * that message's own conversation has no later user message. A partition whose
+ * newest form was already answered is not awaiting input, even when an older
+ * unanswered form exists elsewhere in it.
+ *
+ * The strict check has to run BEFORE the newest-per-partition pick, not after
+ * it. Post-filtering the winning rows would silently change which message is
+ * considered latest: a stray, unrenderable marker emitted after a real
+ * unanswered form would win the partition, fail the check, and drop a project
+ * that is genuinely waiting on the user. So the pick happens here, over rows
+ * already reduced to those that actually render.
+ */
+function listPartitionsAwaitingInput(
+  db: SqliteDb,
+  candidates: Iterable<AwaitingInputCandidate>,
+): Set<string> {
+  // Streamed, and the winner keeps no `content`: this runs on every
+  // `GET /api/projects`, and the candidate set is every form-bearing assistant
+  // message the database has ever stored. Materializing those turns' full text
+  // would grow the cost of listing projects with the length of the history.
+  const winners = new Map<string, AwaitingInputWinner>();
+  for (const candidate of candidates) {
+    if (winners.has(candidate.partitionKey)) continue;
+    if (!emittedRenderableQuestionForm(candidate.content)) continue;
+    winners.set(candidate.partitionKey, {
+      conversationId: candidate.conversationId,
+      createdAt: candidate.createdAt,
+      position: candidate.position,
+    });
+  }
+  // The loop above drains the row iterator before this point, so no statement
+  // executes while it is still open.
+  const laterUserReply = db.prepare(
+    `SELECT 1
+       FROM messages reply
+      WHERE reply.conversation_id = ?
+        AND reply.role = 'user'
+        AND (
+          reply.created_at > ?
+          OR (reply.created_at = ? AND reply.position > ?)
+        )
+      LIMIT 1`,
+  );
+  const awaiting = new Set<string>();
+  for (const [partitionKey, winner] of winners) {
+    const answered = laterUserReply.get(
+      winner.conversationId,
+      winner.createdAt,
+      winner.createdAt,
+      winner.position,
+    );
+    if (!answered) awaiting.add(partitionKey);
+  }
+  return awaiting;
+}
+
 export function listProjectsAwaitingInput(db: SqliteDb) {
   const rows = db
     .prepare(
-      `SELECT latest.projectId
-         FROM (
-           SELECT c.project_id AS projectId,
-                  m.conversation_id AS conversationId,
-                  m.created_at AS createdAt,
-                  m.position AS position,
-                  ROW_NUMBER() OVER (
-                    PARTITION BY c.project_id
-                    ORDER BY m.created_at DESC, m.position DESC
-                  ) AS rowNum
-             FROM messages m
-             JOIN conversations c ON c.id = m.conversation_id
-            WHERE m.role = 'assistant'
-              -- ask-question is an accepted alias for question-form (UI parser
-              -- + daemon open-tag matcher), so an alias-form turn must also
-              -- count as awaiting input.
-              AND (
-                LOWER(m.content) LIKE '%<question-form%'
-                OR LOWER(m.content) LIKE '%<ask-question%'
-              )
-         ) latest
-        WHERE latest.rowNum = 1
-          AND NOT EXISTS (
-            SELECT 1
-              FROM messages reply
-             WHERE reply.conversation_id = latest.conversationId
-               AND reply.role = 'user'
-               AND (
-                 reply.created_at > latest.createdAt
-                 OR (reply.created_at = latest.createdAt AND reply.position > latest.position)
-               )
-          )`,
+      `SELECT c.project_id AS partitionKey,
+              m.conversation_id AS conversationId,
+              m.created_at AS createdAt,
+              m.position AS position,
+              m.content AS content
+         FROM messages m
+         JOIN conversations c ON c.id = m.conversation_id
+        WHERE m.role = 'assistant'
+          AND ${AWAITING_INPUT_MARKER_PREFILTER}
+        ORDER BY m.created_at DESC, m.position DESC`,
     )
-    .all() as DbRow[];
-  return new Set((rows as DbRow[]).map((row: DbRow) => row.projectId));
+    .iterate() as Iterable<AwaitingInputCandidate>;
+  return listPartitionsAwaitingInput(db, rows);
 }
 
 export function listConversationsAwaitingInput(db: SqliteDb) {
   const rows = db
     .prepare(
-      `SELECT latest.conversationId
-         FROM (
-           SELECT m.conversation_id AS conversationId,
-                  m.created_at AS createdAt,
-                  m.position AS position,
-                  ROW_NUMBER() OVER (
-                    PARTITION BY m.conversation_id
-                    ORDER BY m.created_at DESC, m.position DESC
-                  ) AS rowNum
-             FROM messages m
-            WHERE m.role = 'assistant'
-              AND (
-                LOWER(m.content) LIKE '%<question-form%'
-                OR LOWER(m.content) LIKE '%<ask-question%'
-              )
-         ) latest
-        WHERE latest.rowNum = 1
-          AND NOT EXISTS (
-            SELECT 1
-              FROM messages reply
-             WHERE reply.conversation_id = latest.conversationId
-               AND reply.role = 'user'
-               AND (
-                 reply.created_at > latest.createdAt
-                 OR (reply.created_at = latest.createdAt AND reply.position > latest.position)
-               )
-          )`,
+      `SELECT m.conversation_id AS partitionKey,
+              m.conversation_id AS conversationId,
+              m.created_at AS createdAt,
+              m.position AS position,
+              m.content AS content
+         FROM messages m
+        WHERE m.role = 'assistant'
+          AND ${AWAITING_INPUT_MARKER_PREFILTER}
+        ORDER BY m.created_at DESC, m.position DESC`,
     )
-    .all() as DbRow[];
-  return new Set((rows as DbRow[]).map((row: DbRow) => row.conversationId));
+    .iterate() as Iterable<AwaitingInputCandidate>;
+  return listPartitionsAwaitingInput(db, rows);
 }
 
 export function getProject(db: SqliteDb, id: string) {
@@ -1839,7 +2133,52 @@ export function insertProject(db: SqliteDb, p: DbRow) {
   return getProject(db, p.id);
 }
 
+/** Idempotent acceptance and its ordering projection commit together. */
+export function acceptProjectUserSubmission(
+  db: SqliteDb, input: { id: string; projectId: string; conversationId: string; acceptedAt: number },
+): { id: string; projectId: string; conversationId: string; acceptedAt: number } {
+  return db.transaction(() => {
+    const existing = db.prepare(`SELECT id, project_id AS projectId,
+      conversation_id AS conversationId, accepted_at AS acceptedAt
+      FROM project_user_submissions WHERE id = ?`).get(input.id) as typeof input | undefined;
+    if (existing) {
+      if (existing.projectId !== input.projectId || existing.conversationId !== input.conversationId) {
+        throw new Error('submission identity conflict');
+      }
+      return existing;
+    }
+    db.prepare(`INSERT INTO project_user_submissions(id, project_id, conversation_id, accepted_at)
+      VALUES (?, ?, ?, ?)`).run(input.id, input.projectId, input.conversationId, input.acceptedAt);
+    db.prepare(`UPDATE projects SET last_user_query_at = ?
+      WHERE id = ? AND (last_user_query_at IS NULL OR last_user_query_at < ?)`)
+      .run(input.acceptedAt, input.projectId, input.acceptedAt);
+    return input;
+  })();
+}
+
+export function getProjectUserSubmission(db: SqliteDb, id: string) {
+  return db.prepare(`SELECT id, project_id AS projectId, conversation_id AS conversationId,
+    accepted_at AS acceptedAt FROM project_user_submissions WHERE id = ?`).get(id) as
+    { id: string; projectId: string; conversationId: string; acceptedAt: number } | undefined;
+}
+
+/** Record best-effort ordering metadata without affecting message persistence or content activity. */
+export function recordProjectUserQuery(db: SqliteDb, id: string, sentAt: unknown): void {
+  if (typeof sentAt !== 'number' || !Number.isSafeInteger(sentAt) || sentAt < 0) return;
+  try {
+    db.prepare(`UPDATE projects SET last_user_query_at = ?
+      WHERE id = ? AND (last_user_query_at IS NULL OR last_user_query_at < ?)`)
+      .run(sentAt, id, sentAt);
+  } catch {
+    // Ordering is expendable under storage pressure; the conversation is not.
+  }
+}
+
 export function updateProject(db: SqliteDb, id: string, patch: DbRow) {
+  if ('lastUserQueryAt' in patch) {
+    recordProjectUserQuery(db, id, patch.lastUserQueryAt);
+    if (Object.keys(patch).length === 1) return getProject(db, id);
+  }
   const existing = getProject(db, id);
   if (!existing) return null;
   const merged = {
@@ -1894,6 +2233,7 @@ function normalizeProject(row: DbRow) {
     customInstructions: row.customInstructions ?? undefined,
     createdAt: Number(row.createdAt),
     updatedAt: Number(row.updatedAt),
+    lastUserQueryAt: row.lastUserQueryAt == null ? null : Number(row.lastUserQueryAt),
   };
 }
 
@@ -2331,13 +2671,25 @@ export interface ConversationIntentSignals {
   deck: boolean;
   media: boolean;
   platform: boolean;
+  /**
+   * Which handheld shell the user's own words asked for (OD Next prototype
+   * tasks). Latches like the booleans: the first resolved platform holds for
+   * the conversation so a later "make the button blue" turn keeps quoting the
+   * same shell and the stable context does not flip.
+   */
+  devicePlatform: OdNextDevicePlatformV1 | null;
 }
 
 const NO_INTENT_SIGNALS: ConversationIntentSignals = {
   deck: false,
   media: false,
   platform: false,
+  devicePlatform: null,
 };
+
+function normalizeDevicePlatform(value: unknown): OdNextDevicePlatformV1 | null {
+  return value === 'ios' || value === 'android' || value === 'mobile-neutral' ? value : null;
+}
 
 /**
  * Read the conversation's latched intent signals. A missing row, NULL
@@ -2362,6 +2714,7 @@ function normalizeIntentSignals(value: unknown): ConversationIntentSignals {
       deck: parsed?.deck === true,
       media: parsed?.media === true,
       platform: parsed?.platform === true,
+      devicePlatform: normalizeDevicePlatform(parsed?.devicePlatform),
     };
   } catch {
     return { ...NO_INTENT_SIGNALS };
@@ -2394,11 +2747,13 @@ export function latchConversationIntentSignals(
       deck: stored.deck || fresh.deck,
       media: stored.media || fresh.media,
       platform: stored.platform || fresh.platform,
+      devicePlatform: stored.devicePlatform ?? fresh.devicePlatform ?? null,
     };
     if (
       effective.deck !== stored.deck ||
       effective.media !== stored.media ||
-      effective.platform !== stored.platform
+      effective.platform !== stored.platform ||
+      effective.devicePlatform !== stored.devicePlatform
     ) {
       db.prepare(`UPDATE conversations SET intent_signals_json = ? WHERE id = ?`).run(
         JSON.stringify(effective),
@@ -2437,13 +2792,21 @@ export function upsertAgentSession(
     model?: string | null;
     cwd?: string | null;
     lastMessageId?: string | null;
+    lastInputTokens?: number | null;
   },
 ): void {
+  const lastInputTokens =
+    typeof input.lastInputTokens === 'number' &&
+    Number.isSafeInteger(input.lastInputTokens) &&
+    input.lastInputTokens >= 0 &&
+    input.lastInputTokens <= 1_000_000_000
+      ? input.lastInputTokens
+      : null;
   db.prepare(
     `INSERT INTO agent_sessions
        (conversation_id, agent_id, session_id, stable_prompt_hash, stable_prompt_sections,
-        model, cwd, last_message_id, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        model, cwd, last_message_id, last_input_tokens, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(conversation_id, agent_id)
        DO UPDATE SET session_id = excluded.session_id,
                      stable_prompt_hash = excluded.stable_prompt_hash,
@@ -2451,6 +2814,11 @@ export function upsertAgentSession(
                      model = excluded.model,
                      cwd = excluded.cwd,
                      last_message_id = excluded.last_message_id,
+                     last_input_tokens = CASE
+                       WHEN excluded.session_id = agent_sessions.session_id
+                         THEN COALESCE(excluded.last_input_tokens, agent_sessions.last_input_tokens)
+                       ELSE excluded.last_input_tokens
+                     END,
                      updated_at = excluded.updated_at`,
   ).run(
     input.conversationId,
@@ -2461,6 +2829,7 @@ export function upsertAgentSession(
     input.model ?? null,
     input.cwd ?? null,
     input.lastMessageId ?? null,
+    lastInputTokens,
     Date.now(),
   );
 }
@@ -2476,10 +2845,12 @@ export function getAgentSessionRecord(
   model: string | null;
   cwd: string | null;
   lastMessageId: string | null;
+  lastInputTokens: number | null;
 } | null {
   const row = db
     .prepare(
-      `SELECT session_id, stable_prompt_hash, stable_prompt_sections, model, cwd, last_message_id
+      `SELECT session_id, stable_prompt_hash, stable_prompt_sections, model, cwd, last_message_id,
+              last_input_tokens
          FROM agent_sessions
         WHERE conversation_id = ? AND agent_id = ?`,
     )
@@ -2494,6 +2865,13 @@ export function getAgentSessionRecord(
     model: typeof row.model === 'string' ? row.model : null,
     cwd: typeof row.cwd === 'string' ? row.cwd : null,
     lastMessageId: typeof row.last_message_id === 'string' ? row.last_message_id : null,
+    lastInputTokens:
+      typeof row.last_input_tokens === 'number' &&
+      Number.isSafeInteger(row.last_input_tokens) &&
+      row.last_input_tokens >= 0 &&
+      row.last_input_tokens <= 1_000_000_000
+        ? row.last_input_tokens
+        : null,
   };
 }
 
@@ -2527,13 +2905,99 @@ export function latestCompletedAssistantMessageId(
 ): string | null {
   const row = db
     .prepare(
+      // `excludeMessageId` keeps the caller's in-flight placeholder — which the
+      // stored session has never seen — from counting as advancement. When that
+      // placeholder IS the stored cursor (a daemon-internal restart re-entering
+      // with the same message), the session did produce it, so the exclusion
+      // must not apply: that is what `resumableMessageId` is for, and the
+      // exclusion used to consume the row before the admission could.
+      // Advancement detection is unaffected — any later `succeeded` message
+      // still wins on `position DESC` and still fails the cursor comparison.
       `SELECT id FROM messages
-        WHERE conversation_id = ? AND role = 'assistant' AND id != ?
+        WHERE conversation_id = ? AND role = 'assistant'
+          AND (id != ? OR id = ?)
           AND (run_status = 'succeeded' OR id = ?)
         ORDER BY position DESC LIMIT 1`,
     )
-    .get(conversationId, excludeMessageId, resumableMessageId) as DbRow | undefined;
+    .get(
+      conversationId,
+      excludeMessageId,
+      resumableMessageId,
+      resumableMessageId,
+    ) as DbRow | undefined;
   return row && typeof row.id === 'string' ? row.id : null;
+}
+
+/**
+ * The user request that produced `assistantMessageId` — i.e. what the upstream
+ * session that ended on that assistant turn was working on.
+ *
+ * Anchored on the stored resume cursor rather than "the newest user message",
+ * because by prompt-composition time the current turn's own user row is already
+ * seeded (`seedRunUserMessage`) and would win a naive lookup. Returns null when
+ * the anchor row is gone or nothing precedes it — the caller must then
+ * synthesize no context at all rather than guess at one.
+ */
+export function userRequestBeforeAssistantMessage(
+  db: SqliteDb,
+  conversationId: string,
+  assistantMessageId: string,
+): string | null {
+  const row = db
+    .prepare(
+      // A missing anchor makes the subquery NULL, so `position < NULL` matches
+      // nothing and the caller correctly gets null instead of the latest turn.
+      `SELECT content FROM messages
+        WHERE conversation_id = ? AND role = 'user'
+          AND position < (SELECT position FROM messages WHERE id = ?)
+        ORDER BY position DESC LIMIT 1`,
+    )
+    .get(conversationId, assistantMessageId) as DbRow | undefined;
+  const content = row && typeof row.content === 'string' ? row.content.trim() : '';
+  return content.length > 0 ? content : null;
+}
+
+/**
+ * How far back a run start looks for the conversation's last declared task
+ * list. A plan is recalled from the RECENT past, not from the whole
+ * conversation — and the bound is also the cost ceiling: 21 of the 27 runtimes
+ * never emit a task list at all, so without it every one of their run starts
+ * would read every assistant message's `events_json` blob in the conversation.
+ */
+const TODO_RECALL_MESSAGE_LOOKBACK = 8;
+
+/**
+ * The conversation's most recently declared task list — the raw TodoWrite
+ * `input` — walking back from the newest assistant turn, or `null` when none of
+ * the recent turns declared one.
+ *
+ * Deliberately NOT `latestCompletedAssistantMessageId`'s `run_status =
+ * 'succeeded'` filter: a turn that was interrupted or failed is precisely the
+ * turn most likely to have left work open, and it is the one we most want to
+ * hand back. Only `excludeMessageId` — the current run's own in-flight
+ * placeholder — is skipped.
+ *
+ * Walking PAST a turn that declared no list is intentional: an unrelated
+ * question answered in between does not close the outstanding plan.
+ */
+export function latestTodoWriteInputForConversation(
+  db: SqliteDb,
+  conversationId: string,
+  excludeMessageId: string,
+): unknown | null {
+  const rows = db
+    .prepare(
+      `SELECT id, events_json AS eventsJson FROM messages
+        WHERE conversation_id = ? AND role = 'assistant' AND id != ?
+        ORDER BY position DESC LIMIT ?`,
+    )
+    .all(conversationId, excludeMessageId, TODO_RECALL_MESSAGE_LOOKBACK) as DbRow[];
+  for (const row of rows) {
+    const events = materializeMessageAgentEvents(db, String(row.id), row.eventsJson).events;
+    const input = latestTodoWriteInputFromEvents(events);
+    if (input != null) return input;
+  }
+  return null;
 }
 
 export function updateAgentSessionStableHash(
@@ -2575,7 +3039,62 @@ export function countMessages(db: SqliteDb, conversationId: string): number {
   return Number(row?.count ?? 0);
 }
 
+/**
+ * The `done_key` every OTHER assistant row of a conversation was recorded with
+ * — the Run identities `excludeMessageId` must never be allowed to absorb (see
+ * the PUT guard in `routes/project/conversations.ts`).
+ *
+ * Each physical Run mints exactly one key and emits it before any model output,
+ * so a row's FIRST well-formed `done_key` event is that row's Run identity;
+ * later keys in the same list are the damage the guard exists to stop, so only
+ * the first one counts and an already-damaged sibling cannot re-export the key
+ * it absorbed.
+ *
+ * Invariant: each sibling's key is read inside SQLite. This runs on every
+ * message PUT, and a sibling's event log can hold any amount of tool output, so
+ * no sibling event log is ever materialized or parsed in JS here.
+ */
+export function listSiblingRunDoneKeys(
+  db: SqliteDb,
+  conversationId: string,
+  excludeMessageId: string,
+): Set<string> {
+  const rows = db
+    .prepare(
+      `SELECT (
+          SELECT json_extract(event.value, '$.key')
+            FROM json_each(m.events_json) AS event
+           WHERE event.type = 'object'
+             AND json_extract(event.value, '$.kind') = 'done_key'
+             AND json_type(event.value, '$.key') = 'text'
+             AND json_extract(event.value, '$.key') <> ''
+           ORDER BY CAST(event.key AS INTEGER)
+           LIMIT 1
+        ) AS doneKey
+         FROM messages AS m
+        WHERE m.conversation_id = ?
+          AND m.role = 'assistant'
+          AND m.id <> ?
+          AND m.events_json IS NOT NULL
+          AND m.events_json LIKE '%"done_key"%'
+          AND json_valid(m.events_json)
+          AND json_type(m.events_json) = 'array'`,
+    )
+    .all(conversationId, excludeMessageId) as Array<{ doneKey: unknown }>;
+  const keys = new Set<string>();
+  for (const row of rows) {
+    if (typeof row.doneKey === 'string' && row.doneKey) keys.add(row.doneKey);
+  }
+  return keys;
+}
+
 export function listMessages(db: SqliteDb, conversationId: string) {
+  return observeRead('conversation_messages', () => listMessagesUnobserved(db, conversationId), {
+    rows: (result) => result.length,
+  });
+}
+
+function listMessagesUnobserved(db: SqliteDb, conversationId: string) {
   const messages = db
     .prepare(
       `SELECT id, role, content, agent_id AS agentId, agent_name AS agentName,
@@ -2593,19 +3112,65 @@ export function listMessages(db: SqliteDb, conversationId: string) {
               run_context_json AS runContextJson,
               task_analytics_json AS taskAnalyticsJson,
               applied_plugin_snapshot_json AS appliedPluginSnapshotJson,
+              forked_into_json AS forkedIntoJson,
+              cancel_origin AS cancelOrigin,
               created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
               position
          FROM messages
         WHERE conversation_id = ?
         ORDER BY position ASC`,
-    )
-    .all(conversationId) as DbRow[];
+    );
   const eventBatches = readConversationMessageEventBatches(db, conversationId);
-  return messages.map((message) => normalizeMessage(
-    db,
-    message,
-    eventBatches.get(String(message.id)) ?? [],
-  ));
+  // One query for the whole conversation. A per-message lookup here would be a
+  // straight N+1 on every transcript read.
+  const artifactRefs = conversationChatArtifactRefs(db, conversationId);
+  // Rows are normalized one at a time, so only one row's stored event log is
+  // held at full size at once: rows written before the run-event payload
+  // budget can be MBs each, and normalizing bounds them (see
+  // `normalizeMessage`). Nothing below runs another statement while the
+  // iterator is open — batches and artifact refs were read above. Lightweight
+  // adapters that model only `all()` (see `hasMessageEventBatchStorage`) get
+  // the same rows in one step.
+  const rows = typeof messages.iterate === 'function'
+    ? (messages.iterate(conversationId) as Iterable<DbRow>)
+    : (messages.all(conversationId) as DbRow[]);
+  const normalized = [];
+  for (const message of rows) {
+    normalized.push(normalizeMessage(
+      db,
+      message,
+      eventBatches.get(String(message.id)) ?? [],
+      artifactRefs.get(String(message.id)) ?? [],
+    ));
+  }
+  return normalized;
+}
+
+function projectIdForConversation(db: SqliteDb, conversationId: string): string | null {
+  const row = db
+    .prepare(`SELECT project_id AS projectId FROM conversations WHERE id = ?`)
+    .get(conversationId) as DbRow | undefined;
+  return typeof row?.projectId === 'string' ? row.projectId : null;
+}
+
+function conversationChatArtifactRefs(
+  db: SqliteDb,
+  conversationId: string,
+): Map<string, ChatArtifactRef[]> {
+  try {
+    const projectId = projectIdForConversation(db, conversationId);
+    if (!projectId) return new Map();
+    return projectConversationChatArtifactRefs(db, projectId, conversationId);
+  } catch {
+    // A snapshot store problem must never make a conversation unreadable.
+    //
+    // The owning-project lookup is INSIDE this guard, not in front of it. It
+    // reads a different table than the refs themselves, so it can fail on its
+    // own — and when it did, the throw travelled all the way out of
+    // `listMessages` and the transcript came back empty. Artifact refs decorate
+    // a conversation; nothing about them is worth losing its messages over.
+    return new Map();
+  }
 }
 
 export function getMessage(db: SqliteDb, id: string, conversationId?: string) {
@@ -2625,13 +3190,83 @@ export function getMessage(db: SqliteDb, id: string, conversationId?: string) {
               session_mode AS sessionMode,
               run_context_json AS runContextJson,
               applied_plugin_snapshot_json AS appliedPluginSnapshotJson,
+              forked_into_json AS forkedIntoJson,
+              cancel_origin AS cancelOrigin,
               created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
               position
          FROM messages
         WHERE id = ?${conversationId ? ' AND conversation_id = ?' : ''}`,
     )
     .get(conversationId ? [id, conversationId] : id) as DbRow | undefined;
-  return row ? normalizeMessage(db, row) : null;
+  if (!row) return null;
+  return normalizeMessage(db, row, undefined, messageChatArtifactRefs(db, String(row.id)));
+}
+
+function messageChatArtifactRefs(db: SqliteDb, messageId: string): ChatArtifactRef[] {
+  const owner = db
+    .prepare(
+      `SELECT c.project_id AS projectId FROM messages m
+         JOIN conversations c ON c.id = m.conversation_id
+        WHERE m.id = ?`,
+    )
+    .get(messageId) as DbRow | undefined;
+  if (typeof owner?.projectId !== 'string') return [];
+  try {
+    return projectChatArtifactRefs(db, owner.projectId, messageId);
+  } catch {
+    // A snapshot store problem must never make a message unreadable.
+    return [];
+  }
+}
+
+/**
+ * Materialize artifact refs for a message that has none yet.
+ *
+ * This is what makes CONVERSATION FORK work: the fork copies each source
+ * message under a fresh id, and the copy re-seeds its own `message_artifacts`
+ * rows pointing at the SAME immutable snapshots. Blobs are shared, never
+ * duplicated, and the two branches count independently — deleting one branch's
+ * message cannot take the other branch's evidence with it.
+ *
+ * Refs are only seeded when the message has none. A browser PUT that echoes a
+ * stale projection back must not be able to overwrite refs the daemon wrote at
+ * the run's terminal chokepoint.
+ */
+function seedMessageArtifactRefsIfAbsent(
+  db: SqliteDb,
+  messageId: string,
+  refs: unknown,
+): void {
+  if (!Array.isArray(refs) || refs.length === 0) return;
+  try {
+    if (listMessageArtifactRows(db, messageId).length > 0) return;
+    const inputs = refs.flatMap((raw) => {
+      const ref = raw as Partial<ChatArtifactRef>;
+      if (
+        typeof ref?.label !== 'string' ||
+        typeof ref.kind !== 'string' ||
+        (ref.displayPolicy !== 'immutable_snapshot' &&
+          ref.displayPolicy !== 'latest_with_static_preview')
+      ) return [];
+      return [{
+        label: ref.label,
+        kind: ref.kind,
+        displayPolicy: ref.displayPolicy,
+        snapshotId: typeof ref.snapshotId === 'string' ? ref.snapshotId : null,
+        workspaceArtifactId:
+          typeof ref.workspaceArtifactId === 'string' ? ref.workspaceArtifactId : null,
+        // `html_version_id` is daemon-internal lineage that never crosses the
+        // wire, so a fork rebuilt from the DTO cannot carry it. It is optional
+        // diagnostics; the snapshot itself is what the fork actually needs.
+      }];
+    });
+    if (inputs.length === 0) return;
+    replaceMessageArtifacts(db, messageId, inputs);
+  } catch (error) {
+    // A fork that cannot carry its refs still forks. The copy simply shows no
+    // cards rather than blocking the branch.
+    console.warn('[db] failed to seed message artifact refs', error);
+  }
 }
 
 export function conversationTurnIndexForRun(
@@ -2677,6 +3312,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
     .prepare(
       `SELECT position, run_id AS runId, run_status AS runStatus,
               content, events_json AS eventsJson,
+              task_analytics_json AS taskAnalyticsJson,
               ${eventBatchProjection} AS hasEventBatches
          FROM messages WHERE id = ?`,
     )
@@ -2696,11 +3332,22 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
     const nextEventsJson = preserveDaemonEventSnapshot
       ? existing.eventsJson ?? null
       : persistedEvents
-        ? JSON.stringify(persistedEvents)
+        ? serializeRunEventsForStorage(persistedEvents)
         : null;
     const nextContent = preserveDaemonEventSnapshot
       ? existing.content ?? ''
       : m.content;
+    // A turn's recovery lineage is written once, by whoever owns the turn. A
+    // rewrite that carries no opinion about it — above all the run-create seed,
+    // which rebuilds this row from the request that won the claim — must not
+    // erase it, or an accepted answer loses the logical task it belongs to
+    // after a reload. An explicit null still clears it.
+    const nextTaskAnalyticsJson =
+      m.taskAnalytics === undefined
+        ? ((existing.taskAnalyticsJson as string | null) ?? null)
+        : m.taskAnalytics
+          ? JSON.stringify(m.taskAnalytics)
+          : null;
     db.prepare(
       `UPDATE messages
           SET role = ?, content = ?, agent_id = ?, agent_name = ?,
@@ -2709,7 +3356,8 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
               produced_files_json = ?, trace_object_files_json = ?, feedback_json = ?,
               pre_turn_file_names_json = ?,
               session_mode = ?, run_context_json = ?, task_analytics_json = ?,
-              applied_plugin_snapshot_json = ?,
+              applied_plugin_snapshot_json = ?, forked_into_json = ?,
+              cancel_origin = ?,
               telemetry_finalized_at = CASE
                 WHEN ? THEN COALESCE(telemetry_finalized_at, ?)
                 ELSE telemetry_finalized_at
@@ -2734,8 +3382,10 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.preTurnFileNames ? JSON.stringify(m.preTurnFileNames) : null,
       normalizeMessageSessionModeForStorage(m.sessionMode),
       m.runContext ? JSON.stringify(m.runContext) : null,
-      m.taskAnalytics ? JSON.stringify(m.taskAnalytics) : null,
+      nextTaskAnalyticsJson,
       m.appliedPluginSnapshot ? JSON.stringify(m.appliedPluginSnapshot) : null,
+      normalizeForkedIntoForStorage(m.forkedInto),
+      normalizeCancelOriginForStorage(m.cancelOrigin),
       m.telemetryFinalized === true ? 1 : 0,
       now,
       m.startedAt ?? null,
@@ -2752,12 +3402,13 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
     const createdAt = typeof m.createdAt === 'number' && Number.isFinite(m.createdAt)
       ? m.createdAt
       : now;
-    // 25 values: id, conversation_id, role, content, agent_id, agent_name,
+    // 28 values: id, conversation_id, role, content, agent_id, agent_name,
     // run_id, run_status, result_delivery_state, last_run_event_id, events_json, attachments_json,
     // comment_attachments_json, produced_files_json, trace_object_files_json,
     // feedback_json, pre_turn_file_names_json, session_mode, run_context_json,
-    // task_analytics_json, applied_plugin_snapshot_json,
-    // telemetry_finalized_at, started_at, ended_at, position, created_at.
+    // task_analytics_json, applied_plugin_snapshot_json, forked_into_json,
+    // cancel_origin, telemetry_finalized_at, started_at, ended_at, position,
+    // created_at.
     db.prepare(
       `INSERT INTO messages
          (id, conversation_id, role, content, agent_id, agent_name,
@@ -2765,9 +3416,9 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
           attachments_json, comment_attachments_json, produced_files_json,
           trace_object_files_json, feedback_json, pre_turn_file_names_json,
           session_mode, run_context_json, task_analytics_json,
-          applied_plugin_snapshot_json,
+          applied_plugin_snapshot_json, forked_into_json, cancel_origin,
           telemetry_finalized_at, started_at, ended_at, position, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       m.id,
       conversationId,
@@ -2779,7 +3430,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.runStatus ?? null,
       normalizeResultDeliveryStateForStorage(m.resultDeliveryState),
       m.lastRunEventId ?? null,
-      persistedEvents ? JSON.stringify(persistedEvents) : null,
+      persistedEvents ? serializeRunEventsForStorage(persistedEvents) : null,
       m.attachments ? JSON.stringify(m.attachments) : null,
       m.commentAttachments ? JSON.stringify(m.commentAttachments) : null,
       m.producedFiles ? JSON.stringify(m.producedFiles) : null,
@@ -2790,6 +3441,8 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.runContext ? JSON.stringify(m.runContext) : null,
       m.taskAnalytics ? JSON.stringify(m.taskAnalytics) : null,
       m.appliedPluginSnapshot ? JSON.stringify(m.appliedPluginSnapshot) : null,
+      normalizeForkedIntoForStorage(m.forkedInto),
+      normalizeCancelOriginForStorage(m.cancelOrigin),
       m.telemetryFinalized === true ? now : null,
       m.startedAt ?? null,
       m.endedAt ?? null,
@@ -2797,6 +3450,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       createdAt,
     );
   }
+  seedMessageArtifactRefsIfAbsent(db, String(m.id), m.artifactRefs);
   // Bump conversation activity so the sidebar's recency sort works.
   db.prepare(`UPDATE conversations SET updated_at = ? WHERE id = ?`).run(
     now,
@@ -2819,6 +3473,8 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
               run_context_json AS runContextJson,
               task_analytics_json AS taskAnalyticsJson,
               applied_plugin_snapshot_json AS appliedPluginSnapshotJson,
+              forked_into_json AS forkedIntoJson,
+              cancel_origin AS cancelOrigin,
               created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
               position
          FROM messages WHERE id = ?`,
@@ -2871,7 +3527,7 @@ export function appendMessageStatusEvent(db: SqliteDb, messageId: string, event:
     : { kind: 'status', label };
   const next = [...events, nextEvent];
   db.prepare(`UPDATE messages SET events_json = ? WHERE id = ?`)
-    .run(JSON.stringify(next), messageId);
+    .run(serializeRunEventsForStorage(next), messageId);
   return next;
 }
 
@@ -2879,6 +3535,7 @@ export function compactAdjacentMessageAgentEvents(
   incomingEvents: readonly DbRow[],
 ): DbRow[] {
   const events: DbRow[] = [];
+  let lastNonDeltaJson: string | undefined;
   for (const event of incomingEvents) {
     const kind = typeof event?.kind === 'string' ? event.kind : '';
     const last = events[events.length - 1];
@@ -2886,9 +3543,42 @@ export function compactAdjacentMessageAgentEvents(
       (kind === 'text' || kind === 'thinking') && typeof event?.text === 'string';
     if (isMergeableDelta && last?.kind === kind && typeof last.text === 'string') {
       events[events.length - 1] = { ...last, text: last.text + event.text };
-    } else {
-      events.push(event);
+      lastNonDeltaJson = undefined;
+      continue;
     }
+
+    if (isMergeableDelta) {
+      events.push(event);
+      lastNonDeltaJson = undefined;
+      continue;
+    }
+
+    // TodoWrite is a state-replacement snapshot, not an activity log. Stream
+    // reconnects and whole-message browser snapshots can replay the exact same
+    // state thousands of times; those byte-equal adjacent copies carry no UI
+    // meaning. Ordinary tool/status/result events remain untouched even when
+    // equal, and changed Todo snapshots still survive.
+    const comparableSnapshots =
+      last?.kind === 'tool_use'
+      && kind === 'tool_use'
+      && isTodoWriteToolName(last.name)
+      && isTodoWriteToolName(event.name)
+      && last.id === event.id
+      && last.name === event.name;
+    if (comparableSnapshots) {
+      if (last === event) continue;
+      const eventJson = JSON.stringify(event);
+      const previousJson = lastNonDeltaJson ?? JSON.stringify(last);
+      if (eventJson === previousJson) {
+        lastNonDeltaJson = previousJson;
+        continue;
+      }
+      events.push(event);
+      lastNonDeltaJson = eventJson;
+      continue;
+    }
+    events.push(event);
+    lastNonDeltaJson = undefined;
   }
   return events;
 }
@@ -2996,7 +3686,23 @@ function materializeMessageAgentEvents(
   let textDelta = '';
   for (const batch of batches) {
     for (const event of batch) {
-      if (event?.kind === 'text' && typeof event.text === 'string') textDelta += event.text;
+      /*
+       * The turn-completion marker rides the text stream (that is how the chat
+       * client finds the process/conclusion boundary) but must not survive into
+       * the message body. `content` is what copy-to-clipboard, exports, title
+       * fallbacks and the legacy events-less render path read, and a raw
+       * `<od-done key="…"/>` in any of those is a protocol tag on screen — the
+       * exact failure `<od-title>` already shipped once.
+       */
+      /*
+       * `<od-next key="…" .../>` (or the legacy paired form) and `<od-focus key="…"/>` are stripped from the live stream before
+       * anything is persisted, so this is belt-and-braces: the body is the one
+       * surface a future path could reach without passing the stream stripper,
+       * and the cost of being wrong there is a protocol tag in an export.
+       */
+      if (event?.kind === 'text' && typeof event.text === 'string') {
+        textDelta += stripArtifactFocusMarkers(stripNextStepMarkers(stripDoneMarkers(event.text)));
+      }
     }
     events = mergeMessageAgentEvents(events, batch);
   }
@@ -3032,14 +3738,14 @@ export function appendMessageAgentEvents(
       `UPDATE messages
           SET content = COALESCE(content, '') || ?, events_json = ?
         WHERE id = ?`,
-    ).run(textDelta, JSON.stringify(materializedEvents), messageId);
+    ).run(textDelta, serializeRunEventsForStorage(materializedEvents), messageId);
     return materializedEvents;
   }
   const inserted = db.prepare(
     `INSERT INTO message_event_batches (message_id, events_json, created_at)
      SELECT ?, ?, ?
       WHERE EXISTS (SELECT 1 FROM messages WHERE id = ?)`,
-  ).run(messageId, JSON.stringify(events), Date.now(), messageId);
+  ).run(messageId, serializeRunEventsForStorage(events), Date.now(), messageId);
   return inserted.changes > 0 ? events : null;
 }
 
@@ -3060,10 +3766,78 @@ export function finalizeMessageAgentEvents(
       `UPDATE messages
           SET content = COALESCE(content, '') || ?, events_json = ?
         WHERE id = ?`,
-    ).run(materialized.textDelta, JSON.stringify(materialized.events), messageId);
+    ).run(materialized.textDelta, serializeRunEventsForStorage(materialized.events), messageId);
     clearMessageAgentEventBatches(db, messageId);
     return materialized.events;
   })();
+}
+
+/**
+ * Retire the unfinished prose an interrupted attempt left on this message.
+ *
+ * A turn only gets another attempt because the previous one never terminated,
+ * so whatever text the superseded attempt streamed after its last committed
+ * boundary was never closed upstream either — and the next attempt writes that
+ * passage again. Appending it a second time is how one conclusion ends up in
+ * the transcript twice (OPEND-2566): the event stream is append-only and
+ * adjacent text is concatenated, so nothing downstream can tell a re-written
+ * answer from a longer one.
+ *
+ * Only the trailing delta run goes. Prose that a tool row already closed is
+ * committed in the agent's own session — a resumed attempt continues past it
+ * instead of repeating it — so it has to survive, and the last tool row is the
+ * boundary the resume itself is anchored on.
+ *
+ * `content` is corrected by removing exactly the suffix those deltas
+ * contributed, and only when it really is that suffix; a row whose body came
+ * from somewhere else is left alone rather than rewritten on a guess.
+ *
+ * Returns how many events were dropped.
+ */
+export function dropTrailingMessageAgentDeltas(
+  db: SqliteDb,
+  messageId: string,
+): number {
+  const events = finalizeMessageAgentEvents(db, messageId);
+  if (!events || events.length === 0) return 0;
+  // How the attempt ended is bookkeeping, not body: an interrupted attempt
+  // signs off with its own `status` rows (the terminal error above all), and
+  // they sit AFTER the passage that was cut off. Step over them to reach the
+  // prose, then leave them where they are — they are what makes the seam
+  // legible once the duplicate is gone.
+  let end = events.length;
+  while (end > 0 && events[end - 1]?.kind === 'status') end -= 1;
+  let cut = end;
+  while (cut > 0) {
+    const event = events[cut - 1];
+    const kind = typeof event?.kind === 'string' ? event.kind : '';
+    if ((kind === 'text' || kind === 'thinking') && typeof event?.text === 'string') {
+      cut -= 1;
+      continue;
+    }
+    break;
+  }
+  if (cut === end) return 0;
+  const dropped = events.slice(cut, end);
+  const kept = [...events.slice(0, cut), ...events.slice(end)];
+  const droppedText = dropped
+    .filter((event) => event?.kind === 'text' && typeof event.text === 'string')
+    .map((event) =>
+      stripArtifactFocusMarkers(stripNextStepMarkers(stripDoneMarkers(String(event.text)))),
+    )
+    .join('');
+  const row = db
+    .prepare(`SELECT content FROM messages WHERE id = ?`)
+    .get(messageId) as DbRow | undefined;
+  if (!row) return 0;
+  const content = typeof row.content === 'string' ? row.content : '';
+  const nextContent =
+    droppedText && content.endsWith(droppedText)
+      ? content.slice(0, content.length - droppedText.length)
+      : content;
+  db.prepare(`UPDATE messages SET content = ?, events_json = ? WHERE id = ?`)
+    .run(nextContent, serializeRunEventsForStorage(kept), messageId);
+  return dropped.length;
 }
 
 export function appendMessageAgentEvent(
@@ -3089,11 +3863,36 @@ const PREVIEW_COMMENT_STATUSES = new Set([
   'failed',
 ]);
 
-export function listPreviewComments(db: SqliteDb, projectId: string, conversationId: string) {
+/** Server-controlled read scope; never populated from a request body. */
+interface PreviewCommentReadOptions {
+  /** Include the same project's reserved inbound anchor, not other private chats. */
+  includeProjectAnchor?: boolean;
+}
+
+function currentPreviewCommentFilter(db: SqliteDb, projectId: string): (comment: PreviewComment) => boolean {
+  const state = parseCommentFileState(getProject(db, projectId)?.metadata?._commentFiles);
+  const pending = new Set(pendingCommentFileRetirements(db, projectId).map(row => row.fact.sourceFileId));
+  const facts = new Map(state?.files.map(fact => [fact.sourceFileId, fact]));
+  // A creator may comment before any receipt/share exists. The existing
+  // workspace pointer proves only that local lifetime, never remote admission.
+  const pointers = new Map((db.prepare('SELECT id, current_path AS path FROM workspace_artifacts WHERE project_id = ? AND deleted_at IS NULL')
+    .all(projectId) as Array<{ id: string; path: string }>).map(row => [row.id, row.path]));
+  return comment => {
+    if (!comment.sourceFileId) return true; // Historical rows are never assigned a guessed identity.
+    if (pending.has(comment.sourceFileId)) return false;
+    const fact = facts.get(comment.sourceFileId);
+    return fact ? !fact.retired && fact.sourceFilePath === comment.filePath : pointers.get(comment.sourceFileId) === comment.filePath;
+  };
+}
+
+export function listPreviewComments(
+  db: SqliteDb, projectId: string, conversationId: string,
+  options: PreviewCommentReadOptions = {},
+) {
   return (db
     .prepare(
       `SELECT id, project_id AS projectId, conversation_id AS conversationId,
-              file_path AS filePath, element_id AS elementId, selector, label,
+              file_path AS filePath, source_file_id AS sourceFileId, element_id AS elementId, selector, label,
               text, position_json AS positionJson, html_hint AS htmlHint,
               selection_kind AS selectionKind, member_count AS memberCount,
               pod_members_json AS podMembersJson, style_json AS styleJson,
@@ -3101,14 +3900,18 @@ export function listPreviewComments(db: SqliteDb, projectId: string, conversatio
               slide_index AS slideIndex,
               anchor_state AS anchorState, anchored_version AS anchoredVersion,
               author_member_id AS authorMemberId, last_good_position_json AS lastGoodPositionJson,
+              author_kind AS authorKind, author_app_user_id AS authorAppUserId,
+              author_display_name AS authorDisplayName, author_key AS authorKey,
               pin_seq AS pinSeq, sort_key AS sortKey,
               note, status, created_at AS createdAt, updated_at AS updatedAt
          FROM preview_comments
-        WHERE project_id = ? AND conversation_id = ?
+        WHERE project_id = ? AND (conversation_id = ? OR conversation_id = ?)
         ORDER BY created_at ASC, rowid ASC`,
     )
-    .all(projectId, conversationId) as DbRow[])
-    .map(normalizePreviewComment);
+    .all(projectId, conversationId, options.includeProjectAnchor
+      ? getProjectCommentAnchorConversationId(db, projectId) : null) as DbRow[])
+    .map(normalizePreviewComment)
+    .filter(currentPreviewCommentFilter(db, projectId));
 }
 
 /**
@@ -3120,7 +3923,7 @@ export function listProjectPreviewComments(db: SqliteDb, projectId: string) {
   return (db
     .prepare(
       `SELECT id, project_id AS projectId, conversation_id AS conversationId,
-              file_path AS filePath, element_id AS elementId, selector, label,
+              file_path AS filePath, source_file_id AS sourceFileId, element_id AS elementId, selector, label,
               text, position_json AS positionJson, html_hint AS htmlHint,
               selection_kind AS selectionKind, member_count AS memberCount,
               pod_members_json AS podMembersJson, style_json AS styleJson,
@@ -3128,6 +3931,8 @@ export function listProjectPreviewComments(db: SqliteDb, projectId: string) {
               slide_index AS slideIndex,
               anchor_state AS anchorState, anchored_version AS anchoredVersion,
               author_member_id AS authorMemberId, last_good_position_json AS lastGoodPositionJson,
+              author_kind AS authorKind, author_app_user_id AS authorAppUserId,
+              author_display_name AS authorDisplayName, author_key AS authorKey,
               pin_seq AS pinSeq, sort_key AS sortKey,
               note, status, created_at AS createdAt, updated_at AS updatedAt
          FROM preview_comments
@@ -3135,7 +3940,8 @@ export function listProjectPreviewComments(db: SqliteDb, projectId: string) {
         ORDER BY created_at ASC, rowid ASC`,
     )
     .all(projectId) as DbRow[])
-    .map(normalizePreviewComment);
+    .map(normalizePreviewComment)
+    .filter(currentPreviewCommentFilter(db, projectId));
 }
 
 export interface UpsertPreviewCommentOptions {
@@ -3242,11 +4048,11 @@ export function upsertPreviewComment(
   }
   db.prepare(
     `INSERT INTO preview_comments
-       (id, project_id, conversation_id, file_path, element_id, selector, label,
+       (id, project_id, conversation_id, file_path, source_file_id, element_id, selector, label,
         text, position_json, html_hint, selection_kind, member_count, pod_members_json,
         style_json, attachments_json, slide_index, slide_key, note, status, created_at, updated_at,
-        anchored_version, author_member_id, pin_seq, pin_seq_confirmed, sort_key)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        anchored_version, author_member_id, author_kind, author_display_name, pin_seq, pin_seq_confirmed, sort_key)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        selector = excluded.selector,
        label = excluded.label,
@@ -3271,6 +4077,7 @@ export function upsertPreviewComment(
     projectId,
     conversationId,
     filePath,
+    typeof input?.sourceFileId === 'string' ? input.sourceFileId : null,
     elementId,
     selector,
     label,
@@ -3290,11 +4097,31 @@ export function upsertPreviewComment(
     now,
     anchoredVersion,
     authorMemberId,
+    authorMemberId ? 'member' : null,
+    authorMemberId && typeof input?.authorDisplayName === 'string' ? input.authorDisplayName.trim() || null : null,
     pinSeq,
     pinSeqConfirmed,
     sortKey,
   );
   return getPreviewComment(db, projectId, conversationId, id);
+}
+
+/** Reconcile the authenticated cloud author fingerprint on the same local member row. */
+export function confirmPreviewCommentAuthorKey(
+  db: SqliteDb,
+  projectId: string,
+  id: string,
+  memberId: string,
+  authorKey: string,
+): boolean {
+  if (!memberId.trim() || !authorKey.trim()) return false;
+  const result = db.prepare(
+    `UPDATE preview_comments SET author_key = ?
+      WHERE id = ? AND project_id = ? AND author_member_id = ?
+        AND (author_key IS NULL OR author_key = '')
+        AND (author_kind = 'member' OR author_kind IS NULL)`,
+  ).run(authorKey.trim(), id, projectId, memberId);
+  return result.changes > 0;
 }
 
 /**
@@ -3314,14 +4141,63 @@ export function confirmPreviewCommentPinSeq(
   seq: number,
 ): boolean {
   if (!Number.isFinite(seq)) return false;
-  const result = db
+  return db.transaction(() => {
+    const row = db
+      .prepare(
+        `SELECT file_path AS filePath FROM preview_comments
+          WHERE id = ? AND project_id = ? AND pin_seq_confirmed = 0`,
+      )
+      .get(id, projectId) as { filePath?: unknown } | undefined;
+    if (!row || typeof row.filePath !== 'string') return false;
+    const pinSeq = distinctConfirmedPinSeq(db, projectId, row.filePath, id, Math.round(seq));
+    return db
+      .prepare(
+        `UPDATE preview_comments
+            SET pin_seq = ?, pin_seq_confirmed = 1
+          WHERE id = ? AND project_id = ? AND pin_seq_confirmed = 0`,
+      )
+      .run(pinSeq, id, projectId).changes > 0;
+  })();
+}
+
+function nextPinSeq(db: SqliteDb, projectId: string, filePath: string, excludeId: string): number {
+  const pinScope = db
     .prepare(
-      `UPDATE preview_comments
-          SET pin_seq = ?, pin_seq_confirmed = 1
-        WHERE id = ? AND project_id = ? AND pin_seq_confirmed = 0`,
+      `SELECT COALESCE(MAX(pin_seq), 0) AS maxPinSeq
+         FROM preview_comments
+        WHERE project_id = ? AND file_path = ? AND id <> ?`,
     )
-    .run(Math.round(seq), id, projectId);
-  return result.changes > 0;
+    .get(projectId, filePath, excludeId) as DbRow;
+  return Number(pinScope?.maxPinSeq ?? 0) + 1;
+}
+
+/**
+ * Invariant: no two SETTLED pins of one file share a number. The cloud `seq`
+ * is the preferred number, but it can only be adopted when no other confirmed
+ * row of the file already holds it. Confirmed rows the cloud never numbered —
+ * comments written while a project was private and relayed later by the
+ * publish backfill, or never relayed at all — keep their local numbers, and a
+ * cloud seq landing on one of them would show two pins labelled the same
+ * (share P0 integration: two "1."). In that case take the next free number.
+ * Provisional (unconfirmed) rows are not blockers: they move to their own
+ * cloud seq when their push resolves, which is how two devices converge.
+ */
+function distinctConfirmedPinSeq(
+  db: SqliteDb,
+  projectId: string,
+  filePath: string,
+  id: string,
+  preferred: number,
+): number {
+  const taken = db
+    .prepare(
+      `SELECT 1 FROM preview_comments
+        WHERE project_id = ? AND file_path = ? AND id <> ?
+          AND pin_seq = ? AND pin_seq_confirmed = 1
+        LIMIT 1`,
+    )
+    .get(projectId, filePath, id, preferred);
+  return taken ? nextPinSeq(db, projectId, filePath, id) : preferred;
 }
 
 /**
@@ -3557,13 +4433,11 @@ export function ensureTeamProjectCommentConversations(
 }
 
 /**
- * Repair the comment-anchor invariant for historical active Team projects.
- *
- * Older databases can contain Team bindings created before pulled mirrors and
- * Team shares seeded a local conversation. Comments are project-scoped in the
- * collaboration protocol but still need a daemon-local conversation FK. Run
- * this once at startup instead of mutating the database from a comments GET.
- * Personal and deleted bindings intentionally keep their existing behavior.
+ * Every relay-eligible project needs the same internal conversation FK: all
+ * active Team projects and personal projects with a persisted public share.
+ * Repair historical data at startup, never as a side effect of comments GET.
+ * Only Team projects also need a public routing conversation; personal shares
+ * must not create or replace an ordinary chat just to receive web comments.
  */
 export function repairTeamProjectCommentAnchorConversations(
   db: SqliteDb,
@@ -3571,19 +4445,24 @@ export function repairTeamProjectCommentAnchorConversations(
 ): { checked: number; created: number } {
   const rows = db
     .prepare(
-      `SELECT project_id AS projectId
-         FROM workspace_projects
-        WHERE visibility = 'team'
-          AND resource_state != 'deleted'`,
+      `SELECT wp.project_id AS projectId, wp.visibility
+         FROM workspace_projects wp
+        WHERE wp.resource_state != 'deleted'
+          AND (wp.visibility = 'team'
+            OR (wp.visibility = 'personal' AND EXISTS (
+              SELECT 1 FROM public_file_publications p
+               WHERE p.project_id = wp.project_id
+            )))`,
     )
-    .all() as Array<{ projectId: string }>;
+    .all() as Array<{ projectId: string; visibility: 'team' | 'personal' }>;
 
   let created = 0;
   const repair = db.transaction(() => {
     for (const row of rows) {
-      if (ensureTeamProjectCommentConversations(db, row.projectId, now).anchorCreated) {
-        created += 1;
-      }
+      const anchorCreated = row.visibility === 'team'
+        ? ensureTeamProjectCommentConversations(db, row.projectId, now).anchorCreated
+        : ensureProjectCommentAnchorConversation(db, row.projectId, now)?.created === true;
+      if (anchorCreated) created += 1;
     }
   });
   repair();
@@ -3649,6 +4528,86 @@ export function deleteSyncedPreviewComment(
   return result.changes > 0;
 }
 
+export type SyncedCommentMergeResult = 'changed' | 'unchanged';
+
+function syncedCommentLabel(incoming: unknown, stored: unknown, elementId: unknown): string {
+  const nonBlank = (value: unknown): string | undefined =>
+    typeof value === 'string' && value.trim() ? value.trim() : undefined;
+  const element = nonBlank(elementId);
+  // A label describes the target for display, not identity. Losing a real
+  // comment for a missing display string is worse than using a generic name.
+  return nonBlank(incoming) ?? nonBlank(stored)
+    ?? (element && !/^path-\d+(?:-\d+)*$/.test(element) ? element : 'Annotation');
+}
+
+function validSyncedCreationTime(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= Number.MAX_SAFE_INTEGER;
+}
+
+/** Preserve comments from legacy transports without inventing creation dates.
+ * Zero is the explicit unknown sentinel; updates may reuse a persisted date. */
+function syncedCommentCreationTime(incoming: unknown, stored: unknown): number {
+  if (validSyncedCreationTime(incoming)) return incoming;
+  if (validSyncedCreationTime(stored)) return stored;
+  return 0;
+}
+
+/** Immutable creation metadata can be recovered from an earlier, correlated
+ * cloud timestamp even when its content revision is stale. Never make a note
+ * younger, renumber pins, or override a user-dragged sidebar position. */
+function repairSyncedCommentCreationTime(
+  db: SqliteDb, projectId: string, comment: CollabCloudComment, existing: DbRow,
+): boolean {
+  if (!validSyncedCreationTime(comment.createdAt)
+    || (existing.createdAt !== 0 && (!validSyncedCreationTime(existing.createdAt) || comment.createdAt >= existing.createdAt))
+    || comment.filePath !== existing.filePath) return false;
+  const sameAuthor = comment.authorKind === 'user'
+    ? existing.authorKind === 'user' && typeof comment.authorAppUserId === 'string'
+      && Boolean(comment.authorAppUserId.trim()) && comment.authorAppUserId === existing.authorAppUserId
+    : (comment.authorKind === undefined || comment.authorKind === 'member')
+      && (existing.authorKind === null || existing.authorKind === 'member')
+      && typeof comment.memberId === 'string' && Boolean(comment.memberId.trim())
+      && comment.memberId.trim() === existing.authorMemberId;
+  if (!sameAuthor) return false;
+  const result = db.prepare(`UPDATE preview_comments SET
+    sort_key = CASE WHEN sort_key = created_at THEN ? ELSE sort_key END,
+    created_at = ? WHERE id = ? AND project_id = ? AND created_at = ?`)
+    .run(comment.createdAt, comment.createdAt, comment.id, projectId, existing.createdAt);
+  if (result.changes !== 1) throw new Error('Synced comment creation time was not persisted');
+  return true;
+}
+
+type SyncedRevision = { seq: number | null; updatedAt: number | null };
+
+/**
+ * Ordering rule for an inbound collab-cloud revision against a stored row.
+ *
+ * - The cloud `seq` is the sole sync cursor. When both sides know one in the
+ *   same stream (the caller passes stored seq only for a matching stream), an
+ *   incoming `seq` at or below the row's `cloud_revision_seq` is a replay (a
+ *   restarted daemon re-pulling from 0, a member snapshot, a relay echo) and
+ *   never overwrites the row: `same-revision` at equality (metadata hydration
+ *   only), `stale` below it.
+ * - A revision the row has not seen yet — a higher `seq`, or any `seq` for a
+ *   row that has none recorded — still honours the business last-writer-wins
+ *   rule on `updatedAt` when the incoming record carries one, so a local edit
+ *   not yet relayed is not clobbered by an older cloud edit. A record with no
+ *   `updatedAt` cannot contest the row on time and is applied in `seq` order.
+ * - Without an incoming `seq` (an older relay build) only `updatedAt` orders,
+ *   and a record with no `updatedAt` is never assumed to be newest.
+ */
+export function syncedCommentRevisionIsNewer(
+  incoming: SyncedRevision,
+  stored: { seq: number | null; updatedAt: number },
+): 'apply' | 'same-revision' | 'stale' {
+  if (incoming.seq !== null && stored.seq !== null && incoming.seq <= stored.seq) {
+    return incoming.seq === stored.seq ? 'same-revision' : 'stale';
+  }
+  if (incoming.updatedAt === null) return incoming.seq !== null ? 'apply' : 'stale';
+  if (incoming.updatedAt > stored.updatedAt) return 'apply';
+  return incoming.updatedAt === stored.updatedAt ? 'same-revision' : 'stale';
+}
+
 /**
  * Merge one collab-cloud comment into local `preview_comments`. The cloud
  * comment's id is used verbatim as the local id (it is the author daemon's own
@@ -3657,28 +4616,27 @@ export function deleteSyncedPreviewComment(
  * - Tombstone (`deleted: true`): delete the local row by id. Delete wins
  *   unconditionally (it does not compare `updatedAt`).
  * - Create/edit: UPSERT by id. A brand-new id inserts; an existing id updates
- *   IN PLACE only when the incoming `updatedAt` is strictly newer
- *   (last-writer-wins), so a re-pull of an unchanged comment is a no-op and a
- *   stale edit never overwrites a fresher local one. Comments are keyed by id,
- *   so multiple notes on the same element coexist, including from the same
- *   member.
+ *   IN PLACE only when {@link syncedCommentRevisionIsNewer} says so. Comments
+ *   are keyed by id, so multiple notes on the same element coexist, including
+ *   from the same member.
  *
  * `conversationId` is the LOCAL project comment anchor (see
  * getProjectCommentAnchorConversationId);
  * the cloud comment's own conversationId is not a valid FK here. It is only used
  * when inserting a new row — an in-place update keeps the row's existing
- * conversation. Returns true when local state changed (insert, update, or delete).
+ * conversation. Returns an explicit changed/unchanged acknowledgement. Failures
+ * throw so the caller cannot acknowledge a batch it did not persist.
  */
 export function mergeSyncedPreviewComment(
   db: SqliteDb,
   projectId: string,
   conversationId: string,
   comment: CollabCloudComment,
-): boolean {
+  options: { stream?: string | undefined } = {},
+): SyncedCommentMergeResult {
   if (comment.deleted) {
-    return deleteSyncedPreviewComment(db, projectId, comment.id);
+    return deleteSyncedPreviewComment(db, projectId, comment.id) ? 'changed' : 'unchanged';
   }
-  const now = Date.now();
   const slideIndex = Number.isFinite(comment.slideIndex)
     ? Math.max(0, Math.round(comment.slideIndex as number))
     : null;
@@ -3698,25 +4656,105 @@ export function mergeSyncedPreviewComment(
   const anchoredVersion = Number.isFinite(comment.anchoredVersion)
     ? Math.max(0, Math.round(comment.anchoredVersion as number))
     : null;
-  const updatedAt = Number.isFinite(comment.updatedAt) ? (comment.updatedAt as number) : now;
+  // A missing `updatedAt` (share-page creates carry none) is NOT "now": that
+  // made a replayed create look newer than every later revision. The best
+  // business timestamp such a record has is its creation time.
+  const incomingUpdatedAt = Number.isFinite(comment.updatedAt) ? (comment.updatedAt as number) : null;
+  const revisionSeq = Number.isFinite(comment.seq) && comment.seq > 0 ? Math.round(comment.seq) : null;
+  const revisionStream = typeof options.stream === 'string' && options.stream ? options.stream : null;
+  const authorKind = comment.authorKind === 'member' || comment.authorKind === 'user'
+    ? comment.authorKind
+    : undefined;
+  const authorMemberId = authorKind === 'user'
+    ? null
+    : typeof comment.memberId === 'string' && comment.memberId.trim()
+      ? comment.memberId.trim()
+      : null;
+  const authorAppUserId = typeof comment.authorAppUserId === 'string'
+    ? comment.authorAppUserId
+    : undefined;
+  const authorDisplayName = typeof comment.authorDisplayName === 'string'
+    ? comment.authorDisplayName
+    : undefined;
+  const authorKey = typeof comment.authorKey === 'string' ? comment.authorKey : undefined;
   const existing = db
-    .prepare(`SELECT updated_at AS updatedAt FROM preview_comments WHERE id = ? AND project_id = ?`)
+    .prepare(`SELECT created_at AS createdAt, updated_at AS updatedAt, file_path AS filePath,
+                     label, author_key AS authorKey,
+                     author_kind AS authorKind, author_member_id AS authorMemberId,
+                     author_app_user_id AS authorAppUserId,
+                     source_file_id AS sourceFileId,
+                     cloud_revision_seq AS cloudRevisionSeq,
+                     cloud_revision_stream AS cloudRevisionStream
+                FROM preview_comments WHERE id = ? AND project_id = ?`)
     .get(comment.id, projectId) as DbRow | undefined;
+  if (existing && existing.sourceFileId !== (comment.sourceFileId ?? null)) {
+    throw new Error('COMMENT_FILE_LIFETIME_CONFLICT');
+  }
+  const createdAt = syncedCommentCreationTime(comment.createdAt, existing?.createdAt);
+  const label = syncedCommentLabel(comment.label, existing?.label, comment.elementId);
   if (existing) {
-    // Last-writer-wins: only apply a strictly-newer edit. Keeps the existing
-    // row's conversation/created_at/author identity; refreshes mutable content,
-    // status, and drift-ladder anchor state.
-    if (updatedAt <= Number(existing.updatedAt ?? 0)) return false;
-    db.prepare(
+    const creationTimeChanged = repairSyncedCommentCreationTime(db, projectId, comment, existing);
+    // Keeps the existing conversation and repairs only correlated creation metadata; refreshes mutable
+    // content/status/anchor state, and updates author fields only when the
+    // incoming wire payload explicitly carries each trusted field. Legacy
+    // payloads cannot erase them.
+    // A seq recorded under another stream (a renumbered member stream, the
+    // other relay scope) says nothing about this one: order by updatedAt.
+    const sameStream = (existing.cloudRevisionStream ?? null) === revisionStream;
+    const storedSeq = sameStream && Number.isFinite(existing.cloudRevisionSeq)
+      && Number(existing.cloudRevisionSeq) > 0
+      ? Number(existing.cloudRevisionSeq)
+      : null;
+    const storedUpdatedAt = Number(existing.updatedAt ?? 0);
+    const verdict = syncedCommentRevisionIsNewer(
+      { seq: revisionSeq, updatedAt: incomingUpdatedAt },
+      { seq: storedSeq, updatedAt: storedUpdatedAt },
+    );
+    if (verdict !== 'apply') {
+      // The row already reflects this revision or a later one. Still record
+      // the cloud position it has been proven to dominate, so a later replay
+      // of the same range short-circuits on seq alone.
+      if (revisionSeq !== null && (storedSeq === null || revisionSeq > storedSeq)) {
+        db.prepare(`UPDATE preview_comments SET cloud_revision_seq = ?, cloud_revision_stream = ?
+          WHERE id = ? AND project_id = ?`).run(revisionSeq, revisionStream, comment.id, projectId);
+      }
+      // A server version may begin supplying its account-level avatar key
+      // after an older daemon already stored this exact event. A replay is
+      // metadata hydration, not a newer edit: never replace a known key or
+      // update any comment content, timestamp, or author identity.
+      const sameAuthor = authorKind === existing.authorKind
+        && (authorKind === 'user'
+          ? authorAppUserId === existing.authorAppUserId
+          : authorMemberId === existing.authorMemberId);
+      if (verdict === 'same-revision' && sameAuthor && authorKey && !existing.authorKey) {
+        const hydrated = db.prepare(`UPDATE preview_comments SET author_key = ?
+          WHERE id = ? AND project_id = ? AND author_key IS NULL`)
+          .run(authorKey, comment.id, projectId);
+        return creationTimeChanged || hydrated.changes === 1 ? 'changed' : 'unchanged';
+      }
+      return creationTimeChanged ? 'changed' : 'unchanged';
+    }
+    // An incoming revision without its own `updatedAt` takes its creation
+    // time, never the local clock (see incomingUpdatedAt above).
+    const updatedAt = incomingUpdatedAt ?? createdAt;
+    const result = db.prepare(
       `UPDATE preview_comments SET
          selector = ?, label = ?, text = ?, position_json = ?, html_hint = ?,
          selection_kind = ?, member_count = ?, pod_members_json = ?, style_json = ?,
          attachments_json = ?, slide_index = ?, slide_key = ?, note = ?, status = ?,
-         anchor_state = ?, anchored_version = ?, last_good_position_json = ?, updated_at = ?
+         anchor_state = ?, anchored_version = ?, last_good_position_json = ?,
+         author_member_id = CASE WHEN ? THEN ? ELSE author_member_id END,
+         author_kind = CASE WHEN ? THEN ? ELSE author_kind END,
+         author_app_user_id = CASE WHEN ? THEN ? ELSE author_app_user_id END,
+         author_display_name = CASE WHEN ? THEN ? ELSE author_display_name END,
+         author_key = CASE WHEN ? THEN ? ELSE author_key END,
+         updated_at = ?,
+         cloud_revision_seq = CASE WHEN ? THEN ? ELSE cloud_revision_seq END,
+         cloud_revision_stream = CASE WHEN ? THEN ? ELSE cloud_revision_stream END
        WHERE id = ? AND project_id = ?`,
     ).run(
       comment.selector,
-      comment.label,
+      label,
       typeof comment.text === 'string' ? comment.text : '',
       JSON.stringify(comment.position ?? { x: 0, y: 0, width: 0, height: 0 }),
       typeof comment.htmlHint === 'string' ? comment.htmlHint : '',
@@ -3732,14 +4770,29 @@ export function mergeSyncedPreviewComment(
       anchorState,
       anchoredVersion,
       comment.lastGoodPosition ? JSON.stringify(comment.lastGoodPosition) : null,
+      authorKind !== undefined ? 1 : 0,
+      authorMemberId,
+      authorKind !== undefined ? 1 : 0,
+      authorKind ?? null,
+      authorAppUserId !== undefined ? 1 : 0,
+      authorAppUserId ?? null,
+      authorDisplayName !== undefined ? 1 : 0,
+      authorDisplayName ?? null,
+      authorKey !== undefined ? 1 : 0,
+      authorKey ?? null,
       updatedAt,
+      revisionSeq !== null ? 1 : 0,
+      revisionSeq,
+      revisionSeq !== null ? 1 : 0,
+      revisionStream,
       comment.id,
       projectId,
     );
-    return true;
+    if (result.changes !== 1) throw new Error('Synced comment update was not persisted');
+    return 'changed';
   }
-  // New comment. INSERT OR IGNORE guards against a rare id collision without
-  // throwing.
+  // Same-project replay is handled above. All other insert failures, including
+  // an id owned by another project, must throw instead of acknowledging loss.
   //
   // pin_seq is taken straight from the wire's `seq` — the collab-cloud's own
   // globally-serialized push sequence for this project (see
@@ -3752,37 +4805,30 @@ export function mergeSyncedPreviewComment(
   // reconciliation. Falls back to a local MAX+1 only for a comment that
   // somehow carries no real seq (e.g. an older relay build) so the row still
   // gets a usable number instead of a permanent NULL.
-  const createdAt = Number.isFinite(comment.createdAt) ? comment.createdAt : now;
   const hasWireSeq = Number.isFinite(comment.seq) && comment.seq > 0;
-  let pinSeq = hasWireSeq ? Math.round(comment.seq) : null;
-  if (!hasWireSeq) {
-    const pinScope = db
-      .prepare(
-        `SELECT COALESCE(MAX(pin_seq), 0) AS maxPinSeq
-           FROM preview_comments
-          WHERE project_id = ? AND file_path = ?`,
-      )
-      .get(projectId, comment.filePath) as DbRow;
-    pinSeq = Number(pinScope?.maxPinSeq ?? 0) + 1;
-  }
+  const pinSeq = hasWireSeq
+    ? distinctConfirmedPinSeq(db, projectId, comment.filePath, comment.id, Math.round(comment.seq))
+    : nextPinSeq(db, projectId, comment.filePath, comment.id);
   const result = db
     .prepare(
-      `INSERT OR IGNORE INTO preview_comments
-         (id, project_id, conversation_id, file_path, element_id, selector, label,
+      `INSERT INTO preview_comments
+         (id, project_id, conversation_id, file_path, source_file_id, element_id, selector, label,
           text, position_json, html_hint, selection_kind, member_count, pod_members_json,
           style_json, attachments_json, slide_index, slide_key, note, status, created_at, updated_at,
-          anchor_state, anchored_version, author_member_id, last_good_position_json,
-          pin_seq, pin_seq_confirmed, sort_key)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          anchor_state, anchored_version, author_member_id, author_kind, author_app_user_id,
+          author_display_name, author_key, last_good_position_json, pin_seq, pin_seq_confirmed, sort_key,
+          cloud_revision_seq, cloud_revision_stream)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       comment.id,
       projectId,
       conversationId,
       comment.filePath,
+      comment.sourceFileId ?? null,
       comment.elementId,
       comment.selector,
-      comment.label,
+      label,
       typeof comment.text === 'string' ? comment.text : '',
       JSON.stringify(comment.position ?? { x: 0, y: 0, width: 0, height: 0 }),
       typeof comment.htmlHint === 'string' ? comment.htmlHint : '',
@@ -3796,23 +4842,70 @@ export function mergeSyncedPreviewComment(
       typeof comment.note === 'string' ? comment.note : '',
       status,
       createdAt,
-      updatedAt,
+      incomingUpdatedAt ?? createdAt,
       anchorState,
       anchoredVersion,
-      typeof comment.memberId === 'string' ? comment.memberId : null,
+      authorMemberId,
+      authorKind ?? null,
+      authorAppUserId ?? null,
+      authorDisplayName ?? null,
+      authorKey ?? null,
       comment.lastGoodPosition ? JSON.stringify(comment.lastGoodPosition) : null,
       pinSeq,
       1,
       createdAt,
+      revisionSeq,
+      revisionSeq !== null ? revisionStream : null,
     );
-  return result.changes > 0;
+  if (result.changes !== 1) throw new Error('Synced comment insert was not persisted');
+  return 'changed';
 }
 
-export function getPreviewComment(db: SqliteDb, projectId: string, conversationId: string, id: string) {
+/** File-scoped acknowledgements never infer unseen rows from a wall clock. */
+export function getFileCommentReadState(db: SqliteDb, projectId: string, viewerScope: string, filePath: string) {
+  const rows = db.prepare(`SELECT s.comment_id AS id FROM project_comment_seen s
+    JOIN preview_comments c ON c.id = s.comment_id AND c.project_id = s.project_id
+    WHERE s.project_id = ? AND s.viewer_scope = ? AND c.file_path = ?`).all(projectId, viewerScope, filePath) as Array<{id: string}>;
+  return { projectId, filePath, seenCommentIds: rows.map(row => row.id) };
+}
+
+export function markFileCommentsSeen(db: SqliteDb, projectId: string, viewerScope: string, filePath: string, ids: string[]) {
+  db.transaction(() => {
+    const insert = db.prepare(`INSERT OR IGNORE INTO project_comment_seen (project_id, viewer_scope, comment_id)
+      SELECT project_id, ?, id FROM preview_comments WHERE project_id = ? AND file_path = ? AND id = ?`);
+    for (const id of new Set(ids)) insert.run(viewerScope, projectId, filePath, id);
+  })();
+  return getFileCommentReadState(db, projectId, viewerScope, filePath);
+}
+
+export function getProjectCommentReadState(
+  db: SqliteDb, projectId: string, viewerScope: string,
+): { projectId: string; lastReadAt?: number } {
+  const stored = db.prepare(`SELECT last_read_at AS lastReadAt FROM project_comment_read_state
+    WHERE project_id = ? AND viewer_scope = ?`).get(projectId, viewerScope) as DbRow | undefined;
+  const lastReadAt = stored?.lastReadAt;
+  return { projectId, ...(Number.isFinite(lastReadAt) ? { lastReadAt } : {}) };
+}
+
+/** Advance, never rewind, a trusted viewer's project-level read marker. */
+export function markProjectCommentsRead(
+  db: SqliteDb, projectId: string, viewerScope: string, readAt: number,
+): { projectId: string; lastReadAt?: number } {
+  db.prepare(`INSERT INTO project_comment_read_state (project_id, viewer_scope, last_read_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(project_id, viewer_scope) DO UPDATE SET
+      last_read_at = MAX(project_comment_read_state.last_read_at, excluded.last_read_at)`).run(projectId, viewerScope, readAt);
+  return getProjectCommentReadState(db, projectId, viewerScope);
+}
+
+export function getPreviewComment(
+  db: SqliteDb, projectId: string, conversationId: string, id: string,
+  options: PreviewCommentReadOptions = {},
+) {
   const row = db
     .prepare(
       `SELECT id, project_id AS projectId, conversation_id AS conversationId,
-              file_path AS filePath, element_id AS elementId, selector, label,
+              file_path AS filePath, source_file_id AS sourceFileId, element_id AS elementId, selector, label,
               text, position_json AS positionJson, html_hint AS htmlHint,
               selection_kind AS selectionKind, member_count AS memberCount,
               pod_members_json AS podMembersJson, style_json AS styleJson,
@@ -3820,12 +4913,15 @@ export function getPreviewComment(db: SqliteDb, projectId: string, conversationI
               slide_index AS slideIndex,
               anchor_state AS anchorState, anchored_version AS anchoredVersion,
               author_member_id AS authorMemberId, last_good_position_json AS lastGoodPositionJson,
+              author_kind AS authorKind, author_app_user_id AS authorAppUserId,
+              author_display_name AS authorDisplayName, author_key AS authorKey,
               pin_seq AS pinSeq, sort_key AS sortKey,
               note, status, created_at AS createdAt, updated_at AS updatedAt
          FROM preview_comments
-        WHERE id = ? AND project_id = ? AND conversation_id = ?`,
+         WHERE id = ? AND project_id = ? AND (conversation_id = ? OR conversation_id = ?)`,
     )
-    .get(id, projectId, conversationId) as DbRow | undefined;
+    .get(id, projectId, conversationId, options.includeProjectAnchor
+      ? getProjectCommentAnchorConversationId(db, projectId) : null) as DbRow | undefined;
   return row ? normalizePreviewComment(row) : null;
 }
 
@@ -3834,7 +4930,7 @@ export function getProjectPreviewComment(db: SqliteDb, projectId: string, id: st
   const row = db
     .prepare(
       `SELECT id, project_id AS projectId, conversation_id AS conversationId,
-              file_path AS filePath, element_id AS elementId, selector, label,
+              file_path AS filePath, source_file_id AS sourceFileId, element_id AS elementId, selector, label,
               text, position_json AS positionJson, html_hint AS htmlHint,
               selection_kind AS selectionKind, member_count AS memberCount,
               pod_members_json AS podMembersJson, style_json AS styleJson,
@@ -3842,6 +4938,8 @@ export function getProjectPreviewComment(db: SqliteDb, projectId: string, id: st
               slide_index AS slideIndex,
               anchor_state AS anchorState, anchored_version AS anchoredVersion,
               author_member_id AS authorMemberId, last_good_position_json AS lastGoodPositionJson,
+              author_kind AS authorKind, author_app_user_id AS authorAppUserId,
+              author_display_name AS authorDisplayName, author_key AS authorKey,
               pin_seq AS pinSeq, sort_key AS sortKey,
               note, status, created_at AS createdAt, updated_at AS updatedAt
          FROM preview_comments
@@ -3851,14 +4949,39 @@ export function getProjectPreviewComment(db: SqliteDb, projectId: string, id: st
   return row ? normalizePreviewComment(row) : null;
 }
 
-function normalizePreviewComment(row: DbRow) {
+/**
+ * Row → `PreviewComment`. The return type is annotated ON PURPOSE.
+ *
+ * Without it, this function's shape is inferred from whatever it happens to
+ * build, and the routes hand the result onward through
+ * `saved as unknown as PreviewComment`. That pair means a field added to the
+ * contract but forgotten here does not fail typecheck — it is simply
+ * `undefined` for the whole DB→HTTP leg, everywhere, silently. Annotating the
+ * return makes the compiler the thing that notices instead of a reviewer.
+ */
+/**
+ * Every `PreviewComment` field, required but allowed to be `undefined`.
+ *
+ * `exactOptionalPropertyTypes` refuses `{ x: undefined }` for an `x?: T`, and
+ * this function builds every optional field explicitly. Stripping the `?` and
+ * widening with `| undefined` keeps the build honest AND makes it stricter
+ * than the plain contract type would: a field added to `PreviewComment` and
+ * forgotten here is a missing-property error, which is the whole point of
+ * annotating this function.
+ */
+type NormalizedPreviewComment = {
+  [K in keyof PreviewComment]-?: PreviewComment[K] | undefined;
+};
+
+function normalizePreviewComment(row: DbRow): PreviewComment {
   const podMembers = parseJsonOrUndef(row.podMembersJson);
   const normalizedPodMembers = Array.isArray(podMembers) ? podMembers : undefined;
-  return {
+  const normalized: NormalizedPreviewComment = {
     id: row.id,
     projectId: row.projectId,
     conversationId: row.conversationId,
     filePath: row.filePath,
+    sourceFileId: typeof row.sourceFileId === 'string' ? row.sourceFileId : undefined,
     elementId: row.elementId,
     selector: row.selector,
     label: row.label,
@@ -3880,26 +5003,40 @@ function normalizePreviewComment(row: DbRow) {
     status: row.status,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
-    anchorState: typeof row.anchorState === 'string' ? row.anchorState : undefined,
+    anchorState: asPreviewCommentAnchorState(row.anchorState),
     anchoredVersion: Number.isFinite(row.anchoredVersion) ? row.anchoredVersion : undefined,
     authorMemberId: typeof row.authorMemberId === 'string' ? row.authorMemberId : undefined,
+    // A comment written by a workspace member leaves all four NULL and reads
+    // exactly as it did before these columns existed.
+    authorKind: row.authorKind === 'user' || row.authorKind === 'member' ? row.authorKind : undefined,
+    authorAppUserId:
+      typeof row.authorAppUserId === 'string' ? row.authorAppUserId : undefined,
+    authorDisplayName:
+      typeof row.authorDisplayName === 'string' ? row.authorDisplayName : undefined,
+    authorKey: typeof row.authorKey === 'string' ? row.authorKey : undefined,
     lastGoodPosition: parseJsonOrUndef(row.lastGoodPositionJson),
     pinSeq: Number.isFinite(row.pinSeq) ? row.pinSeq : undefined,
     sortKey: Number.isFinite(row.sortKey) ? row.sortKey : undefined,
   };
+  // Sound at runtime: an optional property holding `undefined` is what an
+  // absent property reads as. The cast only relaxes the explicit-undefined
+  // rule, never the key set or the value types.
+  return normalized as PreviewComment;
 }
 
-function normalizePreviewCommentAttachments(input: unknown) {
+function normalizePreviewCommentAttachments(input: unknown): PreviewCommentAttachment[] {
   if (!Array.isArray(input)) return [];
   return input
-    .map((item) => {
+    .map((item): PreviewCommentAttachment | null => {
       if (!item || typeof item !== 'object') return null;
       const path = typeof (item as DbRow).path === 'string' ? (item as DbRow).path.trim() : '';
       if (!path) return null;
       const rawName = typeof (item as DbRow).name === 'string' ? (item as DbRow).name.trim() : '';
       return { path, name: rawName || path.split('/').pop() || path };
     })
-    .filter(Boolean)
+    // `.filter(Boolean)` does not narrow, and the annotated return type is
+    // what makes that visible — the runtime was always dropping these.
+    .filter((item): item is PreviewCommentAttachment => item !== null)
     .slice(0, 20);
 }
 
@@ -3982,7 +5119,7 @@ function finiteNumber(value: unknown): number {
 }
 
 function randomCommentId(): string {
-  return `cmt_${randomUUID().slice(0, 8)}`;
+  return `cmt_${randomUUID().replace(/-/g, '')}`;
 }
 
 const LEGACY_MESSAGE_EVENT_COMPACTION_MIN_CHARS = 256 * 1024;
@@ -3997,6 +5134,10 @@ type MessageEventMaintenanceJob =
     }
   | {
       kind: 'finalize_batches';
+      messageId: string;
+    }
+  | {
+      kind: 'heal_oversized_payloads';
       messageId: string;
     };
 
@@ -4051,8 +5192,10 @@ function scheduleNextMessageEventMaintenance(
       if (!db.open) return;
       if (job.kind === 'finalize_batches') {
         finalizeMessageAgentEvents(db, job.messageId);
+      } else if (job.kind === 'heal_oversized_payloads') {
+        healOversizedMessageEvents(db, job.messageId);
       } else {
-        const compactedJson = JSON.stringify(job.events);
+        const compactedJson = serializeRunEventsForStorage(job.events);
         if (compactedJson.length < job.expectedEventsJson.length) {
           const noPendingBatches = hasMessageEventBatchStorage(db)
             ? `AND NOT EXISTS (
@@ -4081,7 +5224,226 @@ function scheduleNextMessageEventMaintenance(
   immediate.unref?.();
 }
 
-function normalizeMessage(db: SqliteDb, row: DbRow, eventBatches?: DbRow[][]) {
+// ---------- run event payload heal ----------
+//
+// I3 — rows written before the run-event payload budget existed are healed
+// once. The pass itself (scheduling, yielding, reporting) lives in
+// `storage/message-event-payload-heal.ts`; these are its row-level primitives.
+// Each call rewrites at most ONE row, inside its own transaction, streaming the
+// row's events out of SQLite one element at a time — a stored event log is
+// never materialized whole in JS, and a crash leaves every row either as it was
+// or fully healed.
+
+export type RunEventPayloadHealOutcome =
+  | { status: 'rewritten'; bytesBefore: number; bytesAfter: number }
+  | { status: 'unchanged' | 'missing' | 'active' | 'malformed' };
+
+function isActiveMessageRunStatus(value: unknown): boolean {
+  return value === 'queued' || value === 'running';
+}
+
+/**
+ * True when some stored event in `column` (a JSON array) is a record, is not
+ * `text`/`thinking`, and exceeds the per-event budget — the exact shape
+ * `boundPersistedAgentEvent` rewrites. Evaluated inside SQLite.
+ */
+function oversizedEventExistsSql(column: string): string {
+  return `EXISTS (
+            SELECT 1
+              FROM json_each(${column}) AS event
+             WHERE event.type = 'object'
+               AND octet_length(event.value) > ${RUN_EVENT_JSON_BUDGET_BYTES}
+               AND COALESCE(json_extract(event.value, '$.kind'), '') NOT IN ('text', 'thinking')
+          )`;
+}
+
+function healedEventsJson(
+  elements: Iterable<{ type: string; value: unknown }>,
+): { json: string; changed: boolean } {
+  const parts: string[] = [];
+  let changed = false;
+  for (const element of elements) {
+    let value: unknown;
+    switch (element.type) {
+      case 'object':
+      case 'array':
+        value = JSON.parse(String(element.value));
+        break;
+      case 'true':
+        value = true;
+        break;
+      case 'false':
+        value = false;
+        break;
+      case 'null':
+        value = null;
+        break;
+      default:
+        value = element.value;
+    }
+    const bounded = boundPersistedAgentEvent(value);
+    if (bounded !== value) changed = true;
+    parts.push(JSON.stringify(bounded) ?? 'null');
+  }
+  return { json: `[${parts.join(',')}]`, changed };
+}
+
+/** Messages whose stored event log is larger than one event's budget, by rowid. */
+export function listRunEventHealMessageCandidates(
+  db: SqliteDb,
+  afterRowid: number,
+  limit: number,
+): Array<{ rowid: number; id: string }> {
+  return db
+    .prepare(
+      `SELECT rowid AS rowid, id
+         FROM messages
+        WHERE rowid > ?
+          AND octet_length(events_json) > ?
+        ORDER BY rowid
+        LIMIT ?`,
+    )
+    .all(afterRowid, RUN_EVENT_JSON_BUDGET_BYTES, limit) as Array<{ rowid: number; id: string }>;
+}
+
+/** Event batches larger than one event's budget, by id. */
+export function listRunEventHealBatchCandidates(
+  db: SqliteDb,
+  afterId: number,
+  limit: number,
+): Array<{ id: number }> {
+  if (!hasMessageEventBatchStorage(db)) return [];
+  return db
+    .prepare(
+      `SELECT id
+         FROM message_event_batches
+        WHERE id > ?
+          AND octet_length(events_json) > ?
+        ORDER BY id
+        LIMIT ?`,
+    )
+    .all(afterId, RUN_EVENT_JSON_BUDGET_BYTES, limit) as Array<{ id: number }>;
+}
+
+/**
+ * Rewrite one message's stored events so every event fits the payload budget.
+ * Skips (`active`) a row whose run is still queued or running: its writer owns
+ * it. A row that is already bounded is left untouched (`unchanged`), so
+ * healing is idempotent.
+ */
+export function healOversizedMessageEvents(
+  db: SqliteDb,
+  messageId: string,
+): RunEventPayloadHealOutcome {
+  return db.transaction((): RunEventPayloadHealOutcome => {
+    const row = db
+      .prepare(
+        `SELECT run_status AS runStatus,
+                octet_length(events_json) AS bytes,
+                (json_valid(events_json) AND json_type(events_json) = 'array') AS isArray
+           FROM messages
+          WHERE id = ?`,
+      )
+      .get(messageId) as DbRow | undefined;
+    if (!row || row.bytes == null) return { status: 'missing' };
+    if (isActiveMessageRunStatus(row.runStatus)) return { status: 'active' };
+    if (Number(row.bytes) <= RUN_EVENT_JSON_BUDGET_BYTES) return { status: 'unchanged' };
+    if (row.isArray !== 1) return { status: 'malformed' };
+    const needsHeal = db
+      .prepare(`SELECT ${oversizedEventExistsSql('m.events_json')} AS needed FROM messages AS m WHERE m.id = ?`)
+      .get(messageId) as { needed: number } | undefined;
+    if (needsHeal?.needed !== 1) return { status: 'unchanged' };
+    const healed = healedEventsJson(
+      db
+        .prepare(
+          `SELECT event.type AS type, event.value AS value
+             FROM messages AS m, json_each(m.events_json) AS event
+            WHERE m.id = ?
+            ORDER BY CAST(event.key AS INTEGER)`,
+        )
+        .iterate(messageId) as Iterable<{ type: string; value: unknown }>,
+    );
+    if (!healed.changed) return { status: 'unchanged' };
+    db.prepare(`UPDATE messages SET events_json = ? WHERE id = ?`).run(healed.json, messageId);
+    return {
+      status: 'rewritten',
+      bytesBefore: Number(row.bytes),
+      bytesAfter: Buffer.byteLength(healed.json, 'utf8'),
+    };
+  }).immediate();
+}
+
+/** {@link healOversizedMessageEvents} for one `message_event_batches` row. */
+export function healOversizedMessageEventBatch(
+  db: SqliteDb,
+  batchId: number,
+): RunEventPayloadHealOutcome {
+  if (!hasMessageEventBatchStorage(db)) return { status: 'missing' };
+  return db.transaction((): RunEventPayloadHealOutcome => {
+    const row = db
+      .prepare(
+        `SELECT message.run_status AS runStatus,
+                octet_length(batch.events_json) AS bytes,
+                (json_valid(batch.events_json) AND json_type(batch.events_json) = 'array') AS isArray
+           FROM message_event_batches AS batch
+           LEFT JOIN messages AS message ON message.id = batch.message_id
+          WHERE batch.id = ?`,
+      )
+      .get(batchId) as DbRow | undefined;
+    if (!row || row.bytes == null) return { status: 'missing' };
+    if (isActiveMessageRunStatus(row.runStatus)) return { status: 'active' };
+    if (Number(row.bytes) <= RUN_EVENT_JSON_BUDGET_BYTES) return { status: 'unchanged' };
+    if (row.isArray !== 1) return { status: 'malformed' };
+    const needsHeal = db
+      .prepare(
+        `SELECT ${oversizedEventExistsSql('batch.events_json')} AS needed
+           FROM message_event_batches AS batch WHERE batch.id = ?`,
+      )
+      .get(batchId) as { needed: number } | undefined;
+    if (needsHeal?.needed !== 1) return { status: 'unchanged' };
+    const healed = healedEventsJson(
+      db
+        .prepare(
+          `SELECT event.type AS type, event.value AS value
+             FROM message_event_batches AS batch, json_each(batch.events_json) AS event
+            WHERE batch.id = ?
+            ORDER BY CAST(event.key AS INTEGER)`,
+        )
+        .iterate(batchId) as Iterable<{ type: string; value: unknown }>,
+    );
+    if (!healed.changed) return { status: 'unchanged' };
+    db.prepare(`UPDATE message_event_batches SET events_json = ? WHERE id = ?`).run(healed.json, batchId);
+    return {
+      status: 'rewritten',
+      bytesBefore: Number(row.bytes),
+      bytesAfter: Buffer.byteLength(healed.json, 'utf8'),
+    };
+  }).immediate();
+}
+
+export function hasCompletedDaemonMaintenancePass(db: SqliteDb, name: string): boolean {
+  return Boolean(
+    db.prepare(`SELECT 1 FROM daemon_maintenance_passes WHERE name = ?`).get(name),
+  );
+}
+
+export function recordCompletedDaemonMaintenancePass(
+  db: SqliteDb,
+  name: string,
+  completedAt = Date.now(),
+): void {
+  db.prepare(
+    `INSERT INTO daemon_maintenance_passes (name, completed_at) VALUES (?, ?)
+       ON CONFLICT(name) DO UPDATE SET completed_at = excluded.completed_at`,
+  ).run(name, completedAt);
+}
+
+function normalizeMessage(
+  db: SqliteDb,
+  row: DbRow,
+  eventBatches?: DbRow[][],
+  artifactRefs?: ChatArtifactRef[],
+) {
   const eventsJson = typeof row.eventsJson === 'string' ? row.eventsJson : null;
   const materializedEvents = materializeMessageAgentEvents(
     db,
@@ -4089,6 +5451,17 @@ function normalizeMessage(db: SqliteDb, row: DbRow, eventBatches?: DbRow[][]) {
     eventsJson,
     eventBatches,
   );
+  // I2: a loaded conversation never carries unbounded run-event payloads, even
+  // for rows written before the payload budget existed and not yet healed by
+  // the background pass. A row this small cannot hold an oversized event
+  // (each UTF-16 unit is at most 3 UTF-8 bytes), so only larger rows pay for
+  // the per-event check.
+  const mayHoldOversizedEvents =
+    materializedEvents.batchCount > 0
+    || (eventsJson !== null && eventsJson.length * 3 > RUN_EVENT_JSON_BUDGET_BYTES);
+  const boundedEvents = mayHoldOversizedEvents
+    ? (boundPersistedAgentEvents(materializedEvents.events) as DbRow[])
+    : materializedEvents.events;
   if (isTerminalMessageRunStatus(row.runStatus)) {
     if (materializedEvents.batchCount > 0) {
       // A terminal row with batches means the daemon stopped between its last
@@ -4109,12 +5482,27 @@ function normalizeMessage(db: SqliteDb, row: DbRow, eventBatches?: DbRow[][]) {
         expectedEventsJson: eventsJson,
         events: materializedEvents.events,
       });
+    } else if (boundedEvents !== materializedEvents.events) {
+      // The stored row predates the budget: rewrite it once, off the request
+      // path, so the next read does not pay for bounding it again.
+      scheduleMessageEventMaintenance(db, {
+        kind: 'heal_oversized_payloads',
+        messageId: String(row.id),
+      });
     }
   }
+  const scrubProtocolTail = row.role === 'assistant'
+    ? scrubDsmlToolProtocolTail
+    : (text: string) => text;
+  const visibleEvents = row.role === 'assistant'
+    ? scrubDsmlToolProtocolTailFromEvents(boundedEvents)
+    : boundedEvents;
   return {
     id: row.id,
     role: row.role,
-    content: `${typeof row.content === 'string' ? row.content : ''}${materializedEvents.textDelta}`,
+    content: scrubProtocolTail(
+      `${typeof row.content === 'string' ? row.content : ''}${materializedEvents.textDelta}`,
+    ),
     agentId: row.agentId ?? undefined,
     agentName: row.agentName ?? undefined,
     runId: row.runId ?? undefined,
@@ -4123,11 +5511,14 @@ function normalizeMessage(db: SqliteDb, row: DbRow, eventBatches?: DbRow[][]) {
     lastRunEventId: row.lastRunEventId ?? undefined,
     events:
       eventsJson !== null || materializedEvents.batchCount > 0
-        ? materializedEvents.events
+        ? visibleEvents
         : undefined,
     attachments: parseJsonOrUndef(row.attachmentsJson),
     commentAttachments: parseJsonOrUndef(row.commentAttachmentsJson),
     producedFiles: parseJsonOrUndef(row.producedFilesJson),
+    // Normalized artifact refs. `producedFiles` stays exactly as it was for
+    // transcripts and older clients; new cards read this instead.
+    artifactRefs: artifactRefs && artifactRefs.length > 0 ? artifactRefs : undefined,
     traceObjectFiles: parseJsonOrUndef(row.traceObjectFilesJson),
     feedback: parseJsonOrUndef(row.feedbackJson),
     preTurnFileNames: parseJsonOrUndef(row.preTurnFileNamesJson),
@@ -4135,10 +5526,53 @@ function normalizeMessage(db: SqliteDb, row: DbRow, eventBatches?: DbRow[][]) {
     runContext: parseJsonOrUndef(row.runContextJson),
     taskAnalytics: parseJsonOrUndef(row.taskAnalyticsJson),
     appliedPluginSnapshot: parseJsonOrUndef(row.appliedPluginSnapshotJson),
+    forkedInto: normalizeForkedInto(parseJsonOrUndef(row.forkedIntoJson)),
+    cancelOrigin: normalizeCancelOrigin(row.cancelOrigin),
     createdAt: row.createdAt ?? undefined,
     startedAt: row.startedAt ?? undefined,
     endedAt: row.endedAt ?? undefined,
   };
+}
+
+const DSML_PROTOCOL_TAIL_EVENT_LOOKBACK = 512;
+
+/**
+ * Historical agent_message_chunk deltas can be separated by diagnostic or
+ * tool events, so adjacent-text compaction is not sufficient. Treat only the
+ * concatenated visible text suffix as a stream, then remove the matched tail
+ * backwards from its source events while leaving non-text events untouched.
+ */
+function scrubDsmlToolProtocolTailFromEvents(events: readonly DbRow[]): DbRow[] {
+  let suffix = '';
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event?.kind !== 'text' || typeof event.text !== 'string') continue;
+    const remaining = DSML_PROTOCOL_TAIL_EVENT_LOOKBACK - suffix.length;
+    if (remaining <= 0) break;
+    suffix = `${event.text.slice(-remaining)}${suffix}`;
+  }
+
+  const visibleSuffix = scrubDsmlToolProtocolTail(suffix);
+  let charsToRemove = suffix.length - visibleSuffix.length;
+  if (charsToRemove <= 0) return [...events];
+
+  const visibleEvents = [...events];
+  const emptiedTextEventIndexes = new Set<number>();
+  for (let index = visibleEvents.length - 1; index >= 0 && charsToRemove > 0; index -= 1) {
+    const event = visibleEvents[index];
+    if (event?.kind !== 'text' || typeof event.text !== 'string') continue;
+    if (charsToRemove >= event.text.length) {
+      charsToRemove -= event.text.length;
+      emptiedTextEventIndexes.add(index);
+      continue;
+    }
+    visibleEvents[index] = {
+      ...event,
+      text: event.text.slice(0, event.text.length - charsToRemove),
+    };
+    charsToRemove = 0;
+  }
+  return visibleEvents.filter((_, index) => !emptiedTextEventIndexes.has(index));
 }
 
 function normalizeMessageSessionMode(value: unknown): ChatSessionMode | undefined {
@@ -4161,6 +5595,53 @@ function normalizeResultDeliveryStateForStorage(
 
 function normalizeMessageSessionModeForStorage(value: unknown): ChatSessionMode | null {
   return value === 'chat' || value === 'design' || value === 'plan' ? value : null;
+}
+
+/**
+ * The fork divider marker is only meaningful when it carries the title the
+ * divider prints. A shape without a usable title would render an empty line
+ * between two hairlines, so it is stored as "not forked" instead.
+ */
+function normalizeForkedInto(
+  value: unknown,
+): { title: string; conversationId?: string } | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const candidate = value as { title?: unknown; conversationId?: unknown };
+  if (typeof candidate.title !== 'string' || !candidate.title) return undefined;
+  return {
+    title: candidate.title,
+    ...(typeof candidate.conversationId === 'string' && candidate.conversationId
+      ? { conversationId: candidate.conversationId }
+      : {}),
+  };
+}
+
+function normalizeForkedIntoForStorage(value: unknown): string | null {
+  const normalized = normalizeForkedInto(value);
+  return normalized ? JSON.stringify(normalized) : null;
+}
+
+/**
+ * Who cancelled this turn. Enum mirrors `RunCancelOrigin`; anything else is
+ * dropped rather than stored verbatim, because the UI reads this field as
+ * PROOF ("the user pressed Stop") and an unrecognized value must not be able
+ * to masquerade as one of the four known origins.
+ */
+const CANCEL_ORIGINS = new Set([
+  'user_stop',
+  'project_cleanup',
+  'daemon_shutdown',
+  'unknown',
+]);
+
+function normalizeCancelOrigin(value: unknown): ChatMessage['cancelOrigin'] {
+  return typeof value === 'string' && CANCEL_ORIGINS.has(value)
+    ? (value as NonNullable<ChatMessage['cancelOrigin']>)
+    : undefined;
+}
+
+function normalizeCancelOriginForStorage(value: unknown): string | null {
+  return normalizeCancelOrigin(value) ?? null;
 }
 
 function parseJsonOrUndef(s: unknown): any {

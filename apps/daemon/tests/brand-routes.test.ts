@@ -604,11 +604,15 @@ describe('brand routes', () => {
       createdAt: 1,
       updatedAt: 1,
     });
-    // The agent paused on an anti-bot wall and asked the user via a question form.
+    // The agent paused on an anti-bot wall and asked the user via a question
+    // form. The body has to be a RENDERABLE form (JSON with a non-empty
+    // `questions` array): needs_input promises the user something to answer, so
+    // the latch requires a form the UI can actually draw, not a bare marker.
     upsertMessage(db, 'conversation-blocked', {
       id: 'message-blocked',
       role: 'assistant',
-      content: 'Please complete the Cloudflare check. <question-form><question>Done?</question></question-form>',
+      content: 'Please complete the Cloudflare check. '
+        + '<question-form>{"questions":[{"id":"done","label":"Done?"}]}</question-form>',
       runId: 'run-blocked',
       runStatus: 'running',
       startedAt: 1,
@@ -1659,13 +1663,33 @@ describe('brand routes', () => {
       skillsRoot,
       dataDir,
       db,
-      // The same production seam `server.ts` builds. Constructed with no
-      // membership-directory fetcher, which is
-      // `authorizeCreatedProjectWorkspace`'s documented local/dev
-      // compatibility configuration — so a verified header identity still
-      // binds here, while the resolver's verify-then-degrade contract is
-      // covered directly in `tests/collab/created-project-workspace.test.ts`.
-      resolveCreatedProjectHome: createCreatedProjectWorkspaceResolver({}),
+      // A scoped create must verify its exact membership before binding either
+      // the backing project or its draft design system.
+      resolveCreatedProjectHome: createCreatedProjectWorkspaceResolver({
+        fetchWorkspaceDirectory: async () => ({
+          ok: true,
+          items: [
+            {
+              workspaceId: 'ws-team-1',
+              workspaceName: 'Team 1',
+              workspaceType: 'team',
+              workspaceMemberId: 'member-owner',
+              role: 'member',
+              memberStatus: 'active',
+              lifecycleState: 'active',
+            },
+            {
+              workspaceId: 'ws-team-catalog',
+              workspaceName: 'Team Catalog',
+              workspaceType: 'team',
+              workspaceMemberId: 'member-catalog-owner',
+              role: 'owner',
+              memberStatus: 'active',
+              lifecycleState: 'active',
+            },
+          ],
+        }),
+      }),
       ...extraDeps,
     });
     const server = http.createServer(app);

@@ -2,8 +2,27 @@ import { describe, expect, it } from 'vitest';
 
 import {
   projectKindFromMetadataToTracking,
+  projectKindFromMetadataToTrackingOrLegacyDefault,
   projectKindToTracking,
+  projectIntentFromMetadataToTracking,
 } from '../src/analytics/events.js';
+
+describe('projectIntentFromMetadataToTracking', () => {
+  it('keeps Motion distinct from Hyperframes while both keep their engine kind', () => {
+    for (const intent of ['motion-design', 'hyperframes'] as const) {
+      const metadata = { kind: 'video', videoModel: 'hyperframes-html', intent };
+      expect(projectKindFromMetadataToTracking(metadata)).toBe('hyperframes');
+      expect(projectIntentFromMetadataToTracking(metadata)).toBe(intent);
+    }
+  });
+
+  it('uses a bounded unknown for old projects and unexpected metadata', () => {
+    expect(projectIntentFromMetadataToTracking(null)).toBe('unknown');
+    expect(projectIntentFromMetadataToTracking({})).toBe('unknown');
+    expect(projectIntentFromMetadataToTracking({ intent: 'private-prompt-text' })).toBe('unknown');
+    expect(projectIntentFromMetadataToTracking({ intent: 'worker-visualizer' })).toBe('worker-visualizer');
+  });
+});
 
 describe('projectKindToTracking', () => {
   it('maps the base project kinds to their tracking enum', () => {
@@ -102,6 +121,17 @@ describe('projectKindToTracking', () => {
       'hyperframes',
     );
     expect(projectKindFromMetadataToTracking({ kind: 'deck' })).toBe('slide_deck');
+    expect(projectKindFromMetadataToTracking({ kind: 'orbit' })).toBe('orbit');
     expect(projectKindFromMetadataToTracking(null)).toBeNull();
+  });
+
+  it('uses one prototype fallback for legacy metadata across runtimes', () => {
+    expect(projectKindFromMetadataToTrackingOrLegacyDefault({})).toBe('prototype');
+    expect(projectKindFromMetadataToTrackingOrLegacyDefault(null)).toBe('prototype');
+    expect(projectKindFromMetadataToTrackingOrLegacyDefault({ kind: 'orbit' })).toBe('orbit');
+    expect(projectKindFromMetadataToTrackingOrLegacyDefault({ kind: 'future-kind' })).toBe('other');
+    expect(
+      projectKindFromMetadataToTrackingOrLegacyDefault({ kind: 'other', intent: 'document' }),
+    ).toBe('document');
   });
 });

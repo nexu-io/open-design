@@ -875,7 +875,7 @@ describe('project move to personal on an unbound (never-locally-shared) project'
           id: result.projectId,
           visibility: 'personal',
           syncState: 'local_only',
-          resourceHubResourceId: null,
+          resourceHubResourceId: resourceId,
         });
 
         const row = getWorkspaceProjectByProjectId(db, result.projectId);

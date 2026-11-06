@@ -4,14 +4,14 @@
 //   • the Community gallery card opens the FULL plugin details modal
 //     (Use split action + Share menu + close);
 //   • the creation page's active template chip opens the LIGHTWEIGHT
-//     community preview (header title/category + close, footer category +
-//     Remix).
+//     community preview (header title/category + close; no footer — the Remix
+//     bar is gone per product, OPEND-2692).
 // Before the swap the two entries were reversed. These specs pin the
 // corrected mapping end-to-end through the real entry shell.
 
 import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
-import { applyStandardMocks } from '@/playwright/mock-factory';
+import { applyStandardMocks, routeSignedOutVelaStatus } from '@/playwright/mock-factory';
 import { ensureRailOpen } from '@/playwright/rail';
 import { T } from '@/timeouts';
 
@@ -126,15 +126,23 @@ async function gotoCommunity(page: Page) {
   await expect(page.locator('article.community-template-card').first()).toBeVisible();
 }
 
+async function openDeckCommunityCard(page: Page) {
+  await page.getByRole('button', { name: 'Slides', exact: true }).click();
+  const card = page.locator('article.community-template-card').first();
+  await expect(card).toHaveAttribute('data-template-type', 'Slides');
+  await card.click();
+}
+
 test.beforeEach(async ({ page }) => {
   await applyStandardMocks(page);
+  await routeSignedOutVelaStatus(page);
   await routeMappingFixtures(page);
 });
 
 test('[P1] community template card opens the full details modal (Use split + Share), not the lightweight preview', async ({ page }) => {
   await gotoCommunity(page);
 
-  await page.locator('article.community-template-card').first().click();
+  await openDeckCommunityCard(page);
 
   // Full modal chrome: Use split action (main face + caret), Share menu,
   // and the ds-modal shell — the lightweight footer-Remix preview must not
@@ -153,21 +161,22 @@ test('[P1] community template card opens the full details modal (Use split + Sha
   await page.keyboard.press('Escape');
 });
 
-test('[P1] community Use hands into Home and the active template chip opens the lightweight preview', async ({ page }) => {
+test('[P0] signed-out Local setup can use a Community template on Home', async ({ page }) => {
   await gotoCommunity(page);
 
   // Use from the community card's full modal routes the plugin as the Home
   // composer's active driver (EntryShell onUsePlugin hand-off).
-  await page.locator('article.community-template-card').first().click();
+  await openDeckCommunityCard(page);
   await page.getByTestId(`plugin-details-use-${DECK_PLUGIN.id}`).click();
   await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
 
-  // The chip's detail entry opens the LIGHTWEIGHT preview: footer category +
-  // Remix, no Use split action, no Share menu.
+  // The chip's detail entry opens the LIGHTWEIGHT preview: header category
+  // + close only — no Remix footer, no Use split action, no Share menu.
   await page.getByTestId('home-hero-active-plugin').locator('.home-hero__active-chip-body').click();
   await expect(page.locator('.community-template-preview')).toBeVisible();
-  const foot = page.locator('.community-template-preview__foot');
-  await expect(foot).toContainText('Remix');
+  await expect(page.locator('.community-template-preview__head')).toContainText('Slides');
+  await expect(page.locator('.community-template-preview__foot')).toHaveCount(0);
+  await expect(page.locator('.community-template-preview')).not.toContainText('Remix');
   await expect(page.getByTestId(`plugin-details-use-${DECK_PLUGIN.id}`)).toHaveCount(0);
   await expect(page.locator('.template-share-trigger')).toHaveCount(0);
 
@@ -180,12 +189,21 @@ test('[P1] community Use hands into Home and the active template chip opens the 
 test('[P1] community category tabs filter the current template catalog', async ({ page }) => {
   await gotoCommunity(page);
 
+  // The caption under a card is the template's own title now, so the type it
+  // was gridded under is read off the card element itself.
   const cards = page.locator('article.community-template-card');
   await expect(cards).toHaveCount(1);
-  await expect(cards.locator('.community-template-card__foot')).toContainText('Slides');
+  await expect(cards).toHaveAttribute('data-template-type', 'Prototype');
 
-  await page.getByRole('button', { name: 'Prototype', exact: true }).click();
+  await page.getByRole('button', { name: 'Slides', exact: true }).click();
 
   await expect(cards).toHaveCount(1);
-  await expect(cards.locator('.community-template-card__foot')).toContainText('Prototype');
+  await expect(cards).toHaveAttribute('data-template-type', 'Slides');
+
+  // The row is fixed to the Home taxonomy: Document is a tab even while no
+  // document template ships, and picking it shows the empty state rather than
+  // borrowing another kind's cards.
+  await page.getByRole('button', { name: 'Document', exact: true }).click();
+  await expect(cards).toHaveCount(0);
+  await expect(page.getByTestId('community-empty-state')).toBeVisible();
 });

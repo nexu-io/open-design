@@ -23,6 +23,27 @@ type GetObjectOptions = StorageConfig & {
   objectKey: string;
 };
 
+/**
+ * R2/S3 If-Match requires a strong quoted ETag. GET may omit the quotes;
+ * a weak `W/"..."` validator is not promoted because If-Match is strong.
+ */
+export function strongQuotedEtag(etag: string): string {
+  const trimmed = etag.trim();
+  if (trimmed.length === 0) {
+    throw new Error("storage object ETag is empty");
+  }
+  if (/^W\//i.test(trimmed)) {
+    throw new Error(
+      `storage object ETag is weak; refusing If-Match without a strong validator: ${trimmed}`,
+    );
+  }
+  const unquoted = trimmed.replace(/^"+|"+$/g, "");
+  if (unquoted.length === 0) {
+    throw new Error("storage object ETag is empty after removing quotes");
+  }
+  return `"${unquoted}"`;
+}
+
 function hmac(key: Buffer | string, value: string): Buffer {
   return createHmac("sha256", key).update(value, "utf8").digest();
 }
@@ -53,13 +74,13 @@ function objectUrl(config: StorageConfig, objectKey: string): { canonicalUri: st
   return { canonicalUri, url };
 }
 
-function authorizationHeader(config: StorageConfig, method: "GET" | "PUT", canonicalUri: string, headers: Record<string, string>, payloadHash: string, dateStamp: string): string {
+function authorizationHeader(config: StorageConfig, method: "GET" | "PUT", canonicalUri: string, headers: Record<string, string>, payloadHash: string, dateStamp: string, canonicalQuery = ""): string {
   const signedHeaders = Object.keys(headers).sort().join(";");
   const canonicalHeaders = Object.keys(headers)
     .sort()
     .map((name) => `${name}:${headers[name]}\n`)
     .join("");
-  const canonicalRequest = [method, canonicalUri, "", canonicalHeaders, signedHeaders, payloadHash].join("\n");
+  const canonicalRequest = [method, canonicalUri, canonicalQuery, canonicalHeaders, signedHeaders, payloadHash].join("\n");
   const credentialScope = `${dateStamp}/${config.region}/s3/aws4_request`;
   const stringToSign = ["AWS4-HMAC-SHA256", headers["x-amz-date"], credentialScope, hash(canonicalRequest)].join("\n");
   const signingKey = hmac(hmac(hmac(hmac(`AWS4${config.secretAccessKey}`, dateStamp), config.region), "s3"), "aws4_request");
@@ -130,6 +151,10 @@ export async function putStorageObjectWithStatus(options: PutObjectOptions): Pro
   const body = options.body == null ? readFileSync(options.bodyPath ?? "") : Buffer.from(options.body);
   const payloadHash = hash(body);
   const { canonicalUri, url } = objectUrl(options, options.objectKey);
+  const requestHeaders = { ...(options.headers ?? {}) };
+  if (requestHeaders["if-match"] != null && requestHeaders["if-match"].length > 0) {
+    requestHeaders["if-match"] = strongQuotedEtag(requestHeaders["if-match"]);
+  }
   // x-amz-date is filled in per attempt inside signedFetchWithRetry so the
   // signature never goes stale across a backoff; keep the key present here so it
   // is part of the signed header set.
@@ -139,7 +164,7 @@ export async function putStorageObjectWithStatus(options: PutObjectOptions): Pro
     host: url.host,
     "x-amz-content-sha256": payloadHash,
     "x-amz-date": "",
-    ...(options.headers ?? {}),
+    ...requestHeaders,
   };
   if (options.sessionToken != null && options.sessionToken.length > 0) {
     headers["x-amz-security-token"] = options.sessionToken;
@@ -172,6 +197,7 @@ export async function getStorageObject(options: GetObjectOptions): Promise<{ byt
   const payloadHash = hash("");
   const { canonicalUri, url } = objectUrl(options, options.objectKey);
   const headers: Record<string, string> = {
+    "accept-encoding": "identity",
     host: url.host,
     "x-amz-content-sha256": payloadHash,
     "x-amz-date": "",
@@ -210,4 +236,40 @@ export async function getStorageObject(options: GetObjectOptions): Promise<{ byt
 export async function getStorageObjectText(options: GetObjectOptions): Promise<string | null> {
   const object = await getStorageObject(options);
   return object?.text ?? null;
+}
+
+/** Check the origin bucket for any object under a prefix without downloading release artifacts. */
+export async function storagePrefixHasObjects(options: StorageConfig & { prefix: string }): Promise<boolean> {
+  const { canonicalUri, url } = objectUrl(options, "");
+  const canonicalQuery = `list-type=2&max-keys=1&prefix=${encodePathSegment(options.prefix)}`;
+  url.search = canonicalQuery;
+  const payloadHash = hash("");
+  const response = await signedFetchWithRetry(`LIST ${url}`, () => {
+    const { amzDate, dateStamp } = amzTimestamp(new Date());
+    const headers: Record<string, string> = {
+      host: url.host,
+      "x-amz-content-sha256": payloadHash,
+      "x-amz-date": amzDate,
+    };
+    if (options.sessionToken != null && options.sessionToken.length > 0) {
+      headers["x-amz-security-token"] = options.sessionToken;
+    }
+    return {
+      init: {
+        method: "GET",
+        headers: {
+          ...headers,
+          Authorization: authorizationHeader(options, "GET", canonicalUri, headers, payloadHash, dateStamp, canonicalQuery),
+        },
+      },
+      url,
+    };
+  });
+  const body = await response.text();
+  if (!response.ok) throw new Error(`LIST ${url} failed with HTTP ${response.status}: ${body}`);
+  const count = /<KeyCount>\s*([01])\s*<\/KeyCount>/.exec(body);
+  if (count == null || !body.includes("</ListBucketResult>")) {
+    throw new Error(`invalid ListObjectsV2 response for ${options.prefix}`);
+  }
+  return count[1] === "1";
 }

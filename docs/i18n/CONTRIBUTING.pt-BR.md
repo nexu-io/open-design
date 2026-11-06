@@ -244,7 +244,12 @@ Não somos pedantes com formatação (Prettier on save está ok), mas duas regra
 Além disso:
 
 - **Não narre.** Sem `// import the module`, sem `// loop through items`. Se o código se lê obviamente, o comentário é ruído. Reserve comentários para intenção não-óbvia ou restrições que o código não consegue expressar.
-- **TypeScript** em `apps/web/src/`. O daemon (`apps/daemon/`) é JavaScript ESM puro com JSDoc onde tipos importam — mantenha assim.
+- **TypeScript-first.** Mantenha em TypeScript os pontos de entrada, módulos,
+  scripts, testes, reporters e configurações pertencentes ao projeto, incluindo
+  o código em `apps/web/src/` e `apps/daemon/src/`. Novos arquivos `.js`, `.mjs`
+  ou `.cjs` só são permitidos quando forem gerados, incorporarem código de
+  terceiros ou forem necessários por um motivo de compatibilidade documentado
+  explicitamente; eles também devem passar no `pnpm guard`.
 - **Sem novas dependências top-level** sem um parágrafo na descrição do PR sobre o que ganhamos vs. quantos bytes despachamos. A lista de deps em [`package.json`](../../package.json) é pequena de propósito.
 - **Rode `pnpm typecheck`** antes do push. CI roda; falhar lá rende um comentário "please fix".
 

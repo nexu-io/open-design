@@ -43,7 +43,7 @@ export interface RunLike {
 }
 
 export interface RunWaiter {
-  wait(run: RunLike): Promise<{ status: string }>;
+  wait(run: RunLike): Promise<{ status: string; cancelOrigin?: string | null }>;
 }
 
 export interface SkillPluginCandidateLike {
@@ -272,6 +272,20 @@ export function reconcileAssistantMessageOnRunEnd(
             SET run_status = ?, ended_at = COALESCE(ended_at, ?)
           WHERE id = ? AND run_status IN ('queued', 'running')`,
       ).run(finalStatus.status, Date.now(), run.assistantMessageId);
+      // Who cancelled, recorded separately from the status latch above.
+      // The latch only fires while the row is still queued/running, and the
+      // client often writes `canceled` first (it stops its own stream); the
+      // origin would then never land. It is written unconditionally for a
+      // cancelled run because it is the daemon's own answer to a question the
+      // client cannot answer for itself — `runStatus: 'canceled'` alone cannot
+      // tell a user's Stop from a shutdown or project cleanup, and the pause
+      // line in chat treats `user_stop` as proof.
+      if (finalStatus.status === 'canceled' && finalStatus.cancelOrigin) {
+        db.prepare(`UPDATE messages SET cancel_origin = ? WHERE id = ?`).run(
+          finalStatus.cancelOrigin,
+          run.assistantMessageId,
+        );
+      }
     })
     .catch((err: Error) => {
       console.warn('[runs] message reconciliation failed', err);

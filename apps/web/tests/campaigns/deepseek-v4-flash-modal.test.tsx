@@ -18,7 +18,6 @@
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getGoPlanCampaignCopy } from '../../src/campaigns/go-plan-content';
 import { DeepSeekV4FlashCampaign } from '../../src/components/DeepSeekV4FlashCampaign';
 import { I18nProvider } from '../../src/i18n';
 
@@ -58,6 +57,22 @@ afterEach(() => {
 });
 
 describe('paid 立即使用 switches the workbench onto the campaign model', () => {
+  it('shows the model provider logo and restores the abbreviation if the asset fails', () => {
+    render(<DeepSeekV4FlashCampaign audience="paid" active />);
+
+    const providerLogo = screen.getByRole('img', { name: 'DeepSeek' });
+    expect(providerLogo.querySelector('img')).toHaveAttribute(
+      'src',
+      '/agent-icons/deepseek.svg',
+    );
+    expect(screen.queryByText('DS', { exact: true })).toBeNull();
+
+    fireEvent.error(providerLogo.querySelector('img')!);
+
+    expect(screen.getByRole('img', { name: 'DeepSeek' })).toBeVisible();
+    expect(screen.getByText('DS', { exact: true })).toBeVisible();
+  });
+
   it('applies agent amr + model deepseek-v4-flash and pulses the chip without opening the picker', () => {
     vi.useFakeTimers();
     const onUseCampaignModel = vi.fn();
@@ -134,27 +149,32 @@ describe('the modal never re-opens for a seen campaign (no URL override left)', 
   });
 });
 
-describe('unpaid Go path opens public Pricing', () => {
-  it('renders the complete modal and accessible labels from the active locale', () => {
-    const copy = getGoPlanCampaignCopy('fr');
-
+describe('unpaid DeepSeek path opens public Pricing', () => {
+  it('renders the DeepSeek upgrade offer without any Go campaign content', () => {
     render(
-      <I18nProvider initial="fr">
+      <I18nProvider initial="en">
         <DeepSeekV4FlashCampaign audience="unpaid" active />
       </I18nProvider>,
     );
 
-    expect(screen.getByRole('button', { name: copy.closeAria })).toBeVisible();
-    expect(screen.getByText(copy.newBadge, { exact: true })).toBeVisible();
-    expect(screen.getByText(copy.eyebrow, { exact: true })).toBeVisible();
-    expect(screen.getByRole('heading', { name: copy.headline })).toBeVisible();
-    expect(screen.getByText(copy.description, { exact: true })).toBeVisible();
-    expect(screen.getByRole('group', { name: copy.providersAria })).toBeVisible();
-    expect(screen.getByText(copy.benefit, { exact: true })).toBeVisible();
-    expect(screen.getAllByText(copy.status, { exact: true })).toHaveLength(3);
-    expect(screen.getByText(copy.renewal, { exact: true })).toBeVisible();
-    expect(screen.getByText(copy.boundary, { exact: true })).toBeVisible();
-    expect(screen.getByRole('button', { name: copy.cta })).toBeVisible();
+    expect(screen.getByRole('heading', {
+      name: 'This time, put top-tier intelligence to work. Unlimited.',
+    })).toBeVisible();
+    expect(screen.getByText('Free for paid plans')).toBeVisible();
+    expect(screen.getByText('Upgrade to unlock · through Aug 27')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Upgrade and use' })).toBeVisible();
+    expect(screen.queryByText('GO', { exact: true })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^View Go plan/ })).toBeNull();
+  });
+
+  it('keeps provider identity visible when the unpaid DeepSeek logo fails to load', () => {
+    render(<DeepSeekV4FlashCampaign audience="unpaid" active />);
+
+    const providerLogo = screen.getByRole('img', { name: 'DeepSeek' });
+    fireEvent.error(providerLogo.querySelector('img')!);
+
+    expect(screen.getByRole('img', { name: 'DeepSeek' })).toBeVisible();
+    expect(screen.getByText('DS', { exact: true })).toBeVisible();
   });
 
   it('opens the locale-neutral comparison page', () => {
@@ -169,12 +189,16 @@ describe('unpaid Go path opens public Pricing', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /^View Go plan/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Upgrade and use' }));
 
     expect(open).toHaveBeenCalledTimes(1);
     const url = new URL(String(open.mock.calls[0]?.[0]));
     expect(url.origin + url.pathname).toBe('https://open-design.ai/pricing/');
     expect(url.searchParams.get('od_locale')).toBe('en');
+    expect(url.searchParams.get('od_entry_source')).toBe('deepseek_unpaid_modal');
+    expect(url.searchParams.get('od_campaign_id')).toBe('deepseek_v4_pro');
+    expect(url.searchParams.get('od_conversion_source')).toBe('deepseek_unpaid_modal');
+    expect(url.searchParams.get('od_device_id')).toBe('install-abc123');
   });
 
   it('keeps the same target without metrics consent', () => {
@@ -189,7 +213,7 @@ describe('unpaid Go path opens public Pricing', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /^View Go plan/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Upgrade and use' }));
 
     expect(open).toHaveBeenCalledTimes(1);
     const url = new URL(String(open.mock.calls[0]?.[0]));
@@ -197,22 +221,33 @@ describe('unpaid Go path opens public Pricing', () => {
     expect(url.origin + url.pathname).toBe('https://open-design.ai/pricing/');
   });
 
-  it('uses an independent frequency key from the paid DeepSeek campaign', () => {
+  it('shares the DeepSeek frequency key with the paid campaign', () => {
     vi.stubGlobal('open', vi.fn());
     render(<DeepSeekV4FlashCampaign audience="unpaid" active />);
 
-    fireEvent.click(screen.getByRole('button', { name: /^View Go plan/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Upgrade and use' }));
 
     expect(window.localStorage.getItem(
-      'open-design:campaign-seen:go-plan-launch-2026',
+      'open-design:campaign-seen:deepseek-v4-dual-unlimited-2026',
     )).toBe('1');
     expect(window.localStorage.getItem(
-      'open-design:campaign-seen:deepseek-v4-dual-unlimited-2026',
+      'open-design:campaign-seen:go-plan-launch-2026',
     )).toBeNull();
   });
 });
 
 describe('campaign modal only interrupts the active home view', () => {
+  it('keeps the shared dialog Escape behavior and records the dismissal', () => {
+    render(<DeepSeekV4FlashCampaign audience="paid" active />);
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(screen.queryByTestId(DIALOG)).toBeNull();
+    expect(window.localStorage.getItem(
+      'open-design:campaign-seen:deepseek-v4-dual-unlimited-2026',
+    )).toBe('1');
+  });
+
   it('stays silent on non-home views even when the campaign is unseen', () => {
     render(<DeepSeekV4FlashCampaign audience="paid" active={false} />);
 
@@ -261,6 +296,22 @@ describe('campaign modal only interrupts the active home view', () => {
     expect(screen.queryByTestId(DIALOG)).toBeNull();
 
     // …so returning to home within the window shows it again.
+    rerender(<DeepSeekV4FlashCampaign audience="paid" active />);
+    expect(screen.getByTestId(DIALOG)).toBeInTheDocument();
+  });
+
+  it('yields the modal slot while a higher-priority announcement is pending', () => {
+    const { rerender } = render(
+      <DeepSeekV4FlashCampaign audience="paid" active />,
+    );
+    expect(screen.getByTestId(DIALOG)).toBeInTheDocument();
+
+    rerender(<DeepSeekV4FlashCampaign audience="unknown" active />);
+    expect(screen.queryByTestId(DIALOG)).toBeNull();
+    expect(window.localStorage.getItem(
+      'open-design:campaign-seen:deepseek-v4-dual-unlimited-2026',
+    )).toBeNull();
+
     rerender(<DeepSeekV4FlashCampaign audience="paid" active />);
     expect(screen.getByTestId(DIALOG)).toBeInTheDocument();
   });

@@ -44,7 +44,9 @@ describe('EntryNavRail analytics', () => {
     fireEvent.click(screen.getByTestId('entry-nav-community'));
     fireEvent.click(screen.getByTestId('entry-nav-design-systems'));
     fireEvent.click(screen.getByTestId('entry-nav-plugins'));
-    fireEvent.click(screen.getByTestId('entry-nav-search'));
+    // The search button left the rail for the chrome row (WorkspaceTabsBar),
+    // which tracks its own click; the rail no longer renders it.
+    expect(screen.queryByTestId('entry-nav-search')).toBeNull();
     fireEvent.click(screen.getByTestId('entry-settings-button'));
 
     expect(analytics.track).toHaveBeenCalledWith('ui_click', expect.objectContaining({
@@ -60,11 +62,6 @@ describe('EntryNavRail analytics', () => {
     expect(analytics.track).toHaveBeenCalledWith('ui_click', expect.objectContaining({
       area: 'entry_nav',
       target: 'plugins',
-    }), undefined);
-    expect(analytics.track).toHaveBeenCalledWith('ui_click', expect.objectContaining({
-      area: 'entry_nav',
-      element: 'search',
-      target: 'search',
     }), undefined);
     expect(analytics.track).toHaveBeenCalledWith('ui_click', expect.objectContaining({
       area: 'account_menu',

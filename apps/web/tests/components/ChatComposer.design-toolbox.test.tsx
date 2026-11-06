@@ -233,9 +233,8 @@ describe('ChatComposer design toolbox', () => {
       });
 
       const search = await waitFor(() => {
-        const input = document.querySelector<HTMLInputElement>(
-          '.composer-plugins-standalone-popup input',
-        );
+        const input = screen.getByTestId('composer-plugins-popup')
+          .querySelector<HTMLInputElement>('input');
         expect(input).toBeTruthy();
         return input!;
       });
@@ -246,7 +245,7 @@ describe('ChatComposer design toolbox', () => {
         fireEvent.keyDown(document, { key: 'Escape' });
       });
 
-      expect(document.querySelector('.composer-plugins-standalone-popup')).toBeNull();
+      expect(screen.queryByTestId('composer-plugins-popup')).toBeNull();
       expect(document.activeElement).toBe(opener);
     } finally {
       opener.remove();

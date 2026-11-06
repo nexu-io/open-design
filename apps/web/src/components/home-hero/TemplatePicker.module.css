@@ -1,0 +1,73 @@
+.switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.switcher:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+/* The capsule owns the surface. Global button:disabled must not paint a
+   second gray button inside it while the catalog or a selection is pending. */
+.picker .switcher:disabled {
+  background: transparent;
+  color: inherit;
+  box-shadow: none;
+  cursor: default;
+  opacity: 0.5;
+}
+
+.picker .switcher:hover:not(:disabled) { background: transparent; }
+
+.picker :global(.home-hero__footer-select-menu) {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  top: calc(100% + 7px);
+  bottom: auto;
+}
+
+.picker[data-field-name='template'] :global(.home-hero__footer-select-menu) :global(.home-hero__footer-select-item.is-selected),
+.picker[data-field-name='template'] :global(.home-hero__footer-select-menu) :global(.home-hero__footer-select-item:hover),
+.picker[data-field-name='template'] :global(.home-hero__footer-select-menu) :global(.home-hero__footer-select-item:focus-visible) {
+  background: color-mix(in srgb, var(--bg-subtle) 78%, var(--bg-panel));
+  color: var(--text);
+}
+
+.picker[data-type] { padding-inline: 9.5px 12px; }
+.picker[data-type] :global(.home-hero__template-trigger) { gap: 8px; }
+.picker .switcher { gap: 4px; min-width: 0; }
+.picker .clear {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  /* Keep the 24px click target while giving its 18px glyph the same visual
+     slot and spacing as the type entry buttons. */
+  margin-inline: -3px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--brand-ink);
+  box-shadow: none;
+}
+.picker .clear:hover:not(:disabled) { background: color-mix(in srgb, var(--brand-ink) 8%, transparent); }
+.picker .clear:disabled { background: transparent; opacity: 0.5; }
+.typeGlyph, .clearGlyph {
+  transition: opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.clearGlyph { position: absolute; opacity: 0; }
+.picker:hover .clear:not(:disabled) .typeGlyph,
+.picker:focus-within .clear:not(:disabled) .typeGlyph { opacity: 0; }
+.picker:hover .clear:not(:disabled) .clearGlyph,
+.picker:focus-within .clear:not(:disabled) .clearGlyph { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .typeGlyph, .clearGlyph { transition: none; }
+}

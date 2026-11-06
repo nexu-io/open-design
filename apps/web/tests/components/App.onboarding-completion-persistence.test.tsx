@@ -52,6 +52,7 @@ const entryViewCapture = vi.hoisted(() => ({
     options?: { throwOnError?: boolean; agentCliEnv?: AppConfig['agentCliEnv'] },
   ) => unknown),
   activeSignOut: null as null | (() => void | Promise<void>),
+  registrationActiveChange: null as null | ((active: boolean) => void),
 }));
 
 const settingsCapture = vi.hoisted(() => ({
@@ -83,6 +84,7 @@ vi.mock('../../src/components/EntryView', () => ({
     onCompleteOnboarding,
     onRefreshAgents,
     onSignedOut,
+    onRegistrationInviteActiveChange,
   }: {
     config: AppConfig;
     onAgentChange: (agentId: string) => void;
@@ -91,19 +93,25 @@ vi.mock('../../src/components/EntryView', () => ({
       options?: { throwOnError?: boolean; agentCliEnv?: AppConfig['agentCliEnv'] },
     ) => unknown;
     onSignedOut: () => void | Promise<void>;
+    onRegistrationInviteActiveChange?: (active: boolean) => void;
   }) => {
     entryViewCapture.firstAgentChange ??= onAgentChange;
     entryViewCapture.firstCompleteOnboarding ??= onCompleteOnboarding;
     entryViewCapture.firstRefreshAgents ??= onRefreshAgents;
     entryViewCapture.activeSignOut = onSignedOut;
+    entryViewCapture.registrationActiveChange = onRegistrationInviteActiveChange ?? null;
     return (
       <>
         <div data-testid="onboarding-completed">{String(config.onboardingCompleted)}</div>
         <div data-testid="agent-id">{String(config.agentId ?? 'none')}</div>
+        <div data-testid="api-key">{config.apiKey}</div>
+        <div data-testid="api-model">{config.model}</div>
       </>
     );
   },
 }));
+
+vi.mock('../../src/components/PrivacyConsentModal', () => ({ PrivacyConsentModal: () => <div data-testid="privacy-consent">Privacy consent</div> }));
 
 vi.mock('../../src/components/ProjectView', () => ({
   ProjectView: () => <div>Project view</div>,
@@ -259,6 +267,7 @@ describe('App onboarding completion persistence', () => {
     entryViewCapture.firstCompleteOnboarding = null;
     entryViewCapture.firstRefreshAgents = null;
     entryViewCapture.activeSignOut = null;
+    entryViewCapture.registrationActiveChange = null;
     settingsCapture.resetOnboarding = null;
     mockedDaemonIsLive.mockResolvedValue(true);
     mockedFetchAgentsStream.mockResolvedValue([]);
@@ -285,7 +294,7 @@ describe('App onboarding completion persistence', () => {
     vi.clearAllMocks();
   });
 
-  it('clears only execution and onboarding state for an active Cloud sign-out', () => {
+  it('preserves local BYOK configuration across an active Cloud sign-out', () => {
     const current = {
       ...returningUserConfig(),
       mode: 'api',
@@ -333,27 +342,74 @@ describe('App onboarding completion persistence', () => {
       agentModels: {},
       agentCliEnv: {},
       agentCliEnvIntent: {},
-      apiKey: '',
-      apiProtocol: 'anthropic',
-      apiVersion: '',
-      baseUrl: 'https://api.anthropic.com',
-      model: 'claude-sonnet-4-5',
-      apiProviderBaseUrl: 'https://api.anthropic.com',
-      apiProtocolConfigs: {},
-      byokImageModel: undefined,
-      byokVideoModel: undefined,
-      byokSpeechModel: undefined,
-      byokSpeechVoice: undefined,
-      byokProviderConfigDrafts: {},
-      byokPendingProviderKey: undefined,
-      maxTokens: undefined,
+      apiKey: 'secret',
+      apiProtocol: 'openai',
+      apiVersion: '2026-01-01',
+      baseUrl: 'https://example.com/v1',
+      model: 'private-model',
+      apiProviderBaseUrl: 'https://example.com/v1',
+      apiProtocolConfigs: {
+        openai: {
+          apiKey: 'secret',
+          baseUrl: 'https://example.com/v1',
+          model: 'private-model',
+        },
+      },
+      byokImageModel: 'private-image-model',
+      byokVideoModel: 'private-video-model',
+      byokSpeechModel: 'private-speech-model',
+      byokSpeechVoice: 'private-voice',
+      byokProviderConfigDrafts: {
+        'openai:https://example.com/v1': {
+          apiConfig: {
+            apiKey: 'draft-secret',
+            baseUrl: 'https://example.com/v1',
+            model: 'draft-model',
+          },
+          maxTokens: 8192,
+        },
+      },
+      byokPendingProviderKey: 'openai:https://example.com/v1',
+      maxTokens: 12345,
       designSystemId: 'keep-design-system',
       telemetry: { metrics: false, content: false },
     });
   });
 
-  it('persists the cleared execution state and returns to onboarding after active sign-out', async () => {
-    mockedLoadConfig.mockReturnValue(returningUserConfig());
+  it('keeps the selected AMR environment when signing out to use another account', () => {
+    const current = {
+      ...returningUserConfig(),
+      agentCliEnv: {
+        amr: {
+          OPEN_DESIGN_AMR_PROFILE: 'test',
+          VELA_RUNTIME_KEY: 'account-a-key',
+          VELA_LINK_URL: 'https://account-a.example',
+        },
+      },
+    } as AppConfig;
+
+    expect(resetExecutionConfigAfterSignOut(current).agentCliEnv).toEqual({
+      amr: { OPEN_DESIGN_AMR_PROFILE: 'test' },
+    });
+  });
+
+  it('persists the Cloud reset without discarding BYOK and returns to onboarding', async () => {
+    mockedLoadConfig.mockReturnValue({
+      ...returningUserConfig(),
+      mode: 'api',
+      apiKey: 'persisted-key',
+      apiProtocol: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-5',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+      apiProtocolConfigs: {
+        openai: {
+          apiKey: 'persisted-key',
+          baseUrl: 'https://api.openai.com/v1',
+          model: 'gpt-5',
+        },
+      },
+    });
     mockedFetchDaemonConfig.mockResolvedValue({ onboardingCompleted: true });
 
     render(<App />);
@@ -367,18 +423,50 @@ describe('App onboarding completion persistence', () => {
 
     expect(screen.getByTestId('onboarding-completed').textContent).toBe('false');
     expect(screen.getByTestId('agent-id').textContent).toBe('none');
+    expect(screen.getByTestId('api-key').textContent).toBe('persisted-key');
+    expect(screen.getByTestId('api-model').textContent).toBe('gpt-5');
     expect(mockedSyncConfigToDaemon).toHaveBeenLastCalledWith(
       expect.objectContaining({
         onboardingCompleted: false,
         mode: 'daemon',
         agentId: null,
-        apiKey: '',
+        apiKey: 'persisted-key',
+        model: 'gpt-5',
         agentModels: {},
-        apiProtocolConfigs: {},
+        apiProtocolConfigs: {
+          openai: {
+            apiKey: 'persisted-key',
+            baseUrl: 'https://api.openai.com/v1',
+            model: 'gpt-5',
+          },
+        },
       }),
       { allowOnboardingReset: true },
     );
     expect(await navigatedToOnboarding()).toBe(true);
+  });
+
+  it('persists the selected AMR environment through active sign-out', async () => {
+    const agentCliEnv = {
+      amr: { OPEN_DESIGN_AMR_PROFILE: 'test', VELA_RUNTIME_KEY: 'account-a-key' },
+    };
+    mockedLoadConfig.mockReturnValue({ ...returningUserConfig(), agentCliEnv });
+    mockedFetchDaemonConfig.mockResolvedValue({ onboardingCompleted: true, agentCliEnv });
+
+    render(<App />);
+    await waitFor(() => {
+      expect(entryViewCapture.activeSignOut).toEqual(expect.any(Function));
+    });
+    await act(async () => {
+      await entryViewCapture.activeSignOut?.();
+    });
+
+    expect(mockedSyncConfigToDaemon).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        agentCliEnv: { amr: { OPEN_DESIGN_AMR_PROFILE: 'test' } },
+      }),
+      { allowOnboardingReset: true },
+    );
   });
 
   it('keeps a completed user out of onboarding when the daemon copy still says false', async () => {
@@ -572,4 +660,13 @@ describe('App onboarding completion persistence', () => {
     expect(mockedFetchDaemonConfig).toHaveBeenCalledTimes(1);
     expect(await navigatedToOnboarding()).toBe(false);
   });
+  it('defers consent while the actual registration surface is active and restores disclosure after exit', async () => {
+    const config = returningUserConfig(); mockedLoadConfig.mockReturnValue(config);
+    mockedFetchDaemonConfig.mockResolvedValue(config); mockedSyncConfigToDaemon.mockResolvedValue(undefined);
+    render(<App />); await screen.findByTestId('privacy-consent');
+    expect(entryViewCapture.registrationActiveChange).toBeTypeOf('function');
+    act(() => entryViewCapture.registrationActiveChange?.(true)); expect(screen.queryByTestId('privacy-consent')).toBeNull();
+    act(() => entryViewCapture.registrationActiveChange?.(false)); expect(screen.getByTestId('privacy-consent')).toBeTruthy();
+  });
+
 });

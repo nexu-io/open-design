@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { pickHomeTemplate } from '../helpers/home-template-picker';
 
 // Static prompt-example cards must show the Send cue too.
 //
@@ -80,7 +81,6 @@ describe('use-with-query send pulse gating', () => {
             projects={[]}
             onSubmit={() => undefined}
             onOpenProject={() => undefined}
-            onViewAllProjects={() => undefined}
             promptHandoff={createPluginUseHandoff(1, 'required-input-plugin', {
               action: 'use-with-query',
             })}
@@ -122,17 +122,15 @@ describe('static prompt-example send pulse', () => {
           projects={[]}
           onSubmit={() => undefined}
           onOpenProject={() => undefined}
-          onViewAllProjects={() => undefined}
         />
       </I18nProvider>,
     );
 
     // #5517 removed the inline template rail; templates are picked from the
     // composer footer's radial Template picker.
-    fireEvent.click(await screen.findByTestId('home-hero-template-trigger'));
     // The chip's default plugin exists (so the chip binds) but no plugin
     // matches the example filter → fallback static prompt-example cards.
-    fireEvent.click(await screen.findByTestId('home-hero-template-wedge-prototype'));
+    await pickHomeTemplate('prototype');
     const exampleCards = await screen.findAllByTestId('home-hero-prompt-example');
     const firstExample = exampleCards[0];
     if (!firstExample) throw new Error('expected at least one prompt-example card');

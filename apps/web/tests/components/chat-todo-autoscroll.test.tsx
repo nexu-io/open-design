@@ -295,70 +295,23 @@ function chatPaneEl(messages: ChatMessage[]) {
   );
 }
 
-describe('composer-pinned Todo snapshot', () => {
-  it('renders one Todo card above the composer and none in message history', async () => {
-    render(chatPaneEl(messagesWithTodo(3)));
+describe('Todo 清单只出现一次(B17)', () => {
+  /*
+   * 钉在输入框上方的那张 TodoCard 已经退场:同一份清单不再显示两处,
+   * 它现在只在执行记录里以「执行计划 · N 步」+ 分段出现(D29 / 组件 7)。
+   *
+   * 这一组原来有四条钉卡专属断言,连同被删的组件一起作废。留下的是**仍然成立的那条不变量**:
+   * 一份快照在屏幕上只画一次。
+   *
+   * ⚠️ 随钉卡一起消失的还有「继续未完成任务」那颗按钮 —— 它是已上线能力,
+   * 稿子没画它该搬去哪,记为 T33,**未解决前不提测**。这里不为它写测试,
+   * 因为「它现在没有入口」不是我们想固化的行为。
+   */
+  it('输入框上方不再有钉住的清单卡', async () => {
+    const { container } = render(chatPaneEl(messagesWithTodo(4)));
     await flushFrames();
-
-    const todoCard = document.querySelector('.chat-pinned-todo .op-card.op-todo');
-    expect(todoCard).not.toBeNull();
-    expect(document.querySelector('.chat-log .op-card.op-todo')).toBeNull();
-    expect(screen.queryAllByText('Task 1').length).toBeGreaterThan(0);
-  });
-
-  it('keeps one pinned card and updates it from the latest snapshot', async () => {
-    render(chatPaneEl(messagesWithTwoTodoSnapshots()));
-    await flushFrames();
-
-    expect(document.querySelectorAll('.chat-pinned-todo .op-card.op-todo')).toHaveLength(1);
-    expect(document.querySelector('.chat-log .op-card.op-todo')).toBeNull();
-    expect(screen.queryAllByText('Task 2 updated').length).toBeGreaterThan(0);
-  });
-
-  it('collapses a completed snapshot to one summary row and remains expandable', async () => {
-    render(chatPaneEl(messagesWithTodoThenDone()));
-    await flushFrames();
-
-    const toggle = document.querySelector<HTMLButtonElement>('.chat-pinned-todo .op-todo-toggle');
-    expect(toggle?.getAttribute('aria-expanded')).toBe('false');
-    expect(document.querySelector('.chat-pinned-todo .op-todo-done')).toBeNull();
-    fireEvent.click(toggle!);
-    expect(toggle?.getAttribute('aria-expanded')).toBe('true');
-    expect(screen.queryAllByText('Task 1 updated').length).toBeGreaterThan(0);
-  });
-
-  it('keeps the todo card rendered when virtualization omits the original TodoWrite row from the tail window', async () => {
-    geom = { scrollHeight: 20000, clientHeight: 400, scrollTop: 20000 };
-    render(chatPaneEl(longConversationWithEarlyTodo()));
-    await flushFrames();
-
-    expect(document.querySelector('[data-testid="chat-virtual-spacer"]')).not.toBeNull();
-    expect(document.querySelectorAll('.chat-pinned-todo .op-card.op-todo')).toHaveLength(1);
-    expect(document.querySelector('.chat-log .op-card.op-todo')).toBeNull();
-    expect(screen.queryAllByText('Task 1').length).toBeGreaterThan(0);
-  });
-
-  it('scrolls to the bottom when pinned and the Todo card grows', async () => {
-    // Start pinned: scrollTop == scrollHeight (user is at the very bottom).
-    geom = { scrollHeight: 1000, clientHeight: 400, scrollTop: 1000 };
-    render(chatPaneEl(messagesWithTodo(2)));
-    await flushFrames();
-
-    // The initial-bottom-scroll effect fires and confirms pinnedToBottomRef = true.
-    // Now simulate the pinned Todo surface growing.
-    // The ResizeObserver callback should fire followLatestIfPinned, which snaps
-    // scrollTop back to scrollHeight.
-    geom = { ...geom, clientHeight: 300, scrollHeight: 1000, scrollTop: 600 };
-
-    await act(async () => {
-      const callbacks = [...resizeCallbacks];
-      callbacks.forEach((callback) => callback([], {} as ResizeObserver));
-      await Promise.resolve();
-    });
-    await flushFrames();
-
-    // followLatestIfPinned fires from the shared callback and snaps scrollTop
-    // to scrollHeight (1000).
-    expect(geom.scrollTop).toBe(1000);
+    // 同上,按类名查是对的:B17 让钉在输入框上方的清单卡退场,
+    // 这一条钉的就是那块 DOM 不许回来。
+    expect(container.querySelector('.chat-pinned-todo')).toBeNull();
   });
 });

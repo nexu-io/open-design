@@ -1,7 +1,11 @@
+import { workspaceIdentityCacheKey } from '../../src/collab/workspace-identity';
+import { workspaceContextFixture } from '../helpers/workspace-context';
+
 import { describe, expect, it } from 'vitest';
 
 import {
   AMR_AUTH_RETRY_CONTINUATION_TTL_MS,
+  amrAuthRetryMatchesRouteContext,
   canConsumeAmrAuthRetryContinuation,
   routeStillMatchesAmrAuthRetryContinuation,
   type AmrAuthRetryContinuation,
@@ -172,6 +176,80 @@ describe('AMR auth retry continuation', () => {
     })).toBe(false);
     expect(routeStillMatchesAmrAuthRetryContinuation(pending, {
       kind: 'home',
+    })).toBe(false);
+  });
+});
+
+
+describe('AMR retry across project-scope and route-directory projections', () => {
+  const scope = workspaceContextFixture({
+    workspaceId: 'workspace-a',
+    workspaceType: 'personal',
+    workspaceMemberId: 'member-a',
+    role: 'member',
+  });
+  const owner = { ...scope, role: 'owner' as const };
+  const armed: AmrAuthRetryContinuation = {
+    ...pending,
+    workspaceIdentityKey: workspaceIdentityCacheKey(scope),
+    workspacePrincipal: {
+      workspaceId: scope.workspaceId,
+      workspaceType: scope.workspaceType,
+      workspaceMemberId: scope.workspaceMemberId,
+    },
+  };
+
+  it('preserves the same active principal across member and owner projections', () => {
+    expect(workspaceIdentityCacheKey(scope)).not.toBe(workspaceIdentityCacheKey(owner));
+    expect(amrAuthRetryMatchesRouteContext(armed, owner)).toBe(true);
+  });
+
+  it.each([
+    { workspaceId: 'workspace-b' },
+    { workspaceMemberId: 'member-b' },
+    { workspaceType: 'team' as const },
+  ])('rejects a different principal: %j', (changedIdentity) => {
+    expect(amrAuthRetryMatchesRouteContext(armed, { ...owner, ...changedIdentity })).toBe(false);
+  });
+
+  it('rejects a removed member even if the permission projection has not caught up', () => {
+    expect(amrAuthRetryMatchesRouteContext(armed, { ...owner, memberStatus: 'removed' })).toBe(false);
+  });
+
+  it.each(['locked', 'deleted'] as const)('rejects a %s workspace', (lifecycleState) => {
+    expect(amrAuthRetryMatchesRouteContext(armed, { ...owner, lifecycleState })).toBe(false);
+  });
+
+  it('rejects revoked write permission for an otherwise unchanged principal', () => {
+    expect(amrAuthRetryMatchesRouteContext(armed, {
+      ...owner,
+      permissions: { ...owner.permissions, canWriteSyncedFiles: false },
+    })).toBe(false);
+  });
+
+  it('does not invent a principal when the structured witness is missing', () => {
+    expect(amrAuthRetryMatchesRouteContext({ ...armed, workspacePrincipal: null }, owner)).toBe(false);
+    expect(amrAuthRetryMatchesRouteContext({
+      ...armed,
+      workspacePrincipal: { ...scope, workspaceMemberId: '' },
+    }, owner)).toBe(false);
+  });
+
+  it('keeps old inline continuations on their original exact-key boundary', () => {
+    const legacy = { ...armed };
+    delete legacy.workspacePrincipal;
+    expect(amrAuthRetryMatchesRouteContext(legacy, scope)).toBe(true);
+    expect(amrAuthRetryMatchesRouteContext(legacy, owner)).toBe(false);
+  });
+
+  it('still requires the exact project-scope permission snapshot when consuming', () => {
+    expect(canConsumeAmrAuthRetryContinuation(armed, {
+      ...matchingCandidate,
+      workspaceIdentityKey: workspaceIdentityCacheKey(scope),
+    })).toBe(true);
+    expect(canConsumeAmrAuthRetryContinuation(armed, {
+      ...matchingCandidate,
+      workspaceIdentityKey: workspaceIdentityCacheKey(owner),
     })).toBe(false);
   });
 });

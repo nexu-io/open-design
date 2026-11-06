@@ -326,7 +326,7 @@ open-design/
 
 ## Fehlerbehebung
 
-- **"no agents found on PATH"** — installieren Sie eine der in [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts) registrierten lokalen Runtimes, stellen Sie sicher, dass der daemon deren Executable findet, und verwenden Sie danach **Rescan** unter **Settings → Execution mode**. Alternativ konfigurieren Sie in den Einstellungen eine BYOK-Runtime.
+- **"no agents found on PATH"** — installieren Sie eine der in [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts) registrierten lokalen Runtimes, stellen Sie sicher, dass der daemon deren Executable findet, und verwenden Sie danach **Rescan** unter **Models & providers → Local CLI**. Alternativ konfigurieren Sie in den Einstellungen eine BYOK-Runtime.
 - **daemon 500 on /api/chat** — prüfen Sie das daemon-Terminal und den stderr-Auszug; meist hat die CLI ihre Argumente abgelehnt. Unterschiedliche CLIs haben unterschiedliche argv-Formen; prüfen Sie die passende Definition unter `apps/daemon/src/runtimes/defs/`, falls Sie nachjustieren müssen.
 - **media generation says `OD_BIN` is missing or daemon URL is `:0`** — führen Sie die Media Dispatcher Checks oben aus. Setzen Sie keine alte CLI-Session fort; öffnen Sie das Projekt aus der OpenDesign App neu, damit der daemon frische `OD_*` Variablen injiziert.
 - **Codex lädt zu viel Plugin-Kontext** — starten Sie OpenDesign mit `OD_CODEX_DISABLE_PLUGINS=1 pnpm tools-dev`, damit vom daemon gestartete Codex-Prozesse mit `--disable plugins` laufen.

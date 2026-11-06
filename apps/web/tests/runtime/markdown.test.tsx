@@ -62,6 +62,31 @@ describe('renderMarkdown', () => {
     expect(out).toContain('>here</a>');
   });
 
+  it('renders angle-wrapped destinations that contain spaces', () => {
+    const out = html(
+      '打开 [index.html](</Users/me/Library/Application Support/Open Design/project/index.html>)',
+    );
+
+    expect(out).toContain('<a class="md-link"');
+    expect(out).toContain('href="/Users/me/Library/Application Support/Open Design/project/index.html"');
+    expect(out).toContain('>index.html</a>');
+    expect(out).not.toContain('[index.html]');
+  });
+
+  it('keeps relative project links but renders executable schemes as inert text', () => {
+    const relative = html('Open [brief](docs/brief.md).');
+    expect(relative).toContain('href="docs/brief.md"');
+    const windowsPath = html('Open [Dockerfile](C:/Users/me/project/Dockerfile).');
+    expect(windowsPath).toContain('href="C:/Users/me/project/Dockerfile"');
+
+    for (const href of ['javascript:alert(1)', 'vbscript:msgbox(1)', 'file:///tmp/secret']) {
+      const out = html(`[unsafe](${href})`);
+      expect(out).not.toContain('<a');
+      expect(out).not.toContain('href=');
+      expect(out).toContain('unsafe');
+    }
+  });
+
   it('marks bare URLs with the bare-link class so CSS can apply URL-specific wrapping', () => {
     const out = html('See https://example.com/very/long/path?with=long&query=string');
     expect(out).toContain('md-link-bare');

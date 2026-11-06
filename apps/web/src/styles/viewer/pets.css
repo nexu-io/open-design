@@ -527,7 +527,7 @@
   line-height: 1;
 }
 .composer-pet-label {
-  font-weight: 500;
+  font-weight: 600;
 }
 .composer-pet-menu {
   position: absolute;
@@ -1032,7 +1032,7 @@
   min-width: 0;
 }
 .composer-tools-row-body strong {
-  font-weight: 500;
+  font-weight: 600;
   font-size: 12px;
 }
 .composer-tools-row-meta {
@@ -1261,7 +1261,7 @@
 }
 .composer-ds-picker-item-title {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
 }
 .composer-ds-picker-item-summary {

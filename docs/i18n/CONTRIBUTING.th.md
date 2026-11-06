@@ -244,7 +244,11 @@ Table OVERRIDES ใน `maxTokens.ts` มีไว้สำหรับกรณ
 นอกเหนือจากนั้น:
 
 - **อย่า narrate.** ไม่มี `// import the module`, ไม่มี `// loop through items`. ถ้า code อ่านชัดอยู่แล้ว comment คือ noise. เก็บ comment ไว้ให้ intent หรือ constraint ที่ code สื่อเองไม่ได้.
-- **TypeScript** สำหรับ `apps/web/src/`. Daemon (`apps/daemon/`) เป็น plain ESM JavaScript พร้อม JSDoc เมื่อ types สำคัญ — รักษาแบบนั้น.
+- **TypeScript-first.** ใช้ TypeScript สำหรับ entrypoint, module, script, test,
+  reporter และ config ที่โปรเจกต์เป็นเจ้าของ รวมถึงโค้ดใน `apps/web/src/` และ
+  `apps/daemon/src/` ไฟล์ `.js`, `.mjs` หรือ `.cjs` ใหม่อนุญาตเฉพาะเมื่อเป็นไฟล์
+  ที่สร้างขึ้นอัตโนมัติ โค้ดของบุคคลที่สามที่รวมเข้ามา หรือจำเป็นเพื่อความเข้ากันได้
+  ที่มีการบันทึกไว้อย่างชัดเจน และต้องผ่าน `pnpm guard`
 - **ไม่มี top-level dependencies ใหม่** ถ้าไม่มี paragraph ใน PR description อธิบายว่าเราได้อะไรเทียบกับ bytes ที่ ship. Dep list ใน [`package.json`](../../package.json) เล็กโดยตั้งใจ.
 - **รัน `pnpm typecheck`** ก่อน push. CI รันอยู่แล้ว; ถ้า fail จะได้ comment "please fix".
 

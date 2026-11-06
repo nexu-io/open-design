@@ -278,4 +278,46 @@ describe('run message event persistence', () => {
       },
     ]);
   });
+
+  it('persists both tool timing endpoints so completed rows keep their duration after replay', () => {
+    db = createDb();
+    db.prepare(`INSERT INTO messages (id, content, events_json) VALUES (?, '', '[]')`)
+      .run('assistant-1');
+    const run = { id: 'run-1', assistantMessageId: 'assistant-1' };
+
+    persistRunEventToAssistantMessage(db, run, 'agent', {
+      type: 'tool_use',
+      id: 'tool-1',
+      name: 'Bash',
+      input: { command: 'sleep 1' },
+      startedAt: 1_000,
+    });
+    persistRunEventToAssistantMessage(db, run, 'agent', {
+      type: 'tool_result',
+      toolUseId: 'tool-1',
+      content: 'ok',
+      isError: false,
+      completedAt: 2_250,
+    });
+    finalizeRunMessageEvents(db, run);
+
+    const message = db.prepare(`SELECT events_json AS eventsJson FROM messages WHERE id = ?`)
+      .get('assistant-1') as { eventsJson: string };
+    expect(JSON.parse(message.eventsJson)).toEqual([
+      {
+        kind: 'tool_use',
+        id: 'tool-1',
+        name: 'Bash',
+        input: { command: 'sleep 1' },
+        startedAt: 1_000,
+      },
+      {
+        kind: 'tool_result',
+        toolUseId: 'tool-1',
+        content: 'ok',
+        isError: false,
+        completedAt: 2_250,
+      },
+    ]);
+  });
 });

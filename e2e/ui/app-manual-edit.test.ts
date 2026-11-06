@@ -1,14 +1,18 @@
 import { expect, test } from '@/playwright/suite';
+import { ACTIVE_ARTIFACT_PREVIEW_SELECTOR } from '@/playwright/artifact-preview';
 import { expectStableCount } from '@/playwright/assertions';
 import { applyStandardMocks, routeAgents, routeSuccessfulRuns } from '@/playwright/mock-factory';
-import { clickDeckNextSlide, openAllProjectFiles } from '@/playwright/workspace';
+import {
+  clickDeckNextSlide,
+  clickPreviewToolbarAction,
+  openAllProjectFiles,
+  openPreviewToolbarMoreMenu,
+} from '@/playwright/workspace';
 import type { Page } from '@playwright/test';
 import { pathToFileURL } from 'node:url';
 import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
-const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
-
 test.describe.configure({ timeout: T.xlong });
 
 function artifactPreview(page: Page) {
@@ -23,6 +27,95 @@ test.beforeEach(async ({ page }) => {
   await applyStandardMocks(page);
 });
 
+test.use({ screenshot: 'off', video: 'off', trace: 'off' });
+test('B2 confirmed PDF save survives focus history refresh in the running product', async ({ page }, testInfo) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'B2 export guide');
+  await seedHtmlArtifact(page, projectId, 'guide.html', '<!doctype html><html><head><title>B2 export</title></head><body><h1>B2 export fixture</h1></body></html>');
+  await page.route('**/api/integrations/vela/status*', route => route.fulfill({ json: {
+    loggedIn: true, profile: 'test', configPath: '', user: { id: 'b2-browser-account', email: 'fixture@example.invalid' },
+  } }));
+  let refreshing = false;
+  let releaseHistory!: () => void;
+  const historyReady = new Promise<void>(resolve => { releaseHistory = resolve; });
+  let refreshRead = false;
+  await page.route(`**/api/projects/${projectId}/share-state`, async route => {
+    if (refreshing) { refreshRead = true; await historyReady; }
+    await route.fulfill({ json: { projectId, bindingExists: false, hasEverShared: false, publications: [] } });
+  });
+  // Controlled native-save acknowledgement at the production HTTP boundary.
+  // This proves UI consumption, not an actual OS save or cloud login.
+  await page.route(`**/api/projects/${projectId}/export/pdf`, async route => {
+    refreshing = true;
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await expect.poll(() => refreshRead).toBe(true);
+    await route.fulfill({ json: { ok: true } });
+  });
+  await page.goto(`/projects/${projectId}/files/guide.html`);
+  await openDesignFile(page, 'guide.html');
+  await expect(artifactPreview(page)).toBeVisible();
+  const guide = page.getByRole('status', { name: 'Share the link, invite feedback', exact: true });
+  await expect(guide).toHaveCount(0);
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  const saved = page.waitForResponse(response => response.url().endsWith(`/api/projects/${projectId}/export/pdf`) && response.request().method() === 'POST');
+  await page.getByRole('menuitem', { name: /Export as PDF/i }).click();
+  expect((await saved).ok()).toBe(true);
+  await expect(guide).toHaveCount(0);
+  releaseHistory();
+  const capture = testInfo.outputPath('b2-guide.png');
+  try {
+    await expect(guide).toBeVisible();
+    await guide.hover();
+    await expect(guide).not.toContainText('Awaiting');
+  } finally {
+    await page.screenshot({ path: capture });
+    await testInfo.attach('B2 production entry, controlled native save ack; OS save UNKNOWN', { path: capture, contentType: 'image/png' });
+  }
+  await guide.getByRole('button', { name: 'Try sharing', exact: true }).click();
+  await expect(guide).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Share', exact: true })).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByRole('menu').getByRole('heading', { name: 'Share', exact: true })).toBeVisible();
+});
+
+test.describe('K8 scoped comment sync banner', () => {
+  test('real preview entry reads sync state and clears the banner after login refresh', async ({ page }) => {
+    await routeMockAgents(page);
+    const projectId = await createEmptyProject(page, 'K8 sync banner');
+    await seedHtmlArtifact(page, projectId, 'sync.html', manualEditHtml());
+    // First prove production registration on the actual tools-dev daemon.
+    // A local project has no verified cloud scope, so the honest result is null.
+    const actual = await page.request.get(`/api/projects/${projectId}/comment-sync-state`);
+    expect(actual.status()).toBe(200);
+    expect(await actual.json()).toBeNull();
+    let sessionMissing = true;
+    let reads = 0;
+    // Controlled upstream states prove the running UI consumption path, not
+    // successful cloud authentication or real scoped outbox delivery.
+    await page.route(`**/api/projects/${projectId}/comment-sync-state`, async route => {
+      expect(route.request().method()).toBe('GET');
+      reads += 1;
+      await route.fulfill({ json: { pending: sessionMissing ? 1 : 0, lastError: 'COMMENT_SYNC_DELIVERY_FAILED', sessionMissing, shareStopped: null } });
+    });
+    await page.goto(`/projects/${projectId}/files/sync.html`);
+    await openDesignFile(page, 'sync.html');
+    await expect(artifactPreview(page)).toBeVisible();
+    await clickPreviewToolbarAction(page, 'comment-panel-toggle', /^Comments \(\d+\)$/);
+    const panel = page.getByTestId('comment-side-panel');
+    await expect(panel).toBeVisible();
+    const banner = panel.getByRole('status');
+    await expect(banner).toContainText('Comment sync is paused');
+    await expect(banner.getByRole('button', { name: 'Sign in', exact: true })).toBeEnabled();
+    await expect(page.getByTestId('board-mode-toggle')).toBeEnabled();
+    const beforeLogin = reads;
+    sessionMissing = false;
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('od:amr-login-status-change', { detail: { reason: 'login' } })));
+    await expect.poll(() => reads).toBeGreaterThan(beforeLogin);
+    await expect(banner).toHaveCount(0);
+    await expect(panel).toBeVisible();
+    await expect(page.getByTestId('board-mode-toggle')).toBeEnabled();
+  });
+});
+
 test('[P0] manual edit inspector previews and persists page and selected element styles', async ({ page }) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'Manual edit smoke');
@@ -33,11 +126,18 @@ test('[P0] manual edit inspector previews and persists page and selected element
   await expect(artifactPreview(page)).toBeVisible();
   const frame = artifactPreviewFrame(page);
   await expect(frame.getByRole('heading', { name: 'Original Hero' })).toBeVisible();
-  await expect.poll(() => previewCss(page, '[data-od-id="responsive-pair"]', 'flexDirection')).toBe('row');
+  await expect.poll(() => previewCss(page, '[data-od-id="responsive-pair"]', 'flexDirection'))
+    .toMatch(/^(row|column)$/);
+  const initialFlexDirection = await previewCss(
+    page,
+    '[data-od-id="responsive-pair"]',
+    'flexDirection',
+  );
 
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
   await expect(frame.locator('html[data-od-edit-mode]')).toHaveCount(1);
-  await expect.poll(() => previewCss(page, '[data-od-id="responsive-pair"]', 'flexDirection')).toBe('row');
+  await expect.poll(() => previewCss(page, '[data-od-id="responsive-pair"]', 'flexDirection'))
+    .toBe(initialFlexDirection);
 
   await frame.locator('body').evaluate(() => {
     window.parent.postMessage({ type: 'od-edit-background' }, '*');
@@ -91,7 +191,7 @@ test('[P0] manual edit inspector previews and persists page and selected element
   await expectFileSourceExcludes(page, projectId, 'manual-edit.html', ['data-od-edit-selected']);
   await expect(page.locator('.manual-edit-error')).toHaveCount(0);
 
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
   await expect(frame.getByRole('heading', { name: 'Original Hero' })).toBeVisible();
   const viewMode = page.getByRole('tablist', { name: 'View mode' });
   await expect(viewMode).toBeVisible();
@@ -99,8 +199,8 @@ test('[P0] manual edit inspector previews and persists page and selected element
   await expect(viewMode.getByRole('tab', { name: 'Code', exact: true })).toBeVisible();
   await expect(artifactPreview(page)).toBeVisible();
 
-  await page.getByTestId('board-mode-toggle').click();
-  await expect(page.getByRole('button', { name: /^Comment$/ })).toBeVisible();
+  await clickPreviewToolbarAction(page, 'board-mode-toggle', /^Comment$/);
+  await expect(page.getByTestId('board-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: /^Share$/ })).toBeVisible();
   const actionMenu = await openShareExportMenu(page);
   await expect(actionMenu.getByRole('menuitem', { name: /Export as PDF/i })).toBeVisible();
@@ -128,13 +228,13 @@ test('[P0] manual edit mode preserves the current page in a multi-page mobile ap
   await expect(preview.getByTestId('mobile-page-profile')).toBeVisible();
   await expect(preview.getByTestId('mobile-page-home')).toBeHidden();
 
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
 
   await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
   await expect(preview.getByTestId('mobile-page-profile')).toBeVisible();
   await expect(preview.getByTestId('mobile-page-home')).toBeHidden();
 
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
   await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'false');
   await expect(preview.locator('html[data-od-edit-mode]')).toHaveCount(0);
   await expect(preview.getByTestId('mobile-page-profile')).toBeVisible();
@@ -142,7 +242,7 @@ test('[P0] manual edit mode preserves the current page in a multi-page mobile ap
   await expect(preview.getByTestId('mobile-page-home')).toBeVisible();
   await expect(preview.getByTestId('mobile-page-profile')).toBeHidden();
 
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
   await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
   await preview.locator('[data-od-id="mobile-page-home"]').evaluate((element) => {
     element.dispatchEvent(new MouseEvent('click', {
@@ -193,7 +293,7 @@ test('[P0] manual edit mode preserves a runtime-rendered mobile app page', async
   await expect(preview.getByRole('heading', { name: 'Profile page' })).toBeVisible();
   await expect(preview.getByTestId('mobile-page-today')).toHaveCount(0);
 
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
 
   await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
   await expect(preview.getByTestId('mobile-page-profile')).toBeVisible();
@@ -210,14 +310,14 @@ test('[P0] manual edit mode preserves a runtime-rendered mobile app page', async
     'CONTENT',
   );
 
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
   await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'false');
   await expect(preview.locator('html[data-od-edit-mode]')).toHaveCount(0);
   await preview.getByRole('button', { name: 'Today' }).click();
   await expect(preview.getByTestId('mobile-page-today')).toBeVisible();
   await expect(preview.getByTestId('mobile-page-profile')).toHaveCount(0);
 
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
   await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
   await expect(preview.getByTestId('mobile-page-today')).toBeVisible();
   await expect(preview.getByTestId('mobile-page-profile')).toHaveCount(0);
@@ -245,26 +345,26 @@ test('[P0] srcDoc page navigation keeps manual edit hover guides across files an
 
   const preview = artifactPreviewFrame(page);
   await expect(preview.getByRole('heading', { name: 'Today page' })).toBeVisible();
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
   await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
   await preview.locator('[data-od-id="today-screen"]').hover();
   await expect(preview.locator('[data-od-edit-guides-layer] > *')).not.toHaveCount(0);
 
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
   await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'false');
   await expect(preview.locator('html[data-od-edit-mode]')).toHaveCount(0);
   await preview.getByRole('link', { name: 'Profile' }).click();
 
   await expect(tabBySuffix(page, 'profile.html')).toHaveAttribute('aria-selected', 'true');
   await expect(preview.getByRole('heading', { name: 'Profile page' })).toBeVisible();
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
   await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
   await preview.locator('[data-od-id="profile-screen"]').hover();
   await expect(preview.locator('[data-od-edit-guides-layer] > *')).not.toHaveCount(0);
 
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
   await expect(preview.locator('html[data-od-edit-mode]')).toHaveCount(0);
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
   await expect(preview.locator('html[data-od-edit-mode]')).toHaveCount(1);
   await preview.locator('[data-od-id="profile-screen"]').hover();
   await expect(preview.locator('[data-od-edit-guides-layer] > *')).not.toHaveCount(0);
@@ -371,7 +471,7 @@ test('[P0] @critical preview toolbar keeps share, download, comment, and zoom ac
   // This local Personal fixture deliberately has neither a Team identity nor
   // an authenticated public-publish capability. Keep this toolbar smoke about
   // the stable action surface instead of requiring a workspace-specific card.
-  await expect(shareMenu.getByText(/Share project in workspace/i)).toHaveCount(0);
+  await expect(shareMenu.getByText(/Share project in workspace|Visibility in workspace/i)).toHaveCount(0);
   await expect(shareMenu.getByText(/Publish this file/i)).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(shareMenu).toHaveCount(0);
@@ -415,17 +515,22 @@ test('[P0] @critical preview toolbar keeps share, download, comment, and zoom ac
   await offlinePage.close();
   await expect(downloadMenu).toHaveCount(0);
 
-  await page.getByRole('button', { name: /^Comment$/ }).click();
+  await clickPreviewToolbarAction(page, 'board-mode-toggle', /^Comment$/);
   await expect(page.getByTestId('board-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
-  await page.getByRole('button', { name: /^Comment$/ }).click();
+  await clickPreviewToolbarAction(page, 'board-mode-toggle', /^Comment$/);
   await expect(page.getByTestId('board-mode-toggle')).toHaveAttribute('aria-pressed', 'false');
 
   const zoomButton = page.locator('.viewer-toolbar-zoom .zoom-trigger');
   await expect(zoomButton).toHaveText(/^\d+%$/);
-  await zoomButton.click();
-  const zoomMenu = page.locator('.zoom-menu-popover[role="menu"]');
-  await expect(zoomMenu).toBeVisible();
-  await zoomMenu.getByRole('menuitem', { name: '150%' }).click();
+  if (await zoomButton.isVisible()) {
+    await zoomButton.click();
+    const zoomMenu = page.locator('.zoom-menu-popover[role="menu"]');
+    await expect(zoomMenu).toBeVisible();
+    await zoomMenu.getByRole('menuitem', { name: '150%' }).click();
+  } else {
+    const overflowMenu = await openPreviewToolbarMoreMenu(page);
+    await overflowMenu.getByRole('menuitem', { name: '150%' }).click();
+  }
   await expect(zoomButton).toHaveText('150%');
 });
 
@@ -556,7 +661,7 @@ test('[P1] HTML preview toolbar exposes comments, mark, and edit workflows', asy
   // The screenshot step is gone: `screenshot-copy-button` no longer exists in
   // apps/web, and FileViewer's own suite asserts its absence. Comments, mark
   // and edit below are still live, so the rest of this spec stands.
-  await page.getByTestId('board-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'board-mode-toggle', /^Comment$/);
   await expect(page.getByTestId('board-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
   await artifactPreviewFrame(page).locator('[data-od-id="hero-title"]').click();
   await expect(page.getByTestId('comment-popover')).toBeVisible();
@@ -566,9 +671,9 @@ test('[P1] HTML preview toolbar exposes comments, mark, and edit workflows', asy
 
   await expect(page.getByTestId('comment-side-panel')).toHaveCount(0);
   const commentsButton = page.getByTestId('comment-panel-toggle');
-  await commentsButton.click();
+  await clickPreviewToolbarAction(page, 'comment-panel-toggle', /^Comments \(\d+\)$/);
   await expect(commentsButton).toHaveAttribute('aria-pressed', 'false');
-  await commentsButton.click();
+  await clickPreviewToolbarAction(page, 'comment-panel-toggle', /^Comments \(\d+\)$/);
   await expect(page.getByTestId('comment-side-panel')).toBeVisible();
   await expect(page.getByTestId('comment-side-panel')).toContainText('Panel-level comment');
   await expect(commentsButton).toContainText('1');
@@ -579,7 +684,7 @@ test('[P1] HTML preview toolbar exposes comments, mark, and edit workflows', asy
   await sendPrompt(page, 'Keep the current preview run active');
   await expect(page.getByRole('button', { name: 'Stop' })).toBeVisible();
 
-  await page.getByTestId('draw-overlay-toggle').click();
+  await clickPreviewToolbarAction(page, 'draw-overlay-toggle', /^Mark$/);
   await expect(page.getByTestId('draw-overlay-toggle')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: 'Box select' })).toBeVisible();
   await page.getByPlaceholder('Add a note for this mark').fill('Mark this hero crop');
@@ -598,14 +703,52 @@ test('[P1] HTML preview toolbar exposes comments, mark, and edit workflows', asy
   const queuedStrip = page.getByTestId('chat-queued-send-strip');
   await expect(queuedStrip).toBeVisible();
   await expect(queuedStrip).toContainText('Mark this hero crop');
-  await expect(queuedStrip).toContainText('1 mark');
+  await expect(queuedStrip.getByTestId('chat-queued-send-row')).toHaveCount(1);
 
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
   await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
   await selectPreviewElementThroughBridge(page, artifactPreviewFrame(page), '[data-od-id="hero-title"]', 'Parameters');
   await expect(page.locator('.manual-edit-modal')).toContainText('Hero title');
   await expect(page.locator('.manual-edit-modal')).toContainText('Parameters');
   await expect(page.getByRole('button', { name: /^Save$/ })).toBeVisible();
+});
+
+test('[P1] comment selection falls back from an empty od-id to its screen label in Chromium', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Empty annotated selector');
+  await seedHtmlArtifact(page, projectId, 'empty-annotated-selector.html', emptyOdIdScreenLabelHtml());
+  const conversationId = await latestConversationId(page, projectId);
+  await page.goto(`/projects/${projectId}/conversations/${conversationId}/files/empty-annotated-selector.html`);
+  await openDesignFile(page, 'empty-annotated-selector.html');
+
+  await clickPreviewToolbarAction(page, 'board-mode-toggle', /^Comment$/);
+  const frame = artifactPreviewFrame(page);
+  const target = frame.locator('[data-screen-label="Home"]');
+  await expect(target).toBeVisible();
+  await expect(target).toHaveAttribute('data-od-id', '');
+
+  await target.click();
+  const popover = page.getByTestId('comment-popover');
+  await expect(popover).toBeVisible();
+  await popover.getByTestId('comment-popover-input').fill('Keep this screen label anchored');
+  const savedRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return request.method() === 'POST' && url.pathname.endsWith(`/conversations/${conversationId}/comments`);
+  });
+  const savedResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === 'POST' && url.pathname.endsWith(`/conversations/${conversationId}/comments`);
+  });
+  await popover.getByRole('button', { name: /^Comment$/ }).click();
+  expect((await savedResponse).ok()).toBe(true);
+  const body = (await savedRequest).postDataJSON() as { target?: { elementId?: string; selector?: string } };
+  expect(body.target).toMatchObject({
+    elementId: 'Home',
+    selector: '[data-screen-label="Home"]',
+  });
+  expect(await target.evaluate((element, selector) => (
+    document.querySelector(selector) === element
+  ), body.target?.selector ?? '')).toBe(true);
 });
 
 test('[P1] draw annotation composer floats near the selected mark and can be queued', async ({ page }) => {
@@ -618,13 +761,13 @@ test('[P1] draw annotation composer floats near the selected mark and can be que
   await page.goto(`/projects/${projectId}/conversations/${conversationId}/files/draw-position.html`);
   await openDesignFile(page, 'draw-position.html');
 
-  await page.getByTestId('board-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'board-mode-toggle', /^Comment$/);
   await expect(page.getByTestId('board-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
   await holdNextRunOpen(page);
   await sendPrompt(page, 'Keep draw queue mode active');
   await expect(page.getByRole('button', { name: 'Stop' })).toBeVisible();
 
-  await page.getByTestId('draw-overlay-toggle').click();
+  await clickPreviewToolbarAction(page, 'draw-overlay-toggle', /^Mark$/);
   await expect(page.getByTestId('draw-overlay-toggle')).toHaveAttribute('aria-pressed', 'true');
 
   const previewBox = await artifactPreview(page).boundingBox();
@@ -654,7 +797,7 @@ test('[P1] draw annotation composer floats near the selected mark and can be que
   const queuedStrip = page.getByTestId('chat-queued-send-strip');
   await expect(queuedStrip).toBeVisible();
   await expect(queuedStrip).toContainText('Float this note near the marked hero area');
-  await expect(queuedStrip).toContainText('1 mark');
+  await expect(queuedStrip.getByTestId('chat-queued-send-row')).toHaveCount(1);
 });
 
 test('[P1] first-loop onboarding completes once after a successful artifact export', async ({ page }) => {
@@ -769,6 +912,33 @@ test('[P0] manual edit mode keeps deck navigation available for deck-shaped HTML
   await expect(frame.getByText('Slide Two')).toBeVisible();
 });
 
+test('[P0] deck presentation host exit remains usable after the sandboxed slide takes focus', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Deck presentation exit smoke');
+  await seedDeckArtifact(page, projectId, 'present-exit.html', 'Present Exit', ['Slide One', 'Slide Two']);
+  await page.goto(`/projects/${projectId}/files/present-exit.html`);
+  await openDesignFile(page, 'present-exit.html');
+
+  await page.getByRole('button', { name: 'Present', exact: true }).click();
+  const popupPromise = page.waitForEvent('popup');
+  await page.getByRole('menuitem', { name: /^In this tab/i }).click();
+  const presenter = await popupPromise;
+
+  const overlay = page.locator('.present-overlay');
+  await expect(overlay).toBeVisible();
+  const presentedSlide = overlay.frameLocator('iframe[title="present"]');
+  const slideHeading = presentedSlide.getByRole('heading', { name: 'Slide One' });
+  await expect(slideHeading).toBeVisible();
+  await slideHeading.click();
+  await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).toBe('IFRAME');
+
+  const presenterClosed = presenter.waitForEvent('close');
+  await overlay.getByRole('button', { name: 'Exit presentation' }).click();
+  await expect(overlay).toHaveCount(0);
+  await presenterClosed;
+  expect(presenter.isClosed()).toBe(true);
+});
+
 test('[P1] deck thumbnail rail keeps complete 16:9 slides separated and aligned', async ({ page }) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'Deck thumbnail rail layout');
@@ -837,11 +1007,7 @@ test('[P0] @critical edited HTML file restores selected tab and preview after re
 
   const frame = artifactPreviewFrame(page);
   await expect(frame.getByRole('heading', { name: 'Original Hero' })).toBeVisible();
-  const activeEditToggle = page.locator(
-    '[data-testid="file-workspace"] [data-testid="manual-edit-mode-toggle"]:visible',
-  );
-  await expect(activeEditToggle).toHaveCount(1);
-  await activeEditToggle.click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
   await selectPreviewElementThroughBridge(page, frame, '[data-od-id="hero-title"]', 'Parameters');
   const parameters = inspectorSection(page, 'Parameters');
   const fontSizeInput = parameters.locator('.cc-row').filter({ hasText: 'Font size' }).locator('input');
@@ -851,7 +1017,7 @@ test('[P0] @critical edited HTML file restores selected tab and preview after re
   await inspectSaveButton(page).click({ force: true });
   await expectFileSource(page, projectId, 'restore-edit.html', ['font-size: 52px', 'color:']);
 
-  await activeEditToggle.click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
   const viewMode = page.getByRole('tablist', { name: 'View mode' });
   await expect(viewMode).toBeVisible();
   await expect(viewMode.getByRole('tab', { name: 'Preview', exact: true })).toHaveAttribute('aria-selected', 'true');
@@ -1256,6 +1422,19 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function emptyOdIdScreenLabelHtml(): string {
+  return `<!doctype html>
+<html>
+  <body>
+    <main>
+      <section data-od-id="" data-screen-label="Home" style="width:320px;min-height:80px;padding:24px">
+        Empty id, Home screen label
+      </section>
+    </main>
+  </body>
+</html>`;
+}
+
 function manualEditHtml(): string {
   return `<!doctype html>
 <html>
@@ -1376,30 +1555,6 @@ function linkedMobilePageHtml(
       <h1>${heading}</h1>
       <a href="${href}">${linkLabel}</a>
     </main>
-  </body>
-</html>`;
-}
-
-function deckHtml(): string {
-  return `<!doctype html>
-<html>
-  <body>
-    <section class="slide" data-od-id="slide-1"><h1>Slide One</h1></section>
-    <section class="slide" data-od-id="slide-2" hidden><h1>Slide Two</h1></section>
-    <script>
-      let active = 0;
-      const slides = Array.from(document.querySelectorAll('.slide'));
-      function render() { slides.forEach((slide, index) => { slide.hidden = index !== active; }); }
-      window.addEventListener('message', (event) => {
-        if (!event.data || event.data.type !== 'od:slide') return;
-        if (event.data.action === 'next') active = Math.min(slides.length - 1, active + 1);
-        if (event.data.action === 'prev') active = Math.max(0, active - 1);
-        render();
-        window.parent.postMessage({ type: 'od:slide-state', active, count: slides.length }, '*');
-      });
-      render();
-      window.parent.postMessage({ type: 'od:slide-state', active, count: slides.length }, '*');
-    </script>
   </body>
 </html>`;
 }

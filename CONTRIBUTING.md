@@ -244,7 +244,10 @@ We're not pedantic about formatting (Prettier on save is fine), but two rules ar
 Beyond that:
 
 - **Don't narrate.** No `// import the module`, no `// loop through items`. If the code reads obviously, the comment is noise. Save comments for non-obvious intent or constraints the code can't express.
-- **TypeScript** for `apps/web/src/`. The daemon (`apps/daemon/`) is plain ESM JavaScript with JSDoc when types matter — keep it that way.
+- **TypeScript-first.** Keep project-owned entrypoints, modules, scripts, tests,
+  reporters, and configs in TypeScript, including code in `apps/web/src/` and
+  `apps/daemon/src/`. New `.js`, `.mjs`, or `.cjs` files need an explicit
+  generated, vendored, or compatibility reason and must pass `pnpm guard`.
 - **No new top-level dependencies** without a paragraph in the PR description on what we get vs. what bytes we ship. The dep list in [`package.json`](package.json) is small on purpose.
 - **Run `pnpm typecheck`** before pushing. CI runs it; failing it earns a "please fix" comment.
 
@@ -253,7 +256,8 @@ Beyond that:
 ## Commits & pull requests
 
 - **One concern per PR.** Adding a skill + refactoring the parser + bumping a dep is three PRs.
-- **Title is imperative + scope.** `add dating-web skill`, `fix daemon SSE backpressure when CLI hangs`, `docs: clarify storage contract`.
+- **Team PRs start with a verified Plane item.** Example: `[OPEND-3693] fix(web): restore home scrolling`. Keep the prefix when editing. Spaces are accepted; multiple consecutive identifiers link all items, but only the first receives code-line attribution. The existing PR body template remains sufficient.
+- **The Plane gate applies to internal accounts and ODCrew.** External contributors are exempt. Once enabled, `quality/plane` must pass before merging. Emergency bypass requires `lefarcen` or `mrcfps` to Approve the current commit with `quality-bypass: <specific reason>` in the review; ordinary approval does not bypass it.
 - **Use the PR template.** Fill every section of [`.github/pull_request_template.md`](.github/pull_request_template.md) — Why, What users will see, Surface area, Screenshots (if UI), Bug fix verification (if bug fix), Validation. Empty sections earn a "please fill in" reply.
 - **Body explains the why.** "What does this do" is usually obvious from the diff; "why does this need to exist" rarely is.
 - **Reference an issue** if there is one. If there isn't and the PR is non-trivial, open one first so we can agree the change is wanted before you spend the time.

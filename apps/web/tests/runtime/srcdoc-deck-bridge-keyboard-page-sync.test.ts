@@ -52,6 +52,10 @@ interface CustomDeckOptions {
   navigationLockMs?: number;
   /** Expose one artifact-owned direct-index control per slide. */
   directIndexControls?: boolean;
+  /** Keep direct-index controls visible but ignore their click handlers. */
+  ignoreDirectIndexControls?: boolean;
+  /** Advertise a canonical deck protocol version in the source document. */
+  protocolVersion?: number;
 }
 
 function setupCustomCounterDeck(options: CustomDeckOptions = {}) {
@@ -73,7 +77,10 @@ function setupCustomCounterDeck(options: CustomDeckOptions = {}) {
     </div>
     <div class="deck-pager"><span id="pager-cur">1</span> / <span id="pager-total">3</span></div>
   `;
-  const srcdoc = buildSrcdoc(`<!doctype html><html><body>${bodyHtml}</body></html>`, {
+  const protocolAttribute = options.protocolVersion == null
+    ? ''
+    : ` data-od-deck-protocol="${options.protocolVersion}"`;
+  const srcdoc = buildSrcdoc(`<!doctype html><html${protocolAttribute}><body>${bodyHtml}</body></html>`, {
     deck: true,
   });
   const script = extractDeckBridgeScript(srcdoc);
@@ -134,7 +141,7 @@ function setupCustomCounterDeck(options: CustomDeckOptions = {}) {
       const dot = win.document.createElement('button');
       dot.className = 'nav-dot';
       dot.addEventListener('click', () => {
-        if (navigationLocked) return;
+        if (options.ignoreDirectIndexControls || navigationLocked) return;
         apply(index);
         lockNavigation();
       });
@@ -334,22 +341,93 @@ describe('deck bridge - keyboard paging keeps page counters in sync', () => {
     expect(slideStatesOf(parentPostMessage).at(-1)).toMatchObject({ active: 1, count: 3 });
   });
 
-  it('jumps directly to a selected thumbnail without exposing intermediate slides', async () => {
-    const { win, parentPostMessage, track, pagerCur, visited } = setupCustomCounterDeck({
-      navigationLockMs: 120,
-      directIndexControls: true,
-    });
-    visited.length = 0;
+  it('reaches a selected thumbnail before the direct-index retry window', async () => {
+    vi.useFakeTimers();
+    try {
+      const { win, parentPostMessage, track, pagerCur, visited } = setupCustomCounterDeck({
+        directIndexControls: true,
+        ignoreDirectIndexControls: true,
+        listenOn: 'window',
+      });
+      visited.length = 0;
 
-    win.dispatchEvent(new win.MessageEvent('message', {
-      data: { type: 'od:slide', action: 'go', index: 2 },
-    }));
-    await new Promise<void>((resolve) => win.setTimeout(resolve, 100));
-    expect(track.style.transform).toBe('translateX(-200vw)');
-    expect(pagerCur.textContent).toBe('3');
-    expect(win.document.querySelectorAll('.slide')[2]?.classList.contains('is-active')).toBe(true);
-    expect(visited).toEqual([2]);
-    expect(slideStatesOf(parentPostMessage).at(-1)).toMatchObject({ active: 2, count: 3 });
+      win.dispatchEvent(new win.MessageEvent('message', {
+        data: { type: 'od:slide', action: 'go', index: 2 },
+      }));
+      await vi.advanceTimersByTimeAsync(1499);
+
+      // The authored dots deliberately ignore clicks, matching the reported
+      // legacy deck. Keyboard navigation must still reach the target before
+      // the bridge's 1.5s direct-index retry window can expire.
+      expect(track.style.transform).toBe('translateX(-200vw)');
+      expect(pagerCur.textContent).toBe('3');
+      expect(win.document.querySelectorAll('.slide')[2]?.classList.contains('is-active')).toBe(true);
+      expect(visited).toEqual([1, 2]);
+      expect(slideStatesOf(parentPostMessage).at(-1)).toMatchObject({ active: 2, count: 3 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('retries a proven keyboard path through an authored transition lock', async () => {
+    vi.useFakeTimers();
+    try {
+      const { win, parentPostMessage, track, pagerCur, visited } = setupCustomCounterDeck({
+        navigationLockMs: 120,
+        directIndexControls: true,
+        ignoreDirectIndexControls: true,
+        listenOn: 'window',
+      });
+      visited.length = 0;
+
+      win.dispatchEvent(new win.MessageEvent('message', {
+        data: { type: 'od:slide', action: 'go', index: 2 },
+      }));
+      await vi.advanceTimersByTimeAsync(499);
+
+      expect(track.style.transform).toBe('translateX(-200vw)');
+      expect(pagerCur.textContent).toBe('3');
+      expect(win.document.querySelectorAll('.slide')[2]?.classList.contains('is-active')).toBe(true);
+      expect(visited).toEqual([1, 2]);
+      expect(slideStatesOf(parentPostMessage).at(-1)).toMatchObject({ active: 2, count: 3 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('ignores future-version bridge commands while accepting legacy and v1 navigation', async () => {
+    vi.useFakeTimers();
+    try {
+      const { win, track, pagerCur, visited } = setupCustomCounterDeck({
+        listenOn: 'window',
+        protocolVersion: 1,
+      });
+      visited.length = 0;
+
+      win.dispatchEvent(new win.MessageEvent('message', {
+        data: { type: 'od:slide', action: 'go', index: 2, protocolVersion: 2 },
+      }));
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(track.style.transform).toBe('translateX(-0vw)');
+      expect(pagerCur.textContent).toBe('1');
+      expect(visited).toEqual([]);
+
+      win.dispatchEvent(new win.MessageEvent('message', {
+        data: { type: 'od:slide', action: 'next' },
+      }));
+      await vi.advanceTimersByTimeAsync(100);
+      expect(pagerCur.textContent).toBe('2');
+
+      win.dispatchEvent(new win.MessageEvent('message', {
+        data: { type: 'od:slide', action: 'next', protocolVersion: 1 },
+      }));
+      await vi.advanceTimersByTimeAsync(100);
+      expect(track.style.transform).toBe('translateX(-200vw)');
+      expect(pagerCur.textContent).toBe('3');
+      expect(visited).toEqual([1, 2]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps keyboard-only deck state in sync across direct selection and later paging', async () => {
@@ -420,7 +498,9 @@ describe('deck bridge - keyboard paging keeps page counters in sync', () => {
     expect(track.style.transform).toBe('translateX(-0vw)');
     expect(pagerCur.textContent).toBe('1');
     expect(win.document.querySelectorAll('.slide')[0]?.classList.contains('is-active')).toBe(true);
-    expect(visited).toEqual([2, 0]);
+    // The second selection arrives before the document-listener probe has
+    // moved at all, so it cancels the stale jump and keeps slide 1 selected.
+    expect(visited).toEqual([]);
     expect(slideStatesOf(parentPostMessage).at(-1)).toMatchObject({ active: 0, count: 3 });
   });
 

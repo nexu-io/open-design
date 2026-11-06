@@ -1,4 +1,8 @@
 import { expect, test } from '@/playwright/suite';
+import {
+  ACTIVE_ARTIFACT_PREVIEW_SELECTOR,
+  settledActiveArtifactPreview,
+} from '@/playwright/artifact-preview';
 import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
 import {
   applyStandardMocks,
@@ -6,17 +10,22 @@ import {
   routeSuccessfulRuns,
   successfulRunEventBody,
 } from '@/playwright/mock-factory';
-import { clickDeckNextSlide, clickDeckPreviousSlide, openAllProjectFiles } from '@/playwright/workspace';
+import {
+  clickDeckNextSlide,
+  clickDeckPreviousSlide,
+  clickPreviewToolbarAction,
+  openAllProjectFiles,
+} from '@/playwright/workspace';
 import type { Dialog, Locator, Page, Request, Response } from '@playwright/test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { T } from '@/timeouts';
+import { captureVisual } from '@/playwright/visual';
 import { automatedUiScenarios } from '@/playwright/resources';
 import type { UiScenario } from '@/playwright/resources';
 
 const STORAGE_KEY = 'open-design:config';
-const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
 const APP_OWNED_SCENARIO_FLOWS = new Set([
   'design-files-upload',
   'design-files-delete',
@@ -59,6 +68,13 @@ function stagedAttachmentName(page: Page, name: string): Locator {
   return page
     .locator('[data-testid="staged-attachments"], [data-testid="staged-contexts"]')
     .getByText(name, { exact: true });
+}
+
+/** Opt-in visual evidence from this real daemon-backed browser flow. */
+async function captureLane4CommentState(page: Page, state: string): Promise<void> {
+  if (!process.env.OD_VISUAL_OUTPUT_DIR) return;
+  test.setTimeout(120_000);
+  await captureVisual(page, `lane4-${state}`);
 }
 
 test.beforeEach(async ({ page }) => {
@@ -166,6 +182,7 @@ for (const entry of automatedUiScenarios().filter(
     if (
       entry.flow === 'question-form-single-selection'
       || entry.flow === 'question-form-submit-persistence'
+      || entry.flow === 'question-form-single-answer'
     ) {
       await routeSuccessfulRuns(page, { runIdPrefix: 'mock-run' });
     }
@@ -225,6 +242,10 @@ for (const entry of automatedUiScenarios().filter(
     }
     if (entry.flow === 'question-form-single-selection') {
       await runQuestionFormSingleSelectionFlow(page, entry);
+      return;
+    }
+    if (entry.flow === 'question-form-single-answer') {
+      await runQuestionFormSingleAnswerFlow(page, entry);
       return;
     }
     if (entry.flow === 'question-form-submit-persistence') {
@@ -324,24 +345,313 @@ test('[P0] sending preview comments opens the refreshed follow-up artifact', asy
   const projectId = await createEmptyProject(page, 'Comment preview follow-up');
   await expectWorkspaceReady(page);
 
-  await seedHtmlArtifact(page, projectId, entry.mockArtifact.fileName, entry.mockArtifact.html);
+  // Real custom-element markup exercises the bridge's tag-name label without
+  // injecting a synthetic comment target or changing the live product DOM.
+  const longCommentTag = 'project-overview-section-with-an-intentionally-long-component-name';
+  const initialHtml = entry.mockArtifact.html
+    .replace('<h1 ', `<${longCommentTag} style="display:block;font-size:32px;font-weight:700" `)
+    .replace('</h1>', `</${longCommentTag}>`);
+  await seedHtmlArtifact(page, projectId, entry.mockArtifact.fileName, initialHtml);
   await page.reload();
   await expectWorkspaceReady(page);
   await page.goto(`/projects/${projectId}/files/${entry.mockArtifact.fileName}`, { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
   await expect(artifactPreview(page)).toBeVisible();
 
-  await page.getByTestId('board-mode-toggle').click();
-  await page.getByTestId('comment-panel-toggle').click();
-  await clickCommentTargetInPreview(page, '[data-od-id="hero-title"]');
-  await expect(page.getByTestId('comment-popover')).toBeVisible();
-  await page.getByTestId('comment-popover-input').fill('Make the headline more specific.');
-  await page.getByTestId('comment-popover-save').click();
-  await expect(page.getByTestId('comment-saved-marker-hero-title')).toBeVisible();
-
+  const commentEntry = page.getByTestId('comment-panel-toggle');
+  await expect(commentEntry).toHaveAttribute('aria-pressed', 'false');
+  for (const [property, value] of Object.entries({
+    height: '30px', 'min-width': '42px', padding: '0px 8px', gap: '5px',
+  })) {
+    await expect(commentEntry).toHaveCSS(property, value);
+  }
+  await enterPreviewCommentMode(page);
+  await expect(commentEntry).toHaveAttribute('aria-pressed', 'true');
+  await expect(commentEntry).toHaveClass(/active/);
   const sidePanel = page.getByTestId('comment-side-panel');
   await expect(sidePanel).toBeVisible();
+  await expect(sidePanel.getByTestId('comment-side-item')).toHaveCount(0);
+  await captureLane4CommentState(page, '06-panel-empty');
+  await captureLane4CommentState(page, '05-input-no-selection');
+
+  await clickCommentTargetInPreview(page, '[data-od-id="hero-title"]');
+  await expect(page.getByTestId('comment-popover')).toBeVisible();
+  const floatingComposer = page.getByTestId('comment-popover');
+  await page.setViewportSize({ width: 1600, height: 720 });
+  for (const [property, value] of Object.entries({
+    padding: '10px', 'border-radius': '8px',
+    'border-top-width': '1px', 'border-top-color': 'rgba(73, 73, 73, 0.18)',
+    'background-color': 'rgba(250, 250, 250, 0.66)', 'backdrop-filter': 'blur(28px) saturate(1.8)',
+    'box-shadow': 'rgba(28, 27, 26, 0.16) 0px 24px 60px 0px, rgba(28, 27, 26, 0.07) 0px 8px 16px 0px',
+  })) {
+    await expect(floatingComposer).toHaveCSS(property, value);
+  }
+  await expect(floatingComposer).toHaveCSS('width', '320px');
+  await expect(floatingComposer).toHaveCSS('gap', 'normal');
+  const composerTitle = floatingComposer.locator('.comment-popover-titlebar');
+  const composerBody = floatingComposer.locator('.comment-popover-body');
+  const composerActions = floatingComposer.locator('.comment-popover-actions');
+  await expect(composerTitle).toHaveCSS('margin', '-2px 0px 8px');
+  await expect(composerTitle).toHaveCSS('gap', '8px');
+  const titleLabel = composerTitle.locator('.comment-popover-title');
+  await expect(titleLabel).toHaveCSS('color', 'rgb(73, 73, 73)');
+  await expect(titleLabel).toHaveCSS('font-size', '12px');
+  await expect(titleLabel).toHaveCSS('font-weight', '600');
+  await expect(titleLabel).toHaveCSS('text-overflow', 'ellipsis');
+  await expect(titleLabel).toHaveCSS('white-space', 'nowrap');
+  await expect(titleLabel).toHaveText(longCommentTag);
+  await expect(titleLabel).toHaveAttribute('title', longCommentTag);
+  await expect.poll(() => titleLabel.evaluate(element => element.clientWidth > 0 && element.scrollWidth > element.clientWidth)).toBe(true);
+  await expect(composerTitle.getByRole('button', { name: 'Move comment box', exact: true })).toBeVisible();
+  await expect(composerTitle.getByTestId('comment-popover-view-all')).toBeVisible();
+  await expect(composerActions).toHaveCSS('margin-top', '8px');
+  await expect(composerActions).toHaveCSS('gap', '10px');
+  await expect(composerActions).toHaveCSS('flex-wrap', 'wrap');
+  await expect(floatingComposer.locator('.comment-popover-actions-end')).toHaveCSS('gap', '10px');
+  await expect(floatingComposer.locator('.comment-popover-actions-end')).toHaveCSS('flex-wrap', 'wrap');
+  const titleRect = await composerTitle.boundingBox();
+  const bodyRect = await composerBody.boundingBox();
+  const actionsRect = await composerActions.boundingBox();
+  expect(bodyRect!.y - (titleRect!.y + titleRect!.height)).toBeCloseTo(8, 0);
+  expect(actionsRect!.y - (bodyRect!.y + bodyRect!.height)).toBeCloseTo(8, 0);
+  const dragHandle = floatingComposer.getByRole('button', { name: 'Move comment box', exact: true });
+  const handleBounds = await dragHandle.boundingBox();
+  const beforeDrag = await floatingComposer.boundingBox();
+  expect(handleBounds).not.toBeNull();
+  expect(beforeDrag).not.toBeNull();
+  await page.mouse.move(handleBounds!.x + handleBounds!.width / 2, handleBounds!.y + handleBounds!.height / 2);
+  await page.mouse.down();
+  await expect(floatingComposer).toHaveClass(/comment-popover-dragging/);
+  await page.mouse.move(handleBounds!.x + handleBounds!.width / 2, handleBounds!.y + handleBounds!.height / 2 + 16, { steps: 4 });
+  await page.mouse.up();
+  await expect(floatingComposer).not.toHaveClass(/comment-popover-dragging/);
+  await expect.poll(async () => {
+    const bounds = await floatingComposer.boundingBox();
+    const delta = bounds === null ? -1 : Math.round(bounds.y - beforeDrag!.y);
+    return delta >= 0 && delta <= 16;
+  }).toBe(true);
+  await expect(titleLabel).toHaveText(await titleLabel.getAttribute('title') ?? '');
+  await test.info().attach('comment-composer-width-wide', { body: await page.screenshot(), contentType: 'image/png' });
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await expect.poll(async () => {
+    const bounds = await floatingComposer.boundingBox();
+    return bounds !== null && bounds.width > 200 && bounds.width < 300;
+  }).toBe(true);
+  const compactCard = await floatingComposer.boundingBox();
+  expect(compactCard).not.toBeNull();
+  expect(compactCard!.width).toBeGreaterThan(200);
+  expect(compactCard!.x).toBeGreaterThanOrEqual(0);
+  expect(compactCard!.x + compactCard!.width).toBeLessThanOrEqual(1280);
+  const note = floatingComposer.getByTestId('comment-popover-input');
+  for (const [property, value] of Object.entries({
+    padding: '8px 10px', 'border-radius': '4px',
+    'background-color': 'rgb(250, 250, 250)', color: 'rgb(73, 73, 73)',
+    'font-size': '14px', 'line-height': '17.5px', height: '112px', 'overflow-y': 'auto',
+  })) await expect(note).toHaveCSS(property, value);
+  await expect(note).not.toHaveAttribute('maxlength');
+  await test.info().attach('comment-composer-surface', { body: await page.screenshot(), contentType: 'image/png' });
+  await captureLane4CommentState(page, '05-input-element-selected');
+  // A floating sidebar covers the toolbar. With a composer open, hiding the
+  // sidebar preserves the selected comment tool, exposing its real hover state.
+  await sidePanel.getByRole('button', { name: 'Hide Comments', exact: true }).click();
+  await expect(sidePanel).not.toBeVisible();
+  await expect(page.getByTestId('comment-popover')).toBeVisible();
+  await expect(commentEntry).toHaveAttribute('aria-pressed', 'true');
+  await commentEntry.hover();
+  await expect(commentEntry).toHaveClass(/active/);
+  await captureLane4CommentState(page, 'r-entry-selected-hover');
+  await page.getByTestId('comment-popover-view-all').click();
+  await expect(sidePanel).toBeVisible();
+  for (const dismiss of ['escape', 'button'] as const) {
+    const imageName = `discard-${dismiss}.png`;
+    const removedImageName = `remove-${dismiss}.png`;
+    const imageFiles = [removedImageName, imageName].map(name => ({
+      name,
+      mimeType: 'image/png',
+      buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64'),
+    }));
+    await floatingComposer.locator('input[type="file"]').setInputFiles(imageFiles);
+    await expect(floatingComposer.locator('.comment-popover-image')).toHaveCount(2);
+    const removedImage = floatingComposer.getByRole('button', { name: removedImageName, exact: true });
+    await floatingComposer.locator('.comment-popover-image').filter({ has: page.getByRole('button', { name: removedImageName, exact: true }) }).locator('.comment-popover-image-remove').click();
+    await expect(removedImage).toHaveCount(0);
+    await expect(floatingComposer.locator('.comment-popover-image')).toHaveCount(1);
+    const imagePreview = floatingComposer.getByRole('button', { name: imageName, exact: true });
+    await expect(imagePreview).toBeVisible();
+    await expect(note).toHaveValue('');
+    await floatingComposer.locator('.comment-popover-image-remove').click();
+    await expect(floatingComposer.locator('.comment-popover-images')).toHaveCount(0);
+    await expect(page.getByTestId('comment-popover-save')).toBeDisabled();
+    await expect(page.getByTestId('comment-add-send')).toBeDisabled();
+    await floatingComposer.locator('input[type="file"]').setInputFiles(imageFiles.slice(1));
+    await expect(floatingComposer.locator('.comment-popover-image')).toHaveCount(1);
+    await expect(imagePreview).toBeVisible();
+    await expect(page.getByTestId('comment-popover-save')).toBeEnabled();
+    await expect(page.getByTestId('comment-add-send')).toBeEnabled();
+    await expect.poll(() => imagePreview.locator('img').evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
+    await imagePreview.click();
+    const imageDialog = page.getByRole('dialog', { name: imageName, exact: true });
+    await expect(imageDialog).toBeVisible();
+    await expect(imageDialog).toHaveAttribute('aria-modal', 'true');
+    await expect.poll(() => imageDialog.getByRole('img', { name: imageName, exact: true }).evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
+    if (dismiss === 'escape') await test.info().attach('comment-image-lightbox', { body: await page.screenshot(), contentType: 'image/png' });
+    await imageDialog.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(imageDialog).toHaveCount(0);
+    await expect(floatingComposer).toBeVisible();
+    await expect(imagePreview).toBeVisible();
+    await note.fill(`Discard this ${dismiss} draft.`);
+    await expect(page.getByTestId('comment-popover-save')).toBeEnabled();
+    if (dismiss === 'escape') await note.press('Escape');
+    else await floatingComposer.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(floatingComposer).toHaveCount(0);
+    await expect(sidePanel.getByTestId('comment-side-item')).toHaveCount(0);
+    await expect(page.getByTestId('comment-saved-marker-hero-title')).toHaveCount(0);
+    await clickCommentTargetInPreview(page, '[data-od-id="hero-title"]');
+    await expect(floatingComposer).toBeVisible();
+    await expect(note).toHaveValue('');
+    await expect(floatingComposer.locator('.comment-popover-images')).toHaveCount(0);
+    await expect(page.getByTestId('comment-popover-save')).toBeDisabled();
+    await expect(titleLabel).toHaveText(longCommentTag);
+  }
+  // 22,000 CJK characters are 66,000 UTF-8 bytes: the byte limit belongs
+  // to the server, not a client character cap or preflight validation.
+  const oversizedDraft = '界'.repeat(22_000);
+  expect(Buffer.byteLength(oversizedDraft, 'utf8')).toBeGreaterThan(64 * 1024);
+  await note.fill(oversizedDraft);
+  await expect(note).toHaveValue(oversizedDraft);
+  await expect(note).not.toHaveAttribute('maxlength');
+  await expect(floatingComposer.locator('.comment-popover-images')).toHaveCount(0);
+  await expect(page.getByTestId('comment-popover-save')).toBeEnabled();
+  await expect(page.getByTestId('comment-add-send')).toBeEnabled();
+  // Do not submit an over-limit payload in this client-only acceptance check.
+  await note.fill('');
+  await expect(page.getByTestId('comment-popover-save')).toBeDisabled();
+  await page.setViewportSize({ width: 1280, height: 480 });
+  await expect.poll(() => composerBody.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+  await expect(composerBody).toHaveCSS('overflow-y', 'auto');
+  const saveComment = page.getByTestId('comment-popover-save');
+  const multilineComment = 'Make the headline more specific.\nKeep the supporting copy concise.';
+  await note.fill('Make the headline more specific.');
+  // Collapse a full selection to its end before exercising native multiline
+  // input. Unlike Meta+End, this also moves the caret on macOS.
+  await note.press('ControlOrMeta+a');
+  await note.press('ArrowRight');
+  await expect.poll(() => note.evaluate(input => (input as HTMLTextAreaElement).selectionStart))
+    .toBe('Make the headline more specific.'.length);
+  await note.press('Shift+Enter');
+  await note.pressSequentially('Keep the supporting copy concise.');
+  await expect(note).toHaveValue(multilineComment);
+  await expect(floatingComposer).toBeVisible();
+  await expect(sidePanel.getByTestId('comment-side-item')).toHaveCount(0);
+  await expect(page.getByTestId('comment-saved-marker-hero-title')).toHaveCount(0);
+  await expect(saveComment).toBeEnabled();
+  await expect.poll(async () => {
+    const bounds = await saveComment.boundingBox();
+    return bounds !== null && bounds.y >= 0 && bounds.y + bounds.height <= 480
+      && bounds.x >= 0 && bounds.x + bounds.width <= 1280;
+  }).toBe(true);
+  // Check bounds before actionability can scroll an offscreen footer into view.
+  await saveComment.click({ trial: true });
+  await test.info().attach('comment-composer-short', { body: await page.screenshot(), contentType: 'image/png' });
+  const firstSaved = page.waitForResponse(response => {
+    const path = new URL(response.url()).pathname;
+    return response.request().method() === 'POST'
+      && path.startsWith(`/api/projects/${encodeURIComponent(projectId)}/conversations/`)
+      && path.endsWith('/comments');
+  });
+  await saveComment.click();
+  const firstSaveResponse = await firstSaved;
+  expect(firstSaveResponse.ok()).toBe(true);
+  const originalComment = (await firstSaveResponse.json()).comment;
+  expect(originalComment.id).toEqual(expect.any(String));
+  expect(originalComment.id.length).toBeGreaterThan(0);
+  expect(originalComment.note).toBe(multilineComment);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await expect(page.getByTestId('comment-saved-marker-hero-title')).toBeVisible();
+  await expect(floatingComposer).toHaveCount(0);
+
   await expect(sidePanel.getByTestId('comment-side-item').filter({ hasText: 'Make the headline more specific.' }).first()).toBeVisible();
+  await page.getByTestId('comment-saved-marker-hero-title').getByRole('button').click();
+  await expect(floatingComposer).toBeVisible();
+  await expect(note).toHaveValue(multilineComment);
+  await expect(note).not.toHaveAttribute('readonly');
+  await expect(saveComment).toBeDisabled();
+  await note.fill('This unsaved replacement must be discarded.');
+  await expect(saveComment).toBeEnabled();
+  await note.press('Escape');
+  await expect(floatingComposer).toHaveCount(0);
+  await expect(sidePanel.getByTestId('comment-side-item')).toHaveCount(1);
+  await expect(sidePanel.getByTestId('comment-side-item')).toContainText('Make the headline more specific.');
+  await expect(sidePanel.getByTestId('comment-side-item')).not.toContainText('This unsaved replacement must be discarded.');
+  await page.getByTestId('comment-saved-marker-hero-title').getByRole('button').click();
+  await expect(note).toHaveValue(multilineComment);
+  await expect(saveComment).toBeDisabled();
+  const editedComment = `${multilineComment}\nPreserve the existing layout.`;
+  await note.fill(editedComment);
+  await expect(saveComment).toBeEnabled();
+  const editSaved = page.waitForResponse(response => {
+    const path = new URL(response.url()).pathname;
+    return response.request().method() === 'POST'
+      && path.startsWith(`/api/projects/${encodeURIComponent(projectId)}/conversations/`)
+      && path.endsWith('/comments');
+  });
+  await note.press('Enter');
+  const editSaveResponse = await editSaved;
+  expect(editSaveResponse.ok()).toBe(true);
+  expect((await editSaveResponse.json()).comment).toMatchObject({
+    id: originalComment.id,
+    note: editedComment,
+  });
+  await expect(floatingComposer).toHaveCount(0);
+  await expect(sidePanel.getByTestId('comment-side-item')).toHaveCount(1);
+  await expect(sidePanel.getByTestId('comment-side-item')).toContainText('Preserve the existing layout.');
+  await expect(page.getByTestId('comment-saved-marker-hero-title')).toHaveCount(1);
+  const commentsReadBack = page.waitForResponse(response =>
+    response.request().method() === 'GET' && response.url() === editSaveResponse.url());
+  await page.reload();
+  const readBackResponse = await commentsReadBack;
+  expect(readBackResponse.ok()).toBe(true);
+  const persistedComments = (await readBackResponse.json()).comments;
+  expect(persistedComments).toHaveLength(1);
+  expect(persistedComments[0]).toMatchObject({ id: originalComment.id, note: editedComment });
+  await expectWorkspaceReady(page);
+  await expect(artifactPreview(page)).toBeVisible();
+  await enterPreviewCommentMode(page);
+  await expect(sidePanel).toBeVisible();
+  await expect(sidePanel.getByTestId('comment-side-item')).toHaveCount(1);
+  await expect(sidePanel.getByTestId('comment-side-item')).toContainText('Preserve the existing layout.');
+  await page.getByTestId('comment-saved-marker-hero-title').getByRole('button').click();
+  await expect(note).toHaveValue(editedComment);
+  await expect(saveComment).toBeDisabled();
+  await note.press('Escape');
+  await expect(floatingComposer).toHaveCount(0);
+  await captureLane4CommentState(page, '06-panel-populated');
+  await captureLane4CommentState(page, '06-author-self');
+  // Restore the reference skin while retaining the current comment behavior.
+  const floatHost = page.locator('.comment-float-host').filter({ has: sidePanel });
+  await expect(floatHost).toHaveCSS('width', '320px');
+  const header = sidePanel.locator('.comment-side-header');
+  await expect(header).toHaveCSS('padding', '0px 16px');
+  await expect(sidePanel.locator('.comment-side-title')).toHaveText('Comments');
+  const list = sidePanel.locator('.comment-side-list');
+  await expect(list).toHaveCSS('padding', '8px 12px');
+  await expect(list).toHaveCSS('gap', '6px');
+  const item = sidePanel.getByTestId('comment-side-item').first();
+  await expect(item).toHaveCSS('padding', '6px 10px 6px 8px');
+  await expect(item.locator('.comment-side-time')).toHaveCSS('font-size', '10.5px');
+  await expect(item.locator('.comment-side-avatar')).toHaveCSS('width', '20px');
+  await expect(item.locator('.comment-side-avatar')).toHaveCSS('height', '20px');
+  await expect(item.locator('.comment-side-avatar')).toHaveCSS('font-weight', '500');
+  const avatarSwatch = await item.locator('.comment-side-avatar').evaluate(element => {
+    const style = getComputedStyle(element);
+    return { background: style.backgroundColor, foreground: style.color };
+  });
+  const savedPin = page.locator('.comment-saved-pin');
+  await expect(savedPin).toHaveCount(1);
+  await expect(savedPin).toHaveCSS('width', '28px');
+  await expect(savedPin).toHaveCSS('height', '28px');
+  await expect(savedPin).toHaveCSS('background-color', avatarSwatch.background);
+  await expect(savedPin).toHaveCSS('color', avatarSwatch.foreground);
   await expect
     .poll(async () => {
       const selectAll = sidePanel.getByRole('button', { name: /select all/i }).first();
@@ -351,6 +661,11 @@ test('[P0] sending preview comments opens the refreshed follow-up artifact', asy
     })
     .toBe(true);
   await expect(page.getByTestId('comment-side-send-claude')).toBeVisible();
+  const selectbar = sidePanel.getByTestId('comment-side-selectbar');
+  await expect(selectbar).toHaveCSS('padding', '4px 14px 8px');
+  await expect(item.locator('.comment-side-check')).toHaveAttribute('aria-pressed', 'true');
+  const sendComments = sidePanel.getByTestId('comment-side-send-claude');
+  await expect(sendComments).toBeEnabled();
 
   const runRequest = page.waitForRequest(isCreateRunRequest);
   const runEvents = page.waitForResponse((response) => {
@@ -367,7 +682,7 @@ test('[P0] sending preview comments opens the refreshed follow-up artifact', asy
       filePath?: string;
     }>;
   };
-  expect(body.message).toContain('Make the headline more specific.');
+  expect(body.message).toContain(editedComment);
   expect(body.commentAttachments).toEqual([
     expect.objectContaining({
       elementId: 'hero-title',
@@ -419,6 +734,7 @@ function scenarioPriority(entry: UiScenario): 'P0' | 'P1' | 'P2' {
       return 'P0';
     case 'deep-link-preview':
     case 'question-form-submit-persistence':
+    case 'question-form-single-answer':
     case 'generation-does-not-create-extra-file':
     case 'file-mention':
     case 'deck-pagination-next-prev-correctness':
@@ -599,9 +915,14 @@ async function sendPrompt(page: Page, prompt: string) {
 }
 
 async function startNewConversation(page: Page) {
+  // The history dropdown is opened first on purpose: creating a conversation
+  // must also dismiss it, and the `toHaveCount(0)` below is only meaningful if
+  // the list was on screen to begin with.
   await page.getByTestId('conversation-history-trigger').click();
   await expect(page.getByTestId('conversation-list')).toBeVisible();
-  await page.getByTestId('conversation-history-new').click();
+  // The single "new conversation" control sits inside the history dropdown,
+  // beside the search field (OPEND-3087); creating dismisses the dropdown.
+  await page.getByTestId('conversation-history-menu').getByTestId('chat-new-conversation').click();
   await expect(page.getByTestId('conversation-list')).toHaveCount(0);
 }
 
@@ -650,8 +971,9 @@ async function runExampleUsePromptFlow(
   await expect(page).toHaveURL(/\/projects\//);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toHaveText(entry.prompt);
-  await expect(page.getByTestId('project-title')).toContainText('Warm Utility Example');
-  await expect(page.getByTestId('project-meta')).toContainText('Warm Utility Example');
+  // The project is named once, in the switcher docked above the chat card
+  // (OPEND-3128); the card itself carries no title row.
+  await expect(page.getByTestId('workspace-tabs-dropdown-trigger')).toContainText('Warm Utility Example');
 }
 
 async function runHyperframesProjectRoutingFlow(
@@ -857,21 +1179,25 @@ async function runQuestionFormSingleSelectionFlow(
 ) {
   await seedQuestionFormMessage(page);
 
-  const toneQuestion = page.locator('.qf-field', { has: page.getByText('Visual tone') });
+  const toneQuestion = page.locator(
+    '[data-testid="question-form-visual-picker"][data-question-id="tone"]',
+  );
   await expect(toneQuestion).toBeVisible();
 
-  const editorial = toneQuestion.getByRole('radio', { name: 'Content-led product' });
-  const modern = toneQuestion.getByRole('radio', { name: 'Quiet SaaS' });
-  const editorialCard = toneQuestion.locator('label.qf-visual-card[title="Content-led product"]');
-  const modernCard = toneQuestion.locator('label.qf-visual-card[title="Quiet SaaS"]');
+  // 视觉方向按新稿改成了「一沓叠放的预览图」(D45):默认只有最上面那张露在外面,
+  // 底下几张被盖住点不到。先切成网格再逐张点 —— 比 force:true 干净,也更像真人的操作。
+  await toneQuestion.locator('[data-action="toggle-view"]').click();
 
-  await editorialCard.click();
+  const editorial = toneQuestion.getByRole('radio', { name: /Content-led product$/ });
+  const modern = toneQuestion.getByRole('radio', { name: /Quiet SaaS$/ });
+
+  await editorial.click();
   await expect(editorial).toBeChecked();
-  await modernCard.click();
+  await modern.click();
 
   await expect(editorial).not.toBeChecked();
   await expect(modern).toBeChecked();
-  await expect(toneQuestion.locator('input[type="radio"]:checked')).toHaveCount(1);
+  await expect(toneQuestion.getByRole('radio', { checked: true })).toHaveCount(1);
 }
 
 async function runQuestionFormSubmitPersistenceFlow(
@@ -885,16 +1211,19 @@ async function runQuestionFormSubmitPersistenceFlow(
   const form = page.locator('.question-form').first();
   await expect(form).toBeVisible();
 
-  const toneQuestion = form.locator('.qf-field', { has: page.getByText('Visual tone') });
-  const modern = toneQuestion.getByRole('radio', { name: 'Quiet SaaS' });
-  await toneQuestion.locator('label.qf-visual-card[title="Quiet SaaS"]').click();
+  const toneQuestion = form.locator(
+    '[data-testid="question-form-visual-picker"][data-question-id="tone"]',
+  );
+  // 同上:叠放态下被盖住的那几张点不到,先切网格(D45)
+  await toneQuestion.locator('[data-action="toggle-view"]').click();
+  const modern = toneQuestion.getByRole('radio', { name: /Quiet SaaS$/ });
+  await modern.click();
   await expect(modern).toBeChecked();
 
-  await form.getByRole('button', { name: 'Send answers' }).click();
+  await form.getByRole('button', { name: 'Next' }).click();
 
   const summary = page.getByTestId('question-form-summary');
   await expect(summary).toBeVisible();
-  await expect(summary.getByText('Questions answered')).toBeVisible();
   await expect(summary.getByText('Visual tone')).toBeVisible();
   // The summary echoes the picked visual-style card (its title), not the
   // underlying option label.
@@ -922,6 +1251,109 @@ async function runQuestionFormSubmitPersistenceFlow(
   await expect(page.locator('.question-form')).toHaveCount(0);
 }
 
+/**
+ * One question form occurrence yields exactly one answer (OPEND-2367).
+ *
+ * The assertions read the daemon's conversation rather than the rendered form:
+ * a UI that merely looks locked while the host took a second answer is the
+ * failure this pins.
+ *
+ * Scope, stated honestly: this is a guard, not a reproduction. It stays green
+ * on the pre-fix build, because once the answer reaches the message list the
+ * old build locked the form from history too. OPEND-2367's window is the one
+ * BEFORE that — the answer still in flight or parked in a busy conversation's
+ * queue — which needs the submit promise held open and is covered at the
+ * component layer (`AssistantMessage.question-form-resubmit.test.tsx`, red
+ * before the fix). What this adds is the end-to-end invariant those unit
+ * specs cannot state: after a double submit, a project switch and a reload,
+ * the daemon still holds exactly one answer for the occurrence.
+ */
+async function runQuestionFormSingleAnswerFlow(
+  page: Page,
+  _entry: UiScenario,
+) {
+  await seedQuestionFormMessage(page);
+  const { projectId, conversationId } = await getCurrentProjectContext(page);
+
+  const messagesFor = async (): Promise<Array<{ id: string; role: string; content: string }>> => {
+    const response = await page.request.get(
+      `/api/projects/${projectId}/conversations/${conversationId}/messages`,
+    );
+    expect(response.ok()).toBeTruthy();
+    const { messages } = (await response.json()) as {
+      messages: Array<{ id: string; role: string; content: string }>;
+    };
+    return messages;
+  };
+  const answersFor = async (): Promise<string[]> =>
+    (await messagesFor())
+      .filter(
+        (message) =>
+          message.role === 'user' && message.content.includes('[form answers — discovery]'),
+      )
+      .map((message) => message.content);
+
+  const form = page.locator('.question-form').first();
+  await expect(form).toBeVisible();
+  const toneQuestion = form.locator(
+    '[data-testid="question-form-visual-picker"][data-question-id="tone"]',
+  );
+  await toneQuestion.locator('[data-action="toggle-view"]').click();
+  await toneQuestion.getByRole('radio', { name: /Quiet SaaS$/ }).click();
+
+  // A rapid double submit: the second click lands before the first send has
+  // settled, which is the window the component-local lock was built for.
+  const send = form.getByRole('button', { name: 'Next' });
+  await send.click();
+  await send.click({ force: true, timeout: T.short }).catch(() => {});
+
+  await expect(page.getByTestId('question-form-summary')).toBeVisible();
+  expect(await answersFor()).toHaveLength(1);
+
+  // Leaving the project and coming back rebuilds the form from scratch.
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.goto(`/projects/${projectId}/conversations/${conversationId}`, {
+    waitUntil: 'domcontentloaded',
+  });
+  await expectWorkspaceReady(page);
+  await expect(page.getByTestId('question-form-summary')).toBeVisible();
+  await expect(page.locator('.question-form')).toHaveCount(0);
+  expect(await answersFor()).toHaveLength(1);
+
+  // And so does a full reload.
+  await page.reload();
+  await expectWorkspaceReady(page);
+  await expect(page.getByTestId('question-form-summary')).toBeVisible();
+  await expect(page.locator('.question-form')).toHaveCount(0);
+  expect(await answersFor()).toHaveLength(1);
+
+  // A second submitter for the same occurrence — another tab, which never saw
+  // this one's form lock — reaches the daemon directly. The occurrence claim
+  // is decided where the check and the write are one operation, so the stored
+  // answer stays the one the surviving run read.
+  const stored = await messagesFor();
+  const answerRow = stored.find(
+    (message) =>
+      message.role === 'user' && message.content.includes('[form answers — discovery]'),
+  );
+  expect(answerRow).toBeTruthy();
+  const claim = await page.request.put(
+    `/api/projects/${projectId}/conversations/${conversationId}/messages/${answerRow!.id}`,
+    {
+      data: {
+        role: 'user',
+        content: '[form answers — discovery]\n- Visual tone: Editorial / magazine',
+        createOnly: true,
+        createdAt: Date.now(),
+      },
+    },
+  );
+  expect(claim.ok(), `create-only claim: ${await claim.text()}`).toBeTruthy();
+  const claimed = (await claim.json()) as { message: { content: string } };
+  expect(claimed.message.content).toBe(answerRow!.content);
+  expect(await answersFor()).toHaveLength(1);
+}
+
 async function runGenerationDoesNotCreateExtraFileFlow(
   page: Page,
   entry: UiScenario,
@@ -943,20 +1375,33 @@ async function runGenerationDoesNotCreateExtraFileFlow(
 }
 
 async function clickCommentTargetInPreview(page: Page, selector: string) {
-  const target = artifactPreviewFrame(page).locator(selector);
+  const { frame } = await settledActiveArtifactPreview(page, T.medium);
+  // Comment mode swaps the visible transport from the URL iframe to the
+  // retained srcDoc iframe. Visibility/load alone is not enough: the bridge
+  // marks the document only after it has consumed the Host mode replay. A
+  // click before that witness is a valid DOM click but cannot publish an
+  // `od:comment-target`, so it is silently lost.
+  await expect(frame.locator('html[data-od-comment-mode]')).toHaveCount(1, {
+    timeout: T.medium,
+  });
+  const target = frame.locator(selector);
   await expect(target).toBeVisible();
-  // Auto-fit zoom + comment-bridge injection can keep the iframe target
-  // moving for long enough that Playwright's stability check never settles
-  // (CI: "element is not stable" until test timeout). Force once visible.
-  await target.click({ force: true });
+  // Keep Playwright's hit testing enabled. The host layout must make the
+  // target's natural center clickable while the floating comments card is
+  // open; a forced or edge-biased click would conceal a product regression.
+  await target.click();
+}
+
+async function enterPreviewCommentMode(page: Page) {
+  await clickPreviewToolbarAction(page, 'board-mode-toggle', /^Comment$/);
+  await clickPreviewToolbarAction(page, 'comment-panel-toggle', /^Comments \(\d+\)$/);
 }
 
 async function runCommentAttachmentFlow(
   page: Page,
   entry: UiScenario,
 ) {
-  await page.getByTestId('board-mode-toggle').click();
-  await page.getByTestId('comment-panel-toggle').click();
+  await enterPreviewCommentMode(page);
   await clickCommentTargetInPreview(page, '[data-od-id="hero-title"]');
   await expect(page.getByTestId('comment-popover')).toBeVisible();
   await page.getByTestId('comment-popover-input').fill('Make the headline more specific.');
@@ -1616,6 +2061,10 @@ async function runFileUploadSendFlow(
   await expectScenarioProjectState(page, entry, projectId);
 }
 
+// Parked: the per-row delete button left the history dropdown with the
+// toolbar dock port (OPEND-3087, Demo #8113), so this flow has no UI entry.
+// Its scenario is registered with `automated: false` until a delete entry
+// point returns; the steps are kept so it can be re-enabled as-is.
 async function runConversationDeleteRecoveryFlow(
   page: Page,
   entry: UiScenario,

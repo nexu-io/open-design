@@ -1,3 +1,4 @@
+import { finalizeRuntimeManifest } from "../resources/runtime-manifest.js";
 import { execFile } from "node:child_process";
 import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
@@ -31,7 +32,6 @@ import {
   shouldInstallInternalPackageForWinPrebundle,
   shouldUseWinStandalonePrebundle,
 } from "./prebundle.js";
-import { processWebSourcemaps } from "../web-sourcemaps.js";
 import { ensureWorkspaceBuildArtifacts } from "../workspace-build.js";
 import {
   ELECTRON_BUILDER_BUILD_DEPENDENCIES_FROM_SOURCE,
@@ -127,44 +127,12 @@ async function validateWinPackagedAppRuntime(appRoot: string): Promise<string | 
   });
 }
 
-async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
-  const webNextEnvPath = join(config.workspaceRoot, "apps", "web", "next-env.d.ts");
-  const previousWebNextEnv = await readFile(webNextEnvPath, "utf8").catch(() => null);
-
-  await runPnpm(config, ["--filter", "@open-design/release", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/contracts", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/registry-protocol", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/sidecar-proto", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/launcher-proto", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/sidecar", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/platform", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/agui-adapter", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/plugin-runtime", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/download", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/host", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/diagnostics", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/dsh-runtime", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/components", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/daemon", "build"]);
-  try {
-    await runPnpm(config, ["--filter", "@open-design/web", "build"], { OD_WEB_OUTPUT_MODE: config.webOutputMode });
-    await runPnpm(config, ["--filter", "@open-design/web", "build:sidecar"]);
-    // Inject chunk IDs + upload browser sourcemaps to PostHog, then strip
-    // .map files before any packaging step copies the web output into the
-    // Electron resources. See `tools/pack/src/web-sourcemaps.ts`.
-    await processWebSourcemaps(config);
-  } finally {
-    if (previousWebNextEnv == null) await rm(webNextEnvPath, { force: true });
-    else await writeFile(webNextEnvPath, previousWebNextEnv, "utf8");
-  }
-  await runPnpm(config, ["--filter", "@open-design/desktop", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/packaged", "build"]);
-}
-
 export async function ensureWinWorkspaceBuild(config: ToolPackConfig, cache: ToolPackCache): Promise<string> {
-  return ensureWorkspaceBuildArtifacts(config, cache, async () => {
-    await buildWorkspaceArtifacts(config);
-  });
+  return ensureWorkspaceBuildArtifacts(
+    config,
+    cache,
+    async (args, extraEnv) => await runPnpm(config, args, extraEnv),
+  );
 }
 
 export async function createWorkspaceTarballsCacheKey(
@@ -430,7 +398,7 @@ export async function createWinPackagedAppCacheKey(
     platform: "win32",
     prebundle: shouldUseWinStandalonePrebundle(config.webOutputMode),
     runtimeDependencies: shouldUseWinStandalonePrebundle(config.webOutputMode) ? runtimeDependencies : null,
-    schemaVersion: 4,
+    schemaVersion: 7,
     tarballsKey,
     webOutputMode: config.webOutputMode,
   });
@@ -475,6 +443,7 @@ export async function prepareWinPackagedApp(
         platform: "win32",
       });
       await runElectronRebuild(config, appRoot);
+      await finalizeRuntimeManifest(appRoot);
       const nativeValidationError = await validateWinPackagedAppRuntime(appRoot);
       if (nativeValidationError != null) throw new Error(nativeValidationError);
       return { packagedVersion };
@@ -496,6 +465,8 @@ export async function prepareWinPackagedApp(
     packagedVersion,
     { usePrebundle },
   );
+  // Entrypoints are regenerated on both cache hits and misses.
+  await finalizeRuntimeManifest(join(manifest.entryPath, "app"));
   await writePackagedConfig(
     config,
     paths,

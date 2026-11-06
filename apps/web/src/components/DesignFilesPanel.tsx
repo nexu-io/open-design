@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { TrackingProjectKind } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import { trackFileManagerClick } from '../analytics/events';
-import { useT } from '../i18n';
+import { useI18n, useT } from '../i18n';
+import { communityForLocale } from '../lib/community-links';
 import { LIBRARY_UI_VISIBLE } from '../features/libraryUi';
 import type { Dict } from '../i18n/types';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
@@ -34,6 +36,10 @@ import {
   getHtmlThumbnailSource,
   loadHtmlThumbnailSource,
 } from './html-thumbnail-source-cache';
+import { BuildPreviewToggle } from './design-files/BuildPreviewToggle';
+import { DesignFilesBuildingState } from './design-files/DesignFilesBuildingState';
+import { selectBuildPreviewHtmlEntry } from './auto-open-file';
+import type { RunProgressStep } from '../runtime/run-progress';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
@@ -46,6 +52,7 @@ export interface DesignFilesNavState {
 
 interface Props {
   projectId: string;
+  projectKind: TrackingProjectKind;
   filesRefreshKey?: number;
   /** Read-only viewer of a team-shared project: disables project mutations. */
   viewerOnly?: boolean;
@@ -56,6 +63,23 @@ interface Props {
    * only an empty local result swaps the creation CTAs for a syncing notice.
    */
   downloadPending?: boolean;
+  /**
+   * Whether `files` reflects a file list the daemon actually returned. Zero
+   * files before the first authoritative read is indistinguishable from a
+   * genuinely empty project, and the empty-state CTAs create NEW content --
+   * offering them to someone whose project does have files is the same class
+   * of mistake the `downloadPending` branch below already guards (OPEND-2283).
+   */
+  filesAuthoritative?: boolean;
+  /**
+   * Before the first authoritative read, draw the empty state instead of
+   * "Loading…" -- inert, so none of its CTAs can act on a guess. For a project
+   * the Home send just created, whose hand-off frame already showed this empty
+   * state (OPEND-3334): flipping to "Loading…" and back reads as a jump. The
+   * authority gate is unchanged; the real, clickable empty state (or the
+   * files) replaces this once a listing is accepted.
+   */
+  emptyLookBeforeFirstListing?: boolean;
   // Basename of the project's working directory when the user has chosen a
   // real folder (e.g. "openclaw"). Shown as the breadcrumb root instead of
   // the generic "project" label. Undefined for default-storage projects.
@@ -63,9 +87,16 @@ interface Props {
   // True while the host is reindexing a freshly replaced working dir. Drives
   // a loading overlay so the panel doesn't sit silently on the stale tree.
   reloading?: boolean;
-  // True while the chat agent is generating. The footer swaps its idle
-  // drop/upload hint for the typewriter "tip" line while a run is in flight.
+  // True while a run of this conversation is genuinely in flight (streaming,
+  // or attached and about to). Not the composer's disabled state: a read-only
+  // viewer has that with nothing running. A run that has already written a
+  // page is shown taking shape.
   running?: boolean;
+  /** Active turn start, used to exclude pages left over from earlier runs. */
+  runStartedAt?: number | null;
+  /** The running turn's tool calls, newest first. The building preview names
+   *  the first one as the current step and logs the rest beneath it. */
+  runSteps?: RunProgressStep[];
   files: ProjectFile[];
   // Persisted folders from `/api/projects/:id/folders`, including empty ones
   // that no file lives under. Without these, a folder only appears once a file
@@ -334,7 +365,7 @@ const USEFUL_TIPS: ReadonlyArray<{ key: keyof Dict; url?: string }> = [
   { key: 'designFiles.usefulInfoTip14' },
   { key: 'designFiles.usefulInfoTip15' },
   { key: 'designFiles.usefulInfoTip5' },
-  { key: 'designFiles.usefulInfoTip6', url: 'https://discord.gg/mHAjSMV6gz' },
+  { key: 'designFiles.usefulInfoTip6' },
   { key: 'designFiles.usefulInfoTip7', url: 'https://github.com/nexu-io/open-design' },
   { key: 'designFiles.usefulInfoTip8', url: 'https://x.com/OpenDesignHQ' },
   { key: 'designFiles.usefulInfoTip16', url: 'https://www.threads.com/@opendesign.ai' },
@@ -363,11 +394,12 @@ function prefersReducedMotion(): boolean {
 // progress and recovery feedback. Under prefers-reduced-motion the full tip is
 // shown immediately and just cycles.
 function RotatingTip({ auxiliary = false }: { auxiliary?: boolean }) {
-  const t = useT();
+  const { t, locale } = useI18n();
+  const community = communityForLocale(locale);
   const [index, setIndex] = useState(0);
   const [typed, setTyped] = useState('');
   // Resolve tips each render but read them through a ref so the typing effect
-  // depends only on `index` — depending on the (re-created) array would reset
+  // restarts on tip or locale changes — depending on the (re-created) array would reset
   // the typewriter on every render and never advance.
   const tipsRef = useRef<string[]>([]);
   tipsRef.current = USEFUL_TIPS.map(({ key }) => t(key));
@@ -408,7 +440,10 @@ function RotatingTip({ auxiliary = false }: { auxiliary?: boolean }) {
       window.clearInterval(typeTimer);
       window.clearTimeout(holdTimer);
     };
-  }, [index]);
+  }, [index, locale]);
+
+  const tip = USEFUL_TIPS[index];
+  const tipUrl = tip?.key === 'designFiles.usefulInfoTip6' ? community.href : tip?.url;
 
   return (
     <div className={`df-useful-info${auxiliary ? ' df-useful-info-auxiliary' : ''}`}>
@@ -417,8 +452,8 @@ function RotatingTip({ auxiliary = false }: { auxiliary?: boolean }) {
         <span className="df-useful-info-label">{t('designFiles.usefulInfoLabel')}</span>
       </div>
       <span className="df-useful-info-tip">
-        {USEFUL_TIPS[index]?.url ? (
-          <a className="df-tip-link" href={USEFUL_TIPS[index].url} target="_blank" rel="noreferrer">
+        {tipUrl ? (
+          <a className="df-tip-link" href={tipUrl} target="_blank" rel="noreferrer">
             {typed}
           </a>
         ) : (
@@ -441,14 +476,25 @@ function RotatingTip({ auxiliary = false }: { auxiliary?: boolean }) {
  * every non-control click target (row name, card thumb, plugin-folder row)
  * opens the file in a workspace tab through `onOpenFile`.
  */
+// React 18's DOM runtime drops the boolean `inert` attribute; set it on the
+// node so keyboard focus is blocked as well as pointer interaction.
+const makeInert = (node: HTMLElement | null) => {
+  node?.setAttribute('inert', '');
+};
+
 export function DesignFilesPanel({
   projectId,
+  projectKind,
   filesRefreshKey = 0,
   viewerOnly = false,
   downloadPending = false,
+  filesAuthoritative = true,
+  emptyLookBeforeFirstListing = false,
   rootDirName,
   reloading,
   running = false,
+  runStartedAt,
+  runSteps,
   files,
   folders,
   liveArtifacts,
@@ -480,6 +526,26 @@ export function DesignFilesPanel({
   const { workspaceContext } = useProjectCollabContext();
   const t = useT();
   const analytics = useAnalytics();
+  // The page the run is currently building, if it has produced one. Only HTML
+  // qualifies: there is nothing to watch take shape in a markdown file or an
+  // image, and swapping the preview for one mid-run would be a downgrade.
+  const buildPreviewName = useMemo(
+    () => {
+      if (!running || !runStartedAt || !Number.isFinite(runStartedAt)) return null;
+      return selectBuildPreviewHtmlEntry(files.filter((file) => file.mtime >= runStartedAt));
+    },
+    [running, runStartedAt, files],
+  );
+  const buildPreviewFile = useMemo(
+    () => (buildPreviewName ? files.find((file) => file.name === buildPreviewName) ?? null : null),
+    [buildPreviewName, files],
+  );
+  // A long run must not trap the user away from their files. The topbar's
+  // preview switch flips this both ways; it resets when the next run starts.
+  const [buildPreviewDismissed, setBuildPreviewDismissed] = useState(false);
+  useEffect(() => {
+    if (running) setBuildPreviewDismissed(false);
+  }, [running]);
   const [draggingFiles, setDraggingFiles] = useState(false);
   const [dropReadError, setDropReadError] = useState<string | null>(null);
   const dragDepthRef = useRef(0);
@@ -1357,6 +1423,8 @@ export function DesignFilesPanel({
                       page_name: 'file_manager',
                       area: 'file_manager',
                       element: 'create_design_system_from_project',
+                      project_id: projectId,
+                      project_kind: projectKind,
                     });
                     setProjectMenuOpen(false);
                     onCreateDesignSystemFromProject();
@@ -1376,6 +1444,8 @@ export function DesignFilesPanel({
                       page_name: 'file_manager',
                       area: 'file_manager',
                       element: 'duplicate_project',
+                      project_id: projectId,
+                      project_kind: projectKind,
                     });
                     setProjectMenuOpen(false);
                     onDuplicateProject();
@@ -1433,6 +1503,96 @@ export function DesignFilesPanel({
   const visibleUploadError = uploadError ?? dropReadError;
   const hasSelection = selected.size > 0;
 
+  // The empty state's one markup, for the confirmed-empty project and for the
+  // inert stand-in drawn before the first listing (`emptyLookBeforeFirstListing`).
+  const renderEmptyState = (beforeFirstListing: boolean) => (
+    <div
+      className="df-empty"
+      data-testid={beforeFirstListing ? 'design-files-empty-unconfirmed' : 'design-files-empty'}
+      ref={beforeFirstListing ? makeInert : undefined}
+      aria-busy={beforeFirstListing || undefined}
+    >
+      <div className="df-empty-pill">
+        <span className="df-empty-title">
+          {t('designFiles.empty')}
+        </span>
+        {/* Keep starter actions discoverable in shared read-only
+            projects, but disable every project mutation in place. */}
+        <div className="df-empty-actions">
+          <button
+            type="button"
+            className="df-empty-cta df-empty-cta-primary"
+            data-testid={beforeFirstListing ? undefined : 'design-files-empty-new-sketch'}
+            disabled={viewerOnly}
+            onClick={onNewSketch}
+            title={viewerOnly
+              ? t('fileViewer.readonlySharedNoExport')
+              : t('designFiles.newSketch')}
+          >
+            <Icon name="pencil" size={13} />
+            <span>{t('designFiles.newSketch')}</span>
+          </button>
+          {/* `onPaste` is a historical prop name — the action creates
+              a new blank Markdown document. */}
+          <button
+            type="button"
+            className="df-empty-cta df-empty-cta-doc"
+            data-testid={beforeFirstListing ? undefined : 'design-files-empty-new-document'}
+            disabled={viewerOnly}
+            onClick={onPaste}
+            title={viewerOnly
+              ? t('fileViewer.readonlySharedNoExport')
+              : t('designFiles.newDocumentTitle')}
+          >
+            <Icon name="file" size={13} />
+            <span>{t('designFiles.newDocument')}</span>
+          </button>
+          <button
+            type="button"
+            className="df-empty-cta df-empty-cta-upload"
+            data-testid={beforeFirstListing ? undefined : 'design-files-upload-trigger'}
+            disabled={viewerOnly}
+            onClick={onUpload}
+            title={viewerOnly
+              ? t('fileViewer.readonlySharedNoExport')
+              : t('designFiles.upload.title')}
+          >
+            <Icon name="upload" size={13} />
+            <span>{t('designFiles.upload.label')}</span>
+          </button>
+          {onOpenBrowser ? (
+            <button
+              type="button"
+              className="df-empty-cta df-empty-cta-secondary"
+              data-testid={beforeFirstListing ? undefined : 'design-files-empty-open-browser'}
+              onClick={onOpenBrowser}
+              aria-label={t('workspace.newBrowserDescription')}
+              title={t('workspace.newBrowserDescription')}
+            >
+              <Icon name="globe" size={13} />
+              <span>{t('workspace.newBrowser')}</span>
+            </button>
+          ) : null}
+          {onCreateDesignSystem ? (
+            <button
+              type="button"
+              className="df-empty-cta df-empty-cta-tertiary"
+              data-testid={beforeFirstListing ? undefined : 'design-files-empty-create-design-system'}
+              disabled={viewerOnly}
+              onClick={onCreateDesignSystem}
+              title={viewerOnly
+                ? t('fileViewer.readonlySharedNoExport')
+                : t('dsManager.createTitle')}
+            >
+              <Icon name="blocks" size={14} />
+              <span>{t('dsManager.createTitle')}</span>
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className={`df-panel ${hasSelection ? 'has-selection' : ''}`}>
       {reloading ? (
@@ -1446,7 +1606,19 @@ export function DesignFilesPanel({
       <div className="df-main">
         <div className="df-topbar">
           <div className="df-topbar-left">{breadcrumbs}</div>
-          <div className="df-topbar-right">{fileActions}</div>
+          <div className="df-topbar-right">
+            {/* Only while there is something to preview: a run in flight that
+                has already written a page. Outside that window the pane has
+                one view, and a switch with nothing on its other side would be
+                a control that does nothing. */}
+            {buildPreviewFile && running ? (
+              <BuildPreviewToggle
+                checked={!buildPreviewDismissed}
+                onChange={(next) => setBuildPreviewDismissed(!next)}
+              />
+            ) : null}
+            {fileActions}
+          </div>
         </div>
         <div
           className="df-body"
@@ -1501,6 +1673,8 @@ export function DesignFilesPanel({
                       page_name: 'file_manager',
                       area: 'file_manager',
                       element: 'download_as_zip',
+                      project_id: projectId,
+                      project_kind: projectKind,
                     });
                     void handleBatchDownload();
                   }}
@@ -1527,7 +1701,34 @@ export function DesignFilesPanel({
               </div>
             </div>
           ) : null}
-          {files.length === 0 && liveArtifacts.length === 0 && (folders?.length ?? 0) === 0 ? (
+          {buildPreviewFile && running && !buildPreviewDismissed ? (
+            /* The middle state: a page exists but the run is still writing it.
+               Watching it take shape beats a grid of file cards whose only news
+               is that a file appeared. Falls back to the grid the moment the run
+               ends, or when the topbar's preview switch is turned off. */
+            <div className="df-empty" data-testid="design-files-building-host">
+              <DesignFilesBuildingState
+                projectId={projectId}
+                file={buildPreviewFile}
+                filesRefreshKey={filesRefreshKey ?? 0}
+                steps={runSteps ?? []}
+                workspaceContext={workspaceContext}
+              />
+            </div>
+          ) : files.length === 0 && liveArtifacts.length === 0 && (folders?.length ?? 0) === 0 && !filesAuthoritative ? (
+            emptyLookBeforeFirstListing ? renderEmptyState(true) : (
+            // The list has not arrived. Saying nothing reads as "stuck"; saying
+            // "no designs yet" would be a guess. Say we are working instead.
+            <div className="df-empty df-empty-syncing" data-testid="design-files-loading">
+              <div className="df-empty-pill">
+                <FileSyncBadge state="downloading" size={20} />
+                <span className="df-empty-title">{t('common.loading')}</span>
+              </div>
+            </div>
+            )
+          ) : null}
+          {buildPreviewFile && running && !buildPreviewDismissed ? null
+          : files.length === 0 && liveArtifacts.length === 0 && (folders?.length ?? 0) === 0 && filesAuthoritative ? (
             downloadPending ? (
               // A shared project whose local mirror has not caught up yet
               // reads as EXACTLY the same zero-files result as a genuinely
@@ -1545,86 +1746,7 @@ export function DesignFilesPanel({
                 </div>
               </div>
             ) : (
-              <div className="df-empty" data-testid="design-files-empty">
-                <div className="df-empty-pill">
-                  <span className="df-empty-title">
-                    {t('designFiles.empty')}
-                  </span>
-                  {/* Keep starter actions discoverable in shared read-only
-                      projects, but disable every project mutation in place. */}
-                  <div className="df-empty-actions">
-                    <button
-                      type="button"
-                      className="df-empty-cta df-empty-cta-primary"
-                      data-testid="design-files-empty-new-sketch"
-                      disabled={viewerOnly}
-                      onClick={onNewSketch}
-                      title={viewerOnly
-                        ? t('fileViewer.readonlySharedNoExport')
-                        : t('designFiles.newSketch')}
-                    >
-                      <Icon name="pencil" size={13} />
-                      <span>{t('designFiles.newSketch')}</span>
-                    </button>
-                    {/* `onPaste` is a historical prop name — the action creates
-                        a new blank Markdown document. */}
-                    <button
-                      type="button"
-                      className="df-empty-cta df-empty-cta-doc"
-                      data-testid="design-files-empty-new-document"
-                      disabled={viewerOnly}
-                      onClick={onPaste}
-                      title={viewerOnly
-                        ? t('fileViewer.readonlySharedNoExport')
-                        : t('designFiles.newDocumentTitle')}
-                    >
-                      <Icon name="file" size={13} />
-                      <span>{t('designFiles.newDocument')}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="df-empty-cta df-empty-cta-upload"
-                      data-testid="design-files-upload-trigger"
-                      disabled={viewerOnly}
-                      onClick={onUpload}
-                      title={viewerOnly
-                        ? t('fileViewer.readonlySharedNoExport')
-                        : t('designFiles.upload.title')}
-                    >
-                      <Icon name="upload" size={13} />
-                      <span>{t('designFiles.upload.label')}</span>
-                    </button>
-                    {onOpenBrowser ? (
-                      <button
-                        type="button"
-                        className="df-empty-cta df-empty-cta-secondary"
-                        data-testid="design-files-empty-open-browser"
-                        onClick={onOpenBrowser}
-                        aria-label={t('workspace.newBrowserDescription')}
-                        title={t('workspace.newBrowserDescription')}
-                      >
-                        <Icon name="globe" size={13} />
-                        <span>{t('workspace.newBrowser')}</span>
-                      </button>
-                    ) : null}
-                    {onCreateDesignSystem ? (
-                      <button
-                        type="button"
-                        className="df-empty-cta df-empty-cta-tertiary"
-                        data-testid="design-files-empty-create-design-system"
-                        disabled={viewerOnly}
-                        onClick={onCreateDesignSystem}
-                        title={viewerOnly
-                          ? t('fileViewer.readonlySharedNoExport')
-                          : t('dsManager.createTitle')}
-                      >
-                        <Icon name="blocks" size={14} />
-                        <span>{t('dsManager.createTitle')}</span>
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
+              renderEmptyState(false)
             )
           ) : (
             <>
@@ -1976,7 +2098,9 @@ function HtmlCardThumbnail({
         thumbnailIdentity.refreshKey,
       )?.source
       ?? getHtmlThumbnailSource(thumbnailIdentity);
-    return source === null ? null : buildSrcdoc(source, { baseHref });
+    // A thumbnail never owns playback. Only marked motion videos wait for a
+    // host grant, which this static card intentionally never provides.
+    return source === null ? null : buildSrcdoc(source, { baseHref, motionPreview: true });
   });
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [scale, setScale] = useState<number | null>(null);
@@ -2023,7 +2147,7 @@ function HtmlCardThumbnail({
       )?.source
       ?? getHtmlThumbnailSource(thumbnailIdentity);
     if (cachedSource !== null) {
-      setSrcDoc(buildSrcdoc(cachedSource, { baseHref }));
+      setSrcDoc(buildSrcdoc(cachedSource, { baseHref, motionPreview: true }));
       return;
     }
     // Only an actual network load waits for viewport proximity (cached
@@ -2043,7 +2167,7 @@ function HtmlCardThumbnail({
         },
       ).then((html) => {
           if (cancelled || html === null) return;
-          const nextSrcDoc = buildSrcdoc(html, { baseHref });
+          const nextSrcDoc = buildSrcdoc(html, { baseHref, motionPreview: true });
           if (!cancelled) setSrcDoc(nextSrcDoc);
         })
         .catch(() => {

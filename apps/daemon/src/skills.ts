@@ -31,7 +31,7 @@ export const SKILL_ID_ALIASES = Object.freeze({
   "taste-skill": "design-taste-frontend",
 });
 
-type SkillMode = "image" | "video" | "audio" | "deck" | "design-system" | "template" | "prototype";
+type SkillMode = "utility" | "image" | "video" | "audio" | "deck" | "design-system" | "template" | "prototype";
 type SkillSurface = "web" | "image" | "video" | "audio";
 type SkillPlatform = "desktop" | "mobile" | null;
 type JsonRecord = Record<string, unknown>;
@@ -283,7 +283,6 @@ export async function listSkills(
         // rest of the frontmatter to keep the shadowed-skill path cheap.
         if (seenIds.has(parentId)) continue;
         seenIds.add(parentId);
-        const hasAttachments = await dirHasAttachments(dir);
         const mode = normalizeMode(data.od?.mode, body, data.description);
         const surface = normalizeSurface(data.od?.surface, mode);
         const platform = normalizePlatform(
@@ -316,9 +315,7 @@ export async function listSkills(
           data.zh_description,
         );
         const examplePromptI18n = localizedMapFromRecord(data.od?.example_prompt_i18n);
-        const parentBody = hasAttachments
-          ? withSkillRootPreamble(body, dir)
-          : body;
+        const parentBody = await skillBodyWithRootPreamble(body, dir);
         // Pre-compute derived examples so the parent entry can advertise
         // `aggregatesExamples` in the same push. The frontend uses that
         // flag to hide the parent card from the gallery (its preview would
@@ -421,6 +418,7 @@ export async function listSkills(
   // does whenever the request carries no `x-od-workspace-id` header — must
   // still go through `skillVisibleFromWorkspace` below so a claimed skill is
   // hidden from a headerless reader instead of silently passing through here.
+  out.sort((a, b) => (a.featured ?? Number.POSITIVE_INFINITY) - (b.featured ?? Number.POSITIVE_INFINITY));
   if (!options.db || options.workspaceId === undefined) return out;
   const scopeDb = options.db;
   const scopeId = options.workspaceId;
@@ -591,6 +589,18 @@ function withSkillRootPreamble(body: string, dir: string): string {
   return preamble + body;
 }
 
+/**
+ * Add the same staged-root contract to every file-backed skill source.
+ *
+ * Global skills already flow through this helper while the registry is
+ * scanned. Plugin-local SKILL.md files are loaded through a separate path, so
+ * that loader calls this export too; otherwise their companion files are
+ * staged correctly but the model is never told where the staged copy lives.
+ */
+export async function skillBodyWithRootPreamble(body: string, dir: string): Promise<string> {
+  return await dirHasAttachments(dir) ? withSkillRootPreamble(body, dir) : body;
+}
+
 function collectReferencedSideFiles(body: string): string[] {
   const files = new Set<string>();
   const matches = body.matchAll(/\b(?:assets|references)\/[A-Za-z0-9._-]+\b/g);
@@ -745,7 +755,7 @@ function inferMode(body: unknown, description: unknown): SkillMode {
 function normalizeMode(value: unknown, body: unknown, description: unknown): SkillMode {
   if (
     value === "image" || value === "video" || value === "audio" || value === "deck" ||
-    value === "design-system" || value === "template" || value === "prototype"
+    value === "design-system" || value === "template" || value === "prototype" || value === "utility"
   ) return value;
   return inferMode(body, description);
 }

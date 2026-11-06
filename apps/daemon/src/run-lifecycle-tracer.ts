@@ -51,8 +51,35 @@ export interface RunLifecycleStreamEventMarkers {
   // Stamping the anchor from arrival would measure a tool-only ACP turn as
   // runtime init, which is the case this whole boundary change exists for.
   firstModelEventAt?: number;
+  // True when THIS event is user-visible model output leaving the daemon.
+  // Callers mark `first_visible_output` from it at the single emission choke
+  // point, so the mark lands after every filter that can withhold bytes
+  // (`<od-title>` stripping, the fabricated-role-marker guard, close-time
+  // buffering) rather than when the daemon first recognised a token.
   firstVisibleOutput: boolean;
   firstArtifactWrite: boolean;
+}
+
+/**
+ * Whether a streamed delta frame actually put characters on the user's screen.
+ *
+ * `text_delta` / `thinking_delta` frames are not self-evidently visible: Claude
+ * Code streams `thinking_delta` whose `thinking` is the empty string, carrying
+ * only an `estimated_tokens` count (measured off the CLI directly: 20 of 20
+ * frames on a 26.5s extended-thinking turn, and 1508 of 1707 across the 32
+ * runs recorded in `claude-stream.ts`). Those frames arrive, and the daemon
+ * forwards them, but they render nothing.
+ *
+ * `first_visible_output` is the boundary that answers "when did the user stop
+ * staring at an empty message?", so it must be stamped by pixels, not by frame
+ * arrival. Frame arrival is already covered by `first_model_event`.
+ */
+function deltaCarriesCharacters(data: unknown): boolean {
+  const delta =
+    data && typeof data === 'object' && 'delta' in data
+      ? (data as { delta?: unknown }).delta
+      : undefined;
+  return typeof delta === 'string' && delta.length > 0;
 }
 
 export function runLifecycleMarkersForStreamEvent(
@@ -89,14 +116,22 @@ export function runLifecycleMarkersForStreamEvent(
         ? { firstModelEventAt }
         : {}),
       firstVisibleOutput:
-        type === 'text_delta' ||
-        type === 'thinking_delta' ||
-        type === 'artifact',
+        type === 'artifact' ||
+        ((type === 'text_delta' || type === 'thinking_delta') &&
+          deltaCarriesCharacters(data)),
       firstArtifactWrite: type === 'artifact' || type === 'live_artifact',
     };
   }
   return {
-    firstVisibleOutput: false,
+    // The plain / BYOK / antigravity family has no structured `agent` stream —
+    // its reply reaches the user as `stdout` chunks, already control-stripped,
+    // title-stripped and role-guarded by the time they are sent. Without this,
+    // those runs would report no visible output at all and fall back to the
+    // first token, which is exactly wrong for antigravity: it buffers stdout
+    // until close, so its first token and its first visible byte can be a whole
+    // run apart. `stderr` stays out — it is a diagnostic channel, not the
+    // model's answer.
+    firstVisibleOutput: event === 'stdout',
     firstArtifactWrite: event === 'live_artifact',
   };
 }

@@ -23,10 +23,11 @@
 // mis-shaped payload degrades to an empty catalog instead of poisoning every
 // consumer downstream.
 
-import type {
-  TeamProject,
-  WorkspaceCollabContext,
-  WorkspaceTeamProjectsResponse,
+import {
+  workspaceContextHasWorkspaceIdentity,
+  type TeamProject,
+  type WorkspaceCollabContext,
+  type WorkspaceTeamProjectsResponse,
 } from '@open-design/contracts';
 
 import { coalescedGet, forceCoalescedGet } from '../lib/coalesced-get';
@@ -183,6 +184,14 @@ export function asTeamProjectRows(value: unknown): TeamProject[] {
   return [];
 }
 
+/** No exact active Workspace/member identity means no scoped project catalog. */
+class TeamProjectCatalogUnavailableError extends Error {
+  constructor() {
+    super('team-projects 403');
+    this.name = 'TeamProjectCatalogUnavailableError';
+  }
+}
+
 /**
  * Read the team-shared project catalog, collapsing a mount/navigation burst
  * into one request.
@@ -203,6 +212,10 @@ export async function fetchTeamProjectsCatalog(
     cacheDiscriminator?: string;
   },
 ): Promise<TeamProject[]> {
+  // Personal and Team workspaces can both host member-shared projects.
+  if (!workspaceContextHasWorkspaceIdentity(options.context)) {
+    throw new TeamProjectCatalogUnavailableError();
+  }
   const cacheKey = `workspace-team-projects:${workspaceIdentityCacheKey(options.context)}`
     + `:generation:${options.requestGeneration ?? 'verified'}`
     + `:target:${options.cacheDiscriminator ?? 'catalog'}`;

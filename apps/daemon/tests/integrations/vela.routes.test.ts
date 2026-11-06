@@ -12,7 +12,8 @@
 // writing the config file with the active VELA_PROFILE and exiting 0 —
 // mirroring real vela's on-disk side-effect without the device-auth loop.
 
-import { mkdtempSync, existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, chmodSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
 import { createServer } from 'node:http';
 import https from 'node:https';
 import type { AddressInfo } from 'node:net';
@@ -29,6 +30,7 @@ import { startServer } from '../../src/server.js';
 import { readAppConfig, writeAppConfig } from '../../src/app-config.js';
 import {
   clearAllVelaLiveAccounts,
+  clearVelaAuthorizationState,
   clearVelaLiveAccountRefreshThrottle,
   isVelaLoginSupervisorSettled,
   parseAmrEntryAnalyticsPayload,
@@ -37,6 +39,7 @@ import {
   velaLiveAccountCacheKey,
 } from '../../src/integrations/vela.js';
 import { registerVelaRoutes } from '../../src/routes/vela.js';
+import { workspaceContextFromDirectoryItem } from '../../src/collab/vela-workspace-context.js';
 
 interface StartedServer {
   url: string;
@@ -62,6 +65,10 @@ async function postJson<T = unknown>(
   body?: unknown,
   headers: Record<string, string> = {},
 ): Promise<{ status: number; body: T }> {
+  if (url.endsWith('/api/integrations/vela/logout') && body === undefined) {
+    const current = await getJson<{user: {id: string} | null; credentialRevision: string}>(url.replace(/logout$/, 'status'));
+    body = {expectedAppUserId: current.body.user?.id ?? '', expectedCredentialRevision: current.body.credentialRevision};
+  }
   const init: RequestInit = {
     method: 'POST',
     headers: body === undefined ? headers : { 'Content-Type': 'application/json', ...headers },
@@ -259,6 +266,8 @@ afterEach(async () => {
     delete process.env.FAKE_VELA_BILLING_LOG;
     delete process.env.FAKE_VELA_BILLING_DELAY_MS;
     delete process.env.FAKE_VELA_BILLING_UNKNOWN_COMMAND;
+    delete process.env.FAKE_VELA_BILLING_STDERR;
+    clearVelaAuthorizationState();
     delete process.env.FAKE_VELA_MODEL_LIST_JSON;
     delete process.env.FAKE_VELA_MODEL_PRESET_JSON;
     delete process.env.FAKE_VELA_ENV_DUMP_PATH;
@@ -280,6 +289,32 @@ afterEach(async () => {
       retryDelay: 50,
     });
   }
+});
+
+describe('POST /api/amr/web-intent', () => {
+  it.each([false, true])('checks credential content across the upstream request (changed=%s)', async (changed) => {
+    const previousOrigin = process.env.OD_VELA_WEB_URL;
+    process.env.OD_VELA_WEB_URL = 'http://localhost:5173';
+    const upstream = await startWalletApi((req, res) => {
+      expect(req.url).toBe('/api/v1/auth/intents');
+      expect(req.headers.authorization).toBe('Bearer ck-seeded-key');
+      if (changed) seedLogin('local', { apiUrl: upstream.url, controlKey: 'ck-replaced-key' });
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ intentId: 'intent-local' }));
+    });
+    seedLogin('local', { apiUrl: upstream.url });
+    try {
+      const result = await postJson(`${baseUrl}/api/amr/web-intent`, { target: '/dashboard' });
+      expect(result.status).toBe(changed ? 409 : 200);
+      expect(result.body).toEqual(changed
+        ? { error: 'account_changed' }
+        : { url: 'http://localhost:5173/login?intentId=intent-local' });
+    } finally {
+      if (previousOrigin === undefined) delete process.env.OD_VELA_WEB_URL;
+      else process.env.OD_VELA_WEB_URL = previousOrigin;
+      await upstream.close();
+    }
+  });
 });
 
 describe('GET /api/integrations/vela/wallet', () => {
@@ -307,9 +342,9 @@ describe('GET /api/integrations/vela/wallet', () => {
 
   it('fetches the AMR wallet balance with the local control key and caches it briefly', async () => {
     const walletApi = await startWalletApi((req, res) => {
-      expect(req.url).toBe('/api/v1/wallet/balance');
       expect(req.headers.authorization).toBe('Bearer ck-wallet-balance');
       res.setHeader('content-type', 'application/json');
+      expect(req.url).toBe('/api/v1/wallet/balance');
       res.end(JSON.stringify({
         balanceUsd: '0.1000',
         updatedAt: '2026-06-23T06:05:18.782Z',
@@ -538,11 +573,11 @@ describe('GET /api/integrations/vela/wallet', () => {
   });
 
   it('does not serve a cached wallet balance after the control key is rejected', async () => {
-    let requestCount = 0;
-    const walletApi = await startWalletApi((_req, res) => {
-      requestCount += 1;
+    let walletRequestCount = 0;
+    const walletApi = await startWalletApi((req, res) => {
       res.setHeader('content-type', 'application/json');
-      if (requestCount === 1) {
+      walletRequestCount += 1;
+      if (walletRequestCount === 1) {
         res.end(JSON.stringify({
           balanceUsd: '0.1000',
           updatedAt: '2026-06-23T06:05:18.782Z',
@@ -578,7 +613,13 @@ describe('GET /api/integrations/vela/wallet', () => {
       expect(second.body.balanceUsd).toBeNull();
       expect(second.body.source).toBe('unavailable');
       expect(second.body.error?.code).toBe('unauthorized');
-      expect(second.body.error?.message).toMatch(/sign in again/i);
+      expect(second.body.error?.message).not.toMatch(/sign in/i);
+      // Billing is display-only (OPEND-3553): a wallet rejection must not
+      // expire the AMR session.
+      const status = await getJson<{ sessionState?: string }>(
+        `${baseUrl}/api/integrations/vela/status`,
+      );
+      expect(status.body.sessionState).toBe('authenticated');
     } finally {
       await walletApi.close();
     }
@@ -992,6 +1033,27 @@ describe('GET /api/integrations/vela/status', () => {
       ? readFileSync(billingLog, 'utf8').trim().split('\n').filter(Boolean)
       : [];
     expect(attempts).toHaveLength(1);
+  });
+
+  it('keeps the session authenticated when vela billing summary reports 401 (OPEND-3553)', async () => {
+    clearAllVelaLiveAccounts();
+    process.env.FAKE_VELA_BILLING_STDERR =
+      'Error: API request failed with status 401: {"error":"unauthenticated"}';
+    seedLogin('local', {
+      user: { id: 'billing-401', email: 'billing-401@example.com', plan: undefined },
+    });
+
+    const first = await getJson<{ sessionState?: string; account?: unknown }>(
+      `${baseUrl}/api/integrations/vela/status?refresh=1`,
+    );
+    const second = await getJson<{ sessionState?: string; account?: unknown }>(
+      `${baseUrl}/api/integrations/vela/status`,
+    );
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(second.body.account).toBeUndefined();
+    expect(second.body.sessionState).toBe('authenticated');
   });
 
   it('keeps signed-in status usable when old vela CLI lacks billing commands', async () => {
@@ -1559,6 +1621,9 @@ describe('POST /api/integrations/vela/login', () => {
     const env = JSON.parse(readFileSync(dumpPath, 'utf8'));
     expect(env.OPEN_DESIGN_AMR_AUTH_ATTEMPT_ID).toBe(authAttemptId);
     expect(env.OPEN_DESIGN_AMR_AUTH_STAGE_FORMAT).toBeUndefined();
+    // No entry attribution (e.g. a retry) still marks the login as Open Design's.
+    expect(env.OPEN_DESIGN_AMR_ORIGIN).toBe('open_design');
+    expect(env.OPEN_DESIGN_AMR_ENTRY_ID).toBeUndefined();
     const status = await getJson<{
       authAttemptId?: string;
       authRoute?: string;
@@ -1992,6 +2057,20 @@ describe('POST /api/integrations/vela/login', () => {
       delete process.env.FAKE_VELA_LOGIN_FAIL;
       await new Promise<void>((resolve) => isolatedServer.close(() => resolve()));
     }
+  });
+
+  it('exposes the new activation link while existing credentials are still present', async () => {
+    seedLogin('local');
+    process.env.FAKE_VELA_LOGIN_DELAY_MS = '30000';
+    const login = await postJson(`${baseUrl}/api/integrations/vela/login`);
+    expect(login.status).toBe(202);
+    const during = await getJson<{ loginInFlight: boolean; activationUrl?: string; userCode?: string }>(
+      `${baseUrl}/api/integrations/vela/status`,
+    );
+    expect(during.body.loginInFlight).toBe(true);
+    expect(during.body.activationUrl).toContain('deviceId=fake-device');
+    expect(during.body.userCode).toBe('FAKE-CODE');
+    await postJson(`${baseUrl}/api/integrations/vela/login/cancel`);
   });
 
   it('surfaces and cancels a delayed login subprocess', async () => {
@@ -3020,7 +3099,245 @@ describe('POST /api/integrations/vela/analytics-entry', () => {
   });
 });
 
+describe('Test touchpoint runtime proxy', () => {
+  it('forwards the caller encoding preference and labels the reply it gets back', async () => {
+    // Decisions carry base64 content and run to megabytes. Building the upstream
+    // headers from scratch dropped `accept-encoding`, so every refresh pulled the
+    // payload uncompressed; the body is piped verbatim, so the reply must also
+    // carry upstream's `content-encoding` or the caller decodes gzip as JSON.
+    let seenAcceptEncoding: string | undefined;
+    const upstream = createServer((req, res) => {
+      seenAcceptEncoding = req.headers['accept-encoding'] as string | undefined;
+      res.setHeader('content-type', 'application/json');
+      res.setHeader('content-encoding', 'gzip');
+      res.statusCode = 200;
+      res.end(gzipSync(Buffer.from(JSON.stringify({ placementKey: 'opend.home.hover-layer' }))));
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+    const address = upstream.address() as AddressInfo;
+    seedLogin('local', { apiUrl: `http://127.0.0.1:${address.port}` });
+    try {
+      const response = await fetch(
+        `${baseUrl}/api/touchpoints/test-runtime?deploymentId=deployment-1&placementKey=opend.home.hover-layer&locale=zh-CN`,
+        { headers: { 'accept-encoding': 'gzip' } },
+      );
+      expect(response.status).toBe(200);
+      expect(seenAcceptEncoding).toBe('gzip');
+      // `fetch` decodes transparently, which is only possible when the header survived.
+      expect(await response.json()).toEqual({ placementKey: 'opend.home.hover-layer' });
+    } finally {
+      await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    }
+  });
+
+  it('leaves an unencoded reply unlabelled when the caller asks for no encoding', async () => {
+    let seenAcceptEncoding: string | undefined = 'unset';
+    const upstream = createServer((req, res) => {
+      seenAcceptEncoding = req.headers['accept-encoding'] as string | undefined;
+      res.setHeader('content-type', 'application/json');
+      res.statusCode = 200;
+      res.end(JSON.stringify({ placementKey: 'opend.home.hover-layer' }));
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+    const address = upstream.address() as AddressInfo;
+    seedLogin('local', { apiUrl: `http://127.0.0.1:${address.port}` });
+    try {
+      const response = await fetch(
+        `${baseUrl}/api/touchpoints/test-runtime?deploymentId=deployment-1&placementKey=opend.home.hover-layer&locale=zh-CN`,
+        { headers: { 'accept-encoding': 'identity' } },
+      );
+      expect(seenAcceptEncoding).toBe('identity');
+      expect(response.headers.get('content-encoding')).toBeNull();
+      expect(await response.json()).toEqual({ placementKey: 'opend.home.hover-layer' });
+    } finally {
+      await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    }
+  });
+
+  it('forwards only the registered context POST with daemon-held credentials', async () => {
+    const requests: Array<{
+      url: string;
+      method: string;
+      authorization: string | undefined;
+      body: string;
+    }> = [];
+    const upstream = createServer((req, res) => {
+      let body = '';
+      req.setEncoding('utf8');
+      req.on('data', (chunk) => {
+        body += chunk;
+      });
+      req.on('end', () => {
+        requests.push({
+          url: req.url ?? '',
+          method: req.method ?? '',
+          authorization: req.headers.authorization,
+          body,
+        });
+        res.setHeader('content-type', 'application/json');
+        res.statusCode = 201;
+        res.end(JSON.stringify({ deploymentId: 'deployment-1', scenario: 'realtime', updatedAt: '2026-09-14T00:00:00.000Z' }));
+      });
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+    const address = upstream.address() as AddressInfo;
+    seedLogin('local', { apiUrl: `http://127.0.0.1:${address.port}` });
+    try {
+      const accepted = await postJson(
+        `${baseUrl}/api/touchpoints/test-runtime/context`,
+        { deploymentId: 'deployment-1', scenario: 'realtime' },
+        { authorization: 'Bearer browser-supplied-key' },
+      );
+      expect(accepted.status).toBe(201);
+      expect(requests).toEqual([
+        {
+          url: '/api/v1/touchpoints/runtime/test-context',
+          method: 'POST',
+          authorization: 'Bearer ck-seeded-key',
+          body: JSON.stringify({
+            deploymentId: 'deployment-1',
+            scenario: 'realtime',
+          }),
+        },
+      ]);
+      const acceptance = await postJson(
+        `${baseUrl}/api/touchpoints/test-runtime/test-deployments/deployment-1/acceptances`,
+        {
+          placementKey: 'opend.home.campaign-modal',
+          hostVersion: '2',
+          locale: 'zh-CN',
+          scenario: 'realtime',
+          evidence: 'http://127.0.0.1:55381/#cms-test',
+        },
+        { authorization: 'Bearer browser-supplied-key' },
+      );
+      expect(acceptance.status).toBe(201);
+      expect(requests).toEqual([
+        {
+          url: '/api/v1/touchpoints/runtime/test-context',
+          method: 'POST',
+          authorization: 'Bearer ck-seeded-key',
+          body: JSON.stringify({
+            deploymentId: 'deployment-1',
+            scenario: 'realtime',
+          }),
+        },
+        {
+          url: '/api/v1/touchpoints/test-deployments/deployment-1/acceptances',
+          method: 'POST',
+          authorization: 'Bearer ck-seeded-key',
+          body: JSON.stringify({
+            placementKey: 'opend.home.campaign-modal',
+            hostVersion: '2',
+            locale: 'zh-CN',
+            scenario: 'realtime',
+            evidence: 'http://127.0.0.1:55381/#cms-test',
+          }),
+        },
+      ]);
+      const simulated = await postJson(
+        `${baseUrl}/api/touchpoints/test-runtime/context`,
+        { deploymentId: 'deployment-1', scenario: 'before' },
+      );
+      expect(simulated.status).toBe(400);
+      expect(simulated.body).toEqual({ error: 'realtime_test_runtime_required' });
+      expect(requests).toHaveLength(2);
+      const rejected = await postJson(
+        `${baseUrl}/api/touchpoints/test-runtime/unknown`,
+        { deploymentId: 'deployment-1', scenario: 'before' },
+      );
+      expect(rejected.status).toBe(404);
+      expect(rejected.body).toEqual({
+        error: 'unknown_touchpoint_runtime_path',
+      });
+      expect(requests).toHaveLength(2);
+    } finally {
+      await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    }
+  });
+});
+
+describe('Production touchpoint runtime proxy', () => {
+  it('routes a local publish reader separately without changing the stored login or trusting remote overrides', async () => {
+    const requests: string[] = [];
+    const upstream = createServer((req, res) => {
+      requests.push(req.url ?? '');
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ activityId: 'published-local' }));
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+    const address = upstream.address() as AddressInfo;
+    seedLogin('local', { apiUrl: 'http://127.0.0.1:1' });
+    try {
+      process.env.OPEN_DESIGN_CMS_PRODUCTION_API_URL = `http://127.0.0.1:${address.port}`;
+      const response = await getJson(
+        `${baseUrl}/api/touchpoints/production-runtime?placementKey=opend.home.account-badge&locale=zh-CN`,
+      );
+      expect(response.status).toBe(200);
+      expect(requests).toHaveLength(1);
+      process.env.OPEN_DESIGN_CMS_PRODUCTION_API_URL = 'https://example.com';
+      const rejected = await getJson(
+        `${baseUrl}/api/touchpoints/production-runtime?placementKey=opend.home.account-badge&locale=zh-CN`,
+      );
+      expect(rejected.status).toBe(400);
+      expect(requests).toHaveLength(1);
+    } finally {
+      delete process.env.OPEN_DESIGN_CMS_PRODUCTION_API_URL;
+      await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    }
+  });
+  it('forwards only the exact production decision path with daemon-held credentials', async () => {
+    const requests: Array<{
+      url: string;
+      method: string;
+      authorization: string | undefined;
+    }> = [];
+    const upstream = createServer((req, res) => {
+      requests.push({
+        url: req.url ?? '',
+        method: req.method ?? '',
+        authorization: req.headers.authorization,
+      });
+      res.setHeader('content-type', 'application/json');
+      res.statusCode = 200;
+      res.end(JSON.stringify({ activityId: 'activity-1' }));
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+    const address = upstream.address() as AddressInfo;
+    seedLogin('local', { apiUrl: `http://127.0.0.1:${address.port}` });
+    try {
+      const accepted = await getJson(
+        `${baseUrl}/api/touchpoints/production-runtime?placementKey=opend.home.campaign-modal&locale=en-US`,
+      );
+      expect(accepted.status).toBe(200);
+      expect(requests).toEqual([
+        {
+          url: '/api/v1/touchpoints/runtime/production?placementKey=opend.home.campaign-modal&locale=en-US',
+          method: 'GET',
+          authorization: 'Bearer ck-seeded-key',
+        },
+      ]);
+      const rejected = await getJson(
+        `${baseUrl}/api/touchpoints/production-runtime/deployments`,
+      );
+      expect(rejected.status).toBe(404);
+      expect(requests).toHaveLength(1);
+    } finally {
+      await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    }
+  });
+});
+
 describe('POST /api/integrations/vela/logout', () => {
+  it('requires the observed account and credential revision before sign-out', async () => {
+    seedLogin('local');
+    const missing = await postJson(`${baseUrl}/api/integrations/vela/logout`, {});
+    expect(missing.status).toBe(400);
+    const wrong = await postJson(`${baseUrl}/api/integrations/vela/logout`, {expectedAppUserId: 'other-user', expectedCredentialRevision: 'old-revision'});
+    expect(wrong.status).toBe(409);
+    expect(JSON.parse(readFileSync(configPath(), 'utf8')).profiles.local.runtimeKey).toBeTruthy();
+  });
+
   it('drops back to preset AMR models after file-backed logout invalidates the cached remote catalog', async () => {
     seedLogin('local');
 
@@ -3168,6 +3485,7 @@ describe('POST /api/integrations/vela/logout', () => {
           VELA_OPENCODE_BIN: '/tmp/opencode',
           OPEN_DESIGN_AMR_PROFILE: 'local',
           VELA_RUNTIME_KEY: 'rt-env-secret',
+          VELA_CONTROL_KEY: 'ck-env-secret',
           VELA_LINK_URL: 'https://openrouter.example/v1',
         },
       },
@@ -3192,6 +3510,7 @@ describe('POST /api/integrations/vela/logout', () => {
 
       const nextConfig = await readAppConfig(dataDir);
       expect(nextConfig.agentCliEnv?.amr?.VELA_RUNTIME_KEY).toBeUndefined();
+      expect(nextConfig.agentCliEnv?.amr?.VELA_CONTROL_KEY).toBeUndefined();
       expect(nextConfig.agentCliEnv?.amr?.VELA_LINK_URL).toBeUndefined();
 
       const nextAmrConfig = JSON.parse(readFileSync(configPath(), 'utf8'));
@@ -3315,6 +3634,7 @@ describe('parseAmrEntryAnalyticsPayload — entry sources added in this PR', () 
     const cases: Array<[string, string]> = [
       ['settings_amr_upgrade', 'settings'],
       ['inline_amr_upgrade', 'chat_panel'],
+      ['go_plan_sunset_modal', 'home'],
       ['deepseek_unpaid_modal', 'home'],
       ['deepseek_workbench_badge', 'home'],
       ['deepseek_model_switcher_upgrade', 'chat_panel'],
@@ -3364,6 +3684,18 @@ describe('parseAmrEntryAnalyticsPayload — entry sources added in this PR', () 
     });
   });
 
+  it('accepts the targeted Go Plan sunset campaign dimensions', () => {
+    const parsed = parseAmrEntryAnalyticsPayload({
+      ...payloadFor('go_plan_sunset_modal', 'home'),
+      campaignId: 'go_plan_sunset_202608',
+      conversionSource: 'go_plan_sunset_modal',
+    });
+    expect(parsed).toMatchObject({
+      campaignId: 'go_plan_sunset_202608',
+      conversionSource: 'go_plan_sunset_modal',
+    });
+  });
+
   it('rejects unknown campaign dimensions rather than silently dropping them', () => {
     expect(
       parseAmrEntryAnalyticsPayload({
@@ -3377,5 +3709,179 @@ describe('parseAmrEntryAnalyticsPayload — entry sources added in this PR', () 
         conversionSource: 'not_a_real_source',
       }),
     ).toBeNull();
+  });
+});
+
+// Model entitlements must use the request's verified selection, never the
+// daemon's ambient CLI workspace or a different tab's current selection.
+describe('GET /api/amr/models explicit workspace authority', () => {
+  it.each(['replacement', 'rotation'] as const)('preserves the catalog actor boundary through %s credential changes', async (mode) => {
+    const dataDir = process.env.OD_DATA_DIR as string;
+    const previous = await readAppConfig(dataDir);
+    const previousRollout = process.env.OD_NEXT_STRATEGY_ROLLOUT;
+    // This exercises the direct AMR model preflight. An inherited OD Next
+    // rollout would require its separate persisted task mapping first.
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
+    seedLogin('local', { controlKey: 'actor-a-control', runtimeKey: 'actor-a-runtime', user: { id: 'actor-a', email: 'a@example.test' } });
+    const binary = path.join(tmpHome, 'changing-actor-vela.mjs');
+    const changed = path.join(tmpHome, 'changed');
+    const launched = path.join(tmpHome, 'agent-launched');
+    writeFileSync(binary, `#!/usr/bin/env node
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+if (args[0] === 'model') {
+  if (args[1] === 'preset' && !existsSync(${JSON.stringify(changed)})) {
+    const config = JSON.parse(readFileSync(${JSON.stringify(configPath())}, 'utf8'));
+    Object.assign(config.profiles.local, { controlKey: 'actor-b-control', runtimeKey: 'actor-b-runtime', user: { id: ${JSON.stringify(mode === 'rotation' ? 'actor-a' : 'actor-b')}, email: 'b@example.test' } });
+    writeFileSync(${JSON.stringify(configPath())}, JSON.stringify(config));
+    writeFileSync(${JSON.stringify(changed)}, 'yes');
+  }
+  console.log(JSON.stringify({ source: args[1] === 'preset' ? 'preset' : 'remote', data: [{ id: 'public_model_deepseek_v4_flash', enabled: true, default: true }] }));
+} else {
+  if (args[0] === 'agent') writeFileSync(${JSON.stringify(launched)}, 'yes');
+  await import(${JSON.stringify(new URL('../fixtures/fake-vela.mjs', import.meta.url).href)});
+}
+`);
+    chmodSync(binary, 0o755);
+    await setSettingsAmrEnv({ VELA_BIN: binary });
+    try {
+      const project = await postJson(`${baseUrl}/api/projects`, { id: `model-actor-${Date.now()}`, name: 'Catalog actor boundary' });
+      expect(project.status).toBe(200);
+      const projectId = (project.body as { project: { id: string } }).project.id;
+      const response = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: 'amr', projectId, message: 'never run as replacement actor', model: 'default' }),
+      });
+      expect(response.ok).toBe(true);
+      const events = await response.text();
+      expect(existsSync(changed)).toBe(true);
+      expect(existsSync(launched)).toBe(mode === 'rotation');
+      if (mode === 'replacement') expect(events).toContain('AMR_AUTH_REQUIRED');
+      else {
+        expect(events).not.toContain('AMR_AUTH_REQUIRED');
+        expect(events).toContain('event: end');
+      }
+    } finally {
+      if (previousRollout === undefined) delete process.env.OD_NEXT_STRATEGY_ROLLOUT;
+      else process.env.OD_NEXT_STRATEGY_ROLLOUT = previousRollout;
+      await writeAppConfig(dataDir, { ...previous });
+    }
+  });
+
+
+  it('keeps verified A to B to A entitlements separate from the ambient CLI workspace', async () => {
+    const binary = path.join(tmpHome, 'scoped-model-vela.mjs');
+    const reads = path.join(tmpHome, 'model-reads.jsonl');
+    writeFileSync(binary, `#!/usr/bin/env node
+import { appendFileSync } from 'node:fs';
+if (process.argv[2] !== 'model') { console.log('1.0.0'); process.exit(0); }
+const source = process.argv[3] === 'preset' ? 'preset' : 'remote';
+if (process.argv[3] === 'list' && !process.argv.includes('--help')) appendFileSync(${JSON.stringify(reads)}, JSON.stringify({ workspaceId: process.env.VELA_WORKSPACE_ID, argv: process.argv.slice(2) }) + '\\n');
+console.log(JSON.stringify({ source, data: [
+  { id: 'public_model_deepseek_v4_1_flash', enabled: true },
+  { id: 'public_model_deepseek_v4_pro', enabled: source === 'remote' && process.env.VELA_WORKSPACE_ID === 'go-b' },
+] }));
+`);
+    chmodSync(binary, 0o755);
+    const config = await readAppConfig(process.env.OD_DATA_DIR as string);
+    const app = express();
+    const lifecycle = registerVelaRoutes(app, {
+      paths: { RUNTIME_DATA_DIR: process.env.OD_DATA_DIR as string },
+      appConfig: { readAppConfig: async () => ({
+        ...config, agentCliEnv: { amr: { VELA_BIN: binary, VELA_WORKSPACE_ID: 'ambient-go' } },
+      }) },
+      http: {},
+      env: process.env,
+      verifyWorkspaceReadAuthority: async (req) => {
+        const headers = req as { get(name: string): string };
+        return { ok: true, context: workspaceContextFromDirectoryItem({
+          workspaceId: headers.get('x-od-workspace-id'),
+          workspaceMemberId: headers.get('x-od-workspace-member-id'),
+          workspaceName: 'scoped fixture', workspaceType: 'team', role: 'member',
+          memberStatus: 'active', lifecycleState: 'active',
+        }) };
+      },
+    });
+    const scopedServer = app.listen(0, '127.0.0.1');
+    await new Promise<void>((resolve) => scopedServer.once('listening', resolve));
+    try {
+      const address = scopedServer.address() as AddressInfo;
+      let beforeReturnReads = '';
+      for (const workspaceId of ['free-a', 'go-b', 'free-a']) {
+        await vi.waitFor(async () => {
+          const response = await fetch(`http://127.0.0.1:${address.port}/api/amr/models`, {
+            headers: { 'x-od-workspace-id': workspaceId, 'x-od-workspace-member-id': `member-${workspaceId}` },
+          });
+          expect(response.status).toBe(200);
+          const catalog = await response.json() as { source: string; refreshing: boolean; models: Array<{ id: string; enabled?: boolean }> };
+          expect(catalog.source).toBe('remote');
+          expect(catalog.refreshing).toBe(false);
+          expect(catalog.models.find((model) => model.id === 'deepseek-v4-pro')?.enabled).toBe(workspaceId === 'go-b');
+        });
+        if (workspaceId === 'go-b') beforeReturnReads = readFileSync(reads, 'utf8');
+      }
+      // A-return must reuse A's own catalog. A B-refresh already in flight
+      // may still finish, so compare A commands rather than all child writes.
+      const parseReads = (value: string): Array<{ workspaceId: string; argv: string[] }> => value.trim().split('\n').map((line) => JSON.parse(line));
+      const calls = parseReads(readFileSync(reads, 'utf8'));
+      expect(calls.filter((call) => call.workspaceId === 'free-a')).toEqual(
+        parseReads(beforeReturnReads).filter((call) => call.workspaceId === 'free-a'),
+      );
+      expect(new Set(calls.map((call) => call.workspaceId))).toEqual(new Set(['free-a', 'go-b']));
+      expect(calls.every((call) => JSON.stringify(call.argv) === JSON.stringify(['model', 'list', '--all', '--format', 'json']))).toBe(true);
+      const forced = await fetch(`http://127.0.0.1:${address.port}/api/amr/models?refresh=1`, {
+        headers: { 'x-od-workspace-id': 'free-a', 'x-od-workspace-member-id': 'member-free-a' },
+      });
+      expect(forced.status).toBe(200);
+      await vi.waitFor(async () => {
+        const response = await fetch(`http://127.0.0.1:${address.port}/api/amr/models`, {
+          headers: { 'x-od-workspace-id': 'free-a', 'x-od-workspace-member-id': 'member-free-a' },
+        });
+        const catalog = await response.json() as { source: string; refreshing: boolean };
+        expect(catalog.source).toBe('remote');
+        expect(catalog.refreshing).toBe(false);
+      });
+      const afterForced = parseReads(readFileSync(reads, 'utf8'));
+      expect(afterForced.filter((call) => call.workspaceId === 'free-a')).toHaveLength(calls.filter((call) => call.workspaceId === 'free-a').length + 1);
+      expect(afterForced.filter((call) => call.workspaceId === 'go-b')).toEqual(calls.filter((call) => call.workspaceId === 'go-b'));
+      expect(afterForced.at(-1)?.workspaceId).toBe('free-a');
+      const unscoped = await fetch(`http://127.0.0.1:${address.port}/api/amr/models?refresh=1`);
+      expect(unscoped.status).toBe(400);
+    } finally {
+      await lifecycle.close();
+      await new Promise<void>((resolve) => scopedServer.close(() => resolve()));
+    }
+  });
+
+
+  it('rejects a denied selected principal before reading a model catalog', async () => {
+    const app = express();
+    const verifyWorkspaceReadAuthority = vi.fn(async () => ({
+      ok: false as const,
+      status: 403 as const,
+      code: 'WORKSPACE_ACCESS_DENIED' as const,
+      message: 'the requested workspace is not available to this member',
+    }));
+    const lifecycle = registerVelaRoutes(app, {
+      paths: { RUNTIME_DATA_DIR: process.env.OD_DATA_DIR as string },
+      appConfig: { readAppConfig },
+      http: {},
+      env: process.env,
+      verifyWorkspaceReadAuthority,
+    });
+    const scopedServer = app.listen(0, '127.0.0.1');
+    await new Promise<void>((resolve) => scopedServer.once('listening', resolve));
+    try {
+      const address = scopedServer.address() as AddressInfo;
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/amr/models`, {
+        headers: { 'x-od-workspace-id': 'free-a', 'x-od-workspace-member-id': 'foreign-member' },
+      });
+      expect(response.status).toBe(403);
+      expect(await response.json()).toMatchObject({ error: 'WORKSPACE_ACCESS_DENIED' });
+      expect(verifyWorkspaceReadAuthority).toHaveBeenCalledTimes(1);
+    } finally {
+      await lifecycle.close();
+      await new Promise<void>((resolve) => scopedServer.close(() => resolve()));
+    }
   });
 });

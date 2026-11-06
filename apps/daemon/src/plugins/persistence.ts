@@ -63,6 +63,7 @@ export function migratePlugins(db: SqliteDb): void {
       plugin_spec_version      TEXT NOT NULL DEFAULT '1.0.0',
       plugin_version           TEXT NOT NULL,
       manifest_source_digest   TEXT NOT NULL,
+      strategy_json            TEXT,
       source_marketplace_id    TEXT,
       source_marketplace_entry_name TEXT,
       source_marketplace_entry_version TEXT,
@@ -202,6 +203,7 @@ export function migratePlugins(db: SqliteDb): void {
     db.exec(`ALTER TABLE applied_plugin_snapshots ADD COLUMN plugin_spec_version TEXT NOT NULL DEFAULT '1.0.0'`);
   }
   for (const [name, ddl] of [
+    ['strategy_json', `ALTER TABLE applied_plugin_snapshots ADD COLUMN strategy_json TEXT`],
     ['source_marketplace_entry_name', `ALTER TABLE applied_plugin_snapshots ADD COLUMN source_marketplace_entry_name TEXT`],
     ['source_marketplace_entry_version', `ALTER TABLE applied_plugin_snapshots ADD COLUMN source_marketplace_entry_version TEXT`],
     ['marketplace_trust', `ALTER TABLE applied_plugin_snapshots ADD COLUMN marketplace_trust TEXT`],

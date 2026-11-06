@@ -139,7 +139,7 @@
 .markdown-rendered h6 {
   margin: 32px 0 12px;
   color: var(--text-strong);
-  font-weight: 760;
+  font-weight: 700;
   letter-spacing: 0;
   line-height: 1.18;
 }
@@ -428,7 +428,7 @@
   outline: none;
   background: transparent;
   color: var(--text);
-  font: 13px/1.7 var(--mono);
+  font: 500 13px/1.7 var(--mono);
   padding: 24px 28px 40px;
   tab-size: 2;
 }
@@ -469,6 +469,10 @@
   padding: 24px;
 }
 .image-body img {
+  /* Keep the hairline inside the 100% fit box. Without border-box, a large
+     artifact consumes the full content box first and its 1px border extends
+     past the preview viewport, so the edge against the clipped side vanishes. */
+  box-sizing: border-box;
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
@@ -981,44 +985,28 @@
 }
 .assistant-label { font-weight: 500; color: var(--text-muted); font-size: 11px; }
 
+/* 一轮**内部**那一档间距。稿子 `docs/design/chat-panel/src/scene-shell.css`:
+   `.flow { … gap: 12px }` —— 「同一个人连着说的几块之间是 12」。
+   轮次**之间**的 24 不在这里,在 `routines.css` 的 `.chat-log` 那一段。 */
 .assistant-flow {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
 }
 .prose-block {
-  line-height: var(--prose-line-height, 1.75);
-  color: var(--text);
-  font-size: var(--prose-font-size, 15px);
-  letter-spacing: -0.01em;
-}
-/* Streaming caret — a blinking block riding the end of the last prose block,
-   tracking the final character as tokens arrive (Lobe-style typing cursor). */
-.prose-block[data-stream-cursor="true"] > *:last-child::after {
-  content: "";
-  display: inline-block;
-  width: 0.5em;
-  height: 1em;
-  margin-left: 1px;
-  vertical-align: text-bottom;
-  background: var(--purple);
-  border-radius: 1px;
-  animation: stream-caret-blink 1s steps(2, start) infinite;
-}
-@keyframes stream-caret-blink {
-  0%, 50% { opacity: 1; }
-  50.01%, 100% { opacity: 0; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .prose-block[data-stream-cursor="true"] > *:last-child::after { animation: none; opacity: 1; }
+  line-height: var(--prose-line-height, 1.7);
+  color: var(--text-strong);
+  font-size: var(--prose-font-size, 13px);
+  letter-spacing: normal;
 }
 .prose-block .md-p { margin: 0; }
+.prose-block strong { font-weight: 600; }
 .prose-block .md-p + .md-p { margin-top: 14px; }
 .prose-block .md-h {
   margin: 24px 0 10px;
   line-height: 1.3;
-  font-weight: 650;
+  font-weight: 600;
   color: var(--text-strong, var(--text));
   letter-spacing: -0.02em;
 }
@@ -1041,7 +1029,7 @@
 .prose-block .md-ol li::marker {
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
-  font-weight: 500;
+  font-weight: 600;
 }
 /* GFM task list — checkbox glyph replaces the bullet marker. */
 .prose-block .md-task-list {
@@ -1091,7 +1079,7 @@
   font-family: var(--mono);
   font-size: 0.86em;
   color: var(--text);
-  font-weight: 450;
+  font-weight: 600;
 }
 .prose-block .md-code-block {
   position: relative;
@@ -1114,7 +1102,7 @@
 .prose-block .md-code-lang {
   font-family: var(--mono);
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-muted);
   text-transform: lowercase;
   letter-spacing: 0.02em;
@@ -1396,7 +1384,7 @@
 .thinking-status.op-status-running { color: var(--purple); border-color: var(--purple); background: none; }
 .thinking-status-active { color: var(--purple); }
 .thinking-label {
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-muted);
   font-size: 13px;
 }
@@ -1494,7 +1482,7 @@
   font-size: 12px;
   color: var(--text-muted);
 }
-.status-label { letter-spacing: 0.02em; font-weight: 500; }
+.status-label { letter-spacing: 0.02em; font-weight: 600; }
 .status-detail {
   min-width: 0;
   max-width: 100%;
@@ -1583,7 +1571,7 @@
 .action-card-status.op-status-ok { color: var(--green); }
 .action-card-status.op-status-error { color: var(--red); }
 .action-card-toggle .summary {
-  font-weight: 500;
+  font-weight: 600;
   font-size: 13px;
   color: var(--text-muted);
   flex: 1; min-width: 0;
@@ -1599,7 +1587,7 @@
 }
 .task-activity .action-card-toggle .summary {
   flex: 0 1 auto;
-  font-weight: 400;
+  font-weight: 600;
 }
 .task-activity-elapsed {
   color: var(--text-muted);
@@ -1745,7 +1733,7 @@
   transition: transform 120ms var(--ease-out);
 }
 .op-title {
-  font-weight: 500;
+  font-weight: 600;
   font-size: 13px;
   color: var(--text-muted);
 }
@@ -1757,51 +1745,4 @@
   white-space: nowrap;
   min-width: 0;
   flex: 1;
-}
-
-/* Live code box — code streaming in real time while a Write/Edit tool's JSON
-   input is still arriving (before the full tool_use event). */
-.live-code-box {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: transparent;
-  overflow: hidden;
-}
-.live-code-box .live-code-head {
-  cursor: default;
-  border-radius: 0;
-}
-.live-code-box .live-code-head:hover {
-  background: transparent;
-}
-.live-code-pre {
-  margin: 0;
-  padding: 8px 12px 10px;
-  max-height: 240px;
-  overflow-y: auto;
-  font-family: var(--mono);
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--text);
-  background: transparent;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  border-top: 1px solid var(--border);
-  scrollbar-width: thin;
-}
-.live-code-pre code {
-  font-family: inherit;
-}
-.live-code-caret {
-  display: inline-block;
-  width: 2px;
-  height: 1em;
-  margin-left: 1px;
-  vertical-align: text-bottom;
-  background: var(--purple);
-  border-radius: 1px;
-  animation: stream-caret-blink 1s steps(2, start) infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .live-code-caret { animation: none; opacity: 1; }
 }

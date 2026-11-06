@@ -40,6 +40,11 @@
 5. 只有在能明显提升 agent 输出质量时，才添加 `examples/`、`preview/`、`assets/` 或 `references/`。
 6. 当插件行为足够复杂、容易回归时，添加 `evals/evals.json`。
 7. 如果要对外发布，准备适配 skills.sh、ClawHub 和 canonical GitHub source 的 registry-safe README 段落。
+8. 对于以 HTML 为真实产物的视觉插件，必须提交真实的 `example.html`，并将
+   `od.preview.type` 声明为 `"html"`、`entry` 指向 `"./example.html"`。
+   `od.useCase.exampleOutputs` 和 `od.context.assets` 也必须包含该文件。海报图
+   可以作为辅助资源保留，但不能代替 HTML 预览；如果 `template.json` 包含
+   `referenceHtml`，应从它（或同一个确定性生成器）生成样例，并保持同步。
 
 ## 完成标准
 
@@ -51,6 +56,8 @@
 - 声明的 atoms 是已知一方 atoms，或明确标注为未来工作。
 - capabilities 是最小必要集合。
 - 视觉类插件包含 preview 或具体示例输出。
+- HTML 预览入口能以 `200 text/html` 正常加载；对该插件而言，preview baker
+  中的 `skip (status 404)` 必须视为失败，即使整个烘焙任务仍显示绿色。
 - share、deploy、connector、network 类插件在对外可见操作前要求用户确认。
 
 ## 验证命令

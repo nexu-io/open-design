@@ -182,7 +182,7 @@
   margin-bottom: 18px;
   color: var(--text-muted);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .ds-setup-field > span {
   color: var(--text-strong);
@@ -231,7 +231,7 @@
   color: var(--text-muted);
   font-family: var(--sans);
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .ds-resource-card {
   margin-top: 12px;
@@ -274,7 +274,7 @@
   margin-top: 2px;
   color: var(--text-muted);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .ds-resource-row > p {
   grid-column: 1 / -1;
@@ -427,7 +427,7 @@
   color: var(--text-strong);
   background: var(--bg-panel);
   box-shadow: var(--shadow-xs);
-  font: 13px/1.5 "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font: 500 13px/1.5 "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 .ds-design-md-preview {
   min-width: 0;
@@ -964,7 +964,7 @@ a.ds-source-link-open:focus-visible {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: color-mix(in srgb, var(--bg) 68%, transparent);
+  background: var(--scrim-tint);
   -webkit-backdrop-filter: var(--scrim-backdrop);
   backdrop-filter: var(--scrim-backdrop);
 }
@@ -1494,7 +1494,7 @@ a.ds-source-link-open:focus-visible {
   border-radius: var(--radius-large, 8px);
   background: var(--bg-panel);
   color: var(--text-muted);
-  font: 11px/1.35 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font: 500 11px/1.35 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1658,7 +1658,7 @@ a.ds-source-link-open:focus-visible {
   border-radius: var(--radius-large, 8px);
   background: var(--bg-panel);
   color: var(--text);
-  font: 11px/1.35 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font: 500 11px/1.35 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1703,7 +1703,7 @@ a.ds-source-link-open:focus-visible {
   background: var(--bg-subtle);
   color: var(--text-muted);
   white-space: pre-wrap;
-  font: 12px/1.45 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font: 500 12px/1.45 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
 }
 .ds-warning-card span {
   flex: 1;
@@ -1761,7 +1761,7 @@ a.ds-source-link-open:focus-visible {
   background: var(--bg-panel);
   color: var(--text);
   white-space: pre-wrap;
-  font: 12.5px/1.5 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font: 500 12.5px/1.5 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
 }
 .ds-review-sections {
   display: grid;
@@ -1815,7 +1815,7 @@ a.ds-source-link-open:focus-visible {
   white-space: pre-wrap;
   margin: 0;
   color: var(--text);
-  font: 13px/1.55 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font: 500 13px/1.55 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
 }
 .ds-body-editor {
   display: grid;
@@ -2109,7 +2109,7 @@ a.ds-source-link-open:focus-visible {
   background: var(--bg-elevated);
   color: var(--text);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .ds-user-empty {
   padding: 18px;
@@ -2350,7 +2350,7 @@ a.ds-source-link-open:focus-visible {
    Design Files tab, this tab scrolls with the strip — no sticky pinning, so
    overflowed tabs never slide underneath it. */
 .ws-tab.design-system-tab {
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
 }
 .ws-tab.design-system-tab.active {
@@ -2394,7 +2394,7 @@ a.ds-source-link-open:focus-visible {
   background: var(--text);
   color: var(--bg);
   border-color: var(--text);
-  font-weight: 500;
+  font-weight: 600;
 }
 .ws-tab-action.share:hover:not(:disabled) {
   background: #000;
@@ -2640,7 +2640,7 @@ a.ds-source-link-open:focus-visible {
   color: var(--text);
   font-family: var(--serif);
   font-size: 48px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.04;
   letter-spacing: 0;
 }
@@ -2900,7 +2900,7 @@ a.ds-source-link-open:focus-visible {
   font-family: var(--serif);
   font-size: clamp(28px, 4vw, 48px);
   line-height: 1.08;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0;
 }
 .ds-project-head p {
@@ -3602,7 +3602,7 @@ a.ds-source-link-open:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 500;
+  font-weight: 600;
 }
 .ds-project-file-row svg:last-child {
   color: var(--text-faint);
@@ -3664,7 +3664,7 @@ a.ds-source-link-open:focus-visible {
   margin: 0 0 2px 2px;
   color: var(--text-muted);
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0;
 }
 .ds-project-review-item {

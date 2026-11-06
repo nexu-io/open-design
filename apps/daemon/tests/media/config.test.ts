@@ -363,9 +363,9 @@ describe('media-config OpenAI auth-file fallback', () => {
     });
 
     it('falls back to OD_DATA_DIR when OD_MEDIA_CONFIG_DIR is unset', async () => {
-      // Packaged daemon (apps/packaged/src/sidecars.ts) and the
-      // Home Manager / NixOS modules already set OD_DATA_DIR for the
-      // rest of the daemon's runtime state. media-config should
+      // The packaged daemon (apps/packaged/src/sidecars.ts) and other
+      // supervised runtimes already set OD_DATA_DIR for the rest of the
+      // daemon's runtime state. media-config should
       // co-locate there without needing a second env var.
       process.env.OD_DATA_DIR = overrideRoot;
       await writeProvidersAt(overrideRoot, {

@@ -21,11 +21,19 @@ import {
   createConversation,
   listConversations,
   listMessages,
+  loadTabs,
   saveMessage,
+  registerQueuedSubmission,
 } from '../../src/state/projects';
 import { fetchPreviewComments, fetchProjectFiles } from '../../src/providers/registry';
 import { useProjectFileEvents } from '../../src/providers/project-events';
 import { resetSharedCancellableGet } from '../../src/lib/shared-cancellable-get';
+import {
+  beginHomeAttachmentUploads,
+  endHomeAttachmentUploads,
+  resetHomeAttachmentUploads,
+  settleHomeAttachmentUpload,
+} from '../../src/state/home-attachment-handoff';
 import {
   cancelBrandExtraction,
   continueBrandExtraction,
@@ -50,9 +58,11 @@ const registryOriginals = vi.hoisted(() => ({
 
 const fileWorkspaceSpy = vi.hoisted(() => vi.fn());
 const chatPaneSpy = vi.hoisted(() => vi.fn());
+const chatPaneMounts = vi.hoisted(() => ({ count: 0 }));
 
 type MockChatPaneProps = {
   messages?: ChatMessage[];
+  sendDisabled?: boolean;
   activeConversationId?: string | null;
   initialDraft?: string;
   onBrandBrowserAssistConfirm?: (card: {
@@ -148,6 +158,29 @@ vi.mock('../../src/runtime/brand-browser-bridge', () => ({
   getBrandBrowser: brandBrowserBridgeMocks.getBrandBrowser,
 }));
 
+// ProjectView also mounts `useDesignMdState` (the Continue-in-CLI staleness
+// chip), which reads the same project file list through `fetchProjectFiles` so
+// the two share ONE request in the browser instead of opening two (W82). These
+// cases measure ProjectView's own file reads through the mocked reader, above
+// the layer where that sharing happens, so the hook is stubbed out here to keep
+// the mocked call sequence describing ProjectView alone. The hook's own
+// behaviour is covered by tests/hooks/useDesignMdState.test.tsx.
+vi.mock('../../src/hooks/useDesignMdState', () => ({
+  useDesignMdState: () => ({
+    exists: false,
+    generatedAt: null,
+    transcriptMessageCount: null,
+    designSystemId: null,
+    currentArtifact: null,
+    isStale: false,
+    staleReason: null,
+    loading: false,
+    error: null,
+    refresh: async () => {},
+  }),
+  computeStale: () => ({ isStale: false, staleReason: null }),
+}));
+
 vi.mock('../../src/providers/registry', async () => {
   const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
     '../../src/providers/registry',
@@ -180,6 +213,9 @@ vi.mock('../../src/state/projects', async () => {
     loadTabs: vi.fn().mockResolvedValue({ tabs: [], active: null }),
     patchConversation: vi.fn(),
     patchProject: vi.fn(),
+    registerQueuedSubmission: vi.fn(async (projectId, submission) => ({
+      id: submission.id, projectId, conversationId: submission.conversationId, acceptedAt: submission.submittedAt,
+    })),
     saveMessage: vi.fn(),
     saveTabs: vi.fn(),
   };
@@ -218,9 +254,14 @@ vi.mock('../../src/components/Loading', () => ({
   CenteredLoader: () => <div data-testid="loader" />,
 }));
 
-vi.mock('../../src/components/ChatPane', () => ({
+vi.mock('../../src/components/ChatPane', async () => {
+  const { useEffect } = await vi.importActual<typeof import('react')>('react');
+  return {
   ChatPane: (props: MockChatPaneProps) => {
     chatPaneSpy(props);
+    useEffect(() => {
+      chatPaneMounts.count += 1;
+    }, []);
     return (
       <>
         <div data-testid="active-conversation">{props.activeConversationId ?? ''}</div>
@@ -235,7 +276,8 @@ vi.mock('../../src/components/ChatPane', () => ({
       </>
     );
   },
-}));
+  };
+});
 
 const mockedListConversations = vi.mocked(listConversations);
 const mockedCreateConversation = vi.mocked(createConversation);
@@ -335,6 +377,7 @@ describe('ProjectView pending prompt seeding', () => {
 
   afterEach(() => {
     cleanup();
+    resetHomeAttachmentUploads();
     resetSharedCancellableGet();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -435,6 +478,76 @@ describe('ProjectView pending prompt seeding', () => {
     });
     expect(refreshResult).toEqual({ acceptedGeneration: 2 });
     expect(mockedFetchProjectFiles.mock.calls.at(-1)?.[1]?.fresh).toBe(true);
+  });
+
+  it('does not force a preview refresh when SSE-ready reconciliation finds the same files', async () => {
+    const file: ProjectFile = {
+      name: 'index.html',
+      path: 'index.html',
+      size: 100,
+      mtime: 1_000,
+      kind: 'html',
+      mime: 'text/html',
+    };
+    mockedFetchProjectFiles.mockResolvedValue([file]);
+
+    renderProjectView(project('sse-ready-same-files'));
+    await waitFor(() => {
+      const props = fileWorkspaceSpy.mock.calls.at(-1)?.[0];
+      expect(props?.files).toEqual([file]);
+      expect(props?.filesRefreshKey).toBe(0);
+    });
+
+    const options = mockedUseProjectFileEvents.mock.calls.at(-1)?.[3];
+    await act(async () => {
+      options?.onReady?.();
+    });
+
+    await waitFor(() => expect(mockedFetchProjectFiles).toHaveBeenCalledTimes(2));
+    const props = fileWorkspaceSpy.mock.calls.at(-1)?.[0];
+    expect(props?.files).toEqual([file]);
+    expect(props?.filesRefreshKey).toBe(0);
+    expect(mockedFetchProjectFiles.mock.calls.at(-1)?.[1]).toMatchObject({
+      fresh: true,
+      requireAuthoritative: true,
+    });
+  });
+
+  it('refreshes the preview when SSE-ready reconciliation finds changed files', async () => {
+    const oldFile: ProjectFile = {
+      name: 'index.html',
+      path: 'index.html',
+      size: 100,
+      mtime: 1_000,
+      kind: 'html',
+      mime: 'text/html',
+    };
+    const changedFile: ProjectFile = {
+      ...oldFile,
+      size: 120,
+      mtime: 2_000,
+    };
+    mockedFetchProjectFiles
+      .mockResolvedValueOnce([oldFile])
+      .mockResolvedValue([changedFile]);
+
+    renderProjectView(project('sse-ready-changed-files'));
+    await waitFor(() => {
+      const props = fileWorkspaceSpy.mock.calls.at(-1)?.[0];
+      expect(props?.files).toEqual([oldFile]);
+      expect(props?.filesRefreshKey).toBe(0);
+    });
+
+    const options = mockedUseProjectFileEvents.mock.calls.at(-1)?.[3];
+    await act(async () => {
+      options?.onReady?.();
+    });
+
+    await waitFor(() => {
+      const props = fileWorkspaceSpy.mock.calls.at(-1)?.[0];
+      expect(props?.files).toEqual([changedFile]);
+      expect(props?.filesRefreshKey).toBe(1);
+    });
   });
 
   it('does not advance the file generation when a fresh revalidation fails', async () => {
@@ -704,6 +817,92 @@ describe('ProjectView pending prompt seeding', () => {
       expect(mockedSaveMessage).toHaveBeenCalled();
     });
     expect(window.sessionStorage.getItem(`od:auto-send-first:${projectId}`)).toBeNull();
+  });
+
+  it('records recency once at queue entry, not again when the queued send starts', async () => {
+    const projectId = 'queued-project-recency';
+    const onTouchProject = vi.fn();
+    renderProjectView(project(projectId), vi.fn(), { onTouchProject });
+    await screen.findByText(`conv-${projectId}`);
+    await waitFor(() => expect(chatPaneSpy).toHaveBeenCalled());
+    await act(async () => {
+      await chatPaneSpy.mock.calls.at(-1)?.[0].onSend('Queued request', [], [], { queueOnly: true });
+    });
+    await waitFor(() => expect(mockedSaveMessage.mock.calls.some(([, , message]) => message.role === 'user')).toBe(true));
+    expect(onTouchProject).toHaveBeenCalledTimes(1);
+    expect(onTouchProject).toHaveBeenCalledWith(expect.any(Number));
+  });
+
+  it('OPEND-4047 does not register a queued automatic repair as a human submission', async () => {
+    const projectId = 'queued-system-repair';
+    const onTouchProject = vi.fn();
+    renderProjectView(project(projectId), vi.fn(), { onTouchProject });
+    await screen.findByText(`conv-${projectId}`);
+    await act(async () => {
+      await chatPaneSpy.mock.calls.at(-1)?.[0].onSend('Automatic repair', [], [], {
+        queueOnly: true, systemSubmission: true,
+      });
+    });
+    await waitFor(() => expect(mockedSaveMessage.mock.calls.some(([, , message]) => message.role === 'user')).toBe(true));
+    expect(registerQueuedSubmission).not.toHaveBeenCalled();
+    expect(onTouchProject).not.toHaveBeenCalled();
+  });
+
+  it('holds the Home auto-send until the picked batch finishes uploading', async () => {
+    // OPEND-2585. The project frame now opens while the Home batch is still
+    // going up, so the auto-send is the only thing left waiting on it. If it
+    // fired on the first frame the user's prompt would go out with none of the
+    // files they attached to it.
+    const projectId = 'auto-send-uploading-batch';
+    const prompt = '我上传了多少个文件';
+    window.sessionStorage.setItem(`od:auto-send-first:${projectId}`, '1');
+    window.sessionStorage.setItem(`od:auto-send-prompt:${projectId}`, prompt);
+    beginHomeAttachmentUploads(projectId, [
+      new File(['a'], 'shot-0.png', { type: 'image/png' }),
+      new File(['b'], 'shot-1.png', { type: 'image/png' }),
+    ]);
+
+    renderProjectView(project(projectId));
+
+    // The conversation has resolved and messages have loaded — everything the
+    // auto-send waits on EXCEPT the uploads. It must still not have fired.
+    await screen.findByText(`conv-${projectId}`);
+    await waitFor(() => expect(chatPaneSpy).toHaveBeenCalled());
+    expect(mockedSaveMessage).not.toHaveBeenCalled();
+    // The composer is reachable now, which it never was behind the old
+    // hand-off screen. A second prompt sent here would consume the turn the
+    // Home prompt is queued for, so the send waits with it.
+    expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.sendDisabled).toBe(true);
+
+    // The uploads answer, in the order the user picked the files.
+    window.sessionStorage.setItem(
+      `od:auto-send-attachments:${projectId}`,
+      JSON.stringify([
+        { path: 'attachments/shot-0.png', name: 'shot-0.png', kind: 'image', size: 1 },
+        { path: 'attachments/shot-1.png', name: 'shot-1.png', kind: 'image', size: 1 },
+      ]),
+    );
+    await act(async () => {
+      settleHomeAttachmentUpload(projectId, 0);
+      settleHomeAttachmentUpload(projectId, 1);
+      endHomeAttachmentUploads(projectId);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(mockedSaveMessage).toHaveBeenCalled());
+    expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.sendDisabled).toBe(false);
+    const userMessageCall = mockedSaveMessage.mock.calls.find(
+      ([, , message]) => message.role === 'user',
+    );
+    expect(userMessageCall?.[2]).toEqual(expect.objectContaining({
+      role: 'user',
+      content: prompt,
+      // The paths the server gave back, not the local names the frame drew.
+      attachments: [
+        expect.objectContaining({ path: 'attachments/shot-0.png' }),
+        expect.objectContaining({ path: 'attachments/shot-1.png' }),
+      ],
+    }));
   });
 
   it('does not prefill when re-entering a project after the pending prompt was cleared', async () => {
@@ -1019,7 +1218,7 @@ describe('ProjectView pending prompt seeding', () => {
       expect(mockedContinueBrandExtraction).toHaveBeenCalledWith(projectId);
     });
     await waitFor(() => {
-      expect(mockedListMessages).toHaveBeenCalledWith(projectId, 'conv-brand-replacement', null);
+      expect(mockedListMessages).toHaveBeenCalledWith(projectId, 'conv-brand-replacement', null, expect.any(AbortSignal), expect.any(Function));
     });
     await waitFor(() => {
       expect(screen.getByTestId('active-conversation').textContent).toBe('conv-brand-replacement');
@@ -1622,3 +1821,118 @@ function latestChatPaneProps(): MockChatPaneProps {
   if (!latest) throw new Error('ChatPane was not rendered');
   return latest[0] as MockChatPaneProps;
 }
+
+describe('ProjectView mounted from a Home send before the create answers (OPEND-3334)', () => {
+  const pendingHandoff = {
+    prompt: 'Draft the onboarding flow',
+    files: [] as File[],
+    conversationId: 'conv-seed',
+    persisted: false,
+  };
+
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    window.localStorage.clear();
+    chatPaneMounts.count = 0;
+    mockedListConversations.mockImplementation(async (projectId) => [
+      { ...conversation(projectId), id: 'conv-seed' },
+    ]);
+    mockedListMessages.mockResolvedValue([]);
+    mockedFetchPreviewComments.mockResolvedValue([]);
+    mockedFetchProjectFiles.mockResolvedValue([]);
+    mockedFetchBrands.mockResolvedValue([]);
+    brandBrowserBridgeMocks.getBrandBrowser.mockReturnValue(null);
+  });
+
+  afterEach(() => {
+    cleanup();
+    resetHomeAttachmentUploads();
+    resetSharedCancellableGet();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+  });
+
+  it('holds every project read and draws the optimistic turn under the auto-send ids', async () => {
+    const fetchSpy = vi.fn(async (_input: string | URL | Request) => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchSpy);
+    renderProjectView(project('p-new'), vi.fn(), { creationHandoff: pendingHandoff });
+
+    await waitFor(() => {
+      expect(latestChatPaneProps().messages?.map((message) => message.content))
+        .toEqual(['Draft the onboarding flow', '']);
+    });
+    const ids = latestChatPaneProps().messages?.map((message) => message.id) ?? [];
+    expect(ids[0]).toMatch(/^home-auto-send-.+-user$/);
+    expect(ids[1]).toMatch(/^home-auto-send-.+-assistant$/);
+
+    // Give any stray mount effect a chance to fire before asserting silence.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(mockedListConversations).not.toHaveBeenCalled();
+    expect(mockedFetchProjectFiles).not.toHaveBeenCalled();
+    expect(vi.mocked(loadTabs)).not.toHaveBeenCalled();
+    const projectScoped = fetchSpy.mock.calls.filter(([input]) =>
+      String(input).includes('/api/projects/p-new'));
+    expect(projectScoped).toEqual([]);
+  });
+
+  it('keeps the optimistic turn when App releases its record while the Home uploads are still going up', async () => {
+    // QA on bd5fe20579: App's record has an 8s cleanup deadline after the
+    // create; uploads outliving it made the first turn and its Working row
+    // vanish until the uploads finished.
+    const brief = new File(['x'], 'brief.txt', { type: 'text/plain' });
+    beginHomeAttachmentUploads('p-new', [brief]);
+    const persisted = { ...pendingHandoff, files: [brief], persisted: true };
+    const view = renderProjectView(project('p-new'), vi.fn(), { creationHandoff: persisted });
+    await waitFor(() => {
+      expect(latestChatPaneProps().messages?.map((message) => message.content))
+        .toEqual(['Draft the onboarding flow', '']);
+    });
+
+    view.rerender(projectViewElement(project('p-new'), vi.fn(), { creationHandoff: null }));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(latestChatPaneProps().messages?.map((message) => message.content))
+      .toEqual(['Draft the onboarding flow', '']);
+    expect(chatPaneMounts.count).toBe(1);
+  });
+
+  it('retires the optimistic turn once the record is released and nothing is left to send', async () => {
+    const view = renderProjectView(project('p-new'), vi.fn(), {
+      creationHandoff: { ...pendingHandoff, persisted: true },
+    });
+    await waitFor(() => {
+      expect(latestChatPaneProps().messages?.length).toBe(2);
+    });
+    // No upload in flight and no auto-send key: e.g. the working-directory
+    // hand-off failed after the create, so App never writes the keys.
+    view.rerender(projectViewElement(project('p-new'), vi.fn(), { creationHandoff: null }));
+    await waitFor(() => {
+      expect(latestChatPaneProps().messages ?? []).toEqual([]);
+    });
+  });
+
+  it('starts reading once the create answers, in the same pane, keyed by the seed conversation', async () => {
+    const view = renderProjectView(project('p-new'), vi.fn(), { creationHandoff: pendingHandoff });
+    await waitFor(() => expect(chatPaneMounts.count).toBe(1));
+    expect(mockedListConversations).not.toHaveBeenCalled();
+
+    view.rerender(projectViewElement(project('p-new'), vi.fn(), {
+      creationHandoff: { ...pendingHandoff, persisted: true },
+    }));
+
+    await waitFor(() => expect(mockedListConversations).toHaveBeenCalled());
+    await waitFor(() => {
+      expect(screen.getByTestId('active-conversation').textContent).toBe('conv-seed');
+    });
+    // The conversation list answering is the pane learning its id, not a
+    // conversation switch: the pane is never remounted.
+    expect(chatPaneMounts.count).toBe(1);
+    // The optimistic turn stays until a real one exists.
+    expect(latestChatPaneProps().messages?.map((message) => message.content))
+      .toEqual(['Draft the onboarding flow', '']);
+  });
+});

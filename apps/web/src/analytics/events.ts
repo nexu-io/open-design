@@ -1,3 +1,7 @@
+import type { WorkspaceFundingRecoveryResultProps, WorkspaceJourneySurfaceProps, WorkspaceJourneyClickProps, WorkspaceInvitePageViewProps } from '@open-design/contracts/analytics';
+import { reportExperienceEvent } from '../observability/experience-diagnostics';
+import { observeAnalytics } from './observe';
+import type { ProjectCommentSendResultProps, ShareGuideClickProps, ShareGuideSurfaceViewProps } from '@open-design/contracts/analytics';
 // Typed track* helpers for the v2 analytics schema. Each helper accepts a
 // strongly typed props payload (from @open-design/contracts/analytics) and
 // forwards it through the loosely typed `track()` from AnalyticsProvider.
@@ -19,6 +23,7 @@ import type {
   AssistantFeedbackReasonPanelSurfaceViewProps,
   QuestionsFormSurfaceViewProps,
   DeepSeekCampaignModalSurfaceViewProps,
+  GoPlanSunsetModalSurfaceViewProps,
   DeepSeekCampaignBadgeSurfaceViewProps,
   DeepSeekCampaignModelBenefitSurfaceViewProps,
   // ui_click
@@ -79,6 +84,7 @@ import type {
   AmrEntryClickProps,
   PreviewRunStatusSurfaceViewProps,
   DeepSeekCampaignModalClickProps,
+  GoPlanSunsetModalClickProps,
   DeepSeekCampaignBadgeClickProps,
   RunFailedToastSurfaceViewProps,
   RunRecoveryActionSurfaceViewProps,
@@ -135,6 +141,7 @@ import type {
   FileUploadResultProps,
   ContextLinkResultProps,
   SpeakerNotesSaveResultProps,
+  ArtifactEditResultProps,
   ArtifactExportResultProps,
   ArtifactDeployResultProps,
   ArtifactPublishResultProps,
@@ -143,12 +150,14 @@ import type {
   FeedbackSubmitResultProps,
   ConversationForkResultProps,
   SettingsViewProps,
+  LabsItemToggledProps,
   SettingsCliTestResultProps,
   SettingsByokModelsFetchResultProps,
   SettingsByokTestResultProps,
   SettingsConnectorAuthResultProps,
   ByokPreflightBlockedProps,
   OnboardingClickProps,
+  AgentDetectDiagnosticProps,
   OnboardingRuntimeScanResultProps,
   OnboardingCompleteResultProps,
   OnboardingPromptPrefilledProps,
@@ -182,7 +191,7 @@ import type {
 } from '@open-design/contracts/analytics';
 
 type TrackOptions = { requestId?: string; insertId?: string };
-type Track = (
+export type Track = (
   event: string,
   properties: Record<string, unknown>,
   options?: TrackOptions,
@@ -205,7 +214,23 @@ function send<T extends object>(
   props: T,
   options?: TrackOptions,
 ): void {
+  // SAFETY: typed event props are plain payload objects; both sinks read them as string-keyed properties.
+  reportExperienceEvent(event, props as unknown as Record<string, unknown>);
+  // SAFETY: the same plain typed payload is forwarded without mutation.
   track(event, props as unknown as Record<string, unknown>, options);
+}
+
+/** New passive observations never pass requestId options: those can wrap business fetches. */
+export function trackProjectCommentSendResult(track: Track, props: ProjectCommentSendResultProps): void {
+  observeAnalytics(() => send(track, 'project_comment_send_result', props));
+}
+
+export function trackShareGuideSurfaceView(track: Track, props: ShareGuideSurfaceViewProps): void {
+  observeAnalytics(() => send(track, 'surface_view', props));
+}
+
+export function trackShareGuideClick(track: Track, props: ShareGuideClickProps): void {
+  observeAnalytics(() => send(track, 'ui_click', props));
 }
 
 // ---- page_view -----------------------------------------------------------
@@ -262,6 +287,10 @@ export function trackWorkspaceProjectActionResult(track: Track, props: Workspace
 
 export function trackWorkspaceSharedProjectOpenResult(track: Track, props: WorkspaceSharedProjectOpenResultProps, options?: TrackOptions): void {
   send(track, 'workspace_shared_project_open_result', props, options);
+}
+
+export function trackWorkspaceFundingRecoveryResult(track: Track, props: WorkspaceFundingRecoveryResultProps): void {
+  send(track, 'workspace_funding_recovery_result', props);
 }
 
 export function trackWorkspaceResourceActionResult(track: Track, props: WorkspaceResourceActionResultProps, options?: TrackOptions): void {
@@ -437,6 +466,13 @@ export function trackDeepSeekCampaignModalSurfaceView(
   send(track, 'surface_view', props);
 }
 
+export function trackGoPlanSunsetModalSurfaceView(
+  track: Track,
+  props: GoPlanSunsetModalSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
 export function trackDeepSeekCampaignBadgeSurfaceView(
   track: Track,
   props: DeepSeekCampaignBadgeSurfaceViewProps,
@@ -454,6 +490,13 @@ export function trackDeepSeekCampaignModelBenefitSurfaceView(
 export function trackDeepSeekCampaignModalClick(
   track: Track,
   props: DeepSeekCampaignModalClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackGoPlanSunsetModalClick(
+  track: Track,
+  props: GoPlanSunsetModalClickProps,
 ): void {
   send(track, 'ui_click', props);
 }
@@ -809,6 +852,9 @@ export function trackChatPanelClick(
   send(track, 'ui_click', props);
 }
 
+// Dormant with `ComposerModePicker` (see that file's header): both composers
+// have dropped the mode chip, so nothing calls this today. Kept so the picker
+// can be restored in one step — do NOT delete it as dead code.
 export function trackComposerSessionModeClick(
   track: Track,
   props: ComposerSessionModeClickProps,
@@ -1177,6 +1223,13 @@ export function trackArtifactExportResult(
   send(track, 'artifact_export_result', props, options);
 }
 
+export function trackArtifactEditResult(
+  track: Track,
+  props: ArtifactEditResultProps,
+): void {
+  send(track, 'artifact_edit_result', props);
+}
+
 export function trackArtifactDeployResult(
   track: Track,
   props: ArtifactDeployResultProps,
@@ -1188,8 +1241,9 @@ export function trackArtifactDeployResult(
 export function trackArtifactPublishResult(
   track: Track,
   props: ArtifactPublishResultProps,
+  options?: { requestId?: string },
 ): void {
-  send(track, 'artifact_publish_result', props);
+  send(track, 'artifact_publish_result', props, options);
 }
 
 export function trackFileVersionRestoreResult(
@@ -1222,6 +1276,19 @@ export function trackSettingsView(
   props: SettingsViewProps,
 ): void {
   send(track, 'settings_view', props);
+}
+
+// ---- Labs ----------------------------------------------------------------
+
+/**
+ * Fires after the preference is persisted, not on click.
+ *
+ * The event asserts "this install now prefers X". A failed write rolls the
+ * switch back, so reporting the click would assert something that is not true
+ * of the machine. Losing the rare failed toggle is the cheaper error.
+ */
+export function trackLabsItemToggled(track: Track, props: LabsItemToggledProps): void {
+  send(track, 'labs_item_toggled', props);
 }
 
 export function trackSettingsCliTestResult(
@@ -1265,6 +1332,7 @@ export function trackAssistantFeedbackClick(
 ) {
   track(
     'assistant_feedback_click',
+    // SAFETY: the typed feedback payload is a plain string-keyed object, passed unchanged to track.
     props as unknown as Record<string, unknown>,
   );
 }
@@ -1275,6 +1343,7 @@ export function trackAssistantFeedbackReasonView(
 ) {
   track(
     'assistant_feedback_reason_view',
+    // SAFETY: the typed feedback payload is a plain string-keyed object, passed unchanged to track.
     props as unknown as Record<string, unknown>,
   );
 }
@@ -1286,6 +1355,7 @@ export function trackAssistantFeedbackReasonClick(
 ) {
   track(
     'assistant_feedback_reason_click',
+    // SAFETY: the typed feedback payload is a plain string-keyed object, passed unchanged to track.
     props as unknown as Record<string, unknown>,
     options,
   );
@@ -1298,6 +1368,7 @@ export function trackAssistantFeedbackReasonSubmit(
 ) {
   track(
     'assistant_feedback_reason_submit',
+    // SAFETY: the typed feedback payload is a plain string-keyed object, passed unchanged to track.
     props as unknown as Record<string, unknown>,
     options,
   );
@@ -1319,6 +1390,13 @@ export function trackOnboardingClick(
   props: OnboardingClickProps,
 ): void {
   send(track, 'ui_click', props);
+}
+
+export function trackAgentDetectDiagnostic(
+  track: Track,
+  props: AgentDetectDiagnosticProps,
+): void {
+  send(track, 'agent_detect_diagnostic', props);
 }
 
 export function trackOnboardingRuntimeScanResult(
@@ -1511,4 +1589,14 @@ export function trackExperienceSurveySent(
     $survey_questions: answered,
     ...responses,
   });
+}
+
+export function trackWorkspaceJourneyView(track: Track, props: WorkspaceJourneySurfaceProps): void {
+  send(track, 'surface_view', props);
+}
+export function trackWorkspaceJourneyClick(track: Track, props: WorkspaceJourneyClickProps): void {
+  send(track, 'ui_click', props);
+}
+export function trackWorkspaceInvitePageView(track: Track, props: WorkspaceInvitePageViewProps): void {
+  send(track, 'page_view', props);
 }

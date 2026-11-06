@@ -166,7 +166,8 @@ describe('resolveDesignDeliveryOutcome', () => {
       resolveDesignDeliveryOutcome({
         sessionMode: 'design',
         runStatus: 'succeeded',
-        content: '<question-form id="brief">{"questions":[]}</question-form>',
+        content:
+          '<question-form id="brief">{"questions":[{"id":"surface","label":"Which surface?"}]}</question-form>',
         events: [],
         producedFileCount: 0,
         traceObjectFileCount: 0,
@@ -190,6 +191,107 @@ describe('resolveDesignDeliveryOutcome', () => {
             },
           },
         ],
+        producedFileCount: 0,
+        traceObjectFileCount: 0,
+      }),
+    ).toBe('awaiting_input');
+  });
+
+  it('keeps a legacy child-tag clarification turn awaiting input', () => {
+    expect(
+      resolveDesignDeliveryOutcome({
+        sessionMode: 'design',
+        runStatus: 'succeeded',
+        content: [
+          '<question-form id="audio">',
+          '<question-select id="format" label="Format">',
+          '<option value="mp3">MP3</option>',
+          '</question-select>',
+          '<question-text id="mood" label="Mood" />',
+          '</question-form>',
+        ].join(''),
+        events: [],
+        producedFileCount: 0,
+        traceObjectFileCount: 0,
+      }),
+    ).toBe('awaiting_input');
+  });
+
+  it('does not report a malformed closed question form as a successful text answer', () => {
+    expect(
+      resolveDesignDeliveryOutcome({
+        sessionMode: 'design',
+        runStatus: 'succeeded',
+        content:
+          '<question-form><question-select id="format"><option>MP3</question-select></question-form>',
+        events: [],
+        producedFileCount: 0,
+        traceObjectFileCount: 0,
+      }),
+    ).toBe('no_result');
+  });
+
+  it('does not latch a no-clarification turn to awaiting_input on a stray open tag', () => {
+    // Production repro: an OD Next strategy turn that needed no clarification
+    // narrated its decision into an open <question-form> tag. The tail is
+    // prose, so no form was ever asked — the turn must be judged on its
+    // deliverables, not parked as awaiting input.
+    const content =
+      '策略判断信息充足，将直接进入生产。\n\n<question-form> 无需提出';
+    expect(
+      resolveDesignDeliveryOutcome({
+        sessionMode: 'design',
+        runStatus: 'succeeded',
+        content,
+        events: [],
+        producedFileCount: 2,
+        traceObjectFileCount: 0,
+      }),
+    ).toBe('delivered');
+    // Same tag, same absence of a real ask: a zero-file report turn is
+    // report_only, not awaiting_input.
+    expect(
+      resolveDesignDeliveryOutcome({
+        sessionMode: 'design',
+        runStatus: 'succeeded',
+        content,
+        events: [],
+        producedFileCount: 0,
+        traceObjectFileCount: 0,
+      }),
+    ).toBe('report_only');
+    expect(
+      designDeliveryVerificationPending({
+        sessionMode: 'design',
+        runStatus: 'succeeded',
+        resultDeliveryState: undefined,
+        content,
+        events: [],
+        producedFiles: undefined,
+        traceObjectFiles: undefined,
+      }),
+    ).toBe(true);
+  });
+
+  it('still treats a mid-stream question-form body as awaiting input', () => {
+    // A truncated but still-plausible JSON body is a real ask that simply has
+    // not finished streaming — it must keep its awaiting_input classification.
+    expect(
+      resolveDesignDeliveryOutcome({
+        sessionMode: 'design',
+        runStatus: 'succeeded',
+        content: 'Quick brief first.\n<question-form id="brief">{"questions":[',
+        events: [],
+        producedFileCount: 0,
+        traceObjectFileCount: 0,
+      }),
+    ).toBe('awaiting_input');
+    expect(
+      resolveDesignDeliveryOutcome({
+        sessionMode: 'design',
+        runStatus: 'succeeded',
+        content: 'Quick brief first.\n<question-form id="brief"><question-se',
+        events: [],
         producedFileCount: 0,
         traceObjectFileCount: 0,
       }),
@@ -244,7 +346,8 @@ describe('resolveDesignDeliveryOutcome', () => {
       designDeliveryVerificationPending({
         sessionMode: 'design',
         runStatus: 'succeeded',
-        content: '<question-form id="brief">{"questions":[]}</question-form>',
+        content:
+          '<question-form id="brief">{"questions":[{"id":"surface","label":"Which surface?"}]}</question-form>',
         events: [],
       }),
     ).toBe(false);

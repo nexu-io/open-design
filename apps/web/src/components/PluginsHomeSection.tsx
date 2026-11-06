@@ -490,6 +490,8 @@ function pluginFacetLabel(slug: string, fallback: string, t: ReturnType<typeof u
     case 'from-framer': return t('pluginsHome.facet.framer');
     case 'from-webflow': return t('pluginsHome.facet.webflow');
     case 'prototype': return t('homeHero.chip.prototype');
+    case 'document': return t('homeHero.chip.document');
+    case 'webgl': return t('homeHero.chip.webgl');
     case 'deck': return t('pluginsHome.facet.slides');
     case 'design-system': return t('entry.navDesignSystems');
     case 'hyperframes': return t('homeHero.chip.hyperframes');

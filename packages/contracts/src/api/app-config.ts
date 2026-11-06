@@ -1,3 +1,5 @@
+import type { OdNextRolloutMode } from './strategy-rollout.js';
+
 export interface AgentModelPrefs {
   model?: string;
   reasoning?: string;
@@ -64,6 +66,25 @@ export interface AppConfigPrefs {
   projectLocations?: ProjectLocationPrefs[];
   /** Project location id used for new projects when the create request does not choose one explicitly. */
   defaultProjectLocationId?: string | null;
+  /**
+   * Which mode this installation runs the OD Next design strategy in.
+   *
+   * OD Next is the default route: an installation that never chose runs the
+   * strategy, so absent (and `null`) mean `active`. Setting this to `'off'` is
+   * the whole opt-out step — the next run takes the ordinary route without
+   * restarting the daemon, because the run route reads this field per request
+   * rather than latching it at boot.
+   *
+   * A packaged install has no other control: the packaged child environment
+   * allowlist carries no `OD_NEXT_*` key, so this field is what the Labs
+   * switch writes and the only thing standing between an opted-out user and
+   * the default.
+   *
+   * `OD_NEXT_STRATEGY_ROLLOUT` still outranks this when it is set, so an
+   * operator, a packaged smoke run, or a test can pin a mode for one process
+   * without overwriting what the user saved.
+   */
+  odNextStrategyMode?: OdNextRolloutMode | null;
   /**
    * Most-recently-used local working directories the user granted the agent
    * read access to (via the Home composer's working-directory picker). These

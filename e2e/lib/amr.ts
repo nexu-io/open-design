@@ -9,6 +9,7 @@ export type FakeVelaOptions = {
   failBalanceAtPrompt?: boolean;
   failBalanceAtPromptOnce?: boolean;
   failModelListInvalidApiKey?: boolean;
+  fundingCheck?: { status: 'available' | 'insufficient' | 'unknown'; workspaceMemberId: string; balanceUsd?: string };
   requireLoginConfig?: boolean;
   requireSetModel?: boolean;
   sessionId?: string;
@@ -20,6 +21,25 @@ export type VelaEndpoints = {
 };
 
 const DEFAULT_ASSISTANT_TEXT = 'Hello from the e2e fake vela.';
+/**
+ * What the real `vela` CLI prints when the API rejects its runtime key mid-run.
+ *
+ * vela's API answers an unauthenticated request with `{"error":"unauthenticated"}`
+ * under HTTP 401 (`services/api/src/app.ts:723`, `:792`, `:863`;
+ * `runtime-keys.ts:51`), and the CLI renders that through `client.ParseAPIError`
+ * as `API request failed with status %d: %s`
+ * (`apps/cli/internal/client/client.go:42`).
+ *
+ * It has to be a shape vela actually sends. `classifyAmrAccountFailure`
+ * (`apps/daemon/src/integrations/vela-errors.ts`) only claims the AMR-specific
+ * `AMR_AUTH_REQUIRED` on evidence that identifies the AMR credential — a whole
+ * `unauthenticated` / `auth_required` code, `not logged in` alongside vela/amr,
+ * or the sign-in `session` noun — because every run's failure text also carries
+ * `gh`, `npm`, `curl` and MCP output, whose sign-in prose belongs to somebody
+ * else. Invented sign-in wording is deliberately not enough, so a fabricated
+ * message here would assert a path production never takes.
+ */
+const PROMPT_AUTH_FAILURE_MESSAGE = 'API request failed with status 401: unauthenticated';
 const PRESET_MODELS_JSON = JSON.stringify({
   source: 'preset',
   data: [
@@ -181,7 +201,8 @@ if (argv[2] === 'model' && argv[3] === 'preset' && argv[4] === '--format' && arg
   exit(0);
 }
 
-if (argv[2] === 'model' && argv[3] === 'list' && argv[4] === '--format' && argv[5] === 'json') {
+// The daemon asks \`vela model list --all --format json\`; accept it with or without --all, in any flag order.
+if (argv[2] === 'model' && argv[3] === 'list' && argv.includes('--format') && argv.includes('json')) {
   if (MODEL_LIST_INVALID_API_KEY) {
     stderr.write('Error: list Link models: API request failed with status 401: invalid_api_key\\n');
     exit(1);
@@ -193,6 +214,21 @@ if (argv[2] === 'model' && argv[3] === 'list' && argv[4] === '--format' && argv[
 if (REQUIRE_LOGIN && !hasRuntimeKey()) {
   stderr.write('AMR login missing or expired. Please sign in again.\\n');
   exit(1);
+}
+
+if (argv[2] === 'billing' && ['preflight', 'funding-check'].includes(argv[3])) {
+  const check = ${JSON.stringify(options.fundingCheck ?? null)};
+  if (!check) exit(1);
+  const workspaceId = argv[argv.indexOf('--workspace-id') + 1];
+  const modelId = argv.includes('--model') ? argv[argv.indexOf('--model') + 1] : null;
+  const generatedAt = new Date().toISOString();
+  stdout.write(JSON.stringify({
+    schemaVersion: 1, workspaceId, workspaceMemberId: check.workspaceMemberId,
+    modelId, generatedAt, balanceUsd: check.balanceUsd ?? '0', modelCovered: false,
+    funding: 'gateway', fundingCheck: argv[3] === 'funding-check' ? check.status : undefined,
+    codingPlan: { workspaceId, generatedAt, eligible: false, tier: null, windows: [] },
+  }));
+  exit(0);
 }
 
 const sessionsWithModel = new Set();
@@ -248,7 +284,7 @@ function handle(msg) {
       return;
     }
     if (AUTH_FAIL || (AUTH_FAIL_ONCE && shouldFailOnce('auth'))) {
-      writeError(id, 'Your authentication token has expired. Please sign in again.');
+      writeError(id, ${JSON.stringify(PROMPT_AUTH_FAILURE_MESSAGE)});
       return;
     }
     if (BALANCE_FAIL || (BALANCE_FAIL_ONCE && shouldFailOnce('balance'))) {

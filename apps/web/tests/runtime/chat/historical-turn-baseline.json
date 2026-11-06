@@ -1,0 +1,624 @@
+{
+  "bare-done-while-todo-open": [
+    {
+      "kind": "shell",
+      "id": "shell-1",
+      "status": "done",
+      "stopped": false,
+      "thinking": false,
+      "elapsedMs": 3200,
+      "quietMs": null,
+      "items": [
+        {
+          "kind": "text",
+          "text": "先看看现有文件。",
+          "thinking": true
+        },
+        {
+          "kind": "tool",
+          "id": "t1",
+          "pending": false,
+          "tool": "read",
+          "name": "Read",
+          "title": "Read",
+          "rawTitle": false,
+          "file": {
+            "path": "/p/index.html",
+            "label": "index.html"
+          },
+          "pattern": null,
+          "hits": null,
+          "delta": null,
+          "elapsedMs": 1200,
+          "failed": false,
+          "failReason": null,
+          "command": null,
+          "terminal": null
+        },
+        {
+          "kind": "plan",
+          "steps": [
+            "改首屏",
+            "补页脚"
+          ]
+        },
+        {
+          "kind": "todo",
+          "segment": {
+            "content": "改首屏",
+            "status": "stopped",
+            "recalled": false,
+            "abandoned": false,
+            "implicit": false,
+            "items": [
+              {
+                "kind": "text",
+                "text": "正在改首屏的标题。"
+              },
+              {
+                "kind": "tool",
+                "id": "t2",
+                "pending": false,
+                "tool": "write",
+                "name": "Write",
+                "title": "Write",
+                "rawTitle": false,
+                "file": {
+                  "path": "/p/index.html",
+                  "label": "index.html"
+                },
+                "pattern": null,
+                "hits": null,
+                "delta": null,
+                "elapsedMs": 1200,
+                "failed": false,
+                "failReason": null,
+                "command": null,
+                "terminal": null
+              }
+            ],
+            "elapsedMs": 1200
+          }
+        },
+        {
+          "kind": "todo",
+          "segment": {
+            "content": "补页脚",
+            "status": "pending",
+            "recalled": false,
+            "abandoned": false,
+            "implicit": false,
+            "items": [],
+            "elapsedMs": null
+          }
+        }
+      ],
+      "segments": [
+        {
+          "content": "改首屏",
+          "status": "stopped",
+          "recalled": false,
+          "abandoned": false,
+          "implicit": false,
+          "items": [
+            {
+              "kind": "text",
+              "text": "正在改首屏的标题。"
+            },
+            {
+              "kind": "tool",
+              "id": "t2",
+              "pending": false,
+              "tool": "write",
+              "name": "Write",
+              "title": "Write",
+              "rawTitle": false,
+              "file": {
+                "path": "/p/index.html",
+                "label": "index.html"
+              },
+              "pattern": null,
+              "hits": null,
+              "delta": null,
+              "elapsedMs": 1200,
+              "failed": false,
+              "failReason": null,
+              "command": null,
+              "terminal": null
+            }
+          ],
+          "elapsedMs": 1200
+        },
+        {
+          "content": "补页脚",
+          "status": "pending",
+          "recalled": false,
+          "abandoned": false,
+          "implicit": false,
+          "items": [],
+          "elapsedMs": null
+        }
+      ],
+      "thinkingTokens": null
+    },
+    {
+      "kind": "prose",
+      "text": "首屏改好了,页脚下轮再说。"
+    }
+  ],
+  "bare-done-after-todos-closed": [
+    {
+      "kind": "shell",
+      "id": "shell-1",
+      "status": "done",
+      "stopped": false,
+      "thinking": false,
+      "elapsedMs": 1200,
+      "quietMs": null,
+      "items": [
+        {
+          "kind": "plan",
+          "steps": [
+            "改首屏",
+            "补页脚"
+          ]
+        },
+        {
+          "kind": "todo",
+          "segment": {
+            "content": "改首屏",
+            "status": "completed",
+            "recalled": false,
+            "abandoned": false,
+            "implicit": false,
+            "items": [
+              {
+                "kind": "text",
+                "text": "正在改首屏的标题。"
+              },
+              {
+                "kind": "tool",
+                "id": "t1",
+                "pending": false,
+                "tool": "write",
+                "name": "Write",
+                "title": "Write",
+                "rawTitle": false,
+                "file": {
+                  "path": "/p/index.html",
+                  "label": "index.html"
+                },
+                "pattern": null,
+                "hits": null,
+                "delta": null,
+                "elapsedMs": 1200,
+                "failed": false,
+                "failReason": null,
+                "command": null,
+                "terminal": null
+              }
+            ],
+            "elapsedMs": 1200
+          }
+        },
+        {
+          "kind": "todo",
+          "segment": {
+            "content": "补页脚",
+            "status": "completed",
+            "recalled": false,
+            "abandoned": false,
+            "implicit": false,
+            "items": [],
+            "elapsedMs": null
+          }
+        }
+      ],
+      "segments": [
+        {
+          "content": "改首屏",
+          "status": "completed",
+          "recalled": false,
+          "abandoned": false,
+          "implicit": false,
+          "items": [
+            {
+              "kind": "text",
+              "text": "正在改首屏的标题。"
+            },
+            {
+              "kind": "tool",
+              "id": "t1",
+              "pending": false,
+              "tool": "write",
+              "name": "Write",
+              "title": "Write",
+              "rawTitle": false,
+              "file": {
+                "path": "/p/index.html",
+                "label": "index.html"
+              },
+              "pattern": null,
+              "hits": null,
+              "delta": null,
+              "elapsedMs": 1200,
+              "failed": false,
+              "failReason": null,
+              "command": null,
+              "terminal": null
+            }
+          ],
+          "elapsedMs": 1200
+        },
+        {
+          "content": "补页脚",
+          "status": "completed",
+          "recalled": false,
+          "abandoned": false,
+          "implicit": false,
+          "items": [],
+          "elapsedMs": null
+        }
+      ],
+      "thinkingTokens": null
+    },
+    {
+      "kind": "prose",
+      "text": "<done/>首屏和页脚都改好了。"
+    }
+  ],
+  "no-done-lift-conclusion": [
+    {
+      "kind": "shell",
+      "id": "shell-1",
+      "status": "done",
+      "stopped": false,
+      "thinking": false,
+      "elapsedMs": 1200,
+      "quietMs": null,
+      "items": [
+        {
+          "kind": "plan",
+          "steps": [
+            "整理配色"
+          ]
+        },
+        {
+          "kind": "todo",
+          "segment": {
+            "content": "整理配色",
+            "status": "stopped",
+            "recalled": false,
+            "abandoned": false,
+            "implicit": false,
+            "items": [
+              {
+                "kind": "text",
+                "text": "把主色统一成品牌绿。"
+              },
+              {
+                "kind": "tool",
+                "id": "t1",
+                "pending": false,
+                "tool": "edit",
+                "name": "Edit",
+                "title": "Edit",
+                "rawTitle": false,
+                "file": {
+                  "path": "/p/tokens.css",
+                  "label": "tokens.css"
+                },
+                "pattern": null,
+                "hits": null,
+                "delta": null,
+                "elapsedMs": 1200,
+                "failed": false,
+                "failReason": null,
+                "command": null,
+                "terminal": null
+              }
+            ],
+            "elapsedMs": 1200
+          }
+        }
+      ],
+      "segments": [
+        {
+          "content": "整理配色",
+          "status": "stopped",
+          "recalled": false,
+          "abandoned": false,
+          "implicit": false,
+          "items": [
+            {
+              "kind": "text",
+              "text": "把主色统一成品牌绿。"
+            },
+            {
+              "kind": "tool",
+              "id": "t1",
+              "pending": false,
+              "tool": "edit",
+              "name": "Edit",
+              "title": "Edit",
+              "rawTitle": false,
+              "file": {
+                "path": "/p/tokens.css",
+                "label": "tokens.css"
+              },
+              "pattern": null,
+              "hits": null,
+              "delta": null,
+              "elapsedMs": 1200,
+              "failed": false,
+              "failReason": null,
+              "command": null,
+              "terminal": null
+            }
+          ],
+          "elapsedMs": 1200
+        }
+      ],
+      "thinkingTokens": null
+    },
+    {
+      "kind": "prose",
+      "text": "配色统一好了。"
+    }
+  ],
+  "implicit-done-artifact": [
+    {
+      "kind": "shell",
+      "id": "shell-1",
+      "status": "done",
+      "stopped": false,
+      "thinking": false,
+      "elapsedMs": null,
+      "quietMs": null,
+      "items": [
+        {
+          "kind": "plan",
+          "steps": [
+            "出页面"
+          ]
+        },
+        {
+          "kind": "todo",
+          "segment": {
+            "content": "出页面",
+            "status": "stopped",
+            "recalled": false,
+            "abandoned": false,
+            "implicit": false,
+            "items": [
+              {
+                "kind": "text",
+                "text": "正在拼页面。给你:\n"
+              }
+            ],
+            "elapsedMs": null
+          }
+        }
+      ],
+      "segments": [
+        {
+          "content": "出页面",
+          "status": "stopped",
+          "recalled": false,
+          "abandoned": false,
+          "implicit": false,
+          "items": [
+            {
+              "kind": "text",
+              "text": "正在拼页面。给你:\n"
+            }
+          ],
+          "elapsedMs": null
+        }
+      ],
+      "thinkingTokens": null
+    },
+    {
+      "kind": "prose",
+      "text": "<artifact type=\"text/html\">\n<!doctype html>"
+    }
+  ],
+  "implicit-done-question-form": [
+    {
+      "kind": "shell",
+      "id": "shell-1",
+      "status": "done",
+      "stopped": false,
+      "thinking": false,
+      "elapsedMs": null,
+      "quietMs": null,
+      "items": [
+        {
+          "kind": "text",
+          "text": "先确认方向。"
+        }
+      ],
+      "segments": [],
+      "thinkingTokens": null
+    },
+    {
+      "kind": "prose",
+      "text": "<question-form id=\"discovery\">"
+    }
+  ],
+  "marker-inside-code": [
+    {
+      "kind": "shell",
+      "id": "shell-1",
+      "status": "done",
+      "stopped": false,
+      "thinking": false,
+      "elapsedMs": null,
+      "quietMs": null,
+      "items": [
+        {
+          "kind": "plan",
+          "steps": [
+            "写文档"
+          ]
+        },
+        {
+          "kind": "todo",
+          "segment": {
+            "content": "写文档",
+            "status": "stopped",
+            "recalled": false,
+            "abandoned": false,
+            "implicit": false,
+            "items": [],
+            "elapsedMs": null
+          }
+        }
+      ],
+      "segments": [
+        {
+          "content": "写文档",
+          "status": "stopped",
+          "recalled": false,
+          "abandoned": false,
+          "implicit": false,
+          "items": [],
+          "elapsedMs": null
+        }
+      ],
+      "thinkingTokens": null
+    },
+    {
+      "kind": "prose",
+      "text": "这个标记写作 `<done/>`,别手打。例子:\n```html\n<artifact type=\"html\">x</artifact>\n```\n继续。"
+    }
+  ],
+  "plain-chat-turn": [
+    {
+      "kind": "prose",
+      "text": "这是一段普通回答,没有任何标记。"
+    }
+  ],
+  "streaming-midway": [
+    {
+      "kind": "shell",
+      "id": "shell-1",
+      "status": "running",
+      "stopped": false,
+      "thinking": false,
+      "elapsedMs": null,
+      "quietMs": null,
+      "items": [
+        {
+          "kind": "plan",
+          "steps": [
+            "改首屏"
+          ]
+        },
+        {
+          "kind": "todo",
+          "segment": {
+            "content": "改首屏",
+            "status": "in_progress",
+            "recalled": false,
+            "abandoned": false,
+            "implicit": false,
+            "items": [
+              {
+                "kind": "text",
+                "text": "正在改首屏"
+              }
+            ],
+            "elapsedMs": null
+          }
+        }
+      ],
+      "segments": [
+        {
+          "content": "改首屏",
+          "status": "in_progress",
+          "recalled": false,
+          "abandoned": false,
+          "implicit": false,
+          "items": [
+            {
+              "kind": "text",
+              "text": "正在改首屏"
+            }
+          ],
+          "elapsedMs": null
+        }
+      ],
+      "thinkingTokens": null
+    }
+  ],
+  "canceled-turn": [
+    {
+      "kind": "shell",
+      "id": "shell-1",
+      "status": "running",
+      "stopped": true,
+      "thinking": false,
+      "elapsedMs": null,
+      "quietMs": null,
+      "items": [
+        {
+          "kind": "plan",
+          "steps": [
+            "改首屏",
+            "补页脚"
+          ]
+        },
+        {
+          "kind": "todo",
+          "segment": {
+            "content": "改首屏",
+            "status": "stopped",
+            "recalled": false,
+            "abandoned": false,
+            "implicit": false,
+            "items": [],
+            "elapsedMs": null
+          }
+        },
+        {
+          "kind": "todo",
+          "segment": {
+            "content": "补页脚",
+            "status": "pending",
+            "recalled": false,
+            "abandoned": false,
+            "implicit": false,
+            "items": [],
+            "elapsedMs": null
+          }
+        }
+      ],
+      "segments": [
+        {
+          "content": "改首屏",
+          "status": "stopped",
+          "recalled": false,
+          "abandoned": false,
+          "implicit": false,
+          "items": [],
+          "elapsedMs": null
+        },
+        {
+          "content": "补页脚",
+          "status": "pending",
+          "recalled": false,
+          "abandoned": false,
+          "implicit": false,
+          "items": [],
+          "elapsedMs": null
+        }
+      ],
+      "thinkingTokens": null
+    },
+    {
+      "kind": "prose",
+      "text": "正在改首屏。"
+    }
+  ]
+}

@@ -15,6 +15,47 @@ import type {
 // the sync trigger. Single source of truth for the daemon routes, the web
 // CollabClient, and the `od collab` CLI so no surface re-declares these shapes.
 
+/** Content-free creator registration returned by Vela ensure-private.
+ * Root identity is server-generated and independent of selected-file resources. */
+export interface PublicShareProjectRegistration {
+  workspaceId: string;
+  projectId: string;
+  resourceId: string;
+  ownerMemberId: string;
+  visibility: 'private' | 'team';
+  createdAt: string;
+}
+
+export interface ProjectShareHistoryResponse {
+  projectId: string;
+  /** Includes stopped bindings; absence of a local link is irrelevant. */
+  bindingExists: boolean;
+  hasEverShared: boolean;
+  publications: Array<{ sourceFilePath: string; sourceFileId?: string; slug: string; status: 'active' | 'stopped' }>;
+}
+
+export interface PublicFileStopRetryRequest {
+  projectId: string;
+  /** Original project-relative file identity; the project may already be deleted. */
+  filePath: string;
+  slug: string;
+}
+
+/** A persisted pending stop visible only to its current verified owner. */
+export interface PublicFileStopListItem extends PublicFileStopRetryRequest {
+  /** Eligible for the existing automatic retry budget, not proof of a running stop. */
+  retrying: boolean;
+}
+
+/** GET /api/public-file-stops; includes exhausted tasks until confirmed stopped. */
+export interface PublicFileStopListResponse {
+  tasks: ReadonlyArray<PublicFileStopListItem>;
+}
+
+export interface PublicFileStopRetryResponse extends PublicFileStopRetryRequest {
+  status: 'stopped';
+}
+
 export type CollabMemberRole = 'owner' | 'admin' | 'member';
 
 /** Public single-file snapshot returned by the daemon publish routes. */
@@ -27,8 +68,10 @@ export interface PublicProjectFilePublication {
 export const PUBLIC_FILE_MANUAL_REVOKE_REQUIRED =
   'PUBLIC_FILE_MANUAL_REVOKE_REQUIRED' as const;
 
-/** Recovery data returned when a new public snapshot could not be persisted or redacted. */
-export interface PublicFileManualRevokeRequiredData extends PublicProjectFilePublication {
+/** Recovery data returned when a new public snapshot could not be persisted or redacted.
+ * `url` is `null` when no Viewer origin is configured; `slug` still stops it. */
+export interface PublicFileManualRevokeRequiredData extends Omit<PublicProjectFilePublication, 'url'> {
+  url: string | null;
   projectId: string;
 }
 
@@ -107,6 +150,8 @@ export interface CollabPresenceLeaveResponse extends OkResponse {
  * `syncState` is the project sync state (see {@link ProjectSyncState}).
  */
 export interface CollabSyncStatusResponse {
+  /** Owner-device overwrite authorization; absent for read-only member mirrors. */
+  ownedContentUpdate?: OwnedProjectContentUpdate | null;
   publishedVersion: number | null;
   /**
    * The latest published version this daemon has durably materialized into the
@@ -170,6 +215,54 @@ export interface CollabProjectBootstrapResponse {
 export interface CollabPullResponse extends OkResponse {
   /** The actual hub version materialized by this pull, or null when unpublished. */
   version: number | null;
+}
+
+export type OwnedProjectContentUpdateState =
+  | 'up_to_date' | 'confirmation_required' | 'ignored' | 'suppressed' | 'downloading'
+  | 'busy' | 'failed' | 'unsupported';
+
+export interface OwnedProjectContentUpdate {
+  state: OwnedProjectContentUpdateState;
+  latestVersion: number | null;
+  localVersion: number | null;
+  /** Device-local reminder silence; never an authorization to replace content. */
+  promptSuppressedUntil: number | null;
+  updatedAt: number;
+  errorCode?: 'PROJECT_BUSY' | 'PROJECT_DIRECTORY_UNSUPPORTED' | 'PROJECT_SYNC_FAILED';
+}
+
+/** POST /api/projects/:id/collab/update: shared by web and od collab. */
+export interface OwnedProjectContentUpdateRequest {
+  action: 'check' | 'accept' | 'dismiss' | 'reset-preference';
+  /** Exact offered head. A stale acceptance cannot approve a newer snapshot. */
+  version?: number;
+  /** Silence future automatic prompts, including new heads; explicit acceptance remains required. */
+  dontPromptFor24h?: boolean;
+  /** Explicit manual checks can re-offer a previously dismissed version. */
+  manual?: boolean;
+}
+
+export interface OwnedProjectContentUpdateResponse {
+  update: OwnedProjectContentUpdate;
+}
+
+export function parseOwnedProjectContentUpdate(value: unknown): OwnedProjectContentUpdate | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+  const states: readonly string[] = ['up_to_date', 'confirmation_required', 'ignored', 'suppressed', 'downloading', 'busy', 'failed', 'unsupported'];
+  if (typeof input.state !== 'string' || !states.includes(input.state)) return null;
+  const version = (v: unknown): v is number | null => v === null || (typeof v === 'number' && Number.isSafeInteger(v) && v >= 0);
+  if (!version(input.latestVersion) || !version(input.localVersion)
+    || (input.promptSuppressedUntil !== null && (typeof input.promptSuppressedUntil !== 'number' || !Number.isFinite(input.promptSuppressedUntil) || input.promptSuppressedUntil < 0))
+    || typeof input.updatedAt !== 'number' || !Number.isFinite(input.updatedAt)) return null;
+  const codes = ['PROJECT_BUSY', 'PROJECT_DIRECTORY_UNSUPPORTED', 'PROJECT_SYNC_FAILED'];
+  return {
+    state: input.state as OwnedProjectContentUpdateState,
+    latestVersion: input.latestVersion, localVersion: input.localVersion,
+    promptSuppressedUntil: input.promptSuppressedUntil as number | null, updatedAt: input.updatedAt,
+    ...(typeof input.errorCode === 'string' && codes.includes(input.errorCode)
+      ? { errorCode: input.errorCode as NonNullable<OwnedProjectContentUpdate['errorCode']> } : {}),
+  };
 }
 
 /** POST /api/projects/:id/collab/sync-intent response. */
@@ -307,6 +400,8 @@ export interface WorkspaceCollabContext {
   workspaceId: string;
   workspaceType: WorkspaceType;
   workspaceMemberId: string;
+  /** Active member count from the same authorized workspace snapshot; omitted when unknown. */
+  memberCount?: number;
   role: CollabMemberRole;
   memberStatus: WorkspaceMemberStatus;
   lifecycleState: WorkspaceLifecycleState;
@@ -360,6 +455,9 @@ export interface WorkspaceContextResponse {
 
 /** A workspace visible to the signed-in Vela identity. Mirrors B's directory item. */
 export interface WorkspaceDirectoryItem {
+  memberCount?: number;
+  /** Verified owner default supplied by the upstream account directory. */
+  isDefault?: boolean;
   workspaceId: string;
   workspaceName: string;
   workspaceIconKey?: string;
@@ -399,10 +497,9 @@ export interface WorkspaceActiveResponse {
   context: WorkspaceCollabContext;
 }
 
-// —— Derivation helpers — a verbatim mirror of B's vela
-// packages/shared/src/workspace-context.ts. Both the daemon's dev context stub
-// and the real B proxy derive permissions/seat summary through these, so C never
-// drifts from B's authorization rules. If B's helper changes, update here too.
+// —— Derivation helpers — local permission projection from verified B identity.
+// Invite entry is available to every active member; assigning admin remains
+// Owner-only and the upstream create endpoint retains final authorization.
 
 export function isWorkspaceLifecycleReadable(state: WorkspaceLifecycleState): boolean {
   return state !== 'deleted';
@@ -411,12 +508,10 @@ export function isWorkspaceLifecycleReadable(state: WorkspaceLifecycleState): bo
 /**
  * Whether a context can address the workspace resource hub.
  *
- * The hub keys every resource by a TEAM workspace: `teamId` is populated only
- * for `workspaceType === 'team'` (see the field's doc above), so a personal or
- * signed-out session has no id to push, snapshot, or redact under. Everything
- * built on the hub USED to be team-only by construction. That is still true of
- * team project SHARING, which needs teammates to share with — but no longer of
- * public single-file links: see {@link workspaceContextHasWorkspaceIdentity}.
+ * Use this narrower predicate for resource types that remain Team-only, such
+ * as team-owned plugins and design systems. Project sharing and public file
+ * links use {@link workspaceContextHasWorkspaceIdentity}: an active Personal
+ * workspace may have invited members and share projects with them.
  *
  * This is the ONE predicate both sides must agree on: the daemon refuses hub
  * writes when it is false, and the web UI must not render a hub-backed entry
@@ -443,10 +538,9 @@ export function workspaceContextHasTeamIdentity(
  * for a hub write is an id to publish under and a member id to own the result
  * with; the workspace TYPE is not part of it.
  *
- * Use this for surfaces that only need somewhere to put a resource — the public
- * single-file link is the one today. Use {@link workspaceContextHasTeamIdentity}
- * where the feature genuinely needs a TEAM, such as sharing a project with
- * teammates.
+ * Use this for project sharing and public single-file links. Use
+ * {@link workspaceContextHasTeamIdentity} for features still restricted to
+ * Team workspaces.
  *
  * Same rule as its sibling: the daemon refuses the write when this is false and
  * the web UI must not render the entry point when it is false. Deriving it twice
@@ -457,6 +551,117 @@ export function workspaceContextHasWorkspaceIdentity(
   context: WorkspaceCollabContext | null | undefined,
 ): boolean {
   return Boolean(context && context.workspaceId && context.workspaceMemberId);
+}
+
+/**
+ * The fields that name WHO a workspace context belongs to — and nothing else.
+ *
+ * ## Why this exists
+ *
+ * The product resolves the same person's workspace context from two sources,
+ * and they legitimately disagree:
+ *
+ * - The SHELL (`GET /api/workspace/context`, the account membership
+ *   directory) reports the member's REAL `role`.
+ * - The PROJECT scope fast path (`GET /api/projects/:id/workspace-scope` →
+ *   `resolveLocalProjectWorkspaceScope` in apps/daemon) resolves *without
+ *   consulting the membership directory* — that is its stated contract and the
+ *   reason the read-only decision can paint on the first frame — so it fills
+ *   `role` with a least-privilege `member` placeholder. That placeholder is
+ *   load-bearing: it is how "creator may write / non-creator is read-only" is
+ *   implemented (see `workspaceResourceAccess` in
+ *   apps/daemon/src/collab/workspace-resource-mutation.ts). It must not be
+ *   "fixed", and it must not be made to wait on the network.
+ *
+ * Everything else the two sources publish for one member of one workspace is
+ * byte-identical: `canShareProjects` / `canWriteSyncedFiles` derive from
+ * `memberStatus` + `lifecycleState` only (see {@link buildWorkspacePermissions}),
+ * never from `role`. So `role` is the ONLY field that can differ — which is why
+ * a naive "are these the same context" comparison silently works for a plain
+ * member and silently fails for an owner or an admin.
+ *
+ * That has produced the same defect seven times so far, always written as an
+ * ad-hoc field-by-field or cache-key comparison at the call site:
+ *
+ *  1. A balance dialog that told the team owner to "ask your team owner"
+ *     (§6.V / OPEND-2720) — fixed by {@link workspaceBillingAuthorityContext}.
+ *  2. A plan-gated model whose "upgrade to use this" tooltip did nothing when
+ *     clicked, on team AND personal workspaces (`AvatarMenu`).
+ *  3. "项目不存在" on a team owner's own project, opened from its directory card
+ *     (`bootstrapProjectRoute`).
+ *  4. The progressive first-open lane dead for every owner/admin, silently
+ *     falling back to full materialization (`bootstrapFirstOpenTeamProjectRoute`).
+ *  5. A home project grid that never went stale after the owner shared or
+ *     unshared, so Back showed the pre-share state (`project-display-cache`).
+ *  6. Every project open by an owner/admin discarding the route bootstrap's
+ *     pre-fetched scope and refetching it (`useProjectWorkspaceScope`).
+ *  7. `App.handleProjectChange`'s route-snapshot match, which compares the
+ *     route snapshot's scope-derived context against the directory-derived
+ *     project context — still open at the time of writing.
+ *
+ * ## The rule
+ *
+ * Asking **"is this the same person in the same workspace?"** goes through this
+ * helper — never through a cache key, never through a hand-rolled field
+ * comparison. `role` is authorization state, not identity, and the answer to
+ * "who is this" may not depend on it.
+ *
+ * `memberStatus` and `lifecycleState` are excluded for a related reason: the two
+ * sources describe DIFFERENT OBJECTS' state (the project's own row versus the
+ * workspace's directory entry — a frozen project reads back `locked` while its
+ * workspace is `active`). They are state of an identity, not the identity, and
+ * every consumer that cares about them still reads them from whichever context
+ * is authoritative for its own question.
+ *
+ * Using `role` to decide **whether this person may change this thing** remains
+ * correct and is untouched by this helper — that is what
+ * `workspaceResourceAccess`, the `x-od-workspace-role` request header, and the
+ * daemon's mutation gate do.
+ */
+export type WorkspacePrincipal = Pick<
+  WorkspaceCollabContext,
+  'workspaceId' | 'workspaceType' | 'workspaceMemberId'
+>;
+
+/**
+ * A stable partition token for one workspace principal, or `null` when the
+ * context is absent or its identity incomplete.
+ *
+ * `null` is deliberately not a token: an absent identity is not equal to
+ * another absent identity, so callers that store this key can compare it
+ * directly without accidentally letting two unknowns match.
+ */
+export function workspacePrincipalKey(
+  context: WorkspacePrincipal | null | undefined,
+): string | null {
+  if (!context) return null;
+  // Blankness disqualifies, but the token itself keys on the raw values so this
+  // stays exactly as strict as the field-by-field `!==` comparisons it
+  // replaced. `JSON.stringify` keeps the three fields unambiguous even if an id
+  // ever contains the separator.
+  if (!context.workspaceId?.trim() || !context.workspaceMemberId?.trim()) return null;
+  return JSON.stringify([
+    context.workspaceId,
+    context.workspaceType,
+    context.workspaceMemberId,
+  ]);
+}
+
+/**
+ * Whether two workspace contexts name the same person in the same workspace.
+ *
+ * Fail-closed: an absent or incomplete identity on either side is never "the
+ * same person", including when both sides are absent.
+ *
+ * See {@link WorkspacePrincipal} for why this exists and why `role` is not part
+ * of the answer.
+ */
+export function isSameWorkspacePrincipal(
+  a: WorkspacePrincipal | null | undefined,
+  b: WorkspacePrincipal | null | undefined,
+): boolean {
+  const key = workspacePrincipalKey(a);
+  return key !== null && key === workspacePrincipalKey(b);
 }
 
 export function isWorkspaceLifecycleWritable(state: WorkspaceLifecycleState): boolean {
@@ -478,12 +683,136 @@ export function buildWorkspacePermissions(input: {
   return {
     canManageMembers: writable && (isOwner || isAdmin),
     canManageBilling: readable && isOwner,
-    canInviteMembers: writable && (isOwner || isAdmin),
+    canInviteMembers: writable,
     canManageAutoRecharge: writable && isOwner,
     canShareProjects: writable,
     canWriteSyncedFiles: writable,
     canViewWorkspaceSettings: readable,
     canManageSharedResources: writable && (isOwner || isAdmin),
+  };
+}
+
+/**
+ * Whether this context may be shown a billing entrance — an upgrade link, a
+ * plan surface, a top-up destination.
+ *
+ * `canManageBilling` answers a TEAM question: which member of a shared
+ * workspace may spend money that is not only theirs. B enforces the same bit
+ * server-side (`services/api/src/billing/http/routes.ts` refuses a caller
+ * without it), so surfacing an external billing action to a team member
+ * without it can only produce a button that fails on arrival. That gate is
+ * correct and this predicate keeps it exactly as strict.
+ *
+ * A single-member Personal workspace may reach its own billing entrance even
+ * when a project-scope placeholder has no billing permission. An invited
+ * Member or Admin in a multi-member Personal workspace cannot spend the
+ * Owner's money: the authenticated directory's memberCount distinguishes
+ * that real member from the single-member placeholder. Older providers omit
+ * memberCount and retain the historical single-member fallback.
+ *
+ * This is the ONE predicate every billing entrance must agree on. The audience
+ * split that decides WHICH dialog appears (`runtime/amr-balance-branch.ts`) and
+ * the resolver that decides whether that dialog HAS a destination
+ * (`workspaceUpgradeUrl`) both read it here, because a user who is routed to
+ * the upgrade dialog and a user who is handed an upgrade link have to be the
+ * same user. Deriving it twice is how a dialog grows a body with no way out.
+ *
+ * Note this is about the ENTRANCE, not the action. Whether the entrance leads
+ * to a plan surface or to auto-recharge is a separate question owned by
+ * `canManageAutoRecharge` (`writable && isOwner`, a strictly narrower bit).
+ */
+export function canReachWorkspaceBillingEntrance(
+  context: Pick<WorkspaceCollabContext, 'workspaceType'> & {
+    memberCount?: number;
+    permissions?: Pick<WorkspacePermissions, 'canManageBilling'>;
+  },
+): boolean {
+  if (context.workspaceType === 'personal' && (context.memberCount === undefined || context.memberCount <= 1)) return true;
+  return context.permissions?.canManageBilling === true;
+}
+
+/**
+ * The one context a billing entrance may be resolved from, for a run that a
+ * specific project's workspace pays for.
+ *
+ * Two questions get confused here, and they have different authorities.
+ *
+ * WHICH WORKSPACE PAYS is the project's resolved scope, and only the project's
+ * resolved scope. A settled unavailable/forbidden scope produces no context at
+ * all, and that absence must stay an absence: substituting whichever workspace
+ * the navigation rail happens to be in is how a Team project's empty wallet
+ * ends up asking about the viewer's Personal one. So `scoped` is passed through
+ * untouched in its identity — there is no input to this function that can make
+ * the result name a different `workspaceId`, `workspaceType`, or
+ * `workspaceMemberId` than `scoped` did, and a null `scoped` stays null.
+ *
+ * WHO IS ASKING the project scope cannot answer. `resolveLocalProjectWorkspaceScope`
+ * (apps/daemon) resolves a project's scope *without consulting the membership
+ * directory* — that is its stated contract and the reason it is fast and
+ * local — so it fills `role` with a least-privilege `member` placeholder. That
+ * placeholder is load-bearing for writes: the daemon's resource gate derives
+ * `privileged` from the role the project request asserts, and a placeholder
+ * that said `owner` would let a workspace owner write every project in the
+ * workspace, including ones they did not create. It must not be "fixed".
+ *
+ * What it must not do is answer a MONEY question. Asked whether the viewer may
+ * reach a billing entrance, the placeholder demotes a workspace owner to a
+ * member and deletes their own way to pay — the dialog becomes "ask your team
+ * owner" for the team owner themselves (§6.V / OPEND-2720, reproduced on a
+ * real runtime 2026-09-07).
+ *
+ * So this adopts billing-only directory facts — the membership role and
+ * member count — and only from an
+ * authoritative context (`GET /api/workspace/context`) that names the very same
+ * workspace AND the very same member. Permissions are re-derived through
+ * {@link buildWorkspacePermissions} using the SCOPE's own lifecycle and member
+ * status, because those describe this project's state (a frozen project reads
+ * back `locked`) rather than the directory's view of the workspace. A frozen
+ * project therefore stays unwritable no matter whose role is adopted.
+ *
+ * Everything else — a mismatch of any identity field, an absent authority —
+ * keeps the fail-closed scope exactly as it is.
+ *
+ * The AUTHORITY's own `memberStatus` is deliberately not consulted (product
+ * ruling 2026-09-07). It could only ever change the outcome for the pairing
+ * "the directory reports this member removed, yet the project's scope still
+ * resolves for them", and the product ships no entrance that removes a member,
+ * so that pairing has no way to occur. Adding the branch anyway would only buy
+ * an unreachable one: nothing this function returns is an authorization. The
+ * permission bits are still re-derived from the SCOPE's own `memberStatus`
+ * above, so a scope that does report `removed` stays closed regardless of the
+ * role adopted, and every money action behind the entrance is enforced
+ * server-side. The residue if the pairing ever became reachable is a removed
+ * member seeing an upgrade link — which is not a harm worth a dead branch.
+ *
+ * The result is for billing entrances only (which dialog, whether an upgrade
+ * link exists, where it lands). It must never be used as a project request's
+ * workspace identity, nor reach a write/read-only decision.
+ */
+export function workspaceBillingAuthorityContext(
+  scoped: WorkspaceCollabContext | null | undefined,
+  authoritative: WorkspaceCollabContext | null | undefined,
+): WorkspaceCollabContext | null {
+  if (!scoped) return null;
+  if (!authoritative) return scoped;
+  if (!isSameWorkspacePrincipal(authoritative, scoped)) {
+    return scoped;
+  }
+  const roleChanged = authoritative.role !== scoped.role;
+  const memberCountChanged = authoritative.memberCount !== undefined
+    && authoritative.memberCount !== scoped.memberCount;
+  if (!roleChanged && !memberCountChanged) return scoped;
+  return {
+    ...scoped,
+    ...(authoritative.memberCount !== undefined ? { memberCount: authoritative.memberCount } : {}),
+    ...(roleChanged ? {
+      role: authoritative.role,
+      permissions: buildWorkspacePermissions({
+        role: authoritative.role,
+        lifecycleState: scoped.lifecycleState,
+        memberStatus: scoped.memberStatus,
+      }),
+    } : {}),
   };
 }
 
@@ -539,6 +868,14 @@ export interface WorkspaceBillingSnapshot {
     expiresAt: string | null;
     updatedAt: string | null;
   };
+  /** Original backend windows; absence means this producer has no window data. */
+  designPlanWindows?: Array<{
+    kind: '5h' | '7d';
+    windowStart: string | null;
+    resetsAt: string | null;
+    remainingCredits: string;
+    limitCredits: string;
+  }>;
   revisions: {
     billing: string;
     wallet: string;
@@ -656,6 +993,17 @@ export interface WorkspaceBillingSummary {
   /** Available balance in USD, as reported by vela (kept as a string to avoid
    *  float drift on money values). */
   balanceUsd: string;
+  /**
+   * Credits per US dollar, as Vela computes it. The Coding Plan quota panel is
+   * the only surface that turns a window's credit count into money, and this is
+   * the rate it must divide by — a client-side copy of a server-owned exchange
+   * rate goes wrong silently the day the backend changes it.
+   *
+   * Optional: absent when the installed Vela CLI / backend does not report it,
+   * or reports a rate that is not a positive number. Callers fall back to their
+   * own documented default rather than rendering nothing.
+   */
+  creditsPerUsd?: number;
   /** Subscription status, e.g. `active` / `canceled`. */
   subscriptionStatus: string;
   /** Actions the caller may take, e.g. `subscription_checkout` / `billing_portal`. */
@@ -669,6 +1017,12 @@ export interface WorkspaceBillingSummary {
 }
 
 export interface WorkspaceBillingResponse {
+  /** Advisory funding/usage read. Absent on older CLIs; never infer exhausted. */
+  preflight?: WorkspaceBillingPreflight | null;
+  /** Exact-workspace upstream supports quota events and its producer is healthy.
+   * Wallet runtime freshness alone does not cover Coding Plan consumption.
+   * Missing/false requires the client to keep quota fallback reads. */
+  quotaRealtime?: { healthy: boolean };
   /** Account-scoped metadata; independently nullable from workspace money. */
   summary: WorkspaceBillingSummary | null;
   /**
@@ -692,6 +1046,55 @@ export interface WorkspaceBillingResponse {
    * observed for the exact workspace/member in this response.
    */
   authoritativeWorkspaceRead?: WorkspaceBillingAuthoritativeRead;
+}
+
+/** Immediately expirable Link read; it does not reserve or authorize a request. */
+export type WorkspaceRequestConcurrencyHint = {
+  workspaceId: string;
+  workspaceMemberId: string;
+  observedAt: string;
+} & (
+  | { status: 'available' | 'full'; running: number; limit: number }
+  | { status: 'unknown'; running?: never; limit?: never }
+);
+
+export interface WorkspaceRequestConcurrencyResponse {
+  /** Absent/null includes old CLI or an unavailable read; never implies idle. */
+  requestConcurrencyHint?: WorkspaceRequestConcurrencyHint | null;
+}
+
+export interface WorkspaceBillingPreflight {
+  schemaVersion: 1;
+  workspaceId: string;
+  workspaceMemberId: string;
+  modelId: string | null;
+  generatedAt: string;
+  balanceUsd: string;
+  modelCovered: boolean | null;
+  /** Link still checks model access, quotas, free models and auto recharge. */
+  funding: 'coding_plan' | 'wallet' | 'gateway';
+  /** Fresh read-only feedback. Never use this to cancel an already running task. */
+  fundingCheck?: 'available' | 'insufficient' | 'unknown';
+  codingPlan: {
+    workspaceId: string;
+    generatedAt: string;
+    eligible: boolean;
+    tier: 'go' | 'plus' | 'pro' | 'max' | null;
+    windows: Array<{
+      policyId: string;
+      durationSeconds: number;
+      resetMode: 'activity_triggered' | 'anchored_recurring';
+      usedCredits: string;
+      limitCredits: string;
+      remainingCredits: string;
+      windowStart: string | null;
+      resetsAt: string | null;
+    }>;
+  };
+}
+
+export interface WorkspaceBillingPreflightResponse {
+  preflight: WorkspaceBillingPreflight;
 }
 
 export type WorkspaceTeamBillingPlanId = 'team_plus' | 'team_pro' | 'team_max';
@@ -790,11 +1193,16 @@ export interface CollabCloudMembersResponse {
  * `slideIndex`) plus the drift-ladder fields (`anchorState`/`anchoredVersion`/
  * `lastGoodPosition`) ride along so a synced comment keeps pointing at the same
  * element on the receiver. The stream carries the comment's full lifecycle: a
- * create/edit is pushed with the current `updatedAt` (receivers apply the newest
- * by `updatedAt`), and a delete is pushed as a tombstone (`deleted: true`) that
- * removes the comment by `id` on every receiver.
+ * create/edit is pushed with the current `updatedAt`, and a delete is pushed as
+ * a tombstone (`deleted: true`) that removes the comment by `id` on every
+ * receiver. Receivers order revisions of one comment by the cloud `seq` (a
+ * replayed `seq` never overwrites a later one); `updatedAt` is the business
+ * last-writer-wins check for a revision the receiver has not seen yet.
  */
 export interface CollabCloudComment {
+  /** Server-admitted immutable creator file lifetime, not a permission. */
+  sourceFileId?: string;
+  sourceFilePath?: string;
   /**
    * The author daemon's local comment id — the GLOBAL dedup key. A receiver
    * merges idempotently by this id, so a member's own comment pulled back is a
@@ -824,6 +1232,8 @@ export interface CollabCloudComment {
   seq: number;
   note: string;
   filePath: string;
+  /** Server-asserted alias identity for public-file relays; clients do not supply it. */
+  publicationSlug?: string;
   elementId: string;
   selector: string;
   label: string;
@@ -843,6 +1253,8 @@ export interface CollabCloudComment {
   anchoredVersion?: number;
   /** Last known-good bbox for the `lost` ghost pin. */
   lastGoodPosition?: PreviewCommentPosition;
+  /** Original epoch milliseconds, or 0 when a legacy record's creation time is unknown.
+   * Receivers must not replace missing/unknown time with their synchronization clock. */
   createdAt: number;
   updatedAt: number;
   /**
@@ -852,6 +1264,47 @@ export interface CollabCloudComment {
    * comment as it last existed and should not be re-materialized.
    */
   deleted?: boolean;
+  /**
+   * Which identity the author holds — see `ShareAuthorKind`. Absent means
+   * `member`, which is what every comment written before the share page
+   * existed is.
+   *
+   * ## Why this had to widen before anything else
+   *
+   * This interface is the WIRE between daemons of different versions. A daemon
+   * that does not know a field drops it on receive, and `mergeSyncedComment`'s
+   * update path does not rewrite authorship afterwards — so a comment that
+   * round-trips through an older daemon loses these fields permanently, with
+   * nothing to recover them from. Widening the wire first is what keeps that
+   * from happening; the fields can then be populated at leisure.
+   *
+   * All three are optional for the same reason: an older daemon sends none of
+   * them and must keep working.
+   */
+  authorKind?: 'member' | 'user';
+  /**
+   * The author's account id when `authorKind` is `user`. Carried alongside
+   * `memberId` rather than replacing it: `memberId` stays required so an older
+   * daemon still has something to render.
+   */
+  authorAppUserId?: string;
+  /**
+   * Server-stamped display name for the author.
+   *
+   * It travels WITH the comment on purpose. The alternative — resolving the
+   * name from the team member directory at render time — would mean the share
+   * page needs to read that directory, and the directory exposes real names
+   * and roles. Sending the name with the comment keeps the two as separate
+   * channels, so showing an author's name never requires opening the roster.
+   */
+  authorDisplayName?: string;
+  /**
+   * Avatar colour seed, keyed on the ACCOUNT rather than the membership so one
+   * person is one colour whether they commented from the client or the share
+   * page. Display only — never an identity assertion, and never the basis for
+   * deciding whether a comment belongs to the viewer.
+   */
+  authorKey?: string;
 }
 
 /** POST /teams/:teamId/projects/:projectId/comments request body. */

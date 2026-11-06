@@ -2,7 +2,9 @@ import type { Express } from 'express';
 import fs from 'node:fs';
 import { SIDECAR_ENV } from '@open-design/sidecar-proto';
 import { buildMcpInstallPayload, type McpInstallPayload } from './mcp-install-info.js';
-import { installCodexMcp, probeCodexInstall, uninstallCodexMcp } from './codex-cli.js';
+import { installCodexMcp, probeCodexInstall, refreshOwnedCodexMcp, uninstallCodexMcp } from './codex-cli.js';
+import { isManagedMcpBootstrapEnv } from './mcp-bootstrap.js';
+import { isCodexRegistrationOwnedBy, managedMcpRegistrationEnv } from './mcp-managed-registration.js';
 import { MCP_TEMPLATES, buildAcpMcpServers, buildClaudeMcpJson, isManagedProjectCwd, readMcpConfig, writeMcpConfig } from './mcp-config.js';
 import { beginAuth, exchangeCodeForToken, refreshAccessToken } from './mcp-oauth.js';
 import { clearToken, getToken, isTokenExpired, readAllTokens, setToken } from './mcp-tokens.js';
@@ -10,10 +12,13 @@ import type { RouteDeps } from './server-context.js';
 
 export interface RegisterMcpRoutesDeps extends RouteDeps<'http' | 'paths' | 'mcp'> {}
 
+// Lets the daemon finish binding its port before the registration is rebuilt.
+const MCP_REGISTRATION_REFRESH_DELAY_MS = 5_000;
+
 export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
   const { isLocalSameOrigin, resolvedPortRef, sendApiError } = ctx.http;
   const { OD_BIN, RUNTIME_DATA_DIR, PROJECTS_DIR } = ctx.paths;
-  const { pendingAuth, daemonUrlRef } = ctx.mcp;
+  const { pendingAuth, daemonUrlRef, inheritedEnvironment } = ctx.mcp;
   const getResolvedPort = () => resolvedPortRef.current;
   const getDaemonUrl = () => daemonUrlRef.current;
   // Surfaces the absolute paths to the daemon's Node-compatible runtime and
@@ -41,20 +46,10 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
   // differently depending on which install path the user took.
   function computeInstallPayload(): McpInstallPayload {
     const cliPath = OD_BIN;
-    // The daemon was bootstrapped as a sidecar (tools-dev, packaged) iff
-    // bootstrapSidecarRuntime stamped OD_SIDECAR_IPC_PATH into the env.
-    // In sidecar mode the snippet omits --daemon-url and the spawned
-    // `od mcp` discovers the live URL via the concrete IPC endpoint on
-    // every spawn, so the client config survives ephemeral-port
-    // restarts. For direct `od` / `od --port X` launches there is no
-    // IPC socket; the helper bakes --daemon-url so custom ports keep
-    // working.
-    const sidecarIpcPath = process.env[SIDECAR_ENV.IPC_PATH];
-    const isSidecarMode = sidecarIpcPath != null && sidecarIpcPath.length > 0;
-    const sidecarEnv: Record<string, string> = {};
-    if (isSidecarMode) {
-      sidecarEnv[SIDECAR_ENV.IPC_PATH] = sidecarIpcPath;
-    }
+    // Forward only the opaque inherited client capability. IPC endpoint
+    // naming and transport stay private to @open-design/sidecar.
+    const sidecarEnv = inheritedEnvironment();
+    const isSidecarMode = Object.keys(sidecarEnv).length > 0;
     const mcpBootstrapCommand = process.env.OD_MCP_BOOTSTRAP_COMMAND;
     if (
       mcpBootstrapCommand != null
@@ -66,6 +61,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
     if (mcpBootstrapArgs != null && mcpBootstrapArgs.length > 0) {
       sidecarEnv.OD_MCP_BOOTSTRAP_ARGS = mcpBootstrapArgs;
     }
+    Object.assign(sidecarEnv, managedMcpRegistrationEnv());
     // tools-dev / packaged launchers export OD_WEB_PORT so the daemon
     // knows where the browser-facing OpenDesign studio is running.
     // CLI-only / headless launches set neither and webBaseUrl falls
@@ -120,6 +116,28 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
   // ourselves — that way we inherit Codex's merge / validation rules
   // and only need to track its argv. See apps/daemon/src/codex-cli.ts.
   const CODEX_MCP_NAME = 'open-design';
+
+  // Under a managed outer, keep this install's own Codex registration pointed
+  // at the runtime that is running now. Registrations name a versioned
+  // payload, and a payload version is only cleaned up after a newer one has
+  // started here, so refreshing on every start keeps them valid. The
+  // registration name is global, so a registration written by another install
+  // (another channel, a local build) is left exactly as it is. Never installs one.
+  if (isManagedMcpBootstrapEnv(process.env)) {
+    const timer = setTimeout(() => {
+      const payload = computeInstallPayload();
+      if (!payload.cliExists || !payload.nodeExists) return;
+      refreshOwnedCodexMcp(
+        { name: CODEX_MCP_NAME, command: payload.command, args: payload.args, env: payload.env },
+        (existing) => isCodexRegistrationOwnedBy(existing, payload),
+      )
+        .then((outcome) => console.info('[mcp] codex registration refresh', { outcome }))
+        .catch((err: unknown) => console.warn('[mcp] codex registration refresh failed', {
+          error: err instanceof Error ? err.message : String(err),
+        }));
+    }, MCP_REGISTRATION_REFRESH_DELAY_MS);
+    timer.unref?.();
+  }
 
   app.get('/api/mcp/install/codex/status', async (req, res) => {
     if (!isLocalSameOrigin(req, getResolvedPort())) {

@@ -1,16 +1,23 @@
 import fs from 'node:fs';
+import { parseStockSearchRequest, type StockSearchRequest } from '@open-design/contracts';
+import { resolveProjectWritePath, validateProjectPath } from '../projects.js';
+import { stockSearch, StockSearchServiceError, StockSearchInputError } from '../media/stock-search.js';
+import { createStockRecorder } from '../media/stock-telemetry.js';
 import type { Express } from 'express';
 import type {
   HyperFramesScaffoldRequest,
   HyperFramesScaffoldResponse,
   MediaExecutionPolicy,
   MediaGenerationResultProps,
+  ProjectFile,
+  ProjectMediaTaskFile,
 } from '@open-design/contracts';
 import type { AnalyticsContext } from '../analytics.js';
 import { defaultMediaExecutionPolicy, mediaPolicyDenial } from '../media/policy.js';
 import { formatMediaTaskDiagnostic } from '../media/diagnostics.js';
-import { findMediaModel } from '../media/models.js';
-import type { MediaTaskError } from '../media/tasks.js';
+import { findMediaModel, type MediaModel } from '../media/models.js';
+import { fetchVelaVideoModels } from '../media/vela.js';
+import type { CloudVideoModelsResponse } from '@open-design/contracts';
 import type { ImageGenerationRequestSummary } from '../media/image-generation-retry.js';
 import type { RouteDeps } from '../server-context.js';
 import type {
@@ -25,15 +32,145 @@ import {
   type AIHubMixCatalogType,
 } from '../integrations/aihubmix.js';
 import { isSandboxModeEnabled } from '../sandbox-mode.js';
+import { createChatArtifactBlobStore } from '../chat-artifacts/blob-store.js';
+import { captureChatArtifactSnapshotFromBytes } from '../chat-artifacts/capture.js';
+import { resolveChatArtifactQuota } from '../chat-artifacts/quota.js';
 import {
   HYPERFRAMES_SCAFFOLD_TOOL_ENDPOINT,
+  MOTION_REFERENCE_TOOL_ENDPOINT,
+  MOTION_COMPARE_TOOL_ENDPOINT,
+  STOCK_SEARCH_TOOL_ENDPOINT,
   MEDIA_TASK_WAIT_TOOL_ENDPOINT,
   type ToolTokenGrant,
 } from '../tool-tokens.js';
+import { associateLateRunProducedFile } from '../runtimes/run-produced-files.js';
 import { scaffoldHyperFramesComposition } from '../media/hyperframes-scaffold.js';
+import { buildMotionReference, MotionReferenceError } from '../media/motion-reference.js';
+import { compareMotionFilms, MotionCompareError } from '../media/motion-compare.js';
+import path from 'node:path';
+import { assignMediaTaskBatches } from '../media/task-batches.js';
+import { mediaTaskErrorFromFailure } from '../media/task-error.js';
 import { normalizePersistedAutomationWorkspaceScope } from '../automations/workspace-scope.js';
 
 const LONG_MEDIA_PROXY_TIMEOUT_MS = 10 * 60 * 1000;
+const MEDIA_FILE_MTIME_TOLERANCE_MS = 1;
+
+function finiteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+/**
+ * Files a media task's recorded metadata could still be, after the agent moved
+ * or renamed it.
+ *
+ * An in-project move preserves size and mtime, so the pair is a bounded
+ * identity witness that needs no filename guessing. The tolerance absorbs a
+ * destination filesystem storing fewer sub-millisecond digits than the source;
+ * it is deliberately far below any real filesystem's timestamp granularity,
+ * because a wider window buys nothing for a move (which preserves the value
+ * exactly) and only makes unrelated files collide. A witness that has drifted
+ * past it is not a witness, and staying blind beats showing the wrong image.
+ *
+ * `claimedNames` are files another task has already proven it owns. A witness
+ * may never point at one of those: two chat cards showing the same image is
+ * the same lie as one card showing a stranger's.
+ */
+function mediaTaskFileCandidates(
+  taskFile: unknown,
+  projectFiles: readonly ProjectFile[],
+  claimedNames: ReadonlySet<string>,
+): ProjectFile[] {
+  if (!taskFile || typeof taskFile !== 'object') return [];
+  const file = taskFile as Partial<ProjectMediaTaskFile>;
+  const name = typeof file.name === 'string' ? file.name.trim() : '';
+  if (!name) return [];
+
+  const size = finiteNumber(file.size);
+  const mtime = finiteNumber(file.mtime);
+  if (size === null || mtime === null) return [];
+  const kind = typeof file.kind === 'string' && file.kind ? file.kind : null;
+  return projectFiles.filter((candidate) => (
+    !claimedNames.has(candidate.name)
+    && candidate.size === size
+    && Math.abs(candidate.mtime - mtime) <= MEDIA_FILE_MTIME_TOLERANCE_MS
+    && (kind === null || candidate.kind === kind)
+  ));
+}
+
+/**
+ * Resolve one media task's generation-time file metadata to the path that is
+ * currently registered in the project. Ambiguous matches fail closed so
+ * ChatPanel never previews an unrelated file.
+ */
+export function resolveMediaTaskProjectFile(
+  taskFile: unknown,
+  projectFiles: ProjectFile[],
+  claimedNames: ReadonlySet<string> = new Set(),
+): ProjectFile | null {
+  if (!taskFile || typeof taskFile !== 'object') return null;
+  const file = taskFile as Partial<ProjectMediaTaskFile>;
+  const name = typeof file.name === 'string' ? file.name.trim() : '';
+  if (!name) return null;
+
+  if (!claimedNames.has(name)) {
+    const exact = projectFiles.find((candidate) => candidate.name === name);
+    if (exact) return exact;
+  }
+
+  const matches = mediaTaskFileCandidates(taskFile, projectFiles, claimedNames);
+  return matches.length === 1 ? matches[0]! : null;
+}
+
+/**
+ * Resolve every moved media task against the project at once, so no surviving
+ * file is handed to two of them.
+ *
+ * Per-task uniqueness is not enough: two tasks that recorded the same witness
+ * each see exactly one candidate and each would take it. A file that more than
+ * one task can claim proves nothing about either, so it is withdrawn from all
+ * of them — the same fail-closed rule, applied across tasks instead of within
+ * one.
+ */
+export function resolveMovedMediaTaskFiles(
+  candidates: ReadonlyArray<{ taskId: string; file: unknown }>,
+  projectFiles: readonly ProjectFile[],
+  claimedNames: ReadonlySet<string> = new Set(),
+): Map<string, ProjectFile> {
+  const matchesByTask = new Map<string, ProjectFile[]>();
+  const claimCounts = new Map<string, number>();
+  for (const candidate of candidates) {
+    const matches = mediaTaskFileCandidates(candidate.file, projectFiles, claimedNames);
+    matchesByTask.set(candidate.taskId, matches);
+    for (const match of matches) {
+      claimCounts.set(match.name, (claimCounts.get(match.name) ?? 0) + 1);
+    }
+  }
+
+  const resolved = new Map<string, ProjectFile>();
+  for (const [taskId, matches] of matchesByTask) {
+    const uncontested = matches.filter((match) => (claimCounts.get(match.name) ?? 0) === 1);
+    const only = uncontested.length === 1 ? uncontested[0] : undefined;
+    if (only) resolved.set(taskId, only);
+  }
+  return resolved;
+}
+
+function reconciledMediaTaskFile(
+  taskFile: unknown,
+  projectFile: ProjectFile,
+): Record<string, unknown> {
+  const original = taskFile && typeof taskFile === 'object'
+    ? taskFile as Record<string, unknown>
+    : {};
+  return {
+    ...original,
+    name: projectFile.name,
+    size: projectFile.size,
+    mtime: projectFile.mtime,
+    kind: projectFile.kind,
+    mime: projectFile.mime,
+  };
+}
 
 function mediaProviderId(model: string): string | undefined {
   const registered = findMediaModel(model)?.provider;
@@ -96,36 +233,16 @@ export function resolveLegacyMediaRouteGrant(input: {
   return { ok: true, grant: input.grant };
 }
 
-
-/**
- * Build the persisted failure record for a media task.
- *
- * A media failure is the only thing the client has left to explain itself
- * with, so anything the producer proved must survive into the snapshot: the
- * stable `code` the web client keys its copy on, the optional `subject`
- * naming what a safety policy objected to, and `retryable` so the UI can stop
- * inviting a retry that cannot succeed. Absent fields stay absent rather than
- * being defaulted — `retryable: false` invented here would tell a user a
- * transient outage is permanent.
- */
-function mediaTaskErrorFromFailure(err: any): MediaTaskError {
-  const subject = err?.subject;
-  const retryable = err?.retryable;
-  return {
-    message: String(err && err.message ? err.message : err),
-    status: typeof err?.status === 'number' ? err.status : 400,
-    code: err?.code,
-    ...(subject === 'prompt' || subject === 'input_image' || subject === 'output_image'
-      ? { subject }
-      : {}),
-    ...(typeof retryable === 'boolean' ? { retryable } : {}),
-  };
-}
+export { mediaTaskErrorFromFailure };
 
 export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) {
   const { db, design } = ctx;
   const { sendApiError, requireLocalDaemonRequest, isLocalSameOrigin, resolvedPortRef } = ctx.http;
   const { PROJECT_ROOT, PROJECTS_DIR, RUNTIME_DATA_DIR } = ctx.paths;
+  // Derived from the one resolved daemon data root; the store rejects anything
+  // else, so there is no second data root to drift.
+  const chatArtifactBlobs = createChatArtifactBlobStore({ dataDir: RUNTIME_DATA_DIR });
+  const chatArtifactQuota = resolveChatArtifactQuota(process.env);
   const { authorizeToolRequest, optionalToolGrantFromRequest, requestProjectOverride } = ctx.auth;
   const { randomUUID } = ctx.ids;
   const { MEDIA_PROVIDERS, IMAGE_MODELS, VIDEO_MODELS, AUDIO_MODELS_BY_KIND, MEDIA_ASPECTS, VIDEO_LENGTHS_SEC, AUDIO_DURATIONS_SEC, readMaskedConfig, writeConfig, generateMedia, createMediaTask, persistMediaTask, appendTaskProgress, notifyTaskWaiters, getLiveMediaTask, mediaTaskSnapshot, listMediaTasksByProject, listElevenLabsVoiceOptions } = ctx.media;
@@ -136,8 +253,8 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       : null;
   const { orbitService } = ctx.orbit;
   const { openBrowser, openNativeFolderDialog } = ctx.nativeDialogs;
-  const { findTeamWorkspaceIdForProject, getProject } = ctx.projectStore;
-  const { resolveProjectDir } = ctx.projectFiles;
+  const { getWorkspaceProjectByProjectId, getProject } = ctx.projectStore;
+  const { listFiles, resolveProjectDir, resolveProjectFilePath } = ctx.projectFiles;
   const { insertConversation, upsertMessage } = ctx.conversations;
   const { searchResearch, ResearchError } = ctx.research;
   const getResolvedPort = () => resolvedPortRef.current;
@@ -217,6 +334,43 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       return sendApiError(res, 403, denial.code, denial.message);
     }
 
+    /**
+     * The dual of `attachLateOutputToRunMessage` below: hand the FAILURE back to
+     * the turn that asked for it.
+     *
+     * Every failure path here already knew which run this was — `runId` is right
+     * there in `options.grant`, printed in the `[media]` diagnostic and shipped
+     * to analytics — and none of them wrote it anywhere the run could see. So
+     * the run's terminal verdict came from the agent's exit code alone: the
+     * agent apologises in prose and exits 0, and the turn published
+     * `status: "succeeded"`, `endedWithUnfinishedWork: false`, a green check and
+     * an empty artifact rail while the daemon's own log said the only
+     * deliverable had failed 55s earlier.
+     *
+     * Declared outside the try so BOTH failure paths reach it: the async
+     * provider rejection AND the synchronous dispatch throw below, which marks
+     * the same task failed and would otherwise stay silent for the same reason.
+     *
+     * Best-effort by construction: the task is already marked failed and its
+     * waiters already told, so this must never turn a recorded failure into an
+     * unhandled rejection.
+     */
+    const reportFailureToRun = (taskId: string, error: unknown): void => {
+      const runId = options.grant?.runId;
+      if (!runId || !taskId) return;
+      try {
+        design.runs.noteMediaTaskFailure(runId, {
+          taskId,
+          surface,
+          model,
+          failedAt: Date.now(),
+          error,
+        });
+      } catch (err) {
+        console.warn('[media] run failure association failed', err);
+      }
+    };
+
     let task: ReturnType<typeof createMediaTask> | null = null;
     try {
       const taskId = randomUUID();
@@ -250,13 +404,50 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         hasCompositionDir: Boolean(req.body?.compositionDir),
       }));
 
+      /**
+       * Hand this task's output back to the turn that asked for it.
+       *
+       * A media generation is a 202 dispatch: the file can land long after the
+       * run went terminal, and the run-terminal produced-file floor works off a
+       * filesystem diff frozen before these bytes existed (Plane OPEND-2608 /
+       * OPEND-2609). `associateLateRunProducedFile` is additive and refuses to
+       * act while the run is still live, so the terminal pass keeps ownership
+       * of every file that DID land in time.
+       *
+       * Resolves the project directory exactly the way `generateMedia` does
+       * (`ensureProject(projectsRoot, projectId)` — no metadata), so this points
+       * at the bytes that were actually written.
+       */
+      const attachLateOutputToRunMessage = async (meta: unknown): Promise<void> => {
+        const runId = options.grant?.runId;
+        const name =
+          meta && typeof meta === 'object' && typeof (meta as { name?: unknown }).name === 'string'
+            ? (meta as { name: string }).name
+            : '';
+        if (!runId || !name) return;
+        try {
+          await associateLateRunProducedFile(db, {
+            runId,
+            projectRoot: resolveProjectDir(PROJECTS_DIR, projectId),
+            projectRelativePath: name,
+          });
+        } catch (err) {
+          console.warn('[media] late produced-file association failed', err);
+        }
+      };
+
       const proxyDispatcher = proxyDispatcherRequestInit(process.env, {
         headersTimeout: LONG_MEDIA_PROXY_TIMEOUT_MS,
         bodyTimeout: LONG_MEDIA_PROXY_TIMEOUT_MS,
       });
       task.status = 'running';
       persistMediaTask(task);
-      const workspaceId = findTeamWorkspaceIdForProject(db, projectId) ?? undefined;
+      // Media billing follows the project's Workspace binding, not its sharing
+      // visibility. A private project inside a team Workspace must still spend
+      // that Workspace's balance; `findTeamWorkspaceIdForProject` deliberately
+      // answers the narrower collaboration question and excludes it.
+      const workspaceId =
+        getWorkspaceProjectByProjectId(db, projectId)?.workspaceId?.trim() || undefined;
       generateMedia({
         projectRoot: PROJECT_ROOT,
         projectsRoot: PROJECTS_DIR,
@@ -285,13 +476,39 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         image: req.body?.image,
         images: Array.isArray(req.body?.images) ? req.body.images : undefined,
         workspaceId,
+        // Strong capture path (spec §5.1.1): freeze the provider's own bytes
+        // the moment they land, so a later turn overwriting the same output
+        // name can never rewrite this message's history. Bound to THIS run and
+        // task, so the run-terminal pass can reuse it verbatim instead of
+        // re-reading a file that may already have moved on.
+        onBytesWritten: async (written: {
+          bytes: Buffer;
+          name: string;
+          mime: string;
+          kind: string;
+          mtime: number;
+        }) => {
+          await captureChatArtifactSnapshotFromBytes(
+            { db, blobs: chatArtifactBlobs, quota: chatArtifactQuota },
+            {
+              projectId,
+              projectRelativePath: written.name,
+              kind: written.kind,
+              mime: written.mime,
+              bytes: written.bytes,
+              sourceMtime: written.mtime,
+              ...(options.grant?.runId ? { runId: options.grant.runId } : {}),
+              mediaTaskId: taskId,
+            },
+          );
+        },
         onProgress: (line: any) => appendTaskProgress(task, line),
         requestInit: proxyDispatcher.requestInit,
         onProviderRequestSettled: (summary: ImageGenerationRequestSummary & { providerId: string }) => {
           providerRequestSummary = summary;
         },
       })
-        .then((meta: any) => {
+        .then(async (meta: any) => {
           task.status = 'done';
           task.file = meta;
           task.endedAt = Date.now();
@@ -319,10 +536,16 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
             fileSize: typeof meta?.size === 'number' ? meta.size : undefined,
             mime: typeof meta?.mime === 'string' ? meta.mime : undefined,
           }));
+          // Last, and only after the waiters have been told: this generation
+          // may have outlived the turn that asked for it, and the run-terminal
+          // floor froze its file list before these bytes existed. Attach them
+          // to that turn now, additively. A no-op whenever the run is still
+          // live — the terminal pass covers that case on its own.
+          await attachLateOutputToRunMessage(meta);
         })
         .catch((err: any) => {
           task.status = 'failed';
-          task.error = mediaTaskErrorFromFailure(err);
+          task.error = mediaTaskErrorFromFailure(err, { model });
           task.endedAt = Date.now();
           persistMediaTask(task);
           if (analyticsContext && providerRequestSummary) {
@@ -347,6 +570,10 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
             elapsedMs: task.endedAt - task.startedAt,
             error: task.error.message,
           }));
+          // Last, and only after the waiters have been told: the run that asked
+          // for this generation must not be able to report itself complete when
+          // the host just watched its deliverable fail.
+          reportFailureToRun(taskId, task.error);
         })
         .finally(() => proxyDispatcher.close());
 
@@ -358,7 +585,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     } catch (err: any) {
       if (task) {
         task.status = 'failed';
-        task.error = mediaTaskErrorFromFailure(err);
+        task.error = mediaTaskErrorFromFailure(err, { model });
         task.endedAt = Date.now();
         persistMediaTask(task);
         notifyTaskWaiters(task);
@@ -375,6 +602,10 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
           elapsedMs: task.endedAt - task.startedAt,
           error: task.error.message,
         }));
+        // Same invariant as the async rejection above: a dispatch that threw
+        // before the provider was ever reached is still a generation this run
+        // asked for and did not get.
+        reportFailureToRun(task.id, task.error);
       }
       throw err;
     }
@@ -457,7 +688,28 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       // Analytics is best-effort and must not change the media task outcome.
     }
   };
-  app.get('/api/media/models', (_req, res) => {
+  app.get('/api/media/models', async (req, res) => {
+    if (req.query.cloud === 'true') {
+      if (!isLocalSameOrigin(req, getResolvedPort())) return res.status(403).json({ error: 'cross-origin request rejected' });
+      const grant = optionalToolGrantFromRequest(req, { operation: 'media:generate' });
+      const projectId = grant?.projectId ?? (typeof req.query.projectId === 'string' ? req.query.projectId : '');
+      if (!projectId) return sendApiError(res, 400, 'BAD_REQUEST', 'projectId is required for the scoped cloud catalogue');
+      if (grant) {
+        if (!await ctx.authorizeProjectToolRequest(res, projectId, { mode: 'read' }, grant.runId)) return;
+      } else if (!await ctx.authorizeProjectRequest(req, res, projectId, { mode: 'read' })) return;
+      try {
+        const workspaceId = getWorkspaceProjectByProjectId(db, projectId)?.workspaceId?.trim() || undefined;
+        const available = await fetchVelaVideoModels(workspaceId);
+        const catalogue: CloudVideoModelsResponse = {
+          video: VIDEO_MODELS.filter((model: MediaModel) => model.provider === 'vela'
+            && available.includes(model.id.replace(/^vela\//, ''))),
+          source: 'account_workspace_catalogue',
+        };
+        return res.json(catalogue);
+      } catch {
+        return sendApiError(res, 503, 'MEDIA_CATALOG_UNAVAILABLE', 'Cloud video availability could not be verified; do not infer availability from the static catalogue.');
+      }
+    }
     res.json({
       providers: MEDIA_PROVIDERS,
       image: IMAGE_MODELS,
@@ -630,6 +882,15 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       onAppConfigWritten?.(config);
       res.json({ config });
     } catch (err: any) {
+      if (err?.code === 'INVALID_APP_CONFIG_VALUE') {
+        // Nested envelope on purpose. `od`'s error reader only finds a code in
+        // this shape; from a flat body it falls back to `daemon-not-running`
+        // and exits 64, which tells a caller to go start a daemon that just
+        // answered. Rejected input should read as a plain failure.
+        return res.status(400).json({
+          error: { code: err.code, message: String(err.message) },
+        });
+      }
       const status = err?.code === 'WORKSPACE_ACCESS_DENIED'
           ? 403
           : 500;
@@ -768,6 +1029,89 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     }
   });
 
+  const handleStockSearch = async (req: any, res: any, projectId: string, grant: ToolTokenGrant | null, authorizedWorkspaceId?: string | null) => {
+    const project = getProject(db, projectId);
+    if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+    let request: StockSearchRequest;
+    try {
+      request = parseStockSearchRequest(req.body);
+      request.outDir = validateProjectPath(request.outDir ?? 'assets/stock');
+      await resolveProjectWritePath(PROJECTS_DIR, projectId, request.outDir, project.metadata);
+    } catch (err: any) {
+      return sendApiError(res, 400, 'INVALID_STOCK_REQUEST', err.message);
+    }
+    const run = grant?.runId ? design.runs.get(grant.runId) : null;
+    let workspaceId = getWorkspaceProjectByProjectId(db, projectId)?.workspaceId?.trim();
+    if (grant) {
+      const scope = run?.workspaceScope;
+      const bound = scope?.schemaVersion === 1 && scope.projectId === projectId
+        && scope.source === 'persisted_project_binding'
+        && typeof scope.workspaceId === 'string' && Boolean(scope.workspaceId.trim());
+      const accountScoped = scope?.schemaVersion === 1 && scope.projectId === projectId
+        && scope.source === 'unbound_account' && scope.workspaceId === null;
+      if (run?.projectId !== projectId || (!bound && !accountScoped)
+        || (scope.workspaceId ?? null) !== (authorizedWorkspaceId ?? null)) {
+        return sendApiError(res, 403, 'FORBIDDEN', "stock search requires the run's original authorized project workspace");
+      }
+      // A genuine unbound scope stays unbound; absence of proof never borrows
+      // the mutable project's current wallet or the daemon's ambient selection.
+      workspaceId = bound ? scope.workspaceId.trim() : undefined;
+    }
+    const analytics = await mediaAnalyticsContext(req, grant);
+    const recorder = await createStockRecorder({ slotCount: request.slots.length, env: {
+      ...process.env,
+      OD_DATA_DIR: RUNTIME_DATA_DIR,
+      OD_PROJECT_ID: projectId,
+      OD_STOCK_RUN_ID: grant?.runId ?? '',
+      OD_STOCK_SESSION_ID: run?.conversationId ?? '',
+      OD_STOCK_ANALYTICS_DEVICE_ID: analytics?.deviceId ?? '',
+      OD_STOCK_ANALYTICS_SESSION_ID: analytics?.sessionId ?? '',
+      OD_STOCK_ANALYTICS_CLIENT_TYPE: analytics?.clientType ?? '',
+      OD_STOCK_ANALYTICS_LOCALE: analytics?.locale ?? '',
+    } });
+    try {
+      const report = await stockSearch({
+        ...request,
+        cwd: resolveProjectDir(PROJECTS_DIR, projectId, project.metadata),
+        ...(workspaceId ? { workspaceId } : {}),
+        resolveOutputPath: (relative) => resolveProjectWritePath(PROJECTS_DIR, projectId, relative, project.metadata),
+        onAttempt: (event) => { recorder.record(event); },
+      });
+      const collectionStatus = await recorder.finish(report);
+      res.json({ ...report, telemetry: { callId: recorder.callId, collectionStatus } });
+    } catch (err: any) {
+      await recorder.finish({ providers: [], slots: request.slots.map((slot) => ({ ...slot, status: 'error' })) });
+      if (err instanceof StockSearchServiceError) return sendApiError(res, 503, 'STOCK_SEARCH_UNAVAILABLE', err.message);
+      if (err instanceof StockSearchInputError || err.code === 'EPATHESCAPE') return sendApiError(res, 400, 'INVALID_STOCK_REQUEST', err.message);
+      return sendApiError(res, 500, 'STOCK_SEARCH_FAILED', 'stock search could not complete');
+    }
+  };
+
+  app.post(STOCK_SEARCH_TOOL_ENDPOINT, async (req, res) => {
+    const grant = authorizeToolRequest(req, res, 'media:stock-search', { endpoint: STOCK_SEARCH_TOOL_ENDPOINT });
+    if (!grant) return;
+    const authority = await ctx.authorizeProjectToolRequest(res, grant.projectId, { mode: 'write', capability: 'writeFiles' }, grant.runId);
+    if (!authority) return;
+    await handleStockSearch(req, res, grant.projectId, grant, authority.workspace?.workspaceId ?? null);
+  });
+
+  // Existing UI/project clients use the same execution path. Bearer callers
+  // cannot downgrade to browser authority or select a different project.
+  app.post('/api/projects/:id/media/stock-search', async (req, res) => {
+    if (!isLocalSameOrigin(req, getResolvedPort())) return sendApiError(res, 403, 'FORBIDDEN', 'cross-origin request rejected');
+    const bearer = /^Bearer(?:\s|$)/i.test(req.get('authorization')?.trim() ?? '');
+    const grant = bearer ? authorizeToolRequest(req, res, 'media:stock-search', { endpoint: STOCK_SEARCH_TOOL_ENDPOINT }) : null;
+    if (bearer && !grant) return;
+    if (grant && grant.projectId !== req.params.id) return sendApiError(res, 403, 'FORBIDDEN', 'projectId is derived from the tool token');
+    let authorizedWorkspaceId: string | null | undefined;
+    if (grant) {
+      const authority = await ctx.authorizeProjectToolRequest(res, grant.projectId, { mode: 'write', capability: 'writeFiles' }, grant.runId);
+      if (!authority) return;
+      authorizedWorkspaceId = authority.workspace?.workspaceId ?? null;
+    } else if (!await ctx.authorizeProjectRequest(req, res, req.params.id, { mode: 'write', capability: 'writeFiles' })) return;
+    await handleStockSearch(req, res, req.params.id, grant, authorizedWorkspaceId);
+  });
+
   app.post('/api/projects/:id/media/hyperframes/scaffold', async (req, res) => {
     if (!isLocalSameOrigin(req, getResolvedPort())) {
       return res.status(403).json({
@@ -805,6 +1149,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         res,
         grant.projectId,
         { mode: 'write', capability: 'writeFiles' },
+        grant.runId,
       )) return;
       await handleHyperFramesScaffold(req, res, grant.projectId);
     } catch (err: any) {
@@ -814,6 +1159,133 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       if (code) body.code = code;
       res.status(status).json(body);
     }
+  });
+
+  // Motion reference pack: measure a user's reference video (attached file or
+  // link) into facts, frames and a contact sheet for replication.
+  const handleMotionReference = async (req: any, res: any, projectId: string) => {
+    const project = getProject(db, projectId);
+    if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+    const body = (req.body ?? {}) as { source?: unknown; id?: unknown };
+    if (typeof body.source !== 'string' || !body.source.trim()) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'source is required (a project file path or an http(s) link)');
+    }
+    const source = body.source.trim();
+    const sourceKind = /^https?:\/\//i.test(source) ? 'url' as const : 'file' as const;
+    const captureReplicationResult = async (props: {
+      result: 'success' | 'failed';
+      durationSec?: number;
+      shotCount?: number;
+      hasAudio?: boolean;
+      failureCode?: string;
+    }) => {
+      // Best effort: a replication never fails because telemetry did. This is
+      // the only product signal that says whether anyone uses replication and
+      // where it stops working — no prompt, no file name, no frame content.
+      try {
+        const context = await mediaAnalyticsContext(req, null);
+        if (!context) return;
+        design.analytics.capture({
+          eventName: 'motion_replicate_result',
+          context,
+          appVersion: design.getAppVersion(),
+          properties: {
+            page_name: 'studio',
+            area: 'motion_replication',
+            project_id: project.id,
+            source_kind: sourceKind,
+            ...props,
+          },
+          // Opaque per-attempt id: never derive it from the source path or link.
+          insertId: `motion_replicate_result:${randomUUID()}`,
+        });
+      } catch {
+        // ignore
+      }
+    };
+    try {
+      const result = await buildMotionReference({
+        projectDir: resolveProjectDir(PROJECTS_DIR, project.id, project.metadata),
+        source: body.source,
+        toolsDir: path.join(RUNTIME_DATA_DIR, 'tools'),
+        rulesFile: path.join(ctx.paths.SKILLS_DIR, 'motion-design', 'references', 'replicate.md'),
+        ...(typeof body.id === 'string' && body.id.trim() ? { id: body.id } : {}),
+      });
+      await captureReplicationResult({
+        result: 'success',
+        durationSec: result.durationSec,
+        shotCount: result.cuts.length + 1,
+        hasAudio: result.hasAudio,
+      });
+      return res.status(201).json(result);
+    } catch (err: any) {
+      if (err instanceof MotionReferenceError) {
+        await captureReplicationResult({ result: 'failed', failureCode: err.code });
+        return sendApiError(res, err.code === 'BAD_REQUEST' ? 400 : 422, err.code, err.message);
+      }
+      await captureReplicationResult({ result: 'failed', failureCode: 'MOTION_REFERENCE_FAILED' });
+      return sendApiError(res, 500, 'MOTION_REFERENCE_FAILED', String(err?.message ?? err));
+    }
+  };
+
+  app.post('/api/projects/:id/media/motion-reference', async (req, res) => {
+    if (!isLocalSameOrigin(req, getResolvedPort())) return sendApiError(res, 403, 'FORBIDDEN', 'cross-origin request rejected');
+    if (!await ctx.authorizeProjectRequest(req, res, req.params.id, { mode: 'write', capability: 'writeFiles' })) return;
+    await handleMotionReference(req, res, req.params.id);
+  });
+
+  app.post(MOTION_REFERENCE_TOOL_ENDPOINT, async (req, res) => {
+    const grant = authorizeToolRequest(req, res, 'media:reference', { endpoint: MOTION_REFERENCE_TOOL_ENDPOINT });
+    if (!grant) return;
+    if (!await ctx.authorizeProjectToolRequest(res, grant.projectId, { mode: 'write', capability: 'writeFiles' }, grant.runId)) return;
+    await handleMotionReference(req, res, grant.projectId);
+  });
+
+  // Motion compare: put the produced film beside the reference at the same
+  // timestamps, so the agent looks at real evidence instead of trusting a
+  // film it remembers writing.
+  const handleMotionCompare = async (req: any, res: any, projectId: string) => {
+    const project = getProject(db, projectId);
+    if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+    const body = (req.body ?? {}) as { reference?: unknown; candidate?: unknown; times?: unknown; cuts?: unknown; id?: unknown };
+    if (typeof body.reference !== 'string' || !body.reference.trim()) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'reference is required (the video the film was made from)');
+    }
+    if (typeof body.candidate !== 'string' || !body.candidate.trim()) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'candidate is required (the film just produced)');
+    }
+    const numbers = (value: unknown): number[] | null => Array.isArray(value)
+      ? value.filter((n): n is number => typeof n === 'number' && Number.isFinite(n))
+      : null;
+    const times = numbers(body.times);
+    const cuts = numbers(body.cuts);
+    try {
+      const result = await compareMotionFilms({
+        projectDir: resolveProjectDir(PROJECTS_DIR, project.id, project.metadata),
+        reference: body.reference,
+        candidate: body.candidate,
+        ...(times ? { times } : {}),
+        ...(cuts ? { cuts } : {}),
+        ...(typeof body.id === 'string' && body.id.trim() ? { id: body.id } : {}),
+      });
+      return res.status(201).json(result);
+    } catch (err: any) {
+      if (err instanceof MotionCompareError) return sendApiError(res, err.status, err.code, err.message);
+      return sendApiError(res, 500, 'MOTION_COMPARE_FAILED', String(err?.message ?? err));
+    }
+  };
+
+  app.post('/api/projects/:id/media/motion-compare', async (req, res) => {
+    if (!isLocalSameOrigin(req, getResolvedPort())) return sendApiError(res, 403, 'FORBIDDEN', 'cross-origin request rejected');
+    if (!await ctx.authorizeProjectRequest(req, res, req.params.id, { mode: 'write', capability: 'writeFiles' })) return;
+    await handleMotionCompare(req, res, req.params.id);
+  });
+
+  app.post(MOTION_COMPARE_TOOL_ENDPOINT, async (req, res) => {
+    const grant = authorizeToolRequest(req, res, 'media:compare', { endpoint: MOTION_COMPARE_TOOL_ENDPOINT });
+    if (!grant) return;
+    if (!await ctx.authorizeProjectToolRequest(res, grant.projectId, { mode: 'write', capability: 'writeFiles' }, grant.runId)) return;
+    await handleMotionCompare(req, res, grant.projectId);
   });
 
   app.post('/api/projects/:id/media/generate', async (req, res) => {
@@ -869,6 +1341,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         res,
         grant.projectId,
         { mode: 'write', capability: 'writeFiles' },
+        grant.runId,
       )) return;
       await handleGenerate(req, res, { projectId: grant.projectId, grant });
     } catch (err: any) {
@@ -927,9 +1400,20 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     const authorizationHeader = req.get('authorization');
-    // Once a caller chooses the tool-token lane, invalid, expired, or
-    // under-scoped credentials must not downgrade to project authorization.
-    const toolGrant = typeof authorizationHeader === 'string'
+    // Only a Bearer credential chooses the tool-token lane: that is the sole
+    // shape `bearerTokenFromRequest` parses. A reverse proxy that
+    // authenticates browsers itself forwards its own `Authorization: Basic
+    // ...`, which can never satisfy the lane, so claiming it here failed
+    // every proxied wait with TOOL_TOKEN_MISSING. Once a Bearer caller does
+    // choose the lane, invalid, expired, or under-scoped credentials must not
+    // downgrade to project authorization.
+    // Classify the scheme independently of whether a token follows it: a bare
+    // `Bearer` (or `Bearer ` trimmed to it) is still a caller reaching for the
+    // tool-token lane and must keep failing closed with TOOL_TOKEN_MISSING
+    // rather than downgrading to browser project authority.
+    const usesToolTokenLane = typeof authorizationHeader === 'string'
+      && /^Bearer(?:\s|$)/i.test(authorizationHeader.trim());
+    const toolGrant = usesToolTokenLane
       ? authorizeToolRequest(
           req,
           res,
@@ -937,13 +1421,14 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
           { endpoint: MEDIA_TASK_WAIT_TOOL_ENDPOINT },
         )
       : null;
-    if (typeof authorizationHeader === 'string' && !toolGrant) return;
+    if (usesToolTokenLane && !toolGrant) return;
     if (
       toolGrant
       && !await ctx.authorizeProjectToolRequest(
         res,
         toolGrant.projectId,
         { mode: 'read' },
+        toolGrant.runId,
       )
     ) return;
 
@@ -1008,16 +1493,86 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     const projectId = req.params.id;
-    if (!getProject(db, projectId)) {
+    const project = getProject(db, projectId);
+    if (!project) {
       return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
     }
     if (!await ctx.authorizeProjectRequest(req, res, projectId, { mode: 'read' })) return;
     const includeDone =
       req.query.includeDone === '1' || req.query.includeDone === 'true';
-    const tasks = listMediaTasksByProject(db, projectId, {
+    const taskRows = listMediaTasksByProject(db, projectId, {
       includeTerminal: includeDone,
-    }).map((t: any) => ({
+    });
+    const confirmedFiles = new Map<string, ProjectFile>();
+    const movedCandidates: typeof taskRows = [];
+    if (includeDone && taskRows.some((task: any) => task.status === 'done')) {
+      await Promise.all(taskRows.map(async (task: any) => {
+        if (task.status !== 'done') return;
+        const name = typeof task.file?.name === 'string' ? task.file.name.trim() : '';
+        if (!name) return;
+        try {
+          confirmedFiles.set(
+            task.id,
+            await resolveProjectFilePath(PROJECTS_DIR, projectId, name, project.metadata),
+          );
+        } catch {
+          if (finiteNumber(task.file?.size) !== null && finiteNumber(task.file?.mtime) !== null) {
+            movedCandidates.push(task);
+          }
+        }
+      }));
+    }
+    if (movedCandidates.length > 0) {
+      try {
+        const projectFiles = await listFiles(
+          PROJECTS_DIR,
+          projectId,
+          { metadata: project.metadata },
+        );
+        // Files a task still resolves by its recorded path are already
+        // spoken for; a moved task must not take one of them.
+        const claimedNames = new Set(
+          [...confirmedFiles.values()].map((file) => file.name),
+        );
+        const resolved = resolveMovedMediaTaskFiles(
+          movedCandidates.map((task: any) => ({ taskId: task.id, file: task.file })),
+          projectFiles,
+          claimedNames,
+        );
+        for (const [taskId, file] of resolved) confirmedFiles.set(taskId, file);
+      } catch {
+        // Task status remains useful when an imported folder is temporarily
+        // unavailable. Omit unconfirmed files and let the client's bounded
+        // terminal poll reconcile them if the project root returns.
+      }
+    }
+    const batches = assignMediaTaskBatches(taskRows.map((task: any) => ({
+      id: task.id,
+      runId: task.runId,
+      surface: task.surface,
+      startedAt: task.startedAt,
+      endedAt: task.endedAt,
+      sequence: task.sequence,
+    })));
+    const tasks = taskRows.map((t: any) => {
+      const resolvedFile = confirmedFiles.get(t.id) ?? null;
+      let confirmedFile: Record<string, unknown> | null = null;
+      if (resolvedFile) {
+        confirmedFile = reconciledMediaTaskFile(t.file, resolvedFile);
+        if ((t.file as { name?: unknown } | null)?.name !== resolvedFile.name) {
+          const liveTask = getLiveMediaTask(t.id);
+          if (liveTask) {
+            liveTask.file = confirmedFile;
+            persistMediaTask(liveTask);
+          }
+        }
+      }
+      const batch = batches.get(t.id);
+      return {
         taskId: t.id,
+        sequence: t.sequence,
+        ...(batch ?? {}),
+        ...(t.runId ? { runId: t.runId } : {}),
         status: t.status,
         startedAt: t.startedAt,
         endedAt: t.endedAt,
@@ -1026,10 +1581,13 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         model: t.model,
         progress: t.progress.slice(-3),
         progressCount: t.progress.length,
-        ...(t.status === 'done' ? { file: t.file } : {}),
+        ...(confirmedFile ? { file: confirmedFile } : {}),
         ...(t.status === 'failed' || t.status === 'interrupted' ? { error: t.error } : {}),
-      }));
-    tasks.sort((a: any, b: any) => b.startedAt - a.startedAt);
+      };
+    });
+    // Newest first, with creation order breaking the ties a parallel fan-out
+    // always produces.
+    tasks.sort((a: any, b: any) => (b.startedAt - a.startedAt) || (b.sequence - a.sequence));
     res.json({ tasks });
   });
 

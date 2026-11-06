@@ -16,6 +16,7 @@
 import type { InstalledPluginRecord } from '@open-design/contracts';
 import type { Locale } from '../../i18n';
 import { localizePluginDescription } from './localization';
+import { homePresetCopy } from './homePresetCopy';
 
 const INPUT_PLACEHOLDER_PATTERN = /\{\{\s*([a-zA-Z_][\w-]*)\s*\}\}/g;
 
@@ -175,6 +176,8 @@ export function examplePresetSeedPrompt(
   locale: Locale,
   fallback: () => string,
 ): PresetSeed {
+  const curatedCopy = homePresetCopy(record.id, locale);
+  if (curatedCopy) return { text: curatedCopy.prompt, fromRenderedQuery: false };
   const description = stripAttributionTail(localizePluginDescription(locale, record).trim());
   // zh: the localized useCase.query is a generator-facing meta-instruction
   // ("follow the en field verbatim; start from example.html"), useless as a

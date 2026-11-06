@@ -1,33 +1,8 @@
 // @vitest-environment jsdom
 //
-// Acceptance: which plan wordmark a TEAM workspace draws on the account
-// nameplate. That nameplate used to render twice — the rail's bottom-left
-// account row plus the account menu's billing card; since 320a36ac1 the
-// account module is a floating avatar-only trigger, so the billing card is
-// the only site left. See `nameplateTier()` below.
-//
-// Reported (owner, from a real client standing in a team workspace):
-// 「团队版的订阅，这里应该都显示 team 的标识」 …… 「产品期望团队从 free 到 max，
-// 徽标都显示 team 的那个，个人的还是维持现状不要动」
-//
-// So the badge names the plan FAMILY, not the tier inside it: every tier of a
-// team subscription draws the one `team` wordmark, and the personal ladder is
-// untouched. It got this wrong from both ends:
-//
-//   • PAID team tiers — `planBadgeTierForLabel` asked `plus` / `pro` / `max`
-//     BEFORE `team`, and B's team ids EMBED the personal tier word
-//     (`team_plus`, `team_max`), so `team_plus` matched `plus` and the `team`
-//     branch was reachable only from a bare `team` id.
-//   • the FREE team tier — B reports an unsubscribed workspace as
-//     `billingState: 'free'` with a null `planId` and an EMPTY `membershipTier`,
-//     an id indistinguishable from a personal free account, so no id can name
-//     it and only the workspace kind can.
-//
-// The plan LABEL beside the badge is deliberately NOT part of this. The label
-// answers a subscription question, and every user-created workspace in B is
-// team-typed, so labelling one 团队版 off the workspace kind is #146 (covered by
-// `EntryNavRail.billing-card.test.tsx`). 免费 paired with the `team` wordmark is
-// the intended reading: the family is team, the subscription is not paid.
+// D4 quota popover: the supplied client design uses the scoped Free/Go/Plus/Pro/Max
+// wordmark in both the entry pill and popover. The host's earlier team-family
+// helper remains the fallback for an unrecognized legacy team plan.
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { WorkspaceBillingSummary, WorkspaceCollabContext } from '@open-design/contracts';
@@ -88,7 +63,7 @@ function renderRail(props: {
   );
 }
 
-const ALL_TIERS: PlanBadgeTier[] = ['free', 'plus', 'pro', 'max', 'team'];
+const ALL_TIERS: PlanBadgeTier[] = ['free', 'go', 'plus', 'pro', 'max', 'team'];
 
 /**
  * Read back WHICH wordmark a slot is drawing.
@@ -128,16 +103,16 @@ function drawnTier(slot: Element | null | undefined): PlanBadgeTier | 'unrecogni
 }
 
 /**
- * The wordmark on the account nameplate, inside the menu's billing card.
+ * The wordmark on the account nameplate, inside the billing card.
  *
  * 320a36ac1 moved the account module into the floating top-right cluster and
- * reduced its trigger to a bare avatar circle — the nameplate (tier label +
- * wordmark) now renders only here, so this opens the menu to read it. The
- * subject of these cases is `planBadgeTierForWorkspace`'s answer, which is
- * unchanged; only the one surface that draws it moved.
+ * reduced its trigger to a bare avatar circle; the account then moved to the
+ * foot of the rail and the billing card to a hover panel under the top-right
+ * credits pill — the nameplate (tier label + wordmark) now renders only
+ * there, so this hovers the pill to read the popover's scoped tier.
  */
 function nameplateTier() {
-  fireEvent.click(screen.getByTestId('entry-nav-account'));
+  fireEvent.pointerEnter(screen.getByTestId('entry-top-right-credits'));
   return drawnTier(document.querySelector('.entry-nav-rail__menu-credits'));
 }
 
@@ -155,7 +130,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('plan wordmark — a team workspace draws `team` at every tier', () => {
+describe('plan wordmark — the quota popover names the current workspace tier', () => {
   it.each([
     // B's report for a workspace nobody has paid for: a positive free
     // entitlement, no plan id, and an empty tier on the summary.
@@ -163,63 +138,65 @@ describe('plan wordmark — a team workspace draws `team` at every tier', () => 
       name: 'free (nothing paid for)',
       entitlement: { billingState: 'free', planId: null },
       membershipTier: '',
+      expected: 'free',
     },
     {
       name: 'team_basic',
       entitlement: { billingState: 'active', planId: 'team_basic' },
       membershipTier: 'team_basic',
+      expected: 'team',
     },
     {
       name: 'team_plus',
       entitlement: { billingState: 'active', planId: 'team_plus' },
       membershipTier: 'team_plus',
+      expected: 'plus',
+    },
+    {
+      name: 'team_go',
+      entitlement: { billingState: 'active', planId: 'team_go' },
+      membershipTier: 'team_go',
+      expected: 'go',
     },
     {
       name: 'team_pro',
       entitlement: { billingState: 'active', planId: 'team_pro' },
       membershipTier: 'team_pro',
+      expected: 'pro',
     },
     {
       name: 'team_max',
       entitlement: { billingState: 'active', planId: 'team_max' },
       membershipTier: 'team_max',
+      expected: 'max',
     },
     // A billing-period suffix is still the same plan family.
     {
       name: 'team_max_yearly',
       entitlement: { billingState: 'active', planId: 'team_max_yearly' },
       membershipTier: 'team_max_yearly',
+      expected: 'max',
     },
-  ])('draws the team wordmark on $name', ({ entitlement, membershipTier }) => {
+  ])('draws the $expected wordmark on $name', ({ entitlement, membershipTier, expected }) => {
     renderRail({
       context: context(entitlement as Partial<WorkspaceCollabContext>),
       billing: billing({ membershipTier }),
     });
 
-    expect(nameplateTier()).toBe('team');
+    expect(nameplateTier()).toBe(expected);
+    expect(drawnTier(screen.getByTestId('entry-top-right-credits'))).toBe(expected === 'free' ? null : expected);
   });
 
-  // Was "draws the same wordmark on the account row and in the billing card":
-  // the two sites agreeing stopped being assertable when 320a36ac1 collapsed
-  // the always-visible account row into a bare avatar and left the billing
-  // card as the only nameplate. What survives is that a paid team tier whose
-  // id embeds a personal tier word still resolves to `team`.
-  it('draws the team wordmark for a paid team tier whose id embeds a personal one', () => {
+  it('draws the paid tier wordmark for a team plan', () => {
     renderRail({
       context: context({ billingState: 'active', planId: 'team_pro' } as Partial<WorkspaceCollabContext>),
       billing: billing({ membershipTier: 'team_pro', subscriptionStatus: 'active' }),
     });
 
-    expect(nameplateTier()).toBe('team');
+    expect(nameplateTier()).toBe('pro');
   });
 
-  // A personal workspace CAN hold a team-namespaced plan — membership is per
-  // workspace, and `workspaceBillingSummaryForContext` deliberately passes a
-  // team tier through on the personal side so `hasTeamPlan` still offers the
-  // team surfaces there. The badge names the SUBSCRIPTION family, and that
-  // subscription is a team one, so it draws `team` too. This is the only case
-  // outside a team workspace whose glyph moves.
-  it('draws the team wordmark for a personal workspace holding a team plan', () => {
+  it('draws the paid tier for a personal workspace holding a team plan', () => {
     renderRail({
       context: context({
         workspaceType: 'personal',
@@ -229,7 +206,7 @@ describe('plan wordmark — a team workspace draws `team` at every tier', () => 
       billing: billing({ membershipTier: 'team_plus', subscriptionStatus: 'active' }),
     });
 
-    expect(nameplateTier()).toBe('team');
+    expect(nameplateTier()).toBe('plus');
   });
 });
 
@@ -252,5 +229,21 @@ describe('plan wordmark — the personal ladder is untouched', () => {
     });
 
     expect(nameplateTier()).toBe(plan);
+  });
+});
+describe('OPEND-4440 workspace plan loading', () => {
+  it.each(['owner', 'member'] as const)('keeps an unknown %s workspace neutral until its Max plan arrives', role => {
+    const unknown = context({ workspaceId: 'new-team', workspaceMemberId: 'new-member', role, planId: null });
+    const view = renderRail({ context: unknown, billing: null });
+    const pill = screen.getByTestId('entry-top-right-credits');
+    expect(drawnTier(pill)).toBeNull();
+    expect(pill.getAttribute('aria-busy')).toBe('true');
+    fireEvent.pointerEnter(pill);
+    expect(drawnTier(document.querySelector('.entry-nav-rail__menu-credits'))).toBeNull();
+    expect(document.querySelector('.entry-nav-rail__menu-credits-plan')?.textContent).not.toContain('团队');
+    view.rerender(<I18nProvider initial="zh-CN"><EntryNavRail view="home" onViewChange={() => {}} onNewProject={() => {}} open context={context({ ...unknown, planId: 'max' } as unknown as Partial<WorkspaceCollabContext>)} billing={billing({ membershipTier: 'max' })} balanceUsd="0" /></I18nProvider>);
+    expect(drawnTier(screen.getByTestId('entry-top-right-credits'))).toBe('max');
+    expect(screen.getByTestId('entry-top-right-credits').getAttribute('aria-busy')).not.toBe('true');
+    expect(nameplateTier()).toBe('max');
   });
 });

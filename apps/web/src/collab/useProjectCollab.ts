@@ -3,7 +3,10 @@ import type {
   CollabMemberRole,
   CollabPresenceMember,
   ProjectContentTransferState,
+  ProjectVisibility,
   WorkspaceCollabContext,
+  OwnedProjectContentUpdate,
+  OwnedProjectContentUpdateRequest,
 } from '@open-design/contracts';
 import { resolveCollabSession } from './collab-session';
 import {
@@ -104,6 +107,14 @@ export interface UseProjectCollabOptions {
    * first paint until this hook completes its own status check.
    */
   initialMaterializationPending?: boolean;
+  /**
+   * `ProjectWorkspaceScope.visibility` for this exact project, as answered by
+   * `GET /api/projects/:id/workspace-scope`. See
+   * {@link projectIsDaemonConfirmedPersonal} for why the single-writer gate
+   * consumes it. Null/omitted while the scope read is pending, or for a legacy
+   * unbound project that has no workspace row at all.
+   */
+  projectVisibility?: ProjectVisibility | null;
   /** Injectable for tests. */
   fetch?: typeof fetch;
   baseUrl?: string;
@@ -157,6 +168,10 @@ export function useWorkspaceContext(options: UseProjectCollabOptions = {}): Work
 }
 
 export interface ProjectCollab {
+  ownedContentUpdate?: OwnedProjectContentUpdate | null;
+  /** Local acceptance or daemon replacement is active; ownership is unchanged. */
+  contentUpdatePending?: boolean;
+  requestContentUpdate?: (request: OwnedProjectContentUpdateRequest) => Promise<OwnedProjectContentUpdate | null>;
   /** Whether collab (presence + sync) is active for this project + viewer. */
   enabled: boolean;
   /** The viewer's presence identity, when enabled. */
@@ -238,6 +253,38 @@ export interface ProjectCollab {
   applyContentTransferState?: (state: ProjectContentTransferState) => void;
 }
 
+/**
+ * Whether the daemon has already answered that this project is a private
+ * draft — nobody's team share, therefore nobody else's single-writer project.
+ *
+ * `ProjectWorkspaceScope.visibility` is the `workspace_projects` row itself:
+ * the row a share/unshare mutation writes, and the row the daemon's own write
+ * gate reads before it allows a file write, rename, or run. It is also the
+ * only surface that can answer `personal` — `materializePulledTeamMirror`
+ * stamps `visibility: 'team'` on every pulled mirror AND on the placeholder it
+ * creates before the first pull, so a project someone else shared is never
+ * recorded personal on this daemon.
+ *
+ * That makes it the right authority for the single-writer gate, and it must
+ * outrank `/collab/status`. Status has to consult the remote hub catalog for
+ * ownership, so it can fail (403/404/5xx, or simply never answer), and its
+ * catalog read is served from a stale-while-revalidate + persisted snapshot
+ * cache. The gate below used to fall back to the browser's team-project
+ * catalog cache in that window, which for a workspace owner/admin never
+ * matches: that cache is keyed by the full workspace identity, and the
+ * project-scope context carries the daemon's hardcoded `role: 'member'` while
+ * the shell context that filled the cache carries the member's REAL role. With
+ * no catalog and no status the gate failed closed forever, and the creator of
+ * a personal, local-only project was shown 「这是共享项目」 with Chat, upload,
+ * editing and export all disabled while the daemon would have accepted every
+ * one of those writes (OPEND-2624).
+ */
+export function projectIsDaemonConfirmedPersonal(
+  visibility: ProjectVisibility | null | undefined,
+): boolean {
+  return visibility === 'personal';
+}
+
 export function resolveProjectWriterAuthority(options: {
   workspaceReadOnly: boolean;
   workspaceContextReadOnly: boolean;
@@ -246,12 +293,16 @@ export function resolveProjectWriterAuthority(options: {
   isOwner: boolean;
   knownOwnedByViewer: boolean;
   createdByViewerThisSession: boolean;
+  daemonConfirmedPersonal?: boolean;
   materializationPending?: boolean;
   syncState: ProjectCollab['syncState'];
 }): ProjectCollab['writerAuthority'] {
   if (options.workspaceReadOnly || options.lostAccessAfterUnshare) return 'denied';
   if (options.materializationPending) return 'pending';
   if (options.workspaceContextReadOnly) return 'pending';
+  // The project's own workspace row already settled this: a private draft has
+  // exactly one writer and it is whoever is looking at it.
+  if (options.daemonConfirmedPersonal) return 'allowed';
   // A settled daemon status outranks every provisional browser-side witness.
   // Catalog ownership and same-session creation exist only to bridge the
   // UNKNOWN window; once status names another writer they must not keep write
@@ -305,6 +356,9 @@ export function useProjectCollab(
     ...(options.statusPollMs !== undefined ? { statusPollMs: options.statusPollMs } : {}),
   });
   const workspaceIdentity = workspaceIdentityCacheKey(context);
+  const daemonConfirmedPersonal = projectIsDaemonConfirmedPersonal(
+    options.projectVisibility,
+  );
   // Gate 1 (workspace-level): a non-writable workspace (locked/frozen billing or
   // a removed member) freezes everyone — consume B's `canWriteSyncedFiles` bit
   // rather than re-deriving from lifecycle so the two lanes cannot drift.
@@ -320,8 +374,17 @@ export function useProjectCollab(
   // unshared project is never read-only on this gate.
   const statusUnknown = decision.enabled && collab.syncState === null;
   const shared = collab.syncState !== 'local_only' && collab.syncState !== null;
-  const collabEnabled = decision.enabled && (statusUnknown || shared);
+  // A newly materialized owner device may retain a legacy local_only stamp.
+  // The daemon's scoped owner update is also authoritative shared-project evidence.
+  const collabEnabled = decision.enabled && (statusUnknown || shared || collab.ownedContentUpdate != null);
   const isOwner = collab.ownerMemberId != null && collab.ownerMemberId === context?.workspaceMemberId;
+  // Page-entry checking is distinct from member mirror polling. The daemon
+  // decides whether the owner needs confirmation or has a 24h authorization.
+  const requestContentUpdate = collab.requestContentUpdate;
+  useEffect(() => {
+    if (!decision.enabled || !isOwner || typeof requestContentUpdate !== 'function') return;
+    void requestContentUpdate({ action: 'check' }).catch(() => undefined);
+  }, [projectId, workspaceIdentity, decision.enabled, isOwner, requestContentUpdate]);
   // A project this browser tab created moments ago was not shared at create
   // time. Scope the signal to the exact Workspace identity used by the create
   // request so switching to a different Workspace with the same project id
@@ -421,7 +484,8 @@ export function useProjectCollab(
     confirmedOwnedBySomeoneElseRef.current = relationshipScopeKey;
   }
   const lostAccessAfterUnshare =
-    confirmedOwnedBySomeoneElseRef.current === relationshipScopeKey
+    !daemonConfirmedPersonal
+    && confirmedOwnedBySomeoneElseRef.current === relationshipScopeKey
     && collab.syncState === 'local_only'
     && !isOwner;
   // The project-level (single-writer) gate. Catalog ownership and the
@@ -434,7 +498,8 @@ export function useProjectCollab(
     && !knownOwnedByViewer
     && !createdByViewerThisSession;
   const sharedReadOnly =
-    unknownStatusReadOnly || (shared && !isOwner) || lostAccessAfterUnshare;
+    !daemonConfirmedPersonal
+    && (unknownStatusReadOnly || (shared && !isOwner) || lostAccessAfterUnshare);
   const viewerOnly = workspaceContextReadOnly || workspaceReadOnly || sharedReadOnly;
   const materializationPending =
     collab.awaitingFirstMaterialization
@@ -442,6 +507,8 @@ export function useProjectCollab(
       options.initialMaterializationPending === true
       && collab.statusPollGeneration === 0
     );
+  const contentUpdatePending = collab.contentUpdatePending
+    || collab.ownedContentUpdate?.state === 'downloading';
   const writerAuthority = resolveProjectWriterAuthority({
     workspaceReadOnly,
     workspaceContextReadOnly,
@@ -450,14 +517,16 @@ export function useProjectCollab(
     isOwner,
     knownOwnedByViewer,
     createdByViewerThisSession,
-    materializationPending,
+    daemonConfirmedPersonal,
+    materializationPending: materializationPending || contentUpdatePending,
     syncState: collab.syncState,
   });
   // Positive non-owner evidence only — sticky UX (default-collapsed chat) must
   // not latch on `shared && !isOwner` while ownerMemberId is still missing from
   // an otherwise-shared status payload for the real owner.
   const isSharedNonOwner =
-    !isEffectiveOwner
+    !daemonConfirmedPersonal
+    && !isEffectiveOwner
     && (knownOwnedBySomeoneElse
       || (shared && statusNamedDifferentOwner)
       || lostAccessAfterUnshare);
@@ -583,6 +652,9 @@ export function useProjectCollab(
   });
 
   return {
+    ownedContentUpdate: collab.ownedContentUpdate ?? null,
+    contentUpdatePending,
+    requestContentUpdate: collab.requestContentUpdate,
     enabled: collabEnabled,
     member,
     present: collab.present,

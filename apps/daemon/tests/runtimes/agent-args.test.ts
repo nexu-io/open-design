@@ -1,10 +1,15 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { test } from 'vitest';
 import {
   AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, grokBuild, join, kilo, kimi, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
 } from './helpers/test-helpers.js';
 import { writeAntigravityModelSelection } from '../../src/runtimes/defs/antigravity.js';
+import { parseOpenCodeModels } from '../../src/runtimes/defs/opencode.js';
 import { agentCapabilities } from '../../src/runtimes/capabilities.js';
+import {
+  getRememberedLiveModels,
+  rememberLiveModels,
+} from '../../src/runtimes/models.js';
 import type { TestAgentDef } from './helpers/test-helpers.js';
 
 // ---- Cursor Agent --trust capability (issue #4461) -------------------------
@@ -72,12 +77,16 @@ test('cursor-agent declares the --trust capability probe (issue #4461 root cause
   assert.equal(cursorAgent.capabilityFlags?.['--trust'], 'trust');
 });
 
-test('opencode args keep the documented run/json argv and ignore unsupported reasoning options', () => {
+test('opencode args pass model-supported variants without changing the default argv', () => {
   agentCapabilities.delete('opencode');
   const prompt = 'design a dashboard';
   const baseArgs = opencode.buildArgs(prompt, [], [], {});
   assert.equal(opencode.promptViaStdin, true);
   assert.equal(opencode.reasoningOptions, undefined);
+  assert.deepEqual(opencode.listModels?.args, ['models', '--verbose']);
+  assert.equal(opencode.fallbackModels.find(
+    (model) => model.id === 'openai/gpt-5.6-sol',
+  )?.reasoningOptions, undefined);
   assert.deepEqual(opencode.helpArgs, ['run', '--help']);
   assert.deepEqual(opencode.capabilityFlags?.['--dangerously-skip-permissions'], 'skipPermissions');
   assert.equal(baseArgs.includes('-'), false);
@@ -101,20 +110,117 @@ test('opencode args keep the documented run/json argv and ignore unsupported rea
     '-m',
     'anthropic/claude-sonnet-4-5',
   ]);
-  const withReasoning = opencode.buildArgs(
-    prompt,
-    [],
-    [],
-    {
-      model: 'anthropic/claude-sonnet-4-5',
-      reasoning: 'high',
-    },
-  );
-  assert.equal(withReasoning.some((arg) => arg.includes('reason')), false);
-  assert.equal(withReasoning.includes('--thinking'), false);
-  assert.deepEqual(withReasoning, withModel);
+  assert.deepEqual(opencode.buildArgs(prompt, [], [], {
+    model: 'anthropic/claude-sonnet-4-5',
+    reasoning: 'high',
+  }), withModel);
+  assert.deepEqual(opencode.buildArgs(prompt, [], [], {
+    model: 'openai/gpt-5.6-sol',
+    reasoning: 'default',
+  }), [
+    'run',
+    '--format',
+    'json',
+    '-m',
+    'openai/gpt-5.6-sol',
+  ]);
   assert.equal(withModel.includes('--dangerously-skip-permissions'), false);
   assert.equal(withModel.includes('--model'), false);
+});
+
+test('opencode parses live verbose variant metadata and only forwards variants advertised for that model', () => {
+  const previous = getRememberedLiveModels('opencode');
+  const parsed = parseOpenCodeModels([
+    'openai/gpt-5.6-sol',
+    '{ "variants": { "high": {} } }',
+    'openai/gpt-5.6-terra',
+    '{ "variants": { "high": {} } }',
+    'openai/gpt-5.6-luna',
+    '{ "variants": { "max": {} } }',
+    'custom/reasoner',
+    '{',
+    '  "id": "reasoner",',
+    '  "variants": {',
+    '    "low": { "reasoningEffort": "low" },',
+    '    "ultra": { "reasoningEffort": "ultra" }',
+    '  }',
+    '}',
+    'custom/plain',
+    '{',
+    '  "id": "plain",',
+    '  "variants": {}',
+    '}',
+  ].join('\n'));
+  assert.deepEqual(parsed?.find((model) => model.id === 'custom/reasoner')?.reasoningOptions, [
+    { id: 'default', label: 'Default' },
+    { id: 'low', label: 'low' },
+    { id: 'ultra', label: 'ultra' },
+  ]);
+  assert.equal(parsed?.find((model) => model.id === 'custom/plain')?.reasoningOptions, undefined);
+
+  rememberLiveModels('opencode', parsed ?? []);
+  try {
+    assert.deepEqual(opencode.buildArgs('', [], [], {
+      model: 'openai/gpt-5.6-sol',
+      reasoning: 'high',
+    }), [
+      'run',
+      '--format',
+      'json',
+      '-m',
+      'openai/gpt-5.6-sol',
+      '--variant',
+      'high',
+    ]);
+    assert.deepEqual(opencode.buildArgs('', [], [], {
+      model: 'openai/gpt-5.6-terra',
+      reasoning: 'high',
+    }), [
+      'run',
+      '--format',
+      'json',
+      '-m',
+      'openai/gpt-5.6-terra',
+      '--variant',
+      'high',
+    ]);
+    assert.deepEqual(opencode.buildArgs('', [], [], {
+      model: 'openai/gpt-5.6-luna',
+      reasoning: 'max',
+    }), [
+      'run',
+      '--format',
+      'json',
+      '-m',
+      'openai/gpt-5.6-luna',
+      '--variant',
+      'max',
+    ]);
+    assert.deepEqual(opencode.buildArgs('', [], [], {
+      model: 'custom/reasoner',
+      reasoning: 'ultra',
+    }), [
+      'run',
+      '--format',
+      'json',
+      '-m',
+      'custom/reasoner',
+      '--variant',
+      'ultra',
+    ]);
+    assert.deepEqual(opencode.buildArgs('', [], [], {
+      model: 'custom/plain',
+      reasoning: 'ultra',
+    }), [
+      'run',
+      '--format',
+      'json',
+      '-m',
+      'custom/plain',
+    ]);
+  } finally {
+    rememberLiveModels('opencode', previous);
+  }
 });
 
 test('opencode passes --dangerously-skip-permissions when the help probe finds it', () => {
@@ -130,6 +236,22 @@ test('opencode passes --dangerously-skip-permissions when the help probe finds i
   } finally {
     agentCapabilities.delete('opencode');
   }
+});
+
+test('opencode pins its workspace to the project cwd', () => {
+  // OpenCode resolves its project by walking up to the nearest enclosing git
+  // root, not by using its process cwd. A managed project directory is not a
+  // repository, so a development install (daemon data dir under the checkout)
+  // made OpenCode adopt the whole Open Design repository as the workspace: it
+  // wrote the deliverable at the repository root, the project stayed empty, and
+  // the Run reported `no_artifact`.
+  const args = opencode.buildArgs('design a dashboard', [], [], {}, { cwd: '/projects/p1' });
+  assert.deepEqual(args, ['run', '--format', 'json', '--dir', '/projects/p1']);
+});
+
+test('opencode omits --dir for a run with no project directory', () => {
+  const args = opencode.buildArgs('design a dashboard', [], [], {}, {});
+  assert.equal(args.includes('--dir'), false);
 });
 
 // Copilot reads the prompt from stdin when `-p` is omitted entirely
@@ -301,26 +423,23 @@ test('pi fetchModels reads the model table from stdout', async () => {
   }
 });
 
-test('pi args forward extraAllowedDirs as --append-system-prompt flags', () => {
-  const args = pi.buildArgs(
-    '',
-    [],
-    ['/tmp/skills', '/tmp/design-systems'],
-    {},
-    {},
-  );
+test('pi args do not pass resource directories as system-prompt files', () => {
+  const root = mkdtempSync(join(tmpdir(), 'od-pi-resource-dirs-'));
+  try {
+    const dirs = ['skills', 'design-systems', 'task-inputs'].map((name) => join(root, name));
+    for (const dir of dirs) mkdirSync(dir);
 
-  assert.deepEqual(args, [
-    '--mode',
-    'rpc',
-    '--append-system-prompt',
-    '/tmp/skills',
-    '--append-system-prompt',
-    '/tmp/design-systems',
-  ]);
+    const args = pi.buildArgs('', [], dirs, {}, {});
+
+    // Pi reads an existing --append-system-prompt path as a file; directories
+    // cause EISDIR warnings. Resource paths already travel in the RPC prompt.
+    assert.deepEqual(args, ['--mode', 'rpc']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
-test('pi args filter relative paths from extraAllowedDirs', () => {
+test('pi args ignore both absolute and relative extraAllowedDirs', () => {
   const args = pi.buildArgs(
     '',
     [],
@@ -329,18 +448,10 @@ test('pi args filter relative paths from extraAllowedDirs', () => {
     {},
   );
 
-  // Relative paths should be filtered out.
-  assert.deepEqual(args, [
-    '--mode',
-    'rpc',
-    '--append-system-prompt',
-    '/tmp/skills',
-    '--append-system-prompt',
-    '/tmp/design-systems',
-  ]);
+  assert.deepEqual(args, ['--mode', 'rpc']);
 });
 
-test('pi args combine model, thinking, and extraAllowedDirs', () => {
+test('pi args preserve model and thinking when resource directories are supplied', () => {
   const args = pi.buildArgs(
     '',
     [],
@@ -356,8 +467,6 @@ test('pi args combine model, thinking, and extraAllowedDirs', () => {
     'openai/gpt-5',
     '--thinking',
     'medium',
-    '--append-system-prompt',
-    '/tmp/skills',
   ]);
 });
 
@@ -525,32 +634,56 @@ test('qwen args check promptViaStdin, base args, model args and exclude `-` sent
   assert.equal(withModel.includes('-'), false);
 });
 
-// `agy` exposes `-p` (print mode, alias for `--print`) plus `-` as
-// the stdin sentinel — confirmed against `agy --help` on v1.0.3, where
-// `Available subcommands` is `changelog / help / install / plugin /
-// update` (no `chat`). Earlier review iterations pinned `['chat', '-']`
-// based on a different agy build the looper reviewer environment uses;
-// the installed CLI does not recognise it, exits 0 with no stdout, and
-// the daemon would render the resulting empty reply as a "successful"
-// agent response — exactly the failure mode the auth/quota guard at
-// server.ts ~12090 is meant to catch but for the wrong reason.
-test('antigravity pipes prompt via stdin via -p flag (print mode)', () => {
+const AGY_STREAM_JSON_ARGS = [
+  '--input-format',
+  'stream-json',
+  '--output-format',
+  'stream-json',
+];
+
+function decodeAgyStdinFrame(stdin: string): unknown {
+  assert.ok(stdin.endsWith('\n'), 'agy stream-json input must be newline-terminated');
+  const lines = stdin.slice(0, -1).split('\n');
+  assert.equal(lines.length, 1, 'the prompt must be exactly one NDJSON message');
+  return JSON.parse(lines[0]!);
+}
+
+// OPEND-3495. agy only reads the prompt from stdin through its documented
+// `--input-format stream-json` channel; with `-p <text>` it ignores stdin
+// entirely (agy 1.1.1: "no longer reading stdin when a prompt is provided via
+// a flag"), and putting the whole prompt into `-p` overflows Windows'
+// CreateProcess command line (`spawn ENAMETOOLONG`). So argv must carry no
+// prompt and no `-p`, and stdin must carry the prompt as one agy `user`
+// message.
+test('antigravity runs headless stream-json with the prompt as one agy user message on stdin', () => {
   assert.equal(antigravity.bin, 'agy');
-  assert.equal(antigravity.streamFormat, 'plain');
   assert.equal(antigravity.promptViaStdin, true);
+  assert.equal(antigravity.streamFormat, 'json-event-stream');
+  assert.equal(antigravity.eventParser, 'antigravity');
 
   const args = antigravity.buildArgs('write hello world', [], [], {}, {});
-  assert.deepEqual(args, ['-p', '-']);
+  assert.deepEqual(args, AGY_STREAM_JSON_ARGS);
+  assert.equal(args.includes('-p'), false);
+  assert.equal(args.includes('--print'), false);
 
   const argsWithLog = antigravity.buildArgs('write hello world', [], [], {}, {
     agentLogFilePath: '/tmp/od-agy-test.log',
   });
-  assert.deepEqual(argsWithLog, ['--log-file', '/tmp/od-agy-test.log', '-p', '-']);
+  assert.deepEqual(argsWithLog, [
+    '--log-file',
+    '/tmp/od-agy-test.log',
+    ...AGY_STREAM_JSON_ARGS,
+  ]);
 
-  // No `--model` flag exists upstream, so buildArgs argv must stay the
-  // same regardless of which label the user picks.
-  // Pass a temp antigravitySettingsPath so buildArgs does not touch the
-  // real ~/.gemini/antigravity-cli/settings.json during a unit test run.
+  assert.equal(typeof antigravity.encodeStdinPrompt, 'function');
+  assert.deepEqual(decodeAgyStdinFrame(antigravity.encodeStdinPrompt!('write hello world')), {
+    event: 'user',
+    message: { content: 'write hello world' },
+  });
+
+  // The model is chosen through agy's settings.json (see below), never
+  // through argv. Pass a temp antigravitySettingsPath so buildArgs does not
+  // touch the real ~/.gemini/antigravity-cli/settings.json in a unit test.
   const settingsDir = mkdtempSync(join(tmpdir(), 'od-agy-argv-'));
   try {
     const withModel = antigravity.buildArgs('hi', [], [], {
@@ -560,7 +693,11 @@ test('antigravity pipes prompt via stdin via -p flag (print mode)', () => {
       antigravitySettingsPath: join(settingsDir, 'settings.json'),
     });
     assert.equal(withModel.includes('--model'), false);
-    assert.deepEqual(withModel, ['--log-file', '/tmp/od-agy-test.log', '-p', '-']);
+    assert.deepEqual(withModel, [
+      '--log-file',
+      '/tmp/od-agy-test.log',
+      ...AGY_STREAM_JSON_ARGS,
+    ]);
   } finally {
     rmSync(settingsDir, { recursive: true, force: true });
   }
@@ -576,15 +713,11 @@ test('antigravity pipes prompt via stdin via -p flag (print mode)', () => {
   const followUp = antigravity.buildArgs('next message', [], [], {}, {
     hasPriorAssistantTurn: true,
   });
-  assert.deepEqual(followUp, ['-p', '-']);
+  assert.deepEqual(followUp, AGY_STREAM_JSON_ARGS);
   assert.equal(followUp.includes('-c'), false);
-
-  const firstTurn = antigravity.buildArgs('first', [], [], {}, {
-    hasPriorAssistantTurn: false,
-  });
-  assert.deepEqual(firstTurn, ['-p', '-']);
   assert.equal(antigravity.resumesSessionViaCli, undefined);
 
+  // The prompt never rides argv, so no argv budget applies.
   assert.equal(antigravity.maxPromptArgBytes, undefined);
 
   // Picker exposes the synthetic Default + the 8 labels agy's TUI
@@ -612,6 +745,88 @@ test('antigravity pipes prompt via stdin via -p flag (print mode)', () => {
   // settings UI hides the "Custom (fill below)" option when this is
   // `false`. Remove this opt-out once upstream wires #35.
   assert.equal(antigravity.supportsCustomModel, false);
+});
+
+// OPEND-3495: on Windows the composed OD prompt (system prompt + skills +
+// design system + transcript) routinely exceeds CreateProcess's 32_767-char
+// command-line cap. The whole prompt must reach agy through the stdin frame,
+// byte for byte, and argv must stay a small, prompt-independent size.
+test('antigravity keeps a large prompt out of argv and delivers it intact in the stdin frame', () => {
+  const marker = 'OPEND_3495_PROMPT_BODY_MARKER';
+  const prompt = `He said "use <artifact>" \\ ünïcode ✓\n${'Design system rule line that pads the composed prompt.\n'.repeat(1800)}${marker}`;
+  assert.ok(prompt.length > 90_000);
+
+  const args = antigravity.buildArgs(prompt, [], [], {}, {
+    agentLogFilePath: 'C:\\Users\\me\\AppData\\Local\\Temp\\od-agy-run.log',
+  });
+  assert.equal(args.some((arg: string) => arg.includes(marker)), false);
+  const commandLineLength = ['C:\\Users\\me\\.local\\bin\\agy.exe', ...args]
+    .map((arg) => (/[\s"]/.test(arg) ? `"${arg.replace(/"/g, '\\"')}"` : arg))
+    .join(' ').length;
+  assert.ok(
+    commandLineLength < 1_024,
+    `agy command line is ${commandLineLength} chars; it must not grow with the prompt`,
+  );
+
+  assert.equal(typeof antigravity.encodeStdinPrompt, 'function');
+  const frame = decodeAgyStdinFrame(antigravity.encodeStdinPrompt!(prompt)) as {
+    event: string;
+    message: { content: string };
+  };
+  assert.equal(frame.event, 'user');
+  assert.equal(frame.message.content, prompt);
+});
+
+test('antigravity gates non-interactive permission bypass on the detected CLI capability', () => {
+  agentCapabilities.delete('antigravity');
+  assert.deepEqual(antigravity.helpArgs, ['--help']);
+  assert.deepEqual(antigravity.capabilityFlags, {
+    '--dangerously-skip-permissions': 'skipPermissions',
+  });
+  assert.deepEqual(antigravity.buildArgs('', [], [], {}), AGY_STREAM_JSON_ARGS);
+
+  agentCapabilities.set('antigravity', { skipPermissions: true });
+  try {
+    assert.deepEqual(antigravity.buildArgs('', [], [], {}), [
+      '--dangerously-skip-permissions',
+      ...AGY_STREAM_JSON_ARGS,
+    ]);
+  } finally {
+    agentCapabilities.delete('antigravity');
+  }
+});
+
+test('antigravity keeps log argv order when permission bypass is unavailable', () => {
+  agentCapabilities.set('antigravity', { skipPermissions: false });
+  try {
+    assert.deepEqual(
+      antigravity.buildArgs('', [], [], {}, {
+        agentLogFilePath: '/tmp/od-agy-test.log',
+      }),
+      ['--log-file', '/tmp/od-agy-test.log', ...AGY_STREAM_JSON_ARGS],
+    );
+  } finally {
+    agentCapabilities.delete('antigravity');
+  }
+});
+
+test('antigravity places permission bypass after log args', () => {
+  agentCapabilities.set('antigravity', { skipPermissions: true });
+  try {
+    assert.deepEqual(
+      antigravity.buildArgs('', [], [], {}, {
+        agentLogFilePath: '/tmp/od-agy-test.log',
+      }),
+      [
+        '--log-file',
+        '/tmp/od-agy-test.log',
+        '--dangerously-skip-permissions',
+        ...AGY_STREAM_JSON_ARGS,
+      ],
+    );
+  } finally {
+    agentCapabilities.delete('antigravity');
+  }
 });
 
 // `agy` reads `~/.gemini/antigravity-cli/settings.json` on every CLI
@@ -950,6 +1165,31 @@ test('claude flags promptViaStdin and never embeds the prompt in argv', () => {
   // `-p` (print mode) must still be present; without it claude drops into
   // an interactive REPL that the daemon has no TTY for.
   assert.ok(args.includes('-p'), 'claude argv must include -p');
+});
+
+test('claude enables native Child behavior frames when advertised without blocking older runtimes', () => {
+  assert.equal(
+    claude.buildArgs('', [], [], {}, {}).includes('--forward-subagent-text'),
+    false,
+  );
+  assert.equal(
+    claude.capabilityFlags?.['--forward-subagent-text'],
+    'forwardSubagentText',
+  );
+  agentCapabilities.set('claude', { forwardSubagentText: true });
+  try {
+    assert.equal(claude.buildArgs('', [], [], {}, {
+      observeNativeChildBehavior: true,
+    }).includes('--forward-subagent-text'), true);
+  } finally {
+    agentCapabilities.delete('claude');
+  }
+  const argsWithoutForwardText = claude.buildArgs('', [], [], {}, {
+    observeNativeChildBehavior: true,
+  });
+  assert.equal(argsWithoutForwardText.includes('--forward-subagent-text'), false);
+  assert.ok(argsWithoutForwardText.includes('--output-format'));
+  assert.ok(argsWithoutForwardText.includes('--permission-mode'));
 });
 
 // ---- Claude Code --add-dir capability (issue #430) -------------------------

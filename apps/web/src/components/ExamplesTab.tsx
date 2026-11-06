@@ -713,9 +713,14 @@ function ExampleCard({
                   type="button"
                   className="share-menu-item"
                   role="menuitem"
-                  onClick={() => {
+                  onClick={async () => {
                     setShareOpen(false);
-                    exportAsZip(html, exportTitle);
+                    try {
+                      await exportAsZip(html, exportTitle);
+                    } catch (error) {
+                      console.warn('[ExamplesTab] ZIP export failed:', error);
+                      alert(`${t('fileViewer.exportFailedTitle')}\n${t('fileViewer.exportFailedDescription')}`);
+                    }
                   }}
                 >
                   <span className="share-menu-icon">🗜</span>

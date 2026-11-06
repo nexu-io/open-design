@@ -269,4 +269,4 @@ where.exe opencode   # should show C:\Users\YOUR_USERNAME\AppData\Roaming\npm\op
 opencode --version
 ```
 
-If OpenDesign still shows OpenCode as *not installed* in **Settings → Execution mode**, click **Rescan** after confirming the `opencode.cmd` directory is on your user `PATH`.
+If OpenDesign still shows OpenCode as *not installed* in **Models & providers → Local CLI**, click **Rescan** after confirming the `opencode.cmd` directory is on your user `PATH`.

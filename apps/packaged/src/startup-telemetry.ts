@@ -9,19 +9,15 @@
 // dashboard. This module lets the packaged MAIN process emit one structured
 // event on the fatal-exit path.
 //
-// ZERO startup side-effects by construction:
+// No import-time startup side-effects:
 //  - No work at import time (pure helpers + one async fn; no client, no I/O).
-//  - Invoked ONLY from index.ts's `main().catch(...)`, i.e. only when startup
-//    has ALREADY failed and the process is about to exit(1). The happy path
-//    never touches any of this.
+//  - Failure reports run on the fatal path. Launch timing reports reuse the
+//    bounded transport without awaiting network on the startup critical path.
 //  - capture() is fetch-based (no posthog-node SDK, no new dependency), wrapped
 //    in Promise.race with a hard timeout, and swallows every error — it can
 //    neither block nor crash the exit.
 //
-// Consent: startup-crash telemetry follows the existing `captureSafety` policy
-// in apps/daemon/src/analytics.ts — stability data is retained even for
-// opted-out users (and the main process cannot read daemon consent anyway,
-// since the daemon isn't up). The Settings → Privacy copy MUST call this out.
+// Stability events use the safety channel independently of metrics consent.
 //
 // Payload PII: the free-form crash fields (error_message, error_stack) and every
 // path we send (log_path, native_module_path) run through `scrubUserPaths` to
@@ -29,8 +25,9 @@
 // errors are module-resolution / daemon-exit messages, not user content, so this
 // bounds the exposure to build/OS strings rather than anything the user typed.
 
+import { daemonExitObservationSchema, type DaemonExitObservation, buildClientTelemetryParams, isClientMetricEventName, parseClientMetricEvent, processExitMetricFields, classifyProcessExit } from "@open-design/contracts/analytics";
 import { readFile } from "node:fs/promises";
-import { readFileSync, statSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { release } from "node:os";
 
@@ -200,6 +197,37 @@ export function parseDaemonLogTail(logText: string): {
   return out;
 }
 
+// Bounds for the raw-tail fallback below. 40 lines is enough to carry a thrown
+// stack plus the lines around it; 4000 chars is the hard cap — 2x ERROR_STACK_MAX
+// because for this bucket the tail is the ONLY signal (there is no parsed error
+// and no stack worth sending), while still staying far under the 16 KiB we read
+// off disk so a chatty daemon cannot balloon the payload.
+const LOG_TAIL_SAMPLE_MAX_LINES = 40;
+const LOG_TAIL_SAMPLE_MAX = 4000;
+
+// The fallback for logs `parseDaemonLogTail` cannot name.
+//
+// Production (14 days to 2026-08-22): the single largest startup-failure bucket
+// is macOS `daemon-start` — 968 events across 293 people — where the daemon
+// exits code=1, the native module IS present, and error_code / missing_module /
+// daemon_error all come back null. The reason was printed in a log tail we had
+// already read and then discarded, because the parser only names shapes we
+// already know. Shipping the tail itself turns that bucket from undiagnosable
+// into readable.
+//
+// Scrub BEFORE truncating so no username can survive in the slice, and keep the
+// END of the tail: it is chronological, so the fatal line sits nearest the exit
+// (the same reasoning that makes parseDaemonLogTail take the LAST match).
+export function buildDaemonLogTailSample(logText: string): string | null {
+  const lines = logText.split(/\r?\n/);
+  while (lines.length > 0 && (lines[lines.length - 1] ?? "").trim() === "") lines.pop();
+  if (lines.length === 0) return null;
+  const scrubbed = scrubUserPaths(lines.slice(-LOG_TAIL_SAMPLE_MAX_LINES).join("\n"));
+  if (scrubbed.length <= LOG_TAIL_SAMPLE_MAX) return scrubbed;
+  const dropped = scrubbed.length - LOG_TAIL_SAMPLE_MAX;
+  return `…[+${dropped} chars]${scrubbed.slice(-LOG_TAIL_SAMPLE_MAX)}`;
+}
+
 // Reduce `syscall` to the bare operation token.
 //
 // Node does NOT guarantee this is only the operation name: a failed
@@ -332,6 +360,8 @@ export interface CaptureDeps {
   timeoutMs?: number;
   now?: () => string;
   insertId?: string;
+  /** Called only for a successful response received within the transport budget. */
+  onCaptured?: () => void;
 }
 
 // Fire a single PostHog capture over plain HTTPS. No-op without a key; never
@@ -343,6 +373,7 @@ export async function captureStartupFailure(
     distinctId: string;
     event: string;
     properties: Record<string, unknown>;
+    occurredAt?: string;
   },
   deps: CaptureDeps = {},
 ): Promise<void> {
@@ -355,11 +386,15 @@ export async function captureStartupFailure(
   const insertId = deps.insertId ?? randomInsertId();
   const appVersion =
     typeof args.properties.app_version === "string" ? args.properties.app_version : null;
+  const metric = isClientMetricEventName(args.event) ? parseClientMetricEvent(args.event, args.properties) : null;
+  if (isClientMetricEventName(args.event) && !metric) return;
   const body = JSON.stringify({
     api_key: key,
     event: args.event,
     distinct_id: args.distinctId,
-    properties: {
+    // Metric envelopes are already normalized and validated; the legacy
+    // crash envelope below must not overwrite their schema or client type.
+    properties: metric ? { ...metric, $insert_id: insertId } : {
       ...args.properties,
       // Shared safety-event envelope, mirroring captureSafety in
       // apps/daemon/src/analytics.ts. posthog-node-style manual enrichment:
@@ -376,16 +411,18 @@ export async function captureStartupFailure(
       $os_version: release(),
       $insert_id: insertId,
     },
-    timestamp: now(),
+    timestamp: args.occurredAt ?? now(),
   });
 
+  let acceptingResponse = true;
   const send = (async () => {
     try {
-      await fetchImpl(`${host}/capture/`, {
+      const response = await fetchImpl(`${host}/capture/`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body,
       });
+      if (response.ok && acceptingResponse) deps.onCaptured?.();
     } catch {
       // analytics failure must never look like a product error
     }
@@ -396,10 +433,48 @@ export async function captureStartupFailure(
     timer = setTimeout(resolve, timeoutMs);
   });
   await Promise.race([send, timeout]);
+  acceptingResponse = false;
   if (timer) clearTimeout(timer);
 }
 
+// CS02-local event names pending CS01 registry alignment. Unlike the legacy
+// crash path, launch denominators require a real installation identity: never
+// group unrelated installations under the synthetic namespace fallback.
+export async function reportLaunchEvent(args: {
+  posthogKey: string | null;
+  posthogHost: string | null;
+  installationRoot: string | null;
+  dataRoot?: string | null;
+  namespace: string;
+  appVersion: string | null;
+  channel: string;
+  event: "client_launch_attempt" | "client_business_ready" | "client_launch_result";
+  properties: Record<string, unknown>;
+}, deps: CaptureDeps = {}): Promise<void> {
+  try {
+    if (!args.posthogKey?.trim() || !args.installationRoot) return;
+    const identity = JSON.parse(readFileSync(join(args.installationRoot, "installation.json"), "utf8")) as { installationId?: unknown };
+    if (typeof identity.installationId !== "string" || !identity.installationId.trim()) return;
+    const occurredAt = args.properties.occurred_at;
+    const eventId = args.properties.event_id;
+    if (typeof occurredAt !== "string" || typeof eventId !== "string") return;
+    const common = buildClientTelemetryParams(args.properties, {
+      eventId, deviceId: identity.installationId, appVersion: args.appVersion,
+      channel: args.channel, clientType: 'desktop', captureSource: CAPTURE_SOURCE,
+      env: resolveTelemetryEnv(), platform: process.platform, arch: process.arch,
+      osVersion: typeof process.getSystemVersion === 'function' ? process.getSystemVersion() : null,
+      reportedAt: (deps.now ?? (() => new Date().toISOString()))(),
+    });
+    const properties = parseClientMetricEvent(args.event, { ...args.properties, ...common });
+    if (!properties) return;
+    await captureStartupFailure({ ...args, distinctId: identity.installationId, occurredAt, properties },
+      { ...deps, insertId: eventId });
+  } catch { /* Missing identity or telemetry must never break startup. */ }
+}
+
 export interface ReportStartupFailureArgs {
+  dataRoot?: string | null;
+  launchContext?: { app_session_id: string; launch_attempt_id: string };
   error: unknown;
   isPathAccess: boolean;
   posthogKey: string | null;
@@ -431,6 +506,12 @@ export async function reportStartupFailure(
     let errorCode: string | undefined;
     let missingModule: string | undefined;
     let daemonError: string | undefined;
+    // Only populated when the parse above found NOTHING (see
+    // buildDaemonLogTailSample). Narrow on purpose: when we can already name the
+    // cause, the raw tail is bytes and privacy surface for no new information,
+    // and keeping it narrow makes the field itself a signal — its presence means
+    // "this log defeated the parser".
+    let daemonLogTail: string | null = null;
     if (classification.logPath) {
       const tail = await (deps.readLogTail ?? defaultReadLogTail)(classification.logPath);
       if (tail) {
@@ -438,6 +519,9 @@ export async function reportStartupFailure(
         errorCode = parsed.errorCode;
         missingModule = parsed.missingModule;
         daemonError = parsed.daemonError;
+        if (!errorCode && !missingModule && !daemonError) {
+          daemonLogTail = buildDaemonLogTailSample(tail);
+        }
       }
     }
     const rawMessage =
@@ -478,6 +562,11 @@ export async function reportStartupFailure(
       nativeModulePath = scrubUserPaths(args.nativeModulePath);
     }
     const properties: Record<string, unknown> = {
+      ...args.launchContext,
+      event_id: `${args.launchContext?.launch_attempt_id ?? randomInsertId()}:failure`,
+      occurred_at: (deps.now ?? (() => new Date().toISOString()))(),
+      exit_reason: classifyProcessExit(classification.signal === 'SIGKILL' || classification.signal === 'SIGTERM' ? 'killed'
+        : classification.signal === 'SIGABRT' || classification.signal === 'SIGSEGV' || (classification.exitCode != null && classification.exitCode !== 0) ? 'crash' : 'unknown'),
       failure_kind: classification.failureKind,
       exit_code: classification.exitCode,
       signal: classification.signal,
@@ -487,6 +576,7 @@ export async function reportStartupFailure(
       daemon_error: daemonError
         ? truncateForTelemetry(scrubUserPaths(daemonError), ERROR_MESSAGE_MAX)
         : null,
+      daemon_log_tail: daemonLogTail,
       sys_code: sys.code,
       sys_errno: sys.errno,
       sys_syscall: sys.syscall,
@@ -507,7 +597,7 @@ export async function reportStartupFailure(
       source: args.source,
       platform: process.platform,
     };
-    await captureStartupFailure(
+    const legacySend = captureStartupFailure(
       {
         posthogKey: args.posthogKey,
         posthogHost: args.posthogHost,
@@ -515,9 +605,102 @@ export async function reportStartupFailure(
         event: STARTUP_FAILURE_EVENT,
         properties,
       },
-      { fetchImpl: deps.fetchImpl, timeoutMs: deps.timeoutMs, now: deps.now },
+      { fetchImpl: deps.fetchImpl, timeoutMs: deps.timeoutMs, now: deps.now, insertId: properties.event_id as string },
     );
+    const common = buildClientTelemetryParams(properties, {
+      eventId: `${properties.event_id}:exit`, deviceId: args.distinctId.startsWith("packaged-") ? null : args.distinctId, appVersion: args.appVersion,
+      clientType: 'desktop', captureSource: CAPTURE_SOURCE, env: resolveTelemetryEnv(),
+      platform: process.platform, arch: process.arch, reportedAt: (deps.now ?? (() => new Date().toISOString()))(),
+    });
+    const exit = parseClientMetricEvent('client_process_exit', { ...common,
+      ...processExitMetricFields(STARTUP_FAILURE_EVENT, properties), event_id: `${properties.event_id}:exit` });
+    const metricSend = exit ? captureStartupFailure({ ...args, event: 'client_process_exit', properties: exit },
+      { fetchImpl: deps.fetchImpl, timeoutMs: deps.timeoutMs, now: deps.now, insertId: exit.event_id as string }) : Promise.resolve();
+    await Promise.all([legacySend, metricSend]);
   } catch {
     // Reporting a startup failure must NEVER itself break the exit path.
   }
+}
+
+
+/** Same explicit fatal/log evidence as daemon replay; signal or RSS alone is insufficient. */
+function observedDaemonOom(dataRoot: string, instanceId: string, logPath?: string): boolean {
+  try {
+    const checkpoint = JSON.parse(readFileSync(join(dataRoot, 'diagnostics', 'daemon-health.json'), 'utf8')) as {
+      bootId?: string; pid?: number; startedAt?: number;
+    };
+    if (checkpoint.bootId !== instanceId || typeof checkpoint.startedAt !== 'number') return false;
+    const reports = join(dataRoot, 'diagnostics', 'fatal-reports');
+    let names: string[] = [];
+    try { names = readdirSync(reports).filter(name => name.endsWith('.json')).sort().slice(-5); } catch {}
+    for (const name of names.reverse()) {
+      try {
+        const file = join(reports, name);
+        const stat = statSync(file);
+        if (stat.size > 8 * 1024 * 1024 || stat.mtimeMs < checkpoint.startedAt - 1000) continue;
+        const report = JSON.parse(readFileSync(file, 'utf8')) as { header?: { processId?: number; trigger?: string; event?: string } };
+        if (report.header?.processId === checkpoint.pid && (report.header?.trigger === 'OOMError'
+          || /heap out of memory/i.test(report.header?.event ?? ''))) return true;
+      } catch {}
+    }
+    if (logPath) {
+      const stat = statSync(logPath);
+      if (stat.mtimeMs < checkpoint.startedAt - 1000) return false;
+      const length = Math.min(stat.size, 64 * 1024);
+      const buffer = Buffer.alloc(length);
+      const fd = openSync(logPath, 'r');
+      try { readSync(fd, buffer, 0, length, stat.size - length); } finally { closeSync(fd); }
+      return buffer.toString('utf8').includes('JavaScript heap out of memory');
+    }
+  } catch {}
+  return false;
+}
+
+/** Runtime safety capture survives a dead daemon; persist before attempting delivery. */
+export async function reportDaemonExit(args: {
+  dataRoot: string;
+  installationRoot: string;
+  namespace: string;
+  posthogKey: string | null;
+  posthogHost: string | null;
+  observation: DaemonExitObservation;
+  logPath?: string;
+}, deps: CaptureDeps = {}): Promise<void> {
+  try {
+    const observation = daemonExitObservationSchema.parse(args.observation);
+    if (observation.reason !== 'clean-exit' && observedDaemonOom(args.dataRoot, observation.process_instance_id, args.logPath)) {
+      observation.reason = 'oom';
+    }
+    const directory = join(args.dataRoot, 'diagnostics');
+    const path = join(directory, 'daemon-exit-observation.json');
+    const persist = (value: DaemonExitObservation): void => {
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(`${path}.tmp`, JSON.stringify(value), { mode: 0o600 });
+      renameSync(`${path}.tmp`, path);
+    };
+    // Disk failure must not prevent the direct safety capture.
+    try { persist(observation); } catch {}
+    const distinctId = resolveStartupDistinctId(args.namespace, args.installationRoot);
+    const eventId = `${observation.process_instance_id}-unclean-exit:exit`;
+    const common = buildClientTelemetryParams(observation, {
+      eventId, deviceId: distinctId.startsWith('packaged-') ? null : distinctId,
+      appVersion: observation.app_version, clientType: 'desktop', captureSource: 'packaged/runtime',
+      env: resolveTelemetryEnv(), platform: process.platform, arch: process.arch,
+      reportedAt: (deps.now ?? (() => new Date().toISOString()))(), preserveUnknownAppVersion: true,
+    });
+    const metric = parseClientMetricEvent('client_process_exit', { ...common,
+      ...processExitMetricFields('daemon_unclean_exit', { ...observation, previous_app_version: observation.app_version,
+        occurrence_time_source: 'observed', is_backfill: false }),
+    });
+    if (!metric) return;
+    await captureStartupFailure({ ...args, distinctId, event: 'client_process_exit', properties: metric,
+      occurredAt: observation.occurred_at }, { ...deps, insertId: eventId, onCaptured: () => {
+        try {
+          const current = daemonExitObservationSchema.parse(JSON.parse(readFileSync(path, 'utf8')));
+          // A restart may already have consumed the observation. Never resurrect it
+          // or overwrite the next generation's evidence after an asynchronous send.
+          if (current.process_instance_id === observation.process_instance_id) persist({ ...current, delivered: true });
+        } catch {}
+      } });
+  } catch { /* Observability must never change process supervision. */ }
 }

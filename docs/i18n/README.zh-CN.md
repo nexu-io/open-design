@@ -1,13 +1,9 @@
-<h1 align="center">OpenDesign：The open-source Claude Design alternative</h1>
+<h1 align="center">OpenDesign：首个协作式 AI 设计 Agent 工作台</h1>
 
-> ⚡ **[OpenDesign Cloud——官方模型服务。](https://open-design.ai/zh/pricing/)** 一次充值，即可在 OpenDesign 里直接使用 Agent 与图像模型：GPT、Claude 与 DeepSeek Agent 模型，以及 GPT Image 2.0、Seedream 5.0 Pro 与 Nano Banana 2.0 图像模型。
->
-> 🚀 **[DeepSeek V4 Flash 与 V4 Pro 现已上线。](https://open-design.ai/zh/pricing/)** 面向原型、演示文稿、设计系统与日常 Agent 任务，直接使用顶级智能。OpenDesign 会员可在应用内无限量使用两周。
->
-> 🧩 **[现已支持 DeepSeek Harness。](https://open-design.ai/zh/agents/deepseek-harness-design/)** 将 DeepSeek 官方 `dsh` Agent Harness 作为原生运行时接入 OpenDesign，支持结构化思考、工具调用、模型发现、取消与会话恢复；生成文件仍进入 OpenDesign 的实时预览与交付流程。
+> ✨ **[庆祝 GitHub 100K Star，OpenDesign Go 额度翻倍](https://open-design.ai/pricing/)**。**首月仅需 8 美元，指定 Design Plan 模型每月最高可享 120 美元使用额度**，可用于 GPT-6 Luna、DeepSeek V4.1 Flash、GLM-5.3 Flash-X、MiMo V2.6 Flash 等 10 多款模型。 所有个人套餐均提供 API 接入，可用于 Codex、Claude Code、DSH、OpenCode 等工具。
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="OpenDesign hero banner" width="100%" />
+  <img src="../../docs/assets/readme-hero-design-agent.webp" alt="OpenDesign：首个协作式 AI 设计 Agent 工作台" width="100%" />
 </p>
 
 <p align="center">
@@ -15,7 +11,6 @@
   <a href="https://open-design.ai/">下载</a> ·
   <a href="https://open-design.ai/cloud/">OpenDesign Cloud</a> ·
   <a href="https://discord.gg/mHAjSMV6gz">Discord</a> ·
-  <a href="https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=c06v4df1-9676-4672-8c77-7a30eab76154">飞书中文社区</a> ·
   <a href="https://x.com/OpenDesignHQ">关注 @OpenDesignHQ</a>
 </p>
 
@@ -32,76 +27,61 @@
 
 ## 什么是 OpenDesign
 
-🎨 **本地优先、开源的 Claude Design 替代品。** &nbsp;🖥️ **macOS 与 Windows 原生桌面应用。** &nbsp;⚡ **100+ 功能技能 + 独立渲染模板目录** · ✨ **151 个品牌级设计系统包** · 📦 **277 个开箱即用的插件。** &nbsp;🖼️ 可生成 **Web · 桌面 · 移动端原型**、**实时仪表盘 / 工件**、**演示文稿**、**图片**、**视频**，以及 **HyperFrames** 动态图形。🔒 沙箱 iframe 预览 · HTML / PDF / PPTX / MP4 导出。&nbsp;🤖 **运行于 DeepSeek Harness (`dsh`) · Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity 等 26 个不同的本地 CLI 可执行程序**，或通过 BYOK 接入任何 OpenAI 兼容端点。
+OpenDesign 是**首个协作式 AI 设计 Agent 工作台**。从需求描述出发，使用你熟悉的编程 Agent 或 OpenDesign Cloud，创建符合设计系统的原型。与团队分享并收集反馈，再让 Agent 在同一个项目中继续完善。
 
-OpenDesign 是这样一种产物：Anthropic 随 Claude Design 推出的 **Agent 原生**循环——发现需求、锁定方向、流式输出工件、评审、交付——不再封闭，而是变成了一个由**功能技能、渲染设计模板、设计系统和插件组成的文件系统**，你笔记本电脑上已有的编码 Agent 就能读取、编写和混搭。你的 CLI 变成设计引擎，你的笔记本变成工作坊，团队的 `DESIGN.md` 变成品牌契约。
-
-它也是 **Agent 时代的 Figma 替代品**——不再在画布上推像素，而是用真实 CSS、真实字体、真实组件交付单页工件，直接导出 HTML / PDF / PPTX / MP4——已经由你的设计系统塑形，已经可以在你日常使用的 Agent 中运行。
+这套工作流开放且可扩展。OpenDesign 采用 Apache 2.0 许可证；团队可以查看并按自己的流程调整技能、设计模板、设计系统和插件。
 
 
 ---
 
 ## 产品速览
 
-快速看懂 OpenDesign 的核心工作流：从 **Home** 输入需求，在 **Plugins** 中探索可复用技能，并把品牌参考沉淀为 **Design System**；进入任一项目的 **Studio** 后，即可在一处创建和迭代原型、演示文稿、移动应用、图片、文档与 HyperFrame。
-
 ### 核心页面
 
 <table>
 <tr>
-<td valign="top">
-<img src="../../docs/screenshots/product-tour/home.png" alt="OpenDesign Home 页，包含产物类型、需求输入、模型选择和示例" /><br/>
-<sub><b>Home</b>——选择产物类型并输入需求，再设定设计系统、工作目录与模型，即可开始创作。</sub>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png"><img src="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png" alt="Home — 从需求描述或示例开始。" width="500" /></a><br/>
+<sub><b>Home</b> — 从需求描述或示例开始。</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp"><img src="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp" alt="All projects — 重新打开设计系统、媒体和原型项目。" width="500" /></a><br/>
+<sub><b>All projects</b> — 重新打开设计系统、媒体和原型项目。</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png"><img src="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png" alt="Design Systems — 查看品牌素材，并与 Agent 一起完善。" width="500" /></a><br/>
+<sub><b>Design Systems</b> — 查看品牌素材，并与 Agent 一起完善。</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png"><img src="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png" alt="Plugins — 查找技能，通过 Try it 启动。" width="500" /></a><br/>
+<sub><b>Plugins</b> — 查找技能，通过 Try it 启动。</sub>
 </td>
 </tr>
 </table>
 
-<table>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/plugins.png" alt="OpenDesign Plugins 页的官方技能目录" /><br/>
-<sub><b>Plugins</b>——按类别浏览官方技能、搜索目录，并通过 <code>Try it</code> 直接启动工作流。</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/design-system.png" alt="OpenDesign Studio 中的 Shopify 设计系统预览" /><br/>
-<sub><b>Design System</b>——提取并完善品牌视觉语言，预览结果，再在同一工作区中继续创作。</sub>
-</td>
-</tr>
-</table>
-
-### Studio——一个项目里的多种产物
-
-进入某个项目的 Studio，对话、生成文件与实时预览会围绕六种产物集中在同一工作区：
+### Studio——在同一个项目中创作和完善
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-prototype.png" alt="OpenDesign Studio 中的 Web 原型预览" /><br/>
-<sub><b>原型</b>——生成或重建 Web 体验，查看渲染后的页面，并在原处继续与 Agent 迭代。</sub>
+<img src="../../docs/screenshots/product-tour/studio-prototype-2026.webp" alt="Prototype — 与 Agent 一起构建和迭代交互式网页，并实时预览。" /><br/>
+<sub><b>Prototype</b> — 与 Agent 一起构建和迭代交互式网页，并实时预览。</sub>
 </td>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-deck.png" alt="OpenDesign Studio 中的多页演示文稿预览" /><br/>
-<sub><b>演示文稿</b>——创建多页演示文稿，检查缩略图与演讲者备注，完成后直接导出。</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-mobile-app.png" alt="OpenDesign Studio 中的移动应用预览" /><br/>
-<sub><b>移动应用</b>——在设备预览中生成和打磨移动界面，旁边同步保留对话、输出文件与后续操作。</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-image.png" alt="OpenDesign Studio 中的生成图片预览" /><br/>
-<sub><b>图片</b>——从项目对话中生成视觉素材，全尺寸预览结果，然后下载或打开。</sub>
+<img src="../../docs/screenshots/product-tour/studio-slides-2026.png" alt="Slides — 制作演示文稿、查看幻灯片和演讲者备注，完成后导出。" /><br/>
+<sub><b>Slides</b> — 制作演示文稿、查看幻灯片和演讲者备注，完成后导出。</sub>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-document.png" alt="OpenDesign Studio 中的多页文档预览" /><br/>
-<sub><b>文档</b>——创建精致的多页指南与编辑型文档，检查渲染布局，完成后导出或分享。</sub>
+<img src="../../docs/screenshots/product-tour/studio-image-2026.webp" alt="Image — 从对话中生成视觉素材，查看结果，再下载或打开。" /><br/>
+<sub><b>Image</b> — 从对话中生成视觉素材，查看结果，再下载或打开。</sub>
 </td>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-hyperframe.png" alt="OpenDesign Studio 中的 HyperFrame 动态图形预览" /><br/>
-<sub><b>HyperFrame</b>——创建代码驱动的动态图形，在 Studio 中预览动画，并导出最终视频。</sub>
+<a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4"><img src="../../docs/screenshots/product-tour/studio-hyperframes-poster-2026.png" alt="HyperFrames — 与 Agent 一起制作动态图形并导出 MP4。" /></a><br/>
+<sub><b>HyperFrames</b> — 与 Agent 一起制作动态图形并导出 MP4。 <a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4">观看视频</a>.</sub>
 </td>
 </tr>
 </table>
@@ -115,6 +95,7 @@ OpenDesign 是这样一种产物：Anthropic 随 Claude Design 推出的 **Agent
 | 编码 Agent / 平台 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 状态 &nbsp;&nbsp; | 快速接入 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
 |---|:---:|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ 支持 | `od mcp install claude` |
+| [Claude Desktop](https://claude.ai/download) | ✅ 支持¹ | `od mcp install claude-desktop` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ 支持 | `od mcp install codex` |
 | [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ 支持 | `od mcp install reasonix` |
 | [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | ✅ 原生运行时 | `od agent setup deepseek-harness` |
@@ -134,6 +115,8 @@ OpenDesign 是这样一种产物：Anthropic 随 Claude Design 推出的 **Agent
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ 支持 | `od mcp install hermes` |
 
 使用 DeepSeek Harness 时，请先安装官方 `dsh` CLI，再在 OpenDesign 中选择它，或运行 `od agent setup deepseek-harness` 安装/修复 OD 连接组件。MCP 集成可用 `od mcp install <agent> --print` 干跑预览 · `--uninstall` 卸载 · 完整清单 `od mcp install --help`。
+
+¹ Claude Desktop 的自动 MCP 配置目前仅在 macOS 和 Windows 上支持。
 
 <p align="center">
   <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="OpenDesign 支持的 26 个编码 Agent CLI — DeepSeek Harness · Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
@@ -251,29 +234,12 @@ OpenDesign 是这样一种产物：Anthropic 随 Claude Design 推出的 **Agent
 
 ## 为什么选择 OpenDesign
 
-> **2026 年 4 月，Anthropic 发布了 Claude Design——LLM 第一次不再写文章，而是直接交付设计工件。** 它迅速传播。然而它始终闭源、仅付费、仅云端，锁定 Anthropic 的模型、Anthropic 的技能、Anthropic 的表面。没有 Checkout，没有自托管，没有 Vercel 部署，不能换成你自己的 Agent。
-
-OpenDesign (OD) 是开源替代品。同样的循环，同样的工件优先心智模型，没有任何锁定：
-
 - 🤖 **Agent 原生，不绑定模型。** 我们不发布 Agent。你 `PATH` 上已有的 `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` 就是设计引擎。一键切换。
 - 🧠 **默认品牌级。** 每次渲染都把当前包的 `DESIGN.md` 作为核心品牌契约读取。仓库随附 151 个设计系统包；旧包可以仅含 `DESIGN.md`，新包还可加入 `manifest.json`、`tokens.css`、组件、资产和来源信息。放入文件夹，选择器自动识别。
-- 🖥️ **本地优先，每一层都可 BYOK。** 原生桌面应用保持本地优先，不发生云端往返。在描述 daemon 数据路径之前，必须阅读仓库根目录 `AGENTS.md` 中的 **Daemon data directory contract**。
+- 🖥️ **本地优先，每一层都可 BYOK。** 原生桌面应用保持本地优先。产品分析和会话回放需经用户同意；经清理的安全与可靠性遥测始终开启。在描述 daemon 数据路径之前，必须阅读仓库根目录 `AGENTS.md` 中的 **Daemon data directory contract**。
 - 🌍 **四个平面上可组合。** **插件**承载可运行的工作流 · 功能**技能**承载 Agent 行为 · **设计模板**承载渲染蓝图 · **设计系统**承载品牌。四者都采用可移植、可版本控制的目录，任何人都可以编写和发布。
-- 🔁 **刷新现有代码库。** 将 `git` 仓库 + `DESIGN.md` 交给 Agent，它就能将你的真实组件重构到品牌规范。专门的插件用于将 Figma / Pencil 工作流迁移到 React / Next.js / Vue 代码。
-- 🔒 **隐私信条。** 一切都运行在持有你数据的环境中——你的笔记本、你团队的服务器、你的 Vercel 项目。需要网络时有 SSRF 防护的 BYOK 代理。
-
-### 对比
-
-| | Claude Design | Figma | Lovable / v0 / Bolt | **OpenDesign** |
-|---|---|---|---|---|
-| 开源 | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
-| 自托管 / 桌面 | ❌ | ❌ | ❌ | **✅ macOS + Windows + Docker** |
-| Agent 原生（在 CLI 中运行） | 仅 Anthropic | ❌ | 仅云端 Agent | **✅ 25 CLI + BYOK** |
-| 品牌级 `DESIGN.md` | 私有 | Theme JSON | 有限 token | **✅ 151 系统随附** |
-| 技能 / 插件 / 模板 | 封闭 | 插件商店 | 封闭 | **✅ 100+ 功能技能 · 独立渲染模板目录 · 277 插件** |
-| HyperFrames (HTML→MP4) | ❌ | ❌ | ❌ | **✅ 一等公民** |
-| 将现有仓库刷新到品牌 | ❌ | ❌ | ❌ | **✅ 通过 Agent + `DESIGN.md`** |
-| 最低费用 | Pro / Max / Team | Pro / Org | Pro / Team | **BYOK · 任意兼容端点** |
+- 🔁 **刷新现有代码库。** 将 `git` 仓库 + `DESIGN.md` 交给 Agent，它就能将你的真实组件重构到品牌规范。
+- 🔒 **隐私信条。** 项目可在本地或自行部署的环境中运行。使用云端模型或 OpenDesign Cloud 时，相关请求会发送至相应服务。BYOK 代理包含 SSRF 防护。
 
 ---
 
@@ -336,14 +302,14 @@ pnpm tools-dev run web
 
 打开 `tools-dev` 打印的 URL；除非显式传入端口参数，开发端口会动态分配。
 
-Node `~24`，pnpm `10.33.x`。Windows 用户请参见 [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md)。完整的快速开始指南、环境变量、Nix flake 和打包构建流程 → [`QUICKSTART.zh-CN.md`](QUICKSTART.zh-CN.md)。
+Node `~24`，pnpm `10.33.x`。Windows 用户请参见 [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md)。完整的快速开始指南、环境变量和打包构建流程 → [`QUICKSTART.zh-CN.md`](QUICKSTART.zh-CN.md)。
 
 ### 一个完整的工作流——从需求到工件
 
 `需求 → 插件 → 方向 → 设计系统 → 工件 → 交付 → 记忆`
 
 1. **PM 提交需求。** 插件选择器提供落地页 · 路演 Deck · 仪表盘 · 社交媒体帖 · PM 规范 · OKR 记分卡……
-2. **设计师（或 Agent）锁定方向。** 没有品牌？从 5 个精选方向中选择。有品牌？放入截图 / URL → Agent 连接 GitHub、导入 Figma、编纂可复用的 `DESIGN.md`。
+2. **设计师（或 Agent）锁定方向。** 没有品牌？从 5 个精选方向中选择。有品牌？放入截图 / URL → Agent 连接 GitHub、编纂可复用的 `DESIGN.md`。
 3. **Agent 创建首个交付物。** 插件 + 功能技能或设计模板 + `DESIGN.md` 已绑定。有文件系统的 CLI 运行写入规范项目文件，预览随文件更新；没有文件工具的 BYOK/纯 API 运行返回一个完整的 `<artifact>` 块。
 4. **交付给工程团队。** 工件是真实的 HTML/CSS——放入 Cursor、Codex 或 Claude Code 中继续作为代码开发。或直接导出 PPTX / PDF / MP4 交给营销团队。
 5. **OpenDesign 越用越聪明。** 你的截图、字体、色板和已确认的工件会累积为下次会话的默认值。更少的重复劳动，更少的偏差。
@@ -416,9 +382,9 @@ od skills list --json
 
 **AI 与 LLM** — `claude` · `cohere` · `mistral-ai` · `minimax` · `together-ai` · `replicate` · `runwayml` · `elevenlabs` · `ollama` · `x-ai`
 
-**开发者工具** — `cursor` · `vercel` · `linear-app` · `framer` · `expo` · `clickhouse` · `mongodb` · `supabase` · `hashicorp` · `posthog` · `sentry` · `warp` · `webflow` · `sanity` · `mintlify` · `lovable` · `composio` · `opencode-ai` · `voltagent`
+**开发者工具** — `cursor` · `vercel` · `linear-app` · `expo` · `clickhouse` · `mongodb` · `supabase` · `hashicorp` · `posthog` · `sentry` · `warp` · `sanity` · `mintlify` · `composio` · `opencode-ai` · `voltagent`
 
-**生产力** — `notion` · `figma` · `miro` · `airtable` · `superhuman` · `intercom` · `zapier` · `cal` · `clay` · `raycast`
+**生产力** — `notion` · `miro` · `airtable` · `superhuman` · `intercom` · `zapier` · `cal` · `clay` · `raycast`
 
 **金融科技** — `stripe` · `coinbase` · `binance` · `kraken` · `mastercard` · `revolut` · `wise`
 
@@ -474,7 +440,7 @@ od skills list --json
 od plugin list                       # 列出已安装插件（--task-kind / --mode / --tag 过滤）
 od plugin search "landing page"      # 按关键词搜
 od plugin info od-default            # 看某个插件的元数据、输入、权限
-od plugin install od-figma-migration # 从注册中心装；也支持 ./本地文件夹 或 https://… 直链
+od plugin install od-default        # 从注册中心装；也支持 ./本地文件夹 或 https://… 直链
 od plugin apply od-default --input brief="给我们的种子轮做一页 pitch"
 od plugin upgrade od-default         # 升级
 od plugin uninstall od-default       # 卸载
@@ -573,6 +539,11 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 - [x] Sidecar 协议 + Electron 桌面 + IPC 自动化
 - [x] 工件 Lint API + 五维自评预输出门控
 - [x] **0.8.0**——插件市场基础设施（261 个官方插件、manifest 规范、逐 Agent 安装脚本）
+- [x] **0.9.0**——OpenDesign Cloud（应用内置的官方模型服务：零配置，一键登录）
+- [x] **0.10.0**——一体化设计工作区：一个窗口内完成完整创作闭环（参考 → 素材 → 交互编辑 → 动效 → 交付）
+- [x] **0.11.0**——_The Bazaar_：在开放中构建——人人都可以挑选和贡献的插件与设计系统社区市场
+- [x] **0.12.0**——_品牌设计系统_：把你已经拥有的品牌变成可复用、可移植的 `DESIGN.md` 系统
+- [x] **0.13.0**——_Stay in Flow_：原生会话恢复、更快的模型选择、直接导出截图支撑的 PPTX / PDF
 - [x] 打包 Electron 构建——macOS（Apple Silicon + Intel）+ Windows（x64）+ Linux AppImage（可选通道）
 - [ ] 评论模式精确编辑——部分已发布，可靠的定向补丁进行中
 - [ ] AI 输出的调参面板 UX——尚未实现
@@ -696,11 +667,11 @@ gh pr create --fill
 
 如果这为你节省了三十分钟，请给一个 ★。Star 不能当饭吃——但它告诉下一位设计师、Agent 和贡献者，这个实验值得他们关注。一次点击，三秒钟，真实的信号。
 
-<a href="https://star-history.com/#nexu-io/open-design&Date">
+<a href="https://star-history.dera.page/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-08-04" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
-    <img alt="OpenDesign Star 历史" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-08-04" />
+    <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
+    <img alt="OpenDesign Star 历史" src="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
   </picture>
 </a>
 
@@ -710,11 +681,10 @@ gh pr create --fill
 
 | 项目 | 角色 |
 |---|---|
-| Claude Design | 本仓库作为开源替代品所对标的闭源产品。 |
 | [`alchaincyf/huashu-design`](https://github.com/alchaincyf/huashu-design) | 设计哲学指南针——初级设计师工作流、品牌资产协议、反 AI 泛滥清单、五维评审。 |
 | [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) | 杂志风格 Web PPT 技能，完整打包在 [`design-templates/guizang-ppt/`](../../design-templates/guizang-ppt/) 下。Deck 模式默认技能。 |
 | [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill) | HTML PPT Studio 系列——15 套 Deck 模板，36 个主题，31 种页面布局，动画运行时，磁力卡片演示模式。 |
-| [`OpenCoworkAI/open-codesign`](https://github.com/OpenCoworkAI/open-codesign) | 首个开源 Claude Design 替代品；我们借鉴的 UX 模式（流式工件循环、沙箱 iframe、实时 Agent 面板）。 |
+| [`OpenCoworkAI/open-codesign`](https://github.com/OpenCoworkAI/open-codesign) | 我们借鉴的 UX 模式（流式工件循环、沙箱 iframe、实时 Agent 面板）。 |
 | [`multica-ai/multica`](https://github.com/multica-ai/multica) | 守护进程 + 适配器架构——PATH 扫描 Agent 检测、本地守护进程作为唯一特权进程。 |
 | [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md) | 最初 9 节 `DESIGN.md` schema 和 70 个上游衍生系统的历史来源；当前包可在此基础上扩展。 |
 | [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills) | `design-systems/` 下新增的 57 个设计技能的来源。 |
@@ -727,4 +697,4 @@ gh pr create --fill
 
 ## 许可证
 
-Apache-2.0。打包的 `design-templates/guizang-ppt/` 保留其原始 [LICENSE](../../design-templates/guizang-ppt/LICENSE)（MIT，[@op7418](https://github.com/op7418)）。打包的 `design-templates/html-ppt/` 保留其原始 [LICENSE](../../design-templates/html-ppt/LICENSE)（MIT，[@lewislulu](https://github.com/lewislulu)）。
+Apache-2.0。打包的 `design-templates/guizang-ppt/` 保留其原始 [LICENSE](../../design-templates/guizang-ppt/LICENSE)（MIT，[@op7418](https://github.com/op7418)）。打包的 `design-templates/html-ppt/` 保留其原始 [LICENSE](../../design-templates/html-ppt/LICENSE)（MIT，[@lewislulu](https://github.com/lewislulu)）。打包的 `skills/web-clone/` 保留其原始 [LICENSE](../../skills/web-clone/LICENSE)（MIT，[@Jane-xiaoer](https://github.com/Jane-xiaoer)）。

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   ProjectContentTransferState,
   WorkspaceCollabContext,
+  OwnedProjectContentUpdate,
+  OwnedProjectContentUpdateRequest,
 } from '@open-design/contracts';
 import {
   CollabClient,
@@ -40,6 +42,9 @@ export interface UseCollabOptions {
 }
 
 export interface UseCollabResult {
+  ownedContentUpdate: OwnedProjectContentUpdate | null;
+  contentUpdatePending: boolean;
+  requestContentUpdate: (request: OwnedProjectContentUpdateRequest) => Promise<OwnedProjectContentUpdate | null>;
   present: CollabPresenceMember[];
   publishedVersion: number | null;
   materializedVersion: number | null;
@@ -251,8 +256,13 @@ export function useCollab(options: UseCollabOptions): UseCollabResult {
     },
     [],
   );
+  const requestContentUpdate = useCallback(async (request: OwnedProjectContentUpdateRequest) =>
+    (await clientRef.current?.requestContentUpdate(request)) ?? null, []);
 
   return {
+    ownedContentUpdate: snapshot.ownedContentUpdate ?? null,
+    contentUpdatePending: snapshot.contentUpdatePending ?? false,
+    requestContentUpdate,
     present: snapshot.present,
     publishedVersion: snapshot.publishedVersion,
     materializedVersion: snapshot.materializedVersion,

@@ -8,9 +8,15 @@ const pluginsHomeCss = readFileSync(
   'utf8',
 );
 
-type Specificity = [ids: number, classes: number, types: number];
 
-function cssDeclarations(css: string, selector: string): string {
+function cssDeclarations(rawCss: string, selector: string): string {
+  /*
+   * 先剥注释再切规则。`[^{}]+` 会把紧挨在选择器前面的注释一并吞进「选择器」那一段,
+   * 而注释里只要有逗号(比如写特异性的 `(0,2,1)`),按 `,` 切出来就没有一片等于
+   * 选择器本身了 —— 于是明明规则在,却报 Missing CSS block。
+   * `next-step-cascade.test.ts` 里同样先 strip 过。
+   */
+  const css = rawCss.replace(/\/\*[\s\S]*?\*\//g, '');
   const blocks: string[] = [];
   const rulePattern = /([^{}]+)\{([^}]*)\}/g;
   let match: RegExpExecArray | null;
@@ -27,28 +33,6 @@ function ruleValue(block: string, property: string): string {
   const match = matches.at(-1);
   if (!match) throw new Error(`Missing CSS property ${property}`);
   return match[1]!.trim();
-}
-
-function specificity(selector: string): Specificity {
-  const ids = selector.match(/#[\w-]+/g)?.length ?? 0;
-  const classes =
-    (selector.match(/\.[\w-]+/g)?.length ?? 0) +
-    (selector.match(/\[[^\]]+\]/g)?.length ?? 0) +
-    (selector.match(/:(?!:)[\w-]+(?:\([^)]*\))?/g)?.length ?? 0);
-  const withoutPseudos = selector.replace(/:(?!:)[\w-]+(?:\([^)]*\))?/g, '');
-  const types = withoutPseudos
-    .split(/[#.:[\]\s>+~]+/)
-    .filter((part) => /^[a-z][\w-]*$/i.test(part)).length;
-
-  return [ids, classes, types];
-}
-
-function compareSpecificity(left: Specificity, right: Specificity): number {
-  for (let index = 0; index < left.length; index += 1) {
-    const diff = left[index]! - right[index]!;
-    if (diff !== 0) return diff;
-  }
-  return 0;
 }
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -86,7 +70,13 @@ function contrastRatio(foreground: string, background: string): number {
 
 describe('plugin use menu contrast', () => {
   it('keeps option text readable on hover and keyboard focus', () => {
-    const globalHoverSelector = 'button:hover:not(:disabled)';
+    /*
+     * 全局那条按钮 hover 现在包在 `:where()` 里、特异性为 0(见
+     * `tests/styles/button-hover-default.test.ts` 的原委),所以「必须压过它」
+     * 这个判据没有对象了 —— 任何组件规则都自动赢。这里改成钉住它**确实**被归零,
+     * 剩下的仍然逐条验这个菜单自己的可读性。
+     */
+    const globalHoverSelector = ':where(button:hover:not(:disabled))';
     const hoverSelector = 'button.plugins-home__use-menu-item:hover:not(:disabled)';
     const focusSelector = 'button.plugins-home__use-menu-item:focus-visible';
     const globalHover = cssDeclarations(indexCss, globalHoverSelector);
@@ -94,7 +84,6 @@ describe('plugin use menu contrast', () => {
     const focus = cssDeclarations(pluginsHomeCss, focusSelector);
 
     expect(ruleValue(globalHover, 'background')).toBe('var(--bg-subtle)');
-    expect(compareSpecificity(specificity(hoverSelector), specificity(globalHoverSelector))).toBeGreaterThan(0);
 
     for (const block of [hover, focus]) {
       const background = ruleValue(block, 'background');

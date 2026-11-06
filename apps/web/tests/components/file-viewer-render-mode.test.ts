@@ -4,6 +4,7 @@ import {
   hasTweaksTemplate,
   hasUrlModeBridge,
   htmlNeedsFocusGuard,
+  htmlNeedsLocalInteractionBridge,
   htmlNeedsPoweredPreview,
   htmlNeedsRedirectGuard,
   htmlNeedsSandboxShim,
@@ -16,6 +17,13 @@ describe('shouldUrlLoadHtmlPreview', () => {
 
   it('URL-loads a plain HTML preview by default', () => {
     expect(shouldUrlLoadHtmlPreview(base)).toBe(true);
+  });
+
+  it('uses the current client bridge for strict local forms and hash routers', () => {
+    expect(htmlNeedsLocalInteractionBridge('<form><input><button>Save</button></form>')).toBe(true);
+    expect(htmlNeedsLocalInteractionBridge('<a href="#/details/7">Details</a>')).toBe(true);
+    expect(htmlNeedsLocalInteractionBridge('<a href="#contact">Contact</a>')).toBe(false);
+    expect(shouldUrlLoadHtmlPreview({ ...base, needsLocalInteractionBridge: true })).toBe(false);
   });
 
   it('falls back to srcDoc when the file is a deck (deck bridge required)', () => {
@@ -65,8 +73,25 @@ describe('shouldUrlLoadHtmlPreview', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, forceInline: true })).toBe(false);
   });
 
+  it('URL-loads sandbox-shim artifacts only when the daemon guard is present', () => {
+    expect(shouldUrlLoadHtmlPreview({ ...base, needsSandboxShim: true })).toBe(false);
+    expect(shouldUrlLoadHtmlPreview({
+      ...base,
+      needsSandboxShim: true,
+      urlSandboxGuard: true,
+    })).toBe(true);
+  });
+
   it('falls back to srcDoc when the HTML source needs a focus guard', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, needsFocusGuard: true })).toBe(false);
+  });
+
+  it('URL-loads focus-guard artifacts only when the daemon guard is present', () => {
+    expect(shouldUrlLoadHtmlPreview({
+      ...base,
+      needsFocusGuard: true,
+      urlFocusGuard: true,
+    })).toBe(true);
   });
 
   it('falls back to srcDoc when the HTML source needs a redirect guard (issue #710)', () => {
@@ -74,6 +99,14 @@ describe('shouldUrlLoadHtmlPreview', () => {
     // the iframe forever and freezes the workspace. The srcDoc path carries
     // buildSrcdoc's redirect-loop guard.
     expect(shouldUrlLoadHtmlPreview({ ...base, needsRedirectGuard: true })).toBe(false);
+  });
+
+  it('URL-loads redirecting artifacts only when the daemon guard is present', () => {
+    expect(shouldUrlLoadHtmlPreview({
+      ...base,
+      needsRedirectGuard: true,
+      urlRedirectGuard: true,
+    })).toBe(true);
   });
 
   it('falls back to srcDoc when the source references project files by site-root path', () => {
@@ -341,6 +374,12 @@ describe('htmlNeedsPoweredPreview', () => {
 
   it('matches SharedArrayBuffer (needs cross-origin isolation)', () => {
     expect(htmlNeedsPoweredPreview('const b = new SharedArrayBuffer(16);')).toBe(true);
+  });
+
+  it('keeps Web Storage artifacts in the host-managed sandbox', () => {
+    expect(htmlNeedsPoweredPreview('<script>localStorage.setItem("task", "saved")</script>')).toBe(false);
+    expect(htmlNeedsPoweredPreview('<script>window.sessionStorage.getItem("task")</script>')).toBe(false);
+    expect(htmlNeedsPoweredPreview('<p>Persistent form</p>')).toBe(false);
   });
 
   it('matches Web Worker / SharedWorker construction', () => {

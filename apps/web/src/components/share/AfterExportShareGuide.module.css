@@ -1,0 +1,156 @@
+/* Restored from "交互状态 - Owner - 分享评论1.0.html", the `phase-owner-intro`
+   scope, Owner-P1 "导出完成 · 分享引导" mockup — values below are read
+   directly off that markup/CSS. Keep the guide below the Share anchor. */
+.guide {
+  position: absolute;
+  inset-block-start: calc(100% + 8px);
+  inset-inline-end: 0;
+  z-index: 20;
+  box-sizing: border-box;
+  width: 280px;
+  max-width: calc(100vw - 24px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-panel);
+  color: var(--text-strong);
+  box-shadow: var(--share-guide-shadow);
+  font-size: 12px;
+  line-height: 18px;
+}
+/* Upward caret. The design computes its offset from the live Share-button
+   rect (`--phase-intro-arrow-left`); this integration anchors the whole card
+   to the Share button via `inset-inline-end: 0` on `.guide` instead, so a
+   fixed offset approximating the button's center stands in for that. */
+.guide::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  right: 36px;
+  width: 9px;
+  height: 9px;
+  transform: rotate(45deg);
+  background: var(--share-surface-dark);
+  border-top: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+}
+.hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 112px;
+  overflow: hidden;
+  border-radius: 11px 11px 0 0;
+  background: var(--share-surface-dark);
+}
+/* Staggered comment bubbles, cropped at the edges. */
+.cover {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background-color: var(--share-surface-dark);
+  background-image:
+    radial-gradient(ellipse at 50% 48%, rgba(0, 0, 0, 0) 25%, rgba(0, 0, 0, .18) 65%, rgba(0, 0, 0, .65) 100%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='1.35' fill='%233b3b3b'/%3E%3C/svg%3E"),
+    linear-gradient(135deg, #292a2c 0%, #232426 50%, #1e2021 100%);
+  background-size: 100% 100%, 24px 24px, 100% 100%;
+  pointer-events: none;
+}
+.artwork {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 104px;
+  transform: scale(.85);
+  transform-origin: center;
+}
+.bubble {
+  position: absolute;
+  z-index: 1;
+  white-space: nowrap;
+  display: block;
+  padding: 4px 13px 5px;
+  border-radius: 18px 18px 2px 18px;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 21px;
+  letter-spacing: -.25px;
+}
+.bubblePurple { top: 12px; left: 2px; background: #B19AFF; color: #482D80; border-radius: 18px 18px 18px 2px; }
+.bubbleGreen { top: 38px; right: 16px; background: #6DDDB1; color: #155C40; }
+.bubblePink { top: 74px; left: 64px; background: #FF92BC; color: #7D234C; border-radius: 18px 18px 18px 2px; }
+button.close {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  right: 8px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  min-height: 0;
+  min-width: 0;
+  padding: 3px;
+  border: 0;
+  border-radius: 5px;
+  background: #191b1de6;
+  color: #d8dcdf;
+}
+button.close svg { width: 14px; height: 14px; }
+button.close:hover { color: var(--share-white); background: #ffffff20; }
+.body { padding: 12px 16px 14px; }
+.title {
+  margin: 0 0 6px;
+  font-size: 14px;
+  line-height: 21px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--text-strong);
+}
+.desc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 19px;
+  color: var(--text-muted);
+}
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+}
+/* .start moved into the shared `ShareButton`'s `dark-sm` variant (2026
+   refactor: item 1) — ShareButton.module.css. .dismiss (a plain ghost text
+   button, not one of item 1's named targets) keeps its own shape here. */
+button.dismiss {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  min-height: 0;
+  min-width: 0;
+  margin: 0;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--share-text-dim);
+  background: transparent;
+  padding-left: 0;
+}
+button.dismiss:hover { color: var(--text-strong); }
+.guide button:focus-visible { outline: 2px solid #a5bc9a; outline-offset: 2px; }
+/* Typography/color now come from ShareErrorRow's shared `.row` (margin: 0);
+   this wrapper owns only the top spacing this call site needs. The extra
+   `p` in the selector out-specifies `.row`'s own margin:0 regardless of CSS
+   Module file/import order. */
+.error p { margin-top: 8px; }

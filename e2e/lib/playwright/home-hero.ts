@@ -1,47 +1,55 @@
 import { expect } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 
-/**
- * Home's inline scenario rail — the "Start from a template… / …or create a
- * blank project" row, its `home-hero-type-tabs` container, the
- * `home-hero-rail-<chipId>` cards and the "More" shortcuts menu — was removed
- * in the #5517 alignment. Choosing a project-type template is now a
- * composer-footer control: `home-hero-template-trigger` opens a radial menu
- * (`home-hero-template-menu`) whose ring segments are the templates
- * (`home-hero-template-wedge-<chipId>`).
- *
- * These helpers are the single place e2e encodes that entry point, so the next
- * time the picker's shape changes only this file moves.
- */
+export function homeTemplateTrigger(page: Page): Locator {
+  return page.getByTestId('home-hero-template-trigger').locator('button[aria-haspopup="listbox"]')
+    .or(page.getByTestId('home-hero-type-pills-more'));
+}
 
-/** Open the radial template menu (idempotent). Returns the menu locator. */
-export async function openHomeTemplateMenu(page: Page): Promise<Locator> {
-  const menu = page.getByTestId('home-hero-template-menu');
-  if ((await menu.count()) > 0) return menu;
-  await page.getByTestId('home-hero-template-trigger').click();
+export const HOME_TYPE_PRIMARY_CHIP_IDS = ['prototype', 'motion-design', 'deck'] as const;
+export const HOME_TYPE_OTHER_CHIP_IDS = [
+  'image',
+  'document',
+  'hyperframes',
+  'web-clone',
+  'video',
+  'audio',
+  'live-artifact',
+  'webgl',
+] as const;
+
+
+export async function openHomeTemplates(page: Page): Promise<Locator> {
+  const trigger = homeTemplateTrigger(page);
+  await expect(trigger).toBeEnabled();
+  if (await trigger.getAttribute('aria-expanded') !== 'true') await trigger.click();
+  const menu = page.getByTestId('home-hero-template-menu')
+    .or(page.getByTestId('home-hero-type-pills-popover'));
   await expect(menu).toBeVisible();
   return menu;
 }
 
-/**
- * Select a template by `HomeHeroChip` id (see
- * `apps/web/src/components/home-hero/chips.ts`) — `deck`, `prototype`,
- * `wireframe`, `mobile`, `document`, `web-clone`, `webgl`, `hyperframes`,
- * `live-artifact`, `image`, `video`, `audio`.
- *
- * Only `apply-scenario` chips are offered as wedges. The action chips that used
- * to share the rail moved to their own surfaces and are NOT reachable here:
- * Brand Kit → the composer design-system picker's Create button
- * (`project-ds-picker-create`), plugin authoring → the Extensions page
- * (`plugins-create-button`), Figma import → the composer plus menu.
- */
 export async function pickHomeTemplate(page: Page, chipId: string): Promise<void> {
-  await openHomeTemplateMenu(page);
-  const wedge = page.getByTestId(`home-hero-template-wedge-${chipId}`);
-  await expect(wedge).toBeVisible();
-  await wedge.click();
-  // Confirming a row closes the menu and puts the chosen label on the pill —
-  // clearing a type was removed, so the label is the observable "it is set".
-  await expect(page.getByTestId('home-hero-template-menu')).toHaveCount(0);
-  await expect(page.getByTestId('home-hero-template-picker')).toHaveClass(/has-selection/);
+  const clear = page.getByTestId('home-hero-template-clear');
+  if (await clear.isVisible()) {
+    // Selected types expose a clear action; choosing another starts from the pills.
+    await expect(clear).toBeEnabled();
+    await clear.click();
+    await expect(page.getByTestId('home-hero-type-pills')).toBeVisible();
+  }
+  if (chipId === 'wireframe' || chipId === 'mobile') {
+    await expect(homeTemplateTrigger(page)).toBeEnabled();
+    await page.evaluate((id) => {
+      window.dispatchEvent(new CustomEvent('open-design:home-apply-template', { detail: { chipId: id } }));
+    }, chipId);
+  } else if (await page.getByTestId(`home-hero-type-pill-${chipId}`).isVisible()) {
+    await page.getByTestId(`home-hero-type-pill-${chipId}`).click();
+  } else {
+    const menu = await openHomeTemplates(page);
+    await menu.locator(`[data-chip="${chipId}"]`).click();
+    await expect(menu).toHaveCount(0);
+  }
+  await expect(page.getByTestId('home-hero-template-picker')).toHaveAttribute(
+    'data-type', chipId === 'wireframe' || chipId === 'mobile' ? 'prototype' : chipId,
+  );
 }

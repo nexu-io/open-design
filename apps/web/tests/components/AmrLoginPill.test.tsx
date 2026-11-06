@@ -12,7 +12,7 @@
  */
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { ComponentProps } from 'react';
+import { useCallback, useState, type ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -157,11 +157,12 @@ describe('AmrAccountControl', () => {
       onSignIn: vi.fn(),
     });
 
+    // OPEND-2849 S32a:标题 + 正文两段;下面的登录页链接仍在。
+    expect(screen.getByText('Couldn’t open the sign-in page')).toBeTruthy();
     expect(
-      screen.getByText(
-        'Couldn’t open your browser automatically. Open the sign-in page below to continue.',
-      ),
+      screen.getByText('Your browser didn’t open automatically. Please try signing in again.'),
     ).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Open sign-in page' })).toBeTruthy();
   });
 
   it('does not render the activation block before vela has printed a URL', () => {
@@ -204,6 +205,73 @@ describe('AmrAccountControl', () => {
 });
 
 describe('AmrLoginPill', () => {
+  it('does not echo a controlled status between the two Settings pills', () => {
+    const signedInStatus: VelaLoginStatus = {
+      loggedIn: true,
+      loginInFlight: false,
+      profile: 'local',
+      configPath: '/x',
+      user: { id: 'u', email: 'leaf@example.com', plan: 'free' },
+    };
+    const onStatusChange = vi.fn();
+
+    function SettingsPills() {
+      const [status, setStatus] = useState<VelaLoginStatus | null>(signedInStatus);
+      const receiveStatus = useCallback((next: VelaLoginStatus | null) => {
+        onStatusChange(next);
+        setStatus(next);
+      }, []);
+      return (
+        <I18nProvider initial="en">
+          <button onClick={() => setStatus({ ...status! })}>Refresh equivalent status</button>
+          <AmrLoginPill initialStatus={status} skipInitialRefresh onStatusChange={receiveStatus} />
+          <AmrLoginPill initialStatus={status} skipInitialRefresh onStatusChange={receiveStatus} />
+        </I18nProvider>
+      );
+    }
+
+    render(<SettingsPills />);
+
+    expect(screen.getAllByRole('button', { name: 'Sign out' })).toHaveLength(2);
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh equivalent status' }));
+    expect(screen.getAllByRole('button', { name: 'Sign out' })).toHaveLength(2);
+    expect(onStatusChange).not.toHaveBeenCalled();
+  });
+
+  it('applies a genuine parent status change to both Settings pills without feedback', () => {
+    const signedInStatus: VelaLoginStatus = {
+      loggedIn: true,
+      loginInFlight: false,
+      profile: 'local',
+      configPath: '/x',
+      user: { id: 'u', email: 'leaf@example.com', plan: 'free' },
+    };
+    const onStatusChange = vi.fn();
+
+    function SettingsPills() {
+      const [status, setStatus] = useState<VelaLoginStatus | null>(signedInStatus);
+      return (
+        <I18nProvider initial="en">
+          <button onClick={() => setStatus({
+            ...signedInStatus,
+            loggedIn: false,
+            user: null,
+          })}>
+            Apply signed-out status
+          </button>
+          <AmrLoginPill initialStatus={status} skipInitialRefresh onStatusChange={onStatusChange} />
+          <AmrLoginPill initialStatus={status} skipInitialRefresh onStatusChange={onStatusChange} />
+        </I18nProvider>
+      );
+    }
+
+    render(<SettingsPills />);
+    fireEvent.click(screen.getByRole('button', { name: 'Apply signed-out status' }));
+
+    expect(screen.getAllByRole('button', { name: 'Sign in' })).toHaveLength(2);
+    expect(onStatusChange).not.toHaveBeenCalled();
+  });
+
   it('renders a Sign-in button when /status reports loggedIn=false', async () => {
     globalThis.fetch = vi.fn(async (input) => {
       const url = typeof input === 'string' ? input : (input as URL).toString();
@@ -279,7 +347,46 @@ describe('AmrLoginPill', () => {
     expect(screen.getByText('leaf@example.com')).toBeTruthy();
     expect(screen.getByText('TEST')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Manage' }).getAttribute('href')).toBe(
-      'https://vela.powerformer.net/dashboard?source=open_design',
+      'https://open-design.powerformer.net/cloud/dashboard?source=open_design',
+    );
+  });
+
+  it('scopes the account management URL to the supplied workspace', () => {
+    renderAccountControl({
+      status: 'signed-in',
+      profile: 'test',
+      showConsoleAction: true,
+      workspaceId: 'workspace-settings',
+    });
+
+    expect(screen.getByRole('link', { name: 'Manage' }).getAttribute('href')).toBe(
+      'https://open-design.powerformer.net/cloud/dashboard?workspaceId=workspace-settings&source=open_design',
+    );
+  });
+
+  it.each([undefined, null, '   '])('keeps an explicit console URL unchanged for workspace %s', (workspaceId) => {
+    renderAccountControl({
+      status: 'signed-in',
+      showConsoleAction: true,
+      consoleUrl: 'https://feature.example/dashboard?source=open_design&legacy=%2f',
+      workspaceId,
+    });
+
+    expect(screen.getByRole('link', { name: 'Manage' }).getAttribute('href')).toBe(
+      'https://feature.example/dashboard?source=open_design&legacy=%2f',
+    );
+  });
+
+  it('preserves an unparseable console URL when a workspace is supplied', () => {
+    renderAccountControl({
+      status: 'signed-in',
+      showConsoleAction: true,
+      consoleUrl: '/legacy-console?source=open_design',
+      workspaceId: 'workspace-settings',
+    });
+
+    expect(screen.getByRole('link', { name: 'Manage' }).getAttribute('href')).toBe(
+      '/legacy-console?source=open_design',
     );
   });
 
@@ -309,14 +416,14 @@ describe('AmrLoginPill', () => {
 
     expect(screen.queryByText('PROD')).toBeNull();
     expect(screen.getByRole('link', { name: 'Manage' }).getAttribute('href')).toBe(
-      'https://open-design.ai/amr/dashboard?source=open_design',
+      'https://open-design.ai/cloud/dashboard?source=open_design',
     );
   });
 
   it('bridges the attributed management URL even though its click stops propagation', async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = typeof input === 'string' ? input : input.toString();
-      if (url === '/api/attribution/bridge-url') {
+      if (url === '/api/amr/web-intent') {
         return jsonResponse({ body: { url: 'https://open-design.ai/amr/dashboard?od_bridge=odbr_12345678' } });
       }
       if (url === '/api/system/open-external') return jsonResponse({ body: { ok: true } });
@@ -356,7 +463,7 @@ describe('AmrLoginPill', () => {
       expect.objectContaining({ method: 'POST' }),
     );
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      '/api/attribution/bridge-url',
+      '/api/amr/web-intent',
       expect.objectContaining({
         method: 'POST',
         body: expect.stringContaining('od_device_id=od-install-abc'),
@@ -369,6 +476,38 @@ describe('AmrLoginPill', () => {
         body: JSON.stringify({ url: 'https://open-design.ai/amr/dashboard?od_bridge=odbr_12345678' }),
       }),
     );
+  });
+
+  it('keeps the status consoleOrigin when scoping the management link and click to a workspace', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ body: { ok: true } }));
+    vi.stubGlobal('fetch', fetchMock);
+    renderPill({
+      workspaceId: 'workspace-settings',
+      initialStatus: {
+        loggedIn: true,
+        loginInFlight: false,
+        profile: 'feature-test',
+        consoleOrigin: 'https://feature.example',
+        configPath: '/x',
+        user: { id: 'u', email: 'leaf@example.com', plan: 'plus' },
+      },
+      skipInitialRefresh: true,
+      showConsoleAction: true,
+    });
+
+    const link = screen.getByRole('link', { name: 'Manage' }) as HTMLAnchorElement;
+    expect(link.href).toBe('https://feature.example/dashboard?workspaceId=workspace-settings&source=open_design');
+    fireEvent.click(link);
+
+    expect(new URL(link.href).searchParams.get('workspaceId')).toBe('workspace-settings');
+    expect(new URL(link.href).searchParams.get('od_entry_source')).toBe('settings_amr_console');
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/system/open-external',
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.stringContaining('https://feature.example/dashboard?workspaceId=workspace-settings&source=open_design&'),
+      }),
+    ));
   });
 
   it('uses the feature-test origin carried by the visible status for management', async () => {
@@ -562,10 +701,8 @@ describe('AmrLoginPill', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeTruthy();
     });
-    expect(screen.getByRole('alert').textContent).toBe(
-      'profile "prod" api URL: is not configured',
-    );
-    expect(screen.queryByText('Sign-in failed.')).toBeNull();
+    expect(screen.getByRole('alert').textContent).toBe('Sign-in failed.');
+    expect(screen.queryByText('profile "prod" api URL: is not configured')).toBeNull();
     expect(screen.queryByText('Signing in…')).toBeNull();
   });
 
@@ -600,8 +737,9 @@ describe('AmrLoginPill', () => {
     expect(await screen.findByText('Signing in…')).toBeTruthy();
   });
 
-  it('clears the local signing-in state as soon as status reports the login is complete', async () => {
+  it('publishes the poll-confirmed signed-in status to the parent', async () => {
     let loginPosted = false;
+    const onStatusChange = vi.fn();
     const fetchMock = vi.fn(async (input, init) => {
       const url = typeof input === 'string' ? input : (input as URL).toString();
       if (url.endsWith('/api/integrations/vela/status')) {
@@ -627,7 +765,7 @@ describe('AmrLoginPill', () => {
     });
     globalThis.fetch = fetchMock as typeof fetch;
 
-    renderPill();
+    renderPill({ onStatusChange });
     fireEvent.click(await screen.findByRole('button', { name: 'Sign in' }));
 
     await waitFor(() => {
@@ -635,6 +773,10 @@ describe('AmrLoginPill', () => {
     });
     expect(screen.getByText('leaf@example.com')).toBeTruthy();
     expect(screen.queryByText('Signing in…')).toBeNull();
+    expect(onStatusChange).toHaveBeenCalledWith(expect.objectContaining({
+      loggedIn: true,
+      user: expect.objectContaining({ email: 'leaf@example.com' }),
+    }));
   });
 
   // This pill is what Settings' "Sign in / Register" cloud callout and the
@@ -760,6 +902,7 @@ describe('AmrLoginPill', () => {
       ) {
         return jsonResponse({ status: 202, body: { pid: 4242 } });
       }
+      if (url.endsWith('/api/integrations/vela/status')) return jsonResponse({body: {loggedIn:false, loginInFlight:false, user:null, profile:'local', configPath:'/x'}});
       throw new Error(`unexpected fetch: ${url}`);
     });
     globalThis.fetch = fetchMock as typeof fetch;
@@ -896,85 +1039,13 @@ describe('AmrLoginPill', () => {
     }
   });
 
-  it('cancels the canonical attempt when the pre-start status refresh is non-OK', async () => {
-    const canonicalAuthAttemptId = '22222222-2222-4222-8222-222222222222';
-    let releaseLogin!: (response: Response) => void;
-    const heldLoginResponse = new Promise<Response>((resolve) => {
-      releaseLogin = resolve;
-    });
-    const cancelAttemptIds: string[] = [];
-    let statusCalls = 0;
-    const fetchMock = vi.fn(async (input, init) => {
-      const url = typeof input === 'string' ? input : (input as URL).toString();
-      if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
-        return heldLoginResponse;
-      }
-      if (url.endsWith('/api/integrations/vela/status')) {
-        statusCalls += 1;
-        return jsonResponse({ status: 503, body: { error: 'unavailable' } });
-      }
-      if (
-        url.endsWith('/api/integrations/vela/login/cancel') &&
-        init?.method === 'POST'
-      ) {
-        const body = JSON.parse(String(init.body)) as { authAttemptId: string };
-        cancelAttemptIds.push(body.authAttemptId);
-        return jsonResponse({
-          body: {
-            canceled: body.authAttemptId === canonicalAuthAttemptId,
-          },
-        });
-      }
-      throw new Error(`unexpected fetch: ${url}`);
-    });
+  it('does not start a new login when the existing result cannot be checked', async () => {
+    const fetchMock = vi.fn(async (_input: unknown) => jsonResponse({status:503,body:{error:'unavailable'}}));
     globalThis.fetch = fetchMock as typeof fetch;
-
-    renderPill({
-      skipInitialRefresh: true,
-      revealPendingCancelAction: true,
-      initialStatus: {
-        loggedIn: false,
-        loginInFlight: false,
-        profile: 'prod',
-        user: null,
-        configPath: '/x',
-      },
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        '/api/integrations/vela/login',
-        expect.objectContaining({ method: 'POST' }),
-      );
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    await waitFor(() => {
-      expect(cancelAttemptIds).toHaveLength(1);
-      expect(statusCalls).toBe(1);
-    });
-
-    releaseLogin(jsonResponse({
-      status: 202,
-      body: { pid: 123, authAttemptId: canonicalAuthAttemptId },
-    }));
-
-    await waitFor(() => {
-      expect(cancelAttemptIds).toEqual([
-        expect.stringMatching(
-          /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
-        ),
-        canonicalAuthAttemptId,
-      ]);
-      expect(screen.getByText('Canceled')).toBeTruthy();
-    });
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(statusCalls).toBe(1);
-    expect(screen.queryByText('Signing in…')).toBeNull();
+    renderPill({skipInitialRefresh:true,initialStatus:{loggedIn:false,loginInFlight:false,profile:'local',user:null,configPath:'/x'}});
+    fireEvent.click(screen.getByRole('button',{name:'Sign in'}));
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
+    expect(fetchMock.mock.calls.every(call => String(call[0]).endsWith('/status'))).toBe(true);
   });
 
   it('only surfaces activation details from the pill when explicitly enabled', async () => {
@@ -1038,6 +1109,8 @@ describe('AmrLoginPill', () => {
 
     renderPill();
     fireEvent.click(await screen.findByRole('button', { name: 'Sign in' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
 
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 2100));
@@ -1177,6 +1250,7 @@ describe('AmrLoginPill', () => {
           body: loggedIn
             ? {
                 loggedIn: true,
+                credentialRevision: 'revision-a',
                 profile: 'local',
                 configPath: '/x',
                 user: { id: 'u', email: 'leaf@example.com', plan: 'free' },
@@ -1203,7 +1277,7 @@ describe('AmrLoginPill', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy();
     });
-    expect(onSignedOut).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onSignedOut).toHaveBeenCalledTimes(1));
     expect(screen.queryByTestId('sign-out-confirm-dialog')).toBeNull();
   });
 

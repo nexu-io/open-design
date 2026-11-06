@@ -217,18 +217,40 @@ class MockWorkspaceEventSource {
 }
 
 describe('RecentProjectsStrip', () => {
+  it('uses user send recency in the default all-projects order', () => {
+    const items = [
+      project({ id: 'a', name: 'A', updatedAt: 900, lastUserQueryAt: 10 }),
+      project({ id: 'b', name: 'B', updatedAt: 1, lastUserQueryAt: 20 }),
+      project({ id: 'c', name: 'C', updatedAt: 1000, lastUserQueryAt: null }),
+    ];
+    const { container, rerender } = render(
+      <RecentProjectsStrip projects={items} onOpen={() => {}} heading="All projects" />,
+    );
+    const ids = () => [...container.querySelectorAll('[data-project-id]')]
+      .map(node => node.getAttribute('data-project-id'));
+    expect(ids()).toEqual(['b', 'a', 'c']);
+    rerender(<RecentProjectsStrip
+      projects={items.map(item => item.id === 'a' ? { ...item, lastUserQueryAt: 30 } : item)}
+      onOpen={() => {}} heading="All projects"
+    />);
+    expect(ids()).toEqual(['a', 'b', 'c']);
+  });
+
   it('turns a script-activated deck into a deterministic visible first-page cover', () => {
     const cover = deckPreviewSrcDoc(`<!doctype html>
       <html><head><style>
-        #stage { position: fixed; top: 50%; left: 50%; width: 1920px; height: 1080px }
+        .deck-shell { position: fixed; transform: translateX(1400px) }
+        .deck-stage { position: relative; width: 1920px; height: 1080px; transform: scale(.6) }
         .slide { display: none; opacity: 0; visibility: hidden }
         .slide.active,
         .slide.is-active { display: flex; opacity: 1; visibility: visible }
         [data-anim] { opacity: 0; transform: translateY(24px) }
       </style></head><body>
-        <div id="stage">
-          <section class="slide orange"><h1 data-anim="fade-up">Launch</h1></section>
-          <section class="slide dark"><h1>Details</h1></section>
+        <div class="deck-shell">
+          <div class="deck-stage">
+            <section class="slide orange"><h1 data-anim="fade-up">Launch</h1></section>
+            <section class="slide dark"><h1>Details</h1></section>
+          </div>
         </div>
         <script>document.querySelector('.slide').classList.add('is-active')</script>
       </body></html>`);
@@ -238,11 +260,35 @@ describe('RecentProjectsStrip', () => {
       /<section class="slide orange active is-active" data-od-cover-slide(?:="")?>/,
     );
     expect(cover).toContain('[data-od-cover-slide] > *');
-    expect(cover).toContain(':where(body *):has(> [data-od-cover-slide])');
+    expect(cover).toMatch(
+      /\.deck-shell,\s*\.deck-stage,\s*:where\(body \*\):has\(> \[data-od-cover-slide\]\)\s*\{[^}]*display: block !important/s,
+    );
     expect(cover).toContain('transform-origin: 0 0 !important');
     expect(cover).toContain('[data-od-cover-slide] [data-anim]');
     expect(cover).toContain('opacity: 1 !important');
     expect(cover).toContain('.slide:not([data-od-cover-slide])');
+  });
+
+  it('marks the first real slide when a style comment contains a slide tag example', () => {
+    const cover = deckPreviewSrcDoc(`<!doctype html>
+      <html><head><style>
+        /* Put content inside <section class="slide"> bodies. */
+        .slide { display: none }
+        .slide.active { display: grid }
+      </style></head><body>
+        <div class="deck-shell"><div class="deck-stage">
+          <section class="slide s-title active"><h1>Real cover</h1></section>
+          <section class="slide s-details"><h2>Details</h2></section>
+        </div></div>
+      </body></html>`);
+
+    expect(cover).toContain('inside <section class="slide"> bodies');
+    expect(cover).toMatch(
+      /<section class="slide s-title active is-active" data-od-cover-slide(?:="")?>/,
+    );
+    expect(cover).not.toContain(
+      'inside <section class="slide active is-active" data-od-cover-slide> bodies',
+    );
   });
 
   it('lets a 16:9 project cover determine its grid-card height without a taller minimum', () => {
@@ -1004,7 +1050,7 @@ describe('RecentProjectsStrip', () => {
       const htmlFrame = container.querySelector<HTMLIFrameElement>('.recent-projects__card-thumb-html iframe');
       expect(htmlFrame).toBeTruthy();
       expect(htmlFrame?.getAttribute('src')).toBe(
-        '/api/projects/project-html/files/index.html?workspaceId=ws-1&workspaceMemberId=wm-1&v=200',
+        '/api/projects/project-html/files/index.html?workspaceId=ws-1&workspaceMemberId=wm-1&v=200&odMotionThumbnail=1',
       );
       expect(container.querySelector('.recent-projects__card-thumb-html .recent-projects__card-glyph')).toBeNull();
     });
@@ -1073,7 +1119,7 @@ describe('RecentProjectsStrip', () => {
       expect(deckCard?.querySelector('.recent-projects__deck-iframe')?.getAttribute('srcdoc'))
         .toContain('slide');
       expect(htmlCard?.querySelector('iframe')?.getAttribute('src')).toBe(
-        '/api/projects/project-html/files/index.html?workspaceId=ws-1&workspaceMemberId=wm-1&v=200',
+        '/api/projects/project-html/files/index.html?workspaceId=ws-1&workspaceMemberId=wm-1&v=200&odMotionThumbnail=1',
       );
       expect(deckCard?.querySelector('.recent-projects__card-glyph')).toBeNull();
       expect(htmlCard?.querySelector('.recent-projects__card-glyph')).toBeNull();
@@ -1187,7 +1233,10 @@ describe('recvqabp2Uy23r — shared badge grid overlay vs list inline', () => {
     const badge = screen.getByText('Shared').closest('.recent-projects__card-badge');
     expect(badge).not.toBeNull();
     expect(badge?.classList.contains('recent-projects__card-badge--inline')).toBe(false);
-    expect(badge?.closest('.recent-projects__card-thumb')).not.toBeNull();
+    // Anchored on the CARD (beside the ⋯ menu anchor), not inside the thumb:
+    // the thumb scales on hover (#7635) and would carry the badge with it.
+    expect(badge?.closest('.recent-projects__card-thumb')).toBeNull();
+    expect(badge?.closest('.recent-projects__card')).not.toBeNull();
   });
 
   it('renders the shared badge inline next to the name in list view', () => {
@@ -1200,7 +1249,8 @@ describe('recvqabp2Uy23r — shared badge grid overlay vs list inline', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'List view' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sort projects · View mode' }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'List view' }));
 
     const badge = screen.getByText('Shared').closest('.recent-projects__card-badge');
     expect(badge).not.toBeNull();
@@ -1222,14 +1272,15 @@ describe('recvqabp2Uy23r — shared badge grid overlay vs list inline', () => {
   });
 });
 
-describe('recvqbipG9QDTt — Recent Projects filter needs a visible clear entry', () => {
+describe('recvqbipG9QDTt — a narrowing type filter stays visible and resettable', () => {
   // RecentProjectsStrip mounts once per host view and stays alive across
   // EntryShell tab switches — Home's instance in particular is only ever
   // hidden via `content-visibility`, never unmounted — so kindFilter /
-  // ownerFilter state survives a round trip through another tab with no
-  // visible sign anything is filtered. A filter that now matches zero
-  // projects reads as "my projects disappeared" instead of "a filter is on".
-  it('shows no clear-filters entry while the default (unfiltered) view is showing', () => {
+  // ownerFilter state survives a round trip through another tab. The cue is
+  // the filter trigger printing the picked value, and the reset is picking
+  // "Any type" back; OPEND-3107 keeps the row at the Demo's three controls,
+  // so there is no separate clear chip to look for.
+  it('prints the picked type on the trigger once the filter hides every project, and Any type restores the grid', () => {
     render(
       <RecentProjectsStrip
         projects={[project({ id: 'project-1', name: 'Only Project' })]}
@@ -1238,31 +1289,21 @@ describe('recvqbipG9QDTt — Recent Projects filter needs a visible clear entry'
       />,
     );
 
-    expect(screen.queryByTestId('recent-projects-clear-filters')).toBeNull();
-  });
-
-  it('surfaces a clear-filters entry once the type filter hides every project, and restores the grid on click', () => {
-    render(
-      <RecentProjectsStrip
-        projects={[project({ id: 'project-1', name: 'Only Project' })]}
-        onOpen={() => {}}
-        heading="All projects"
-      />,
-    );
-
-    // Every project here falls back to the 'prototype' card category
-    // (projectCategory's default), so filtering to Media leaves zero
+    // Every project here falls back to the 'prototype' filter bucket
+    // (projectKindFilterCategory's default), so filtering to Image leaves zero
     // matches — exactly the "did my projects disappear?" scenario reported.
     fireEvent.click(screen.getByRole('button', { name: 'Any type' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Media' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Image' }));
 
     expect(screen.queryByText('Only Project')).toBeNull();
-    const clearButton = screen.getByTestId('recent-projects-clear-filters');
+    expect(screen.queryByTestId('recent-projects-clear-filters')).toBeNull();
+    const trigger = screen.getByRole('button', { name: 'Image' });
+    expect(trigger.classList.contains('recent-projects__filter')).toBe(true);
 
-    fireEvent.click(clearButton);
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole('button', { name: 'Any type' }));
 
     expect(screen.getByText('Only Project')).toBeTruthy();
-    expect(screen.queryByTestId('recent-projects-clear-filters')).toBeNull();
     expect(screen.getByRole('button', { name: 'Any type' })).toBeTruthy();
   });
 });
@@ -1340,11 +1381,52 @@ describe('team-shared project with unresolved owner identity', () => {
   });
 });
 
+function stubUnsharedProjectDelete() {
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const projectId = String(input).match(/\/api\/projects\/([^/]+)\/share-state/)?.[1];
+    if (!projectId) throw new Error(`Unexpected fetch: ${String(input)}`);
+    return new Response(JSON.stringify({
+      projectId, hasEverShared: false, bindingExists: false, publications: [],
+    }), { headers: { 'Content-Type': 'application/json' } });
+  }));
+}
+
+describe('A5 — main no-share delete baseline', () => {
+  // Recorded before A5 implementation; production dialog and translations are
+  // byte-identical to main 8e372744dda55f3b2d090d5bcdfd6ceabdc119b5.
+  it('preserves the no-share dialog DOM and cancelling never deletes', async () => {
+    stubUnsharedProjectDelete();
+    const onDelete = vi.fn();
+    render(
+      <RecentProjectsStrip
+        projects={[project({ id: 'project-1', name: 'My project' })]}
+        onOpen={() => {}}
+        onDelete={onDelete}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
+    const dialog = screen.getByRole('alertdialog');
+    await within(dialog).findByText('Delete "My project"?');
+    // React useId depends on prior renders, not product state. Preserve every
+    // other byte, including the title/aria-labelledby relationship.
+    const titleId = dialog.getAttribute('aria-labelledby')!;
+    expect(dialog.outerHTML.replaceAll(titleId, 'delete-title')).toBe(
+      `<div tabindex="-1" class="_focusTarget_8e4a21 _dialog_8e4a21 modal modal-confirm" role="alertdialog" aria-modal="true" aria-labelledby="delete-title" data-testid="project-delete-confirm-dialog"><h2 class="_title_8e4a21" id="delete-title">Delete project</h2><p class="_description_8e4a21">Delete "My project"?</p><div class="_footer_8e4a21 row"><button type="button" data-testid="project-delete-confirm-cancel">Cancel</button><button type="button" class="primary danger" data-testid="project-delete-confirm-accept">Delete</button></div></div>`,
+    );
+    expect(onDelete).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(onDelete).not.toHaveBeenCalled();
+  });
+});
+
 describe('recvqbh189zBY6 — single-card delete confirmation', () => {
   // commitDelete used to await onDelete and drop the result either way, so a
   // 403/network failure closed the confirm dialog exactly like a success —
   // the project stayed put with no signal anything had gone wrong.
   it('keeps the dialog open with a visible error when the delete request fails', async () => {
+    stubUnsharedProjectDelete();
     const onDelete = vi.fn(async () => false);
     render(
       <RecentProjectsStrip
@@ -1358,6 +1440,7 @@ describe('recvqbh189zBY6 — single-card delete confirmation', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
 
     const dialog = await screen.findByRole('alertdialog');
+    await within(dialog).findByText('Delete "My project"?');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => {
@@ -1369,6 +1452,7 @@ describe('recvqbh189zBY6 — single-card delete confirmation', () => {
   });
 
   it('closes the dialog on a successful delete', async () => {
+    stubUnsharedProjectDelete();
     const onDelete = vi.fn(async () => true);
     render(
       <RecentProjectsStrip
@@ -1382,6 +1466,7 @@ describe('recvqbh189zBY6 — single-card delete confirmation', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
 
     const dialog = await screen.findByRole('alertdialog');
+    await within(dialog).findByText('Delete "My project"?');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => {
@@ -1391,6 +1476,7 @@ describe('recvqbh189zBY6 — single-card delete confirmation', () => {
   });
 
   it('submits at most one delete while the request is pending', async () => {
+    stubUnsharedProjectDelete();
     let resolveDelete!: (value: true) => void;
     const pendingDelete = new Promise<true>((resolve) => {
       resolveDelete = resolve;
@@ -1408,6 +1494,7 @@ describe('recvqbh189zBY6 — single-card delete confirmation', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
 
     const dialog = await screen.findByRole('alertdialog');
+    await within(dialog).findByText('Delete "My project"?');
     const deleteButton = within(dialog).getByRole('button', { name: 'Delete' });
     fireEvent.click(deleteButton);
     fireEvent.click(deleteButton);

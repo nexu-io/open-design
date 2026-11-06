@@ -1,5 +1,7 @@
+import { JSDOM } from 'jsdom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installMockOpenDesignHost } from '@open-design/host/testing';
+import { advanceWorkspaceAccountGeneration } from '../../src/collab/workspace-identity';
 import {
   buildWorkspacePermissions,
   buildWorkspaceSeatSummary,
@@ -12,11 +14,17 @@ import {
   connectConnector,
   DEFAULT_DEPLOY_PROVIDER_ID,
   deleteDesignSystemDraft,
+  uninstallDesignSystem,
   DesignSystemDeleteError,
   deletePreviewComment,
   deployProjectFile,
   createDesignSystemDraft,
   fetchAgentsStream,
+  fetchSkills,
+  fetchDesignTemplates,
+  fetchDesignSystems,
+  fetchPromptTemplates,
+  fetchPreviewComments,
   fetchCloudflarePagesZones,
   fetchDeployConfig,
   fetchDesignSystemsResult,
@@ -39,10 +47,86 @@ import {
   patchPreviewCommentSortKey,
   patchPreviewCommentStatus,
   updateDeployConfig,
+  COMMENT_PULL_TIMEOUT_MS,
   uploadProjectFiles,
   upsertPreviewComment,
   writeProjectTextFileDetailed,
 } from '../../src/providers/registry';
+
+describe('passive startup catalog observation', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+  const readers = [
+    (onReadResult: (success: boolean) => void) => fetchSkills(null, { onReadResult }),
+    (onReadResult: (success: boolean) => void) => fetchDesignTemplates({ onReadResult }),
+    (onReadResult: (success: boolean) => void) => fetchDesignSystems(null, { onReadResult }),
+    (onReadResult: (success: boolean) => void) => fetchPromptTemplates({ onReadResult }),
+  ];
+  it.each(readers.map((read, index) => ({ read, index })))(
+    'observes failures without changing the existing empty-list result $index', async ({ read }) => {
+      for (const fetcher of [
+        async () => new Response('', { status: 503 }),
+        async () => { throw new Error('offline'); },
+        async () => new Response('{'),
+      ]) {
+        const observer = vi.fn();
+        vi.stubGlobal('fetch', vi.fn(fetcher));
+        await expect(read(observer)).resolves.toEqual([]);
+        expect(observer).toHaveBeenLastCalledWith(false);
+      }
+      const observer = vi.fn();
+      vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+        skills: [], designTemplates: [], designSystems: [], promptTemplates: [],
+      })));
+      await expect(read(observer)).resolves.toEqual([]);
+      expect(observer).toHaveBeenLastCalledWith(true);
+      await expect(read(() => { throw new Error('observation failed'); })).resolves.toEqual([]);
+    },
+  );
+});
+
+describe('explicit comment pull in the UI provider', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('uses the same pull endpoint as CLI and preserves local comments when remote is unavailable', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith('/pull')) {
+        return new Response(JSON.stringify({ pulled: true, comments: [{ id: 'visitor' }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ comments: [{ id: 'local' }] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await fetchPreviewComments('p', 'conv', personalWorkspaceContext(), true)).toEqual([{ id: 'visitor' }]);
+    expect(fetchMock).toHaveBeenCalledWith('/api/projects/p/conversations/conv/comments/pull',
+      expect.objectContaining({ method: 'POST' }));
+    fetchMock.mockImplementation(async input => String(input).endsWith('/pull')
+      ? new Response(null, { status: 503 })
+      : new Response(JSON.stringify({ comments: [{ id: 'local' }] }), { status: 200 }));
+    expect(await fetchPreviewComments('p', 'conv', personalWorkspaceContext(), true)).toEqual([{ id: 'local' }]);
+  });
+});
+
+describe('comment pull deadline', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('falls back to the local list when the remote pull outlives its deadline', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/pull')) {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+        });
+      }
+      return Promise.resolve(new Response(JSON.stringify({ comments: [{ id: 'local' }] }), { status: 200 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const read = fetchPreviewComments('p', 'conv', personalWorkspaceContext(), true);
+    await vi.advanceTimersByTimeAsync(COMMENT_PULL_TIMEOUT_MS);
+    await expect(read).resolves.toEqual([{ id: 'local' }]);
+  });
+});
 
 describe('skill operation diagnostics', () => {
   afterEach(() => {
@@ -157,7 +241,16 @@ describe('design-system Workspace scope', () => {
       designSystems: [],
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/workspace/design-systems/team', {
+      cache: 'no-store',
+      headers: expect.objectContaining({
+        'x-od-workspace-id': context.workspaceId,
+        'x-od-workspace-type': 'personal',
+        'x-od-workspace-member-id': context.workspaceMemberId,
+      }),
+    });
 
     expect(fetchMock).toHaveBeenCalledWith('/api/design-systems', {
       headers: expect.objectContaining({
@@ -372,7 +465,7 @@ describe('design-system Workspace scope', () => {
     });
   });
 
-  it('keeps personal and official systems available when team materialization fails', async () => {
+  it.each([false, true])('keeps personal and official systems available when team materialization fails (observed=%s)', async (observed) => {
     const context = {
       ...teamWorkspaceContext(),
       workspaceId: 'ws-team-offline',
@@ -397,13 +490,16 @@ describe('design-system Workspace scope', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
+    await expect(fetchDesignSystems(context, observed ? { onReadResult: vi.fn() } : undefined)).resolves.toMatchObject([
+      expect.objectContaining({ id: 'user:local-brand' }),
+    ]);
     await expect(fetchDesignSystemsResult(context)).resolves.toMatchObject({
       ok: true,
       designSystems: [expect.objectContaining({
         id: 'user:local-brand',
       })],
     });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledWith('/api/design-systems', expect.anything());
   });
 
   it('partitions team materialization when the Workspace changes', async () => {
@@ -466,6 +562,307 @@ describe('design-system Workspace scope', () => {
       }),
     }));
   });
+
+  it('collapses concurrent catalog reads for one identity into a single request', async () => {
+    // Bootstrap, the workspace-identity effect and the home-route effect all
+    // want the catalog on the same launch pass, and LibrarySection /
+    // DesignSystemsSection / DesignSystemSwitchPicker each read it again as
+    // they mount. Every one of those owns its own latest-wins bookkeeping, so
+    // none can drop its read — but on the wire they are one request.
+    const context = personalWorkspaceContext();
+    const gate = deferred<Response>();
+    let catalogReads = 0;
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      if (String(input) === '/api/workspace/design-systems/team') {
+        return Promise.resolve(new Response(JSON.stringify({ ids: [] }), { status: 200 }));
+      }
+      catalogReads += 1;
+      return gate.promise;
+    }));
+
+    const reads = [
+      fetchDesignSystemsResult(context),
+      fetchDesignSystemsResult(context),
+      fetchDesignSystemsResult(context),
+    ];
+    await vi.waitFor(() => expect(catalogReads).toBeGreaterThan(0));
+    expect(catalogReads).toBe(1);
+
+    gate.resolve(new Response(
+      JSON.stringify({ designSystems: [{ id: 'user:brand', title: 'Brand', source: 'user', status: 'published' }] }),
+      { status: 200 },
+    ));
+    for (const read of reads) {
+      await expect(read).resolves.toMatchObject({
+        ok: true,
+        designSystems: [expect.objectContaining({ id: 'user:brand' })],
+      });
+    }
+  });
+
+  it('re-reads the catalog for a read issued after the previous one settled', async () => {
+    // Single-flight ONLY: several call sites exist precisely to observe a
+    // change that just happened out of band — returning home re-reads so an
+    // in-project brand extraction shows up. Sharing a settled answer for even
+    // a second would hand those reads the state they were fired to replace.
+    const context = personalWorkspaceContext();
+    let catalogReads = 0;
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      if (String(input) === '/api/workspace/design-systems/team') {
+        return Promise.resolve(new Response(JSON.stringify({ ids: [] }), { status: 200 }));
+      }
+      catalogReads += 1;
+      return Promise.resolve(new Response(JSON.stringify({ designSystems: [] }), { status: 200 }));
+    }));
+
+    await fetchDesignSystemsResult(context);
+    await fetchDesignSystemsResult(context);
+    expect(catalogReads).toBe(2);
+  });
+
+  it('starts a fresh catalog read when a local mutation lands mid-flight', async () => {
+    // Review catch. `DesignSystemsTab` awaits `deleteDesignSystemDraft` (and
+    // `updateDesignSystemDraft` for publish/unpublish) and then calls its plain
+    // `onSystemsRefresh()` — no `forceTeamMaterialization`, because nothing
+    // remote changed. That refresh is precisely the caller that must not join a
+    // GET issued before the mutation: `ttl = 0` stops settled-result reuse, not
+    // in-flight joining, so the tab would commit the pre-mutation rows and leave
+    // the deleted system on screen.
+    const context = personalWorkspaceContext();
+    const pending = deferred<Response>();
+    let rows = [{ id: 'user:doomed', title: 'Doomed', source: 'user', status: 'published' }];
+    let catalogGets = 0;
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/workspace/design-systems/team') {
+        return Promise.resolve(new Response(JSON.stringify({ ids: [] }), { status: 200 }));
+      }
+      if ((init?.method ?? 'GET') === 'DELETE') {
+        rows = [];
+        return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+      }
+      catalogGets += 1;
+      if (catalogGets === 1) return pending.promise;
+      return Promise.resolve(new Response(JSON.stringify({ designSystems: rows }), { status: 200 }));
+    }));
+
+    const inFlightBeforeMutation = fetchDesignSystemsResult(context);
+    await vi.waitFor(() => expect(catalogGets).toBe(1));
+    await expect(deleteDesignSystemDraft('user:doomed', context)).resolves.toBeTruthy();
+
+    const afterMutation = fetchDesignSystemsResult(context);
+    pending.resolve(new Response(
+      JSON.stringify({ designSystems: [{ id: 'user:doomed', title: 'Doomed', source: 'user', status: 'published' }] }),
+      { status: 200 },
+    ));
+
+    await expect(afterMutation).resolves.toMatchObject({ ok: true, designSystems: [] });
+    await inFlightBeforeMutation;
+  });
+
+  it('starts a fresh catalog read after an uninstall, including on an empty 204', async () => {
+    // `uninstallDesignSystem` sends the same `DELETE /api/design-systems/:id` as
+    // the draft-delete helper, so it is a catalog mutation and the generation
+    // must advance for it too. It has no callers today; the spec exists so the
+    // invariant holds the moment one is wired up.
+    //
+    // The 204 is the load-bearing half: the function used to `await resp.json()`
+    // before checking `resp.ok`, so an empty success body threw straight into
+    // the catch and the success path — and therefore any bump placed on it —
+    // was unreachable.
+    const context = personalWorkspaceContext();
+    const pending = deferred<Response>();
+    let rows = [{ id: 'user:installed', title: 'Installed', source: 'user', status: 'published' }];
+    let catalogGets = 0;
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/workspace/design-systems/team') {
+        return Promise.resolve(new Response(JSON.stringify({ ids: [] }), { status: 200 }));
+      }
+      if ((init?.method ?? 'GET') === 'DELETE') {
+        rows = [];
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
+      catalogGets += 1;
+      if (catalogGets === 1) return pending.promise;
+      return Promise.resolve(new Response(JSON.stringify({ designSystems: rows }), { status: 200 }));
+    }));
+
+    const inFlightBeforeMutation = fetchDesignSystemsResult(context);
+    await vi.waitFor(() => expect(catalogGets).toBe(1));
+    await expect(uninstallDesignSystem('user:installed', context)).resolves.toEqual({ ok: true });
+
+    const afterMutation = fetchDesignSystemsResult(context);
+    pending.resolve(new Response(
+      JSON.stringify({ designSystems: [{ id: 'user:installed', title: 'Installed', source: 'user', status: 'published' }] }),
+      { status: 200 },
+    ));
+
+    await expect(afterMutation).resolves.toMatchObject({ ok: true, designSystems: [] });
+    await inFlightBeforeMutation;
+  });
+
+  it('starts a fresh catalog read when the caller brings a newer Team witness', async () => {
+    // Review catch, and a regression this PR introduced: before coalescing, this
+    // path always made its own catalog request.
+    //
+    // `DesignSystemsTab.refreshTeamShared` passes `materializedTeamIds` — never
+    // `forceTeamMaterialization` — and it only does so when the fresh `/team`
+    // read disagrees with the catalog it holds, or right after a share/unshare
+    // (`refreshSystems: true`). So supplying that witness always means "what I
+    // hold is out of date", and joining a catalog GET issued before the
+    // share/unshare would omit the newly shared system or keep a retired mirror.
+    const context = teamWorkspaceContext();
+    const pending = deferred<Response>();
+    let catalogGets = 0;
+    const rowsAfterShare = [
+      { id: 'user:brand', title: 'Brand', source: 'user', status: 'published' },
+      { id: 'user:newly-shared', title: 'Newly shared', source: 'user', status: 'published' },
+    ];
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/workspace/design-systems/team') {
+        // Must not be reached: the caller already has the witness.
+        return Promise.resolve(new Response(JSON.stringify({ ids: [] }), { status: 200 }));
+      }
+      catalogGets += 1;
+      if (catalogGets === 1) return pending.promise;
+      return Promise.resolve(new Response(JSON.stringify({ designSystems: rowsAfterShare }), { status: 200 }));
+    }));
+
+    const issuedBeforeShare = fetchDesignSystemsResult(context);
+    await vi.waitFor(() => expect(catalogGets).toBe(1));
+
+    const afterShare = fetchDesignSystemsResult(context, {
+      materializedTeamIds: ['user:newly-shared'],
+    });
+    pending.resolve(new Response(
+      JSON.stringify({ designSystems: [{ id: 'user:brand', title: 'Brand', source: 'user', status: 'published' }] }),
+      { status: 200 },
+    ));
+
+    await expect(afterShare).resolves.toMatchObject({
+      ok: true,
+      designSystems: [
+        expect.objectContaining({ id: 'user:brand' }),
+        expect.objectContaining({ id: 'user:newly-shared', teamShared: true }),
+      ],
+    });
+    await issuedBeforeShare;
+  });
+
+  it('never lets a pre-account-boundary catalog read answer a post-boundary one', async () => {
+    // A sign-out/sign-in cycle can leave every context field identical while the
+    // authority behind them has changed — that is exactly why the app keys the
+    // catalog on [accountGeneration, workspaceIdentity] and the team-project
+    // catalog carries a request generation. `ttl = 0` does not cover this: it
+    // disables settled-result reuse, but a post-boundary reader could still JOIN
+    // the promise of a request issued before the boundary and adopt its answer.
+    const context = personalWorkspaceContext();
+    const gates: Array<ReturnType<typeof deferred<Response>>> = [];
+    let catalogReads = 0;
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      if (String(input) === '/api/workspace/design-systems/team') {
+        return Promise.resolve(new Response(JSON.stringify({ ids: [] }), { status: 200 }));
+      }
+      catalogReads += 1;
+      const gate = deferred<Response>();
+      gates.push(gate);
+      return gate.promise;
+    }));
+
+    const beforeBoundary = fetchDesignSystemsResult(context);
+    await vi.waitFor(() => expect(catalogReads).toBe(1));
+
+    advanceWorkspaceAccountGeneration('account-boundary');
+
+    const afterBoundary = fetchDesignSystemsResult(context);
+    await vi.waitFor(() => expect(catalogReads).toBe(2));
+
+    for (const gate of gates) {
+      gate.resolve(new Response(JSON.stringify({ designSystems: [] }), { status: 200 }));
+    }
+    await Promise.all([beforeBoundary, afterBoundary]);
+  });
+
+  it('never lets a pre-boundary Team witness decorate a post-boundary catalog', async () => {
+    // The catalog key carries the account generation, but the Team-index read it
+    // awaits first did not. A `/team` request still in flight across a
+    // sign-out/sign-in would be joined by the post-boundary caller, so the fresh
+    // catalog got decorated with the previous account's Team-share flags — the
+    // account-boundary guarantee held for the rows and not for the flags.
+    const context = teamWorkspaceContext();
+    const firstTeamRead = deferred<Response>();
+    let teamReads = 0;
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      if (String(input) === '/api/workspace/design-systems/team') {
+        teamReads += 1;
+        if (teamReads === 1) return firstTeamRead.promise;
+        return Promise.resolve(new Response(JSON.stringify({ ids: ['user:b'] }), { status: 200 }));
+      }
+      return Promise.resolve(new Response(JSON.stringify({
+        designSystems: [
+          { id: 'user:a', title: 'A', source: 'user', status: 'published' },
+          { id: 'user:b', title: 'B', source: 'user', status: 'published' },
+        ],
+      }), { status: 200 }));
+    }));
+
+    const beforeBoundary = fetchDesignSystemsResult(context);
+    await vi.waitFor(() => expect(teamReads).toBe(1));
+
+    advanceWorkspaceAccountGeneration('team-witness-boundary');
+
+    const afterBoundary = fetchDesignSystemsResult(context);
+    await vi.waitFor(() => expect(teamReads).toBe(2));
+
+    firstTeamRead.resolve(new Response(JSON.stringify({ ids: ['user:a'] }), { status: 200 }));
+
+    await expect(afterBoundary).resolves.toMatchObject({
+      ok: true,
+      designSystems: [
+        expect.not.objectContaining({ teamShared: true }),
+        expect.objectContaining({ id: 'user:b', teamShared: true }),
+      ],
+    });
+    await beforeBoundary;
+  });
+
+  it('never lets a headerless catalog read answer a Workspace-scoped one', async () => {
+    // A read issued before `/api/workspace/context` settles carries no identity
+    // headers, and `/api/design-systems` is fail-closed on a missing scope — it
+    // is a different, smaller catalog, not a cheaper copy of the scoped answer.
+    const context = personalWorkspaceContext();
+    const scopedIds: string[] = [];
+    let headerlessReads = 0;
+    // Each read gets its own Response: a shared body can only be read once, so
+    // reusing one would hide a join behind a parse error instead of a count.
+    const gates: Array<ReturnType<typeof deferred<Response>>> = [];
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === '/api/workspace/design-systems/team') {
+        return Promise.resolve(new Response(JSON.stringify({ ids: [] }), { status: 200 }));
+      }
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      const workspaceId = headers['x-od-workspace-id'];
+      if (workspaceId) scopedIds.push(workspaceId);
+      else headerlessReads += 1;
+      const gate = deferred<Response>();
+      gates.push(gate);
+      return gate.promise;
+    }));
+
+    const headerless = fetchDesignSystemsResult(null);
+    const scoped = fetchDesignSystemsResult(context);
+    await vi.waitFor(() => expect(headerlessReads + scopedIds.length).toBe(2));
+    expect(headerlessReads).toBe(1);
+    expect(scopedIds).toEqual([context.workspaceId]);
+
+    for (const gate of gates) {
+      gate.resolve(new Response(JSON.stringify({ designSystems: [] }), { status: 200 }));
+    }
+    await Promise.all([headerless, scoped]);
+  });
+
 });
 
 describe('fetchAgentsStream', () => {
@@ -555,6 +952,126 @@ describe('fetchAppVersionInfo', () => {
     );
 
     await expect(fetchAppVersionInfo()).resolves.toBeNull();
+  });
+});
+
+describe('fetchProjectFiles after an external write', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  const file = (name: string) => ({
+    name, path: name, kind: 'image', mime: 'image/png', size: 1, mtime: 1,
+  });
+  const response = (files: ReturnType<typeof file>[]) => Response.json({ files });
+
+  it.each([0, 249])('replaces a settled forced snapshot after a write %ims later', async (elapsed) => {
+    vi.useFakeTimers();
+    const before = [file('before.png')];
+    const after = [...before, file('generated.png')];
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(response(before))
+      .mockResolvedValueOnce(response(after));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchProjectFiles('post-write-settled', { fresh: true })).resolves.toEqual(before);
+    await vi.advanceTimersByTimeAsync(elapsed);
+    await expect(fetchProjectFiles('post-write-settled', {
+      fresh: true, afterChange: true, requireAuthoritative: true,
+    })).resolves.toEqual(after);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('fences an older in-flight read and shares the post-write request with ordinary readers', async () => {
+    vi.useFakeTimers();
+    const before = [file('before.png')];
+    const after = [...before, file('generated.png')];
+    const oldResponse = deferred<Response>();
+    const newResponse = deferred<Response>();
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockImplementationOnce(() => oldResponse.promise)
+      .mockImplementationOnce(() => newResponse.promise);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const earlier = fetchProjectFiles('post-write-inflight', { fresh: true });
+    await vi.advanceTimersByTimeAsync(95);
+    const completion = fetchProjectFiles('post-write-inflight', {
+      fresh: true, afterChange: true, requireAuthoritative: true,
+    });
+    const ordinary = fetchProjectFiles('post-write-inflight');
+    newResponse.resolve(response(after));
+    oldResponse.resolve(response(before));
+
+    await expect(Promise.all([earlier, completion, ordinary])).resolves.toEqual([after, after, after]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries an overtaken write-boundary read without declaring another write', async () => {
+    vi.useFakeTimers();
+    const firstFiles = [file('first.png')];
+    const latestFiles = [...firstFiles, file('second.png')];
+    const firstResponse = deferred<Response>();
+    const latestResponse = deferred<Response>();
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockImplementationOnce(() => firstResponse.promise)
+      .mockImplementationOnce(() => latestResponse.promise)
+      // A retry that mistakenly declares another write still settles, but its
+      // extra network request is rejected by the count below.
+      .mockImplementation(async () => response(latestFiles));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const first = fetchProjectFiles('post-write-overtaken', { fresh: true, afterChange: true });
+    await vi.advanceTimersByTimeAsync(1);
+    const second = fetchProjectFiles('post-write-overtaken', { fresh: true, afterChange: true });
+    latestResponse.resolve(response(latestFiles));
+    await Promise.resolve();
+    firstResponse.resolve(response(firstFiles));
+
+    await expect(Promise.all([first, second])).resolves.toEqual([latestFiles, latestFiles]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserves ordinary and broadcast-forced concurrent read coalescing', async () => {
+    vi.useFakeTimers();
+    const files = [file('shared.png')];
+    const gate = deferred<Response>();
+    const fetchMock = vi.fn<typeof fetch>(() => gate.promise);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const readers = [
+      fetchProjectFiles('post-write-burst', { fresh: true }),
+      fetchProjectFiles('post-write-burst', { fresh: true }),
+      fetchProjectFiles('post-write-burst'),
+    ];
+    gate.resolve(response(files));
+    await expect(Promise.all(readers)).resolves.toEqual([files, files, files]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('invalidates only the written project and Workspace authority', async () => {
+    vi.useFakeTimers();
+    const workspaceA = personalWorkspaceContext();
+    const workspaceB = { ...workspaceA, workspaceId: 'ws-other', workspaceMemberId: 'wm-other' };
+    const before = [file('before.png')];
+    const after = [...before, file('generated.png')];
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(response(before))
+      .mockResolvedValueOnce(response(before))
+      .mockResolvedValueOnce(response(before))
+      .mockResolvedValueOnce(response(after));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await fetchProjectFiles('post-write-scoped', { workspaceContext: workspaceA, fresh: true });
+    await fetchProjectFiles('post-write-scoped', { workspaceContext: workspaceB, fresh: true });
+    await fetchProjectFiles('post-write-other-project', { workspaceContext: workspaceA, fresh: true });
+    await expect(fetchProjectFiles('post-write-scoped', {
+      workspaceContext: workspaceA, fresh: true, afterChange: true,
+    })).resolves.toEqual(after);
+    await expect(fetchProjectFiles('post-write-scoped', { workspaceContext: workspaceB })).resolves.toEqual(before);
+    await expect(fetchProjectFiles('post-write-other-project', { workspaceContext: workspaceA })).resolves.toEqual(before);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 });
 
@@ -1452,10 +1969,7 @@ describe('connectConnector', () => {
   it('renders a fallback link before navigating the auth popup', async () => {
     const replace = vi.fn();
     const authWindow = {
-      document: {
-        title: '',
-        body: { innerHTML: '' },
-      },
+      document: new JSDOM('<body></body>').window.document,
       location: { replace },
       close: vi.fn(),
     };
@@ -1504,10 +2018,7 @@ describe('connectConnector', () => {
 
   it('keeps the popup open with custom auth guidance when initialization fails', async () => {
     const authWindow = {
-      document: {
-        title: '',
-        body: { innerHTML: '' },
-      },
+      document: new JSDOM('<body></body>').window.document,
       location: { replace: vi.fn() },
       close: vi.fn(),
     };
@@ -1582,10 +2093,7 @@ describe('connectConnector', () => {
 
   it('renders an info notice in the popup when the connect response carries no redirect URL', async () => {
     const authWindow = {
-      document: {
-        title: '',
-        body: { innerHTML: '' },
-      },
+      document: new JSDOM('<body></body>').window.document,
       location: { replace: vi.fn() },
       close: vi.fn(),
     };
@@ -2077,5 +2585,21 @@ describe('deploy provider registry helpers', () => {
       () => { throw new Error('expected deploy to reject'); },
       (err: unknown) => expect((err as { code?: string }).code).toBe('HTTP_404'),
     );
+  });
+});
+
+describe('OPEND-3894 comment reads distinguish errors from empty success', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it.each(['http', 'network', 'invalid'] as const)('rejects final %s failure after a failed pull', async kind => {
+    vi.stubGlobal('fetch', vi.fn(async input => {
+      if (String(input).endsWith('/pull')) return new Response(null, {status: 503});
+      if (kind === 'network') throw new Error('offline');
+      return kind === 'http' ? new Response(null,{status:500}) : Response.json({});
+    }));
+    await expect(fetchPreviewComments('p','c',personalWorkspaceContext(),true)).rejects.toThrow();
+  });
+  it('accepts an explicitly empty successful response', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({comments:[]})));
+    await expect(fetchPreviewComments('p','c')).resolves.toEqual([]);
   });
 });

@@ -1,4 +1,5 @@
 import type { ArtifactManifest } from './artifacts.js';
+import type { StrategyTaskProjectionV2 } from '../plugins/strategy-v2.js';
 
 export type OrchestratorWorkspaceKind = 'scratch';
 export type OrchestratorWorkspaceWriteback = 'external';
@@ -67,6 +68,8 @@ export interface RunResultPackageArtifact {
 export interface RunResultPackageResponse {
   schema: typeof RUN_RESULT_PACKAGE_SCHEMA;
   run: RunResultPackageRun;
+  /** Logical task truth when the requested physical Run belongs to OD Next. */
+  strategyTask?: StrategyTaskProjectionV2;
   workspace: RunWorkspace;
   events: {
     logPath: string | null;

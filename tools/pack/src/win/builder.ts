@@ -1,3 +1,4 @@
+import { assertPackagedSidecarRuntime } from "../resources/runtime-manifest.js";
 import { execFile } from "node:child_process";
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -60,6 +61,7 @@ import {
   resolveWinExecutableVersionTargets,
   rewriteWinExecutableVersion,
 } from "./version-resource.js";
+import { assertPackagedConfigBinding } from "../config/amr-endpoint-binding.js";
 import { buildWinPortableZip } from "./zip.js";
 import type {
   ElectronBuilderDirCacheMetadata,
@@ -69,8 +71,8 @@ import type {
 } from "./types.js";
 
 const execFileAsync = promisify(execFile);
-const WIN_ARCHIVE_CACHE_VERSION = 3;
-const WIN_ELECTRON_BUILDER_DIR_CACHE_VERSION = 8;
+const WIN_ARCHIVE_CACHE_VERSION = 4;
+const WIN_ELECTRON_BUILDER_DIR_CACHE_VERSION = 9;
 const WIN_NSIS_BASE_PAYLOAD_INPUT_HASH_CACHE_VERSION = 2;
 
 async function hashWinNsisInstallerImplementation(config: ToolPackConfig): Promise<string> {
@@ -478,6 +480,10 @@ export async function materializeCachedUnpackedForInstaller(
     join(paths.unpackedRoot, "resources", "open-design-config.json"),
     await readFile(paths.packagedConfigPath),
   );
+  await assertPackagedConfigBinding(
+    join(paths.unpackedRoot, "resources", "open-design-config.json"),
+    await readFile(paths.packagedConfigPath, "utf8"),
+  );
   if (packagedVersion != null) {
     await rewriteUnpackedAppPackageVersion(paths.unpackedRoot, packagedVersion);
     await rewriteWinExecutableVersion(paths.unpackedExePath, packagedVersion);
@@ -570,6 +576,10 @@ export async function runElectronBuilder(
     node: "win.electron-builder-dir-base",
     packagedVersion: versionCore,
   });
+  const assertSidecarRuntime = (unpackedRoot: string) => assertPackagedSidecarRuntime(winUnpackedAppRoot(unpackedRoot), [
+    "main.cjs",
+    ...(usePrebundle ? [WIN_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH, WIN_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH, WIN_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH].map((entry) => entry.slice("app/".length)) : []),
+  ]);
   const auditOutput = "web-standalone-after-pack-audit.json";
   const node = {
     id: "win.electron-builder-dir",
@@ -579,7 +589,10 @@ export async function runElectronBuilder(
       const validationError = await validateWinUnpackedNodePtyRuntime(
         join(entryRoot, "builder", "win-unpacked"),
       );
-      return validationError == null ? null : { reason: validationError };
+      if (validationError != null) return { reason: validationError };
+      try { await assertSidecarRuntime(join(entryRoot, "builder", "win-unpacked")); }
+      catch (error) { return { reason: String(error) }; }
+      return null;
     },
     build: async ({ entryRoot }: { entryRoot: string }): Promise<ElectronBuilderDirCacheMetadata> => {
       const packagedAppRoot = await getPackagedAppRoot();
@@ -589,6 +602,7 @@ export async function runElectronBuilder(
         packagedAppRoot,
       );
       await assertWinUnpackedNodePtyRuntime(join(entryRoot, "builder", "win-unpacked"));
+      await assertSidecarRuntime(join(entryRoot, "builder", "win-unpacked"));
       return { packagedAppKey, packagedVersion };
     },
   };
@@ -614,6 +628,7 @@ export async function runElectronBuilder(
               );
               segments.push(...rawSegments);
               await assertWinUnpackedNodePtyRuntime(join(entryRoot, "builder", "win-unpacked"));
+              await assertSidecarRuntime(join(entryRoot, "builder", "win-unpacked"));
             });
             return { packagedAppKey, packagedVersion };
           },
@@ -627,6 +642,7 @@ export async function runElectronBuilder(
   const cachedExecutablePath = join(cachedUnpackedRoot, `${PRODUCT_NAME}.exe`);
   await runSegment("electron-builder-dir:validate-node-pty-runtime", async () => {
     await assertWinUnpackedNodePtyRuntime(cachedUnpackedRoot);
+    await assertSidecarRuntime(cachedUnpackedRoot);
   });
   await runSegment("electron-builder-dir:prepare-namespace", async () => {
     if (shouldBuildWinNsisInstaller(config.to) || shouldBuildWinPortableZip(config.to)) {
@@ -650,7 +666,13 @@ export async function runElectronBuilder(
       webStandaloneHookAuditPath: (await pathExists(paths.webStandaloneHookAuditPath)) ? paths.webStandaloneHookAuditPath : null,
     });
   });
+  if (config.amrEndpointBinding && !shouldBuildWinNsisInstaller(config.to) && !shouldBuildWinPortableZip(config.to)) {
+    // A directly launched directory must not read the cache entry's old binding.
+    const materialized = await materializeCachedUnpackedForInstaller(cachedUnpackedRoot, paths, packagedVersion);
+    await writeBuiltAppManifest(paths, materialized);
+  }
   if (shouldBuildWinNsisInstaller(config.to) || shouldBuildWinPortableZip(config.to)) {
+    const packagedConfigBody = await readFile(paths.packagedConfigPath, "utf8");
     const signingCacheKey = resolveWinSigningCacheKey(config);
     const nsisInstallerImplementation = shouldBuildWinNsisInstaller(config.to)
       ? await runSegment("nsis-installer:implementation-hash", () => hashWinNsisInstallerImplementation(config))
@@ -713,6 +735,7 @@ export async function runElectronBuilder(
         key,
         namespace: config.namespace,
         packagedVersion,
+        packagedConfigBody,
         signing: signingCacheKey,
         target: "nsis-payload-overlay",
       }),
@@ -874,6 +897,7 @@ export async function runElectronBuilder(
             namespace: config.namespace,
             packagedAppKey,
             packagedVersion,
+            packagedConfigBody,
             signing: signingCacheKey,
             target: "portable-zip",
           }),

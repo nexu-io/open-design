@@ -80,7 +80,7 @@
 5. **移动手势松手漂移修复(两个根因)**。(a) 预览的内联 `translate(dx,dy)` 会顶掉 authored transform(如 `translate(-50%,-50%)` 居中),松手恢复即跳:桥 styleProps 增补 `transform`(computed),预览改为 `manualEditMovePreviewTransform` 把位移**前置合成**,提交把内联 transform 复位到**源码 authored 值**(非一律清空)。(b) auto 宽度的 absolute 元素 shrink-to-fit:提交改大 `left` 后可用宽变窄 → 元素变窄 → `-50%` 平移量变小再跳:`manualEditMoveStyles` 对 out-of-flow 移动附带**钉住起始宽度**(`width: startRect.width`),布局不回流。浏览器实测 held == released(零漂移)。
 6. **拖拽跟手**。rAF tick 对吸附后矩形做等值去重:指针高频事件解析为同一 snapped rect 时跳过选中框 DOM 写入与 iframe 预览消息,拖拽成本跟随实际位移而非指针频率。(页面自身重动画的 iframe 主线程成本不在宿主可控范围。)
 
-协议增量:`od-edit-copy-request {id}`、`od-edit-paste-request {id}`、`od-edit-paste-image {id, file}`(bridge→host);patch 增 `insert-html {id, html}`;`ManualEditStyles` 增 `display`(v2.2)与 `transform`。i18n 增 `manualEdit.pasteElement` / `manualEdit.pasteImage`(19 locale)。
+协议增量:`od-edit-copy-request {id}`、`od-edit-paste-request {id}`、`od-edit-paste-image {id, name, mime, buffer}`(bridge→host);patch 增 `insert-html {id, html}`;`ManualEditStyles` 增 `display`(v2.2)与 `transform`。i18n 增 `manualEdit.pasteElement` / `manualEdit.pasteImage`(19 locale)。
 
 契约反转记录:FileViewer 旧测试「holds the preview steady while manual Edit is open」(编辑模式中外部变更不刷新画布)被本轮**推翻**,改为「defers during interaction, follows once idle」。
 
@@ -154,7 +154,7 @@
 4. **undo/redo 版本管理闭环**:结构补丁(插入/复制/删除)双向原地回放(此前必闪屏);删除的 undo 经还原描述符插回原位;所有回退落 `Undo/Redo` 版本。
 5. 修复既有 7 个红测试(v2.1 面板 opt-in 两步流未同步进 `manual-edit-history` / `srcdoc-reload-races` 测试助手)。
 
-协议增量:`od-edit-text-selection` 增 `format {bold,italic,underline,strike} | null`;`od-edit-apply-dom` 增 `op: replace|insert-after|append-child|prepend-child|remove`(默认 replace,向后兼容)。
+协议增量:`od-edit-text-selection` 增 `format {bold,italic,underline,strike} | null`;`od-edit-apply-dom` 增 `op: replace|insert-after|append-child|prepend-child|remove|insert-at-index|apply-content`(默认 replace,向后兼容)。
 
 新增测试:bridge「选区格式状态上报」「insert-after/append-child/prepend-child/remove 原地应用」「重标注跟随位移 + 新元素就地 stamp + 授权 id 不动 + replace 后仍 source-mappable」;source-patches「插入读回(授权锚/位置锚/__body__)」「删除还原描述符(前兄弟/父级 prepend/__body__/缺失)」;FileViewer「文本提交原地不换 srcdoc」「删除走 remove op」「粘贴图片原地插入 + 选中交接」「undo 原地 + Undo 版本 label」。
 

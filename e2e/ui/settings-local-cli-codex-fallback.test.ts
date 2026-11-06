@@ -1,7 +1,7 @@
 import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
 import { openSettingsDialog } from '../lib/playwright/amr.js';
-import { routeAgents } from '../lib/playwright/mock-factory.js';
+import { routeAgents, suppressWhatsNew } from '../lib/playwright/mock-factory.js';
 
 const STORAGE_KEY = 'open-design:config';
 const LOCALE_KEY = 'open-design:locale';
@@ -69,6 +69,10 @@ async function waitForLoadingToClear(page: Page) {
 }
 
 async function gotoEntryHome(page: Page) {
+  // The entry home mounts `WhatsNewPopup` (EntryShell.tsx) and its backdrop sits
+  // at z-index 1500 — above the z-index 120 chrome that owns the rail/settings
+  // controls this spec clicks. A live release card would swallow those clicks.
+  await suppressWhatsNew(page);
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve OpenDesign' });

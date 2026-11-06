@@ -9,9 +9,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   RecentProjectsStrip,
   projectCardCategory,
+  projectKindFilterCategory,
 } from '../../src/components/RecentProjectsStrip';
 import type { Project } from '../../src/types';
-import type { WorkspaceProjectSummary } from '@open-design/contracts';
+import type { WorkspaceProjectSummary, WorkspaceCollabContext } from '@open-design/contracts';
+import { workspaceContextFixture } from '../helpers/workspace-context';
 
 // Typed on the argument the component actually passes, so `.mock.calls`
 // destructures instead of widening to the empty tuple.
@@ -54,6 +56,14 @@ vi.mock('../../src/state/projects', async (importOriginal) => ({
   moveWorkspaceProject: (...args: unknown[]) => moveWorkspaceProject(args[0] as MoveCall),
 }));
 
+let shareReadContext: WorkspaceCollabContext | null = null;
+vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/collab/useWorkspaceContext')>();
+  return { ...actual, useWorkspaceContext: () => shareReadContext
+    ? { context: shareReadContext, loading: false }
+    : actual.useWorkspaceContext() };
+});
+
 vi.mock('../../src/providers/registry', () => ({
   fetchProjectFileText: vi.fn(async () => null),
   fetchProjectFiles: vi.fn(async () => []),
@@ -64,8 +74,20 @@ vi.mock('../../src/providers/registry', () => ({
 afterEach(() => {
   cleanup();
   moveWorkspaceProject.mockClear();
+  shareReadContext = null;
   vi.restoreAllMocks();
 });
+
+function provideVerifiedZeroShareCount() {
+  shareReadContext = workspaceContextFixture({
+    workspaceId: 'ws-1', workspaceMemberId: 'wm-1', workspaceType: 'personal', role: 'owner',
+  });
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+    const match = String(url).match(/^\/api\/projects\/([^/]+)\/share-state$/);
+    if (!match) return new Response('', { status: 200 });
+    return Response.json({ projectId: decodeURIComponent(match[1]!), bindingExists: false, hasEverShared: false, publications: [] });
+  });
+}
 
 function project(overrides: Partial<Project>): Project {
   return {
@@ -108,20 +130,72 @@ const MEDIA = project({
   updatedAt: 2,
   metadata: { kind: 'video' },
 });
+// OPEND-3107: a Document project is what the Home "Document" chip creates —
+// `kind: 'other'` with `intent: 'document'` (home-hero/chips.ts).
+const DOCUMENT = project({
+  id: 'p-document',
+  name: 'Document project',
+  updatedAt: 1.8,
+  metadata: { kind: 'other', intent: 'document' },
+});
+// OPEND-3107: an Image project is the media-generation chip's `kind: 'image'`.
+const IMAGE = project({
+  id: 'p-image',
+  name: 'Image project',
+  updatedAt: 1.5,
+  metadata: { kind: 'image' },
+});
 const DESIGN_SYSTEM = project({
   id: 'p-ds',
   name: 'Design system project',
   updatedAt: 1,
   metadata: { kind: 'other', importedFrom: 'design-system' },
 });
+// OPEND-3107 (2026-09-16 定稿): the filter names every creation type on its
+// own. A HyperFrames project stores `kind: 'video'` plus `intent:
+// 'hyperframes'` (home-hero/chips.ts), so it must file under HyperFrames, not
+// Video; WebGL is `kind: 'prototype'` + `intent: 'webgl-experience'`.
+const HYPERFRAMES = project({
+  id: 'p-hyperframes',
+  name: 'HyperFrames project',
+  updatedAt: 0.9,
+  metadata: { kind: 'video', intent: 'hyperframes' },
+});
+const WEBGL = project({
+  id: 'p-webgl',
+  name: 'WebGL project',
+  updatedAt: 0.8,
+  metadata: { kind: 'prototype', intent: 'webgl-experience' },
+});
+const AUDIO = project({
+  id: 'p-audio',
+  name: 'Audio project',
+  updatedAt: 0.7,
+  metadata: { kind: 'audio' },
+});
 
-const ALL_PROJECTS = [PROTOTYPE, DECK, LIVE, WEB_CLONE, MEDIA, DESIGN_SYSTEM];
+const ALL_PROJECTS = [
+  PROTOTYPE,
+  DECK,
+  LIVE,
+  WEB_CLONE,
+  MEDIA,
+  DOCUMENT,
+  IMAGE,
+  DESIGN_SYSTEM,
+  HYPERFRAMES,
+  WEBGL,
+  AUDIO,
+];
 
 function renderGrid(props: Partial<React.ComponentProps<typeof RecentProjectsStrip>> = {}) {
   return render(
     <RecentProjectsStrip
       heading="All projects"
       projects={ALL_PROJECTS}
+      // The strip caps at 6 cards by default; the fixtures outgrew that, and
+      // the page mode this mirrors passes an effectively unbounded limit too.
+      limit={ALL_PROJECTS.length}
       onOpen={() => {}}
       {...props}
     />,
@@ -176,6 +250,55 @@ describe('projectCardCategory', () => {
   });
 });
 
+describe('projectKindFilterCategory (OPEND-3107)', () => {
+  // The dropdown offers eleven creation types; every project resolves to
+  // exactly one of them, bucketed by its creation metadata.
+  it('maps each project to the filter bucket the dropdown offers', () => {
+    expect(projectKindFilterCategory(PROTOTYPE)).toBe('prototype');
+    expect(projectKindFilterCategory(DECK)).toBe('slide');
+    expect(projectKindFilterCategory(DOCUMENT)).toBe('document');
+    expect(projectKindFilterCategory(IMAGE)).toBe('image');
+    expect(projectKindFilterCategory(HYPERFRAMES)).toBe('hyperframes');
+    expect(projectKindFilterCategory(WEB_CLONE)).toBe('web-clone');
+    expect(projectKindFilterCategory(MEDIA)).toBe('video');
+    expect(projectKindFilterCategory(AUDIO)).toBe('audio');
+    expect(projectKindFilterCategory(LIVE)).toBe('live-artifact');
+    expect(projectKindFilterCategory(WEBGL)).toBe('webgl');
+    expect(projectKindFilterCategory(DESIGN_SYSTEM)).toBe('design-system');
+  });
+
+  it('files a live-artifact project under Live artifact whether marked by intent or by skill', () => {
+    expect(projectKindFilterCategory(LIVE)).toBe('live-artifact');
+    expect(
+      projectKindFilterCategory(
+        project({ id: 'p-live-skill', skillId: 'live-artifact', metadata: { kind: 'prototype' } }),
+      ),
+    ).toBe('live-artifact');
+  });
+
+  it('keeps a document project out of the Prototype bucket', () => {
+    // The card still wears the Prototype chip (projectCategory falls through),
+    // but the filter must not list it under Prototype AND Document.
+    expect(projectCardCategory(DOCUMENT)).toBe('prototype');
+    expect(projectKindFilterCategory(DOCUMENT)).toBe('document');
+  });
+
+  it('lets the creation intent outrank the storage kind', () => {
+    // HyperFrames is stored as a video project and WebGL as a prototype; the
+    // intent is what the user picked on Home, so it names the bucket.
+    expect(projectCardCategory(HYPERFRAMES)).toBe('media');
+    expect(projectKindFilterCategory(HYPERFRAMES)).toBe('hyperframes');
+    expect(projectCardCategory(WEBGL)).toBe('prototype');
+    expect(projectKindFilterCategory(WEBGL)).toBe('webgl');
+  });
+
+  it('resolves brand-kind projects to the Design system bucket', () => {
+    expect(
+      projectKindFilterCategory(project({ id: 'p-brand', metadata: { kind: 'brand' } })),
+    ).toBe('design-system');
+  });
+});
+
 describe('RecentProjectsStrip type filter (#77)', () => {
   it('omits the redundant owner filter from the drafts space', () => {
     const { container } = renderGrid({ heading: 'Drafts', space: 'drafts' });
@@ -197,42 +320,78 @@ describe('RecentProjectsStrip type filter (#77)', () => {
     expect(filters).toEqual(['All', 'Any type']);
   });
 
-  it('offers exactly the artifact types the cards stamp on themselves', () => {
+  it('offers the twelve entries in the product order, labelled with the Home chip copy (OPEND-3107)', () => {
     const { container } = renderGrid();
 
     const menu = openKindMenu(container);
     const options = [...menu.querySelectorAll('button')].map((node) => node.textContent);
 
+    // 2026-09-16 定稿: 任何类型、原型、幻灯片、文档、图片、HyperFrames、网站克隆、
+    // 视频、音频、实时产物、WebGL、设计体系 — one entry per creation type, in
+    // this order, each reusing the Home type chip's own label key.
     expect(options).toEqual([
       'Any type',
       'Prototype',
-      'Slide',
-      'Live Artifact',
+      'Slide deck',
+      'Document',
+      'Image',
+      'HyperFrames',
       'Website clone',
-      'Media',
-      'Design System',
+      'Video',
+      'Audio',
+      'Live artifact',
+      'WebGL',
+      'Design system',
     ]);
-    // The legacy taxonomy's catch-all bucket matched no chip at all.
+    // Media (the merged video / audio bucket) and Other stay gone.
+    expect(options).not.toContain('Media');
     expect(options).not.toContain('Other');
   });
 
-  it('filters the grid down to the projects wearing the picked chip', () => {
+  it('filters the grid down to the projects in the picked bucket', () => {
     const { container } = renderGrid();
 
-    fireEvent.click(within(openKindMenu(container)).getByText('Slide'));
-    expect(cardNames(container)).toEqual(['Deck project']);
+    const kindTrigger = () => container.querySelectorAll('.recent-projects__filter')[1]!;
 
-    fireEvent.click(within(openKindMenu(container)).getByText('Live Artifact'));
-    expect(cardNames(container)).toEqual(['Live project']);
+    fireEvent.click(within(openKindMenu(container)).getByText('Slide deck'));
+    expect(cardNames(container)).toEqual(['Deck project']);
+    // The trigger names the picked type (OPEND-3107 acceptance).
+    expect(kindTrigger().textContent?.trim()).toBe('Slide deck');
+
+    fireEvent.click(within(openKindMenu(container)).getByText('Document'));
+    expect(cardNames(container)).toEqual(['Document project']);
+    expect(kindTrigger().textContent?.trim()).toBe('Document');
+
+    fireEvent.click(within(openKindMenu(container)).getByText('Image'));
+    expect(cardNames(container)).toEqual(['Image project']);
+    expect(kindTrigger().textContent?.trim()).toBe('Image');
+
+    fireEvent.click(within(openKindMenu(container)).getByText('HyperFrames'));
+    expect(cardNames(container)).toEqual(['HyperFrames project']);
 
     // recvpZbvupSr1o: Website clone must be its own filter bucket, separate
-    // from both Live Artifact and the blank Prototype bucket it used to hide in.
+    // from the blank Prototype bucket it used to hide in.
     fireEvent.click(within(openKindMenu(container)).getByText('Website clone'));
     expect(cardNames(container)).toEqual(['Web clone project']);
 
-    fireEvent.click(within(openKindMenu(container)).getByText('Design System'));
+    // Video no longer swallows the HyperFrames project that shares its kind.
+    fireEvent.click(within(openKindMenu(container)).getByText('Video'));
+    expect(cardNames(container)).toEqual(['Media project']);
+
+    fireEvent.click(within(openKindMenu(container)).getByText('Audio'));
+    expect(cardNames(container)).toEqual(['Audio project']);
+
+    fireEvent.click(within(openKindMenu(container)).getByText('Live artifact'));
+    expect(cardNames(container)).toEqual(['Live project']);
+
+    fireEvent.click(within(openKindMenu(container)).getByText('WebGL'));
+    expect(cardNames(container)).toEqual(['WebGL project']);
+
+    fireEvent.click(within(openKindMenu(container)).getByText('Design system'));
     expect(cardNames(container)).toEqual(['Design system project']);
 
+    // Prototype is the blank-prototype bucket only: no live artifact, no
+    // document, no WebGL — each of those has its own entry now.
     fireEvent.click(within(openKindMenu(container)).getByText('Prototype'));
     expect(cardNames(container)).toEqual(['Prototype project']);
 
@@ -324,7 +483,32 @@ describe('RecentProjectsStrip bulk selection bar (#75)', () => {
     expect(container.querySelector('.recent-projects__bulkbar')).toBeNull();
   });
 
+  it('preserves the main no-share batch dialog DOM and cancel does not delete', async () => {
+    provideVerifiedZeroShareCount();
+    // Production markup/copy verified byte-identical to main 8e372744dda5
+    // before recording; do not regenerate this baseline for share warnings.
+    const onDelete = vi.fn();
+    const { container } = renderGrid({
+      canManageProjectCollection: true,
+      collaborationEnabled: true,
+      onDelete,
+    });
+    const bar = enterSelectionMode(container, ['Deck project', 'Media project']);
+    fireEvent.click(within(bar).getByText('Delete selected'));
+    const dialog = screen.getByRole('alertdialog');
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Delete selected' })).toBeEnabled());
+    const titleId = dialog.getAttribute('aria-labelledby')!;
+    expect(dialog.outerHTML.replaceAll(titleId, 'delete-title')).toBe(
+      `<div tabindex="-1" class="_focusTarget_8e4a21 _dialog_8e4a21 modal modal-confirm" role="alertdialog" aria-modal="true" aria-labelledby="delete-title"><h2 class="_title_8e4a21" id="delete-title">Delete project</h2><p class="_description_8e4a21">Delete 2 project(s)?</p><div class="_footer_8e4a21 row"><button type="button">Cancel</button><button type="button" class="primary danger">Delete selected</button></div></div>`,
+    );
+    expect(onDelete).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(onDelete).not.toHaveBeenCalled();
+  });
+
   it('confirms before deleting the whole selection', async () => {
+    provideVerifiedZeroShareCount();
     const onDelete = vi.fn((_id: string) => true);
     const { container } = renderGrid({
       canManageProjectCollection: true,
@@ -338,6 +522,7 @@ describe('RecentProjectsStrip bulk selection bar (#75)', () => {
     const dialog = screen.getByRole('alertdialog');
     expect(within(dialog).getByText('Delete 2 project(s)?')).toBeTruthy();
     expect(onDelete).not.toHaveBeenCalled();
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Delete selected' })).toBeEnabled());
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete selected' }));
 

@@ -99,8 +99,31 @@ export interface ProjectPreviewScopeDeps {
     workspace?: { workspaceId: string; workspaceMemberId: string } | null,
     options?: { readonly ttlMs?: number },
   ) => string;
+  /**
+   * Like `mint`, but reuses the live scope for this exact (project, workspace)
+   * when one exists — **without renewing it**. Preview reads must be
+   * byte-stable across refetches, and the scope's expiry is serialized into
+   * the bridged document, so touching it here would change the served bytes
+   * and reload the iframe just as a fresh id would.
+   *
+   * `ttlMs` therefore applies only when this call has to create a new reusable
+   * scope. Keeping an in-use scope alive is `renew`'s job, driven by the
+   * client's explicit renewal request, whose response is not a document.
+   */
+  acquire: (
+    projectId: string,
+    workspace?: { workspaceId: string; workspaceMemberId: string } | null,
+    options?: { readonly ttlMs?: number },
+  ) => string;
   revoke: (scope: string) => void;
   expiresAt: (projectId: string, scope: string) => number | undefined;
+  /**
+   * The expiry to embed in a served document — frozen for the scope's whole
+   * life, unlike `expiresAt`, which `renew` moves. Use this for any body whose
+   * bytes must stay identical across refetches; JSON responses keep using
+   * `expiresAt`.
+   */
+  documentExpiresAt: (projectId: string, scope: string) => number | undefined;
   renew: (
     projectId: string,
     scope: string,
@@ -186,7 +209,11 @@ export interface ServerContext {
   orbit: any;
   nativeDialogs: any;
   research: any;
-  mcp: any;
+  mcp: {
+    pendingAuth: any;
+    daemonUrlRef: { current: string };
+    inheritedEnvironment: (baseEnv?: NodeJS.ProcessEnv) => Record<string, string>;
+  };
   plugins: any;
   resources: ResourceDeps;
   routines: RoutineDeps;
@@ -209,13 +236,13 @@ export interface ServerContext {
    * on a re-move). The principal is the same workspace/member that passed D's
    * route-level permission check, so the side effect cannot publish/catalog
    * under a different ambient workspace. D gates the move itself on
-   * `canShareProjects`, so this seam does NOT re-check permission. See
-   * routes/collab-sync.ts for the equivalent HTTP seam (POST /collab/sync-intent)
-   * used by the demo surface.
+   * `canShareProjects`, so this seam does NOT re-check permission. Legacy
+   * sync-intents cannot change policy; permanent deletion is a separate intent.
    */
   collabSync: {
     requestTeamShare(projectId: string, share?: string | ResourceHubPrincipal): Promise<{ version: number | null }>;
     requestTeamUnshare(projectId: string, share?: string | ResourceHubPrincipal): Promise<void>;
+    requestTeamDelete(projectId: string, principal: ResourceHubPrincipal): Promise<void>;
     /**
      * Pull and atomically register a catalog-only Team project before an
      * exact-owner mutation needs local state. This preserves a Personal copy

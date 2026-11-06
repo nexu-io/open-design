@@ -395,7 +395,7 @@ This repo now has the first registry closure in place:
 - Home now presents official plugins as `Official starters` with a
   `Browse registry` path into `/plugins`; `/plugins` remains the registry
   console (`Installed / Available / Sources / Team`).
-- `apps/landing-page` now exposes the public SEO renderer at `/plugins/` plus
+- The extracted marketing-site repository now exposes the public SEO renderer at `/plugins/` plus
   static per-plugin detail pages. It reads `plugins/registry/official`,
   `plugins/registry/community`, and bundled official manifests at build time,
   so open-design.ai can show the ecosystem without calling daemon APIs.
@@ -517,7 +517,7 @@ first, headless, JSON-emitting.
   the bundled plugins currently shipped in `plugins/_official/`. The local repo
   now carries the source shape and generated registry inputs; creating the
   external GitHub repo is an operational launch step, not a code blocker.
-- [x] **P3.2 Static site renderer.** `apps/landing-page` now
+- [x] **P3.2 Static site renderer.** The extracted marketing-site repository now
   statically generates `open-design.ai/plugins` and per-plugin detail routes
   from `plugins/registry/*/open-design-marketplace.json` plus bundled official
   manifests, with SEO metadata, search JSON, and `od://` detail links.

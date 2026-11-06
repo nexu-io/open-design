@@ -77,3 +77,128 @@ describe('bake-plugin-previews vertical deck driver', () => {
     expect(windowScrollTo).not.toHaveBeenCalled();
   });
 });
+
+describe('bake-plugin-previews deck entry reset', () => {
+  // OPEND-2702: probing the advancing input moves the deck off its first
+  // slide, and a deck that persists its position (`#/2` in the URL hash, or
+  // web storage) reopened there after the reload — so the poster baked the
+  // agenda page, not the cover. The reset must clear both before the reload.
+  it('[P1] clears a persisted slide position so the reload lands on the cover', async () => {
+    const scriptUrl = new URL('../../../scripts/bake-plugin-previews.mjs', import.meta.url).href;
+    const { resetDeckEntryState } = await import(/* @vite-ignore */ scriptUrl) as {
+      resetDeckEntryState: () => { hadHash: boolean; clearedStorage: boolean };
+    };
+
+    const replaceState = vi.fn();
+    const localClear = vi.fn();
+    const sessionClear = vi.fn();
+    const location = { hash: '#/2', pathname: '/api/plugins/example-deck/preview', search: '?v=1' };
+    Object.assign(globalThis, {
+      window: {
+        location,
+        history: { replaceState },
+        localStorage: { clear: localClear },
+        sessionStorage: { clear: sessionClear },
+      },
+    });
+
+    expect(resetDeckEntryState()).toEqual({ hadHash: true, clearedStorage: true });
+    expect(replaceState).toHaveBeenCalledWith(null, '', '/api/plugins/example-deck/preview?v=1');
+    expect(localClear).toHaveBeenCalledTimes(1);
+    expect(sessionClear).toHaveBeenCalledTimes(1);
+  });
+
+  it('[P2] reports a deck that persisted nothing without touching history', async () => {
+    const scriptUrl = new URL('../../../scripts/bake-plugin-previews.mjs', import.meta.url).href;
+    const { resetDeckEntryState } = await import(/* @vite-ignore */ scriptUrl) as {
+      resetDeckEntryState: () => { hadHash: boolean; clearedStorage: boolean };
+    };
+
+    const replaceState = vi.fn();
+    Object.assign(globalThis, {
+      window: {
+        location: { hash: '', pathname: '/api/plugins/example-deck/preview', search: '' },
+        history: { replaceState },
+        localStorage: { clear: () => { throw new Error('storage disabled'); } },
+        sessionStorage: { clear: () => { throw new Error('storage disabled'); } },
+      },
+    });
+
+    expect(resetDeckEntryState()).toEqual({ hadHash: false, clearedStorage: false });
+    expect(replaceState).not.toHaveBeenCalled();
+  });
+});
+
+describe('bake-plugin-previews capture navigation', () => {
+  async function loadReset() {
+    const scriptUrl = new URL('../../../scripts/bake-plugin-previews.mjs', import.meta.url).href;
+    return await import(/* @vite-ignore */ scriptUrl) as {
+      resetDeckForCapture: (page: unknown, previewUrl: string) => Promise<void>;
+    };
+  }
+
+  it('[P1] returns to the preview endpoint after a base-relative hash changes the path', async () => {
+    const { resetDeckForCapture } = await loadReset();
+    const previewUrl = 'http://localhost/api/plugins/example-fs-creative-voltage/preview';
+    // The served document injects this base. The template's replaceState('#/1')
+    // changes the path as well as the fragment, so reloading it opens a 404.
+    let currentUrl = new URL('#/1', 'http://localhost/api/plugins/example-fs-creative-voltage/asset/');
+    const storageClear = vi.fn();
+    Object.assign(globalThis, {
+      window: {
+        get location() { return currentUrl; },
+        history: {
+          replaceState: (_state: unknown, _title: string, url: string) => {
+            currentUrl = new URL(url, currentUrl);
+          },
+        },
+        localStorage: { clear: storageClear },
+        sessionStorage: { clear: storageClear },
+      },
+    });
+    const page = {
+      evaluate: async (fn: () => unknown) => fn(),
+      goto: vi.fn(async (url: string) => {
+        currentUrl = new URL(url);
+        return { ok: () => currentUrl.pathname.endsWith('/preview'), status: () => 200 };
+      }),
+      reload: vi.fn(async () => ({ ok: () => false, status: () => 404 })),
+    };
+
+    await resetDeckForCapture(page, previewUrl);
+
+    expect(currentUrl.href).toBe(previewUrl);
+    expect(storageClear).toHaveBeenCalledTimes(2);
+    expect(page.reload).not.toHaveBeenCalled();
+  });
+
+  it.each([404, 503])('[P1] rejects HTTP %i on the second navigation instead of capturing its error page', async (status) => {
+    const { resetDeckForCapture } = await loadReset();
+    const page = {
+      evaluate: vi.fn().mockResolvedValue(undefined),
+      goto: vi.fn().mockResolvedValue({ ok: () => false, status: () => status }),
+    };
+    await expect(resetDeckForCapture(page, 'http://localhost/api/plugins/deck/preview'))
+      .rejects.toThrow(`status ${status}`);
+  });
+
+  it('[P1] accepts a revalidated browser cache response', async () => {
+    const { resetDeckForCapture } = await loadReset();
+    const page = {
+      evaluate: vi.fn().mockResolvedValue(undefined),
+      goto: vi.fn().mockResolvedValue({ ok: () => false, status: () => 304 }),
+    };
+    await expect(resetDeckForCapture(page, 'http://localhost/api/plugins/deck/preview'))
+      .resolves.toBeUndefined();
+  });
+
+  it('[P1] propagates navigation failure instead of baking the previous document', async () => {
+    const { resetDeckForCapture } = await loadReset();
+    const page = {
+      evaluate: vi.fn().mockResolvedValue(undefined),
+      goto: vi.fn().mockRejectedValue(new Error('navigation timed out')),
+    };
+    await expect(resetDeckForCapture(page, 'http://localhost/api/plugins/deck/preview'))
+      .rejects.toThrow('navigation timed out');
+  });
+});

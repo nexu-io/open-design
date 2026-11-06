@@ -6,14 +6,16 @@
 // Claude Code. Unlike the component-level EntryShell tests (which mock
 // `onAgentChange` so it never updates config), this mounts the REAL `App`
 // with the REAL router and REAL EntryView/onboarding UI, so the App-level
-// config lifecycle + auto-select interact exactly as in production. Only the
-// daemon/provider boundary is mocked, and AMR (vela) detection is made to lag
+// config lifecycle + auto-select interact exactly as in production. Network
+// boundaries and CMS content hosts are mocked; AMR (vela) detection is made to lag
 // the first agent probe — the exact window in which the bug surfaces.
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
+import { installMockOpenDesignHost } from '@open-design/host/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../../src/App';
+import { navigate } from '../../src/router';
 import type { AppConfig } from '../../src/types';
 import { loadConfig, fetchDaemonConfig } from '../../src/state/config';
 import {
@@ -27,8 +29,41 @@ import {
 } from '../../src/providers/registry';
 import { fetchAmrModels } from '../../src/providers/daemon';
 import { listProjects, listTemplates } from '../../src/state/projects';
+import { I18nProvider, useI18n } from '../../src/i18n';
+import { clearTestRuntimeSession, observeTestRuntimeIdentity, useTestRuntime } from '../../src/components/TestCampaignModal';
 
 const analyticsMocks = vi.hoisted(() => ({ track: vi.fn() }));
+const cmsTestMocks = vi.hoisted(() => ({ realCoordinator: false }));
+
+// App owns route eligibility; the host suites separately exercise authorization,
+// network cancellation and verified content. These stand-ins expose whether App
+// allows either host to display over the real onboarding page.
+vi.mock('../../src/components/ProductionCampaignModal', () => ({
+  ProductionCampaignModal: ({ authenticated }: { authenticated: boolean }) =>
+    authenticated ? <div role="dialog" aria-label="Production campaign witness" /> : null,
+}));
+vi.mock('../../src/components/TestCampaignModal', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/components/TestCampaignModal')>();
+  return {
+    ...actual,
+    observeTestRuntimeIdentity: vi.fn(actual.observeTestRuntimeIdentity),
+    TestCampaignModal: (props: { authenticated: boolean; sessionSubject: string | null }) => cmsTestMocks.realCoordinator
+      ? <actual.TestCampaignModal {...props} />
+      : props.authenticated ? <div role="dialog" aria-label="Test campaign witness" /> : null,
+  };
+});
+
+// The badge and the hover entry are the top-right CMS touchpoints. Their own
+// suites cover authorization and content; here they only report whether App's
+// route gating lets either one on screen.
+vi.mock('../../src/components/ProductionCampaignBadge', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/components/ProductionCampaignBadge')>()),
+  ProductionCampaignBadge: () => <div data-testid="production-campaign-badge-witness" />,
+}));
+vi.mock('../../src/components/ProductionCampaignHover', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/components/ProductionCampaignHover')>()),
+  ProductionCampaignHover: () => <div data-testid="production-campaign-hover-witness" />,
+}));
 
 vi.mock('../../src/analytics/provider', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/analytics/provider')>();
@@ -155,6 +190,8 @@ function firstRunConfig(): AppConfig {
 }
 
 beforeEach(() => {
+  cmsTestMocks.realCoordinator = false;
+  clearTestRuntimeSession();
   // jsdom polyfills the full EntryView tree expects.
   if (!window.matchMedia) {
     window.matchMedia = ((query: string) => ({
@@ -231,9 +268,155 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  clearTestRuntimeSession();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
   analyticsMocks.track.mockReset();
+});
+
+describe('CMS campaigns during onboarding', () => {
+  it('suppresses both hosts on the login page even after the account is restored', async () => {
+    window.history.replaceState(null, '', '/onboarding');
+    render(<App />);
+    await screen.findByRole('button', { name: /Continue \(signed in\)/i });
+    expect(screen.queryByRole('dialog', { name: 'Production campaign witness' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Test campaign witness' })).toBeNull();
+  });
+
+  it('allows hosts after leaving onboarding and removes them on returning to login', async () => {
+    window.history.replaceState(null, '', '/onboarding');
+    render(<App />);
+    await screen.findByRole('button', { name: /Continue \(signed in\)/i });
+    // Keep onboarding incomplete so the real passive-reauth flow does not
+    // immediately redirect a restored, fully configured account back home.
+    await act(async () => navigate({ kind: 'home', view: 'home' }));
+    await screen.findByRole('dialog', { name: 'Production campaign witness' });
+    await screen.findByRole('dialog', { name: 'Test campaign witness' });
+
+    await act(async () => navigate({ kind: 'home', view: 'onboarding' }));
+    expect(screen.queryByRole('dialog', { name: 'Production campaign witness' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Test campaign witness' })).toBeNull();
+
+    await act(async () => navigate({ kind: 'home', view: 'home' }));
+    await screen.findByRole('dialog', { name: 'Production campaign witness' });
+    await screen.findByRole('dialog', { name: 'Test campaign witness' });
+  });
+});
+
+describe('CMS campaigns outside the home view', () => {
+  // The top-right hosts are desktop-only, so the route assertions need a host
+  // bridge in place before they can say anything about gating.
+  let restoreHost: (() => void) | undefined;
+  beforeEach(() => {
+    restoreHost = installMockOpenDesignHost();
+  });
+  afterEach(() => {
+    restoreHost?.();
+    restoreHost = undefined;
+  });
+  // Every campaign placement this app authorizes is a HOME placement
+  // (`opend.home.*`). The hosts follow: the modal and the top-right entries
+  // belong to the home view, not to a project workbench or another entry tab.
+  const witnesses = () => ({
+    modals: [
+      screen.queryByRole('dialog', { name: 'Production campaign witness' }),
+      screen.queryByRole('dialog', { name: 'Test campaign witness' }),
+    ],
+    topRight: [
+      screen.queryByTestId('production-campaign-badge-witness'),
+      screen.queryByTestId('production-campaign-hover-witness'),
+    ],
+  });
+  async function arriveOnHome() {
+    window.history.replaceState(null, '', '/onboarding');
+    render(<App />);
+    await screen.findByRole('button', { name: /Continue \(signed in\)/i });
+    await act(async () => navigate({ kind: 'home', view: 'home' }));
+    await screen.findByRole('dialog', { name: 'Production campaign witness' });
+    await screen.findByTestId('production-campaign-badge-witness');
+    await screen.findByTestId('production-campaign-hover-witness');
+  }
+
+  it.each(['account', 'logout', 'locale'] as const)('spends cached Test authority when %s changes away from home, even if it changes back', async (boundary) => {
+    cmsTestMocks.realCoordinator = true;
+    const owner = 'account-a';
+    let currentOwner = owner;
+    let loggedIn = true;
+    let failed = false;
+    const placements = ['opend.home.campaign-modal', 'opend.home.account-badge', 'opend.home.hover-entry', 'opend.home.hover-layer'];
+    const context = { deploymentId: 'test-deployment', scenario: 'realtime', updatedAt: new Date().toISOString(), testerMemberId: owner };
+    const fetchMock = vi.mocked(fetch);
+    const original = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/api/integrations/vela/status')) return Response.json({ loggedIn, profile: 'prod', user: { id: currentOwner, email: `${currentOwner}@example.com` }, configPath: '/x' });
+      if (!url.includes('/api/touchpoints/test-runtime')) return original(input, init);
+      if (failed) throw new TypeError('DNS unavailable');
+      if (url.includes('/deployments')) return Response.json({ deployments: [{ id: context.deploymentId, activityId: 'test-activity', snapshotHash: 'snapshot', snapshot: { contentVersionId: 'test-content', manifestHash: 'manifest', artifactHash: 'artifact', placementKeys: placements } }] });
+      if (url.includes('/context')) return Response.json(context);
+      const placementKey = new URL(url, 'http://localhost').searchParams.get('placementKey')!;
+      return Response.json({
+        deploymentId: context.deploymentId, activityId: 'test-activity', snapshotHash: 'snapshot', manifestHash: 'manifest', artifactHash: 'artifact', placementKey, requiredCapabilities: [], staticActions: [],
+        serverTime: context.updatedAt, startsAt: new Date(Date.parse(context.updatedAt) - 60_000).toISOString(), endsAt: new Date(Date.parse(context.updatedAt) + 3_600_000).toISOString(), authorizationExpiresAt: new Date(Date.parse(context.updatedAt) + 60_000).toISOString(), testContext: { ...context, scheduleState: 'active' },
+        content: { id: 'test-content', placementKey, locale: 'en', manifestHash: 'manifest', entryPath: 'entry.js', entryModule: 'export {}', entryDigest: 'entry', resources: [], runtime: { kind: 'web-component', apiVersion: 1, wrapperVersion: 'vela-touchpoint-wrapper-v1', sdkVersion: 'vela-touchpoint-sdk-v1' }, manifest: { formatVersion: 2, runtimeKind: 'web-component', runtimeApiVersion: 1, platformWrapperVersion: 'vela-touchpoint-wrapper-v1', sdkVersion: 'vela-touchpoint-sdk-v1', contentLine: 'production', resources: ['entry.js'], images: [], placements: [{ key: placementKey, entry: 'entry.js', resources: [], locales: ['en'], requiredCapabilities: [], staticActions: [] }] } },
+      });
+    });
+    let setLocale!: ReturnType<typeof useI18n>['setLocale'];
+    function LocaleController() { setLocale = useI18n().setLocale; return null; }
+    window.history.replaceState(null, '', '/onboarding');
+    render(<I18nProvider initial="en"><LocaleController /><App /></I18nProvider>);
+    const probe = renderHook(() => useTestRuntime());
+    await screen.findByRole('button', { name: /Continue \(signed in\)/i });
+    await act(async () => navigate({ kind: 'home', view: 'home' }));
+    await waitFor(() => expect(probe.result.current?.decisions.size).toBe(4));
+    await act(async () => navigate({ kind: 'home', view: 'onboarding' }));
+    expect(probe.result.current).toBeNull();
+    failed = true;
+    if (boundary === 'locale') {
+      await act(async () => setLocale('ja'));
+      await act(async () => setLocale('en'));
+    } else {
+      if (boundary === 'account') currentOwner = 'account-b';
+      else loggedIn = false;
+      await act(async () => fireEvent(window, new Event('focus')));
+      await waitFor(() => expect(observeTestRuntimeIdentity).toHaveBeenCalledWith(loggedIn, currentOwner, 'en'));
+      currentOwner = owner; loggedIn = true;
+      await act(async () => fireEvent(window, new Event('focus')));
+      await waitFor(() => expect(observeTestRuntimeIdentity).toHaveBeenLastCalledWith(true, owner, 'en'));
+    }
+    await act(async () => navigate({ kind: 'home', view: 'home' }));
+    expect(probe.result.current?.decisions.size ?? 0).toBe(0);
+    expect(probe.result.current?.isAuthorized() ?? false).toBe(false);
+  });
+
+  it('withdraws every host on another entry view and restores them on home', async () => {
+    await arriveOnHome();
+
+    await act(async () => navigate({ kind: 'home', view: 'projects' }));
+    const away = witnesses();
+    expect(away.modals).toEqual([null, null]);
+    expect(away.topRight).toEqual([null, null]);
+
+    await act(async () => navigate({ kind: 'home', view: 'home' }));
+    await screen.findByRole('dialog', { name: 'Production campaign witness' });
+    await screen.findByTestId('production-campaign-badge-witness');
+  });
+
+  it('withdraws every host on an open project', async () => {
+    await arriveOnHome();
+
+    await act(async () =>
+      navigate({
+        kind: 'project',
+        projectId: 'project-1',
+        conversationId: null,
+        fileName: null,
+      }),
+    );
+    const inProject = witnesses();
+    expect(inProject.modals).toEqual([null, null]);
+    expect(inProject.topRight).toEqual([null, null]);
+  });
 });
 
 describe('onboarding -> home AMR selection (end to end)', () => {
@@ -258,14 +441,9 @@ describe('onboarding -> home AMR selection (end to end)', () => {
     });
     fireEvent.click(runtimeContinue);
 
-    // The streamlined flow lands on the model-source chooser. Hosted is the
-    // default and completes onboarding directly; the removed About-you,
+    // Continue (signed in) completes onboarding directly with OpenDesign
+    // Hosted; there is no model-source chooser, and the removed About-you,
     // Newsletter, and design-system steps must not be part of this witness.
-    const hostedSource = await screen.findByRole('radio', {
-      name: /OpenDesign Hosted/i,
-    });
-    expect(hostedSource.getAttribute('aria-checked')).toBe('true');
-    fireEvent.click(await screen.findByRole('button', { name: /^Continue$/i }));
 
     // Now on home: the inline model switcher chip must reflect AMR, not the
     // Claude default the App-level auto-select used to snap to while AMR was

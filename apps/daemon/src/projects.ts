@@ -186,7 +186,13 @@ async function collectFolders(dir, relDir, out, shouldSkipDir?: (name: string) =
     if (shouldSkipDir?.(e.name)) continue;
     const rel = relDir ? `${relDir}/${e.name}` : e.name;
     const full = path.join(dir, e.name);
-    const st = await stat(full);
+    let st;
+    try {
+      st = await stat(full);
+    } catch (err) {
+      if (err && err.code === 'ENOENT') continue;
+      throw err;
+    }
     out.push({
       name: rel,
       path: rel,
@@ -293,8 +299,15 @@ async function collectFiles(dir, relDir, out, shouldSkipDir?: (name: string) => 
     }
     if (!e.isFile()) continue;
     if (e.name.endsWith('.artifact.json')) continue;
-    const st = await stat(full);
-    const manifest = await readManifestForPath(projectRoot, rel);
+    let st;
+    let manifest;
+    try {
+      st = await stat(full);
+      manifest = await readManifestForPath(projectRoot, rel);
+    } catch (err) {
+      if (err && err.code === 'ENOENT') continue;
+      throw err;
+    }
     out.push({
       name: rel,
       path: rel,
@@ -813,8 +826,24 @@ export async function readProjectFile(projectsRoot, projectId, name, metadata?) 
   };
 }
 
+/** Managed deletion needs a canonical, confined path even on retry after unlink.
+ * Unlike preview/media resolution this does not require surviving bytes. */
+export async function resolveProjectDeletePath(projectsRoot, projectId, name, metadata?) {
+  assertVisibleForImportedProject(name, metadata);
+  const dir = resolveProjectDir(projectsRoot, projectId, metadata);
+  const filePath = await resolveSafeReal(dir, name);
+  const rootReal = await realpath(dir).catch(() => dir);
+  return { filePath, name: toProjectPath(path.relative(rootReal, filePath)) };
+}
+
 // Like readProjectFile but skips loading the file content into memory.
 // Used by the media streaming endpoint so large video files are never buffered.
+/** Resolve an existing or future output through the project's symlink-aware boundary. */
+export async function resolveProjectWritePath(projectsRoot, projectId, name, metadata?) {
+  assertVisibleForImportedProject(name, metadata);
+  return resolveSafeReal(resolveProjectDir(projectsRoot, projectId, metadata), name);
+}
+
 export async function resolveProjectFilePath(projectsRoot, projectId, name, metadata?) {
   assertVisibleForImportedProject(name, metadata);
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);

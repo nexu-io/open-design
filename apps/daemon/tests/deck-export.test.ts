@@ -149,7 +149,8 @@ describe('buildDeckRenderInput', () => {
 
       expect(request.input.html).toContain('data-od-deck-stage-fallback');
       expect(request.input.html).toContain("window.customElements.define('deck-stage'");
-      expect(request.input.html).toContain("type: 'od:slide-state'");
+      expect(request.input.html).toContain('type: "od:slide-state"');
+      expect(request.input.html).toContain('protocolVersion: 1');
     } finally {
       rmSync(projectsRoot, { recursive: true, force: true });
     }

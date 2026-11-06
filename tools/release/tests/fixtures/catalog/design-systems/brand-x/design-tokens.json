@@ -1,0 +1,12 @@
+{
+  "summary": {
+    "totalTokens": 4,
+    "grade": "excellent"
+  },
+  "tokens": [
+    { "name": "--bg", "value": "#1a1817", "type": "color", "layer": "A1-identity" },
+    { "name": "--surface", "value": "#efe7d2", "type": "color", "layer": "A1-identity" },
+    { "name": "--fg", "value": "#ffffff", "type": "color", "layer": "A1-identity" },
+    { "name": "--accent", "value": "#d44b1e", "type": "color", "layer": "A1-identity" }
+  ]
+}

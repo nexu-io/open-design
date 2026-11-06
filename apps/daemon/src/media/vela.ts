@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import {
   runVelaCommand,
+  velaCommandStderr,
   velaCommandStdout,
   velaWorkspaceCommandOptions,
 } from '../integrations/vela-command.js';
@@ -69,6 +70,12 @@ const VELA_MAX_INPUT_IMAGES = 5;
 const VELA_VIDEO_RATIOS = new Set(['16:9', '9:16', '1:1']);
 const VELA_VIDEO_DURATIONS = new Set([5, 10]);
 
+/** The installed local media runtime predates Vela's media command surface. */
+export const VELA_MEDIA_CLI_INCOMPATIBLE_CODE = 'MEDIA_CLI_INCOMPATIBLE';
+
+const VELA_MEDIA_COMMAND_MISSING_RE =
+  /unknown command\s+["'](?:media|image|video)["']\s+for\s+["']vela["']/i;
+
 function isRecord(value: unknown): value is JsonRecord {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -92,6 +99,15 @@ function parseJsonObject(stdout: string, command: string): JsonRecord {
 
 function nonEmptyString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function submittedImageTaskIdFromPollingFailure(
+  error: unknown,
+): string | undefined {
+  const match = velaCommandStderr(error).match(
+    /(?:^|\r?\n)Error: perform media request GET \/api\/v1\/media\/images\/tasks\/(mit_[A-Za-z0-9_-]+):/,
+  );
+  return match?.[1];
 }
 
 function positiveIntegerFromEnv(name: string, fallback: number): number {
@@ -262,10 +278,15 @@ async function fetchPublishedImageCapabilities(
   wireModel: string,
   runCommand: VelaCommandRunner,
 ): Promise<VelaPublishedImageCapabilities | null> {
-  const stdout = await runCommand(['media', 'models', '--json'], {
-    ...velaWorkspaceCommandOptions(input.workspaceId),
-    timeoutMs: VELA_MODELS_TIMEOUT_MS,
-  });
+  let stdout: string;
+  try {
+    stdout = await runCommand(['media', 'models', '--json'], {
+      ...velaWorkspaceCommandOptions(input.workspaceId),
+      timeoutMs: VELA_MODELS_TIMEOUT_MS,
+    });
+  } catch (error) {
+    throw velaMediaErrorFromFailure(error, 'media models') ?? error;
+  }
   return parsePublishedProfiles(stdout, wireModel, edits);
 }
 
@@ -387,8 +408,37 @@ export async function renderVelaImage(
       });
     } catch (error) {
       // A refused request is a verdict the user can act on, so it must reach
-      // them as one. Everything else keeps its original error untouched.
-      throw velaMediaErrorFromFailure(error, `image ${command}`) ?? error;
+      // them as one. Decode it before transport recovery so a provider verdict
+      // can never be mistaken for a retryable polling failure.
+      const providerError = velaMediaErrorFromFailure(error, `image ${command}`);
+      if (providerError) throw providerError;
+
+      const submittedTaskId = submittedImageTaskIdFromPollingFailure(error);
+      if (!submittedTaskId) throw error;
+
+      // `vela image gen --wait` has already submitted (and potentially charged)
+      // the remote task before its status GET can time out. Resume that exact
+      // task instead of calling `gen` again, which avoids duplicate work and
+      // duplicate billing while tolerating a transient poll failure.
+      try {
+        stdout = await runCommand(
+          [
+            'image',
+            'get',
+            submittedTaskId,
+            '--wait',
+            '--output',
+            outputPath,
+            '--json',
+          ],
+          {
+            ...velaWorkspaceCommandOptions(input.workspaceId),
+            timeoutMs: VELA_IMAGE_TIMEOUT_MS,
+          },
+        );
+      } catch (recoveryError) {
+        throw velaMediaErrorFromFailure(recoveryError, 'image get') ?? recoveryError;
+      }
     }
     const asset = parseJsonObject(stdout, `image ${command}`);
     const assetId = nonEmptyString(asset.asset_id);
@@ -490,6 +540,16 @@ export function velaMediaErrorFromFailure(
   error: unknown,
   label: string,
 ): VelaMediaError | undefined {
+  const commandMessage = error instanceof Error ? error.message : '';
+  if (VELA_MEDIA_COMMAND_MISSING_RE.test(commandMessage)) {
+    return new VelaMediaError(
+      'the local media runtime is too old; update it and try again',
+      {
+        code: VELA_MEDIA_CLI_INCOMPATIBLE_CODE,
+        retryable: false,
+      },
+    );
+  }
   const stdout = velaCommandStdout(error).trim();
   if (!stdout) return undefined;
   let parsed: unknown;
@@ -525,6 +585,12 @@ export async function renderVelaVideo(
   }
 
   const wireModel = wireModelForVela(input.model, input.wireModel);
+  const available = await fetchVelaVideoModels(input.workspaceId, runCommand);
+  if (!available.includes(wireModel)) {
+    throw new VelaMediaError(`unknown or unavailable video model: ${wireModel}; no generation was submitted`, {
+      code: 'MEDIA_MODEL_UNAVAILABLE', retryable: false,
+    });
+  }
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'open-design-vela-video-'));
   const outputPath = path.join(tempDir, 'result.mp4');
   const startedAt = Date.now();
@@ -615,4 +681,16 @@ export async function renderVelaVideo(
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
+}
+
+/** Account/workspace-filtered catalogue. Never treat a failed read as an empty catalogue. */
+export async function fetchVelaVideoModels(workspaceId?: string, runCommand: VelaCommandRunner = runVelaCommand): Promise<string[]> {
+  const raw = await runCommand(['media', 'models', '--json'], {
+    ...velaWorkspaceCommandOptions(workspaceId), timeoutMs: VELA_MODELS_TIMEOUT_MS,
+  });
+  const response = parseJsonObject(raw, 'media models');
+  if (!Array.isArray(response.models)) throw new Error('Vela media catalogue is unavailable: missing models');
+  return response.models.filter((entry): entry is JsonRecord => isRecord(entry) && entry.kind === 'video'
+    && typeof entry.model === 'string' && Boolean(entry.model.trim()) && entry.enabled !== false)
+    .map(entry => String(entry.model));
 }

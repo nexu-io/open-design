@@ -1,13 +1,17 @@
 import { createHash } from "node:crypto";
-import { access, lstat, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { access, lstat, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve, sep } from "node:path";
+
+import { parseAmrEndpointBinding } from "@open-design/contracts";
 
 import {
   LAUNCHER_SCHEMA_VERSION,
+  readLauncherHost,
   compareLauncherVersions,
   type LauncherChannel,
   type LauncherDesktopHandoffDescriptor,
   type LauncherHandoffResumeRequest,
+  type LauncherHost,
   type LauncherPaths,
   type LauncherRuntimeDescriptor,
   type LauncherVersionPaths,
@@ -87,6 +91,12 @@ type ResolvedPayloadConfig = {
 
 export type ResolvePackagedLauncherRuntimeOptions = {
   currentExecutablePath?: string;
+  /**
+   * Identity published by a hosting thin launcher. When it hosts a
+   * payload, its selection is authoritative: the launcher already selected,
+   * pre-armed or rolled back, so this process must not re-derive any of it.
+   */
+  host?: LauncherHost | null;
   /**
    * Pointer from `--od-launcher-delegated-*` argv: the spawning parent
    * pre-armed attempt.json for this pointer, so a matching attempt marks the
@@ -229,9 +239,15 @@ async function resolvePayloadDesktopExecutable(
   return executablePath;
 }
 
-function sameExecutablePath(left: string, right: string): boolean {
-  const normalizedLeft = resolve(left);
-  const normalizedRight = resolve(right);
+async function canonicalExecutablePath(path: string): Promise<string> {
+  return await realpath(path).catch(() => resolve(path));
+}
+
+export async function sameExecutablePath(left: string, right: string): Promise<boolean> {
+  const [normalizedLeft, normalizedRight] = await Promise.all([
+    canonicalExecutablePath(left),
+    canonicalExecutablePath(right),
+  ]);
   return process.platform === "win32"
     ? normalizedLeft.toLowerCase() === normalizedRight.toLowerCase()
     : normalizedLeft === normalizedRight;
@@ -298,6 +314,16 @@ async function resolvePayloadConfig(
   const packagedConfigPath = join(resourcesPath, "open-design-config.json");
   if (!(await pathExists(packagedConfigPath))) return null;
   const raw = await readJsonFile<RawPackagedConfig>(packagedConfigPath);
+  // An update must not replace the installed outer's environment identity.
+  const binding = parseAmrEndpointBinding(config.amrEndpointBinding);
+  const payloadBinding = parseAmrEndpointBinding(raw.amrEndpointBinding);
+  if (JSON.stringify(binding) !== JSON.stringify(payloadBinding)) {
+    if (binding) {
+      console.warn("[open-design launcher] skipping payload for a different AMR environment; using the bound installed application");
+      return null;
+    }
+    throw new Error("Launcher payload AMR endpoint binding differs from the installed application");
+  }
   const webOutputMode = raw.webOutputMode === "standalone" || raw.webOutputMode === "server"
     ? raw.webOutputMode
     : config.webOutputMode;
@@ -327,9 +353,11 @@ async function resolvePayloadConfig(
     config: {
       ...config,
       appVersion: raw.appVersion?.trim() || manifest.version,
+      daemonCliEntry: await resolveOptionalPayloadEntry(resourcesPath, raw.daemonCliEntryRelative),
       daemonSidecarEntry: await resolveOptionalPayloadEntry(resourcesPath, raw.daemonSidecarEntryRelative),
       nodeCommand,
       resourceRoot,
+      telemetryRelayUrl: raw.telemetryRelayUrl?.trim() || config.telemetryRelayUrl,
       webOutputMode: webOutputMode as PackagedWebOutputMode,
       webSidecarEntry: await resolveOptionalPayloadEntry(resourcesPath, raw.webSidecarEntryRelative),
       webStandaloneRoot,
@@ -445,6 +473,20 @@ export async function resolvePackagedLauncherRuntime(
   paths: PackagedNamespacePaths,
   options: ResolvePackagedLauncherRuntimeOptions = {},
 ): Promise<PackagedLauncherRuntime> {
+  const host = options.host ?? readLauncherHost();
+  if (host != null) {
+    const descriptor = host.snapshot();
+    const launcherPaths = resolveLauncherPaths({ channel: descriptor.channel, namespace: descriptor.namespace, root: paths.installationRoot });
+    return {
+      config, descriptor, launcherPaths, paths,
+      desktopExecutablePath: host.running.source === "payload" ? host.running.executablePath : null,
+      electronNodeCommand: null, installedLaunchPath: host.installedAppPath,
+      payloadDesktopProcess: host.running.source === "payload",
+      selection: host.selection == null ? { selected: false, reason: "no-runtime-target" } : { ...host.selection, selected: true },
+      source: host.running.source === "payload" ? "payload" : "current-package",
+      targetVersion: host.running.source === "payload" ? host.running.version : null,
+    };
+  }
   const channel = inferLauncherChannel(config);
   const launcherPaths = resolveLauncherPaths({
     channel,
@@ -475,14 +517,11 @@ export async function resolvePackagedLauncherRuntime(
     descriptor.active.generation === handoff.target.generation &&
     attempted?.version === handoff.target.version &&
     attempted.generation === handoff.target.generation &&
-    sameExecutablePath(currentExecutablePath, handoff.payloadExecutablePath)
+    await sameExecutablePath(currentExecutablePath, handoff.payloadExecutablePath)
     ? handoff.target
     : null;
   const selection = selectLauncherRuntimeTarget({
-    attempted,
-    delegated: options.delegated ?? null,
-    resume: requestedResume,
-    runtime: descriptor,
+    attempted, delegated: options.delegated ?? null, resume: requestedResume, runtime: descriptor,
   });
   const persistedInstall = await readLauncherInstallDescriptor(launcherPaths, channel, config.namespace).catch(() => null);
   // Track the stable launch path of the CURRENT launcher executable (the
@@ -500,16 +539,16 @@ export async function resolvePackagedLauncherRuntime(
     });
     const payloadConfig = await resolvePayloadConfig(config, versionPaths, channel);
     if (payloadConfig != null) {
-      const payloadDesktopProcess = sameExecutablePath(
+      const payloadDesktopProcess = await sameExecutablePath(
         currentExecutablePath,
         payloadConfig.desktopExecutablePath,
       );
       if (
         selection.reason === "active-resume" &&
-        (handoff == null || !payloadDesktopProcess || !sameExecutablePath(
+        (handoff == null || !payloadDesktopProcess || !(await sameExecutablePath(
           handoff.payloadExecutablePath,
           payloadConfig.desktopExecutablePath,
-        ))
+        )))
       ) {
         return await resolvePackagedLauncherRuntime(config, paths, {
           currentExecutablePath,
@@ -540,7 +579,7 @@ export async function resolvePackagedLauncherRuntime(
       // must keep the stable launch path the launcher persisted.
       const installedLaunchPath = !payloadDesktopProcess
         && (persistedInstall == null
-          || !sameExecutablePath(persistedInstall.launchPath, currentPackageLaunchPath))
+          || !(await sameExecutablePath(persistedInstall.launchPath, currentPackageLaunchPath)))
         ? (await writeLauncherInstallDescriptor(
           launcherPaths,
           channel,
@@ -619,6 +658,8 @@ export async function recordPackagedLauncherRuntimeFailedAttempt(
 }
 
 export async function confirmPackagedLauncherRuntime(runtime: PackagedLauncherRuntime): Promise<void> {
+  const host = readLauncherHost();
+  if (host != null) { await host.reportReady(); return; }
   if (runtime.source !== "payload") return;
   if (!runtime.payloadDesktopProcess) return;
   if (runtime.desktopExecutablePath == null) return;

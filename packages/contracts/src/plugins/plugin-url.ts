@@ -3,8 +3,7 @@
 // Both surfaces that link to a plugin's public detail page derive their URLs
 // here so they can never drift:
 //   - the web client's plugin Share menu (`apps/web` PluginShareMenu)
-//   - the landing site's statically generated detail routes
-//     (`apps/landing-page`)
+//   - the public marketing site's statically generated detail routes
 //
 // The detail route is single-segment — `/plugins/<slug>/` — where the slug is
 // the slugified LAST segment of the plugin id. Plugin ids are globally unique

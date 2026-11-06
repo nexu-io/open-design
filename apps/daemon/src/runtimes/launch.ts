@@ -15,8 +15,9 @@ export type AgentLaunchResolution = ReturnType<typeof inspectAgentExecutableReso
 export function resolveAgentLaunch(
   def: RuntimeAgentDef,
   configuredEnv: Record<string, string> = {},
+  options: { skipPathCandidates?: readonly string[] } = {},
 ): AgentLaunchResolution {
-  const resolution = inspectAgentExecutableResolution(def, configuredEnv);
+  const resolution = inspectAgentExecutableResolution(def, configuredEnv, options);
   if (!resolution.selectedPath) {
     return { ...resolution, launchPath: null, launchKind: 'selected', childPathPrepend: [], diagnostic: null };
   }

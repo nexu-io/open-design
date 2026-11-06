@@ -1,3 +1,5 @@
+import { MAC_THIN_LAUNCHER_FILE } from "./thin-launcher.js";
+import { renderPackagedMainEntry } from "../launcher/packaged-entry.js";
 import { readFile } from "node:fs/promises";
 
 import type { ToolPackConfig } from "../config/index.js";
@@ -24,9 +26,11 @@ export const MAC_PREBUNDLE_ENTRYPOINTS_DIR_NAME = "prebundle-entrypoints";
 // (issue #4638). A stale `12.9.0` pin here vs `12.10.0` on disk did exactly
 // that. Keep every entry equal to the daemon's corresponding exact pin.
 export const MAC_PREBUNDLE_RUNTIME_DEPENDENCIES = {
+  "@ffmpeg-installer/ffmpeg": "1.1.0",
   "better-sqlite3": "12.10.0",
   "blake3-wasm": "2.1.5",
   "hyperframes": "0.8.1",
+  "gsap": "3.14.2",
   "node-pty": "1.1.0",
   "sharp": "0.35.3",
 } as const;
@@ -44,14 +48,13 @@ export const MAC_STANDALONE_PREBUNDLE_EXCLUDED_INTERNAL_PACKAGES = [
   "@open-design/desktop",
   "@open-design/launcher-proto",
   "@open-design/packaged",
-  "@open-design/sidecar",
   "@open-design/sidecar-proto",
   "@open-design/web",
 ] as const;
 
 export const MAC_PREBUNDLE_POLICIES = {
   packagedMain: {
-    externals: ["electron"],
+    externals: ["@open-design/sidecar", "electron"],
     forbiddenInputs: [
       "/apps/web/",
       "/node_modules/@open-design/web/",
@@ -63,14 +66,16 @@ export const MAC_PREBUNDLE_POLICIES = {
     label: "packaged main",
   },
   daemonCli: {
-    externals: ["better-sqlite3", "blake3-wasm", "fsevents", "hyperframes", "node-pty"],
+    externals: ["@ffmpeg-installer/ffmpeg", "@open-design/sidecar", "better-sqlite3", "blake3-wasm", "fsevents", "hyperframes", "gsap", "node-pty"],
     forbiddenInputs: [
       "/node_modules/@open-design/daemon/",
+      "/node_modules/@ffmpeg-installer/ffmpeg/",
       "/node_modules/better-sqlite3/",
       "/node_modules/blake3-wasm/",
       "/node_modules/electron/",
       "/node_modules/fsevents/",
       "/node_modules/hyperframes/",
+      "/node_modules/gsap/",
       "/node_modules/next/",
       "/node_modules/node-pty/",
       "/node_modules/openai/",
@@ -80,14 +85,16 @@ export const MAC_PREBUNDLE_POLICIES = {
     label: "daemon cli",
   },
   daemonSidecar: {
-    externals: ["better-sqlite3", "blake3-wasm", "fsevents", "hyperframes", "node-pty"],
+    externals: ["@ffmpeg-installer/ffmpeg", "@open-design/sidecar", "better-sqlite3", "blake3-wasm", "fsevents", "hyperframes", "gsap", "node-pty"],
     forbiddenInputs: [
       "/node_modules/@open-design/daemon/",
+      "/node_modules/@ffmpeg-installer/ffmpeg/",
       "/node_modules/better-sqlite3/",
       "/node_modules/blake3-wasm/",
       "/node_modules/electron/",
       "/node_modules/fsevents/",
       "/node_modules/hyperframes/",
+      "/node_modules/gsap/",
       "/node_modules/next/",
       "/node_modules/node-pty/",
       "/node_modules/openai/",
@@ -97,7 +104,7 @@ export const MAC_PREBUNDLE_POLICIES = {
     label: "daemon sidecar",
   },
   webSidecar: {
-    externals: [],
+    externals: ["@open-design/sidecar"],
     forbiddenInputs: [
       "/node_modules/next/",
       "/node_modules/openai/",
@@ -153,7 +160,14 @@ export async function assertMacPrebundleMetafile(options: {
 }
 
 export function renderMacPackagedMainEntry(usePrebundle: boolean): string {
-  return usePrebundle
-    ? 'import("./prebundled/packaged-main.mjs").catch((error) => {\n  console.error("packaged entry failed", error);\n  process.exit(1);\n});\n'
-    : 'import("@open-design/packaged").catch((error) => {\n  console.error("packaged entry failed", error);\n  process.exit(1);\n});\n';
+  const bundledEntry = usePrebundle ? "./prebundled/packaged-main.mjs" : "@open-design/packaged";
+  const select = `Promise.resolve().then(() => {
+    if (!process.versions.electron || process.env.ELECTRON_RUN_AS_NODE === "1") return { entry: ${JSON.stringify(bundledEntry)} };
+    return require("./${MAC_THIN_LAUNCHER_FILE}").selectAppEntry({
+    app: require("electron").app, appRoot: __dirname, bundledEntry: ${JSON.stringify(bundledEntry)}
+    });
+  }).then(selected => selected == null ? undefined : import(selected.entry))`;
+  // Keep the dependency-free recovery handler; never fall back after acquiring
+  // the hosted lock or mutating its journal.
+  return renderPackagedMainEntry(usePrebundle).replace(`import(${JSON.stringify(bundledEntry)})`, select);
 }

@@ -1,6 +1,9 @@
 import http from 'node:http';
+import path from 'node:path';
+import { stat, writeFile } from 'node:fs/promises';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import {
   closeDatabase,
   ensureWorkspaceProject,
@@ -8,14 +11,21 @@ import {
   openDatabase,
 } from '../../src/db.js';
 import { insertMediaTask, listMediaTasksByProject } from '../../src/media/tasks.js';
+import { ensureProject, renameProjectFile } from '../../src/projects.js';
 import { startServer } from '../../src/server.js';
+import { resolveMediaTaskProjectFile } from '../../src/routes/media.js';
 import { toolTokenRegistry } from '../../src/tool-tokens.js';
+import * as runsModule from '../../src/runtimes/runs.js';
+import * as workspaceDirectoryModule from '../../src/collab/vela-workspace-context.js';
 
 describe('media task route recovery', () => {
   let server: http.Server | null = null;
   let authorityServer: http.Server | null = null;
+  let discardRun: (() => void) | null = null;
 
   afterEach(async () => {
+    discardRun?.();
+    discardRun = null;
     if (server) {
       await new Promise<void>((resolve) => server?.close(() => resolve()));
       server = null;
@@ -25,8 +35,125 @@ describe('media task route recovery', () => {
       authorityServer = null;
     }
     vi.unstubAllEnvs();
+    vi.restoreAllMocks();
     toolTokenRegistry.clear();
     closeDatabase();
+  });
+
+  it('lists image tasks with persisted run ownership for ChatPanel progress', async () => {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required by the daemon test harness');
+    const db = openDatabase(process.cwd(), dataDir === undefined ? {} : { dataDir });
+    const projectId = `project_${randomUUID()}`;
+    const runId = `run_${randomUUID()}`;
+    const now = Date.now();
+    insertProject(db, {
+      id: projectId,
+      name: 'ChatPanel media project',
+      createdAt: now,
+      updatedAt: now,
+    });
+    const projectDir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+    await writeFile(path.join(projectDir, 'generated.png'), Buffer.from('png'));
+    insertMediaTask(db, {
+      id: `task_${randomUUID()}`,
+      projectId,
+      runId,
+      status: 'done',
+      surface: 'image',
+      progress: ['done'],
+      file: { name: 'generated.png', size: 3, kind: 'image', mime: 'image/png' },
+      startedAt: now - 500,
+      endedAt: now,
+    });
+
+    const started = await startServer({ port: 0, returnServer: true }) as {
+      url: string;
+      server: http.Server;
+    };
+    server = started.server;
+    const response = await fetch(
+      `${started.url}/api/projects/${encodeURIComponent(projectId)}/media/tasks?includeDone=1`,
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      tasks: [{ runId, status: 'done', surface: 'image', file: { name: 'generated.png' } }],
+    });
+  });
+
+  it('fails closed when generation metadata matches more than one moved file', () => {
+    expect(resolveMediaTaskProjectFile(
+      { name: 'missing.png', size: 3, mtime: 1234 },
+      [
+        { name: 'a.png', size: 3, mtime: 1234, kind: 'image', mime: 'image/png' },
+        { name: 'b.png', size: 3, mtime: 1234, kind: 'image', mime: 'image/png' },
+      ],
+    )).toBeNull();
+  });
+
+  it('reconciles a completed media task to the uniquely renamed project file', async () => {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required by the daemon test harness');
+    const db = openDatabase(process.cwd(), { dataDir });
+    const projectId = `project_${randomUUID()}`;
+    const taskId = `task_${randomUUID()}`;
+    const now = Date.now();
+    insertProject(db, {
+      id: projectId,
+      name: 'Renamed media project',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const projectsRoot = path.join(dataDir, 'projects');
+    const projectDir = await ensureProject(projectsRoot, projectId);
+    const originalName = 'generated.png';
+    const originalPath = path.join(projectDir, originalName);
+    await writeFile(originalPath, Buffer.from('generated-image-bytes'));
+    const originalStat = await stat(originalPath);
+    insertMediaTask(db, {
+      id: taskId,
+      projectId,
+      runId: `run_${randomUUID()}`,
+      status: 'done',
+      surface: 'image',
+      progress: ['done'],
+      file: {
+        name: originalName,
+        size: originalStat.size,
+        mtime: originalStat.mtimeMs,
+        kind: 'image',
+        mime: 'image/png',
+      },
+      startedAt: now - 500,
+      endedAt: now,
+    });
+    await renameProjectFile(
+      projectsRoot,
+      projectId,
+      originalName,
+      'final/generated-renamed.png',
+    );
+
+    const started = await startServer({ port: 0, returnServer: true }) as {
+      url: string;
+      server: http.Server;
+    };
+    server = started.server;
+
+    const response = await fetch(
+      `${started.url}/api/projects/${encodeURIComponent(projectId)}/media/tasks?includeDone=1`,
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      tasks: [{
+        taskId,
+        status: 'done',
+        file: { name: 'final/generated-renamed.png' },
+      }],
+    });
+    expect(listMediaTasksByProject(db, projectId, { includeTerminal: true })[0]?.file)
+      .toMatchObject({ name: 'final/generated-renamed.png' });
   });
 
   it('accepts only a same-project token explicitly allowed to poll media tasks', async () => {
@@ -34,7 +161,6 @@ describe('media task route recovery', () => {
     const db = openDatabase(process.cwd(), dataDir === undefined ? {} : { dataDir });
     const projectId = `project_${randomUUID()}`;
     const taskId = `task_${randomUUID()}`;
-    const runId = `run_${randomUUID()}`;
     const now = Date.now();
 
     insertProject(db, {
@@ -61,19 +187,24 @@ describe('media task route recovery', () => {
       endedAt: now,
       updatedAt: now,
     });
+    // A token for a bound project must name a real Run owned by that project.
+    // Capture the real service instead of replacing the project authorizer.
+    const runsFactory = vi.spyOn(runsModule, 'createChatRunService');
+    const started = await startServer({ port: 0, returnServer: true }) as {
+      url: string;
+      server: http.Server;
+    };
+    server = started.server;
+    const runs = runsFactory.mock.results[0]!.value as ReturnType<typeof runsModule.createChatRunService>;
+    const run = runs.create({ projectId });
+    discardRun = () => runs.drop(run);
+    const runId = run.id;
     const token = toolTokenRegistry.mint({
       projectId,
       runId,
       allowedEndpoints: ['/api/media/tasks/:id/wait'],
       allowedOperations: ['media:generate'],
     }).token;
-
-    const started = await startServer({ port: 0, returnServer: true }) as {
-      url: string;
-      server: http.Server;
-    };
-    server = started.server;
-
     const response = await fetch(
       `${started.url}/api/media/tasks/${encodeURIComponent(taskId)}/wait`,
       {
@@ -134,6 +265,20 @@ describe('media task route recovery', () => {
     expect(crossProject.status).toBe(403);
     await expect(crossProject.json()).resolves.toMatchObject({
       error: { code: 'FORBIDDEN' },
+    });
+    // A leftover grant cannot keep a discarded Run's project authority alive.
+    runs.drop(run);
+    const discarded = await fetch(
+      `${started.url}/api/media/tasks/${encodeURIComponent(taskId)}/wait`,
+      {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ since: 0, timeoutMs: 0 }),
+      },
+    );
+    expect(discarded.status).toBe(403);
+    await expect(discarded.json()).resolves.toMatchObject({
+      error: { code: 'WORKSPACE_PROJECT_PERMISSION_DENIED' },
     });
   });
 
@@ -200,7 +345,7 @@ describe('media task route recovery', () => {
     }
   });
 
-  it('uses the tool grant and persisted project binding without querying Workspace authority', async () => {
+  it('rejects a bound-project token without a real Run before consulting Workspace authority', async () => {
     const dataDir = process.env.OD_DATA_DIR;
     const db = openDatabase(process.cwd(), dataDir === undefined ? {} : { dataDir });
     const projectId = `project_${randomUUID()}`;
@@ -258,13 +403,39 @@ describe('media task route recovery', () => {
     vi.stubEnv('VELA_CONTROL_KEY', 'test-control-key');
     vi.stubEnv('VELA_API_URL', `http://127.0.0.1:${authorityAddress.port}`);
 
+    // Attribute reads to the actual wait request, rather than counting unrelated
+    // startup/background refreshes while those requests are in flight.
+    const waitRequestScope = new AsyncLocalStorage<boolean>();
+    let waitAuthorityReads = 0;
+    let waitRequests = 0;
+    const createBroker = workspaceDirectoryModule.createWorkspaceDirectoryAuthorityBroker;
+    vi.spyOn(workspaceDirectoryModule, 'createWorkspaceDirectoryAuthorityBroker')
+      .mockImplementation((options) => {
+        const broker = createBroker(options);
+        for (const method of ['read', 'fresh', 'backgroundFresh'] as const) {
+          const read = broker[method];
+          broker[method] = () => {
+            if (waitRequestScope.getStore()) waitAuthorityReads += 1;
+            return read();
+          };
+        }
+        return broker;
+      });
     const started = await startServer({ port: 0, returnServer: true }) as {
       url: string;
       server: http.Server;
     };
     server = started.server;
+    const requestListeners = server.listeners('request') as http.RequestListener[];
+    expect(requestListeners).toHaveLength(1);
+    const requestListener = requestListeners[0]!;
+    server.removeListener('request', requestListener);
+    server.on('request', (req, res) => {
+      const isWait = req.method === 'POST' && req.url === '/api/media/tasks/missing-task/wait';
+      if (isWait) waitRequests += 1;
+      waitRequestScope.run(isWait, () => requestListener(req, res));
+    });
     await vi.waitFor(() => expect(authorityRequests).toBeGreaterThanOrEqual(1));
-    const startupAuthorityRequests = authorityRequests;
     const waitForMissingTask = () => fetch(
       `${started.url}/api/media/tasks/missing-task/wait`,
       {
@@ -278,16 +449,87 @@ describe('media task route recovery', () => {
     );
 
     const removed = await waitForMissingTask();
-    expect(removed.status).toBe(404);
+    expect(removed.status).toBe(403);
+    await expect(removed.json()).resolves.toMatchObject({
+      error: { code: 'WORKSPACE_PROJECT_PERMISSION_DENIED' },
+    });
 
     authorityMode = 'outage';
     const unavailable = await waitForMissingTask();
-    expect(unavailable.status).toBe(404);
+    expect(unavailable.status).toBe(403);
+    await expect(unavailable.json()).resolves.toMatchObject({
+      error: { code: 'WORKSPACE_PROJECT_PERMISSION_DENIED' },
+    });
 
     authorityMode = 'active';
     const authorized = await waitForMissingTask();
-    expect(authorized.status).toBe(404);
-    expect(authorityRequests).toBe(startupAuthorityRequests);
+    expect(authorized.status).toBe(403);
+    await expect(authorized.json()).resolves.toMatchObject({
+      error: { code: 'WORKSPACE_PROJECT_PERMISSION_DENIED' },
+    });
+    expect(waitRequests).toBe(3);
+    expect(waitAuthorityReads).toBe(0);
+  });
+
+  it.each([
+    ['treats a forwarded foreign Basic credential as a proxy-authenticated browser request',
+     `Basic ${Buffer.from('proxy-user:proxy-pass').toString('base64')}`, 200],
+    ['still routes foreign Bearer credentials to the run-scoped tool-token lane',
+     'Bearer forged-tool-token', 401],
+    ['fails closed on a malformed Bearer credential with no token',
+     'Bearer ', 401],
+    ['fails closed on a bare Bearer scheme',
+     'Bearer', 401],
+  ] as const)('%s', async (_label, authorization, expected) => {
+    // Given: a running task that a header-free browser request can already read.
+    const dataDir = process.env.OD_DATA_DIR;
+    const db = openDatabase(process.cwd(), dataDir === undefined ? {} : { dataDir });
+    const projectId = `project_${randomUUID()}`;
+    const taskId = `task_${randomUUID()}`;
+    const now = Date.now() - 5_000;
+
+    insertProject(db, {
+      id: projectId,
+      name: 'Proxy-authenticated media project',
+      createdAt: now,
+      updatedAt: now,
+    });
+    insertMediaTask(db, {
+      id: taskId,
+      projectId,
+      status: 'running',
+      surface: 'video',
+      model: 'seedance-2',
+      progress: ['provider task accepted'],
+      startedAt: now,
+      updatedAt: now,
+    });
+
+    const started = await startServer({ port: 0, returnServer: true }) as {
+      url: string;
+      server: http.Server;
+    };
+    server = started.server;
+
+    // When: the credential reaches the dual-lane wait route.
+    const response = await fetch(`${started.url}/api/media/tasks/${encodeURIComponent(taskId)}/wait`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization },
+      body: JSON.stringify({ since: 0, timeoutMs: 0 }),
+    });
+    const body = await response.text();
+
+    // Then: only Bearer claims the tool-token lane. A proxy's Basic header
+    // stays on project authorization like a header-free browser request,
+    // while a foreign Bearer token still fails closed in the registry.
+    expect(response.status, body).toBe(expected);
+    if (expected === 401) {
+      // A forged token is INVALID; a Bearer scheme carrying no token at all is
+      // MISSING. Both must stay on the tool-token lane and fail closed rather
+      // than downgrading to browser project authority.
+      const code = (JSON.parse(body) as { error?: { code?: string } }).error?.code;
+      expect(code).toMatch(/^TOOL_TOKEN_(INVALID|MISSING)$/);
+    }
   });
 
   it('recovers a pre-restart running task so wait returns interrupted instead of 404', async () => {

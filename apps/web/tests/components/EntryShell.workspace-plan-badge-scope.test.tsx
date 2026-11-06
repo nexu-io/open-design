@@ -3,7 +3,7 @@
 // Switching workspaces must move the PLAN nameplate, not just the money.
 //
 // Reported shape: a workspace Vela Web shows as 免费 (订阅状态:免费, 升级团队套餐
-// CTA, US$0.00) rendered as 专业版 Plus in the client's account menu — while the
+// CTA, $0.00) rendered as 专业版 Plus in the client's account menu — while the
 // 额度 row in that same card correctly read $0.00. "为啥额度是对的?" is the whole
 // diagnosis: money and plan travel different paths, and only money is partitioned
 // by workspace.
@@ -170,9 +170,9 @@ function config(): AppConfig {
 }
 
 /**
- * Scope queries to the open account menu's billing card. A pure read — the
- * menu is opened once, by hand, and `useDismissOnOutsideInteraction` only
- * closes it on a pointerdown outside or Escape, so it survives the switch.
+ * Scope queries to the billing card hanging under the top-right credits pill.
+ * A pure read — the panel is opened once, by hand (a pointer-enter on the
+ * pill), and only a pointer-leave closes it, so it survives the switch.
  */
 function billingCard() {
   const el = document.querySelector('.entry-nav-rail__menu-credits');
@@ -193,10 +193,11 @@ const BADGE_VIEWBOX_WIDTH: Record<string, string> = {
 };
 
 // 320a36ac1 moved the account module into the floating top-right cluster and
-// made its trigger avatar-only — the nameplate (label + badge) now lives in
-// the hover menu's billing card, which the harness already opens and scopes
-// through `billingCard()`. Read the badge from there; the trigger no longer
-// renders one.
+// made its trigger avatar-only; the account then moved to the foot of the rail
+// and the billing card to the hover panel under the credits pill — the
+// nameplate (label + badge) lives there now, which the harness already opens
+// and scopes through `billingCard()`. Read the badge from there; the trigger
+// never renders one.
 function accountRowBadgeViewBox(): string | null {
   const badge = document
     .querySelector('.entry-nav-rail__menu-credits-plan')
@@ -204,10 +205,10 @@ function accountRowBadgeViewBox(): string | null {
   return badge?.getAttribute('viewBox') ?? null;
 }
 
-/** A: a team workspace that really holds a Team Plus subscription. */
+/** A: a Team Pro workspace under an account with a personal Plus plan. */
 const PAID_TEAM = teamContext('workspace-paid', {
   billingState: 'active',
-  planId: 'team_plus',
+  planId: 'team_pro',
 });
 /**
  * B: the reported workspace — brand new, nothing paid for. B reports an
@@ -253,7 +254,7 @@ async function mountHomeShell(initial: WorkspaceCollabContext): Promise<Harness>
       billingReads.push(workspaceId);
       if (workspaceId === PAID_TEAM.workspaceId) {
         return jsonResponse(
-          billingResponse(workspaceId, { billingState: 'active', planId: 'team_plus' }, '12.34'),
+          billingResponse(workspaceId, { billingState: 'active', planId: 'team_pro' }, '12.34'),
         );
       }
       if (workspaceId === FREE_TEAM.workspaceId) {
@@ -294,6 +295,8 @@ async function mountHomeShell(initial: WorkspaceCollabContext): Promise<Harness>
         onConfigPersist={vi.fn()}
         onRefreshAgents={vi.fn(() => [agent()])}
         onCreateProject={vi.fn(async () => true)}
+        onBeginProjectCreation={() => ({ projectId: 'optimistic-project', rollback: () => undefined })}
+        onAmrBalanceGateBlockChange={() => undefined}
         onCreatePluginShareProject={vi.fn()}
         onImportClaudeDesign={vi.fn()}
         onOpenProject={vi.fn()}
@@ -310,7 +313,7 @@ async function mountHomeShell(initial: WorkspaceCollabContext): Promise<Harness>
 
   await waitFor(() => expect(contextReads).toBeGreaterThan(0));
   await waitFor(() => expect(billingReads).toContain(initial.workspaceId));
-  fireEvent.click(await screen.findByTestId('entry-nav-account'));
+  fireEvent.pointerEnter(await screen.findByTestId('entry-top-right-credits'));
   await waitFor(() => expect(billingCard()).toBeTruthy());
 
   return {
@@ -348,20 +351,15 @@ describe('account menu plan nameplate follows the selected workspace', () => {
     vi.restoreAllMocks();
   });
 
-  // The A side of the report: the nameplate answers a WORKSPACE question, so a
-  // personal Plus subscription must not name a team workspace's plan. The label
-  // names the plan FAMILY (团队版) and, per the later product ruling, so does the
-  // badge — a team subscription draws the `team` wordmark at every tier. The
-  // account here pays for a personal PLUS, so the PLUS wordmark is exactly the
-  // regression this asserts against.
+  // The nameplate answers a WORKSPACE question. The team Pro tier must win
+  // over the account's personal Plus tier.
   it('names the workspace subscription, not the account subscription', async () => {
     const home = await mountHomeShell(PAID_TEAM);
 
     await waitFor(() => expect(home.card().getByText('$12.34')).toBeTruthy());
     const card = home.card();
-    expect(card.queryByText('专业版')).toBeNull();
-    expect(card.getByText('团队版')).toBeTruthy();
-    expect(accountRowBadgeViewBox()).toBe(BADGE_VIEWBOX_WIDTH.team);
+    expect(card.getByRole('img', { name: 'pro' })).toBeTruthy();
+    expect(accountRowBadgeViewBox()).toBe(BADGE_VIEWBOX_WIDTH.pro);
   });
 
   // The B side: the exact reported sequence. Switching away from a paid
@@ -376,19 +374,11 @@ describe('account menu plan nameplate follows the selected workspace', () => {
     // saw working ("但是额度是对的").
     await waitFor(() => expect(home.card().getByText('$0.00')).toBeTruthy());
 
-    // The plan half must follow it too. Before the fix this still read
-    // 专业版 + the PLUS wordmark, because it came from the account summary
-    // that cannot change when the workspace does.
-    //
-    // The LABEL is what carries the switch: it is a subscription question, and
-    // this workspace has no subscription (免费). The badge names the plan FAMILY,
-    // which both workspaces share, so it stays on `team` across the switch —
-    // still a live guard on this bug, since the account's own tier is a personal
-    // PLUS and reverting the projection would put that wordmark back here.
+    // The badge must change with the workspace, instead of retaining the
+    // account's Plus tier.
     const card = home.card();
-    expect(card.queryByText('专业版')).toBeNull();
-    expect(card.queryByText('团队版')).toBeNull();
-    expect(card.getByText('免费')).toBeTruthy();
-    expect(accountRowBadgeViewBox()).toBe(BADGE_VIEWBOX_WIDTH.team);
+    expect(card.getByRole('img', { name: 'free' })).toBeTruthy();
+    expect(card.getByText('未订阅')).toBeTruthy();
+    expect(accountRowBadgeViewBox()).toBe(BADGE_VIEWBOX_WIDTH.free);
   });
 });

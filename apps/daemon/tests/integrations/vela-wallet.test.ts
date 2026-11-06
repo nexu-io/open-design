@@ -4,6 +4,11 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  clearVelaAuthorizationState,
+  readVelaControlApiContext,
+  readVelaLoginStatus,
+} from '../../src/integrations/vela.js';
 import { createVelaWalletSnapshotReader } from '../../src/integrations/vela-wallet.js';
 
 let originalHome: string | undefined;
@@ -48,9 +53,29 @@ afterEach(() => {
   if (originalProfile === undefined) delete process.env.OPEN_DESIGN_AMR_PROFILE;
   else process.env.OPEN_DESIGN_AMR_PROFILE = originalProfile;
   rmSync(testHome, { recursive: true, force: true });
+  clearVelaAuthorizationState();
 });
 
 describe('createVelaWalletSnapshotReader balance validation', () => {
+  it('reads only the authenticated Vela wallet balance', async () => {
+    const fetchMock = vi.fn(async () => {
+      return new Response(JSON.stringify({
+        balanceUsd: '0.00',
+        updatedAt: '2026-08-23T00:00:00.000Z',
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    const reader = createVelaWalletSnapshotReader({ fetch: fetchMock as typeof fetch });
+
+    await expect(reader.read()).resolves.toMatchObject({
+      status: 'available',
+      balanceUsd: '0.00',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     { label: 'missing', balanceUsd: undefined },
     { label: 'numeric', balanceUsd: 20 },
@@ -104,5 +129,27 @@ describe('createVelaWalletSnapshotReader balance validation', () => {
       stale: true,
       error: { code: 'upstream' },
     });
+  });
+});
+
+describe('createVelaWalletSnapshotReader billing decoupling (OPEND-3553)', () => {
+  it.each([
+    { status: 401, body: { error: 'unauthenticated' } },
+    { status: 403, body: { error: 'workspace_billing_scope_forbidden' } },
+  ])('a wallet $status only makes the balance unavailable and never expires the session', async ({ status, body }) => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    const reader = createVelaWalletSnapshotReader({ fetch: fetchMock as typeof fetch });
+
+    const snapshot = await reader.read({ refresh: true });
+
+    expect(snapshot).toMatchObject({ status: 'unavailable', balanceUsd: null });
+    expect(readVelaControlApiContext(process.env)).not.toBeNull();
+    expect(readVelaLoginStatus(process.env).sessionState).toBe('authenticated');
+    expect(snapshot.error?.message ?? '').not.toMatch(/sign in/i);
   });
 });

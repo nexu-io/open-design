@@ -1,14 +1,116 @@
+import { createHash } from 'node:crypto';
+
 import { describe, expect, it } from 'vitest';
 
 import {
+  PROMPT_STACK_REDACTION_VERSION,
   PROMPT_STACK_PATH_MARKER,
   buildPromptStackFlatMetadata,
+  buildSafeChildPromptTelemetry,
   buildPromptStackTelemetry,
+  bindOdNextExactSendPromptEvidence,
   promptStackWithoutContent,
   redactLocalPaths,
 } from '../src/prompt-telemetry.js';
 
 describe('prompt telemetry builder', () => {
+  it('binds the raw OD Next inner text identity while keeping its safe body bounded and redacted', () => {
+    const finalText = [
+      '<open_design_prompt_bundle schema="open-design.od-next-prompt-bundle/v2">',
+      'Inspect /Users/alice/private/design.ts with sk-test-1234567890123456789012.',
+      'x'.repeat(80 * 1024),
+      '</open_design_prompt_bundle>',
+    ].join('\n');
+    const sha256 = createHash('sha256').update(finalText, 'utf8').digest('hex');
+    const telemetry = bindOdNextExactSendPromptEvidence({
+      telemetry: buildPromptStackTelemetry({
+        composedPrompt: finalText,
+        sections: [{ kind: 'odNextExactFinalText', content: finalText }],
+      }),
+      finalText,
+      persisted: {
+        kind: 'bundle',
+        schema: 'open-design.od-next-prompt-bundle/v2',
+        text: finalText,
+        utf8Bytes: Buffer.byteLength(finalText, 'utf8'),
+        sha256,
+      },
+      stage: 'request',
+    });
+
+    expect(telemetry.odNextExactSend).toEqual({
+      schema: 'open-design.od-next-exact-send-prompt/v1',
+      boundary: 'hostComposed',
+      kind: 'bundle',
+      promptSchema: 'open-design.od-next-prompt-bundle/v2',
+      stage: 'request',
+      sha256,
+      utf8Bytes: Buffer.byteLength(finalText, 'utf8'),
+    });
+    const section = telemetry.sections[0]!;
+    expect(Buffer.byteLength(section.redactedContent ?? '', 'utf8')).toBe(64 * 1024);
+    expect(section.truncated).toBe(true);
+    expect(section.redactedContent).toContain(PROMPT_STACK_PATH_MARKER);
+    expect(section.redactedContent).toContain('[REDACTED:sk_key]');
+    expect(section.redactedContent).not.toContain('/Users/alice');
+    expect(section.redactedContent).not.toContain('sk-test-');
+  });
+
+  it('rejects raw OD Next text drift before a runtime wrapper can be applied', () => {
+    const finalText = '<open_design_request_turn>repair</open_design_request_turn>';
+    const persistedText = `${finalText}\n`;
+    expect(() => bindOdNextExactSendPromptEvidence({
+      telemetry: buildPromptStackTelemetry({
+        composedPrompt: finalText,
+        sections: [{ kind: 'odNextExactFinalText', content: finalText }],
+      }),
+      finalText,
+      persisted: {
+        kind: 'turn',
+        schema: 'open-design.od-next-request-turn/v1',
+        text: persistedText,
+        utf8Bytes: Buffer.byteLength(persistedText, 'utf8'),
+        sha256: createHash('sha256').update(persistedText, 'utf8').digest('hex'),
+      },
+      stage: 'contract_repair',
+    })).toThrow(/does not match its persisted SHA-256/u);
+  });
+
+  it('builds bounded child-injected Prompt telemetry with the shared secret and path redaction', () => {
+    const telemetry = buildSafeChildPromptTelemetry([
+      'Inspect /Users/alice/private/design.ts with sk-test-1234567890123456789012.',
+      'Return only the structural result.',
+    ]);
+
+    expect(telemetry.hash).toMatch(/^sha256:/u);
+    expect(telemetry.bytes).toBeGreaterThan(0);
+    expect(telemetry.safePayload).toMatchObject({
+      type: 'open-design.child-injected-prompt',
+      redactionVersion: PROMPT_STACK_REDACTION_VERSION,
+      messageCount: 2,
+    });
+    const serialized = JSON.stringify(telemetry.safePayload);
+    expect(serialized).toContain('Inspect');
+    expect(serialized).toContain(PROMPT_STACK_PATH_MARKER);
+    expect(serialized).toContain('[REDACTED:sk_key]');
+    expect(serialized).not.toContain('/Users/alice');
+    expect(serialized).not.toContain('sk-test-');
+  });
+
+  it('caps each Child Prompt segment and the aggregate redacted body', () => {
+    const telemetry = buildSafeChildPromptTelemetry(Array.from(
+      { length: 20 },
+      (_, index) => `${index}:${'x'.repeat(24 * 1024)}`,
+    ));
+
+    expect(telemetry.truncated).toBe(true);
+    expect(telemetry.safePayload.truncated).toBe(true);
+    expect(telemetry.safePayload.redactedContentBytes).toBeLessThanOrEqual(64 * 1024);
+    expect(telemetry.safePayload.capturedMessageCount).toBe(16);
+    expect(telemetry.safePayload.messages.every((message) => (
+      Buffer.byteLength(message.redactedContent, 'utf8') <= 16 * 1024
+    ))).toBe(true);
+  });
   it('redacts local paths and secrets before hashing or content capture', () => {
     const telemetry = buildPromptStackTelemetry({
       composedPrompt:

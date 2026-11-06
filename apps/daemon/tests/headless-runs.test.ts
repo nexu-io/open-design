@@ -1,9 +1,10 @@
+import type { ChatRunCreateResponse, ProjectResponse, UserSubmissionReceipt } from '@open-design/contracts';
 import type http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { startServer } from '../src/server.js';
 
@@ -19,6 +20,7 @@ describe('POST /api/runs headless fallbacks', () => {
   const oldAgentHome = process.env.OD_AGENT_HOME;
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await Promise.resolve(started?.shutdown?.());
     if (started?.server) {
       await new Promise<void>((resolve) => started?.server.close(() => resolve()));
@@ -98,7 +100,13 @@ describe('POST /api/runs headless fallbacks', () => {
 
     const runsResponse = await fetch(`${started.url}/api/runs`);
     expect(runsResponse.status).toBe(200);
-    await expect(runsResponse.json()).resolves.toEqual({ runs: [] });
+    // The awaiting-input set rides along with every list (see
+    // runs-list-awaiting-input.test.ts); with no runs it is simply empty.
+    await expect(runsResponse.json()).resolves.toEqual({
+      runs: [],
+      awaitingInputProjectIds: [],
+      awaitingInputConversationIds: [],
+    });
   });
 
   it('binds omitted conversationId to the seeded project conversation', async () => {
@@ -290,6 +298,81 @@ describe('POST /api/runs headless fallbacks', () => {
     expect(userMessages.some((m) => m.content === transcript)).toBe(false);
   });
 
+  // OPEND-2980: normal web requests carry both pins, while the optimistic
+  // PUT and daemon user seed can arrive in either order. Exercise the actual
+  // multipart upload response and reload the same user row after each write.
+  for (const clientWrite of ['before-seed', 'after-seed'] as const) {
+    for (const prompt of ['Inspect this diagnostic archive', '']) {
+      it(`retains uploaded ZIP size with UI pins, ${clientWrite}, ${prompt ? 'text' : 'attachments-only'}`, async () => {
+        started = await startTestServer();
+        const { projectId, conversationId } = await createProject(started.url, 'UI upload size');
+        const bytes = Buffer.from('UEsDBBQAAAAAAJOuK13X0oKVGAAAABgAAAAOAAAAZGlhZ25vc3RpYy50eHRhdHRhY2htZW50IHNpemUgZml4dHVyZQpQSwECFAMUAAAAAACTritd19KClRgAAAAYAAAADgAAAAAAAAAAAAAAgAEAAAAAZGlhZ25vc3RpYy50eHRQSwUGAAAAAAEAAQA8AAAARAAAAAAA', 'base64');
+        const upload = new FormData();
+        upload.append('files', new File([bytes], 'diagnostics.zip', { type: 'application/zip' }));
+        const uploadResponse = await fetch(`${started.url}/api/projects/${encodeURIComponent(projectId)}/upload`, {
+          method: 'POST',
+          body: upload,
+        });
+        expect(uploadResponse.status).toBe(200);
+        const uploaded = await uploadResponse.json() as {
+          files: Array<{ path: string; name: string; originalName: string; size: number }>;
+        };
+        expect(uploaded.files).toHaveLength(1);
+        expect(uploaded.files[0]).toMatchObject({
+          path: 'diagnostics.zip', originalName: 'diagnostics.zip', size: bytes.length,
+        });
+        const attachment = {
+          path: uploaded.files[0]!.path,
+          name: uploaded.files[0]!.originalName,
+          kind: 'file' as const,
+          size: uploaded.files[0]!.size,
+        };
+        const userMessageId = randomUUID();
+        const assistantMessageId = randomUUID();
+        const messagesUrl = `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`;
+        const assertReload = async () => {
+          const response = await fetch(messagesUrl);
+          expect(response.status).toBe(200);
+          const body = await response.json() as {
+            messages: Array<{ id: string; role: string; content: string; attachments?: Array<{ path: string; size?: number }> }>;
+          };
+          const rows = body.messages.filter((message) => message.id === userMessageId);
+          expect(rows).toHaveLength(1);
+          expect(rows[0]).toMatchObject({ role: 'user', content: prompt, attachments: [attachment] });
+        };
+        const saveClientMessage = async () => {
+          const response = await fetch(`${messagesUrl}/${encodeURIComponent(userMessageId)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: userMessageId, role: 'user', content: prompt, attachments: [attachment],
+            }),
+          });
+          expect(response.status).toBe(200);
+          await assertReload();
+        };
+        if (clientWrite === 'before-seed') await saveClientMessage();
+        const runResponse = await fetch(`${started.url}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            // No provider budget: missing runtime fails after the real run
+            // admission/pinning path. This is metadata persistence coverage,
+            // not a successful agent or browser end-to-end claim.
+            agentId: `missing-agent-${randomUUID()}`,
+            projectId, conversationId, userMessageId, assistantMessageId,
+            message: prompt, currentPrompt: prompt,
+            attachments: [attachment.path],
+          }),
+        });
+        expect(runResponse.status).toBe(202);
+        // Check seed before a later client PUT can mask a lost size.
+        await assertReload();
+        if (clientWrite === 'after-seed') await saveClientMessage();
+      });
+    }
+  }
+
   it('preserves attachments and commentAttachments on omit-pin seeded user turns', async () => {
     started = await startTestServer();
     const { projectId, conversationId } = await createProject(
@@ -299,6 +382,22 @@ describe('POST /api/runs headless fallbacks', () => {
     const prompt = `omit-pin with attachments ${randomUUID()}`;
     const attachmentPath = 'assets/hero.png';
     const bmpAttachmentPath = 'assets/scan.bmp';
+    const fileContents = 'hero fixture bytes';
+    const bmpContents = 'scan fixture bytes';
+    for (const [name, content] of [
+      [attachmentPath, fileContents],
+      [bmpAttachmentPath, bmpContents],
+    ] as const) {
+      const fileResponse = await fetch(
+        `${started.url}/api/projects/${encodeURIComponent(projectId)}/files`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, content }),
+        },
+      );
+      expect(fileResponse.status).toBe(200);
+    }
     const commentAttachment = {
       id: `comment-${randomUUID()}`,
       order: 1,
@@ -336,7 +435,13 @@ describe('POST /api/runs headless fallbacks', () => {
       messages: Array<{
         role: string;
         content: string;
-        attachments?: Array<{ path: string; name: string; kind: string; order?: number }>;
+        attachments?: Array<{
+          path: string;
+          name: string;
+          kind: string;
+          size?: number;
+          order?: number;
+        }>;
         commentAttachments?: Array<{
           id: string;
           filePath: string;
@@ -356,12 +461,14 @@ describe('POST /api/runs headless fallbacks', () => {
         path: attachmentPath,
         name: 'hero.png',
         kind: 'image',
+        size: Buffer.byteLength(fileContents),
         order: 0,
       },
       {
         path: bmpAttachmentPath,
         name: 'scan.bmp',
         kind: 'image',
+        size: Buffer.byteLength(bmpContents),
         order: 1,
       },
     ]);
@@ -425,7 +532,7 @@ describe('POST /api/runs headless fallbacks', () => {
     expect(user?.runContext).toEqual(runContext);
   });
 
-  it('bumps project updatedAt after omit-pin user message seed', async () => {
+  it.each([undefined, 'api-client-user-id'])('records project recency for a seeded user turn with ID %s', async (userMessageId) => {
     started = await startTestServer();
     const older = await createProject(started.url, 'Older project for activity order');
     await delay(5);
@@ -441,6 +548,9 @@ describe('POST /api/runs headless fallbacks', () => {
     expect(beforeIds.indexOf(newer.projectId)).toBeLessThan(beforeIds.indexOf(older.projectId));
 
     await delay(5);
+    let clock = Date.now();
+    vi.spyOn(Date, 'now').mockImplementation(() => ++clock);
+    const prompt = `activity bump seed ${randomUUID()}`;
     const runResponse = await fetch(`${started.url}/api/runs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -448,7 +558,8 @@ describe('POST /api/runs headless fallbacks', () => {
         agentId: `missing-agent-${randomUUID()}`,
         projectId: older.projectId,
         conversationId: older.conversationId,
-        message: `activity bump seed ${randomUUID()}`,
+        message: prompt,
+        userMessageId,
       }),
     });
     expect(runResponse.status).toBe(202);
@@ -461,6 +572,99 @@ describe('POST /api/runs headless fallbacks', () => {
     const afterIds = afterBody.projects.map((p) => p.id);
     // Seeding the older project's user turn must promote it above the newer one.
     expect(afterIds.indexOf(older.projectId)).toBeLessThan(afterIds.indexOf(newer.projectId));
+    const detail = await fetch(`${started.url}/api/projects/${older.projectId}`);
+    const { project } = await detail.json() as import('@open-design/contracts').ProjectResponse;
+    expect(project.lastUserQueryAt).toEqual(expect.any(Number));
+    const messages = await fetch(`${started.url}/api/projects/${older.projectId}/conversations/${older.conversationId}/messages`);
+    const { messages: transcript } = await messages.json() as import('@open-design/contracts').MessagesResponse;
+    const user = transcript.find(message => message.role === 'user');
+    expect(user?.content).toBe(prompt);
+    if (userMessageId) expect(user?.id).toBe(userMessageId);
+    expect(user?.startedAt).toBe(project.lastUserQueryAt);
+    // Separate clock reads deliberately cross a millisecond boundary.
+    expect(user?.createdAt).toBeGreaterThan(project.lastUserQueryAt!);
+    const accepted = await runResponse.json() as import('@open-design/contracts').ChatRunCreateResponse;
+    expect(accepted.userSubmission?.acceptedAt).toBe(project.lastUserQueryAt);
+  });
+
+  it.each([false, true])('replays a submission without duplicate messages (explicit conversation: %s)', async (explicitConversation) => {
+    started = await startTestServer();
+    const { projectId, conversationId } = await createProject(started.url, 'Lost response replay');
+    const body = { agentId: `missing-${randomUUID()}`, projectId,
+      ...(explicitConversation ? { conversationId } : {}),
+      message: 'replay this accepted request', clientRequestId: randomUUID(),
+      submission: { id: randomUUID(), source: 'user' } };
+    const post = (input: object) => fetch(`${started!.url}/api/runs`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+    });
+    const first = await post(body);
+    expect(first.status).toBe(202);
+    const accepted = await first.json() as ChatRunCreateResponse;
+    const replay = await post(body);
+    expect(replay.status).toBe(202);
+    const repeated = await replay.json() as ChatRunCreateResponse;
+    expect(repeated.runId).toBe(accepted.runId);
+    expect(repeated.userSubmission).toEqual(accepted.userSubmission);
+    expect(repeated.userSubmission).toMatchObject({ projectId, conversationId, id: body.submission.id });
+    const transcript = await (await fetch(`${started.url}/api/projects/${projectId}/conversations/${conversationId}/messages`)).json() as import('@open-design/contracts').MessagesResponse;
+    expect(transcript.messages.filter(message => message.role === 'user')).toHaveLength(1);
+    expect(transcript.messages.find(message => message.role === 'user')?.content).toBe(body.message);
+    const detail = await (await fetch(`${started.url}/api/projects/${projectId}`)).json() as ProjectResponse;
+    expect(detail.project.lastUserQueryAt).toBe(accepted.userSubmission!.acceptedAt);
+    const otherConversationId = await createConversation(started.url, projectId, 'Wrong conversation');
+    expect((await post({ ...body, conversationId: otherConversationId })).status).toBe(409);
+    const other = await createProject(started.url, 'Wrong submission scope');
+    expect((await post({ ...body, projectId: other.projectId, conversationId: other.conversationId })).status).toBe(409);
+  });
+
+  it('OPEND-4047/4043 records human acceptance once and never records automatic repair', async () => {
+    started = await startTestServer();
+    const { projectId, conversationId } = await createProject(started.url, 'Submission ownership');
+    const projectTime = async () => ((await (await fetch(`${started!.url}/api/projects/${projectId}`)).json()) as
+      { project: { lastUserQueryAt: number | null } }).project.lastUserQueryAt;
+    const post = async (body: Record<string, unknown>) => fetch(`${started!.url}/api/runs`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const user = { agentId: `missing-${randomUUID()}`, projectId, conversationId,
+      userMessageId: randomUUID(), message: 'human request', clientRequestId: randomUUID(),
+      submission: { id: randomUUID(), source: 'user' } };
+    const first = await post(user);
+    expect(first.status).toBe(202);
+    const receipt = (await first.json() as { userSubmission: UserSubmissionReceipt }).userSubmission;
+    expect(receipt).toMatchObject({ id: user.submission.id, projectId, conversationId });
+    expect(await projectTime()).toBe(receipt.acceptedAt);
+    const replay = await post(user);
+    expect(replay.status).toBe(202);
+    expect((await replay.json() as ChatRunCreateResponse).userSubmission).toEqual(receipt);
+    const automatic = await post({ ...user, userMessageId: randomUUID(), clientRequestId: randomUUID(),
+      message: 'automatic repair', submission: { id: randomUUID(), source: 'system' } });
+    expect(automatic.status).toBe(202);
+    expect((await automatic.json() as ChatRunCreateResponse).userSubmission).toBeUndefined();
+    expect(await projectTime()).toBe(receipt.acceptedAt);
+  });
+
+  it('OPEND-4042 queue registration is idempotent and rejection/drain cannot invent a later send', async () => {
+    started = await startTestServer();
+    const { projectId, conversationId } = await createProject(started.url, 'Queued acceptance');
+    const body = { id: randomUUID(), conversationId, submittedAt: Date.now() - 10000 };
+    const register = () => fetch(`${started!.url}/api/projects/${projectId}/submissions`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const first = await register();
+    expect(first.status).toBe(200);
+    const receipt = (await first.json() as { userSubmission: UserSubmissionReceipt }).userSubmission;
+    expect((await (await register()).json() as { userSubmission: UserSubmissionReceipt }).userSubmission).toEqual(receipt);
+    const send = (submission: object) => fetch(`${started!.url}/api/runs`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        agentId: `missing-${randomUUID()}`, projectId, conversationId, message: 'queued request', submission,
+      }),
+    });
+    expect((await send({ id: randomUUID(), source: 'queue' })).status).toBe(409);
+    const drain = await send({ id: body.id, source: 'queue' });
+    expect(drain.status).toBe(202);
+    expect((await drain.json() as ChatRunCreateResponse).userSubmission).toEqual(receipt);
+    const project = await (await fetch(`${started.url}/api/projects/${projectId}`)).json() as ProjectResponse;
+    expect(project.project.lastUserQueryAt).toBe(body.submittedAt);
   });
 
   it('preserves empty currentPrompt for attachments-only omit-pin sends', async () => {

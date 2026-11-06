@@ -37,6 +37,9 @@ import { upsertInstalledPlugin } from '../src/plugins/registry.js';
 let server: http.Server | null = null;
 let tempDir: string | null = null;
 let createdRunCount = 0;
+let lastCreatedRun: any = null;
+let strategyTaskAtPhysicalCancel: any = null;
+let runsServiceStub: ReturnType<typeof createRunsServiceStub> | null = null;
 
 afterEach(async () => {
   if (server) {
@@ -45,6 +48,7 @@ afterEach(async () => {
     await new Promise<void>((resolve) => toClose.close(() => resolve()));
   }
   closeDatabase();
+  runsServiceStub = null;
   if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
   tempDir = null;
 });
@@ -108,6 +112,22 @@ function createRunsServiceStub() {
   const runs = new Map<string, any>();
   let seq = 0;
   const service = {
+    seed(input: Record<string, unknown>) {
+      const run: Record<string, any> = {
+        clientRequestId: null,
+        requestFingerprint: null,
+        workspaceScope: null,
+        message: null,
+        currentPrompt: null,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        events: [],
+        clients: new Set(),
+        ...input,
+      };
+      runs.set(String(run.id), run);
+      return run;
+    },
     create(meta: any) {
       createdRunCount += 1;
       const run = {
@@ -120,7 +140,17 @@ function createRunsServiceStub() {
         conversationId: typeof meta.conversationId === 'string' ? meta.conversationId : null,
         assistantMessageId: typeof meta.assistantMessageId === 'string' ? meta.assistantMessageId : null,
         agentId: typeof meta.agentId === 'string' ? meta.agentId : null,
+        message: meta.message,
+        currentPrompt: meta.currentPrompt,
+        appliedPluginSnapshotId: meta.appliedPluginSnapshotId,
+        clientRequestId: meta.clientRequestId,
+        requestFingerprint: meta.requestFingerprint,
         workspaceScope: meta.workspaceScope,
+        odNextTaskInputSnapshot: meta.odNextTaskInputSnapshot ?? null,
+        // Mirrors the real store (`runtimes/runs.ts`), which persists the
+        // rollout decision onto the run. Without it a continuation's inherited
+        // decision would be invisible to assertions here.
+        strategyRolloutDecision: meta.strategyRolloutDecision ?? null,
         status: 'queued',
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -128,9 +158,25 @@ function createRunsServiceStub() {
         clients: new Set(),
       };
       runs.set(run.id, run);
+      lastCreatedRun = run;
       return run;
     },
     createOrReuse(meta: any) {
+      const existing = typeof meta.clientRequestId === 'string'
+        ? Array.from(runs.values()).find(
+            (candidate) => candidate.clientRequestId === meta.clientRequestId,
+          )
+        : null;
+      if (existing) {
+        if (
+          typeof existing.requestFingerprint === 'string'
+          && typeof meta.requestFingerprint === 'string'
+          && existing.requestFingerprint !== meta.requestFingerprint
+        ) {
+          return { kind: 'conflict' as const, run: existing };
+        }
+        return { kind: 'reused' as const, run: existing };
+      }
       return { kind: 'created' as const, run: service.create(meta) };
     },
     get: (id: string) => runs.get(id) ?? null,
@@ -141,14 +187,29 @@ function createRunsServiceStub() {
           || run.projectId === filters.projectId,
       ),
     statusBody: (run: any) => ({ ...run }),
+    persistState: () => {},
     stream: (run: any, req: any, res: any) => {
-      res.status(req.method === 'GET' ? 200 : 202).json({ runId: run.id });
+      res.status(req.method === 'GET' ? 200 : 202).json({
+        runId: run.id,
+        ...(run.strategyTask
+          ? {
+              taskExecutionId: run.strategyTask.taskExecutionId,
+              strategyTask: run.strategyTask,
+            }
+          : {}),
+      });
     },
     // Intentionally does NOT invoke `starter` — this test only asserts on the
     // HTTP response to POST /api/runs, not on real agent-process spawning.
     start: (run: any) => run,
+    fail: (run: any, code: string, message: string) => {
+      run.status = 'failed';
+      run.errorCode = code;
+      run.error = message;
+    },
     wait: async () => ({ status: 'succeeded' }),
     cancel: async (run: any) => {
+      strategyTaskAtPhysicalCancel = run.strategyTask ?? null;
       run.status = 'canceled';
       run.updatedAt = Date.now();
       return { ...run };
@@ -183,6 +244,9 @@ async function startServer(opts?: {
   loadPluginRegistryView?: () => Promise<any>;
 }) {
   createdRunCount = 0;
+  lastCreatedRun = null;
+  strategyTaskAtPhysicalCancel = null;
+  runsServiceStub = null;
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-run-ws-gate-'));
   const db = openDatabase(tempDir);
   const now = Date.now();
@@ -262,10 +326,11 @@ async function startServer(opts?: {
 
   const app = express();
   app.use(express.json());
+  runsServiceStub = createRunsServiceStub();
   registerRunRoutes(app, {
     db,
     design: {
-      runs: createRunsServiceStub(),
+      runs: runsServiceStub,
       analytics: { capture: () => {} },
       getAppVersion: () => 'test',
     },
@@ -312,7 +377,10 @@ async function startServer(opts?: {
       runRetryEventsForAnalytics: () => [],
     },
     messages: {
-      pinAssistantMessageOnRunCreate: () => ({ ok: true }),
+      pinAssistantMessageOnRunCreate: (_db: any, _run: any, options?: any) => {
+        options?.beforeClaimCommit?.();
+        return { ok: true };
+      },
       reconcileAssistantMessageOnRunEnd: () => {},
     },
     enforceWorkspaceProjectMutation:
@@ -532,6 +600,7 @@ describe('POST /api/runs — workspace mutation gate', () => {
     },
   );
 
+
   it('authorizes concurrent local runs from persisted bindings without a remote witness', async () => {
     const pending: Array<{
       memberId: string;
@@ -690,6 +759,7 @@ describe('POST /api/runs — workspace mutation gate', () => {
           schemaVersion: 1,
           projectId: PERSONAL_PROJECT,
           workspaceId: WORKSPACE_ID,
+          workspaceMemberId: OWNER_MEMBER_ID,
           source: 'persisted_project_binding',
         },
       });
@@ -948,7 +1018,8 @@ describe('POST /api/runs — workspace mutation gate', () => {
       }),
     });
 
-    expect(response.status).toBe(202);
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ error: { code: 'plugin-not-found' } });
     expect(calls).toEqual(['plugin']);
     expect(getWorkspaceProjectByProjectId(openDatabase(tempDir!), UNBOUND_PROJECT))
       .toMatchObject({

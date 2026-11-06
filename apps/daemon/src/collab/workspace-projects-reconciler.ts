@@ -59,6 +59,7 @@ export interface LocalTeamProjectBinding {
 /** What the remote catalog says about a shared project — the subset
  *  `listTeamProjects()` (contracts' `TeamProject`) actually carries. */
 export interface RemoteTeamProjectRef {
+  visibility?: 'private' | 'team';
   projectId: string;
   ownerMemberId: string;
   displayName?: string | null;
@@ -138,7 +139,7 @@ export interface WorkspaceProjectBindPatch {
 export interface WorkspaceProjectDemotePatch {
   visibility: 'personal';
   createdByWorkspaceMemberId: string;
-  resourceHubResourceId: null;
+  resourceHubResourceId: string | null;
   cloudTombstonedAt: null;
   syncState: 'local_only';
 }
@@ -178,7 +179,8 @@ export function planWorkspaceProjectReconciliation(input: {
   remoteProjects: readonly RemoteTeamProjectRef[];
   localBindings: ReadonlyMap<string, LocalTeamProjectBinding>;
 }): WorkspaceProjectReconcileAction[] {
-  const { workspaceId, workspaceMemberId, remoteProjects, localBindings } = input;
+  const { workspaceId, workspaceMemberId, localBindings } = input;
+  const remoteProjects = input.remoteProjects.filter((project) => project.visibility === undefined || project.visibility === 'team');
   const actions: WorkspaceProjectReconcileAction[] = [];
   const remoteIds = new Set(remoteProjects.map((project) => project.projectId));
 
@@ -260,7 +262,7 @@ export function planWorkspaceProjectReconciliation(input: {
       patch: {
         visibility: 'personal',
         createdByWorkspaceMemberId: workspaceMemberId,
-        resourceHubResourceId: null,
+        resourceHubResourceId: local.resourceHubResourceId,
         cloudTombstonedAt: null,
         syncState: 'local_only',
       },
@@ -281,6 +283,8 @@ export interface WorkspaceProjectsReconcileIdentity {
 }
 
 export interface WorkspaceProjectsReconcilerDeps {
+  /** Capture before remote I/O; fence writes against overlapping explicit moves. */
+  captureReconciliation?: () => (projectId: string) => boolean;
   /** The signed-in team workspace + member this daemon is currently acting
    *  as, or null off-team / signed out / removed. Must gate on active
    *  membership (`memberStatus === 'active'`), the same defensive check
@@ -416,6 +420,7 @@ function applyRemoteMetadataRefresh(
 export async function reconcileWorkspaceProjectsWithRemote(
   deps: WorkspaceProjectsReconcilerDeps,
 ): Promise<WorkspaceProjectsReconcileResult> {
+  const canReconcile = deps.captureReconciliation?.() ?? (() => true);
   const identity = await deps.getWorkspaceIdentity().catch((error) => {
     deps.onError?.(error);
     return null;
@@ -424,7 +429,7 @@ export async function reconcileWorkspaceProjectsWithRemote(
 
   let remoteProjects: readonly RemoteTeamProjectRef[];
   try {
-    remoteProjects = await deps.listRemoteTeamProjects(identity);
+    remoteProjects = (await deps.listRemoteTeamProjects(identity)).filter((project) => project.visibility === undefined || project.visibility === 'team');
   } catch (error) {
     deps.onError?.(error);
     return NO_OP_RESULT;
@@ -457,7 +462,7 @@ export async function reconcileWorkspaceProjectsWithRemote(
     workspaceMemberId: identity.workspaceMemberId,
     remoteProjects: knownRemoteProjects,
     localBindings,
-  });
+  }).filter((action) => canReconcile(action.projectId));
 
   for (const action of actions) {
     try {
@@ -476,6 +481,7 @@ export async function reconcileWorkspaceProjectsWithRemote(
   // changes. Evaluate it independently from the planner's already-correct
   // binding short-circuit: a correct binding can still carry a stale name.
   for (const remote of knownRemoteProjects) {
+    if (!canReconcile(remote.projectId)) continue;
     try {
       applyRemoteMetadataRefresh(
         deps,
@@ -501,6 +507,7 @@ export async function reconcileWorkspaceProjectMetadataWithRemote(
   deps: WorkspaceProjectsReconcilerDeps,
   projectId: string,
 ): Promise<boolean> {
+  const canReconcile = deps.captureReconciliation?.() ?? (() => true);
   const targetProjectId = projectId.trim();
   if (!targetProjectId) return false;
   const identity = await deps.getWorkspaceIdentity().catch((error) => {
@@ -511,13 +518,13 @@ export async function reconcileWorkspaceProjectMetadataWithRemote(
 
   let remoteProjects: readonly RemoteTeamProjectRef[];
   try {
-    remoteProjects = await deps.listRemoteTeamProjects(identity);
+    remoteProjects = (await deps.listRemoteTeamProjects(identity)).filter((project) => project.visibility === undefined || project.visibility === 'team');
   } catch (error) {
     deps.onError?.(error);
     return false;
   }
   const remote = remoteProjects.find((candidate) => candidate.projectId === targetProjectId);
-  if (!remote) return false;
+  if (!remote || !canReconcile(targetProjectId)) return false;
   try {
     return applyRemoteMetadataRefresh(
       deps,

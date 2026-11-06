@@ -73,5 +73,22 @@ describe('MCP daemon target recovery', () => {
     expect(result.isError).toBe(true);
     expect(call).toHaveBeenCalledTimes(1);
     expect(target.currentUrl()).toBe('http://127.0.0.1:62002');
+    // The caller learns the write is ambiguous because the service restarted.
+    expect(result.content.map((item) => item.text).join('\n')).toContain(
+      'may or may not have been applied',
+    );
+  });
+
+  it('keeps the plain unreachable error when the daemon did not move', async () => {
+    const resolveDaemonUrl = vi.fn(async () => 'http://127.0.0.1:62001');
+    const call = vi.fn(async (url: string) => unreachable(url));
+    const target = createMcpDaemonTarget({
+      daemonUrl: 'http://127.0.0.1:62001',
+      resolveDaemonUrl,
+    });
+
+    const result = await target.call('create_project', { name: 'x' }, call);
+
+    expect(result).toEqual(unreachable('http://127.0.0.1:62001'));
   });
 });

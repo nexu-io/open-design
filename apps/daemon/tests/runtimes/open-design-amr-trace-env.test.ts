@@ -5,13 +5,14 @@ import {
   openDesignAmrTraceEnv,
 } from '../../src/runtimes/env.js';
 
-test('openDesignAmrRunAttempt counts automatic retries and manual recharge resumes', () => {
+test('openDesignAmrRunAttempt counts cumulative retries and manual recharge resumes', () => {
   assert.equal(
     openDesignAmrRunAttempt({
+      cumulativeRetryAttemptCount: 1,
       retryAttemptCount: 2,
       manualResumeAttemptCount: 1,
     }),
-    3,
+    4,
   );
   assert.equal(
     openDesignAmrRunAttempt({

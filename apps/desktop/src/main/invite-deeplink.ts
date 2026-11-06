@@ -4,6 +4,7 @@ import {
   createInviteDeeplinkDispatcher,
   continueInviteFromUrl,
   findDeeplinkArg,
+  planProtocolClientRegistration,
   type InviteDeeplinkDeps,
 } from "./invite-deeplink-core.js";
 
@@ -24,6 +25,7 @@ export {
   continueInviteFromUrl,
   createInviteDeeplinkDispatcher,
   findDeeplinkArg,
+  planProtocolClientRegistration,
   INVITE_DEEPLINK_SCHEME,
   type InviteDeeplinkDeps,
 } from "./invite-deeplink-core.js";
@@ -63,12 +65,23 @@ export function dispatchInviteDeeplink(url: string | null): void {
  * {@link continueInviteFromUrl}. macOS delivers via `open-url`; Windows/Linux via
  * a second-instance argv (requires the single-instance lock the app already
  * holds). A cold start through the deeplink carries it in the initial argv.
+ *
+ * Claiming the scheme with the OS is gated by
+ * {@link planProtocolClientRegistration}; the dispatcher wiring below is not,
+ * so a source/dev run still handles a deeplink handed to it directly.
  */
 export function registerInviteDeeplink(deps: InviteDeeplinkDeps): void {
-  if (process.platform === "win32" && deps.protocolClientPath) {
-    app.setAsDefaultProtocolClient(INVITE_DEEPLINK_SCHEME, deps.protocolClientPath);
-  } else {
-    app.setAsDefaultProtocolClient(INVITE_DEEPLINK_SCHEME);
+  const registration = planProtocolClientRegistration({
+    isPackaged: app?.isPackaged === true,
+    platform: process.platform,
+    protocolClientPath: deps.protocolClientPath,
+  });
+  if (registration.register) {
+    if (registration.clientPath) {
+      app.setAsDefaultProtocolClient(INVITE_DEEPLINK_SCHEME, registration.clientPath);
+    } else {
+      app.setAsDefaultProtocolClient(INVITE_DEEPLINK_SCHEME);
+    }
   }
   deeplinkDispatcher.setDeps(deps);
 

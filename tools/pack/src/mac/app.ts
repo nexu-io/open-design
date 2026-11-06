@@ -1,4 +1,9 @@
-import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { buildLauncherHostEnvironment } from "../launcher/artifacts.js";
+import { MAC_THIN_LAUNCHER_FILE } from "./thin-launcher.js";
+import { packagedAmrConfigFields, writePackagedConfigWithBinding } from "../config/amr-endpoint-binding.js";
+
+import { finalizeRuntimeManifest } from "../resources/runtime-manifest.js";
+import { cp, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
 
@@ -41,8 +46,12 @@ function toPosixPath(value: string): string {
   return value.replaceAll("\\", "/");
 }
 
-function toRelativeImportSpecifier(fromDirectory: string, targetPath: string): string {
-  const specifier = toPosixPath(relative(fromDirectory, targetPath));
+export async function toRelativeImportSpecifier(fromDirectory: string, targetPath: string): Promise<string> {
+  const [canonicalFrom, canonicalTarget] = await Promise.all([
+    realpath(fromDirectory),
+    realpath(targetPath),
+  ]);
+  const specifier = toPosixPath(relative(canonicalFrom, canonicalTarget));
   return specifier.startsWith(".") ? specifier : `./${specifier}`;
 }
 
@@ -66,7 +75,6 @@ async function buildPrebundledStandaloneRuntime(
     metafilePath: paths.packagedMainPrebundleMetaPath,
     policyName: "packagedMain",
   });
-
   await runEsbuild(config, [
     join(config.workspaceRoot, "apps", "web", "dist", "sidecar", "index.js"),
     "--bundle",
@@ -86,7 +94,7 @@ async function buildPrebundledStandaloneRuntime(
   await writeFile(
     paths.daemonSidecarPrebundleEntrypointPath,
     `import ${JSON.stringify(
-      toRelativeImportSpecifier(
+      await toRelativeImportSpecifier(
         dirname(paths.daemonSidecarPrebundleEntrypointPath),
         join(config.workspaceRoot, "apps", "daemon", "dist", "sidecar", "index.js"),
       ),
@@ -101,7 +109,7 @@ async function buildPrebundledStandaloneRuntime(
       "process.env.OD_BIN ??= selfPath;",
       "process.env.OD_DAEMON_CLI_PATH ??= selfPath;",
       `await import(${JSON.stringify(
-        toRelativeImportSpecifier(
+        await toRelativeImportSpecifier(
           dirname(paths.daemonCliPrebundleEntrypointPath),
           join(config.workspaceRoot, "apps", "daemon", "dist", "cli.js"),
         ),
@@ -162,8 +170,9 @@ export function renderMacPackagedConfig(options: {
 }): string {
   return `${JSON.stringify(
     {
-      ...(options.config.amrProfile == null ? {} : { amrProfile: options.config.amrProfile }),
+      ...packagedAmrConfigFields(options.config),
       appVersion: options.appVersion,
+      launcherHost: buildLauncherHostEnvironment({ platform: "darwin", arch: process.arch, electronVersion: options.config.electronVersion }),
       ...(options.usePrebundledStandaloneWeb ? { daemonCliEntryRelative: MAC_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH } : {}),
       ...(options.usePrebundledStandaloneWeb
         ? { daemonSidecarEntryRelative: MAC_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH }
@@ -173,8 +182,6 @@ export function renderMacPackagedConfig(options: {
       ...(options.config.updateMetadataUrl == null ? {} : { updateMetadataUrl: options.config.updateMetadataUrl }),
       ...(options.config.posthogKey == null ? {} : { posthogKey: options.config.posthogKey }),
       ...(options.config.posthogHost == null ? {} : { posthogHost: options.config.posthogHost }),
-      ...(options.config.velaWebUrl == null ? {} : { velaWebUrl: options.config.velaWebUrl }),
-      ...(options.config.velaWebUrls == null ? {} : { velaWebUrls: options.config.velaWebUrls }),
       ...(options.usePrebundledStandaloneWeb ? { webSidecarEntryRelative: MAC_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH } : {}),
       webOutputMode: options.config.webOutputMode,
       ...(options.config.portable ? {} : { namespaceBaseRoot: options.config.roots.runtime.namespaceBaseRoot }),
@@ -369,14 +376,18 @@ export async function writeAssembledApp(
     renderMacPackagedMainEntry(usePrebundledStandaloneWeb),
     "utf8",
   );
-  await writeFile(
+  await runEsbuild(config, [
+    join(config.workspaceRoot, "packages", "launcher", "src", "index.ts"),
+    "--bundle", "--platform=node", "--format=cjs", "--target=node24",
+    `--outfile=${join(dirname(paths.assembledMainEntryPath), MAC_THIN_LAUNCHER_FILE)}`,
+  ]);
+  await writePackagedConfigWithBinding(
     paths.packagedConfigPath,
     renderMacPackagedConfig({
       appVersion: packagedVersion,
       config,
       usePrebundledStandaloneWeb,
     }),
-    "utf8",
   );
   await runNpmInstall(paths.assembledAppRoot);
   if (usePrebundledStandaloneWeb) {
@@ -388,4 +399,5 @@ export async function writeAssembledApp(
     platform: "darwin",
   });
   await runMacElectronRebuild(config, paths.assembledAppRoot);
+  await finalizeRuntimeManifest(paths.assembledAppRoot);
 }

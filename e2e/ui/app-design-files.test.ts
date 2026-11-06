@@ -363,23 +363,6 @@ async function waitForSingleSketchFile(page: Page, projectId: string): Promise<s
   return sketchName;
 }
 
-async function selectComposerSessionMode(page: Page, modeTitle: 'Ask mode' | 'Plan mode' | 'Design mode') {
-  // #5517 composer mode picker: Ask maps to the real `chat` session mode.
-  const modeId = modeTitle === 'Ask mode' ? 'chat' : modeTitle === 'Plan mode' ? 'plan' : 'design';
-  const modeName = modeTitle.replace(' mode', '');
-  const trigger = page.getByTestId('chat-composer').getByTestId('composer-mode-trigger');
-  await expect(trigger).toBeVisible();
-  await trigger.click();
-
-  const menu = page.getByTestId('composer-mode-menu');
-  await expect(menu).toBeVisible();
-  await expect(menu.getByTestId('composer-mode-menu-chat')).toBeVisible();
-  await expect(menu.getByTestId('composer-mode-menu-plan')).toBeVisible();
-  await expect(menu.getByTestId('composer-mode-menu-design')).toBeVisible();
-  await menu.getByTestId(`composer-mode-menu-${modeId}`).click();
-  await expect(trigger).toHaveAttribute('aria-label', `Mode: ${modeName}`);
-}
-
 async function openDesignFile(page: Page, fileName: string) {
   const fileTab = page.getByRole('tab', { name: new RegExp(fileName.replace(/\./g, '\\.'), 'i') });
   if (await fileTab.isVisible()) {
@@ -716,7 +699,7 @@ test('[P1] design files tab launcher creates a sketch and exposes editor menu ac
   await expect(page.getByTestId('sketch-menu-clear')).toBeDisabled();
 });
 
-test('[P1] plan mode selection and new Excalidraw sketch emit analytics dimensions', async ({ page }) => {
+test('[P1] new Excalidraw sketch emits analytics dimensions', async ({ page }) => {
   test.setTimeout(90_000);
   const analyticsBodies: string[] = [];
   await page.unroute('**/api/app-config').catch(() => {});
@@ -774,10 +757,13 @@ test('[P1] plan mode selection and new Excalidraw sketch emit analytics dimensio
   });
   await routeMockAgents(page);
 
-  const projectId = await createProjectViaApi(page, 'Plan and sketch analytics');
+  const projectId = await createProjectViaApi(page, 'Sketch analytics');
   await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
-  await selectComposerSessionMode(page, 'Plan mode');
+  // The session-mode picker left the composer (#7635), so `session_mode_toggle`
+  // can no longer be produced from here; the sketch action is the analytics
+  // under test.
+  await expect(page.getByTestId('chat-composer').getByTestId('composer-mode-trigger')).toHaveCount(0);
   await openAllProjectFiles(page);
   await page.getByTestId('design-files-empty-new-sketch').click();
 
@@ -785,10 +771,9 @@ test('[P1] plan mode selection and new Excalidraw sketch emit analytics dimensio
   await expect(page.getByTestId('sketch-excalidraw-editor')).toBeVisible();
   await expectProjectFileToContain(page, projectId, sketchName, '"type": "excalidraw"');
 
-  await expect.poll(() => analyticsBodies.join('\n')).toContain('session_mode_toggle');
   await expect.poll(() => analyticsBodies.join('\n'), { timeout: T.medium }).toContain('new_sketch');
   const raw = analyticsBodies.join('\n');
-  expect(raw).toContain('"mode_after":"plan"');
+  expect(raw).not.toContain('session_mode_toggle');
   expect(raw).toContain(projectId);
 });
 
@@ -1010,6 +995,132 @@ test('[P0] @critical file workspace restores HTML preview after switching throug
   await expect(page.getByTestId('file-workspace')).toBeVisible();
 });
 
+test('[P0] @critical HTML preview permits client-side form submission while isolating the host', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createProjectViaApi(page, 'Interactive form preview');
+  await seedHtmlArtifact(page, projectId, 'form.html', `<!doctype html><html><head><style>
+    .modal-layer { display: grid; position: fixed; inset: 0; z-index: 10; }
+    .authored[hidden] { display: block; }
+  </style></head><body>
+    <h1>Interactive form</h1>
+    <div class="modal-layer" hidden>Hidden popup</div>
+    <p class="authored" hidden>Intentional authored override</p>
+    <p hidden="until-found">Findable content</p>
+    <p hidden="UNTIL-FOUND">Findable content with an uppercase attribute</p>
+    <form><label>Task name<input name="task"></label><button>Save task</button></form>
+    <output aria-label="Saved task"></output>
+    <script>document.querySelector('form').addEventListener('submit', function(event) {
+      event.preventDefault();
+      document.querySelector('output').textContent = document.querySelector('input').value;
+    });</script>
+  </body></html>`);
+
+  for (const query of ['', '?forceInline=1']) {
+    await page.goto(`/projects/${projectId}${query}`, { waitUntil: 'domcontentloaded' });
+    await expectWorkspaceReady(page);
+    await openDesignFile(page, 'form.html');
+    const preview = page.frameLocator('[data-testid="artifact-preview-frame"]');
+    await expect(preview.locator('.modal-layer')).toHaveCount(1);
+    await expect(preview.locator('.modal-layer')).toBeHidden();
+    await expect(preview.locator('.authored')).toBeVisible();
+    const findableStyles = await preview.locator('[hidden="until-found" i]').evaluateAll((nodes) => nodes.map((node) => {
+      const style = getComputedStyle(node);
+      return { display: style.display, contentVisibility: style.contentVisibility };
+    }));
+    expect(findableStyles).toHaveLength(2);
+    for (const style of findableStyles) {
+      expect(style.display).not.toBe('none');
+      expect(style.contentVisibility).toBe('hidden');
+    }
+    await preview.getByLabel('Task name').fill('Created through the preview');
+    await preview.getByRole('button', { name: 'Save task' }).click();
+    await expect(preview.getByLabel('Saved task')).toHaveText('Created through the preview');
+    expect(await preview.locator('body').evaluate(() => {
+      try { void window.parent.document.body; return true; } catch { return false; }
+    })).toBe(false);
+  }
+});
+
+test('[P0] @critical storage-backed HTML keeps project state isolated across preview reloads', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectIds = [
+    await createProjectViaApi(page, 'Persistent form preview A'),
+    await createProjectViaApi(page, 'Persistent form preview B'),
+  ];
+  // Generated pages commonly use the same ordinary key in separate projects.
+  // A project-specific artifact key would hide an origin-isolation regression.
+  const storageKey = JSON.stringify('task-board-state');
+  for (const [index, projectId] of projectIds.entries()) {
+    await seedHtmlArtifact(page, projectId, 'saved-form.html', `<!doctype html><html><body>
+    <h1>Persistent form ${index === 0 ? 'A' : 'B'}</h1>
+    <form><label>Task name<input name="task"></label><button>Save task</button></form>
+    <output aria-label="Saved task"></output>
+    <script>const key=${storageKey};
+    document.querySelector('output').textContent=localStorage.getItem(key)||'';
+    document.querySelector('form').addEventListener('submit', function(event) {
+      event.preventDefault();
+      const value=document.querySelector('input').value;
+      localStorage.setItem(key,value);
+      document.querySelector('output').textContent=value;
+    });</script>
+  </body></html>`);
+  }
+  const openProject = async (index: number) => {
+    await page.goto(`/projects/${projectIds[index]}`, { waitUntil: 'domcontentloaded' });
+    await expectWorkspaceReady(page);
+    await openDesignFile(page, 'saved-form.html');
+    await expect(preview.getByRole('heading', { name: `Persistent form ${index === 0 ? 'A' : 'B'}` })).toBeVisible();
+  };
+  const frame = page.locator('[data-testid="artifact-preview-frame"]');
+  const preview = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  await openProject(0);
+  await preview.getByLabel('Task name').fill('Project A saved across reload');
+  await preview.getByRole('button', { name: 'Save task' }).click();
+  await expect(preview.getByLabel('Saved task')).toHaveText('Project A saved across reload');
+  await expect(frame).toHaveAttribute('data-od-render-mode', 'srcdoc');
+  expect(await frame.getAttribute('sandbox')).not.toContain('allow-same-origin');
+  expect(await preview.locator('body').evaluate(() => {
+    try { void window.parent.document.body; return true; } catch { return false; }
+  })).toBe(false);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
+  await openDesignFile(page, 'saved-form.html');
+  await expect(preview.getByLabel('Saved task')).toHaveText('Project A saved across reload');
+
+  await page.getByRole('button', { name: 'Present', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'In this tab', exact: true }).click();
+  const presentation = page.frameLocator('.present-overlay iframe');
+  await expect(presentation.getByLabel('Saved task')).toHaveText('Project A saved across reload');
+  expect(await presentation.locator('body').evaluate(() => {
+    try { void window.parent.document.body; return true; } catch { return false; }
+  })).toBe(false);
+  await presentation.getByLabel('Task name').fill('Project A saved from presentation');
+  await presentation.getByRole('button', { name: 'Save task' }).click();
+  await expect(presentation.getByLabel('Saved task')).toHaveText('Project A saved from presentation');
+  await page.getByRole('button', { name: 'Exit presentation', exact: true }).click();
+
+  await openProject(1);
+  await expect(preview.getByLabel('Saved task')).toHaveText('');
+  await preview.getByLabel('Task name').fill('Project B saved separately');
+  await preview.getByRole('button', { name: 'Save task' }).click();
+  await expect(preview.getByLabel('Saved task')).toHaveText('Project B saved separately');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
+  await openDesignFile(page, 'saved-form.html');
+  await expect(preview.getByLabel('Saved task')).toHaveText('Project B saved separately');
+
+  await openProject(0);
+  await expect(preview.getByLabel('Saved task')).toHaveText('Project A saved from presentation');
+  const blockedRoutes = await preview.locator('body').evaluate(async (_, otherProjectId) => {
+    const paths = ['/api/projects', `/api/projects/${otherProjectId}/powered/saved-form.html`];
+    return Promise.all(paths.map(async (path) => {
+      try { return { path, readable: (await fetch(path)).ok }; }
+      catch { return { path, readable: false }; }
+    }));
+  }, projectIds[1]);
+  expect(blockedRoutes.map((route) => route.readable)).toEqual([false, false]);
+});
+
 test('[P0] @critical white-screen monitoring recovers layout stalls and confirms persistent blanks', async ({ page }) => {
   const safetyEvents = await captureSafetyTelemetry(page);
   await routeMockAgents(page);
@@ -1140,6 +1251,14 @@ test('[P0] @critical HTML file list and previews stay stable across repeated swi
   await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
 
+  // Project restore asynchronously opens the newest HTML file. If Design
+  // Files is clicked while that restore is still committing, the late file
+  // selection wins and immediately switches the tab back, making the list
+  // assertion race startup instead of testing file stability. Let the restore
+  // own its initial selection, then enter Design Files as the user would.
+  await expect(page.getByRole('tab', { name: /stable-(?:alpha|beta)\.html/i })).toBeVisible();
+  await expect(page.locator('iframe[data-od-active="true"]')).toBeVisible();
+
   await openAllProjectFiles(page);
   const alphaRow = await revealDesignFileRow(page, 'stable-alpha.html');
   const betaRow = designFileRow(page, 'stable-beta.html');
@@ -1189,6 +1308,18 @@ test('[P0] @critical HTML file list and previews stay stable across repeated swi
   const alphaFrameHandle = await captureWarmFrame('stable-alpha.html');
 
   await openAllProjectFiles(page);
+  // #7007 regressed only when the active viewer had already cached the HTML
+  // source and Design Files mounted its thumbnail from that cache on the very
+  // first render. Exercise that exact browser path, not just the jsdom style
+  // contract: the thumbnail must start with the desktop layout viewport and
+  // immediately paint the cached document.
+  const warmAlphaRow = await revealDesignFileRow(page, 'stable-alpha.html');
+  const warmAlphaThumbnail = warmAlphaRow.locator('.df-card-thumb iframe');
+  await expect(warmAlphaThumbnail).toHaveCSS('width', '1200px');
+  await expect(warmAlphaThumbnail).toHaveCSS('height', '675px');
+  await expect(warmAlphaRow.frameLocator('.df-card-thumb iframe').getByRole('heading', {
+    name: 'Stable Alpha',
+  })).toBeVisible();
   await betaRow.getByRole('button').first().click();
   const betaTab = page.getByRole('tab', { name: /stable-beta\.html/i });
   const betaHeading = page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', {

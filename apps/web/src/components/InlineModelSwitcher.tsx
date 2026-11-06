@@ -1,3 +1,4 @@
+import { openExternalUrl } from "../providers/registry";
 // InlineModelSwitcher — top-bar chip exposing CLI/BYOK + model picker.
 //
 // Lives in the entry view's sticky top-bar so users can swap between a
@@ -18,7 +19,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from 'react';
-import type { AmrWalletSnapshot } from '@open-design/contracts';
+import { canReachWorkspaceBillingEntrance, type AmrWalletSnapshot } from '@open-design/contracts';
 import { VisuallyHidden } from '@open-design/components';
 import { useT } from '../i18n';
 import {
@@ -33,8 +34,7 @@ import {
   recordAmrEntry,
   type AmrEntryAttribution,
 } from '../analytics/amr-attribution';
-import { amrPlansUrlForProfile } from '../runtime/amr-guidance';
-import { isUnlimitedModelForPlanTier } from '../runtime/amr-unlimited-models';
+import { amrPlansUrlForWorkspace } from '../runtime/amr-guidance';
 import { getResolvedDeviceId } from '../analytics/client';
 import {
   trackDeepSeekCampaignModelBenefitSurfaceView,
@@ -53,7 +53,6 @@ import {
   workspaceBillingBalanceUsd,
   workspaceBillingSummaryForContext,
 } from '../collab/useWorkspaceContext';
-import { resolvePlanLabelTier } from '../collab/team-plan';
 import { KNOWN_PROVIDERS } from '../state/config';
 import { fetchProviderModels } from '../providers/provider-models';
 import { SUGGESTED_MODELS_BY_PROTOCOL } from '../state/apiProtocols';
@@ -83,6 +82,7 @@ import {
   notifyAmrLoginStatusChanged,
 } from './amrLoginPolling';
 import { orderAgentsWithOpenDesignFirst } from './agentOrdering';
+import { anchorSelectionInView } from './pickerSelectionAnchor';
 import {
   agentModelIsSelectable,
   defaultAgentModelId,
@@ -90,6 +90,7 @@ import {
   normalizeAgentModelChoice,
 } from './agentModelSelection';
 import {
+  modelVersionLabel,
   orderModelOptionsByAvailability,
   SearchableModelSelect,
 } from './modelOptions';
@@ -191,30 +192,11 @@ export function InlineModelSwitcher({
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
-  // Both flags are reserved presentation branches with no trigger wired yet:
-  // `campaignRestricted` (已暂停 badge) is reserved for the backend
-  // usage-limit signal — no trigger wired yet — and `campaignNeedsUpgrade`
-  // (升级可用 badge) is reserved for a real unpaid-audience signal reaching
-  // this component. Until those land, every campaign badge renders the paid
-  // state.
-  const campaignRestricted = false;
+  // This flag is a reserved presentation branch with no trigger wired yet.
+  // It remains available for a real unpaid-audience signal reaching this
+  // component without surfacing an unlimited-use claim in the model picker.
   const campaignNeedsUpgrade = false;
   const campaignVisibility = useDeepSeekV4FlashCampaignVisibility();
-  const campaignModelBadge = campaignRestricted
-    ? t('campaign.deepseekV4Flash.restricted.modelBadge')
-    : campaignNeedsUpgrade
-      ? t('campaign.deepseekV4Flash.unpaid.modelBadge')
-      : t('campaign.deepseekV4Flash.paid.modelBadge');
-  const campaignModelTooltip = campaignRestricted
-    ? t('campaign.deepseekV4Flash.restricted.tooltip')
-    : campaignNeedsUpgrade
-      ? t('campaign.deepseekV4Flash.unpaid.tooltip')
-      : t('campaign.deepseekV4Flash.ruleSummary');
-  const campaignBadgeStateClass = campaignRestricted
-    ? ' is-restricted'
-    : campaignNeedsUpgrade
-      ? ' is-unpaid'
-      : '';
   // recvqfYKutwWlQ: gate the AMR upgrade entry on billing permission below,
   // not just plan tier — a team member without `canManageBilling` (owner-only)
   // can't act on an upgrade even when the tier itself is upgradeable.
@@ -226,12 +208,13 @@ export function InlineModelSwitcher({
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
+  const compactModelListRef = useRef<HTMLDivElement | null>(null);
+  const compactSelectionAnchoredRef = useRef(false);
   const campaignBenefitTrackedForOpenRef = useRef(false);
-  // Viewport clamp for the popover (issue #99): the anchor chip can sit
-  // anywhere on screen (home hero mid-page, chat composer at the bottom), so
-  // a fixed downward placement runs past the screen edge once the model list
-  // is long. Measured on open: cap the height to the space on the chosen
-  // side and flip upward when below is tight.
+  // Keep the menu inside its scrollport as the composer moves. Home's async
+  // examples can move the chip without a scroll, resize, or chip size change.
+  // The absolute menu follows that movement, but its chosen side and height
+  // must be measured again or its first rows can end up behind shell chrome.
   const [popoverPlacement, setPopoverPlacement] = useState<{
     up: boolean;
     maxHeight: number;
@@ -244,19 +227,32 @@ export function InlineModelSwitcher({
     const update = () => {
       const anchor = wrapRef.current?.getBoundingClientRect();
       if (!anchor) return;
-      const viewportHeight = window.innerHeight;
-      const below = viewportHeight - anchor.bottom - 16;
-      const above = anchor.top - 16;
+      const scrollport = wrapRef.current?.closest('.entry-main--scroll');
+      const bounds = scrollport?.getBoundingClientRect();
+      const safeTop = Math.max(0, bounds?.top ?? 0);
+      const safeBottom = Math.min(window.innerHeight, bounds?.bottom ?? window.innerHeight);
+      const below = Math.max(0, safeBottom - anchor.bottom - 16);
+      const above = Math.max(0, anchor.top - safeTop - 16);
       const up = below < 280 && above > below;
-      setPopoverPlacement({
-        up,
-        maxHeight: Math.max(160, Math.min(560, up ? above : below)),
+      const maxHeight = Math.min(560, up ? above : below);
+      setPopoverPlacement((previous) => {
+        if (previous?.up === up && previous.maxHeight === maxHeight) return previous;
+        return { up, maxHeight };
       });
     };
     update();
+    let frame = 0;
+    const followAnchor = () => {
+      update();
+      frame = window.requestAnimationFrame(followAnchor);
+    };
+    if (typeof window.requestAnimationFrame === 'function') {
+      frame = window.requestAnimationFrame(followAnchor);
+    }
     window.addEventListener('resize', update);
     window.addEventListener('scroll', update, true);
     return () => {
+      if (frame !== 0) window.cancelAnimationFrame(frame);
       window.removeEventListener('resize', update);
       window.removeEventListener('scroll', update, true);
     };
@@ -355,6 +351,14 @@ export function InlineModelSwitcher({
         stopAmrPolling();
         amrLoginStartedAtRef.current = null;
         setAmrLoginPending(false);
+        return;
+      }
+      if (outcome === 'cancelled') {
+        stopAmrPolling();
+        amrLoginStartedAtRef.current = null;
+        setAmrLoginPending(false);
+        setAmrLoginError(null);
+        notifyAmrLoginStatusChanged('login-canceled');
         return;
       }
       if (outcome === 'stopped' || outcome === 'timed-out') {
@@ -594,7 +598,10 @@ export function InlineModelSwitcher({
       setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'Escape') {
+        setOpen(false);
+        chipRef.current?.focus();
+      }
     };
     document.addEventListener('mousedown', onClick);
     document.addEventListener('keydown', onKey);
@@ -741,64 +748,6 @@ export function InlineModelSwitcher({
     && config.mode === 'daemon'
     && currentAgent?.id === 'amr';
 
-  // The 「无限使用」 badge has TWO sources and the campaign is only one of them.
-  // The standing one is the subscription itself: Pricing sells an unlimited set
-  // per tier (3 models on Go … 8 on Max), so a Pro subscriber's Kimi K2.7 Code
-  // is unlimited whether or not a campaign is running. Wiring the badge to the
-  // campaign alone left every one of those models unmarked.
-  const planTier = resolvePlanLabelTier({
-    billing: workspaceBillingSummaryForContext(
-      workspaceBillingResponse,
-      workspaceContext,
-    ),
-    context: workspaceContext,
-    // Account-scoped plan is a personal-workspace answer only — a team
-    // workspace's entitlement is never named by the signed-in account's tier.
-    accountPlan:
-      workspaceContextLoading || workspaceContext?.workspaceType === 'team'
-        ? null
-        : amrStatus?.account?.plan,
-  });
-  const unlimitedBadgeForModel = useCallback(
-    (
-      modelId: string | null | undefined,
-    ): { label: string; tooltip: string | null; stateClass: string } | null => {
-      // Same guard the campaign uses: in BYOK mode the visible model is billed
-      // by the user's own provider, and the dormant AMR selection must not
-      // leak an entitlement claim onto it.
-      if (config.mode !== 'daemon' || currentAgent?.id !== 'amr') return null;
-      if (
-        deepSeekCampaignVisibleForCurrentExecution
-        && isDeepSeekV4FlashCampaignModel(modelId)
-      ) {
-        return {
-          label: campaignModelBadge,
-          tooltip: campaignModelTooltip,
-          stateClass: campaignBadgeStateClass,
-        };
-      }
-      if (!isUnlimitedModelForPlanTier(modelId, planTier)) return null;
-      // Badge text only — the campaign's rule-summary tooltip is campaign copy
-      // and there is no product-written line for the plan case, so this branch
-      // carries no tooltip rather than an invented one.
-      return {
-        label: t('inlineSwitcher.unlimitedBadge'),
-        tooltip: null,
-        stateClass: '',
-      };
-    },
-    [
-      campaignBadgeStateClass,
-      campaignModelBadge,
-      campaignModelTooltip,
-      config.mode,
-      currentAgent?.id,
-      deepSeekCampaignVisibleForCurrentExecution,
-      planTier,
-      t,
-    ],
-  );
-
   useEffect(() => {
     if (!currentAgentId || !normalizedCurrentModelId) return;
     const nextChoice: {
@@ -864,6 +813,23 @@ export function InlineModelSwitcher({
     [currentAgent, inlineAgentModelOptions],
   );
 
+  // The compact list caps at six visible rows and scrolls, so a longer catalog
+  // used to open on row one with the model actually in effect below the fold —
+  // the hunting OPEND-2812 reports. Anchor the list on the row it already marks
+  // `aria-checked`; nothing new is remembered here, the selection is read back
+  // out of the rendered list. Once per open, so a later re-render (the catalog
+  // arriving, the popover re-measuring) cannot yank the list back under a user
+  // who has started browsing it.
+  useLayoutEffect(() => {
+    if (!open) {
+      compactSelectionAnchoredRef.current = false;
+      return;
+    }
+    if (compactSelectionAnchoredRef.current || !compactModelListRef.current) return;
+    compactSelectionAnchoredRef.current = true;
+    anchorSelectionInView(compactModelListRef.current, '[aria-checked="true"]');
+  }, [compactModelRows, open]);
+
   useEffect(() => {
     if (!open) {
       campaignBenefitTrackedForOpenRef.current = false;
@@ -901,9 +867,32 @@ export function InlineModelSwitcher({
     open,
   ]);
 
+  const amrLoggedIn = isAmrSessionAuthenticated(amrStatus);
+  const scopedWorkspaceBilling = workspaceBillingSummaryForContext(
+    workspaceBillingResponse,
+    workspaceContext,
+  );
+  // An account's personal plan cannot decide a team's upgrade eligibility.
+  const amrUpgradePlan = workspaceContext?.workspaceType === 'team'
+    ? scopedWorkspaceBilling?.membershipTier?.trim() || null
+    : scopedWorkspaceBilling?.membershipTier?.trim() || amrStatus?.account?.plan;
+  const amrPlansUrl = workspaceContextLoading
+    ? null
+    : amrPlansUrlForWorkspace(
+        amrStatus?.profile ?? config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE,
+        workspaceContext?.workspaceId,
+      );
+  const amrCanUpgrade =
+    amrLoggedIn &&
+    canUpgradeVelaPlan(amrUpgradePlan?.replace(/^team[_-]/i, '')) &&
+    workspaceContext !== null &&
+    canReachWorkspaceBillingEntrance(workspaceContext) &&
+    amrPlansUrl !== null;
+
   /** Where a refused model pick sends the user instead — the same plans
    *  destination the settings picker's upgrade lock already opens. */
   const openAmrModelUpgrade = useCallback(() => {
+    if (!amrCanUpgrade || !amrPlansUrl) return;
     const attribution = recordAmrEntry(
       analytics.track,
       campaignNeedsUpgrade
@@ -925,26 +914,20 @@ export function InlineModelSwitcher({
       resolvedDeviceId: getResolvedDeviceId(),
       installationId: config.installationId,
     });
-    window.open(
+    void openExternalUrl(
       attributedAmrUrl(
-        amrPlansUrlForProfile(
-          amrStatus?.profile ?? config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE,
-        ),
+        amrPlansUrl,
         attribution,
         deviceId,
-      ),
-      '_blank',
-      'noopener,noreferrer',
-    );
+      ));
   }, [
-    amrStatus?.profile,
+    amrCanUpgrade,
+    amrPlansUrl,
     analytics.track,
     campaignNeedsUpgrade,
-    config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE,
     config.installationId,
     config.telemetry?.metrics,
   ]);
-  const amrLoggedIn = isAmrSessionAuthenticated(amrStatus);
 
   useEffect(() => {
     if (!amrLoggedIn || workspaceContext?.workspaceType === 'team') {
@@ -1004,13 +987,6 @@ export function InlineModelSwitcher({
               : t('common.loading')
       )
     : null;
-  // Personal workspaces always resolve `canManageBilling` true (the user is
-  // their own owner), so this does not affect the personal-workspace upgrade
-  // path.
-  const amrCanUpgrade =
-    amrLoggedIn &&
-    canUpgradeVelaPlan(amrStatus?.account?.plan) &&
-    Boolean(workspaceContext?.permissions?.canManageBilling);
   const amrActionLabel = amrLoginPending
     ? t('settings.amrSigningIn')
     : amrLoggedIn
@@ -1148,8 +1124,21 @@ export function InlineModelSwitcher({
           ? currentModelLabel
           : t('inlineSwitcher.modelDefault')
       : config.model.trim() || t('inlineSwitcher.modelDefault');
-
-  const chipUnlimitedBadge = unlimitedBadgeForModel(currentModelId);
+  // Visible chip text drops the company token the way the model rows do
+  // (`claude-fable-5` → `fable-5`); the aria-label/tooltip above keep the full
+  // name, so the company stays available to anyone who needs it spelled out.
+  const chipModelName =
+    config.mode === 'daemon' && currentModelId
+      ? modelVersionLabel(currentModelId, chipModel)
+      : chipModel;
+  // Brand mark for that same model. `default` is the agent's own pick rather
+  // than a named model, so it keeps the agent logo instead of guessing a vendor.
+  const chipModelIconSrc =
+    config.mode === 'daemon'
+      ? currentModelId && currentModelId !== 'default'
+        ? modelProviderIconSrc(currentModelId)
+        : null
+      : modelProviderIconSrc(config.model.trim() || null);
 
   // Compact home chip surfaces the selected model name + a connection-status
   // dot; label/tooltip fall back to the agent name. In CLI mode the agent's
@@ -1157,9 +1146,21 @@ export function InlineModelSwitcher({
   // a user-configured endpoint, treated as connected.
   const chipConnected =
     config.mode === 'daemon' ? currentAgent?.available === true : true;
-  const chipAgentLabel = currentAgent
-    ? displayAgentName(currentAgent)
-    : t('inlineSwitcher.chipTitle');
+  /**
+   * 紧凑 chip 的读屏标签 / 提示里那个「谁在跑」。
+   *
+   * **必须跟着 `config.mode` 分岔**,和非紧凑那支的 `chipPrimary` 同一条规则。
+   * 原来无条件取 `displayAgentName(currentAgent)`,而 API/BYOK 模式下
+   * `config.agentId` 还留着上一个 daemon agent —— 真机上配好 OpenRouter 之后
+   * chip 念的是「Claude Code · google/gemini-2.5-flash」,可那一轮真正跑的是
+   * `byok-opencode`。可见文字只有模型名,所以只有读屏用户会被念错。
+   */
+  const chipAgentLabel =
+    config.mode === 'daemon'
+      ? currentAgent
+        ? displayAgentName(currentAgent)
+        : t('inlineSwitcher.chipTitle')
+      : apiProtocolLabel(apiProtocol);
 
   const handleChipClick = useCallback(() => {
     const nextOpen = !open;
@@ -1189,40 +1190,47 @@ export function InlineModelSwitcher({
         ref={chipRef}
         type="button"
         className={
-          'inline-switcher__chip od-tooltip' +
-          (compact ? ' inline-switcher__chip--icon' : '') +
-          (showAmrReminder ? ' has-amr-reminder' : '')
+          'inline-switcher__chip' +
+          (compact ? ' inline-switcher__chip--icon' : '')
         }
         data-testid="inline-model-switcher-chip"
         onClick={handleChipClick}
         aria-haspopup="menu"
         aria-expanded={open}
+        // No hover bubble: the chip already prints the model it would name,
+        // and the popover it opens spells out the agent — a tooltip repeating
+        // both only covered the composer text under it. The accessible name
+        // stays, so the icon-only treatment is still announced.
         aria-label={
           compact
             ? `${chipAgentLabel} · ${chipModel}`
             : `${chipMode} · ${chipPrimary} · ${chipModel}`
         }
-        data-tooltip={
-          compact
-            ? `${chipAgentLabel} · ${chipModel}`
-            : `${chipMode} · ${chipPrimary} · ${chipModel}`
-        }
-        data-tooltip-placement="bottom"
       >
-        {showAmrReminder ? (
-          <span
-            className="inline-switcher__amr-reminder-dot inline-switcher__amr-reminder-dot--chip"
-            data-testid="inline-model-switcher-amr-reminder"
-            aria-hidden="true"
-          />
-        ) : null}
         {compact ? (
           <>
-            {/* Same agent logo (with the BYOK link-glyph fallback) the full
-                chip leads with, so the compact pill still says which agent the
-                model belongs to. */}
+            {/* Reachability dot leads the chip: it qualifies the whole run
+                that follows (brand mark + model name) rather than reading as
+                punctuation wedged into the model label. */}
+            <span
+              className="inline-switcher__chip-conn"
+              data-connected={chipConnected ? 'true' : 'false'}
+              aria-hidden="true"
+            />
+            {/* The selected MODEL's brand mark — the same artwork its row in
+                the list below carries, so the chip and the row a user just
+                clicked show the same thing. Falls back to the agent logo (and
+                then the BYOK link glyph) when the vendor has no mark. */}
             <span className="inline-switcher__chip-icon" aria-hidden="true">
-              {config.mode === 'daemon' && currentAgent ? (
+              {chipModelIconSrc ? (
+                <img
+                  className="inline-switcher__chip-model-logo"
+                  src={chipModelIconSrc}
+                  alt=""
+                  width={18}
+                  height={18}
+                />
+              ) : config.mode === 'daemon' && currentAgent ? (
                 <AgentIcon id={currentAgent.id} size={18} />
               ) : (
                 <span className="inline-switcher__byok-glyph">
@@ -1230,31 +1238,9 @@ export function InlineModelSwitcher({
                 </span>
               )}
             </span>
-            {/* Divider sits right after the agent logo; the status dot then
-                leads the model name so the dot reads as part of the model
-                label rather than trailing the logo. */}
-            <span className="inline-switcher__chip-divider" aria-hidden="true" />
-            <span
-              className="inline-switcher__chip-conn"
-              data-connected={chipConnected ? 'true' : 'false'}
-              aria-hidden="true"
-            />
-            <span className="inline-switcher__chip-model-name">{chipModel}</span>
-            {chipUnlimitedBadge ? (
-              <span
-                className={
-                  'inline-switcher__campaign-badge'
-                  + (chipUnlimitedBadge.tooltip ? ' od-tooltip' : '')
-                  + chipUnlimitedBadge.stateClass
-                }
-                data-tooltip={chipUnlimitedBadge.tooltip ?? undefined}
-                data-tooltip-placement={chipUnlimitedBadge.tooltip ? 'top' : undefined}
-                aria-label={chipUnlimitedBadge.tooltip ?? undefined}
-                data-testid="inline-model-switcher-chip-unlimited-badge"
-              >
-                {chipUnlimitedBadge.label}
-              </span>
-            ) : null}
+            <span className="inline-switcher__chip-model-name">
+              {chipModelName}
+            </span>
           </>
         ) : (
           <>
@@ -1276,7 +1262,7 @@ export function InlineModelSwitcher({
               <span className="inline-switcher__chip-sep" aria-hidden="true">
                 ·
               </span>
-              <span className="inline-switcher__chip-model">{chipModel}</span>
+              <span className="inline-switcher__chip-model">{chipModelName}</span>
             </span>
             <Icon
               name="chevron-down"
@@ -1467,13 +1453,16 @@ export function InlineModelSwitcher({
             // the execution settings entry below.
             <div className="inline-switcher__row">
               {currentAgent && compactModelRows.length > 0 ? (
-                <div className="inline-switcher__agent-grid" role="radiogroup">
+                <div
+                  className="inline-switcher__agent-grid"
+                  role="radiogroup"
+                  ref={compactModelListRef}
+                >
                   {compactModelRows.map(({ model: m, selectable }) => {
                     const active = currentModelId === m.id;
                     // A model above the caller's plan is shown, but honestly:
                     // disabled with the reason the settings picker already uses,
                     // never as a normal row whose click gets reverted.
-                    const unlimitedBadge = unlimitedBadgeForModel(m.id);
                     const lockedHint = selectable
                       ? null
                       : t('settings.amrModelUpgradeHint');
@@ -1484,7 +1473,10 @@ export function InlineModelSwitcher({
                           role="radio"
                           aria-checked={active}
                           aria-disabled={selectable ? undefined : 'true'}
-                          title={lockedHint ?? undefined}
+                          /* A long catalog ellipsises these rows and many
+                             share a prefix, so the full model name must stay
+                             readable on hover. A locked row keeps its reason. */
+                          title={lockedHint ?? m.label}
                           className={
                             'inline-switcher__agent' +
                             (active ? ' is-active' : '') +
@@ -1531,23 +1523,8 @@ export function InlineModelSwitcher({
                             })()}
                           </span>
                           <span className="inline-switcher__agent-name">
-                            {m.label}
+                            {modelVersionLabel(m.id, m.label)}
                           </span>
-                          {unlimitedBadge ? (
-                            <span
-                              className={
-                                'inline-switcher__campaign-badge'
-                                + (unlimitedBadge.tooltip ? ' od-tooltip' : '')
-                                + unlimitedBadge.stateClass
-                              }
-                              data-tooltip={unlimitedBadge.tooltip ?? undefined}
-                              data-tooltip-placement={unlimitedBadge.tooltip ? 'top' : undefined}
-                              aria-label={unlimitedBadge.tooltip ?? undefined}
-                              data-testid={`inline-model-switcher-unlimited-badge-${m.id}`}
-                            >
-                              {unlimitedBadge.label}
-                            </span>
-                          ) : null}
                           {lockedHint ? (
                             <span
                               className="inline-switcher__agent-lock"
@@ -1701,29 +1678,7 @@ export function InlineModelSwitcher({
                         data-testid="inline-model-switcher-account-upgrade"
                         onClick={(e) => {
                           e.stopPropagation();
-                          const attribution = recordAmrEntry(
-                            analytics.track,
-                            'inline_amr_upgrade',
-                            new Date(),
-                            { metricsConsent: config.telemetry?.metrics === true },
-                          );
-                          const deviceId = amrHandoffDeviceId({
-                            metricsConsent: config.telemetry?.metrics === true,
-                            resolvedDeviceId: getResolvedDeviceId(),
-                            installationId: config.installationId,
-                          });
-                          window.open(
-                            attributedAmrUrl(
-                              amrPlansUrlForProfile(
-                                amrStatus?.profile ??
-                                  config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE,
-                              ),
-                              attribution,
-                              deviceId,
-                            ),
-                            '_blank',
-                            'noopener,noreferrer',
-                          );
+                          openAmrModelUpgrade();
                         }}
                       >
                         {t('settings.amrUpgrade')}
@@ -1822,7 +1777,7 @@ export function InlineModelSwitcher({
                         : undefined
                     }
                     onDisabledOptionUpgrade={
-                      currentAgent?.id === 'amr'
+                      currentAgent?.id === 'amr' && amrCanUpgrade
                         ? openAmrModelUpgrade
                         : undefined
                     }

@@ -2,22 +2,29 @@ import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen, openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
 import { settingsSurface } from '@/playwright/amr';
 import type { Locator, Page } from '@playwright/test';
-import { applyStandardMocks } from '@/playwright/mock-factory';
+import { applyStandardMocks, routeSignedOutVelaStatus } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 
 test.describe.configure({ timeout: T.xlong });
 
 test.beforeEach(async ({ page }) => {
   await applyStandardMocks(page);
+  // This file is the compact Personal/local capability lane. Pin Cloud to a
+  // definitive signed-out response so Home and project creation cannot pass
+  // merely because identity stayed unresolved behind the standard 503 mock.
+  await routeSignedOutVelaStatus(page);
+  await page.route('**/api/workspace/directory', async (route) => {
+    await route.fulfill({ json: { items: [] } });
+  });
 });
 
 test('[P0] @critical home loads with the primary entry controls', async ({ page }) => {
   await gotoEntryHome(page);
 
   // The rail is collapsed by default — the hero owns the first screen and the
-  // only chrome affordance is the pinned Home tab's sidebar toggle in the
-  // workspace tabs bar. Expand to reach the rail nav.
-  await expect(page.getByTestId('workspace-home-rail-toggle')).toBeVisible();
+  // chrome row carries only the search + rail-toggle cluster (#7635). Expand
+  // to reach the rail nav.
+  await expect(page.getByTestId('entry-rail-collapse')).toBeVisible();
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
   await ensureRailOpen(page);
   await expect(page.getByTestId('entry-nav-home')).toHaveAttribute('aria-current', 'page');

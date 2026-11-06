@@ -22,12 +22,14 @@
 // reuses the server's own connection instead of racing a second one.
 
 import type http from 'node:http';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { startServer } from '../src/server.js';
+import { createOpenDesignToolEnv, startServer } from '../src/server.js';
 import {
   ensureWorkspaceResource,
   getWorkspaceResourceByResourceId,
@@ -121,6 +123,54 @@ async function fetchSkillIds(
 }
 
 describe('GET /api/skills — workspace visibility scope', () => {
+  it.skipIf(process.platform === 'win32')('loads the owner-visible media Skill through the POSIX prompt wrapper and keeps built-in fallback for other callers', async () => {
+    const skillId = 'od-next-media-inputs';
+    const workspaceId = 'ws-media-wrapper';
+    const folder = await seedSkillFolder(skillId);
+    bindSkillToWorkspace(skillId, workspaceId, 'member-owner');
+    const privateBody = 'PRIVATE MEDIA INPUT INSTRUCTIONS';
+    await writeFile(path.join(folder, 'SKILL.md'),
+      `---\nname: "${skillId}"\ndescription: "Private media inputs."\n---\n\n${privateBody}\n`);
+    const repoRoot = path.resolve(import.meta.dirname, '../../..');
+    const orchestration = await readFile(path.join(repoRoot,
+      'plugins/_official/scenarios/od-next-strategy/assets/general-orchestration.md'), 'utf8');
+    const wrapper = orchestration.split('### Media input Skill')[1]?.match(/\`\`\`sh\n([\s\S]*?)\n\`\`\`/)?.[1];
+    expect(wrapper).toBeTruthy();
+    const exec = promisify(execFile);
+    for (const memberId of ['member-owner', 'member-other', null]) {
+      const env = {
+        ...process.env,
+        ...createOpenDesignToolEnv({
+          daemonUrl: baseUrl,
+          projectId: 'project-media',
+          workspaceScope: memberId ? {
+            schemaVersion: 1,
+            projectId: 'project-media',
+            workspaceId,
+            workspaceMemberId: memberId,
+            source: 'persisted_project_binding',
+          } : null,
+        }),
+        OD_NODE_BIN: process.execPath,
+        OD_BIN: path.resolve(import.meta.dirname, '../src/cli.ts'),
+        NODE_OPTIONS: '--import tsx',
+      };
+      const { stdout } = await exec('/bin/sh', ['-c', wrapper!], {
+        cwd: repoRoot, env, timeout: 15_000,
+      });
+      const detail = JSON.parse(stdout);
+      const expectedSource = memberId === 'member-owner' ? 'user' : 'built-in';
+      expect(detail.source).toBe(expectedSource);
+      if (memberId === 'member-owner') {
+        expect(detail.body).toContain(privateBody);
+        expect(detail.body).not.toContain('# OD Next Media Inputs');
+      } else {
+        expect(detail.body).toContain('# OD Next Media Inputs');
+        expect(detail.body).not.toContain(privateBody);
+      }
+    }
+  });
+
   it('quarantines an unclaimed user skill from every explicit workspace', async () => {
     const skillId = `wsscope-unclaimed-${Date.now()}`;
     await seedSkillFolder(skillId);

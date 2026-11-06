@@ -185,7 +185,6 @@ function renderHome() {
       projects={[]}
       onSubmit={() => undefined}
       onOpenProject={() => undefined}
-      onViewAllProjects={() => undefined}
     />,
   );
 }
@@ -244,7 +243,6 @@ describe('HomeView workspace-scoped plugin catalog', () => {
         projects={[]}
         onSubmit={() => undefined}
         onOpenProject={() => undefined}
-        onViewAllProjects={() => undefined}
       />,
     );
 
@@ -280,7 +278,6 @@ describe('HomeView workspace-scoped plugin catalog', () => {
         projects={[]}
         onSubmit={() => undefined}
         onOpenProject={() => undefined}
-        onViewAllProjects={() => undefined}
       />,
     );
 
@@ -296,7 +293,6 @@ describe('HomeView workspace-scoped plugin catalog', () => {
         projects={[]}
         onSubmit={() => undefined}
         onOpenProject={() => undefined}
-        onViewAllProjects={() => undefined}
       />,
     );
     await waitFor(() => expect(pluginReads).toBe(1));
@@ -345,7 +341,6 @@ describe('HomeView workspace-scoped plugin catalog', () => {
         projects={[]}
         onSubmit={() => undefined}
         onOpenProject={() => undefined}
-        onViewAllProjects={() => undefined}
       />,
     );
 
@@ -389,7 +384,6 @@ describe('HomeView workspace-scoped plugin catalog', () => {
         projects={[]}
         onSubmit={() => undefined}
         onOpenProject={() => undefined}
-        onViewAllProjects={() => undefined}
         skills={[skill('Skill A')]}
         designSystems={[designSystem('shared-ds', 'DS A')]}
       />,
@@ -411,7 +405,6 @@ describe('HomeView workspace-scoped plugin catalog', () => {
         projects={[]}
         onSubmit={() => undefined}
         onOpenProject={() => undefined}
-        onViewAllProjects={() => undefined}
         skills={[skill('Skill B')]}
         designSystems={[designSystem('shared-ds', 'DS B')]}
       />,
@@ -444,7 +437,6 @@ describe('HomeView workspace-scoped plugin catalog', () => {
         projects={[]}
         onSubmit={() => undefined}
         onOpenProject={() => undefined}
-        onViewAllProjects={() => undefined}
         skills={[skill('Skill A')]}
         designSystems={[designSystem('shared-ds', 'DS A')]}
       />,
@@ -466,7 +458,6 @@ describe('HomeView workspace-scoped plugin catalog', () => {
         projects={[]}
         onSubmit={() => undefined}
         onOpenProject={() => undefined}
-        onViewAllProjects={() => undefined}
         skills={[]}
         designSystems={[]}
       />,
@@ -499,7 +490,6 @@ describe('HomeView workspace-scoped plugin catalog', () => {
         projects={[]}
         onSubmit={() => undefined}
         onOpenProject={() => undefined}
-        onViewAllProjects={() => undefined}
         skills={[skill('Skill A')]}
       />,
     );
@@ -517,7 +507,6 @@ describe('HomeView workspace-scoped plugin catalog', () => {
         projects={[]}
         onSubmit={() => undefined}
         onOpenProject={() => undefined}
-        onViewAllProjects={() => undefined}
         skills={[skill('Skill B')]}
       />,
     );
@@ -534,7 +523,6 @@ describe('HomeView workspace-scoped plugin catalog', () => {
         projects={[]}
         onSubmit={() => undefined}
         onOpenProject={() => undefined}
-        onViewAllProjects={() => undefined}
         skills={[]}
       />,
     );
@@ -600,7 +588,6 @@ describe('HomeView workspace-scoped plugin catalog', () => {
         projects={[]}
         onSubmit={() => undefined}
         onOpenProject={() => undefined}
-        onViewAllProjects={() => undefined}
       />,
     );
     expect(screen.getByTestId('plugin-catalog').textContent).toBe('loading');
@@ -614,7 +601,6 @@ describe('HomeView workspace-scoped plugin catalog', () => {
         projects={[]}
         onSubmit={() => undefined}
         onOpenProject={() => undefined}
-        onViewAllProjects={() => undefined}
       />,
     );
 
@@ -664,7 +650,6 @@ describe('HomeView workspace-scoped plugin catalog', () => {
         projects={[]}
         onSubmit={() => undefined}
         onOpenProject={() => undefined}
-        onViewAllProjects={() => undefined}
       />,
     );
 

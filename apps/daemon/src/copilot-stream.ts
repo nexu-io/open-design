@@ -21,6 +21,8 @@
  *   result                        -> usage
  */
 
+import { boundedRawAgentEvent } from './runtimes/run-event-payload-budget.js';
+
 type StreamEvent = Record<string, unknown>;
 type EventSink = (event: StreamEvent) => void;
 
@@ -42,7 +44,9 @@ export function createCopilotStreamHandler(onEvent: EventSink) {
       try {
         obj = JSON.parse(line);
       } catch {
-        onEvent({ type: 'raw', line });
+        // Bounded at the source: the live stream and the run buffer carry the
+        // same line the transcript stores (see run-event-payload-budget.ts).
+        onEvent(boundedRawAgentEvent(line, null));
         continue;
       }
       handleObject(obj);
@@ -56,7 +60,7 @@ export function createCopilotStreamHandler(onEvent: EventSink) {
     try {
       handleObject(JSON.parse(rem));
     } catch {
-      onEvent({ type: 'raw', line: rem });
+      onEvent(boundedRawAgentEvent(rem));
     }
   }
 

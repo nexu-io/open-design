@@ -16,7 +16,30 @@
 // faststart header instead of buffering the whole clip up front.
 
 import { useEffect, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import type { MediaPreviewSpec } from '../preview';
+
+/**
+ * Poster aspect ratios measured this session, keyed by poster URL.
+ *
+ * Component state is not enough to remember a shape. The <img> unmounts every
+ * time a tile drifts past the mount margin, and the whole card unmounts on a
+ * gallery tab switch — so a host that sizes itself from the picture forgot every
+ * ratio the moment you looked away, and came back to a wall of identical
+ * placeholder boxes (measured: 45 of 46 tiles back at the floor, one click after
+ * they had all been measured). Keyed by URL rather than plugin id because the
+ * ratio is a property of the file, so the same poster reused by two records is
+ * measured once.
+ *
+ * Bounded by the catalogue: one entry per poster the session has actually
+ * looked at, against ~460 records. Not persisted — a reload re-measures, which
+ * is the same cost as the first visit.
+ */
+const posterRatios = new Map<string, number>();
+
+function cachedRatio(poster: string | null): number | null {
+  return poster ? (posterRatios.get(poster) ?? null) : null;
+}
 
 interface Props {
   preview: MediaPreviewSpec;
@@ -38,9 +61,29 @@ export function MediaSurface({ preview, pluginTitle, inView, visible = inView }:
   // poison a freshly-assigned URL (filter rotations, daemon
   // repopulating a preview after an offline flip). #2955.
   const [posterLoadFailed, setPosterLoadFailed] = useState(false);
+  // The poster's own aspect ratio, once it has reported real pixels — published
+  // on this element as `--poster-ratio` plus a `data-poster-loaded` flag,
+  // because a host that sizes itself FROM the image needs both.
+  //
+  // It has to be REMEMBERED, not read off the live <img>. The tag below
+  // unmounts whenever the tile leaves the mount margin (`inView`, once: false),
+  // and a host whose height came from the mounted image would snap back to its
+  // placeholder size on every unmount — in the community gallery's 图片
+  // masonry that re-balances all four columns, so scrolling became a continuous
+  // reflow of the whole grid. This state outlives the <img>, so the box keeps
+  // its shape whether or not the picture is currently in the DOM. Fixed-ratio
+  // hosts (the plugins gallery) read neither. Reset with the URL, same
+  // reasoning as the failure flag above.
+  const [posterRatio, setPosterRatio] = useState<number | null>(() =>
+    cachedRatio(preview.poster),
+  );
   const videoRef = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     setPosterLoadFailed(false);
+    // Back to what is KNOWN about the new URL, not to nothing: a poster this
+    // session has already measured keeps its shape from the first frame, so a
+    // revisited tile never re-opens at the placeholder size.
+    setPosterRatio(cachedRatio(preview.poster));
   }, [preview.poster]);
   // Some Chromium builds paint a solid black frame for an instant right as a
   // freshly-mounted `<video>` starts decoding, before its first real frame is
@@ -169,6 +212,8 @@ export function MediaSurface({ preview, pluginTitle, inView, visible = inView }:
     <div
       ref={approachRef}
       className="plugins-home__media"
+      data-poster-loaded={posterRatio ? 'true' : undefined}
+      style={posterRatio ? ({ '--poster-ratio': String(posterRatio) } as CSSProperties) : undefined}
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => setHovering(false)}
     >
@@ -180,6 +225,17 @@ export function MediaSurface({ preview, pluginTitle, inView, visible = inView }:
           loading="lazy"
           decoding="async"
           referrerPolicy="no-referrer"
+          onLoad={(event) => {
+            const { naturalWidth, naturalHeight } = event.currentTarget;
+            if (naturalWidth > 0 && naturalHeight > 0) {
+              const ratio = naturalWidth / naturalHeight;
+              // Key on the PROP, not `img.src`: the element reports a resolved
+              // absolute URL, and a relative poster (the daemon's baked ones)
+              // would then be written under a key no lookup ever asks for.
+              if (preview.poster) posterRatios.set(preview.poster, ratio);
+              setPosterRatio(ratio);
+            }
+          }}
           onError={() => setPosterLoadFailed(true)}
         />
       ) : useFallback ? (

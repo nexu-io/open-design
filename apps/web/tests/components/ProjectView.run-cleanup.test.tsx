@@ -176,6 +176,9 @@ vi.mock('../../src/state/projects', () => ({
   loadTabs: (...args: unknown[]) => loadTabs(...args),
   patchConversation: (...args: unknown[]) => patchConversation(...args),
   patchProject: (...args: unknown[]) => patchProject(...args),
+  registerQueuedSubmission: vi.fn(async (projectId, submission) => ({
+    id: submission.id, projectId, conversationId: submission.conversationId, acceptedAt: submission.submittedAt,
+  })),
   saveMessage: (...args: unknown[]) => saveMessage(...args),
   saveTabs: (...args: unknown[]) => saveTabs(...args),
   cacheTabsLocally: (_projectId: string, state: unknown) => state,
@@ -416,6 +419,15 @@ describe('selectPrimaryProjectFile', () => {
 
     expect(selectPrimaryProjectFile([sidecar, html])).toBe(html);
   });
+
+  it('does not treat Home-staged reference attachments as the initial artifact to open', () => {
+    const reference = projectFile('reference.png', 'image', 2_000);
+    const generated = projectFile('index.html', 'html', 1_000);
+    const homeAttachments = new Set(['reference.png']);
+
+    expect(selectPrimaryProjectFile([reference], homeAttachments)).toBeNull();
+    expect(selectPrimaryProjectFile([reference, generated], homeAttachments)).toBe(generated);
+  });
 });
 
 describe('retry target resolution', () => {
@@ -450,7 +462,9 @@ describe('retry target resolution', () => {
     });
   });
 
-  it('keeps earlier delivery-failure retry attempts visible while reusing the original user turn', () => {
+  // P0-24: a delivery outcome does not make the run a failure, so a turn whose
+  // run succeeded is not a retry target even when nothing was delivered.
+  it('does not treat succeeded runs with a delivery outcome as retry targets', () => {
     const firstFailure: ChatMessage = {
       ...failedAssistant,
       id: 'assistant-1',
@@ -476,12 +490,7 @@ describe('retry target resolution', () => {
       resultDeliveryState: 'delivery_failed',
     };
 
-    expect(resolveRetryTarget([userMessage, firstFailure, secondFailure], secondFailure.id)).toEqual({
-      failedAssistant: secondFailure,
-      userMsg: userMessage,
-      priorMessages: [],
-      preservedAttempts: [firstFailure, secondFailure],
-    });
+    expect(resolveRetryTarget([userMessage, firstFailure, secondFailure], secondFailure.id)).toBeNull();
   });
 
   it('rejects non-terminal, non-last, or non-user-preceded retry targets', () => {
@@ -1356,7 +1365,10 @@ describe('ProjectView daemon cleanup', () => {
     listMessages.mockResolvedValue([]);
     fetchPreviewComments.mockResolvedValue([]);
     loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
-    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectFiles.mockResolvedValue([
+      projectFile('brief.pdf', 'pdf', 1),
+      projectFile('logo.png', 'image', 2),
+    ]);
     fetchLiveArtifacts.mockResolvedValue([]);
     fetchSkill.mockResolvedValue(null);
     fetchDesignSystem.mockResolvedValue(null);
@@ -1419,6 +1431,10 @@ describe('ProjectView daemon cleanup', () => {
       });
       expect(window.sessionStorage.getItem('od:auto-send-first:project-files')).toBeNull();
       expect(window.sessionStorage.getItem('od:auto-send-attachments:project-files')).toBeNull();
+      expect(saveTabs).not.toHaveBeenCalledWith(
+        'project-files',
+        expect.objectContaining({ active: expect.stringMatching(/brief\.pdf|logo\.png/) }),
+      );
     } finally {
       window.sessionStorage.removeItem('od:auto-send-first:project-files');
       window.sessionStorage.removeItem('od:auto-send-attachments:project-files');
@@ -1607,7 +1623,7 @@ describe('ProjectView daemon cleanup', () => {
     expect(streamViaDaemon).toHaveBeenCalledTimes(1);
   });
 
-  it('audits design-system workspace output after first auto-send and seeds a bounded repair prompt', async () => {
+  it('OPEND-4047 audits design-system workspace output after first auto-send and seeds a bounded repair prompt', async () => {
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
     listMessages.mockResolvedValue([]);
     fetchPreviewComments.mockResolvedValue([]);
@@ -1630,12 +1646,18 @@ describe('ProjectView daemon cleanup', () => {
       }],
       warnings: [],
     });
+    const onTouchProject = vi.fn();
     let streamCallCount = 0;
     streamViaDaemon.mockImplementation(async (options: {
       handlers: { onDone: () => void };
       onRunCreated?: (runId: string) => void;
+      submission?: { source: string };
+      onUserSubmissionAccepted?: (receipt: { id: string; projectId: string; conversationId: string; acceptedAt: number }) => void;
     }) => {
       streamCallCount += 1;
+      if (options.submission?.source === 'user') options.onUserSubmissionAccepted?.({
+        id: 'first', projectId: 'project-ds', conversationId: 'conv-1', acceptedAt: 1000,
+      });
       options.onRunCreated?.(`run-ds-${streamCallCount}`);
       if (streamCallCount === 1) {
         options.handlers.onDone();
@@ -1673,7 +1695,7 @@ describe('ProjectView daemon cleanup', () => {
         onOpenSettings={() => {}}
         onBack={() => {}}
         onClearPendingPrompt={() => {}}
-        onTouchProject={() => {}}
+        onTouchProject={onTouchProject}
         onProjectChange={() => {}}
         onProjectsRefresh={() => {}}
       />,
@@ -1692,6 +1714,10 @@ describe('ProjectView daemon cleanup', () => {
       );
       expect(repairSeed).toBeTruthy();
     });
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
+    expect(streamViaDaemon.mock.calls[1]![0].submission.source).toBe('system');
+    expect(onTouchProject).toHaveBeenCalledTimes(1);
+    expect(onTouchProject).toHaveBeenCalledWith(1000);
     expect(saveMessage.mock.calls.some((call) =>
       call[2]?.role === 'assistant'
       && call[2]?.events?.some((event: { kind?: string; label?: string; detail?: string }) =>
@@ -2215,6 +2241,85 @@ describe('ProjectView daemon cleanup', () => {
     expect(
       latest?.messages?.some((m) => m.role === 'assistant' && m.runStatus === 'failed' && m.resumable === true),
     ).toBe(true);
+  });
+
+  it('threads the captured stderr tail from a live daemon failure onto the assistant message', async () => {
+    // The failure card's copy promises "the original error is collected under
+    // 「view details」". For a whole family of failures the daemon's own message
+    // is generic and the real cause exists only in the stderr it captured, so
+    // the live onError path has to carry that onto the assistant message —
+    // otherwise the card can only ever repeat the generic sentence.
+    const stderrTail =
+      'Error: dsh: plugin tree failed to load: credentials-local: the value for "version" in /Users/tester/.dsh/.credentials.yaml must be a string';
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    streamViaDaemon.mockImplementation(async (options: {
+      onRunCreated?: (runId: string) => void;
+      handlers: { onError: (error: Error) => void };
+    }) => {
+      options.onRunCreated?.('run-stderr-tail-1');
+      const err = new Error('DeepSeek Harness profile exited without a terminal result.') as Error & {
+        code?: string;
+        stderrTail?: string;
+      };
+      err.code = 'DSH_PROFILE_MISSING_RESULT';
+      err.stderrTail = stderrTail;
+      options.handlers.onError(err);
+    });
+
+    chatPaneSpy.mockClear();
+
+    render(
+      <ProjectView
+        project={{ id: 'project-stderr-tail', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    const sendProps = await waitForReadyChatPaneProps();
+    await sendProps!.onSend!('do the thing', [], []);
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      const latest = chatPaneSpy.mock.calls.at(-1)?.[0] as {
+        messages?: Array<{
+          role: string;
+          runStatus?: string;
+          events?: Array<{ kind?: string; label?: string; stderrTail?: string }>;
+        }>;
+      };
+      const failed = latest?.messages?.find(
+        (m) => m.role === 'assistant' && m.runStatus === 'failed',
+      );
+      const errorEvent = failed?.events?.find(
+        (event) => event.kind === 'status' && event.label === 'error',
+      );
+      expect(errorEvent?.stderrTail).toBe(stderrTail);
+    });
   });
 
   it('does not replay a terminal succeeded row with empty produced files', async () => {
@@ -4214,6 +4319,7 @@ describe('ProjectView daemon cleanup', () => {
     render(
       <ProjectView
         project={{ id: 'project-recover-failed', name: 'Project', skillId: null, designSystemId: null } as never}
+        initialWorkspaceScope={{ kind: 'unbound', projectId: 'project-recover-failed', workspaceId: null, context: null }}
         routeFileName={null}
         config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
         agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
@@ -4300,6 +4406,7 @@ describe('ProjectView daemon cleanup', () => {
     render(
       <ProjectView
         project={{ id: 'project-css-recover', name: 'Project', skillId: null, designSystemId: null } as never}
+        initialWorkspaceScope={{ kind: 'unbound', projectId: 'project-css-recover', workspaceId: null, context: null }}
         routeFileName={null}
         config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
         agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}

@@ -16,8 +16,12 @@ export function resolveChatToolTokenTtlMs(inactivityTimeoutMs: number): number {
 // Capability key for the parameterized media wait route. Token grants cannot
 // enumerate a task id that is created after the grant is minted.
 export const MEDIA_TASK_WAIT_TOOL_ENDPOINT = '/api/media/tasks/:id/wait';
+export const STOCK_SEARCH_TOOL_ENDPOINT = '/api/tools/media/stock-search';
 export const HYPERFRAMES_SCAFFOLD_TOOL_ENDPOINT = '/api/tools/media/hyperframes/scaffold';
+export const MOTION_REFERENCE_TOOL_ENDPOINT = '/api/tools/media/motion-reference';
+export const MOTION_COMPARE_TOOL_ENDPOINT = '/api/tools/media/motion-compare';
 export const PROJECT_EXPORT_TOOL_ENDPOINT = '/api/projects/:id/export/:format';
+export const DELIVERABLE_SYNTAX_CHECK_TOOL_ENDPOINT = '/api/tools/deliverable-syntax/check';
 
 export const CHAT_TOOL_ENDPOINTS = [
   '/api/tools/live-artifacts/create',
@@ -28,7 +32,11 @@ export const CHAT_TOOL_ENDPOINTS = [
   '/api/tools/connectors/execute',
   '/api/tools/design-systems/read',
   '/api/tools/media/generate',
+  STOCK_SEARCH_TOOL_ENDPOINT,
   HYPERFRAMES_SCAFFOLD_TOOL_ENDPOINT,
+  MOTION_REFERENCE_TOOL_ENDPOINT,
+  MOTION_COMPARE_TOOL_ENDPOINT,
+  DELIVERABLE_SYNTAX_CHECK_TOOL_ENDPOINT,
   MEDIA_TASK_WAIT_TOOL_ENDPOINT,
   PROJECT_EXPORT_TOOL_ENDPOINT,
   '/api/tools/library/search',
@@ -44,7 +52,11 @@ export const CHAT_TOOL_OPERATIONS = [
   'connectors:execute',
   'design-systems:read',
   'media:generate',
+  'media:stock-search',
   'media:scaffold',
+  'media:reference',
+  'media:compare',
+  'deliverable-syntax:check',
   'project:export',
   'library:search',
   'library:apply',

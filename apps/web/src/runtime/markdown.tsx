@@ -31,6 +31,13 @@ export interface RenderMarkdownOptions {
    * behavior for every link.
    */
   onLinkClick?: MarkdownLinkClickHandler;
+  /**
+   * Disable asynchronous syntax highlighting while a fenced block is still
+   * growing. The plain, escaped code block remains visible; callers can enable
+   * highlighting on the final snapshot without launching Shiki for every
+   * streamed delta.
+   */
+  syntaxHighlight?: boolean;
 }
 
 export function renderMarkdown(input: string, options?: RenderMarkdownOptions): ReactNode {
@@ -295,6 +302,7 @@ function renderBlock(block: Block, key: number, options?: RenderMarkdownOptions)
         key={key}
         body={block.body}
         lang={block.lang}
+        syntaxHighlight={options?.syntaxHighlight !== false}
       />
     );
   }
@@ -409,7 +417,15 @@ function codeCommentLocation(comment: CodeCommentDirective): string {
 // "fold tall code" affordance so a single dump can't swallow the viewport.
 const CODE_COLLAPSE_LINE_THRESHOLD = 16;
 
-function MarkdownCodeBlock({ body, lang }: { body: string; lang: string | null }) {
+function MarkdownCodeBlock({
+  body,
+  lang,
+  syntaxHighlight,
+}: {
+  body: string;
+  lang: string | null;
+  syntaxHighlight: boolean;
+}) {
   const t = useT();
   const [copied, setCopied] = useState(false);
   const [highlightedHtml, setHighlightedHtml] = useState<string | null>(null);
@@ -425,7 +441,10 @@ function MarkdownCodeBlock({ body, lang }: { body: string; lang: string | null }
   }, []);
 
   useEffect(() => {
-    if (!lang) return;
+    if (!lang || !syntaxHighlight) {
+      setHighlightedHtml(null);
+      return;
+    }
     let cancelled = false;
     import('./shiki').then(({ highlightCode }) =>
       highlightCode(body, lang).then((html) => {
@@ -433,7 +452,7 @@ function MarkdownCodeBlock({ body, lang }: { body: string; lang: string | null }
       }),
     ).catch(() => {});
     return () => { cancelled = true; };
-  }, [body, lang]);
+  }, [body, lang, syntaxHighlight]);
 
   async function handleCopy() {
     const ok = await copyToClipboard(body);
@@ -509,6 +528,25 @@ function isSafeMarkdownImageSrc(src: string): boolean {
   );
 }
 
+/**
+ * Chat Markdown also accepts in-project relative paths, so an allow-list of
+ * only http(s) would break file links. Reject explicit executable/privileged
+ * schemes and protocol-relative URLs; a path without a scheme remains local
+ * and is handed to the caller's normal link-routing policy.
+ */
+function isSafeMarkdownHref(href: string): boolean {
+  const value = href.trim();
+  if (!value || value.startsWith('//')) return false;
+  // A Windows drive path satisfies the URI scheme grammar (`C:`), but it is
+  // still a local path that the chat click router must inspect and swallow or
+  // route in-app. Treat it like POSIX/relative project paths, not like an
+  // arbitrary custom protocol.
+  if (/^[a-z]:[\\/]/i.test(value)) return true;
+  const scheme = /^([a-z][a-z\d+.-]*):/i.exec(value)?.[1]?.toLowerCase();
+  if (!scheme) return true;
+  return scheme === 'http' || scheme === 'https' || scheme === 'mailto';
+}
+
 const INLINE_CODE_HEX_COLOR_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
 const PROSE_HEX_COLOR_RE = /(^|[^\w#])(#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}))(?![\w-])/g;
 
@@ -551,6 +589,12 @@ function renderColorToken(value: string, key: string): ReactNode {
   );
 }
 
+function unwrapMarkdownDestination(value: string): string {
+  return value.startsWith('<') && value.endsWith('>')
+    ? value.slice(1, -1)
+    : value;
+}
+
 // Inline pass: tokenize into runs of `code`, **bold**, *italic*, links,
 // and plain text. We walk the string with a regex that matches whichever
 // delimiter shows up next; everything between delimiters becomes a text
@@ -575,7 +619,7 @@ function renderInline(text: string, options?: RenderMarkdownOptions): ReactNode 
   //     leaving italic to win turns the URL into an italic-fragmented mess.
   //  5. bold (**a** / __a__) before italic (*a* / _a_).
   const re =
-    /(`[^`]+`)|!\[([^\]]*)\]\(([^)\s]+)\)|\[([^\]]+)\]\(([^)\s]+)\)|(https?:\/\/[^\s)<>]+)|(\*\*[^*]+\*\*)|(__[^_]+__)|(\*[^*\n]+\*)|(_[^_\n]+_)/g;
+    /(`[^`]+`)|!\[([^\]]*)\]\((<[^>\n]+>|[^)\s]+)\)|\[([^\]]+)\]\((<[^>\n]+>|[^)\s]+)\)|(https?:\/\/[^\s)<>]+)|(\*\*[^*]+\*\*)|(__[^_]+__)|(\*[^*\n]+\*)|(_[^_\n]+_)/g;
   let lastIndex = 0;
   let m: RegExpExecArray | null;
   let key = 0;
@@ -587,7 +631,7 @@ function renderInline(text: string, options?: RenderMarkdownOptions): ReactNode 
       out.push(renderInlineCodeSpan(m[1].slice(1, -1), key++));
     } else if (m[3] !== undefined) {
       // Image: m[2] = alt (may be empty), m[3] = src
-      const src = m[3];
+      const src = unwrapMarkdownDestination(m[3]);
       const alt = m[2] || '';
       if (isSafeMarkdownImageSrc(src)) {
         out.push(
@@ -607,19 +651,23 @@ function renderInline(text: string, options?: RenderMarkdownOptions): ReactNode 
         pushText(out, alt, key++, options);
       }
     } else if (m[4] && m[5]) {
-      const href = m[5];
-      out.push(
-        <a
-          key={key++}
-          className="md-link"
-          href={href}
-          target="_blank"
-          rel="noreferrer noopener"
-          onClick={linkClickHandler?.(href)}
-        >
-          {m[4]}
-        </a>,
-      );
+      const href = unwrapMarkdownDestination(m[5]);
+      if (isSafeMarkdownHref(href)) {
+        out.push(
+          <a
+            key={key++}
+            className="md-link"
+            href={href}
+            target="_blank"
+            rel="noreferrer noopener"
+            onClick={linkClickHandler?.(href)}
+          >
+            {m[4]}
+          </a>,
+        );
+      } else {
+        pushText(out, m[4], key++, options);
+      }
     } else if (m[6]) {
       // Bare URL — autolink with the URL as both href and visible text,
       // matching the Markdown `<https://…>` autolink convention.

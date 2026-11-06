@@ -37,6 +37,28 @@ describe('byok-opencode runtime config', () => {
     }
   });
 
+  it.each(['openai', 'anthropic', 'google', 'azure', 'ollama', 'senseaudio', 'aihubmix'] as const)(
+    'allows images from attachments and Read tools for unknown %s models',
+    (protocol) => {
+      const out = buildOpenCodeByokProviderConfig(
+        { protocol, apiKey: 'test-key', baseUrl: 'https://provider.example/v1' },
+        'new-custom-model',
+      );
+
+      expect(out?.config).toMatchObject({
+        provider: {
+          [BYOK_OPENCODE_PROVIDER_ID]: {
+            models: {
+              'new-custom-model': {
+                modalities: { input: ['text', 'image'], output: ['text'] },
+              },
+            },
+          },
+        },
+      });
+    },
+  );
+
   it('prefixes raw BYOK models with the run-scoped OpenCode provider id', () => {
     expect(opencodeByokModelId('gpt-4o-mini')).toBe('open-design-byok/gpt-4o-mini');
     expect(opencodeByokModelId('open-design-byok/gpt-4o-mini')).toBe('open-design-byok/gpt-4o-mini');
@@ -370,9 +392,15 @@ describe('byok-opencode runtime config', () => {
     });
   });
 
-  it('allows keyless local Ollama and normalizes it to the OpenAI-compatible v1 endpoint', () => {
+  it.each([
+    ['http://localhost:11434', 'http://localhost:11434/v1'],
+    ['http://127.0.0.1:11434', 'http://127.0.0.1:11434/v1'],
+    ['http://[::1]:11434', 'http://[::1]:11434/v1'],
+    ['http://[::1]:11434/api', 'http://[::1]:11434/v1'],
+    ['http://[::1]:11434/v1', 'http://[::1]:11434/v1'],
+  ])('allows keyless local Ollama at %s and normalizes its endpoint', (baseUrl, expectedBaseUrl) => {
     const out = buildOpenCodeByokProviderConfig(
-      { protocol: 'ollama', apiKey: '', baseUrl: 'http://localhost:11434' },
+      { protocol: 'ollama', apiKey: '', baseUrl },
       'llama3.2',
     );
 
@@ -383,7 +411,7 @@ describe('byok-opencode runtime config', () => {
         [BYOK_OPENCODE_PROVIDER_ID]: {
           npm: '@ai-sdk/openai-compatible',
           options: {
-            baseURL: 'http://localhost:11434/v1',
+            baseURL: expectedBaseUrl,
           },
         },
       },
@@ -393,12 +421,14 @@ describe('byok-opencode runtime config', () => {
     expect(provider?.options).not.toHaveProperty('apiKey');
   });
 
-  it('still requires an API key for non-local Ollama providers', () => {
-    expect(buildOpenCodeByokProviderConfig(
-      { protocol: 'ollama', apiKey: '', baseUrl: 'https://ollama.com' },
-      'gpt-oss:20b',
-    )).toBeNull();
-  });
+  it.each(['https://ollama.com', 'http://[2001:db8::1]:11434'])(
+    'still requires an API key for non-local Ollama provider %s', (baseUrl) => {
+      expect(buildOpenCodeByokProviderConfig(
+        { protocol: 'ollama', apiKey: '', baseUrl },
+        'gpt-oss:20b',
+      )).toBeNull();
+    },
+  );
 
   it('allows explicit keyless OpenAI-compatible presets such as vLLM', () => {
     const out = buildOpenCodeByokProviderConfig(

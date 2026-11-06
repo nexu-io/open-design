@@ -2,10 +2,16 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { parseAmrEndpointBinding } from "@open-design/contracts";
+
 import {
+  APP_KEYS,
   OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_DEFAULTS,
+  SIDECAR_SOURCES,
 } from "@open-design/sidecar-proto";
+import { bootstrapSidecarProcess, readCurrentSidecarStamp } from "@open-design/sidecar";
+import { releaseChannelFromNamespace } from "@open-design/release";
 
 import {
   PACKAGED_NAMESPACE_ENV,
@@ -16,6 +22,7 @@ import {
   parsePackagedHeadlessRequest,
   runPackagedHeadless,
 } from "./headless-runtime.js";
+import { resolvePackagedNamespacePaths } from "./paths.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -37,6 +44,7 @@ function resolveHeadlessAmrProfile(): PackagedConfig["amrProfile"] {
 }
 
 function resolveHeadlessConfig(): PackagedConfig {
+  const amrEndpointBinding = parseAmrEndpointBinding(process.env.OPEN_DESIGN_AMR_ENDPOINT_BINDING);
   const namespace = OPEN_DESIGN_SIDECAR_CONTRACT.normalizeNamespace(
     process.env[PACKAGED_NAMESPACE_ENV] ?? SIDECAR_DEFAULTS.namespace,
   );
@@ -50,7 +58,8 @@ function resolveHeadlessConfig(): PackagedConfig {
     ?? join(__dirname, "..", "..", "..", "open-design");
 
   return {
-    amrProfile: resolveHeadlessAmrProfile(),
+    amrEndpointBinding,
+    amrProfile: amrEndpointBinding?.profile ?? resolveHeadlessAmrProfile(),
     appVersion: null,
     daemonCliEntry: null,
     daemonSidecarEntry: null,
@@ -63,12 +72,15 @@ function resolveHeadlessConfig(): PackagedConfig {
     updateMetadataUrl: process.env.OD_UPDATE_METADATA_URL?.trim() || null,
     posthogKey: process.env.POSTHOG_KEY?.trim() || null,
     posthogHost: process.env.POSTHOG_HOST?.trim() || null,
-    velaWebUrl: process.env.OD_VELA_WEB_URL?.trim() || null,
+    velaWebUrl: amrEndpointBinding?.webUrl ?? (process.env.OD_VELA_WEB_URL?.trim() || null),
     velaWebUrls: (() => {
       try {
-        return JSON.parse(process.env.OD_VELA_WEB_URLS ?? '{}') as Record<string, string>;
+        return {
+          ...(JSON.parse(process.env.OD_VELA_WEB_URLS ?? '{}') as Record<string, string>),
+          ...(amrEndpointBinding ? { [amrEndpointBinding.profile]: amrEndpointBinding.webUrl } : {}),
+        };
       } catch {
-        return {};
+        return amrEndpointBinding ? { [amrEndpointBinding.profile]: amrEndpointBinding.webUrl } : {};
       }
     })(),
     webSidecarEntry: null,
@@ -82,16 +94,34 @@ const headlessRequest = parsePackagedHeadlessRequest([
   ...process.argv.slice(2),
 ]);
 
-void runPackagedHeadless(
-  resolveHeadlessConfig(),
-  headlessRequest,
-  {
+async function main(): Promise<void> {
+  const config = resolveHeadlessConfig();
+  const paths = resolvePackagedNamespacePaths(config, config.namespace, process.env);
+  const currentStamp = (() => {
+    try { return readCurrentSidecarStamp(); } catch { return null; }
+  })();
+  const stamp = currentStamp ?? {
+    app: APP_KEYS.DESKTOP,
+    channel: releaseChannelFromNamespace(config.namespace, "default") ?? "stable",
+    mode: "headless",
+    namespace: config.namespace,
+    source: SIDECAR_SOURCES.PACKAGED,
+  };
+  if (await bootstrapSidecarProcess(stamp, {
+    dataRoot: paths.dataRoot,
+    ownerPid: null,
+    port: 0,
+    runtimeRoot: paths.runtimeRoot,
+  })) return;
+  await runPackagedHeadless(config, headlessRequest, {
     mcpBootstrapLaunch: {
       command: process.execPath,
       args: [fileURLToPath(import.meta.url), "--headless"],
     },
-  },
-).catch((error: unknown) => {
+  });
+}
+
+void main().catch((error: unknown) => {
   process.stderr.write(
     `open-design headless failed: ${
       error instanceof Error ? error.message : String(error)

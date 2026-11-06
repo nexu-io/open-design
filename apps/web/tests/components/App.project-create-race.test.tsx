@@ -1,14 +1,23 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useEffect } from 'react';
+import { installMockOpenDesignHost } from '@open-design/host/testing';
+
+import { navigate } from '../../src/router';
 import {
   buildWorkspacePermissions,
+  type ProjectWorkspaceScope,
   type WorkspaceCollabContext,
 } from '@open-design/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../../src/App';
+import { homeAutoSendIdentity } from '../../src/runtime/home-auto-send-identity';
+import { navigationTiming } from '../../src/observability/navigation-timing';
+import { reportSafetyEvent } from '../../src/analytics/error-tracking';
 import { notifyAmrLoginStatusChanged } from '../../src/components/amrLoginPolling';
+import type { ShareLoginReturn } from '../../src/components/share/share-login-return';
 import type {
   ProjectNameAuthorityResolution,
   ProjectRenameFenceToken,
@@ -45,7 +54,13 @@ import {
   listProjects,
   listTemplates,
   patchProject,
+  ProjectCreateError,
 } from '../../src/state/projects';
+import {
+  HOME_COMPOSER_ATTACHMENTS_EVENT,
+  clearHomeComposerAttachments,
+  peekHomeComposerAttachments,
+} from '../../src/state/home-composer-stash';
 import {
   WORKSPACE_CONTEXT_REFRESH_EVENT,
   notifyWorkspaceContextRefresh,
@@ -54,6 +69,7 @@ import {
   currentWorkspaceAccountGeneration,
   workspaceIdentityCacheKey,
 } from '../../src/collab/useWorkspaceContext';
+import { runWorkspaceIdentity } from '../../src/collab/useProjectWorkspaceScope';
 import { resetCoalescedGet } from '../../src/lib/coalesced-get';
 import {
   projectDisplaySnapshotKey,
@@ -75,14 +91,37 @@ const iframePoolHarness = vi.hoisted(() => ({
   evictProject: vi.fn(),
 }));
 
+const requestLimitHandoff = vi.hoisted(() => ({
+  reject: undefined as undefined | ((input: { projectId: string; clientRequestId: string; accountGeneration: number; workspaceContext: WorkspaceCollabContext | null; branch: { tier: 'below_max' | 'max'; audience: 'owner' | 'member' } }) => boolean),
+}));
+
 const projectViewRenameFenceHarness = vi.hoisted(() => ({
   token: null as ProjectRenameFenceToken | null,
+}));
+
+const projectViewRetryScopeHarness = vi.hoisted(() => ({
+  scope: null as ProjectWorkspaceScope | null,
+  armedWorkspaceKey: null as string | null,
+  latest: null as {
+    context: WorkspaceCollabContext | null;
+    continuation: AmrAuthRetryContinuation | null;
+    consume: ((continuation: AmrAuthRetryContinuation) => boolean) | undefined;
+  } | null,
 }));
 
 const workspaceTabsHarness = vi.hoisted(() => ({
   projectIds: new Set<string>(),
 }));
 
+const concurrencyAnalytics = vi.hoisted(() => ({ track: vi.fn() }));
+beforeEach(() => concurrencyAnalytics.track.mockClear());
+vi.mock('../../src/analytics/provider', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/analytics/provider')>();
+  return { ...actual, useAnalytics: () => ({ ...actual.useAnalytics(), track: concurrencyAnalytics.track }) };
+});
+function concurrencyViews() {
+  return concurrencyAnalytics.track.mock.calls.filter(([event, props]) => event === 'surface_view' && props.area === 'concurrency_limit_dialog');
+}
 vi.mock('../../src/collab/workspace-events', () => ({
   useWorkspaceInvalidation: vi.fn((
     handlers: Record<string, (payload: any) => void>,
@@ -107,8 +146,14 @@ vi.mock('../../src/components/IframeKeepAlivePool', async (importOriginal) => ({
   }),
 }));
 
+vi.mock('../../src/analytics/error-tracking', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../src/analytics/error-tracking')>(),
+  reportSafetyEvent: vi.fn(),
+}));
+
 vi.mock('../../src/components/EntryView', () => ({
   EntryView: ({
+    onCompleteOnboarding,
     onCreateProject,
     onCreatePluginShareProject,
     onDeleteProject,
@@ -122,6 +167,7 @@ vi.mock('../../src/components/EntryView', () => ({
     projects,
     projectsLoading,
   }: {
+    onCompleteOnboarding: () => boolean | void;
     onCreateProject: (input: unknown) => boolean | Promise<boolean>;
     onCreatePluginShareProject: (
       pluginId: string,
@@ -154,6 +200,7 @@ vi.mock('../../src/components/EntryView', () => ({
   }) => (
     <main>
       <div data-testid="entry-home-surface" />
+      <button onClick={() => onCompleteOnboarding()}>Complete sign-in</button>
       <div data-testid="amr-login-status">{String(amrLoggedIn)}</div>
       <div data-testid="entry-projects-loading">{String(Boolean(projectsLoading))}</div>
       <button
@@ -208,6 +255,27 @@ vi.mock('../../src/components/EntryView', () => ({
         }
       >
         Create project with working dir
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          onCreateProject({
+            name: 'Many attachment project',
+            skillId: null,
+            designSystemId: null,
+            metadata: { kind: 'prototype', userWorkingDir: '/Users/me/external' },
+            userWorkingDirToken: 'wd-token',
+            pendingPrompt: 'Make a deck from these',
+            autoSendFirstMessage: true,
+            pendingFiles: Array.from(
+              { length: 6 },
+              (_unused, index) =>
+                new File([`shot-${index}`], `shot-${index}.png`, { type: 'image/png' }),
+            ),
+          })
+        }
+      >
+        Create project with many attachments
       </button>
       <button
         type="button"
@@ -365,7 +433,13 @@ vi.mock('../../src/components/ProjectView', () => ({
     onOpenAmrSettings,
     onOpenSettings,
     workspaceContextOverride,
+    creationHandoff,
+    onCreationHandoffSettled,
+    shareLoginReturn,
+    onShareLoginReturnChange,
+    onInitialHomeRequestConcurrencyRejected,
   }: {
+    onInitialHomeRequestConcurrencyRejected?: typeof requestLimitHandoff.reject;
     onBack: () => void;
     onCreateProjectFromDesignSystem?: (designSystemId: string, title: string) => Promise<void> | void;
     onCreateDesignSystemFromProject?: (
@@ -401,9 +475,32 @@ vi.mock('../../src/components/ProjectView', () => ({
     onOpenAmrSettings?: () => void;
     onOpenSettings?: () => void;
     workspaceContextOverride?: WorkspaceCollabContext | null;
-  }) => (
+    creationHandoff?: { conversationId?: string | null; persisted: boolean } | null;
+    onCreationHandoffSettled?: (projectId: string) => void;
+    shareLoginReturn?: ShareLoginReturn | null;
+    onShareLoginReturnChange?: (request: ShareLoginReturn | null) => void;
+  }) => {
+    // The real view releases the creation record once its first transcript
+    // settles, which needs reads that wait for the create; the stand-in has
+    // no transcript, so it settles as soon as the project is persisted.
+    const creationPersisted = creationHandoff?.persisted ?? true;
+    useEffect(() => {
+      if (creationPersisted) onCreationHandoffSettled?.(project.id);
+    }, [creationPersisted, onCreationHandoffSettled, project.id]);
+    requestLimitHandoff.reject = onInitialHomeRequestConcurrencyRejected;
+    projectViewRetryScopeHarness.latest = {
+      context: workspaceContextOverride ?? null,
+      continuation: amrAuthRetryContinuation ?? null,
+      consume: onConsumeAmrAuthRetryContinuation,
+    };
+    return (
     <main data-testid="project-view">
       <span data-testid="project-title">{project.name}</span>
+      <span data-testid="share-login-return">{shareLoginReturn?.filePath ?? 'none'}</span>
+      <button type="button" onClick={() => onShareLoginReturnChange?.({
+        projectId: project.id, filePath: 'index.html', expiresAt: Date.now() + 120_000,
+      })}>Report share login success</button>
+      <button type="button" onClick={() => onShareLoginReturnChange?.(null)}>Consume share login return</button>
       <span data-testid="project-authoritative-title">{authoritativeProjectName ?? 'none'}</span>
       <span data-testid="project-workspace-id">{project.workspaceId ?? 'unbound'}</span>
       <span data-testid="project-route-workspace-context">
@@ -412,6 +509,9 @@ vi.mock('../../src/components/ProjectView', () => ({
           : 'none'}
       </span>
       <span data-testid="project-route-conversation">{routeConversationId ?? 'none'}</span>
+      <span data-testid="project-creation-phase">
+        {creationHandoff ? (creationHandoff.persisted ? 'persisted' : 'pending') : 'none'}
+      </span>
       <span data-testid="project-auth-continuation">
         {amrAuthRetryContinuation?.assistantId ?? 'none'}
       </span>
@@ -503,13 +603,30 @@ vi.mock('../../src/components/ProjectView', () => ({
       <button
         type="button"
         onClick={() => {
-          onArmAmrAuthRetryContinuation?.({
+          const runContext = projectViewRetryScopeHarness.scope
+            ? runWorkspaceIdentity(
+                { loading: false, scope: projectViewRetryScopeHarness.scope },
+                workspaceContextOverride ?? null,
+                project.workspaceId,
+              )
+            : workspaceContextOverride;
+          const continuation = {
             projectId: project.id,
             conversationId: routeConversationId ?? 'conv-auth',
             assistantId: 'assistant-auth-failure',
             originMountId: 'origin-mount',
-            workspaceIdentityKey: workspaceIdentityCacheKey(workspaceContextOverride),
-          });
+            // ProjectView arms from its resolved project scope, which has a
+            // least-privilege role. App's directory context is a different
+            // projection of the same principal; don't silently substitute it.
+            workspaceIdentityKey: workspaceIdentityCacheKey(runContext),
+            workspacePrincipal: runContext ? {
+              workspaceId: runContext.workspaceId,
+              workspaceType: runContext.workspaceType,
+              workspaceMemberId: runContext.workspaceMemberId,
+            } : null,
+          };
+          projectViewRetryScopeHarness.armedWorkspaceKey = continuation.workspaceIdentityKey;
+          onArmAmrAuthRetryContinuation?.(continuation);
           onOpenAmrSettings?.();
         }}
       >
@@ -527,7 +644,8 @@ vi.mock('../../src/components/ProjectView', () => ({
         Consume auth continuation
       </button>
     </main>
-  ),
+    );
+  },
 }));
 
 vi.mock('../../src/components/WorkspaceTabsBar', () => ({
@@ -594,6 +712,11 @@ vi.mock('../../src/providers/registry', async () => {
     fetchDesignTemplates: vi.fn(),
     fetchPromptTemplates: vi.fn(),
     fetchSkills: vi.fn(),
+    openExternalUrl: async (url: string) => {
+      if (!vi.isMockFunction(window.open)) return actual.openExternalUrl(url);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      return true;
+    },
     replaceProjectWorkingDir: vi.fn(),
     uploadProjectFiles: vi.fn(),
   };
@@ -651,6 +774,14 @@ const mockedDuplicateProject = vi.mocked(duplicateProject);
 const mockedGetProject = vi.mocked(getProject);
 const mockedInvalidatePluginCatalogCache = vi.mocked(invalidatePluginCatalogCache);
 const mockedListProjects = vi.mocked(listProjects);
+
+/** Workspace fixtures become visible only after their request identity resolves.
+ * An unscoped boot response belongs to signed-out/local state. */
+function mockWorkspaceProjectList(projects: Project[]): void {
+  mockedListProjects.mockImplementation(async (options) =>
+    options?.workspaceContext ? projects : []);
+}
+
 const mockedListTemplates = vi.mocked(listTemplates);
 const mockedPatchProject = vi.mocked(patchProject);
 const mockedFetchDaemonConfig = vi.mocked(fetchDaemonConfig);
@@ -755,10 +886,13 @@ function stubWorkspaceContext(
     'fetch',
     vi.fn(async (input: RequestInfo | URL) => {
       const pathname = new URL(String(input), 'http://d.local').pathname;
+      const shareProjectId = pathname.match(/^\/api\/projects\/([^/]+)\/share-state$/)?.[1];
       return {
         ok: true,
         json: async () =>
-          pathname.endsWith('/workspace/directory')
+          shareProjectId
+            ? { projectId: decodeURIComponent(shareProjectId), hasEverShared: false, bindingExists: false, publications: [] }
+            : pathname.endsWith('/workspace/directory')
             ? workspaceDirectoryFixture([workspaceContext(workspaceId, workspaceMemberId)])
             : pathname.endsWith('/workspace/context')
               ? workspaceContextPayload(workspaceId, workspaceMemberId)
@@ -770,6 +904,8 @@ function stubWorkspaceContext(
 
 describe('App project creation routing', () => {
   beforeEach(() => {
+    requestLimitHandoff.reject = undefined;
+    navigationTiming.cancel('page_exit');
     resetCoalescedGet();
     resetWorkspaceContextCache();
     resetTeamProjectsCache();
@@ -777,6 +913,9 @@ describe('App project creation routing', () => {
     workspaceInvalidationHarness.handlers.length = 0;
     workspaceInvalidationHarness.onActive.length = 0;
     projectViewRenameFenceHarness.token = null;
+    projectViewRetryScopeHarness.scope = null;
+    projectViewRetryScopeHarness.armedWorkspaceKey = null;
+    projectViewRetryScopeHarness.latest = null;
     workspaceTabsHarness.projectIds.clear();
     window.history.replaceState(null, '', '/');
     mockedDaemonIsLive.mockResolvedValue(true);
@@ -844,6 +983,8 @@ describe('App project creation routing', () => {
 
   afterEach(() => {
     cleanup();
+    navigationTiming.cancel('page_exit');
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
     resetWorkspaceContextCache();
@@ -852,6 +993,155 @@ describe('App project creation routing', () => {
     resetCoalescedGet();
     workspaceInvalidationHarness.handlers.length = 0;
     workspaceInvalidationHarness.onActive.length = 0;
+  });
+
+  it('returns a first request rejected by Link concurrency to Home with the original files, without deleting the created project', async () => {
+    mockedListProjects.mockResolvedValue([]);
+    let createdId = '';
+    mockedCreateProject.mockImplementation(async (input) => {
+      createdId = input.id!;
+      return { project: { ...freshProject, id: createdId }, conversationId: 'conv-new' };
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Create prompted project' }));
+    await screen.findByTestId('project-view');
+    await waitFor(() => expect(mockedUploadProjectFiles).toHaveBeenCalledTimes(1));
+    expect(requestLimitHandoff.reject).toBeTypeOf('function');
+    let restored = false;
+    await act(async () => {
+      restored = requestLimitHandoff.reject!({ projectId: createdId, clientRequestId: homeAutoSendIdentity(createdId).clientRequestId,
+        accountGeneration: currentWorkspaceAccountGeneration(), workspaceContext: null,
+        branch: { tier: 'below_max', audience: 'owner' } });
+    });
+    expect(restored).toBe(true);
+    expect(await screen.findByTestId('entry-home-surface')).toBeTruthy();
+    expect(screen.getByTestId('amr-concurrency-dialog')).toBeTruthy();
+    expect(concurrencyViews().at(-1)?.[1]).toMatchObject({ page_name: 'home', stage: 'before_run' });
+    expect(window.localStorage.getItem('open-design:home-composer:prompt')).toContain('Build the retained artifact prompt');
+    const files = peekHomeComposerAttachments();
+    expect(files.map((f) => f.name)).toEqual(['brief.txt']);
+    expect(files[0]).toBe(mockedUploadProjectFiles.mock.calls[0]![1][0]);
+    expect(files[0]!.size).toBe(5);
+    expect(mockedDeleteProject).not.toHaveBeenCalled();
+    expect(mockedCreateProject).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByTestId('amr-concurrency-close'));
+    expect(mockedCreateProject).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['local', 'http://localhost:5173'],
+    ['test', 'https://open-design.powerformer.net'],
+    ['prod', 'https://open-design.ai'],
+  ] as const)('App recovered Home concurrency upgrade preserves %s profile and original space', async (profile, origin) => {
+    mockedLoadConfig.mockReturnValue({ ...baseConfig, agentId: 'amr',
+      agentCliEnv: { amr: { OPEN_DESIGN_AMR_PROFILE: profile } } });
+    mockedListProjects.mockResolvedValue([]);
+    let createdId = '';
+    mockedCreateProject.mockImplementation(async (input) => {
+      createdId = input.id!;
+      return { project: { ...freshProject, id: createdId }, conversationId: 'conv-new' };
+    });
+    const context = { ...workspaceContext('rejected-space-a', 'owner-a'), role: 'owner' as const,
+      planId: 'team_pro', permissions: buildWorkspacePermissions({ role: 'owner', lifecycleState: 'active' }) };
+    stubWorkspaceContext(context.workspaceId, context.workspaceMemberId);
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    render(<App />);
+    await screen.findByRole('button', { name: 'Create prompted project' });
+    await act(async () => { notifyWorkspaceContextRefresh({ context }); });
+    fireEvent.click(screen.getByRole('button', { name: 'Create prompted project' }));
+    await screen.findByTestId('project-view');
+    await waitFor(() => expect(requestLimitHandoff.reject).toBeTypeOf('function'));
+    await act(async () => {
+      expect(requestLimitHandoff.reject!({ projectId: createdId,
+        clientRequestId: homeAutoSendIdentity(createdId).clientRequestId,
+        accountGeneration: currentWorkspaceAccountGeneration(), workspaceContext: context,
+        branch: { tier: 'below_max', audience: 'owner' } })).toBe(true);
+    });
+    fireEvent.click(await screen.findByTestId('amr-concurrency-upgrade'));
+    const target = new URL(String(open.mock.calls[0]![0]));
+    expect(target.origin).toBe(origin);
+    expect(target.searchParams.get('workspaceId')).toBe('rejected-space-a');
+    expect(target.searchParams.get('billing')).toBe('plan');
+    expect(mockedCreateProject).toHaveBeenCalledOnce();
+    open.mockRestore();
+  });
+
+  it.each(['request', 'account', 'workspace', 'route'] as const)('rejects stale Home recovery across %s boundaries without overwriting the current draft', async (boundary) => {
+    mockedListProjects.mockResolvedValue([]);
+    let createdId = '';
+    mockedCreateProject.mockImplementation(async (input) => {
+      createdId = input.id!;
+      return { project: { ...freshProject, id: createdId }, conversationId: 'conv-new' };
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Create prompted project' }));
+    await screen.findByTestId('project-view');
+    await waitFor(() => expect(mockedUploadProjectFiles).toHaveBeenCalledTimes(1));
+    const reject = requestLimitHandoff.reject!;
+    if (boundary === 'route') {
+      act(() => navigate({ kind: 'home', view: 'home' }));
+      await screen.findByTestId('entry-home-surface');
+    }
+    window.localStorage.setItem('open-design:home-composer:prompt', 'new unsent Home draft');
+    let restored = true;
+    await act(async () => { restored = reject({ projectId: createdId,
+      clientRequestId: boundary === 'request' ? 'another-request' : homeAutoSendIdentity(createdId).clientRequestId,
+      accountGeneration: currentWorkspaceAccountGeneration() + (boundary === 'account' ? 1 : 0),
+      workspaceContext: boundary === 'workspace' ? workspaceContext('other-space', 'other-member') : null,
+      branch: { tier: 'below_max', audience: 'owner' } }); });
+    expect(restored).toBe(false);
+    expect(window.localStorage.getItem('open-design:home-composer:prompt')).toBe('new unsent Home draft');
+    expect(screen.queryByTestId('amr-concurrency-dialog')).toBeNull();
+    expect(mockedDeleteProject).not.toHaveBeenCalled();
+    expect(mockedCreateProject).toHaveBeenCalledOnce();
+  });
+
+  it('declares Home business Ready after successful empty required catalogs', async () => {
+    mockedListProjects.mockResolvedValue([]);
+    const signal = vi.fn(async (_value: { readiness_point?: string }) => true);
+    const restore = installMockOpenDesignHost({ host: {
+      startup: { context: async () => ({ launch_attempt_id: 'launch', app_session_id: 'session' }), signal },
+    } });
+    try {
+      render(<App />);
+      await waitFor(() => expect(signal).toHaveBeenCalledWith(expect.objectContaining({ readiness_point: 'interactive_ready' })));
+    } finally { restore(); }
+  });
+
+  it.each(['projects', 'agents', 'config', 'skills', 'designTemplates', 'designSystems', 'promptTemplates'] as const)('does not declare Home business Ready when required %s fail', async (resource) => {
+    mockedListProjects.mockResolvedValue([]);
+    if (resource === 'projects') mockedListProjects.mockRejectedValue(new Error('catalog unavailable'));
+    else if (resource === 'agents') mockedFetchAgentsStream.mockRejectedValue(new Error('agents unavailable'));
+    else if (resource === 'config') mockedFetchDaemonConfig.mockResolvedValue(null);
+    else {
+      // Exercise the actual provider's failure semantics with the App readiness
+      // gates; a mocked rejected promise misses providers that swallow failures.
+      const actual = await vi.importActual<typeof import('../../src/providers/registry')>('../../src/providers/registry');
+      if (resource === 'skills') mockedFetchSkills.mockImplementation(actual.fetchSkills);
+      if (resource === 'designTemplates') mockedFetchDesignTemplates.mockImplementation(actual.fetchDesignTemplates);
+      if (resource === 'designSystems') mockedFetchDesignSystems.mockImplementation(actual.fetchDesignSystems);
+      if (resource === 'promptTemplates') mockedFetchPromptTemplates.mockImplementation(actual.fetchPromptTemplates);
+      const endpoint = { skills: '/api/skills', designTemplates: '/api/design-templates', designSystems: '/api/design-systems', promptTemplates: '/api/prompt-templates' }[resource];
+      vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => (
+        new URL(String(input), 'http://d.local').pathname === endpoint
+          ? new Response('', { status: 503 }) : Response.json({})
+      )));
+    }
+    const signal = vi.fn(async (_value: { readiness_point?: string }) => true);
+    const restore = installMockOpenDesignHost({ host: {
+      startup: { context: async () => ({ launch_attempt_id: 'launch', app_session_id: 'session' }), signal },
+    } });
+    try {
+      render(<App />);
+      if (resource !== 'config') {
+        await waitFor(() => expect(signal).toHaveBeenCalledWith(expect.objectContaining({ readiness_point: 'first_visible' })));
+      } else {
+        await waitFor(() => expect(mockedFetchDaemonConfig).toHaveBeenCalled());
+      }
+      await act(async () => { await new Promise<void>(resolve => requestAnimationFrame(() => resolve())); });
+      await act(async () => { await new Promise<void>(resolve => requestAnimationFrame(() => resolve())); });
+      expect(signal.mock.calls.some(([value]) => value.readiness_point === 'interactive_ready')).toBe(false);
+    } finally { restore(); }
   });
 
   it('routes mutations and limits global focus catch-up to Skills and Design Systems', async () => {
@@ -896,7 +1186,7 @@ describe('App project creation routing', () => {
         workspaceId: context.workspaceId,
         workspaceMemberId: context.workspaceMemberId,
       }),
-      { forceTeamMaterialization: true },
+      { forceTeamMaterialization: true, onReadResult: expect.any(Function) },
     );
     expect(mockedFetchSkills).toHaveBeenCalledTimes(1);
 
@@ -1223,12 +1513,62 @@ describe('App project creation routing', () => {
     );
   });
 
-  it('enters the project preparing surface before Home project creation settles', async () => {
+  it('mounts the one project view on the click and keeps it through the create (OPEND-3334)', async () => {
     mockedListProjects.mockResolvedValue([]);
     const creation = deferred<{
       project: Project;
       conversationId: string;
     }>();
+    let requestedProjectId: string | undefined;
+    let requestedConversationId: string | undefined;
+    mockedCreateProject.mockImplementation((input) => {
+      requestedProjectId = (input as typeof input & { id?: string }).id;
+      requestedConversationId = (input as typeof input & { conversationId?: string }).conversationId;
+      return creation.promise;
+    });
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Create prompted project' }));
+
+    const view = await screen.findByTestId('project-view');
+    expect(requestedProjectId).toBeTruthy();
+    // The seed conversation is minted with the project and sent with the
+    // create, so the route names it from the first frame.
+    expect(requestedConversationId).toBeTruthy();
+    expect(window.location.pathname).toBe(
+      `/projects/${requestedProjectId}/conversations/${requestedConversationId}`,
+    );
+    expect(screen.getByTestId('project-route-conversation').textContent).toBe(requestedConversationId);
+    // Reads are held until the create answers.
+    expect(screen.getByTestId('project-creation-phase').textContent).toBe('pending');
+    expect(screen.queryByTestId('entry-home-surface')).toBeNull();
+
+    creation.resolve({
+      project: {
+        ...freshProject,
+        id: requestedProjectId!,
+        name: 'Prompted project',
+        pendingPrompt: 'Build the retained artifact prompt',
+      },
+      conversationId: requestedConversationId!,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('project-creation-phase').textContent).not.toBe('pending');
+    });
+    // Same instance: the create answering does not replace the view.
+    expect(screen.getByTestId('project-view')).toBe(view);
+    expect(screen.getByTestId('project-title').textContent).toBe('Prompted project');
+  });
+
+  it('reads and uploads nothing project-scoped before the create answers', async () => {
+    // The optimistic project is not persisted or authorized yet, so NOTHING
+    // project-scoped may go out until POST /api/projects answers. The view is
+    // mounted from the click; it holds its reads on the creation phase. (The
+    // staged files are drawn from local bytes by the optimistic first turn;
+    // see w93-2585-pending-surface-attachments.)
+    mockedListProjects.mockResolvedValue([]);
+    const creation = deferred<{ project: Project; conversationId: string }>();
     let requestedProjectId: string | undefined;
     mockedCreateProject.mockImplementation((input) => {
       requestedProjectId = (input as typeof input & { id?: string }).id;
@@ -1238,26 +1578,112 @@ describe('App project creation routing', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Create prompted project' }));
 
-    await screen.findByTestId('project-creation-pending-view');
-    expect(requestedProjectId).toBeTruthy();
-    expect(window.location.pathname).toBe(`/projects/${requestedProjectId}`);
-    expect(screen.getByText('Build the retained artifact prompt')).toBeTruthy();
-    expect(screen.getByText('Preparing...')).toBeTruthy();
-    expect(screen.queryByTestId('entry-home-surface')).toBeNull();
-    expect(screen.queryByTestId('project-view')).toBeNull();
+    await screen.findByTestId('project-view');
+    expect(screen.getByTestId('project-creation-phase').textContent).toBe('pending');
+
+    // Exact call comparison, not `not.toHaveBeenCalledWith`: an added optional
+    // argument would make a negative argument matcher vacuously true.
+    const projectScopedCalls = vi
+      .mocked(fetch)
+      .mock.calls.filter(([input]) =>
+        String(input).includes(`/api/projects/${requestedProjectId}`),
+      );
+    expect(projectScopedCalls).toHaveLength(0);
+    expect(mockedUploadProjectFiles).toHaveBeenCalledTimes(0);
+    expect(mockedReplaceProjectWorkingDir).toHaveBeenCalledTimes(0);
 
     creation.resolve({
       project: {
         ...freshProject,
         id: requestedProjectId!,
         name: 'Prompted project',
-        pendingPrompt: 'Build the retained artifact prompt',
       },
       conversationId: 'conv-new',
     });
+    await screen.findByTestId('project-view');
+  });
+
+  it('uploads staged Home attachments concurrently, after the working-dir handoff', async () => {
+    // The in-project composer has uploaded one request per file at
+    // STAGED_UPLOAD_CONCURRENCY (4) since the staged-attachment work; the Home
+    // hand-off still sent one serialized 12-file batch. Six files must
+    // therefore open exactly four requests before any of them settles.
+    mockedListProjects.mockResolvedValue([]);
+    mockedReplaceProjectWorkingDir.mockResolvedValue(undefined as never);
+    const releases: Array<() => void> = [];
+    mockedUploadProjectFiles.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          releases.push(() => resolve({ uploaded: [], failed: [] }));
+        }),
+    );
+
+    render(<App />);
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Create project with many attachments' }),
+    );
+
+    await waitFor(() => {
+      expect(mockedUploadProjectFiles).toHaveBeenCalledTimes(4);
+    });
+    // One file per request, so a failure lands on a file instead of a batch.
+    expect(
+      mockedUploadProjectFiles.mock.calls.map(([, files]) => (files as File[]).length),
+    ).toEqual([1, 1, 1, 1]);
+    // The working dir still flips before the first byte goes up, otherwise the
+    // files land in the managed root and vanish when baseDir moves.
+    expect(mockedReplaceProjectWorkingDir.mock.invocationCallOrder[0]!).toBeLessThan(
+      mockedUploadProjectFiles.mock.invocationCallOrder[0]!,
+    );
+
+    await act(async () => {
+      for (const release of releases.splice(0)) release();
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(mockedUploadProjectFiles).toHaveBeenCalledTimes(6);
+    });
+    await act(async () => {
+      for (const release of releases.splice(0)) release();
+      await Promise.resolve();
+    });
+    await screen.findByTestId('project-view');
+  });
+
+  it('reports a per-file Home attachment failure instead of swallowing it', async () => {
+    mockedListProjects.mockResolvedValue([]);
+    mockedReplaceProjectWorkingDir.mockResolvedValue(undefined as never);
+    mockedUploadProjectFiles.mockImplementation(async (_projectId, files) => {
+      const file = (files as File[])[0]!;
+      if (file.name === 'shot-2.png') {
+        return { uploaded: [], failed: [{ name: file.name, error: 'disk full' }], error: 'disk full' };
+      }
+      return {
+        uploaded: [{ path: file.name, name: file.name, kind: 'image' as const, size: file.size }],
+        failed: [],
+      };
+    });
+
+    render(<App />);
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Create project with many attachments' }),
+    );
 
     await screen.findByTestId('project-view');
-    expect(window.location.pathname).toBe(`/projects/${requestedProjectId}`);
+    await waitFor(() => {
+      expect(mockedUploadProjectFiles).toHaveBeenCalledTimes(6);
+    });
+    // The five that landed still travel with the first message.
+    const staged = JSON.parse(
+      window.sessionStorage.getItem('od:auto-send-attachments:project-new') ?? '[]',
+    ) as Array<{ name: string }>;
+    expect(staged.map((item) => item.name)).toEqual([
+      'shot-0.png',
+      'shot-1.png',
+      'shot-3.png',
+      'shot-4.png',
+      'shot-5.png',
+    ]);
   });
 
   it('rolls a failed optimistic Home creation back to the preserved Home surface', async () => {
@@ -1274,17 +1700,158 @@ describe('App project creation routing', () => {
 
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Create prompted project' }));
-    await screen.findByTestId('project-creation-pending-view');
+    await screen.findByTestId('project-view');
     expect(workspaceTabsHarness.projectIds.has(requestedProjectId!)).toBe(true);
 
     creation.reject(new Error('Could not create project'));
 
     await screen.findByTestId('entry-home-surface');
     expect(window.location.pathname).toBe('/');
-    expect(screen.queryByTestId('project-creation-pending-view')).toBeNull();
+    expect(screen.queryByTestId('project-view')).toBeNull();
     expect(screen.queryByTestId(`entry-project-${requestedProjectId}`)).toBeNull();
     expect(workspaceTabsHarness.projectIds.has(requestedProjectId!)).toBe(false);
     expect(screen.getByRole('alert').textContent).toContain('Could not create project');
+  });
+
+  it('maps a create preparation timeout to a localized retry toast and hands attachments back', async () => {
+    mockedListProjects.mockResolvedValue([]);
+    const creation = deferred<{
+      project: Project;
+      conversationId: string;
+    }>();
+    let requestedProjectId: string | undefined;
+    mockedCreateProject.mockImplementation((input) => {
+      requestedProjectId = (input as typeof input & { id?: string }).id;
+      return creation.promise;
+    });
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Create prompted project' }));
+    await screen.findByTestId('project-view');
+
+    creation.reject(new ProjectCreateError(
+      'Project preparation timed out while validating the selected design system. Please try again.',
+      504,
+      'PROJECT_CREATE_PREPARATION_TIMEOUT',
+      true,
+      null,
+    ));
+
+    await screen.findByTestId('entry-home-surface');
+    expect(window.location.pathname).toBe('/');
+    expect(screen.queryByTestId('project-view')).toBeNull();
+    expect(screen.queryByTestId(`entry-project-${requestedProjectId}`)).toBeNull();
+    expect(screen.getByRole('alert').textContent)
+      .toContain('Project setup timed out before it could start. Try sending again.');
+    // Home remounts on the way back; the staged File objects ride the stash
+    // so the retry can resend the same payload.
+    expect(peekHomeComposerAttachments().map((file) => file.name)).toEqual(['brief.txt']);
+    clearHomeComposerAttachments();
+  });
+
+  /*
+   * OPEND-2849(产品《报错文案》S28a / S03):首页发送是乐观建项目,建项目请求失败时
+   * 用户看到的是 App 这枚回滚 Toast,不是 HomeView 自己的错误块。所以这两格的定稿
+   * 要落在这里:请求没到 daemon → S28a;daemon 说未登录(AMR_AUTH_REQUIRED)→ S03。
+   * 原始英文报错(`Failed to fetch` / daemon 的 AMR 文案)不许原样露出。
+   */
+  it.each([
+    [
+      'S28a: the create request never reached the daemon',
+      () => new TypeError('Failed to fetch'),
+      'Local connection lost',
+      'Can’t reach the Open Design service on this computer right now. Please restart the app.',
+      /Failed to fetch/,
+    ],
+    [
+      'S28a: the web proxy could not reach the daemon',
+      () => new ProjectCreateError('Could not reach the local OpenDesign service', null, null, true, null),
+      'Local connection lost',
+      'Can’t reach the Open Design service on this computer right now. Please restart the app.',
+      /Could not reach the local OpenDesign service/,
+    ],
+    [
+      'S03: the daemon rejected the create as not signed in',
+      () => new ProjectCreateError(
+        'AMR sign-in is required. Sign in to AMR Cloud again, then retry this run.',
+        401,
+        'AMR_AUTH_REQUIRED',
+        false,
+        null,
+      ),
+      'Open Design is not signed in',
+      'Sign in to see your projects and continue the conversation.',
+      /AMR sign-in is required/,
+    ],
+  ] as const)('maps a failed Home create to the product copy (%s)', async (_label, makeError, title, body, raw) => {
+    mockedListProjects.mockResolvedValue([]);
+    const creation = deferred<{
+      project: Project;
+      conversationId: string;
+    }>();
+    mockedCreateProject.mockImplementation(() => creation.promise);
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Create prompted project' }));
+    await screen.findByTestId('project-view');
+
+    creation.reject(makeError());
+
+    await screen.findByTestId('entry-home-surface');
+    const alert = screen.getByRole('alert');
+    expect(alert.querySelector('.od-toast-message')?.textContent).toBe(title);
+    expect(alert.querySelector('.od-toast-details')?.textContent).toBe(body);
+    expect(alert.textContent).not.toMatch(raw);
+    clearHomeComposerAttachments();
+  });
+
+  it('hands attachments to an already-mounted Home when the user backed out before the create failed', async () => {
+    mockedListProjects.mockResolvedValue([]);
+    const creation = deferred<{
+      project: Project;
+      conversationId: string;
+    }>();
+    mockedCreateProject.mockImplementation(() => creation.promise);
+    // Stands in for the mounted page HomeView (EntryView is mocked here): the
+    // real listener in HomeView.attachment-stash.test.tsx takes the slot on
+    // this event and appends the files to its staged band.
+    const handedBack: string[] = [];
+    const onHandedBack = () => {
+      handedBack.push(...peekHomeComposerAttachments().map((file) => file.name));
+      clearHomeComposerAttachments();
+    };
+    window.addEventListener(HOME_COMPOSER_ATTACHMENTS_EVENT, onHandedBack);
+    try {
+      render(<App />);
+      fireEvent.click(await screen.findByRole('button', { name: 'Create prompted project' }));
+      await screen.findByTestId('project-view');
+
+      // Back during the in-flight create: Home is on screen before the 504.
+      // The user leaves through the entry rail — here, the same router
+      // navigation that rail click performs.
+      act(() => {
+        navigate({ kind: 'home', view: 'home' });
+      });
+      await screen.findByTestId('entry-home-surface');
+      expect(handedBack).toEqual([]);
+
+      creation.reject(new ProjectCreateError(
+        'Project preparation timed out while loading plugin resources. Please try again.',
+        504,
+        'PROJECT_CREATE_PREPARATION_TIMEOUT',
+        true,
+        null,
+      ));
+
+      await waitFor(() => expect(handedBack).toEqual(['brief.txt']));
+      expect(window.location.pathname).toBe('/');
+      expect(screen.getByRole('alert').textContent)
+        .toContain('Project setup timed out before it could start. Try sending again.');
+      // Consumed by the mounted composer, so nothing is left for a later mount.
+      expect(peekHomeComposerAttachments()).toEqual([]);
+    } finally {
+      window.removeEventListener(HOME_COMPOSER_ATTACHMENTS_EVENT, onHandedBack);
+    }
   });
 
   it('releases a persisted project when attachment setup fails after creation', async () => {
@@ -1302,7 +1869,7 @@ describe('App project creation routing', () => {
 
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Create prompted project' }));
-    await screen.findByTestId('project-creation-pending-view');
+    await screen.findByTestId('project-view');
 
     creation.resolve({
       project: {
@@ -1316,8 +1883,10 @@ describe('App project creation routing', () => {
 
     await screen.findByTestId('project-view');
     expect(screen.getByTestId('project-title').textContent).toBe('Persisted prompted project');
-    expect(window.location.pathname).toBe(`/projects/${requestedProjectId}`);
-    expect(screen.queryByTestId('project-creation-pending-view')).toBeNull();
+    expect(window.location.pathname).toMatch(new RegExp(`^/projects/${requestedProjectId}(/|$)`));
+    await waitFor(() => {
+      expect(screen.getByTestId('project-creation-phase').textContent).not.toBe('pending');
+    });
     expect(workspaceTabsHarness.projectIds.has(requestedProjectId!)).toBe(true);
     expect(screen.getByRole('alert').textContent).toContain('Attachment upload failed');
   });
@@ -1779,12 +2348,13 @@ describe('App project creation routing', () => {
   });
 
   it('removes a locally deleted project from workspace tabs and ignores a stale list', async () => {
+    stubWorkspaceContext('ws-1', 'wm-1');
+    mockedDeleteProject.mockResolvedValue(true);
     const initialProjects = deferred<Project[]>();
     const staleRefreshProjects = deferred<Project[]>();
     mockedListProjects
       .mockReturnValueOnce(initialProjects.promise)
-      .mockReturnValueOnce(staleRefreshProjects.promise)
-      .mockResolvedValue([]);
+      .mockResolvedValue([freshProject]);
 
     render(<App />);
 
@@ -1805,14 +2375,16 @@ describe('App project creation routing', () => {
     workspaceTabsHarness.projectIds.add('project-new');
     expect(workspaceTabsHarness.projectIds.has('project-new')).toBe(true);
 
+    const listCallsBeforeRefresh = mockedListProjects.mock.calls.length;
+    mockedListProjects.mockReturnValueOnce(staleRefreshProjects.promise);
     fireEvent.click(screen.getByRole('button', { name: 'Refresh projects' }));
-    expect(mockedListProjects).toHaveBeenCalledTimes(2);
+    expect(mockedListProjects.mock.calls.length).toBeGreaterThan(listCallsBeforeRefresh);
 
     fireEvent.click(screen.getByRole('button', { name: 'Back to projects' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Delete Fresh project' }));
 
     await waitFor(() => {
-      expect(mockedDeleteProject).toHaveBeenCalledWith('project-new', null);
+      expect(mockedDeleteProject).toHaveBeenCalledWith('project-new', expect.objectContaining({ workspaceId: 'ws-1', workspaceMemberId: 'wm-1' }), expect.any(Function));
       expect(screen.queryByTestId('entry-project-project-new')).toBeNull();
       expect(workspaceTabsHarness.projectIds.has('project-new')).toBe(false);
     });
@@ -2032,6 +2604,75 @@ describe('App project creation routing', () => {
     expect(mockedUploadProjectFiles).not.toHaveBeenCalled();
   });
 
+  it('reports a route authority failure even when ProjectView cannot mount', async () => {
+    const projectId = 'project-inaccessible';
+    mockedListProjects.mockResolvedValue([{ ...freshProject, id: projectId, workspaceId: 'ws-inaccessible' }]);
+    window.history.replaceState({}, '', `/projects/${projectId}`);
+    navigationTiming.begin({ kind: 'home' }, { projectId });
+    render(<App />);
+    await waitFor(() => {
+      const failed = vi.mocked(reportSafetyEvent).mock.calls.find(([name, props]) =>
+        name === 'client_navigation_result' && props?.status === 'failed');
+      expect(failed?.[1]?.reason).toBe('scope_unavailable');
+    });
+    expect(screen.queryByTestId('project-view')).toBeNull();
+  });
+
+  it('records leaving during project lookup without cancelling the original open operation', async () => {
+    const lookup = deferred<Awaited<ReturnType<typeof getProject>>>();
+    mockedListProjects.mockResolvedValue([]);
+    mockedGetProject.mockReturnValue(lookup.promise);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open missing project' }));
+    await waitFor(() => expect(mockedGetProject).toHaveBeenCalled());
+    const attempt = navigationTiming.getSnapshot();
+    expect(attempt?.projectId).toBe('project-missing');
+    expect(vi.mocked(reportSafetyEvent).mock.calls.some(([name, props]) =>
+      name === 'client_navigation_result' && props?.status === 'started')).toBe(true);
+    act(() => navigate({ kind: 'home', view: 'settings' }));
+    await waitFor(() => expect(navigationTiming.getSnapshot()).toBeNull());
+    await act(async () => { lookup.resolve(freshProject); });
+    expect(window.location.pathname).toBe('/projects/project-missing');
+    const events = vi.mocked(reportSafetyEvent).mock.calls
+      .filter(([name]) => name === 'client_navigation_result').map(([, props]) => props);
+    // The settings route is measured as its own page switch; assert only the project attempt.
+    const projectEvents = events.filter((event) => event?.navigation_id === events[0]?.navigation_id);
+    expect(projectEvents.map((event) => event?.status)).toEqual(['started', 'cancelled']);
+  });
+
+  it('still opens the project when only its telemetry attempt is cancelled', async () => {
+    const lookup = deferred<Awaited<ReturnType<typeof getProject>>>();
+    mockedListProjects.mockResolvedValue([]);
+    mockedGetProject.mockReturnValue(lookup.promise);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open missing project' }));
+    await waitFor(() => expect(mockedGetProject).toHaveBeenCalled());
+    act(() => navigationTiming.cancel('superseded'));
+    await act(async () => { lookup.resolve({ ...freshProject, id: 'project-missing' }); });
+    await waitFor(() => expect(window.location.pathname).toBe('/projects/project-missing'));
+  });
+
+  it('gives repeated project clicks new ids without suppressing an earlier lookup', async () => {
+    const firstLookup = deferred<Awaited<ReturnType<typeof getProject>>>();
+    mockedListProjects.mockResolvedValue([]);
+    mockedGetProject.mockReturnValueOnce(firstLookup.promise).mockResolvedValueOnce(null);
+    render(<App />);
+    const open = await screen.findByRole('button', { name: 'Open missing project' });
+    fireEvent.click(open);
+    await waitFor(() => expect(mockedGetProject).toHaveBeenCalledTimes(1));
+    const firstId = navigationTiming.getSnapshot()?.id;
+    fireEvent.click(open);
+    await waitFor(() => expect(mockedGetProject).toHaveBeenCalledTimes(2));
+    await screen.findByRole('alert');
+    await act(async () => { firstLookup.resolve({ ...freshProject, id: 'project-missing' }); });
+    expect(window.location.pathname).toBe('/projects/project-missing');
+    const events = vi.mocked(reportSafetyEvent).mock.calls
+      .filter(([name]) => name === 'client_navigation_result').map(([, props]) => props);
+    expect(events.map((event) => event?.status)).toEqual(['started', 'cancelled', 'started', 'failed']);
+    expect(events[1]?.navigation_id).toBe(firstId);
+    expect(events[2]?.navigation_id).not.toBe(firstId);
+  });
+
   it('surfaces a toast instead of silently bouncing when opening a missing project', async () => {
     mockedListProjects.mockResolvedValue([]);
     mockedGetProject.mockResolvedValue(null);
@@ -2047,6 +2688,88 @@ describe('App project creation routing', () => {
     });
     expect(window.location.pathname).toBe('/');
     expect(screen.queryByTestId('project-view')).toBeNull();
+    const events = vi.mocked(reportSafetyEvent).mock.calls
+      .filter(([name]) => name === 'client_navigation_result').map(([, props]) => props);
+    expect(events.map((event) => event?.status)).toEqual(['started', 'failed']);
+    expect(events[1]?.reason).toBe('open_unavailable');
+  });
+
+  it('OPEND-3691 keeps the exact panel continuation above the project authorization remount', async () => {
+    let member = 'wm-1';
+    const project: Project = { id: 'project-shared', name: 'Team project', skillId: null,
+      designSystemId: null, workspaceId: 'ws-1', createdAt: 20, updatedAt: 20 };
+    mockedListProjects.mockResolvedValue([project]);
+    mockedGetProject.mockResolvedValue(project);
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const pathname = new URL(String(input), 'http://d.local').pathname;
+      if (pathname.endsWith('/workspace/directory')) return new Response(JSON.stringify(
+        workspaceDirectoryFixture([workspaceContext('ws-1', member)])));
+      if (pathname.endsWith('/workspace/context')) return new Response(JSON.stringify(workspaceContextPayload('ws-1', member)));
+      if (pathname.endsWith('/workspace-scope')) return new Response(JSON.stringify({ scope: {
+        kind: 'team', projectId: project.id, workspaceId: 'ws-1', context: workspaceContext('ws-1', member),
+      } }));
+      if (pathname === `/api/projects/${project.id}`) return new Response(JSON.stringify({ project }));
+      if (pathname.endsWith('/workspace/projects/team')) return new Response(JSON.stringify({ projects: [{
+        projectId: project.id, name: project.name, ownerMemberId: member, sharedAt: '2026-10-11T00:00:00Z',
+      }] }));
+      return new Response('{}');
+    }));
+    render(<App />);
+    await screen.findByTestId('entry-project-project-shared');
+    fireEvent.click(screen.getByRole('button', { name: 'Open catalog project' }));
+    await screen.findByTestId('project-view');
+    fireEvent.click(screen.getByRole('button', { name: 'Report share login success' }));
+    await waitFor(() => expect(screen.getByTestId('share-login-return').textContent).toBe('index.html'));
+    member = 'wm-2';
+    act(() => notifyWorkspaceContextRefresh({ context: workspaceContext('ws-1', member) }));
+    await waitFor(() => expect(screen.getByTestId('project-route-workspace-context').textContent).toBe('ws-1:wm-2'));
+    expect(screen.getByTestId('share-login-return').textContent).toBe('index.html');
+    fireEvent.click(screen.getByRole('button', { name: 'Consume share login return' }));
+    expect(screen.getByTestId('share-login-return').textContent).toBe('none');
+    fireEvent.click(screen.getByRole('button', { name: 'Report share login success' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Back to projects' }));
+    await screen.findByTestId('entry-home-surface');
+    act(() => navigate({ kind: 'project', projectId: project.id, conversationId: null, fileName: 'index.html' }));
+    await screen.findByTestId('project-view');
+    expect(screen.getByTestId('share-login-return').textContent).toBe('none');
+  });
+
+  it('OPEND-3722 settles a deleted Team route instead of restarting absence resolution on its own list read', async () => {
+    let deleted = false;
+    const project: Project = { id: 'project-shared', name: 'Team project', skillId: null,
+      designSystemId: null, workspaceId: 'ws-1', createdAt: 20, updatedAt: 20 };
+    mockedListProjects.mockImplementation(async () => deleted ? [] : [project]);
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const pathname = new URL(String(input), 'http://d.local').pathname;
+      if (pathname.endsWith('/workspace/directory')) return new Response(JSON.stringify(
+        workspaceDirectoryFixture([workspaceContext('ws-1', 'wm-1')])));
+      if (pathname.endsWith('/workspace/context')) return new Response(JSON.stringify(workspaceContextPayload('ws-1', 'wm-1')));
+      if (pathname.endsWith('/workspace/projects/team')) return new Response(JSON.stringify({ projects: deleted ? [] : [{
+        projectId: project.id, name: project.name, ownerMemberId: 'owner', sharedAt: '2026-10-11T00:00:00Z',
+      }] }));
+      if (pathname.includes(project.id)) return new Response(JSON.stringify({ error: { code: 'PROJECT_NOT_FOUND' } }), { status: 404 });
+      return new Response('{}');
+    }));
+    render(<App />);
+    await screen.findByTestId('entry-project-project-shared');
+    fireEvent.click(screen.getByRole('button', { name: 'Open catalog project' }));
+    await screen.findByTestId('project-view');
+    // This is the App reconciliation boundary after the old page's handoff is
+    // refused. No successful Run or optimistic message is manufactured here.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    deleted = true;
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Refresh projects' })); });
+    // Commit between retry ticks, so effects see each finished absence read
+    // rather than starting their budget only after one huge clock jump.
+    for (let tick = 0; tick < 24; tick++) {
+      await act(async () => { await vi.advanceTimersByTimeAsync(600); });
+    }
+    expect(screen.getByRole('alert').textContent).toContain('This project has been deleted or no longer exists.');
+    expect(screen.queryByText('Loading workspace…')).toBeNull();
+    const reads = mockedListProjects.mock.calls.length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(13_000); });
+    expect(mockedListProjects).toHaveBeenCalledTimes(reads);
+    expect(window.location.pathname).toBe('/projects/project-shared');
   });
 
   it('renders the catalog title on the first project frame instead of the local placeholder', async () => {
@@ -2126,9 +2849,7 @@ describe('App project creation routing', () => {
     });
 
     expect(window.location.pathname).toBe(`/projects/${workspaceProject.id}`);
-    expect(screen.getByTestId('project-route-workspace-context').textContent).toBe(
-      'ws-1:wm-1',
-    );
+    expect(screen.getByTestId('workspace-tabs-active-project-workspace').textContent).toBe('ws-1');
   });
 
   it('uses a title hint only after loading the workspace-bound local row', async () => {
@@ -2315,7 +3036,7 @@ describe('App project creation routing', () => {
       createdAt: 20,
       updatedAt: 20,
     };
-    mockedListProjects.mockResolvedValue([workspaceAProject]);
+    mockWorkspaceProjectList([workspaceAProject]);
     mockedGetProject.mockResolvedValue(workspaceAProject);
 
     render(<App />);
@@ -2910,7 +3631,7 @@ describe('App project creation routing', () => {
       name: 'Before rename',
       workspaceId: 'ws-1',
     };
-    mockedListProjects.mockResolvedValue([sharedProject]);
+    mockWorkspaceProjectList([sharedProject]);
     const olderMetadataRefresh = deferred<Response>();
     const newerMetadataRefresh = deferred<Response>();
     let catalogReads = 0;
@@ -3337,7 +4058,7 @@ describe('App project creation routing', () => {
       ...existingProject,
       workspaceId: context.workspaceId,
     };
-    mockedListProjects.mockResolvedValue([scopedProject]);
+    mockWorkspaceProjectList([scopedProject]);
     stubWorkspaceContext(context.workspaceId, context.workspaceMemberId);
 
     render(<App />);
@@ -3427,7 +4148,7 @@ describe('App project creation routing', () => {
 
   it('passes the active project persisted Workspace to the tab switch guard', async () => {
     stubWorkspaceContext('ws-1', 'wm-1');
-    mockedListProjects.mockResolvedValue([{
+    mockWorkspaceProjectList([{
       ...existingProject,
       workspaceId: 'ws-1',
     }]);
@@ -3444,7 +4165,7 @@ describe('App project creation routing', () => {
 
   it('owns one AMR auth continuation above ProjectView and clears it after consume, cancel, or route exit', async () => {
     stubWorkspaceContext('ws-1', 'wm-1');
-    mockedListProjects.mockResolvedValue([{
+    mockWorkspaceProjectList([{
       ...existingProject,
       workspaceId: 'ws-1',
     }]);
@@ -3523,8 +4244,35 @@ describe('App project creation routing', () => {
     });
   });
 
+  it('returns to the original project location after reauthentication without starting a task', async () => {
+    mockedLoadConfig.mockReturnValue({ ...baseConfig, mode: 'daemon', agentId: 'amr', onboardingCompleted: true });
+    mockWorkspaceProjectList([{ ...existingProject, workspaceId: 'ws-1' }]);
+    let loginStatus: VelaLoginStatus = { loggedIn: true, profile: 'test', user: { id: 'account-a', email: 'a@example.com' }, configPath: '' };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const pathname = new URL(String(input), 'http://d.local').pathname;
+      return { ok: true, json: async () => pathname.endsWith('/workspace/directory')
+        ? workspaceDirectoryFixture([workspaceContext('ws-1', 'wm-1')])
+        : pathname.endsWith('/workspace/context') ? workspaceContextPayload('ws-1', 'wm-1')
+        : pathname.endsWith('/integrations/vela/status') ? loginStatus : {} } as Response;
+    }));
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Existing project' }));
+    await screen.findByTestId('project-view');
+    const original = window.location.pathname + window.location.search;
+    loginStatus = { ...loginStatus, loggedIn: false, user: null };
+    act(() => notifyAmrLoginStatusChanged());
+    await waitFor(() => expect(window.location.pathname).toBe('/onboarding'));
+    loginStatus = { ...loginStatus, loggedIn: true, user: { id: 'account-a', email: 'a@example.com' } };
+    act(() => notifyAmrLoginStatusChanged());
+    await waitFor(() => expect(screen.getByTestId('amr-login-status').textContent).toBe('true'));
+    fireEvent.click(screen.getByRole('button', { name: 'Complete sign-in' }));
+    await waitFor(() => expect(window.location.pathname + window.location.search).toBe(original));
+    await screen.findByTestId('project-view');
+    expect(mockedCreateProject).not.toHaveBeenCalled();
+  });
+
   it('preserves an exact retry through Settings and returns to its project after sign-in', async () => {
-    mockedListProjects.mockResolvedValue([{
+    mockWorkspaceProjectList([{
       ...existingProject,
       workspaceId: 'ws-1',
     }]);
@@ -3574,6 +4322,102 @@ describe('App project creation routing', () => {
         'assistant-auth-failure',
       );
     });
+  });
+
+  it('retains a Cloud retry across Settings when local scope is member and the same caller is owner', async () => {
+    const scopeContext = workspaceContext('ws-1', 'wm-1');
+    const accountContext: WorkspaceCollabContext = {
+      ...scopeContext,
+      role: 'owner',
+      permissions: buildWorkspacePermissions({ role: 'owner', lifecycleState: 'active' }),
+    };
+    // This is the ordinary daemon projection from
+    // resolveLocalProjectWorkspaceScope: member protects creator-only writes.
+    // The routing test owns App; use the real runWorkspaceIdentity helper at
+    // the mocked ProjectView callback boundary to preserve that input shape.
+    projectViewRetryScopeHarness.scope = {
+      kind: 'team',
+      projectId: existingProject.id,
+      workspaceId: 'ws-1',
+      visibility: 'personal',
+      context: scopeContext,
+    };
+    expect(workspaceIdentityCacheKey(scopeContext)).not.toBe(
+      workspaceIdentityCacheKey(accountContext),
+    );
+    mockWorkspaceProjectList([{ ...existingProject, workspaceId: 'ws-1' }]);
+    const loginStatus: VelaLoginStatus = {
+      loggedIn: true,
+      profile: 'test',
+      user: { id: 'account-a', email: 'account-a@example.com', plan: 'free' },
+      configPath: '',
+    };
+    let settingsStatusResponse: ReturnType<typeof deferred<VelaLoginStatus>> | null = null;
+    const settingsStatusRequested = deferred<void>();
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const pathname = new URL(String(input), 'http://d.local').pathname;
+      return {
+        ok: true,
+        json: async () => {
+          if (pathname.endsWith('/integrations/vela/status') && settingsStatusResponse) {
+            settingsStatusRequested.resolve();
+            return settingsStatusResponse.promise;
+          }
+          return pathname.endsWith('/workspace/directory')
+            ? workspaceDirectoryFixture([accountContext])
+            : pathname.endsWith('/workspace/context')
+              ? { context: accountContext }
+              : pathname.endsWith('/integrations/vela/status')
+                ? loginStatus
+                : {};
+        },
+      } as Response;
+    }));
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Existing project' }));
+    await screen.findByTestId('project-view');
+    fireEvent.click(screen.getByRole('button', { name: 'Authorize in settings' }));
+    await screen.findByTestId('settings-surface');
+    expect(window.location.pathname).toBe('/settings');
+
+    expect(projectViewRetryScopeHarness.armedWorkspaceKey).toBe(
+      workspaceIdentityCacheKey(scopeContext),
+    );
+
+    // Own the real status-response boundary. A synchronous act + waitFor
+    // pending can succeed on the returning render before App's discard effect
+    // settles; resolve the request inside async act before inspecting it.
+    settingsStatusResponse = deferred<VelaLoginStatus>();
+    act(() => notifyAmrLoginStatusChanged());
+    await settingsStatusRequested.promise;
+    await act(async () => {
+      settingsStatusResponse!.resolve(loginStatus);
+      await settingsStatusResponse!.promise;
+    });
+    await waitFor(() => expect(screen.getByTestId('project-route-conversation').textContent).toBe('conv-auth'));
+    expect(window.location.pathname).toBe('/projects/project-existing/conversations/conv-auth');
+    // Confirm the fixture actually crossed the two production projections,
+    // instead of accidentally letting App and ProjectView both use member.
+    expect(projectViewRetryScopeHarness.latest?.context).toMatchObject({
+      workspaceId: 'ws-1', workspaceMemberId: 'wm-1', role: 'owner',
+    });
+    const pending = projectViewRetryScopeHarness.latest?.continuation;
+    expect(pending).toMatchObject({
+      assistantId: 'assistant-auth-failure',
+      workspaceIdentityKey: workspaceIdentityCacheKey(scopeContext),
+    });
+    const consume = projectViewRetryScopeHarness.latest?.consume;
+    expect(consume).toBeTypeOf('function');
+    if (!pending || !consume) throw new Error('The Settings retry was discarded before consumption');
+    // This is App's real one-shot callback, not a retry spy. The exact saved
+    // object must remain consumable after effects, and then reject re-use.
+    const results: boolean[] = [];
+    act(() => {
+      results.push(consume(pending), consume(pending));
+    });
+    expect(results).toEqual([true, false]);
+    expect(screen.getByTestId('project-auth-continuation').textContent).toBe('none');
   });
 
   it('returns from full-page Settings to the exact project conversation and file route', async () => {

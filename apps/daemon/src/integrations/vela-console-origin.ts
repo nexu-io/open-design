@@ -1,13 +1,29 @@
+import { readAmrEndpointBinding } from './amr-endpoint-binding.js';
 import { resolveAmrProfile } from './vela-profile.js';
 
 type EnvMap = NodeJS.ProcessEnv | Record<string, string | undefined>;
 
-// Publicly named console origins already used by the web client. feature-test
-// remains build-injected because its deployment hostname is intentionally not
-// part of the public repository.
+// Publicly named console origins already used by the web client. Each value is
+// a Cloud *base* that callers append a console path to (`/dashboard`,
+// `/settings`), so the `/cloud` segment belongs here rather than at each call
+// site — every consumer concatenates, none resolves against it as a URL base.
+//
+// The test entry moved off `vela.powerformer.net` onto
+// `open-design.powerformer.net/cloud` when vela cut the test Cloud domain over
+// (vela #1922 prepare, #1929 finalize). The new host serves the test Landing
+// page at `/` and hands `/cloud*` and `/amr*` to a test-only path proxy; the
+// legacy hostname is no longer a mapped test route and is scheduled for
+// decommissioning, so it must not be relied on for a compatibility redirect.
+//
+// feature-test is deliberately absent: this repository ships publicly and that
+// deployment's hostname is internal. It is supplied at packaging time through
+// OD_VELA_WEB_URLS / OD_VELA_WEB_URL, so an un-injected build resolves nothing
+// for it and the client falls back to the public console instead of guessing.
+export const DEFAULT_VELA_CONSOLE_ORIGIN = 'https://open-design.ai/cloud';
+
 const PUBLIC_ORIGINS: Partial<Record<string, string>> = {
-  prod: 'https://open-design.ai/cloud',
-  test: 'https://vela.powerformer.net',
+  prod: DEFAULT_VELA_CONSOLE_ORIGIN,
+  test: 'https://open-design.powerformer.net/cloud',
   local: 'http://localhost:5173',
 };
 
@@ -47,6 +63,8 @@ export function resolveEffectiveVelaConsoleOrigin(
   env: EnvMap = process.env,
   configuredEnv: EnvMap = {},
 ): string | undefined {
+  const binding = readAmrEndpointBinding(env);
+  if (binding) return binding.webUrl;
   const packagedProfile = resolveAmrProfile(env);
   const selectedProfile = resolveAmrProfile({ ...env, ...configuredEnv });
   const mapped = originsByProfile(env)[selectedProfile];

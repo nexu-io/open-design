@@ -28,7 +28,16 @@ import { atomcodeAgentDef } from './defs/atomcode.js';
 import { readLocalAgentProfileDefs as readLocalAgentProfileDefsFromFile } from './local-profiles.js';
 import type { RuntimeAgentDef } from './types.js';
 
-const BASE_AGENT_DEFS: RuntimeAgentDef[] = [
+/**
+ * The agents this build ships, before anything a particular machine adds.
+ *
+ * `AGENT_DEFS` below appends whatever local profiles the user has declared, so
+ * it answers "what can this machine run" — a different question from "what do
+ * we ship", and the wrong list for anything that must hold everywhere. A local
+ * profile id is required not to collide with one of these (see
+ * `createLocalAgentDef`), so it is always an id we have never heard of.
+ */
+export const SHIPPED_AGENT_DEFS: RuntimeAgentDef[] = [
   amrAgentDef,
   claudeAgentDef,
   codexAgentDef,
@@ -59,14 +68,14 @@ const BASE_AGENT_DEFS: RuntimeAgentDef[] = [
 ];
 
 export function readLocalAgentProfileDefs(
-  baseDefs: RuntimeAgentDef[] = BASE_AGENT_DEFS,
+  baseDefs: RuntimeAgentDef[] = SHIPPED_AGENT_DEFS,
 ): RuntimeAgentDef[] {
   return readLocalAgentProfileDefsFromFile(baseDefs);
 }
 
 export const AGENT_DEFS: RuntimeAgentDef[] = [
-  ...BASE_AGENT_DEFS,
-  ...readLocalAgentProfileDefs(BASE_AGENT_DEFS),
+  ...SHIPPED_AGENT_DEFS,
+  ...readLocalAgentProfileDefs(SHIPPED_AGENT_DEFS),
 ];
 
 const ids = new Set();
