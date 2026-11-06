@@ -139,6 +139,44 @@ afterEach(() => {
 });
 
 describe('workspace switcher directory', () => {
+  it('shows the authoritative count and disables only creation at the 50 workspace limit', async () => {
+    const items = Array.from({ length: 50 }, (_, index) => ({
+      ...DIRECTORY[0]!, workspaceId: index === 0 ? 'ws-team' : `ws-limit-${index}`,
+      workspaceName: `Limit workspace ${index + 1}`,
+      workspaceMemberId: index === 0 ? 'wm-1' : `wm-limit-${index}`,
+    }));
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => new Response(
+      JSON.stringify(String(input).includes('/api/workspace/directory') ? { items } : {}), { status: 200 },
+    )) as typeof fetch;
+    renderRail();
+    fireEvent.click(screen.getByTestId('workspace-switcher'));
+    await waitFor(() => expect(menu().getByText('50/50')).toBeTruthy());
+    expect(menu().getByRole('menuitem', { name: 'New workspace' })).toBeDisabled();
+    expect(menu().getByRole('note').textContent).toBe('Maximum of 50 workspaces reached');
+    expect(menu().getByRole('menuitem', { name: 'Limit workspace 50' })).not.toBeDisabled();
+    expect(menu().getByRole('menuitem', { name: /Invite/ })).not.toBeDisabled();
+  });
+
+  it('drops a removed background workspace and shows a new membership after rejoining without signing out', async () => {
+    let items = [...DIRECTORY];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => new Response(
+      JSON.stringify(String(input).includes('/api/workspace/directory') ? { items } : {}), { status: 200 },
+    )) as typeof fetch;
+    renderRail();
+    await waitFor(() => expect(OpeningEventSource.instances.length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByTestId('workspace-switcher'));
+    await waitFor(() => expect(menu().getByText('2/50')).toBeTruthy());
+    items = [DIRECTORY[0]!];
+    OpeningEventSource.instances[0]!.emit('workspace-directory-changed', { type: 'workspace-directory-changed', at: Date.now() });
+    await waitFor(() => expect(menu().queryByText('My Workspace2')).toBeNull());
+    expect(menu().getByText('1/50')).toBeTruthy();
+    items = [...items, { ...DIRECTORY[1]!, workspaceMemberId: 'wm-rejoined' }];
+    OpeningEventSource.instances[0]!.emit('workspace-directory-changed', { type: 'workspace-directory-changed', at: Date.now() + 1 });
+    await waitFor(() => expect(menu().getByText('My Workspace2')).toBeTruthy());
+    expect(menu().getByText('2/50')).toBeTruthy();
+    expect(screen.getByTestId('workspace-switcher')).toBeTruthy();
+  });
+
   it('refreshes a remotely-created workspace while the switcher stays closed', async () => {
     let items = DIRECTORY;
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
@@ -201,7 +239,7 @@ describe('workspace switcher directory', () => {
     const list = screen.getByTestId('workspace-switcher-list');
     const actions = screen.getByTestId('workspace-switcher-actions');
     const invite = menu().getByRole('menuitem', { name: /Invite/ });
-    const createTeam = menu().getByRole('menuitem', { name: /New team/ });
+    const createTeam = menu().getByRole('menuitem', { name: /New workspace/ });
 
     expect(list.contains(invite)).toBe(false);
     expect(list.contains(createTeam)).toBe(false);

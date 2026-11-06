@@ -2285,3 +2285,49 @@ async function selectHomeDesignSystem(page: Page, id: string | null) {
   }
   await expect(popover).toHaveCount(0);
 }
+
+test('[P1] invitation banner follows the composer when a suggested prompt expands it', async ({ page }, testInfo) => {
+  await routeSignedOutVelaStatus(page);
+  await seedBrowserLocale(page, 'en');
+  await gotoEntryHome(page);
+  const banner = page.getByRole('region', { name: 'Invite', exact: true });
+  await expect(banner).toBeVisible();
+  await expect.poll(() => banner.evaluate(element => element.parentElement?.getAttribute('data-testid'))).toBe('home-hero');
+  await expect.poll(() => banner.evaluate(element => {
+    const next = element.nextElementSibling;
+    return next ? next.getBoundingClientRect().top - element.getBoundingClientRect().bottom : -1;
+  })).toBe(76);
+  await testInfo.attach('invitation-prompt-initial', { body: await page.screenshot(), contentType: 'image/png' });
+
+  await page.getByTestId('home-hero-type-pill-prototype').click();
+  const preset = page.getByTestId('home-hero-plugin-preset').first();
+  await expect(preset).toBeVisible();
+  await preset.click();
+  await expect.poll(() => page.getByTestId('home-hero-input').textContent()).not.toBe('');
+  await page.getByTestId('home-hero-input').fill('Create a detailed product page with an overview, navigation, pricing and frequently asked questions. '.repeat(20));
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 900, height: 700 }, { width: 375, height: 800 }]) {
+    await page.setViewportSize(viewport);
+    await expect.poll(async () => banner.evaluate(element => {
+      const next = element.nextElementSibling;
+      const rect = element.getBoundingClientRect();
+      return Boolean(next && rect.bottom <= next.getBoundingClientRect().top && !['absolute', 'fixed'].includes(getComputedStyle(element).position));
+    })).toBe(true);
+    await expect.poll(() => banner.evaluate(element => {
+      const next = element.nextElementSibling;
+      const scroll = element.closest('.entry-main--scroll');
+      if (!next || !scroll) return false;
+      const rect = element.getBoundingClientRect();
+      const gap = next.getBoundingClientRect().top - rect.bottom;
+      // A03 lifts at most 56px above the reserved row, while a growing
+      // composer must not push the invitation into the clipped toolbar edge.
+      return gap >= 20 && gap <= 76.5
+        && rect.top >= Math.max(0, scroll.getBoundingClientRect().top) + 15.5;
+    })).toBe(true);
+    await testInfo.attach(`invitation-prompt-${viewport.width}`, { body: await page.screenshot(), contentType: 'image/png' });
+  }
+  const title = page.locator('.home-hero__title');
+  const titleTop = await title.evaluate(element => element.getBoundingClientRect().top);
+  await banner.getByRole('button', { name: 'Dismiss invitation banner' }).click();
+  await expect(banner).toHaveCount(0);
+  await expect.poll(() => title.evaluate(element => element.getBoundingClientRect().top)).toBe(titleTop);
+});

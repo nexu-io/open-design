@@ -18,6 +18,8 @@
  *     产品的 `isFeedbackEligible` 把 `canceled` 当成终态放行,两枚照常渲染。
  *     这条只能从**渲染**上守:jsdom 不算层叠,CSS 断言在这里等于没有。
  *
+ *  (P0-24 Q6:页脚状态词已去掉,①③ 只剩文案键与历史记录;状态在壳头。)
+ *
  *  ③ **状态词是 `--text-muted` 的中性灰**,不是 `--text-faint`。
  *     这条是纯层叠事故,规则文本上一个字都看不出来:
  *         theater.css   `.assistant-footer[data-canceled="true"] .assistant-label`  (0,3,0)
@@ -30,10 +32,6 @@
  */
 
 import { cleanup, render } from '@testing-library/react';
-import { readFileSync } from 'node:fs';
-import { specificityTuple } from '../../helpers/chat-mirror-cascade';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { AssistantMessage } from '../../../src/components/AssistantMessage';
@@ -55,9 +53,6 @@ beforeAll(() => {
 });
 
 afterEach(cleanup);
-
-const HERE = dirname(fileURLToPath(import.meta.url));
-const SRC = resolve(HERE, '../../../src');
 
 function turn(over: Partial<ChatMessage>): ChatMessage {
   return {
@@ -87,162 +82,12 @@ function renderTurn(message: ChatMessage) {
   );
 }
 
-/* ── 层叠:把 index.css 的导入顺序照搬一遍 ───────────────────────────── */
-
-/** `:is(.a, .b)` 里的逗号不是选择器分隔符 —— 按括号深度切,天真 `split(',')` 会切出废选择器。 */
-function splitSelectorList(list: string): string[] {
-  const out: string[] = [];
-  let depth = 0;
-  let buf = '';
-  for (const ch of list) {
-    if (ch === '(' || ch === '[') depth += 1;
-    else if (ch === ')' || ch === ']') depth -= 1;
-    if (ch === ',' && depth === 0) {
-      out.push(buf.trim());
-      buf = '';
-      continue;
-    }
-    buf += ch;
-  }
-  if (buf.trim()) out.push(buf.trim());
-  return out;
-}
-
-/**
- * (b, c) 两档 —— 这一族里没有 id。
- *  b = 类 / 属性 / 伪类(`:not()` / `:is()` 取参数里最重的一档)
- *  c = 元素名
- */
-type Spec = readonly [ids: number, classes: number, types: number];
-
-/**
- * 特异性走校准过的共享量尺(`tests/helpers/chat-mirror-cascade.ts`)——
- * 逐条对 CSS 规范校过,用例见 `chat-mirror-cascade.specificity.test.ts`。
- * 换成**三元组**是因为这条链上有 id 选择器(`index.css` 链里的 `#root`),
- * 原来那份两元组量尺看不见 id,一条 id 规则会凭空输掉。
- */
-function specificity(selector: string): Spec {
-  return specificityTuple(selector);
-}
-
-/** A → B → C 逐位比较(CSS Selectors 4 §15)。 */
-const heavier = (a: Spec, b: Spec): boolean =>
-  a[0] !== b[0] ? a[0] > b[0] : a[1] !== b[1] ? a[1] > b[1] : a[2] > b[2];
-
-/** `index.css` 的导入顺序**就是**层叠顺序 —— 这一族的胜负一半靠它,不能手抄。 */
-function cascadeFiles(): string[] {
-  const index = readFileSync(resolve(SRC, 'index.css'), 'utf-8');
-  return [...index.matchAll(/@import\s+'([^']+)'/g)]
-    .map((m) => resolve(SRC, m[1] ?? ''))
-    .filter((file) => {
-      let text = '';
-      try {
-        text = readFileSync(file, 'utf-8');
-      } catch {
-        return false;
-      }
-      // 只有提到这几个类名的文件才可能命中这枚 label / 这枚点。
-      return /assistant-footer|assistant-label|\.dot[\s,{:.]/.test(text);
-    });
-}
-
-type Rule = { file: string; order: number; selector: string; body: string };
-
-/**
- * 顶层规则 + at-rule 里的规则;暗色 / 打印 / 降级动画那几档跳过 ——
- * 这条测试判的是浅色默认态,那几档进来只会是噪音。
- */
-function rulesOf(css: string, file: string, from: number): Rule[] {
-  const text = css.replace(/\/\*[\s\S]*?\*\//g, '');
-  const out: Rule[] = [];
-  let order = from;
-  const walk = (chunk: string, skip: boolean) => {
-    let i = 0;
-    while (i < chunk.length) {
-      const open = chunk.indexOf('{', i);
-      if (open === -1) break;
-      const prelude = chunk.slice(i, open).trim();
-      let depth = 1;
-      let j = open + 1;
-      while (j < chunk.length && depth > 0) {
-        if (chunk[j] === '{') depth += 1;
-        else if (chunk[j] === '}') depth -= 1;
-        j += 1;
-      }
-      const inner = chunk.slice(open + 1, j - 1);
-      if (prelude.startsWith('@')) {
-        const dark = /dark|print|prefers-reduced-motion/.test(prelude);
-        if (/^@(media|supports|layer|container)/.test(prelude)) walk(inner, skip || dark);
-      } else if (!skip && prelude) {
-        for (const one of splitSelectorList(prelude)) {
-          order += 1;
-          out.push({ file, order, selector: one.replace(/\s+/g, ' ').trim(), body: inner });
-        }
-      }
-      i = j;
-    }
-  };
-  walk(text, false);
-  return out;
-}
-
-function cascade(): Rule[] {
-  const out: Rule[] = [];
-  for (const file of cascadeFiles()) {
-    out.push(...rulesOf(readFileSync(file, 'utf-8'), file, out.length));
-  }
-  return out;
-}
-
-const declaration = (body: string, prop: string): string | null => {
-  let hit: string | null = null;
-  for (const m of body.matchAll(new RegExp(`(?:^|[;{])\\s*${prop}\\s*:([^;}]*)`, 'g'))) {
-    hit = (m[1] ?? '').trim();
-  }
-  return hit;
-};
-
-/**
- * 挑出真的命中 `el` 的规则,按 (特异性, 源码顺序) 决出**赢的那一条**。
- * `matches()` 走的是真 DOM,祖先在不在树上它说了算 —— 少写一个祖先就不会命中,
- * 这正是「规则文本一模一样却错」的那一类事故唯一照得出来的地方。
- */
-function winner(el: Element, prop: string, all: Rule[]): { rule: Rule; value: string } | null {
-  let best: { rule: Rule; value: string; spec: Spec } | null = null;
-  for (const rule of all) {
-    const value = declaration(rule.body, prop);
-    if (value == null) continue;
-    let hit = false;
-    try {
-      hit = el.matches(rule.selector);
-    } catch {
-      continue; // nwsapi 认不出来的伪元素之类,让它过
-    }
-    if (!hit) continue;
-    const spec = specificity(rule.selector);
-    if (!best || heavier(spec, best.spec) || (!heavier(best.spec, spec) && rule.order > best.rule.order)) {
-      best = { rule, value, spec };
-    }
-  }
-  return best ? { rule: best.rule, value: best.value } : null;
-}
-
-/** 陈列页与产线都把面板挂在 `.app` 下面 —— 少了它,routines.css 那一层根本不参赛。 */
-function mountUnderApp(container: HTMLElement) {
-  const app = document.createElement('div');
-  app.className = 'app';
-  document.body.appendChild(app);
-  app.appendChild(container);
-  return app;
-}
-
 describe('中断的一轮 · 状态词', () => {
-  it('写的是「任务已停止」,不是「已取消」(OPEND-2849 S24c 换词)', () => {
-    // 测试环境默认走 en,所以这里比的是英文档;中文那一档在下面逐字钉。
+  it('回合末尾不再出「任务已停止」(P0-24)', () => {
+    // P0-24 Q6:停止只由壳头说,页脚不再有状态词。
     const { container } = renderTurn(turn({ runStatus: 'canceled' }));
-    const label = container.querySelector('[data-testid="assistant-label"]');
-    expect(label?.textContent).toBe(en['assistant.canceledLabel']);
-    expect(en['assistant.canceledLabel']).toBe('Task stopped');
+    expect(container.querySelector('[data-testid="assistant-label"]')).toBeNull();
+    expect(container.textContent).not.toContain(en['assistant.canceledLabel']);
   });
 
   it('文案落在 `assistant.canceledLabel` 上,逐字与稿子相同', () => {
@@ -266,10 +111,11 @@ describe('中断的一轮 · 状态词', () => {
       ],
     }));
 
-    expect(container.textContent).toContain(en['assistant.canceledLabel']);
+    // P0-24 Q6:页脚不再出「任务已停止」,停止由壳头说。
+    expect(container.querySelector('[data-testid="assistant-label"]')).toBeNull();
     // 壳头报的是终态本身。OPEND-2626 之前这里是 `chat.record.running`,
     // 和一个真的在跑的回合共用同一个词;这一条要守的「不退成红色运行失败」没变。
-    expect(container.textContent).toContain(en['chat.record.canceled']);
+    expect(container.textContent).toContain(en['chat.record.turnStopped']);
     expect(container.textContent).not.toContain(en['chat.record.running']);
     expect(container.textContent).not.toContain(en['chat.record.failedTurn']);
   });
@@ -293,45 +139,4 @@ describe('中断的一轮 · 只留 复制 / Fork', () => {
   });
 });
 
-describe('中断的一轮 · 层叠', () => {
-  it('状态词的颜色赢的是 --text-muted,不是旧皮肤那份 --text-faint', () => {
-    const { container } = renderTurn(turn({ runStatus: 'canceled' }));
-    mountUnderApp(container);
-    const label = container.querySelector('[data-testid="assistant-label"]');
-    expect(label, '没渲染出状态词,下面的层叠断言会空过').toBeTruthy();
-
-    const all = cascade();
-    const candidates = all.filter((r) => {
-      if (declaration(r.body, 'color') == null) return false;
-      try {
-        return label!.matches(r.selector);
-      } catch {
-        return false;
-      }
-    });
-    // 参赛的至少要有 composio 的底子和 theater 的中断档;一条都挑不出来说明这份
-    // 层叠快照根本没读到样式,断言就成了空的。
-    expect(candidates.length, '一条命中的 color 规则都没挑出来').toBeGreaterThanOrEqual(2);
-
-    const win = winner(label!, 'color', all);
-    expect(win, '没有任何规则给状态词上色').toBeTruthy();
-    expect(win!.value, `赢的是 ${win!.rule.file} 的 \`${win!.rule.selector}\``).toBe('var(--text-muted)');
-  });
-
-  it('记号是 5px 灰圆点,不是那枚绿勾', () => {
-    const { container } = renderTurn(turn({ runStatus: 'canceled' }));
-    mountUnderApp(container);
-    const dot = container.querySelector('.assistant-footer .dot');
-    expect(dot, '没渲染出记号').toBeTruthy();
-    expect(dot!.tagName.toLowerCase(), '中断档要用 <i>,勾那一档才是 <svg>').toBe('i');
-
-    const all = cascade();
-    expect(winner(dot!, 'background', all)?.value).toBe('var(--text-faint)');
-    expect(winner(dot!, 'width', all)?.value).toBe('5px');
-    expect(winner(dot!, 'border-radius', all)?.value).toBe('50%');
-    // 绿勾那条规则(`--tick-img`)必须不命中中断档。
-    const tick = all.find((r) => /tick-img/.test(r.body));
-    expect(tick, '找不到画绿勾那条规则').toBeTruthy();
-    expect(dot!.matches(tick!.selector), '中断的一轮戴上了「已完成」那枚绿勾').toBe(false);
-  });
-});
+// P0-24 Q6: the settled status word this measured was removed; status lives in the turn header.

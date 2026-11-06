@@ -371,8 +371,22 @@ export function normalizeStrategySettlementReason(value: unknown): StrategySettl
   return StrategySettlementReasonV2Schema.parse(value);
 }
 
+/** Host-owned status and clock for the automatic Runs of one request. */
+export const TaskDisplayProjectionSchema = z.object({
+  id: z.string().min(1),
+  revision: z.number().int().nonnegative(),
+  currentRunId: z.string().min(1),
+  runIds: z.array(z.string().min(1)),
+  state: z.enum(['preparing', 'running', 'waiting', 'incomplete', 'completed', 'failed', 'canceled']),
+  elapsedMs: z.number().nonnegative().nullable(),
+  observedAt: z.number().nonnegative(),
+  ticking: z.boolean(),
+}).strict();
+export type TaskDisplayProjection = z.infer<typeof TaskDisplayProjectionSchema>;
+
 export const StrategyTaskProjectionV2Schema = z.object({
   taskExecutionId: z.string().min(1),
+  display: TaskDisplayProjectionSchema.optional(),
   strategy: StrategyTaskProjectionIdentityV2Schema,
   inputStage: StrategyInputStageV2Schema,
   outcome: z.union([z.literal('running'), StrategyOutcomeV2Schema]),

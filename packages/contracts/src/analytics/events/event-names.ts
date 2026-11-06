@@ -28,6 +28,7 @@ export type AnalyticsEventName =
   | 'mcp_tool_finished'
   // Paid media provider request outcome and bounded response retry.
   | 'media_generation_result'
+  | 'motion_replicate_result'
   | 'media_stock_request_result'
   | 'media_stock_slot_result'
   // Chat artifact snapshot capture outcome per finished run. Daemon-only;
@@ -63,6 +64,7 @@ export type AnalyticsEventName =
   | 'workspace_invite_result'
   | 'workspace_project_action_result'
   | 'workspace_shared_project_open_result'
+  | 'workspace_funding_recovery_result'
   | 'workspace_resource_action_result'
   | 'project_comment_create_result'
   | 'project_comment_send_result'

@@ -200,13 +200,16 @@ describe('HomeHero intent rail', () => {
     expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
   });
 
-  it('requires clearing the selected type before choosing another', () => {
+  it('allows switching the selected type without clearing it first', () => {
     const onClearActiveChip = vi.fn();
     const { onPickChip } = renderHero({ activeChipId: 'prototype', onClearActiveChip });
     expect(screen.getByTestId('home-hero-template-clear')).toBeTruthy();
     fireEvent.click(screen.getByTestId('home-hero-template-trigger').querySelector('.home-hero__footer-select-label')!);
-    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(screen.getByRole('listbox')).toBeTruthy();
     expect(onPickChip).not.toHaveBeenCalled();
+    expect(onClearActiveChip).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('listbox').querySelector('[data-chip="deck"]')!);
+    expect(onPickChip).toHaveBeenCalledWith(expect.objectContaining({ id: 'deck' }));
     expect(onClearActiveChip).not.toHaveBeenCalled();
     fireEvent.click(screen.getByTestId('home-hero-template-clear'));
     expect(onClearActiveChip).toHaveBeenCalledOnce();

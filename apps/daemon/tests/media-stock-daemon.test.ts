@@ -14,6 +14,19 @@ import { stockTelemetryDir } from '../src/media/stock-telemetry.js';
 import { toolTokenRegistry } from '../src/tool-tokens.js';
 import { codexOpenDesignShellEnvironmentArgs } from '../src/runtimes/defs/codex.js';
 
+// Explicit run proofs keep these HTTP fixtures faithful to the daemon's
+// immutable scope contract; token minting alone does not create a Run.
+const fixtureRuns = vi.hoisted(() => new Map<string, any>());
+vi.mock('../src/runtimes/runs.js', async (original) => {
+  const actual = await original<typeof import('../src/runtimes/runs.js')>();
+  return { ...actual, createChatRunService: (...args: Parameters<typeof actual.createChatRunService>) => {
+    const service = actual.createChatRunService(...args);
+    const get = service.get;
+    service.get = (id: string) => fixtureRuns.get(id) ?? get(id);
+    return service;
+  } };
+});
+
 vi.mock('../src/integrations/vela-command.js', async (original) => ({ ...await original<typeof import('../src/integrations/vela-command.js')>(), runVelaCommand: vi.fn() }));
 
 const endpoint = '/api/tools/media/stock-search';
@@ -72,13 +85,19 @@ describe('stock search daemon credential boundary', () => {
   afterEach(async () => {
     if (server) await new Promise<void>((resolve) => server.close(() => resolve()));
     toolTokenRegistry.clear();
+    fixtureRuns.clear();
     closeDatabase();
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
   });
 
   const slots = [{ id: 'hero', query: 'forest camping tent', width: 900 }];
-  const mint = (project: string, run: string) => toolTokenRegistry.mint({ projectId: project, runId: run });
+  const mint = (project: string, run: string) => {
+    fixtureRuns.set(run, { id: run, projectId: project, workspaceScope: {
+      schemaVersion: 1, projectId: project, workspaceId: null, source: 'unbound_account',
+    } });
+    return toolTokenRegistry.mint({ projectId: project, runId: run });
+  };
 
   async function request(body: unknown, token?: string, target = endpoint) {
     return fetch(`${url}${target}`, {
@@ -132,6 +151,17 @@ describe('stock search daemon credential boundary', () => {
       expect((await request({ slots, ...extra }, grant.token)).status).toBe(400);
     }
     expect((await request({ slots }, grant.token, '/api/projects/another-project/media/stock-search')).status).toBe(403);
+    expect(providerRequests).toEqual([]);
+  });
+
+  it('rejects missing run proof and a pinned wallet that differs from the authorized project', async () => {
+    const missing = toolTokenRegistry.mint({ projectId, runId: 'missing-run' });
+    expect((await request({ slots }, missing.token)).status).toBe(403);
+    const grant = mint(projectId, runId);
+    fixtureRuns.get(runId).workspaceScope = {
+      schemaVersion: 1, projectId, workspaceId: 'original-workspace', source: 'persisted_project_binding',
+    };
+    expect((await request({ slots }, grant.token)).status).toBe(403);
     expect(providerRequests).toEqual([]);
   });
 

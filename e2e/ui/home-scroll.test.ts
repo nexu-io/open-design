@@ -2,8 +2,46 @@ import { expect, test } from '@/playwright/suite';
 import { applyStandardMocks, STORAGE_KEY } from '@/playwright/mock-factory';
 import { ensureRailOpen } from '@/playwright/rail';
 import { T } from '@/timeouts';
+import { mockSignedInVelaAccount } from '@/playwright/visual';
+import { pickHomeTemplate } from '@/playwright/home-hero';
+import { mockAmrPersonalWorkspace } from '@/playwright/amr';
 
 test.describe.configure({ timeout: T.xlong });
+
+test('[P1] empty Home invitation and composer stay anchored when examples expand', async ({ page }) => {
+  await applyStandardMocks(page);
+  await mockSignedInVelaAccount(page);
+  await mockAmrPersonalWorkspace(page);
+  await page.route(/\/api\/(?:workspaces\/[^/]+\/)?projects(?:\?|$)/, (route) =>
+    route.request().method() === 'GET'
+      ? route.fulfill({ json: { projects: [] } }) : route.fallback());
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  const home = page.getByTestId('home-view');
+  await expect(home).toHaveClass(/home-view--centered/);
+  const banner = home.getByRole('region', { name: 'Invite', exact: true });
+  await expect(banner).toBeVisible();
+  const clear = page.getByTestId('home-hero-template-clear');
+  if (await clear.isVisible()) await clear.click();
+  await expect(page.getByTestId('home-hero-type-pills')).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  const geometry = () => page.evaluate(() => [
+    document.querySelector('.home-hero [role="region"]'),
+    document.querySelector('.home-hero__title'),
+    document.querySelector('[data-testid="home-hero-composer-card"]'),
+  ].map((element) => Math.round(element!.getBoundingClientRect().top)));
+  const before = await geometry();
+  await pickHomeTemplate(page, 'prototype');
+  await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
+  await expect.poll(geometry).toEqual(before);
+  await clear.click();
+  await expect(page.getByTestId('home-hero-type-pills')).toBeVisible();
+  await expect.poll(geometry).toEqual(before);
+  await banner.getByRole('button', { name: 'Dismiss invitation banner' }).click();
+  await expect(banner).toHaveCount(0);
+  const composer = page.getByTestId('home-hero-composer-card');
+  expect(Math.round((await composer.boundingBox())!.y)).toBe(before[2]);
+});
 
 for (const mode of ['daemon', 'api'] as const) {
   test(`[P1] empty ${mode === 'daemon' ? 'CLI' : 'BYOK'} Home keeps its top reachable and scrolls overflowing content`, async ({ page }, testInfo) => {

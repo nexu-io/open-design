@@ -145,14 +145,19 @@ it('OPEND-3784 scroll dismissal leaves an in-flight publication running exactly 
   expect(writes(request, 'DELETE')).toHaveLength(0);
 });
 
-it.each([true, false])('shows a busy switch while stopping, then restores the confirmed state (success=%s)', async (success) => {
+it.each(['success', 'http-refused', 'response-lost'] as const)('shows a busy switch and restores authoritative state after stop: %s', async outcome => {
+  const committed = outcome !== 'http-refused';
   const route = shareRoute({ status: 'active' });
   let release!: () => void;
   const pending = new Promise<void>(resolve => { release = resolve; });
   const request = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     if (String(input).includes('publish-public') && init?.method === 'DELETE') {
       await pending;
-      if (!success) return Response.json({ error: 'stop_failed' }, { status: 503 });
+      if (outcome === 'http-refused') return Response.json({ error: 'stop_failed' }, { status: 503 });
+      if (outcome === 'response-lost') {
+        await route.fetch(input, init); // The daemon committed before the browser lost the reply.
+        throw new TypeError('Failed to fetch');
+      }
     }
     return route.fetch(input, init);
   });
@@ -170,8 +175,10 @@ it.each([true, false])('shows a busy switch while stopping, then restores the co
   await waitFor(() => expect(linkAccess).toBeEnabled());
   expect(linkAccess).not.toHaveAttribute('aria-busy', 'true');
   expect(linkAccess.querySelector('svg')).toBeNull();
-  expect(linkAccess).toHaveAttribute('aria-checked', success ? 'false' : 'true');
-  if (success) expect(await screen.findByText(stoppedNotice)).toBeVisible();
+  expect(linkAccess).toHaveAttribute('aria-checked', committed ? 'false' : 'true');
+  expect(writes(request, 'DELETE')).toHaveLength(1);
+  expect(writes(request, 'POST')).toHaveLength(0);
+  if (committed) expect(await screen.findByText(stoppedNotice)).toBeVisible();
   else expect(await screen.findByText('Could not turn off the link. Please try again.')).toBeVisible();
 });
 

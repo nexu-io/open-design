@@ -284,6 +284,7 @@ describe('file mutation routes move workspace artifact identity', () => {
           paths: [{ sourceFilePath: scope.filePath, entryPath }], run: catalog }) },
       recordPublicFilePublication: createPublicFilePublicationRecorder(db, publications, enqueuePublishedFileComments),
       verifyWorkspaceRequest: async () => context,
+      resolveLocalPublicShareOwner: (id, workspaceId) => id === projectId && workspaceId === 'offline-w' ? 'creator' : null,
       resolveSharedProject: async () => ({ projectId, ownerMemberId: 'creator', sharedAt: new Date(1).toISOString() }),
       resolveSharedProjectOwner: async () => 'creator', resolveProjectDir: () => projectDir });
     try {

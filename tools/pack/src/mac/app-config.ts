@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
+import { writePackagedConfigWithBinding } from "../config/amr-endpoint-binding.js";
 import type { ToolPackConfig } from "../config/index.js";
 import { pathExists } from "./fs.js";
 import type { SeededAppConfigPaths } from "./types.js";
@@ -50,7 +51,7 @@ export async function writeLaunchPackagedConfig(config: ToolPackConfig, appPath:
 
   const launchConfigPath = join(config.roots.runtime.namespaceRoot, "runtime", "open-design-config.json");
   await mkdir(dirname(launchConfigPath), { recursive: true });
-  await writeFile(
+  await writePackagedConfigWithBinding(
     launchConfigPath,
     `${JSON.stringify(
       {
@@ -61,7 +62,6 @@ export async function writeLaunchPackagedConfig(config: ToolPackConfig, appPath:
       null,
       2,
     )}\n`,
-    "utf8",
   );
   return launchConfigPath;
 }

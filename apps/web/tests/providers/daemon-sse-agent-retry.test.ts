@@ -129,6 +129,21 @@ describe('传输层把 run_retry_attempted 转成 UI 读数', () => {
     expect(seen.map((s) => s.phase)).toEqual(['retrying']);
   });
 
+  // P0-24 A4(真机复现):每次尝试开头都有协议帧 —— 每个尝试现铸一枚 done_key,
+  // 再加 status / usage。它们不是用户看得见的输出,不能把「正在重试」撤掉,
+  // 否则那一行(和回合标题上的「正在重试」)一出现就没了。
+  it('重跑开头的 done_key / status / usage 协议帧不撤那一行', async () => {
+    const seen = await runStream([
+      sseEvent(1, 'run_retry_attempted', REAL_RETRY_FRAME),
+      sseEvent(2, 'start', { bin: 'opencode' }),
+      sseEvent(3, 'agent', { type: 'done_key', key: 'eda6585ec82a0502' }),
+      sseEvent(4, 'agent', { type: 'status', label: 'running', sessionId: null }),
+      sseEvent(5, 'agent', { type: 'usage', usage: { input_tokens: 1, output_tokens: 0 } }),
+      sseEvent(6, 'end', { status: 'succeeded', code: 0 }),
+    ]);
+    expect(seen.map((s) => s.phase)).toEqual(['retrying']);
+  });
+
   // OPEND-2849 S09a:重试帧自己带着失败分类。限流(`rate_limit`)那一档要让
   // 流水尾部那一行换成「模型服务请求繁忙」,别的原因保持「正在重试」(不带 cause)。
   it('因限流触发的重试带上 cause=rate_limit', async () => {

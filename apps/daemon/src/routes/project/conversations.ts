@@ -1,5 +1,5 @@
 import type { Express } from 'express';
-import { MESSAGES_STREAM_CONTENT_TYPE, type ChatMessage, type ChatSessionMode } from '@open-design/contracts';
+import { MESSAGES_STREAM_CONTENT_TYPE, type ChatMessage, type ChatSessionMode, type TaskDisplayProjection } from '@open-design/contracts';
 import { streamMessages } from '../../http/message-stream.js';
 import { readAnalyticsContext } from '../../analytics.js';
 import { nextForkedConversationTitle } from '../../conversation-fork-title.js';
@@ -9,6 +9,7 @@ import type { BoundWorkspaceResourceMutationGate } from '../../collab/workspace-
 import type { AuthorizeProjectRequest } from '../../collab/project-request-authority.js';
 import { TERMINAL_RUN_STATUSES } from '../../runtimes/runs.js';
 import { strategyTaskTurnsForRunIds } from '../../strategies/task-store.js';
+import { projectStrategyTaskByRunId } from '../../strategies/od-next/automatic-simple-production.js';
 
 import { registerProjectCommentRoutes } from './comments.js';
 import { cancelRunsOwnedBy } from './cancel-owned-runs.js';
@@ -402,10 +403,18 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
         .filter((runId): runId is string => typeof runId === 'string' && runId.length > 0),
       { projectId: req.params.id, conversationId: req.params.cid },
     );
+    const taskDisplays = new Map<string, TaskDisplayProjection | undefined>();
     const responseMessages = messages.map((message) => {
       const runId = typeof message.runId === 'string' ? message.runId : null;
       const turn = runId ? turns.get(runId) : undefined;
       if (!turn) return message;
+      if (!taskDisplays.has(turn.taskExecutionId)) {
+        let display;
+        try { display = projectStrategyTaskByRunId(db, runId!)?.display; }
+        catch { /* Unreadable legacy task facts must not prevent transcript loading. */ }
+        taskDisplays.set(turn.taskExecutionId, display);
+      }
+      const taskDisplay = taskDisplays.get(turn.taskExecutionId);
       return {
         ...message,
         strategyTaskExecutionId: turn.taskExecutionId,
@@ -413,6 +422,7 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
         strategyTaskDelivered: turn.delivered,
         strategyTaskBlocked: turn.blocked,
         strategyTaskBlockedText: turn.blockedText,
+        ...(taskDisplay ? { taskDisplay } : {}),
       };
     });
     res.vary('Accept');

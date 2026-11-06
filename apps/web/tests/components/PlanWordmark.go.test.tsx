@@ -52,3 +52,11 @@ describe('Go plan badge', () => {
     expect(svg?.getAttribute('stroke-linejoin')).toBe('round');
   });
 });
+
+it('uses the supplied seats HTML Go artwork only for the migrated surface', () => {
+  const { container } = render(<PlanWordmark tier="go" height={16} variant="seats-phase1" />);
+  const svg = container.querySelector('svg')!;
+  expect(svg.getAttribute('stroke-linecap')).toBeNull();
+  expect(svg.getAttribute('stroke-linejoin')).toBeNull();
+  expect(svg.querySelector('path')?.getAttribute('d')).toBe('M0.5 2.5H63C75.1503 2.5 85 12.3497 85 24.5C85 36.6503 75.1503 46.5 63 46.5H0');
+});
