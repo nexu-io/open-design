@@ -952,6 +952,58 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
       expect(fetches.loginRequests()).toBe(1);
       expect(window.location.pathname).toBe('/');
     });
+
+    // A parked sign-in belongs to the Cloud landing. Once the user picks
+    // another setup, Cloud accepting the session later must not take it over.
+    it('drops a parked sign-in when the user switches to API Key before Cloud accepts', async () => {
+      let cloudAccepts = false;
+      let loginStarted = false;
+      let pollsAfterLogin = 0;
+      globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+          loginStarted = true;
+          return jsonResponse({ pid: 123 }, 202);
+        }
+        if (url.endsWith('/api/integrations/vela/status')) {
+          if (!loginStarted) return jsonResponse(signedInStatus);
+          pollsAfterLogin += 1;
+          return jsonResponse({ ...signedInStatus, loginInFlight: pollsAfterLogin < 2 });
+        }
+        if (url.includes('/api/workspace/directory')) {
+          return cloudAccepts
+            ? jsonResponse({ items: [], activeWorkspaceId: null })
+            : jsonResponse({ error: { code: 'UNAUTHORIZED' } }, 401);
+        }
+        return jsonResponse(signedInStatus);
+      }) as typeof fetch;
+      const props = renderHome({
+        config: baseConfig({ mode: 'daemon', agentId: null }),
+        agents: [amrAgent()],
+        amrLoggedIn: true,
+      });
+
+      const signIn = await findCloudSignInButton();
+      vi.useFakeTimers();
+      fireEvent.click(signIn);
+      await act(async () => {});
+      await vi.advanceTimersByTimeAsync(4000);
+      await act(async () => {});
+      expect(screen.getByRole('alert').textContent).toMatch(/could not verify this sign-in/i);
+
+      fireEvent.click(screen.getByRole('button', { name: 'API Key' }));
+      await act(async () => {});
+      cloudAccepts = true;
+      await act(async () => {
+        workspaceContextModule.notifyWorkspaceContextRefresh();
+      });
+      await vi.advanceTimersByTimeAsync(2000);
+      await act(async () => {});
+
+      expect(props.onAgentChange).not.toHaveBeenCalledWith('amr');
+      expect(props.onCompleteOnboarding).not.toHaveBeenCalled();
+      expect(window.location.pathname).toBe('/onboarding');
+    });
   });
 
   it.each([
