@@ -3735,6 +3735,118 @@ describe('FileWorkspace tab reordering', () => {
   });
 });
 
+describe('FileWorkspace tab middle click', () => {
+  function auxClick(element: HTMLElement, button: number): void {
+    act(() => {
+      element.dispatchEvent(new MouseEvent('auxclick', { bubbles: true, cancelable: true, button }));
+    });
+  }
+
+  function renderTwoFileTabs(onTabsStateChange: (next: OpenTabsState) => void) {
+    return renderWorkspace(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('analysis.html'), workspaceFile('notes.md')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['analysis.html', 'notes.md'], active: 'analysis.html' }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+  }
+
+  it('closes a background file tab without changing the active tab', () => {
+    const onTabsStateChange = vi.fn();
+    const container = renderTwoFileTabs(onTabsStateChange);
+
+    auxClick(getTabByName(container, /notes\.md/i), 1);
+
+    expect(onTabsStateChange).toHaveBeenLastCalledWith({
+      tabs: ['analysis.html'],
+      active: 'analysis.html',
+    });
+  });
+
+  it('closes the active file tab and activates its neighbor', () => {
+    const onTabsStateChange = vi.fn();
+    const container = renderTwoFileTabs(onTabsStateChange);
+
+    auxClick(getTabByName(container, /analysis\.html/i), 1);
+
+    expect(onTabsStateChange).toHaveBeenLastCalledWith({
+      tabs: ['notes.md'],
+      active: 'notes.md',
+    });
+  });
+
+  it('closes a browser tab', () => {
+    const onTabsStateChange = vi.fn();
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: [],
+          active: '__browser__:1',
+          browserTabs: [
+            { id: '__browser__:1', insertAfter: '__design_files__', label: 'Browser' },
+          ],
+        }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    auxClick(getTabByName(container, /Browser/), 1);
+
+    expect(onTabsStateChange).toHaveBeenLastCalledWith({
+      tabs: [],
+      active: '__design_files__',
+    });
+  });
+
+  it('keeps the tab open on a right click', () => {
+    const onTabsStateChange = vi.fn();
+    const container = renderTwoFileTabs(onTabsStateChange);
+
+    auxClick(getTabByName(container, /notes\.md/i), 2);
+
+    expect(onTabsStateChange).not.toHaveBeenCalledWith(
+      expect.objectContaining({ tabs: ['analysis.html'] }),
+    );
+  });
+
+  it('keeps the pinned Design Files tab open', () => {
+    const onTabsStateChange = vi.fn();
+    const container = renderTwoFileTabs(onTabsStateChange);
+    const designFilesTab = container.querySelector<HTMLElement>('.design-files-tab');
+    expect(designFilesTab).not.toBeNull();
+
+    auxClick(designFilesTab!, 1);
+
+    expect(container.querySelector('.design-files-tab')).not.toBeNull();
+    expect(onTabsStateChange).not.toHaveBeenCalledWith(
+      expect.objectContaining({ tabs: ['notes.md'] }),
+    );
+  });
+
+  it('prevents the default middle press so it cannot start autoscroll', () => {
+    const container = renderTwoFileTabs(vi.fn());
+    const press = new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 1 });
+
+    act(() => {
+      getTabByName(container, /notes\.md/i).dispatchEvent(press);
+    });
+
+    expect(press.defaultPrevented).toBe(true);
+  });
+});
+
 describe('projectSplitClassName', () => {
   it('marks the project split as focused so the chat pane can collapse globally', () => {
     expect(projectSplitClassName(false)).toBe('split');
