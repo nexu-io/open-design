@@ -1,0 +1,26 @@
+{
+  "candidateId": "628a4fe6-2b76-42f0-b8fc-b622ba7fec60",
+  "projectId": "brand-github-3c85d1",
+  "runId": "e2abdfe6-13f5-470a-863d-f45fddd821d0",
+  "conversationId": "6f294155-d07c-4432-9bf4-d54dcf600533",
+  "provenance": {
+    "summary": "Detected from context/input-DESIGN.md, SKILL.md after a successful run.",
+    "detectedAt": 1784173255237
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "context/input-DESIGN.md",
+      "label": "context/input-DESIGN.md",
+      "size": 6961,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "SKILL.md",
+      "label": "SKILL.md",
+      "size": 1847,
+      "copied": true
+    }
+  ]
+}
