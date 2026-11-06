@@ -2475,6 +2475,258 @@ describe('POST /api/test/connection provider mode', () => {
       );
     }
   });
+  // Wrapped Chat Completions envelopes — docs/adr/0002.
+  //
+  // ClinePass returns `{ data: { <chat.completion> }, success: true }` for
+  // `stream: false` while streaming on the same endpoint stays standard SSE.
+  // The fixtures below are trimmed from a real response body, not invented:
+  // only the fields that carry meaning for shape detection are kept.
+  describe('wrapped Chat Completions envelopes', () => {
+    const clineEnvelope = (content: string) => ({
+      data: {
+        id: 'gen_01M5HZPAN4T0WX6TJKCKTRQWHV',
+        object: 'chat.completion',
+        created: 1792686840,
+        model: 'vmc/deepseek-v4p1-flash-contributor-fallbacks',
+        choices: [
+          {
+            index: 0,
+            finish_reason: 'stop',
+            message: { role: 'assistant', content },
+          },
+        ],
+        usage: { prompt_tokens: 9, completion_tokens: 1, total_tokens: 10 },
+      },
+      success: true,
+    });
+
+    const postProviderTest = async (body: Record<string, unknown>) => {
+      const res = await realFetch(`${baseUrl}/api/test/connection`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'provider',
+          protocol: 'openai',
+          baseUrl: 'https://api.cline.bot/api/v1',
+          apiKey: 'sk-cline-test',
+          model: 'cline-pass/deepseek-v4.1-flash',
+          ...body,
+        }),
+      });
+      expect(res.status).toBe(200);
+      return (await res.json()) as Record<string, unknown>;
+    };
+
+    // RED SPEC — these two fail on main and must pass after the fix.
+    describe('red spec: the bug itself', () => {
+      it('accepts a completion carried inside a data envelope', async () => {
+        vi.stubGlobal(
+          'fetch',
+          passThroughOrUpstream(() => jsonResponse(clineEnvelope('ok'))),
+        );
+
+        const body = await postProviderTest({});
+
+        expect(body.ok).toBe(true);
+        expect(body.kind).toBe('success');
+        expect(body.sample).toBe('ok');
+      });
+
+      it('reads the assistant text out of the envelope, not just its presence', async () => {
+        vi.stubGlobal(
+          'fetch',
+          passThroughOrUpstream(() => jsonResponse(clineEnvelope('hello'))),
+        );
+
+        const body = await postProviderTest({});
+
+        // Passing `ok` here while `sample` stayed empty would mean only
+        // `inspectProviderCompletion` was wired and the text extractor was not.
+        expect(body.ok).toBe(true);
+        expect(body.kind).toBe('success');
+        expect(body.sample).toBe('hello');
+      });
+    });
+
+    // GUARDS — green on main and must stay green. They pin the acceptance gate
+    // so the fix cannot widen into "any response with a nested array wins".
+    describe('guards: the gate must not widen', () => {
+      it('leaves a standard top-level completion unchanged', async () => {
+        vi.stubGlobal(
+          'fetch',
+          passThroughOrUpstream(() =>
+            jsonResponse({
+              choices: [
+                {
+                  index: 0,
+                  finish_reason: 'stop',
+                  message: { role: 'assistant', content: 'ok' },
+                },
+              ],
+            }),
+          ),
+        );
+
+        const body = await postProviderTest({});
+
+        expect(body.ok).toBe(true);
+        expect(body.kind).toBe('success');
+        expect(body.sample).toBe('ok');
+      });
+
+      it('does not unwrap when the payload reports success: false', async () => {
+        vi.stubGlobal(
+          'fetch',
+          passThroughOrUpstream(() =>
+            jsonResponse({ ...clineEnvelope('ok'), success: false }),
+          ),
+        );
+
+        const body = await postProviderTest({});
+
+        expect(body.ok).toBe(false);
+      });
+
+      it('does not unwrap when the payload carries a top-level error', async () => {
+        vi.stubGlobal(
+          'fetch',
+          passThroughOrUpstream(() =>
+            jsonResponse({
+              error: { message: 'quota exhausted' },
+              ...clineEnvelope('ok'),
+            }),
+          ),
+        );
+
+        const body = await postProviderTest({});
+
+        expect(body.ok).toBe(false);
+        expect(body.detail).toContain('quota exhausted');
+      });
+
+      it('does not unwrap when data.choices is not an array', async () => {
+        vi.stubGlobal(
+          'fetch',
+          passThroughOrUpstream(() =>
+            jsonResponse({ data: { object: 'chat.completion', choices: 'ok' } }),
+          ),
+        );
+
+        const body = await postProviderTest({});
+
+        expect(body.ok).toBe(false);
+      });
+
+      it('does not unwrap when data.object names a different payload', async () => {
+        vi.stubGlobal(
+          'fetch',
+          passThroughOrUpstream(() =>
+            jsonResponse({
+              data: {
+                object: 'embedding',
+                choices: [{ message: { content: 'ok' } }],
+              },
+            }),
+          ),
+        );
+
+        const body = await postProviderTest({});
+
+        expect(body.ok).toBe(false);
+      });
+
+      it('prefers an empty top-level choices over a populated nested one', async () => {
+        vi.stubGlobal(
+          'fetch',
+          passThroughOrUpstream(() =>
+            jsonResponse({
+              choices: [],
+              data: {
+                object: 'chat.completion',
+                choices: [{ message: { content: 'ok' } }],
+              },
+            }),
+          ),
+        );
+
+        const body = await postProviderTest({});
+
+        // The standard shape wins even when it is empty. An implementation
+        // written as `payload.choices?.length ? ... : payload.data?.choices`
+        // would fail here by quietly reading the nested copy.
+        expect(body.ok).toBe(false);
+      });
+
+      it('still validates a wrapped completion with no choices', async () => {
+        vi.stubGlobal(
+          'fetch',
+          passThroughOrUpstream(() =>
+            jsonResponse({ data: { object: 'chat.completion', choices: [] } }),
+          ),
+        );
+
+        const body = await postProviderTest({});
+
+        // Unwrapping is a shape decision, not a success decision.
+        expect(body.ok).toBe(false);
+      });
+
+      it('unwraps exactly one level', async () => {
+        vi.stubGlobal(
+          'fetch',
+          passThroughOrUpstream(() =>
+            jsonResponse({ data: { data: { choices: [{ message: { content: 'ok' } }] } } }),
+          ),
+        );
+
+        const body = await postProviderTest({});
+
+        // Only the observed gateway shape is accepted; guessing deeper would
+        // mean accepting shapes nobody has seen.
+        expect(body.ok).toBe(false);
+      });
+    });
+
+    // Diagnostic hygiene — docs/adr/0002 §Diagnostic trust model.
+    //
+    // Property names and `data.object` are provider-controlled strings, not
+    // structure. They must not reach `detail` (rendered in the dialog) or the
+    // daemon log (collected into diagnostics), even when they carry something
+    // secret-shaped. This is the regression for the class, not for one path.
+    describe('diagnostics never echo provider-supplied strings', () => {
+      it('collapses an opaque property name and data.object to counts and classifications', async () => {
+        const sentinel = 'sk-live-SENTINEL-DO-NOT-LEAK';
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+          vi.stubGlobal(
+            'fetch',
+            passThroughOrUpstream(() =>
+              jsonResponse({
+                success: true,
+                data: { object: sentinel, choices: [] },
+                [sentinel]: 'value',
+              }),
+            ),
+          );
+
+          const body = await postProviderTest({});
+
+          expect(body.ok).toBe(false);
+          expect(body.detail).not.toContain(sentinel);
+          const logged = warn.mock.calls
+            .map((args) => args.map((arg) => String(arg)).join(' '))
+            .join('\n');
+          expect(logged).not.toContain(sentinel);
+
+          // The shape is still reported — as classification, not raw text.
+          expect(body.detail).toContain('data.object: other');
+          expect(body.detail).toContain('other keys: 1');
+        } finally {
+          warn.mockRestore();
+        }
+      });
+    });
+  });
 });
 
 describe('POST /api/test/connection agent mode', () => {
