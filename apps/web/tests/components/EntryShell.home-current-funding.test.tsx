@@ -119,7 +119,7 @@ describe('D0 gen53 / client VIEW-015 and RUN-003 current Home funding', () => {
       await act(async () => { displayB.resolve(response({ summary: null, workspaceBalance: { workspaceId: a.workspaceId, workspaceMemberId: a.workspaceMemberId, balanceUsd: '100', billingScopeVersion: 2, expiresAt: null, updatedAt: null } })); });
     }
     await act(async () => { for (const resolve of bFunding) resolve(response({ preflight: preflight(b, decision, '0') })); });
-    if (decision === 'available' && mutation === 'none') {
+    if ((decision === 'available' || decision === 'unknown') && mutation === 'none') {
       await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
       expect(begin).toHaveBeenCalledTimes(1);
       expect(create.mock.calls[0]?.[0]).toMatchObject({ pendingPrompt: 'Keep the B draft and file at Home', pendingFiles: [file] });

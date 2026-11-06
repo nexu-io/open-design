@@ -3,7 +3,11 @@ import { currentWorkspaceAccountGeneration } from '../collab/workspace-identity'
 import type { AmrBalanceGateScope } from './amr-balance-gate';
 
 type FundingFeedback = 'available' | 'insufficient' | 'unknown';
-interface FundingEvidence { kind: FundingFeedback; preflight: WorkspaceBillingPreflight | null }
+interface FundingEvidence {
+  kind: FundingFeedback;
+  preflight: WorkspaceBillingPreflight | null;
+  authorizationDenied?: boolean;
+}
 const pending = new Map<string, { generation: number; promise: Promise<FundingEvidence> }>();
 let positive: { key: string; expiresAt: number; preflight: WorkspaceBillingPreflight } | null = null;
 const homeBlocks = new Map<string, AmrWalletSnapshot>();
@@ -156,7 +160,8 @@ async function readAmrFundingObservation(
     const response = await fetch(`/api/workspace/billing/preflight?${query}`, {
       cache: 'no-store', signal: AbortSignal.timeout(5_000),
     });
-    if (!response.ok) return unknown;
+    if (!response.ok) return response.status === 401 || response.status === 403
+      ? { ...unknown, authorizationDenied: true } : unknown;
     const { preflight } = await response.json() as WorkspaceBillingPreflightResponse;
     const age = Date.now() - Date.parse(preflight?.generatedAt);
     if (!isCurrent() || generation !== currentWorkspaceAccountGeneration()

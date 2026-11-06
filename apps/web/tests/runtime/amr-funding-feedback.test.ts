@@ -394,7 +394,10 @@ describe('explicit Send funding observations', () => {
       if (change === 'unknown') preflight.fundingCheck = 'unknown';
       const result = readSendTimeAmrFundingEvidence(scope, 'model');
       invalidateAmrFundingFeedback();
-      expect(await result).toEqual({ kind: 'unknown', preflight: null });
+      expect(await result).toEqual({
+        kind: 'unknown', preflight: null,
+        ...(change === 'forbidden' ? { authorizationDenied: true } : {}),
+      });
     },
   );
   it.each(['account', 'route-or-model'] as const)('discards Send after its %s identity changes', async (change) => {
