@@ -27,7 +27,7 @@
     "@open-design/launcher": "workspace:*"
   },
   "optionalDependencies": {
-    "@powerformer/vela-cli": "0.1.9-test.1"
+    "@powerformer/vela-cli": "0.1.9"
   },
   "devDependencies": {
     "@typescript/native": "npm:typescript@7.0.2",
