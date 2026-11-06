@@ -1,4 +1,4 @@
-import type { WorkspaceJourneySurfaceProps, WorkspaceJourneyClickProps, WorkspaceInvitePageViewProps } from '@open-design/contracts/analytics';
+import type { WorkspaceFundingRecoveryResultProps, WorkspaceJourneySurfaceProps, WorkspaceJourneyClickProps, WorkspaceInvitePageViewProps } from '@open-design/contracts/analytics';
 import { reportExperienceEvent } from '../observability/experience-diagnostics';
 import { observeAnalytics } from './observe';
 import type { ProjectCommentSendResultProps, ShareGuideClickProps, ShareGuideSurfaceViewProps } from '@open-design/contracts/analytics';
@@ -287,6 +287,10 @@ export function trackWorkspaceProjectActionResult(track: Track, props: Workspace
 
 export function trackWorkspaceSharedProjectOpenResult(track: Track, props: WorkspaceSharedProjectOpenResultProps, options?: TrackOptions): void {
   send(track, 'workspace_shared_project_open_result', props, options);
+}
+
+export function trackWorkspaceFundingRecoveryResult(track: Track, props: WorkspaceFundingRecoveryResultProps): void {
+  send(track, 'workspace_funding_recovery_result', props);
 }
 
 export function trackWorkspaceResourceActionResult(track: Track, props: WorkspaceResourceActionResultProps, options?: TrackOptions): void {
