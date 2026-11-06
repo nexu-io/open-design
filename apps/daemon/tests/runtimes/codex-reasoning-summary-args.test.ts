@@ -31,6 +31,17 @@ describe('codex buildArgs reasoning summary', () => {
   const findOverride = (args: string[]): string | undefined =>
     args.find((a) => a.startsWith('model_reasoning_summary='));
 
+  it.each(['low', 'medium', 'high', 'xhigh'])('passes Sol 6.1 reasoning %s as an explicit CLI config override', (reasoning) => {
+    const args = codexAgentDef.buildArgs('prompt', [], [], {
+      model: 'gpt-6.1-sol',
+      reasoning,
+    }, {});
+    const index = args.indexOf(`model_reasoning_effort="${reasoning}"`);
+    expect(index).toBeGreaterThan(0);
+    expect(args[index - 1]).toBe('-c');
+    expect(args[args.indexOf('--model') + 1]).toBe('gpt-6.1-sol');
+  });
+
   it('asks for a reasoning summary on a create turn', () => {
     const args = codexAgentDef.buildArgs('prompt', [], [], {}, {});
     expect(findOverride(args)).toBe('model_reasoning_summary="detailed"');
