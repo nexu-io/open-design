@@ -175,6 +175,7 @@ import {
   workspaceBillingBalanceUsd,
   workspaceBillingSummaryForContext,
 } from '../collab/useWorkspaceContext';
+import { workspaceIdentitySettledSignedOut } from '../collab/workspace-identity-signed-out';
 import { useWorkspaceInvalidation } from '../collab/workspace-events';
 import { resolvePlanLabelTier } from '../collab/team-plan';
 import { resolveDeepSeekV4FlashCampaignAudience } from '../campaigns/deepseek-v4-flash';
@@ -733,6 +734,10 @@ export function EntryShell({
   const railWorkspaceContext = accountFooterState === 'sign-in'
     ? null
     : workspaceContext;
+  // The rail's signed-out recent rows delete through the shared flow; a null
+  // context there is only share-free when the identity read settled (loading
+  // and unavailable reads are also null and must fail closed).
+  const railContextSettledSignedOut = workspaceIdentitySettledSignedOut(workspaceContextState);
   const usesOpenDesignCloud = config.mode === 'daemon' && config.agentId === 'amr';
   const amrProfile = config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE ?? null;
   const amrAuthRequired =
@@ -2218,6 +2223,7 @@ export function EntryShell({
             </>
           ) : null}</>}
           context={railWorkspaceContext}
+          contextSettledSignedOut={railContextSettledSignedOut}
           billing={workspaceBilling}
           billingResponse={workspaceBillingResponse}
           balanceUsd={workspaceBalanceUsd}
