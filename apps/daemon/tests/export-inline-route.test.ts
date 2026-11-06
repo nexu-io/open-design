@@ -1,6 +1,7 @@
 import type http from 'node:http';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { load } from 'cheerio';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { inlineRelativeAssets, type InlineAssetReader } from '../src/inline-assets.js';
@@ -464,6 +465,89 @@ describe('GET /api/projects/:id/export/*?inline=1 route', () => {
   const cssBody = 'body{color:#0a0}';
   const jsBody = 'window.OD_EXPORT_OK = 42;';
   const nestedJsBody = 'export const N = 7;';
+
+  it('inlines files named by HTML character references through the export route', async () => {
+    const id = 'export-character-references';
+    const created = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id, name: id, metadata: { kind: 'prototype', entryFile: 'index.html' },
+        skipDiscoveryBrief: true,
+      }),
+    });
+    expect(created.status).toBe(200);
+
+    for (const [name, content] of [
+      ['index.html', '<!doctype html><html><head>' +
+        '<link rel="stylesheet" href="theme&#45;dark.css" title="R&amp;D" ' +
+        'media="screen and (width &gt; 500px)" nonce="abc&#43;123">' +
+        '<script src="boot&period;js" defer></script>' +
+        '</head><body>Export fixture</body></html>'],
+      ['theme-dark.css', 'body{color:#123456}'],
+      ['boot.js', 'window.OD_ENTITY_EXPORT = true;'],
+    ]) {
+      const written = await fetch(`${baseUrl}/api/projects/${id}/files`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name, content, encoding: 'utf8' }),
+      });
+      expect(written.status).toBe(200);
+      expect(await written.json()).toMatchObject({ file: { name } });
+    }
+
+    const response = await fetch(`${baseUrl}/api/projects/${id}/export/index.html?inline=1`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-security-policy')).toBe('sandbox allow-scripts');
+    const $ = load(await response.text());
+    expect($('style')).toHaveLength(1);
+    expect($('style').text()).toContain('body{color:#123456}');
+    expect($('style').attr('title')).toBe('R&D');
+    expect($('style').attr('media')).toBe('screen and (width > 500px)');
+    expect($('style').attr('nonce')).toBe('abc+123');
+    expect($('script').text()).toContain('window.OD_ENTITY_EXPORT = true;');
+    expect($('script').is('[src]')).toBe(false);
+    expect($('script').is('[defer]')).toBe(true);
+  });
+
+  it('preserves decoded backslash-rooted URLs through the export route', async () => {
+    const id = 'export-backslash-rooted';
+    const created = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id, name: id, metadata: { kind: 'prototype', entryFile: 'index.html' },
+        skipDiscoveryBrief: true,
+      }),
+    });
+    expect(created.status).toBe(200);
+
+    for (const [name, content] of [
+      ['index.html', '<link rel="stylesheet" href="&#92;app.css">' +
+        '<script src="&#x5c;app.js"></script><script src="sibling.js"></script>'],
+      ['app.css', '.wrong-project-root{color:red}'],
+      ['app.js', 'window.OD_WRONG_PROJECT_ROOT = true;'],
+      ['sibling.js', 'window.OD_RELATIVE_SIBLING = true;'],
+    ]) {
+      const written = await fetch(`${baseUrl}/api/projects/${id}/files`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name, content, encoding: 'utf8' }),
+      });
+      expect(written.status).toBe(200);
+      expect(await written.json()).toMatchObject({ file: { name } });
+    }
+
+    const response = await fetch(`${baseUrl}/api/projects/${id}/export/index.html?inline=1`);
+    expect(response.status).toBe(200);
+    const body = await response.text();
+    const $ = load(body);
+    expect($('link').attr('href')).toBe('\\app.css');
+    expect($('script[src]').attr('src')).toBe('\\app.js');
+    expect($('style')).toHaveLength(0);
+    expect(body).not.toContain('OD_WRONG_PROJECT_ROOT');
+    expect(body).toContain('window.OD_RELATIVE_SIBLING = true;');
+  });
 
   beforeAll(async () => {
     const started = (await startServer({ port: 0, returnServer: true })) as {

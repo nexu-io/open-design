@@ -1,3 +1,5 @@
+import { Parser } from 'htmlparser2';
+
 // Server-side port of the web-client inliner at
 // apps/web/src/components/FileViewer.tsx:5248-5354 (@ base SHA 5bd97631).
 // Powers the GET /api/projects/:id/export/*?inline=1 endpoint that
@@ -368,7 +370,9 @@ export function resolveProjectRelativePath(
   ownerFileName: string,
   assetRef: string,
 ): string | null {
-  if (/^(?:https?:|data:|blob:|mailto:|tel:|#|\/)/i.test(assetRef)) return null;
+  // URL parsing trims leading C0/space and treats backslashes as separators.
+  const referenceStart = assetRef.replace(/^[\u0000-\u0020]+/, '');
+  if (/^(?:https?:|data:|blob:|mailto:|tel:|#|[\\/])/i.test(referenceStart)) return null;
   try {
     const url = new URL(assetRef, `https://od.local/${baseDirFor(ownerFileName)}`);
     if (url.origin !== 'https://od.local') return null;
@@ -379,8 +383,15 @@ export function resolveProjectRelativePath(
 }
 
 export function readHtmlAttr(tag: string, name: string): string | null {
-  const match = tag.match(new RegExp(`\\s${name}\\s*=\\s*(['"])([\\s\\S]*?)\\1`, 'i'));
-  return match?.[2] ?? null;
+  let value: string | null = null;
+  const parser = new Parser({
+    onopentag(_tagName, attributes) {
+      value = attributes[name.toLowerCase()] ?? null;
+      parser.pause();
+    },
+  }, { decodeEntities: true });
+  parser.end(tag);
+  return value;
 }
 
 // HTML boolean attribute presence test — matches `<tag … name>` or
