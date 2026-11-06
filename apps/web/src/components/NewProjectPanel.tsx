@@ -1217,7 +1217,10 @@ function PlatformPicker({
   const t = useT();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
   const listboxId = useId();
+  const anchor = usePortalPopoverAnchor(open, triggerRef);
 
   function togglePlatform(next: NewProjectPlatform) {
     const active = value.includes(next);
@@ -1230,7 +1233,9 @@ function PlatformPicker({
   useEffect(() => {
     if (!open) return;
     function onPointer(e: MouseEvent) {
-      if (wrapRef.current?.contains(e.target as Node)) return;
+      const target = e.target as Node;
+      if (wrapRef.current?.contains(target)) return;
+      if (popoverRef.current?.contains(target)) return;
       setOpen(false);
     }
     function onKey(e: KeyboardEvent) {
@@ -1253,6 +1258,32 @@ function PlatformPicker({
   const primary = DESIGN_PLATFORMS.find((o) => o.value === value[0]) ?? null;
   const extraCount = Math.max(0, value.length - 1);
 
+  // The portaled listbox lives at the end of <body>, so keep the Tab order it
+  // had when it rendered inline right after the trigger.
+  function popoverOptions(): HTMLElement[] {
+    return Array.from(popoverRef.current?.querySelectorAll<HTMLElement>('[role="option"]') ?? []);
+  }
+  function onTriggerKeyDown(e: React.KeyboardEvent<HTMLButtonElement>) {
+    if (!open || e.key !== 'Tab' || e.shiftKey) return;
+    const first = popoverOptions()[0];
+    if (!first) return;
+    e.preventDefault();
+    first.focus();
+  }
+  function onPopoverKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key !== 'Tab') return;
+    const options = popoverOptions();
+    if (e.shiftKey && e.target === options[0]) {
+      e.preventDefault();
+      triggerRef.current?.focus();
+    } else if (!e.shiftKey && e.target === options[options.length - 1]) {
+      // Hand focus back to the trigger without preventing the default, so the
+      // browser's Tab continues to the field after the picker.
+      triggerRef.current?.focus();
+      setOpen(false);
+    }
+  }
+
   return (
     <div
       className={`newproj-section ds-picker platform-picker${open ? ' open' : ''}`}
@@ -1260,9 +1291,12 @@ function PlatformPicker({
     >
       <label className="newproj-label">Target platforms</label>
       <button
+        ref={triggerRef}
         type="button"
+        data-testid="platform-picker-trigger"
         className={`ds-picker-trigger${open ? ' open' : ''}${primary ? '' : ' empty'}`}
         onClick={() => setOpen((v) => !v)}
+        onKeyDown={onTriggerKeyDown}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}
@@ -1282,13 +1316,24 @@ function PlatformPicker({
           style={{ transform: open ? 'rotate(180deg)' : undefined }}
         />
       </button>
-      {open ? (
+      {open && anchor && typeof document !== 'undefined'
+        ? createPortal(
         <div
-          className="ds-picker-popover"
+          ref={popoverRef}
+          className="ds-picker-popover ds-picker-popover-portal"
           id={listboxId}
           role="listbox"
           aria-label="Target platforms"
           aria-multiselectable="true"
+          data-placement={anchor.bottom !== undefined ? 'up' : 'down'}
+          onKeyDown={onPopoverKeyDown}
+          style={{
+            top: anchor.top ?? 'auto',
+            bottom: anchor.bottom ?? 'auto',
+            left: anchor.left,
+            width: anchor.width,
+            maxHeight: anchor.maxHeight,
+          }}
         >
           <div className="ds-picker-list">
             {DESIGN_PLATFORMS.map((option) => {
@@ -1316,10 +1361,72 @@ function PlatformPicker({
               );
             })}
           </div>
-        </div>
-      ) : null}
+        </div>,
+        document.body,
+      )
+        : null}
     </div>
   );
+}
+
+type PortalPopoverAnchor = {
+  top?: number;
+  bottom?: number;
+  left: number;
+  width: number;
+  maxHeight: number;
+};
+
+/**
+ * Viewport-fixed placement for a picker popover portaled to `document.body`.
+ *
+ * Pickers inside the New Project modal sit in `.newproj-body`, an
+ * `overflow-y: auto` scroll box that clips any absolutely positioned popover.
+ * Portaled popovers escape that clip, so they must place themselves: below the
+ * trigger by default, flipped above it when the space below is tight and the
+ * space above is larger, with the height clamped to the chosen side so the
+ * list scrolls internally instead of leaving the viewport.
+ */
+function anchorPortalPopover(trigger: DOMRect, minWidth = 0): PortalPopoverAnchor {
+  const width = Math.max(minWidth, trigger.width);
+  const left = Math.max(8, Math.min(window.innerWidth - width - 8, trigger.left));
+  const gap = 6;
+  const margin = 12;
+  const preferredMin = 200;
+  const preferredMax = 440;
+  const spaceBelow = window.innerHeight - trigger.bottom - gap - margin;
+  const spaceAbove = trigger.top - gap - margin;
+  const openUp = spaceBelow < preferredMin + 80 && spaceAbove > spaceBelow;
+  const maxHeight = Math.max(0, Math.min(preferredMax, openUp ? spaceAbove : spaceBelow));
+  return openUp
+    ? { bottom: window.innerHeight - trigger.top + gap, left, width, maxHeight }
+    : { top: trigger.bottom + gap, left, width, maxHeight };
+}
+
+/** Keeps a portaled popover anchored to its trigger while open. */
+function usePortalPopoverAnchor(
+  open: boolean,
+  triggerRef: React.RefObject<HTMLElement | null>,
+): PortalPopoverAnchor | null {
+  const [anchor, setAnchor] = useState<PortalPopoverAnchor | null>(null);
+  useLayoutEffect(() => {
+    if (!open) {
+      setAnchor(null);
+      return undefined;
+    }
+    function updateAnchor() {
+      const trigger = triggerRef.current;
+      if (trigger) setAnchor(anchorPortalPopover(trigger.getBoundingClientRect()));
+    }
+    updateAnchor();
+    window.addEventListener('resize', updateAnchor);
+    window.addEventListener('scroll', updateAnchor, true);
+    return () => {
+      window.removeEventListener('resize', updateAnchor);
+      window.removeEventListener('scroll', updateAnchor, true);
+    };
+  }, [open, triggerRef]);
+  return anchor;
 }
 
 function SurfaceOptions({
@@ -2158,16 +2265,11 @@ function DesignSystemPicker({
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
-  const [anchor, setAnchor] = useState<{
-    top?: number;
-    bottom?: number;
-    left: number;
-    width: number;
-    maxHeight: number;
+  const [anchor, setAnchor] = useState<(PortalPopoverAnchor & {
     // Fixed viewport x for the brand preview flyout, placed beside the
     // portaled popover (right when there is room, else left).
     flyoutLeft: number;
-  } | null>(null);
+  }) | null>(null);
 
   // Upgrade the popover's thin list to the rich Brand Kit card whenever the
   // hovered / selected row is a finalized brand (`user:<id>` design system).
@@ -2232,17 +2334,8 @@ function DesignSystemPicker({
     function updateAnchor() {
       const trigger = triggerRef.current;
       if (!trigger) return;
-      const rect = trigger.getBoundingClientRect();
-      const width = Math.max(280, rect.width);
-      const left = Math.max(8, Math.min(window.innerWidth - width - 8, rect.left));
-      const gap = 6;
-      const margin = 12;
-      const preferredMin = 200;
-      const preferredMax = 440;
-      const spaceBelow = window.innerHeight - rect.bottom - gap - margin;
-      const spaceAbove = rect.top - gap - margin;
-      const openUp = spaceBelow < preferredMin + 80 && spaceAbove > spaceBelow;
-      const maxHeight = Math.max(0, Math.min(preferredMax, openUp ? spaceAbove : spaceBelow));
+      const base = anchorPortalPopover(trigger.getBoundingClientRect(), 280);
+      const { left, width } = base;
 
       // Place the brand preview flyout beside the (portaled) popover: to its
       // right when the 320px card fits, otherwise flipped to its left, then
@@ -2262,23 +2355,7 @@ function DesignSystemPicker({
         flyoutLeft = Math.max(8, window.innerWidth - flyoutWidth - 8);
       }
 
-      if (openUp) {
-        setAnchor({
-          bottom: window.innerHeight - rect.top + gap,
-          left,
-          width,
-          maxHeight,
-          flyoutLeft,
-        });
-      } else {
-        setAnchor({
-          top: rect.bottom + gap,
-          left,
-          width,
-          maxHeight,
-          flyoutLeft,
-        });
-      }
+      setAnchor({ ...base, flyoutLeft });
     }
 
     updateAnchor();

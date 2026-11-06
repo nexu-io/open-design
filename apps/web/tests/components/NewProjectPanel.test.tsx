@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -261,6 +261,38 @@ describe('NewProjectPanel design system defaults', () => {
     expect(screen.getByRole('listbox', { name: 'Target platforms' }).getAttribute('aria-multiselectable')).toBe(
       'true',
     );
+  });
+
+  it('keeps the portaled target platform options next to the trigger in Tab order', () => {
+    render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={[]}
+        promptTemplates={[]}
+        onCreate={vi.fn()}
+      />,
+    );
+
+    const trigger = screen.getByTestId('platform-picker-trigger');
+    fireEvent.click(trigger);
+    const listbox = screen.getByRole('listbox', { name: 'Target platforms' });
+    // Portaled out of the modal's clipping scroll body.
+    expect(listbox.parentElement).toBe(document.body);
+
+    const options = within(listbox).getAllByRole('option');
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: 'Tab' });
+    expect(document.activeElement).toBe(options[0]);
+
+    fireEvent.keyDown(options[0]!, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(trigger);
+
+    options[options.length - 1]!.focus();
+    fireEvent.keyDown(options[options.length - 1]!, { key: 'Tab' });
+    expect(document.activeElement).toBe(trigger);
+    expect(screen.queryByRole('listbox', { name: 'Target platforms' })).toBeNull();
   });
 
   it('clears design system metadata when freeform is selected in multi mode', () => {
