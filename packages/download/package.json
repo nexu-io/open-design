@@ -1,6 +1,6 @@
 {
   "name": "@open-design/download",
-  "version": "0.25.1",
+  "version": "0.26.2",
   "private": true,
   "type": "module",
   "main": "./dist/index.mjs",
@@ -23,8 +23,8 @@
     "@open-design/platform": "workspace:*"
   },
   "devDependencies": {
-    "@typescript/native": "npm:typescript@7.0.2",
     "@types/node": "24.12.2",
+    "@typescript/native": "npm:typescript@7.0.2",
     "esbuild": "0.28.0",
     "vitest": "4.1.6"
   },
