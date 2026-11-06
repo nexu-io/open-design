@@ -8,7 +8,8 @@
 
 import Database from 'better-sqlite3';
 import { buildWorkspacePermissions, buildWorkspaceSeatSummary, type WorkspaceCollabContext } from '@open-design/contracts';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as appConfig from '../../src/app-config.js';
 
 import {
   createRunAnalyticsLifecycle,
@@ -32,6 +33,8 @@ type Captured = {
   insertId: string;
   context: { deviceId: string };
 };
+
+afterEach(() => vi.restoreAllMocks());
 
 function harness(finishCaptureResult: unknown = {
   status: 'queued',
@@ -258,13 +261,14 @@ describe('run analytics lifecycle', () => {
     });
     const created = await settled(h, 'run_created');
     expect(resolveExact).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'workspace-a' });
-    expect(created.properties).toMatchObject({ workspace_id: 'workspace-a', member_count: 7 });
+    expect(created.properties).toMatchObject({ workspace_id: 'workspace-a', workspace_member_id: 'actual-caller', member_count: 7 });
     expect(created.properties).not.toHaveProperty('credit_type');
     authorized.workspaceId = 'page-b';
+    authorized.workspaceMemberId = 'another-member';
     authorized.memberCount = 99;
     h.settle({ status: 'succeeded' });
     const finished = await settled(h, 'run_finished');
-    expect(finished.properties).toMatchObject({ workspace_id: 'workspace-a', member_count: 7, result: 'success' });
+    expect(finished.properties).toMatchObject({ workspace_id: 'workspace-a', workspace_member_id: 'actual-caller', member_count: 7, result: 'success' });
     expect(finished.properties).not.toHaveProperty('credit_type');
     expect(h.recoveries.every((recovery) => recovery.properties.workspace_id === 'workspace-a')).toBe(true);
     expect(h.recoveries.at(-1)?.properties.member_count).toBe(7);
@@ -333,22 +337,24 @@ describe('run analytics lifecycle', () => {
     expect(finished.properties).not.toHaveProperty('workspace_id');
   });
 
-  it('retains the original optional workspace snapshot on resume without re-reading page authority', async () => {
+  it.each([undefined, 'original-member'])('retains the historical membership snapshot (%s) on resume', async (memberId) => {
     const resolveExact = vi.fn(async () => workspaceContext({ memberCount: 99 }));
     const h = harness(undefined, {}, { resolveExact });
     h.lifecycle.install({
       run: fakeRun({
         projectId: 'project-a', workspaceScope: WORKSPACE_SCOPE, manualResumeAttemptCount: 1,
-        analyticsRecovery: { context: CONTEXT, properties: { workspace_id: 'workspace-a', member_count: 7 }, insertId: 'previous-attempt', completedAt: 1 },
+        analyticsRecovery: { context: CONTEXT, properties: { workspace_id: 'workspace-a', member_count: 7, ...(memberId ? { workspace_member_id: memberId } : {}) }, insertId: 'previous-attempt', completedAt: 1 },
       }),
       body: { workspaceId: 'page-b' }, requestAnalyticsContext: CONTEXT as never,
     });
     const created = await settled(h, 'run_created');
     expect(created.properties).toMatchObject({ workspace_id: 'workspace-a', member_count: 7 });
+    expect(created.properties.workspace_member_id).toBe(memberId);
     expect(resolveExact).not.toHaveBeenCalled();
     h.settle({ status: 'succeeded' });
     const finished = await settled(h, 'run_finished');
     expect(finished.properties).toMatchObject({ workspace_id: 'workspace-a', member_count: 7 });
+    expect(finished.properties.workspace_member_id).toBe(memberId);
   });
 
   it('installs only one created/finished observer for repeated starts of the same attempt', async () => {
@@ -364,6 +370,9 @@ describe('run analytics lifecycle', () => {
   });
 
   it.each(['natural', 'current-first', 'original-first'] as const)('keeps a late workspace response on its original attempt after finish and resume (%s)', async (finishOrder) => {
+    // The configured release order below must not race real filesystem reads
+    // before detectAgents: they can reverse which attempt receives read 0.
+    vi.spyOn(appConfig, 'readAppConfig').mockResolvedValue({});
     const runs = createChatRunService({
       createSseResponse: () => ({ send: vi.fn(), end: vi.fn(), cleanup: vi.fn() }),
       createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }),

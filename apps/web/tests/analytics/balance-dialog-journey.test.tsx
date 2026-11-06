@@ -1,20 +1,24 @@
 // @vitest-environment jsdom
 import { StrictMode } from 'react';
 import { buildWorkspacePermissions } from '@open-design/contracts';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AmrConcurrencyDialog } from '../../src/components/AmrConcurrencyDialog';
-import { AmrBalanceDialog } from '../../src/components/AmrBalanceDialog';
+import { AmrBalanceDialog, WALLET_WATCH_INTERVAL_MS, WALLET_WATCH_TIMEOUT_MS } from '../../src/components/AmrBalanceDialog';
 import { HomeAmrBalanceGateDialogs, type HomeAmrBalanceGateBlock } from '../../src/components/HomeAmrBalanceGateDialogs';
 import { AmrOwnerTopUpDialog } from '../../src/components/chat/AmrOwnerTopUpDialog';
 import { workspaceContextFixture } from '../helpers/workspace-context';
-const mocks = vi.hoisted(() => ({ track: vi.fn(), context: vi.fn() }));
+const mocks = vi.hoisted(() => ({ track: vi.fn(), context: vi.fn(), recovered: vi.fn() }));
 vi.mock('../../src/analytics/provider', () => ({ useAnalytics: () => ({ track: mocks.track }) }));
 vi.mock('../../src/collab/useWorkspaceContext', () => ({
   useWorkspaceContext: () => ({ context: mocks.context(), loading: false }),
   useWorkspaceBilling: () => null,
 }));
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+vi.mock('../../src/runtime/amr-balance-gate', async (original) => ({
+  ...await original<typeof import('../../src/runtime/amr-balance-gate')>(),
+  hasAmrFundingRecovered: mocks.recovered,
+}));
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 beforeEach(() => {
   mocks.track.mockReset();
   mocks.context.mockReturnValue(workspaceContextFixture({ workspaceId: 'home-workspace', workspaceMemberId: 'member' }));
@@ -76,4 +80,24 @@ it.each(['before_run', 'mid_run', 'unknown'] as const)('keeps concurrency %s on 
 it('does not infer a running task when historical concurrency stage is unavailable', () => {
   render(<AmrConcurrencyDialog branch={{ audience: 'owner', tier: 'max' }} workspaceContext={null} onClose={vi.fn()} />);
   expect(views()[0]![1]).toMatchObject({ stage: 'unknown' });
+});
+
+it.each(['recovered', 'timeout'] as const)('records funding %s once, joined to the original block and member', async (outcome) => {
+  vi.useFakeTimers();
+  vi.stubGlobal('open', vi.fn());
+  mocks.recovered.mockResolvedValue(false);
+  const context = workspaceContextFixture({ workspaceId: 'payer', workspaceMemberId: 'owner', role: 'owner', permissions: buildWorkspacePermissions({ role: 'owner', lifecycleState: 'active' }) });
+  const onResolved = vi.fn();
+  render(<AmrBalanceDialog reason="insufficient" balanceUsd="0" profile="local" entrySource="chat_balance_gate_upgrade"
+    workspaceContext={context} stage="mid_run" projectId="shared-project" conversationId="conversation" manualSendOnRecovery
+    metricsConsent={false} installationId={null} onClose={vi.fn()} onResolved={onResolved} />);
+  fireEvent.click(screen.getByTestId('amr-balance-dialog-plans'));
+  await act(async () => { await vi.advanceTimersByTimeAsync(WALLET_WATCH_INTERVAL_MS); });
+  const results = () => mocks.track.mock.calls.filter(([event]) => event === 'workspace_funding_recovery_result');
+  expect(results()).toHaveLength(0);
+  mocks.recovered.mockResolvedValue(outcome === 'recovered');
+  await act(async () => { await vi.advanceTimersByTimeAsync(outcome === 'recovered' ? WALLET_WATCH_INTERVAL_MS * 2 : WALLET_WATCH_TIMEOUT_MS); });
+  expect(results()).toHaveLength(1);
+  expect(results()[0]![1]).toMatchObject({ result: outcome, block_id: views()[0]![1].block_id, workspace_key: 'payer', workspace_member_id: 'owner', project_key: 'shared-project', conversation_id: 'conversation', requires_manual_send: true });
+  expect(onResolved).toHaveBeenCalledTimes(outcome === 'recovered' ? 1 : 0);
 });

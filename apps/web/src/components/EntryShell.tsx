@@ -37,6 +37,8 @@ import {
 } from '@open-design/contracts';
 import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import { useAnalytics } from '../analytics/provider';
+import { useWorkspaceContentView } from '../analytics/use-workspace-content-view';
+import { entryViewToTracking } from '../analytics/workspace';
 import {
   trackHomeNavClick,
   trackOnboardingClick,
@@ -133,6 +135,7 @@ import {
   type AmrBalanceGateScope,
 } from '../runtime/amr-balance-gate';
 import { cachedHomeAmrFundingBlock, checkAmrFundingFeedback, confirmHomeAmrFundingAvailable, invalidateAmrFundingFeedback, noteHomeAmrFundingBlockPresented, readSendTimeAmrFundingEvidence, recentHomeAmrFundingInsufficiency, retireHomeAmrFundingBlock, takeHomeAmrFundingFastBlock } from '../runtime/amr-funding-feedback';
+import { ReferralNotice } from './ReferralNotice';
 import { HomeView, seedHomeComposerPrompt } from './HomeView';
 import { HomeInviteSurface, HomeInviteTrigger } from './HomeInviteSurface';
 import { entryStrategyRoutingFields } from './entry-strategy-routing';
@@ -2073,6 +2076,13 @@ export function EntryShell({
       workspaceId: completed.workspaceId, workspaceMemberId: completed.workspaceMemberId, count: completed.count, totalCount: completed.count,
     } }));
   }, [registrationSkipNotice, registrationInvite, view, workspaceContextState.loading, workspaceContextState.identityChangePending, amrAccountId, amrRegistrationStatus, railWorkspaceContext]);
+  useWorkspaceContentView({
+    context: railWorkspaceContext,
+    pageName: entryViewToTracking(view),
+    active: route.kind === 'home' && view !== 'onboarding' && !registrationInviteActive,
+    ready: !workspaceContextState.loading && !workspaceContextState.identityChangePending
+      && !workspaceContextState.failure && amrLoggedIn === true,
+  });
   if (registrationInvite) return registrationInvite;
 
   if (view === 'onboarding') {
@@ -2272,6 +2282,7 @@ export function EntryShell({
               <HomeView
                 {...homeViewProps}
                 isActive={view === 'home'}
+                referralNotice={<ReferralNotice accountId={amrLoggedIn === true ? amrAccountId : null} profile={amrRegistrationStatus?.profile?.trim() || amrProfile} consoleOrigin={amrRegistrationStatus?.consoleOrigin} active={view === 'home'} context={homeFundingContext} billing={workspaceBillingResponse} />}
                 inviteSurface={<HomeInviteSurface signedOut={amrLoggedIn === false} identityReady={!workspaceContextState.loading && !workspaceContextState.identityChangePending && !workspaceContextState.failure} accountId={amrLoggedIn === true ? amrAccountId : null} context={railWorkspaceContext} active={view === 'home'} onSignInRequested={() => { setInviteSignInRequest('start'); navigate({ kind: 'home', view: 'onboarding' }); }} openAfterSignIn={inviteSignInRequest === 'waiting'} onSignInInviteConsumed={() => setInviteSignInRequest(null)} />}
                 /* Home is the one composer in the shell and consumes the page
                    handoff. The community view used to dock a second HomeView

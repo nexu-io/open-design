@@ -1,3 +1,4 @@
+import { ReferralEntryProvider } from './components/ReferralEntry';
 import { WorkspaceRemovalBoundary } from './components/WorkspaceRemovalBoundary';
 import { homeAutoSendIdentity, type HomeRequestConcurrencyRejection } from './runtime/home-auto-send-identity';
 import { AmrConcurrencyDialog } from './components/AmrConcurrencyDialog';
@@ -480,13 +481,19 @@ function clearStaleAmrModelChoiceOnProfileChange(
  * the user to choose an execution path again.
  */
 export function resetExecutionConfigAfterSignOut(config: AppConfig): AppConfig {
+  const selectedAmrProfile = config.agentCliEnv?.[AMR_AGENT_ID]?.[AMR_PROFILE_ENV_KEY];
   return {
     ...config,
     onboardingCompleted: false,
     mode: DEFAULT_CONFIG.mode,
     agentId: null,
     agentModels: {},
-    agentCliEnv: {},
+    // The selected backend is an app preference, while the other CLI env
+    // entries can contain account credentials. Keep the backend when signing
+    // out so the next account login starts in the same environment.
+    agentCliEnv: typeof selectedAmrProfile === 'string' && selectedAmrProfile.trim()
+      ? { [AMR_AGENT_ID]: { [AMR_PROFILE_ENV_KEY]: selectedAmrProfile } }
+      : {},
     agentCliEnvIntent: {},
   };
 }
@@ -3299,6 +3306,10 @@ function AppInner() {
 
   const refreshAgents = useCallback(
     async (options?: { throwOnError?: boolean; agentCliEnv?: AppConfig['agentCliEnv'] }) => {
+      // A native menu selection returns focus to the renderer while this
+      // explicit refresh is running. Count it toward the focus throttle so
+      // the same transition does not start a second agent scan.
+      agentFocusRefreshLastRunRef.current = Date.now();
       if (options && Object.prototype.hasOwnProperty.call(options, 'agentCliEnv')) {
         const current = latestPersistedConfigRef.current;
         const nextConfig = clearStaleAmrModelChoiceOnProfileChange(current, {
@@ -6194,7 +6205,7 @@ function AppInner() {
     );
   }
   return (
-    <>
+    <ReferralEntryProvider accountId={isAmrSessionAuthenticated(amrLoginStatus) ? amrLoginStatus?.user?.id ?? amrLoginStatus?.credentialRevision ?? null : null} profile={amrLoginStatus?.profile ?? null}>
       <div
         className={`workspace-shell workspace-shell--${clientType}`}
         data-client-type={clientType}
@@ -6416,7 +6427,7 @@ function AppInner() {
       </motion.div>
       ) : null}
       </AnimatePresence>
-    </>
+    </ReferralEntryProvider>
   );
 }
 

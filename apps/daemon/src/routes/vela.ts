@@ -4,6 +4,8 @@ import type {
   TestRuntimeAcceptanceRequest,
   TestRuntimeContextRequest,
 } from '@open-design/contracts/api/touchpointTestRuntime';
+import { registerVelaReferralRoutes } from './vela-referral.js';
+
 import { createHash, randomUUID } from 'node:crypto';
 import dns from 'node:dns';
 import http from 'node:http';
@@ -1370,6 +1372,11 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }
+  });
+
+  registerVelaReferralRoutes(app, async () => {
+    const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+    return readVelaControlApiContext(env, agentCliEnvForAgent(appConfig.agentCliEnv, 'amr'));
   });
 
   app.all('/api/integrations/vela/api-proxy/*splat', proxyAmrApiRequest);

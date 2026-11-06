@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   createAmrEnvironmentProfileMenuItems,
@@ -6,6 +6,7 @@ import {
   normalizeAmrEnvironmentProfile,
   resolveAboutPanelVersion,
   resolveFirstAvailableBaseUrl,
+  writeAmrEnvironmentProfile,
 } from "../../src/main/index.js";
 
 describe("AMR Environment Profile desktop menu helpers", () => {
@@ -180,6 +181,37 @@ describe("AMR Environment Profile desktop menu helpers", () => {
       : null;
     localItem?.click?.(undefined as never, undefined as never, undefined as never);
     expect(selected).toEqual(["local"]);
+  });
+
+  it("shows the fixed endpoint without offering misleading profile switches", () => {
+    const onSelect = vi.fn();
+    const binding = {
+      profile: "test" as const,
+      apiUrl: "https://amr-feature-api.powerformer.net",
+      linkUrl: "https://amr-feature-link.powerformer.net",
+      webUrl: "https://amr-feature.powerformer.net",
+      credentialScope: "referral-feature-test",
+    };
+    const [menu] = createAmrEnvironmentProfileMenuItems("test", onSelect, binding);
+    expect(menu.submenu).toEqual([{ label: binding.webUrl, enabled: false }]);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("blocks fixed-binding switches before discovery or any app-config request", async () => {
+    const discoverDaemonUrl = vi.fn();
+    const discoverWebUrl = vi.fn();
+    const amrEndpointBinding = {
+      profile: "test" as const,
+      apiUrl: "https://amr-feature-api.powerformer.net",
+      linkUrl: "https://amr-feature-link.powerformer.net",
+      webUrl: "https://amr-feature.powerformer.net",
+      credentialScope: "referral-feature-test",
+    };
+    for (const profile of ["prod", "test", "feature-test", "local"] as const) {
+      await expect(writeAmrEnvironmentProfile({ discoverDaemonUrl, discoverWebUrl, amrEndpointBinding }, profile)).resolves.toBe("test");
+    }
+    expect(discoverDaemonUrl).not.toHaveBeenCalled();
+    expect(discoverWebUrl).not.toHaveBeenCalled();
   });
 
   it("uses the active packaged runtime version for the native About panel", () => {

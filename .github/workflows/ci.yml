@@ -346,6 +346,8 @@ jobs:
         run: |
           pnpm --filter @open-design/contracts test
           pnpm --filter @open-design/host test
+          pnpm --filter @open-design/launcher-proto test
+          pnpm --filter @open-design/launcher test
           pnpm --filter @open-design/sidecar test
           pnpm --filter @open-design/sidecar-proto test
           if [ "${{ fromJSON(needs.plan.outputs.scopes).tools_dev_tests_required }}" = "true" ]; then

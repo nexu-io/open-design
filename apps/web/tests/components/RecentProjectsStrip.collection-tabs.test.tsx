@@ -7,11 +7,14 @@
 // OPEND-3201 rides along: the card's relative time must sit in its own
 // non-shrinking element so the creator, not the time, gives way.
 
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { RecentProjectsStrip } from '../../src/components/RecentProjectsStrip';
 import type { Project } from '../../src/types';
+
+const analytics = vi.hoisted(() => ({ track: vi.fn(), newRequestId: () => 'open-request' }));
+vi.mock('../../src/analytics/provider', () => ({ useAnalytics: () => analytics }));
 
 vi.mock('../../src/providers/registry', () => ({
   fetchProjectFileText: vi.fn(async () => null),
@@ -54,6 +57,7 @@ vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => {
 });
 
 beforeEach(() => {
+  analytics.track.mockClear();
   workspaceState.context = teamContext();
   workspaceState.loading = false;
 });
@@ -248,4 +252,15 @@ describe('Personal workspace shared-project collection', () => {
     renderPage({ collection: 'teamProjects', onCollectionChange });
     expect(onCollectionChange).not.toHaveBeenCalled();
   });
+});
+
+it.each([true, false])('links shared project open outcome %s to the member and project for later creation', async (opened) => {
+  renderPage({ space: 'team', onOpen: async () => opened });
+  fireEvent.click(screen.getByText('Shared with the team').closest('button')!);
+  await waitFor(() => expect(analytics.track).toHaveBeenCalledWith(
+    'workspace_shared_project_open_result',
+    expect.objectContaining({ project_key: 'p-shared', workspace_key: 'ws-team', workspace_member_id: 'wm-1', result: opened ? 'success' : 'failed' }),
+    expect.anything(),
+  ));
+  expect(analytics.track.mock.calls.filter(([name]) => name === 'workspace_shared_project_open_result')).toHaveLength(1);
 });

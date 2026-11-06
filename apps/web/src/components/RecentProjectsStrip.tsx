@@ -1564,6 +1564,7 @@ export function RecentProjectsStrip({
                   const trackSharedOpenResult = (opened: boolean) => {
                     if (!shared && space !== 'team') return;
                     trackWorkspaceSharedProjectOpenResult(analytics.track, {
+                      project_key: project.id,
                       page_name: analyticsPage,
                       area: 'project_collection',
                       result: opened ? 'success' : 'failed',

@@ -25,6 +25,8 @@ export type TrackingWorkspacePage =
 export interface TrackingWorkspaceDimensions {
   /** Opaque workspace id. Never a display name. */
   workspace_key?: string;
+  /** Authorized caller's membership, not the workspace creator's membership. */
+  workspace_member_id?: string;
   workspace_type?: TrackingWorkspaceType;
   workspace_role?: TrackingWorkspaceRole;
   workspace_lifecycle?: string;
@@ -85,7 +87,14 @@ export interface WorkspaceSwitcherClickProps extends TrackingWorkspaceDimensions
 
 export type WorkspaceInviteEntry = 'workspace_switcher' | 'all_projects' | 'onboarding' | 'home_banner' | 'home_header';
 
-export interface WorkspaceInviteClickProps extends TrackingWorkspaceDimensions {
+export interface WorkspaceInviteRecipientDimensions {
+  /** Effective recipient roles in this batch, distinct from the inviter's workspace_role. */
+  requested_roles?: Array<'admin' | 'member'>;
+  requested_admin_count?: number;
+  requested_member_count?: number;
+}
+
+export interface WorkspaceInviteClickProps extends TrackingWorkspaceDimensions, WorkspaceInviteRecipientDimensions {
   page_name: 'home' | 'all_projects' | 'onboarding';
   area: 'workspace_invite_dialog' | 'onboarding_invite_step';
   invite_surface_id?: string;
@@ -160,7 +169,8 @@ export interface ExtensionMarketplaceClickProps extends TrackingWorkspaceDimensi
 
 export interface WorkspaceSurfaceViewProps extends TrackingWorkspaceDimensions {
   page_name: TrackingWorkspacePage;
-  area: 'account_menu' | 'workspace_switcher' | 'workspace_invite_dialog';
+  area: 'account_menu' | 'workspace_switcher' | 'workspace_invite_dialog' | 'workspace_content';
+  surface_instance_id?: string;
   entry_from?: WorkspaceInviteEntry;
   invite_surface_id?: string;
 }
@@ -174,11 +184,13 @@ export interface WorkspaceSwitchResultProps extends TrackingWorkspaceDimensions 
   error_code?: string;
 }
 
-export interface WorkspaceInviteResultProps extends TrackingWorkspaceDimensions {
+export interface WorkspaceInviteResultProps extends TrackingWorkspaceDimensions, WorkspaceInviteRecipientDimensions {
   page_name: 'home' | 'all_projects' | 'onboarding';
   area: 'workspace_invite_dialog' | 'onboarding_invite_step';
   invite_surface_id?: string;
   invite_batch_id?: string;
+  /** Authoritative successful invitation IDs; no recipient emails or invite tokens. */
+  invite_ids?: string[];
   entry_from: WorkspaceInviteEntry;
   result: 'success' | 'partial_success' | 'failed' | 'unknown';
   unknown_count?: number;
@@ -209,6 +221,7 @@ export interface WorkspaceProjectActionResultProps extends TrackingWorkspaceDime
 }
 
 export interface WorkspaceSharedProjectOpenResultProps extends TrackingWorkspaceDimensions {
+  project_key: string;
   page_name: 'all_projects' | 'drafts' | 'home';
   area: 'project_collection';
   result: 'success' | 'failed';
@@ -260,6 +273,16 @@ export interface WorkspaceJourneySurfaceProps extends TrackingWorkspaceDimension
 }
 export interface WorkspaceJourneyClickProps extends WorkspaceJourneySurfaceProps {
   element: 'invite_teammates' | 'close' | 'upgrade' | 'return_personal_workspace';
+}
+
+/** Funding admission recovered; this does not assert payment or a resumed run. */
+export interface WorkspaceFundingRecoveryResultProps extends WorkspaceJourneySurfaceProps {
+  result: 'recovered' | 'timeout';
+  recovery_method: 'funding_preflight';
+  duration_ms: number;
+  requires_manual_send: boolean;
+  project_key?: string;
+  conversation_id?: string;
 }
 export interface WorkspaceInvitePageViewProps extends TrackingWorkspaceDimensions {
   page_name: 'onboarding';
