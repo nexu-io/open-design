@@ -103,7 +103,68 @@ export interface ByokChatProviderConfig {
    * model picker instead of falling back to a hardcoded default. Optional
    * because some presets (e.g. Ollama) infer the model from baseUrl/protocol.
    */
-  model?: string;
+   model?: string;
+}
+
+/** Built-in endpoint per BYOK protocol; empty for protocols with no default (azure). */
+export const DEFAULT_BYOK_BASE_URL_BY_PROTOCOL: Record<ByokChatProtocol, string> = {
+  anthropic: 'https://api.anthropic.com/v1',
+  openai: 'https://api.openai.com/v1',
+  azure: '',
+  google: 'https://generativelanguage.googleapis.com/v1beta',
+  ollama: 'https://ollama.com',
+  senseaudio: 'https://api.senseaudio.cn',
+  aihubmix: 'https://aihubmix.com/v1',
+};
+
+// Exact same-origin spellings that the daemon's provider-specific runtime
+// normalization maps to each built-in endpoint. Alternate version/API paths
+// are custom endpoints even when another protocol treats that path as an
+// alias (for example, OpenAI `/v1beta` and SenseAudio `/api`).
+const BUILT_IN_BYOK_PATHS_BY_PROTOCOL: Record<ByokChatProtocol, readonly string[]> = {
+  anthropic: ['', '/v1'],
+  openai: ['', '/v1'],
+  azure: [],
+  google: ['', '/v1beta'],
+  ollama: ['', '/v1', '/api'],
+  senseaudio: [''],
+  aihubmix: ['/v1'],
+};
+
+function normalizedByokPath(path: string): string {
+  const trimmed = path.replace(/\/+$/, '');
+  return trimmed === '/' ? '' : trimmed;
+}
+
+/**
+ * True when the connection points at any endpoint OTHER than the protocol's
+ * built-in one. A custom base URL means the model field names a model
+ * deliberately (gateway routers such as LiteLLM route behind a stable
+ * `default` alias), so the web preflight, the web run builder, and the
+ * daemon's OpenCode BYOK provider config all share this classification --
+ * notably for deciding when a literal `default` model id is intentional
+ * rather than the picker's "Default (CLI config)" sentinel leaking through.
+ */
+export function isCustomByokBaseUrl(
+  protocol: ByokChatProtocol,
+  baseUrl: string | null | undefined,
+): boolean {
+  const trimmed = typeof baseUrl === 'string' ? baseUrl.trim().replace(/\/+$/, '') : '';
+  if (!trimmed) return false;
+  const protocolDefault = (DEFAULT_BYOK_BASE_URL_BY_PROTOCOL[protocol] ?? '').replace(/\/+$/, '');
+  if (!protocolDefault) return true;
+  try {
+    const custom = new URL(trimmed);
+    const builtIn = new URL(protocolDefault);
+    return (
+      custom.origin !== builtIn.origin ||
+      !BUILT_IN_BYOK_PATHS_BY_PROTOCOL[protocol].includes(
+        normalizedByokPath(custom.pathname),
+      )
+    );
+  } catch {
+    return true;
+  }
 }
 
 export interface ByokMediaDefaults {
