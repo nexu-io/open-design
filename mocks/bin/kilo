@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# Discovery requires a MIME-aware Kilo version before starting the ACP replay.
+if [[ $# -eq 1 && "${1:-}" == "--version" ]]; then
+  printf '%s\n' '7.4.23'
+  exit 0
+fi
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 exec node "$HERE/../mock-agent.mjs" --as kilo "$@"
