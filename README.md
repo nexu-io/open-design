@@ -315,6 +315,12 @@ using `Authorization: Bearer <OD_API_TOKEN>`.
 
 The Sealos App Store template runs the published OpenDesign Docker image with persistent workspace storage and Basic Auth on the public proxy. For custom public or shared Docker deployments, follow the reverse-proxy and `OPEN_DESIGN_ALLOWED_ORIGINS` guidance in [`deploy/README.md`](deploy/README.md#local-compose).
 
+### 🚂 Deploy on Railway
+
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/opendesign)
+
+The Railway template runs the published OpenDesign Docker image with the Claude Code, Codex and OpenCode CLIs added, persistent storage for projects and CLI logins, and the `OD_API_TOKEN` login (user `open-design`) in front. To use those agents, add a model key such as `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `OPENROUTER_API_KEY` to the service.
+
 ### 🧑‍💻 Run from source
 
 ```bash

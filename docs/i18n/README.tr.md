@@ -287,6 +287,12 @@ docker compose up -d
 
 Sealos App Store şablonu, yayımlanmış OpenDesign Docker imajını kalıcı çalışma alanı depolaması ve herkese açık proxy üzerinde Basic Auth ile çalıştırır. Özel herkese açık veya paylaşılan Docker dağıtımları için [`deploy/README.md`](../../deploy/README.md#local-compose) içindeki ters proxy ve `OPEN_DESIGN_ALLOWED_ORIGINS` rehberini izleyin.
 
+### 🚂 Railway üzerinde dağıtın
+
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/opendesign)
+
+Railway şablonu, yayımlanmış OpenDesign Docker imajını Claude Code, Codex ve OpenCode CLI'ları eklenmiş olarak, projeler ve CLI oturumları için kalıcı depolamayla ve önünde `OD_API_TOKEN` girişiyle (kullanıcı adı `open-design`) çalıştırır. Bu ajanları kullanmak için servise `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` veya `OPENROUTER_API_KEY` gibi bir model anahtarı ekleyin.
+
 ### 🧑‍💻 Kaynaktan çalıştırın
 
 ```bash
