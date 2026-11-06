@@ -47,6 +47,7 @@ import { startServer } from '../src/server.js';
 import { getRememberedLiveModels, rememberLiveModels } from '../src/runtimes/models.js';
 import { amrModelLoadingCache } from '../src/runtimes/amr-model-cache.js';
 import { buildAmrModelCacheKey } from '../src/runtimes/amr-model-probe.js';
+import { agentCapabilities } from '../src/runtimes/capabilities.js';
 
 type FetchInput = Parameters<typeof fetch>[0];
 type FetchInit = Parameters<typeof fetch>[1];
@@ -4204,6 +4205,109 @@ process.stdin.on('end', () => {
       expect(result.kind).not.toBe('unknown');
     });
   });
+  it('passes --effort low and --disable-slash-commands for antigravity connection tests when capabilities are detected', async () => {
+    agentCapabilities.delete('antigravity');
+    const argvFile = path.join(os.tmpdir(), `od-agy-argv-${Date.now()}.json`);
+    const script = `
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.4.6');
+  process.exit(0);
+}
+if (args[0] === '--help') {
+  console.error('--dangerously-skip-permissions\\n--model\\n--effort\\n--disable-slash-commands');
+  process.exit(0);
+}
+process.stdin.resume();
+process.stdin.on('data', () => {});
+process.stdin.on('end', () => {
+  fs.writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(args));
+  process.stdout.write(JSON.stringify({ event: 'result', result: { status: 'SUCCESS', response: 'ok' } }) + '\\n');
+  process.exit(0);
+});
+`;
+    try {
+      await withFakeAntigravity(script, async () => {
+        const result = await testAgentConnection({ agentId: 'antigravity' });
+        expect(result.ok).toBe(true);
+        expect(result.kind).toBe('success');
+        const captured = JSON.parse(await fsp.readFile(argvFile, 'utf8'));
+        expect(captured).toContain('--effort');
+        expect(captured[captured.indexOf('--effort') + 1]).toBe('low');
+        expect(captured).toContain('--disable-slash-commands');
+      });
+    } finally {
+      await fsp.rm(argvFile, { force: true });
+    }
+  });
+
+  it('early returns and terminates hanging antigravity process when smoke test replies ok', async () => {
+    agentCapabilities.delete('antigravity');
+    const script = `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.4.6');
+  process.exit(0);
+}
+if (args[0] === '--help') {
+  console.error('--dangerously-skip-permissions');
+  process.exit(0);
+}
+process.on('SIGTERM', () => process.exit(0));
+process.stdin.resume();
+process.stdin.on('data', () => {});
+process.stdin.on('end', () => {
+  process.stdout.write(JSON.stringify({ event: 'result', result: { status: 'SUCCESS', response: 'ok' } }) + '\\n');
+});
+setTimeout(() => process.exit(0), 10000);
+`;
+    await withFakeAntigravity(script, async () => {
+      const start = Date.now();
+      const result = await testAgentConnection({ agentId: 'antigravity' });
+      const duration = Date.now() - start;
+      expect(result.ok).toBe(true);
+      expect(result.kind).toBe('success');
+      expect(result.latencyMs).toBeLessThan(2000);
+      expect(duration).toBeLessThan(6000);
+    });
+  });
+
+  it('does not early-exit on text delta and catches delayed terminal ERROR in antigravity', async () => {
+    agentCapabilities.delete('antigravity');
+    const script = `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.4.6');
+  process.exit(0);
+}
+if (args[0] === '--help') {
+  console.error('--dangerously-skip-permissions');
+  process.exit(0);
+}
+process.stdin.resume();
+process.stdin.on('data', () => {});
+process.stdin.on('end', () => {
+  process.stdout.write(JSON.stringify({
+    event: 'step_update',
+    step_update: { step_type: 'agent_response', text_delta: 'ok' },
+  }) + '\\n');
+  setTimeout(() => {
+    process.stdout.write(JSON.stringify({
+      event: 'result',
+      result: { status: 'ERROR', error: 'quota exceeded after turn' },
+    }) + '\\n');
+    process.exit(0);
+  }, 1200);
+});
+`;
+    await withFakeAntigravity(script, async () => {
+      const result = await testAgentConnection({ agentId: 'antigravity' });
+      expect(result.ok).toBe(false);
+      expect(result.detail).toContain('quota exceeded after turn');
+    });
+  });
+
 
   it('keeps OpenCode smoke tests green when git bootstrap is unavailable', async () => {
     const gitDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-opencode-git-missing-'));
