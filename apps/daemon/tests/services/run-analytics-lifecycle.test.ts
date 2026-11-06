@@ -8,7 +8,8 @@
 
 import Database from 'better-sqlite3';
 import { buildWorkspacePermissions, buildWorkspaceSeatSummary, type WorkspaceCollabContext } from '@open-design/contracts';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as appConfig from '../../src/app-config.js';
 
 import {
   createRunAnalyticsLifecycle,
@@ -32,6 +33,8 @@ type Captured = {
   insertId: string;
   context: { deviceId: string };
 };
+
+afterEach(() => vi.restoreAllMocks());
 
 function harness(finishCaptureResult: unknown = {
   status: 'queued',
@@ -364,6 +367,9 @@ describe('run analytics lifecycle', () => {
   });
 
   it.each(['natural', 'current-first', 'original-first'] as const)('keeps a late workspace response on its original attempt after finish and resume (%s)', async (finishOrder) => {
+    // The configured release order below must not race real filesystem reads
+    // before detectAgents: they can reverse which attempt receives read 0.
+    vi.spyOn(appConfig, 'readAppConfig').mockResolvedValue({});
     const runs = createChatRunService({
       createSseResponse: () => ({ send: vi.fn(), end: vi.fn(), cleanup: vi.fn() }),
       createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }),
