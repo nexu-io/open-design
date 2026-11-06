@@ -2950,11 +2950,18 @@ function OnboardingView({
     // A sign-in that Cloud still rejected parked here. Once Cloud accepts the
     // session, finish what that sign-in started: the passive finish below only
     // covers a completed setup, so a first run would otherwise need a second
-    // click.
-    if (!cloudRejectedAfterSignIn || cloudIdentityRejected || !amrSessionAuthenticated) return;
+    // click. The parked sign-in belongs to the Cloud landing: once the user
+    // picks Local AI or API Key, drop it so a later acceptance cannot switch
+    // them back to Cloud.
+    if (!cloudRejectedAfterSignIn) return;
+    if (step !== 0 || runtime !== null) {
+      setCloudRejectedAfterSignIn(false);
+      return;
+    }
+    if (cloudIdentityRejected || !amrSessionAuthenticated) return;
     setCloudRejectedAfterSignIn(false);
     continueAfterCloudSignIn();
-  }, [amrSessionAuthenticated, cloudIdentityRejected, cloudRejectedAfterSignIn]);
+  }, [amrSessionAuthenticated, cloudIdentityRejected, cloudRejectedAfterSignIn, runtime, step]);
 
   useEffect(() => {
     if (
