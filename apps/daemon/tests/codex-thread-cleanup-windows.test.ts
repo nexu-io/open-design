@@ -3,15 +3,22 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { Duplex } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
 
-const state = vi.hoisted(() => ({ metadata: '', calls: 0, failRefresh: false, failInitial: false, stopped: [] as number[][] }));
+const state = vi.hoisted(() => ({ metadata: '', calls: 0, failRefresh: false, failInitial: false, stopped: [] as number[][],
+  initialGate: null as Promise<void> | null, onInitialSnapshot: null as (() => void) | null }));
 vi.mock('@open-design/platform', async (load) => {
   const actual = await load<typeof import('@open-design/platform')>();
   return { ...actual,
     captureProcessSnapshot: async (options: { timeoutMs?: number }) => {
       expect(options.timeoutMs).toBe(500);
       state.calls++;
+      // Ordering tests hold the initial ownership proof at an explicit gate.
+      if (state.calls === 1) {
+        state.onInitialSnapshot?.();
+        if (state.initialGate) await state.initialGate;
+      }
       if (state.failInitial || (state.calls > 1 && state.failRefresh)) throw new Error('controlled CIM timeout');
       const pids = JSON.parse(await readFile(state.metadata, 'utf8')) as { wrapper: number; descendant: number };
       return [
@@ -29,6 +36,13 @@ vi.mock('@open-design/platform', async (load) => {
 import { attachCodexAppServerSession } from '../src/agent-protocol/codex-app-server/session.js';
 import { cleanupClosedCodexThread } from '../src/agent-protocol/codex-app-server/thread-cleanup.js';
 import { captureProcessSnapshot, isProcessAlive, stopProcesses, waitForProcessExit } from '@open-design/platform';
+
+async function removeFixture(root: string): Promise<void> {
+  // Windows can briefly retain an exited process's working-directory handle.
+  // Retry only filesystem cleanup; never retry the lifecycle assertions.
+  await rm(root, { recursive: true, force: true,
+    maxRetries: process.platform === 'win32' ? 10 : 0, retryDelay: 100 });
+}
 
 async function receipt() {
   let ready!: () => void;
@@ -68,7 +82,7 @@ describe('controlled process fixture PID safety', () => {
         expect(processCalls).not.toHaveBeenCalled();
       } finally {
         processCalls.mockRestore();
-        await rm(root, { recursive: true, force: true });
+        await removeFixture(root);
       }
     },
   );
@@ -92,8 +106,11 @@ describe('Windows owned cleanup lifecycle with controlled generation records', (
             if (process.env.EXIT_WRAPPER === 'yes') process.send('exit-wrapper');
           }
         });`);
+      // The descendant must survive wrapper exit to exercise ownership checks.
+      // Windows otherwise terminates non-detached children with their parent.
       await writeFile(wrapper, `import { spawn } from 'node:child_process'; import { writeFileSync } from 'node:fs';
-        const child = spawn(process.execPath, [process.argv[2]], { stdio: ['inherit', 'inherit', 'inherit', 'ipc'] });
+        const child = spawn(process.execPath, [process.argv[2]], {
+          stdio: ['inherit', 'inherit', 'inherit', 'ipc'], detached: process.platform === 'win32', windowsHide: true });
         writeFileSync(process.env.OWNED_PIDS, JSON.stringify({ wrapper: process.pid, descendant: child.pid }));
         child.on('message', () => process.exit(0)); child.on('exit', code => process.exit(code ?? 1));`);
       const authority = await receipt();
@@ -135,8 +152,11 @@ describe('Windows owned cleanup lifecycle with controlled generation records', (
           try { process.kill(pid, 'SIGKILL'); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
         }
         await cleanup;
+        for (const pid of [owned.descendant, owned.wrapper].filter(pid => Number.isSafeInteger(pid) && pid > 0)) {
+          expect(await waitForProcessExit(pid, 5000)).toBe(true);
+        }
         sibling.kill('SIGKILL'); await siblingClosed;
-        await rm(root, { recursive: true, force: true });
+        await removeFixture(root);
       }
     },
   );
@@ -150,14 +170,20 @@ describe('Windows owned cleanup lifecycle with controlled generation records', (
         import { writeFileSync } from 'node:fs'; import { createInterface } from 'node:readline';
         let child;
         const save = () => writeFileSync(process.env.OWNED_PIDS, JSON.stringify({ wrapper: process.pid, descendant: child?.pid ?? -1 }));
-        const createChild = () => { child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' }); save(); };
+        const createChild = () => {
+          child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+            stdio: 'ignore', detached: process.platform === 'win32', windowsHide: true }); save(); };
         if (process.env.CHILD_MODE !== 'late-unknown-child') createChild(); else save();
+        // The normal helper waits for the host to finish ownership proof before EOF.
+        if (process.env.CHILD_MODE === 'known-child') process.stdin.on('end', () => process.exit(0));
         createInterface({ input: process.stdin }).on('line', line => {
           const frame = JSON.parse(line);
           if (frame.method === 'initialize') process.stdout.write(JSON.stringify({ id: frame.id, result: { userAgent: 'codex/0.154.0' } }) + '\\n');
           if (frame.method === 'thread/archive') {
             if (!child) createChild();
-            process.stdout.write(JSON.stringify({ id: frame.id, result: {} }) + '\\n', () => process.exit(0));
+            process.stdout.write(JSON.stringify({ id: frame.id, result: {} }) + '\\n', () => {
+              if (process.env.CHILD_MODE !== 'known-child') process.exit(0);
+            });
           }
         });`);
       const authority = await receipt();
@@ -203,9 +229,117 @@ describe('Windows owned cleanup lifecycle with controlled generation records', (
         await cleanup;
         sibling.kill('SIGKILL'); await siblingClosed;
         for (const pid of (owned ? [owned.descendant, owned.wrapper] : []).filter(pid => Number.isSafeInteger(pid) && pid > 0)) expect(await waitForProcessExit(pid, 500)).toBe(true);
-        await rm(root, { recursive: true, force: true });
+        await removeFixture(root);
       }
     },
   );
 
+  // #8122 Windows QA. The ownership proof is taken while app-server is still
+  // blocked on the archive request, and its outcome never withholds that request.
+  describe('archive ordering around the initial ownership snapshot', () => {
+    // Like app-server: answers archive and exits only once stdin closes.
+    const appServer = `import { spawn } from 'node:child_process';
+      import { writeFileSync } from 'node:fs'; import { createInterface } from 'node:readline';
+      const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+        stdio: 'ignore', detached: process.platform === 'win32', windowsHide: true });
+      writeFileSync(process.env.OWNED_PIDS, JSON.stringify({ wrapper: process.pid, descendant: child.pid }));
+      process.stdin.on('end', () => process.exit(0));
+      createInterface({ input: process.stdin }).on('line', line => {
+        const frame = JSON.parse(line);
+        if (frame.method === 'initialize') {
+          process.stdout.write(JSON.stringify({ id: frame.id, result: { userAgent: 'codex/0.154.0' } }) + '\\n', () => {
+            if (process.env.EXIT_AFTER_INITIALIZE === 'yes') process.exit(0);
+          });
+        }
+        if (frame.method === 'thread/archive') process.stdout.write(JSON.stringify({ id: frame.id, result: {} }) + '\\n');
+      });`;
+
+    type Run = {
+      cleanup: ReturnType<typeof cleanupClosedCodexThread>;
+      /** True once the host has written thread/archive to app-server's stdin. */
+      archiveRequested: () => boolean;
+      snapshotStarted: Promise<void>;
+      releaseSnapshot: () => void;
+      owned: () => Promise<{ wrapper: number; descendant: number }>;
+    };
+
+    async function withAppServer(
+      options: { failInitial?: boolean; gated?: boolean; exitAfterInitialize?: boolean },
+      body: (run: Run) => Promise<void>,
+    ): Promise<void> {
+      const root = await mkdtemp(path.join(tmpdir(), 'codex-windows-order-'));
+      const wrapper = path.join(root, 'wrapper.ts');
+      state.metadata = path.join(root, 'owned-pids.json'); state.calls = 0; state.stopped = [];
+      state.failRefresh = false; state.failInitial = options.failInitial ?? false;
+      let started!: () => void;
+      const snapshotStarted = new Promise<void>(resolve => { started = resolve; });
+      let release: () => void = () => {};
+      state.onInitialSnapshot = started;
+      state.initialGate = options.gated ? new Promise<void>(resolve => { release = resolve; }) : null;
+      await writeFile(wrapper, appServer);
+      const authority = await receipt();
+      // The host's child stdin is a net.Socket; its write is owned by Duplex.prototype.
+      const writes = vi.spyOn(Duplex.prototype, 'write');
+      const archiveRequested = () => writes.mock.calls.some(([chunk]) => String(chunk).includes('"method":"thread/archive"'));
+      const owned = async () => JSON.parse(await readFile(state.metadata, 'utf8')) as { wrapper: number; descendant: number };
+      const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+      let cleanup: ReturnType<typeof cleanupClosedCodexThread> | undefined;
+      try {
+        Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+        cleanup = cleanupClosedCodexThread({ receipt: authority, command: process.execPath, args: [wrapper], cwd: root,
+          env: { PATH: process.env.PATH, OWNED_PIDS: state.metadata,
+            EXIT_AFTER_INITIALIZE: options.exitAfterInitialize ? 'yes' : 'no' } });
+        await body({ cleanup, archiveRequested, snapshotStarted, releaseSnapshot: () => release(), owned });
+      } finally {
+        release();
+        writes.mockRestore();
+        Object.defineProperty(process, 'platform', platform);
+        state.initialGate = null; state.onInitialSnapshot = null;
+        const pids = await owned().catch(() => null);
+        const live = (pids ? [pids.descendant, pids.wrapper] : []).filter(pid => Number.isSafeInteger(pid) && pid > 0);
+        for (const pid of live) {
+          try { process.kill(pid, 'SIGKILL'); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
+        }
+        await cleanup;
+        for (const pid of live) expect(await waitForProcessExit(pid, 5000)).toBe(true);
+        await removeFixture(root);
+      }
+    }
+
+    it('still sends the archive request when the initial snapshot fails', () => withAppServer({ failInitial: true }, async (run) => {
+      const result = await run.cleanup;
+      const owned = await run.owned();
+      expect(run.archiveRequested()).toBe(true);
+      expect(result).toMatchObject({ status: 'failed', treeVerified: false,
+        message: expect.stringContaining('archive acknowledged; process cleanup failed') });
+      // Without an ownership proof nothing is signalled.
+      expect(state.stopped).toEqual([]);
+      expect(isProcessAlive(owned.descendant)).toBe(true);
+    }));
+
+    it('does not send the archive request before the initial snapshot settles', () => withAppServer({ gated: true }, async (run) => {
+      await run.snapshotStarted;
+      // Drain any synchronous follow-up of the snapshot call before checking.
+      await new Promise(resolve => setImmediate(resolve));
+      expect(run.archiveRequested()).toBe(false);
+      run.releaseSnapshot();
+      const result = await run.cleanup;
+      const owned = await run.owned();
+      expect(run.archiveRequested()).toBe(true);
+      expect(result).toMatchObject({ status: 'archived', treeVerified: false });
+      expect(await waitForProcessExit(owned.descendant, 500)).toBe(true);
+      expect(state.stopped.flat()).toContain(owned.descendant);
+    }));
+
+    it('settles without signalling when app-server exits before the snapshot returns',
+      () => withAppServer({ gated: true, exitAfterInitialize: true }, async (run) => {
+        await run.snapshotStarted;
+        // Settles on the exit itself, without waiting for the held snapshot.
+        const result = await run.cleanup;
+        expect(result).toMatchObject({ status: 'failed', message: expect.stringContaining('exited before acknowledgement') });
+        run.releaseSnapshot();
+        expect(run.archiveRequested()).toBe(false);
+        expect(state.stopped).toEqual([]);
+      }));
+  });
 });
