@@ -1,4 +1,3 @@
-// @ts-nocheck
 export {
   AGENT_DEFS,
   getAgentDef,
