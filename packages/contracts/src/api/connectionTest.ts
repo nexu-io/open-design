@@ -256,7 +256,8 @@ export type ConnectionTestProtocol =
   | 'ollama'
   | 'senseaudio'
   | 'aihubmix'
-  | 'bedrock';
+  | 'bedrock'
+  | 'opencode-go';
 
 export interface ProviderTestRequest extends ReasoningExecutionRequestFields {
   protocol: ConnectionTestProtocol;
