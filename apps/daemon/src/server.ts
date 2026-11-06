@@ -1358,6 +1358,37 @@ export function resolveOpenDesignNodeBin({
 }
 
 const OD_NODE_BIN = resolveOpenDesignNodeBin();
+export function resolveOpenDesignAgentNodeBin({
+  env = process.env,
+  execPath = process.execPath,
+  platform = process.platform,
+  resourceRoot = DAEMON_RESOURCE_ROOT,
+  electronVersion = process.versions.electron,
+  exists = fs.existsSync,
+}: {
+  env?: NodeJS.ProcessEnv | Record<string, string | undefined>;
+  execPath?: string;
+  platform?: NodeJS.Platform;
+  resourceRoot?: string | null;
+  electronVersion?: string;
+  exists?: (path: string) => boolean;
+} = {}): string {
+  const nodeBin = resolveOpenDesignNodeBin({ env, execPath, platform, resourceRoot, exists });
+  if (
+    platform !== 'win32'
+    || !electronVersion
+    || env.OD_NODE_BIN?.trim()
+    || path.win32.normalize(nodeBin).toLowerCase()
+      !== path.win32.normalize(execPath).toLowerCase()
+    || !resourceRoot
+  ) {
+    return nodeBin;
+  }
+  const launcher = path.win32.join(resourceRoot, 'bin', 'node.cmd');
+  return exists(launcher) ? launcher : nodeBin;
+}
+
+const OD_AGENT_NODE_BIN = resolveOpenDesignAgentNodeBin();
 const SKILLS_DIR = resolveDaemonResourceDir(
   DAEMON_RESOURCE_ROOT,
   'skills',
@@ -1985,7 +2016,7 @@ export function createOpenDesignToolEnv({
     OD_BIN,
     OD_DATA_DIR: RUNTIME_DATA_DIR,
     OD_HYPERFRAMES_BIN: hyperFramesBin,
-    OD_NODE_BIN,
+    OD_NODE_BIN: OD_AGENT_NODE_BIN,
     OD_DAEMON_URL: daemonUrl,
     OD_STOCK_RUN_ID: runId ?? '',
     OD_STOCK_SESSION_ID: conversationId ?? '',
