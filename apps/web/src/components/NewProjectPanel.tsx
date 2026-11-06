@@ -40,8 +40,6 @@ import {
   AUDIO_DURATIONS_SEC,
   AUDIO_MODELS_BY_KIND,
   DEFAULT_AUDIO_MODEL,
-  DEFAULT_IMAGE_MODEL,
-  DEFAULT_VIDEO_MODEL,
   findProvider,
   imageModelIdForPromptTemplate,
   IMAGE_MODELS,
@@ -50,6 +48,7 @@ import {
   VIDEO_LENGTHS_SEC,
   VIDEO_MODELS,
 } from '../media/models';
+import { resolveDefaultMediaModel } from '../media/default-model';
 import {
   mergeAihubmixModels,
   useAIHubMixImageModels,
@@ -361,9 +360,14 @@ export function NewProjectPanel({
   // Blank card: create routes through the tab's default skill. A template id
   // routes the project through that design template's SKILL.md instead.
   const [startTemplateId, setStartTemplateId] = useState<string | null>(null);
-  const [imageModel, setImageModel] = useState(DEFAULT_IMAGE_MODEL);
+  const [imageModel, setImageModel] = useState(() =>
+    resolveDefaultMediaModel('image', mediaProviders),
+  );
+  const [imageModelTouched, setImageModelTouched] = useState(false);
   const [imageAspect, setImageAspect] = useState<MediaAspect>('1:1');
-  const [videoModel, setVideoModel] = useState(DEFAULT_VIDEO_MODEL);
+  const [videoModel, setVideoModel] = useState(() =>
+    resolveDefaultMediaModel('video', mediaProviders),
+  );
   const [videoModelTouched, setVideoModelTouched] = useState(false);
   const [videoAspect, setVideoAspect] = useState<MediaAspect>('16:9');
   const [videoLength, setVideoLength] = useState(5);
@@ -578,7 +582,10 @@ export function NewProjectPanel({
     const m = normalizedModel;
     // Accept catalogued ids plus any live AIHubMix catalogue id (aihubmix-*),
     // which renders dynamically and won't appear in the static IMAGE_MODELS.
-    if (m && (IMAGE_MODELS.some((x) => x.id === m) || m.startsWith('aihubmix-'))) setImageModel(m);
+    if (m && (IMAGE_MODELS.some((x) => x.id === m) || m.startsWith('aihubmix-'))) {
+      setImageModel(m);
+      setImageModelTouched(true);
+    }
     const a = pick?.summary.aspect;
     if (a && (MEDIA_ASPECTS as readonly string[]).includes(a)) {
       setImageAspect(a as MediaAspect);
@@ -623,6 +630,23 @@ export function NewProjectPanel({
     // resolution shifts — not whenever the user changes the dropdown.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, mediaSurface, skillIdForTab, videoModelTouched]);
+
+  // Media providers hydrate asynchronously from the daemon (App.tsx boot
+  // merge). A panel mounted before that response seeded the Cloud default;
+  // once credentials land, a default the user never touched must follow
+  // them (issue #7088). Explicit picks latch via the touched flags, and the
+  // HyperFrames / template guards mirror the skill effect above so neither
+  // owner of `videoModel` gets silently rewritten.
+  useEffect(() => {
+    if (!imageModelTouched) setImageModel(resolveDefaultMediaModel('image', mediaProviders));
+    if (videoModelTouched) return;
+    if (skillIdForTab === 'hyperframes' && tab === 'media' && mediaSurface === 'video') return;
+    if (videoPromptTemplate) return;
+    setVideoModel(resolveDefaultMediaModel('video', mediaProviders));
+    // Intentionally keyed on the provider identity only: model/tab churn
+    // must not re-run a reseed that is about credential hydration.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mediaProviders, imageModelTouched, videoModelTouched]);
 
   const canCreate =
     !loading && (tab !== 'template' || templateId != null);
@@ -1072,7 +1096,10 @@ export function NewProjectPanel({
             imageModel={imageModel}
             imageAspect={imageAspect}
             mediaProviders={mediaProviders}
-            onImageModel={setImageModel}
+            onImageModel={(id) => {
+              setImageModel(id);
+              setImageModelTouched(true);
+            }}
             onImageAspect={setImageAspect}
           />
         ) : null}
