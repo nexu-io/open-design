@@ -27,6 +27,7 @@ const ICON_EXT: Record<string, 'svg' | 'png'> = {
   hermes: 'svg',
   'grok-build': 'svg',
   kimi: 'svg',
+  kimchi: 'svg',
   pi: 'svg',
   kiro: 'svg',
   kilo: 'svg',
