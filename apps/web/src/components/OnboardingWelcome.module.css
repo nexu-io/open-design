@@ -6,7 +6,36 @@
 
 .signInAction :global(.onboarding-cloud__primary) {
   margin-top: 0;
+  background: #202020;
+  color: #fff;
 }
+.signInAction :global(.onboarding-cloud__primary:disabled) {
+  background: #202020;
+  color: #fff;
+  opacity: 0.65;
+}
+
+.cancel {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 4px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 24px;
+  height: 24px;
+  min-height: 0;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.cancel:hover:not(:disabled) { color: var(--text); }
+.cancel:disabled { opacity: 0.6; cursor: default; }
 
 .creditCorner {
   position: absolute;
@@ -81,9 +110,6 @@
   gap: 12px;
 }
 
-/* Reserved area under the primary button. Its layers share one grid cell, so
-   the cell is as tall as the tallest state and the button above (centered with
-   the rest of the column) never shifts when the state below it changes. */
 .belowAction {
   display: grid;
   width: 100%;
@@ -97,6 +123,43 @@
   min-width: 0;
 }
 
-.belowLayerHidden {
-  visibility: hidden;
+
+.welcome.welcome {
+  grid-template-columns: minmax(0, 1fr);
+  overflow: auto;
 }
+.welcome > :global(.onboarding-cloud__pane) {
+  align-items: center;
+  padding: 48px 24px 32px;
+}
+.welcome :global(.onboarding-cloud__footer) {
+  position: static;
+  align-items: flex-start;
+  text-align: left;
+  width: min(440px, 100%);
+  margin: 32px auto 0;
+}
+.logo { width: 52px; height: 52px; object-fit: contain; margin: 0 auto 24px; }
+.loginStatus {
+  position: fixed;
+  inset-inline-start: 16px;
+  bottom: 16px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 224px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-panel);
+  box-shadow: 0 4px 20px #0000000a;
+  text-align: center;
+  font-size: 13px;
+}
+.loginStatus p { margin: 4px 0; }
+@media (max-height: 700px) {
+  .welcome:has(.loginStatus) > :global(.onboarding-cloud__pane) { padding-bottom: 160px; }
+}
+
+.welcome :global(.onboarding-cloud__footer .lang-menu-wrap) { align-self: flex-start; position: relative; inset: auto; width: fit-content; margin: 0; }

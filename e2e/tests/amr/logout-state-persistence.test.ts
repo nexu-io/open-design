@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { describe, expect, test } from 'vitest';
 
-import { writeFakeVelaBin } from '@/amr';
+import { seedVelaLoginConfig, writeFakeVelaBin } from '@/amr';
 import { AMR_TEST_WORKSPACE_HEADERS, createAmrProject, putAmrAppConfig } from '@/vitest/amr';
 import { requestJson } from '@/vitest/http';
 import { readRunEvents, startRun, waitForRunStatus, waitForRunTerminal } from '@/vitest/runs';
@@ -14,6 +14,7 @@ describe('AMR logout state persistence', () => {
   test('a previously working AMR session stops working after local logout and requires re-login', { timeout: 180_000 }, async () => {
     const suite = await createSmokeSuite('amr-logout-state-persistence');
     const homeDir = join(suite.scratchDir, 'home-logout-state');
+    await seedVelaLoginConfig(homeDir, { endpoints: suite.amr });
 
     await suite.with.env({ HOME: homeDir, OPEN_DESIGN_AMR_PROFILE: 'local' }, async () => {
       await suite.with.toolsDev(async ({ webUrl }) => {
@@ -68,7 +69,12 @@ describe('AMR logout state persistence', () => {
             },
           },
         });
-        await requestJson(webUrl, '/api/integrations/vela/logout', { body: {}, method: 'POST' });
+        const beforeLogout = await requestJson<{ loggedIn: boolean; credentialRevision: string; user: { id: string } }>(webUrl, '/api/integrations/vela/status');
+        expect(beforeLogout.loggedIn).toBe(true);
+        await requestJson(webUrl, '/api/integrations/vela/logout', {
+          body: { expectedAppUserId: beforeLogout.user.id, expectedCredentialRevision: beforeLogout.credentialRevision },
+          method: 'POST',
+        });
         const status = await requestJson<{ loggedIn: boolean }>(webUrl, '/api/integrations/vela/status');
         expect(status.loggedIn).toBe(false);
 

@@ -337,8 +337,9 @@ export async function enforceLocalProjectDataPlaneRequest(input: {
  * Build the one project data-plane authority gate used by route modules.
  *
  * Persisted project binding is the local namespace and creator witness. Local
- * project data-plane requests never synchronously depend on Vela membership
- * availability; cloud share/sync/billing boundaries perform their own fresh
+ * Scoped local reads do not synchronously depend on Vela membership. Headerless
+ * Team reads require a verified account membership or its offline snapshot;
+ * cloud share/sync/billing boundaries perform their own fresh
  * authorization. Unbound pre-Workspace local projects retain legacy behavior.
  */
 export function createAuthorizeProjectRequest(deps: {

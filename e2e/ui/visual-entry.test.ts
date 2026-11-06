@@ -34,7 +34,7 @@ test('[P2] captures the onboarding cloud sign-in surface', async ({ page }) => {
     page.getByRole('heading', { name: /Welcome to OpenDesign|欢迎使用 OpenDesign/i }),
   ).toBeVisible({ timeout: T.medium });
   await expect(
-    page.getByRole('button', { name: /Sign in \/ Sign up|登录 \/ 注册/i }),
+    page.getByRole('button', { name: /Sign up \/ Log in|登录 \/ 注册/i }),
   ).toBeVisible();
   await expect(
     page.getByRole('button', { name: /Local AI|本地 AI/i }),
