@@ -198,10 +198,12 @@ export const OD_NEXT_PROMPT_STAGE_CONTRACT_V2 = [
 const FORBIDDEN_POST_BUILD_SEMANTICS: ReadonlyArray<{
   label: string;
   pattern: RegExp;
+  referenceVocabulary?: boolean;
 }> = [
   {
     label: 'Verification or Checklist',
     pattern: /\b(?:verification|checklist)\b/i,
+    referenceVocabulary: true,
   },
   {
     label: 'post-Build verification or checklist',
@@ -281,7 +283,16 @@ export function assertOdNextPlanningBuildOnlyV2(
   value: string,
   field: string,
 ): void {
+  assertPlanningBuildOnly(value, field, false);
+}
+
+function assertPlanningBuildOnly(
+  value: string,
+  field: string,
+  allowReferenceVocabulary: boolean,
+): void {
   for (const forbidden of FORBIDDEN_POST_BUILD_SEMANTICS) {
+    if (allowReferenceVocabulary && forbidden.referenceVocabulary) continue;
     if (forbidden.pattern.test(value)) {
       throw new TypeError(
         `${field} contains forbidden ${forbidden.label} semantics.`,
@@ -507,10 +518,14 @@ export function composeOdNextStrategyStableRequestContextV2(
       `<od-next-context kind="fact" name="${name}">\n${escaped(body)}\n</od-next-context>`,
     );
   };
-  const instructionText = (name: string, value: string | undefined): void => {
+  const instructionText = (
+    name: string,
+    value: string | undefined,
+    allowReferenceVocabulary = false,
+  ): void => {
     const body = value?.trim();
     if (!body) return;
-    assertOdNextPlanningBuildOnlyV2(body, `OD Next stable context ${name}`);
+    assertPlanningBuildOnly(body, `OD Next stable context ${name}`, allowReferenceVocabulary);
     blocks.push(
       `<od-next-context kind="instruction" name="${name}">\n${escaped(body)}\n</od-next-context>`,
     );
@@ -600,8 +615,9 @@ export function composeOdNextStrategyStableRequestContextV2(
   if (Object.keys(designSystemIdentity).length > 0) {
     factualStructured('active-design-system-identity', designSystemIdentity);
   }
-  instructionText('active-design-system-design', context.designSystemBody);
-  instructionText('active-design-system-usage', context.designSystemUsageMd);
+  // Design-system references can name files and components without adding a stage.
+  instructionText('active-design-system-design', context.designSystemBody, true);
+  instructionText('active-design-system-usage', context.designSystemUsageMd, true);
   factualText('active-design-system-tokens', context.designSystemTokensCss);
   factualText(
     'active-design-system-components',
