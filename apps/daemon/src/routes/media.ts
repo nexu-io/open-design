@@ -37,12 +37,17 @@ import { captureChatArtifactSnapshotFromBytes } from '../chat-artifacts/capture.
 import { resolveChatArtifactQuota } from '../chat-artifacts/quota.js';
 import {
   HYPERFRAMES_SCAFFOLD_TOOL_ENDPOINT,
+  MOTION_REFERENCE_TOOL_ENDPOINT,
+  MOTION_COMPARE_TOOL_ENDPOINT,
   STOCK_SEARCH_TOOL_ENDPOINT,
   MEDIA_TASK_WAIT_TOOL_ENDPOINT,
   type ToolTokenGrant,
 } from '../tool-tokens.js';
 import { associateLateRunProducedFile } from '../runtimes/run-produced-files.js';
 import { scaffoldHyperFramesComposition } from '../media/hyperframes-scaffold.js';
+import { buildMotionReference, MotionReferenceError } from '../media/motion-reference.js';
+import { compareMotionFilms, MotionCompareError } from '../media/motion-compare.js';
+import path from 'node:path';
 import { assignMediaTaskBatches } from '../media/task-batches.js';
 import { mediaTaskErrorFromFailure } from '../media/task-error.js';
 import { normalizePersistedAutomationWorkspaceScope } from '../automations/workspace-scope.js';
@@ -690,7 +695,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       const projectId = grant?.projectId ?? (typeof req.query.projectId === 'string' ? req.query.projectId : '');
       if (!projectId) return sendApiError(res, 400, 'BAD_REQUEST', 'projectId is required for the scoped cloud catalogue');
       if (grant) {
-        if (!await ctx.authorizeProjectToolRequest(res, projectId, { mode: 'read' })) return;
+        if (!await ctx.authorizeProjectToolRequest(res, projectId, { mode: 'read' }, grant.runId)) return;
       } else if (!await ctx.authorizeProjectRequest(req, res, projectId, { mode: 'read' })) return;
       try {
         const workspaceId = getWorkspaceProjectByProjectId(db, projectId)?.workspaceId?.trim() || undefined;
@@ -1024,7 +1029,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     }
   });
 
-  const handleStockSearch = async (req: any, res: any, projectId: string, grant: ToolTokenGrant | null) => {
+  const handleStockSearch = async (req: any, res: any, projectId: string, grant: ToolTokenGrant | null, authorizedWorkspaceId?: string | null) => {
     const project = getProject(db, projectId);
     if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
     let request: StockSearchRequest;
@@ -1036,6 +1041,22 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       return sendApiError(res, 400, 'INVALID_STOCK_REQUEST', err.message);
     }
     const run = grant?.runId ? design.runs.get(grant.runId) : null;
+    let workspaceId = getWorkspaceProjectByProjectId(db, projectId)?.workspaceId?.trim();
+    if (grant) {
+      const scope = run?.workspaceScope;
+      const bound = scope?.schemaVersion === 1 && scope.projectId === projectId
+        && scope.source === 'persisted_project_binding'
+        && typeof scope.workspaceId === 'string' && Boolean(scope.workspaceId.trim());
+      const accountScoped = scope?.schemaVersion === 1 && scope.projectId === projectId
+        && scope.source === 'unbound_account' && scope.workspaceId === null;
+      if (run?.projectId !== projectId || (!bound && !accountScoped)
+        || (scope.workspaceId ?? null) !== (authorizedWorkspaceId ?? null)) {
+        return sendApiError(res, 403, 'FORBIDDEN', "stock search requires the run's original authorized project workspace");
+      }
+      // A genuine unbound scope stays unbound; absence of proof never borrows
+      // the mutable project's current wallet or the daemon's ambient selection.
+      workspaceId = bound ? scope.workspaceId.trim() : undefined;
+    }
     const analytics = await mediaAnalyticsContext(req, grant);
     const recorder = await createStockRecorder({ slotCount: request.slots.length, env: {
       ...process.env,
@@ -1049,7 +1070,6 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       OD_STOCK_ANALYTICS_LOCALE: analytics?.locale ?? '',
     } });
     try {
-      const workspaceId = getWorkspaceProjectByProjectId(db, projectId)?.workspaceId?.trim();
       const report = await stockSearch({
         ...request,
         cwd: resolveProjectDir(PROJECTS_DIR, projectId, project.metadata),
@@ -1070,8 +1090,9 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
   app.post(STOCK_SEARCH_TOOL_ENDPOINT, async (req, res) => {
     const grant = authorizeToolRequest(req, res, 'media:stock-search', { endpoint: STOCK_SEARCH_TOOL_ENDPOINT });
     if (!grant) return;
-    if (!await ctx.authorizeProjectToolRequest(res, grant.projectId, { mode: 'write', capability: 'writeFiles' })) return;
-    await handleStockSearch(req, res, grant.projectId, grant);
+    const authority = await ctx.authorizeProjectToolRequest(res, grant.projectId, { mode: 'write', capability: 'writeFiles' }, grant.runId);
+    if (!authority) return;
+    await handleStockSearch(req, res, grant.projectId, grant, authority.workspace?.workspaceId ?? null);
   });
 
   // Existing UI/project clients use the same execution path. Bearer callers
@@ -1082,10 +1103,13 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     const grant = bearer ? authorizeToolRequest(req, res, 'media:stock-search', { endpoint: STOCK_SEARCH_TOOL_ENDPOINT }) : null;
     if (bearer && !grant) return;
     if (grant && grant.projectId !== req.params.id) return sendApiError(res, 403, 'FORBIDDEN', 'projectId is derived from the tool token');
+    let authorizedWorkspaceId: string | null | undefined;
     if (grant) {
-      if (!await ctx.authorizeProjectToolRequest(res, grant.projectId, { mode: 'write', capability: 'writeFiles' })) return;
+      const authority = await ctx.authorizeProjectToolRequest(res, grant.projectId, { mode: 'write', capability: 'writeFiles' }, grant.runId);
+      if (!authority) return;
+      authorizedWorkspaceId = authority.workspace?.workspaceId ?? null;
     } else if (!await ctx.authorizeProjectRequest(req, res, req.params.id, { mode: 'write', capability: 'writeFiles' })) return;
-    await handleStockSearch(req, res, req.params.id, grant);
+    await handleStockSearch(req, res, req.params.id, grant, authorizedWorkspaceId);
   });
 
   app.post('/api/projects/:id/media/hyperframes/scaffold', async (req, res) => {
@@ -1125,6 +1149,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         res,
         grant.projectId,
         { mode: 'write', capability: 'writeFiles' },
+        grant.runId,
       )) return;
       await handleHyperFramesScaffold(req, res, grant.projectId);
     } catch (err: any) {
@@ -1134,6 +1159,133 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       if (code) body.code = code;
       res.status(status).json(body);
     }
+  });
+
+  // Motion reference pack: measure a user's reference video (attached file or
+  // link) into facts, frames and a contact sheet for replication.
+  const handleMotionReference = async (req: any, res: any, projectId: string) => {
+    const project = getProject(db, projectId);
+    if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+    const body = (req.body ?? {}) as { source?: unknown; id?: unknown };
+    if (typeof body.source !== 'string' || !body.source.trim()) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'source is required (a project file path or an http(s) link)');
+    }
+    const source = body.source.trim();
+    const sourceKind = /^https?:\/\//i.test(source) ? 'url' as const : 'file' as const;
+    const captureReplicationResult = async (props: {
+      result: 'success' | 'failed';
+      durationSec?: number;
+      shotCount?: number;
+      hasAudio?: boolean;
+      failureCode?: string;
+    }) => {
+      // Best effort: a replication never fails because telemetry did. This is
+      // the only product signal that says whether anyone uses replication and
+      // where it stops working — no prompt, no file name, no frame content.
+      try {
+        const context = await mediaAnalyticsContext(req, null);
+        if (!context) return;
+        design.analytics.capture({
+          eventName: 'motion_replicate_result',
+          context,
+          appVersion: design.getAppVersion(),
+          properties: {
+            page_name: 'studio',
+            area: 'motion_replication',
+            project_id: project.id,
+            source_kind: sourceKind,
+            ...props,
+          },
+          // Opaque per-attempt id: never derive it from the source path or link.
+          insertId: `motion_replicate_result:${randomUUID()}`,
+        });
+      } catch {
+        // ignore
+      }
+    };
+    try {
+      const result = await buildMotionReference({
+        projectDir: resolveProjectDir(PROJECTS_DIR, project.id, project.metadata),
+        source: body.source,
+        toolsDir: path.join(RUNTIME_DATA_DIR, 'tools'),
+        rulesFile: path.join(ctx.paths.SKILLS_DIR, 'motion-design', 'references', 'replicate.md'),
+        ...(typeof body.id === 'string' && body.id.trim() ? { id: body.id } : {}),
+      });
+      await captureReplicationResult({
+        result: 'success',
+        durationSec: result.durationSec,
+        shotCount: result.cuts.length + 1,
+        hasAudio: result.hasAudio,
+      });
+      return res.status(201).json(result);
+    } catch (err: any) {
+      if (err instanceof MotionReferenceError) {
+        await captureReplicationResult({ result: 'failed', failureCode: err.code });
+        return sendApiError(res, err.code === 'BAD_REQUEST' ? 400 : 422, err.code, err.message);
+      }
+      await captureReplicationResult({ result: 'failed', failureCode: 'MOTION_REFERENCE_FAILED' });
+      return sendApiError(res, 500, 'MOTION_REFERENCE_FAILED', String(err?.message ?? err));
+    }
+  };
+
+  app.post('/api/projects/:id/media/motion-reference', async (req, res) => {
+    if (!isLocalSameOrigin(req, getResolvedPort())) return sendApiError(res, 403, 'FORBIDDEN', 'cross-origin request rejected');
+    if (!await ctx.authorizeProjectRequest(req, res, req.params.id, { mode: 'write', capability: 'writeFiles' })) return;
+    await handleMotionReference(req, res, req.params.id);
+  });
+
+  app.post(MOTION_REFERENCE_TOOL_ENDPOINT, async (req, res) => {
+    const grant = authorizeToolRequest(req, res, 'media:reference', { endpoint: MOTION_REFERENCE_TOOL_ENDPOINT });
+    if (!grant) return;
+    if (!await ctx.authorizeProjectToolRequest(res, grant.projectId, { mode: 'write', capability: 'writeFiles' }, grant.runId)) return;
+    await handleMotionReference(req, res, grant.projectId);
+  });
+
+  // Motion compare: put the produced film beside the reference at the same
+  // timestamps, so the agent looks at real evidence instead of trusting a
+  // film it remembers writing.
+  const handleMotionCompare = async (req: any, res: any, projectId: string) => {
+    const project = getProject(db, projectId);
+    if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+    const body = (req.body ?? {}) as { reference?: unknown; candidate?: unknown; times?: unknown; cuts?: unknown; id?: unknown };
+    if (typeof body.reference !== 'string' || !body.reference.trim()) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'reference is required (the video the film was made from)');
+    }
+    if (typeof body.candidate !== 'string' || !body.candidate.trim()) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'candidate is required (the film just produced)');
+    }
+    const numbers = (value: unknown): number[] | null => Array.isArray(value)
+      ? value.filter((n): n is number => typeof n === 'number' && Number.isFinite(n))
+      : null;
+    const times = numbers(body.times);
+    const cuts = numbers(body.cuts);
+    try {
+      const result = await compareMotionFilms({
+        projectDir: resolveProjectDir(PROJECTS_DIR, project.id, project.metadata),
+        reference: body.reference,
+        candidate: body.candidate,
+        ...(times ? { times } : {}),
+        ...(cuts ? { cuts } : {}),
+        ...(typeof body.id === 'string' && body.id.trim() ? { id: body.id } : {}),
+      });
+      return res.status(201).json(result);
+    } catch (err: any) {
+      if (err instanceof MotionCompareError) return sendApiError(res, err.status, err.code, err.message);
+      return sendApiError(res, 500, 'MOTION_COMPARE_FAILED', String(err?.message ?? err));
+    }
+  };
+
+  app.post('/api/projects/:id/media/motion-compare', async (req, res) => {
+    if (!isLocalSameOrigin(req, getResolvedPort())) return sendApiError(res, 403, 'FORBIDDEN', 'cross-origin request rejected');
+    if (!await ctx.authorizeProjectRequest(req, res, req.params.id, { mode: 'write', capability: 'writeFiles' })) return;
+    await handleMotionCompare(req, res, req.params.id);
+  });
+
+  app.post(MOTION_COMPARE_TOOL_ENDPOINT, async (req, res) => {
+    const grant = authorizeToolRequest(req, res, 'media:compare', { endpoint: MOTION_COMPARE_TOOL_ENDPOINT });
+    if (!grant) return;
+    if (!await ctx.authorizeProjectToolRequest(res, grant.projectId, { mode: 'write', capability: 'writeFiles' }, grant.runId)) return;
+    await handleMotionCompare(req, res, grant.projectId);
   });
 
   app.post('/api/projects/:id/media/generate', async (req, res) => {
@@ -1189,6 +1341,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         res,
         grant.projectId,
         { mode: 'write', capability: 'writeFiles' },
+        grant.runId,
       )) return;
       await handleGenerate(req, res, { projectId: grant.projectId, grant });
     } catch (err: any) {
@@ -1275,6 +1428,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         res,
         toolGrant.projectId,
         { mode: 'read' },
+        toolGrant.runId,
       )
     ) return;
 

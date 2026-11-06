@@ -107,7 +107,7 @@ describe('S04 / S06 发送前弹窗', () => {
     for (const ownerName of ['Alice', null]) {
       zh(<AmrOwnerTopUpDialog inline onClose={() => {}} ownerName={ownerName} />);
       expect(screen.getByRole('heading', { level: 2 }).textContent).toBe('团队额度不足');
-      const body = screen.getByText('当前团队额度不足，请联系团队管理员充值或升级订阅。');
+      const body = screen.getByText('当前团队额度不足，请联系团队空间所有者充值或升级订阅。');
       expect(body).toBeTruthy();
       expect(screen.getByTestId('amr-balance-owner-dismiss')).toBeTruthy();
       cleanup();
@@ -134,7 +134,7 @@ describe('S15 运行中额度不足(升级卡归零那一档)', () => {
   it('无充值权限成员:团队标题 + 正文', () => {
     zh(<UpgradeCard balanceUsd={0} pausedAudience="member" onUpgrade={() => {}} />);
     expect(within(why()).getByText('团队额度不足，任务已暂停')).toBeTruthy();
-    expect(within(why()).getByText('当前团队额度不足，请联系团队管理员充值或升级订阅。')).toBeTruthy();
+    expect(within(why()).getByText('当前团队额度不足，请联系团队空间所有者充值或升级订阅。')).toBeTruthy();
   });
 
   it('余额偏低那一档不动', () => {
@@ -161,8 +161,11 @@ function todoTurn(): ChatMessage {
   return { id: 'assistant-1', role: 'assistant', content: '', events, startedAt: 1_000, endedAt: 3_000 };
 }
 
-describe('S24 回合状态行', () => {
-  it('S24a 仍有待办未完成:标题「任务尚未完成」+ 正文带实际未完成项数', () => {
+// P0-24 产品 Q6 答复:回合末尾的状态词删除,包括报错文案 S24 的「任务尚未完成」
+// 「任务已停止」,状态只看回合标题。PRD Must todo 2「其余保持现状」:
+// 「本次任务仍有 N 项内容未完成。」这句正文保留,被停止那一轮的正文随状态词一起删。
+describe('S24 回合状态行(P0-24 已删除)', () => {
+  it('S24a 仍有待办未完成:不再出「任务尚未完成」,「本次任务仍有 N 项内容未完成。」保留', () => {
     zh(
       <AssistantMessage
         projectKind="prototype"
@@ -173,11 +176,11 @@ describe('S24 回合状态行', () => {
         isLast
       />,
     );
-    expect(screen.getByTestId('assistant-label').textContent).toBe('任务尚未完成');
+    expect(screen.queryByTestId('assistant-label')).toBeNull();
     expect(screen.getByTestId('assistant-label-detail').textContent).toBe('本次任务仍有 2 项内容未完成。');
   });
 
-  it('S24c 用户主动停止:标题「任务已停止」+ 正文', () => {
+  it('S24c 用户主动停止:不再出「任务已停止」和正文', () => {
     zh(
       <AssistantMessage
         projectKind="prototype"
@@ -196,8 +199,8 @@ describe('S24 回合状态行', () => {
         isLast
       />,
     );
-    expect(screen.getByTestId('assistant-label').textContent).toBe('任务已停止');
-    expect(screen.getByTestId('assistant-label-detail').textContent).toBe('本次运行已按你的操作停止。');
+    expect(screen.queryByTestId('assistant-label')).toBeNull();
+    expect(screen.queryByTestId('assistant-label-detail')).toBeNull();
   });
 });
 

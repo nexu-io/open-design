@@ -1,3 +1,4 @@
+import { type AmrEndpointBinding, parseAmrEndpointBinding } from "@open-design/contracts";
 import type { UpdateLifecycleObservation } from "@open-design/desktop/main";
 import { randomUUID } from "node:crypto";
 import type { ChildProcess } from "node:child_process";
@@ -626,6 +627,7 @@ export type PackagedDaemonSpawnEnvOptions = {
   launchContext?: { app_session_id: string; launch_attempt_id: string } | undefined;
   appVersion: string | null;
   amrProfile?: string | null;
+  amrEndpointBinding?: AmrEndpointBinding;
   daemonCliEntry: string | null;
   desktopHandoffEnv?: NodeJS.ProcessEnv;
   mcpBootstrapArgs?: readonly string[];
@@ -669,6 +671,13 @@ export function buildPackagedDaemonSpawnEnv(
   paths: PackagedNamespacePaths,
   options: PackagedDaemonSpawnEnvOptions,
 ): NodeJS.ProcessEnv {
+  const binding = parseAmrEndpointBinding(options.amrEndpointBinding);
+  const amrProfile = binding?.profile ?? options.amrProfile;
+  const velaWebUrl = binding?.webUrl ?? options.velaWebUrl;
+  const velaWebUrls = {
+    ...options.velaWebUrls,
+    ...(binding ? { [binding.profile]: binding.webUrl } : {}),
+  };
   return {
     [SIDECAR_ENV.DAEMON_PORT]: "0",
     ...(options.daemonCliEntry == null ? {} : { [SIDECAR_ENV.DAEMON_CLI_PATH]: options.daemonCliEntry }),
@@ -689,13 +698,19 @@ export function buildPackagedDaemonSpawnEnv(
     ...(options.nodeCommand == null || options.nodeCommand.length === 0
       ? {}
       : { OD_NODE_BIN: options.nodeCommand }),
-    ...(options.amrProfile == null || options.amrProfile.length === 0
+    ...(amrProfile == null || amrProfile.length === 0
       ? {}
-      : { OPEN_DESIGN_AMR_PROFILE: options.amrProfile }),
-    ...workspaceTeamTransportEnv(options.amrProfile, options.velaWebUrl),
-    ...(options.velaWebUrls == null || Object.keys(options.velaWebUrls).length === 0
+      : { OPEN_DESIGN_AMR_PROFILE: amrProfile }),
+    ...(binding ? {
+      OPEN_DESIGN_AMR_ENDPOINT_BINDING: JSON.stringify(binding),
+      VELA_PROFILE: binding.profile,
+      VELA_API_URL: binding.apiUrl,
+      VELA_LINK_URL: binding.linkUrl,
+    } : {}),
+    ...workspaceTeamTransportEnv(amrProfile, velaWebUrl),
+    ...(Object.keys(velaWebUrls).length === 0
       ? {}
-      : { OD_VELA_WEB_URLS: JSON.stringify(options.velaWebUrls) }),
+      : { OD_VELA_WEB_URLS: JSON.stringify(velaWebUrls) }),
     ...resolvePackagedShareViewerEnv(options.shareViewerLaunchEnv ?? {}),
     ...(options.appVersion == null ? {} : { OD_APP_VERSION: options.appVersion }),
     ...(options.mcpBootstrapCommand == null
@@ -907,6 +922,7 @@ export async function startPackagedSidecars(
     launchContext?: { app_session_id: string; launch_attempt_id: string } | undefined;
     appVersion: string | null;
     amrProfile: string | null;
+    amrEndpointBinding?: AmrEndpointBinding;
     daemonCliEntry: string | null;
     daemonSidecarEntry: string | null;
     electronNodeCommand: string | null;
@@ -993,6 +1009,7 @@ export async function startPackagedSidecars(
         launchContext: options.launchContext,
         appVersion: options.appVersion,
         amrProfile: options.amrProfile,
+        amrEndpointBinding: options.amrEndpointBinding,
         daemonCliEntry: options.daemonCliEntry,
         desktopHandoffEnv: process.env,
         legacyDataDir: process.env.OD_LEGACY_DATA_DIR ?? null,

@@ -169,6 +169,8 @@ export function useWorkspaceContext(options: UseProjectCollabOptions = {}): Work
 
 export interface ProjectCollab {
   ownedContentUpdate?: OwnedProjectContentUpdate | null;
+  /** Local acceptance or daemon replacement is active; ownership is unchanged. */
+  contentUpdatePending?: boolean;
   requestContentUpdate?: (request: OwnedProjectContentUpdateRequest) => Promise<OwnedProjectContentUpdate | null>;
   /** Whether collab (presence + sync) is active for this project + viewer. */
   enabled: boolean;
@@ -505,6 +507,8 @@ export function useProjectCollab(
       options.initialMaterializationPending === true
       && collab.statusPollGeneration === 0
     );
+  const contentUpdatePending = collab.contentUpdatePending
+    || collab.ownedContentUpdate?.state === 'downloading';
   const writerAuthority = resolveProjectWriterAuthority({
     workspaceReadOnly,
     workspaceContextReadOnly,
@@ -514,7 +518,7 @@ export function useProjectCollab(
     knownOwnedByViewer,
     createdByViewerThisSession,
     daemonConfirmedPersonal,
-    materializationPending,
+    materializationPending: materializationPending || contentUpdatePending,
     syncState: collab.syncState,
   });
   // Positive non-owner evidence only — sticky UX (default-collapsed chat) must
@@ -649,6 +653,7 @@ export function useProjectCollab(
 
   return {
     ownedContentUpdate: collab.ownedContentUpdate ?? null,
+    contentUpdatePending,
     requestContentUpdate: collab.requestContentUpdate,
     enabled: collabEnabled,
     member,

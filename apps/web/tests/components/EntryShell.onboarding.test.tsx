@@ -1,6 +1,8 @@
+import * as workspaceContextModule from '../../src/collab/useWorkspaceContext';
+import { workspaceContextFixture } from '../helpers/workspace-context';
 // @vitest-environment jsdom
 
-import { useState } from 'react';
+import { StrictMode, useState } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -177,6 +179,7 @@ function renderOnboarding(
 function renderHome(
   overrides: Partial<React.ComponentProps<typeof EntryShell>> = {},
   path = '/',
+  strict = false,
 ) {
   window.history.replaceState(null, '', path);
   const props: React.ComponentProps<typeof EntryShell> = {
@@ -218,11 +221,8 @@ function renderHome(
     ...overrides,
   };
 
-  render(
-    <I18nProvider initial="en">
-      <EntryShell {...props} />
-    </I18nProvider>,
-  );
+  const shell = <I18nProvider initial="en"><EntryShell {...props} /></I18nProvider>;
+  render(strict ? <StrictMode>{shell}</StrictMode> : shell);
 
   return props;
 }
@@ -289,7 +289,7 @@ async function clickCloudSignIn() {
 }
 
 async function findCloudSignInButton() {
-  return screen.findByRole('button', { name: /Sign in \/ Sign up/i });
+  return screen.findByRole('button', { name: /Sign up \/ Log in/i });
 }
 
 async function openLocalRuntimeSetup() {
@@ -720,17 +720,44 @@ describe('EntryShell Home submit handoff', () => {
     // explicit user plugin choice on the public create contract.
     expect(onCreateProject.mock.calls[0]?.[0]?.pluginId).toBeUndefined();
     expect(submit.disabled).toBe(true);
-    // The arrow stays visually stable while creation is in flight: no spinner,
-    // no busy state — the disabled lock above is the whole sending treatment.
-    expect(submit.getAttribute('aria-busy')).toBe('false');
-    expect(submit.getAttribute('aria-label')).toBe('Run');
+    expect(submit.getAttribute('aria-busy')).toBe('true');
+    expect(submit.getAttribute('aria-label')).toBe('Sending…');
+    expect(submit.querySelector('svg')).toHaveClass('icon-spin');
 
     resolveCreate(true);
-    await waitFor(() => expect(submit.disabled).toBe(false));
+    await waitFor(() => {
+      expect(submit.disabled).toBe(false);
+      expect(submit.getAttribute('aria-busy')).toBe('false');
+      expect(submit.getAttribute('aria-label')).toBe('Run');
+      expect(submit.querySelector('svg')).not.toHaveClass('icon-spin');
+    });
   });
 });
 
 describe('EntryShell onboarding OpenDesign AMR runtime', () => {
+  it.each(['header', 'banner'] as const)('opens the client welcome screen and starts one browser sign-in from the signed-out %s invitation', async (entry) => {
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({ loggedIn: false, profile: 'prod', configPath: '/x', user: null });
+      }
+      if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+        return jsonResponse({ pid: 123 }, 202);
+      }
+      return jsonResponse({});
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    renderHome({ config: baseConfig({ onboardingCompleted: true, agentId: 'claude-code' }), amrLoggedIn: false }, '/', true);
+    const entries = await screen.findAllByRole('button', { name: /^Invite$/ });
+    expect(entries).toHaveLength(2);
+    fireEvent.click(entries[entry === 'header' ? 0 : 1]!);
+    expect(await screen.findByRole('heading', { name: 'Welcome to OpenDesign' })).toBeTruthy();
+    expect(window.location.pathname).toBe('/onboarding');
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([url, init]) => String(url).endsWith('/api/integrations/vela/login') && init?.method === 'POST')).toHaveLength(1));
+    expect(screen.getByRole('button', { name: /Cancel sign-in/i })).toBeTruthy();
+    expect(screen.queryByRole('dialog', { name: /Invite members/i })).toBeNull();
+  });
+
   it('gates Home on an authoritative signed-out Cloud session without clearing saved setup', async () => {
     globalThis.fetch = vi.fn(async () =>
       jsonResponse({ loggedIn: false, profile: 'prod', configPath: '/x', user: null }),
@@ -1676,7 +1703,10 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
         sourceDetail: 'onboarding_amr_card',
       },
     });
-    expect(screen.getByText('Signing in…')).toBeTruthy();
+    // Design: the primary button itself reports progress and Cancel sits right below it.
+    expect(signIn.textContent).toContain('Signing in…');
+    expect(screen.queryByTestId('onboarding-login-status')).toBeNull();
+    expect(signIn.parentElement?.contains(screen.getByRole('button', { name: /Cancel sign-in/i }))).toBe(true);
     expect(screen.queryByText('Not signed in')).toBeNull();
     expect(signIn.hasAttribute('disabled')).toBe(true);
     await vi.advanceTimersByTimeAsync(2000);
@@ -1685,7 +1715,7 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     expect(screen.getByRole('button', { name: /Cancel sign-in/i })).toBeTruthy();
   });
 
-  it('shows daemon startup errors when AMR sign-in fails immediately', async () => {
+  it('shows a simple retry state when AMR sign-in fails immediately', async () => {
     const startupError = 'profile "prod" api URL: is not configured';
     const fetchMock = vi.fn(async (input, init) => {
       const url = String(input);
@@ -1703,10 +1733,41 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     await clickCloudSignIn();
 
     await waitFor(() => {
-      expect(screen.getByRole('alert').textContent).toBe(startupError);
+      expect(screen.getByRole('alert').textContent).toBe('Sign-in failed.');
     });
-    expect(screen.queryByText('Sign-in failed.')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
     expect(screen.queryByText('Signing in…')).toBeNull();
+    expect((await findCloudSignInButton()).hasAttribute('disabled')).toBe(false);
+  });
+
+  it('leaves the primary button usable when a failure arrives while a login is in flight', async () => {
+    let statusCalls = 0;
+    globalThis.fetch = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        statusCalls += 1;
+        return jsonResponse({
+          loggedIn: false,
+          loginInFlight: statusCalls >= 2,
+          profile: 'prod',
+          user: null,
+          configPath: '/x',
+        });
+      }
+      if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+        return jsonResponse({ error: 'login failed' }, 500);
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }) as typeof fetch;
+    renderOnboarding();
+
+    await clickCloudSignIn();
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toBe('Sign-in failed.');
+    });
+    expect(statusCalls).toBeGreaterThanOrEqual(2);
+    expect((await findCloudSignInButton()).hasAttribute('disabled')).toBe(false);
   });
 
   function mockPendingActivation(browserOpenFailed: boolean) {
@@ -1748,9 +1809,12 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     expect(screen.queryByText("Sign-in page didn't open?")).toBeNull();
 
     await vi.advanceTimersByTimeAsync(3000);
-    const reopen = screen.getByRole('link', { name: /Reopen/i });
-    expect(screen.getByText("Sign-in page didn't open?")).toBeTruthy();
-    expect(reopen.getAttribute('href')).toBe('https://amr.example/activate');
+    const reopen = screen.getByRole('button', { name: /Reopen/i });
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    fireEvent.click(reopen);
+    await act(async () => {});
+    expect(open).toHaveBeenCalledWith('https://amr.example/activate', '_blank', 'noopener,noreferrer');
+    open.mockRestore();
     expect(screen.getAllByRole('button', { name: /cancel/i })).toHaveLength(1);
   });
 
@@ -1764,13 +1828,7 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     await act(async () => {});
     await vi.advanceTimersByTimeAsync(2100);
 
-    expect(screen.getByText('Couldn’t open the sign-in page')).toBeTruthy();
-    expect(
-      screen.getByText('Your browser didn’t open automatically. Please try signing in again.'),
-    ).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Open sign-in page/i }).getAttribute('href')).toBe(
-      'https://amr.example/activate',
-    );
+    expect(screen.getByRole('button', { name: /Reopen/i })).toBeTruthy();
   });
 
   it('clears AMR login pending when canceled and allows a fresh sign-in attempt', async () => {
@@ -1792,8 +1850,9 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     await act(async () => {});
     expect(screen.getByText('Signing in…')).toBeTruthy();
     expect(signIn.hasAttribute('disabled')).toBe(true);
-    expect(screen.queryByRole('button', { name: /Local AI/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /API Key/i })).toBeNull();
+    // Design: the own-AI paths stay available while the browser sign-in is pending.
+    expect((screen.getByRole('button', { name: /Local AI/i }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole('button', { name: /API Key/i }) as HTMLButtonElement).disabled).toBe(false);
 
     fireEvent.click(screen.getByRole('button', { name: /Cancel sign-in/i }));
     await act(async () => {});
@@ -1801,7 +1860,7 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     expect(screen.queryByText('Signing in…')).toBeNull();
     // The landing CTA returns to its signed-out copy and is enabled again.
     const cloudButton = await screen.findByRole('button', {
-      name: /Sign in \/ Sign up/i,
+      name: /Sign up \/ Log in/i,
     });
     expect(cloudButton.hasAttribute('disabled')).toBe(false);
     expect(
@@ -1982,7 +2041,7 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     expect(screen.queryByText('Signing in…')).toBeNull();
     expect(
       screen
-        .getByRole('button', { name: /Sign in \/ Sign up/i })
+        .getByRole('button', { name: /Sign up \/ Log in/i })
         .hasAttribute('disabled'),
     ).toBe(false);
     expect(props.onCompleteOnboarding).not.toHaveBeenCalled();
@@ -2119,10 +2178,10 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     fireEvent.click(signIn);
     await act(async () => {});
 
-    expect(screen.getByText('Signing in…')).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toContain('Sign-in failed.');
+    fireEvent.click(signIn);
+    await act(async () => {});
     await vi.advanceTimersByTimeAsync(2000);
-    expect(screen.getByText('Signing in…')).toBeTruthy();
-
     await vi.advanceTimersByTimeAsync(4000);
     await vi.waitFor(() => {
       expect(props.onCompleteOnboarding).toHaveBeenCalledTimes(1);
@@ -2518,7 +2577,7 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     });
 
     expect(
-      await screen.findByRole('button', { name: /Sign in \/ Sign up/i }),
+      await screen.findByRole('button', { name: /Sign up \/ Log in/i }),
     ).toBeTruthy();
     expect(screen.queryByRole('button', { name: /OpenDesign AMR/i })).toBeNull();
     expect(document.querySelector('.onboarding-view__card--skeleton')).toBeNull();
@@ -2544,4 +2603,46 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     expect(skipClicks).toHaveLength(0);
     expect(trackedEvents('onboarding_complete_result')).toHaveLength(0);
   });
+});
+
+
+it('shows the first-registration invite on a hydrated login before another Continue click', async () => {
+  const base = workspaceContextFixture({ workspaceId: 'registered-workspace', workspaceMemberId: 'registered-member', role: 'owner' });
+  vi.spyOn(workspaceContextModule, 'useWorkspaceContext').mockReturnValue({ context: { ...base, permissions: { ...base.permissions, canInviteMembers: true } }, loading: false });
+  const status = { loggedIn: true, sessionState: 'authenticated' as const, profile: 'prod', credentialRevision: 'registered-credential', configPath: '/test', user: { id: 'registered-account', email: 'new@example.com' }, registrationInvite: { accountId: 'registered-account', deviceAuthorizationId: 'new-authorization' } };
+  globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => String(input) === '/api/workspace/context' ? jsonResponse({ context: { ...base, permissions: { ...base.permissions, canInviteMembers: true } } }) : jsonResponse(status)) as typeof fetch;
+  const activeChange = vi.fn();
+  const props = renderOnboarding({ onRegistrationInviteActiveChange: activeChange, amrLoggedIn: true, amrSessionState: 'authenticated', amrAccountId: status.user.id, amrRegistrationStatus: status });
+  cleanup();
+  function RuntimeHarness() {
+    const [config, setConfig] = useState(props.config);
+    return <I18nProvider initial="en"><EntryShell {...props} config={config}
+      onModeChange={mode => { props.onModeChange(mode); setConfig(old => ({ ...old, mode })); }}
+      onAgentChange={agentId => { props.onAgentChange(agentId); setConfig(old => ({ ...old, agentId })); }} /></I18nProvider>;
+  }
+  render(<RuntimeHarness />);
+  await screen.findByRole('heading', { name: /^Invite colleagues for free\.\s*Design together\.$/ });
+  expect(activeChange).toHaveBeenLastCalledWith(true);
+  expect(props.onAgentChange).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }));
+  await waitFor(() => expect(localStorage.getItem('od.registration-invite.completed:registered-account:new-authorization')).toBe('1'));
+  expect(props.onModeChange).toHaveBeenCalledWith('daemon');
+  expect(props.onAgentChange).toHaveBeenCalledWith('amr');
+  expect(props.onCompleteOnboarding).toHaveBeenCalledOnce();
+  expect(activeChange).toHaveBeenLastCalledWith(false);
+});
+
+it.each([
+  ['Local', baseConfig({ mode: 'daemon', agentId: 'claude-code' })],
+  ['BYOK', baseConfig({ mode: 'api', agentId: null })],
+])('preserves a selected %s runtime during a hydrated registration login', async (_source, config) => {
+  const base = workspaceContextFixture({ workspaceId: 'registered-workspace', workspaceMemberId: 'registered-member', role: 'owner' });
+  vi.spyOn(workspaceContextModule, 'useWorkspaceContext').mockReturnValue({ context: { ...base, permissions: { ...base.permissions, canInviteMembers: true } }, loading: false });
+  const status = { loggedIn: true, sessionState: 'authenticated' as const, profile: 'prod', credentialRevision: 'registered-credential', configPath: '/test', user: { id: 'registered-account', email: 'new@example.com' }, registrationInvite: { accountId: 'registered-account', deviceAuthorizationId: 'new-authorization' } };
+  globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => String(input) === '/api/workspace/context' ? jsonResponse({ context: base }) : jsonResponse(status)) as typeof fetch;
+  const props = renderOnboarding({ config, amrLoggedIn: true, amrSessionState: 'authenticated', amrAccountId: status.user.id, amrRegistrationStatus: status });
+  await screen.findByRole('button', { name: /Continue \(signed in\)/i });
+  expect(screen.queryByRole('heading', { name: /^Invite colleagues for free\.\s*Design together\.$/ })).toBeNull();
+  expect(props.onAgentChange).not.toHaveBeenCalled();
+  expect(props.onCompleteOnboarding).not.toHaveBeenCalled();
 });

@@ -56,16 +56,13 @@ export class AmrModelLoadingCache {
     if (state.remote) {
       const staleByAge = now - state.remote.fetchedAt >= this.refreshIntervalMs;
       if (staleByAge) this.startRefresh(state, fetchers.fetchRemote);
-      return {
-        source: 'remote',
-        models: state.remote.models,
-        refreshing: state.inFlight !== null,
-        ...(state.inFlight || state.lastRemoteError ? { stale: true } : {}),
-        ...(state.lastRemoteError ? { remoteError: state.lastRemoteError } : {}),
-      };
+      return this.remoteResponse(state);
     }
 
     const preset = await fetchers.fetchPreset();
+    // A concurrent caller may finish the remote read while this caller waits
+    // for its preset. Reuse that result instead of starting another list.
+    if (state.remote) return this.remoteResponse(state);
     this.startRefresh(state, fetchers.fetchRemote);
     return {
       source: 'preset',
@@ -131,6 +128,18 @@ export class AmrModelLoadingCache {
     };
     this.states.set(cacheKey, created);
     return created;
+  }
+
+  private remoteResponse(state: CacheState): AmrModelsResponse {
+    const remote = state.remote;
+    if (!remote) throw new Error('AMR remote catalog is unavailable');
+    return {
+      source: 'remote',
+      models: remote.models,
+      refreshing: state.inFlight !== null,
+      ...(state.inFlight || state.lastRemoteError ? { stale: true } : {}),
+      ...(state.lastRemoteError ? { remoteError: state.lastRemoteError } : {}),
+    };
   }
 
   private startRefresh(state: CacheState, fetchRemote: () => Promise<RuntimeModelOption[]>): void {

@@ -124,6 +124,7 @@ function migrate(db: SqliteDb): void {
       resource_state TEXT NOT NULL CHECK (resource_state IN ('active', 'frozen', 'deleted')),
       created_by_workspace_member_id TEXT,
       updated_by_workspace_member_id TEXT,
+      transferred_from_workspace_member_id TEXT,
       resource_hub_resource_id TEXT,
       cloud_tombstoned_at INTEGER,
       sync_state TEXT,
@@ -423,6 +424,34 @@ function migrate(db: SqliteDb): void {
   if (!cols.some((c: DbRow) => c.name === 'custom_instructions')) {
     db.exec(`ALTER TABLE projects ADD COLUMN custom_instructions TEXT`);
   }
+  const needsRecencyColumn = !cols.some((c: DbRow) => c.name === 'last_user_query_at');
+  const hasSubmissions = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='project_user_submissions'").get();
+  if (needsRecencyColumn || !hasSubmissions) {
+    db.transaction(() => {
+      if (needsRecencyColumn) db.exec('ALTER TABLE projects ADD COLUMN last_user_query_at INTEGER');
+      db.exec(`CREATE TABLE IF NOT EXISTS project_user_submissions (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        accepted_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS project_user_submissions_project ON project_user_submissions(project_id, accepted_at);
+      UPDATE projects SET last_user_query_at = (
+        SELECT MAX(sent_at) FROM (
+          SELECT m.created_at AS sent_at FROM conversations c JOIN messages m ON m.conversation_id = c.id
+          WHERE c.project_id = projects.id AND m.role = 'user'
+            AND m.id NOT GLOB 'routine-user-*' AND m.id NOT GLOB 'orbit-user-*'
+          UNION ALL SELECT accepted_at FROM project_user_submissions WHERE project_id = projects.id
+          UNION ALL SELECT projects.last_user_query_at
+          WHERE projects.last_user_query_at > COALESCE((
+            SELECT MAX(m.created_at) FROM conversations c JOIN messages m ON m.conversation_id = c.id
+            WHERE c.project_id = projects.id AND m.role = 'user'
+              AND (m.id GLOB 'routine-user-*' OR m.id GLOB 'orbit-user-*')
+          ), 0)
+        )
+      );`);
+    })();
+  }
   const workspaceProjectCols = db.prepare(`PRAGMA table_info(workspace_projects)`).all() as DbRow[];
   if (!workspaceProjectCols.some((c: DbRow) => c.name === 'resource_hub_resource_id')) {
     db.exec(`ALTER TABLE workspace_projects ADD COLUMN resource_hub_resource_id TEXT`);
@@ -438,6 +467,9 @@ function migrate(db: SqliteDb): void {
     db.exec(
       `ALTER TABLE workspace_projects ADD COLUMN metadata_refresh_pending INTEGER NOT NULL DEFAULT 0`,
     );
+  }
+  if (!migratedWorkspaceProjectCols.some((c: DbRow) => c.name === 'transferred_from_workspace_member_id')) {
+    db.exec(`ALTER TABLE workspace_projects ADD COLUMN transferred_from_workspace_member_id TEXT`);
   }
   const conversationCols = db.prepare(`PRAGMA table_info(conversations)`).all() as DbRow[];
   if (!conversationCols.some((c: DbRow) => c.name === 'session_mode')) {
@@ -622,6 +654,13 @@ function migrate(db: SqliteDb): void {
       FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
     );
   `);
+
+  db.exec(`CREATE TABLE IF NOT EXISTS project_comment_seen (
+    project_id TEXT NOT NULL, viewer_scope TEXT NOT NULL, comment_id TEXT NOT NULL,
+    PRIMARY KEY(project_id, viewer_scope, comment_id),
+    FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    FOREIGN KEY(comment_id) REFERENCES preview_comments(id) ON DELETE CASCADE
+  )`);
 
   const deploymentCols = db.prepare(`PRAGMA table_info(deployments)`).all() as DbRow[];
   if (!deploymentCols.some((c: DbRow) => c.name === 'status')) {
@@ -1130,6 +1169,7 @@ const PROJECT_COLS = `id, name, skill_id AS skillId,
   metadata_json AS metadataJson,
   applied_plugin_snapshot_id AS appliedPluginSnapshotId,
   custom_instructions AS customInstructions,
+  last_user_query_at AS lastUserQueryAt,
   created_at AS createdAt,
   updated_at AS updatedAt`;
 
@@ -1162,6 +1202,7 @@ export function listUnboundProjects(db: SqliteDb) {
               p.metadata_json AS metadataJson,
               p.applied_plugin_snapshot_id AS appliedPluginSnapshotId,
               p.custom_instructions AS customInstructions,
+              p.last_user_query_at AS lastUserQueryAt,
               p.created_at AS createdAt,
               p.updated_at AS updatedAt
          FROM projects p
@@ -1182,6 +1223,7 @@ export function getWorkspaceProject(db: SqliteDb, workspaceId: string, projectId
               resource_state AS resourceState,
               created_by_workspace_member_id AS createdByWorkspaceMemberId,
               updated_by_workspace_member_id AS updatedByWorkspaceMemberId,
+              transferred_from_workspace_member_id AS transferredFromWorkspaceMemberId,
               resource_hub_resource_id AS resourceHubResourceId,
               cloud_tombstoned_at AS cloudTombstonedAt,
               sync_state AS syncState,
@@ -1205,6 +1247,7 @@ export function listWorkspaceProjects(db: SqliteDb, workspaceId: string) {
               p.metadata_json AS metadataJson,
               p.applied_plugin_snapshot_id AS appliedPluginSnapshotId,
               p.custom_instructions AS customInstructions,
+              p.last_user_query_at AS lastUserQueryAt,
               p.created_at AS createdAt,
               p.updated_at AS updatedAt,
               wp.project_id AS workspaceProjectId,
@@ -1292,6 +1335,7 @@ export function getWorkspaceProjectByProjectId(db: SqliteDb, projectId: string) 
               resource_state AS resourceState,
               created_by_workspace_member_id AS createdByWorkspaceMemberId,
               updated_by_workspace_member_id AS updatedByWorkspaceMemberId,
+              transferred_from_workspace_member_id AS transferredFromWorkspaceMemberId,
               resource_hub_resource_id AS resourceHubResourceId,
               cloud_tombstoned_at AS cloudTombstonedAt,
               sync_state AS syncState,
@@ -1310,9 +1354,10 @@ export function getWorkspaceProjectByProjectId(db: SqliteDb, projectId: string) 
  *
  * A project's `updated_at` answers exactly one question for the UI — when did a
  * person last change this project's conversations, files, or name? The project
- * card renders it as one relative time and the list sorts by it, folding the
- * project row and its `workspace_projects` binding together with
- * `MAX(p.updated_at, wp.updated_at)` (see `listWorkspaceProjects` below and
+ * card renders it as one relative time, independent of `last_user_query_at`
+ * used for recent-project ordering. Content activity folds the project row
+ * and its workspace binding together with `MAX(p.updated_at, wp.updated_at)`
+ * (see `listWorkspaceProjects` below and
  * `normalizeWorkspaceProjectRow` in routes/project/index.ts). So BOTH rows have
  * to answer it, and only a local action may answer it with `Date.now()`.
  *
@@ -2088,7 +2133,52 @@ export function insertProject(db: SqliteDb, p: DbRow) {
   return getProject(db, p.id);
 }
 
+/** Idempotent acceptance and its ordering projection commit together. */
+export function acceptProjectUserSubmission(
+  db: SqliteDb, input: { id: string; projectId: string; conversationId: string; acceptedAt: number },
+): { id: string; projectId: string; conversationId: string; acceptedAt: number } {
+  return db.transaction(() => {
+    const existing = db.prepare(`SELECT id, project_id AS projectId,
+      conversation_id AS conversationId, accepted_at AS acceptedAt
+      FROM project_user_submissions WHERE id = ?`).get(input.id) as typeof input | undefined;
+    if (existing) {
+      if (existing.projectId !== input.projectId || existing.conversationId !== input.conversationId) {
+        throw new Error('submission identity conflict');
+      }
+      return existing;
+    }
+    db.prepare(`INSERT INTO project_user_submissions(id, project_id, conversation_id, accepted_at)
+      VALUES (?, ?, ?, ?)`).run(input.id, input.projectId, input.conversationId, input.acceptedAt);
+    db.prepare(`UPDATE projects SET last_user_query_at = ?
+      WHERE id = ? AND (last_user_query_at IS NULL OR last_user_query_at < ?)`)
+      .run(input.acceptedAt, input.projectId, input.acceptedAt);
+    return input;
+  })();
+}
+
+export function getProjectUserSubmission(db: SqliteDb, id: string) {
+  return db.prepare(`SELECT id, project_id AS projectId, conversation_id AS conversationId,
+    accepted_at AS acceptedAt FROM project_user_submissions WHERE id = ?`).get(id) as
+    { id: string; projectId: string; conversationId: string; acceptedAt: number } | undefined;
+}
+
+/** Record best-effort ordering metadata without affecting message persistence or content activity. */
+export function recordProjectUserQuery(db: SqliteDb, id: string, sentAt: unknown): void {
+  if (typeof sentAt !== 'number' || !Number.isSafeInteger(sentAt) || sentAt < 0) return;
+  try {
+    db.prepare(`UPDATE projects SET last_user_query_at = ?
+      WHERE id = ? AND (last_user_query_at IS NULL OR last_user_query_at < ?)`)
+      .run(sentAt, id, sentAt);
+  } catch {
+    // Ordering is expendable under storage pressure; the conversation is not.
+  }
+}
+
 export function updateProject(db: SqliteDb, id: string, patch: DbRow) {
+  if ('lastUserQueryAt' in patch) {
+    recordProjectUserQuery(db, id, patch.lastUserQueryAt);
+    if (Object.keys(patch).length === 1) return getProject(db, id);
+  }
   const existing = getProject(db, id);
   if (!existing) return null;
   const merged = {
@@ -2143,6 +2233,7 @@ function normalizeProject(row: DbRow) {
     customInstructions: row.customInstructions ?? undefined,
     createdAt: Number(row.createdAt),
     updatedAt: Number(row.updatedAt),
+    lastUserQueryAt: row.lastUserQueryAt == null ? null : Number(row.lastUserQueryAt),
   };
 }
 
@@ -4768,6 +4859,23 @@ export function mergeSyncedPreviewComment(
     );
   if (result.changes !== 1) throw new Error('Synced comment insert was not persisted');
   return 'changed';
+}
+
+/** File-scoped acknowledgements never infer unseen rows from a wall clock. */
+export function getFileCommentReadState(db: SqliteDb, projectId: string, viewerScope: string, filePath: string) {
+  const rows = db.prepare(`SELECT s.comment_id AS id FROM project_comment_seen s
+    JOIN preview_comments c ON c.id = s.comment_id AND c.project_id = s.project_id
+    WHERE s.project_id = ? AND s.viewer_scope = ? AND c.file_path = ?`).all(projectId, viewerScope, filePath) as Array<{id: string}>;
+  return { projectId, filePath, seenCommentIds: rows.map(row => row.id) };
+}
+
+export function markFileCommentsSeen(db: SqliteDb, projectId: string, viewerScope: string, filePath: string, ids: string[]) {
+  db.transaction(() => {
+    const insert = db.prepare(`INSERT OR IGNORE INTO project_comment_seen (project_id, viewer_scope, comment_id)
+      SELECT project_id, ?, id FROM preview_comments WHERE project_id = ? AND file_path = ? AND id = ?`);
+    for (const id of new Set(ids)) insert.run(viewerScope, projectId, filePath, id);
+  })();
+  return getFileCommentReadState(db, projectId, viewerScope, filePath);
 }
 
 export function getProjectCommentReadState(

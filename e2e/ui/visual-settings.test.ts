@@ -1,8 +1,9 @@
 import type { Locator } from '@playwright/test';
+import type { WorkspaceProjectsResponse } from '@open-design/contracts';
 
 import { expect, test } from '@/playwright/suite';
 import { T } from '@/timeouts';
-import { mockAmrPersonalWorkspace } from '@/playwright/amr';
+import { AMR_PERSONAL_WORKSPACE_CONTEXT, mockAmrPersonalWorkspace } from '@/playwright/amr';
 import {
   captureVisual,
   captureVisualTarget,
@@ -13,6 +14,7 @@ import {
   prepareVisualSettingsDialog,
   VISUAL_AMR_AGENT,
   VISUAL_CLI_AGENTS,
+  VISUAL_PROJECTS,
   waitForVisualFonts,
 } from '@/playwright/visual';
 
@@ -67,10 +69,36 @@ test('[P1] captures the settings OpenDesign account balance surface', async ({ p
   // permissions come from the selected Workspace. Use the same exact Personal
   // Workspace identity as the AMR runtime tests so directory bootstrap and the
   // subsequent scoped context lookup agree.
-  await mockAmrPersonalWorkspace(page, undefined, {
+  await mockAmrPersonalWorkspace(page, 'visual-project-launchpad', {
     accountPlan: 'plus',
     accountBalanceUsd: '247.51',
     accountCredits: 2_475_100,
+  });
+  // This signed-in capture needs projects in the exact workspace catalog;
+  // anonymous fixture rows are deliberately hidden after account selection.
+  await page.route(`**/api/workspaces/${AMR_PERSONAL_WORKSPACE_CONTEXT.workspaceId}/projects**`, async (route) => {
+    const response: WorkspaceProjectsResponse = {
+      projects: VISUAL_PROJECTS.map((project) => ({
+        ...project,
+        project,
+        workspaceId: AMR_PERSONAL_WORKSPACE_CONTEXT.workspaceId,
+        visibility: 'personal',
+        resourceState: 'active',
+        createdByWorkspaceMemberId: AMR_PERSONAL_WORKSPACE_CONTEXT.workspaceMemberId,
+        currentUserAccess: {
+          canOpen: true,
+          canRename: true,
+          canDelete: true,
+          canDuplicate: true,
+          canMoveToTeam: true,
+          canMoveToPersonal: false,
+          canExport: true,
+          canSendTo: true,
+          canRestoreVersion: true,
+        },
+      })),
+    };
+    await route.fulfill({ json: response });
   });
   await gotoVisualHome(page);
   await gotoVisualWorkspace(page);
