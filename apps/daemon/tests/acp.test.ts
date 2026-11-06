@@ -560,9 +560,9 @@ test('attachAcpSession includes frozen PDF, text, and image attachments as ACP r
     sessionId: 'session-1',
     prompt: [
       { type: 'text', text: 'describe this image' },
-      { type: 'resource_link', uri: pdfPath },
-      { type: 'resource_link', uri: textPath },
-      { type: 'resource_link', uri: imagePath },
+      { type: 'resource_link', uri: pdfPath, name: path.basename(pdfPath) },
+      { type: 'resource_link', uri: textPath, name: path.basename(textPath) },
+      { type: 'resource_link', uri: imagePath, name: path.basename(imagePath) },
     ],
   });
 });
@@ -592,8 +592,8 @@ test('attachAcpSession preserves duplicate ordinary image resource links', () =>
     sessionId: 'session-1',
     prompt: [
       { type: 'text', text: 'describe both image occurrences' },
-      { type: 'resource_link', uri: imagePath },
-      { type: 'resource_link', uri: imagePath },
+      { type: 'resource_link', uri: imagePath, name: path.basename(imagePath) },
+      { type: 'resource_link', uri: imagePath, name: path.basename(imagePath) },
     ],
   });
 });
