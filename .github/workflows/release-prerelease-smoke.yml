@@ -118,7 +118,7 @@ jobs:
     name: Smoke prerelease mac arm64
     needs: plan
     if: ${{ needs.plan.outputs.mac_arm64 == 'true' }}
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 45
     env:
       RELEASE_NAMESPACE: release-prerelease

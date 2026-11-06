@@ -474,7 +474,7 @@ jobs:
     # release-prerelease-tests.yml, where they can take as long as they like
     # without holding this workflow's concurrency group.
     needs: metadata
-    runs-on: macos-14
+    runs-on: macos-15
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
