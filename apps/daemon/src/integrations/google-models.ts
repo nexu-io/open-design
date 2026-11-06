@@ -4,7 +4,7 @@ export function googleGenerativeLanguageBaseUrl(baseUrl: string): string {
   url.hash = '';
   const pathname = url.pathname
     .replace(/\/+$/, '')
-    .replace(/\/v\d+(?:beta)?$/i, '');
+    .replace(/\/v\d+(?:alpha|beta)?$/i, '');
   url.pathname = pathname || '/';
   return url.toString().replace(/\/+$/, '');
 }
