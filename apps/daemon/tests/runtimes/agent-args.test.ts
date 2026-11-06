@@ -3,7 +3,10 @@ import { test } from 'vitest';
 import {
   AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, grokBuild, join, kilo, kimi, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
 } from './helpers/test-helpers.js';
-import { writeAntigravityModelSelection } from '../../src/runtimes/defs/antigravity.js';
+import {
+  parseAntigravityModels,
+  writeAntigravityModelSelection,
+} from '../../src/runtimes/defs/antigravity.js';
 import { parseOpenCodeModels } from '../../src/runtimes/defs/opencode.js';
 import { agentCapabilities } from '../../src/runtimes/capabilities.js';
 import {
@@ -720,31 +723,75 @@ test('antigravity runs headless stream-json with the prompt as one agy user mess
   // The prompt never rides argv, so no argv budget applies.
   assert.equal(antigravity.maxPromptArgBytes, undefined);
 
-  // Picker exposes the synthetic Default + the 8 labels agy's TUI
-  // Switch-Model surfaces for consumer-tier accounts. The set is small
-  // enough to ship statically; revisit when upstream adds an `agy
-  // models` subcommand (also tracked under issue #35).
+  // Live discovery queries `agy models` (shipped in agy >= 1.0.5) and
+  // falls back to the current agy 1.5.1 catalog when the probe cannot
+  // run (older CLI without `models`, offline, or unauthenticated).
+  assert.deepEqual(antigravity.listModels?.args, ['models']);
+  assert.equal(antigravity.listModels?.timeoutMs, 15_000);
+  assert.equal(antigravity.listModels?.parse, parseAntigravityModels);
   assert.deepEqual(
     antigravity.fallbackModels.map((m) => m.id),
     [
       'default',
-      'Gemini 3.1 Pro (High)',
-      'Gemini 3.1 Pro (Low)',
-      'Gemini 3.5 Flash (High)',
-      'Gemini 3.5 Flash (Medium)',
-      'Gemini 3.5 Flash (Low)',
-      'Claude Sonnet 4.6 (Thinking)',
-      'Claude Opus 4.6 (Thinking)',
+      'Gemini 4 Argon (Medium)',
+      'Gemini 4 Argon (High)',
+      'Gemini 4 Argon (Low)',
+      'Gemini 3.8 Flash (High)',
+      'Gemini 3.8 Flash (Medium)',
+      'Gemini 3.8 Flash (Low)',
+      'Claude Opus 5.5 (Low)',
+      'Claude Opus 5.5 (Medium)',
+      'Claude Opus 5.5 (High)',
+      'Claude Sonnet 5.5 (Low)',
+      'Claude Sonnet 5.5 (Medium)',
+      'Claude Sonnet 5.5 (High)',
       'GPT-OSS 120B (Medium)',
     ],
   );
 
-  // `agy` v1.0.3 has no `--model` flag (upstream #35), no `models`
-  // subcommand, and no `/model` slash command — a user-typed model id
-  // would be silently ignored at spawn, looking like an OD bug. The
-  // settings UI hides the "Custom (fill below)" option when this is
-  // `false`. Remove this opt-out once upstream wires #35.
+  // `supportsCustomModel` remains `false`: agy validates model labels
+  // against its server-side catalog, and free-text slugs written to
+  // settings.json either miss the catalog or resolve to the wrong
+  // effort tier without matching waitForAgyToReadModel's label pattern.
   assert.equal(antigravity.supportsCustomModel, false);
+});
+
+test('parseAntigravityModels parses agy models TSV output using the display label as id', () => {
+  const sampleOutput = [
+    'gemini-4-argon-medium\tGemini 4 Argon (Medium)',
+    'gemini-4-argon-high\tGemini 4 Argon (High)',
+    'gemini-4-argon-low\tGemini 4 Argon (Low)',
+    'gemini-3.8-flash-high\tGemini 3.8 Flash (High)',
+    'claude-opus-5-5-high\tClaude Opus 5.5 (High)',
+    'claude-sonnet-5-5-high\tClaude Sonnet 5.5 (High)',
+    'gpt-oss-120b-medium\tGPT-OSS 120B (Medium)',
+    // Duplicate label must be deduped while preserving order.
+    'gemini-4-argon-high-alias\tGemini 4 Argon (High)',
+    '',
+  ].join('\r\n');
+
+  assert.deepEqual(parseAntigravityModels(sampleOutput), [
+    { id: 'default', label: 'Default (CLI config)' },
+    { id: 'Gemini 4 Argon (Medium)', label: 'Gemini 4 Argon (Medium)' },
+    { id: 'Gemini 4 Argon (High)', label: 'Gemini 4 Argon (High)' },
+    { id: 'Gemini 4 Argon (Low)', label: 'Gemini 4 Argon (Low)' },
+    { id: 'Gemini 3.8 Flash (High)', label: 'Gemini 3.8 Flash (High)' },
+    { id: 'Claude Opus 5.5 (High)', label: 'Claude Opus 5.5 (High)' },
+    { id: 'Claude Sonnet 5.5 (High)', label: 'Claude Sonnet 5.5 (High)' },
+    { id: 'GPT-OSS 120B (Medium)', label: 'GPT-OSS 120B (Medium)' },
+  ]);
+
+  // Empty, error, or help output with no valid `<slug>\t<Label>` rows
+  // returns null so detection falls back to `fallbackModels`.
+  assert.equal(parseAntigravityModels(''), null);
+  assert.equal(
+    parseAntigravityModels('Error: authentication required. Run agy to log in.\n'),
+    null,
+  );
+  assert.equal(
+    parseAntigravityModels('Usage of agy:\n  --help\tShow help for subcommands\n'),
+    null,
+  );
 });
 
 // OPEND-3495: on Windows the composed OD prompt (system prompt + skills +
