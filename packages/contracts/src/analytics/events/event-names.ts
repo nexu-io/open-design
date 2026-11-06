@@ -8,6 +8,8 @@ import type { ClientMetricEventName } from '../client-metrics.js';
 
 export type AnalyticsEventName =
   | ClientMetricEventName
+  // Consent-gated display recovery observation (not safety telemetry).
+  | 'client_display_refresh'
   // Core triad
   | 'page_view'
   | 'ui_click'

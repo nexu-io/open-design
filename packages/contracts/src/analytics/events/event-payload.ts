@@ -1,3 +1,4 @@
+import type { ClientDisplayRefreshProps } from './result-events.js';
 import type { ClientMetricEventPayload } from '../client-metrics.js';
 import type { UpdateLifecycleObservedProps } from '../update-lifecycle.js';
 import type { MediaStockRequestResultProps, MediaStockSlotResultProps } from '../media-stock.js';
@@ -25,6 +26,7 @@ import type { ProjectCommentCreateResultProps, WorkspaceFundingRecoveryResultPro
 
 export type AnalyticsEventPayload =
   | ClientMetricEventPayload
+  | { event: 'client_display_refresh'; props: ClientDisplayRefreshProps }
   | { event: 'packaged_runtime_failed'; props: PackagedRuntimeFailedProps }
   | { event: 'page_view'; props: PageViewProps }
   | { event: 'ui_click'; props: UiClickProps }
