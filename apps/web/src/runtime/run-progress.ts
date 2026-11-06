@@ -64,10 +64,13 @@ function stepsFromEvents(events: AgentEvent[]): RunProgressStep[] {
   // before rendering or applying the cap, preserving the latest complete input.
   const displayEvents = dedupeToolUsesById(dropSupersededInFlightToolUses(events));
   const steps: RunProgressStep[] = [];
+  const seenIds = new Set<string>();
   // Backwards: the newest step leads, and the cap then drops the oldest.
   for (let i = displayEvents.length - 1; i >= 0 && steps.length < MAX_STEPS; i--) {
     const event = displayEvents[i];
     if (!event || event.kind !== 'tool_use') continue;
+    if (seenIds.has(event.id)) continue;
+    seenIds.add(event.id);
     const category = toolCategoryForName(event.name);
     // The todo list has its own pinned card above the composer; repeating it
     // here would spend trail lines on a state the user is already watching.
