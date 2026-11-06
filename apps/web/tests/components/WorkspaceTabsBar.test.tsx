@@ -758,6 +758,113 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     expect(screen.getByTestId('workspace-home-rail-toggle')).toBeTruthy();
   });
 
+  describe('middle click', () => {
+    const betaProject: Project = { ...project, id: 'project-beta', name: 'Project Beta' };
+
+    function auxClick(element: Element, button: number): void {
+      fireEvent(element, new MouseEvent('auxclick', { bubbles: true, cancelable: true, button }));
+    }
+
+    function seedTwoProjectTabs(): void {
+      window.localStorage.setItem(
+        'open-design:workspace-tabs:v1',
+        JSON.stringify({
+          activeTabId: 'project:project-alpha',
+          tabs: [
+            { id: 'entry:home:seed', kind: 'entry', view: 'home', createdAt: 1, lastActiveAt: 1 },
+            {
+              id: 'project:project-alpha',
+              kind: 'project',
+              projectId: 'project-alpha',
+              conversationId: null,
+              fileName: null,
+              createdAt: 2,
+              lastActiveAt: 3,
+            },
+            {
+              id: 'project:project-beta',
+              kind: 'project',
+              projectId: 'project-beta',
+              conversationId: null,
+              fileName: null,
+              createdAt: 2,
+              lastActiveAt: 2,
+            },
+          ],
+        }),
+      );
+    }
+
+    function stripTab(name: string): HTMLElement {
+      const tab = screen.getAllByRole('tab').find((node) => node.textContent?.includes(name));
+      if (!tab) throw new Error(`No strip tab named ${name}`);
+      return tab;
+    }
+
+    it('closes a background project tab without navigating', () => {
+      seedTwoProjectTabs();
+      render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project, betaProject]} />);
+
+      auxClick(stripTab('Project Beta'), 1);
+
+      expect(screen.getAllByRole('tab').some((tab) => tab.textContent?.includes('Project Beta'))).toBe(false);
+      expect(screen.getAllByRole('tab').some((tab) => tab.textContent?.includes('Project Alpha'))).toBe(true);
+      expect(navigate).not.toHaveBeenCalled();
+    });
+
+    it('closes the active project tab and navigates to its neighbor', () => {
+      seedTwoProjectTabs();
+      render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project, betaProject]} />);
+
+      auxClick(stripTab('Project Alpha'), 1);
+
+      expect(screen.getAllByRole('tab').some((tab) => tab.textContent?.includes('Project Alpha'))).toBe(false);
+      expect(navigate).toHaveBeenCalledWith({
+        kind: 'project',
+        projectId: 'project-beta',
+        conversationId: null,
+        fileName: null,
+      });
+    });
+
+    it('keeps the tab open on a right click', () => {
+      seedTwoProjectTabs();
+      render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project, betaProject]} />);
+
+      auxClick(stripTab('Project Beta'), 2);
+
+      expect(screen.getAllByRole('tab').some((tab) => tab.textContent?.includes('Project Beta'))).toBe(true);
+      expect(navigate).not.toHaveBeenCalled();
+    });
+
+    it('keeps the pinned Home tab open', () => {
+      render(<WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />);
+
+      auxClick(screen.getByRole('tab'), 1);
+
+      expect(screen.getAllByRole('tab')).toHaveLength(1);
+      expect(navigate).not.toHaveBeenCalled();
+    });
+
+    it('closes the project tab of a dock dropdown row and keeps the dropdown open', async () => {
+      seedTwoProjectTabs();
+      const dock = document.createElement('div');
+      document.body.append(dock);
+      setWorkspaceTabsDock(dock);
+      render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project, betaProject]} />);
+
+      fireEvent.click(await screen.findByTestId('workspace-tabs-dropdown-trigger'));
+      const menu = screen.getByRole('listbox');
+      auxClick(within(menu).getByRole('option', { name: /Project Beta/ }), 1);
+
+      expect(within(menu).queryByRole('option', { name: /Project Beta/ })).toBeNull();
+      expect(within(menu).getByRole('option', { name: /Project Alpha/ })).toBeTruthy();
+      expect(navigate).not.toHaveBeenCalled();
+
+      dock.remove();
+    });
+  });
+
   it('maps the browser new-tab shortcut to the workspace new-tab action', async () => {
     render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />);
 
