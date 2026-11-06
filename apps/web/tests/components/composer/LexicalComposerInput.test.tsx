@@ -482,6 +482,39 @@ describe('LexicalComposerInput', () => {
     await waitFor(() => expect(onEnterSend).toHaveBeenCalledTimes(1));
   });
 
+  it('inserts a soft line break with Shift+Enter without sending', async () => {
+    const { ref, onEnterSend, getByTestId } = setup({ draft: 'hithere' });
+    const editable = getByTestId('chat-composer-input') as HTMLElement & {
+      __lexicalEditor?: import('lexical').LexicalEditor;
+    };
+    const editor = editable.__lexicalEditor;
+    expect(editor).toBeTruthy();
+    act(() => {
+      editor?.update(() => {
+        const paragraph = $getRoot().getFirstChild();
+        const first = $isElementNode(paragraph) ? paragraph.getFirstChild() : null;
+        if ($isTextNode(first)) first.select(2, 2);
+      }, { discrete: true });
+    });
+
+    const shiftEnter = () => ({
+      key: 'Enter',
+      shiftKey: true,
+      metaKey: false,
+      ctrlKey: false,
+      altKey: false,
+      repeat: false,
+      preventDefault: vi.fn(),
+    } as unknown as KeyboardEvent);
+    const first = shiftEnter();
+    act(() => {
+      editor?.dispatchCommand(KEY_ENTER_COMMAND, first);
+    });
+    await waitFor(() => expect(ref.current?.getText()).toBe('hi\nthere'));
+    expect(first.preventDefault).toHaveBeenCalledTimes(1);
+    expect(onEnterSend).not.toHaveBeenCalled();
+  });
+
   it('does not send when the browser repeats a held Enter key', async () => {
     const { onEnterSend, getByTestId } = setup({ draft: 'hi' });
     const editable = getByTestId('chat-composer-input') as HTMLElement & {
