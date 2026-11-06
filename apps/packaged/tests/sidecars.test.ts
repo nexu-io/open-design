@@ -431,6 +431,19 @@ describe('packaged child Vite+ environment forwarding', () => {
     expect(env.OD_ALLOWED_INTERNAL_HOSTS).toBe('127.0.0.1,localhost');
     expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
   });
+  it('forwards OD_CODEX_SANDBOX so the daemon can honor the operator sandbox override (#8811)', () => {
+    const env = resolvePackagedChildBaseEnv({
+      HOME: '/Users/tester',
+      OD_CODEX_SANDBOX: 'danger-full-access',
+      RANDOM_INTERNAL_FLAG: 'drop-me',
+    });
+    expect(env.OD_CODEX_SANDBOX).toBe('danger-full-access');
+    expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
+  });
+  it('leaves OD_CODEX_SANDBOX unset when the user did not set it', () => {
+    const env = resolvePackagedChildBaseEnv({ HOME: '/Users/tester' });
+    expect(env).not.toHaveProperty('OD_CODEX_SANDBOX');
+  });
 
   it('adds custom VP_HOME/bin to the packaged PATH builder', () => {
     const vpHome = mkdtempSync(join(tmpdir(), 'od-packaged-vp-home-'));
