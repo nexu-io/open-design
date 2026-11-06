@@ -1,3 +1,4 @@
+import type { AmrEndpointBinding } from "@open-design/contracts";
 import { recordIncomingUpdateStageResults, recordIncomingUpdateLifecycle, type UpdateLifecycleObservation } from "./update-lifecycle-observations.js";
 export { recordIncomingUpdateLifecycle, type UpdateLifecycleObservation } from "./update-lifecycle-observations.js";
 import { randomBytes } from "node:crypto";
@@ -198,6 +199,8 @@ export function applyLoopbackConnectionLimitSwitch(electronApp: Electron.App): v
 }
 
 export type DesktopMainOptions = {
+  /** Immutable endpoint binding supplied by the packaged runtime. */
+  amrEndpointBinding?: AmrEndpointBinding;
   electronReadyAtMs?: number;
   /** Carries the packaged process origin and sidecar phases into desktop. */
   startupTiming?: StartupTiming | null;
@@ -339,7 +342,11 @@ export function mergeAmrEnvironmentProfileConfig(
 export function createAmrEnvironmentProfileMenuItems(
   selectedProfile: AmrEnvironmentProfile,
   onSelect: (profile: AmrEnvironmentProfile) => void,
+  binding?: AmrEndpointBinding,
 ): MenuItemConstructorOptions[] {
+  if (binding) {
+    return [{ label: "AMR Profile", submenu: [{ label: binding.webUrl, enabled: false }] }];
+  }
   return [
     {
       label: "AMR Profile",
@@ -399,6 +406,17 @@ async function writeAppConfigToDaemon(
   return payload.config;
 }
 
+export async function writeAmrEnvironmentProfile(
+  options: Pick<DesktopMainOptions, "discoverDaemonUrl" | "discoverWebUrl" | "amrEndpointBinding">,
+  profile: AmrEnvironmentProfile,
+): Promise<AmrEnvironmentProfile> {
+  if (options.amrEndpointBinding) return normalizeAmrEnvironmentProfile(options.amrEndpointBinding.profile);
+  const baseUrl = await resolveDaemonBaseUrl(options)();
+  const config = await readAppConfigFromDaemon(baseUrl);
+  const writtenConfig = await writeAppConfigToDaemon(baseUrl, mergeAmrEnvironmentProfileConfig(config, profile));
+  return normalizeAmrEnvironmentProfile(writtenConfig.agentCliEnv?.[AMR_PROFILE_AGENT_ID]?.[AMR_PROFILE_ENV_KEY]);
+}
+
 type DesktopMenuController = {
   dispose(): void;
   setUpdateLabels(labels: DesktopUpdateMenuLabels): void;
@@ -406,7 +424,7 @@ type DesktopMenuController = {
 
 function installDesktopMenu(
   runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout>,
-  options: Pick<DesktopMainOptions, "discoverDaemonUrl" | "discoverWebUrl"> & {
+  options: Pick<DesktopMainOptions, "discoverDaemonUrl" | "discoverWebUrl" | "amrEndpointBinding"> & {
     onOpenUpdateDialog?: () => void;
     updater: DesktopUpdater;
   },
@@ -425,23 +443,15 @@ function installDesktopMenu(
   const discoverAppConfigBaseUrl = resolveDaemonBaseUrl(options);
 
   const readCurrentAmrProfile = async (): Promise<AmrEnvironmentProfile> => {
+    if (options.amrEndpointBinding) return normalizeAmrEnvironmentProfile(options.amrEndpointBinding.profile);
     const baseUrl = await discoverAppConfigBaseUrl();
     const config = await readAppConfigFromDaemon(baseUrl);
     return normalizeAmrEnvironmentProfile(config.agentCliEnv?.[AMR_PROFILE_AGENT_ID]?.[AMR_PROFILE_ENV_KEY]);
   };
 
-  const writeCurrentAmrProfile = async (profile: AmrEnvironmentProfile): Promise<AmrEnvironmentProfile> => {
-    const baseUrl = await discoverAppConfigBaseUrl();
-    const config = await readAppConfigFromDaemon(baseUrl);
-    const nextConfig = mergeAmrEnvironmentProfileConfig(config, profile);
-    const writtenConfig = await writeAppConfigToDaemon(baseUrl, nextConfig);
-    return normalizeAmrEnvironmentProfile(
-      writtenConfig.agentCliEnv?.[AMR_PROFILE_AGENT_ID]?.[AMR_PROFILE_ENV_KEY],
-    );
-  };
-
   const selectAmrProfile = (profile: AmrEnvironmentProfile): void => {
-    void writeCurrentAmrProfile(profile)
+    if (options.amrEndpointBinding) return;
+    void writeAmrEnvironmentProfile(options, profile)
       .then((writtenProfile) => {
         lastKnownAmrProfile = writtenProfile;
         for (const window of BrowserWindow.getAllWindows()) {
@@ -558,7 +568,7 @@ function installDesktopMenu(
         ? [
             {
               label: "Develop",
-              submenu: createAmrEnvironmentProfileMenuItems(lastKnownAmrProfile, selectAmrProfile),
+              submenu: createAmrEnvironmentProfileMenuItems(lastKnownAmrProfile, selectAmrProfile, options.amrEndpointBinding),
             },
           ]
         : []),

@@ -1,6 +1,16 @@
 import type { Dict } from '../types';
 
 export const de: Dict = {
+  "referral.notice.label": "Reset-Karten-Hinweis",
+  "referral.notice.registered": "Erhalte eine Reset-Karte mit deinem ersten Abo innerhalb von 48 Stunden",
+  "referral.notice.pending": "Dein erstes Abo ist abgeschlossen. Die Reset-Karte wird ausgestellt.",
+  "referral.notice.pendingAt": "Dein erstes Abo ist abgeschlossen. Die Reset-Karte wird voraussichtlich am {time} ausgestellt.",
+  "referral.notice.exhausted": "Dein Design-Plan-Kontingent ist aufgebraucht. Lade Freunde ein, um Reset-Karten zu erhalten und nach deren Erhalt weiterzuarbeiten.",
+  "referral.notice.remaining": "Noch {time}",
+  "referral.notice.invite": "Freunde einladen",
+  "referral.notice.subscribe": "Abonnieren",
+  "referral.notice.dismiss": "Hinweis schließen",
+  "referral.notice.openFailed": "Seite konnte nicht geöffnet werden. Bitte erneut versuchen.",
   "workspaceInvite.deliveryPending": "Die Einladung wird noch zugestellt. Bitte später erneut prüfen.",
   "workspaceInvite.deliveryFailed": "Die Einladung konnte nicht zugestellt werden. Bitte erneut versuchen.",
   "workspaceInvite.invalidResponse": "Die Zustellung konnte nicht bestätigt werden. Bitte später erneut versuchen.",

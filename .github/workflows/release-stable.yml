@@ -325,7 +325,7 @@ jobs:
     name: Build release mac arm64
     needs: [metadata, verify]
     if: ${{ needs.metadata.outputs.run_prepublish_jobs == 'true' }}
-    runs-on: macos-14
+    runs-on: macos-15
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
