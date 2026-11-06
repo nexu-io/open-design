@@ -6674,15 +6674,18 @@ export function ProjectView({
     ) => {
       if (projectCollab.materializationPending) return null;
       let commentConversationId = activeConversationId ?? routeConversationId;
-      if (!commentConversationId && sharedProjectScope && projectRunWorkspaceContext) {
-        // A read-only preview can be ready before its chat list. Resolve the
-        // existing server-owned route without creating a conversation or
-        // granting artifact-write permission to the commenter.
+      if (!commentConversationId && projectRunWorkspaceContext) {
+        // A file preview can be ready before its chat list, in personal and
+        // team workspaces alike. Resolve the existing server-owned route
+        // without creating a conversation or granting artifact-write
+        // permission to the commenter.
         try {
+          // Only a shared project waits out the materialization retries; a
+          // personal 404 is settled and should fail fast.
           const list = await listConversationsWithRetry(
             project.id,
             projectRunWorkspaceContext,
-            true,
+            sharedProjectScope,
           );
           commentConversationId = list[0]?.id ?? null;
         } catch {
