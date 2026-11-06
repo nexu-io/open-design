@@ -817,6 +817,15 @@ export async function createProject(
         // read-only window; another Workspace with the same project id must not
         // inherit the signal.
         markProjectCreatedByViewer(created.project.id, input.workspaceContext ?? null);
+        // Returning Home immediately must not replay the pre-create list from
+        // the GET coalescer's one-second window (including in-flight reads).
+        if (input.workspaceContext) {
+          invalidateWorkspaceProjectLists(
+            input.workspaceContext,
+            currentWorkspaceAccountGeneration(),
+          );
+        }
+        evictCoalescedGet('local-projects');
         return created;
       }
       if (await isDaemonProxyConnectionFailure(resp)) {

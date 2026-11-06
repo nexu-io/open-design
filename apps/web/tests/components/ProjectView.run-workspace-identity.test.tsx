@@ -50,6 +50,7 @@ import { resetWorkspaceContextCache } from '../../src/collab/useWorkspaceContext
 import { streamViaDaemon } from '../../src/providers/daemon';
 import { useProjectFileEvents } from '../../src/providers/project-events';
 import { checkAmrBalanceGate } from '../../src/runtime/amr-balance-gate';
+import { buildTurnBlocks } from '../../src/runtime/chat/build-turn-blocks';
 import {
   createConversation,
   listConversations,
@@ -1269,6 +1270,47 @@ describe('a Home auto-send identifies its caller before the project scope resolv
     expect(firstRun?.clientRequestId).toMatch(/^[A-Za-z0-9._-]+$/);
     expect(firstRun?.userMessageId).toMatch(/^[A-Za-z0-9._-]+$/);
     expect(firstRun?.assistantMessageId).toMatch(/^[A-Za-z0-9._-]+$/);
+  });
+
+  it('keeps the running timer continuous when the Home placeholder becomes a real turn', async () => {
+    // Only virtualize the wall clock: React and mocked I/O still settle through
+    // their normal events, while the creation delay is deterministic.
+    const sentAt = Date.now();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(sentAt);
+    const handoff = {
+      prompt: SEED_PROMPT,
+      files: [],
+      conversationId: conversation(PROJECT_ID).id,
+      persisted: false,
+    };
+    const view = renderProjectView({ creationHandoff: handoff });
+    const assistant = () => chatPaneSpy.mock.calls.at(-1)?.[0].messages
+      ?.find((message: ChatMessage) => message.role === 'assistant') as ChatMessage;
+    await waitFor(() => expect(assistant()?.runStatus).toBe('running'));
+    const placeholder = assistant();
+    expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
+
+    vi.setSystemTime(sentAt + 1_200);
+    const elapsed = (message: ChatMessage) => buildTurnBlocks({
+      events: message.events ?? [],
+      runStatus: message.runStatus,
+      startedAtMs: message.startedAt,
+      nowMs: Date.now(),
+    }).find((block) => block.kind === 'shell')?.elapsedMs;
+    expect(elapsed(placeholder)).toBe(1_200);
+    view.rerender(projectViewElement({ creationHandoff: { ...handoff, persisted: true } }));
+    await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(assistant().id).toBe(placeholder.id);
+    expect(elapsed(assistant())).toBe(1_200);
+
+    // The handoff must not make a later ordinary send inherit this clock.
+    await act(async () => mockedStreamViaDaemon.mock.calls[0]![0].handlers.onDone('Done'));
+    vi.setSystemTime(sentAt + 5_000);
+    fireEvent.click(view.getByTestId('normal-send'));
+    await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalledTimes(2));
+    const latest = chatPaneSpy.mock.calls.at(-1)?.[0].messages?.at(-1) as ChatMessage;
+    expect(latest.startedAt).toBe(sentAt + 5_000);
   });
 
   it('keeps Home handoff identities within the daemon limit for a maximum-length project id', async () => {
