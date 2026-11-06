@@ -2177,6 +2177,27 @@ describe('POST /api/test/connection provider mode', () => {
     });
   });
 
+  it('classifies undici connect timeouts as timeout instead of unknown', async () => {
+    const connectTimeout = new TypeError('fetch failed');
+    Object.defineProperty(connectTimeout, 'cause', {
+      value: Object.assign(new Error('Connect Timeout Error'), {
+        code: 'UND_ERR_CONNECT_TIMEOUT',
+      }),
+    });
+    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(connectTimeout)));
+
+    await expect(testProviderConnection({
+      protocol: 'openai',
+      baseUrl: 'http://localhost:1234/v1',
+      apiKey: 'sk-good',
+      model: 'gpt-4o',
+    })).resolves.toMatchObject({
+      ok: false,
+      kind: 'timeout',
+      detail: 'fetch failed (UND_ERR_CONNECT_TIMEOUT)',
+    });
+  });
+
   it('uses a live system-proxy dispatcher for provider-mode fetches', async () => {
     const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({
       HTTPS_PROXY: 'http://system-proxy.internal:8443',
