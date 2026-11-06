@@ -19,7 +19,8 @@ export function parseGrokBuildModels(stdout: string): RuntimeModelOption[] {
 
 function grokModelSupportsReasoningEffort(model: string | null | undefined): boolean {
   if (!model || model === DEFAULT_MODEL_OPTION.id || model === 'grok-build') return false;
-  return /reasoning/i.test(model);
+  // Grok reasoning models and multi-agent orchestration benefit from --effort.
+  return /reasoning|multi-agent/i.test(model);
 }
 
 // xAI's first-party CLI agent — https://x.ai/cli — distributed as the
@@ -36,14 +37,15 @@ function grokModelSupportsReasoningEffort(model: string | null | undefined): boo
 // Headless mode uses `--prompt-file <PATH>` because recent Grok CLI builds
 // require `-p/--single` to receive the prompt as an argv value and no longer
 // read piped stdin. OD's composed prompts often exceed safe argv limits, so
-// the daemon stages the prompt in a temp file and passes that path here. The
-// CLI also exposes `--output-format streaming-json`, but
-// the streaming-json schema is xAI-specific and we do not yet have a
-// daemon-side parser for it. To ship the runtime now and let users at
-// least chat with grok inside OD, this defaults to `plain` streamFormat
-// (single-turn text reply, no tool_use streaming). Upgrading to a
-// `grok-stream-json` event parser is follow-up work once the format is
-// stable enough to lock in.
+// the daemon stages the prompt in a temp file and passes that path here.
+//
+// Stream format is Grok's NDJSON `streaming-json` (thought/text/end/error),
+// parsed by runtimes/grok-stream.ts. Tool timelines are not available on
+// this wire; design artifacts use reconstructed text + plain-stream
+// artifact extraction, plus any files the CLI writes into the project cwd.
+//
+// Multi-turn: capture-style resume via `end.sessionId` + `--resume <id>`.
+// Do not use `-c` (continue most-recent-in-cwd) — ambiguous across OD projects.
 export const grokBuildAgentDef = {
   id: 'grok-build',
   name: 'Grok Build',
@@ -60,8 +62,8 @@ export const grokBuildAgentDef = {
   },
   fallbackModels: [
     DEFAULT_MODEL_OPTION,
-    { id: 'grok-build', label: 'grok-build (xAI · default)' },
-    { id: 'grok-4.3', label: 'grok-4.3 (xAI)' },
+    { id: 'grok-4.5', label: 'grok-4.5 (xAI · default)' },
+    { id: 'grok-build', label: 'grok-build (xAI)' },
     { id: 'grok-4.20-reasoning', label: 'grok-4.20-reasoning (xAI · deep)' },
     {
       id: 'grok-4.20-non-reasoning',
@@ -86,7 +88,17 @@ export const grokBuildAgentDef = {
       runtimeContext.promptFilePath,
       '--no-plan',
       '--always-approve',
+      '--output-format',
+      'streaming-json',
     ];
+    // Capture-style resume: daemon stores sessionId from the stream `end`
+    // event and passes it here on follow-up turns.
+    if (
+      typeof runtimeContext.resumeSessionId === 'string' &&
+      runtimeContext.resumeSessionId.length > 0
+    ) {
+      args.push('--resume', runtimeContext.resumeSessionId);
+    }
     if (options.model && options.model !== DEFAULT_MODEL_OPTION.id) {
       args.push('--model', options.model);
     }
@@ -104,7 +116,9 @@ export const grokBuildAgentDef = {
   ],
   promptViaFile: true,
   promptViaStdin: false,
-  streamFormat: 'plain',
+  streamFormat: 'grok-stream-json',
+  resumesSessionViaCli: true,
+  capturesSessionIdFromStream: true,
   installUrl: 'https://x.ai/cli',
   docsUrl: 'https://x.ai/cli',
 } satisfies RuntimeAgentDef;
