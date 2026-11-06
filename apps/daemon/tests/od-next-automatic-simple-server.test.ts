@@ -2684,7 +2684,7 @@ process.stdin.on('end', () => {
     expect(researchContract).not.toContain('## assistant');
   });
 
-  it('keeps a successful no-artifact production reply completed without claiming delivery', async () => {
+  it('fails a no-artifact production run with a retryable missing-artifact contract', async () => {
     const fixture = await createFixture('repair');
     await writeFile(`${fixture.logPath}.blocked-production`, '1');
     queueFixtureIds(fixture);
@@ -2696,51 +2696,52 @@ process.stdin.on('end', () => {
     const task = await waitForTask(fixture.taskExecutionId, 'completed');
     expect(task.runs.map((run) => run.inputStage)).toEqual(['request', 'production']);
     const terminal = await waitForRunTerminal(started!.url, task.latestRunId);
-    // A clean production exit completes the turn without claiming delivery.
-    // Missing artifacts must not restore contract blocking or a repair turn.
+    // A production turn that exits cleanly but never creates an artifact is an
+    // incomplete delivery, not a silent success: the physical Run fails with a
+    // retryable missing-artifact error while the logical task still settles
+    // (physicalStatus 'failed') instead of reopening a repair turn.
     expect(terminal).toMatchObject({
-      status: 'succeeded',
-      exitCode: 0,
+      status: 'failed',
+      errorCode: 'AGENT_EXECUTION_FAILED',
       strategyTask: {
         outcome: 'completed', terminal: true, inputStage: 'production',
-        deliverableValid: false, settlementReason: 'ended', settlementFacts: { todoUnfinished: true, deliverableValid: false },
+        settlementReason: 'ended', settlementFacts: { physicalStatus: 'failed' },
       },
     });
-    expect(terminal.endedWithUnfinishedWork).toBe(true);
-    expect(terminal.errorCode ?? null).toBeNull();
-    expect(terminal.error ?? null).toBeNull();
+    expect(terminal.error ?? '').toContain('finished without creating an artifact');
     const records = (await readFile(terminal.eventsLogPath, 'utf8')).trim().split('\n')
       .map((line) => JSON.parse(line));
-    expect(records.filter((event) => event.event === 'error')).toHaveLength(0);
+    const errors = records.filter((event) => event.event === 'error');
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.data?.error).toMatchObject({
+      code: 'AGENT_EXECUTION_FAILED', retryable: true,
+    });
     expect(records.filter((event) => event.event === 'end')).toHaveLength(1);
     const end = records.find((event) => event.event === 'end')?.data;
     expect(end).toMatchObject({
-      status: 'succeeded',
-      code: 0,
+      status: 'failed',
       artifactCount: 0,
       strategyTask: {
         outcome: 'completed', inputStage: 'production',
-        deliverableValid: false, settlementReason: 'ended', settlementFacts: { todoUnfinished: true, deliverableValid: false },
+        settlementReason: 'ended', settlementFacts: { physicalStatus: 'failed' },
       },
     });
-    expect(end.strategyTask.blockedContext ?? null).toBeNull();
     expect(records.find((event) => event.data?.type === 'runtime_close')?.data)
-      .toMatchObject({ rpc_close_reason: 'exit_0', status: 'succeeded', exit_code: 0 });
+      .toMatchObject({ rpc_close_reason: 'empty_output', status: 'failed' });
     const response = await fetch(
       `${started!.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`,
     );
     const { messages } = await response.json() as {
       messages: Array<{ runId?: string; runStatus?: string }>;
     };
-    expect(messages.find((message) => message.runId === task.latestRunId)?.runStatus).toBe('succeeded');
+    expect(messages.find((message) => message.runId === task.latestRunId)?.runStatus).toBe('failed');
     const [recovery] = await waitForRunAnalyticsRecoveries([task.latestRunId]);
     expect(recovery?.properties).toMatchObject({
-      result: 'success',
-      od_next_settlement_reason: 'ended', od_next_settlement_facts: { todoUnfinished: true, deliverableValid: false },
-      rpc_close_reason: 'exit_0',
+      result: 'failed',
+      error_code: 'AGENT_EXECUTION_FAILED',
+      od_next_settlement_reason: 'ended',
+      rpc_close_reason: 'empty_output',
     });
-    expect(recovery?.properties?.error_code).toBeUndefined();
-    expect(recovery?.properties?.od_next_blocked_reason_code).toBeUndefined();
     for (const mapping of task.runs.slice(0, -1)) {
       expect((await getRun(started!.url, mapping.runId)).status).toBe('succeeded');
     }
