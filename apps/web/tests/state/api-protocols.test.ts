@@ -26,6 +26,24 @@ describe('apiProtocols table consistency', () => {
     }
   });
 
+  it('keeps the Opper preset wired to OpenAI-compatible chat models', () => {
+    const opperProvider = KNOWN_PROVIDERS.find(
+      (provider) =>
+        provider.protocol === 'openai' &&
+        provider.baseUrl === 'https://api.opper.ai/v3/compat',
+    );
+
+    expect(opperProvider).toMatchObject({
+      label: 'Opper',
+      apiKeyConsoleLink: {
+        host: 'platform.opper.ai',
+        url: 'https://platform.opper.ai/?utm_source=open_design&utm_medium=provider_preset&utm_campaign=opper_byok',
+      },
+    });
+    expect(opperProvider?.preferredModels[0]).toBe('claude-sonnet-4-6');
+    expect(opperProvider?.preferredModels).toContain('gpt-5.4-mini');
+  });
+
   it('keeps the Atlas Cloud preset wired to OpenAI-compatible chat models', () => {
     const atlasCloudProvider = KNOWN_PROVIDERS.find(
       (provider) =>
