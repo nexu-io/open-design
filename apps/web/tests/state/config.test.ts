@@ -256,6 +256,39 @@ describe('syncConfigToDaemon', () => {
       allowSilentUpdates: true,
     });
   });
+
+  it('omits unhydrated daemon-owned ZCode app path from app config syncs', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const config = { ...DEFAULT_CONFIG };
+    delete (config as Partial<AppConfig>).zcodeAppPath;
+
+    await syncConfigToDaemon(config);
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(JSON.parse(String(init.body))).not.toHaveProperty('zcodeAppPath');
+  });
+
+  it('syncs hydrated null ZCode app path as an explicit clear', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await syncConfigToDaemon({
+      ...DEFAULT_CONFIG,
+      zcodeAppPath: null,
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      zcodeAppPath: null,
+    });
+  });
 });
 
 describe('syncMediaProvidersToDaemon', () => {

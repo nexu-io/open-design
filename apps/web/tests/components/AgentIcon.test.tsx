@@ -72,6 +72,21 @@ describe('AgentIcon', () => {
     expect(markup).not.toContain('agent-icon-mono');
   });
 
+  it('renders ZCode as a color-baked app-style SVG', () => {
+    const zcodeSvg = readFileSync(
+      new URL('../../public/agent-icons/zcode.svg', import.meta.url),
+      'utf8',
+    );
+    const markup = renderToStaticMarkup(<AgentIcon id="zcode" size={24} />);
+
+    expect(zcodeSvg).toMatch(/^<svg\b/);
+    expect(zcodeSvg).toContain('id="zcode-bg"');
+    expect(zcodeSvg).toContain('fill="#fff"');
+    expect(markup).toContain('src="/agent-icons/zcode.svg"');
+    expect(markup).not.toContain('agent-icon-fallback');
+    expect(markup).not.toContain('agent-icon-mono');
+  });
+
   it('renders AMR as the bundled color SVG instead of the fallback initial', () => {
     const amrSvg = readFileSync(
       new URL('../../public/agent-icons/amr.svg', import.meta.url),

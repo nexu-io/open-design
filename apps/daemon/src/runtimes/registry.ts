@@ -26,6 +26,7 @@ import { reasonixAgentDef } from './defs/reasonix.js';
 import { mimoAgentDef } from './defs/mimo.js';
 import { atomcodeAgentDef } from './defs/atomcode.js';
 import { readLocalAgentProfileDefs as readLocalAgentProfileDefsFromFile } from './local-profiles.js';
+import { zcodeAgentDef } from './defs/zcode.js';
 import type { RuntimeAgentDef } from './types.js';
 
 /**
@@ -64,6 +65,7 @@ export const SHIPPED_AGENT_DEFS: RuntimeAgentDef[] = [
   reasonixAgentDef,
   codebuddyAgentDef,
   mimoAgentDef,
+  zcodeAgentDef,
   atomcodeAgentDef,
 ];
 

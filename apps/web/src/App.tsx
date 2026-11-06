@@ -3305,16 +3305,31 @@ function AppInner() {
   );
 
   const refreshAgents = useCallback(
-    async (options?: { throwOnError?: boolean; agentCliEnv?: AppConfig['agentCliEnv'] }) => {
+    async (options?: {
+      throwOnError?: boolean;
+      agentCliEnv?: AppConfig['agentCliEnv'];
+      zcodeAppPath?: AppConfig['zcodeAppPath'];
+    }) => {
       // A native menu selection returns focus to the renderer while this
       // explicit refresh is running. Count it toward the focus throttle so
       // the same transition does not start a second agent scan.
       agentFocusRefreshLastRunRef.current = Date.now();
-      if (options && Object.prototype.hasOwnProperty.call(options, 'agentCliEnv')) {
+      const hasAgentCliEnvOption =
+        options && Object.prototype.hasOwnProperty.call(options, 'agentCliEnv');
+      const hasZcodeAppPathOption =
+        options && Object.prototype.hasOwnProperty.call(options, 'zcodeAppPath');
+      if (hasAgentCliEnvOption) {
         const current = latestPersistedConfigRef.current;
         const nextConfig = clearStaleAmrModelChoiceOnProfileChange(current, {
           ...current,
-          agentCliEnv: options.agentCliEnv ?? {},
+          agentCliEnv: hasAgentCliEnvOption
+            ? options.agentCliEnv ?? {}
+            : current.agentCliEnv ?? {},
+          ...(hasZcodeAppPathOption
+            ? { zcodeAppPath: options.zcodeAppPath ?? null }
+            : Object.prototype.hasOwnProperty.call(current, 'zcodeAppPath')
+              ? { zcodeAppPath: current.zcodeAppPath ?? null }
+              : {}),
         });
         latestPersistedConfigRef.current = nextConfig;
         // Settings sends the current environment even for an unchanged rescan.
@@ -3350,6 +3365,7 @@ function AppInner() {
               ),
             );
           },
+          ...(hasZcodeAppPathOption ? { zcodeAppPath: options.zcodeAppPath ?? null } : {}),
         });
         const ordered = orderAgentsByRegistry(next);
         reportAgentDetectDiagnostics(analytics.track, ordered);
