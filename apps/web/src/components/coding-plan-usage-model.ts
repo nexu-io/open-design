@@ -58,14 +58,11 @@ export interface CodingPlanQuotaView {
 }
 
 /**
- * Every window the panel draws, shortest period first.
+ * Readable rows from the windows supplied by the caller, shortest period first.
  *
- * ONE BLOCK PER BACKEND WINDOW — the client no longer picks a single pool. The
- * v2 design draws Go with two blocks (5 小时 over 7 天) and Plus/Pro/Max with
- * one (7 天), and that difference is not a client rule: it is what each plan's
- * preflight returns. Hard-coding "the 7-day one" made every other enforced
- * pool invisible, which is how a Go subscriber could be stopped by a 5-hour
- * limit the panel never mentioned.
+ * The card selects its design-specified display periods before calling this
+ * model. This helper calculates shares and order; it does not decide which
+ * backend limits the card displays or which limits the gateway enforces.
  *
  * A window whose numbers are not a readable share (an unparseable count, a zero
  * limit) is dropped on its own rather than taking the panel down with it: a
