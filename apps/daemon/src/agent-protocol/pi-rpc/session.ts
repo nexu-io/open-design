@@ -6,7 +6,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ChildProcess } from 'node:child_process';
+import { execFileSync, type ChildProcess } from 'node:child_process';
 import type { Writable } from 'node:stream';
 import { createJsonLineStream } from '../core/index.js';
 import { mapPiRpcEvent } from './events.js';
@@ -37,6 +37,7 @@ export type PiRpcSession = {
   hasFatalError(): boolean;
   completedSuccessfully(): boolean;
   completionShutdownRequested(): boolean;
+  getTerminationProvenance?(): 'natural' | 'shutdown' | 'none';
   abort(): void;
   getLastSessionPath(): string | null;
 };
@@ -209,6 +210,84 @@ export function attachPiRpcSession({
   let promptCompleted = false;
   let agentErrorObserved = false;
   let completionShutdownRequested = false;
+  let terminationProvenance: 'natural' | 'shutdown' | 'none' = 'none';
+  let shutdownTimer: NodeJS.Timeout | null = null;
+
+  const markNaturalExit = (): void => {
+    if (completionShutdownRequested) return;
+    if (terminationProvenance === 'none') {
+      terminationProvenance = 'natural';
+    }
+    if (shutdownTimer) {
+      clearTimeout(shutdownTimer);
+      shutdownTimer = null;
+    }
+  };
+
+  const isChildProcessZombie = (pid: number | undefined): boolean => {
+    if (!pid || typeof pid !== 'number') return false;
+    if (process.platform === 'linux') {
+      try {
+        const status = fs.readFileSync(`/proc/${pid}/status`, 'utf8');
+        return /State:\s+Z/i.test(status);
+      } catch {
+        return true;
+      }
+    }
+    if (process.platform === 'darwin') {
+      try {
+        const out = execFileSync('ps', ['-o', 'state=', '-p', String(pid)], {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+          timeout: 200,
+        });
+        return out.trim().startsWith('Z');
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  };
+
+  const isChildDead = (): boolean =>
+    terminationProvenance === 'natural' ||
+    child.killed ||
+    child.exitCode != null ||
+    child.signalCode != null ||
+    isChildProcessZombie(child.pid);
+
+  const isHandledShutdownExit = (
+    code: number | null,
+    signal: NodeJS.Signals | string | null,
+  ): boolean => {
+    if (signal === 'SIGTERM') return true;
+    if (code === 143) return true;
+    if (process.platform === 'win32' && code === 1) return true;
+    return false;
+  };
+
+  // Process-level exit evidence: do not cancel teardown on stdout EOF/close,
+  // since a process may close its stdout stream while remaining alive.
+  child.once('exit', (code: number | null, signal: NodeJS.Signals | string | null) => {
+    if (completionShutdownRequested) {
+      // If the host requested shutdown (sent SIGTERM), retain shutdown
+      // provenance when process-exit evidence shows the child terminated from
+      // or handled the fallback signal. If the child reaped with an unrelated
+      // error code, revert to natural provenance so the failure is not masked.
+      if (!isHandledShutdownExit(code, signal)) {
+        terminationProvenance = 'natural';
+        completionShutdownRequested = false;
+      }
+      return;
+    }
+    if (terminationProvenance === 'none') {
+      terminationProvenance = 'natural';
+    }
+    if (shutdownTimer) {
+      clearTimeout(shutdownTimer);
+      shutdownTimer = null;
+    }
+  });
 
   let nextRpcId = 1;
   let stdinOpen = true;
@@ -409,14 +488,50 @@ export function attachPiRpcSession({
       } catch (err: unknown) {
         fail(`stdin close: ${errorMessage(err)}`);
       }
-      // Grace period before SIGTERM. Configurable via PI_GRACEFUL_SHUTDOWN_MS
-      // for resource-constrained machines where the event loop drains slowly.
-      const shutdownMs = Number(process.env.PI_GRACEFUL_SHUTDOWN_MS) || 5000;
-      setTimeout(() => {
-        if (!child.killed && child.exitCode == null && child.signalCode == null) {
-          completionShutdownRequested = child.kill('SIGTERM');
-        }
-      }, shutdownMs);
+      if (isChildDead()) {
+        markNaturalExit();
+      } else {
+        // Grace period before SIGTERM. Configurable via PI_GRACEFUL_SHUTDOWN_MS
+        // for resource-constrained machines where the event loop drains slowly.
+        const shutdownMs = Number(process.env.PI_GRACEFUL_SHUTDOWN_MS) || 5000;
+        const attemptShutdown = (deferred = false): void => {
+          if (isChildDead()) return;
+
+          // If stdout ended, the child might have called process.exit() and Node's
+          // waitpid process reaper is in-flight. Defer briefly before dispatching
+          // SIGTERM so that a natural exit isn't preempted by the fallback kill.
+          const stdoutEnded = Boolean(stdout.readableEnded || stdout.closed || stdout.destroyed);
+          if (stdoutEnded && !deferred) {
+            shutdownTimer = setTimeout(() => {
+              shutdownTimer = null;
+              attemptShutdown(true);
+            }, 30);
+            return;
+          }
+
+          if (isChildDead()) {
+            markNaturalExit();
+            return;
+          }
+
+          try {
+            const delivered = child.kill('SIGTERM');
+            if (delivered) {
+              completionShutdownRequested = true;
+              terminationProvenance = 'shutdown';
+            } else {
+              markNaturalExit();
+            }
+          } catch {
+            markNaturalExit();
+          }
+        };
+
+        shutdownTimer = setTimeout(() => {
+          shutdownTimer = null;
+          attemptShutdown(false);
+        }, shutdownMs);
+      }
     }
   });
 
@@ -442,7 +557,10 @@ export function attachPiRpcSession({
     completionShutdownRequested() {
       // Some Pi builds trap this signal and report code 143 instead. Keep the
       // actual host signal separate from a naturally failing process exit.
-      return completionShutdownRequested;
+      return completionShutdownRequested && terminationProvenance === 'shutdown';
+    },
+    getTerminationProvenance() {
+      return terminationProvenance;
     },
     getLastSessionPath() {
       return capturedSessionPath;
@@ -454,6 +572,10 @@ export function attachPiRpcSession({
       // not by this method.
       if (finished || child.killed) return;
       finished = true;
+      if (shutdownTimer) {
+        clearTimeout(shutdownTimer);
+        shutdownTimer = null;
+      }
       sendCommand(stdin, 'abort');
     },
   };

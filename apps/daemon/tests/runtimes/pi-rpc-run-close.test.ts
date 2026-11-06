@@ -26,9 +26,11 @@ afterEach(async () => {
 });
 
 describe('Pi RPC public Run close', () => {
-  it.each([
+  it.skipIf(process.platform === 'win32').each([
     { mode: 'success', expected: 'succeeded' },
     { mode: 'sigterm-exit', expected: 'succeeded' },
+    { mode: 'stdout-close-alive', expected: 'succeeded' },
+    { mode: 'stdout-close-sigterm-exit', expected: 'succeeded' },
     { mode: 'nonzero', expected: 'failed' },
     { mode: 'error', expected: 'failed' },
     { mode: 'cancel', expected: 'canceled' },
@@ -42,10 +44,10 @@ const fs = require('node:fs');
 if (process.argv.includes('--version')) { console.log('1.1.0'); process.exit(0); }
 if (process.argv.includes('--list-models')) { console.log('provider model context max-out thinking images\\nopenai fixture-model 128K 16K yes yes'); process.exit(0); }
 if (process.argv.includes('--help')) { console.log('Usage: pi --mode rpc'); process.exit(0); }
-const W = value => fs.writeSync(1, JSON.stringify(value) + '\\n');
+const W = value => { try { fs.writeSync(1, JSON.stringify(value) + '\\n'); } catch {} };
 const mode = ${JSON.stringify(mode)};
 // Pi 1.1.0 traps SIGTERM and exits 143, so there is no signal on 'close'.
-if (mode === 'sigterm-exit') process.on('SIGTERM', () => process.exit(143));
+if (mode === 'sigterm-exit' || mode === 'stdout-close-sigterm-exit') process.on('SIGTERM', () => process.exit(143));
 // Native RPC runtimes can stay alive after stdin EOF. Completion, rather
 // than the fallback signal, must determine the successful turn's verdict.
 setInterval(() => {}, 1000);
@@ -60,6 +62,10 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
   if (mode === 'cancel') return;
   if (mode === 'error') W({ type: 'message_update', assistantMessageEvent: { type: 'error', reason: 'Native Pi fixture failure' } });
   W({ type: 'agent_end' });
+  if (mode === 'stdout-close-alive' || mode === 'stdout-close-sigterm-exit') {
+    try { fs.closeSync(1); } catch {}
+    fs.openSync(require('node:os').devNull, 'w');
+  }
   // Exercise a natural failure during the grace period, after the turn ends.
   if (mode === 'nonzero') setTimeout(() => process.exit(143), 80);
 });
@@ -108,9 +114,12 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
     if (mode === 'success') {
       expect(run.signal).toBe('SIGTERM');
       expect(run.error ?? null).toBeNull();
-    } else if (mode === 'sigterm-exit') {
+    } else if (mode === 'sigterm-exit' || mode === 'stdout-close-sigterm-exit') {
       expect(run.exitCode).toBe(143);
       expect(run.signal ?? null).toBeNull();
+      expect(run.error ?? null).toBeNull();
+    } else if (mode === 'stdout-close-alive') {
+      expect(run.signal).toBe('SIGTERM');
       expect(run.error ?? null).toBeNull();
     } else if (mode === 'nonzero') {
       expect(run.exitCode).toBe(143);

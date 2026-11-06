@@ -308,6 +308,30 @@ describe('classifyChatRunCloseStatus (#1451 close-handler classification)', () =
     ).toBe('failed');
   });
 
+  it('returns failed on natural exit code 143 after clean ACP completion when completion shutdown was not requested (#9047)', () => {
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: 143,
+        signal: null,
+        acpCleanCompletion: true,
+        acpCompletionShutdownRequested: false,
+      }),
+    ).toBe('failed');
+  });
+
+  it('returns succeeded on intentional trapped exit code 143 after clean ACP completion when completion shutdown was requested (#9047)', () => {
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: 143,
+        signal: null,
+        acpCleanCompletion: true,
+        acpCompletionShutdownRequested: true,
+      }),
+    ).toBe('succeeded');
+  });
+
   it('returns failed when shutdown was requested but the ACP prompt never completed cleanly', () => {
     expect(
       classifyChatRunCloseStatus({
