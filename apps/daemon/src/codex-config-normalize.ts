@@ -85,30 +85,13 @@ function matchQuotedValue(line: string, key: string): string | null {
   return value.length > 0 ? value : null;
 }
 
-/**
- * Resolve the `env_key` of the currently-selected Codex provider from a
- * config.toml string, or null when there is no custom provider / env_key.
- *
- * Codex custom providers name the environment variable holding their API key
- * via `env_key`, e.g.:
- *
- *   model_provider = "azure"
- *   [model_providers.azure]
- *   env_key = "AZURE_OPENAI_API_KEY"
- *
- * Consumed by the auth probe (`runtimes/auth.ts`) so a working custom-provider
- * Codex install isn't reported as unauthenticated just because
- * `codex login status` (a ChatGPT/OpenAI-login check) exits non-zero.
- *
- * Deliberately a narrow line scanner rather than a full TOML parse — matching
- * this module's regex-scoped handling of config.toml (the daemon ships no TOML
- * parser); it reads only the two fields it needs.
- */
-export function extractCodexProviderEnvKey(toml: string): string | null {
+export type CodexProviderAuth =
+  | { kind: 'env-key'; envKey: string }
+  | { kind: 'inline-bearer-token' };
+
+export function extractCodexProviderAuth(toml: string): CodexProviderAuth | null {
   const lines = String(toml || '').split(/\r?\n/);
 
-  // The selected provider is a root-table key, which in TOML must appear before
-  // the first `[table]` header.
   let provider: string | null = null;
   for (const raw of lines) {
     const line = stripTomlComment(raw).trim();
@@ -125,6 +108,8 @@ export function extractCodexProviderEnvKey(toml: string): string | null {
   const headerRe =
     /^\[\s*model_providers\.\s*(?:"([^"]*)"|'([^']*)'|([A-Za-z0-9_.-]+))\s*\]$/;
   let inSelectedTable = false;
+  let envKey: string | null = null;
+  let hasInlineBearerToken = false;
   for (const raw of lines) {
     const line = stripTomlComment(raw).trim();
     if (line.startsWith('[')) {
@@ -134,26 +119,37 @@ export function extractCodexProviderEnvKey(toml: string): string | null {
       continue;
     }
     if (!inSelectedTable) continue;
-    const value = matchQuotedValue(line, 'env_key');
-    if (value) return value;
+    envKey ??= matchQuotedValue(line, 'env_key');
+    if (matchQuotedValue(line, 'experimental_bearer_token')) {
+      hasInlineBearerToken = true;
+    }
   }
+  if (envKey) return { kind: 'env-key', envKey };
+  if (hasInlineBearerToken) return { kind: 'inline-bearer-token' };
   return null;
 }
 
-/**
- * Read the selected Codex provider's `env_key` from the on-disk config.toml
- * (honoring CODEX_HOME). Returns null when the file is absent/unreadable or
- * declares no custom provider env_key.
- */
-export async function readCodexProviderEnvKey(
+export function extractCodexProviderEnvKey(toml: string): string | null {
+  const auth = extractCodexProviderAuth(toml);
+  return auth?.kind === 'env-key' ? auth.envKey : null;
+}
+
+export async function readCodexProviderAuth(
   env: NodeJS.ProcessEnv = process.env,
-): Promise<string | null> {
+): Promise<CodexProviderAuth | null> {
   try {
     const toml = await readFile(resolveCodexConfigPath(env), 'utf8');
-    return extractCodexProviderEnvKey(toml);
+    return extractCodexProviderAuth(toml);
   } catch {
     return null;
   }
+}
+
+export async function readCodexProviderEnvKey(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<string | null> {
+  const auth = await readCodexProviderAuth(env);
+  return auth?.kind === 'env-key' ? auth.envKey : null;
 }
 
 /**

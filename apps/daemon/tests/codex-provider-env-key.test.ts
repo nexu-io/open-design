@@ -2,11 +2,15 @@
 // a working custom provider whose API key lives in a provider-specific
 // `env_key` (e.g. AZURE_OPENAI_API_KEY) declared in ~/.codex/config.toml, not
 // just CODEX_API_KEY / OPENAI_API_KEY. `extractCodexProviderEnvKey` resolves
-// the selected provider's `env_key` from the config text.
+// the selected provider's `env_key`, while `extractCodexProviderAuth` also
+// recognizes an inline `experimental_bearer_token`.
 
 import { describe, expect, it } from 'vitest';
 
-import { extractCodexProviderEnvKey } from '../src/codex-config-normalize.js';
+import {
+  extractCodexProviderAuth,
+  extractCodexProviderEnvKey,
+} from '../src/codex-config-normalize.js';
 
 describe('extractCodexProviderEnvKey', () => {
   it('resolves the selected custom provider env_key', () => {
@@ -80,5 +84,48 @@ describe('extractCodexProviderEnvKey', () => {
   it('returns null for empty or non-provider config', () => {
     expect(extractCodexProviderEnvKey('')).toBeNull();
     expect(extractCodexProviderEnvKey('model = "gpt-5"\n')).toBeNull();
+  });
+});
+
+describe('extractCodexProviderAuth', () => {
+  it('detects an inline bearer token on the selected provider', () => {
+    const toml = [
+      'model_provider = "deepseek"',
+      '[model_providers.deepseek]',
+      'base_url = "https://api.deepseek.com"',
+      'experimental_bearer_token = "secret-value"',
+    ].join('\n');
+    expect(extractCodexProviderAuth(toml)).toEqual({ kind: 'inline-bearer-token' });
+  });
+
+  it('does not use an inline token from a non-selected provider', () => {
+    const toml = [
+      'model_provider = "openai"',
+      '[model_providers.deepseek]',
+      'experimental_bearer_token = "secret-value"',
+    ].join('\n');
+    expect(extractCodexProviderAuth(toml)).toBeNull();
+  });
+
+  it('prefers a configured env key over an inline token', () => {
+    const toml = [
+      'model_provider = "deepseek"',
+      '[model_providers.deepseek]',
+      'experimental_bearer_token = "secret-value"',
+      'env_key = "DEEPSEEK_API_KEY"',
+    ].join('\n');
+    expect(extractCodexProviderAuth(toml)).toEqual({
+      kind: 'env-key',
+      envKey: 'DEEPSEEK_API_KEY',
+    });
+  });
+
+  it('ignores empty inline tokens', () => {
+    const toml = [
+      'model_provider = "deepseek"',
+      '[model_providers.deepseek]',
+      'experimental_bearer_token = ""',
+    ].join('\n');
+    expect(extractCodexProviderAuth(toml)).toBeNull();
   });
 });
