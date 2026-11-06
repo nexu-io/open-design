@@ -263,7 +263,7 @@ location /api/ {
 | モード | ピッカーの値 | リクエストの流れ |
 |---|---|---|
 | **Local CLI**（daemon がエージェントを検出した場合のデフォルト） | "Local CLI" | フロントエンド → daemon `/api/chat` → `spawn(<agent>, ...)` → 構造化されたツール／ファイルイベントを SSE 配信 → プロジェクトファイル → プレビュー。plain-stream CLI は text-artifact 経路を使用します。 |
-| **API モード**（フォールバック / CLI なし） | "Anthropic API" / "OpenAI API" / "Atlas Cloud" / "Azure OpenAI" / "Google Gemini" | フロントエンド → daemon `/api/proxy/{provider}/stream` → provider SSE を `delta/end/error` に正規化 → `<artifact>` パーサー → プレビュー |
+| **API モード**（フォールバック / CLI なし） | "Anthropic API" / "OpenAI API" / "Atlas Cloud" / "Ofox" / "Azure OpenAI" / "Google Gemini" | フロントエンド → daemon `/api/proxy/{provider}/stream` → provider SSE を `delta/end/error` に正規化 → `<artifact>` パーサー → プレビュー |
 
 両モードは同じファイルワークスペースとサンドボックス化されたプレビューに到達しますが、引き渡し契約は異なります。ファイルシステム対応ランタイムは正規ファイルを書き込み、そのソースを `<artifact>` に再出力しません。plain／テキスト専用および BYOK 実行にはファイルツールがないため、完全な HTML を `<artifact>` に入れたものが正規の成果物です。実行プロファイルはランタイムのトランスポートから選択されます。
 
