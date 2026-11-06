@@ -167,6 +167,30 @@ describe('entry layout materials (styles/home/entry-layout.css)', () => {
     ).toMatch(/margin-left:\s*12px/);
   });
 
+  it('floats the rail as an overlay drawer when the narrow window has zeroed its track', () => {
+    const drawer = declarationsInside(
+      entryLayoutCss,
+      '@media (max-width: 1080px)',
+      '.entry-shell--no-header .entry.entry--rail-overlay .entry-nav-rail',
+    );
+    expect(drawer).toMatch(/position:\s*fixed/);
+    expect(drawer).toMatch(/pointer-events:\s*auto/);
+    expect(drawer).toMatch(/width:\s*min\(var\(--entry-rail-width, 236px\), 85vw\)/);
+    // The click-catcher is fixed (never a grid item that would steal the
+    // rail's track) and hidden on wide windows.
+    expect(declarations(entryLayoutCss, '.entry-rail-backdrop')).toMatch(/display:\s*none/);
+    expect(
+      declarationsInside(entryLayoutCss, '@media (max-width: 1080px)', '.entry-rail-backdrop'),
+    ).toMatch(/position:\s*fixed/);
+    expect(
+      declarationsInside(
+        entryLayoutCss,
+        '@media (max-width: 1080px)',
+        '.entry--rail-overlay .entry-rail-backdrop',
+      ),
+    ).toMatch(/pointer-events:\s*auto/);
+  });
+
   it('degrades the content card to a solid surface without transparency / backdrop-filter', () => {
     const reduced = declarationsInside(entryLayoutCss, '@media (prefers-reduced-transparency: reduce)', '.entry-main--scroll');
     expect(reduced).toMatch(/--entry-content-surface:\s*var\(--bg\)/);

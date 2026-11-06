@@ -7,6 +7,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  ENTRY_RAIL_TOGGLE_EVENT,
   EntryShell,
   ONBOARDING_LOCAL_AUTO_TEST_DELAY_MS,
 } from '../../src/components/EntryShell';
@@ -374,6 +375,116 @@ describe('EntryShell navigation shortcuts', () => {
     });
 
     expect(entry?.classList.contains('entry--rail-open')).toBe(false);
+  });
+});
+
+describe('EntryShell narrow-window rail toggle', () => {
+  // entry-layout.css zeroes the docked rail's grid track at this width, so the
+  // toggle must open the overlay drawer instead of flipping the hidden dock.
+  const NARROW_QUERY = '(max-width: 1080px)';
+  let restoreMatchMedia: (() => void) | null = null;
+
+  function emulateWindowWidth(narrow: boolean) {
+    const original = Object.getOwnPropertyDescriptor(window, 'matchMedia');
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: (query: string) => ({
+        matches: narrow && query === NARROW_QUERY,
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }),
+    });
+    restoreMatchMedia = () => {
+      if (original) Object.defineProperty(window, 'matchMedia', original);
+      else delete (window as { matchMedia?: unknown }).matchMedia;
+    };
+  }
+
+  function entryElement(): HTMLElement {
+    const entry = document.querySelector('.entry');
+    if (!(entry instanceof HTMLElement)) throw new Error('entry not found');
+    return entry;
+  }
+
+  function railElement(): HTMLElement {
+    const rail = document.querySelector('nav.entry-nav-rail');
+    if (!(rail instanceof HTMLElement)) throw new Error('rail not found');
+    return rail;
+  }
+
+  function toggleRail() {
+    act(() => {
+      window.dispatchEvent(new CustomEvent(ENTRY_RAIL_TOGGLE_EVENT));
+    });
+  }
+
+  afterEach(() => {
+    restoreMatchMedia?.();
+    restoreMatchMedia = null;
+    window.localStorage.removeItem('od.entry.railOpen');
+  });
+
+  it('opens the rail as an overlay drawer without touching the docked preference', async () => {
+    emulateWindowWidth(true);
+    window.localStorage.setItem('od.entry.railOpen', 'false');
+    renderHome();
+
+    const entry = entryElement();
+    expect(entry.classList.contains('entry--rail-overlay')).toBe(false);
+    expect(railElement().hasAttribute('inert')).toBe(true);
+
+    toggleRail();
+
+    await waitFor(() => expect(entry.classList.contains('entry--rail-overlay')).toBe(true));
+    expect(entry.classList.contains('entry--rail-open')).toBe(true);
+    expect(railElement().hasAttribute('inert')).toBe(false);
+    expect(window.localStorage.getItem('od.entry.railOpen')).toBe('false');
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(entry.classList.contains('entry--rail-overlay')).toBe(false));
+
+    toggleRail();
+    await waitFor(() => expect(entry.classList.contains('entry--rail-overlay')).toBe(true));
+    fireEvent.click(screen.getByTestId('entry-rail-backdrop'));
+    await waitFor(() => expect(entry.classList.contains('entry--rail-overlay')).toBe(false));
+    expect(railElement().hasAttribute('inert')).toBe(true);
+  });
+
+  it('never opens the drawer on load and closes it when a destination is picked', async () => {
+    emulateWindowWidth(true);
+    window.localStorage.setItem('od.entry.railOpen', 'true');
+    renderHome();
+
+    const entry = entryElement();
+    // A docked preference saved on a wide window must not cover a phone screen.
+    expect(entry.classList.contains('entry--rail-overlay')).toBe(false);
+    expect(railElement().hasAttribute('inert')).toBe(true);
+
+    toggleRail();
+    await waitFor(() => expect(entry.classList.contains('entry--rail-overlay')).toBe(true));
+
+    fireEvent.click(screen.getByTestId('entry-nav-design-systems'));
+    await waitFor(() => expect(entry.classList.contains('entry--rail-overlay')).toBe(false));
+    expect(window.localStorage.getItem('od.entry.railOpen')).toBe('true');
+  });
+
+  it('keeps docking and persisting the rail on wide windows', async () => {
+    emulateWindowWidth(false);
+    window.localStorage.setItem('od.entry.railOpen', 'false');
+    renderHome();
+
+    const entry = entryElement();
+    toggleRail();
+
+    await waitFor(() => expect(entry.classList.contains('entry--rail-open')).toBe(true));
+    expect(entry.classList.contains('entry--rail-overlay')).toBe(false);
+    expect(window.localStorage.getItem('od.entry.railOpen')).toBe('true');
   });
 });
 
