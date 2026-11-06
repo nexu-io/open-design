@@ -13,9 +13,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "media-dispatch-hint",
       "clarifying-questions",
       "comment-identity-edit",
+      "subagent-turn",
       "role-marker-guard",
     ],
-    "totalChars": 68130,
+    "totalChars": 68599,
   },
   "ask-mode-full-context": {
     "sections": [
@@ -34,9 +35,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "filesystem-handoff-override",
       "clarifying-questions",
       "comment-identity-edit",
+      "subagent-turn",
       "role-marker-guard",
     ],
-    "totalChars": 19430,
+    "totalChars": 19899,
   },
   "codex-image-dispatcher": {
     "sections": [
@@ -48,9 +50,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "skill-write-boundary",
       "clarifying-questions",
       "comment-identity-edit",
+      "subagent-turn",
       "role-marker-guard",
     ],
-    "totalChars": 54999,
+    "totalChars": 55468,
   },
   "critique-enabled": {
     "sections": [
@@ -71,9 +74,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "skill-write-boundary",
       "clarifying-questions",
       "comment-identity-edit",
+      "subagent-turn",
       "role-marker-guard",
     ],
-    "totalChars": 67658,
+    "totalChars": 68127,
   },
   "deck-kind-no-skill": {
     "sections": [
@@ -88,9 +92,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "skill-write-boundary",
       "clarifying-questions",
       "comment-identity-edit",
+      "subagent-turn",
       "role-marker-guard",
     ],
-    "totalChars": 96424,
+    "totalChars": 96893,
   },
   "deck-kind-with-skill-seed": {
     "sections": [
@@ -105,9 +110,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "skill-write-boundary",
       "clarifying-questions",
       "comment-identity-edit",
+      "subagent-turn",
       "role-marker-guard",
     ],
-    "totalChars": 67186,
+    "totalChars": 67655,
   },
   "design-ds-fixture-fallback": {
     "sections": [
@@ -128,9 +134,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "skill-write-boundary",
       "clarifying-questions",
       "comment-identity-edit",
+      "subagent-turn",
       "role-marker-guard",
     ],
-    "totalChars": 92179,
+    "totalChars": 92648,
   },
   "design-full-stack": {
     "sections": [
@@ -158,9 +165,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "skill-write-boundary",
       "clarifying-questions",
       "comment-identity-edit",
+      "subagent-turn",
       "role-marker-guard",
     ],
-    "totalChars": 74811,
+    "totalChars": 75280,
   },
   "design-minimal": {
     "sections": [
@@ -175,9 +183,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "skill-write-boundary",
       "clarifying-questions",
       "comment-identity-edit",
+      "subagent-turn",
       "role-marker-guard",
     ],
-    "totalChars": 96380,
+    "totalChars": 96849,
   },
   "design-no-ds-multitarget": {
     "sections": [
@@ -192,9 +201,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "skill-write-boundary",
       "clarifying-questions",
       "comment-identity-edit",
+      "subagent-turn",
       "role-marker-guard",
     ],
-    "totalChars": 72752,
+    "totalChars": 73221,
   },
   "example-prompt": {
     "sections": [
@@ -209,9 +219,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "skill-write-boundary",
       "clarifying-questions",
       "comment-identity-edit",
+      "subagent-turn",
       "role-marker-guard",
     ],
-    "totalChars": 70999,
+    "totalChars": 71468,
   },
   "freeform-other": {
     "sections": [
@@ -227,9 +238,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "skill-write-boundary",
       "clarifying-questions",
       "comment-identity-edit",
+      "subagent-turn",
       "role-marker-guard",
     ],
-    "totalChars": 100076,
+    "totalChars": 100545,
   },
   "freeform-other-no-deck-signal": {
     "sections": [
@@ -243,9 +255,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "skill-write-boundary",
       "clarifying-questions",
       "comment-identity-edit",
+      "subagent-turn",
       "role-marker-guard",
     ],
-    "totalChars": 69922,
+    "totalChars": 70391,
   },
   "media-image": {
     "sections": [
@@ -257,9 +270,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "skill-write-boundary",
       "clarifying-questions",
       "comment-identity-edit",
+      "subagent-turn",
       "role-marker-guard",
     ],
-    "totalChars": 54997,
+    "totalChars": 55466,
   },
   "memory-hooks-off": {
     "sections": [
@@ -275,9 +289,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "skill-write-boundary",
       "clarifying-questions",
       "comment-identity-edit",
+      "subagent-turn",
       "role-marker-guard",
     ],
-    "totalChars": 97885,
+    "totalChars": 98354,
   },
   "plan-mode": {
     "sections": [
@@ -292,9 +307,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "skill-write-boundary",
       "clarifying-questions",
       "comment-identity-edit",
+      "subagent-turn",
       "role-marker-guard",
     ],
-    "totalChars": 73946,
+    "totalChars": 74415,
   },
   "plugin-stages": {
     "sections": [
@@ -311,9 +327,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "skill-write-boundary",
       "clarifying-questions",
       "comment-identity-edit",
+      "subagent-turn",
       "role-marker-guard",
     ],
-    "totalChars": 96476,
+    "totalChars": 96945,
   },
   "skip-discovery-brief": {
     "sections": [
@@ -328,9 +345,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "skill-write-boundary",
       "clarifying-questions",
       "comment-identity-edit",
+      "subagent-turn",
       "role-marker-guard",
     ],
-    "totalChars": 70510,
+    "totalChars": 70979,
   },
   "slim-design-full-stack": {
     "sections": [
@@ -355,9 +373,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "media-dispatch-hint",
       "skill-write-boundary",
       "comment-identity-edit",
+      "subagent-turn",
       "role-marker-guard",
     ],
-    "totalChars": 50847,
+    "totalChars": 51316,
   },
   "slim-freeform-no-deck-signal": {
     "sections": [
@@ -367,9 +386,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "media-dispatch-hint",
       "skill-write-boundary",
       "comment-identity-edit",
+      "subagent-turn",
       "role-marker-guard",
     ],
-    "totalChars": 42902,
+    "totalChars": 43371,
   },
 }
 `;

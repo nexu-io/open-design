@@ -99,6 +99,7 @@ to the **host**, not to either strategy — if a strategy is retired, these stay
 | Shared motion source player | Composition-only preview controls and persisted playback; suppressed during frame capture | ✅ motion source | ✅ motion source |
 | Motion `data-poster-time` | Agent-selected seconds; daemon validates the linked MP4 and freezes its frame with the composition dimensions | ✅ selected motion skill | ✅ motion task profile |
 | `.od-frames/` device shells | prototype device frames | ❌ | ✅ OD Next only |
+| Finish sub-agents and background work before the turn ends | daemon run lifecycle: a clean turn end completes the run and closes a stream-json agent's stdin (`applyClaudeStreamJsonRunBookkeeping`), and silent runs hit the inactivity timeout | ✅ shared `subagent-turn.ts` (classic/slim/API-BYOK), not on AMR | ✅ shared host directive, not on AMR |
 
 Two things to read off this table.
 
