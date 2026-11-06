@@ -59,6 +59,7 @@ import {
   installPluginSource,
   listPluginMarketplaces,
   listPlugins,
+  pluginApplyFailed,
   refreshPluginMarketplace,
   removePluginMarketplace,
   resolvedWorkspaceContextForWrite,
@@ -84,6 +85,7 @@ import { humanizeCategory } from './SkillsSection';
 import { buildCategoryCatalog, extractCategories } from './plugins-home/facets';
 import { TrustBadge } from './TrustBadge';
 import { useI18n } from '../i18n';
+import { formatPluginApplyFailure } from '../i18n/pluginApplyErrors';
 import { useDismissOnOutsideInteraction } from '../hooks/useDismissOnOutsideInteraction';
 import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
@@ -411,10 +413,12 @@ export function PluginsView({
       workspaceContext: pluginsContextRef.current,
     });
     setPendingApplyId(null);
-    if (!result) {
+    if (!result || pluginApplyFailed(result)) {
       setNotice({
         ok: false,
-        message: `Failed to apply ${record.title}. Make sure the daemon is reachable.`,
+        message: pluginApplyFailed(result)
+          ? formatPluginApplyFailure(result, t, record.title)
+          : `Failed to apply ${record.title}. Make sure the daemon is reachable.`,
       });
       return;
     }

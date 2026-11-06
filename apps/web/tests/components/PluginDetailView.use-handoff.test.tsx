@@ -141,4 +141,41 @@ describe('PluginDetailView Use hands the plugin to Home', () => {
     expect(takeHomePromptHandoff()).toBeNull();
     expect(vi.mocked(navigate)).not.toHaveBeenCalledWith({ kind: 'home', view: 'home' });
   });
+
+  it('shows the preserved backend diagnosis when applying the plugin fails', async () => {
+    vi.mocked(applyPlugin).mockResolvedValue({
+      ok: false,
+      diagnosis: {
+        code: 'PLUGIN_CONFIGURATION_INVALID',
+        reason: 'manifest_invalid',
+      },
+    } as never);
+    await renderDetailAndUse();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Apply failed: Plugin configuration is invalid. Reinstall or update the plugin and try again.',
+    );
+  });
+
+  it('distinguishes a safe daemon failure from the unreachable fallback', async () => {
+    vi.mocked(applyPlugin).mockResolvedValue({
+      ok: false,
+      diagnosis: { code: 'PLUGIN_APPLY_FAILED' },
+    } as never);
+    await renderDetailAndUse();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Apply failed: The plugin could not be applied. Try again.',
+    );
+    expect(screen.getByRole('alert')).not.toHaveTextContent('daemon is reachable');
+  });
+
+  it('keeps the localized fallback when applying fails without a diagnosis', async () => {
+    vi.mocked(applyPlugin).mockResolvedValue(null as never);
+    await renderDetailAndUse();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Apply failed. Make sure the daemon is reachable.',
+    );
+  });
 });
