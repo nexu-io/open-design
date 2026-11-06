@@ -319,7 +319,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1700;
+  z-index: 2000;
   animation: fade-in 160ms ease-out;
 }
 .modal-backdrop--app-modal {
