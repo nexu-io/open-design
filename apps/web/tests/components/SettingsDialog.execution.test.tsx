@@ -957,6 +957,28 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     );
   });
 
+  it('offers Runcrate as an OpenAI-compatible gateway preset', () => {
+    renderSettingsDialog({
+      apiProtocol: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
+    selectGatewayPreset('Runcrate');
+
+    expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain(
+      'deepseek-ai/DeepSeek-V4-Flash',
+    );
+    expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe(
+      'https://api.runcrate.ai/v1',
+    );
+    expect(screen.getByRole('link', { name: 'Get key ↗' }).getAttribute('href')).toBe(
+      'https://runcrate.ai/dashboard/api-keys',
+    );
+  });
+
   it('keeps Anthropic-compatible gateway presets selectable', () => {
     renderSettingsDialog();
 
