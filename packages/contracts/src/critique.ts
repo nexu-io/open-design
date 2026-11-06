@@ -51,6 +51,9 @@ export const CritiqueConfigSchema = z.object({
   // semantic check is "threshold cannot meaningfully exceed scale".
   (cfg) => cfg.scoreThreshold <= cfg.scoreScale + 1e-9,
   { message: 'scoreThreshold must be <= scoreScale' },
+).refine(
+  (cfg) => cfg.totalTimeoutMs >= cfg.perRoundTimeoutMs,
+  { message: 'totalTimeoutMs must be >= perRoundTimeoutMs' },
 );
 
 export type CritiqueConfig = z.infer<typeof CritiqueConfigSchema>;
