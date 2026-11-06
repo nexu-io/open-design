@@ -1,5 +1,20 @@
 import { RELEASE_CHANNELS, type ReleaseChannel } from "@open-design/release";
 
+// Wire protocol for an operator-supplied HTTP slide renderer (OD_SLIDE_RENDERER_URL).
+// It transports the same DesktopRenderSlides types declared below, so it is
+// re-exported from here rather than left as a second entry point.
+export {
+  decodeSlideRenderFrame,
+  encodeSlideRenderFrame,
+  SLIDE_RENDERER_FRAME_MAGIC,
+  SLIDE_RENDERER_HTTP_PATH,
+  SLIDE_RENDERER_HTTP_PROTOCOL_VERSION,
+  SlideRenderFrameError,
+  type DecodedSlideRenderFrame,
+  type SlideRenderFrameHeader,
+  type SlideRenderFramePart,
+} from "./slide-renderer-http.js";
+
 export const APP_KEYS = Object.freeze({
   DAEMON: "daemon",
   DESKTOP: "desktop",
