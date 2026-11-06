@@ -632,6 +632,27 @@ test("isAllowedChangedPath allows ordinary app and package source/test paths whi
   assert.equal(isAllowedChangedPath("apps/packaged/vitest.config.ts"), false);
 });
 
+test("isDocsPath allows markdown files in design-templates and skills directories", () => {
+  // Core files in design templates
+  assert.equal(isAllowedChangedPath("design-templates/blog-post/SKILL.md"), true);
+  assert.equal(isAllowedChangedPath("design-templates/blog-post/AGENTS.md"), true);
+  // Nested references in design templates
+  assert.equal(isAllowedChangedPath("design-templates/clinical-case-report/references/checklist.md"), true);
+  assert.equal(isAllowedChangedPath("design-templates/html-ppt/references/animations.md"), true);
+  // Skill SKILL.md files
+  assert.equal(isAllowedChangedPath("skills/ad-creative/SKILL.md"), true);
+  assert.equal(isAllowedChangedPath("skills/agent-browser/SKILL.md"), true);
+  // Design template README variants
+  assert.equal(isAllowedChangedPath("design-templates/guizang-ppt/README.md"), true);
+  assert.equal(isAllowedChangedPath("design-templates/guizang-ppt/README.zh-CN.md"), true);
+  assert.equal(isAllowedChangedPath("design-templates/html-ppt/README.pt-BR.md"), true);
+  // Multi-language docs in skills directory
+  assert.equal(isAllowedChangedPath("skills/8-bit-orbit-video-template/AGENTS.md"), true);
+  // Allowed source paths inside design templates and skills are still blocked
+  assert.equal(isAllowedChangedPath("design-templates/blog-post/SKILL.md"), true);
+  assert.equal(isAllowedChangedPath("skills/ad-creative/SKILL.md"), true);
+});
+
 test("waitForPendingApprovalRuns retries until action_required runs appear and keeps polling through the retry window", async () => {
   const run = {
     id: 26273463769,

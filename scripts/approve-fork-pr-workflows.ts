@@ -139,7 +139,9 @@ function isDocsPath(path: string): boolean {
     path === "README.md" ||
     path === "CONTRIBUTING.md" ||
     path === "QUICKSTART.md" ||
-    path.startsWith("docs/")
+    path.startsWith("docs/") ||
+    path.startsWith("design-templates/") ||
+    path.startsWith("skills/")
   );
 }
 
